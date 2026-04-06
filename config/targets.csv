@@ -1,5 +1,3 @@
-label,description,mz,ms_level,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max
-258.1085,8-oxo-dAMP (MS1),258.1085,1,8.0,10.0,20,,,
-242.1136,dCyd (MS1),242.1136,1,11.0,13.0,20,,,
-258.1085_NL116,8-oxo-dAMP NL 116.0474 Da (MS2 確認),258.1085,2,8.0,10.0,20,116.0474,20,50
-242.1136_NL116,dCyd NL 116.0474 Da (MS2 確認),242.1136,2,11.0,13.0,20,116.0474,20,50
+label,mz,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max
+258.1085,258.1085,8,10,20,116.0474,20,50
+242.1136,242.1136,11,13,20,116.0474,20,50

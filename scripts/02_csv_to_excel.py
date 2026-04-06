@@ -73,12 +73,11 @@ def _load_column_meta() -> dict:
     """
     Returns dict: csv_col_name → {type, palette, label, nl_col}
     type = 'sample' | 'ms1_rt' | 'ms1_int' | 'ms2_nl'
-    nl_col: for MS1 columns, the CSV key of the confirming NL column (or None).
-            Linkage by prefix convention: "258.1085_NL116" confirms "258.1085".
+    nl_col: for MS1 columns, the CSV key of the NL column (e.g. "258.1085_NL"), or None.
+    Each targets.csv row is one compound; neutral_loss_da non-empty → NL column exists.
     """
     meta: dict[str, dict] = {"SampleName": {"type": "sample"}}
     palette_idx = 0
-    ms1_labels: list[str] = []
 
     targets_path = CONFIG_DIR / "targets.csv"
     if not targets_path.exists():
@@ -87,34 +86,26 @@ def _load_column_meta() -> dict:
     with open(targets_path, newline="", encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
             label = row["label"].strip()
-            ms_level = row.get("ms_level", "1").strip()
+            has_nl = bool(row.get("neutral_loss_da", "").strip())
 
-            if ms_level == "1":
-                pal = _MS1_PALETTES[palette_idx % len(_MS1_PALETTES)]
-                palette_idx += 1
-                ms1_labels.append(label)
-                meta[f"{label}_RT"] = {
-                    "type": "ms1_rt",
-                    "palette": pal,
-                    "label": label,
-                    "nl_col": None,
-                }
-                meta[f"{label}_Int"] = {
-                    "type": "ms1_int",
-                    "palette": pal,
-                    "label": label,
-                    "nl_col": None,
-                }
-            else:
-                meta[label] = {"type": "ms2_nl", "label": label}
-                # Back-link to the MS1 RT/Int entries whose label is a prefix of this NL label
-                linked = next(
-                    (l for l in ms1_labels if label.startswith(l + "_")), None
-                )
-                if linked:
-                    for suffix in ("_RT", "_Int"):
-                        if (k := linked + suffix) in meta:
-                            meta[k]["nl_col"] = label
+            pal = _MS1_PALETTES[palette_idx % len(_MS1_PALETTES)]
+            palette_idx += 1
+            nl_col = f"{label}_NL" if has_nl else None
+
+            meta[f"{label}_RT"] = {
+                "type": "ms1_rt",
+                "palette": pal,
+                "label": label,
+                "nl_col": nl_col,
+            }
+            meta[f"{label}_Int"] = {
+                "type": "ms1_int",
+                "palette": pal,
+                "label": label,
+                "nl_col": nl_col,
+            }
+            if has_nl:
+                meta[nl_col] = {"type": "ms2_nl", "label": label}
 
     return meta
 

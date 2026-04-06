@@ -6,9 +6,7 @@ CONFIG_DIR = ROOT / "config"
 _SETTINGS_FIELDS = ["key", "value", "description"]
 _TARGETS_FIELDS = [
     "label",
-    "description",
     "mz",
-    "ms_level",
     "rt_min",
     "rt_max",
     "ppm_tol",
@@ -47,7 +45,9 @@ def read_targets() -> list[dict[str, str]]:
 
 
 def write_targets(targets: list[dict[str, str]]) -> None:
-    with (CONFIG_DIR / "targets.csv").open("w", newline="", encoding="utf-8-sig") as handle:
+    with (CONFIG_DIR / "targets.csv").open(
+        "w", newline="", encoding="utf-8-sig"
+    ) as handle:
         writer = csv.DictWriter(handle, fieldnames=_TARGETS_FIELDS)
         writer.writeheader()
         for target in targets:

@@ -13,8 +13,8 @@ def tmp_config(tmp_path):
         encoding="utf-8-sig",
     )
     (tmp_path / "targets.csv").write_text(
-        "label,description,mz,ms_level,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max\n"
-        "258.1085,test,258.1085,1,8.0,10.0,20,,,\n",
+        "label,mz,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max\n"
+        "258.1085,258.1085,8.0,10.0,20,116.0474,20,50\n",
         encoding="utf-8-sig",
     )
     return tmp_path
@@ -48,7 +48,9 @@ def test_write_settings_preserves_description(tmp_config, monkeypatch):
             "smooth_points": "15",
         }
     )
-    rows = list(csv.DictReader((tmp_config / "settings.csv").open(encoding="utf-8-sig")))
+    rows = list(
+        csv.DictReader((tmp_config / "settings.csv").open(encoding="utf-8-sig"))
+    )
     assert {row["key"]: row["description"] for row in rows}["data_dir"] == "資料目錄"
 
 
@@ -63,15 +65,13 @@ def test_write_targets_round_trips(tmp_config, monkeypatch):
         [
             {
                 "label": "242.1136",
-                "description": "",
                 "mz": "242.1136",
-                "ms_level": "1",
                 "rt_min": "11.0",
                 "rt_max": "13.0",
                 "ppm_tol": "20",
-                "neutral_loss_da": "",
-                "nl_ppm_warn": "",
-                "nl_ppm_max": "",
+                "neutral_loss_da": "116.0474",
+                "nl_ppm_warn": "20",
+                "nl_ppm_max": "50",
             }
         ]
     )

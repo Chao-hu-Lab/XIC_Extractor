@@ -1,5 +1,5 @@
-key,value,description
+﻿key,value,description
 data_dir,C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R,資料來源資料夾（換批次只改這裡）
 dll_dir,C:\Xcalibur\system\programs,Xcalibur DLL 路徑（通常不需更改）
-smooth_sigma,3.0,15G Gaussian 平滑的 sigma（對齊 Xcalibur EIC 顯示）
 smooth_points,15,Gaussian 平滑點數
+smooth_sigma,3.0,15G Gaussian 平滑的 sigma（對齊 Xcalibur EIC 顯示）

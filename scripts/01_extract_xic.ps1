@@ -30,8 +30,7 @@ $OutputCsv    = Join-Path $outputDir "xic_results.csv"
 
 # ---- Read targets.csv --------------------------------------------------------
 $targets    = @(Import-Csv (Join-Path $configDir "targets.csv"))
-$ms1Targets = @($targets | Where-Object { $_.ms_level -eq '1' })
-$ms2Targets = @($targets | Where-Object { $_.ms_level -eq '2' })
+$nlTargets  = @($targets | Where-Object { $_.neutral_loss_da -ne '' })
 
 # ---- Load DLLs ---------------------------------------------------------------
 Add-Type -Path (Join-Path $DllDir "ThermoFisher.CommonCore.Data.dll")
@@ -109,11 +108,13 @@ function Test-NeutralLoss {
     param(
         $RawFile,
         [double]$PrecursorMz, [double]$RtMin, [double]$RtMax,
-        [double]$PrecursorPpm,
         [double]$NeutralLoss,
         [double]$NlPpmWarn, [double]$NlPpmMax
     )
-    $preTol    = $PrecursorMz * $PrecursorPpm / 1e6
+    # DDA stores precursor mass with lower accuracy than Orbitrap MS1 measurement.
+    # Use a fixed Da window matching the typical quadrupole isolation width (±0.5 Da),
+    # not ppm, to avoid rejecting valid scans due to DDA mass-recording imprecision.
+    $preTol    = 0.5
     $sscan     = $RawFile.ScanNumberFromRetentionTime($RtMin)
     $escan     = $RawFile.ScanNumberFromRetentionTime($RtMax)
     $bestPpm   = [double]::MaxValue
@@ -130,7 +131,10 @@ function Test-NeutralLoss {
         if ([Math]::Abs($preMz - $PrecursorMz) -gt $preTol) { continue }
         $triggered = $true
 
-        $expectedProd = $preMz - $NeutralLoss
+        # Use theoretical target mz (not DDA-recorded preMz) to compute expected product,
+        # because DDA precursor mass has low accuracy while the product ion search needs
+        # to match the Orbitrap-measured fragment.
+        $expectedProd = $PrecursorMz - $NeutralLoss
         $searchTol    = $expectedProd * $NlPpmMax / 1e6
 
         $data = $RawFile.GetSimplifiedScan($s)
@@ -156,7 +160,7 @@ $results  = [System.Collections.Generic.List[object]]::new()
 
 Write-Host "Data dir   : $DataDir"
 Write-Host "Output     : $OutputCsv"
-Write-Host "MS1 targets: $($ms1Targets.Count)   MS2-NL targets: $($ms2Targets.Count)"
+Write-Host "Targets    : $($targets.Count)  with NL: $($nlTargets.Count)"
 Write-Host "Smoothing  : ${SmoothPoints}G  sigma=$SmoothSigma"
 Write-Host "Files      : $total"
 Write-Host ""
@@ -173,20 +177,19 @@ foreach ($file in $rawFiles) {
 
         $row = [ordered]@{ SampleName = [IO.Path]::GetFileNameWithoutExtension($file.Name) }
 
-        foreach ($t in $ms1Targets) {
+        foreach ($t in $targets) {
             $apex = Get-MS1Apex -RawFile $rawFile `
                 -Mz ([double]$t.mz) -RtMin ([double]$t.rt_min) -RtMax ([double]$t.rt_max) `
                 -PpmTol ([double]$t.ppm_tol) -SmoothPts $SmoothPoints -SmoothSig $SmoothSigma
             $row["$($t.label)_RT"]  = if ([double]::IsNaN($apex.RT)) { "ND" } else { [math]::Round($apex.RT, 4) }
             $row["$($t.label)_Int"] = if ($apex.Intensity -le 0)     { "ND" } else { [math]::Round($apex.Intensity, 0) }
-        }
 
-        foreach ($t in $ms2Targets) {
-            $row[$t.label] = Test-NeutralLoss -RawFile $rawFile `
-                -PrecursorMz ([double]$t.mz) -RtMin ([double]$t.rt_min) -RtMax ([double]$t.rt_max) `
-                -PrecursorPpm ([double]$t.ppm_tol) `
-                -NeutralLoss ([double]$t.neutral_loss_da) `
-                -NlPpmWarn ([double]$t.nl_ppm_warn) -NlPpmMax ([double]$t.nl_ppm_max)
+            if ($t.neutral_loss_da -ne '') {
+                $row["$($t.label)_NL"] = Test-NeutralLoss -RawFile $rawFile `
+                    -PrecursorMz ([double]$t.mz) -RtMin ([double]$t.rt_min) -RtMax ([double]$t.rt_max) `
+                    -NeutralLoss ([double]$t.neutral_loss_da) `
+                    -NlPpmWarn ([double]$t.nl_ppm_warn) -NlPpmMax ([double]$t.nl_ppm_max)
+            }
         }
 
         $results.Add([PSCustomObject]$row)
@@ -194,8 +197,11 @@ foreach ($file in $rawFiles) {
     catch {
         Write-Warning ("    Error: {0}" -f $_.Exception.Message)
         $errRow = [ordered]@{ SampleName = [IO.Path]::GetFileNameWithoutExtension($file.Name) }
-        foreach ($t in $ms1Targets) { $errRow["$($t.label)_RT"] = "ERROR"; $errRow["$($t.label)_Int"] = "ERROR" }
-        foreach ($t in $ms2Targets) { $errRow[$t.label] = "ERROR" }
+        foreach ($t in $targets) {
+            $errRow["$($t.label)_RT"] = "ERROR"
+            $errRow["$($t.label)_Int"] = "ERROR"
+            if ($t.neutral_loss_da -ne '') { $errRow["$($t.label)_NL"] = "ERROR" }
+        }
         $results.Add([PSCustomObject]$errRow)
     }
     finally {
