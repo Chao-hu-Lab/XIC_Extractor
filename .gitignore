@@ -1,8 +1,21 @@
+# Python
 .venv/
 .uv-cache/
-.pytest_cache/
-.tmp/
-tmp_runtime/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.tmp/
+tmp_runtime/
+
+# Output (generated files)
 output/
+
+# Superpowers / Claude dev artefacts
+docs/superpowers/
+.superpowers/
+.remember/

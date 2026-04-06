@@ -1,0 +1,18 @@
+[project]
+name = "xic-extractor"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "PyQt6>=6.6",
+    "openpyxl>=3.1",
+]
+
+[project.scripts]
+xic-extractor = "gui.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider -p no:tmpdir"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
