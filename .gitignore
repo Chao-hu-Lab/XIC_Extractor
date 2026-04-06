@@ -1,6 +1,7 @@
 .venv/
 .uv-cache/
 .pytest_cache/
+.tmp/
 tmp_runtime/
 __pycache__/
 *.pyc
