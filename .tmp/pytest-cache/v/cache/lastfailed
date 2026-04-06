@@ -1,0 +1,7 @@
+{
+  "tests/test_config_io.py::test_read_settings": true,
+  "tests/test_config_io.py::test_write_settings_round_trips": true,
+  "tests/test_config_io.py::test_write_settings_preserves_description": true,
+  "tests/test_config_io.py::test_read_targets": true,
+  "tests/test_config_io.py::test_write_targets_round_trips": true
+}
