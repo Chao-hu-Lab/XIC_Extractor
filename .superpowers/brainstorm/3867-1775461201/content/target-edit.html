@@ -1,0 +1,128 @@
+<h2>目標（Targets）編輯方式</h2>
+<p class="subtitle">新增 / 修改 / 刪除 targets.csv 的操作介面</p>
+
+<div class="cards">
+
+  <!-- Option A: Inline editing -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f6f8fa;padding:12px;border-radius:6px;min-height:220px">
+      <div style="background:#fff;border:1px solid #d0d7de;border-radius:6px;padding:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="color:#24292f;font-size:10px;font-weight:bold">🎯 分析目標</div>
+          <div style="background:#0969da;color:#fff;border-radius:4px;padding:2px 8px;font-size:9px">+ 新增列</div>
+        </div>
+        <!-- Table header -->
+        <div style="display:grid;grid-template-columns:1.5fr 1fr 0.6fr 0.6fr 0.5fr 0.5fr;gap:2px;margin-bottom:3px">
+          <div style="background:#0969da15;color:#0969da;font-size:8px;padding:3px 4px;border-radius:2px;font-weight:bold">Label</div>
+          <div style="background:#0969da15;color:#0969da;font-size:8px;padding:3px 4px;border-radius:2px;font-weight:bold;text-align:center">m/z</div>
+          <div style="background:#0969da15;color:#0969da;font-size:8px;padding:3px 4px;border-radius:2px;font-weight:bold;text-align:center">RT↓</div>
+          <div style="background:#0969da15;color:#0969da;font-size:8px;padding:3px 4px;border-radius:2px;font-weight:bold;text-align:center">RT↑</div>
+          <div style="background:#0969da15;color:#0969da;font-size:8px;padding:3px 4px;border-radius:2px;font-weight:bold;text-align:center">MS</div>
+          <div style="background:#0969da15;font-size:8px;padding:3px 4px;border-radius:2px"></div>
+        </div>
+        <!-- Row 1 - normal -->
+        <div style="display:grid;grid-template-columns:1.5fr 1fr 0.6fr 0.6fr 0.5fr 0.5fr;gap:2px;margin-bottom:2px">
+          <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:2px;height:16px;padding:0 3px;display:flex;align-items:center"><span style="font-size:8px;color:#24292f">258.1085</span></div>
+          <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:2px;height:16px"></div>
+          <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:2px;height:16px"></div>
+          <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:2px;height:16px"></div>
+          <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:2px;height:16px;display:flex;align-items:center;justify-content:center"><span style="font-size:8px;color:#24292f">1</span></div>
+          <div style="display:flex;gap:2px">
+            <div style="background:#cf222e15;border-radius:2px;width:14px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px">🗑</div>
+          </div>
+        </div>
+        <!-- Row 2 - being edited (highlighted) -->
+        <div style="display:grid;grid-template-columns:1.5fr 1fr 0.6fr 0.6fr 0.5fr 0.5fr;gap:2px;margin-bottom:2px">
+          <div style="background:#fff;border:2px solid #0969da;border-radius:2px;height:16px;padding:0 3px;display:flex;align-items:center">
+            <span style="font-size:8px;color:#24292f">242.1136</span>
+            <span style="background:#0969da;width:1px;height:10px;margin-left:1px;animation:blink 1s infinite"></span>
+          </div>
+          <div style="background:#fff;border:2px solid #0969da;border-radius:2px;height:16px"></div>
+          <div style="background:#fff;border:2px solid #0969da;border-radius:2px;height:16px"></div>
+          <div style="background:#fff;border:2px solid #0969da;border-radius:2px;height:16px"></div>
+          <div style="background:#fff;border:2px solid #0969da;border-radius:2px;height:16px;display:flex;align-items:center;justify-content:center"><span style="font-size:8px;color:#0969da">1</span></div>
+          <div style="display:flex;gap:2px">
+            <div style="background:#cf222e15;border-radius:2px;width:14px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px">🗑</div>
+          </div>
+        </div>
+        <!-- Row 3 -->
+        <div style="display:grid;grid-template-columns:1.5fr 1fr 0.6fr 0.6fr 0.5fr 0.5fr;gap:2px;margin-bottom:8px">
+          <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:2px;height:16px"></div>
+          <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:2px;height:16px"></div>
+          <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:2px;height:16px"></div>
+          <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:2px;height:16px"></div>
+          <div style="background:#ffe0e6;border:1px solid #d0d7de;border-radius:2px;height:16px;display:flex;align-items:center;justify-content:center"><span style="font-size:8px;color:#cf222e">2</span></div>
+          <div style="display:flex;gap:2px">
+            <div style="background:#cf222e15;border-radius:2px;width:14px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px">🗑</div>
+          </div>
+        </div>
+        <div style="background:#dff7e0;border-radius:3px;padding:4px 8px;font-size:8px;color:#1a7f37;display:flex;align-items:center;gap:4px">
+          <span>✓</span><span>點擊儲存格直接編輯，Tab 跳到下一格</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — 直接內嵌編輯</h3>
+      <p>點擊儲存格立即可編輯，像 Excel 操作。速度快、直覺，適合熟練用戶快速修改數值。</p>
+    </div>
+  </div>
+
+  <!-- Option B: Dialog popup -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f6f8fa;padding:12px;border-radius:6px;min-height:220px;position:relative">
+      <!-- Background table -->
+      <div style="background:#fff;border:1px solid #d0d7de;border-radius:6px;padding:10px;opacity:0.4">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="color:#24292f;font-size:10px;font-weight:bold">🎯 分析目標</div>
+          <div style="background:#0969da;color:#fff;border-radius:4px;padding:2px 8px;font-size:9px">+ 新增</div>
+        </div>
+        <div style="height:80px;background:#f6f8fa;border-radius:4px"></div>
+      </div>
+      <!-- Dialog overlay -->
+      <div style="position:absolute;top:20px;left:20px;right:20px;background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:12px;box-shadow:0 8px 24px #0003">
+        <div style="color:#24292f;font-size:10px;font-weight:bold;margin-bottom:8px;border-bottom:1px solid #d0d7de;padding-bottom:6px">✏ 編輯目標：258.1085</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+          <div>
+            <div style="color:#57606a;font-size:8px;margin-bottom:2px">Label</div>
+            <div style="background:#f6f8fa;border:1px solid #0969da;border-radius:3px;height:16px;padding:0 4px;display:flex;align-items:center"><span style="font-size:8px">258.1085</span></div>
+          </div>
+          <div>
+            <div style="color:#57606a;font-size:8px;margin-bottom:2px">m/z</div>
+            <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:3px;height:16px"></div>
+          </div>
+          <div>
+            <div style="color:#57606a;font-size:8px;margin-bottom:2px">RT min</div>
+            <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:3px;height:16px"></div>
+          </div>
+          <div>
+            <div style="color:#57606a;font-size:8px;margin-bottom:2px">RT max</div>
+            <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:3px;height:16px"></div>
+          </div>
+          <div>
+            <div style="color:#57606a;font-size:8px;margin-bottom:2px">ppm tol</div>
+            <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:3px;height:16px"></div>
+          </div>
+          <div>
+            <div style="color:#57606a;font-size:8px;margin-bottom:2px">MS Level</div>
+            <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:3px;height:16px;display:flex;align-items:center;padding:0 4px"><span style="font-size:8px;color:#24292f">MS1 ▾</span></div>
+          </div>
+        </div>
+        <!-- NL section (collapsible) -->
+        <div style="background:#fff8e1;border:1px solid #f9c23c;border-radius:3px;padding:4px 6px;margin-bottom:6px">
+          <div style="color:#9a6700;font-size:8px">▶ MS2 Neutral Loss 設定（選填）</div>
+        </div>
+        <div style="display:flex;gap:6px;justify-content:flex-end">
+          <div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:4px;padding:3px 8px;font-size:8px;color:#57606a">取消</div>
+          <div style="background:#0969da;border-radius:4px;padding:3px 8px;font-size:8px;color:#fff">儲存</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — 彈出對話框</h3>
+      <p>點「編輯」開啟 Dialog，一次看到目標的所有欄位（含 NL 設定）。不易誤觸、欄位說明清楚。</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">點選或在終端回覆偏好</p>
