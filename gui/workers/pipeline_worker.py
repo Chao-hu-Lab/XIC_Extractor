@@ -1,6 +1,8 @@
+import io
 import re
 import subprocess
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -76,21 +78,17 @@ class PipelineWorker(QThread):
         return total_files
 
     def _run_python(self) -> str:
-        command = [sys.executable, str(self._scripts_dir / "02_csv_to_excel.py")]
-        self._process = subprocess.Popen(
-            command,
-            cwd=self._scripts_dir.parent,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-        )
-        stdout, stderr = self._process.communicate()
-        if self._stop_requested:
-            return stdout
-        if self._process.returncode != 0:
-            raise RuntimeError(stderr.strip() or "02_csv_to_excel.py failed.")
-        return stdout
+        from scripts.csv_to_excel import run as _csv_to_excel_run
+
+        if getattr(sys, "frozen", False):
+            base_dir = Path(sys.executable).parent
+        else:
+            base_dir = self._scripts_dir.parent
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _csv_to_excel_run(base_dir)
+        return buf.getvalue()
 
     def _parse_summary(self, stdout: str, total_files: int) -> dict:
         excel_path = ""
