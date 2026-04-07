@@ -40,17 +40,24 @@ class PipelineWorker(QThread):
             self._process = None
 
     def _run_ps1(self) -> int:
+        if getattr(sys, "frozen", False):
+            root_dir = Path(sys.executable).parent
+        else:
+            root_dir = self._scripts_dir.parent
+
         command = [
             "powershell",
             "-ExecutionPolicy",
             "Bypass",
             "-File",
             str(self._scripts_dir / "01_extract_xic.ps1"),
+            "-RootDir",
+            str(root_dir),
         ]
         total_files = 0
         self._process = subprocess.Popen(
             command,
-            cwd=self._scripts_dir.parent,
+            cwd=str(root_dir),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
