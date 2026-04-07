@@ -12,6 +12,7 @@ a = Analysis(
         ("config/settings.example.csv", "config"),
         ("config/targets.example.csv", "config"),
         ("scripts", "scripts"),
+        ("README.md", "."),
     ],
     hiddenimports=[
         "PyQt6.QtCore",

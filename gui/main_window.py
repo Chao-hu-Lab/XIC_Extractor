@@ -19,6 +19,7 @@ else:
     _ROOT = Path(__file__).resolve().parent.parent
 _SCRIPTS_DIR = _ROOT / "scripts"
 _ICON_PATH = _ROOT / "assets" / "app_icon.png"
+(_ROOT / "output").mkdir(exist_ok=True)
 
 # Title bar background colour (deep purple matching the icon)
 _TITLEBAR_COLOR = "#2D1B69"
