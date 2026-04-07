@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-from PyQt6.QtCore import QSignalBlocker, pyqtSignal
+from PyQt6.QtCore import QSignalBlocker, Qt, pyqtSignal
 from PyQt6.QtGui import QWheelEvent
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -161,8 +161,9 @@ class TargetsSection(QWidget):
             if nl_value == "—":
                 nl_value = ""
 
-            istd_cb = self._table.cellWidget(row, _COL_ISTD)
-            assert isinstance(istd_cb, QCheckBox)
+            istd_container = self._table.cellWidget(row, _COL_ISTD)
+            istd_cb = istd_container.findChild(QCheckBox)
+            assert istd_cb is not None
             is_istd = "true" if istd_cb.isChecked() else "false"
 
             result.append(
@@ -216,9 +217,13 @@ class TargetsSection(QWidget):
 
         istd_cb = QCheckBox()
         istd_cb.setChecked(target.get("is_istd", "false").lower() == "true")
-        istd_cb.setStyleSheet("margin-left: auto; margin-right: auto;")
         istd_cb.stateChanged.connect(lambda _: self._set_dirty(True))
-        self._table.setCellWidget(row, _COL_ISTD, istd_cb)
+        istd_container = QWidget()
+        istd_layout = QHBoxLayout(istd_container)
+        istd_layout.setContentsMargins(0, 0, 0, 0)
+        istd_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        istd_layout.addWidget(istd_cb)
+        self._table.setCellWidget(row, _COL_ISTD, istd_container)
 
         nl_combo = self._make_nl_combo(target.get("neutral_loss_da", ""))
         self._table.setCellWidget(row, _COL_NL, nl_combo)
