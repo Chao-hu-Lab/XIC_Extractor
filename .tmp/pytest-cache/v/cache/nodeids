@@ -1,7 +1,0 @@
-[
-  "tests/test_config_io.py::test_read_settings",
-  "tests/test_config_io.py::test_read_targets",
-  "tests/test_config_io.py::test_write_settings_preserves_description",
-  "tests/test_config_io.py::test_write_settings_round_trips",
-  "tests/test_config_io.py::test_write_targets_round_trips"
-]
