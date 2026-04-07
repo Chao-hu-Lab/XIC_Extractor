@@ -13,8 +13,9 @@ def tmp_config(tmp_path):
         encoding="utf-8-sig",
     )
     (tmp_path / "targets.csv").write_text(
-        "label,mz,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max\n"
-        "258.1085,258.1085,8.0,10.0,20,116.0474,20,50\n",
+        "label,mz,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max,is_istd,istd_pair\n"
+        "5-hmdC,258.1085,8.0,10.0,20,116.0474,20,50,false,d3-5-hmdC\n"
+        "d3-5-hmdC,261.1273,8.0,10.0,20,116.0474,20,50,true,\n",
         encoding="utf-8-sig",
     )
     return tmp_path
@@ -56,7 +57,7 @@ def test_write_settings_preserves_description(tmp_config, monkeypatch):
 
 def test_read_targets(tmp_config, monkeypatch):
     monkeypatch.setattr("gui.config_io.CONFIG_DIR", tmp_config)
-    assert read_targets()[0]["label"] == "258.1085"
+    assert read_targets()[0]["label"] == "5-hmdC"
 
 
 def test_write_targets_round_trips(tmp_config, monkeypatch):
@@ -64,18 +65,56 @@ def test_write_targets_round_trips(tmp_config, monkeypatch):
     write_targets(
         [
             {
-                "label": "242.1136",
-                "mz": "242.1136",
-                "rt_min": "11.0",
-                "rt_max": "13.0",
+                "label": "5-hmdC",
+                "mz": "258.1085",
+                "rt_min": "8.0",
+                "rt_max": "10.0",
                 "ppm_tol": "20",
                 "neutral_loss_da": "116.0474",
                 "nl_ppm_warn": "20",
                 "nl_ppm_max": "50",
+                "is_istd": "false",
+                "istd_pair": "d3-5-hmdC",
             }
         ]
     )
-    assert read_targets()[0]["label"] == "242.1136"
+    assert read_targets()[0]["label"] == "5-hmdC"
+
+
+def test_write_targets_round_trips_with_istd_fields(tmp_config, monkeypatch):
+    monkeypatch.setattr("gui.config_io.CONFIG_DIR", tmp_config)
+    write_targets(
+        [
+            {
+                "label": "5-hmdC",
+                "mz": "258.1085",
+                "rt_min": "8.0",
+                "rt_max": "10.0",
+                "ppm_tol": "20",
+                "neutral_loss_da": "116.0474",
+                "nl_ppm_warn": "20",
+                "nl_ppm_max": "50",
+                "is_istd": "false",
+                "istd_pair": "d3-5-hmdC",
+            }
+        ]
+    )
+    targets = read_targets()
+    assert targets[0]["is_istd"] == "false"
+    assert targets[0]["istd_pair"] == "d3-5-hmdC"
+
+
+def test_read_targets_backward_compat_missing_istd_cols(tmp_path, monkeypatch):
+    """Old CSV without is_istd/istd_pair columns reads without error."""
+    (tmp_path / "targets.csv").write_text(
+        "label,mz,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max\n"
+        "5-hmdC,258.1085,8,10,20,116.0474,20,50\n",
+        encoding="utf-8-sig",
+    )
+    monkeypatch.setattr("gui.config_io.CONFIG_DIR", tmp_path)
+    targets = read_targets()
+    assert targets[0]["label"] == "5-hmdC"
+    assert targets[0].get("is_istd", "false") == "false"
 
 
 def test_read_settings_copies_example_when_missing(tmp_path, monkeypatch):
