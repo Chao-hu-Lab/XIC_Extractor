@@ -12,7 +12,6 @@ a = Analysis(
         ("config/settings.example.csv", "config"),
         ("config/targets.example.csv", "config"),
         ("scripts", "scripts"),
-        ("README.md", "."),
     ],
     hiddenimports=[
         "PyQt6.QtCore",
@@ -22,6 +21,7 @@ a = Analysis(
         "openpyxl",
         "openpyxl.styles",
         "openpyxl.utils",
+        "scripts.csv_to_excel",
     ],
     hookspath=[],
     hooksconfig={},

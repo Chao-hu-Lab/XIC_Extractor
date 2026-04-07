@@ -118,25 +118,27 @@ def test_read_targets_backward_compat_missing_istd_cols(tmp_path, monkeypatch):
 
 
 def test_read_settings_copies_example_when_missing(tmp_path, monkeypatch):
-    """read_settings() 在 settings.csv 不存在時自動複製 .example.csv。"""
+    """read_settings() 在 settings.csv 不存在時自動從 bundle 複製 .example.csv。"""
     (tmp_path / "settings.example.csv").write_text(
         "key,value,description\ndata_dir,/placeholder,資料目錄\n",
         encoding="utf-8-sig",
     )
     monkeypatch.setattr("gui.config_io.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("gui.config_io._BUNDLE_CONFIG", tmp_path)
     result = read_settings()
     assert result["data_dir"] == "/placeholder"
     assert (tmp_path / "settings.csv").exists()
 
 
 def test_read_targets_copies_example_when_missing(tmp_path, monkeypatch):
-    """read_targets() 在 targets.csv 不存在時自動複製 .example.csv。"""
+    """read_targets() 在 targets.csv 不存在時自動從 bundle 複製 .example.csv。"""
     (tmp_path / "targets.example.csv").write_text(
         "label,mz,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max\n"
         "ExA,258.1085,8.0,10.0,20,116.0474,20,50\n",
         encoding="utf-8-sig",
     )
     monkeypatch.setattr("gui.config_io.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("gui.config_io._BUNDLE_CONFIG", tmp_path)
     result = read_targets()
     assert result[0]["label"] == "ExA"
     assert (tmp_path / "targets.csv").exists()

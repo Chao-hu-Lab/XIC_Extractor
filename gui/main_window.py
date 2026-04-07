@@ -14,11 +14,13 @@ from gui.styles import STYLESHEET
 from gui.workers.pipeline_worker import PipelineWorker
 
 if getattr(sys, "frozen", False):
-    _ROOT = Path(sys.executable).parent
+    _ROOT = Path(sys.executable).parent  # user-writable: config/, output/
+    _BUNDLE = Path(sys._MEIPASS)  # read-only bundle: scripts/, assets/
 else:
     _ROOT = Path(__file__).resolve().parent.parent
-_SCRIPTS_DIR = _ROOT / "scripts"
-_ICON_PATH = _ROOT / "assets" / "app_icon.png"
+    _BUNDLE = _ROOT
+_SCRIPTS_DIR = _BUNDLE / "scripts"
+_ICON_PATH = _BUNDLE / "assets" / "app_icon.png"
 (_ROOT / "output").mkdir(exist_ok=True)
 
 if getattr(sys, "frozen", False) and sys.platform == "win32":
