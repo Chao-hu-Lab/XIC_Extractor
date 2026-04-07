@@ -35,6 +35,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path dist\XIC_Extractor\output -Force
+          Copy-Item README.md dist\XIC_Extractor\README.md
 
       - name: Package distribution
         shell: pwsh

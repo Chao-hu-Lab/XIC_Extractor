@@ -4,11 +4,14 @@ import sys
 from pathlib import Path
 
 if getattr(sys, "frozen", False):
-    ROOT = Path(sys.executable).parent
+    ROOT = Path(sys.executable).parent  # user-writable: config/, output/
+    _BUNDLE = Path(sys._MEIPASS)  # read-only bundle: example CSVs
 else:
     ROOT = Path(__file__).resolve().parent.parent
+    _BUNDLE = ROOT
 
 CONFIG_DIR = ROOT / "config"
+_BUNDLE_CONFIG = _BUNDLE / "config"
 _SETTINGS_FIELDS = ["key", "value", "description"]
 _TARGETS_FIELDS = [
     "label",
@@ -25,10 +28,11 @@ _TARGETS_FIELDS = [
 
 
 def _ensure_config(name: str) -> None:
-    """若 {name}.csv 不存在，從 {name}.example.csv 複製一份。"""
+    """若 {name}.csv 不存在，從 bundle 內的 {name}.example.csv 複製一份。"""
     dst = CONFIG_DIR / f"{name}.csv"
     if not dst.exists():
-        src = CONFIG_DIR / f"{name}.example.csv"
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        src = _BUNDLE_CONFIG / f"{name}.example.csv"
         if src.exists():
             shutil.copy2(src, dst)
 
