@@ -19,6 +19,8 @@ _TARGETS_FIELDS = [
     "neutral_loss_da",
     "nl_ppm_warn",
     "nl_ppm_max",
+    "is_istd",
+    "istd_pair",
 ]
 
 

@@ -92,6 +92,18 @@ class ResultsSection(QWidget):
         self._error_label.setVisible(False)
         self._body_layout.addWidget(self._error_label)
 
+        self._istd_warn_label = QLabel()
+        self._istd_warn_label.setWordWrap(True)
+        self._istd_warn_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+        )
+        self._istd_warn_label.setStyleSheet(
+            "background-color: #FF7043; color: white; font-weight: 600;"
+            " padding: 8px 12px; border-radius: 4px;"
+        )
+        self._istd_warn_label.setVisible(False)
+        self._body_layout.addWidget(self._istd_warn_label)
+
         self._grid = QGridLayout()
         self._grid.setHorizontalSpacing(12)
         self._grid.setVerticalSpacing(12)
@@ -104,6 +116,16 @@ class ResultsSection(QWidget):
         self._folder_button.setVisible(has_path)
         self._error_label.clear()
         self._error_label.setVisible(False)
+        istd_warnings = summary.get("istd_warnings", [])
+        if istd_warnings:
+            parts = [
+                f"{warning['label']} ({warning['detected']}/{warning['total']})"
+                for warning in istd_warnings
+            ]
+            self._istd_warn_label.setText("⚠ ISTD 未全偵測：" + "、".join(parts))
+            self._istd_warn_label.setVisible(True)
+        else:
+            self._istd_warn_label.setVisible(False)
         self._clear_grid()
 
         cards: list[_Card] = []
@@ -149,6 +171,7 @@ class ResultsSection(QWidget):
         self._excel_path = ""
         self._open_button.setVisible(False)
         self._folder_button.setVisible(False)
+        self._istd_warn_label.setVisible(False)
         self._clear_grid()
         self._error_label.setText(message)
         self._error_label.setVisible(True)

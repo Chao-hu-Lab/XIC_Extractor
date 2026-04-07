@@ -2,7 +2,9 @@ import csv
 from pathlib import Path
 
 from PyQt6.QtCore import QSignalBlocker, pyqtSignal
+from PyQt6.QtGui import QWheelEvent
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QFrame,
@@ -17,9 +19,28 @@ from PyQt6.QtWidgets import (
 
 from gui import config_io
 
-_TABLE_HEADERS = ["Label", "m/z", "RT min", "RT max", "ppm", "NL(Da)", ""]
-# column indices
-_COL_LABEL, _COL_MZ, _COL_RT_MIN, _COL_RT_MAX, _COL_PPM, _COL_NL, _COL_DEL = range(7)
+_TABLE_HEADERS = [
+    "Label",
+    "ISTD",
+    "ISTD Pair",
+    "m/z",
+    "RT min",
+    "RT max",
+    "ppm",
+    "NL(Da)",
+    "",
+]
+(
+    _COL_LABEL,
+    _COL_ISTD,
+    _COL_PAIR,
+    _COL_MZ,
+    _COL_RT_MIN,
+    _COL_RT_MAX,
+    _COL_PPM,
+    _COL_NL,
+    _COL_DEL,
+) = range(9)
 
 _NL_PRESETS: list[tuple[str, str]] = [
     ("", "—"),
@@ -35,14 +56,26 @@ _DEFAULT_NL_PPM_WARN = "20"
 _DEFAULT_NL_PPM_MAX = "50"
 
 
+class _NoScrollComboBox(QComboBox):
+    """Only change the selection when the combo box itself has focus."""
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        if not self.hasFocus():
+            event.ignore()
+            return
+        super().wheelEvent(event)
+
+
 class TargetsSection(QWidget):
     targets_saved = pyqtSignal()
+
+    _COL_NL = _COL_NL
+    _COL_ISTD = _COL_ISTD
 
     def __init__(self) -> None:
         super().__init__()
         self._dirty = False
         self._is_loading = False
-        # hidden per-row data not shown in table: nl_ppm_warn, nl_ppm_max
         self._row_meta: list[dict[str, str]] = []
 
         root_layout = QVBoxLayout(self)
@@ -90,6 +123,8 @@ class TargetsSection(QWidget):
         )
         self._table.horizontalHeader().setStretchLastSection(False)
         self._table.setColumnWidth(_COL_LABEL, 160)
+        self._table.setColumnWidth(_COL_ISTD, 55)
+        self._table.setColumnWidth(_COL_PAIR, 130)
         self._table.setColumnWidth(_COL_MZ, 100)
         self._table.setColumnWidth(_COL_RT_MIN, 90)
         self._table.setColumnWidth(_COL_RT_MAX, 90)
@@ -102,8 +137,6 @@ class TargetsSection(QWidget):
         self._add_button.clicked.connect(self._on_add_row)
         self._save_button.clicked.connect(self._save)
         self._import_button.clicked.connect(self._on_import)
-
-    # ── Public API ──────────────────────────────────────────────────────────────
 
     def load(self, targets: list[dict[str, str]]) -> None:
         self._is_loading = True
@@ -127,6 +160,11 @@ class TargetsSection(QWidget):
             )
             if nl_value == "—":
                 nl_value = ""
+
+            istd_cb = self._table.cellWidget(row, _COL_ISTD)
+            assert isinstance(istd_cb, QCheckBox)
+            is_istd = "true" if istd_cb.isChecked() else "false"
+
             result.append(
                 {
                     "label": self._table.item(row, _COL_LABEL).text().strip(),
@@ -138,14 +176,14 @@ class TargetsSection(QWidget):
                     "neutral_loss_da": nl_value,
                     "nl_ppm_warn": meta.get("nl_ppm_warn", _DEFAULT_NL_PPM_WARN),
                     "nl_ppm_max": meta.get("nl_ppm_max", _DEFAULT_NL_PPM_MAX),
+                    "is_istd": is_istd,
+                    "istd_pair": self._table.item(row, _COL_PAIR).text().strip(),
                 }
             )
         return result
 
     def set_enabled(self, enabled: bool) -> None:
         self.setEnabled(enabled)
-
-    # ── Private ─────────────────────────────────────────────────────────────────
 
     def _append_row(self, target: dict[str, str] | None = None) -> None:
         target = target or {}
@@ -162,6 +200,9 @@ class TargetsSection(QWidget):
             self._table.setItem(
                 row, _COL_LABEL, QTableWidgetItem(target.get("label", ""))
             )
+            self._table.setItem(
+                row, _COL_PAIR, QTableWidgetItem(target.get("istd_pair", ""))
+            )
             self._table.setItem(row, _COL_MZ, QTableWidgetItem(target.get("mz", "")))
             self._table.setItem(
                 row, _COL_RT_MIN, QTableWidgetItem(target.get("rt_min", ""))
@@ -173,6 +214,12 @@ class TargetsSection(QWidget):
                 row, _COL_PPM, QTableWidgetItem(target.get("ppm_tol", _DEFAULT_PPM))
             )
 
+        istd_cb = QCheckBox()
+        istd_cb.setChecked(target.get("is_istd", "false").lower() == "true")
+        istd_cb.setStyleSheet("margin-left: auto; margin-right: auto;")
+        istd_cb.stateChanged.connect(lambda _: self._set_dirty(True))
+        self._table.setCellWidget(row, _COL_ISTD, istd_cb)
+
         nl_combo = self._make_nl_combo(target.get("neutral_loss_da", ""))
         self._table.setCellWidget(row, _COL_NL, nl_combo)
 
@@ -181,8 +228,8 @@ class TargetsSection(QWidget):
         delete_button.clicked.connect(self._on_delete_clicked)
         self._table.setCellWidget(row, _COL_DEL, delete_button)
 
-    def _make_nl_combo(self, value: str) -> QComboBox:
-        combo = QComboBox()
+    def _make_nl_combo(self, value: str) -> _NoScrollComboBox:
+        combo = _NoScrollComboBox()
         combo.setEditable(True)
         for _val, display in _NL_PRESETS:
             combo.addItem(display)
