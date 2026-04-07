@@ -1,4 +1,4 @@
-label,mz,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max,is_istd,istd_pair
+﻿label,mz,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max,is_istd,istd_pair
 5-hmdC,258.1085,8,10,20,116.0474,20,50,false,d3-5-hmdC
 d3-5-hmdC,261.127276,8,10,20,116.0474,20,50,true,
 5-medC,242.1136,11,13,20,116.0474,20,50,false,d3-5-medC
