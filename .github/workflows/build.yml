@@ -31,6 +31,12 @@ jobs:
       - name: Build executable
         run: uv run pyinstaller xic_extractor.spec
 
+      - name: Prepare distribution folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist\XIC_Extractor\output -Force
+          attrib +h dist\XIC_Extractor\_internal
+
       - name: Package distribution
         shell: pwsh
         run: |
