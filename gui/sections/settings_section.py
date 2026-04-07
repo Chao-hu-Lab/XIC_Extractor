@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from PyQt6.QtCore import QSignalBlocker, pyqtSignal
+from PyQt6.QtCore import Qt, QSignalBlocker, pyqtSignal
 from PyQt6.QtWidgets import (
+    QAbstractSpinBox,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -14,6 +15,52 @@ from PyQt6.QtWidgets import (
     QWidget,
     QDoubleSpinBox,
 )
+
+
+class _LabeledSpin(QWidget):
+    """SpinBox with a sub-label and explicit − / + buttons.
+
+    Solves the Qt arrow-button hit-target problem: removes the built-in
+    arrows and replaces them with 28×28 px buttons that never overlap the
+    text field.
+    """
+
+    def __init__(self, label: str, spin: QAbstractSpinBox) -> None:
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(2)
+
+        lbl = QLabel(label)
+        lbl.setStyleSheet("color: #57606a; font-size: 9pt;")
+        lay.addWidget(lbl)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(4)
+
+        _btn_style = "font-size: 14pt; font-weight: 600; padding: 0;"
+
+        btn_minus = QPushButton("−")
+        btn_minus.setFixedSize(32, 32)
+        btn_minus.setStyleSheet(_btn_style)
+        btn_minus.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn_minus.clicked.connect(lambda: spin.stepBy(-1))
+
+        btn_plus = QPushButton("+")
+        btn_plus.setFixedSize(32, 32)
+        btn_plus.setStyleSheet(_btn_style)
+        btn_plus.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn_plus.clicked.connect(lambda: spin.stepBy(1))
+
+        spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        spin.setMinimumWidth(60)
+
+        row.addWidget(btn_minus)
+        row.addWidget(spin, 1)
+        row.addWidget(btn_plus)
+        lay.addLayout(row)
 
 
 class SettingsSection(QWidget):
@@ -46,14 +93,14 @@ class SettingsSection(QWidget):
         body_layout = QGridLayout(body)
         body_layout.setContentsMargins(16, 16, 16, 16)
         body_layout.setHorizontalSpacing(12)
-        body_layout.setVerticalSpacing(12)
+        body_layout.setVerticalSpacing(8)
         card_layout.addWidget(body)
 
         self._data_dir_edit = QLineEdit()
         self._dll_dir_edit = QLineEdit()
         self._smooth_points_spin = QSpinBox()
         self._smooth_sigma_spin = QDoubleSpinBox()
-        self._save_button = QPushButton("💾 儲存設定")
+        self._save_button = QPushButton("儲存設定")
         self._save_button.setObjectName("btn_save")
         self._save_button.setVisible(False)
 
@@ -62,20 +109,30 @@ class SettingsSection(QWidget):
         self._smooth_sigma_spin.setDecimals(2)
         self._smooth_sigma_spin.setSingleStep(0.1)
 
+        # ── Data directory row ───────────────────────────────────────────────
         body_layout.addWidget(QLabel("Data directory"), 0, 0)
         body_layout.addWidget(self._data_dir_edit, 0, 1)
         body_layout.addWidget(self._make_browse_button(self._data_dir_edit), 0, 2)
 
-        body_layout.addWidget(QLabel("DLL directory"), 1, 0)
-        body_layout.addWidget(self._dll_dir_edit, 1, 1)
-        body_layout.addWidget(self._make_browse_button(self._dll_dir_edit), 1, 2)
+        self._data_dir_error = QLabel("路徑不存在")
+        self._data_dir_error.setStyleSheet("color: #cf222e; font-size: 9pt;")
+        self._data_dir_error.setVisible(False)
+        body_layout.addWidget(self._data_dir_error, 1, 1)
 
-        body_layout.addWidget(QLabel("Smoothing"), 2, 0)
+        # ── DLL directory row ────────────────────────────────────────────────
+        body_layout.addWidget(QLabel("DLL directory"), 2, 0)
+        body_layout.addWidget(self._dll_dir_edit, 2, 1)
+        body_layout.addWidget(self._make_browse_button(self._dll_dir_edit), 2, 2)
+
+        # ── Smoothing row ────────────────────────────────────────────────────
+        body_layout.addWidget(QLabel("Smoothing"), 3, 0)
         smoothing_layout = QHBoxLayout()
         smoothing_layout.setContentsMargins(0, 0, 0, 0)
-        smoothing_layout.addWidget(self._smooth_points_spin)
-        smoothing_layout.addWidget(self._smooth_sigma_spin)
-        body_layout.addLayout(smoothing_layout, 2, 1, 1, 2)
+        smoothing_layout.setSpacing(16)
+        smoothing_layout.addWidget(_LabeledSpin("Points", self._smooth_points_spin))
+        smoothing_layout.addWidget(_LabeledSpin("σ (sigma)", self._smooth_sigma_spin))
+        smoothing_layout.addStretch()
+        body_layout.addLayout(smoothing_layout, 3, 1, 1, 2)
 
         button_row = QHBoxLayout()
         button_row.setContentsMargins(16, 0, 16, 16)
@@ -95,8 +152,12 @@ class SettingsSection(QWidget):
         try:
             self._data_dir_edit.setText(settings.get("data_dir", ""))
             self._dll_dir_edit.setText(settings.get("dll_dir", ""))
-            self._smooth_points_spin.setValue(int(settings.get("smooth_points", "15") or 15))
-            self._smooth_sigma_spin.setValue(float(settings.get("smooth_sigma", "3.0") or 3.0))
+            self._smooth_points_spin.setValue(
+                int(settings.get("smooth_points", "15") or 15)
+            )
+            self._smooth_sigma_spin.setValue(
+                float(settings.get("smooth_sigma", "3.0") or 3.0)
+            )
         finally:
             del blockers
         self._set_dirty(False)
@@ -117,11 +178,18 @@ class SettingsSection(QWidget):
         self.setEnabled(enabled)
 
     def _wire_signals(self) -> None:
-        self._data_dir_edit.textChanged.connect(lambda _text: self._set_dirty(True))
-        self._dll_dir_edit.textChanged.connect(lambda _text: self._set_dirty(True))
-        self._smooth_points_spin.valueChanged.connect(lambda _value: self._set_dirty(True))
-        self._smooth_sigma_spin.valueChanged.connect(lambda _value: self._set_dirty(True))
+        self._data_dir_edit.textChanged.connect(self._validate_data_dir)
+        self._data_dir_edit.textChanged.connect(lambda _: self._set_dirty(True))
+        self._dll_dir_edit.textChanged.connect(lambda _: self._set_dirty(True))
+        self._smooth_points_spin.valueChanged.connect(lambda _: self._set_dirty(True))
+        self._smooth_sigma_spin.valueChanged.connect(lambda _: self._set_dirty(True))
         self._save_button.clicked.connect(self._save)
+
+    def _validate_data_dir(self, text: str) -> None:
+        stripped = text.strip()
+        invalid = bool(stripped) and not Path(stripped).exists()
+        self._data_dir_error.setVisible(invalid)
+        self._data_dir_edit.setStyleSheet("border-color: #cf222e;" if invalid else "")
 
     def _make_browse_button(self, target: QLineEdit) -> QPushButton:
         button = QPushButton("Browse…")
@@ -129,7 +197,9 @@ class SettingsSection(QWidget):
         return button
 
     def _browse_for_directory(self, target: QLineEdit) -> None:
-        directory = QFileDialog.getExistingDirectory(self, "Select directory", target.text())
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select directory", target.text()
+        )
         if directory:
             target.setText(directory)
 

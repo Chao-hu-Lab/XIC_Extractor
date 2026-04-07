@@ -23,9 +23,13 @@ class _Card(QFrame):
         layout.setSpacing(6)
 
         label_widget = QLabel(label.upper())
-        label_widget.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 9pt; font-weight: 600;")
+        label_widget.setStyleSheet(
+            f"color: {COLORS['text_muted']}; font-size: 9pt; font-weight: 600;"
+        )
         value_widget = QLabel(value)
-        value_widget.setStyleSheet(f"color: {color}; font-size: 20pt; font-weight: 700;")
+        value_widget.setStyleSheet(
+            f"color: {color}; font-size: 20pt; font-weight: 700;"
+        )
         detail_widget = QLabel(detail)
         detail_widget.setWordWrap(True)
         detail_widget.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 9pt;")
@@ -60,6 +64,12 @@ class ResultsSection(QWidget):
         title.setObjectName("section_title")
         header_layout.addWidget(title)
         header_layout.addStretch()
+        self._folder_button = QPushButton("開啟資料夾")
+        self._folder_button.setObjectName("btn_open_excel")
+        self._folder_button.clicked.connect(self._open_folder)
+        self._folder_button.setVisible(False)
+        header_layout.addWidget(self._folder_button)
+
         self._open_button = QPushButton("開啟 Excel")
         self._open_button.setObjectName("btn_open_excel")
         self._open_button.clicked.connect(self._open_excel)
@@ -75,7 +85,9 @@ class ResultsSection(QWidget):
 
         self._error_label = QLabel()
         self._error_label.setWordWrap(True)
-        self._error_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self._error_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+        )
         self._error_label.setStyleSheet(f"color: {COLORS['error']}; font-weight: 600;")
         self._error_label.setVisible(False)
         self._body_layout.addWidget(self._error_label)
@@ -87,7 +99,9 @@ class ResultsSection(QWidget):
 
     def update_results(self, summary: dict) -> None:
         self._excel_path = summary.get("excel_path", "")
-        self._open_button.setVisible(bool(self._excel_path))
+        has_path = bool(self._excel_path)
+        self._open_button.setVisible(has_path)
+        self._folder_button.setVisible(has_path)
         self._error_label.clear()
         self._error_label.setVisible(False)
         self._clear_grid()
@@ -98,8 +112,12 @@ class ResultsSection(QWidget):
                 _Card(
                     label=str(target["label"]),
                     value=f"{target['detected']}/{target['total']}",
-                    detail="NL confirmed" if target.get("nl_confirmed") else "MS1 detected",
-                    color=COLORS["success"] if target.get("detected") else COLORS["text_muted"],
+                    detail="NL confirmed"
+                    if target.get("nl_confirmed")
+                    else "MS1 detected",
+                    color=COLORS["success"]
+                    if target.get("detected")
+                    else COLORS["text_muted"],
                 )
             )
 
@@ -130,6 +148,7 @@ class ResultsSection(QWidget):
     def show_error(self, message: str) -> None:
         self._excel_path = ""
         self._open_button.setVisible(False)
+        self._folder_button.setVisible(False)
         self._clear_grid()
         self._error_label.setText(message)
         self._error_label.setVisible(True)
@@ -138,6 +157,12 @@ class ResultsSection(QWidget):
     def _open_excel(self) -> None:
         if self._excel_path:
             os.startfile(self._excel_path)
+
+    def _open_folder(self) -> None:
+        if self._excel_path:
+            from pathlib import Path
+
+            os.startfile(str(Path(self._excel_path).parent))
 
     def _clear_grid(self) -> None:
         while self._grid.count():
