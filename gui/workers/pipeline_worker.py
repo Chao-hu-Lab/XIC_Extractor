@@ -95,6 +95,7 @@ class PipelineWorker(QThread):
         nl_warn_count = 0
         targets: list[dict[str, int | str | bool]] = []
         seen_labels: set[str] = set()
+        istd_warnings: list[dict[str, int | str]] = []
 
         for line in stdout.splitlines():
             if match := re.search(r"Saved\s+:\s+(.+)", line):
@@ -134,9 +135,19 @@ class PipelineWorker(QThread):
             if warn_match := re.search(r"\s+\S+\s+OK:\d+\s+WARN:(\d+)\s+ND:\d+", line):
                 nl_warn_count += int(warn_match.group(1))
 
+            if istd_nd := re.search(r"^ISTD_ND:\s+(\S+)\s+(\d+)/(\d+)", line):
+                istd_warnings.append(
+                    {
+                        "label": istd_nd.group(1),
+                        "detected": int(istd_nd.group(2)),
+                        "total": int(istd_nd.group(3)),
+                    }
+                )
+
         return {
             "total_files": total_files,
             "targets": targets,
             "nl_warn_count": nl_warn_count,
             "excel_path": excel_path,
+            "istd_warnings": istd_warnings,
         }
