@@ -9,11 +9,15 @@
 # Usage  : powershell -ExecutionPolicy Bypass -File .\scripts\01_extract_xic.ps1
 # ==============================================================================
 
+param(
+    [string]$RootDir = ""
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # ---- Paths -------------------------------------------------------------------
-$root      = Resolve-Path "$PSScriptRoot\.."
+$root = if ($RootDir -ne "") { $RootDir } else { (Resolve-Path "$PSScriptRoot\..").Path }
 $configDir = Join-Path $root "config"
 $outputDir = Join-Path $root "output"
 if (-not (Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir | Out-Null }
