@@ -35,7 +35,6 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path dist\XIC_Extractor\output -Force
-          attrib +h dist\XIC_Extractor\_internal
 
       - name: Package distribution
         shell: pwsh
