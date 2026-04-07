@@ -19,3 +19,7 @@ output/
 docs/superpowers/
 .superpowers/
 .remember/
+
+# Private user config (use *.example.csv as template)
+config/settings.csv
+config/targets.csv
