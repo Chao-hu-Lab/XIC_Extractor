@@ -5,6 +5,7 @@ csv_to_excel.py
 """
 
 import csv
+import statistics
 from datetime import datetime
 from pathlib import Path
 
@@ -92,6 +93,8 @@ def _load_column_meta(config_dir: Path) -> dict:
                 "palette": pal,
                 "label": label,
                 "nl_col": nl_col,
+                "is_istd": row.get("is_istd", "false").lower() == "true",
+                "istd_pair": row.get("istd_pair", "").strip(),
             }
             meta[f"{label}_Int"] = {
                 "type": "ms1_int",
@@ -173,7 +176,8 @@ def _build_data_sheet(
             # MS1 / sample: ND or ERROR → orange warning cell
             if raw_val in ND_ERROR:
                 cell.value = raw_val
-                _apply(cell, fill=_fill("FFE0B2"), alignment=CENTER, border=BORDER)
+                nd_hex = "FF7043" if meta.get("is_istd", False) else "FFE0B2"
+                _apply(cell, fill=_fill(nd_hex), alignment=CENTER, border=BORDER)
                 continue
 
             # Numeric conversion for MS1 columns
@@ -273,6 +277,7 @@ def _build_summary_sheet(
         "Mean RT (min)",
         "Mean Int",
         "NL ✓/⚠/✗",
+        "RT Δ vs ISTD (%)",
     ]
 
     for row_idx, metric in enumerate(metrics, start=2):
@@ -324,6 +329,37 @@ def _build_summary_sheet(
                     val = f"✓{n_ok} ⚠{n_warn} ✗{n_nd}"
                 else:
                     val = "—"
+
+            elif metric == "RT Δ vs ISTD (%)":
+                istd_label = col_meta.get(rt_key, {}).get("istd_pair", "")
+                if not istd_label:
+                    val = "—"
+                else:
+                    istd_rt_key = f"{istd_label}_RT"
+                    istd_nl_col = col_meta.get(istd_rt_key, {}).get("nl_col")
+                    deltas: list[float] = []
+                    for r in rows:
+                        if nl_key:
+                            analyte_nl = r.get(nl_key, "")
+                            if analyte_nl != "OK" and not analyte_nl.startswith(
+                                "WARN_"
+                            ):
+                                continue
+                        if istd_nl_col:
+                            istd_nl = r.get(istd_nl_col, "")
+                            if istd_nl != "OK" and not istd_nl.startswith("WARN_"):
+                                continue
+                        rt_analyte = _safe_float(r.get(rt_key, ""))
+                        rt_istd = _safe_float(r.get(istd_rt_key, ""))
+                        if rt_analyte is None or rt_istd is None or rt_istd == 0:
+                            continue
+                        deltas.append(abs(rt_analyte - rt_istd) / rt_istd * 100)
+                    if not deltas:
+                        val = "—"
+                    else:
+                        mean_delta = sum(deltas) / len(deltas)
+                        sd_delta = statistics.stdev(deltas) if len(deltas) > 1 else 0.0
+                        val = f"{mean_delta:.2f}±{sd_delta:.2f}% (n={len(deltas)})"
 
             else:
                 val = "—"
@@ -393,6 +429,22 @@ def run(base_dir: Path) -> None:
         n_warn = sum(1 for r in rows if r.get(k, "").startswith("WARN_"))
         n_nd = len(rows) - n_ok - n_warn
         print(f"  {k}  OK:{n_ok}  WARN:{n_warn}  ND:{n_nd}")
+    for k in ms1_cols:
+        if not col_meta.get(k, {}).get("is_istd", False):
+            continue
+        label_name = k.replace("_RT", "")
+        nl_col = col_meta.get(k, {}).get("nl_col")
+        if nl_col:
+            n_det = sum(
+                1
+                for r in rows
+                if _safe_float(r.get(k, "")) is not None
+                and (r.get(nl_col, "") == "OK" or r.get(nl_col, "").startswith("WARN_"))
+            )
+        else:
+            n_det = sum(1 for r in rows if _safe_float(r.get(k, "")) is not None)
+        if n_det < len(rows):
+            print(f"ISTD_ND: {label_name} {n_det}/{len(rows)}")
 
 
 # ── CLI entry point ────────────────────────────────────────────────────────────
