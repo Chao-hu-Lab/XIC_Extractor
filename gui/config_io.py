@@ -1,7 +1,13 @@
 import csv
+import shutil
+import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+if getattr(sys, "frozen", False):
+    ROOT = Path(sys.executable).parent
+else:
+    ROOT = Path(__file__).resolve().parent.parent
+
 CONFIG_DIR = ROOT / "config"
 _SETTINGS_FIELDS = ["key", "value", "description"]
 _TARGETS_FIELDS = [
@@ -16,7 +22,17 @@ _TARGETS_FIELDS = [
 ]
 
 
+def _ensure_config(name: str) -> None:
+    """若 {name}.csv 不存在，從 {name}.example.csv 複製一份。"""
+    dst = CONFIG_DIR / f"{name}.csv"
+    if not dst.exists():
+        src = CONFIG_DIR / f"{name}.example.csv"
+        if src.exists():
+            shutil.copy2(src, dst)
+
+
 def read_settings() -> dict[str, str]:
+    _ensure_config("settings")
     with (CONFIG_DIR / "settings.csv").open(newline="", encoding="utf-8-sig") as handle:
         return {row["key"]: row["value"] for row in csv.DictReader(handle)}
 
@@ -40,6 +56,7 @@ def write_settings(settings: dict[str, str]) -> None:
 
 
 def read_targets() -> list[dict[str, str]]:
+    _ensure_config("targets")
     with (CONFIG_DIR / "targets.csv").open(newline="", encoding="utf-8-sig") as handle:
         return list(csv.DictReader(handle))
 
