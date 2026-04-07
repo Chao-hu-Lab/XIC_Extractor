@@ -21,6 +21,13 @@ _SCRIPTS_DIR = _ROOT / "scripts"
 _ICON_PATH = _ROOT / "assets" / "app_icon.png"
 (_ROOT / "output").mkdir(exist_ok=True)
 
+if getattr(sys, "frozen", False) and sys.platform == "win32":
+    _internal = _ROOT / "_internal"
+    if _internal.exists():
+        ctypes.windll.kernel32.SetFileAttributesW(
+            str(_internal), 0x02
+        )  # FILE_ATTRIBUTE_HIDDEN
+
 # Title bar background colour (deep purple matching the icon)
 _TITLEBAR_COLOR = "#2D1B69"
 
