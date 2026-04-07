@@ -16,7 +16,6 @@ tmp_runtime/
 output/
 
 # Superpowers / Claude dev artefacts
-docs/superpowers/
 .superpowers/
 .remember/
 
