@@ -38,6 +38,7 @@ def read_settings() -> dict[str, str]:
 
 
 def write_settings(settings: dict[str, str]) -> None:
+    _ensure_config("settings")
     path = CONFIG_DIR / "settings.csv"
     with path.open(newline="", encoding="utf-8-sig") as handle:
         existing = {row["key"]: row for row in csv.DictReader(handle)}
