@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-from PyQt6.QtCore import QSignalBlocker, Qt, pyqtSignal
+from PyQt6.QtCore import QSignalBlocker, pyqtSignal
 from PyQt6.QtGui import QWheelEvent
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -19,7 +19,17 @@ from PyQt6.QtWidgets import (
 
 from gui import config_io
 
-_TABLE_HEADERS = ["Label", "ISTD", "ISTD Pair", "m/z", "RT min", "RT max", "ppm", "NL(Da)", ""]
+_TABLE_HEADERS = [
+    "Label",
+    "ISTD",
+    "ISTD Pair",
+    "m/z",
+    "RT min",
+    "RT max",
+    "ppm",
+    "NL(Da)",
+    "",
+]
 (
     _COL_LABEL,
     _COL_ISTD,
