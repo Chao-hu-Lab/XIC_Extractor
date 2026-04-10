@@ -8,7 +8,7 @@
 
 ## 下載與執行（一般使用者）
 
-1. 前往 [Releases](../../releases) 下載最新版 `XIC_Extractor_vX.X.X.zip`
+1. 前往 [Releases](../../releases) 下載最新版 `XIC_Extractor-Windows-vX.Y.Z.zip`
 2. 解壓縮到任意資料夾
 3. 雙擊 `XIC_Extractor.exe` 執行（**不需安裝 Python**）
 4. 首次啟動時，`config/` 目錄會自動建立預設設定檔
@@ -55,7 +55,7 @@
 
 ```bash
 # 需要 Python 3.10+ 與 uv（https://docs.astral.sh/uv/）
-git clone https://github.com/bosschen0429/XIC_Extractor.git
+git clone https://github.com/Chao-hu-Lab/XIC_Extractor.git
 cd XIC_Extractor
 
 # 建立虛擬環境並安裝依賴

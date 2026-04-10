@@ -1,9 +1,14 @@
-name: Build Windows EXE
+name: Build Desktop Packages
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      upload_artifact:
+        description: "Upload as artifact (for testing without a tag)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -13,37 +18,68 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Setup Python and dependencies
+        uses: Chao-hu-Lab/shared-workflows/.github/actions/setup-python@main
+        with:
+          python-version: "3.12"
+          install-args: "-e . pyinstaller"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: Install Python
-        run: uv python install 3.12
-
-      - name: Create virtual environment
-        run: uv venv
-
-      - name: Install dependencies
-        run: uv pip install PyQt6 openpyxl pyinstaller pillow
-
-      - name: Build executable
-        run: uv run pyinstaller xic_extractor.spec
-
-      - name: Prepare distribution folder
+      - name: Determine package metadata
+        id: meta
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path dist\XIC_Extractor\output -Force
-          Copy-Item README.md dist\XIC_Extractor\README.md
+          $projectVersion = uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
+          if ("${{ github.ref }}".StartsWith("refs/tags/")) {
+            $packageVersion = "${{ github.ref_name }}"
+            if ($packageVersion -ne "v$projectVersion") {
+              throw "Tag $packageVersion does not match project version v$projectVersion"
+            }
+          } else {
+            $packageVersion = "v$projectVersion-dev"
+          }
+
+          $artifactStem = "XIC_Extractor-Windows-$packageVersion"
+          "version=$packageVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_stem=$artifactStem" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build executable
+        shell: pwsh
+        run: uv run pyinstaller xic_extractor.spec --clean --noconfirm
 
       - name: Package distribution
         shell: pwsh
         run: |
-          Compress-Archive -Path dist\XIC_Extractor -DestinationPath XIC_Extractor_${{ github.ref_name }}.zip
+          $artifactStem = "${{ steps.meta.outputs.artifact_stem }}"
+          $stageDir = Join-Path $env:RUNNER_TEMP $artifactStem
+          $archivePath = Join-Path "dist" "$artifactStem.zip"
+
+          if (Test-Path $stageDir) {
+            Remove-Item $stageDir -Recurse -Force
+          }
+          if (Test-Path $archivePath) {
+            Remove-Item $archivePath -Force
+          }
+
+          New-Item -ItemType Directory -Path $stageDir | Out-Null
+          Copy-Item "dist\XIC_Extractor\*" $stageDir -Recurse
+          New-Item -ItemType Directory -Path (Join-Path $stageDir "output") -Force | Out-Null
+          Copy-Item "README.md" (Join-Path $stageDir "README.md")
+
+          Compress-Archive -Path $stageDir -DestinationPath $archivePath -Force
+
+      - name: Upload artifact
+        if: startsWith(github.ref, 'refs/tags/') || inputs.upload_artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact_stem }}
+          path: dist/${{ steps.meta.outputs.artifact_stem }}.zip
+          retention-days: 7
 
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: XIC_Extractor_${{ github.ref_name }}.zip
+          files: dist/${{ steps.meta.outputs.artifact_stem }}.zip
           generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
