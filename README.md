@@ -90,9 +90,9 @@ Row-based primary review table。每列是一個 sample-target result：
 | `Role` | `Analyte` 或 `ISTD` |
 | `ISTD Pair` | analyte 對應的 ISTD label |
 | `RT` | smoothed peak apex 的 RT（分鐘） |
-| `Area` | 主要定量指標 |
+| `Area` | 主要定量指標；Excel 內以科學記號顯示 |
 | `NL` | `OK`、`WARN_12.3ppm`、`NL_FAIL`、`NO_MS2`；無 NL target 為空白 |
-| `Int` | apex scan 的 raw intensity，屬於 advanced info |
+| `Int` | apex scan 的 raw intensity，屬於 advanced info；Excel 內以科學記號顯示 |
 | `PeakStart` / `PeakEnd` | peak integration boundary，屬於 advanced info |
 
 ### `output/xic_diagnostics.csv`
@@ -112,8 +112,8 @@ Row-based primary review table。每列是一個 sample-target result：
 
 | Sheet | 內容 |
 | --- | --- |
-| `XIC Results` | row-based sample-target review table；預設顯示 `RT`、`Area`、`NL`，`Int`、`PeakStart`、`PeakEnd` 以 Excel outline hidden 作為 advanced info |
-| `Summary` | one row per target，包含 detection rate、Mean RT、Median Area、Area / ISTD ratio、NL counts、RT delta |
+| `XIC Results` | row-based sample-target review table；`SampleName` / `Group` 會合併連續相同儲存格；預設顯示 `RT`、`Area`、`NL`，`Int`、`PeakStart`、`PeakEnd` 以 Excel outline hidden 作為 advanced info |
+| `Summary` | one row per target，包含 detection rate、Mean RT、Median Area (detected)、Area / ISTD ratio (paired detected)、NL counts、RT delta |
 | `Diagnostics` | issue rows；若有 diagnostics，workbook 開啟時會落在此 sheet |
 
 ---

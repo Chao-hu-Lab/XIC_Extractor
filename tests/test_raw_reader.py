@@ -141,6 +141,25 @@ def test_extract_xic_sets_trace_type_when_supported() -> None:
     assert settings.TraceType == "MassRange"
 
 
+def test_extract_xic_prefers_mass_range_trace_type_constructor() -> None:
+    from xic_extractor.raw_reader import RawFileHandle
+
+    calls: list[str] = []
+
+    def _trace_settings(trace_type: str):
+        calls.append(trace_type)
+        return SimpleNamespace(MassRanges=None, Filter=None, TraceType=None)
+
+    raw = _FakeRaw(chromatogram=_FakeChromatogram([8.1], [10.0]))
+    thermo = _fake_thermo(raw)
+    thermo.trace_settings_factory = _trace_settings
+    handle = RawFileHandle(raw, thermo)
+
+    handle.extract_xic(mz=258.0, rt_min=8.0, rt_max=10.0, ppm_tol=20.0)
+
+    assert calls == ["MassRange"]
+
+
 def test_extract_xic_returns_positions_and_intensities() -> None:
     from xic_extractor.raw_reader import RawFileHandle
 

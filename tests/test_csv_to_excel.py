@@ -38,17 +38,39 @@ def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_colum
     assert ws["F2"].value == 9.1234
     assert ws["F2"].number_format == "0.0000"
     assert ws["G2"].value == 12345.6
-    assert ws["G2"].number_format == "#,##0.00"
+    assert ws["G2"].number_format == "0.00E+00"
     assert ws["H2"].value == "✓"
     assert ws["H3"].value == "⚠ 12.3ppm"
     assert ws["H4"].value == "✗ NL"
     assert ws["H5"].value == "— MS2"
     assert ws["H2"].fill.fgColor.rgb.endswith("C8E6C9")
     assert ws["I2"].value == 1000.0
+    assert ws["I2"].number_format == "0.00E+00"
     assert ws.column_dimensions["I"].hidden is True
     assert ws.column_dimensions["J"].hidden is True
     assert ws.column_dimensions["K"].hidden is True
     assert ws.auto_filter.ref == "A1:K6"
+
+
+def test_data_sheet_merges_repeated_sample_and_group_cells() -> None:
+    rows = [
+        _long_row("Tumor_1", "Analyte", "9.1", "10000", "OK"),
+        _long_row("Tumor_1", "ISTD", "9.2", "20000", "OK", role="ISTD"),
+        _long_row("Normal_1", "Analyte", "9.3", "30000", "OK"),
+    ]
+    wb = Workbook()
+    ws = wb.active
+
+    _build_data_sheet(ws, rows)
+
+    merged_ranges = {str(cell_range) for cell_range in ws.merged_cells.ranges}
+    assert "A2:A3" in merged_ranges
+    assert "B2:B3" in merged_ranges
+    assert "A4:A4" not in merged_ranges
+    assert ws["A2"].value == "Tumor_1"
+    assert ws["A3"].value is None
+    assert ws["B2"].value == "Tumor"
+    assert ws["B3"].value is None
 
 
 def test_data_sheet_forces_sample_names_and_target_labels_to_literal_text() -> None:
@@ -88,14 +110,19 @@ def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     assert data["Analyte"]["Detected"] == 4
     assert data["Analyte"]["Total"] == 4
     assert data["Analyte"]["Detection %"] == "100%"
-    assert data["Analyte"]["Median Area"] == "40,000.00"
-    assert data["Analyte"]["Area / ISTD ratio"] == "0.5000±0.0000 (n=3)"
+    assert "Median Area (detected)" in data["headers"]
+    assert "Area / ISTD ratio (paired detected)" in data["headers"]
+    assert data["Analyte"]["Median Area (detected)"] == 40000.0
+    assert ws["H2"].number_format == "0.00E+00"
+    assert data["Analyte"]["Area / ISTD ratio (paired detected)"] == (
+        "0.5000±0.0000 (n=3)"
+    )
     assert data["Analyte"]["NL OK"] == 2
     assert data["Analyte"]["NL WARN"] == 1
     assert data["Analyte"]["NL FAIL"] == 0
     assert data["Analyte"]["NO MS2"] == 1
     assert data["Analyte"]["RT Delta vs ISTD"] == "1.47±0.63% (n=3)"
-    assert data["ISTD"]["Area / ISTD ratio"] == "—"
+    assert data["ISTD"]["Area / ISTD ratio (paired detected)"] == "—"
 
 
 def test_run_writes_row_based_results_sheet_and_makes_diagnostics_active(

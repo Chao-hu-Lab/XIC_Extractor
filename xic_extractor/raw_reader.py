@@ -41,7 +41,7 @@ class _ThermoApi:
     raw_file_reader_adapter: Any
     device_ms: Any
     mass_range_factory: Callable[[float, float], Any]
-    trace_settings_factory: Callable[[], Any]
+    trace_settings_factory: Callable[..., Any]
     mass_range_trace_type: Any
     ms2_order: Any
 
@@ -105,7 +105,7 @@ class RawFileHandle:
 
     def _build_chromatogram_settings(self, mz: float, ppm_tol: float) -> Any:
         tolerance = mz * ppm_tol / 1e6
-        settings = self._thermo.trace_settings_factory()
+        settings = self._create_mass_range_trace_settings()
         settings.MassRanges = [
             self._thermo.mass_range_factory(mz - tolerance, mz + tolerance)
         ]
@@ -113,6 +113,14 @@ class RawFileHandle:
         if hasattr(settings, "TraceType"):
             settings.TraceType = self._thermo.mass_range_trace_type
         return settings
+
+    def _create_mass_range_trace_settings(self) -> Any:
+        try:
+            return self._thermo.trace_settings_factory(
+                self._thermo.mass_range_trace_type
+            )
+        except TypeError:
+            return self._thermo.trace_settings_factory()
 
 
 def open_raw(

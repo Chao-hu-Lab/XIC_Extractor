@@ -56,8 +56,8 @@ _SUMMARY_HEADERS = [
     "Total",
     "Detection %",
     "Mean RT",
-    "Median Area",
-    "Area / ISTD ratio",
+    "Median Area (detected)",
+    "Area / ISTD ratio (paired detected)",
     "NL OK",
     "NL WARN",
     "NL FAIL",
@@ -149,8 +149,8 @@ def _long_cell_fill(header: str, raw_val: str, alt: bool) -> PatternFill:
 def _long_number_format(header: str) -> str:
     if header in {"RT", "PeakStart", "PeakEnd"}:
         return "0.0000"
-    if header == "Area":
-        return "#,##0.00"
+    if header in {"Area", "Int"}:
+        return "0.00E+00"
     return "#,##0"
 
 
@@ -200,6 +200,39 @@ def _build_data_sheet(ws, rows: list[dict[str, str]]) -> None:
         if header in _ADVANCED_HEADERS:
             ws.column_dimensions[letter].hidden = True
             ws.column_dimensions[letter].outlineLevel = 1
+    _merge_repeated_identity_cells(ws, rows)
+
+
+def _merge_repeated_identity_cells(ws, rows: list[dict[str, str]]) -> None:
+    if not rows:
+        return
+    block_start = 2
+    previous = _identity_key(rows[0])
+    for offset, row in enumerate(rows[1:], start=3):
+        current = _identity_key(row)
+        if current == previous:
+            continue
+        _merge_identity_block(ws, block_start, offset - 1)
+        block_start = offset
+        previous = current
+    _merge_identity_block(ws, block_start, len(rows) + 1)
+
+
+def _identity_key(row: dict[str, str]) -> tuple[str, str]:
+    return row.get("SampleName", ""), row.get("Group", "")
+
+
+def _merge_identity_block(ws, start_row: int, end_row: int) -> None:
+    if end_row <= start_row:
+        return
+    for column in (1, 2):
+        ws.merge_cells(
+            start_row=start_row,
+            start_column=column,
+            end_row=end_row,
+            end_column=column,
+        )
+        ws.cell(row=start_row, column=column).alignment = CENTER_WRAP
 
 
 def _sample_group(name: str) -> str:
@@ -229,12 +262,15 @@ def _build_summary_sheet(
         fill_hex = GREY if row_idx % 2 == 0 else WHITE
         values = _summary_row_values(target, rows, count_no_ms2_as_detected)
         for col_idx, value in enumerate(values, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
             _apply(
-                ws.cell(row=row_idx, column=col_idx, value=value),
+                cell,
                 fill=_fill(fill_hex),
                 alignment=CENTER,
                 border=BORDER,
             )
+            if _SUMMARY_HEADERS[col_idx - 1] == "Median Area (detected)":
+                cell.number_format = "0.00E+00"
 
     widths = [24, 12, 24, 12, 10, 12, 12, 16, 24, 10, 10, 10, 10, 22]
     for col_idx, width in enumerate(widths, start=1):
@@ -310,13 +346,13 @@ def _long_mean_rt(rows: list[dict[str, str]]) -> str:
     return f"{sum(values) / len(values):.4f}" if values else "—"
 
 
-def _long_median_area(rows: list[dict[str, str]]) -> str:
+def _long_median_area(rows: list[dict[str, str]]) -> float | str:
     values = [
         value
         for row in rows
         if (value := _safe_float(row.get("Area", ""))) is not None
     ]
-    return f"{statistics.median(values):,.2f}" if values else "—"
+    return statistics.median(values) if values else "—"
 
 
 def _long_nl_counts(rows: list[dict[str, str]]) -> dict[str, int]:
