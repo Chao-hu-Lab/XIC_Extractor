@@ -22,6 +22,7 @@ dev = [
 
 [project.scripts]
 xic-extractor = "gui.main:main"
+xic-extractor-cli = "scripts.run_extraction:main"
 
 [tool.setuptools.packages.find]
 include = ["gui*", "scripts*", "xic_extractor*"]
