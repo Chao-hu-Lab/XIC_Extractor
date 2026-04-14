@@ -25,6 +25,19 @@ DiagnosticIssue = Literal[
 
 _MS1_SUFFIXES = ("RT", "Int", "Area", "PeakStart", "PeakEnd")
 _DIAGNOSTIC_FIELDS = ("SampleName", "Target", "Issue", "Reason")
+_LONG_OUTPUT_FIELDS = (
+    "SampleName",
+    "Group",
+    "Target",
+    "Role",
+    "ISTD Pair",
+    "RT",
+    "Area",
+    "NL",
+    "Int",
+    "PeakStart",
+    "PeakEnd",
+)
 
 
 @dataclass(frozen=True)
@@ -84,6 +97,7 @@ def run(
 
     output = RunOutput(file_results=file_results, diagnostics=diagnostics)
     _write_output_csv(config, targets, file_results)
+    _write_long_output_csv(config, targets, file_results)
     _write_diagnostics_csv(config, diagnostics)
     return output
 
@@ -247,6 +261,70 @@ def _write_diagnostics_csv(
             )
 
 
+def _write_long_output_csv(
+    config: ExtractionConfig, targets: list[Target], file_results: list[FileResult]
+) -> None:
+    path = config.output_csv.with_name("xic_results_long.csv")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.DictWriter(handle, fieldnames=_LONG_OUTPUT_FIELDS)
+        writer.writeheader()
+        for file_result in file_results:
+            writer.writerows(_long_output_rows(file_result, targets))
+
+
+def _long_output_rows(
+    file_result: FileResult, targets: list[Target]
+) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for target in targets:
+        row = {
+            "SampleName": file_result.sample_name,
+            "Group": _sample_group(file_result.sample_name),
+            "Target": target.label,
+            "Role": "ISTD" if target.is_istd else "Analyte",
+            "ISTD Pair": target.istd_pair,
+            "RT": "",
+            "Area": "",
+            "NL": "",
+            "Int": "",
+            "PeakStart": "",
+            "PeakEnd": "",
+        }
+        if file_result.error is not None:
+            _set_long_ms1_values(row, "ERROR")
+            row["NL"] = "ERROR" if target.neutral_loss_da is not None else ""
+        else:
+            result = file_result.results[target.label]
+            _set_long_peak_values(row, result.peak_result.peak)
+            row["NL"] = (
+                result.nl.to_token()
+                if target.neutral_loss_da is not None and result.nl is not None
+                else ""
+            )
+        rows.append(row)
+    return rows
+
+
+def _set_long_ms1_values(row: dict[str, str], value: str) -> None:
+    row["RT"] = value
+    row["Area"] = value
+    row["Int"] = value
+    row["PeakStart"] = value
+    row["PeakEnd"] = value
+
+
+def _set_long_peak_values(row: dict[str, str], peak: PeakResult | None) -> None:
+    if peak is None:
+        _set_long_ms1_values(row, "ND")
+        return
+    row["RT"] = f"{peak.rt:.4f}"
+    row["Area"] = f"{peak.area:.2f}"
+    row["Int"] = f"{peak.intensity:.0f}"
+    row["PeakStart"] = f"{peak.peak_start:.4f}"
+    row["PeakEnd"] = f"{peak.peak_end:.4f}"
+
+
 def _output_fieldnames(targets: list[Target]) -> list[str]:
     fieldnames = ["SampleName"]
     for target in targets:
@@ -301,3 +379,14 @@ def _format_optional_number(value: float | None) -> str:
     if value is None:
         return "NA"
     return f"{value:g}"
+
+
+def _sample_group(name: str) -> str:
+    normalized = name.upper()
+    if normalized.startswith("TUMOR"):
+        return "Tumor"
+    if normalized.startswith("NORMAL"):
+        return "Normal"
+    if normalized.startswith("BENIGNFAT"):
+        return "Benignfat"
+    return "QC"

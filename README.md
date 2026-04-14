@@ -66,7 +66,7 @@ XIC Extractor 會從 Thermo Xcalibur `.raw` 檔案批次提取多目標化合物
 
 ### `output/xic_results.csv`
 
-每列是一個 sample，每個 target 會輸出：
+Legacy wide-format export。每列是一個 sample，每個 target 會輸出：
 
 | 欄位 | 意義 |
 | --- | --- |
@@ -77,6 +77,23 @@ XIC Extractor 會從 Thermo Xcalibur `.raw` 檔案批次提取多目標化合物
 | `{label}_NL` | `OK`、`WARN_12.3ppm`、`NL_FAIL` 或 `NO_MS2`；無 NL target 不會有 `_NL` 欄位 |
 
 `ND` 代表沒有可用 peak；`ERROR` 代表該 raw file 發生 file-level error。
+
+### `output/xic_results_long.csv`
+
+Row-based primary review table。每列是一個 sample-target result：
+
+| 欄位 | 意義 |
+| --- | --- |
+| `SampleName` | sample name |
+| `Group` | 由 sample name 推斷的 `Tumor`、`Normal`、`Benignfat` 或 `QC` |
+| `Target` | target label |
+| `Role` | `Analyte` 或 `ISTD` |
+| `ISTD Pair` | analyte 對應的 ISTD label |
+| `RT` | smoothed peak apex 的 RT（分鐘） |
+| `Area` | 主要定量指標 |
+| `NL` | `OK`、`WARN_12.3ppm`、`NL_FAIL`、`NO_MS2`；無 NL target 為空白 |
+| `Int` | apex scan 的 raw intensity，屬於 advanced info |
+| `PeakStart` / `PeakEnd` | peak integration boundary，屬於 advanced info |
 
 ### `output/xic_diagnostics.csv`
 
@@ -95,8 +112,8 @@ XIC Extractor 會從 Thermo Xcalibur `.raw` 檔案批次提取多目標化合物
 
 | Sheet | 內容 |
 | --- | --- |
-| `XIC Results` | 格式化後的 main data |
-| `Summary` | detection rate、Mean RT、Median Area、Area / ISTD ratio、NL counts、RT delta |
+| `XIC Results` | row-based sample-target review table；預設顯示 `RT`、`Area`、`NL`，`Int`、`PeakStart`、`PeakEnd` 以 Excel outline hidden 作為 advanced info |
+| `Summary` | one row per target，包含 detection rate、Mean RT、Median Area、Area / ISTD ratio、NL counts、RT delta |
 | `Diagnostics` | issue rows；若有 diagnostics，workbook 開啟時會落在此 sheet |
 
 ---

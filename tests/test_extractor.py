@@ -97,6 +97,34 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
     assert _read_csv(config.diagnostics_csv) == []
     assert len(output.file_results) == 1
     assert output.diagnostics == []
+    assert _read_csv(config.output_csv.with_name("xic_results_long.csv")) == [
+        {
+            "SampleName": "SampleA",
+            "Group": "QC",
+            "Target": "NoNL",
+            "Role": "Analyte",
+            "ISTD Pair": "",
+            "RT": "8.5000",
+            "Area": "3400.25",
+            "NL": "",
+            "Int": "1200",
+            "PeakStart": "8.0000",
+            "PeakEnd": "9.0000",
+        },
+        {
+            "SampleName": "SampleA",
+            "Group": "QC",
+            "Target": "WithNL",
+            "Role": "Analyte",
+            "ISTD Pair": "",
+            "RT": "9.5000",
+            "Area": "4400.75",
+            "NL": "WARN_12.3ppm",
+            "Int": "2200",
+            "PeakStart": "9.0000",
+            "PeakEnd": "10.0000",
+        },
+    ]
 
 
 def test_run_writes_nd_for_peak_failure_but_keeps_nl_result(
