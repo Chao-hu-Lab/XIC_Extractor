@@ -22,7 +22,7 @@ def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_colum
 
     _build_data_sheet(ws, rows)
 
-    assert [ws.cell(row=1, column=i).value for i in range(1, 12)] == [
+    assert [ws.cell(row=1, column=i).value for i in range(1, 13)] == [
         "SampleName",
         "Group",
         "Target",
@@ -34,6 +34,7 @@ def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_colum
         "Int",
         "PeakStart",
         "PeakEnd",
+        "PeakWidthSec",
     ]
     assert ws["F2"].value == 9.1234
     assert ws["F2"].number_format == "0.0000"
@@ -46,10 +47,13 @@ def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_colum
     assert ws["H2"].fill.fgColor.rgb.endswith("C8E6C9")
     assert ws["I2"].value == 1000.0
     assert ws["I2"].number_format == "0.00E+00"
+    assert ws["L2"].value == 24.0
+    assert ws["L2"].number_format == "0.00"
     assert ws.column_dimensions["I"].hidden is True
     assert ws.column_dimensions["J"].hidden is True
     assert ws.column_dimensions["K"].hidden is True
-    assert ws.auto_filter.ref == "A1:K6"
+    assert ws.column_dimensions["L"].hidden is True
+    assert ws.auto_filter.ref == "A1:L6"
 
 
 def test_data_sheet_merges_repeated_sample_and_group_cells() -> None:
@@ -141,6 +145,7 @@ def test_run_writes_row_based_results_sheet_and_makes_diagnostics_active(
                 "Analyte_Area": "ND",
                 "Analyte_PeakStart": "ND",
                 "Analyte_PeakEnd": "ND",
+                "Analyte_PeakWidthSec": "ND",
                 "Analyte_NL": "NL_FAIL",
             }
         ],
@@ -201,6 +206,7 @@ def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
                 "Analyte_Area": "10000",
                 "Analyte_PeakStart": "8.9",
                 "Analyte_PeakEnd": "9.3",
+                "Analyte_PeakWidthSec": "24.00",
                 "Analyte_NL": "OK",
             }
         ],
@@ -238,6 +244,7 @@ def _long_row(
         "Int": "1000",
         "PeakStart": "8.9",
         "PeakEnd": "9.3",
+        "PeakWidthSec": "24.00",
     }
 
 

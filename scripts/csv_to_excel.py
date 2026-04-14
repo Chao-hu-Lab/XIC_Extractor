@@ -46,8 +46,9 @@ _LONG_HEADERS = [
     "Int",
     "PeakStart",
     "PeakEnd",
+    "PeakWidthSec",
 ]
-_ADVANCED_HEADERS = {"Int", "PeakStart", "PeakEnd"}
+_ADVANCED_HEADERS = {"Int", "PeakStart", "PeakEnd", "PeakWidthSec"}
 _SUMMARY_HEADERS = [
     "Target",
     "Role",
@@ -128,7 +129,7 @@ def _long_cell_value(header: str, raw_val: str) -> object:
         return _excel_text(raw_val)
     if header == "NL":
         return _nl_to_display(raw_val) if raw_val else ""
-    if header in {"RT", "Area", "Int", "PeakStart", "PeakEnd"}:
+    if header in {"RT", "Area", "Int", "PeakStart", "PeakEnd", "PeakWidthSec"}:
         if raw_val in ND_ERROR:
             return raw_val
         parsed = _safe_float(raw_val)
@@ -151,6 +152,8 @@ def _long_number_format(header: str) -> str:
         return "0.0000"
     if header in {"Area", "Int"}:
         return "0.00E+00"
+    if header == "PeakWidthSec":
+        return "0.00"
     return "#,##0"
 
 
@@ -167,6 +170,7 @@ def _long_column_width(header: str) -> int:
         "Int": 14,
         "PeakStart": 14,
         "PeakEnd": 14,
+        "PeakWidthSec": 14,
     }[header]
 
 
@@ -192,7 +196,7 @@ def _build_data_sheet(ws, rows: list[dict[str, str]]) -> None:
             if isinstance(value, float):
                 cell.number_format = _long_number_format(header)
 
-    ws.auto_filter.ref = f"A1:K{max(1, len(rows) + 1)}"
+    ws.auto_filter.ref = f"A1:L{max(1, len(rows) + 1)}"
     ws.freeze_panes = "A2"
     for col_idx, header in enumerate(_LONG_HEADERS, start=1):
         letter = get_column_letter(col_idx)
@@ -558,9 +562,25 @@ def _wide_to_long_rows(
                     "Int": row.get(f"{target.label}_Int", ""),
                     "PeakStart": row.get(f"{target.label}_PeakStart", ""),
                     "PeakEnd": row.get(f"{target.label}_PeakEnd", ""),
+                    "PeakWidthSec": _legacy_peak_width_seconds(row, target.label),
                 }
             )
     return long_rows
+
+
+def _legacy_peak_width_seconds(row: dict[str, str], label: str) -> str:
+    existing = row.get(f"{label}_PeakWidthSec", "")
+    if existing:
+        return existing
+    start = row.get(f"{label}_PeakStart", "")
+    end = row.get(f"{label}_PeakEnd", "")
+    if start in ND_ERROR or end in ND_ERROR:
+        return start if start == end else ""
+    start_value = _safe_float(start)
+    end_value = _safe_float(end)
+    if start_value is None or end_value is None:
+        return ""
+    return f"{abs(end_value - start_value) * 60.0:.2f}"
 
 
 def _read_results(path: Path) -> list[dict[str, str]]:
