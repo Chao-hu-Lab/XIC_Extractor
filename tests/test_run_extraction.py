@@ -39,7 +39,7 @@ def test_cli_runs_extraction_with_base_dir_and_skips_excel(
     assert "1/2 SampleA.raw" in stdout
 
 
-def test_cli_skips_excel_conversion_by_default(
+def test_cli_runs_excel_conversion_by_default(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
     module = _module()
@@ -52,17 +52,20 @@ def test_cli_skips_excel_conversion_by_default(
     monkeypatch.setattr(
         module.csv_to_excel,
         "run",
-        lambda base_dir: calls.setdefault("excel_base_dir", base_dir),
+        lambda excel_config, excel_targets: calls.update(
+            {"excel_config": excel_config, "excel_targets": excel_targets}
+        ),
     )
 
     exit_code = module.main(["--base-dir", str(tmp_path)])
 
     assert exit_code == 0
-    assert "excel_base_dir" not in calls
-    assert "Excel skipped" in capsys.readouterr().out
+    assert calls["excel_config"] is config
+    assert calls["excel_targets"] == targets
+    assert "Excel skipped" not in capsys.readouterr().out
 
 
-def test_cli_runs_excel_conversion_when_requested(
+def test_cli_accepts_excel_flag_for_compatibility(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
     module = _module()
@@ -75,13 +78,16 @@ def test_cli_runs_excel_conversion_when_requested(
     monkeypatch.setattr(
         module.csv_to_excel,
         "run",
-        lambda base_dir: calls.setdefault("excel_base_dir", base_dir),
+        lambda excel_config, excel_targets: calls.update(
+            {"excel_config": excel_config, "excel_targets": excel_targets}
+        ),
     )
 
     exit_code = module.main(["--base-dir", str(tmp_path), "--excel"])
 
     assert exit_code == 0
-    assert calls["excel_base_dir"] == tmp_path
+    assert calls["excel_config"] is config
+    assert calls["excel_targets"] == targets
     assert "Excel skipped" not in capsys.readouterr().out
 
 

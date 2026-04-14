@@ -27,11 +27,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"Processed files: {len(output.file_results)}")
     print(f"Diagnostics: {len(output.diagnostics)}")
 
-    if not args.excel or args.skip_excel:
+    if args.skip_excel:
         print("Excel skipped.")
         return 0
 
-    csv_to_excel.run(base_dir)
+    csv_to_excel.run(config, targets)
     return 0
 
 
@@ -48,15 +48,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--skip-excel",
         action="store_true",
-        help=(
-            "Write CSV outputs only; kept for compatibility. "
-            "This is the default until Excel conversion is updated."
-        ),
+        help="Write CSV outputs only and skip Excel conversion.",
     )
     parser.add_argument(
         "--excel",
         action="store_true",
-        help="Also run Excel conversion after writing CSV outputs.",
+        help="Run Excel conversion after writing CSV outputs; this is the default.",
     )
     return parser.parse_args(argv)
 
