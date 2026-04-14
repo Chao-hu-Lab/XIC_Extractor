@@ -3,7 +3,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from xic_extractor.config import CANONICAL_SETTINGS_DESCRIPTIONS
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DESCRIPTIONS
 
 if getattr(sys, "frozen", False):
     ROOT = Path(sys.executable).parent  # user-writable: config/, output/

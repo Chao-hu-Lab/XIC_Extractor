@@ -77,6 +77,28 @@ def test_positive_flat_noise_returns_peak_not_found() -> None:
     assert result.n_prominent_peaks == 0
 
 
+def test_deterministic_random_noise_returns_peak_not_found() -> None:
+    rng = np.random.default_rng(20260414)
+    rt = np.linspace(0.0, 1.0, 240)
+    intensity = np.clip(rng.normal(loc=8.0, scale=3.0, size=len(rt)), 0.0, None)
+
+    result = find_peak_and_area(rt, intensity, _config())
+
+    assert result.status == "PEAK_NOT_FOUND"
+    assert result.peak is None
+
+
+def test_negative_baseline_noise_does_not_return_ok_peak() -> None:
+    rng = np.random.default_rng(20260414)
+    rt = np.linspace(0.0, 1.0, 240)
+    intensity = rng.normal(loc=-5.0, scale=2.0, size=len(rt))
+
+    result = find_peak_and_area(rt, intensity, _config())
+
+    assert result.status in {"NO_SIGNAL", "PEAK_NOT_FOUND"}
+    assert result.peak is None
+
+
 def test_zero_signal_returns_no_signal() -> None:
     rt = np.linspace(0.0, 1.0, 60)
     intensity = np.zeros_like(rt)

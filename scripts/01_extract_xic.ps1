@@ -25,6 +25,15 @@ if (-not (Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir
 # ---- Read settings.csv -------------------------------------------------------
 $cfg = @{}
 Import-Csv (Join-Path $configDir "settings.csv") | ForEach-Object { $cfg[$_.key] = $_.value }
+if (
+    (-not $cfg.ContainsKey('smooth_points') -or [string]::IsNullOrWhiteSpace([string]$cfg['smooth_points'])) -and
+    $cfg.ContainsKey('smooth_window')
+) {
+    $cfg['smooth_points'] = $cfg['smooth_window']
+}
+if (-not $cfg.ContainsKey('smooth_sigma') -or [string]::IsNullOrWhiteSpace([string]$cfg['smooth_sigma'])) {
+    $cfg['smooth_sigma'] = '3.0'
+}
 
 $DataDir      = $cfg['data_dir']
 $DllDir       = $cfg['dll_dir']

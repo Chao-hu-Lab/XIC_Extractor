@@ -45,9 +45,10 @@ def find_peak_and_area(
     if max_smoothed <= 0:
         return _failure("NO_SIGNAL", n_points, max_smoothed)
 
-    peaks, _ = find_peaks(
-        smoothed, prominence=max_smoothed * config.peak_min_prominence_ratio
+    prominence = _prominence_threshold(
+        intensity_values, smoothed, max_smoothed, config.peak_min_prominence_ratio
     )
+    peaks, _ = find_peaks(smoothed, prominence=prominence)
     if len(peaks) == 0:
         return _failure("PEAK_NOT_FOUND", n_points, max_smoothed)
 
@@ -93,6 +94,19 @@ def _failure(
         max_smoothed=max_smoothed,
         n_prominent_peaks=0,
     )
+
+
+def _prominence_threshold(
+    intensity: np.ndarray,
+    smoothed: np.ndarray,
+    max_smoothed: float,
+    peak_min_prominence_ratio: float,
+) -> float:
+    residual = intensity - smoothed
+    median = float(np.median(residual))
+    mad = float(np.median(np.abs(residual - median)))
+    noise_floor = 6.0 * 1.4826 * mad
+    return max(max_smoothed * peak_min_prominence_ratio, noise_floor)
 
 
 def _peak_bounds(

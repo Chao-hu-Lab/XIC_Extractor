@@ -105,6 +105,71 @@ def test_load_config_derives_output_paths_and_creates_output_dir(tmp_path: Path)
     assert targets[0].neutral_loss_da == pytest.approx(116.0474)
 
 
+def test_load_config_missing_settings_file_raises_config_error(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_targets(config_dir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "settings.csv")
+
+
+def test_load_config_missing_targets_file_raises_config_error(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "targets.csv")
+
+
+def test_load_config_rejects_settings_missing_required_columns(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "settings.csv").write_text(
+        "name,value\n"
+        "data_dir,C:\\data\n",
+        encoding="utf-8-sig",
+    )
+    _write_targets(config_dir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "settings.csv", "column key")
+
+
+def test_load_config_rejects_targets_missing_required_columns(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir)
+    (config_dir / "targets.csv").write_text(
+        "label,mz,rt_min,rt_max\n"
+        "Analyte,258.1085,8.0,10.0\n",
+        encoding="utf-8-sig",
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "targets.csv", "column ppm_tol")
+
+
+def test_load_config_rejects_empty_targets_file(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir)
+    (config_dir / "targets.csv").write_text(
+        ",".join(TARGET_FIELDS) + "\n",
+        encoding="utf-8-sig",
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "targets.csv", "label")
+
+
 def test_migrate_settings_dict_renames_legacy_key_and_backfills_defaults() -> None:
     migrated, warnings = migrate_settings_dict(
         {

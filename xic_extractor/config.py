@@ -4,35 +4,17 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
+
 LOGGER = logging.getLogger(__name__)
-
-CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
-    "data_dir": "C:/your/data/folder",
-    "dll_dir": "C:\\Xcalibur\\system\\programs",
-    "smooth_window": "15",
-    "smooth_polyorder": "3",
-    "peak_rel_height": "0.95",
-    "peak_min_prominence_ratio": "0.10",
-    "ms2_precursor_tol_da": "0.5",
-    "nl_min_intensity_ratio": "0.01",
-    "count_no_ms2_as_detected": "false",
-}
-
-CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
-    "data_dir": "資料來源資料夾（換批次只改這裡）",
-    "dll_dir": "Xcalibur DLL 路徑（通常不需更改）",
-    "smooth_window": "Savitzky-Golay 平滑視窗長度（必須為奇數，建議 9-21）",
-    "smooth_polyorder": "Savitzky-Golay 多項式階數（通常 2-4）",
-    "peak_rel_height": "Peak 邊界的相對高度（0.95 = 積分到 apex 的 5%，範圍 0.5-0.99）",
-    "peak_min_prominence_ratio": "Peak prominence 至少為 apex 的比例（越低越寬容，0.05-0.20）",
-    "ms2_precursor_tol_da": "MS2 precursor m/z 匹配視窗（Da，對應 DDA quadrupole 隔離寬度）",
-    "nl_min_intensity_ratio": "NL product 強度至少為該 scan base peak 的比例（1% 排除 noise）",
-    "count_no_ms2_as_detected": "是否將無 MS2 觸發的樣品算為偵測到（DDA 隨機性假陰性補救用）",
-}
 
 _TARGET_FIELDS = (
     "label", "mz", "rt_min", "rt_max", "ppm_tol", "neutral_loss_da",
     "nl_ppm_warn", "nl_ppm_max", "is_istd", "istd_pair",
+)
+_REQUIRED_SETTING_FIELDS = ("key", "value")
+_MIGRATION_DEFAULT_KEYS = tuple(
+    key for key in CANONICAL_SETTINGS_DEFAULTS if key not in {"data_dir", "dll_dir"}
 )
 
 
@@ -98,7 +80,8 @@ def migrate_settings_dict(raw: dict[str, str]) -> tuple[dict[str, str], list[str
         migrated.pop("smooth_sigma", None)
         warnings.append("Dropped smooth_sigma because Savitzky-Golay smoothing has no sigma.")
 
-    for key, default in CANONICAL_SETTINGS_DEFAULTS.items():
+    for key in _MIGRATION_DEFAULT_KEYS:
+        default = CANONICAL_SETTINGS_DEFAULTS[key]
         if key not in migrated or migrated[key] == "":
             migrated[key] = default
             warnings.append(f"Filled missing {key} with default {default}.")
@@ -124,8 +107,11 @@ def load_config(config_dir: Path) -> tuple[ExtractionConfig, list[Target]]:
 
 
 def _read_settings(path: Path) -> dict[str, str]:
+    if not path.exists():
+        raise ConfigError(f"{path}: file is missing")
     with path.open(newline="", encoding="utf-8-sig") as handle:
         rows = csv.DictReader(handle)
+        _require_columns(path, rows.fieldnames, _REQUIRED_SETTING_FIELDS)
         return {
             str(row.get("key", "")).strip(): str(row.get("value", "")).strip()
             for row in rows
@@ -143,34 +129,53 @@ def _validate_settings(
 
 def _parse_settings_values(settings: dict[str, str], settings_path: Path) -> _ParsedSettings:
     return _ParsedSettings(
-        data_dir=_parse_existing_dir(settings_path, "data_dir", settings["data_dir"]),
-        dll_dir=_parse_existing_dir(settings_path, "dll_dir", settings["dll_dir"]),
+        data_dir=_parse_existing_dir(
+            settings_path, "data_dir", _setting_value(settings, settings_path, "data_dir")
+        ),
+        dll_dir=_parse_existing_dir(
+            settings_path, "dll_dir", _setting_value(settings, settings_path, "dll_dir")
+        ),
         smooth_window=_parse_int(
-            settings_path, None, "smooth_window", settings["smooth_window"]
+            settings_path,
+            None,
+            "smooth_window",
+            _setting_value(settings, settings_path, "smooth_window"),
         ),
         smooth_polyorder=_parse_int(
-            settings_path, None, "smooth_polyorder", settings["smooth_polyorder"]
+            settings_path,
+            None,
+            "smooth_polyorder",
+            _setting_value(settings, settings_path, "smooth_polyorder"),
         ),
         peak_rel_height=_parse_float(
-            settings_path, None, "peak_rel_height", settings["peak_rel_height"]
+            settings_path,
+            None,
+            "peak_rel_height",
+            _setting_value(settings, settings_path, "peak_rel_height"),
         ),
         peak_min_prominence_ratio=_parse_float(
             settings_path,
             None,
             "peak_min_prominence_ratio",
-            settings["peak_min_prominence_ratio"],
+            _setting_value(settings, settings_path, "peak_min_prominence_ratio"),
         ),
         ms2_precursor_tol_da=_parse_float(
-            settings_path, None, "ms2_precursor_tol_da", settings["ms2_precursor_tol_da"]
+            settings_path,
+            None,
+            "ms2_precursor_tol_da",
+            _setting_value(settings, settings_path, "ms2_precursor_tol_da"),
         ),
         nl_min_intensity_ratio=_parse_float(
-            settings_path, None, "nl_min_intensity_ratio", settings["nl_min_intensity_ratio"]
+            settings_path,
+            None,
+            "nl_min_intensity_ratio",
+            _setting_value(settings, settings_path, "nl_min_intensity_ratio"),
         ),
         count_no_ms2_as_detected=_parse_bool(
             settings_path,
             None,
             "count_no_ms2_as_detected",
-            settings["count_no_ms2_as_detected"],
+            _setting_value(settings, settings_path, "count_no_ms2_as_detected"),
         ),
     )
 
@@ -245,16 +250,22 @@ def _build_config(parsed: _ParsedSettings, output_dir: Path) -> ExtractionConfig
 
 
 def _read_targets(path: Path) -> list[Target]:
+    if not path.exists():
+        raise ConfigError(f"{path}: file is missing")
     targets: list[Target] = []
     seen: set[str] = set()
 
     with path.open(newline="", encoding="utf-8-sig") as handle:
-        for row_number, row in enumerate(csv.DictReader(handle), start=2):
+        rows = csv.DictReader(handle)
+        _require_columns(path, rows.fieldnames, _TARGET_FIELDS)
+        for row_number, row in enumerate(rows, start=2):
             target = _parse_target_row(path, row_number, row)
             if target.label in seen:
                 raise _config_error(path, row_number, "label", target.label, "must be unique")
             seen.add(target.label)
             targets.append(target)
+    if not targets:
+        raise _config_error(path, 2, "label", "", "at least one target row is required")
 
     by_label = {target.label: target for target in targets}
     for row_number, target in enumerate(targets, start=2):
@@ -357,6 +368,22 @@ def _parse_existing_dir(path: Path, column: str, value: str) -> Path:
     if not directory.is_dir():
         raise _config_error(path, None, column, value, "must exist as a directory")
     return directory
+
+
+def _setting_value(settings: dict[str, str], path: Path, column: str) -> str:
+    value = settings.get(column, "")
+    if value == "":
+        raise _config_error(path, None, column, value, "is required")
+    return value
+
+
+def _require_columns(
+    path: Path, fieldnames: list[str] | None, required: tuple[str, ...]
+) -> None:
+    available = set(fieldnames or [])
+    for column in required:
+        if column not in available:
+            raise _config_error(path, None, column, "", "required column is missing")
 
 
 def _parse_int(path: Path, row_number: int | None, column: str, value: str) -> int:

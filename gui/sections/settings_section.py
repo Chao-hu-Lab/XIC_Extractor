@@ -3,18 +3,20 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QSignalBlocker, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
+    QLabel,
     QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
-    QDoubleSpinBox,
 )
+
+from xic_extractor.config import migrate_settings_dict
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
 
 class _LabeledSpin(QWidget):
@@ -69,6 +71,7 @@ class SettingsSection(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._dirty = False
+        self._settings_values = dict(CANONICAL_SETTINGS_DEFAULTS)
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -98,16 +101,15 @@ class SettingsSection(QWidget):
 
         self._data_dir_edit = QLineEdit()
         self._dll_dir_edit = QLineEdit()
-        self._smooth_points_spin = QSpinBox()
-        self._smooth_sigma_spin = QDoubleSpinBox()
+        self._smooth_window_spin = QSpinBox()
+        self._smooth_polyorder_spin = QSpinBox()
         self._save_button = QPushButton("儲存設定")
         self._save_button.setObjectName("btn_save")
         self._save_button.setVisible(False)
 
-        self._smooth_points_spin.setRange(1, 999)
-        self._smooth_sigma_spin.setRange(0.1, 999.0)
-        self._smooth_sigma_spin.setDecimals(2)
-        self._smooth_sigma_spin.setSingleStep(0.1)
+        self._smooth_window_spin.setRange(3, 999)
+        self._smooth_window_spin.setSingleStep(2)
+        self._smooth_polyorder_spin.setRange(1, 10)
 
         # ── Data directory row ───────────────────────────────────────────────
         body_layout.addWidget(QLabel("Data directory"), 0, 0)
@@ -129,8 +131,10 @@ class SettingsSection(QWidget):
         smoothing_layout = QHBoxLayout()
         smoothing_layout.setContentsMargins(0, 0, 0, 0)
         smoothing_layout.setSpacing(16)
-        smoothing_layout.addWidget(_LabeledSpin("Points", self._smooth_points_spin))
-        smoothing_layout.addWidget(_LabeledSpin("σ (sigma)", self._smooth_sigma_spin))
+        smoothing_layout.addWidget(_LabeledSpin("Window", self._smooth_window_spin))
+        smoothing_layout.addWidget(
+            _LabeledSpin("Polyorder", self._smooth_polyorder_spin)
+        )
         smoothing_layout.addStretch()
         body_layout.addLayout(smoothing_layout, 3, 1, 1, 2)
 
@@ -146,29 +150,36 @@ class SettingsSection(QWidget):
         blockers = [
             QSignalBlocker(self._data_dir_edit),
             QSignalBlocker(self._dll_dir_edit),
-            QSignalBlocker(self._smooth_points_spin),
-            QSignalBlocker(self._smooth_sigma_spin),
+            QSignalBlocker(self._smooth_window_spin),
+            QSignalBlocker(self._smooth_polyorder_spin),
         ]
         try:
-            self._data_dir_edit.setText(settings.get("data_dir", ""))
-            self._dll_dir_edit.setText(settings.get("dll_dir", ""))
-            self._smooth_points_spin.setValue(
-                int(settings.get("smooth_points", "15") or 15)
+            migrated, _ = migrate_settings_dict(settings)
+            self._settings_values = dict(CANONICAL_SETTINGS_DEFAULTS)
+            self._settings_values.update(migrated)
+            self._data_dir_edit.setText(self._settings_values.get("data_dir", ""))
+            self._dll_dir_edit.setText(self._settings_values.get("dll_dir", ""))
+            self._smooth_window_spin.setValue(
+                int(self._settings_values.get("smooth_window", "15") or 15)
             )
-            self._smooth_sigma_spin.setValue(
-                float(settings.get("smooth_sigma", "3.0") or 3.0)
+            self._smooth_polyorder_spin.setValue(
+                int(self._settings_values.get("smooth_polyorder", "3") or 3)
             )
         finally:
             del blockers
         self._set_dirty(False)
 
     def get_values(self) -> dict[str, str]:
-        return {
-            "data_dir": self._data_dir_edit.text().strip(),
-            "dll_dir": self._dll_dir_edit.text().strip(),
-            "smooth_points": str(self._smooth_points_spin.value()),
-            "smooth_sigma": f"{self._smooth_sigma_spin.value():.1f}",
-        }
+        values = dict(self._settings_values)
+        values.update(
+            {
+                "data_dir": self._data_dir_edit.text().strip(),
+                "dll_dir": self._dll_dir_edit.text().strip(),
+                "smooth_window": str(self._smooth_window_spin.value()),
+                "smooth_polyorder": str(self._smooth_polyorder_spin.value()),
+            }
+        )
+        return values
 
     def is_valid(self) -> bool:
         data_dir = self._data_dir_edit.text().strip()
@@ -181,8 +192,8 @@ class SettingsSection(QWidget):
         self._data_dir_edit.textChanged.connect(self._validate_data_dir)
         self._data_dir_edit.textChanged.connect(lambda _: self._set_dirty(True))
         self._dll_dir_edit.textChanged.connect(lambda _: self._set_dirty(True))
-        self._smooth_points_spin.valueChanged.connect(lambda _: self._set_dirty(True))
-        self._smooth_sigma_spin.valueChanged.connect(lambda _: self._set_dirty(True))
+        self._smooth_window_spin.valueChanged.connect(lambda _: self._set_dirty(True))
+        self._smooth_polyorder_spin.valueChanged.connect(lambda _: self._set_dirty(True))
         self._save_button.clicked.connect(self._save)
 
     def _validate_data_dir(self, text: str) -> None:
