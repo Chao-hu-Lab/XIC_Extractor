@@ -78,6 +78,7 @@ class ValidationRow:
     peak_start_new: float | None
     peak_end_new: float | None
     nl_new: str
+    new_row_present: bool = True
 
 
 @dataclass(frozen=True)
@@ -213,23 +214,26 @@ def merge_old_new_rows(
     new_rows: list[ValidationRow],
 ) -> list[ValidationRow]:
     old_by_key = {(row.sample_name, row.target): row for row in old_rows}
+    new_by_key = {(row.sample_name, row.target): row for row in new_rows}
     merged: list[ValidationRow] = []
-    for new in new_rows:
-        old = old_by_key.get((new.sample_name, new.target))
+    for key in sorted(old_by_key.keys() | new_by_key.keys()):
+        old = old_by_key.get(key)
+        new = new_by_key.get(key)
         merged.append(
             ValidationRow(
-                sample_name=new.sample_name,
-                target=new.target,
+                sample_name=new.sample_name if new else old.sample_name,
+                target=new.target if new else old.target,
                 rt_old=old.rt_old if old else None,
                 int_old=old.int_old if old else None,
                 nl_old=old.nl_old if old else "",
-                rt_new=new.rt_new,
-                int_new_raw=new.int_new_raw,
-                int_new_smoothed=new.int_new_smoothed,
-                area_new=new.area_new,
-                peak_start_new=new.peak_start_new,
-                peak_end_new=new.peak_end_new,
-                nl_new=new.nl_new,
+                rt_new=new.rt_new if new else None,
+                int_new_raw=new.int_new_raw if new else None,
+                int_new_smoothed=new.int_new_smoothed if new else None,
+                area_new=new.area_new if new else None,
+                peak_start_new=new.peak_start_new if new else None,
+                peak_end_new=new.peak_end_new if new else None,
+                nl_new=new.nl_new if new else "",
+                new_row_present=new is not None,
             )
         )
     return merged
@@ -316,6 +320,42 @@ def _target_failures(
     rows: list[ValidationRow],
 ) -> list[FailureRecord]:
     failures: list[FailureRecord] = []
+    missing_new_rows = [
+        row for row in rows if _old_peak_ok(row) and not row.new_row_present
+    ]
+    for row in missing_new_rows:
+        failures.append(
+            FailureRecord(
+                target=target,
+                sample_name=row.sample_name,
+                issue="NEW_ROW_MISSING",
+                reason="Old pipeline produced this sample-target row, but new did not.",
+                metric_value="",
+                limit="required",
+            )
+        )
+
+    missing_new_peaks = [
+        row
+        for row in rows
+        if _old_peak_ok(row) and row.new_row_present and not _new_peak_ok(row)
+    ]
+    for row in missing_new_peaks:
+        failures.append(
+            FailureRecord(
+                target=target,
+                sample_name=row.sample_name,
+                issue="NEW_PEAK_MISSING",
+                reason="Old pipeline detected a peak, but new pipeline did not.",
+                metric_value=(
+                    f"old_rt={row.rt_old:.4f}; old_int={row.int_old:.0f}"
+                    if row.rt_old is not None and row.int_old is not None
+                    else ""
+                ),
+                limit="new peak required when old peak exists",
+            )
+        )
+
     missing_smoothed = [
         row for row in rows if _new_peak_ok(row) and row.int_new_smoothed is None
     ]
@@ -449,6 +489,10 @@ def _nl_agreement_pct(rows: list[ValidationRow]) -> float | None:
 
 def _new_peak_ok(row: ValidationRow) -> bool:
     return row.rt_new is not None and row.int_new_raw is not None
+
+
+def _old_peak_ok(row: ValidationRow) -> bool:
+    return row.rt_old is not None and row.int_old is not None
 
 
 def _legacy_nl(token: str) -> str:
@@ -590,6 +634,8 @@ def _autosize(ws, n_cols: int) -> None:
 def _stage_cases(worktree: Path, cases: list[ValidationCase]) -> Path:
     data_dir = worktree / "local_validation_raw"
     data_dir.mkdir(parents=True, exist_ok=True)
+    for stale_raw in data_dir.glob("*.raw"):
+        stale_raw.unlink()
     for case in cases:
         dst = data_dir / f"{case.name}{case.path.suffix}"
         shutil.copy2(case.path, dst)

@@ -81,6 +81,31 @@ def test_compare_fails_before_thresholds_when_smoothed_missing() -> None:
     assert report.failures[0].issue == "MISSING_SMOOTHED_INTENSITY"
 
 
+def test_compare_fails_when_old_peak_is_missing_from_new_pipeline() -> None:
+    rows = [
+        ValidationRow(
+            sample_name="Tumor_1",
+            target="Analyte",
+            rt_old=9.0,
+            int_old=1000.0,
+            nl_old="OK",
+            rt_new=None,
+            int_new_raw=None,
+            int_new_smoothed=None,
+            area_new=None,
+            peak_start_new=None,
+            peak_end_new=None,
+            nl_new="OK",
+        )
+    ]
+
+    report = compare_validation_rows(rows)
+
+    assert report.failed is True
+    assert report.targets[0].status == "FAIL"
+    assert report.failures[0].issue == "NEW_PEAK_MISSING"
+
+
 def test_compare_validation_rows_flags_rt_smoothed_and_nl_failures() -> None:
     rows = [
         ValidationRow(
@@ -130,6 +155,35 @@ def test_strict_exit_code_honors_explicit_override_mode() -> None:
     assert strict_exit_code(report, strict=False, allow_overrides=False) == 0
     assert strict_exit_code(report, strict=True, allow_overrides=False) == 1
     assert strict_exit_code(report, strict=True, allow_overrides=True) == 0
+
+
+def test_merge_old_new_rows_preserves_old_only_rows_as_failures() -> None:
+    old_rows = [
+        ValidationRow(
+            sample_name="Tumor_1",
+            target="Analyte",
+            rt_old=9.0,
+            int_old=1000.0,
+            nl_old="OK",
+            rt_new=None,
+            int_new_raw=None,
+            int_new_smoothed=None,
+            area_new=None,
+            peak_start_new=None,
+            peak_end_new=None,
+            nl_new="",
+            new_row_present=False,
+        )
+    ]
+
+    from scripts.validate_migration import merge_old_new_rows
+
+    merged = merge_old_new_rows(old_rows, [])
+    report = compare_validation_rows(merged)
+
+    assert len(merged) == 1
+    assert report.failed is True
+    assert report.failures[0].issue == "NEW_ROW_MISSING"
 
 
 def test_write_validation_workbook_contains_summary_pertarget_and_fail_sheets(
@@ -194,3 +248,23 @@ def test_stage_cases_copies_raws_and_points_settings_at_validation_dir(
     assert (data_dir / "Tumor.raw").read_text(encoding="utf-8") == "raw"
     settings_text = (config_dir / "settings.csv").read_text(encoding="utf-8-sig")
     assert f"data_dir,{data_dir}" in settings_text
+
+
+def test_stage_cases_removes_stale_validation_raw_files(tmp_path: Path) -> None:
+    worktree = tmp_path / "worktree"
+    config_dir = worktree / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "settings.csv").write_text(
+        "key,value,description\ndata_dir,C:\\old,raw folder\ndll_dir,C:\\dll,dll\n",
+        encoding="utf-8-sig",
+    )
+    data_dir = worktree / "local_validation_raw"
+    data_dir.mkdir(parents=True)
+    (data_dir / "Stale.raw").write_text("stale", encoding="utf-8")
+    raw_file = tmp_path / "source.raw"
+    raw_file.write_text("raw", encoding="utf-8")
+
+    _stage_cases(worktree, [ValidationCase("Tumor", raw_file)])
+
+    assert not (data_dir / "Stale.raw").exists()
+    assert (data_dir / "Tumor.raw").read_text(encoding="utf-8") == "raw"
