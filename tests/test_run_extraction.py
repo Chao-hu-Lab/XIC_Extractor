@@ -1,8 +1,9 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.config import ConfigError, ExtractionConfig, Target
 from xic_extractor.extractor import DiagnosticRecord, RunOutput
+from xic_extractor.raw_reader import RawReaderError
 
 
 def test_cli_runs_extraction_with_base_dir_and_skips_excel(
@@ -38,7 +39,7 @@ def test_cli_runs_extraction_with_base_dir_and_skips_excel(
     assert "1/2 SampleA.raw" in stdout
 
 
-def test_cli_runs_excel_conversion_by_default(
+def test_cli_skips_excel_conversion_by_default(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
     module = _module()
@@ -57,8 +58,72 @@ def test_cli_runs_excel_conversion_by_default(
     exit_code = module.main(["--base-dir", str(tmp_path)])
 
     assert exit_code == 0
+    assert "excel_base_dir" not in calls
+    assert "Excel skipped" in capsys.readouterr().out
+
+
+def test_cli_runs_excel_conversion_when_requested(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module.csv_to_excel,
+        "run",
+        lambda base_dir: calls.setdefault("excel_base_dir", base_dir),
+    )
+
+    exit_code = module.main(["--base-dir", str(tmp_path), "--excel"])
+
+    assert exit_code == 0
     assert calls["excel_base_dir"] == tmp_path
     assert "Excel skipped" not in capsys.readouterr().out
+
+
+def test_cli_reports_config_errors_without_traceback(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    monkeypatch.setattr(
+        module,
+        "load_config",
+        lambda _config_dir: (_ for _ in ()).throw(ConfigError("settings.csv missing")),
+    )
+
+    exit_code = module.main(["--base-dir", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "settings.csv missing" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_cli_reports_reader_setup_errors_without_traceback(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+    monkeypatch.setattr(
+        module.extractor,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RawReaderError("pythonnet is not installed")
+        ),
+    )
+
+    exit_code = module.main(["--base-dir", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "pythonnet is not installed" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_pyproject_exposes_cli_entry_point() -> None:

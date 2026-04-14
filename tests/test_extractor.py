@@ -6,7 +6,41 @@ import pytest
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import NLResult
+from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
+
+
+@pytest.fixture(autouse=True)
+def _disable_reader_preflight(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "xic_extractor.extractor.preflight_raw_reader",
+        lambda _dll_dir: [],
+        raising=False,
+    )
+
+
+def test_run_raises_before_processing_when_reader_preflight_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "xic_extractor.extractor.preflight_raw_reader",
+        lambda _dll_dir: ["pythonnet is not installed"],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.open_raw",
+        lambda *_args: pytest.fail(
+            "open_raw should not be called after preflight failure"
+        ),
+    )
+
+    with pytest.raises(RawReaderError, match="pythonnet is not installed"):
+        _run(config, [_target("Analyte")])
+
+    assert not config.output_csv.exists()
+    assert not config.diagnostics_csv.exists()
 
 
 def test_run_writes_success_rows_with_area_columns_and_optional_nl(

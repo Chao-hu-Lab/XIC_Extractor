@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import NLResult, check_nl
-from xic_extractor.raw_reader import open_raw
+from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
 from xic_extractor.signal_processing import (
     PeakDetectionResult,
     PeakResult,
@@ -60,6 +60,10 @@ def run(
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
 ) -> RunOutput:
+    reader_errors = preflight_raw_reader(config.dll_dir)
+    if reader_errors:
+        raise RawReaderError(" ".join(reader_errors))
+
     raw_paths = sorted(config.data_dir.glob("*.raw"))
     file_results: list[FileResult] = []
     diagnostics: list[DiagnosticRecord] = []

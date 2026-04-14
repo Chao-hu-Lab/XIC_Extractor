@@ -1,26 +1,33 @@
 import argparse
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from scripts import csv_to_excel
 from xic_extractor import extractor
-from xic_extractor.config import load_config
+from xic_extractor.config import ConfigError, load_config
+from xic_extractor.raw_reader import RawReaderError
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     base_dir = args.base_dir.resolve()
-    config, targets = load_config(base_dir / "config")
+    try:
+        config, targets = load_config(base_dir / "config")
 
-    output = extractor.run(
-        config,
-        targets,
-        progress_callback=_print_progress,
-    )
+        output = extractor.run(
+            config,
+            targets,
+            progress_callback=_print_progress,
+        )
+    except (ConfigError, RawReaderError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
     print(f"Processed files: {len(output.file_results)}")
     print(f"Diagnostics: {len(output.diagnostics)}")
 
-    if args.skip_excel:
+    if not args.excel or args.skip_excel:
         print("Excel skipped.")
         return 0
 
@@ -41,7 +48,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--skip-excel",
         action="store_true",
-        help="Write CSV outputs only; skip Excel conversion.",
+        help=(
+            "Write CSV outputs only; kept for compatibility. "
+            "This is the default until Excel conversion is updated."
+        ),
+    )
+    parser.add_argument(
+        "--excel",
+        action="store_true",
+        help="Also run Excel conversion after writing CSV outputs.",
     )
     return parser.parse_args(argv)
 
