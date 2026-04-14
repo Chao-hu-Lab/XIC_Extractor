@@ -251,7 +251,7 @@ def find_peak_and_area(
     8. widths = peak_widths(smoothed, [best_idx], rel_height=peak_rel_height)
     9. left = floor(widths[2][0]); right = ceil(widths[3][0]) + 1
     10. Clamp: left = max(0, left); right = min(len(rt), right)
-    11. area = trapezoid(intensity[left:right], rt[left:right])  # RAW intensity
+    11. area = trapezoid(intensity[left:right], rt[left:right]) * 60  # RAW intensity; ×60 converts counts·min → counts·sec
     12. peak = PeakResult(rt=rt[best_idx], intensity=intensity[best_idx],
                          intensity_smoothed=smoothed[best_idx], area=area,
                          peak_start=rt[left], peak_end=rt[right - 1])
@@ -264,6 +264,7 @@ def find_peak_and_area(
 **Key algorithmic decisions (rationale embedded):**
 - Apex intensity uses **raw** array, not smoothed, so Excel values match what users see in Xcalibur at the apex scan.
 - Area integration uses **raw** intensity — area is conservative under integration; smoothed would underestimate.
+- **Area unit is `counts·seconds`**: Thermo's `GetChromatogramData` returns rt in minutes, so `trapezoid(intensity, rt)` natively produces `counts·minutes`. We multiply by 60 so area matches Xcalibur / MassHunter / manual-integration convention (chemists otherwise see numbers ~60× too small and area < height, which is physically impossible).
 - Smoothed array is used only for detection (peak finding) and boundary (peak_widths), never for the final quantitative numbers.
 - Multi-peak selection: highest peak wins. Rationale: `rt_min/rt_max` windows are already user-set; within the window the strongest signal is the target. If RT has drifted significantly, picking the strongest makes the anomaly visible rather than systematically picking wrong peaks.
 

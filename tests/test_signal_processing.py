@@ -39,7 +39,8 @@ def _gaussian(
 def test_clean_gaussian_peak_returns_raw_apex_and_area() -> None:
     rt = np.linspace(8.0, 10.0, 401)
     intensity = _gaussian(rt, center=9.0, sigma=0.08, height=1000.0)
-    expected_area = 1000.0 * 0.08 * np.sqrt(2 * np.pi)
+    # rt is in minutes, area is reported in counts·seconds (LC-MS convention).
+    expected_area = 1000.0 * 0.08 * np.sqrt(2 * np.pi) * 60.0
 
     result = find_peak_and_area(rt, intensity, _config())
 
@@ -164,11 +165,38 @@ def test_area_is_computed_from_raw_intensity_not_smoothed() -> None:
     smoothed = savgol_filter(intensity, config.smooth_window, config.smooth_polyorder)
     left = int(np.searchsorted(rt, result.peak.peak_start, side="left"))
     right = int(np.searchsorted(rt, result.peak.peak_end, side="right"))
-    raw_area = np.trapezoid(intensity[left:right], rt[left:right])
-    smoothed_area = np.trapezoid(smoothed[left:right], rt[left:right])
+    # rt is in minutes; area is reported in counts·seconds, so scale both
+    # reference integrals by 60 to match the convention used by find_peak_and_area.
+    raw_area = np.trapezoid(intensity[left:right], rt[left:right]) * 60.0
+    smoothed_area = np.trapezoid(smoothed[left:right], rt[left:right]) * 60.0
     apex_idx = int(np.argmin(np.abs(rt - result.peak.rt)))
 
     assert result.peak.area == pytest.approx(raw_area)
     assert result.peak.area != pytest.approx(smoothed_area, rel=1e-4)
     assert result.peak.intensity == pytest.approx(intensity[apex_idx])
     assert result.peak.intensity_smoothed == pytest.approx(smoothed[apex_idx])
+
+
+def test_area_is_reported_in_counts_seconds_not_counts_minutes() -> None:
+    """
+    The Thermo RawFileReader returns retention time in minutes, but LC-MS
+    convention (Xcalibur, MassHunter, manual integration) reports peak area in
+    counts·seconds. `find_peak_and_area` must convert so downstream numbers match
+    what chemists see in Xcalibur.
+    """
+    rt_minutes = np.linspace(8.0, 10.0, 401)
+    intensity = _gaussian(rt_minutes, center=9.0, sigma=0.08, height=1000.0)
+
+    result = find_peak_and_area(rt_minutes, intensity, _config())
+
+    assert result.status == "OK"
+    assert result.peak is not None
+
+    # Reference integral in the native rt units (minutes).
+    left = int(np.searchsorted(rt_minutes, result.peak.peak_start, side="left"))
+    right = int(np.searchsorted(rt_minutes, result.peak.peak_end, side="right"))
+    area_counts_minutes = np.trapezoid(intensity[left:right], rt_minutes[left:right])
+
+    # The output must be 60× the raw-minutes integral — anything else means we
+    # accidentally reverted to counts·minutes and area will look ~60× too small.
+    assert result.peak.area == pytest.approx(area_counts_minutes * 60.0, rel=1e-6)

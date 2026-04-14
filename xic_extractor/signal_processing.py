@@ -54,7 +54,13 @@ def find_peak_and_area(
 
     best_idx = int(peaks[np.argmax(smoothed[peaks])])
     left, right = _peak_bounds(smoothed, best_idx, config.peak_rel_height, n_points)
-    area = float(np.trapezoid(intensity_values[left:right], rt_values[left:right]))
+    # Thermo returns rt in minutes, but LC-MS convention (Xcalibur, MassHunter,
+    # manual integration) reports area in counts·seconds — convert so downstream
+    # numbers match what chemists see in Xcalibur.
+    area_counts_minutes = float(
+        np.trapezoid(intensity_values[left:right], rt_values[left:right])
+    )
+    area = area_counts_minutes * 60.0
 
     return PeakDetectionResult(
         status="OK",
