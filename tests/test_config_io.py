@@ -55,6 +55,34 @@ def test_write_settings_preserves_description(tmp_config, monkeypatch):
     assert {row["key"]: row["description"] for row in rows}["data_dir"] == "資料目錄"
 
 
+def test_write_settings_backfills_description_for_migrated_smooth_window(
+    tmp_config, monkeypatch
+):
+    monkeypatch.setattr("gui.config_io.CONFIG_DIR", tmp_config)
+    write_settings(
+        {
+            "data_dir": "C:\\x",
+            "dll_dir": "C:\\y",
+            "smooth_window": "15",
+            "smooth_polyorder": "3",
+            "peak_rel_height": "0.95",
+            "peak_min_prominence_ratio": "0.10",
+            "ms2_precursor_tol_da": "0.5",
+            "nl_min_intensity_ratio": "0.01",
+            "count_no_ms2_as_detected": "false",
+        }
+    )
+
+    rows = list(
+        csv.DictReader((tmp_config / "settings.csv").open(encoding="utf-8-sig"))
+    )
+
+    descriptions = {row["key"]: row["description"] for row in rows}
+    assert descriptions["smooth_window"]
+    assert "Savitzky-Golay" in descriptions["smooth_window"]
+    assert descriptions["count_no_ms2_as_detected"]
+
+
 def test_read_targets(tmp_config, monkeypatch):
     monkeypatch.setattr("gui.config_io.CONFIG_DIR", tmp_config)
     assert read_targets()[0]["label"] == "5-hmdC"
