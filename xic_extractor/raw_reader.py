@@ -1,4 +1,5 @@
 import importlib
+import math
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -215,7 +216,29 @@ def _first_or_empty(values: Any) -> Any:
 
 
 def _extract_precursor_mz(filter_obj: Any) -> float:
+    get_reaction = getattr(filter_obj, "GetReaction", None)
+    if callable(get_reaction):
+        try:
+            precursor = _positive_float_or_none(get_reaction(0).PrecursorMass)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            precursor = None
+        if precursor is not None:
+            return precursor
+
     reactions = getattr(getattr(filter_obj, "Filter", SimpleNamespace()), "Reactions", [])
     if reactions is None or len(reactions) == 0:
         raise RawReaderError("MS2 filter has no precursor reaction")
-    return float(reactions[0].PrecursorMass)
+    precursor = _positive_float_or_none(reactions[0].PrecursorMass)
+    if precursor is None:
+        raise RawReaderError("MS2 filter has no precursor reaction")
+    return precursor
+
+
+def _positive_float_or_none(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed) or parsed <= 0.0:
+        return None
+    return parsed

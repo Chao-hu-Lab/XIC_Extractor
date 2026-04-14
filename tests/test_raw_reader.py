@@ -185,6 +185,22 @@ def test_iter_ms2_scans_reports_missing_precursor_reaction() -> None:
     assert "precursor reaction" in events[0].parse_error
 
 
+def test_iter_ms2_scans_reads_precursor_from_scan_filter_get_reaction() -> None:
+    from xic_extractor.raw_reader import RawFileHandle
+
+    raw = _FakeRaw(
+        filters={1: _FakeScanFilterWithReaction(precursor_mz=537.0779)},
+        scans={1: _FakeScan([127.0], [50.0])},
+    )
+    handle = RawFileHandle(raw, _fake_thermo(raw))
+
+    events = list(handle.iter_ms2_scans(rt_min=8.0, rt_max=8.0))
+
+    assert events[0].parse_error is None
+    assert events[0].scan is not None
+    assert events[0].scan.precursor_mz == pytest.approx(537.0779)
+
+
 def test_iter_ms2_scans_yields_parse_error_events() -> None:
     from xic_extractor.raw_reader import RawFileHandle
 
@@ -304,6 +320,17 @@ class _FakeFilter:
         self.Filter = SimpleNamespace(
             Reactions=[SimpleNamespace(PrecursorMass=precursor_mz)]
         )
+
+
+class _FakeScanFilterWithReaction:
+    def __init__(self, *, precursor_mz: float) -> None:
+        self.MSOrder = "Ms2"
+        self.reaction = SimpleNamespace(PrecursorMass=precursor_mz)
+
+    def GetReaction(self, index: int):
+        if index != 0:
+            raise IndexError(index)
+        return self.reaction
 
 
 class _FakeScan:
