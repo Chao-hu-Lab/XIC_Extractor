@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Setup Python and dependencies
-        uses: Chao-hu-Lab/shared-workflows/.github/actions/setup-python@main
+        uses: Chao-hu-Lab/shared-workflows/.github/actions/setup-python@c5276382aafc2ee6c0f14b3651cad8aca9f74758
         with:
           python-version: "3.12"
           install-args: "-e . pyinstaller"
