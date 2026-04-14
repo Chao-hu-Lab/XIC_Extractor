@@ -17,6 +17,7 @@ tmp_runtime/
 # Output (generated files)
 output/
 local_raw_samples/
+local_validation_raw/
 
 # Superpowers / Claude dev artefacts
 .superpowers/

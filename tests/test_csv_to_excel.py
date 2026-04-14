@@ -16,8 +16,7 @@ from xic_extractor.config import ExtractionConfig, Target
 def _write_targets(tmp_path: Path, rows: str) -> None:
     (tmp_path / "targets.csv").write_text(
         "label,mz,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max,"
-        "is_istd,istd_pair\n"
-        + rows,
+        "is_istd,istd_pair\n" + rows,
         encoding="utf-8-sig",
     )
 

@@ -271,8 +271,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_path = args.output.resolve()
 
     cases = list(args.case) + [
-        ValidationCase(name=raw_file.stem, path=raw_file)
-        for raw_file in args.raw_file
+        ValidationCase(name=raw_file.stem, path=raw_file) for raw_file in args.raw_file
     ]
     if cases:
         _stage_cases(old_worktree, cases)
@@ -345,13 +344,8 @@ def _target_failures(
                     sample_name="",
                     issue="RT_DRIFT",
                     reason="RT drift exceeded migration threshold.",
-                    metric_value=(
-                        f"median={median_delta:.4f}; max={max_delta:.4f}"
-                    ),
-                    limit=(
-                        f"median<={RT_MEDIAN_LIMIT:.3f}; "
-                        f"max<={RT_MAX_LIMIT:.3f}"
-                    ),
+                    metric_value=(f"median={median_delta:.4f}; max={max_delta:.4f}"),
+                    limit=(f"median<={RT_MEDIAN_LIMIT:.3f}; max<={RT_MAX_LIMIT:.3f}"),
                 )
             )
 
@@ -448,9 +442,7 @@ def _nl_agreement_pct(rows: list[ValidationRow]) -> float | None:
     if not comparable:
         return None
     agree = sum(
-        1
-        for row in comparable
-        if _legacy_nl(row.nl_new) == _legacy_nl(row.nl_old)
+        1 for row in comparable if _legacy_nl(row.nl_new) == _legacy_nl(row.nl_old)
     )
     return round(agree / len(comparable) * 100.0, 1)
 

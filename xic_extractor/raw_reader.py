@@ -81,7 +81,9 @@ class RawFileHandle:
                 precursor_mz = _extract_precursor_mz(filter_obj)
                 scan_data = self._raw_file.GetSimplifiedScan(scan_number)
                 masses = np.asarray(getattr(scan_data, "Masses", []), dtype=float)
-                intensities = np.asarray(getattr(scan_data, "Intensities", []), dtype=float)
+                intensities = np.asarray(
+                    getattr(scan_data, "Intensities", []), dtype=float
+                )
                 base_peak = float(np.max(intensities)) if len(intensities) else 0.0
                 yield Ms2ScanEvent(
                     scan=Ms2Scan(
@@ -131,7 +133,9 @@ def open_raw(
         raw_file = thermo.raw_file_reader_adapter.FileFactory(str(path))
         raw_file.SelectInstrument(thermo.device_ms, 1)
     except Exception as exc:
-        raise RawReaderError(f"Failed to load Thermo DLL or open raw file: {exc}") from exc
+        raise RawReaderError(
+            f"Failed to load Thermo DLL or open raw file: {exc}"
+        ) from exc
     return RawFileHandle(raw_file, thermo)
 
 
@@ -149,13 +153,16 @@ def preflight_raw_reader(
             "pythonnet is not installed; Install project dependencies with `uv sync`."
         )
     except Exception as exc:
-        errors.append(f".NET runtime is not available ({exc}); Install .NET 6+ runtime.")
+        errors.append(
+            f".NET runtime is not available ({exc}); Install .NET 6+ runtime."
+        )
 
     try:
         resolved = dll_dir.resolve(strict=True)
     except OSError:
         errors.append(
-            f"Xcalibur DLL directory was not found at `{dll_dir}`; open Settings and correct DLL directory."
+            f"Xcalibur DLL directory was not found at `{dll_dir}`; "
+            "open Settings and correct DLL directory."
         )
         return errors
 
@@ -163,7 +170,8 @@ def preflight_raw_reader(
         dll_path = resolved / dll_name
         if not dll_path.is_file():
             errors.append(
-                f"Xcalibur DLL `{dll_name}` was not found in `{resolved}`; open Settings and correct DLL directory."
+                f"Xcalibur DLL `{dll_name}` was not found in `{resolved}`; "
+                "open Settings and correct DLL directory."
             )
     return errors
 
@@ -191,7 +199,9 @@ def _ensure_assemblies_loaded(
         try:
             clr.AddReference(str(dll_path))
         except Exception as exc:
-            raise RawReaderError(f"Failed to load Thermo DLL `{dll_path}`: {exc}") from exc
+            raise RawReaderError(
+                f"Failed to load Thermo DLL `{dll_path}`: {exc}"
+            ) from exc
     _ASSEMBLIES_LOADED = True
 
 
@@ -225,7 +235,9 @@ def _extract_precursor_mz(filter_obj: Any) -> float:
         if precursor is not None:
             return precursor
 
-    reactions = getattr(getattr(filter_obj, "Filter", SimpleNamespace()), "Reactions", [])
+    reactions = getattr(
+        getattr(filter_obj, "Filter", SimpleNamespace()), "Reactions", []
+    )
     if reactions is None or len(reactions) == 0:
         raise RawReaderError("MS2 filter has no precursor reaction")
     precursor = _positive_float_or_none(reactions[0].PrecursorMass)

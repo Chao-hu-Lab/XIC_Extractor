@@ -6,7 +6,6 @@ import pytest
 from xic_extractor.neutral_loss import check_nl
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
 
-
 PRECURSOR_MZ = 258.0969
 NEUTRAL_LOSS_DA = 131.0405
 EXPECTED_PRODUCT_MZ = PRECURSOR_MZ - NEUTRAL_LOSS_DA

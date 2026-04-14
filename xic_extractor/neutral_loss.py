@@ -68,9 +68,7 @@ def check_nl(
             min_intensity_ratio=nl_min_intensity_ratio,
             diagnostic_ppm=diagnostic_ppm,
         )
-        if candidate_ppm is not None and (
-            best_ppm is None or candidate_ppm < best_ppm
-        ):
+        if candidate_ppm is not None and (best_ppm is None or candidate_ppm < best_ppm):
             best_ppm = candidate_ppm
 
     status = _classify_nl_result(

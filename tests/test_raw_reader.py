@@ -25,7 +25,9 @@ def test_preflight_reports_missing_dotnet_runtime(tmp_path: Path) -> None:
 
     tmp_path.mkdir(exist_ok=True)
     _write_expected_dlls(tmp_path)
-    errors = preflight_raw_reader(tmp_path, import_module_func=_broken_pythonnet_runtime)
+    errors = preflight_raw_reader(
+        tmp_path, import_module_func=_broken_pythonnet_runtime
+    )
 
     assert any(".NET runtime" in error and "Install" in error for error in errors)
 
@@ -36,7 +38,9 @@ def test_preflight_reports_missing_dll_dir(tmp_path: Path) -> None:
     missing = tmp_path / "missing"
     errors = preflight_raw_reader(missing, import_module_func=_working_imports())
 
-    assert any("Xcalibur DLL directory" in error and str(missing) in error for error in errors)
+    assert any(
+        "Xcalibur DLL directory" in error and str(missing) in error for error in errors
+    )
 
 
 def test_preflight_reports_missing_expected_thermo_dll(tmp_path: Path) -> None:
@@ -69,11 +73,19 @@ def test_open_raw_raises_raw_reader_error_when_preflight_fails(tmp_path: Path) -
     from xic_extractor.raw_reader import RawReaderError, open_raw
 
     with pytest.raises(RawReaderError, match="Xcalibur DLL directory"):
-        open_raw(tmp_path / "sample.raw", tmp_path / "missing", _import_module=_working_imports())
+        open_raw(
+            tmp_path / "sample.raw",
+            tmp_path / "missing",
+            _import_module=_working_imports(),
+        )
 
 
 def test_open_raw_loads_only_expected_absolute_dll_paths(tmp_path: Path) -> None:
-    from xic_extractor.raw_reader import EXPECTED_THERMO_DLLS, open_raw, reset_reader_state
+    from xic_extractor.raw_reader import (
+        EXPECTED_THERMO_DLLS,
+        open_raw,
+        reset_reader_state,
+    )
 
     reset_reader_state()
     _write_expected_dlls(tmp_path)
@@ -235,7 +247,9 @@ def _missing_pythonnet(name: str):
 
 def _broken_pythonnet_runtime(name: str):
     if name == "pythonnet":
-        return SimpleNamespace(get_runtime_info=lambda: (_ for _ in ()).throw(RuntimeError("no runtime")))
+        return SimpleNamespace(
+            get_runtime_info=lambda: (_ for _ in ()).throw(RuntimeError("no runtime"))
+        )
     return SimpleNamespace(AddReference=lambda *_: None)
 
 
@@ -250,6 +264,7 @@ def _working_imports(
         if name == "pythonnet":
             return SimpleNamespace(get_runtime_info=lambda: "ok")
         if name == "clr":
+
             def _add_reference(path: str) -> None:
                 if add_reference_error is not None:
                     raise add_reference_error

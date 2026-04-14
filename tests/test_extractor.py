@@ -52,7 +52,9 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
         "xic_extractor.extractor.find_peak_and_area",
-        _peak_sequence([_ok_peak(8.5, 1200.0, 3400.25), _ok_peak(9.5, 2200.0, 4400.75)]),
+        _peak_sequence(
+            [_ok_peak(8.5, 1200.0, 3400.25), _ok_peak(9.5, 2200.0, 4400.75)]
+        ),
     )
     monkeypatch.setattr(
         "xic_extractor.extractor.check_nl",
@@ -106,7 +108,9 @@ def test_run_writes_nd_for_peak_failure_but_keeps_nl_result(
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
         "xic_extractor.extractor.find_peak_and_area",
-        _peak_sequence([_failed_peak("PEAK_NOT_FOUND", n_points=15, max_smoothed=1234.0)]),
+        _peak_sequence(
+            [_failed_peak("PEAK_NOT_FOUND", n_points=15, max_smoothed=1234.0)]
+        ),
     )
     monkeypatch.setattr(
         "xic_extractor.extractor.check_nl",
@@ -371,9 +375,7 @@ def _nl_sequence(results: list[NLResult]):
     return _fake_check_nl
 
 
-def _open_raw_factory(
-    *, errors: dict[str, Exception] | None = None
-):
+def _open_raw_factory(*, errors: dict[str, Exception] | None = None):
     error_by_name = errors or {}
 
     def _fake_open_raw(path: Path, dll_dir: Path):
@@ -394,7 +396,9 @@ class _FakeRaw:
     def extract_xic(
         self, mz: float, rt_min: float, rt_max: float, ppm_tol: float
     ) -> tuple[np.ndarray, np.ndarray]:
-        return np.asarray([rt_min, rt_max], dtype=float), np.asarray([1.0, 2.0], dtype=float)
+        return np.asarray([rt_min, rt_max], dtype=float), np.asarray(
+            [1.0, 2.0], dtype=float
+        )
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:

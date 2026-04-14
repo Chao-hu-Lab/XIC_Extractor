@@ -290,8 +290,10 @@ def _is_detected(
     if nl_key is None:
         return True
     nl = row.get(nl_key, "")
-    return nl == "OK" or nl.startswith("WARN_") or (
-        count_no_ms2_as_detected and nl == "NO_MS2"
+    return (
+        nl == "OK"
+        or nl.startswith("WARN_")
+        or (count_no_ms2_as_detected and nl == "NO_MS2")
     )
 
 

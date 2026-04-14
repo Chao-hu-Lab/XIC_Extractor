@@ -9,8 +9,16 @@ from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 LOGGER = logging.getLogger(__name__)
 
 _TARGET_FIELDS = (
-    "label", "mz", "rt_min", "rt_max", "ppm_tol", "neutral_loss_da",
-    "nl_ppm_warn", "nl_ppm_max", "is_istd", "istd_pair",
+    "label",
+    "mz",
+    "rt_min",
+    "rt_max",
+    "ppm_tol",
+    "neutral_loss_da",
+    "nl_ppm_warn",
+    "nl_ppm_max",
+    "is_istd",
+    "istd_pair",
 )
 _REQUIRED_SETTING_FIELDS = ("key", "value")
 _MIGRATION_DEFAULT_KEYS = tuple(
@@ -73,12 +81,16 @@ def migrate_settings_dict(raw: dict[str, str]) -> tuple[dict[str, str], list[str
             migrated["smooth_window"] = migrated["smooth_points"]
             warnings.append("Renamed smooth_points to smooth_window.")
         else:
-            warnings.append("Ignored legacy smooth_points because smooth_window exists.")
+            warnings.append(
+                "Ignored legacy smooth_points because smooth_window exists."
+            )
         migrated.pop("smooth_points", None)
 
     if "smooth_sigma" in migrated:
         migrated.pop("smooth_sigma", None)
-        warnings.append("Dropped smooth_sigma because Savitzky-Golay smoothing has no sigma.")
+        warnings.append(
+            "Dropped smooth_sigma because Savitzky-Golay smoothing has no sigma."
+        )
 
     for key in _MIGRATION_DEFAULT_KEYS:
         default = CANONICAL_SETTINGS_DEFAULTS[key]
@@ -127,10 +139,14 @@ def _validate_settings(
     return _build_config(parsed, output_dir)
 
 
-def _parse_settings_values(settings: dict[str, str], settings_path: Path) -> _ParsedSettings:
+def _parse_settings_values(
+    settings: dict[str, str], settings_path: Path
+) -> _ParsedSettings:
     return _ParsedSettings(
         data_dir=_parse_existing_dir(
-            settings_path, "data_dir", _setting_value(settings, settings_path, "data_dir")
+            settings_path,
+            "data_dir",
+            _setting_value(settings, settings_path, "data_dir"),
         ),
         dll_dir=_parse_existing_dir(
             settings_path, "dll_dir", _setting_value(settings, settings_path, "dll_dir")
@@ -261,7 +277,9 @@ def _read_targets(path: Path) -> list[Target]:
         for row_number, row in enumerate(rows, start=2):
             target = _parse_target_row(path, row_number, row)
             if target.label in seen:
-                raise _config_error(path, row_number, "label", target.label, "must be unique")
+                raise _config_error(
+                    path, row_number, "label", target.label, "must be unique"
+                )
             seen.add(target.label)
             targets.append(target)
     if not targets:
@@ -299,10 +317,16 @@ def _parse_target_row(path: Path, row_number: int, row: dict[str, str]) -> Targe
     if mz <= 0:
         raise _config_error(path, row_number, "mz", values["mz"], "must be > 0")
     if ppm_tol <= 0:
-        raise _config_error(path, row_number, "ppm_tol", values["ppm_tol"], "must be > 0")
+        raise _config_error(
+            path, row_number, "ppm_tol", values["ppm_tol"], "must be > 0"
+        )
     if rt_min < 0 or rt_max < 0 or rt_min >= rt_max:
         raise _config_error(
-            path, row_number, "rt_min", values["rt_min"], "must be non-negative and < rt_max"
+            path,
+            row_number,
+            "rt_min",
+            values["rt_min"],
+            "must be non-negative and < rt_max",
         )
 
     neutral_loss_da, nl_ppm_warn, nl_ppm_max = _parse_neutral_loss(
@@ -329,13 +353,16 @@ def _parse_neutral_loss(
     if values["neutral_loss_da"] == "":
         if values["nl_ppm_warn"] or values["nl_ppm_max"]:
             LOGGER.warning(
-                "%s row %s has NL thresholds without neutral_loss_da; thresholds ignored",
+                "%s row %s has NL thresholds without neutral_loss_da; "
+                "thresholds ignored",
                 path,
                 row_number,
             )
         return None, None, None
 
-    neutral_loss_da = _parse_float(path, row_number, "neutral_loss_da", values["neutral_loss_da"])
+    neutral_loss_da = _parse_float(
+        path, row_number, "neutral_loss_da", values["neutral_loss_da"]
+    )
     nl_ppm_warn = _parse_float(path, row_number, "nl_ppm_warn", values["nl_ppm_warn"])
     nl_ppm_max = _parse_float(path, row_number, "nl_ppm_max", values["nl_ppm_max"])
 
@@ -348,9 +375,13 @@ def _parse_neutral_loss(
             "must be > 0 and < mz",
         )
     if nl_ppm_warn <= 0:
-        raise _config_error(path, row_number, "nl_ppm_warn", values["nl_ppm_warn"], "must be > 0")
+        raise _config_error(
+            path, row_number, "nl_ppm_warn", values["nl_ppm_warn"], "must be > 0"
+        )
     if nl_ppm_max <= 0:
-        raise _config_error(path, row_number, "nl_ppm_max", values["nl_ppm_max"], "must be > 0")
+        raise _config_error(
+            path, row_number, "nl_ppm_max", values["nl_ppm_max"], "must be > 0"
+        )
     if nl_ppm_warn > nl_ppm_max:
         raise _config_error(
             path,
@@ -390,7 +421,9 @@ def _parse_int(path: Path, row_number: int | None, column: str, value: str) -> i
     try:
         return int(value)
     except ValueError as exc:
-        raise _config_error(path, row_number, column, value, "must be an integer") from exc
+        raise _config_error(
+            path, row_number, column, value, "must be an integer"
+        ) from exc
 
 
 def _parse_float(path: Path, row_number: int | None, column: str, value: str) -> float:
@@ -416,7 +449,9 @@ def _require_range(
     path: Path, column: str, value: str, parsed: float, minimum: float, maximum: float
 ) -> None:
     if not minimum <= parsed <= maximum:
-        raise _config_error(path, None, column, value, f"must be between {minimum} and {maximum}")
+        raise _config_error(
+            path, None, column, value, f"must be between {minimum} and {maximum}"
+        )
 
 
 def _config_error(

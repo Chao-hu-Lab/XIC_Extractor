@@ -278,9 +278,7 @@ def _target(
     )
 
 
-def _file_result(
-    sample_name: str, results: dict[str, ExtractionResult]
-) -> FileResult:
+def _file_result(sample_name: str, results: dict[str, ExtractionResult]) -> FileResult:
     return FileResult(sample_name=sample_name, results=results)
 
 

@@ -282,7 +282,9 @@ def _set_target_values(row: dict[str, str], target: Target, value: str) -> None:
         row[f"{target.label}_NL"] = value
 
 
-def _set_peak_values(row: dict[str, str], target: Target, peak: PeakResult | None) -> None:
+def _set_peak_values(
+    row: dict[str, str], target: Target, peak: PeakResult | None
+) -> None:
     if peak is None:
         for suffix in _MS1_SUFFIXES:
             row[f"{target.label}_{suffix}"] = "ND"

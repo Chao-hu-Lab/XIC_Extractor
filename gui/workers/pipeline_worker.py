@@ -52,10 +52,7 @@ def build_summary(
     output: RunOutput,
     excel_path: Path,
 ) -> dict[str, Any]:
-    target_summaries = [
-        _target_summary(config, target, output)
-        for target in targets
-    ]
+    target_summaries = [_target_summary(config, target, output) for target in targets]
     return {
         "total_files": len(output.file_results),
         "excel_path": str(excel_path),

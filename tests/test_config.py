@@ -5,7 +5,6 @@ import pytest
 
 from xic_extractor.config import ConfigError, load_config, migrate_settings_dict
 
-
 SETTINGS_FIELDS = ["key", "value", "description"]
 TARGET_FIELDS = [
     "label",
@@ -45,7 +44,9 @@ def _write_settings(config_dir: Path, overrides: dict[str, str] | None = None) -
         rows.update(overrides)
 
     config_dir.mkdir(parents=True, exist_ok=True)
-    with (config_dir / "settings.csv").open("w", newline="", encoding="utf-8-sig") as handle:
+    with (config_dir / "settings.csv").open(
+        "w", newline="", encoding="utf-8-sig"
+    ) as handle:
         writer = csv.DictWriter(handle, fieldnames=SETTINGS_FIELDS)
         writer.writeheader()
         for key, value in rows.items():
@@ -71,7 +72,9 @@ def _target_row(**overrides: str) -> dict[str, str]:
 
 def _write_targets(config_dir: Path, rows: list[dict[str, str]] | None = None) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
-    with (config_dir / "targets.csv").open("w", newline="", encoding="utf-8-sig") as handle:
+    with (config_dir / "targets.csv").open(
+        "w", newline="", encoding="utf-8-sig"
+    ) as handle:
         writer = csv.DictWriter(handle, fieldnames=TARGET_FIELDS)
         writer.writeheader()
         for row in rows or [_target_row()]:
@@ -89,7 +92,9 @@ def _assert_error(exc_info: pytest.ExceptionInfo[ConfigError], *parts: str) -> N
         assert part in message
 
 
-def test_load_config_derives_output_paths_and_creates_output_dir(tmp_path: Path) -> None:
+def test_load_config_derives_output_paths_and_creates_output_dir(
+    tmp_path: Path,
+) -> None:
     config_dir = tmp_path / "config"
     _write_valid_config(config_dir)
 
@@ -129,8 +134,7 @@ def test_load_config_rejects_settings_missing_required_columns(tmp_path: Path) -
     config_dir = tmp_path / "config"
     config_dir.mkdir(parents=True)
     (config_dir / "settings.csv").write_text(
-        "name,value\n"
-        "data_dir,C:\\data\n",
+        "name,value\ndata_dir,C:\\data\n",
         encoding="utf-8-sig",
     )
     _write_targets(config_dir)
@@ -145,8 +149,7 @@ def test_load_config_rejects_targets_missing_required_columns(tmp_path: Path) ->
     config_dir = tmp_path / "config"
     _write_settings(config_dir)
     (config_dir / "targets.csv").write_text(
-        "label,mz,rt_min,rt_max\n"
-        "Analyte,258.1085,8.0,10.0\n",
+        "label,mz,rt_min,rt_max\nAnalyte,258.1085,8.0,10.0\n",
         encoding="utf-8-sig",
     )
 
@@ -183,7 +186,10 @@ def test_migrate_settings_dict_renames_legacy_key_and_backfills_defaults() -> No
     assert "smooth_points" not in migrated
     assert migrated["smooth_polyorder"] == "3"
     assert migrated["peak_rel_height"] == "0.95"
-    assert any("smooth_points" in warning and "smooth_window" in warning for warning in warnings)
+    assert any(
+        "smooth_points" in warning and "smooth_window" in warning
+        for warning in warnings
+    )
     assert any("smooth_polyorder" in warning for warning in warnings)
 
 
