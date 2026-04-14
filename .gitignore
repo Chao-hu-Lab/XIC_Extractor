@@ -8,6 +8,7 @@ __pycache__/
 *.egg-info/
 
 # Test / lint caches
+.coverage
 .pytest_cache/
 .ruff_cache/
 .tmp/
