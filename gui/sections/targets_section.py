@@ -285,6 +285,7 @@ class TargetsSection(QWidget):
         import openpyxl
 
         from scripts.xlsx_to_targets import (
+            DEFAULT_RT_WINDOW,
             _assign_istd_pairs,
             parse_dna_sheet,
             parse_rna_sheet,
@@ -323,10 +324,14 @@ class TargetsSection(QWidget):
             targets = []
             if sheet_key in ("DNA", "both"):
                 if "DNA" in wb.sheetnames:
-                    targets.extend(parse_dna_sheet(wb["DNA"], rt_window=1.0))
+                    targets.extend(
+                        parse_dna_sheet(wb["DNA"], rt_window=DEFAULT_RT_WINDOW)
+                    )
             if sheet_key in ("RNA", "both"):
                 if "RNA" in wb.sheetnames:
-                    targets.extend(parse_rna_sheet(wb["RNA"], rt_window=1.0))
+                    targets.extend(
+                        parse_rna_sheet(wb["RNA"], rt_window=DEFAULT_RT_WINDOW)
+                    )
             _assign_istd_pairs(targets)
         except Exception as exc:
             QMessageBox.critical(self, "匯入失敗", f"無法解析 Excel 檔案：\n{exc}")

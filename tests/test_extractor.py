@@ -58,7 +58,7 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
     )
     monkeypatch.setattr(
         "xic_extractor.extractor.check_nl",
-        _nl_sequence([NLResult("WARN", 12.34, 3, 0, 2)]),
+        _nl_sequence([NLResult("WARN", 12.34, None, 3, 0, 2)]),
     )
 
     output = _run(config, targets, progress_callback=lambda *_args: None)
@@ -98,9 +98,12 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
             "WithNL_NL": "WARN_12.3ppm",
         }
     ]
-    assert _read_csv(config.diagnostics_csv) == []
+    # WithNL target triggers NL_ANCHOR_FALLBACK (fake raw has no MS2 data); no error diagnostics
+    assert all(
+        d["Issue"] == "NL_ANCHOR_FALLBACK" for d in _read_csv(config.diagnostics_csv)
+    )
     assert len(output.file_results) == 1
-    assert output.diagnostics == []
+    assert all(d.issue == "NL_ANCHOR_FALLBACK" for d in output.diagnostics)
     assert _read_csv(config.output_csv.with_name("xic_results_long.csv")) == [
         {
             "SampleName": "SampleA",
@@ -148,7 +151,7 @@ def test_run_writes_nd_for_peak_failure_but_keeps_nl_result(
     )
     monkeypatch.setattr(
         "xic_extractor.extractor.check_nl",
-        _nl_sequence([NLResult("OK", 1.2, 3, 0, 2)]),
+        _nl_sequence([NLResult("OK", 1.2, None, 3, 0, 2)]),
     )
 
     _run(config, targets)
@@ -185,7 +188,7 @@ def test_run_writes_file_error_row_and_continues(
     )
     monkeypatch.setattr(
         "xic_extractor.extractor.check_nl",
-        _nl_sequence([NLResult("OK", 1.0, 2, 0, 1)]),
+        _nl_sequence([NLResult("OK", 1.0, None, 2, 0, 1)]),
     )
 
     output = _run(config, targets)
@@ -261,13 +264,13 @@ def test_run_writes_peak_diagnostics(
 @pytest.mark.parametrize(
     ("nl_result", "issue", "reason_part"),
     [
-        (NLResult("NL_FAIL", 78.4, 10, 1, 3), "NL_FAIL", "best match 78.4 ppm"),
+        (NLResult("NL_FAIL", 78.4, None, 10, 1, 3), "NL_FAIL", "best match 78.4 ppm"),
         (
-            NLResult("NL_FAIL", None, 10, 1, 3),
+            NLResult("NL_FAIL", None, None, 10, 1, 3),
             "NL_FAIL",
             "not detected in any matched scan",
         ),
-        (NLResult("NO_MS2", None, 42, 2, 0), "NO_MS2", "42 valid MS2 scans"),
+        (NLResult("NO_MS2", None, None, 42, 2, 0), "NO_MS2", "42 valid MS2 scans"),
     ],
 )
 def test_run_writes_neutral_loss_diagnostics(
@@ -400,7 +403,11 @@ def _peak_sequence(results: list[PeakDetectionResult]):
     pending = list(results)
 
     def _fake_find_peak_and_area(
-        rt: np.ndarray, intensity: np.ndarray, config: ExtractionConfig
+        rt: np.ndarray,
+        intensity: np.ndarray,
+        config: ExtractionConfig,
+        *,
+        preferred_rt: float | None = None,
     ) -> PeakDetectionResult:
         return pending.pop(0)
 
@@ -440,6 +447,9 @@ class _FakeRaw:
         return np.asarray([rt_min, rt_max], dtype=float), np.asarray(
             [1.0, 2.0], dtype=float
         )
+
+    def iter_ms2_scans(self, rt_min: float, rt_max: float):
+        return iter([])
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:

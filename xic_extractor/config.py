@@ -39,6 +39,9 @@ class ExtractionConfig:
     ms2_precursor_tol_da: float
     nl_min_intensity_ratio: float
     count_no_ms2_as_detected: bool = False
+    nl_rt_anchor_search_margin_min: float = 2.0
+    nl_rt_anchor_half_window_min: float = 1.0
+    nl_fallback_half_window_min: float = 2.0
 
 
 @dataclass(frozen=True)
@@ -70,6 +73,9 @@ class _ParsedSettings:
     ms2_precursor_tol_da: float
     nl_min_intensity_ratio: float
     count_no_ms2_as_detected: bool
+    nl_rt_anchor_search_margin_min: float
+    nl_rt_anchor_half_window_min: float
+    nl_fallback_half_window_min: float
 
 
 def migrate_settings_dict(raw: dict[str, str]) -> tuple[dict[str, str], list[str]]:
@@ -193,6 +199,24 @@ def _parse_settings_values(
             "count_no_ms2_as_detected",
             _setting_value(settings, settings_path, "count_no_ms2_as_detected"),
         ),
+        nl_rt_anchor_search_margin_min=_parse_float(
+            settings_path,
+            None,
+            "nl_rt_anchor_search_margin_min",
+            _setting_value(settings, settings_path, "nl_rt_anchor_search_margin_min"),
+        ),
+        nl_rt_anchor_half_window_min=_parse_float(
+            settings_path,
+            None,
+            "nl_rt_anchor_half_window_min",
+            _setting_value(settings, settings_path, "nl_rt_anchor_half_window_min"),
+        ),
+        nl_fallback_half_window_min=_parse_float(
+            settings_path,
+            None,
+            "nl_fallback_half_window_min",
+            _setting_value(settings, settings_path, "nl_fallback_half_window_min"),
+        ),
     )
 
 
@@ -262,6 +286,9 @@ def _build_config(parsed: _ParsedSettings, output_dir: Path) -> ExtractionConfig
         ms2_precursor_tol_da=parsed.ms2_precursor_tol_da,
         nl_min_intensity_ratio=parsed.nl_min_intensity_ratio,
         count_no_ms2_as_detected=parsed.count_no_ms2_as_detected,
+        nl_rt_anchor_search_margin_min=parsed.nl_rt_anchor_search_margin_min,
+        nl_rt_anchor_half_window_min=parsed.nl_rt_anchor_half_window_min,
+        nl_fallback_half_window_min=parsed.nl_fallback_half_window_min,
     )
 
 

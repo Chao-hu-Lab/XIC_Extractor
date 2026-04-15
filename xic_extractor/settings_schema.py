@@ -8,6 +8,9 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "ms2_precursor_tol_da": "1.6",
     "nl_min_intensity_ratio": "0.01",
     "count_no_ms2_as_detected": "false",
+    "nl_rt_anchor_search_margin_min": "2.0",
+    "nl_rt_anchor_half_window_min": "1.0",
+    "nl_fallback_half_window_min": "2.0",
 }
 
 CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
@@ -30,5 +33,14 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     ),
     "count_no_ms2_as_detected": (
         "是否將無 MS2 觸發的樣品算為偵測到（DDA 隨機性假陰性補救用）"
+    ),
+    "nl_rt_anchor_search_margin_min": (
+        "NL 錨定搜尋半徑（min）：以 rt_center ±此值搜尋 NL 確認的 MS2 作為 RT anchor"
+    ),
+    "nl_rt_anchor_half_window_min": (
+        "NL 錨定後的 XIC 半寬（min）：找到 anchor 時，XIC 窗口 = [anchor_rt ± 此值]"
+    ),
+    "nl_fallback_half_window_min": (
+        "NL 錨定失敗時的 fallback XIC 半寬（min）：窗口 = [rt_center ± 此值]"
     ),
 }

@@ -336,6 +336,9 @@ class _FakeRaw:
     def ScanNumberFromRetentionTime(self, rt: float) -> int:
         return 1 if rt <= 8.0 else 2
 
+    def RetentionTimeFromScanNumber(self, scan_number: int) -> float:
+        return 8.0 + (scan_number - 1) * 0.1
+
     def GetChromatogramData(self, *_args):
         return self.chromatogram
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.neutral_loss import NLResult, check_nl
+from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
 from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
 from xic_extractor.signal_processing import (
     PeakDetectionResult,
@@ -21,7 +21,14 @@ DiagnosticIssue = Literal[
     "NL_FAIL",
     "NO_MS2",
     "FILE_ERROR",
+    "MULTI_PEAK",
+    "TAILING",
+    "NL_ANCHOR_FALLBACK",
 ]
+
+# Asymmetry ratio (right / left half-width at 5 % peak height) above this
+# threshold triggers a TAILING warning.  USP guideline is 2.0 for quantification.
+_TAILING_THRESHOLD: float = 2.0
 
 _MS1_SUFFIXES = ("RT", "Int", "Area", "PeakStart", "PeakEnd", "PeakWidth")
 _DIAGNOSTIC_FIELDS = ("SampleName", "Target", "Issue", "Reason")
@@ -111,17 +118,44 @@ def _process_file(
         with open_raw(raw_path, config.dll_dir) as raw:
             results: dict[str, ExtractionResult] = {}
             diagnostics: list[DiagnosticRecord] = []
+
+            # Pass 1: ISTDs — reference_rt=None → 選 base_peak 最高的 anchor
+            istd_anchor_rts: dict[str, float] = {}
             for target in targets:
-                rt, intensity = raw.extract_xic(
-                    target.mz, target.rt_min, target.rt_max, target.ppm_tol
+                if not target.is_istd:
+                    continue
+                anchor_rt = _extract_one_target(
+                    raw,
+                    config,
+                    sample_name,
+                    target,
+                    reference_rt=None,
+                    results=results,
+                    diagnostics=diagnostics,
                 )
-                peak_result = find_peak_and_area(rt, intensity, config)
-                nl_result = _check_target_nl(raw, target, config)
-                result = ExtractionResult(peak_result=peak_result, nl=nl_result)
-                results[target.label] = result
-                diagnostics.extend(
-                    _build_diagnostics(sample_name, target, result, config)
+                if anchor_rt is not None:
+                    istd_anchor_rts[target.label] = anchor_rt
+
+            # Pass 2: analytes — reference_rt 依 ISTD pair 決定
+            # 有 ISTD pair → 選最靠近 ISTD anchor_rt 的 scan（區分異構體）
+            # 無 ISTD pair → reference_rt=None，選 base_peak 最高的 scan
+            for target in targets:
+                if target.is_istd:
+                    continue
+                if target.istd_pair and target.istd_pair in istd_anchor_rts:
+                    reference_rt: float | None = istd_anchor_rts[target.istd_pair]
+                else:
+                    reference_rt = None
+                _extract_one_target(
+                    raw,
+                    config,
+                    sample_name,
+                    target,
+                    reference_rt=reference_rt,
+                    results=results,
+                    diagnostics=diagnostics,
                 )
+
             return FileResult(sample_name=sample_name, results=results), diagnostics
     except Exception as exc:
         reason = f"Failed to open .raw: {type(exc).__name__}: {exc}"
@@ -138,8 +172,87 @@ def _process_file(
         )
 
 
+def _extract_one_target(
+    raw: Any,
+    config: ExtractionConfig,
+    sample_name: str,
+    target: Target,
+    *,
+    reference_rt: float | None,
+    results: dict[str, ExtractionResult],
+    diagnostics: list[DiagnosticRecord],
+) -> float | None:
+    """處理單一 target 並將結果寫入 results/diagnostics。回傳 anchor_rt（若無則 None）。"""
+    rt_min, rt_max, anchor_used, anchor_rt = _get_rt_window(
+        raw, target, config, reference_rt=reference_rt
+    )
+    rt, intensity = raw.extract_xic(target.mz, rt_min, rt_max, target.ppm_tol)
+    peak_result = find_peak_and_area(rt, intensity, config, preferred_rt=anchor_rt)
+    nl_result = _check_target_nl(raw, target, config, rt_min, rt_max)
+    result = ExtractionResult(peak_result=peak_result, nl=nl_result)
+    results[target.label] = result
+    diagnostics.extend(_build_diagnostics(sample_name, target, result, config))
+    if not anchor_used and target.neutral_loss_da is not None:
+        rt_center = (target.rt_min + target.rt_max) / 2.0
+        diagnostics.append(
+            DiagnosticRecord(
+                sample_name=sample_name,
+                target_label=target.label,
+                issue="NL_ANCHOR_FALLBACK",
+                reason=(
+                    f"No NL-confirmed MS2 within RT center "
+                    f"{rt_center:.2f} ± {config.nl_rt_anchor_search_margin_min} min; "
+                    f"fallback window [{rt_min:.2f}, {rt_max:.2f}]"
+                ),
+            )
+        )
+    return anchor_rt
+
+
+def _get_rt_window(
+    raw: Any,
+    target: Target,
+    config: ExtractionConfig,
+    *,
+    reference_rt: float | None,
+) -> tuple[float, float, bool, float | None]:
+    """回傳 (rt_min, rt_max, anchor_used, anchor_rt)。
+
+    reference_rt 控制 anchor 選擇邏輯（見 find_nl_anchor_rt）：
+    - None → ISTD 模式，選最高 base_peak
+    - float → analyte 模式，選最靠近 reference_rt 的 scan
+      (有 ISTD pair 時傳 ISTD anchor_rt；無 ISTD pair 時傳 rt_center)
+    """
+    if target.neutral_loss_da is None or target.nl_ppm_max is None:
+        return target.rt_min, target.rt_max, False, None
+
+    rt_center = (target.rt_min + target.rt_max) / 2.0
+    anchor_rt = find_nl_anchor_rt(
+        raw,
+        precursor_mz=target.mz,
+        rt_center=rt_center,
+        search_margin_min=config.nl_rt_anchor_search_margin_min,
+        neutral_loss_da=target.neutral_loss_da,
+        nl_ppm_max=target.nl_ppm_max,
+        ms2_precursor_tol_da=config.ms2_precursor_tol_da,
+        nl_min_intensity_ratio=config.nl_min_intensity_ratio,
+        reference_rt=reference_rt,
+    )
+
+    if anchor_rt is not None:
+        half = config.nl_rt_anchor_half_window_min
+        return max(0.0, anchor_rt - half), anchor_rt + half, True, anchor_rt
+
+    half = config.nl_fallback_half_window_min
+    return max(0.0, rt_center - half), rt_center + half, False, None
+
+
 def _check_target_nl(
-    raw: Any, target: Target, config: ExtractionConfig
+    raw: Any,
+    target: Target,
+    config: ExtractionConfig,
+    rt_min: float,
+    rt_max: float,
 ) -> NLResult | None:
     if target.neutral_loss_da is None:
         return None
@@ -148,8 +261,8 @@ def _check_target_nl(
     return check_nl(
         raw,
         precursor_mz=target.mz,
-        rt_min=target.rt_min,
-        rt_max=target.rt_max,
+        rt_min=rt_min,
+        rt_max=rt_max,
         neutral_loss_da=target.neutral_loss_da,
         nl_ppm_warn=target.nl_ppm_warn,
         nl_ppm_max=target.nl_ppm_max,
@@ -184,6 +297,30 @@ def _build_diagnostics(
                 reason=_nl_reason(target, result.nl, config),
             )
         )
+
+    if result.peak_result.status == "OK" and result.peak_result.peak is not None:
+        peak = result.peak_result.peak
+        if result.peak_result.n_prominent_peaks > 1:
+            records.append(
+                DiagnosticRecord(
+                    sample_name=sample_name,
+                    target_label=target.label,
+                    issue="MULTI_PEAK",
+                    reason=_multi_peak_reason(target, result.peak_result, result.nl),
+                )
+            )
+        left_half = peak.rt - peak.peak_start
+        right_half = peak.peak_end - peak.rt
+        if left_half > 0 and (right_half / left_half) > _TAILING_THRESHOLD:
+            records.append(
+                DiagnosticRecord(
+                    sample_name=sample_name,
+                    target_label=target.label,
+                    issue="TAILING",
+                    reason=_tailing_reason(peak),
+                )
+            )
+
     return records
 
 
@@ -226,16 +363,45 @@ def _nl_reason(target: Target, nl: NLResult, config: ExtractionConfig) -> str:
     expected_product = target.mz - nl_da
 
     if nl.best_ppm is not None:
+        rt_info = (
+            f" at scan RT {nl.best_scan_rt:.3f} min"
+            if nl.best_scan_rt is not None
+            else ""
+        )
         return (
             f"Precursor {target.mz} triggered {nl.matched_scan_count} MS2 scans; "
             f"NL {nl_da:g} Da → expected product m/z {expected_product:.4f}; "
-            f"best match {nl.best_ppm:.1f} ppm (limit {limit:g} ppm)"
+            f"best match {nl.best_ppm:.1f} ppm (limit {limit:g} ppm){rt_info}"
         )
 
     return (
         f"Precursor {target.mz} triggered {nl.matched_scan_count} MS2 scans; "
         f"NL {nl_da:g} Da → expected product m/z {expected_product:.4f}; "
         f"not detected in any matched scan"
+    )
+
+
+def _multi_peak_reason(
+    target: Target, peak_result: PeakDetectionResult, nl: NLResult | None
+) -> str:
+    base = (
+        f"{peak_result.n_prominent_peaks} prominent peaks detected in window "
+        f"[{target.rt_min}, {target.rt_max}]; tallest peak selected — "
+        f"verify integration window or split into separate targets"
+    )
+    if nl is not None and nl.best_scan_rt is not None:
+        base += f"; NL-confirmed MS2 at RT {nl.best_scan_rt:.3f} min"
+    return base
+
+
+def _tailing_reason(peak: PeakResult) -> str:
+    left_half = peak.rt - peak.peak_start
+    right_half = peak.peak_end - peak.rt
+    ratio = right_half / left_half if left_half > 0 else float("inf")
+    return (
+        f"Asymmetry ratio {ratio:.2f} (right/left half-width at 5% peak height, "
+        f"USP limit 2.0); apex RT {peak.rt:.4f} min, "
+        f"peak [{peak.peak_start:.4f}, {peak.peak_end:.4f}]"
     )
 
 

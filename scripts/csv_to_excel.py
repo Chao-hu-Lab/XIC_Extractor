@@ -584,6 +584,12 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
         wb.active = wb.index(ws_diagnostics)
 
     wb.save(excel_path)
+    for _csv in [
+        config.output_csv,
+        config.output_csv.with_name("xic_results_long.csv"),
+        config.diagnostics_csv,
+    ]:
+        _csv.unlink(missing_ok=True)
     _print_summary(excel_path, rows, config.count_no_ms2_as_detected)
     return excel_path
 

@@ -186,10 +186,12 @@ def _scan_event(
     masses: list[float],
     intensities: list[float],
     scan_number: int = 1,
+    rt: float = 8.5,
 ) -> Ms2ScanEvent:
     return Ms2ScanEvent(
         scan=Ms2Scan(
             scan_number=scan_number,
+            rt=rt,
             precursor_mz=precursor_mz,
             masses=np.asarray(masses, dtype=float),
             intensities=np.asarray(intensities, dtype=float),

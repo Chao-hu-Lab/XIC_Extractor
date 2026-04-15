@@ -22,19 +22,23 @@ def test_worker_runs_shared_pipeline_and_emits_structured_summary(
             _file_result(
                 "Tumor_1",
                 {
-                    "Analyte": _result(area=10_000.0, nl=NLResult("OK", 1.0, 2, 0, 1)),
-                    "ISTD": _result(area=20_000.0, nl=NLResult("OK", 1.0, 2, 0, 1)),
+                    "Analyte": _result(
+                        area=10_000.0, nl=NLResult("OK", 1.0, None, 2, 0, 1)
+                    ),
+                    "ISTD": _result(
+                        area=20_000.0, nl=NLResult("OK", 1.0, None, 2, 0, 1)
+                    ),
                 },
             ),
             _file_result(
                 "Tumor_2",
                 {
                     "Analyte": _result(
-                        area=30_000.0, nl=NLResult("NO_MS2", None, 2, 0, 0)
+                        area=30_000.0, nl=NLResult("NO_MS2", None, None, 2, 0, 0)
                     ),
                     "ISTD": _result(
                         area=60_000.0,
-                        nl=NLResult("NL_FAIL", None, 2, 0, 1),
+                        nl=NLResult("NL_FAIL", None, None, 2, 0, 1),
                     ),
                 },
             ),

@@ -23,6 +23,7 @@ class RawReaderError(Exception):
 @dataclass(frozen=True)
 class Ms2Scan:
     scan_number: int
+    rt: float
     precursor_mz: float
     masses: np.ndarray
     intensities: np.ndarray
@@ -79,6 +80,7 @@ class RawFileHandle:
                 if getattr(filter_obj, "MSOrder", None) != self._thermo.ms2_order:
                     continue
                 precursor_mz = _extract_precursor_mz(filter_obj)
+                scan_rt = float(self._raw_file.RetentionTimeFromScanNumber(scan_number))
                 scan_data = self._raw_file.GetSimplifiedScan(scan_number)
                 masses = np.asarray(getattr(scan_data, "Masses", []), dtype=float)
                 intensities = np.asarray(
@@ -88,6 +90,7 @@ class RawFileHandle:
                 yield Ms2ScanEvent(
                     scan=Ms2Scan(
                         scan_number=scan_number,
+                        rt=scan_rt,
                         precursor_mz=precursor_mz,
                         masses=masses,
                         intensities=intensities,

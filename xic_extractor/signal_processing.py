@@ -29,7 +29,11 @@ class PeakDetectionResult:
 
 
 def find_peak_and_area(
-    rt: np.ndarray, intensity: np.ndarray, config: ExtractionConfig
+    rt: np.ndarray,
+    intensity: np.ndarray,
+    config: ExtractionConfig,
+    *,
+    preferred_rt: float | None = None,
 ) -> PeakDetectionResult:
     rt_values, intensity_values = _as_matching_arrays(rt, intensity)
     n_points = len(intensity_values)
@@ -52,7 +56,12 @@ def find_peak_and_area(
     if len(peaks) == 0:
         return _failure("PEAK_NOT_FOUND", n_points, max_smoothed)
 
-    best_idx = int(peaks[np.argmax(smoothed[peaks])])
+    if preferred_rt is not None and len(peaks) > 1:
+        # NL anchor 指向化合物實際 RT；多峰時優先選距 anchor 最近的峰
+        rt_diffs = np.abs(rt_values[peaks] - preferred_rt)
+        best_idx = int(peaks[np.argmin(rt_diffs)])
+    else:
+        best_idx = int(peaks[np.argmax(smoothed[peaks])])
     left, right = _peak_bounds(smoothed, best_idx, config.peak_rel_height, n_points)
     # Thermo returns rt in minutes, but LC-MS convention (Xcalibur, MassHunter,
     # manual integration) reports area in counts·seconds — convert so downstream

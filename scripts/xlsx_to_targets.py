@@ -12,7 +12,7 @@ uv run python scripts/xlsx_to_targets.py path/to/RT_check.xlsx --sheet RNA
 uv run python scripts/xlsx_to_targets.py path/to/RT_check.xlsx --sheet both
 
 # Custom output path and RT window
-uv run python scripts/xlsx_to_targets.py path/to/RT_check.xlsx --output config/my_targets.csv --rt-window 0.5
+uv run python scripts/xlsx_to_targets.py path/to/RT_check.xlsx --output config/my_targets.csv --rt-window 1.0
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ NL_MER: float = 146.0579  # 2′-O-methylribose – 2′-OMe RNA nucleosides
 DEFAULT_PPM_TOL: int = 20
 DEFAULT_NL_PPM_WARN: int = 20
 DEFAULT_NL_PPM_MAX: int = 50
-DEFAULT_RT_WINDOW: float = 1.0  # minutes
+DEFAULT_RT_WINDOW: float = 1.5  # minutes
 
 # Common ISTD label prefixes (deuterium, 15N, 13C labels)
 _ISTD_PREFIXES: tuple[str, ...] = (
