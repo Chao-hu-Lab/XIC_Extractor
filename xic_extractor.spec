@@ -22,6 +22,7 @@ a = Analysis(
         "openpyxl.styles",
         "openpyxl.utils",
         "scripts.csv_to_excel",
+        "scripts.xlsx_to_targets",
     ],
     hookspath=[],
     hooksconfig={},

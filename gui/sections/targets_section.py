@@ -9,7 +9,9 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -101,12 +103,14 @@ class TargetsSection(QWidget):
         toolbar = QHBoxLayout()
         toolbar.setContentsMargins(16, 16, 16, 0)
         self._import_button = QPushButton("⬆ 匯入 CSV")
+        self._import_xlsx_button = QPushButton("📊 從 Excel 匯入")
         self._add_button = QPushButton("＋ 新增目標")
         self._add_button.setObjectName("btn_add")
         self._save_button = QPushButton("💾 儲存目標")
         self._save_button.setObjectName("btn_save")
         self._save_button.setVisible(False)
         toolbar.addWidget(self._import_button)
+        toolbar.addWidget(self._import_xlsx_button)
         toolbar.addStretch()
         toolbar.addWidget(self._add_button)
         toolbar.addWidget(self._save_button)
@@ -137,6 +141,7 @@ class TargetsSection(QWidget):
         self._add_button.clicked.connect(self._on_add_row)
         self._save_button.clicked.connect(self._save)
         self._import_button.clicked.connect(self._on_import)
+        self._import_xlsx_button.clicked.connect(self._on_import_xlsx)
 
     def load(self, targets: list[dict[str, str]]) -> None:
         self._is_loading = True
@@ -273,6 +278,90 @@ class TargetsSection(QWidget):
             return
         with Path(filename).open(newline="", encoding="utf-8-sig") as handle:
             self.load(list(csv.DictReader(handle)))
+        self._set_dirty(True)
+
+    def _on_import_xlsx(self) -> None:
+        """從 RT 標準品 Excel 自動產生目標清單並載入表格。"""
+        import openpyxl
+
+        from scripts.xlsx_to_targets import (
+            _assign_istd_pairs,
+            parse_dna_sheet,
+            parse_rna_sheet,
+        )
+
+        # 1. 選擇 Excel 檔
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "選擇 RT 標準品 Excel", "", "Excel Files (*.xlsx *.xls)"
+        )
+        if not filename:
+            return
+        xlsx_path = Path(filename)
+
+        # 2. 選擇分頁
+        _SHEET_OPTIONS = [
+            "DNA（NL = dR · 116.0474 Da）",
+            "RNA（NL = R / MeR 自動偵測）",
+            "DNA + RNA（合併）",
+        ]
+        _SHEET_KEYS = ["DNA", "RNA", "both"]
+        choice, ok = QInputDialog.getItem(
+            self,
+            "選擇分頁",
+            "要匯入哪個分頁的標準品？",
+            _SHEET_OPTIONS,
+            0,
+            False,
+        )
+        if not ok:
+            return
+        sheet_key = _SHEET_KEYS[_SHEET_OPTIONS.index(choice)]
+
+        # 3. 解析 Excel
+        try:
+            wb = openpyxl.load_workbook(xlsx_path, data_only=True, read_only=False)
+            targets = []
+            if sheet_key in ("DNA", "both"):
+                if "DNA" in wb.sheetnames:
+                    targets.extend(parse_dna_sheet(wb["DNA"], rt_window=1.0))
+            if sheet_key in ("RNA", "both"):
+                if "RNA" in wb.sheetnames:
+                    targets.extend(parse_rna_sheet(wb["RNA"], rt_window=1.0))
+            _assign_istd_pairs(targets)
+        except Exception as exc:
+            QMessageBox.critical(self, "匯入失敗", f"無法解析 Excel 檔案：\n{exc}")
+            return
+
+        if not targets:
+            QMessageBox.warning(self, "無資料", "在選定的分頁中找不到可匯入的目標。")
+            return
+
+        # 4. 存一份到 config/ 作為記錄（方便日後追溯使用了哪個 Excel）
+        out_name = f"{xlsx_path.stem}_targets_{sheet_key}.csv"
+        out_path = config_io.CONFIG_DIR / out_name
+        try:
+            config_io.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            _FIELDS = [
+                "label",
+                "mz",
+                "rt_min",
+                "rt_max",
+                "ppm_tol",
+                "neutral_loss_da",
+                "nl_ppm_warn",
+                "nl_ppm_max",
+                "is_istd",
+                "istd_pair",
+            ]
+            with out_path.open("w", newline="", encoding="utf-8") as fh:
+                writer = csv.DictWriter(fh, fieldnames=_FIELDS)
+                writer.writeheader()
+                writer.writerows(targets)
+        except Exception:
+            pass  # 存檔失敗不影響主要流程
+
+        # 5. 載入表格
+        self.load([{k: str(v) for k, v in t.items()} for t in targets])
         self._set_dirty(True)
 
     def _find_widget_row(self, widget: QWidget, column: int) -> int:
