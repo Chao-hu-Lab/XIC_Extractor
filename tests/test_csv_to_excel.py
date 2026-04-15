@@ -167,7 +167,7 @@ def test_run_writes_row_based_results_sheet_and_makes_diagnostics_active(
     excel_path = run(config, targets)
 
     wb = load_workbook(excel_path)
-    assert wb.sheetnames == ["XIC Results", "Summary", "Diagnostics"]
+    assert wb.sheetnames == ["XIC Results", "Summary", "Targets", "Diagnostics"]
     assert wb.active.title == "Diagnostics"
     ws_results = wb["XIC Results"]
     assert ws_results["A1"].value == "SampleName"
@@ -214,7 +214,7 @@ def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
     excel_path = run(config, targets)
 
     wb = load_workbook(excel_path)
-    assert wb.sheetnames == ["XIC Results", "Summary", "Diagnostics"]
+    assert wb.sheetnames == ["XIC Results", "Summary", "Targets", "Diagnostics"]
     assert wb.active.title == "XIC Results"
     assert wb["XIC Results"]["C2"].value == "Analyte"
     assert wb["Diagnostics"].auto_filter.ref == "A1:D1"

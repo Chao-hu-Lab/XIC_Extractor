@@ -219,16 +219,23 @@ def _nl_reason(target: Target, nl: NLResult, config: ExtractionConfig) -> str:
         )
 
     limit = target.nl_ppm_max if target.nl_ppm_max is not None else 0.0
+    assert (
+        target.neutral_loss_da is not None
+    )  # NL is only checked when neutral_loss_da is set
+    nl_da = target.neutral_loss_da
+    expected_product = target.mz - nl_da
+
     if nl.best_ppm is not None:
         return (
             f"Precursor {target.mz} triggered {nl.matched_scan_count} MS2 scans; "
-            f"best NL product {nl.best_ppm:.1f} ppm (limit {limit:g} ppm)"
+            f"NL {nl_da:g} Da → expected product m/z {expected_product:.4f}; "
+            f"best match {nl.best_ppm:.1f} ppm (limit {limit:g} ppm)"
         )
 
-    diagnostic_ppm = max(3.0 * limit, 500.0)
     return (
         f"Precursor {target.mz} triggered {nl.matched_scan_count} MS2 scans; "
-        f"no product within {diagnostic_ppm:g} ppm diagnostic window"
+        f"NL {nl_da:g} Da → expected product m/z {expected_product:.4f}; "
+        f"not detected in any matched scan"
     )
 
 

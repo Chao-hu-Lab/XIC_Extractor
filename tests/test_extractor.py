@@ -261,8 +261,12 @@ def test_run_writes_peak_diagnostics(
 @pytest.mark.parametrize(
     ("nl_result", "issue", "reason_part"),
     [
-        (NLResult("NL_FAIL", 78.4, 10, 1, 3), "NL_FAIL", "best NL product 78.4 ppm"),
-        (NLResult("NL_FAIL", None, 10, 1, 3), "NL_FAIL", "no product within"),
+        (NLResult("NL_FAIL", 78.4, 10, 1, 3), "NL_FAIL", "best match 78.4 ppm"),
+        (
+            NLResult("NL_FAIL", None, 10, 1, 3),
+            "NL_FAIL",
+            "not detected in any matched scan",
+        ),
         (NLResult("NO_MS2", None, 42, 2, 0), "NO_MS2", "42 valid MS2 scans"),
     ],
 )
