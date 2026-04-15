@@ -34,7 +34,7 @@ def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_colum
         "Int",
         "PeakStart",
         "PeakEnd",
-        "PeakWidthSec",
+        "PeakWidth",
     ]
     assert ws["F2"].value == 9.1234
     assert ws["F2"].number_format == "0.0000"
@@ -47,8 +47,8 @@ def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_colum
     assert ws["H2"].fill.fgColor.rgb.endswith("C8E6C9")
     assert ws["I2"].value == 1000.0
     assert ws["I2"].number_format == "0.00E+00"
-    assert ws["L2"].value == 24.0
-    assert ws["L2"].number_format == "0.00"
+    assert abs(ws["L2"].value - 0.4) < 1e-9
+    assert ws["L2"].number_format == "0.0000"
     assert ws.column_dimensions["I"].hidden is True
     assert ws.column_dimensions["J"].hidden is True
     assert ws.column_dimensions["K"].hidden is True
@@ -94,9 +94,7 @@ def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     rows = [
         _long_row("Tumor_1", "Analyte", "9.0", "10000", "OK", istd_pair="ISTD"),
         _long_row("Tumor_1", "ISTD", "9.1", "20000", "OK", role="ISTD"),
-        _long_row(
-            "Tumor_2", "Analyte", "9.2", "30000", "WARN_5ppm", istd_pair="ISTD"
-        ),
+        _long_row("Tumor_2", "Analyte", "9.2", "30000", "WARN_5ppm", istd_pair="ISTD"),
         _long_row("Tumor_2", "ISTD", "9.1", "60000", "OK", role="ISTD"),
         _long_row("Tumor_3", "Analyte", "9.3", "50000", "NO_MS2", istd_pair="ISTD"),
         _long_row("Tumor_3", "ISTD", "9.1", "100000", "NO_MS2", role="ISTD"),
@@ -125,7 +123,7 @@ def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     assert data["Analyte"]["NL WARN"] == 1
     assert data["Analyte"]["NL FAIL"] == 0
     assert data["Analyte"]["NO MS2"] == 1
-    assert data["Analyte"]["RT Delta vs ISTD"] == "1.47±0.63% (n=3)"
+    assert data["Analyte"]["RT Delta vs ISTD"] == "0.1333±0.0577 min (n=3)"
     assert data["ISTD"]["Area / ISTD ratio (paired detected)"] == "—"
 
 
@@ -145,7 +143,7 @@ def test_run_writes_row_based_results_sheet_and_makes_diagnostics_active(
                 "Analyte_Area": "ND",
                 "Analyte_PeakStart": "ND",
                 "Analyte_PeakEnd": "ND",
-                "Analyte_PeakWidthSec": "ND",
+                "Analyte_PeakWidth": "ND",
                 "Analyte_NL": "NL_FAIL",
             }
         ],
@@ -206,7 +204,7 @@ def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
                 "Analyte_Area": "10000",
                 "Analyte_PeakStart": "8.9",
                 "Analyte_PeakEnd": "9.3",
-                "Analyte_PeakWidthSec": "24.00",
+                "Analyte_PeakWidth": "0.4000",
                 "Analyte_NL": "OK",
             }
         ],
@@ -244,7 +242,7 @@ def _long_row(
         "Int": "1000",
         "PeakStart": "8.9",
         "PeakEnd": "9.3",
-        "PeakWidthSec": "24.00",
+        "PeakWidth": "0.4000",
     }
 
 

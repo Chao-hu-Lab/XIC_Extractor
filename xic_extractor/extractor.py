@@ -23,7 +23,7 @@ DiagnosticIssue = Literal[
     "FILE_ERROR",
 ]
 
-_MS1_SUFFIXES = ("RT", "Int", "Area", "PeakStart", "PeakEnd", "PeakWidthSec")
+_MS1_SUFFIXES = ("RT", "Int", "Area", "PeakStart", "PeakEnd", "PeakWidth")
 _DIAGNOSTIC_FIELDS = ("SampleName", "Target", "Issue", "Reason")
 _LONG_OUTPUT_FIELDS = (
     "SampleName",
@@ -37,7 +37,7 @@ _LONG_OUTPUT_FIELDS = (
     "Int",
     "PeakStart",
     "PeakEnd",
-    "PeakWidthSec",
+    "PeakWidth",
 )
 
 
@@ -291,7 +291,7 @@ def _long_output_rows(
             "Int": "",
             "PeakStart": "",
             "PeakEnd": "",
-            "PeakWidthSec": "",
+            "PeakWidth": "",
         }
         if file_result.error is not None:
             _set_long_ms1_values(row, "ERROR")
@@ -314,7 +314,7 @@ def _set_long_ms1_values(row: dict[str, str], value: str) -> None:
     row["Int"] = value
     row["PeakStart"] = value
     row["PeakEnd"] = value
-    row["PeakWidthSec"] = value
+    row["PeakWidth"] = value
 
 
 def _set_long_peak_values(row: dict[str, str], peak: PeakResult | None) -> None:
@@ -326,7 +326,7 @@ def _set_long_peak_values(row: dict[str, str], peak: PeakResult | None) -> None:
     row["Int"] = f"{peak.intensity:.0f}"
     row["PeakStart"] = f"{peak.peak_start:.4f}"
     row["PeakEnd"] = f"{peak.peak_end:.4f}"
-    row["PeakWidthSec"] = _format_peak_width_seconds(peak)
+    row["PeakWidth"] = _format_peak_width(peak)
 
 
 def _output_fieldnames(targets: list[Target]) -> list[str]:
@@ -377,12 +377,11 @@ def _set_peak_values(
     row[f"{target.label}_Area"] = f"{peak.area:.2f}"
     row[f"{target.label}_PeakStart"] = f"{peak.peak_start:.4f}"
     row[f"{target.label}_PeakEnd"] = f"{peak.peak_end:.4f}"
-    row[f"{target.label}_PeakWidthSec"] = _format_peak_width_seconds(peak)
+    row[f"{target.label}_PeakWidth"] = _format_peak_width(peak)
 
 
-def _format_peak_width_seconds(peak: PeakResult) -> str:
-    width_seconds = abs(peak.peak_end - peak.peak_start) * 60.0
-    return f"{width_seconds:.2f}"
+def _format_peak_width(peak: PeakResult) -> str:
+    return f"{abs(peak.peak_end - peak.peak_start):.4f}"
 
 
 def _format_optional_number(value: float | None) -> str:

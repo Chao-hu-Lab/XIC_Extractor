@@ -71,13 +71,13 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
         "NoNL_Area",
         "NoNL_PeakStart",
         "NoNL_PeakEnd",
-        "NoNL_PeakWidthSec",
+        "NoNL_PeakWidth",
         "WithNL_RT",
         "WithNL_Int",
         "WithNL_Area",
         "WithNL_PeakStart",
         "WithNL_PeakEnd",
-        "WithNL_PeakWidthSec",
+        "WithNL_PeakWidth",
         "WithNL_NL",
     ]
     assert rows == [
@@ -88,13 +88,13 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
             "NoNL_Area": "3400.25",
             "NoNL_PeakStart": "8.0000",
             "NoNL_PeakEnd": "9.0000",
-            "NoNL_PeakWidthSec": "60.00",
+            "NoNL_PeakWidth": "1.0000",
             "WithNL_RT": "9.5000",
             "WithNL_Int": "2200",
             "WithNL_Area": "4400.75",
             "WithNL_PeakStart": "9.0000",
             "WithNL_PeakEnd": "10.0000",
-            "WithNL_PeakWidthSec": "60.00",
+            "WithNL_PeakWidth": "1.0000",
             "WithNL_NL": "WARN_12.3ppm",
         }
     ]
@@ -114,7 +114,7 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
             "Int": "1200",
             "PeakStart": "8.0000",
             "PeakEnd": "9.0000",
-            "PeakWidthSec": "60.00",
+            "PeakWidth": "1.0000",
         },
         {
             "SampleName": "SampleA",
@@ -128,7 +128,7 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
             "Int": "2200",
             "PeakStart": "9.0000",
             "PeakEnd": "10.0000",
-            "PeakWidthSec": "60.00",
+            "PeakWidth": "1.0000",
         },
     ]
 
@@ -159,7 +159,7 @@ def test_run_writes_nd_for_peak_failure_but_keeps_nl_result(
     assert rows[0]["WithNL_Area"] == "ND"
     assert rows[0]["WithNL_PeakStart"] == "ND"
     assert rows[0]["WithNL_PeakEnd"] == "ND"
-    assert rows[0]["WithNL_PeakWidthSec"] == "ND"
+    assert rows[0]["WithNL_PeakWidth"] == "ND"
     assert rows[0]["WithNL_NL"] == "OK"
     diagnostics = _read_csv(config.diagnostics_csv)
     assert diagnostics[0]["Issue"] == "PEAK_NOT_FOUND"
@@ -198,13 +198,13 @@ def test_run_writes_file_error_row_and_continues(
         "NoNL_Area": "ERROR",
         "NoNL_PeakStart": "ERROR",
         "NoNL_PeakEnd": "ERROR",
-        "NoNL_PeakWidthSec": "ERROR",
+        "NoNL_PeakWidth": "ERROR",
         "WithNL_RT": "ERROR",
         "WithNL_Int": "ERROR",
         "WithNL_Area": "ERROR",
         "WithNL_PeakStart": "ERROR",
         "WithNL_PeakEnd": "ERROR",
-        "WithNL_PeakWidthSec": "ERROR",
+        "WithNL_PeakWidth": "ERROR",
         "WithNL_NL": "ERROR",
     }
     assert rows[1]["SampleName"] == "Good"

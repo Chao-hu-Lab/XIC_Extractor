@@ -94,7 +94,7 @@ Row-based primary review table。每列是一個 sample-target result：
 | `NL` | `OK`、`WARN_12.3ppm`、`NL_FAIL`、`NO_MS2`；無 NL target 為空白 |
 | `Int` | apex scan 的 raw intensity，屬於 advanced info；Excel 內以科學記號顯示 |
 | `PeakStart` / `PeakEnd` | peak integration boundary，屬於 advanced info |
-| `PeakWidthSec` | `abs(PeakEnd - PeakStart) * 60`，單位為 seconds，屬於 advanced info |
+| `PeakWidth` | `abs(PeakEnd - PeakStart)`，單位與 RT 相同（分鐘），屬於 advanced info |
 
 ### `output/xic_diagnostics.csv`
 
@@ -113,7 +113,7 @@ Row-based primary review table。每列是一個 sample-target result：
 
 | Sheet | 內容 |
 | --- | --- |
-| `XIC Results` | row-based sample-target review table；`SampleName` / `Group` 會合併連續相同儲存格；預設顯示 `RT`、`Area`、`NL`，`Int`、`PeakStart`、`PeakEnd`、`PeakWidthSec` 以 Excel outline hidden 作為 advanced info |
+| `XIC Results` | row-based sample-target review table；`SampleName` / `Group` 會合併連續相同儲存格；預設顯示 `RT`、`Area`、`NL`，`Int`、`PeakStart`、`PeakEnd`、`PeakWidth` 以 Excel outline hidden 作為 advanced info |
 | `Summary` | one row per target，包含 detection rate、Mean RT、Median Area (detected)、Area / ISTD ratio (paired detected)、NL counts、RT delta |
 | `Diagnostics` | issue rows；若有 diagnostics，workbook 開啟時會落在此 sheet |
 

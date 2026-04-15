@@ -46,9 +46,9 @@ _LONG_HEADERS = [
     "Int",
     "PeakStart",
     "PeakEnd",
-    "PeakWidthSec",
+    "PeakWidth",
 ]
-_ADVANCED_HEADERS = {"Int", "PeakStart", "PeakEnd", "PeakWidthSec"}
+_ADVANCED_HEADERS = {"Int", "PeakStart", "PeakEnd", "PeakWidth"}
 _SUMMARY_HEADERS = [
     "Target",
     "Role",
@@ -129,7 +129,7 @@ def _long_cell_value(header: str, raw_val: str) -> object:
         return _excel_text(raw_val)
     if header == "NL":
         return _nl_to_display(raw_val) if raw_val else ""
-    if header in {"RT", "Area", "Int", "PeakStart", "PeakEnd", "PeakWidthSec"}:
+    if header in {"RT", "Area", "Int", "PeakStart", "PeakEnd", "PeakWidth"}:
         if raw_val in ND_ERROR:
             return raw_val
         parsed = _safe_float(raw_val)
@@ -152,8 +152,8 @@ def _long_number_format(header: str) -> str:
         return "0.0000"
     if header in {"Area", "Int"}:
         return "0.00E+00"
-    if header == "PeakWidthSec":
-        return "0.00"
+    if header == "PeakWidth":
+        return "0.0000"
     return "#,##0"
 
 
@@ -170,7 +170,7 @@ def _long_column_width(header: str) -> int:
         "Int": 14,
         "PeakStart": 14,
         "PeakEnd": 14,
-        "PeakWidthSec": 14,
+        "PeakWidth": 14,
     }[header]
 
 
@@ -343,18 +343,14 @@ def _is_long_detected(
 
 def _long_mean_rt(rows: list[dict[str, str]]) -> str:
     values = [
-        value
-        for row in rows
-        if (value := _safe_float(row.get("RT", ""))) is not None
+        value for row in rows if (value := _safe_float(row.get("RT", ""))) is not None
     ]
     return f"{sum(values) / len(values):.4f}" if values else "—"
 
 
 def _long_median_area(rows: list[dict[str, str]]) -> float | str:
     values = [
-        value
-        for row in rows
-        if (value := _safe_float(row.get("Area", ""))) is not None
+        value for row in rows if (value := _safe_float(row.get("Area", ""))) is not None
     ]
     return statistics.median(values) if values else "—"
 
@@ -418,14 +414,14 @@ def _long_rt_delta(
             continue
         rt_analyte = _safe_float(row.get("RT", ""))
         rt_istd = _safe_float(istd.get("RT", ""))
-        if rt_analyte is None or rt_istd is None or rt_istd == 0:
+        if rt_analyte is None or rt_istd is None:
             continue
-        deltas.append(abs(rt_analyte - rt_istd) / rt_istd * 100)
+        deltas.append(abs(rt_analyte - rt_istd))
     if not deltas:
         return "—"
     mean_delta = sum(deltas) / len(deltas)
     sd_delta = statistics.stdev(deltas) if len(deltas) > 1 else 0.0
-    return f"{mean_delta:.2f}±{sd_delta:.2f}% (n={len(deltas)})"
+    return f"{mean_delta:.4f}±{sd_delta:.4f} min (n={len(deltas)})"
 
 
 def _rows_by_sample_and_target(
@@ -562,14 +558,14 @@ def _wide_to_long_rows(
                     "Int": row.get(f"{target.label}_Int", ""),
                     "PeakStart": row.get(f"{target.label}_PeakStart", ""),
                     "PeakEnd": row.get(f"{target.label}_PeakEnd", ""),
-                    "PeakWidthSec": _legacy_peak_width_seconds(row, target.label),
+                    "PeakWidth": _legacy_peak_width(row, target.label),
                 }
             )
     return long_rows
 
 
-def _legacy_peak_width_seconds(row: dict[str, str], label: str) -> str:
-    existing = row.get(f"{label}_PeakWidthSec", "")
+def _legacy_peak_width(row: dict[str, str], label: str) -> str:
+    existing = row.get(f"{label}_PeakWidth", "")
     if existing:
         return existing
     start = row.get(f"{label}_PeakStart", "")
@@ -580,7 +576,7 @@ def _legacy_peak_width_seconds(row: dict[str, str], label: str) -> str:
     end_value = _safe_float(end)
     if start_value is None or end_value is None:
         return ""
-    return f"{abs(end_value - start_value) * 60.0:.2f}"
+    return f"{abs(end_value - start_value):.4f}"
 
 
 def _read_results(path: Path) -> list[dict[str, str]]:
@@ -600,9 +596,7 @@ def _print_summary(
         label = target["Target"]
         target_rows = [row for row in rows if row.get("Target") == label]
         detected = sum(
-            1
-            for row in target_rows
-            if _is_long_detected(row, count_no_ms2_as_detected)
+            1 for row in target_rows if _is_long_detected(row, count_no_ms2_as_detected)
         )
         note = (
             " (NL confirmed)" if any(row.get("NL", "") for row in target_rows) else ""
@@ -624,9 +618,7 @@ def _print_summary(
         label = target["Target"]
         target_rows = [row for row in rows if row.get("Target") == label]
         detected = sum(
-            1
-            for row in target_rows
-            if _is_long_detected(row, count_no_ms2_as_detected)
+            1 for row in target_rows if _is_long_detected(row, count_no_ms2_as_detected)
         )
         if detected < len(target_rows):
             print(f"ISTD_ND: {label} {detected}/{len(target_rows)}")
