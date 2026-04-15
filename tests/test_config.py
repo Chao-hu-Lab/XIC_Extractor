@@ -255,6 +255,23 @@ def test_load_config_rejects_istd_pair_that_is_not_an_istd(tmp_path: Path) -> No
     _assert_error(exc_info, "targets.csv", "row 2", "istd_pair", "Candidate")
 
 
+def test_load_config_rejects_istd_with_istd_pair(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir)
+    _write_targets(
+        config_dir,
+        [
+            _target_row(label="ISTD-A", is_istd="true", istd_pair="ISTD-B"),
+            _target_row(label="ISTD-B", is_istd="true"),
+        ],
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "targets.csv", "row 2", "istd_pair", "ISTD-B")
+
+
 @pytest.mark.parametrize(
     ("column", "value"),
     [

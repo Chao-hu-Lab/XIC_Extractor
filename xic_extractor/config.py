@@ -314,6 +314,14 @@ def _read_targets(path: Path) -> list[Target]:
 
     by_label = {target.label: target for target in targets}
     for row_number, target in enumerate(targets, start=2):
+        if target.is_istd and target.istd_pair:
+            raise _config_error(
+                path,
+                row_number,
+                "istd_pair",
+                target.istd_pair,
+                "is_istd=true targets must not set istd_pair",
+            )
         if not target.istd_pair:
             continue
         pair = by_label.get(target.istd_pair)

@@ -8,6 +8,9 @@ from xic_extractor.config import ExtractionConfig
 
 PeakStatus = Literal["OK", "NO_SIGNAL", "WINDOW_TOO_SHORT", "PEAK_NOT_FOUND"]
 
+# preferred_rt 選峰時，若最靠近 anchor 的峰強度 < 最高峰的這個比例，改選最高峰
+_PREFERRED_RT_MIN_INTENSITY_RATIO: float = 0.2
+
 
 @dataclass(frozen=True)
 class PeakResult:
@@ -56,12 +59,21 @@ def find_peak_and_area(
     if len(peaks) == 0:
         return _failure("PEAK_NOT_FOUND", n_points, max_smoothed)
 
+    strongest_idx = int(peaks[np.argmax(smoothed[peaks])])
     if preferred_rt is not None and len(peaks) > 1:
         # NL anchor 指向化合物實際 RT；多峰時優先選距 anchor 最近的峰
+        # 但若最近峰強度 < 最高峰的 20%，anchor 可能是雜訊，回到選最高峰
         rt_diffs = np.abs(rt_values[peaks] - preferred_rt)
-        best_idx = int(peaks[np.argmin(rt_diffs)])
+        nearest_idx = int(peaks[np.argmin(rt_diffs)])
+        if (
+            smoothed[nearest_idx]
+            >= smoothed[strongest_idx] * _PREFERRED_RT_MIN_INTENSITY_RATIO
+        ):
+            best_idx = nearest_idx
+        else:
+            best_idx = strongest_idx
     else:
-        best_idx = int(peaks[np.argmax(smoothed[peaks])])
+        best_idx = strongest_idx
     left, right = _peak_bounds(smoothed, best_idx, config.peak_rel_height, n_points)
     # Thermo returns rt in minutes, but LC-MS convention (Xcalibur, MassHunter,
     # manual integration) reports area in counts·seconds — convert so downstream

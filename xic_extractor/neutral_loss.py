@@ -162,15 +162,12 @@ def _best_product_ppm(
     masses = np.asarray(scan.masses, dtype=float)
     intensities = np.asarray(scan.intensities, dtype=float)
     intensity_floor = scan.base_peak * min_intensity_ratio
-    best_ppm: float | None = None
 
-    for mass, intensity in zip(masses, intensities):
-        if intensity < intensity_floor:
-            continue
-        ppm = abs(float(mass) - expected_product) / expected_product * 1_000_000.0
-        if ppm <= diagnostic_ppm and (best_ppm is None or ppm < best_ppm):
-            best_ppm = ppm
-    return best_ppm
+    ppm = np.abs(masses - expected_product) / expected_product * 1_000_000.0
+    mask = (intensities >= intensity_floor) & (ppm <= diagnostic_ppm)
+    if not mask.any():
+        return None
+    return float(ppm[mask].min())
 
 
 def _classify_nl_result(
