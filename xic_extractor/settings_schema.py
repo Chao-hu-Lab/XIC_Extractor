@@ -5,7 +5,7 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "smooth_polyorder": "3",
     "peak_rel_height": "0.95",
     "peak_min_prominence_ratio": "0.10",
-    "ms2_precursor_tol_da": "0.5",
+    "ms2_precursor_tol_da": "1.6",
     "nl_min_intensity_ratio": "0.01",
     "count_no_ms2_as_detected": "false",
 }
@@ -22,7 +22,8 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
         "Peak prominence 至少為 apex 的比例（越低越寬容，0.05-0.20）"
     ),
     "ms2_precursor_tol_da": (
-        "MS2 precursor m/z 匹配視窗（Da，對應 DDA quadrupole 隔離寬度）"
+        "MS2 precursor m/z 匹配視窗（Da，建議設為 quadrupole 隔離視窗 + 0.4 Da 緩衝，"
+        "Fusion Lumos CID 典型隔離視窗 1.2 Da → 預設 1.6 Da）"
     ),
     "nl_min_intensity_ratio": (
         "NL product 強度至少為該 scan base peak 的比例（1% 排除 noise）"

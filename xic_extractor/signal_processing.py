@@ -111,7 +111,7 @@ def _prominence_threshold(
     residual = intensity - smoothed
     median = float(np.median(residual))
     mad = float(np.median(np.abs(residual - median)))
-    noise_floor = 6.0 * 1.4826 * mad
+    noise_floor = 3.0 * 1.4826 * mad
     return max(max_smoothed * peak_min_prominence_ratio, noise_floor)
 
 
