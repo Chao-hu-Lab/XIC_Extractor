@@ -9,7 +9,7 @@ requires-python = ">=3.10"
 dependencies = [
     "PyQt6>=6.6",
     "numpy>=1.26",
-    "openpyxl>=3.1",
+    "openpyxl>=3.1.5",
     "pythonnet>=3.0",
     "scipy>=1.11",
 ]
