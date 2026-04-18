@@ -114,7 +114,7 @@ Row-based primary review table。每列是一個 sample-target result：
 | Sheet | 內容 |
 | --- | --- |
 | `XIC Results` | row-based sample-target review table；`SampleName` / `Group` 會合併連續相同儲存格；預設顯示 `RT`、`Area`、`NL`，`Int`、`PeakStart`、`PeakEnd`、`PeakWidth` 以 Excel outline hidden 作為 advanced info |
-| `Summary` | one row per target，包含 detection rate、Mean RT、Median Area (detected)、Area / ISTD ratio (paired detected)、NL counts、RT delta |
+| `Summary` | one row per target，包含 detection rate、Mean RT、Median Area (detected)、QC-only Area / ISTD ratio mean±SD / CV% (paired detected)、NL counts、RT delta |
 | `Diagnostics` | issue rows；若有 diagnostics，workbook 開啟時會落在此 sheet |
 
 ---

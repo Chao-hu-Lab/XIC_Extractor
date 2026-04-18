@@ -3,7 +3,12 @@ from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 
-from scripts.csv_to_excel import _build_data_sheet, _build_summary_sheet, run
+from scripts.csv_to_excel import (
+    _build_data_sheet,
+    _build_summary_sheet,
+    _wide_to_long_rows,
+    run,
+)
 from xic_extractor.config import ExtractionConfig, Target
 
 
@@ -116,15 +121,93 @@ def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     assert "Area / ISTD ratio (paired detected)" in data["headers"]
     assert data["Analyte"]["Median Area (detected)"] == 40000.0
     assert ws["H2"].number_format == "0.00E+00"
-    assert data["Analyte"]["Area / ISTD ratio (paired detected)"] == (
-        "0.5000±0.0000 (n=3)"
-    )
+    assert data["Analyte"]["Area / ISTD ratio (paired detected)"] == "—"
     assert data["Analyte"]["NL OK"] == 2
     assert data["Analyte"]["NL WARN"] == 1
     assert data["Analyte"]["NL FAIL"] == 0
     assert data["Analyte"]["NO MS2"] == 1
     assert data["Analyte"]["RT Delta vs ISTD"] == "0.1333±0.0577 min (n=3)"
     assert data["ISTD"]["Area / ISTD ratio (paired detected)"] == "—"
+
+
+def test_summary_area_ratio_uses_only_explicit_qc_samples() -> None:
+    rows = [
+        _long_row("Tumor_1", "Analyte", "9.0", "10000", "OK", istd_pair="ISTD"),
+        _long_row("Tumor_1", "ISTD", "9.0", "10000", "OK", role="ISTD"),
+        _long_row("Tumor_2", "Analyte", "9.0", "90000", "OK", istd_pair="ISTD"),
+        _long_row("Tumor_2", "ISTD", "9.0", "10000", "OK", role="ISTD"),
+        _long_row(
+            "Breast Cancer Tissue_pooled_QC1",
+            "Analyte",
+            "9.0",
+            "20000",
+            "OK",
+            istd_pair="ISTD",
+        ),
+        _long_row(
+            "Breast Cancer Tissue_pooled_QC1",
+            "ISTD",
+            "9.0",
+            "10000",
+            "OK",
+            role="ISTD",
+        ),
+        _long_row(
+            "Breast Cancer Tissue_pooled_QC_2",
+            "Analyte",
+            "9.0",
+            "40000",
+            "OK",
+            istd_pair="ISTD",
+        ),
+        _long_row(
+            "Breast Cancer Tissue_pooled_QC_2",
+            "ISTD",
+            "9.0",
+            "10000",
+            "OK",
+            role="ISTD",
+        ),
+    ]
+    wb = Workbook()
+    ws = wb.active
+
+    _build_summary_sheet(ws, rows)
+    data = _summary_rows(ws)
+
+    assert data["Analyte"]["Detected"] == 4
+    assert data["Analyte"]["Area / ISTD ratio (paired detected)"] == (
+        "3.0000±1.4142, CV=47.1% (n=2)"
+    )
+
+
+def test_wide_to_long_rows_classifies_qc_from_sample_name_token() -> None:
+    rows = [
+        {
+            "SampleName": "Breast Cancer Tissue_pooled_QC_1",
+            "Analyte_RT": "9.0",
+            "Analyte_Area": "10000",
+            "Analyte_NL": "OK",
+        },
+        {
+            "SampleName": "SampleA",
+            "Analyte_RT": "9.0",
+            "Analyte_Area": "10000",
+            "Analyte_NL": "OK",
+        },
+        {
+            "SampleName": "Breast_Cancer_Tissue_pooled_QC1",
+            "Analyte_RT": "9.0",
+            "Analyte_Area": "10000",
+            "Analyte_NL": "OK",
+        },
+    ]
+
+    long_rows = _wide_to_long_rows(rows, [_target("Analyte")])
+
+    assert long_rows[0]["Group"] == "QC"
+    assert long_rows[1]["Group"] == "Other"
+    assert long_rows[2]["Group"] == "QC"
 
 
 def test_run_writes_row_based_results_sheet_and_makes_diagnostics_active(

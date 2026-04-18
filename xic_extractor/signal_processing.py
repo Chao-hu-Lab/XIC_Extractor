@@ -37,6 +37,7 @@ def find_peak_and_area(
     config: ExtractionConfig,
     *,
     preferred_rt: float | None = None,
+    strict_preferred_rt: bool = False,
 ) -> PeakDetectionResult:
     rt_values, intensity_values = _as_matching_arrays(rt, intensity)
     n_points = len(intensity_values)
@@ -62,10 +63,11 @@ def find_peak_and_area(
     strongest_idx = int(peaks[np.argmax(smoothed[peaks])])
     if preferred_rt is not None and len(peaks) > 1:
         # NL anchor 指向化合物實際 RT；多峰時優先選距 anchor 最近的峰
-        # 但若最近峰強度 < 最高峰的 20%，anchor 可能是雜訊，回到選最高峰
+        # paired analyte 已由 ISTD anchor 約束時強制尊重最近峰；其他路徑若最近峰
+        # 強度 < 最高峰的 20%，anchor 可能是雜訊，回到選最高峰。
         rt_diffs = np.abs(rt_values[peaks] - preferred_rt)
         nearest_idx = int(peaks[np.argmin(rt_diffs)])
-        if (
+        if strict_preferred_rt or (
             smoothed[nearest_idx]
             >= smoothed[strongest_idx] * _PREFERRED_RT_MIN_INTENSITY_RATIO
         ):

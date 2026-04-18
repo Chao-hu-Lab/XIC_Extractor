@@ -1,7 +1,7 @@
 import csv
 import gc
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from statistics import median
 from typing import Any, Literal
@@ -9,6 +9,7 @@ from typing import Any, Literal
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
 from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
+from xic_extractor.sample_groups import classify_sample_group
 from xic_extractor.signal_processing import (
     PeakDetectionResult,
     PeakResult,
@@ -32,7 +33,11 @@ DiagnosticIssue = Literal[
 # Asymmetry ratio (right / left half-width at 5 % peak height) above this
 # threshold triggers a TAILING warning.  USP guideline is 2.0 for quantification.
 _TAILING_THRESHOLD: float = 2.0
-# 選出的峰 RT 距 NL anchor 超過這個距離時發出 ANCHOR_RT_MISMATCH 警告
+# paired analyte 有自己的 NL anchor 時，以 target anchor 作為最直接的證據。
+_PAIRED_TARGET_ANCHOR_PEAK_DELTA_MAX_MIN: float = 0.25
+# target anchor 缺失時才退回 ISTD anchor，門檻較寬但仍擋掉明顯旁峰。
+_PAIRED_FALLBACK_ISTD_PEAK_DELTA_MAX_MIN: float = 0.5
+# 非 paired/非拒絕情境下，選出的峰 RT 距 NL anchor 超過此距離時發出警告。
 _ANCHOR_PEAK_DELTA_WARN_MIN: float = 0.5
 
 _MS1_SUFFIXES = ("RT", "Int", "Area", "PeakStart", "PeakEnd", "PeakWidth")
@@ -135,6 +140,7 @@ def _process_file(
                     sample_name,
                     target,
                     reference_rt=None,
+                    strict_preferred_rt=False,
                     results=results,
                     diagnostics=diagnostics,
                 )
@@ -144,8 +150,8 @@ def _process_file(
             sample_drift = _estimate_sample_drift(targets, istd_anchor_rts)
 
             # Pass 2: analytes — reference_rt 依 ISTD pair 決定
-            # 有 ISTD pair 且 anchor 成功 → 選最靠近 ISTD anchor_rt 的 scan（區分異構體）
-            # 有 ISTD pair 但 anchor 失敗 → 發 ISTD_ANCHOR_MISSING，降級為 base_peak 最高
+            # 有 ISTD pair 且 anchor 成功 → 選最靠近 ISTD anchor_rt 的 scan
+            # 有 ISTD pair 但 anchor 失敗 → 發 ISTD_ANCHOR_MISSING
             # 無 ISTD pair → reference_rt=None，選 base_peak 最高的 scan
             for target in targets:
                 if target.is_istd:
@@ -160,9 +166,10 @@ def _process_file(
                                 target_label=target.label,
                                 issue="ISTD_ANCHOR_MISSING",
                                 reason=(
-                                    f"ISTD '{target.istd_pair}' yielded no NL-confirmed anchor "
-                                    f"in this sample; falling back to highest base_peak — "
-                                    f"isobar discrimination disabled"
+                                    f"ISTD '{target.istd_pair}' yielded no "
+                                    f"NL-confirmed anchor in this sample; "
+                                    f"falling back to highest base_peak — isobar "
+                                    f"discrimination disabled"
                                 ),
                             )
                         )
@@ -174,6 +181,7 @@ def _process_file(
                     target,
                     reference_rt=reference_rt,
                     sample_drift=sample_drift,
+                    strict_preferred_rt=reference_rt is not None,
                     results=results,
                     diagnostics=diagnostics,
                 )
@@ -202,22 +210,49 @@ def _extract_one_target(
     *,
     reference_rt: float | None,
     sample_drift: float = 0.0,
+    strict_preferred_rt: bool = False,
     results: dict[str, ExtractionResult],
     diagnostics: list[DiagnosticRecord],
 ) -> float | None:
-    """處理單一 target 並將結果寫入 results/diagnostics。回傳 anchor_rt（若無則 None）。"""
+    """處理單一 target 並將結果寫入 results/diagnostics。
+
+    回傳 anchor_rt（若無則 None）。
+    """
     rt_min, rt_max, anchor_used, anchor_rt = _get_rt_window(
         raw, target, config, reference_rt=reference_rt, sample_drift=sample_drift
     )
     rt, intensity = raw.extract_xic(target.mz, rt_min, rt_max, target.ppm_tol)
-    peak_result = find_peak_and_area(rt, intensity, config, preferred_rt=anchor_rt)
+    peak_result = find_peak_and_area(
+        rt,
+        intensity,
+        config,
+        preferred_rt=anchor_rt,
+        strict_preferred_rt=strict_preferred_rt,
+    )
     nl_result = _check_target_nl(raw, target, config)
+    paired_rejection = _paired_anchor_mismatch_diagnostic(
+        sample_name,
+        target,
+        peak_result,
+        reference_rt=reference_rt,
+        anchor_rt=anchor_rt,
+        strict_preferred_rt=strict_preferred_rt,
+    )
+    if paired_rejection is not None:
+        peak_result = replace(peak_result, peak=None)
+
     result = ExtractionResult(peak_result=peak_result, nl=nl_result)
     results[target.label] = result
     diagnostics.extend(_build_diagnostics(sample_name, target, result, config))
+    if paired_rejection is not None:
+        diagnostics.append(paired_rejection)
 
     # 問題 7：anchor 找到，但選出的峰 RT 與 anchor 相差過大（可能 anchor 是雜訊）
-    if anchor_rt is not None and peak_result.peak is not None:
+    if (
+        paired_rejection is None
+        and anchor_rt is not None
+        and peak_result.peak is not None
+    ):
         delta = abs(peak_result.peak.rt - anchor_rt)
         if delta > _ANCHOR_PEAK_DELTA_WARN_MIN:
             diagnostics.append(
@@ -226,7 +261,8 @@ def _extract_one_target(
                     target_label=target.label,
                     issue="ANCHOR_RT_MISMATCH",
                     reason=(
-                        f"Peak RT {peak_result.peak.rt:.3f} min deviates {delta:.2f} min "
+                        f"Peak RT {peak_result.peak.rt:.3f} min deviates "
+                        f"{delta:.2f} min "
                         f"from NL anchor at {anchor_rt:.3f} min "
                         f"(threshold {_ANCHOR_PEAK_DELTA_WARN_MIN} min); "
                         f"anchor scan may be noise — verify manually"
@@ -267,7 +303,8 @@ def _get_rt_window(
 
     reference_rt 控制 anchor 選擇邏輯（見 find_nl_anchor_rt）：
     - None → 選最高 base_peak（ISTD 及無 ISTD pair 的 analyte）
-    - float → 選最靠近 reference_rt 的 scan（有 ISTD pair 的 analyte，傳 ISTD anchor_rt）
+    - float → 選最靠近 reference_rt 的 scan
+      （有 ISTD pair 的 analyte，傳 ISTD anchor_rt）
 
     sample_drift 是從本樣本所有成功 ISTD 估計的整體 RT 偏移量，用於校正 anchor
     搜尋中心與 fallback 窗口中心，讓兩者跟著樣本實際 RT 移動。
@@ -322,7 +359,7 @@ def _check_target_nl(
     target: Target,
     config: ExtractionConfig,
 ) -> NLResult | None:
-    """NL 品質評估用 target 原始窗口（不受 anchor 縮小影響），確保 matched_scan_count 完整。"""
+    """NL 品質評估用 target 原始窗口，確保 matched_scan_count 完整。"""
     if target.neutral_loss_da is None:
         return None
     if target.nl_ppm_warn is None or target.nl_ppm_max is None:
@@ -337,6 +374,51 @@ def _check_target_nl(
         nl_ppm_max=target.nl_ppm_max,
         ms2_precursor_tol_da=config.ms2_precursor_tol_da,
         nl_min_intensity_ratio=config.nl_min_intensity_ratio,
+    )
+
+
+def _paired_anchor_mismatch_diagnostic(
+    sample_name: str,
+    target: Target,
+    peak_result: PeakDetectionResult,
+    *,
+    reference_rt: float | None,
+    anchor_rt: float | None,
+    strict_preferred_rt: bool,
+) -> DiagnosticRecord | None:
+    if (
+        not strict_preferred_rt
+        or reference_rt is None
+        or peak_result.peak is None
+    ):
+        return None
+
+    peak = peak_result.peak
+    if anchor_rt is not None:
+        expected_rt = anchor_rt
+        anchor_label = "target NL anchor"
+        allowed_delta = _PAIRED_TARGET_ANCHOR_PEAK_DELTA_MAX_MIN
+        secondary_note = f"; ISTD anchor at {reference_rt:.3f} min"
+    else:
+        expected_rt = reference_rt
+        anchor_label = "ISTD anchor"
+        allowed_delta = _PAIRED_FALLBACK_ISTD_PEAK_DELTA_MAX_MIN
+        secondary_note = "; no target NL anchor"
+
+    delta = abs(peak.rt - expected_rt)
+    if delta <= allowed_delta:
+        return None
+
+    return DiagnosticRecord(
+        sample_name=sample_name,
+        target_label=target.label,
+        issue="ANCHOR_RT_MISMATCH",
+        reason=(
+            f"Rejected paired analyte peak RT {peak.rt:.3f} min because it "
+            f"deviates {delta:.2f} min from {anchor_label} at "
+            f"{expected_rt:.3f} min (allowed ±{allowed_delta:.2f} min)"
+            f"{secondary_note}; output set to ND to avoid false positive"
+        ),
     )
 
 
@@ -633,11 +715,4 @@ def _format_optional_number(value: float | None) -> str:
 
 
 def _sample_group(name: str) -> str:
-    normalized = name.upper()
-    if normalized.startswith("TUMOR"):
-        return "Tumor"
-    if normalized.startswith("NORMAL"):
-        return "Normal"
-    if normalized.startswith("BENIGNFAT"):
-        return "Benignfat"
-    return "QC"
+    return classify_sample_group(name)

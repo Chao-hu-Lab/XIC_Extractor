@@ -271,6 +271,28 @@ def _validate_settings_ranges(
             settings["nl_min_intensity_ratio"],
             "must be > 0 and <= 1",
         )
+    for column, parsed_value in (
+        (
+            "nl_rt_anchor_search_margin_min",
+            parsed.nl_rt_anchor_search_margin_min,
+        ),
+        (
+            "nl_rt_anchor_half_window_min",
+            parsed.nl_rt_anchor_half_window_min,
+        ),
+        (
+            "nl_fallback_half_window_min",
+            parsed.nl_fallback_half_window_min,
+        ),
+    ):
+        if parsed_value <= 0:
+            raise _config_error(
+                settings_path,
+                None,
+                column,
+                settings[column],
+                "must be > 0",
+            )
 
 
 def _build_config(parsed: _ParsedSettings, output_dir: Path) -> ExtractionConfig:

@@ -98,7 +98,7 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
             "WithNL_NL": "WARN_12.3ppm",
         }
     ]
-    # WithNL target triggers NL_ANCHOR_FALLBACK (fake raw has no MS2 data); no error diagnostics
+    # WithNL target triggers NL_ANCHOR_FALLBACK; no error diagnostics.
     assert all(
         d["Issue"] == "NL_ANCHOR_FALLBACK" for d in _read_csv(config.diagnostics_csv)
     )
@@ -107,7 +107,7 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
     assert _read_csv(config.output_csv.with_name("xic_results_long.csv")) == [
         {
             "SampleName": "SampleA",
-            "Group": "QC",
+            "Group": "Other",
             "Target": "NoNL",
             "Role": "Analyte",
             "ISTD Pair": "",
@@ -121,7 +121,7 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
         },
         {
             "SampleName": "SampleA",
-            "Group": "QC",
+            "Group": "Other",
             "Target": "WithNL",
             "Role": "Analyte",
             "ISTD Pair": "",
@@ -328,6 +328,180 @@ def test_run_reports_progress_and_stops_between_files(
     assert [row["SampleName"] for row in _read_csv(config.output_csv)] == ["A"]
 
 
+def test_paired_analyte_uses_strict_anchor_peak_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [
+        _target("Analyte", istd_pair="ISTD"),
+        _target("ISTD", is_istd=True),
+    ]
+    strict_flags: list[bool] = []
+
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_nl_anchor_rt",
+        _anchor_sequence([13.70, 13.75]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _capturing_peak_sequence(
+            [_ok_peak(13.70, 2000.0, 3000.0), _ok_peak(13.75, 500.0, 800.0)],
+            strict_flags,
+        ),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.check_nl",
+        _nl_sequence(
+            [
+                NLResult("OK", 1.0, 13.70, 1, 0, 1),
+                NLResult("OK", 1.0, 13.75, 1, 0, 1),
+            ]
+        ),
+    )
+
+    _run(config, targets)
+
+    assert strict_flags == [False, True]
+
+
+def test_paired_analyte_writes_nd_when_peak_is_far_from_target_anchor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [
+        _target("Analyte", istd_pair="ISTD"),
+        _target("ISTD", is_istd=True),
+    ]
+
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_nl_anchor_rt",
+        _anchor_sequence([13.70, 13.75]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence(
+            [_ok_peak(13.70, 2000.0, 3000.0), _ok_peak(13.06, 5000.0, 8000.0)]
+        ),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.check_nl",
+        _nl_sequence(
+            [
+                NLResult("OK", 1.0, 13.70, 1, 0, 1),
+                NLResult("OK", 1.0, 13.75, 1, 0, 1),
+            ]
+        ),
+    )
+
+    _run(config, targets)
+
+    rows = _read_csv(config.output_csv)
+    assert rows[0]["Analyte_RT"] == "ND"
+    assert rows[0]["Analyte_Int"] == "ND"
+    assert rows[0]["Analyte_Area"] == "ND"
+    diagnostics = _read_csv(config.diagnostics_csv)
+    assert any(
+        record["Target"] == "Analyte"
+        and record["Issue"] == "ANCHOR_RT_MISMATCH"
+        and "Rejected paired analyte peak RT 13.060" in record["Reason"]
+        and "target NL anchor at 13.750" in record["Reason"]
+        and "allowed ±0.25 min" in record["Reason"]
+        for record in diagnostics
+    )
+
+
+def test_paired_analyte_accepts_peak_close_to_target_anchor_even_if_farther_from_istd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [
+        _target("Analyte", istd_pair="ISTD"),
+        _target("ISTD", is_istd=True),
+    ]
+
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_nl_anchor_rt",
+        _anchor_sequence([13.70, 13.95]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence(
+            [_ok_peak(13.70, 2000.0, 3000.0), _ok_peak(13.95, 5000.0, 8000.0)]
+        ),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.check_nl",
+        _nl_sequence(
+            [
+                NLResult("OK", 1.0, 13.70, 1, 0, 1),
+                NLResult("OK", 1.0, 13.95, 1, 0, 1),
+            ]
+        ),
+    )
+
+    _run(config, targets)
+
+    rows = _read_csv(config.output_csv)
+    assert rows[0]["Analyte_RT"] == "13.9500"
+    assert rows[0]["Analyte_Area"] == "8000.00"
+    diagnostics = _read_csv(config.diagnostics_csv)
+    assert not any(
+        record["Target"] == "Analyte" and record["Issue"] == "ANCHOR_RT_MISMATCH"
+        for record in diagnostics
+    )
+
+
+def test_paired_analyte_fallback_writes_nd_when_peak_is_far_from_istd_anchor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [
+        _target("Analyte", istd_pair="ISTD"),
+        _target("ISTD", is_istd=True),
+    ]
+
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_nl_anchor_rt",
+        _anchor_sequence([13.70, None]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence(
+            [_ok_peak(13.70, 2000.0, 3000.0), _ok_peak(14.31, 5000.0, 8000.0)]
+        ),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.check_nl",
+        _nl_sequence(
+            [
+                NLResult("OK", 1.0, 13.70, 1, 0, 1),
+                NLResult("NL_FAIL", None, None, 1, 0, 1),
+            ]
+        ),
+    )
+
+    _run(config, targets)
+
+    rows = _read_csv(config.output_csv)
+    assert rows[0]["Analyte_RT"] == "ND"
+    diagnostics = _read_csv(config.diagnostics_csv)
+    assert any(
+        record["Target"] == "Analyte"
+        and record["Issue"] == "ANCHOR_RT_MISMATCH"
+        and "ISTD anchor at 13.700" in record["Reason"]
+        and "allowed ±0.50 min" in record["Reason"]
+        for record in diagnostics
+    )
+
+
 def _run(config: ExtractionConfig, targets: list[Target], **kwargs):
     from xic_extractor.extractor import run
 
@@ -355,7 +529,13 @@ def _config(tmp_path: Path) -> ExtractionConfig:
     )
 
 
-def _target(label: str, *, neutral_loss_da: float | None = 116.0474) -> Target:
+def _target(
+    label: str,
+    *,
+    neutral_loss_da: float | None = 116.0474,
+    is_istd: bool = False,
+    istd_pair: str = "",
+) -> Target:
     return Target(
         label=label,
         mz=258.1085,
@@ -365,8 +545,8 @@ def _target(label: str, *, neutral_loss_da: float | None = 116.0474) -> Target:
         neutral_loss_da=neutral_loss_da,
         nl_ppm_warn=20.0 if neutral_loss_da is not None else None,
         nl_ppm_max=50.0 if neutral_loss_da is not None else None,
-        is_istd=False,
-        istd_pair="",
+        is_istd=is_istd,
+        istd_pair=istd_pair,
     )
 
 
@@ -408,10 +588,40 @@ def _peak_sequence(results: list[PeakDetectionResult]):
         config: ExtractionConfig,
         *,
         preferred_rt: float | None = None,
+        strict_preferred_rt: bool = False,
     ) -> PeakDetectionResult:
         return pending.pop(0)
 
     return _fake_find_peak_and_area
+
+
+def _capturing_peak_sequence(
+    results: list[PeakDetectionResult],
+    strict_flags: list[bool],
+):
+    pending = list(results)
+
+    def _fake_find_peak_and_area(
+        rt: np.ndarray,
+        intensity: np.ndarray,
+        config: ExtractionConfig,
+        *,
+        preferred_rt: float | None = None,
+        strict_preferred_rt: bool = False,
+    ) -> PeakDetectionResult:
+        strict_flags.append(strict_preferred_rt)
+        return pending.pop(0)
+
+    return _fake_find_peak_and_area
+
+
+def _anchor_sequence(results: list[float | None]):
+    pending = list(results)
+
+    def _fake_find_nl_anchor_rt(*_args, **_kwargs) -> float | None:
+        return pending.pop(0)
+
+    return _fake_find_nl_anchor_rt
 
 
 def _nl_sequence(results: list[NLResult]):

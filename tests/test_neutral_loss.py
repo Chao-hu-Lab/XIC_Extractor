@@ -3,7 +3,7 @@ from collections.abc import Iterator
 import numpy as np
 import pytest
 
-from xic_extractor.neutral_loss import check_nl
+from xic_extractor.neutral_loss import check_nl, find_nl_anchor_rt
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
 
 PRECURSOR_MZ = 258.0969
@@ -162,6 +162,75 @@ def test_check_nl_ignores_all_zero_spectrum_without_divide_by_zero() -> None:
     assert result.matched_scan_count == 1
 
 
+def test_find_nl_anchor_rt_without_reference_uses_strongest_base_peak() -> None:
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.10,
+                masses=[EXPECTED_PRODUCT_MZ, 150.0],
+                intensities=[100.0, 250.0],
+            ),
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.90,
+                masses=[EXPECTED_PRODUCT_MZ, 150.0],
+                intensities=[80.0, 900.0],
+            ),
+        ]
+    )
+
+    anchor_rt = _anchor(raw)
+
+    assert anchor_rt == pytest.approx(8.90)
+
+
+def test_find_nl_anchor_rt_with_reference_uses_nearest_scan_even_when_weaker() -> None:
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.10,
+                masses=[EXPECTED_PRODUCT_MZ, 150.0],
+                intensities=[80.0, 900.0],
+            ),
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.75,
+                masses=[EXPECTED_PRODUCT_MZ, 150.0],
+                intensities=[100.0, 250.0],
+            ),
+        ]
+    )
+
+    anchor_rt = _anchor(raw, reference_rt=8.80)
+
+    assert anchor_rt == pytest.approx(8.75)
+
+
+def test_find_nl_anchor_rt_with_reference_breaks_distance_tie_by_base_peak() -> None:
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.00,
+                masses=[EXPECTED_PRODUCT_MZ, 150.0],
+                intensities=[100.0, 250.0],
+            ),
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=9.00,
+                masses=[EXPECTED_PRODUCT_MZ, 150.0],
+                intensities=[80.0, 900.0],
+            ),
+        ]
+    )
+
+    anchor_rt = _anchor(raw, reference_rt=8.50)
+
+    assert anchor_rt == pytest.approx(9.00)
+
+
 def _check(raw: "_FakeRaw"):
     return check_nl(
         raw,
@@ -173,6 +242,20 @@ def _check(raw: "_FakeRaw"):
         nl_ppm_max=20.0,
         ms2_precursor_tol_da=0.5,
         nl_min_intensity_ratio=0.05,
+    )
+
+
+def _anchor(raw: "_FakeRaw", reference_rt: float | None = None) -> float | None:
+    return find_nl_anchor_rt(
+        raw,
+        precursor_mz=PRECURSOR_MZ,
+        rt_center=8.5,
+        search_margin_min=1.0,
+        neutral_loss_da=NEUTRAL_LOSS_DA,
+        nl_ppm_max=20.0,
+        ms2_precursor_tol_da=0.5,
+        nl_min_intensity_ratio=0.05,
+        reference_rt=reference_rt,
     )
 
 

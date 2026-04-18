@@ -18,6 +18,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from xic_extractor.config import ExtractionConfig, Target, load_config
+from xic_extractor.sample_groups import classify_sample_group
 
 _MS2_HEADER = "37474F"
 _MS2_OK = "C8E6C9"
@@ -253,14 +254,7 @@ def _merge_identity_block(ws, start_row: int, end_row: int) -> None:
 
 
 def _sample_group(name: str) -> str:
-    normalized = name.upper()
-    if normalized.startswith("TUMOR"):
-        return "Tumor"
-    if normalized.startswith("NORMAL"):
-        return "Normal"
-    if normalized.startswith("BENIGNFAT"):
-        return "Benignfat"
-    return "QC"
+    return classify_sample_group(name)
 
 
 def _build_summary_sheet(
@@ -390,6 +384,8 @@ def _long_area_ratio(
     for row in rows:
         if row.get("Target") != target_row["Target"]:
             continue
+        if classify_sample_group(row.get("SampleName", "")) != "QC":
+            continue
         if not _is_long_detected(row, count_no_ms2_as_detected):
             continue
         istd = rows_by_sample.get((row.get("SampleName", ""), istd_pair))
@@ -404,7 +400,12 @@ def _long_area_ratio(
         return "—"
     mean_ratio = sum(ratios) / len(ratios)
     sd_ratio = statistics.stdev(ratios) if len(ratios) > 1 else 0.0
-    return f"{mean_ratio:.4f}±{sd_ratio:.4f} (n={len(ratios)})"
+    cv_text = (
+        f"{sd_ratio / mean_ratio * 100:.1f}%"
+        if len(ratios) > 1 and mean_ratio != 0
+        else "—"
+    )
+    return f"{mean_ratio:.4f}±{sd_ratio:.4f}, CV={cv_text} (n={len(ratios)})"
 
 
 def _long_rt_delta(

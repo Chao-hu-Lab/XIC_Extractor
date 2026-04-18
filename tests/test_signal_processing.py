@@ -66,6 +66,25 @@ def test_two_peak_signal_chooses_highest_smoothed_peak() -> None:
     assert result.n_prominent_peaks == 2
 
 
+def test_strict_preferred_rt_chooses_anchor_peak_even_when_neighbor_is_higher() -> None:
+    rt = np.linspace(12.7, 14.8, 421)
+    intensity = _gaussian(rt, center=13.06, sigma=0.06, height=330000.0)
+    intensity += _gaussian(rt, center=13.79, sigma=0.05, height=38000.0)
+
+    result = find_peak_and_area(
+        rt,
+        intensity,
+        _config(),
+        preferred_rt=13.75,
+        strict_preferred_rt=True,
+    )
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(13.79, abs=0.02)
+    assert result.n_prominent_peaks == 2
+
+
 def test_positive_flat_noise_returns_peak_not_found() -> None:
     rt = np.linspace(0.0, 1.0, 60)
     intensity = np.full_like(rt, 12.0)

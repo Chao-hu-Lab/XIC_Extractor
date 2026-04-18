@@ -59,10 +59,8 @@ def find_nl_anchor_rt(
     diagnostic_ppm = max(3.0 * nl_ppm_max, NL_DIAGNOSTIC_PPM_FLOOR)
 
     best_rt: float | None = None
-    if reference_rt is None:
-        best_base_peak: float = -1.0
-    else:
-        best_distance: float = float("inf")
+    best_base_peak: float = -1.0
+    best_distance: float = float("inf")
 
     for event in raw.iter_ms2_scans(rt_min, rt_max):
         if event.parse_error is not None or event.scan is None:
@@ -83,8 +81,12 @@ def find_nl_anchor_rt(
                 best_rt = event.scan.rt
         else:
             distance = abs(event.scan.rt - reference_rt)
-            if distance < best_distance:
+            distance_tied = np.isclose(distance, best_distance, rtol=0.0, atol=1e-12)
+            if distance < best_distance or (
+                distance_tied and event.scan.base_peak > best_base_peak
+            ):
                 best_distance = distance
+                best_base_peak = event.scan.base_peak
                 best_rt = event.scan.rt
 
     return best_rt

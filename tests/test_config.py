@@ -212,6 +212,12 @@ def test_migrate_settings_dict_drops_smooth_sigma_with_warning() -> None:
         ("ms2_precursor_tol_da", "0"),
         ("nl_min_intensity_ratio", "0"),
         ("nl_min_intensity_ratio", "1.1"),
+        ("nl_rt_anchor_search_margin_min", "0"),
+        ("nl_rt_anchor_search_margin_min", "-0.1"),
+        ("nl_rt_anchor_half_window_min", "0"),
+        ("nl_rt_anchor_half_window_min", "-0.1"),
+        ("nl_fallback_half_window_min", "0"),
+        ("nl_fallback_half_window_min", "-0.1"),
     ],
 )
 def test_load_config_rejects_invalid_settings(
