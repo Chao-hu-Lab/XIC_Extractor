@@ -134,9 +134,7 @@ class ResultsSection(QWidget):
                 _Card(
                     label=str(target["label"]),
                     value=f"{target['detected']}/{target['total']}",
-                    detail="NL confirmed"
-                    if target.get("nl_confirmed")
-                    else "MS1 detected",
+                    detail=_target_detail(target),
                     color=COLORS["success"]
                     if target.get("detected")
                     else COLORS["text_muted"],
@@ -145,10 +143,12 @@ class ResultsSection(QWidget):
 
         cards.append(
             _Card(
-                label="NL WARN",
-                value=str(summary.get("nl_warn_count", 0)),
-                detail="Neutral-loss warning hits",
-                color=COLORS["warning"],
+                label="DIAGNOSTICS",
+                value=str(summary.get("diagnostics_count", 0)),
+                detail="Issue rows",
+                color=COLORS["warning"]
+                if summary.get("diagnostics_count", 0)
+                else COLORS["success"],
             )
         )
         cards.append(
@@ -193,3 +193,16 @@ class ResultsSection(QWidget):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
+
+
+def _target_detail(target: dict) -> str:
+    detail = (
+        f"✓{target.get('nl_ok', 0)} "
+        f"⚠{target.get('nl_warn', 0)} "
+        f"✗{target.get('nl_fail', 0)} "
+        f"—{target.get('nl_no_ms2', 0)}"
+    )
+    median_area = target.get("median_area")
+    if median_area is not None:
+        detail += f"\nMedian Area: {float(median_area):,.2f}"
+    return detail

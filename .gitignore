@@ -5,8 +5,10 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
 
 # Test / lint caches
+.coverage
 .pytest_cache/
 .ruff_cache/
 .tmp/
@@ -14,11 +16,15 @@ tmp_runtime/
 
 # Output (generated files)
 output/
+local_raw_samples/
+local_validation_raw/
 
 # Superpowers / Claude dev artefacts
 .superpowers/
 .remember/
+.worktrees/
 
-# Private user config (use *.example.csv as template)
-config/settings.csv
-config/targets.csv
+# Private user config/profiles (only examples are versioned)
+config/*
+!config/settings.example.csv
+!config/targets.example.csv

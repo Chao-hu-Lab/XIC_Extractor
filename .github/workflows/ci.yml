@@ -8,9 +8,9 @@ on:
 
 jobs:
   test:
-    uses: Chao-hu-Lab/shared-workflows/.github/workflows/python-ci.yml@main
+    uses: Chao-hu-Lab/shared-workflows/.github/workflows/python-ci.yml@c5276382aafc2ee6c0f14b3651cad8aca9f74758
     with:
       python-versions: '["3.11", "3.12"]'
-      install-args: "-e . pytest"
+      install-args: "-e .[dev]"
       pythonpath: ""
       submodules: false

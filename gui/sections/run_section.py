@@ -3,8 +3,8 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QProgressBar,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )

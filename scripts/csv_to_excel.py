@@ -1,32 +1,30 @@
 """
-csv_to_excel.py
 將 xic_results.csv 轉換為格式化 Excel。
-欄位結構從 config/targets.csv 自動推導，支援任意數量的特徵。
+
+欄位結構從 Target 設定推導，支援 apex RT、raw intensity、integrated
+area、peak boundary、四態 neutral-loss 結果與 diagnostics sheet。
 """
+
+from __future__ import annotations
 
 import csv
 import statistics
 from datetime import datetime
 from pathlib import Path
+from typing import overload
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-# ── Colour palette (MS1 target pairs, cycling) ────────────────────────────────
-_MS1_PALETTES = [
-    {"header": "1B5E20", "light": "C8E6C9", "alt": "A5D6A7"},  # green
-    {"header": "0D47A1", "light": "BBDEFB", "alt": "90CAF9"},  # blue
-    {"header": "4A148C", "light": "E1BEE7", "alt": "CE93D8"},  # purple
-    {"header": "004D40", "light": "B2DFDB", "alt": "80CBC4"},  # teal
-    {"header": "E65100", "light": "FFE0B2", "alt": "FFCC80"},  # orange
-    {"header": "880E4F", "light": "FCE4EC", "alt": "F48FB1"},  # pink
-]
-_MS2_HEADER = "37474F"  # blue-grey
-_MS2_OK = "C8E6C9"  # green  ✓
-_MS2_WARN = "FFF9C4"  # yellow ⚠
-_MS2_ND = "FFCDD2"  # red    ✗
+from xic_extractor.config import ExtractionConfig, Target, load_config
+from xic_extractor.sample_groups import classify_sample_group
 
+_MS2_HEADER = "37474F"
+_MS2_OK = "C8E6C9"
+_MS2_WARN = "FFF9C4"
+_MS2_FAIL = "FFCDD2"
+_MS2_NO_MS2 = "E0E0E0"
 _SAMPLE_HEADER = "2E4057"
 WHITE = "FFFFFF"
 GREY = "F5F5F5"
@@ -34,420 +32,666 @@ _THIN = Side(style="thin", color="BDBDBD")
 BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 CENTER = Alignment(horizontal="center", vertical="center")
 CENTER_WRAP = Alignment(horizontal="center", vertical="center", wrap_text=True)
-# PS1 outputs ASCII tokens; map them to display symbols here
-_NL_DISPLAY = {"OK": "✓", "ND": "✗"}  # WARN_Xppm → "⚠ Xppm" handled in _nl_display()
 ND_ERROR = {"ND", "ERROR"}
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
+_DIAGNOSTIC_HEADERS = ["SampleName", "Target", "Issue", "Reason"]
+_LONG_HEADERS = [
+    "SampleName",
+    "Group",
+    "Target",
+    "Role",
+    "ISTD Pair",
+    "RT",
+    "Area",
+    "NL",
+    "Int",
+    "PeakStart",
+    "PeakEnd",
+    "PeakWidth",
+]
+_ADVANCED_HEADERS = {"Int", "PeakStart", "PeakEnd", "PeakWidth"}
+_TARGETS_HEADERS = [
+    "Label",
+    "Role",
+    "ISTD Pair",
+    "m/z",
+    "RT min",
+    "RT max",
+    "ppm tol",
+    "NL (Da)",
+    "Expected product m/z",
+    "NL ppm warn",
+    "NL ppm max",
+]
+_SUMMARY_HEADERS = [
+    "Target",
+    "Role",
+    "ISTD Pair",
+    "Detected",
+    "Total",
+    "Detection %",
+    "Mean RT",
+    "Median Area (detected)",
+    "Area / ISTD ratio (paired detected)",
+    "NL OK",
+    "NL WARN",
+    "NL FAIL",
+    "NO MS2",
+    "RT Delta vs ISTD",
+]
 
 
 def _fill(hex6: str) -> PatternFill:
     return PatternFill("solid", fgColor=hex6)
 
 
-def _apply(cell, **kw) -> None:
-    for k, v in kw.items():
-        setattr(cell, k, v)
+def _apply(cell, **kw: object) -> None:
+    for key, value in kw.items():
+        setattr(cell, key, value)
 
 
-def _header_style(hex6: str) -> dict:
-    return dict(
-        font=Font(bold=True, color="FFFFFF", size=11),
-        fill=_fill(hex6),
-        alignment=CENTER_WRAP,
-        border=BORDER,
-    )
+def _header_style(hex6: str) -> dict[str, object]:
+    return {
+        "font": Font(bold=True, color="FFFFFF", size=11),
+        "fill": _fill(hex6),
+        "alignment": CENTER_WRAP,
+        "border": BORDER,
+    }
 
 
-def _safe_float(s: str) -> float | None:
+def _safe_float(value: object) -> float | None:
     try:
-        return float(s)
+        return float(value)
     except (ValueError, TypeError):
         return None
 
 
-# ── Parse targets.csv to understand column types ───────────────────────────────
-def _load_column_meta(config_dir: Path) -> dict:
-    """
-    Returns dict: csv_col_name → {type, palette, label, nl_col}
-    type = 'sample' | 'ms1_rt' | 'ms1_int' | 'ms2_nl'
-    nl_col: for MS1 columns, the CSV key of the NL column (e.g. "258.1085_NL"), or None.
-    Each targets.csv row is one compound; neutral_loss_da non-empty → NL column exists.
-    """
-    meta: dict[str, dict] = {"SampleName": {"type": "sample"}}
-    palette_idx = 0
-
-    targets_path = config_dir / "targets.csv"
-    if not targets_path.exists():
-        return meta
-
-    with open(targets_path, newline="", encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            label = row["label"].strip()
-            has_nl = bool(row.get("neutral_loss_da", "").strip())
-
-            pal = _MS1_PALETTES[palette_idx % len(_MS1_PALETTES)]
-            palette_idx += 1
-            nl_col = f"{label}_NL" if has_nl else None
-
-            meta[f"{label}_RT"] = {
-                "type": "ms1_rt",
-                "palette": pal,
-                "label": label,
-                "nl_col": nl_col,
-                "is_istd": row.get("is_istd", "false").lower() == "true",
-                "istd_pair": row.get("istd_pair", "").strip(),
-            }
-            meta[f"{label}_Int"] = {
-                "type": "ms1_int",
-                "palette": pal,
-                "label": label,
-                "nl_col": nl_col,
-            }
-            if has_nl:
-                meta[nl_col] = {"type": "ms2_nl", "label": label}
-
-    return meta
+def _excel_text(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    if value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
 
 
 def _nl_to_display(value: str) -> str:
-    """Convert PS1 ASCII token to Unicode display string."""
     if value == "OK":
         return "✓"
+    if value.startswith("WARN_"):
+        return "⚠ " + value[5:]
+    if value == "NL_FAIL":
+        return "✗ NL"
+    if value == "NO_MS2":
+        return "— MS2"
     if value == "ND":
         return "✗"
-    if value.startswith("WARN_"):
-        return "⚠ " + value[5:]  # WARN_12.3ppm → ⚠ 12.3ppm
     return value
 
 
 def _nl_cell_fill(value: str) -> PatternFill:
-    """Return fill colour based on PS1 ASCII token."""
     if value == "OK":
         return _fill(_MS2_OK)
     if value.startswith("WARN_"):
         return _fill(_MS2_WARN)
-    return _fill(_MS2_ND)  # ND, ERROR, anything else
+    if value == "NO_MS2":
+        return _fill(_MS2_NO_MS2)
+    return _fill(_MS2_FAIL)
 
 
-# ── Build main data sheet ──────────────────────────────────────────────────────
-def _build_data_sheet(
-    ws, rows: list[dict], col_meta: dict, csv_keys: list[str]
-) -> None:
-    # Header row
-    for col_idx, key in enumerate(csv_keys, start=1):
-        meta = col_meta.get(key, {"type": "unknown"})
-        t = meta.get("type", "")
+def _long_cell_value(header: str, raw_val: str) -> object:
+    if header in {"SampleName", "Target", "ISTD Pair"}:
+        return _excel_text(raw_val)
+    if header == "NL":
+        return _nl_to_display(raw_val) if raw_val else ""
+    if header in {"RT", "Area", "Int", "PeakStart", "PeakEnd", "PeakWidth"}:
+        if raw_val in ND_ERROR:
+            return raw_val
+        parsed = _safe_float(raw_val)
+        return parsed if parsed is not None else raw_val
+    return raw_val
 
-        if t == "sample":
-            label, hex6 = "Sample Name", _SAMPLE_HEADER
-        elif t == "ms1_rt":
-            label = f"{meta['label']}\nRT (min)"
-            hex6 = meta["palette"]["header"]
-        elif t == "ms1_int":
-            label = f"{meta['label']}\nIntensity"
-            hex6 = meta["palette"]["header"]
-        elif t == "ms2_nl":
-            label = f"{meta['label']}\nNL check"
-            hex6 = _MS2_HEADER
-        else:
-            label, hex6 = key, _SAMPLE_HEADER
 
-        _apply(ws.cell(row=1, column=col_idx, value=label), **_header_style(hex6))
+def _long_cell_fill(header: str, raw_val: str, alt: bool) -> PatternFill:
+    if raw_val in ND_ERROR:
+        return _fill("FFE0B2" if raw_val == "ND" else "FF7043")
+    if header == "NL" and raw_val:
+        return _nl_cell_fill(raw_val)
+    if header in _ADVANCED_HEADERS:
+        return _fill("ECEFF1")
+    return _fill(GREY if alt else WHITE)
 
-    ws.row_dimensions[1].height = 40
 
-    # Data rows
+def _long_number_format(header: str) -> str:
+    if header in {"RT", "PeakStart", "PeakEnd"}:
+        return "0.0000"
+    if header in {"Area", "Int"}:
+        return "0.00E+00"
+    if header == "PeakWidth":
+        return "0.0000"
+    return "#,##0"
+
+
+def _long_column_width(header: str) -> int:
+    return {
+        "SampleName": 28,
+        "Group": 14,
+        "Target": 24,
+        "Role": 12,
+        "ISTD Pair": 24,
+        "RT": 12,
+        "Area": 16,
+        "NL": 14,
+        "Int": 14,
+        "PeakStart": 14,
+        "PeakEnd": 14,
+        "PeakWidth": 14,
+    }[header]
+
+
+def _build_data_sheet(ws, rows: list[dict[str, str]]) -> None:
+    for col_idx, header in enumerate(_LONG_HEADERS, start=1):
+        color = _MS2_HEADER if header in _ADVANCED_HEADERS else _SAMPLE_HEADER
+        _apply(ws.cell(row=1, column=col_idx, value=header), **_header_style(color))
+    ws.row_dimensions[1].height = 30
+
     for row_idx, row in enumerate(rows, start=2):
         alt = row_idx % 2 == 0
-        for col_idx, key in enumerate(csv_keys, start=1):
-            raw_val = row.get(key, "")
-            meta = col_meta.get(key, {"type": "unknown"})
-            t = meta.get("type", "")
-
+        for col_idx, header in enumerate(_LONG_HEADERS, start=1):
+            raw_val = row.get(header, "")
             cell = ws.cell(row=row_idx, column=col_idx)
-
-            # MS2 NL columns: convert ASCII token → Unicode + colour
-            if t == "ms2_nl":
-                cell.value = _nl_to_display(raw_val)
-                _apply(
-                    cell, fill=_nl_cell_fill(raw_val), alignment=CENTER, border=BORDER
-                )
-                continue
-
-            # MS1 / sample: ND or ERROR → orange warning cell
-            if raw_val in ND_ERROR:
-                cell.value = raw_val
-                nd_hex = "FF7043" if meta.get("is_istd", False) else "FFE0B2"
-                _apply(cell, fill=_fill(nd_hex), alignment=CENTER, border=BORDER)
-                continue
-
-            # Numeric conversion for MS1 columns
-            value = _safe_float(raw_val) if t in ("ms1_rt", "ms1_int") else raw_val
+            value = _long_cell_value(header, raw_val)
             cell.value = value
-
-            if t == "sample":
-                fill = _fill(GREY) if alt else _fill(WHITE)
-            elif t == "ms1_rt":
-                fill = _fill(
-                    meta["palette"]["alt"] if alt else meta["palette"]["light"]
-                )
-            elif t == "ms1_int":
-                fill = _fill(
-                    meta["palette"]["alt"] if alt else meta["palette"]["light"]
-                )
-            else:
-                fill = _fill(GREY) if alt else _fill(WHITE)
-
-            _apply(cell, fill=fill, alignment=CENTER, border=BORDER)
-
+            _apply(
+                cell,
+                fill=_long_cell_fill(header, raw_val, alt),
+                alignment=CENTER,
+                border=BORDER,
+            )
             if isinstance(value, float):
-                cell.number_format = "0.0000" if t == "ms1_rt" else "#,##0"
+                cell.number_format = _long_number_format(header)
 
-    # Column widths
-    for col_idx, key in enumerate(csv_keys, start=1):
-        t = col_meta.get(key, {}).get("type", "")
-        ws.column_dimensions[get_column_letter(col_idx)].width = (
-            30 if t == "sample" else 16 if t in ("ms1_rt", "ms1_int") else 18
+    ws.auto_filter.ref = f"A1:L{max(1, len(rows) + 1)}"
+    ws.freeze_panes = "A2"
+    for col_idx, header in enumerate(_LONG_HEADERS, start=1):
+        letter = get_column_letter(col_idx)
+        ws.column_dimensions[letter].width = _long_column_width(header)
+        if header in _ADVANCED_HEADERS:
+            ws.column_dimensions[letter].hidden = True
+            ws.column_dimensions[letter].outlineLevel = 1
+    _merge_repeated_identity_cells(ws, rows)
+
+
+def _merge_repeated_identity_cells(ws, rows: list[dict[str, str]]) -> None:
+    if not rows:
+        return
+    block_start = 2
+    previous = _identity_key(rows[0])
+    for offset, row in enumerate(rows[1:], start=3):
+        current = _identity_key(row)
+        if current == previous:
+            continue
+        _merge_identity_block(ws, block_start, offset - 1)
+        block_start = offset
+        previous = current
+    _merge_identity_block(ws, block_start, len(rows) + 1)
+
+
+def _identity_key(row: dict[str, str]) -> tuple[str, str]:
+    return row.get("SampleName", ""), row.get("Group", "")
+
+
+def _merge_identity_block(ws, start_row: int, end_row: int) -> None:
+    if end_row <= start_row:
+        return
+    for column in (1, 2):
+        ws.merge_cells(
+            start_row=start_row,
+            start_column=column,
+            end_row=end_row,
+            end_column=column,
         )
-
-    ws.freeze_panes = "B2"
-
-
-# ── Group classification ───────────────────────────────────────────────────────
-_GROUPS = ["Tumor", "Normal", "Benignfat", "QC"]
+        ws.cell(row=start_row, column=column).alignment = CENTER_WRAP
 
 
 def _sample_group(name: str) -> str:
-    n = name.upper()
-    if n.startswith("TUMOR"):
-        return "Tumor"
-    if n.startswith("NORMAL"):
-        return "Normal"
-    if n.startswith("BENIGNFAT"):
-        return "Benignfat"
-    return "QC"
+    return classify_sample_group(name)
 
 
-def _is_detected(row: dict, rt_key: str, int_key: str, nl_key: str | None) -> bool:
-    """True if compound is NL-confirmed detected in this sample."""
-    if _safe_float(row.get(rt_key, "")) is None:
-        return False
-    if _safe_float(row.get(int_key, "")) is None:
-        return False
-    if nl_key:
-        nl = row.get(nl_key, "")
-        return nl == "OK" or nl.startswith("WARN_")
-    return True
-
-
-# ── Build summary sheet ────────────────────────────────────────────────────────
 def _build_summary_sheet(
-    ws, rows: list[dict], col_meta: dict, csv_keys: list[str]
+    ws,
+    rows: list[dict[str, str]],
+    count_no_ms2_as_detected: bool = False,
 ) -> None:
-    # Build ordered compound list: (label, rt_key, int_key, nl_key|None)
-    compounds: list[tuple[str, str, str, str | None]] = []
-    seen: set[str] = set()
-    for key in csv_keys:
-        meta = col_meta.get(key, {})
-        if meta.get("type") == "ms1_rt":
-            label = meta["label"]
-            if label not in seen:
-                seen.add(label)
-                compounds.append((label, key, f"{label}_Int", meta.get("nl_col")))
-
-    # Group rows by sample group
-    group_rows: dict[str, list[dict]] = {g: [] for g in _GROUPS}
-    for row in rows:
-        group_rows[_sample_group(row.get("SampleName", ""))].append(row)
-
-    # ── Header row ──────────────────────────────────────────────────────────────
-    headers = ["Metric"] + [c[0] for c in compounds]
-    for col_idx, h in enumerate(headers, start=1):
-        if col_idx == 1:
-            hex6 = _SAMPLE_HEADER
-        else:
-            label = compounds[col_idx - 2][0]
-            pal = col_meta.get(f"{label}_RT", {}).get("palette", {})
-            hex6 = pal.get("header", _MS2_HEADER)
-        _apply(ws.cell(row=1, column=col_idx, value=h), **_header_style(hex6))
+    for col_idx, header in enumerate(_SUMMARY_HEADERS, start=1):
+        _apply(
+            ws.cell(row=1, column=col_idx, value=header),
+            **_header_style(_MS2_HEADER),
+        )
     ws.row_dimensions[1].height = 30
 
-    # ── Metric rows ─────────────────────────────────────────────────────────────
-    metrics = [f"{g} ({len(group_rows[g])})" for g in _GROUPS] + [
-        "Total Detection",
-        "Mean RT (min)",
-        "Mean Int",
-        "NL ✓/⚠/✗",
-        "RT Δ vs ISTD (%)",
+    for row_idx, target in enumerate(_target_summaries(rows), start=2):
+        fill_hex = GREY if row_idx % 2 == 0 else WHITE
+        values = _summary_row_values(target, rows, count_no_ms2_as_detected)
+        for col_idx, value in enumerate(values, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            _apply(
+                cell,
+                fill=_fill(fill_hex),
+                alignment=CENTER,
+                border=BORDER,
+            )
+            if _SUMMARY_HEADERS[col_idx - 1] == "Median Area (detected)":
+                cell.number_format = "0.00E+00"
+
+    widths = [24, 12, 24, 12, 10, 12, 12, 16, 24, 10, 10, 10, 10, 22]
+    for col_idx, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+    ws.auto_filter.ref = f"A1:N{max(1, len(_target_summaries(rows)) + 1)}"
+    ws.freeze_panes = "A2"
+
+
+def _target_summaries(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    seen: set[str] = set()
+    summaries: list[dict[str, str]] = []
+    for row in rows:
+        target = row.get("Target", "")
+        if not target or target in seen:
+            continue
+        seen.add(target)
+        summaries.append(row)
+    return summaries
+
+
+def _summary_row_values(
+    target_row: dict[str, str],
+    rows: list[dict[str, str]],
+    count_no_ms2_as_detected: bool,
+) -> list[object]:
+    target = target_row["Target"]
+    target_rows = [row for row in rows if row.get("Target") == target]
+    detected_rows = [
+        row for row in target_rows if _is_long_detected(row, count_no_ms2_as_detected)
+    ]
+    total = len(target_rows)
+    detected = len(detected_rows)
+    nl_counts = _long_nl_counts(target_rows)
+    return [
+        _excel_text(target),
+        target_row.get("Role", ""),
+        _excel_text(target_row.get("ISTD Pair", "")),
+        detected,
+        total,
+        f"{detected / total * 100:.0f}%" if total else "0%",
+        _long_mean_rt(detected_rows),
+        _long_median_area(detected_rows),
+        _long_area_ratio(target_row, rows, count_no_ms2_as_detected),
+        nl_counts["OK"],
+        nl_counts["WARN"],
+        nl_counts["NL_FAIL"],
+        nl_counts["NO_MS2"],
+        _long_rt_delta(target_row, rows, count_no_ms2_as_detected),
     ]
 
-    for row_idx, metric in enumerate(metrics, start=2):
-        fill_hex = GREY if row_idx % 2 == 0 else WHITE
+
+def _is_long_detected(
+    row: dict[str, str], count_no_ms2_as_detected: bool = False
+) -> bool:
+    if _safe_float(row.get("RT", "")) is None:
+        return False
+    if _safe_float(row.get("Area", "")) is None:
+        return False
+    nl = row.get("NL", "")
+    if nl == "":
+        return True
+    if nl == "OK" or nl.startswith("WARN_"):
+        return True
+    return count_no_ms2_as_detected and nl == "NO_MS2"
+
+
+def _long_mean_rt(rows: list[dict[str, str]]) -> str:
+    values = [
+        value for row in rows if (value := _safe_float(row.get("RT", ""))) is not None
+    ]
+    return f"{sum(values) / len(values):.4f}" if values else "—"
+
+
+def _long_median_area(rows: list[dict[str, str]]) -> float | str:
+    values = [
+        value for row in rows if (value := _safe_float(row.get("Area", ""))) is not None
+    ]
+    return statistics.median(values) if values else "—"
+
+
+def _long_nl_counts(rows: list[dict[str, str]]) -> dict[str, int]:
+    values = [row.get("NL", "") for row in rows]
+    ok = sum(1 for value in values if value == "OK")
+    warn = sum(1 for value in values if value.startswith("WARN_"))
+    no_ms2 = sum(1 for value in values if value == "NO_MS2")
+    fail = sum(1 for value in values if value == "NL_FAIL")
+    return {"OK": ok, "WARN": warn, "NL_FAIL": fail, "NO_MS2": no_ms2}
+
+
+def _long_area_ratio(
+    target_row: dict[str, str],
+    rows: list[dict[str, str]],
+    count_no_ms2_as_detected: bool,
+) -> str:
+    istd_pair = target_row.get("ISTD Pair", "")
+    if not istd_pair:
+        return "—"
+    ratios: list[float] = []
+    rows_by_sample = _rows_by_sample_and_target(rows)
+    for row in rows:
+        if row.get("Target") != target_row["Target"]:
+            continue
+        if classify_sample_group(row.get("SampleName", "")) != "QC":
+            continue
+        if not _is_long_detected(row, count_no_ms2_as_detected):
+            continue
+        istd = rows_by_sample.get((row.get("SampleName", ""), istd_pair))
+        if istd is None or not _is_long_detected(istd, count_no_ms2_as_detected):
+            continue
+        analyte_area = _safe_float(row.get("Area", ""))
+        istd_area = _safe_float(istd.get("Area", ""))
+        if analyte_area is None or istd_area is None or istd_area == 0:
+            continue
+        ratios.append(analyte_area / istd_area)
+    if not ratios:
+        return "—"
+    mean_ratio = sum(ratios) / len(ratios)
+    sd_ratio = statistics.stdev(ratios) if len(ratios) > 1 else 0.0
+    cv_text = (
+        f"{sd_ratio / mean_ratio * 100:.1f}%"
+        if len(ratios) > 1 and mean_ratio != 0
+        else "—"
+    )
+    return f"{mean_ratio:.4f}±{sd_ratio:.4f}, CV={cv_text} (n={len(ratios)})"
+
+
+def _long_rt_delta(
+    target_row: dict[str, str],
+    rows: list[dict[str, str]],
+    count_no_ms2_as_detected: bool,
+) -> str:
+    istd_pair = target_row.get("ISTD Pair", "")
+    if not istd_pair:
+        return "—"
+    deltas: list[float] = []
+    rows_by_sample = _rows_by_sample_and_target(rows)
+    for row in rows:
+        if row.get("Target") != target_row["Target"]:
+            continue
+        if not _is_long_detected(row, count_no_ms2_as_detected):
+            continue
+        istd = rows_by_sample.get((row.get("SampleName", ""), istd_pair))
+        if istd is None or not _is_long_detected(istd, count_no_ms2_as_detected):
+            continue
+        rt_analyte = _safe_float(row.get("RT", ""))
+        rt_istd = _safe_float(istd.get("RT", ""))
+        if rt_analyte is None or rt_istd is None:
+            continue
+        deltas.append(abs(rt_analyte - rt_istd))
+    if not deltas:
+        return "—"
+    mean_delta = sum(deltas) / len(deltas)
+    sd_delta = statistics.stdev(deltas) if len(deltas) > 1 else 0.0
+    return f"{mean_delta:.4f}±{sd_delta:.4f} min (n={len(deltas)})"
+
+
+def _rows_by_sample_and_target(
+    rows: list[dict[str, str]],
+) -> dict[tuple[str, str], dict[str, str]]:
+    return {(row.get("SampleName", ""), row.get("Target", "")): row for row in rows}
+
+
+def _build_targets_sheet(ws, targets: list[Target]) -> None:
+    for col_idx, header in enumerate(_TARGETS_HEADERS, start=1):
         _apply(
-            ws.cell(row=row_idx, column=1, value=metric),
-            fill=_fill(fill_hex),
-            alignment=CENTER,
-            border=BORDER,
+            ws.cell(row=1, column=col_idx, value=header),
+            **_header_style(_SAMPLE_HEADER),
         )
+    ws.row_dimensions[1].height = 30
 
-        for col_idx, (label, rt_key, int_key, nl_key) in enumerate(compounds, start=2):
-            cell = ws.cell(row=row_idx, column=col_idx)
+    for row_idx, target in enumerate(targets, start=2):
+        fill_hex = GREY if row_idx % 2 == 0 else WHITE
+        expected_product = (
+            target.mz - target.neutral_loss_da
+            if target.neutral_loss_da is not None
+            else None
+        )
+        values: list[object] = [
+            _excel_text(target.label),
+            "ISTD" if target.is_istd else "Analyte",
+            _excel_text(target.istd_pair),
+            target.mz,
+            target.rt_min,
+            target.rt_max,
+            target.ppm_tol,
+            target.neutral_loss_da if target.neutral_loss_da is not None else "—",
+            expected_product if expected_product is not None else "—",
+            target.nl_ppm_warn if target.nl_ppm_warn is not None else "—",
+            target.nl_ppm_max if target.nl_ppm_max is not None else "—",
+        ]
+        for col_idx, value in enumerate(values, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            _apply(cell, fill=_fill(fill_hex), alignment=CENTER, border=BORDER)
+            header = _TARGETS_HEADERS[col_idx - 1]
+            if isinstance(value, float):
+                if header in {"m/z", "Expected product m/z", "NL (Da)"}:
+                    cell.number_format = "0.0000"
+                elif header in {"RT min", "RT max"}:
+                    cell.number_format = "0.00"
 
-            # Per-group detection rate rows
-            group_match = next((g for g in _GROUPS if metric.startswith(g)), None)
-            if group_match:
-                src = group_rows[group_match]
-                n_total = len(src)
-                n_det = sum(1 for r in src if _is_detected(r, rt_key, int_key, nl_key))
-                pct = n_det / n_total * 100 if n_total else 0
-                val: object = f"{n_det}/{n_total} ({pct:.0f}%)"
+    widths = [24, 12, 24, 14, 10, 10, 10, 12, 22, 14, 14]
+    for col_idx, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+    ws.auto_filter.ref = f"A1:K{max(1, len(targets) + 1)}"
+    ws.freeze_panes = "A2"
 
-            elif metric == "Total Detection":
-                n_det = sum(1 for r in rows if _is_detected(r, rt_key, int_key, nl_key))
-                pct = n_det / len(rows) * 100 if rows else 0
-                val = f"{n_det}/{len(rows)} ({pct:.0f}%)"
 
-            elif metric == "Mean RT (min)":
-                det = [r for r in rows if _is_detected(r, rt_key, int_key, nl_key)]
-                rt_vals = [
-                    v for r in det if (v := _safe_float(r.get(rt_key, ""))) is not None
-                ]
-                val = f"{sum(rt_vals) / len(rt_vals):.4f}" if rt_vals else "—"
+def _read_diagnostics(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        return list(csv.DictReader(handle))
 
-            elif metric == "Mean Int":
-                det = [r for r in rows if _is_detected(r, rt_key, int_key, nl_key)]
-                int_vals = [
-                    v for r in det if (v := _safe_float(r.get(int_key, ""))) is not None
-                ]
-                val = f"{sum(int_vals) / len(int_vals):,.0f}" if int_vals else "—"
 
-            elif metric == "NL ✓/⚠/✗":
-                if nl_key:
-                    nl_vals = [r.get(nl_key, "") for r in rows]
-                    n_ok = sum(1 for v in nl_vals if v == "OK")
-                    n_warn = sum(1 for v in nl_vals if v.startswith("WARN_"))
-                    n_nd = len(rows) - n_ok - n_warn
-                    val = f"✓{n_ok} ⚠{n_warn} ✗{n_nd}"
-                else:
-                    val = "—"
-
-            elif metric == "RT Δ vs ISTD (%)":
-                istd_label = col_meta.get(rt_key, {}).get("istd_pair", "")
-                if not istd_label:
-                    val = "—"
-                else:
-                    istd_rt_key = f"{istd_label}_RT"
-                    istd_nl_col = col_meta.get(istd_rt_key, {}).get("nl_col")
-                    deltas: list[float] = []
-                    for r in rows:
-                        if nl_key:
-                            analyte_nl = r.get(nl_key, "")
-                            if analyte_nl != "OK" and not analyte_nl.startswith(
-                                "WARN_"
-                            ):
-                                continue
-                        if istd_nl_col:
-                            istd_nl = r.get(istd_nl_col, "")
-                            if istd_nl != "OK" and not istd_nl.startswith("WARN_"):
-                                continue
-                        rt_analyte = _safe_float(r.get(rt_key, ""))
-                        rt_istd = _safe_float(r.get(istd_rt_key, ""))
-                        if rt_analyte is None or rt_istd is None or rt_istd == 0:
-                            continue
-                        deltas.append(abs(rt_analyte - rt_istd) / rt_istd * 100)
-                    if not deltas:
-                        val = "—"
-                    else:
-                        mean_delta = sum(deltas) / len(deltas)
-                        sd_delta = statistics.stdev(deltas) if len(deltas) > 1 else 0.0
-                        val = f"{mean_delta:.2f}±{sd_delta:.2f}% (n={len(deltas)})"
-
-            else:
-                val = "—"
-
-            _apply(
-                cell, value=val, fill=_fill(fill_hex), alignment=CENTER, border=BORDER
+def _build_diagnostics_sheet(ws, rows: list[dict[str, str]]) -> None:
+    for col_idx, header in enumerate(_DIAGNOSTIC_HEADERS, start=1):
+        _apply(
+            ws.cell(row=1, column=col_idx, value=header),
+            **_header_style(_MS2_HEADER),
+        )
+    for row_idx, row in enumerate(rows, start=2):
+        issue = row.get("Issue", "")
+        for col_idx, header in enumerate(_DIAGNOSTIC_HEADERS, start=1):
+            raw = row.get(header, "")
+            value = (
+                _excel_text(raw)
+                if header in {"SampleName", "Target", "Reason"}
+                else raw
             )
+            _apply(
+                ws.cell(row=row_idx, column=col_idx, value=value),
+                fill=_fill(_diagnostic_fill(issue)),
+                alignment=CENTER,
+                border=BORDER,
+            )
+    ws.auto_filter.ref = f"A1:D{max(1, len(rows) + 1)}"
+    widths = [24, 20, 18, 60]
+    for col_idx, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+    ws.freeze_panes = "A2"
 
-    # Column widths
-    ws.column_dimensions["A"].width = 22
-    for col_idx in range(2, len(compounds) + 2):
-        ws.column_dimensions[get_column_letter(col_idx)].width = 18
 
-    ws.freeze_panes = "B2"
+def _diagnostic_fill(issue: str) -> str:
+    if issue in {"NO_MS2", "WINDOW_TOO_SHORT"}:
+        return _MS2_NO_MS2
+    if issue in {"NL_FAIL", "PEAK_NOT_FOUND", "NO_SIGNAL", "FILE_ERROR"}:
+        return _MS2_FAIL
+    return _MS2_WARN
 
 
-# ── Entry point for frozen-exe import ─────────────────────────────────────────
-def run(base_dir: Path) -> None:
-    """Entry point for both direct call and frozen-exe import."""
-    config_dir = base_dir / "config"
-    output_dir = base_dir / "output"
-    csv_path = output_dir / "xic_results.csv"
+@overload
+def run(base_or_config: Path) -> Path: ...
+
+
+@overload
+def run(base_or_config: ExtractionConfig, targets: list[Target]) -> Path: ...
+
+
+def run(
+    base_or_config: Path | ExtractionConfig,
+    targets: list[Target] | None = None,
+) -> Path:
+    if isinstance(base_or_config, Path):
+        config, loaded_targets = load_config(base_or_config / "config")
+        return run(config, loaded_targets)
+    if targets is None:
+        raise TypeError("targets are required when run() receives ExtractionConfig")
+    return _run_with_config(base_or_config, targets)
+
+
+def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
+    output_dir = config.output_csv.parent
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
     excel_path = output_dir / f"xic_results_{timestamp}.xlsx"
 
-    with open(csv_path, newline="", encoding="utf-8-sig") as f:
-        rows = list(csv.DictReader(f))
-
+    rows = _read_long_results(config, targets)
     if not rows:
         print("CSV is empty.")
-        return
+        return excel_path
 
-    csv_keys = list(rows[0].keys())
-    col_meta = _load_column_meta(config_dir)
+    diagnostics = _read_diagnostics(config.diagnostics_csv)
 
     wb = Workbook()
     ws_data = wb.active
     ws_data.title = "XIC Results"
-    _build_data_sheet(ws_data, rows, col_meta, csv_keys)
+    _build_data_sheet(ws_data, rows)
 
-    ws_sum = wb.create_sheet("Summary")
-    _build_summary_sheet(ws_sum, rows, col_meta, csv_keys)
+    ws_summary = wb.create_sheet("Summary")
+    _build_summary_sheet(
+        ws_summary,
+        rows,
+        count_no_ms2_as_detected=config.count_no_ms2_as_detected,
+    )
+
+    ws_targets = wb.create_sheet("Targets")
+    _build_targets_sheet(ws_targets, targets)
+
+    ws_diagnostics = wb.create_sheet("Diagnostics")
+    _build_diagnostics_sheet(ws_diagnostics, diagnostics)
+    if diagnostics:
+        wb.active = wb.index(ws_diagnostics)
 
     wb.save(excel_path)
+    for _csv in [
+        config.output_csv,
+        config.output_csv.with_name("xic_results_long.csv"),
+        config.diagnostics_csv,
+    ]:
+        _csv.unlink(missing_ok=True)
+    _print_summary(excel_path, rows, config.count_no_ms2_as_detected)
+    return excel_path
 
-    ms1_cols = [k for k in csv_keys if col_meta.get(k, {}).get("type") == "ms1_rt"]
-    ms2_cols = [k for k in csv_keys if col_meta.get(k, {}).get("type") == "ms2_nl"]
+
+def _read_long_results(
+    config: ExtractionConfig, targets: list[Target]
+) -> list[dict[str, str]]:
+    long_path = config.output_csv.with_name("xic_results_long.csv")
+    if long_path.exists():
+        return _read_results(long_path)
+    return _wide_to_long_rows(_read_results(config.output_csv), targets)
+
+
+def _wide_to_long_rows(
+    rows: list[dict[str, str]], targets: list[Target]
+) -> list[dict[str, str]]:
+    long_rows: list[dict[str, str]] = []
+    for row in rows:
+        sample_name = row.get("SampleName", "")
+        for target in targets:
+            long_rows.append(
+                {
+                    "SampleName": sample_name,
+                    "Group": _sample_group(sample_name),
+                    "Target": target.label,
+                    "Role": "ISTD" if target.is_istd else "Analyte",
+                    "ISTD Pair": target.istd_pair,
+                    "RT": row.get(f"{target.label}_RT", ""),
+                    "Area": row.get(f"{target.label}_Area", ""),
+                    "NL": row.get(f"{target.label}_NL", "")
+                    if target.neutral_loss_da is not None
+                    else "",
+                    "Int": row.get(f"{target.label}_Int", ""),
+                    "PeakStart": row.get(f"{target.label}_PeakStart", ""),
+                    "PeakEnd": row.get(f"{target.label}_PeakEnd", ""),
+                    "PeakWidth": _legacy_peak_width(row, target.label),
+                }
+            )
+    return long_rows
+
+
+def _legacy_peak_width(row: dict[str, str], label: str) -> str:
+    existing = row.get(f"{label}_PeakWidth", "")
+    if existing:
+        return existing
+    start = row.get(f"{label}_PeakStart", "")
+    end = row.get(f"{label}_PeakEnd", "")
+    if start in ND_ERROR or end in ND_ERROR:
+        return start if start == end else ""
+    start_value = _safe_float(start)
+    end_value = _safe_float(end)
+    if start_value is None or end_value is None:
+        return ""
+    return f"{abs(end_value - start_value):.4f}"
+
+
+def _read_results(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _print_summary(
+    excel_path: Path,
+    rows: list[dict[str, str]],
+    count_no_ms2_as_detected: bool,
+) -> None:
     print(f"Saved : {excel_path}")
-    print(f"Rows  : {len(rows)}")
-    for k in ms1_cols:
-        nl_col = col_meta.get(k, {}).get("nl_col")
-        if nl_col:
-            n_det = sum(
-                1
-                for r in rows
-                if _safe_float(r.get(k, "")) is not None
-                and (r.get(nl_col, "") == "OK" or r.get(nl_col, "").startswith("WARN_"))
-            )
-            print(
-                f"  {k.replace('_RT', '')} detected (NL confirmed): {n_det}/{len(rows)}"
-            )
-        else:
-            n_det = sum(1 for r in rows if _safe_float(r.get(k, "")) is not None)
-            print(f"  {k.replace('_RT', '')} detected: {n_det}/{len(rows)}")
-    for k in ms2_cols:
-        n_ok = sum(1 for r in rows if r.get(k, "") == "OK")
-        n_warn = sum(1 for r in rows if r.get(k, "").startswith("WARN_"))
-        n_nd = len(rows) - n_ok - n_warn
-        print(f"  {k}  OK:{n_ok}  WARN:{n_warn}  ND:{n_nd}")
-    for k in ms1_cols:
-        if not col_meta.get(k, {}).get("is_istd", False):
+    sample_count = len({row.get("SampleName", "") for row in rows})
+    print(f"Rows  : {sample_count}")
+    for target in _target_summaries(rows):
+        label = target["Target"]
+        target_rows = [row for row in rows if row.get("Target") == label]
+        detected = sum(
+            1 for row in target_rows if _is_long_detected(row, count_no_ms2_as_detected)
+        )
+        note = (
+            " (NL confirmed)" if any(row.get("NL", "") for row in target_rows) else ""
+        )
+        print(f"  {label} detected{note}: {detected}/{len(target_rows)}")
+    for target in _target_summaries(rows):
+        label = target["Target"]
+        target_rows = [row for row in rows if row.get("Target") == label]
+        if not any(row.get("NL", "") for row in target_rows):
             continue
-        label_name = k.replace("_RT", "")
-        nl_col = col_meta.get(k, {}).get("nl_col")
-        if nl_col:
-            n_det = sum(
-                1
-                for r in rows
-                if _safe_float(r.get(k, "")) is not None
-                and (r.get(nl_col, "") == "OK" or r.get(nl_col, "").startswith("WARN_"))
-            )
-        else:
-            n_det = sum(1 for r in rows if _safe_float(r.get(k, "")) is not None)
-        if n_det < len(rows):
-            print(f"ISTD_ND: {label_name} {n_det}/{len(rows)}")
+        counts = _long_nl_counts(target_rows)
+        print(
+            f"  {label}_NL  OK:{counts['OK']}  WARN:{counts['WARN']}  "
+            f"FAIL:{counts['NL_FAIL']}  NO_MS2:{counts['NO_MS2']}"
+        )
+    for target in _target_summaries(rows):
+        if target.get("Role") != "ISTD":
+            continue
+        label = target["Target"]
+        target_rows = [row for row in rows if row.get("Target") == label]
+        detected = sum(
+            1 for row in target_rows if _is_long_detected(row, count_no_ms2_as_detected)
+        )
+        if detected < len(target_rows):
+            print(f"ISTD_ND: {label} {detected}/{len(target_rows)}")
 
 
-# ── CLI entry point ────────────────────────────────────────────────────────────
 def main() -> None:
     base_dir = Path(__file__).parent.parent
     run(base_dir)

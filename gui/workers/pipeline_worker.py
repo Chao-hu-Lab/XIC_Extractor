@@ -1,11 +1,15 @@
-import io
-import re
-import subprocess
-import sys
-from contextlib import redirect_stdout
+import statistics
 from pathlib import Path
+from typing import Any
 
 from PyQt6.QtCore import QThread, pyqtSignal
+
+from scripts import csv_to_excel
+from xic_extractor import config as config_module
+from xic_extractor import extractor
+from xic_extractor.config import ConfigError, ExtractionConfig, Target
+from xic_extractor.extractor import ExtractionResult, RunOutput
+from xic_extractor.raw_reader import RawReaderError
 
 
 class PipelineWorker(QThread):
@@ -13,148 +17,113 @@ class PipelineWorker(QThread):
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
 
-    def __init__(self, scripts_dir: Path) -> None:
+    def __init__(self, config_dir: Path) -> None:
         super().__init__()
-        self._scripts_dir = scripts_dir
-        self._process: subprocess.Popen[str] | None = None
-        self._stop_requested = False
+        self._config_dir = config_dir
 
     def stop(self) -> None:
-        self._stop_requested = True
-        if self._process is not None and self._process.poll() is None:
-            self._process.terminate()
+        self.requestInterruption()
 
     def run(self) -> None:
         try:
-            total_files = self._run_ps1()
-            if self._stop_requested:
-                return
-            stdout = self._run_python()
-            if self._stop_requested:
-                return
-            self.finished.emit(self._parse_summary(stdout, total_files))
-        except Exception as exc:
-            if not self._stop_requested:
-                self.error.emit(str(exc))
-        finally:
-            self._process = None
-
-    def _run_ps1(self) -> int:
-        if getattr(sys, "frozen", False):
-            root_dir = Path(sys.executable).parent
-        else:
-            root_dir = self._scripts_dir.parent
-
-        command = [
-            "powershell",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(self._scripts_dir / "01_extract_xic.ps1"),
-            "-RootDir",
-            str(root_dir),
-        ]
-        total_files = 0
-        self._process = subprocess.Popen(
-            command,
-            cwd=str(root_dir),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-        )
-
-        assert self._process.stdout is not None
-        for raw_line in self._process.stdout:
-            line = raw_line.rstrip()
-            if match := re.search(r"Files\s+:\s+(\d+)", line):
-                total_files = int(match.group(1))
-                continue
-            if match := re.search(r"\s+\[\s*(\d+)/\s*(\d+)\]\s+(.+)", line):
-                current = int(match.group(1))
-                total = int(match.group(2))
-                filename = match.group(3).strip()
-                total_files = total
-                self.progress.emit(current, total, filename)
-
-        return_code = self._process.wait()
-        if self._stop_requested:
-            return total_files
-        if return_code != 0:
-            raise RuntimeError("01_extract_xic.ps1 failed.")
-        return total_files
-
-    def _run_python(self) -> str:
-        from scripts.csv_to_excel import run as _csv_to_excel_run
-
-        if getattr(sys, "frozen", False):
-            base_dir = Path(sys.executable).parent
-        else:
-            base_dir = self._scripts_dir.parent
-
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _csv_to_excel_run(base_dir)
-        return buf.getvalue()
-
-    def _parse_summary(self, stdout: str, total_files: int) -> dict:
-        excel_path = ""
-        nl_warn_count = 0
-        targets: list[dict[str, int | str | bool]] = []
-        seen_labels: set[str] = set()
-        istd_warnings: list[dict[str, int | str]] = []
-
-        for line in stdout.splitlines():
-            if match := re.search(r"Saved\s+:\s+(.+)", line):
-                excel_path = match.group(1).strip()
-                continue
-
-            confirmed = re.search(
-                r"\s+(\S+)_RT detected \(NL confirmed\): (\d+)/(\d+)",
-                line,
+            config, targets = config_module.load_config(self._config_dir)
+            output = extractor.run(
+                config,
+                targets,
+                progress_callback=self.progress.emit,
+                should_stop=self.isInterruptionRequested,
             )
-            if confirmed:
-                label = confirmed.group(1)
-                targets.append(
-                    {
-                        "label": label,
-                        "detected": int(confirmed.group(2)),
-                        "total": int(confirmed.group(3)),
-                        "nl_confirmed": True,
-                    }
-                )
-                seen_labels.add(label)
-                continue
+            if self.isInterruptionRequested():
+                return
+            excel_path = csv_to_excel.run(config, targets)
+            summary = build_summary(config, targets, output, excel_path)
+            self.finished.emit(summary)
+        except ConfigError as exc:
+            self.error.emit(f"設定檔錯誤：{exc}")
+        except RawReaderError as exc:
+            self.error.emit(f"Raw file 讀取失敗：{exc}")
+        except Exception as exc:
+            self.error.emit(str(exc))
 
-            basic = re.search(r"\s+(\S+)_RT detected: (\d+)/(\d+)", line)
-            if basic and basic.group(1) not in seen_labels:
-                targets.append(
-                    {
-                        "label": basic.group(1),
-                        "detected": int(basic.group(2)),
-                        "total": int(basic.group(3)),
-                        "nl_confirmed": False,
-                    }
-                )
-                seen_labels.add(basic.group(1))
-                continue
 
-            if warn_match := re.search(r"\s+\S+\s+OK:\d+\s+WARN:(\d+)\s+ND:\d+", line):
-                nl_warn_count += int(warn_match.group(1))
+def build_summary(
+    config: ExtractionConfig,
+    targets: list[Target],
+    output: RunOutput,
+    excel_path: Path,
+) -> dict[str, Any]:
+    target_summaries = [_target_summary(config, target, output) for target in targets]
+    return {
+        "total_files": len(output.file_results),
+        "excel_path": str(excel_path),
+        "targets": target_summaries,
+        "istd_warnings": [
+            {
+                "label": summary["label"],
+                "detected": summary["detected"],
+                "total": summary["total"],
+            }
+            for target, summary in zip(targets, target_summaries)
+            if target.is_istd and summary["detected"] < summary["total"]
+        ],
+        "diagnostics_count": len(output.diagnostics),
+    }
 
-            if istd_nd := re.search(r"^ISTD_ND:\s+(\S+)\s+(\d+)/(\d+)", line):
-                istd_warnings.append(
-                    {
-                        "label": istd_nd.group(1),
-                        "detected": int(istd_nd.group(2)),
-                        "total": int(istd_nd.group(3)),
-                    }
-                )
 
-        return {
-            "total_files": total_files,
-            "targets": targets,
-            "nl_warn_count": nl_warn_count,
-            "excel_path": excel_path,
-            "istd_warnings": istd_warnings,
-        }
+def _target_summary(
+    config: ExtractionConfig,
+    target: Target,
+    output: RunOutput,
+) -> dict[str, int | float | str | None]:
+    detected = 0
+    nl_ok = 0
+    nl_warn = 0
+    nl_fail = 0
+    nl_no_ms2 = 0
+    detected_areas: list[float] = []
+
+    for file_result in output.file_results:
+        result = file_result.results.get(target.label)
+        if result is None:
+            continue
+        if result.nl is not None:
+            if result.nl.status == "OK":
+                nl_ok += 1
+            elif result.nl.status == "WARN":
+                nl_warn += 1
+            elif result.nl.status == "NL_FAIL":
+                nl_fail += 1
+            elif result.nl.status == "NO_MS2":
+                nl_no_ms2 += 1
+        if _is_detected(config, target, result):
+            detected += 1
+            if result.peak_result.peak is not None:
+                detected_areas.append(result.peak_result.peak.area)
+
+    median_area = statistics.median(detected_areas) if detected_areas else None
+    return {
+        "label": target.label,
+        "detected": detected,
+        "total": len(output.file_results),
+        "nl_ok": nl_ok,
+        "nl_warn": nl_warn,
+        "nl_fail": nl_fail,
+        "nl_no_ms2": nl_no_ms2,
+        "median_area": median_area,
+    }
+
+
+def _is_detected(
+    config: ExtractionConfig,
+    target: Target,
+    result: ExtractionResult,
+) -> bool:
+    if result.peak_result.status != "OK" or result.peak_result.peak is None:
+        return False
+    if target.neutral_loss_da is None:
+        return True
+    if result.nl is None:
+        return False
+    if result.nl.status in {"OK", "WARN"}:
+        return True
+    return config.count_no_ms2_as_detected and result.nl.status == "NO_MS2"

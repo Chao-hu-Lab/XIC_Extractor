@@ -19,7 +19,6 @@ if getattr(sys, "frozen", False):
 else:
     _ROOT = Path(__file__).resolve().parent.parent
     _BUNDLE = _ROOT
-_SCRIPTS_DIR = _BUNDLE / "scripts"
 _ICON_PATH = _BUNDLE / "assets" / "app_icon.png"
 (_ROOT / "output").mkdir(exist_ok=True)
 
@@ -123,7 +122,9 @@ class MainWindow(QMainWindow):
         except FileNotFoundError:
             targets = []
 
-        self._settings.load(settings)
+        migrated = self._settings.load(settings)
+        if migrated:
+            write_settings(self._settings.get_values())
         self._targets.load(targets)
         self._status_bar.showMessage(f"已載入 {len(targets)} 個目標")
 
@@ -141,7 +142,7 @@ class MainWindow(QMainWindow):
         self._run.set_running(True)
         self._status_bar.showMessage("開始執行 pipeline...")
 
-        self._worker = PipelineWorker(_SCRIPTS_DIR)
+        self._worker = PipelineWorker(_ROOT / "config")
         self._worker.progress.connect(self._run.set_progress)
         self._worker.finished.connect(self._on_finished)
         self._worker.error.connect(self._on_error)

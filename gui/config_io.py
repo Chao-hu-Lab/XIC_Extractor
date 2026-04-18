@@ -3,6 +3,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DESCRIPTIONS
+
 if getattr(sys, "frozen", False):
     ROOT = Path(sys.executable).parent  # user-writable: config/, output/
     _BUNDLE = Path(sys._MEIPASS)  # read-only bundle: example CSVs
@@ -57,7 +59,8 @@ def write_settings(settings: dict[str, str]) -> None:
                 {
                     "key": key,
                     "value": value,
-                    "description": existing.get(key, {}).get("description", ""),
+                    "description": existing.get(key, {}).get("description", "")
+                    or CANONICAL_SETTINGS_DESCRIPTIONS.get(key, ""),
                 }
             )
 

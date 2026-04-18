@@ -1,8 +1,10 @@
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QSignalBlocker, pyqtSignal
+from PyQt6.QtCore import QSignalBlocker, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
+    QCheckBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -13,8 +15,10 @@ from PyQt6.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
     QWidget,
-    QDoubleSpinBox,
 )
+
+from xic_extractor.config import migrate_settings_dict
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
 
 class _LabeledSpin(QWidget):
@@ -69,6 +73,7 @@ class SettingsSection(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._dirty = False
+        self._settings_values = dict(CANONICAL_SETTINGS_DEFAULTS)
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -98,16 +103,32 @@ class SettingsSection(QWidget):
 
         self._data_dir_edit = QLineEdit()
         self._dll_dir_edit = QLineEdit()
-        self._smooth_points_spin = QSpinBox()
-        self._smooth_sigma_spin = QDoubleSpinBox()
+        self._smooth_window_spin = QSpinBox()
+        self._smooth_polyorder_spin = QSpinBox()
+        self._peak_rel_height_spin = QDoubleSpinBox()
+        self._peak_min_prominence_ratio_spin = QDoubleSpinBox()
+        self._ms2_precursor_tol_da_spin = QDoubleSpinBox()
+        self._nl_min_intensity_ratio_spin = QDoubleSpinBox()
+        self._count_no_ms2_checkbox = QCheckBox("將 NO_MS2 視為偵測到")
         self._save_button = QPushButton("儲存設定")
         self._save_button.setObjectName("btn_save")
         self._save_button.setVisible(False)
 
-        self._smooth_points_spin.setRange(1, 999)
-        self._smooth_sigma_spin.setRange(0.1, 999.0)
-        self._smooth_sigma_spin.setDecimals(2)
-        self._smooth_sigma_spin.setSingleStep(0.1)
+        self._smooth_window_spin.setRange(3, 999)
+        self._smooth_window_spin.setSingleStep(2)
+        self._smooth_polyorder_spin.setRange(1, 10)
+        self._peak_rel_height_spin.setRange(0.50, 0.99)
+        self._peak_rel_height_spin.setSingleStep(0.01)
+        self._peak_rel_height_spin.setDecimals(2)
+        self._peak_min_prominence_ratio_spin.setRange(0.01, 0.50)
+        self._peak_min_prominence_ratio_spin.setSingleStep(0.01)
+        self._peak_min_prominence_ratio_spin.setDecimals(2)
+        self._ms2_precursor_tol_da_spin.setRange(0.01, 10.0)
+        self._ms2_precursor_tol_da_spin.setSingleStep(0.1)
+        self._ms2_precursor_tol_da_spin.setDecimals(2)
+        self._nl_min_intensity_ratio_spin.setRange(0.01, 1.0)
+        self._nl_min_intensity_ratio_spin.setSingleStep(0.01)
+        self._nl_min_intensity_ratio_spin.setDecimals(2)
 
         # ── Data directory row ───────────────────────────────────────────────
         body_layout.addWidget(QLabel("Data directory"), 0, 0)
@@ -124,15 +145,36 @@ class SettingsSection(QWidget):
         body_layout.addWidget(self._dll_dir_edit, 2, 1)
         body_layout.addWidget(self._make_browse_button(self._dll_dir_edit), 2, 2)
 
-        # ── Smoothing row ────────────────────────────────────────────────────
-        body_layout.addWidget(QLabel("Smoothing"), 3, 0)
+        body_layout.addWidget(QLabel("Signal processing"), 3, 0)
         smoothing_layout = QHBoxLayout()
         smoothing_layout.setContentsMargins(0, 0, 0, 0)
         smoothing_layout.setSpacing(16)
-        smoothing_layout.addWidget(_LabeledSpin("Points", self._smooth_points_spin))
-        smoothing_layout.addWidget(_LabeledSpin("σ (sigma)", self._smooth_sigma_spin))
+        smoothing_layout.addWidget(_LabeledSpin("Window", self._smooth_window_spin))
+        smoothing_layout.addWidget(
+            _LabeledSpin("Polyorder", self._smooth_polyorder_spin)
+        )
+        smoothing_layout.addWidget(
+            _LabeledSpin("Peak height", self._peak_rel_height_spin)
+        )
+        smoothing_layout.addWidget(
+            _LabeledSpin("Prominence", self._peak_min_prominence_ratio_spin)
+        )
         smoothing_layout.addStretch()
         body_layout.addLayout(smoothing_layout, 3, 1, 1, 2)
+
+        body_layout.addWidget(QLabel("MS2 / NL"), 4, 0)
+        ms2_layout = QHBoxLayout()
+        ms2_layout.setContentsMargins(0, 0, 0, 0)
+        ms2_layout.setSpacing(16)
+        ms2_layout.addWidget(
+            _LabeledSpin("Precursor tol", self._ms2_precursor_tol_da_spin)
+        )
+        ms2_layout.addWidget(
+            _LabeledSpin("Min intensity", self._nl_min_intensity_ratio_spin)
+        )
+        ms2_layout.addWidget(self._count_no_ms2_checkbox)
+        ms2_layout.addStretch()
+        body_layout.addLayout(ms2_layout, 4, 1, 1, 2)
 
         button_row = QHBoxLayout()
         button_row.setContentsMargins(16, 0, 16, 16)
@@ -142,37 +184,93 @@ class SettingsSection(QWidget):
 
         self._wire_signals()
 
-    def load(self, settings: dict[str, str]) -> None:
+    def load(self, settings: dict[str, str]) -> bool:
         blockers = [
             QSignalBlocker(self._data_dir_edit),
             QSignalBlocker(self._dll_dir_edit),
-            QSignalBlocker(self._smooth_points_spin),
-            QSignalBlocker(self._smooth_sigma_spin),
+            QSignalBlocker(self._smooth_window_spin),
+            QSignalBlocker(self._smooth_polyorder_spin),
+            QSignalBlocker(self._peak_rel_height_spin),
+            QSignalBlocker(self._peak_min_prominence_ratio_spin),
+            QSignalBlocker(self._ms2_precursor_tol_da_spin),
+            QSignalBlocker(self._nl_min_intensity_ratio_spin),
+            QSignalBlocker(self._count_no_ms2_checkbox),
         ]
         try:
-            self._data_dir_edit.setText(settings.get("data_dir", ""))
-            self._dll_dir_edit.setText(settings.get("dll_dir", ""))
-            self._smooth_points_spin.setValue(
-                int(settings.get("smooth_points", "15") or 15)
+            migrated, _ = migrate_settings_dict(settings)
+            self._settings_values = dict(CANONICAL_SETTINGS_DEFAULTS)
+            self._settings_values.update(migrated)
+            self._data_dir_edit.setText(self._settings_values.get("data_dir", ""))
+            self._dll_dir_edit.setText(self._settings_values.get("dll_dir", ""))
+            self._smooth_window_spin.setValue(
+                _int_value(self._settings_values, "smooth_window")
             )
-            self._smooth_sigma_spin.setValue(
-                float(settings.get("smooth_sigma", "3.0") or 3.0)
+            self._smooth_polyorder_spin.setValue(
+                _int_value(self._settings_values, "smooth_polyorder")
+            )
+            self._peak_rel_height_spin.setValue(
+                _float_value(self._settings_values, "peak_rel_height")
+            )
+            self._peak_min_prominence_ratio_spin.setValue(
+                _float_value(self._settings_values, "peak_min_prominence_ratio")
+            )
+            self._ms2_precursor_tol_da_spin.setValue(
+                _float_value(self._settings_values, "ms2_precursor_tol_da")
+            )
+            self._nl_min_intensity_ratio_spin.setValue(
+                _float_value(self._settings_values, "nl_min_intensity_ratio")
+            )
+            self._count_no_ms2_checkbox.setChecked(
+                self._settings_values.get("count_no_ms2_as_detected", "false").lower()
+                == "true"
             )
         finally:
             del blockers
         self._set_dirty(False)
+        return migrated != settings
 
     def get_values(self) -> dict[str, str]:
-        return {
-            "data_dir": self._data_dir_edit.text().strip(),
-            "dll_dir": self._dll_dir_edit.text().strip(),
-            "smooth_points": str(self._smooth_points_spin.value()),
-            "smooth_sigma": f"{self._smooth_sigma_spin.value():.1f}",
-        }
+        values = dict(self._settings_values)
+        values.update(
+            {
+                "data_dir": self._data_dir_edit.text().strip(),
+                "dll_dir": self._dll_dir_edit.text().strip(),
+                "smooth_window": str(self._smooth_window_spin.value()),
+                "smooth_polyorder": str(self._smooth_polyorder_spin.value()),
+                "peak_rel_height": f"{self._peak_rel_height_spin.value():.2f}",
+                "peak_min_prominence_ratio": (
+                    f"{self._peak_min_prominence_ratio_spin.value():.2f}"
+                ),
+                "ms2_precursor_tol_da": f"{self._ms2_precursor_tol_da_spin.value():g}",
+                "nl_min_intensity_ratio": (
+                    f"{self._nl_min_intensity_ratio_spin.value():.2f}"
+                ),
+                "count_no_ms2_as_detected": (
+                    "true" if self._count_no_ms2_checkbox.isChecked() else "false"
+                ),
+            }
+        )
+        return values
 
     def is_valid(self) -> bool:
-        data_dir = self._data_dir_edit.text().strip()
-        return bool(data_dir) and Path(data_dir).exists()
+        values = self.get_values()
+        smooth_window = int(values["smooth_window"])
+        smooth_polyorder = int(values["smooth_polyorder"])
+        peak_rel_height = float(values["peak_rel_height"])
+        peak_min_prominence_ratio = float(values["peak_min_prominence_ratio"])
+        ms2_precursor_tol_da = float(values["ms2_precursor_tol_da"])
+        nl_min_intensity_ratio = float(values["nl_min_intensity_ratio"])
+        return (
+            bool(values["data_dir"])
+            and bool(values["dll_dir"])
+            and smooth_window >= 3
+            and smooth_window % 2 == 1
+            and 1 <= smooth_polyorder < smooth_window
+            and 0.50 <= peak_rel_height <= 0.99
+            and 0.01 <= peak_min_prominence_ratio <= 0.50
+            and ms2_precursor_tol_da > 0
+            and 0 < nl_min_intensity_ratio <= 1
+        )
 
     def set_enabled(self, enabled: bool) -> None:
         self.setEnabled(enabled)
@@ -181,8 +279,23 @@ class SettingsSection(QWidget):
         self._data_dir_edit.textChanged.connect(self._validate_data_dir)
         self._data_dir_edit.textChanged.connect(lambda _: self._set_dirty(True))
         self._dll_dir_edit.textChanged.connect(lambda _: self._set_dirty(True))
-        self._smooth_points_spin.valueChanged.connect(lambda _: self._set_dirty(True))
-        self._smooth_sigma_spin.valueChanged.connect(lambda _: self._set_dirty(True))
+        self._smooth_window_spin.valueChanged.connect(lambda _: self._set_dirty(True))
+        self._smooth_polyorder_spin.valueChanged.connect(
+            lambda _: self._set_dirty(True)
+        )
+        self._peak_rel_height_spin.valueChanged.connect(lambda _: self._set_dirty(True))
+        self._peak_min_prominence_ratio_spin.valueChanged.connect(
+            lambda _: self._set_dirty(True)
+        )
+        self._ms2_precursor_tol_da_spin.valueChanged.connect(
+            lambda _: self._set_dirty(True)
+        )
+        self._nl_min_intensity_ratio_spin.valueChanged.connect(
+            lambda _: self._set_dirty(True)
+        )
+        self._count_no_ms2_checkbox.stateChanged.connect(
+            lambda _: self._set_dirty(True)
+        )
         self._save_button.clicked.connect(self._save)
 
     def _validate_data_dir(self, text: str) -> None:
@@ -210,3 +323,17 @@ class SettingsSection(QWidget):
     def _set_dirty(self, dirty: bool) -> None:
         self._dirty = dirty
         self._save_button.setVisible(dirty)
+
+
+def _int_value(settings: dict[str, str], key: str) -> int:
+    try:
+        return int(settings.get(key, CANONICAL_SETTINGS_DEFAULTS[key]))
+    except ValueError:
+        return int(CANONICAL_SETTINGS_DEFAULTS[key])
+
+
+def _float_value(settings: dict[str, str], key: str) -> float:
+    try:
+        return float(settings.get(key, CANONICAL_SETTINGS_DEFAULTS[key]))
+    except ValueError:
+        return float(CANONICAL_SETTINGS_DEFAULTS[key])
