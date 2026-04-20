@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from xic_extractor.rt_prior_library import LibraryEntry, load_library
+from xic_extractor.rt_prior_library import (
+    LibraryEntry,
+    load_library,
+    write_pending_update,
+)
 
 
 def test_load_empty_returns_empty(tmp_path: Path) -> None:
@@ -37,3 +41,27 @@ def test_load_filters_by_config_hash(tmp_path: Path) -> None:
     istd_entry = lib[("d3-A", "ISTD")]
     assert istd_entry.median_abs_rt == 9.03
     assert istd_entry.sigma_abs_rt == 0.18
+
+
+def test_write_pending_round_trip(tmp_path: Path) -> None:
+    lib = tmp_path / "lib.csv"
+    entries = [
+        LibraryEntry(
+            config_hash="aaaa1111",
+            target_label="A",
+            role="analyte",
+            istd_pair="d3-A",
+            median_delta_rt=0.10,
+            sigma_delta_rt=0.02,
+            median_abs_rt=None,
+            sigma_abs_rt=None,
+            n_samples=10,
+            updated_at="2026-04-20T12:00:00",
+        )
+    ]
+    pending = write_pending_update(lib, entries)
+    assert pending == lib.with_suffix(".pending.csv")
+    assert pending.exists()
+    lines = pending.read_text(encoding="utf-8").strip().splitlines()
+    assert lines[0].startswith("config_hash,")
+    assert "aaaa1111" in lines[1]

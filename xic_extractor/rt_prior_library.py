@@ -57,7 +57,40 @@ def load_library(path: Path, config_hash: str) -> dict[tuple[str, str], LibraryE
     return out
 
 
+def write_pending_update(library_path: Path, entries: list[LibraryEntry]) -> Path:
+    """Write proposed library rows without mutating the main library."""
+    pending = library_path.with_suffix(".pending.csv")
+    pending.parent.mkdir(parents=True, exist_ok=True)
+    with pending.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=LIBRARY_FIELDNAMES)
+        writer.writeheader()
+        for entry in entries:
+            writer.writerow(
+                {
+                    "config_hash": entry.config_hash,
+                    "target_label": entry.target_label,
+                    "role": entry.role,
+                    "istd_pair": entry.istd_pair,
+                    "median_delta_rt": _format_optional_float(
+                        entry.median_delta_rt
+                    ),
+                    "sigma_delta_rt": _format_optional_float(entry.sigma_delta_rt),
+                    "median_abs_rt": _format_optional_float(entry.median_abs_rt),
+                    "sigma_abs_rt": _format_optional_float(entry.sigma_abs_rt),
+                    "n_samples": str(entry.n_samples),
+                    "updated_at": entry.updated_at,
+                }
+            )
+    return pending
+
+
 def _opt_float(value: str | None) -> float | None:
     if value is None or value == "":
         return None
     return float(value)
+
+
+def _format_optional_float(value: float | None) -> str:
+    if value is None:
+        return ""
+    return str(value)
