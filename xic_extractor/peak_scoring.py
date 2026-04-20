@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from xic_extractor.baseline import asls_baseline
@@ -26,7 +28,22 @@ _RT_PRIOR_NO_SIGMA_SOFT_MIN = 0.2
 _RT_PRIOR_NO_SIGMA_HARD_MIN = 1.0
 
 
+def _is_finite(value: float) -> bool:
+    return math.isfinite(float(value))
+
+
+def _at_least(value: float, threshold: float) -> bool:
+    return value >= threshold or math.isclose(
+        value,
+        threshold,
+        rel_tol=1e-12,
+        abs_tol=1e-12,
+    )
+
+
 def symmetry_severity(half_width_ratio: float) -> tuple[int, str]:
+    if not _is_finite(half_width_ratio):
+        return 2, _LABEL_SYMMETRY
     if (
         half_width_ratio < _SYMMETRY_HARD_LOW
         or half_width_ratio > _SYMMETRY_HARD_HIGH
@@ -83,17 +100,19 @@ def rt_prior_severity(
 ) -> tuple[int, str]:
     if prior is None:
         return 0, _LABEL_RT_PRIOR
+    if not _is_finite(observed) or not _is_finite(prior):
+        return 2, _LABEL_RT_PRIOR
     deviation = abs(observed - prior)
-    if sigma is not None and sigma > 0:
+    if sigma is not None and _is_finite(sigma) and sigma > 0:
         n_sigma = deviation / sigma
-        if n_sigma >= _RT_PRIOR_SIGMA_HARD:
+        if _at_least(n_sigma, _RT_PRIOR_SIGMA_HARD):
             return 2, _LABEL_RT_PRIOR
-        if n_sigma >= _RT_PRIOR_SIGMA_SOFT:
+        if _at_least(n_sigma, _RT_PRIOR_SIGMA_SOFT):
             return 1, _LABEL_RT_PRIOR
         return 0, _LABEL_RT_PRIOR
-    if deviation >= _RT_PRIOR_NO_SIGMA_HARD_MIN:
+    if _at_least(deviation, _RT_PRIOR_NO_SIGMA_HARD_MIN):
         return 2, _LABEL_RT_PRIOR
-    if deviation >= _RT_PRIOR_NO_SIGMA_SOFT_MIN:
+    if _at_least(deviation, _RT_PRIOR_NO_SIGMA_SOFT_MIN):
         return 1, _LABEL_RT_PRIOR
     return 0, _LABEL_RT_PRIOR
 
@@ -101,9 +120,11 @@ def rt_prior_severity(
 def rt_centrality_severity(
     observed: float, rt_min: float, rt_max: float
 ) -> tuple[int, str]:
+    if not (_is_finite(observed) and _is_finite(rt_min) and _is_finite(rt_max)):
+        return 2, _LABEL_RT_CENTRALITY
     span = rt_max - rt_min
     if span <= 0:
-        return 0, _LABEL_RT_CENTRALITY
+        return 2, _LABEL_RT_CENTRALITY
     distance_low = observed - rt_min
     distance_high = rt_max - observed
     min_edge = min(distance_low, distance_high) / span
@@ -117,6 +138,8 @@ def rt_centrality_severity(
 def noise_shape_severity(intensity: np.ndarray) -> tuple[int, str]:
     """Jaggedness: sum of abs second differences normalised by peak span."""
     values = np.asarray(intensity, dtype=float)
+    if values.ndim != 1 or not np.all(np.isfinite(values)):
+        return 2, _LABEL_NOISE_SHAPE
     if len(values) < 3:
         return 0, _LABEL_NOISE_SHAPE
     span = float(values.max() - values.min())
@@ -134,6 +157,8 @@ def noise_shape_severity(intensity: np.ndarray) -> tuple[int, str]:
 def peak_width_severity(fwhm_ratio: float | None) -> tuple[int, str]:
     if fwhm_ratio is None:
         return 0, _LABEL_PEAK_WIDTH
+    if not _is_finite(fwhm_ratio):
+        return 2, _LABEL_PEAK_WIDTH
     if fwhm_ratio < 0.3 or fwhm_ratio > 3.0:
         return 2, _LABEL_PEAK_WIDTH
     if fwhm_ratio < 0.5 or fwhm_ratio > 2.0:
