@@ -300,6 +300,44 @@ def test_run_writes_neutral_loss_diagnostics(
     assert reason_part in diagnostics[0]["Reason"]
 
 
+def test_istd_no_ms2_keeps_ms1_peak_and_writes_confidence_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("ISTD", is_istd=True)]
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence([_ok_peak(9.05, 1200.0, 3400.25)]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.check_nl",
+        _nl_sequence([NLResult("NO_MS2", None, None, 12, 0, 0)]),
+    )
+
+    _run(config, targets)
+
+    rows = _read_csv(config.output_csv)
+    assert rows[0]["ISTD_RT"] == "9.0500"
+    assert rows[0]["ISTD_Int"] == "1200"
+    assert rows[0]["ISTD_Area"] == "3400.25"
+    diagnostics = _read_csv(config.diagnostics_csv)
+    assert any(
+        record["Target"] == "ISTD"
+        and record["Issue"] == "NO_MS2"
+        for record in diagnostics
+    )
+    assert any(
+        record["Target"] == "ISTD"
+        and record["Issue"] == "ISTD_CONFIDENCE"
+        and "confidence=MEDIUM" in record["Reason"]
+        and "flags=NO_MS2" in record["Reason"]
+        and "MS1 peak retained" in record["Reason"]
+        for record in diagnostics
+    )
+
+
 def test_run_reports_progress_and_stops_between_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -5,7 +5,7 @@ import pytest
 from scipy.signal import savgol_filter
 
 from xic_extractor.config import ExtractionConfig
-from xic_extractor.signal_processing import find_peak_and_area
+from xic_extractor.signal_processing import find_peak_and_area, find_peak_candidates
 
 
 def _config(
@@ -64,6 +64,37 @@ def test_two_peak_signal_chooses_highest_smoothed_peak() -> None:
     assert result.peak is not None
     assert result.peak.rt == pytest.approx(9.4, abs=0.01)
     assert result.n_prominent_peaks == 2
+
+
+def test_candidate_enumeration_returns_all_prominent_peaks() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = _gaussian(rt, center=8.7, sigma=0.05, height=500.0)
+    intensity += _gaussian(rt, center=9.4, sigma=0.06, height=1200.0)
+
+    result = find_peak_candidates(rt, intensity, _config())
+
+    assert result.status == "OK"
+    assert len(result.candidates) == 2
+    assert [candidate.peak.rt for candidate in result.candidates] == pytest.approx(
+        [8.7, 9.4],
+        abs=0.01,
+    )
+    assert result.candidates[1].peak.intensity > result.candidates[0].peak.intensity
+
+
+def test_raw_apex_reporting_does_not_return_zero_intensity_when_area_is_positive() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = _gaussian(rt, center=9.0, sigma=0.08, height=1000.0)
+    intensity[int(np.argmin(np.abs(rt - 9.0)))] = 0.0
+
+    result = find_peak_and_area(rt, intensity, _config(smooth_window=31))
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.area > 0.0
+    assert result.peak.intensity > 900.0
+    assert result.peak.rt == pytest.approx(8.995, abs=0.01)
+    assert result.peak.intensity_smoothed > 900.0
 
 
 def test_strict_preferred_rt_chooses_anchor_peak_even_when_neighbor_is_higher() -> None:

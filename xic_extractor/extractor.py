@@ -28,6 +28,7 @@ DiagnosticIssue = Literal[
     "NL_ANCHOR_FALLBACK",
     "ISTD_ANCHOR_MISSING",
     "ANCHOR_RT_MISMATCH",
+    "ISTD_CONFIDENCE",
 ]
 
 # Asymmetry ratio (right / left half-width at 5 % peak height) above this
@@ -472,6 +473,10 @@ def _build_diagnostics(
                 )
             )
 
+        istd_confidence = _istd_confidence_diagnostic(sample_name, target, result)
+        if istd_confidence is not None:
+            records.append(istd_confidence)
+
     return records
 
 
@@ -553,6 +558,40 @@ def _tailing_reason(peak: PeakResult) -> str:
         f"Asymmetry ratio {ratio:.2f} (right/left half-width at 5% peak height, "
         f"USP limit 2.0); apex RT {peak.rt:.4f} min, "
         f"peak [{peak.peak_start:.4f}, {peak.peak_end:.4f}]"
+    )
+
+
+def _istd_confidence_diagnostic(
+    sample_name: str, target: Target, result: ExtractionResult
+) -> DiagnosticRecord | None:
+    if not target.is_istd:
+        return None
+
+    flags: list[str] = []
+    confidence = "HIGH"
+    if result.nl is not None:
+        if result.nl.status == "NO_MS2":
+            flags.append("NO_MS2")
+            confidence = "MEDIUM"
+        elif result.nl.status == "NL_FAIL":
+            flags.append("NL_FAIL")
+            confidence = "LOW"
+        elif result.nl.status == "WARN":
+            flags.append("NL_WARN")
+            confidence = "MEDIUM"
+
+    if not flags:
+        return None
+
+    return DiagnosticRecord(
+        sample_name=sample_name,
+        target_label=target.label,
+        issue="ISTD_CONFIDENCE",
+        reason=(
+            f"ISTD confidence={confidence}; flags={','.join(flags)}; "
+            "MS1 peak retained because ISTD NL evidence is diagnostic support, "
+            "not a hard detection gate"
+        ),
     )
 
 

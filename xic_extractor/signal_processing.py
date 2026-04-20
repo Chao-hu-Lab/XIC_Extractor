@@ -23,12 +23,34 @@ class PeakResult:
 
 
 @dataclass(frozen=True)
+class PeakCandidate:
+    peak: PeakResult
+    smoothed_apex_rt: float
+    smoothed_apex_intensity: float
+    smoothed_apex_index: int
+    raw_apex_rt: float
+    raw_apex_intensity: float
+    raw_apex_index: int
+    prominence: float
+
+
+@dataclass(frozen=True)
+class PeakCandidatesResult:
+    status: PeakStatus
+    candidates: tuple[PeakCandidate, ...]
+    n_points: int
+    max_smoothed: float | None
+    n_prominent_peaks: int
+
+
+@dataclass(frozen=True)
 class PeakDetectionResult:
     status: PeakStatus
     peak: PeakResult | None
     n_points: int
     max_smoothed: float | None
     n_prominent_peaks: int
+    candidates: tuple[PeakCandidate, ...] = ()
 
 
 def find_peak_and_area(
@@ -39,62 +61,75 @@ def find_peak_and_area(
     preferred_rt: float | None = None,
     strict_preferred_rt: bool = False,
 ) -> PeakDetectionResult:
+    candidates_result = find_peak_candidates(rt, intensity, config)
+    if candidates_result.status != "OK":
+        return PeakDetectionResult(
+            status=candidates_result.status,
+            peak=None,
+            n_points=candidates_result.n_points,
+            max_smoothed=candidates_result.max_smoothed,
+            n_prominent_peaks=candidates_result.n_prominent_peaks,
+            candidates=candidates_result.candidates,
+        )
+
+    candidates = candidates_result.candidates
+    best_candidate = _select_candidate(
+        candidates,
+        preferred_rt=preferred_rt,
+        strict_preferred_rt=strict_preferred_rt,
+    )
+    return PeakDetectionResult(
+        status="OK",
+        peak=best_candidate.peak,
+        n_points=candidates_result.n_points,
+        max_smoothed=candidates_result.max_smoothed,
+        n_prominent_peaks=candidates_result.n_prominent_peaks,
+        candidates=candidates,
+    )
+
+
+def find_peak_candidates(
+    rt: np.ndarray,
+    intensity: np.ndarray,
+    config: ExtractionConfig,
+) -> PeakCandidatesResult:
     rt_values, intensity_values = _as_matching_arrays(rt, intensity)
     n_points = len(intensity_values)
     if n_points == 0:
-        return _failure("NO_SIGNAL", n_points, None)
+        return _candidate_failure("NO_SIGNAL", n_points, None)
     if n_points < config.smooth_window:
-        return _failure("WINDOW_TOO_SHORT", n_points, None)
+        return _candidate_failure("WINDOW_TOO_SHORT", n_points, None)
 
     smoothed = savgol_filter(
         intensity_values, config.smooth_window, config.smooth_polyorder
     )
     max_smoothed = float(np.max(smoothed))
     if max_smoothed <= 0:
-        return _failure("NO_SIGNAL", n_points, max_smoothed)
+        return _candidate_failure("NO_SIGNAL", n_points, max_smoothed)
 
     prominence = _prominence_threshold(
         intensity_values, smoothed, max_smoothed, config.peak_min_prominence_ratio
     )
-    peaks, _ = find_peaks(smoothed, prominence=prominence)
+    peaks, properties = find_peaks(smoothed, prominence=prominence)
     if len(peaks) == 0:
-        return _failure("PEAK_NOT_FOUND", n_points, max_smoothed)
+        return _candidate_failure("PEAK_NOT_FOUND", n_points, max_smoothed)
 
-    strongest_idx = int(peaks[np.argmax(smoothed[peaks])])
-    if preferred_rt is not None and len(peaks) > 1:
-        # NL anchor 指向化合物實際 RT；多峰時優先選距 anchor 最近的峰
-        # paired analyte 已由 ISTD anchor 約束時強制尊重最近峰；其他路徑若最近峰
-        # 強度 < 最高峰的 20%，anchor 可能是雜訊，回到選最高峰。
-        rt_diffs = np.abs(rt_values[peaks] - preferred_rt)
-        nearest_idx = int(peaks[np.argmin(rt_diffs)])
-        if strict_preferred_rt or (
-            smoothed[nearest_idx]
-            >= smoothed[strongest_idx] * _PREFERRED_RT_MIN_INTENSITY_RATIO
-        ):
-            best_idx = nearest_idx
-        else:
-            best_idx = strongest_idx
-    else:
-        best_idx = strongest_idx
-    left, right = _peak_bounds(smoothed, best_idx, config.peak_rel_height, n_points)
-    # Thermo returns rt in minutes, but LC-MS convention (Xcalibur, MassHunter,
-    # manual integration) reports area in counts·seconds — convert so downstream
-    # numbers match what chemists see in Xcalibur.
-    area_counts_minutes = float(
-        np.trapezoid(intensity_values[left:right], rt_values[left:right])
+    prominences = properties.get("prominences", np.zeros(len(peaks), dtype=float))
+    candidates = tuple(
+        _build_candidate(
+            rt_values,
+            intensity_values,
+            smoothed,
+            smoothed_apex_idx=int(peak_idx),
+            prominence=float(prominences[index]),
+            peak_rel_height=config.peak_rel_height,
+        )
+        for index, peak_idx in enumerate(peaks)
     )
-    area = area_counts_minutes * 60.0
 
-    return PeakDetectionResult(
+    return PeakCandidatesResult(
         status="OK",
-        peak=PeakResult(
-            rt=float(rt_values[best_idx]),
-            intensity=float(intensity_values[best_idx]),
-            intensity_smoothed=float(smoothed[best_idx]),
-            area=area,
-            peak_start=float(rt_values[left]),
-            peak_end=float(rt_values[right - 1]),
-        ),
+        candidates=candidates,
         n_points=n_points,
         max_smoothed=max_smoothed,
         n_prominent_peaks=len(peaks),
@@ -111,18 +146,103 @@ def _as_matching_arrays(
     return rt_values, intensity_values
 
 
-def _failure(
+def _candidate_failure(
     status: Literal["NO_SIGNAL", "WINDOW_TOO_SHORT", "PEAK_NOT_FOUND"],
     n_points: int,
     max_smoothed: float | None,
-) -> PeakDetectionResult:
-    return PeakDetectionResult(
+) -> PeakCandidatesResult:
+    return PeakCandidatesResult(
         status=status,
-        peak=None,
+        candidates=(),
         n_points=n_points,
         max_smoothed=max_smoothed,
         n_prominent_peaks=0,
     )
+
+
+def _select_candidate(
+    candidates: tuple[PeakCandidate, ...],
+    *,
+    preferred_rt: float | None,
+    strict_preferred_rt: bool,
+) -> PeakCandidate:
+    strongest_candidate = max(
+        candidates, key=lambda candidate: candidate.smoothed_apex_intensity
+    )
+    if preferred_rt is None or len(candidates) == 1:
+        return strongest_candidate
+
+    # NL anchor 指向化合物實際 RT；多峰時優先選距 anchor 最近的峰。
+    # paired analyte 已由 ISTD anchor 約束時強制尊重最近峰；其他路徑若最近峰
+    # 強度 < 最高峰的 20%，anchor 可能是雜訊，回到選最高峰。
+    nearest_candidate = min(
+        candidates, key=lambda candidate: abs(candidate.smoothed_apex_rt - preferred_rt)
+    )
+    if strict_preferred_rt:
+        return nearest_candidate
+    if (
+        nearest_candidate.smoothed_apex_intensity
+        >= strongest_candidate.smoothed_apex_intensity
+        * _PREFERRED_RT_MIN_INTENSITY_RATIO
+    ):
+        return nearest_candidate
+    return strongest_candidate
+
+
+def _build_candidate(
+    rt_values: np.ndarray,
+    intensity_values: np.ndarray,
+    smoothed: np.ndarray,
+    *,
+    smoothed_apex_idx: int,
+    prominence: float,
+    peak_rel_height: float,
+) -> PeakCandidate:
+    n_points = len(intensity_values)
+    left, right = _peak_bounds(smoothed, smoothed_apex_idx, peak_rel_height, n_points)
+    raw_apex_idx = _raw_apex_index(intensity_values, left, right)
+    area = _integrate_area_counts_seconds(intensity_values, rt_values, left, right)
+
+    peak = PeakResult(
+        rt=float(rt_values[raw_apex_idx]),
+        intensity=float(intensity_values[raw_apex_idx]),
+        intensity_smoothed=float(smoothed[raw_apex_idx]),
+        area=area,
+        peak_start=float(rt_values[left]),
+        peak_end=float(rt_values[right - 1]),
+    )
+    return PeakCandidate(
+        peak=peak,
+        smoothed_apex_rt=float(rt_values[smoothed_apex_idx]),
+        smoothed_apex_intensity=float(smoothed[smoothed_apex_idx]),
+        smoothed_apex_index=smoothed_apex_idx,
+        raw_apex_rt=peak.rt,
+        raw_apex_intensity=peak.intensity,
+        raw_apex_index=raw_apex_idx,
+        prominence=prominence,
+    )
+
+
+def _raw_apex_index(intensity_values: np.ndarray, left: int, right: int) -> int:
+    if right <= left:
+        return left
+    local_offset = int(np.argmax(intensity_values[left:right]))
+    return left + local_offset
+
+
+def _integrate_area_counts_seconds(
+    intensity_values: np.ndarray,
+    rt_values: np.ndarray,
+    left: int,
+    right: int,
+) -> float:
+    # Thermo returns rt in minutes, but LC-MS convention (Xcalibur, MassHunter,
+    # manual integration) reports area in counts·seconds — convert so downstream
+    # numbers match what chemists see in Xcalibur.
+    area_counts_minutes = float(
+        np.trapezoid(intensity_values[left:right], rt_values[left:right])
+    )
+    return area_counts_minutes * 60.0
 
 
 def _prominence_threshold(
