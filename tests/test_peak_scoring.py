@@ -1,11 +1,15 @@
+from dataclasses import dataclass
+
 import numpy as np
 import pytest
 
 from xic_extractor.peak_scoring import (
     Confidence,
+    ScoredCandidate,
     build_reason,
     confidence_from_total,
     local_sn_severity,
+    select_candidate_with_confidence,
     symmetry_severity,
 )
 
@@ -52,6 +56,42 @@ def test_reason_appends_istd_note() -> None:
     assert reason.startswith("ISTD anchor was LOW") or reason.endswith(
         "ISTD anchor was LOW"
     )
+
+
+@dataclass
+class _FakePeak:
+    smoothed_apex_rt: float
+    smoothed_apex_intensity: float
+
+
+def _sc(
+    confidence: Confidence, apex_rt: float, intensity: float, prior: float | None
+) -> ScoredCandidate:
+    return ScoredCandidate(
+        candidate=_FakePeak(apex_rt, intensity),
+        severities=tuple(),
+        confidence=confidence,
+        reason="",
+        prior_rt=prior,
+    )
+
+
+def test_selector_prefers_higher_confidence() -> None:
+    a = _sc(Confidence.MEDIUM, 10.0, 1000, prior=10.0)
+    b = _sc(Confidence.HIGH, 10.5, 500, prior=10.0)
+    assert select_candidate_with_confidence([a, b]) is b
+
+
+def test_selector_tiebreak_by_prior_distance() -> None:
+    a = _sc(Confidence.HIGH, 10.3, 1000, prior=10.0)
+    b = _sc(Confidence.HIGH, 10.05, 500, prior=10.0)
+    assert select_candidate_with_confidence([a, b]) is b
+
+
+def test_selector_final_tiebreak_by_intensity() -> None:
+    a = _sc(Confidence.HIGH, 10.1, 1000, prior=10.0)
+    b = _sc(Confidence.HIGH, 10.1, 500, prior=10.0)
+    assert select_candidate_with_confidence([a, b]) is a
 
 
 @pytest.mark.parametrize(

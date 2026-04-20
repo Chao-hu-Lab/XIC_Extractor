@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 import numpy as np
 
@@ -36,6 +38,23 @@ class Confidence(Enum):
     VERY_LOW = "VERY_LOW"
 
 
+@dataclass(frozen=True)
+class ScoredCandidate:
+    candidate: Any
+    severities: tuple[tuple[int, str], ...]
+    confidence: Confidence
+    reason: str
+    prior_rt: float | None
+
+
+_CONFIDENCE_RANK = {
+    Confidence.HIGH: 0,
+    Confidence.MEDIUM: 1,
+    Confidence.LOW: 2,
+    Confidence.VERY_LOW: 3,
+}
+
+
 def confidence_from_total(total_severity: int) -> Confidence:
     if total_severity == 0:
         return Confidence.HIGH
@@ -65,6 +84,26 @@ def build_reason(
     if istd_confidence_note is not None:
         parts.append(istd_confidence_note)
     return "; ".join(parts)
+
+
+def select_candidate_with_confidence(scored: list[ScoredCandidate]) -> ScoredCandidate:
+    if not scored:
+        raise ValueError("select_candidate_with_confidence requires at least one candidate")
+
+    def key(scored_candidate: ScoredCandidate) -> tuple[int, float, float]:
+        candidate = scored_candidate.candidate
+        distance = (
+            abs(candidate.smoothed_apex_rt - scored_candidate.prior_rt)
+            if scored_candidate.prior_rt is not None
+            else 0.0
+        )
+        return (
+            _CONFIDENCE_RANK[scored_candidate.confidence],
+            distance,
+            -candidate.smoothed_apex_intensity,
+        )
+
+    return min(scored, key=key)
 
 
 def _is_finite(value: float) -> bool:
