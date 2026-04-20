@@ -152,7 +152,7 @@ uv run xic-extractor-cli --base-dir .
 | `settings.csv` / `targets.csv` 格式錯誤 | 依錯誤訊息中的 file、row、column 修正設定 |
 | `data_dir` 不存在 | 到 Settings 指向含 `.raw` 檔案的資料夾 |
 | `dll_dir` 不存在或缺 Thermo DLL | 到 Settings 指向含 `ThermoFisher.CommonCore.Data.dll` 與 `ThermoFisher.CommonCore.RawFileReader.dll` 的資料夾 |
-| 缺 pythonnet / .NET runtime | 重新安裝 packaged app，或在開發環境執行 `uv sync --extra dev` |
+| 缺 pythonnet / .NET runtime | 重新安裝 packaged app，或在開發環境使用 Python 3.10-3.13 執行 `uv sync --extra dev`；Python 3.14 目前不支援 pythonnet |
 | 單一 `.raw` 無法讀取 | pipeline 會繼續處理其他檔案，並在 Diagnostics 寫入 `FILE_ERROR` |
 
 ---
@@ -163,7 +163,7 @@ uv run xic-extractor-cli --base-dir .
 git clone https://github.com/Chao-hu-Lab/XIC_Extractor.git
 cd XIC_Extractor
 
-uv venv
+uv venv --python 3.13
 uv sync --extra dev
 
 uv run python -m gui.main

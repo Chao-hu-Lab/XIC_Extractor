@@ -1,3 +1,4 @@
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -136,6 +137,12 @@ def test_pyproject_exposes_cli_entry_point() -> None:
     pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
 
     assert 'xic-extractor-cli = "scripts.run_extraction:main"' in pyproject
+
+
+def test_pyproject_excludes_python_314_for_pythonnet() -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    assert pyproject["project"]["requires-python"] == ">=3.10,<3.14"
 
 
 def _module():
