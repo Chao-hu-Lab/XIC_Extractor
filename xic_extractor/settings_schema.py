@@ -40,7 +40,8 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
         "是否將無 MS2 觸發的樣品算為偵測到（DDA 隨機性假陰性補救用）"
     ),
     "injection_order_source": (
-        "Sample 注射順序來源檔（CSV/XLSX 有 Sample_Name 與 Injection_Order 欄）"
+        "Sample 注射順序來源檔（CSV/XLSX 有 Sample_Name 與 Injection_Order 欄；"
+        "留空則 fallback to RAW mtime）"
     ),
     "rolling_window_size": "ISTD RT prior 的滾動視窗半徑（±N 個注射）",
     "dirty_matrix_mode": "髒基質模式（放寬 S/N、收緊峰形；尿液等複雜基質用）",

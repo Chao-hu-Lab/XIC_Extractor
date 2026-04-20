@@ -50,7 +50,7 @@ def load_library(path: Path, config_hash: str) -> dict[tuple[str, str], LibraryE
                 sigma_delta_rt=_opt_float(row.get("sigma_delta_rt")),
                 median_abs_rt=_opt_float(row.get("median_abs_rt")),
                 sigma_abs_rt=_opt_float(row.get("sigma_abs_rt")),
-                n_samples=int(row.get("n_samples") or 0),
+                n_samples=int((row.get("n_samples") or "0").strip() or 0),
                 updated_at=row.get("updated_at") or "",
             )
             out[(entry.target_label, entry.role)] = entry
@@ -85,12 +85,15 @@ def write_pending_update(library_path: Path, entries: list[LibraryEntry]) -> Pat
 
 
 def _opt_float(value: str | None) -> float | None:
-    if value is None or value == "":
+    if value is None:
         return None
-    return float(value)
+    normalized = value.strip()
+    if normalized == "":
+        return None
+    return float(normalized)
 
 
 def _format_optional_float(value: float | None) -> str:
     if value is None:
         return ""
-    return str(value)
+    return f"{value:.6f}"

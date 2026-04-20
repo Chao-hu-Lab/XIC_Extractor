@@ -10,6 +10,16 @@ def asls_baseline(
 ) -> np.ndarray:
     """Asymmetric Least Squares baseline (Eilers & Boelens 2005)."""
     values = np.asarray(y, dtype=float)
+    if values.ndim != 1:
+        raise ValueError("asls_baseline expects a 1-D trace")
+    if not np.all(np.isfinite(values)):
+        raise ValueError("asls_baseline input must contain only finite values")
+    if lam <= 0:
+        raise ValueError("lam must be > 0")
+    if not 0 < p < 1:
+        raise ValueError("p must be > 0 and < 1")
+    if n_iter < 1:
+        raise ValueError("n_iter must be >= 1")
     n = len(values)
     if n < 3:
         return values.copy()

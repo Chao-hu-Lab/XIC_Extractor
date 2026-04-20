@@ -9,6 +9,15 @@ def test_read_csv(tmp_path: Path) -> None:
     assert read_injection_order(p) == {"S_A": 1, "S_B": 2}
 
 
+def test_read_csv_handles_utf8_bom(tmp_path: Path) -> None:
+    p = tmp_path / "info.csv"
+    p.write_text(
+        "Sample_Name,Injection_Order\nS_A,1\n",
+        encoding="utf-8-sig",
+    )
+    assert read_injection_order(p) == {"S_A": 1}
+
+
 def test_read_strips_whitespace(tmp_path: Path) -> None:
     p = tmp_path / "info.csv"
     p.write_text("Sample_Name,Injection_Order\n  S_A  ,5\n", encoding="utf-8")
@@ -42,3 +51,18 @@ def test_read_xlsx(tmp_path: Path) -> None:
     p = tmp_path / "info.xlsx"
     wb.save(p)
     assert read_injection_order(p) == {"S_X": 3, "S_Y": 7}
+
+
+def test_read_xlsx_releases_file_handle(tmp_path: Path) -> None:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Sample_Name", "Injection_Order"])
+    ws.append(["S_X", 3])
+    p = tmp_path / "info.xlsx"
+    wb.save(p)
+
+    assert read_injection_order(p) == {"S_X": 3}
+    p.unlink()
+    assert not p.exists()

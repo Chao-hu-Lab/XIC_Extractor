@@ -21,7 +21,7 @@ def read_injection_order(path: Path) -> dict[str, int]:
 
 def _read_csv(path: Path) -> dict[str, int]:
     out: dict[str, int] = {}
-    with path.open(encoding="utf-8") as handle:
+    with path.open(encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
         for row in reader:
             name = (row.get("Sample_Name") or "").strip()
@@ -34,20 +34,23 @@ def _read_csv(path: Path) -> dict[str, int]:
 
 def _read_xlsx(path: Path) -> dict[str, int]:
     wb = load_workbook(path, read_only=True, data_only=True)
-    ws = wb.active
-    rows = ws.iter_rows(values_only=True)
-    header = next(rows)
-    cols = {str(value): i for i, value in enumerate(header) if value is not None}
-    name_i = cols["Sample_Name"]
-    order_i = cols["Injection_Order"]
-    out: dict[str, int] = {}
-    for row in rows:
-        name = row[name_i]
-        order = row[order_i]
-        if name is None or order is None:
-            continue
-        out[str(name).strip()] = int(order)
-    return out
+    try:
+        ws = wb.active
+        rows = ws.iter_rows(values_only=True)
+        header = next(rows)
+        cols = {str(value): i for i, value in enumerate(header) if value is not None}
+        name_i = cols["Sample_Name"]
+        order_i = cols["Injection_Order"]
+        out: dict[str, int] = {}
+        for row in rows:
+            name = row[name_i]
+            order = row[order_i]
+            if name is None or order is None:
+                continue
+            out[str(name).strip()] = int(order)
+        return out
+    finally:
+        wb.close()
 
 
 def rolling_median_rt(

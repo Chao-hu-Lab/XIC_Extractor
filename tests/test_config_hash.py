@@ -25,6 +25,32 @@ def test_different_targets_different_hash(tmp_path: Path) -> None:
     )
 
 
+def test_different_settings_different_hash(tmp_path: Path) -> None:
+    targets = tmp_path / "targets.csv"
+    settings_a = tmp_path / "a.csv"
+    settings_b = tmp_path / "b.csv"
+    targets.write_bytes(b"label\nA\n")
+    settings_a.write_bytes(b"key,value\nrolling_window_size,5\n")
+    settings_b.write_bytes(b"key,value\nrolling_window_size,7\n")
+    assert compute_config_hash(targets, settings_a) != compute_config_hash(
+        targets, settings_b
+    )
+
+
+def test_hash_uses_separator_between_files(tmp_path: Path) -> None:
+    targets_a = tmp_path / "targets_a.csv"
+    settings_a = tmp_path / "settings_a.csv"
+    targets_b = tmp_path / "targets_b.csv"
+    settings_b = tmp_path / "settings_b.csv"
+    targets_a.write_bytes(b"a")
+    settings_a.write_bytes(b"bc")
+    targets_b.write_bytes(b"ab")
+    settings_b.write_bytes(b"c")
+    assert compute_config_hash(targets_a, settings_a) != compute_config_hash(
+        targets_b, settings_b
+    )
+
+
 def test_hash_is_8_hex_chars(tmp_path: Path) -> None:
     t = tmp_path / "t.csv"
     s = tmp_path / "s.csv"

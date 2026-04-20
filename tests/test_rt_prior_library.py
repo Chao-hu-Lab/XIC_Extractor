@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from xic_extractor.rt_prior_library import (
+    LIBRARY_FIELDNAMES,
     LibraryEntry,
     load_library,
     write_pending_update,
@@ -43,8 +44,23 @@ def test_load_filters_by_config_hash(tmp_path: Path) -> None:
     assert istd_entry.sigma_abs_rt == 0.18
 
 
+def test_load_optional_float_whitespace_is_missing(tmp_path: Path) -> None:
+    p = tmp_path / "lib.csv"
+    p.write_text(
+        "config_hash,target_label,role,istd_pair,median_delta_rt,"
+        "sigma_delta_rt,median_abs_rt,sigma_abs_rt,n_samples,updated_at\n"
+        "aaaa1111,A,analyte,d3-A, ,  ,,, 10 ,2026-01-01T00:00:00\n",
+        encoding="utf-8",
+    )
+    entry = load_library(p, "aaaa1111")[("A", "analyte")]
+    assert entry.median_delta_rt is None
+    assert entry.sigma_delta_rt is None
+    assert entry.n_samples == 10
+
+
 def test_write_pending_round_trip(tmp_path: Path) -> None:
     lib = tmp_path / "lib.csv"
+    lib.write_text("existing library content\n", encoding="utf-8")
     entries = [
         LibraryEntry(
             config_hash="aaaa1111",
@@ -62,6 +78,10 @@ def test_write_pending_round_trip(tmp_path: Path) -> None:
     pending = write_pending_update(lib, entries)
     assert pending == lib.with_suffix(".pending.csv")
     assert pending.exists()
+    assert lib.read_text(encoding="utf-8") == "existing library content\n"
     lines = pending.read_text(encoding="utf-8").strip().splitlines()
-    assert lines[0].startswith("config_hash,")
-    assert "aaaa1111" in lines[1]
+    assert lines[0] == ",".join(LIBRARY_FIELDNAMES)
+    assert "0.100000" in lines[1]
+    assert "0.020000" in lines[1]
+    loaded = load_library(pending, "aaaa1111")
+    assert loaded[("A", "analyte")].median_delta_rt == 0.1

@@ -344,6 +344,14 @@ def _validate_settings_ranges(
                 settings[column],
                 "must be > 0",
             )
+    if parsed.rolling_window_size < 1:
+        raise _config_error(
+            settings_path,
+            None,
+            "rolling_window_size",
+            settings["rolling_window_size"],
+            "must be >= 1",
+        )
 
 
 def _build_config(
