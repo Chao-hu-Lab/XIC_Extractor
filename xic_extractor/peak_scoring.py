@@ -10,6 +10,7 @@ _LABEL_SYMMETRY = "symmetry"
 _LABEL_LOCAL_SN = "local_sn"
 _LABEL_NL = "nl_support"
 _LABEL_RT_PRIOR = "rt_prior"
+_LABEL_RT_CENTRALITY = "rt_centrality"
 
 _SYMMETRY_SOFT_LOW, _SYMMETRY_SOFT_HIGH = 0.5, 2.0
 _SYMMETRY_HARD_LOW, _SYMMETRY_HARD_HIGH = 0.3, 3.0
@@ -93,3 +94,19 @@ def rt_prior_severity(
     if deviation >= _RT_PRIOR_NO_SIGMA_SOFT_MIN:
         return 1, _LABEL_RT_PRIOR
     return 0, _LABEL_RT_PRIOR
+
+
+def rt_centrality_severity(
+    observed: float, rt_min: float, rt_max: float
+) -> tuple[int, str]:
+    span = rt_max - rt_min
+    if span <= 0:
+        return 0, _LABEL_RT_CENTRALITY
+    distance_low = observed - rt_min
+    distance_high = rt_max - observed
+    min_edge = min(distance_low, distance_high) / span
+    if min_edge < 0.01:
+        return 2, _LABEL_RT_CENTRALITY
+    if min_edge < 0.10:
+        return 1, _LABEL_RT_CENTRALITY
+    return 0, _LABEL_RT_CENTRALITY

@@ -66,7 +66,11 @@ def test_local_sn_invalid_trace_is_major() -> None:
     assert label == "local_sn"
 
 
-from xic_extractor.peak_scoring import nl_support_severity, rt_prior_severity
+from xic_extractor.peak_scoring import (
+    nl_support_severity,
+    rt_centrality_severity,
+    rt_prior_severity,
+)
 
 
 def test_nl_present_and_match_is_pass() -> None:
@@ -110,4 +114,20 @@ def test_rt_prior_no_sigma_uses_1min_rule() -> None:
     sev, _ = rt_prior_severity(observed=10.3, prior=10.0, sigma=None)
     assert sev == 1
     sev, _ = rt_prior_severity(observed=11.5, prior=10.0, sigma=None)
+    assert sev == 2
+
+
+def test_rt_centrality_center_pass() -> None:
+    sev, label = rt_centrality_severity(observed=5.0, rt_min=0.0, rt_max=10.0)
+    assert sev == 0
+    assert label == "rt_centrality"
+
+
+def test_rt_centrality_within_10pct_soft() -> None:
+    sev, _ = rt_centrality_severity(observed=0.8, rt_min=0.0, rt_max=10.0)
+    assert sev == 1
+
+
+def test_rt_centrality_within_1pct_major() -> None:
+    sev, _ = rt_centrality_severity(observed=0.05, rt_min=0.0, rt_max=10.0)
     assert sev == 2
