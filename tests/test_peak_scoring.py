@@ -64,3 +64,22 @@ def test_local_sn_invalid_trace_is_major() -> None:
     sev, label = local_sn_severity(y, apex_index=200, dirty_matrix=False)
     assert sev == 2
     assert label == "local_sn"
+
+
+from xic_extractor.peak_scoring import nl_support_severity
+
+
+def test_nl_present_and_match_is_pass() -> None:
+    sev, label = nl_support_severity(ms2_present=True, nl_match=True)
+    assert sev == 0
+    assert label == "nl_support"
+
+
+def test_ms2_present_but_no_nl_match_is_major() -> None:
+    sev, _ = nl_support_severity(ms2_present=True, nl_match=False)
+    assert sev == 2
+
+
+def test_no_ms2_is_minor() -> None:
+    sev, _ = nl_support_severity(ms2_present=False, nl_match=False)
+    assert sev == 1

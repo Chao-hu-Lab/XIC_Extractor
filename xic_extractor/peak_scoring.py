@@ -8,6 +8,7 @@ from xic_extractor.baseline import asls_baseline
 
 _LABEL_SYMMETRY = "symmetry"
 _LABEL_LOCAL_SN = "local_sn"
+_LABEL_NL = "nl_support"
 
 _SYMMETRY_SOFT_LOW, _SYMMETRY_SOFT_HIGH = 0.5, 2.0
 _SYMMETRY_HARD_LOW, _SYMMETRY_HARD_HIGH = 0.3, 3.0
@@ -57,3 +58,11 @@ def local_sn_severity(
     if ratio < soft:
         return 1, _LABEL_LOCAL_SN
     return 0, _LABEL_LOCAL_SN
+
+
+def nl_support_severity(ms2_present: bool, nl_match: bool) -> tuple[int, str]:
+    if ms2_present and nl_match:
+        return 0, _LABEL_NL
+    if ms2_present and not nl_match:
+        return 2, _LABEL_NL
+    return 1, _LABEL_NL
