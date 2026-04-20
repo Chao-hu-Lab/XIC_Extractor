@@ -9,6 +9,7 @@ from xic_extractor.baseline import asls_baseline
 _LABEL_SYMMETRY = "symmetry"
 _LABEL_LOCAL_SN = "local_sn"
 _LABEL_NL = "nl_support"
+_LABEL_RT_PRIOR = "rt_prior"
 
 _SYMMETRY_SOFT_LOW, _SYMMETRY_SOFT_HIGH = 0.5, 2.0
 _SYMMETRY_HARD_LOW, _SYMMETRY_HARD_HIGH = 0.3, 3.0
@@ -16,6 +17,10 @@ _SN_SOFT_THRESHOLD = 3.0
 _SN_HARD_THRESHOLD = 2.0
 _SN_DIRTY_SOFT_THRESHOLD = 2.0
 _SN_DIRTY_HARD_THRESHOLD = 1.3
+_RT_PRIOR_SIGMA_SOFT = 2.0
+_RT_PRIOR_SIGMA_HARD = 5.0
+_RT_PRIOR_NO_SIGMA_SOFT_MIN = 0.2
+_RT_PRIOR_NO_SIGMA_HARD_MIN = 1.0
 
 
 def symmetry_severity(half_width_ratio: float) -> tuple[int, str]:
@@ -66,3 +71,25 @@ def nl_support_severity(ms2_present: bool, nl_match: bool) -> tuple[int, str]:
     if ms2_present and not nl_match:
         return 2, _LABEL_NL
     return 1, _LABEL_NL
+
+
+def rt_prior_severity(
+    observed: float,
+    prior: float | None,
+    sigma: float | None,
+) -> tuple[int, str]:
+    if prior is None:
+        return 0, _LABEL_RT_PRIOR
+    deviation = abs(observed - prior)
+    if sigma is not None and sigma > 0:
+        n_sigma = deviation / sigma
+        if n_sigma >= _RT_PRIOR_SIGMA_HARD:
+            return 2, _LABEL_RT_PRIOR
+        if n_sigma >= _RT_PRIOR_SIGMA_SOFT:
+            return 1, _LABEL_RT_PRIOR
+        return 0, _LABEL_RT_PRIOR
+    if deviation >= _RT_PRIOR_NO_SIGMA_HARD_MIN:
+        return 2, _LABEL_RT_PRIOR
+    if deviation >= _RT_PRIOR_NO_SIGMA_SOFT_MIN:
+        return 1, _LABEL_RT_PRIOR
+    return 0, _LABEL_RT_PRIOR

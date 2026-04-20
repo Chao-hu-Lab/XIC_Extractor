@@ -66,7 +66,7 @@ def test_local_sn_invalid_trace_is_major() -> None:
     assert label == "local_sn"
 
 
-from xic_extractor.peak_scoring import nl_support_severity
+from xic_extractor.peak_scoring import nl_support_severity, rt_prior_severity
 
 
 def test_nl_present_and_match_is_pass() -> None:
@@ -83,3 +83,31 @@ def test_ms2_present_but_no_nl_match_is_major() -> None:
 def test_no_ms2_is_minor() -> None:
     sev, _ = nl_support_severity(ms2_present=False, nl_match=False)
     assert sev == 1
+
+
+def test_rt_prior_no_prior_skips() -> None:
+    sev, label = rt_prior_severity(observed=10.0, prior=None, sigma=None)
+    assert sev == 0
+    assert label == "rt_prior"
+
+
+def test_rt_prior_within_2sigma_pass() -> None:
+    sev, _ = rt_prior_severity(observed=10.1, prior=10.0, sigma=0.1)
+    assert sev == 0
+
+
+def test_rt_prior_2_to_5_sigma_minor() -> None:
+    sev, _ = rt_prior_severity(observed=10.3, prior=10.0, sigma=0.1)
+    assert sev == 1
+
+
+def test_rt_prior_beyond_5_sigma_major() -> None:
+    sev, _ = rt_prior_severity(observed=11.0, prior=10.0, sigma=0.1)
+    assert sev == 2
+
+
+def test_rt_prior_no_sigma_uses_1min_rule() -> None:
+    sev, _ = rt_prior_severity(observed=10.3, prior=10.0, sigma=None)
+    assert sev == 1
+    sev, _ = rt_prior_severity(observed=11.5, prior=10.0, sigma=None)
+    assert sev == 2
