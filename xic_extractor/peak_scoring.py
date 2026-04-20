@@ -47,6 +47,22 @@ class ScoredCandidate:
     prior_rt: float | None
 
 
+@dataclass(frozen=True)
+class ScoringContext:
+    rt_array: np.ndarray
+    intensity_array: np.ndarray
+    apex_index: int
+    half_width_ratio: float
+    fwhm_ratio: float | None
+    ms2_present: bool
+    nl_match: bool
+    rt_prior: float | None
+    rt_prior_sigma: float | None
+    rt_min: float
+    rt_max: float
+    dirty_matrix: bool
+
+
 _CONFIDENCE_RANK = {
     Confidence.HIGH: 0,
     Confidence.MEDIUM: 1,
@@ -104,6 +120,33 @@ def select_candidate_with_confidence(scored: list[ScoredCandidate]) -> ScoredCan
         )
 
     return min(scored, key=key)
+
+
+def score_candidate(
+    candidate: Any,
+    ctx: ScoringContext,
+    prior_rt: float | None,
+    istd_confidence_note: str | None = None,
+) -> ScoredCandidate:
+    severities: list[tuple[int, str]] = [
+        symmetry_severity(ctx.half_width_ratio),
+        local_sn_severity(ctx.intensity_array, ctx.apex_index, ctx.dirty_matrix),
+        nl_support_severity(ctx.ms2_present, ctx.nl_match),
+        rt_prior_severity(candidate.smoothed_apex_rt, ctx.rt_prior, ctx.rt_prior_sigma),
+        rt_centrality_severity(candidate.smoothed_apex_rt, ctx.rt_min, ctx.rt_max),
+        noise_shape_severity(ctx.intensity_array),
+        peak_width_severity(ctx.fwhm_ratio),
+    ]
+    total = sum(severity for severity, _ in severities)
+    confidence = confidence_from_total(total)
+    reason = build_reason(severities, istd_confidence_note)
+    return ScoredCandidate(
+        candidate=candidate,
+        severities=tuple(severities),
+        confidence=confidence,
+        reason=reason,
+        prior_rt=prior_rt,
+    )
 
 
 def _is_finite(value: float) -> bool:

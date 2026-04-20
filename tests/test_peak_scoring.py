@@ -6,12 +6,15 @@ import pytest
 from xic_extractor.peak_scoring import (
     Confidence,
     ScoredCandidate,
+    ScoringContext,
     build_reason,
     confidence_from_total,
     local_sn_severity,
+    score_candidate,
     select_candidate_with_confidence,
     symmetry_severity,
 )
+from xic_extractor.signal_processing import PeakCandidate, PeakResult
 
 
 @pytest.mark.parametrize(
@@ -92,6 +95,51 @@ def test_selector_final_tiebreak_by_intensity() -> None:
     a = _sc(Confidence.HIGH, 10.1, 1000, prior=10.0)
     b = _sc(Confidence.HIGH, 10.1, 500, prior=10.0)
     assert select_candidate_with_confidence([a, b]) is a
+
+
+def _make_candidate(apex_rt: float, apex_intensity: float) -> PeakCandidate:
+    peak = PeakResult(
+        rt=apex_rt,
+        intensity=apex_intensity,
+        intensity_smoothed=apex_intensity,
+        area=100.0,
+        peak_start=apex_rt - 0.1,
+        peak_end=apex_rt + 0.1,
+    )
+    return PeakCandidate(
+        peak=peak,
+        smoothed_apex_rt=apex_rt,
+        smoothed_apex_intensity=apex_intensity,
+        smoothed_apex_index=100,
+        raw_apex_rt=apex_rt,
+        raw_apex_intensity=apex_intensity,
+        raw_apex_index=100,
+        prominence=apex_intensity * 0.5,
+    )
+
+
+def test_score_candidate_returns_seven_severities() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+    assert len(scored.severities) == 7
+    assert scored.confidence == Confidence.HIGH
+    assert scored.reason == "all checks passed"
 
 
 @pytest.mark.parametrize(
