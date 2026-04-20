@@ -93,8 +93,25 @@ def test_raw_apex_reporting_does_not_return_zero_intensity_when_area_is_positive
     assert result.peak is not None
     assert result.peak.area > 0.0
     assert result.peak.intensity > 900.0
-    assert result.peak.rt == pytest.approx(8.995, abs=0.01)
+    assert result.peak.rt == pytest.approx(9.0, abs=0.01)
     assert result.peak.intensity_smoothed > 900.0
+    assert result.candidates[0].raw_apex_rt == pytest.approx(8.995, abs=0.01)
+
+
+def test_raw_spike_inside_peak_window_does_not_move_reported_peak_rt() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = _gaussian(rt, center=9.0, sigma=0.08, height=1000.0)
+    spike_idx = int(np.argmin(np.abs(rt - 8.88)))
+    intensity[spike_idx] = 1400.0
+
+    result = find_peak_and_area(rt, intensity, _config(smooth_window=31))
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(9.0, abs=0.01)
+    assert result.peak.intensity == pytest.approx(1400.0)
+    assert result.candidates[0].smoothed_apex_rt == pytest.approx(9.0, abs=0.01)
+    assert result.candidates[0].raw_apex_rt == pytest.approx(8.88, abs=0.01)
 
 
 def test_strict_preferred_rt_chooses_anchor_peak_even_when_neighbor_is_higher() -> None:
@@ -220,10 +237,11 @@ def test_area_is_computed_from_raw_intensity_not_smoothed() -> None:
     raw_area = np.trapezoid(intensity[left:right], rt[left:right]) * 60.0
     smoothed_area = np.trapezoid(smoothed[left:right], rt[left:right]) * 60.0
     apex_idx = int(np.argmin(np.abs(rt - result.peak.rt)))
+    raw_apex_idx = result.candidates[0].raw_apex_index
 
     assert result.peak.area == pytest.approx(raw_area)
     assert result.peak.area != pytest.approx(smoothed_area, rel=1e-4)
-    assert result.peak.intensity == pytest.approx(intensity[apex_idx])
+    assert result.peak.intensity == pytest.approx(intensity[raw_apex_idx])
     assert result.peak.intensity_smoothed == pytest.approx(smoothed[apex_idx])
 
 

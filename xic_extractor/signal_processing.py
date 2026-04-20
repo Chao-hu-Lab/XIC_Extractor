@@ -204,9 +204,9 @@ def _build_candidate(
     area = _integrate_area_counts_seconds(intensity_values, rt_values, left, right)
 
     peak = PeakResult(
-        rt=float(rt_values[raw_apex_idx]),
+        rt=float(rt_values[smoothed_apex_idx]),
         intensity=float(intensity_values[raw_apex_idx]),
-        intensity_smoothed=float(smoothed[raw_apex_idx]),
+        intensity_smoothed=float(smoothed[smoothed_apex_idx]),
         area=area,
         peak_start=float(rt_values[left]),
         peak_end=float(rt_values[right - 1]),
@@ -216,7 +216,7 @@ def _build_candidate(
         smoothed_apex_rt=float(rt_values[smoothed_apex_idx]),
         smoothed_apex_intensity=float(smoothed[smoothed_apex_idx]),
         smoothed_apex_index=smoothed_apex_idx,
-        raw_apex_rt=peak.rt,
+        raw_apex_rt=float(rt_values[raw_apex_idx]),
         raw_apex_intensity=peak.intensity,
         raw_apex_index=raw_apex_idx,
         prominence=prominence,
