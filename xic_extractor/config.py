@@ -52,6 +52,12 @@ class ExtractionConfig:
     nl_rt_anchor_search_margin_min: float = 2.0
     nl_rt_anchor_half_window_min: float = 1.0
     nl_fallback_half_window_min: float = 2.0
+    injection_order_source: Path | None = None
+    rolling_window_size: int = 5
+    dirty_matrix_mode: bool = False
+    rt_prior_library_path: Path | None = None
+    emit_score_breakdown: bool = False
+    config_hash: str = ""
 
 
 @dataclass(frozen=True)
@@ -86,6 +92,11 @@ class _ParsedSettings:
     nl_rt_anchor_search_margin_min: float
     nl_rt_anchor_half_window_min: float
     nl_fallback_half_window_min: float
+    injection_order_source: Path | None
+    rolling_window_size: int
+    dirty_matrix_mode: bool
+    rt_prior_library_path: Path | None
+    emit_score_breakdown: bool
 
 
 def migrate_settings_dict(raw: dict[str, str]) -> tuple[dict[str, str], list[str]]:
@@ -129,7 +140,10 @@ def load_config(config_dir: Path) -> tuple[ExtractionConfig, list[Target]]:
     output_dir = config_dir.parent / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    config = _validate_settings(migrated, settings_path, output_dir)
+    config_hash = (
+        compute_config_hash(targets_path, settings_path) if targets_path.exists() else ""
+    )
+    config = _validate_settings(migrated, settings_path, output_dir, config_hash)
     targets = _read_targets(targets_path)
     return config, targets
 
@@ -148,11 +162,14 @@ def _read_settings(path: Path) -> dict[str, str]:
 
 
 def _validate_settings(
-    settings: dict[str, str], settings_path: Path, output_dir: Path
+    settings: dict[str, str],
+    settings_path: Path,
+    output_dir: Path,
+    config_hash: str,
 ) -> ExtractionConfig:
     parsed = _parse_settings_values(settings, settings_path)
     _validate_settings_ranges(settings, settings_path, parsed)
-    return _build_config(parsed, output_dir)
+    return _build_config(parsed, output_dir, config_hash)
 
 
 def _parse_settings_values(
@@ -226,6 +243,30 @@ def _parse_settings_values(
             None,
             "nl_fallback_half_window_min",
             _setting_value(settings, settings_path, "nl_fallback_half_window_min"),
+        ),
+        injection_order_source=_parse_optional_path(
+            settings.get("injection_order_source", "")
+        ),
+        rolling_window_size=_parse_int(
+            settings_path,
+            None,
+            "rolling_window_size",
+            _setting_value(settings, settings_path, "rolling_window_size"),
+        ),
+        dirty_matrix_mode=_parse_bool(
+            settings_path,
+            None,
+            "dirty_matrix_mode",
+            _setting_value(settings, settings_path, "dirty_matrix_mode"),
+        ),
+        rt_prior_library_path=_parse_optional_path(
+            settings.get("rt_prior_library_path", "")
+        ),
+        emit_score_breakdown=_parse_bool(
+            settings_path,
+            None,
+            "emit_score_breakdown",
+            _setting_value(settings, settings_path, "emit_score_breakdown"),
         ),
     )
 
@@ -305,7 +346,9 @@ def _validate_settings_ranges(
             )
 
 
-def _build_config(parsed: _ParsedSettings, output_dir: Path) -> ExtractionConfig:
+def _build_config(
+    parsed: _ParsedSettings, output_dir: Path, config_hash: str
+) -> ExtractionConfig:
     return ExtractionConfig(
         data_dir=parsed.data_dir,
         dll_dir=parsed.dll_dir,
@@ -321,6 +364,12 @@ def _build_config(parsed: _ParsedSettings, output_dir: Path) -> ExtractionConfig
         nl_rt_anchor_search_margin_min=parsed.nl_rt_anchor_search_margin_min,
         nl_rt_anchor_half_window_min=parsed.nl_rt_anchor_half_window_min,
         nl_fallback_half_window_min=parsed.nl_fallback_half_window_min,
+        injection_order_source=parsed.injection_order_source,
+        rolling_window_size=parsed.rolling_window_size,
+        dirty_matrix_mode=parsed.dirty_matrix_mode,
+        rt_prior_library_path=parsed.rt_prior_library_path,
+        emit_score_breakdown=parsed.emit_score_breakdown,
+        config_hash=config_hash,
     )
 
 
@@ -510,6 +559,13 @@ def _parse_bool(path: Path, row_number: int | None, column: str, value: str) -> 
     if normalized == "false":
         return False
     raise _config_error(path, row_number, column, value, "must be true or false")
+
+
+def _parse_optional_path(value: str) -> Path | None:
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return Path(normalized).expanduser()
 
 
 def _require_range(
