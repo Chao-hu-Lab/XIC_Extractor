@@ -46,6 +46,27 @@ def confidence_from_total(total_severity: int) -> Confidence:
     return Confidence.VERY_LOW
 
 
+def build_reason(
+    signals: list[tuple[int, str]],
+    istd_confidence_note: str | None,
+) -> str:
+    concerns = [(severity, label) for severity, label in signals if severity >= 1]
+    if not concerns and istd_confidence_note is None:
+        return "all checks passed"
+
+    parts: list[str] = []
+    if concerns:
+        concerns.sort(key=lambda pair: -pair[0])
+        phrase = "; ".join(
+            f"{label} ({'major' if severity == 2 else 'minor'})"
+            for severity, label in concerns
+        )
+        parts.append(f"concerns: {phrase}")
+    if istd_confidence_note is not None:
+        parts.append(istd_confidence_note)
+    return "; ".join(parts)
+
+
 def _is_finite(value: float) -> bool:
     return math.isfinite(float(value))
 

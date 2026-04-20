@@ -3,6 +3,7 @@ import pytest
 
 from xic_extractor.peak_scoring import (
     Confidence,
+    build_reason,
     confidence_from_total,
     local_sn_severity,
     symmetry_severity,
@@ -23,6 +24,34 @@ from xic_extractor.peak_scoring import (
 )
 def test_confidence_from_total(total: int, expected: Confidence) -> None:
     assert confidence_from_total(total) == expected
+
+
+def test_reason_all_pass() -> None:
+    assert (
+        build_reason(
+            [(0, "symmetry"), (0, "local_sn")],
+            istd_confidence_note=None,
+        )
+        == "all checks passed"
+    )
+
+
+def test_reason_lists_concerns_in_severity_order() -> None:
+    reason = build_reason(
+        [(0, "symmetry"), (1, "local_sn"), (2, "nl_support")],
+        istd_confidence_note=None,
+    )
+    assert reason == "concerns: nl_support (major); local_sn (minor)"
+
+
+def test_reason_appends_istd_note() -> None:
+    reason = build_reason(
+        [(0, "symmetry")], istd_confidence_note="ISTD anchor was LOW"
+    )
+    assert "ISTD anchor was LOW" in reason
+    assert reason.startswith("ISTD anchor was LOW") or reason.endswith(
+        "ISTD anchor was LOW"
+    )
 
 
 @pytest.mark.parametrize(
