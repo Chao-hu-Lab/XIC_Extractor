@@ -10,6 +10,10 @@ PeakStatus = Literal["OK", "NO_SIGNAL", "WINDOW_TOO_SHORT", "PEAK_NOT_FOUND"]
 
 # preferred_rt 選峰時，若最靠近 anchor 的峰強度 < 最高峰的這個比例，改選最高峰
 _PREFERRED_RT_MIN_INTENSITY_RATIO: float = 0.2
+_PREFERRED_RT_RECOVERY_PROMINENCE_FRACTION: float = 0.2
+_PREFERRED_RT_RECOVERY_MIN_PROMINENCE_RATIO: float = 0.01
+_PREFERRED_RT_RECOVERY_MAX_DELTA_MIN: float = 0.35
+_PREFERRED_RT_RECOVERY_MIN_INTENSITY_RATIO: float = 0.03
 
 
 @dataclass(frozen=True)
@@ -62,36 +66,43 @@ def find_peak_and_area(
     strict_preferred_rt: bool = False,
 ) -> PeakDetectionResult:
     candidates_result = find_peak_candidates(rt, intensity, config)
-    if candidates_result.status != "OK":
-        return PeakDetectionResult(
-            status=candidates_result.status,
-            peak=None,
-            n_points=candidates_result.n_points,
-            max_smoothed=candidates_result.max_smoothed,
-            n_prominent_peaks=candidates_result.n_prominent_peaks,
-            candidates=candidates_result.candidates,
+    if candidates_result.status == "OK":
+        best_candidate = _select_candidate(
+            candidates_result.candidates,
+            preferred_rt=preferred_rt,
+            strict_preferred_rt=strict_preferred_rt,
         )
+        recovery_candidate, recovery_result = _preferred_rt_recovery(
+            rt,
+            intensity,
+            config,
+            preferred_rt=preferred_rt,
+            strict_preferred_rt=strict_preferred_rt,
+            current_candidate=best_candidate,
+        )
+        if recovery_candidate is not None and recovery_result is not None:
+            return _detection_success(recovery_result, recovery_candidate)
+        return _detection_success(candidates_result, best_candidate)
 
-    candidates = candidates_result.candidates
-    best_candidate = _select_candidate(
-        candidates,
+    recovery_candidate, recovery_result = _preferred_rt_recovery(
+        rt,
+        intensity,
+        config,
         preferred_rt=preferred_rt,
         strict_preferred_rt=strict_preferred_rt,
+        current_candidate=None,
     )
-    return PeakDetectionResult(
-        status="OK",
-        peak=best_candidate.peak,
-        n_points=candidates_result.n_points,
-        max_smoothed=candidates_result.max_smoothed,
-        n_prominent_peaks=candidates_result.n_prominent_peaks,
-        candidates=candidates,
-    )
+    if recovery_candidate is not None and recovery_result is not None:
+        return _detection_success(recovery_result, recovery_candidate)
+    return _detection_failure(candidates_result)
 
 
 def find_peak_candidates(
     rt: np.ndarray,
     intensity: np.ndarray,
     config: ExtractionConfig,
+    *,
+    peak_min_prominence_ratio: float | None = None,
 ) -> PeakCandidatesResult:
     rt_values, intensity_values = _as_matching_arrays(rt, intensity)
     n_points = len(intensity_values)
@@ -108,7 +119,14 @@ def find_peak_candidates(
         return _candidate_failure("NO_SIGNAL", n_points, max_smoothed)
 
     prominence = _prominence_threshold(
-        intensity_values, smoothed, max_smoothed, config.peak_min_prominence_ratio
+        intensity_values,
+        smoothed,
+        max_smoothed,
+        (
+            config.peak_min_prominence_ratio
+            if peak_min_prominence_ratio is None
+            else peak_min_prominence_ratio
+        ),
     )
     peaks, properties = find_peaks(smoothed, prominence=prominence)
     if len(peaks) == 0:
@@ -134,6 +152,98 @@ def find_peak_candidates(
         max_smoothed=max_smoothed,
         n_prominent_peaks=len(peaks),
     )
+
+
+def _detection_success(
+    candidates_result: PeakCandidatesResult, candidate: PeakCandidate
+) -> PeakDetectionResult:
+    return PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        n_points=candidates_result.n_points,
+        max_smoothed=candidates_result.max_smoothed,
+        n_prominent_peaks=candidates_result.n_prominent_peaks,
+        candidates=candidates_result.candidates,
+    )
+
+
+def _detection_failure(candidates_result: PeakCandidatesResult) -> PeakDetectionResult:
+    return PeakDetectionResult(
+        status=candidates_result.status,
+        peak=None,
+        n_points=candidates_result.n_points,
+        max_smoothed=candidates_result.max_smoothed,
+        n_prominent_peaks=candidates_result.n_prominent_peaks,
+        candidates=candidates_result.candidates,
+    )
+
+
+def _preferred_rt_recovery(
+    rt: np.ndarray,
+    intensity: np.ndarray,
+    config: ExtractionConfig,
+    *,
+    preferred_rt: float | None,
+    strict_preferred_rt: bool,
+    current_candidate: PeakCandidate | None,
+) -> tuple[PeakCandidate | None, PeakCandidatesResult | None]:
+    if preferred_rt is None or strict_preferred_rt:
+        return None, None
+    if (
+        current_candidate is not None
+        and abs(current_candidate.smoothed_apex_rt - preferred_rt)
+        <= _PREFERRED_RT_RECOVERY_MAX_DELTA_MIN
+    ):
+        return None, None
+
+    relaxed_ratio = max(
+        _PREFERRED_RT_RECOVERY_MIN_PROMINENCE_RATIO,
+        config.peak_min_prominence_ratio
+        * _PREFERRED_RT_RECOVERY_PROMINENCE_FRACTION,
+    )
+    if relaxed_ratio >= config.peak_min_prominence_ratio:
+        return None, None
+
+    relaxed_result = find_peak_candidates(
+        rt,
+        intensity,
+        config,
+        peak_min_prominence_ratio=relaxed_ratio,
+    )
+    if relaxed_result.status != "OK":
+        return None, None
+
+    candidate = _select_preferred_recovery_candidate(
+        relaxed_result.candidates,
+        preferred_rt=preferred_rt,
+    )
+    if candidate is None:
+        return None, None
+    return candidate, relaxed_result
+
+
+def _select_preferred_recovery_candidate(
+    candidates: tuple[PeakCandidate, ...],
+    *,
+    preferred_rt: float,
+) -> PeakCandidate | None:
+    nearest_candidate = min(
+        candidates, key=lambda candidate: abs(candidate.smoothed_apex_rt - preferred_rt)
+    )
+    delta = abs(nearest_candidate.smoothed_apex_rt - preferred_rt)
+    if delta > _PREFERRED_RT_RECOVERY_MAX_DELTA_MIN:
+        return None
+
+    strongest_candidate = max(
+        candidates, key=lambda candidate: candidate.smoothed_apex_intensity
+    )
+    if (
+        nearest_candidate.smoothed_apex_intensity
+        < strongest_candidate.smoothed_apex_intensity
+        * _PREFERRED_RT_RECOVERY_MIN_INTENSITY_RATIO
+    ):
+        return None
+    return nearest_candidate
 
 
 def _as_matching_arrays(

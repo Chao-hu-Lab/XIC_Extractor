@@ -133,6 +133,57 @@ def test_strict_preferred_rt_chooses_anchor_peak_even_when_neighbor_is_higher() 
     assert result.n_prominent_peaks == 2
 
 
+def test_preferred_rt_recovers_weaker_anchor_peak_when_strong_peak_is_far() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = _gaussian(rt, center=8.48, sigma=0.04, height=1000.0)
+    intensity += _gaussian(rt, center=9.03, sigma=0.05, height=80.0)
+
+    result = find_peak_and_area(
+        rt,
+        intensity,
+        _config(),
+        preferred_rt=9.03,
+    )
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(9.03, abs=0.02)
+
+
+def test_preferred_rt_recovers_peak_below_standard_prominence_threshold() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = np.full_like(rt, 100000.0)
+    intensity += _gaussian(rt, center=9.05, sigma=0.05, height=5000.0)
+
+    result = find_peak_and_area(
+        rt,
+        intensity,
+        _config(),
+        preferred_rt=9.05,
+    )
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(9.05, abs=0.02)
+
+
+def test_strict_preferred_rt_does_not_relax_prominence_threshold() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = np.full_like(rt, 100000.0)
+    intensity += _gaussian(rt, center=9.05, sigma=0.05, height=5000.0)
+
+    result = find_peak_and_area(
+        rt,
+        intensity,
+        _config(),
+        preferred_rt=9.05,
+        strict_preferred_rt=True,
+    )
+
+    assert result.status == "PEAK_NOT_FOUND"
+    assert result.peak is None
+
+
 def test_positive_flat_noise_returns_peak_not_found() -> None:
     rt = np.linspace(0.0, 1.0, 60)
     intensity = np.full_like(rt, 12.0)
