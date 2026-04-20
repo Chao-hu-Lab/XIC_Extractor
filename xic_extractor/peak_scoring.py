@@ -12,6 +12,7 @@ _LABEL_NL = "nl_support"
 _LABEL_RT_PRIOR = "rt_prior"
 _LABEL_RT_CENTRALITY = "rt_centrality"
 _LABEL_NOISE_SHAPE = "noise_shape"
+_LABEL_PEAK_WIDTH = "peak_width"
 
 _SYMMETRY_SOFT_LOW, _SYMMETRY_SOFT_HIGH = 0.5, 2.0
 _SYMMETRY_HARD_LOW, _SYMMETRY_HARD_HIGH = 0.3, 3.0
@@ -128,3 +129,13 @@ def noise_shape_severity(intensity: np.ndarray) -> tuple[int, str]:
     if jagged > 0.3:
         return 1, _LABEL_NOISE_SHAPE
     return 0, _LABEL_NOISE_SHAPE
+
+
+def peak_width_severity(fwhm_ratio: float | None) -> tuple[int, str]:
+    if fwhm_ratio is None:
+        return 0, _LABEL_PEAK_WIDTH
+    if fwhm_ratio < 0.3 or fwhm_ratio > 3.0:
+        return 2, _LABEL_PEAK_WIDTH
+    if fwhm_ratio < 0.5 or fwhm_ratio > 2.0:
+        return 1, _LABEL_PEAK_WIDTH
+    return 0, _LABEL_PEAK_WIDTH

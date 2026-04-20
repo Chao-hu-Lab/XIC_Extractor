@@ -69,6 +69,7 @@ def test_local_sn_invalid_trace_is_major() -> None:
 from xic_extractor.peak_scoring import (
     noise_shape_severity,
     nl_support_severity,
+    peak_width_severity,
     rt_centrality_severity,
     rt_prior_severity,
 )
@@ -153,3 +154,22 @@ def test_noise_shape_alternating_major() -> None:
     y = np.tile([0.0, 10.0], 101)[:201]
     sev, _ = noise_shape_severity(y)
     assert sev == 2
+
+
+@pytest.mark.parametrize(
+    ("ratio", "expected"),
+    [
+        (1.0, 0),
+        (0.7, 0),
+        (1.4, 0),
+        (0.4, 1),
+        (2.5, 1),
+        (0.2, 2),
+        (4.0, 2),
+        (None, 0),
+    ],
+)
+def test_peak_width_severity(ratio: float | None, expected: int) -> None:
+    sev, label = peak_width_severity(ratio)
+    assert sev == expected
+    assert label == "peak_width"
