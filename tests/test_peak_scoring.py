@@ -1,7 +1,28 @@
 import numpy as np
 import pytest
 
-from xic_extractor.peak_scoring import local_sn_severity, symmetry_severity
+from xic_extractor.peak_scoring import (
+    Confidence,
+    confidence_from_total,
+    local_sn_severity,
+    symmetry_severity,
+)
+
+
+@pytest.mark.parametrize(
+    ("total", "expected"),
+    [
+        (0, Confidence.HIGH),
+        (1, Confidence.MEDIUM),
+        (2, Confidence.MEDIUM),
+        (3, Confidence.LOW),
+        (4, Confidence.LOW),
+        (5, Confidence.VERY_LOW),
+        (100, Confidence.VERY_LOW),
+    ],
+)
+def test_confidence_from_total(total: int, expected: Confidence) -> None:
+    assert confidence_from_total(total) == expected
 
 
 @pytest.mark.parametrize(

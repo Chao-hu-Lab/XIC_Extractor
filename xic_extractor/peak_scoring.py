@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from enum import Enum
 
 import numpy as np
 
@@ -26,6 +27,23 @@ _RT_PRIOR_SIGMA_SOFT = 2.0
 _RT_PRIOR_SIGMA_HARD = 5.0
 _RT_PRIOR_NO_SIGMA_SOFT_MIN = 0.2
 _RT_PRIOR_NO_SIGMA_HARD_MIN = 1.0
+
+
+class Confidence(Enum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+    VERY_LOW = "VERY_LOW"
+
+
+def confidence_from_total(total_severity: int) -> Confidence:
+    if total_severity == 0:
+        return Confidence.HIGH
+    if total_severity <= 2:
+        return Confidence.MEDIUM
+    if total_severity <= 4:
+        return Confidence.LOW
+    return Confidence.VERY_LOW
 
 
 def _is_finite(value: float) -> bool:
