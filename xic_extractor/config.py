@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import logging
 import math
 from dataclasses import dataclass
@@ -24,6 +25,15 @@ _REQUIRED_SETTING_FIELDS = ("key", "value")
 _MIGRATION_DEFAULT_KEYS = tuple(
     key for key in CANONICAL_SETTINGS_DEFAULTS if key not in {"data_dir", "dll_dir"}
 )
+
+
+def compute_config_hash(targets_csv: Path, settings_csv: Path) -> str:
+    """SHA-256[:8] hex of targets.csv followed by settings.csv byte content."""
+    digest = hashlib.sha256()
+    digest.update(targets_csv.read_bytes())
+    digest.update(b"\x00")
+    digest.update(settings_csv.read_bytes())
+    return digest.hexdigest()[:8]
 
 
 @dataclass(frozen=True)
