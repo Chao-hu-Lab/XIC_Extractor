@@ -67,6 +67,7 @@ def test_local_sn_invalid_trace_is_major() -> None:
 
 
 from xic_extractor.peak_scoring import (
+    noise_shape_severity,
     nl_support_severity,
     rt_centrality_severity,
     rt_prior_severity,
@@ -130,4 +131,25 @@ def test_rt_centrality_within_10pct_soft() -> None:
 
 def test_rt_centrality_within_1pct_major() -> None:
     sev, _ = rt_centrality_severity(observed=0.05, rt_min=0.0, rt_max=10.0)
+    assert sev == 2
+
+
+def test_noise_shape_smooth_pass() -> None:
+    x = np.linspace(-3, 3, 201)
+    y = np.exp(-x * x)
+    sev, label = noise_shape_severity(y)
+    assert sev == 0
+    assert label == "noise_shape"
+
+
+def test_noise_shape_ragged_minor() -> None:
+    rng = np.random.default_rng(1)
+    y = rng.normal(0, 1, 201)
+    sev, _ = noise_shape_severity(y)
+    assert sev == 1
+
+
+def test_noise_shape_alternating_major() -> None:
+    y = np.tile([0.0, 10.0], 101)[:201]
+    sev, _ = noise_shape_severity(y)
     assert sev == 2

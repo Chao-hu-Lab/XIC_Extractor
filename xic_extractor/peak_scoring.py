@@ -11,6 +11,7 @@ _LABEL_LOCAL_SN = "local_sn"
 _LABEL_NL = "nl_support"
 _LABEL_RT_PRIOR = "rt_prior"
 _LABEL_RT_CENTRALITY = "rt_centrality"
+_LABEL_NOISE_SHAPE = "noise_shape"
 
 _SYMMETRY_SOFT_LOW, _SYMMETRY_SOFT_HIGH = 0.5, 2.0
 _SYMMETRY_HARD_LOW, _SYMMETRY_HARD_HIGH = 0.3, 3.0
@@ -110,3 +111,20 @@ def rt_centrality_severity(
     if min_edge < 0.10:
         return 1, _LABEL_RT_CENTRALITY
     return 0, _LABEL_RT_CENTRALITY
+
+
+def noise_shape_severity(intensity: np.ndarray) -> tuple[int, str]:
+    """Jaggedness: sum of abs second differences normalised by peak span."""
+    values = np.asarray(intensity, dtype=float)
+    if len(values) < 3:
+        return 0, _LABEL_NOISE_SHAPE
+    span = float(values.max() - values.min())
+    if span <= 0:
+        return 0, _LABEL_NOISE_SHAPE
+    second_diff = np.abs(np.diff(values, n=2))
+    jagged = float(second_diff.sum() / (span * len(values)))
+    if jagged > 0.5:
+        return 2, _LABEL_NOISE_SHAPE
+    if jagged > 0.3:
+        return 1, _LABEL_NOISE_SHAPE
+    return 0, _LABEL_NOISE_SHAPE
