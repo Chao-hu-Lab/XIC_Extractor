@@ -146,6 +146,13 @@ def test_pyproject_excludes_python_314_for_pythonnet() -> None:
     assert pyproject["project"]["requires-python"] == ">=3.10,<3.14"
 
 
+def test_pyproject_dev_group_includes_ruff_for_ci_lint() -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    dev_group = pyproject["dependency-groups"]["dev"]
+    assert any(str(dep).startswith("ruff") for dep in dev_group)
+
+
 def _module():
     import scripts.run_extraction as module
 
