@@ -14,6 +14,15 @@ def _config(
     smooth_polyorder: int = 3,
     peak_rel_height: float = 0.95,
     peak_min_prominence_ratio: float = 0.10,
+    resolver_mode: str = "legacy_savgol",
+    resolver_chrom_threshold: float = 0.05,
+    resolver_min_search_range_min: float = 0.04,
+    resolver_min_relative_height: float = 0.05,
+    resolver_min_absolute_height: float = 25.0,
+    resolver_min_ratio_top_edge: float = 1.3,
+    resolver_peak_duration_min: float = 0.03,
+    resolver_peak_duration_max: float = 1.00,
+    resolver_min_scans: int = 5,
 ) -> ExtractionConfig:
     return ExtractionConfig(
         data_dir=Path("raw"),
@@ -27,6 +36,15 @@ def _config(
         ms2_precursor_tol_da=0.5,
         nl_min_intensity_ratio=0.01,
         count_no_ms2_as_detected=False,
+        resolver_mode=resolver_mode,
+        resolver_chrom_threshold=resolver_chrom_threshold,
+        resolver_min_search_range_min=resolver_min_search_range_min,
+        resolver_min_relative_height=resolver_min_relative_height,
+        resolver_min_absolute_height=resolver_min_absolute_height,
+        resolver_min_ratio_top_edge=resolver_min_ratio_top_edge,
+        resolver_peak_duration_min=resolver_peak_duration_min,
+        resolver_peak_duration_max=resolver_peak_duration_max,
+        resolver_min_scans=resolver_min_scans,
     )
 
 
@@ -320,3 +338,122 @@ def test_area_is_reported_in_counts_seconds_not_counts_minutes() -> None:
     # The output must be 60× the raw-minutes integral — anything else means we
     # accidentally reverted to counts·minutes and area will look ~60× too small.
     assert result.peak.area == pytest.approx(area_counts_minutes * 60.0, rel=1e-6)
+
+
+def test_legacy_savgol_resolver_mode_preserves_existing_candidate_behavior() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = _gaussian(rt, center=8.7, sigma=0.05, height=500.0)
+    intensity += _gaussian(rt, center=9.4, sigma=0.06, height=1200.0)
+
+    result = find_peak_candidates(
+        rt,
+        intensity,
+        _config(resolver_mode="legacy_savgol"),
+    )
+
+    assert result.status == "OK"
+    assert len(result.candidates) == 2
+    assert [candidate.peak.rt for candidate in result.candidates] == pytest.approx(
+        [8.7, 9.4],
+        abs=0.01,
+    )
+
+
+def test_local_minimum_resolver_splits_shoulder_peaks_with_visible_valley() -> None:
+    rt = np.linspace(8.7, 9.3, 601)
+    intensity = _gaussian(rt, center=8.93, sigma=0.035, height=950.0)
+    intensity += _gaussian(rt, center=9.08, sigma=0.03, height=520.0)
+    intensity += 20.0
+
+    result = find_peak_candidates(
+        rt,
+        intensity,
+        _config(
+            resolver_mode="local_minimum",
+            resolver_chrom_threshold=0.02,
+            resolver_min_search_range_min=0.03,
+            resolver_min_relative_height=0.08,
+            resolver_min_absolute_height=80.0,
+            resolver_min_ratio_top_edge=1.2,
+            resolver_peak_duration_min=0.02,
+            resolver_peak_duration_max=0.35,
+            resolver_min_scans=7,
+        ),
+    )
+
+    assert result.status == "OK"
+    assert len(result.candidates) == 2
+    assert [candidate.peak.rt for candidate in result.candidates] == pytest.approx(
+        [8.93, 9.08],
+        abs=0.02,
+    )
+
+
+def test_local_minimum_resolver_keeps_single_broad_peak_without_valid_valley() -> None:
+    rt = np.linspace(8.7, 9.3, 601)
+    intensity = _gaussian(rt, center=9.0, sigma=0.08, height=900.0)
+    intensity += _gaussian(rt, center=9.05, sigma=0.07, height=280.0)
+    intensity += 25.0
+
+    result = find_peak_candidates(
+        rt,
+        intensity,
+        _config(
+            resolver_mode="local_minimum",
+            resolver_chrom_threshold=0.02,
+            resolver_min_search_range_min=0.03,
+            resolver_min_relative_height=0.08,
+            resolver_min_absolute_height=80.0,
+            resolver_min_ratio_top_edge=1.6,
+            resolver_peak_duration_min=0.02,
+            resolver_peak_duration_max=0.60,
+            resolver_min_scans=7,
+        ),
+    )
+
+    assert result.status == "OK"
+    assert len(result.candidates) == 1
+
+
+def test_local_minimum_resolver_uses_valley_minimum_as_region_boundary() -> None:
+    rt = np.linspace(8.8, 9.2, 401)
+    intensity = _gaussian(rt, center=8.92, sigma=0.03, height=850.0)
+    intensity += _gaussian(rt, center=9.08, sigma=0.03, height=620.0)
+    intensity += 15.0
+
+    valley_mask = (rt > 8.97) & (rt < 9.03)
+    valley_index = int(np.argmin(intensity[valley_mask]))
+    valley_rt = float(rt[valley_mask][valley_index])
+
+    local_result = find_peak_candidates(
+        rt,
+        intensity,
+        _config(
+            resolver_mode="local_minimum",
+            resolver_chrom_threshold=0.02,
+            resolver_min_search_range_min=0.03,
+            resolver_min_relative_height=0.08,
+            resolver_min_absolute_height=80.0,
+            resolver_min_ratio_top_edge=1.2,
+            resolver_peak_duration_min=0.02,
+            resolver_peak_duration_max=0.25,
+            resolver_min_scans=7,
+        ),
+    )
+    legacy_result = find_peak_candidates(
+        rt,
+        intensity,
+        _config(resolver_mode="legacy_savgol"),
+    )
+
+    assert local_result.status == "OK"
+    assert len(local_result.candidates) == 2
+    assert local_result.candidates[0].peak.peak_end == pytest.approx(
+        valley_rt,
+        abs=0.01,
+    )
+    assert local_result.candidates[1].peak.peak_start == pytest.approx(
+        valley_rt,
+        abs=0.01,
+    )
+    assert legacy_result.status == "OK"

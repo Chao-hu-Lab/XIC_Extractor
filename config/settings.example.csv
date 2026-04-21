@@ -5,6 +5,15 @@ smooth_window,15,Savitzky-Golay 平滑視窗長度（必須為奇數，建議 9-
 smooth_polyorder,3,Savitzky-Golay 多項式階數（通常 2-4）
 peak_rel_height,0.95,Peak 邊界的相對高度（0.95 = 積分到 apex 的 5%，範圍 0.5-0.99）
 peak_min_prominence_ratio,0.1,Peak prominence 至少為 apex 的比例（越低越寬容，0.05-0.20）
+resolver_mode,legacy_savgol,峰切割演算法（legacy_savgol 或 local_minimum）
+resolver_chrom_threshold,0.05,Local minimum resolver 低強度剪枝百分位（0-1）
+resolver_min_search_range_min,0.04,Local minimum 搜尋 valley 的 RT 視窗（分鐘）
+resolver_min_relative_height,0.05,Local minimum 最低相對 apex 高度（相對全 trace 最大值）
+resolver_min_absolute_height,25.0,Local minimum 最低絕對 apex 強度
+resolver_min_ratio_top_edge,1.3,Local minimum apex 與兩側 edge 的最小比值（需 > 1）
+resolver_peak_duration_min,0.03,Local minimum 峰最短持續時間（分鐘）
+resolver_peak_duration_max,1.0,Local minimum 峰最長持續時間（分鐘）
+resolver_min_scans,5,Local minimum 區段最少 scans 數
 ms2_precursor_tol_da,1.6,MS2 precursor m/z 匹配視窗（Da，對應 DDA quadrupole 隔離寬度）
 nl_min_intensity_ratio,0.01,NL product 強度至少為該 scan base peak 的比例（1% 排除 noise）
 count_no_ms2_as_detected,FALSE,是否將無 MS2 觸發的樣品算為偵測到（DDA 隨機性假陰性補救用）

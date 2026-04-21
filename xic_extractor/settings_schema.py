@@ -5,6 +5,15 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "smooth_polyorder": "3",
     "peak_rel_height": "0.95",
     "peak_min_prominence_ratio": "0.10",
+    "resolver_mode": "legacy_savgol",
+    "resolver_chrom_threshold": "0.05",
+    "resolver_min_search_range_min": "0.04",
+    "resolver_min_relative_height": "0.05",
+    "resolver_min_absolute_height": "25.0",
+    "resolver_min_ratio_top_edge": "1.3",
+    "resolver_peak_duration_min": "0.03",
+    "resolver_peak_duration_max": "1.00",
+    "resolver_min_scans": "5",
     "ms2_precursor_tol_da": "1.6",
     "nl_min_intensity_ratio": "0.01",
     "count_no_ms2_as_detected": "false",
@@ -29,6 +38,19 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "peak_min_prominence_ratio": (
         "Peak prominence 至少為 apex 的比例（越低越寬容，0.05-0.20）"
     ),
+    "resolver_mode": "峰切割演算法（legacy_savgol 或 local_minimum）",
+    "resolver_chrom_threshold": "Local minimum resolver 低強度剪枝百分位（0-1）",
+    "resolver_min_search_range_min": "Local minimum 搜尋 valley 的 RT 視窗（分鐘）",
+    "resolver_min_relative_height": (
+        "Local minimum 最低相對 apex 高度（相對全 trace 最大值）"
+    ),
+    "resolver_min_absolute_height": "Local minimum 最低絕對 apex 強度",
+    "resolver_min_ratio_top_edge": (
+        "Local minimum apex 與兩側 edge 的最小比值（需 > 1）"
+    ),
+    "resolver_peak_duration_min": "Local minimum 峰最短持續時間（分鐘）",
+    "resolver_peak_duration_max": "Local minimum 峰最長持續時間（分鐘）",
+    "resolver_min_scans": "Local minimum 區段最少 scans 數",
     "ms2_precursor_tol_da": (
         "MS2 precursor m/z 匹配視窗（Da，建議設為 quadrupole 隔離視窗 + 0.4 Da 緩衝，"
         "Fusion Lumos CID 典型隔離視窗 1.2 Da → 預設 1.6 Da）"

@@ -106,6 +106,15 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.smooth_window == 15
     assert config.smooth_polyorder == 3
     assert config.count_no_ms2_as_detected is False
+    assert config.resolver_mode == "legacy_savgol"
+    assert config.resolver_chrom_threshold == pytest.approx(0.05)
+    assert config.resolver_min_search_range_min == pytest.approx(0.04)
+    assert config.resolver_min_relative_height == pytest.approx(0.05)
+    assert config.resolver_min_absolute_height == pytest.approx(25.0)
+    assert config.resolver_min_ratio_top_edge == pytest.approx(1.3)
+    assert config.resolver_peak_duration_min == pytest.approx(0.03)
+    assert config.resolver_peak_duration_max == pytest.approx(1.00)
+    assert config.resolver_min_scans == 5
     assert targets[0].label == "Analyte"
     assert targets[0].neutral_loss_da == pytest.approx(116.0474)
 
@@ -200,6 +209,37 @@ def test_migrate_settings_dict_drops_smooth_sigma_with_warning() -> None:
     assert any("smooth_sigma" in warning for warning in warnings)
 
 
+def test_load_config_accepts_local_minimum_resolver_settings(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(
+        config_dir,
+        {
+            "resolver_mode": "local_minimum",
+            "resolver_chrom_threshold": "0.08",
+            "resolver_min_search_range_min": "0.06",
+            "resolver_min_relative_height": "0.12",
+            "resolver_min_absolute_height": "90",
+            "resolver_min_ratio_top_edge": "1.8",
+            "resolver_peak_duration_min": "0.04",
+            "resolver_peak_duration_max": "0.80",
+            "resolver_min_scans": "9",
+        },
+    )
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.resolver_mode == "local_minimum"
+    assert config.resolver_chrom_threshold == pytest.approx(0.08)
+    assert config.resolver_min_search_range_min == pytest.approx(0.06)
+    assert config.resolver_min_relative_height == pytest.approx(0.12)
+    assert config.resolver_min_absolute_height == pytest.approx(90.0)
+    assert config.resolver_min_ratio_top_edge == pytest.approx(1.8)
+    assert config.resolver_peak_duration_min == pytest.approx(0.04)
+    assert config.resolver_peak_duration_max == pytest.approx(0.80)
+    assert config.resolver_min_scans == 9
+
+
 @pytest.mark.parametrize(
     ("column", "value"),
     [
@@ -220,6 +260,16 @@ def test_migrate_settings_dict_drops_smooth_sigma_with_warning() -> None:
         ("nl_fallback_half_window_min", "-0.1"),
         ("rolling_window_size", "0"),
         ("rolling_window_size", "-1"),
+        ("resolver_chrom_threshold", "-0.01"),
+        ("resolver_chrom_threshold", "1.01"),
+        ("resolver_min_search_range_min", "0"),
+        ("resolver_min_relative_height", "0"),
+        ("resolver_min_relative_height", "1.1"),
+        ("resolver_min_absolute_height", "-1"),
+        ("resolver_min_ratio_top_edge", "1.0"),
+        ("resolver_peak_duration_min", "0"),
+        ("resolver_peak_duration_max", "0"),
+        ("resolver_min_scans", "0"),
     ],
 )
 def test_load_config_rejects_invalid_settings(
@@ -233,6 +283,34 @@ def test_load_config_rejects_invalid_settings(
         load_config(config_dir)
 
     _assert_error(exc_info, "settings.csv", column, value)
+
+
+def test_load_config_rejects_unknown_resolver_mode(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"resolver_mode": "wavelet"})
+    _write_targets(config_dir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "settings.csv", "resolver_mode", "wavelet")
+
+
+def test_load_config_rejects_peak_duration_min_above_max(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(
+        config_dir,
+        {
+            "resolver_peak_duration_min": "0.40",
+            "resolver_peak_duration_max": "0.20",
+        },
+    )
+    _write_targets(config_dir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "settings.csv", "resolver_peak_duration_min", "0.40")
 
 
 def test_load_config_rejects_duplicate_target_labels(tmp_path: Path) -> None:
