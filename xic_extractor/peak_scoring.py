@@ -61,6 +61,8 @@ class ScoringContext:
     rt_min: float
     rt_max: float
     dirty_matrix: bool
+    baseline_array: np.ndarray | None = None
+    residual_mad: float | None = None
 
 
 _CONFIDENCE_RANK = {
@@ -132,7 +134,13 @@ def score_candidate(
 ) -> ScoredCandidate:
     severities: list[tuple[int, str]] = [
         symmetry_severity(ctx.half_width_ratio),
-        local_sn_severity(ctx.intensity_array, ctx.apex_index, ctx.dirty_matrix),
+        local_sn_severity(
+            ctx.intensity_array,
+            ctx.apex_index,
+            ctx.dirty_matrix,
+            baseline=ctx.baseline_array,
+            residual_mad=ctx.residual_mad,
+        ),
         nl_support_severity(ctx.ms2_present, ctx.nl_match),
         rt_prior_severity(candidate.smoothed_apex_rt, ctx.rt_prior, ctx.rt_prior_sigma),
         rt_centrality_severity(candidate.smoothed_apex_rt, ctx.rt_min, ctx.rt_max),
@@ -184,20 +192,23 @@ def local_sn_severity(
     intensity: np.ndarray,
     apex_index: int,
     dirty_matrix: bool,
+    *,
+    baseline: np.ndarray | None = None,
+    residual_mad: float | None = None,
 ) -> tuple[int, str]:
     """S/N ratio of peak apex vs. MAD of trace residual after AsLS baseline."""
     values = np.asarray(intensity, dtype=float)
     if len(values) < 5 or apex_index < 0 or apex_index >= len(values):
         return 2, _LABEL_LOCAL_SN
-    try:
-        baseline = asls_baseline(values)
-    except ValueError:
+    cached_baseline = baseline
+    mad = residual_mad
+    if cached_baseline is None or mad is None:
+        cached_baseline, mad = compute_local_sn_cache(values)
+    if cached_baseline is None or mad is None:
         return 2, _LABEL_LOCAL_SN
-    residual = values - baseline
-    mad = float(np.median(np.abs(residual - np.median(residual))))
     if mad <= 0:
         return 0, _LABEL_LOCAL_SN
-    peak_above_baseline = float(values[apex_index] - baseline[apex_index])
+    peak_above_baseline = float(values[apex_index] - cached_baseline[apex_index])
     ratio = peak_above_baseline / mad
     hard = _SN_DIRTY_HARD_THRESHOLD if dirty_matrix else _SN_HARD_THRESHOLD
     soft = _SN_DIRTY_SOFT_THRESHOLD if dirty_matrix else _SN_SOFT_THRESHOLD
@@ -206,6 +217,21 @@ def local_sn_severity(
     if ratio < soft:
         return 1, _LABEL_LOCAL_SN
     return 0, _LABEL_LOCAL_SN
+
+
+def compute_local_sn_cache(
+    intensity: np.ndarray,
+) -> tuple[np.ndarray | None, float | None]:
+    values = np.asarray(intensity, dtype=float)
+    if len(values) < 5 or not np.all(np.isfinite(values)):
+        return None, None
+    try:
+        baseline = asls_baseline(values)
+    except ValueError:
+        return None, None
+    residual = values - baseline
+    mad = float(np.median(np.abs(residual - np.median(residual))))
+    return baseline, mad
 
 
 def nl_support_severity(ms2_present: bool, nl_match: bool) -> tuple[int, str]:

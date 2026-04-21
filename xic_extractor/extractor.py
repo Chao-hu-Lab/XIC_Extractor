@@ -13,7 +13,7 @@ from scipy.signal import peak_widths
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.injection_rolling import read_injection_order, rolling_median_rt
 from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
-from xic_extractor.peak_scoring import ScoringContext
+from xic_extractor.peak_scoring import ScoringContext, compute_local_sn_cache
 from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
 from xic_extractor.rt_prior_library import LibraryEntry, load_library
 from xic_extractor.sample_groups import classify_sample_group
@@ -151,23 +151,13 @@ def run(
     resolved_rt_prior_library = _resolve_rt_prior_library(config, rt_prior_library)
     istd_targets = [target for target in targets if target.is_istd]
     istd_rts_by_sample: dict[str, dict[str, float]] = {}
-    prepass_results_by_sample: dict[str, dict[str, ExtractionResult]] = {}
-    prepass_diagnostics_by_sample: dict[str, list[DiagnosticRecord]] = {}
-    prepass_anchor_rts_by_sample: dict[str, dict[str, float]] = {}
-    prepass_shape_metrics_by_sample: dict[
-        str, dict[str, tuple[float, float | None]]
-    ] = {}
     for raw_path in raw_paths:
         if should_stop is not None and should_stop():
             break
         prepass = _extract_istd_anchors_only(config, istd_targets, raw_path)
         if prepass is None:
             continue
-        anchors, istd_results, istd_diagnostics, istd_shape_metrics = prepass
-        prepass_results_by_sample[raw_path.stem] = istd_results
-        prepass_diagnostics_by_sample[raw_path.stem] = istd_diagnostics
-        prepass_anchor_rts_by_sample[raw_path.stem] = anchors
-        prepass_shape_metrics_by_sample[raw_path.stem] = istd_shape_metrics
+        anchors, _, _, _ = prepass
         for istd_label, anchor_rt in anchors.items():
             istd_rts_by_sample.setdefault(istd_label, {})[raw_path.stem] = anchor_rt
 
@@ -195,12 +185,6 @@ def run(
             targets,
             raw_path,
             scoring_context_factory=scoring_context_factory,
-            precomputed_istd_results=prepass_results_by_sample.get(raw_path.stem),
-            precomputed_istd_diagnostics=prepass_diagnostics_by_sample.get(raw_path.stem),
-            precomputed_istd_anchor_rts=prepass_anchor_rts_by_sample.get(raw_path.stem),
-            precomputed_istd_shape_metrics=prepass_shape_metrics_by_sample.get(
-                raw_path.stem
-            ),
         )
         file_results.append(file_result)
         diagnostics.extend(file_diagnostics)
@@ -1306,6 +1290,7 @@ def _build_scoring_context_factory(
 
         rt_values = np.asarray(rt, dtype=float)
         intensity_values = np.asarray(intensity, dtype=float)
+        baseline_array, residual_mad = compute_local_sn_cache(intensity_values)
         ms2_present = nl_result is not None and nl_result.matched_scan_count > 0
         nl_match = nl_result is not None and nl_result.status in {"OK", "WARN"}
 
@@ -1335,6 +1320,8 @@ def _build_scoring_context_factory(
                 rt_min=target.rt_min,
                 rt_max=target.rt_max,
                 dirty_matrix=config.dirty_matrix_mode,
+                baseline_array=baseline_array,
+                residual_mad=residual_mad,
             )
 
         setattr(builder, "rt_prior", rt_prior)

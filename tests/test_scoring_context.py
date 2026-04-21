@@ -10,6 +10,7 @@ from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extractor import _build_scoring_context_factory
 from xic_extractor.neutral_loss import NLResult
 from xic_extractor.rt_prior_library import LibraryEntry
+from xic_extractor.signal_processing import find_peak_and_area
 
 
 def test_istd_context_uses_rolling_median_prior() -> None:
@@ -118,6 +119,50 @@ def test_context_without_injection_order_or_library_has_no_prior() -> None:
     assert ctx.rt_prior_sigma is None
     assert ctx.ms2_present is False
     assert ctx.nl_match is False
+
+
+def test_scoring_context_caches_asls_inputs_per_xic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call_count = 0
+
+    def _fake_asls(values: np.ndarray) -> np.ndarray:
+        nonlocal call_count
+        call_count += 1
+        return np.zeros_like(values)
+
+    monkeypatch.setattr("xic_extractor.peak_scoring.asls_baseline", _fake_asls)
+
+    rt = np.linspace(9.6, 10.4, 401)
+    intensity = 300 * np.exp(-((rt - 10.00) / 0.03) ** 2)
+    intensity += 300 * np.exp(-((rt - 10.25) / 0.03) ** 2)
+    intensity += 2.0
+
+    factory = _build_scoring_context_factory(
+        config=_config(),
+        injection_order={},
+        istd_rts_by_sample={},
+        rt_prior_library={},
+    )
+    builder = factory(
+        target=_target(label="Analyte-A", is_istd=False, istd_pair="ISTD-A"),
+        sample_name="S2",
+        rt=rt,
+        intensity=intensity,
+        istd_rt_in_this_sample=None,
+        paired_istd_fwhm=None,
+        nl_result=None,
+    )
+
+    result = find_peak_and_area(
+        rt,
+        intensity,
+        _config(),
+        scoring_context_builder=builder,
+    )
+
+    assert result.status == "OK"
+    assert call_count == 1
 
 
 def _config(**overrides: object) -> ExtractionConfig:

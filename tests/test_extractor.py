@@ -211,6 +211,46 @@ def test_run_falls_back_to_main_pass_when_prepass_returns_none(
     assert output.file_results[0].results["Analyte"].peak_result.peak is not None
 
 
+def test_run_reextracts_istd_in_main_pass_to_keep_scoring_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("ISTD", is_istd=True)]
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor._extract_istd_anchors_only",
+        lambda *_args, **_kwargs: (
+            {"ISTD": 9.05},
+            {},
+            [],
+            {},
+        ),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence(
+            [
+                _ok_peak(
+                    9.05,
+                    1500.0,
+                    2000.0,
+                    confidence="LOW",
+                    reason="concerns: rt_prior (major)",
+                    severities=((2, "rt_prior"),),
+                )
+            ]
+        ),
+    )
+
+    output = _run(config, targets)
+
+    result = output.file_results[0].results["ISTD"]
+    assert result.confidence == "LOW"
+    assert result.reason == "concerns: rt_prior (major)"
+    assert result.severities == ((2, "rt_prior"),)
+
+
 def test_run_writes_nd_for_peak_failure_but_keeps_nl_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -383,6 +423,10 @@ def test_istd_no_ms2_keeps_ms1_peak_and_writes_confidence_flags(
     targets = [_target("ISTD", is_istd=True)]
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
+        "xic_extractor.extractor._extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
         "xic_extractor.extractor.find_peak_and_area",
         _peak_sequence([_ok_peak(9.05, 1200.0, 3400.25)]),
     )
@@ -454,6 +498,10 @@ def test_paired_analyte_uses_strict_anchor_peak_selection(
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
+        "xic_extractor.extractor._extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
         "xic_extractor.extractor.find_nl_anchor_rt",
         _anchor_sequence([13.70, 13.70, 13.75]),
     )
@@ -505,6 +553,10 @@ def test_istd_anchor_rechecks_target_center_when_strongest_anchor_is_far(
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
+        "xic_extractor.extractor._extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
         "xic_extractor.extractor.find_nl_anchor_rt",
         _fake_find_nl_anchor_rt,
     )
@@ -549,6 +601,10 @@ def test_istd_anchor_keeps_strongest_anchor_when_it_is_near_target_center(
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
+        "xic_extractor.extractor._extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
         "xic_extractor.extractor.find_nl_anchor_rt",
         _fake_find_nl_anchor_rt,
     )
@@ -578,6 +634,10 @@ def test_paired_analyte_writes_nd_when_peak_is_far_from_target_anchor(
     ]
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor._extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
     monkeypatch.setattr(
         "xic_extractor.extractor.find_nl_anchor_rt",
         _anchor_sequence([13.70, 13.70, 13.75]),
@@ -627,6 +687,10 @@ def test_paired_analyte_accepts_peak_close_to_target_anchor_even_if_farther_from
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
+        "xic_extractor.extractor._extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
         "xic_extractor.extractor.find_nl_anchor_rt",
         _anchor_sequence([13.70, 13.70, 13.95]),
     )
@@ -669,6 +733,10 @@ def test_paired_analyte_fallback_writes_nd_when_peak_is_far_from_istd_anchor(
     ]
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor._extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
     monkeypatch.setattr(
         "xic_extractor.extractor.find_nl_anchor_rt",
         _anchor_sequence([13.70, 13.70, None]),
@@ -751,7 +819,15 @@ def _target(
     )
 
 
-def _ok_peak(rt: float, intensity: float, area: float) -> PeakDetectionResult:
+def _ok_peak(
+    rt: float,
+    intensity: float,
+    area: float,
+    *,
+    confidence: str | None = None,
+    reason: str | None = None,
+    severities: tuple[tuple[int, str], ...] = (),
+) -> PeakDetectionResult:
     return PeakDetectionResult(
         status="OK",
         peak=PeakResult(
@@ -765,6 +841,9 @@ def _ok_peak(rt: float, intensity: float, area: float) -> PeakDetectionResult:
         n_points=15,
         max_smoothed=intensity,
         n_prominent_peaks=1,
+        confidence=confidence,
+        reason=reason,
+        severities=severities,
     )
 
 
