@@ -174,6 +174,11 @@ def _process_file(
         with open_raw(raw_path, config.dll_dir) as raw:
             results: dict[str, ExtractionResult] = dict(precomputed_istd_results or {})
             diagnostics: list[DiagnosticRecord] = list(precomputed_istd_diagnostics or [])
+            istd_confidence_by_label = {
+                label: result.peak_result.confidence
+                for label, result in results.items()
+                if result.peak_result.confidence is not None
+            }
 
             if precomputed_istd_anchor_rts is None:
                 istd_anchor_rts: dict[str, float] = {}
@@ -191,6 +196,9 @@ def _process_file(
                         diagnostics=diagnostics,
                         scoring_context_factory=scoring_context_factory,
                     )
+                    confidence = results[target.label].peak_result.confidence
+                    if confidence is not None:
+                        istd_confidence_by_label[target.label] = confidence
                     if anchor_rt is not None:
                         istd_anchor_rts[target.label] = anchor_rt
             else:
@@ -234,6 +242,9 @@ def _process_file(
                     results=results,
                     diagnostics=diagnostics,
                     scoring_context_factory=scoring_context_factory,
+                    istd_confidence_note=_istd_confidence_note(
+                        istd_confidence_by_label.get(target.istd_pair)
+                    ),
                 )
 
             return FileResult(sample_name=sample_name, results=results), diagnostics
@@ -264,6 +275,7 @@ def _extract_one_target(
     results: dict[str, ExtractionResult],
     diagnostics: list[DiagnosticRecord],
     scoring_context_factory: Callable[..., Any] | None = None,
+    istd_confidence_note: str | None = None,
 ) -> float | None:
     """處理單一 target 並將結果寫入 results/diagnostics。
 
@@ -289,6 +301,7 @@ def _extract_one_target(
             preferred_rt=anchor_rt,
             strict_preferred_rt=strict_preferred_rt,
             scoring_context_builder=scoring_context_builder,
+            istd_confidence_note=istd_confidence_note,
         )
     else:
         peak_result = find_peak_and_area(
@@ -845,6 +858,12 @@ def _format_optional_number(value: float | None) -> str:
 
 def _sample_group(name: str) -> str:
     return classify_sample_group(name)
+
+
+def _istd_confidence_note(istd_confidence: str | None) -> str | None:
+    if istd_confidence in (None, "HIGH", "MEDIUM"):
+        return None
+    return f"ISTD anchor was {istd_confidence}"
 
 
 def _extract_istd_anchors_only(
