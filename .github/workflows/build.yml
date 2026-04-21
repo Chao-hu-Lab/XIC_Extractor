@@ -69,7 +69,7 @@ jobs:
 
       - name: Upload artifact
         if: startsWith(github.ref, 'refs/tags/') || inputs.upload_artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.meta.outputs.artifact_stem }}
           path: dist/${{ steps.meta.outputs.artifact_stem }}.zip
