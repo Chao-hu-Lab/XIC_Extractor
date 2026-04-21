@@ -63,6 +63,7 @@ class PeakDetectionResult:
     candidates: tuple[PeakCandidate, ...] = ()
     confidence: str | None = None
     reason: str | None = None
+    severities: tuple[tuple[int, str], ...] = ()
 
 
 def find_peak_and_area(
@@ -78,6 +79,7 @@ def find_peak_and_area(
     candidates_result = find_peak_candidates(rt, intensity, config)
     chosen_confidence: str | None = None
     chosen_reason: str | None = None
+    chosen_severities: tuple[tuple[int, str], ...] = ()
     if candidates_result.status == "OK":
         if scoring_context_builder is not None:
             scored_candidates = [
@@ -93,6 +95,7 @@ def find_peak_and_area(
             best_candidate = chosen.candidate
             chosen_confidence = chosen.confidence.value
             chosen_reason = chosen.reason
+            chosen_severities = chosen.severities
         else:
             best_candidate = _select_candidate(
                 candidates_result.candidates,
@@ -114,6 +117,7 @@ def find_peak_and_area(
             best_candidate,
             confidence=chosen_confidence,
             reason=chosen_reason,
+            severities=chosen_severities,
         )
 
     recovery_candidate, recovery_result = _preferred_rt_recovery(
@@ -192,6 +196,7 @@ def _detection_success(
     *,
     confidence: str | None = None,
     reason: str | None = None,
+    severities: tuple[tuple[int, str], ...] = (),
 ) -> PeakDetectionResult:
     return PeakDetectionResult(
         status="OK",
@@ -202,6 +207,7 @@ def _detection_success(
         candidates=candidates_result.candidates,
         confidence=confidence,
         reason=reason,
+        severities=severities,
     )
 
 

@@ -6,13 +6,19 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Literal
 
+import numpy as np
 from openpyxl import Workbook
+from scipy.signal import peak_widths
 
 from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.injection_rolling import rolling_median_rt
 from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
+from xic_extractor.peak_scoring import ScoringContext
 from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
+from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.sample_groups import classify_sample_group
 from xic_extractor.signal_processing import (
+    PeakCandidate,
     PeakDetectionResult,
     PeakResult,
     find_peak_and_area,
@@ -115,7 +121,7 @@ def run(
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
     injection_order: dict[str, int] | None = None,
-    rt_prior_library: dict[tuple[str, str], Any] | None = None,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
 ) -> RunOutput:
     reader_errors = preflight_raw_reader(config.dll_dir)
     if reader_errors:
@@ -127,19 +133,26 @@ def run(
     prepass_results_by_sample: dict[str, dict[str, ExtractionResult]] = {}
     prepass_diagnostics_by_sample: dict[str, list[DiagnosticRecord]] = {}
     prepass_anchor_rts_by_sample: dict[str, dict[str, float]] = {}
+    prepass_shape_metrics_by_sample: dict[
+        str, dict[str, tuple[float, float | None]]
+    ] = {}
     for raw_path in raw_paths:
         if should_stop is not None and should_stop():
             break
-        anchors, istd_results, istd_diagnostics = _extract_istd_anchors_only(
-            config, istd_targets, raw_path
-        )
+        (
+            anchors,
+            istd_results,
+            istd_diagnostics,
+            istd_shape_metrics,
+        ) = _extract_istd_anchors_only(config, istd_targets, raw_path)
         prepass_results_by_sample[raw_path.stem] = istd_results
         prepass_diagnostics_by_sample[raw_path.stem] = istd_diagnostics
         prepass_anchor_rts_by_sample[raw_path.stem] = anchors
+        prepass_shape_metrics_by_sample[raw_path.stem] = istd_shape_metrics
         for istd_label, anchor_rt in anchors.items():
             istd_rts_by_sample.setdefault(istd_label, {})[raw_path.stem] = anchor_rt
 
-    scoring_context_factory = _make_scoring_context_factory(
+    scoring_context_factory = _build_scoring_context_factory(
         config=config,
         injection_order=(
             injection_order
@@ -166,6 +179,9 @@ def run(
             precomputed_istd_results=prepass_results_by_sample.get(raw_path.stem),
             precomputed_istd_diagnostics=prepass_diagnostics_by_sample.get(raw_path.stem),
             precomputed_istd_anchor_rts=prepass_anchor_rts_by_sample.get(raw_path.stem),
+            precomputed_istd_shape_metrics=prepass_shape_metrics_by_sample.get(
+                raw_path.stem
+            ),
         )
         file_results.append(file_result)
         diagnostics.extend(file_diagnostics)
@@ -191,12 +207,16 @@ def _process_file(
     precomputed_istd_results: dict[str, ExtractionResult] | None = None,
     precomputed_istd_diagnostics: list[DiagnosticRecord] | None = None,
     precomputed_istd_anchor_rts: dict[str, float] | None = None,
+    precomputed_istd_shape_metrics: dict[str, tuple[float, float | None]] | None = None,
 ) -> tuple[FileResult, list[DiagnosticRecord]]:
     sample_name = raw_path.stem
     try:
         with open_raw(raw_path, config.dll_dir) as raw:
             results: dict[str, ExtractionResult] = dict(precomputed_istd_results or {})
             diagnostics: list[DiagnosticRecord] = list(precomputed_istd_diagnostics or [])
+            istd_shape_metrics_by_label: dict[str, tuple[float, float | None]] = dict(
+                precomputed_istd_shape_metrics or {}
+            )
             istd_confidence_by_label = {
                 label: result.peak_result.confidence
                 for label, result in results.items()
@@ -218,6 +238,7 @@ def _process_file(
                         results=results,
                         diagnostics=diagnostics,
                         scoring_context_factory=scoring_context_factory,
+                        shape_metrics_by_label=istd_shape_metrics_by_label,
                     )
                     confidence = results[target.label].peak_result.confidence
                     if confidence is not None:
@@ -268,6 +289,11 @@ def _process_file(
                     istd_confidence_note=_istd_confidence_note(
                         istd_confidence_by_label.get(target.istd_pair)
                     ),
+                    istd_rt_in_this_sample=istd_anchor_rts.get(target.istd_pair),
+                    paired_istd_fwhm=_paired_istd_fwhm(
+                        target,
+                        istd_shape_metrics_by_label,
+                    ),
                 )
 
             return FileResult(sample_name=sample_name, results=results), diagnostics
@@ -299,6 +325,9 @@ def _extract_one_target(
     diagnostics: list[DiagnosticRecord],
     scoring_context_factory: Callable[..., Any] | None = None,
     istd_confidence_note: str | None = None,
+    istd_rt_in_this_sample: float | None = None,
+    paired_istd_fwhm: float | None = None,
+    shape_metrics_by_label: dict[str, tuple[float, float | None]] | None = None,
 ) -> float | None:
     """處理單一 target 並將結果寫入 results/diagnostics。
 
@@ -308,6 +337,7 @@ def _extract_one_target(
         raw, target, config, reference_rt=reference_rt, sample_drift=sample_drift
     )
     rt, intensity = raw.extract_xic(target.mz, rt_min, rt_max, target.ppm_tol)
+    nl_result = _check_target_nl(raw, target, config)
     scoring_context_builder = None
     if scoring_context_factory is not None:
         scoring_context_builder = scoring_context_factory(
@@ -315,6 +345,9 @@ def _extract_one_target(
             sample_name=sample_name,
             rt=rt,
             intensity=intensity,
+            istd_rt_in_this_sample=istd_rt_in_this_sample,
+            paired_istd_fwhm=paired_istd_fwhm,
+            nl_result=nl_result,
         )
     if scoring_context_builder is not None:
         peak_result = find_peak_and_area(
@@ -334,7 +367,6 @@ def _extract_one_target(
             preferred_rt=anchor_rt,
             strict_preferred_rt=strict_preferred_rt,
         )
-    nl_result = _check_target_nl(raw, target, config)
     paired_rejection = _paired_anchor_mismatch_diagnostic(
         sample_name,
         target,
@@ -345,6 +377,9 @@ def _extract_one_target(
     )
     if paired_rejection is not None:
         peak_result = replace(peak_result, peak=None)
+    shape_metrics = _selected_shape_metrics(intensity, peak_result)
+    if shape_metrics_by_label is not None and shape_metrics is not None:
+        shape_metrics_by_label[target.label] = shape_metrics
 
     result = ExtractionResult(
         peak_result=peak_result,
@@ -354,6 +389,9 @@ def _extract_one_target(
         istd_pair=target.istd_pair,
         confidence=peak_result.confidence or "HIGH",
         reason=peak_result.reason or "",
+        severities=peak_result.severities,
+        prior_rt=getattr(scoring_context_builder, "rt_prior", None),
+        prior_source=getattr(scoring_context_builder, "prior_source", ""),
     )
     results[target.label] = result
     diagnostics.extend(_build_diagnostics(sample_name, target, result, config))
@@ -1058,14 +1096,20 @@ def _istd_confidence_note(istd_confidence: str | None) -> str | None:
 
 def _extract_istd_anchors_only(
     config: ExtractionConfig, istd_targets: list[Target], raw_path: Path
-) -> tuple[dict[str, float], dict[str, ExtractionResult], list[DiagnosticRecord]]:
+) -> tuple[
+    dict[str, float],
+    dict[str, ExtractionResult],
+    list[DiagnosticRecord],
+    dict[str, tuple[float, float | None]],
+]:
     if not istd_targets:
-        return {}, {}, []
+        return {}, {}, [], {}
     try:
         with open_raw(raw_path, config.dll_dir) as raw:
             results: dict[str, ExtractionResult] = {}
             diagnostics: list[DiagnosticRecord] = []
             anchors: dict[str, float] = {}
+            shape_metrics_by_label: dict[str, tuple[float, float | None]] = {}
             for target in istd_targets:
                 anchor_rt = _extract_one_target(
                     raw,
@@ -1076,12 +1120,102 @@ def _extract_istd_anchors_only(
                     strict_preferred_rt=False,
                     results=results,
                     diagnostics=diagnostics,
+                    shape_metrics_by_label=shape_metrics_by_label,
                 )
                 if anchor_rt is not None:
                     anchors[target.label] = anchor_rt
-            return anchors, results, diagnostics
+            return anchors, results, diagnostics, shape_metrics_by_label
     except Exception:
-        return {}, {}, []
+        return {}, {}, [], {}
+
+
+def _build_scoring_context_factory(
+    *,
+    config: ExtractionConfig,
+    injection_order: dict[str, int],
+    istd_rts_by_sample: dict[str, dict[str, float]],
+    rt_prior_library: dict[tuple[str, str], LibraryEntry],
+) -> Callable[..., Callable[[PeakCandidate], ScoringContext]]:
+    def _factory(
+        *,
+        target: Target,
+        sample_name: str,
+        rt: np.ndarray,
+        intensity: np.ndarray,
+        istd_rt_in_this_sample: float | None,
+        paired_istd_fwhm: float | None,
+        nl_result: NLResult | None,
+    ) -> Callable[[PeakCandidate], ScoringContext]:
+        rt_prior: float | None = None
+        rt_prior_sigma: float | None = None
+        prior_source = ""
+
+        if target.is_istd:
+            rt_map = istd_rts_by_sample.get(target.label, {})
+            rt_prior = rolling_median_rt(
+                target.label,
+                sample_name,
+                rt_map,
+                injection_order,
+                window=config.rolling_window_size,
+            )
+            if rt_prior is not None:
+                prior_source = "rolling_median"
+            else:
+                library_entry = rt_prior_library.get((target.label, "ISTD"))
+                if library_entry is not None and library_entry.median_abs_rt is not None:
+                    rt_prior = library_entry.median_abs_rt
+                    rt_prior_sigma = library_entry.sigma_abs_rt
+                    prior_source = "library_abs"
+        else:
+            library_entry = rt_prior_library.get((target.label, "analyte"))
+            if (
+                library_entry is not None
+                and istd_rt_in_this_sample is not None
+                and library_entry.median_delta_rt is not None
+            ):
+                rt_prior = istd_rt_in_this_sample + library_entry.median_delta_rt
+                rt_prior_sigma = library_entry.sigma_delta_rt
+                prior_source = "delta_rt_library"
+
+        rt_values = np.asarray(rt, dtype=float)
+        intensity_values = np.asarray(intensity, dtype=float)
+        ms2_present = nl_result is not None and nl_result.matched_scan_count > 0
+        nl_match = nl_result is not None and nl_result.status in {"OK", "WARN"}
+
+        def builder(candidate: PeakCandidate) -> ScoringContext:
+            half_width_ratio, fwhm = _compute_shape_metrics(
+                intensity_values,
+                candidate.smoothed_apex_index,
+            )
+            fwhm_ratio: float | None = None
+            if (
+                not target.is_istd
+                and fwhm is not None
+                and paired_istd_fwhm is not None
+                and paired_istd_fwhm > 0
+            ):
+                fwhm_ratio = fwhm / paired_istd_fwhm
+            return ScoringContext(
+                rt_array=rt_values,
+                intensity_array=intensity_values,
+                apex_index=candidate.smoothed_apex_index,
+                half_width_ratio=half_width_ratio,
+                fwhm_ratio=fwhm_ratio,
+                ms2_present=ms2_present,
+                nl_match=nl_match,
+                rt_prior=rt_prior,
+                rt_prior_sigma=rt_prior_sigma,
+                rt_min=target.rt_min,
+                rt_max=target.rt_max,
+                dirty_matrix=config.dirty_matrix_mode,
+            )
+
+        setattr(builder, "rt_prior", rt_prior)
+        setattr(builder, "prior_source", prior_source)
+        return builder
+
+    return _factory
 
 
 def _make_scoring_context_factory(
@@ -1091,10 +1225,61 @@ def _make_scoring_context_factory(
     istd_rts_by_sample: dict[str, dict[str, float]],
     rt_prior_library: dict[tuple[str, str], Any],
 ) -> Callable[..., Any]:
-    def _factory(**_kwargs: Any) -> Any:
-        return None
+    return _build_scoring_context_factory(
+        config=config,
+        injection_order=injection_order,
+        istd_rts_by_sample=istd_rts_by_sample,
+        rt_prior_library=rt_prior_library,
+    )
 
-    return _factory
+
+def _compute_shape_metrics(
+    intensity: np.ndarray,
+    apex_index: int,
+) -> tuple[float, float | None]:
+    values = np.asarray(intensity, dtype=float)
+    if len(values) == 0 or apex_index < 0 or apex_index >= len(values):
+        return 1.0, None
+    widths, _, left_ips, right_ips = peak_widths(values, [apex_index], rel_height=0.5)
+    if len(widths) == 0:
+        return 1.0, None
+    fwhm = float(widths[0])
+    left = apex_index - float(left_ips[0])
+    right = float(right_ips[0]) - apex_index
+    if left <= 0 or right <= 0:
+        return 1.0, fwhm
+    return float(left / right), fwhm
+
+
+def _selected_shape_metrics(
+    intensity: np.ndarray,
+    peak_result: PeakDetectionResult,
+) -> tuple[float, float | None] | None:
+    candidate = _selected_candidate(peak_result)
+    if candidate is None:
+        return None
+    return _compute_shape_metrics(intensity, candidate.smoothed_apex_index)
+
+
+def _selected_candidate(peak_result: PeakDetectionResult) -> PeakCandidate | None:
+    if peak_result.peak is None:
+        return None
+    for candidate in peak_result.candidates:
+        if candidate.peak == peak_result.peak:
+            return candidate
+    return None
+
+
+def _paired_istd_fwhm(
+    target: Target,
+    istd_shape_metrics_by_label: dict[str, tuple[float, float | None]],
+) -> float | None:
+    if not target.istd_pair:
+        return None
+    metrics = istd_shape_metrics_by_label.get(target.istd_pair)
+    if metrics is None:
+        return None
+    return metrics[1]
 
 
 def _fallback_injection_order_from_mtime(raw_paths: list[Path]) -> dict[str, int]:

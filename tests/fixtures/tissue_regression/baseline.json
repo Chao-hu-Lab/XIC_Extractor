@@ -84,172 +84,172 @@
     "area": null
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "15N5-8-oxodG",
     "role": "ISTD",
-    "rt": 16.5311,
-    "area": 3098638.75
+    "rt": 16.5105,
+    "area": 2619664.78
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "5-hmdC",
     "role": "Analyte",
-    "rt": 9.0921,
-    "area": 248568.3
+    "rt": 9.0742,
+    "area": 440880.64
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "5-medC",
     "role": "Analyte",
-    "rt": 11.8394,
-    "area": 40161547.52
+    "rt": 11.8083,
+    "area": 34560385.31
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "8-oxo-Guo",
     "role": "Analyte",
-    "rt": 13.9034,
-    "area": 124266.96
+    "rt": null,
+    "area": null
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "8-oxodG",
     "role": "Analyte",
-    "rt": 16.6237,
-    "area": 354728.64
+    "rt": 16.5547,
+    "area": 149679.47
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "N6-HE-dA",
     "role": "Analyte",
     "rt": null,
     "area": null
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "N6-medA",
     "role": "Analyte",
     "rt": null,
     "area": null
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "[13C,15N2]-8-oxo-Guo",
     "role": "ISTD",
-    "rt": 13.6629,
-    "area": 26563382.46
+    "rt": 13.6046,
+    "area": 22509003.67
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "d3-5-hmdC",
     "role": "ISTD",
-    "rt": 9.0097,
-    "area": 9068916.02
+    "rt": 8.9938,
+    "area": 7842914.65
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "d3-5-medC",
     "role": "ISTD",
-    "rt": 11.7672,
-    "area": 19813214.28
+    "rt": 11.7293,
+    "area": 17176235.3
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "d3-N6-medA",
     "role": "ISTD",
-    "rt": 24.6903,
-    "area": 446792938.73
+    "rt": 24.6257,
+    "area": 412827909.68
   },
   {
-    "sample": "TumorBC2283_DNA",
+    "sample": "TumorBC2282_DNA",
     "target": "d4-N6-2HE-dA",
     "role": "ISTD",
-    "rt": 22.9035,
-    "area": 122821395.5
+    "rt": 22.8831,
+    "area": 146849508.52
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "15N5-8-oxodG",
     "role": "ISTD",
-    "rt": 16.6344,
-    "area": 6416355.55
+    "rt": 16.5519,
+    "area": 3028866.07
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "5-hmdC",
     "role": "Analyte",
-    "rt": 9.1569,
-    "area": 486328.96
+    "rt": 9.1381,
+    "area": 875222.59
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "5-medC",
     "role": "Analyte",
-    "rt": 12.2676,
-    "area": 97605214.11
+    "rt": 12.3164,
+    "area": 80516386.63
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "8-oxo-Guo",
     "role": "Analyte",
-    "rt": 14.0097,
-    "area": 121359.45
+    "rt": 13.9317,
+    "area": 94526.67
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "8-oxodG",
     "role": "Analyte",
-    "rt": 16.7756,
-    "area": 1168889.07
+    "rt": null,
+    "area": null
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "N6-HE-dA",
     "role": "Analyte",
-    "rt": 23.4504,
-    "area": 107636.85
+    "rt": null,
+    "area": null
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "N6-medA",
     "role": "Analyte",
     "rt": null,
     "area": null
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "[13C,15N2]-8-oxo-Guo",
     "role": "ISTD",
-    "rt": 13.8022,
-    "area": 53687871.5
+    "rt": 13.626,
+    "area": 27036325.51
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "d3-5-hmdC",
     "role": "ISTD",
-    "rt": 9.0741,
-    "area": 17394540.12
+    "rt": 9.0139,
+    "area": 9416192.95
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "d3-5-medC",
     "role": "ISTD",
-    "rt": 12.1854,
-    "area": 31485376.83
+    "rt": 12.275,
+    "area": 17367401.51
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "d3-N6-medA",
     "role": "ISTD",
-    "rt": 25.279,
-    "area": 796017147.56
+    "rt": 25.1897,
+    "area": 452855884.98
   },
   {
-    "sample": "TumorBC2304_DNA",
+    "sample": "TumorBC2303_DNA",
     "target": "d4-N6-2HE-dA",
     "role": "ISTD",
-    "rt": 23.2846,
-    "area": 319465095.14
+    "rt": 23.1945,
+    "area": 166567311.19
   },
   {
     "sample": "NormalBC2257_DNA",
@@ -336,172 +336,172 @@
     "area": 210739611.16
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "15N5-8-oxodG",
     "role": "ISTD",
-    "rt": 16.6032,
-    "area": 3677423.3
+    "rt": 16.6177,
+    "area": 3470182.27
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "5-hmdC",
     "role": "Analyte",
-    "rt": 9.153,
-    "area": 2365695.4
+    "rt": 9.1491,
+    "area": 1670524.92
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "5-medC",
     "role": "Analyte",
-    "rt": 12.6797,
-    "area": 66412342.12
+    "rt": 12.7056,
+    "area": 71490524.66
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "8-oxo-Guo",
     "role": "Analyte",
-    "rt": 13.9632,
-    "area": 417864.8
+    "rt": 13.9963,
+    "area": 126048.49
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "8-oxodG",
     "role": "Analyte",
-    "rt": 16.8927,
-    "area": 1749548.16
+    "rt": 16.9424,
+    "area": 561233.33
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "N6-HE-dA",
     "role": "Analyte",
     "rt": null,
     "area": null
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "N6-medA",
     "role": "Analyte",
     "rt": null,
     "area": null
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "[13C,15N2]-8-oxo-Guo",
     "role": "ISTD",
-    "rt": 13.6746,
-    "area": 30436834.23
+    "rt": 13.734,
+    "area": 28930835.08
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "d3-5-hmdC",
     "role": "ISTD",
-    "rt": 9.0709,
-    "area": 10523901.4
+    "rt": 9.0661,
+    "area": 10301569.94
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "d3-5-medC",
     "role": "ISTD",
-    "rt": 12.5968,
-    "area": 19861421.82
+    "rt": 12.5822,
+    "area": 19204209.83
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "d3-N6-medA",
     "role": "ISTD",
-    "rt": 25.6283,
-    "area": 407348490.01
+    "rt": 25.716,
+    "area": 491070351.86
   },
   {
-    "sample": "NormalBC2263_DNA",
+    "sample": "NormalBC2267_DNA",
     "target": "d4-N6-2HE-dA",
     "role": "ISTD",
-    "rt": 23.4276,
-    "area": 191451631.68
+    "rt": 23.4728,
+    "area": 183809688.94
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "15N5-8-oxodG",
     "role": "ISTD",
-    "rt": 16.5738,
-    "area": 3430802.81
+    "rt": 16.5534,
+    "area": 3927447.88
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "5-hmdC",
     "role": "Analyte",
-    "rt": null,
-    "area": null
+    "rt": 9.1143,
+    "area": 826752.96
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "5-medC",
     "role": "Analyte",
-    "rt": 12.6804,
-    "area": 755288.35
+    "rt": 12.6561,
+    "area": 49137562.03
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "8-oxo-Guo",
     "role": "Analyte",
-    "rt": 13.9683,
-    "area": 727862.95
+    "rt": 13.942,
+    "area": 751271.49
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "8-oxodG",
     "role": "Analyte",
-    "rt": 16.9414,
-    "area": 1809765.35
+    "rt": 16.9257,
+    "area": 1637432.52
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "N6-HE-dA",
     "role": "Analyte",
     "rt": null,
     "area": null
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "N6-medA",
     "role": "Analyte",
     "rt": null,
     "area": null
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "[13C,15N2]-8-oxo-Guo",
     "role": "ISTD",
-    "rt": 13.6773,
-    "area": 25058054.92
+    "rt": 13.6514,
+    "area": 31154469.07
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "d3-5-hmdC",
     "role": "ISTD",
-    "rt": 9.0406,
-    "area": 5214667.57
+    "rt": 9.0316,
+    "area": 8040591.0
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "d3-5-medC",
     "role": "ISTD",
-    "rt": 12.5974,
-    "area": 21393927.86
+    "rt": 12.5732,
+    "area": 24391404.57
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "d3-N6-medA",
     "role": "ISTD",
-    "rt": 25.7409,
-    "area": 407422807.71
+    "rt": 25.7609,
+    "area": 485567319.38
   },
   {
-    "sample": "NormalBC2272_DNA",
+    "sample": "NormalBC2277_DNA",
     "target": "d4-N6-2HE-dA",
     "role": "ISTD",
-    "rt": 23.497,
-    "area": 164733656.77
+    "rt": 23.4766,
+    "area": 218455705.19
   },
   {
     "sample": "BenignfatBC0979_DNA",
@@ -672,171 +672,171 @@
     "area": 177402829.1
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
+    "sample": "BenignfatBC1214_DNA",
     "target": "15N5-8-oxodG",
     "role": "ISTD",
-    "rt": 16.4807,
-    "area": 4247456.83
+    "rt": 16.2427,
+    "area": 3418132.54
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
+    "sample": "BenignfatBC1214_DNA",
     "target": "5-hmdC",
     "role": "Analyte",
-    "rt": 8.6091,
-    "area": 1169613.99
+    "rt": 9.1593,
+    "area": 271128.08
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
+    "sample": "BenignfatBC1214_DNA",
     "target": "5-medC",
     "role": "Analyte",
-    "rt": 11.7058,
-    "area": 53834196.66
+    "rt": 12.6736,
+    "area": 17464327.0
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
+    "sample": "BenignfatBC1214_DNA",
     "target": "8-oxo-Guo",
     "role": "Analyte",
-    "rt": 13.7628,
-    "area": 496130.27
+    "rt": null,
+    "area": null
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
+    "sample": "BenignfatBC1214_DNA",
     "target": "8-oxodG",
     "role": "Analyte",
-    "rt": 16.3981,
-    "area": 1436648.25
+    "rt": null,
+    "area": null
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
+    "sample": "BenignfatBC1214_DNA",
     "target": "N6-HE-dA",
     "role": "Analyte",
     "rt": null,
     "area": null
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
-    "target": "N6-medA",
-    "role": "Analyte",
-    "rt": 24.4801,
-    "area": 81351.18
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
-    "target": "[13C,15N2]-8-oxo-Guo",
-    "role": "ISTD",
-    "rt": 13.5565,
-    "area": 35799029.94
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
-    "target": "d3-5-hmdC",
-    "role": "ISTD",
-    "rt": 8.4844,
-    "area": 10917597.94
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
-    "target": "d3-5-medC",
-    "role": "ISTD",
-    "rt": 11.6644,
-    "area": 22718403.48
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
-    "target": "d3-N6-medA",
-    "role": "ISTD",
-    "rt": 24.7707,
-    "area": 484667137.52
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC2",
-    "target": "d4-N6-2HE-dA",
-    "role": "ISTD",
-    "rt": 22.9844,
-    "area": 202630702.16
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
-    "target": "15N5-8-oxodG",
-    "role": "ISTD",
-    "rt": 16.4489,
-    "area": 3869595.97
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
-    "target": "5-hmdC",
-    "role": "Analyte",
-    "rt": 8.6051,
-    "area": 1171766.38
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
-    "target": "5-medC",
-    "role": "Analyte",
-    "rt": 12.4528,
-    "area": 55558296.94
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
-    "target": "8-oxo-Guo",
-    "role": "Analyte",
-    "rt": 13.6974,
-    "area": 509859.24
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
-    "target": "8-oxodG",
-    "role": "Analyte",
-    "rt": 16.6963,
-    "area": 1529879.38
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
-    "target": "N6-HE-dA",
-    "role": "Analyte",
-    "rt": 24.0061,
-    "area": 138477.38
-  },
-  {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
+    "sample": "BenignfatBC1214_DNA",
     "target": "N6-medA",
     "role": "Analyte",
     "rt": null,
     "area": null
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
+    "sample": "BenignfatBC1214_DNA",
     "target": "[13C,15N2]-8-oxo-Guo",
     "role": "ISTD",
-    "rt": 13.4494,
-    "area": 31801432.62
+    "rt": 13.4007,
+    "area": 30264907.53
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
+    "sample": "BenignfatBC1214_DNA",
     "target": "d3-5-hmdC",
     "role": "ISTD",
-    "rt": 8.5221,
-    "area": 11257242.41
+    "rt": 9.0345,
+    "area": 6575949.18
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
+    "sample": "BenignfatBC1214_DNA",
     "target": "d3-5-medC",
     "role": "ISTD",
-    "rt": 12.3286,
-    "area": 22974480.57
+    "rt": 12.5906,
+    "area": 37763161.44
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
+    "sample": "BenignfatBC1214_DNA",
     "target": "d3-N6-medA",
     "role": "ISTD",
-    "rt": 25.789,
-    "area": 498741487.85
+    "rt": 26.3309,
+    "area": 465441103.72
   },
   {
-    "sample": "Breast_Cancer_Tissue_pooled_QC_4",
+    "sample": "BenignfatBC1214_DNA",
     "target": "d4-N6-2HE-dA",
     "role": "ISTD",
-    "rt": 23.4667,
-    "area": 220176595.76
+    "rt": 23.6732,
+    "area": 193724762.52
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "15N5-8-oxodG",
+    "role": "ISTD",
+    "rt": 16.2527,
+    "area": 2091539.02
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "5-hmdC",
+    "role": "Analyte",
+    "rt": 8.5865,
+    "area": 1146691.03
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "5-medC",
+    "role": "Analyte",
+    "rt": 12.4038,
+    "area": 24377782.78
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "8-oxo-Guo",
+    "role": "Analyte",
+    "rt": 13.6766,
+    "area": 255472.91
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "8-oxodG",
+    "role": "Analyte",
+    "rt": null,
+    "area": null
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "N6-HE-dA",
+    "role": "Analyte",
+    "rt": null,
+    "area": null
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "N6-medA",
+    "role": "Analyte",
+    "rt": null,
+    "area": null
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "[13C,15N2]-8-oxo-Guo",
+    "role": "ISTD",
+    "rt": 13.402,
+    "area": 15309506.42
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "d3-5-hmdC",
+    "role": "ISTD",
+    "rt": 8.5034,
+    "area": 11578019.48
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "d3-5-medC",
+    "role": "ISTD",
+    "rt": 12.2866,
+    "area": 9951572.99
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "d3-N6-medA",
+    "role": "ISTD",
+    "rt": 26.3018,
+    "area": 495568352.7
+  },
+  {
+    "sample": "Breast_Cancer_Tissue_pooled_QC7",
+    "target": "d4-N6-2HE-dA",
+    "role": "ISTD",
+    "rt": 23.6462,
+    "area": 196506871.34
   }
 ]
