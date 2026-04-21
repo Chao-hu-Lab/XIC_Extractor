@@ -995,23 +995,43 @@ def _write_summary_sheet(
 
 
 def _write_score_breakdown_sheet(sheet: Any, run_output: RunOutput) -> None:
-    sheet.append(
-        [
-            "SampleName",
-            "Target",
-            "symmetry",
-            "local_sn",
-            "nl_support",
-            "rt_prior",
-            "rt_centrality",
-            "noise_shape",
-            "peak_width",
-            "Total Severity",
-            "Confidence",
-            "Prior RT",
-            "Prior Source",
-        ]
-    )
+    headers = [
+        "SampleName",
+        "Target",
+        "symmetry",
+        "local_sn",
+        "nl_support",
+        "rt_prior",
+        "rt_centrality",
+        "noise_shape",
+        "peak_width",
+        "Total Severity",
+        "Confidence",
+        "Prior RT",
+        "Prior Source",
+    ]
+    sheet.append(headers)
+    for file_result in run_output.file_results:
+        for extraction_result in file_result.extraction_results:
+            severities = {label: severity for severity, label in extraction_result.severities}
+            total_severity = sum(severity for severity, _ in extraction_result.severities)
+            sheet.append(
+                [
+                    file_result.sample_name,
+                    extraction_result.target_label,
+                    severities.get("symmetry"),
+                    severities.get("local_sn"),
+                    severities.get("nl_support"),
+                    severities.get("rt_prior"),
+                    severities.get("rt_centrality"),
+                    severities.get("noise_shape"),
+                    severities.get("peak_width"),
+                    total_severity,
+                    extraction_result.confidence,
+                    extraction_result.prior_rt,
+                    extraction_result.prior_source,
+                ]
+            )
 
 
 def _iter_output_rows(

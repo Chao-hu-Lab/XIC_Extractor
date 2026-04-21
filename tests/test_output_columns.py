@@ -32,6 +32,17 @@ def _fabricate_run_output() -> RunOutput:
         istd_pair="",
         confidence="HIGH",
         reason="all checks passed",
+        severities=(
+            (0, "symmetry"),
+            (1, "local_sn"),
+            (0, "nl_support"),
+            (2, "rt_prior"),
+            (0, "rt_centrality"),
+            (1, "noise_shape"),
+            (0, "peak_width"),
+        ),
+        prior_rt=9.01,
+        prior_source="rolling_median",
     )
     file_result = FileResult(
         sample_name="S1",
@@ -64,3 +75,47 @@ def test_summary_sheet_has_confidence_counts(tmp_path: Path) -> None:
         "Confidence VERY_LOW",
     ):
         assert label in headers
+
+
+def test_score_breakdown_sheet_absent_by_default(tmp_path: Path) -> None:
+    out = tmp_path / "r.xlsx"
+    _write_xlsx(out, _fabricate_run_output(), targets=[], emit_score_breakdown=False)
+    wb = load_workbook(out, read_only=True)
+    assert "Score Breakdown" not in wb.sheetnames
+
+
+def test_score_breakdown_sheet_emitted_when_flag_on(tmp_path: Path) -> None:
+    out = tmp_path / "r.xlsx"
+    _write_xlsx(out, _fabricate_run_output(), targets=[], emit_score_breakdown=True)
+    wb = load_workbook(out, read_only=True)
+    assert "Score Breakdown" in wb.sheetnames
+    ws = wb["Score Breakdown"]
+    rows = list(ws.iter_rows(values_only=True))
+    headers = list(rows[0])
+    for col in (
+        "SampleName",
+        "Target",
+        "symmetry",
+        "local_sn",
+        "nl_support",
+        "rt_prior",
+        "rt_centrality",
+        "noise_shape",
+        "peak_width",
+        "Total Severity",
+        "Confidence",
+        "Prior RT",
+        "Prior Source",
+    ):
+        assert col in headers
+    assert len(rows) == 2
+    row = dict(zip(headers, rows[1], strict=False))
+    assert row["SampleName"] == "S1"
+    assert row["Target"] == "d3-5-hmdC"
+    assert row["local_sn"] == 1
+    assert row["rt_prior"] == 2
+    assert row["noise_shape"] == 1
+    assert row["Total Severity"] == 4
+    assert row["Confidence"] == "HIGH"
+    assert row["Prior RT"] == 9.01
+    assert row["Prior Source"] == "rolling_median"
