@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -5,6 +6,11 @@ import numpy as np
 from scipy.signal import find_peaks, peak_widths, savgol_filter
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_scoring import (
+    ScoringContext,
+    score_candidate,
+    select_candidate_with_confidence,
+)
 
 PeakStatus = Literal["OK", "NO_SIGNAL", "WINDOW_TOO_SHORT", "PEAK_NOT_FOUND"]
 
@@ -55,6 +61,8 @@ class PeakDetectionResult:
     max_smoothed: float | None
     n_prominent_peaks: int
     candidates: tuple[PeakCandidate, ...] = ()
+    confidence: str | None = None
+    reason: str | None = None
 
 
 def find_peak_and_area(
@@ -64,14 +72,33 @@ def find_peak_and_area(
     *,
     preferred_rt: float | None = None,
     strict_preferred_rt: bool = False,
+    scoring_context_builder: Callable[[PeakCandidate], ScoringContext] | None = None,
+    istd_confidence_note: str | None = None,
 ) -> PeakDetectionResult:
     candidates_result = find_peak_candidates(rt, intensity, config)
+    chosen_confidence: str | None = None
+    chosen_reason: str | None = None
     if candidates_result.status == "OK":
-        best_candidate = _select_candidate(
-            candidates_result.candidates,
-            preferred_rt=preferred_rt,
-            strict_preferred_rt=strict_preferred_rt,
-        )
+        if scoring_context_builder is not None:
+            scored_candidates = [
+                score_candidate(
+                    candidate,
+                    scoring_context_builder(candidate),
+                    prior_rt=preferred_rt,
+                    istd_confidence_note=istd_confidence_note,
+                )
+                for candidate in candidates_result.candidates
+            ]
+            chosen = select_candidate_with_confidence(scored_candidates)
+            best_candidate = chosen.candidate
+            chosen_confidence = chosen.confidence.value
+            chosen_reason = chosen.reason
+        else:
+            best_candidate = _select_candidate(
+                candidates_result.candidates,
+                preferred_rt=preferred_rt,
+                strict_preferred_rt=strict_preferred_rt,
+            )
         recovery_candidate, recovery_result = _preferred_rt_recovery(
             rt,
             intensity,
@@ -82,7 +109,12 @@ def find_peak_and_area(
         )
         if recovery_candidate is not None and recovery_result is not None:
             return _detection_success(recovery_result, recovery_candidate)
-        return _detection_success(candidates_result, best_candidate)
+        return _detection_success(
+            candidates_result,
+            best_candidate,
+            confidence=chosen_confidence,
+            reason=chosen_reason,
+        )
 
     recovery_candidate, recovery_result = _preferred_rt_recovery(
         rt,
@@ -155,7 +187,11 @@ def find_peak_candidates(
 
 
 def _detection_success(
-    candidates_result: PeakCandidatesResult, candidate: PeakCandidate
+    candidates_result: PeakCandidatesResult,
+    candidate: PeakCandidate,
+    *,
+    confidence: str | None = None,
+    reason: str | None = None,
 ) -> PeakDetectionResult:
     return PeakDetectionResult(
         status="OK",
@@ -164,6 +200,8 @@ def _detection_success(
         max_smoothed=candidates_result.max_smoothed,
         n_prominent_peaks=candidates_result.n_prominent_peaks,
         candidates=candidates_result.candidates,
+        confidence=confidence,
+        reason=reason,
     )
 
 
