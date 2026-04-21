@@ -91,12 +91,42 @@ def run(
     targets: list[Target],
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
+    injection_order: dict[str, int] | None = None,
+    rt_prior_library: dict[tuple[str, str], Any] | None = None,
 ) -> RunOutput:
     reader_errors = preflight_raw_reader(config.dll_dir)
     if reader_errors:
         raise RawReaderError(" ".join(reader_errors))
 
     raw_paths = sorted(config.data_dir.glob("*.raw"))
+    istd_targets = [target for target in targets if target.is_istd]
+    istd_rts_by_sample: dict[str, dict[str, float]] = {}
+    prepass_results_by_sample: dict[str, dict[str, ExtractionResult]] = {}
+    prepass_diagnostics_by_sample: dict[str, list[DiagnosticRecord]] = {}
+    prepass_anchor_rts_by_sample: dict[str, dict[str, float]] = {}
+    for raw_path in raw_paths:
+        if should_stop is not None and should_stop():
+            break
+        anchors, istd_results, istd_diagnostics = _extract_istd_anchors_only(
+            config, istd_targets, raw_path
+        )
+        prepass_results_by_sample[raw_path.stem] = istd_results
+        prepass_diagnostics_by_sample[raw_path.stem] = istd_diagnostics
+        prepass_anchor_rts_by_sample[raw_path.stem] = anchors
+        for istd_label, anchor_rt in anchors.items():
+            istd_rts_by_sample.setdefault(istd_label, {})[raw_path.stem] = anchor_rt
+
+    scoring_context_factory = _make_scoring_context_factory(
+        config=config,
+        injection_order=(
+            injection_order
+            if injection_order is not None
+            else _fallback_injection_order_from_mtime(raw_paths)
+        ),
+        istd_rts_by_sample=istd_rts_by_sample,
+        rt_prior_library=rt_prior_library or {},
+    )
+
     file_results: list[FileResult] = []
     diagnostics: list[DiagnosticRecord] = []
     total = len(raw_paths)
@@ -105,7 +135,15 @@ def run(
         if should_stop is not None and should_stop():
             break
 
-        file_result, file_diagnostics = _process_file(config, targets, raw_path)
+        file_result, file_diagnostics = _process_file(
+            config,
+            targets,
+            raw_path,
+            scoring_context_factory=scoring_context_factory,
+            precomputed_istd_results=prepass_results_by_sample.get(raw_path.stem),
+            precomputed_istd_diagnostics=prepass_diagnostics_by_sample.get(raw_path.stem),
+            precomputed_istd_anchor_rts=prepass_anchor_rts_by_sample.get(raw_path.stem),
+        )
         file_results.append(file_result)
         diagnostics.extend(file_diagnostics)
 
@@ -122,31 +160,41 @@ def run(
 
 
 def _process_file(
-    config: ExtractionConfig, targets: list[Target], raw_path: Path
+    config: ExtractionConfig,
+    targets: list[Target],
+    raw_path: Path,
+    *,
+    scoring_context_factory: Callable[..., Any] | None = None,
+    precomputed_istd_results: dict[str, ExtractionResult] | None = None,
+    precomputed_istd_diagnostics: list[DiagnosticRecord] | None = None,
+    precomputed_istd_anchor_rts: dict[str, float] | None = None,
 ) -> tuple[FileResult, list[DiagnosticRecord]]:
     sample_name = raw_path.stem
     try:
         with open_raw(raw_path, config.dll_dir) as raw:
-            results: dict[str, ExtractionResult] = {}
-            diagnostics: list[DiagnosticRecord] = []
+            results: dict[str, ExtractionResult] = dict(precomputed_istd_results or {})
+            diagnostics: list[DiagnosticRecord] = list(precomputed_istd_diagnostics or [])
 
-            # Pass 1: ISTDs — reference_rt=None → 選 base_peak 最高的 anchor
-            istd_anchor_rts: dict[str, float] = {}
-            for target in targets:
-                if not target.is_istd:
-                    continue
-                anchor_rt = _extract_one_target(
-                    raw,
-                    config,
-                    sample_name,
-                    target,
-                    reference_rt=None,
-                    strict_preferred_rt=False,
-                    results=results,
-                    diagnostics=diagnostics,
-                )
-                if anchor_rt is not None:
-                    istd_anchor_rts[target.label] = anchor_rt
+            if precomputed_istd_anchor_rts is None:
+                istd_anchor_rts: dict[str, float] = {}
+                for target in targets:
+                    if not target.is_istd:
+                        continue
+                    anchor_rt = _extract_one_target(
+                        raw,
+                        config,
+                        sample_name,
+                        target,
+                        reference_rt=None,
+                        strict_preferred_rt=False,
+                        results=results,
+                        diagnostics=diagnostics,
+                        scoring_context_factory=scoring_context_factory,
+                    )
+                    if anchor_rt is not None:
+                        istd_anchor_rts[target.label] = anchor_rt
+            else:
+                istd_anchor_rts = dict(precomputed_istd_anchor_rts)
 
             sample_drift = _estimate_sample_drift(targets, istd_anchor_rts)
 
@@ -185,6 +233,7 @@ def _process_file(
                     strict_preferred_rt=reference_rt is not None,
                     results=results,
                     diagnostics=diagnostics,
+                    scoring_context_factory=scoring_context_factory,
                 )
 
             return FileResult(sample_name=sample_name, results=results), diagnostics
@@ -214,6 +263,7 @@ def _extract_one_target(
     strict_preferred_rt: bool = False,
     results: dict[str, ExtractionResult],
     diagnostics: list[DiagnosticRecord],
+    scoring_context_factory: Callable[..., Any] | None = None,
 ) -> float | None:
     """處理單一 target 並將結果寫入 results/diagnostics。
 
@@ -223,13 +273,31 @@ def _extract_one_target(
         raw, target, config, reference_rt=reference_rt, sample_drift=sample_drift
     )
     rt, intensity = raw.extract_xic(target.mz, rt_min, rt_max, target.ppm_tol)
-    peak_result = find_peak_and_area(
-        rt,
-        intensity,
-        config,
-        preferred_rt=anchor_rt,
-        strict_preferred_rt=strict_preferred_rt,
-    )
+    scoring_context_builder = None
+    if scoring_context_factory is not None:
+        scoring_context_builder = scoring_context_factory(
+            target=target,
+            sample_name=sample_name,
+            rt=rt,
+            intensity=intensity,
+        )
+    if scoring_context_builder is not None:
+        peak_result = find_peak_and_area(
+            rt,
+            intensity,
+            config,
+            preferred_rt=anchor_rt,
+            strict_preferred_rt=strict_preferred_rt,
+            scoring_context_builder=scoring_context_builder,
+        )
+    else:
+        peak_result = find_peak_and_area(
+            rt,
+            intensity,
+            config,
+            preferred_rt=anchor_rt,
+            strict_preferred_rt=strict_preferred_rt,
+        )
     nl_result = _check_target_nl(raw, target, config)
     paired_rejection = _paired_anchor_mismatch_diagnostic(
         sample_name,
@@ -777,3 +845,49 @@ def _format_optional_number(value: float | None) -> str:
 
 def _sample_group(name: str) -> str:
     return classify_sample_group(name)
+
+
+def _extract_istd_anchors_only(
+    config: ExtractionConfig, istd_targets: list[Target], raw_path: Path
+) -> tuple[dict[str, float], dict[str, ExtractionResult], list[DiagnosticRecord]]:
+    if not istd_targets:
+        return {}, {}, []
+    try:
+        with open_raw(raw_path, config.dll_dir) as raw:
+            results: dict[str, ExtractionResult] = {}
+            diagnostics: list[DiagnosticRecord] = []
+            anchors: dict[str, float] = {}
+            for target in istd_targets:
+                anchor_rt = _extract_one_target(
+                    raw,
+                    config,
+                    raw_path.stem,
+                    target,
+                    reference_rt=None,
+                    strict_preferred_rt=False,
+                    results=results,
+                    diagnostics=diagnostics,
+                )
+                if anchor_rt is not None:
+                    anchors[target.label] = anchor_rt
+            return anchors, results, diagnostics
+    except Exception:
+        return {}, {}, []
+
+
+def _make_scoring_context_factory(
+    *,
+    config: ExtractionConfig,
+    injection_order: dict[str, int],
+    istd_rts_by_sample: dict[str, dict[str, float]],
+    rt_prior_library: dict[tuple[str, str], Any],
+) -> Callable[..., Any]:
+    def _factory(**_kwargs: Any) -> Any:
+        return None
+
+    return _factory
+
+
+def _fallback_injection_order_from_mtime(raw_paths: list[Path]) -> dict[str, int]:
+    ordered_paths = sorted(raw_paths, key=lambda path: (path.stat().st_mtime, path.name))
+    return {path.stem: index for index, path in enumerate(ordered_paths, start=1)}
