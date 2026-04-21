@@ -11,11 +11,11 @@ from openpyxl import Workbook
 from scipy.signal import peak_widths
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.injection_rolling import rolling_median_rt
+from xic_extractor.injection_rolling import read_injection_order, rolling_median_rt
 from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
 from xic_extractor.peak_scoring import ScoringContext
 from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
-from xic_extractor.rt_prior_library import LibraryEntry
+from xic_extractor.rt_prior_library import LibraryEntry, load_library
 from xic_extractor.sample_groups import classify_sample_group
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -64,6 +64,23 @@ _LONG_OUTPUT_FIELDS = (
     "PeakStart",
     "PeakEnd",
     "PeakWidth",
+    "Confidence",
+    "Reason",
+)
+_SCORE_BREAKDOWN_FIELDS = (
+    "SampleName",
+    "Target",
+    "symmetry",
+    "local_sn",
+    "nl_support",
+    "rt_prior",
+    "rt_centrality",
+    "noise_shape",
+    "peak_width",
+    "Total Severity",
+    "Confidence",
+    "Prior RT",
+    "Prior Source",
 )
 
 
@@ -128,6 +145,10 @@ def run(
         raise RawReaderError(" ".join(reader_errors))
 
     raw_paths = sorted(config.data_dir.glob("*.raw"))
+    resolved_injection_order = _resolve_injection_order(
+        config, raw_paths, injection_order
+    )
+    resolved_rt_prior_library = _resolve_rt_prior_library(config, rt_prior_library)
     istd_targets = [target for target in targets if target.is_istd]
     istd_rts_by_sample: dict[str, dict[str, float]] = {}
     prepass_results_by_sample: dict[str, dict[str, ExtractionResult]] = {}
@@ -139,12 +160,10 @@ def run(
     for raw_path in raw_paths:
         if should_stop is not None and should_stop():
             break
-        (
-            anchors,
-            istd_results,
-            istd_diagnostics,
-            istd_shape_metrics,
-        ) = _extract_istd_anchors_only(config, istd_targets, raw_path)
+        prepass = _extract_istd_anchors_only(config, istd_targets, raw_path)
+        if prepass is None:
+            continue
+        anchors, istd_results, istd_diagnostics, istd_shape_metrics = prepass
         prepass_results_by_sample[raw_path.stem] = istd_results
         prepass_diagnostics_by_sample[raw_path.stem] = istd_diagnostics
         prepass_anchor_rts_by_sample[raw_path.stem] = anchors
@@ -155,12 +174,12 @@ def run(
     scoring_context_factory = _build_scoring_context_factory(
         config=config,
         injection_order=(
-            injection_order
-            if injection_order is not None
+            resolved_injection_order
+            if resolved_injection_order is not None
             else _fallback_injection_order_from_mtime(raw_paths)
         ),
         istd_rts_by_sample=istd_rts_by_sample,
-        rt_prior_library=rt_prior_library or {},
+        rt_prior_library=resolved_rt_prior_library or {},
     )
 
     file_results: list[FileResult] = []
@@ -195,6 +214,8 @@ def run(
     _write_output_csv(config, targets, file_results)
     _write_long_output_csv(config, targets, file_results)
     _write_diagnostics_csv(config, diagnostics)
+    if config.emit_score_breakdown:
+        _write_score_breakdown_csv(config, file_results)
     return output
 
 
@@ -843,6 +864,8 @@ def _long_output_rows(
             "PeakStart": "",
             "PeakEnd": "",
             "PeakWidth": "",
+            "Confidence": "HIGH",
+            "Reason": "",
         }
         if file_result.error is not None:
             _set_long_ms1_values(row, "ERROR")
@@ -855,8 +878,62 @@ def _long_output_rows(
                 if target.neutral_loss_da is not None and result.nl is not None
                 else ""
             )
+            row["Confidence"] = result.confidence
+            row["Reason"] = result.reason
         rows.append(row)
     return rows
+
+
+def _write_score_breakdown_csv(
+    config: ExtractionConfig, file_results: list[FileResult]
+) -> None:
+    path = config.output_csv.with_name("xic_score_breakdown.csv")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.DictWriter(handle, fieldnames=_SCORE_BREAKDOWN_FIELDS)
+        writer.writeheader()
+        for file_result in file_results:
+            for result in file_result.extraction_results:
+                severities = {label: severity for severity, label in result.severities}
+                writer.writerow(
+                    {
+                        "SampleName": file_result.sample_name,
+                        "Target": result.target_label,
+                        "symmetry": _format_optional_severity(
+                            severities.get("symmetry")
+                        ),
+                        "local_sn": _format_optional_severity(
+                            severities.get("local_sn")
+                        ),
+                        "nl_support": _format_optional_severity(
+                            severities.get("nl_support")
+                        ),
+                        "rt_prior": _format_optional_severity(
+                            severities.get("rt_prior")
+                        ),
+                        "rt_centrality": _format_optional_severity(
+                            severities.get("rt_centrality")
+                        ),
+                        "noise_shape": _format_optional_severity(
+                            severities.get("noise_shape")
+                        ),
+                        "peak_width": _format_optional_severity(
+                            severities.get("peak_width")
+                        ),
+                        "Total Severity": str(
+                            sum(severity for severity, _ in result.severities)
+                        ),
+                        "Confidence": result.confidence,
+                        "Prior RT": _format_optional_number(result.prior_rt),
+                        "Prior Source": result.prior_source,
+                    }
+                )
+
+
+def _format_optional_severity(value: int | None) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _set_long_ms1_values(row: dict[str, str], value: str) -> None:
@@ -1115,6 +1192,31 @@ def _istd_confidence_note(istd_confidence: str | None) -> str | None:
     return f"ISTD anchor was {istd_confidence}"
 
 
+def _resolve_injection_order(
+    config: ExtractionConfig,
+    raw_paths: list[Path],
+    injection_order: dict[str, int] | None,
+) -> dict[str, int] | None:
+    if injection_order is not None:
+        return injection_order
+    if config.injection_order_source is not None:
+        return read_injection_order(config.injection_order_source)
+    if not raw_paths:
+        return None
+    return _fallback_injection_order_from_mtime(raw_paths)
+
+
+def _resolve_rt_prior_library(
+    config: ExtractionConfig,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None,
+) -> dict[tuple[str, str], LibraryEntry]:
+    if rt_prior_library is not None:
+        return rt_prior_library
+    if config.rt_prior_library_path is None:
+        return {}
+    return load_library(config.rt_prior_library_path, config.config_hash)
+
+
 def _extract_istd_anchors_only(
     config: ExtractionConfig, istd_targets: list[Target], raw_path: Path
 ) -> tuple[
@@ -1122,7 +1224,7 @@ def _extract_istd_anchors_only(
     dict[str, ExtractionResult],
     list[DiagnosticRecord],
     dict[str, tuple[float, float | None]],
-]:
+] | None:
     if not istd_targets:
         return {}, {}, [], {}
     try:
@@ -1147,7 +1249,7 @@ def _extract_istd_anchors_only(
                     anchors[target.label] = anchor_rt
             return anchors, results, diagnostics, shape_metrics_by_label
     except Exception:
-        return {}, {}, [], {}
+        return None
 
 
 def _build_scoring_context_factory(

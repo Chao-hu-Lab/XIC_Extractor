@@ -83,10 +83,9 @@ def find_peak_and_area(
     if candidates_result.status == "OK":
         if scoring_context_builder is not None:
             scored_candidates = [
-                score_candidate(
+                _score_with_context(
                     candidate,
                     scoring_context_builder(candidate),
-                    prior_rt=preferred_rt,
                     istd_confidence_note=istd_confidence_note,
                 )
                 for candidate in candidates_result.candidates
@@ -112,10 +111,9 @@ def find_peak_and_area(
         )
         if recovery_candidate is not None and recovery_result is not None:
             if scoring_context_builder is not None:
-                scored_recovery = score_candidate(
+                scored_recovery = _score_with_context(
                     recovery_candidate,
                     scoring_context_builder(recovery_candidate),
-                    prior_rt=preferred_rt,
                     istd_confidence_note=istd_confidence_note,
                 )
                 return _detection_success(
@@ -144,10 +142,9 @@ def find_peak_and_area(
     )
     if recovery_candidate is not None and recovery_result is not None:
         if scoring_context_builder is not None:
-            scored_recovery = score_candidate(
+            scored_recovery = _score_with_context(
                 recovery_candidate,
                 scoring_context_builder(recovery_candidate),
-                prior_rt=preferred_rt,
                 istd_confidence_note=istd_confidence_note,
             )
             return _detection_success(
@@ -159,6 +156,20 @@ def find_peak_and_area(
             )
         return _detection_success(recovery_result, recovery_candidate)
     return _detection_failure(candidates_result)
+
+
+def _score_with_context(
+    candidate: PeakCandidate,
+    context: ScoringContext,
+    *,
+    istd_confidence_note: str | None,
+):
+    return score_candidate(
+        candidate,
+        context,
+        prior_rt=context.rt_prior,
+        istd_confidence_note=istd_confidence_note,
+    )
 
 
 def find_peak_candidates(

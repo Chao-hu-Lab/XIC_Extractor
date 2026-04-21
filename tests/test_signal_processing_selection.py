@@ -94,3 +94,95 @@ def test_recovery_path_preserves_scoring_metadata() -> None:
     assert result.confidence is not None
     assert result.reason is not None
     assert len(result.severities) == 7
+
+
+def test_scoring_tiebreak_uses_context_rt_prior_not_preferred_rt() -> None:
+    rt = np.linspace(9.6, 10.4, 401)
+    y = 300 * np.exp(-((rt - 10.00) / 0.03) ** 2)
+    y += 300 * np.exp(-((rt - 10.25) / 0.03) ** 2)
+    y += 2.0
+
+    def ctx_builder(candidate) -> ScoringContext:
+        return ScoringContext(
+            rt_array=rt,
+            intensity_array=y,
+            apex_index=candidate.smoothed_apex_index,
+            half_width_ratio=1.0,
+            fwhm_ratio=1.0,
+            ms2_present=True,
+            nl_match=True,
+            rt_prior=10.25,
+            rt_prior_sigma=0.05,
+            rt_min=9.6,
+            rt_max=10.4,
+            dirty_matrix=False,
+        )
+
+    result = find_peak_and_area(
+        rt,
+        y,
+        _cfg(),
+        preferred_rt=10.00,
+        strict_preferred_rt=False,
+        scoring_context_builder=ctx_builder,
+    )
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(10.25, abs=0.02)
+
+
+def test_find_peak_and_area_passes_context_prior_into_scoring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rt = np.linspace(9.6, 10.4, 401)
+    y = 300 * np.exp(-((rt - 10.00) / 0.03) ** 2)
+    y += 300 * np.exp(-((rt - 10.25) / 0.03) ** 2)
+    y += 2.0
+    observed_prior_rts: list[float | None] = []
+
+    def ctx_builder(candidate) -> ScoringContext:
+        return ScoringContext(
+            rt_array=rt,
+            intensity_array=y,
+            apex_index=candidate.smoothed_apex_index,
+            half_width_ratio=1.0,
+            fwhm_ratio=1.0,
+            ms2_present=True,
+            nl_match=True,
+            rt_prior=10.25,
+            rt_prior_sigma=0.05,
+            rt_min=9.6,
+            rt_max=10.4,
+            dirty_matrix=False,
+        )
+
+    def _score_candidate(candidate, ctx, prior_rt, istd_confidence_note=None):
+        observed_prior_rts.append(prior_rt)
+        from xic_extractor.peak_scoring import Confidence, ScoredCandidate
+
+        return ScoredCandidate(
+            candidate=candidate,
+            severities=tuple(),
+            confidence=Confidence.HIGH,
+            reason="all checks passed",
+            prior_rt=prior_rt,
+        )
+
+    monkeypatch.setattr(
+        "xic_extractor.signal_processing.score_candidate",
+        _score_candidate,
+    )
+
+    result = find_peak_and_area(
+        rt,
+        y,
+        _cfg(),
+        preferred_rt=10.00,
+        strict_preferred_rt=False,
+        scoring_context_builder=ctx_builder,
+    )
+
+    assert result.status == "OK"
+    assert observed_prior_rts
+    assert set(observed_prior_rts) == {10.25}

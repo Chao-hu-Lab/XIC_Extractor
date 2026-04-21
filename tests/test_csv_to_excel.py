@@ -27,7 +27,7 @@ def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_colum
 
     _build_data_sheet(ws, rows)
 
-    assert [ws.cell(row=1, column=i).value for i in range(1, 13)] == [
+    assert [ws.cell(row=1, column=i).value for i in range(1, 15)] == [
         "SampleName",
         "Group",
         "Target",
@@ -40,6 +40,8 @@ def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_colum
         "PeakStart",
         "PeakEnd",
         "PeakWidth",
+        "Confidence",
+        "Reason",
     ]
     assert ws["F2"].value == 9.1234
     assert ws["F2"].number_format == "0.0000"
@@ -58,7 +60,9 @@ def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_colum
     assert ws.column_dimensions["J"].hidden is True
     assert ws.column_dimensions["K"].hidden is True
     assert ws.column_dimensions["L"].hidden is True
-    assert ws.auto_filter.ref == "A1:L6"
+    assert ws["M2"].value == "HIGH"
+    assert ws["N2"].value == "all checks passed"
+    assert ws.auto_filter.ref == "A1:N6"
 
 
 def test_data_sheet_merges_repeated_sample_and_group_cells() -> None:
@@ -97,13 +101,45 @@ def test_data_sheet_forces_sample_names_and_target_labels_to_literal_text() -> N
 
 def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     rows = [
-        _long_row("Tumor_1", "Analyte", "9.0", "10000", "OK", istd_pair="ISTD"),
+        _long_row(
+            "Tumor_1",
+            "Analyte",
+            "9.0",
+            "10000",
+            "OK",
+            istd_pair="ISTD",
+            confidence="HIGH",
+        ),
         _long_row("Tumor_1", "ISTD", "9.1", "20000", "OK", role="ISTD"),
-        _long_row("Tumor_2", "Analyte", "9.2", "30000", "WARN_5ppm", istd_pair="ISTD"),
+        _long_row(
+            "Tumor_2",
+            "Analyte",
+            "9.2",
+            "30000",
+            "WARN_5ppm",
+            istd_pair="ISTD",
+            confidence="MEDIUM",
+        ),
         _long_row("Tumor_2", "ISTD", "9.1", "60000", "OK", role="ISTD"),
-        _long_row("Tumor_3", "Analyte", "9.3", "50000", "NO_MS2", istd_pair="ISTD"),
+        _long_row(
+            "Tumor_3",
+            "Analyte",
+            "9.3",
+            "50000",
+            "NO_MS2",
+            istd_pair="ISTD",
+            confidence="HIGH",
+        ),
         _long_row("Tumor_3", "ISTD", "9.1", "100000", "NO_MS2", role="ISTD"),
-        _long_row("Tumor_4", "Analyte", "9.4", "70000", "OK", istd_pair="ISTD"),
+        _long_row(
+            "Tumor_4",
+            "Analyte",
+            "9.4",
+            "70000",
+            "OK",
+            istd_pair="ISTD",
+            confidence="LOW",
+        ),
         _long_row("Tumor_4", "ISTD", "ND", "ND", "ND", role="ISTD"),
     ]
     wb = Workbook()
@@ -127,6 +163,10 @@ def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     assert data["Analyte"]["NL FAIL"] == 0
     assert data["Analyte"]["NO MS2"] == 1
     assert data["Analyte"]["RT Delta vs ISTD"] == "0.1333±0.0577 min (n=3)"
+    assert data["Analyte"]["Confidence HIGH"] == 2
+    assert data["Analyte"]["Confidence MEDIUM"] == 1
+    assert data["Analyte"]["Confidence LOW"] == 1
+    assert data["Analyte"]["Confidence VERY_LOW"] == 0
     assert data["ISTD"]["Area / ISTD ratio (paired detected)"] == "—"
 
 
@@ -257,6 +297,8 @@ def test_run_writes_row_based_results_sheet_and_makes_diagnostics_active(
     assert ws_results["C1"].value == "Target"
     assert ws_results["G1"].value == "Area"
     assert ws_results["I1"].value == "Int"
+    assert ws_results["M1"].value == "Confidence"
+    assert ws_results["N1"].value == "Reason"
     assert ws_results.column_dimensions["I"].hidden is True
     ws = wb["Diagnostics"]
     assert [ws.cell(row=1, column=i).value for i in range(1, 5)] == [
@@ -303,6 +345,56 @@ def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
     assert wb["Diagnostics"].auto_filter.ref == "A1:D1"
 
 
+def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
+    config = _config(tmp_path, emit_score_breakdown=True)
+    targets = [_target("Analyte")]
+    config.output_csv.parent.mkdir(parents=True)
+    _write_csv(
+        config.output_csv.with_name("xic_results_long.csv"),
+        [
+            _long_row(
+                "Tumor_1",
+                "Analyte",
+                "9.1",
+                "10000",
+                "OK",
+                confidence="MEDIUM",
+                reason="concerns: local_sn (minor)",
+            )
+        ],
+    )
+    _write_csv(
+        config.output_csv.with_name("xic_score_breakdown.csv"),
+        [
+            {
+                "SampleName": "Tumor_1",
+                "Target": "Analyte",
+                "symmetry": "0",
+                "local_sn": "1",
+                "nl_support": "0",
+                "rt_prior": "0",
+                "rt_centrality": "0",
+                "noise_shape": "0",
+                "peak_width": "0",
+                "Total Severity": "1",
+                "Confidence": "MEDIUM",
+                "Prior RT": "9.05",
+                "Prior Source": "rolling_median",
+            }
+        ],
+    )
+    _write_empty_diagnostics_csv(config.diagnostics_csv)
+
+    excel_path = run(config, targets)
+
+    wb = load_workbook(excel_path)
+    assert "Score Breakdown" in wb.sheetnames
+    ws = wb["Score Breakdown"]
+    assert ws["A1"].value == "SampleName"
+    assert ws["J2"].value == 1
+    assert ws["K2"].value == "MEDIUM"
+
+
 def _long_row(
     sample_name: str,
     target: str,
@@ -312,6 +404,8 @@ def _long_row(
     *,
     role: str = "Analyte",
     istd_pair: str = "",
+    confidence: str = "HIGH",
+    reason: str = "all checks passed",
 ) -> dict[str, str]:
     return {
         "SampleName": sample_name,
@@ -326,6 +420,8 @@ def _long_row(
         "PeakStart": "8.9",
         "PeakEnd": "9.3",
         "PeakWidth": "0.4000",
+        "Confidence": confidence,
+        "Reason": reason,
     }
 
 
@@ -356,7 +452,11 @@ def _write_empty_diagnostics_csv(path: Path) -> None:
         writer.writeheader()
 
 
-def _config(tmp_path: Path) -> ExtractionConfig:
+def _config(
+    tmp_path: Path,
+    *,
+    emit_score_breakdown: bool = False,
+) -> ExtractionConfig:
     return ExtractionConfig(
         data_dir=tmp_path / "raw",
         dll_dir=tmp_path / "dll",
@@ -369,6 +469,7 @@ def _config(tmp_path: Path) -> ExtractionConfig:
         ms2_precursor_tol_da=0.5,
         nl_min_intensity_ratio=0.01,
         count_no_ms2_as_detected=True,
+        emit_score_breakdown=emit_score_breakdown,
     )
 
 

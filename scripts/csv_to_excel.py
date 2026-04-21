@@ -48,6 +48,8 @@ _LONG_HEADERS = [
     "PeakStart",
     "PeakEnd",
     "PeakWidth",
+    "Confidence",
+    "Reason",
 ]
 _ADVANCED_HEADERS = {"Int", "PeakStart", "PeakEnd", "PeakWidth"}
 _TARGETS_HEADERS = [
@@ -78,6 +80,10 @@ _SUMMARY_HEADERS = [
     "NL FAIL",
     "NO MS2",
     "RT Delta vs ISTD",
+    "Confidence HIGH",
+    "Confidence MEDIUM",
+    "Confidence LOW",
+    "Confidence VERY_LOW",
 ]
 
 
@@ -139,7 +145,7 @@ def _nl_cell_fill(value: str) -> PatternFill:
 
 
 def _long_cell_value(header: str, raw_val: str) -> object:
-    if header in {"SampleName", "Target", "ISTD Pair"}:
+    if header in {"SampleName", "Target", "ISTD Pair", "Confidence", "Reason"}:
         return _excel_text(raw_val)
     if header == "NL":
         return _nl_to_display(raw_val) if raw_val else ""
@@ -185,6 +191,8 @@ def _long_column_width(header: str) -> int:
         "PeakStart": 14,
         "PeakEnd": 14,
         "PeakWidth": 14,
+        "Confidence": 14,
+        "Reason": 42,
     }[header]
 
 
@@ -210,7 +218,9 @@ def _build_data_sheet(ws, rows: list[dict[str, str]]) -> None:
             if isinstance(value, float):
                 cell.number_format = _long_number_format(header)
 
-    ws.auto_filter.ref = f"A1:L{max(1, len(rows) + 1)}"
+    ws.auto_filter.ref = (
+        f"A1:{get_column_letter(len(_LONG_HEADERS))}{max(1, len(rows) + 1)}"
+    )
     ws.freeze_panes = "A2"
     for col_idx, header in enumerate(_LONG_HEADERS, start=1):
         letter = get_column_letter(col_idx)
@@ -283,10 +293,13 @@ def _build_summary_sheet(
             if _SUMMARY_HEADERS[col_idx - 1] == "Median Area (detected)":
                 cell.number_format = "0.00E+00"
 
-    widths = [24, 12, 24, 12, 10, 12, 12, 16, 24, 10, 10, 10, 10, 22]
+    widths = [24, 12, 24, 12, 10, 12, 12, 16, 24, 10, 10, 10, 10, 22, 14, 16, 12, 14]
     for col_idx, width in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
-    ws.auto_filter.ref = f"A1:N{max(1, len(_target_summaries(rows)) + 1)}"
+    ws.auto_filter.ref = (
+        f"A1:{get_column_letter(len(_SUMMARY_HEADERS))}"
+        f"{max(1, len(_target_summaries(rows)) + 1)}"
+    )
     ws.freeze_panes = "A2"
 
 
@@ -315,6 +328,7 @@ def _summary_row_values(
     total = len(target_rows)
     detected = len(detected_rows)
     nl_counts = _long_nl_counts(target_rows)
+    confidence_counts = _long_confidence_counts(target_rows)
     return [
         _excel_text(target),
         target_row.get("Role", ""),
@@ -330,7 +344,20 @@ def _summary_row_values(
         nl_counts["NL_FAIL"],
         nl_counts["NO_MS2"],
         _long_rt_delta(target_row, rows, count_no_ms2_as_detected),
+        confidence_counts["HIGH"],
+        confidence_counts["MEDIUM"],
+        confidence_counts["LOW"],
+        confidence_counts["VERY_LOW"],
     ]
+
+
+def _long_confidence_counts(target_rows: list[dict[str, str]]) -> dict[str, int]:
+    counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "VERY_LOW": 0}
+    for row in target_rows:
+        confidence = row.get("Confidence", "HIGH")
+        if confidence in counts:
+            counts[confidence] += 1
+    return counts
 
 
 def _is_long_detected(
@@ -532,6 +559,45 @@ def _diagnostic_fill(issue: str) -> str:
     return _MS2_WARN
 
 
+def _build_score_breakdown_sheet(ws, rows: list[dict[str, str]]) -> None:
+    if not rows:
+        return
+    headers = list(rows[0].keys())
+    for col_idx, header in enumerate(headers, start=1):
+        _apply(
+            ws.cell(row=1, column=col_idx, value=header),
+            **_header_style(_MS2_HEADER),
+        )
+    for row_idx, row in enumerate(rows, start=2):
+        fill_hex = GREY if row_idx % 2 == 0 else WHITE
+        for col_idx, header in enumerate(headers, start=1):
+            raw_value = row.get(header, "")
+            value = (
+                _safe_float(raw_value)
+                if header
+                in {
+                    "symmetry",
+                    "local_sn",
+                    "nl_support",
+                    "rt_prior",
+                    "rt_centrality",
+                    "noise_shape",
+                    "peak_width",
+                    "Total Severity",
+                    "Prior RT",
+                }
+                else _excel_text(raw_value)
+            )
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            _apply(cell, fill=_fill(fill_hex), alignment=CENTER, border=BORDER)
+            if isinstance(value, float) and header == "Prior RT":
+                cell.number_format = "0.0000"
+    ws.auto_filter.ref = (
+        f"A1:{get_column_letter(len(headers))}{max(1, len(rows) + 1)}"
+    )
+    ws.freeze_panes = "A2"
+
+
 @overload
 def run(base_or_config: Path) -> Path: ...
 
@@ -563,6 +629,7 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
         return excel_path
 
     diagnostics = _read_diagnostics(config.diagnostics_csv)
+    score_breakdown = _read_score_breakdown(config)
 
     wb = Workbook()
     ws_data = wb.active
@@ -581,6 +648,9 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
 
     ws_diagnostics = wb.create_sheet("Diagnostics")
     _build_diagnostics_sheet(ws_diagnostics, diagnostics)
+    if config.emit_score_breakdown and score_breakdown:
+        ws_breakdown = wb.create_sheet("Score Breakdown")
+        _build_score_breakdown_sheet(ws_breakdown, score_breakdown)
     if diagnostics:
         wb.active = wb.index(ws_diagnostics)
 
@@ -588,6 +658,7 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
     for _csv in [
         config.output_csv,
         config.output_csv.with_name("xic_results_long.csv"),
+        config.output_csv.with_name("xic_score_breakdown.csv"),
         config.diagnostics_csv,
     ]:
         _csv.unlink(missing_ok=True)
@@ -627,9 +698,18 @@ def _wide_to_long_rows(
                     "PeakStart": row.get(f"{target.label}_PeakStart", ""),
                     "PeakEnd": row.get(f"{target.label}_PeakEnd", ""),
                     "PeakWidth": _legacy_peak_width(row, target.label),
+                    "Confidence": "HIGH",
+                    "Reason": "",
                 }
             )
     return long_rows
+
+
+def _read_score_breakdown(config: ExtractionConfig) -> list[dict[str, str]]:
+    path = config.output_csv.with_name("xic_score_breakdown.csv")
+    if not path.exists():
+        return []
+    return _read_results(path)
 
 
 def _legacy_peak_width(row: dict[str, str], label: str) -> str:

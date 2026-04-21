@@ -118,6 +118,8 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
             "PeakStart": "8.0000",
             "PeakEnd": "9.0000",
             "PeakWidth": "1.0000",
+            "Confidence": "HIGH",
+            "Reason": "",
         },
         {
             "SampleName": "SampleA",
@@ -132,8 +134,81 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
             "PeakStart": "9.0000",
             "PeakEnd": "10.0000",
             "PeakWidth": "1.0000",
+            "Confidence": "HIGH",
+            "Reason": "",
         },
     ]
+
+
+def test_run_loads_scoring_inputs_from_config_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    config = ExtractionConfig(
+        **{
+            **config.__dict__,
+            "injection_order_source": tmp_path / "sample_info.csv",
+            "rt_prior_library_path": tmp_path / "rt_prior_library.csv",
+            "config_hash": "abcd1234",
+        }
+    )
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("NoNL", neutral_loss_da=None)]
+    calls: dict[str, object] = {}
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence([_ok_peak(8.5, 1200.0, 3400.25)]),
+    )
+
+    def _read_injection_order(path: Path) -> dict[str, int]:
+        calls["injection_order_path"] = path
+        return {"SampleA": 1}
+
+    def _load_library(path: Path, config_hash: str) -> dict[tuple[str, str], object]:
+        calls["library_args"] = (path, config_hash)
+        return {}
+
+    monkeypatch.setattr(
+        "xic_extractor.extractor.read_injection_order",
+        _read_injection_order,
+    )
+    monkeypatch.setattr("xic_extractor.extractor.load_library", _load_library)
+
+    _run(config, targets)
+
+    assert calls["injection_order_path"] == config.injection_order_source
+    assert calls["library_args"] == (
+        config.rt_prior_library_path,
+        config.config_hash,
+    )
+
+
+def test_run_falls_back_to_main_pass_when_prepass_returns_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("ISTD", is_istd=True), _target("Analyte", istd_pair="ISTD")]
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor._extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence(
+            [
+                _ok_peak(9.05, 1500.0, 2000.0),
+                _ok_peak(9.07, 1200.0, 1800.0),
+            ]
+        ),
+    )
+
+    output = _run(config, targets)
+
+    assert output.file_results[0].results["ISTD"].peak_result.peak is not None
+    assert output.file_results[0].results["Analyte"].peak_result.peak is not None
 
 
 def test_run_writes_nd_for_peak_failure_but_keeps_nl_result(
