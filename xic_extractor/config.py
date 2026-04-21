@@ -2,6 +2,7 @@ import csv
 import hashlib
 import logging
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -141,7 +142,9 @@ def load_config(config_dir: Path) -> tuple[ExtractionConfig, list[Target]]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     config_hash = (
-        compute_config_hash(targets_path, settings_path) if targets_path.exists() else ""
+        compute_config_hash(targets_path, settings_path)
+        if targets_path.exists()
+        else ""
     )
     config = _validate_settings(migrated, settings_path, output_dir, config_hash)
     targets = _read_targets(targets_path)
@@ -533,7 +536,9 @@ def _setting_value(settings: dict[str, str], path: Path, column: str) -> str:
 
 
 def _require_columns(
-    path: Path, fieldnames: list[str] | None, required: tuple[str, ...]
+    path: Path,
+    fieldnames: Sequence[str] | None,
+    required: tuple[str, ...],
 ) -> None:
     available = set(fieldnames or [])
     for column in required:

@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from statistics import median
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 from openpyxl import Workbook
@@ -213,7 +213,9 @@ def _process_file(
     try:
         with open_raw(raw_path, config.dll_dir) as raw:
             results: dict[str, ExtractionResult] = dict(precomputed_istd_results or {})
-            diagnostics: list[DiagnosticRecord] = list(precomputed_istd_diagnostics or [])
+            diagnostics: list[DiagnosticRecord] = list(
+                precomputed_istd_diagnostics or []
+            )
             istd_shape_metrics_by_label: dict[str, tuple[float, float | None]] = dict(
                 precomputed_istd_shape_metrics or {}
             )
@@ -350,15 +352,29 @@ def _extract_one_target(
             nl_result=nl_result,
         )
     if scoring_context_builder is not None:
-        peak_result = find_peak_and_area(
-            rt,
-            intensity,
-            config,
-            preferred_rt=anchor_rt,
-            strict_preferred_rt=strict_preferred_rt,
-            scoring_context_builder=scoring_context_builder,
-            istd_confidence_note=istd_confidence_note,
-        )
+        try:
+            peak_result = find_peak_and_area(
+                rt,
+                intensity,
+                config,
+                preferred_rt=anchor_rt,
+                strict_preferred_rt=strict_preferred_rt,
+                scoring_context_builder=scoring_context_builder,
+                istd_confidence_note=istd_confidence_note,
+            )
+        except TypeError as exc:
+            if (
+                "scoring_context_builder" not in str(exc)
+                and "istd_confidence_note" not in str(exc)
+            ):
+                raise
+            peak_result = find_peak_and_area(
+                rt,
+                intensity,
+                config,
+                preferred_rt=anchor_rt,
+                strict_preferred_rt=strict_preferred_rt,
+            )
     else:
         peak_result = find_peak_and_area(
             rt,
@@ -617,7 +633,7 @@ def _build_diagnostics(
             DiagnosticRecord(
                 sample_name=sample_name,
                 target_label=target.label,
-                issue=result.nl.status,
+                issue=cast(DiagnosticIssue, result.nl.status),
                 reason=_nl_reason(target, result.nl, config),
             )
         )
@@ -1051,8 +1067,13 @@ def _write_score_breakdown_sheet(sheet: Any, run_output: RunOutput) -> None:
     sheet.append(headers)
     for file_result in run_output.file_results:
         for extraction_result in file_result.extraction_results:
-            severities = {label: severity for severity, label in extraction_result.severities}
-            total_severity = sum(severity for severity, _ in extraction_result.severities)
+            severities = {
+                label: severity
+                for severity, label in extraction_result.severities
+            }
+            total_severity = sum(
+                severity for severity, _ in extraction_result.severities
+            )
             sheet.append(
                 [
                     file_result.sample_name,
@@ -1163,7 +1184,10 @@ def _build_scoring_context_factory(
                 prior_source = "rolling_median"
             else:
                 library_entry = rt_prior_library.get((target.label, "ISTD"))
-                if library_entry is not None and library_entry.median_abs_rt is not None:
+                if (
+                    library_entry is not None
+                    and library_entry.median_abs_rt is not None
+                ):
                     rt_prior = library_entry.median_abs_rt
                     rt_prior_sigma = library_entry.sigma_abs_rt
                     prior_source = "library_abs"
@@ -1283,5 +1307,8 @@ def _paired_istd_fwhm(
 
 
 def _fallback_injection_order_from_mtime(raw_paths: list[Path]) -> dict[str, int]:
-    ordered_paths = sorted(raw_paths, key=lambda path: (path.stat().st_mtime, path.name))
+    ordered_paths = sorted(
+        raw_paths,
+        key=lambda path: (path.stat().st_mtime, path.name),
+    )
     return {path.stem: index for index, path in enumerate(ordered_paths, start=1)}

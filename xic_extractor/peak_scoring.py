@@ -104,7 +104,9 @@ def build_reason(
 
 def select_candidate_with_confidence(scored: list[ScoredCandidate]) -> ScoredCandidate:
     if not scored:
-        raise ValueError("select_candidate_with_confidence requires at least one candidate")
+        raise ValueError(
+            "select_candidate_with_confidence requires at least one candidate"
+        )
 
     def key(scored_candidate: ScoredCandidate) -> tuple[int, float, float]:
         candidate = scored_candidate.candidate

@@ -10,6 +10,11 @@ from xic_extractor.peak_scoring import (
     build_reason,
     confidence_from_total,
     local_sn_severity,
+    nl_support_severity,
+    noise_shape_severity,
+    peak_width_severity,
+    rt_centrality_severity,
+    rt_prior_severity,
     score_candidate,
     select_candidate_with_confidence,
     symmetry_severity,
@@ -212,15 +217,6 @@ def test_local_sn_invalid_trace_is_major() -> None:
     sev, label = local_sn_severity(y, apex_index=200, dirty_matrix=False)
     assert sev == 2
     assert label == "local_sn"
-
-
-from xic_extractor.peak_scoring import (
-    noise_shape_severity,
-    nl_support_severity,
-    peak_width_severity,
-    rt_centrality_severity,
-    rt_prior_severity,
-)
 
 
 def test_nl_present_and_match_is_pass() -> None:

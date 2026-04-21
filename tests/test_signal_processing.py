@@ -82,7 +82,8 @@ def test_candidate_enumeration_returns_all_prominent_peaks() -> None:
     assert result.candidates[1].peak.intensity > result.candidates[0].peak.intensity
 
 
-def test_raw_apex_reporting_does_not_return_zero_intensity_when_area_is_positive() -> None:
+def test_raw_apex_reporting_does_not_return_zero_intensity_when_area_is_positive(
+) -> None:
     rt = np.linspace(8.0, 10.0, 401)
     intensity = _gaussian(rt, center=9.0, sigma=0.08, height=1000.0)
     intensity[int(np.argmin(np.abs(rt - 9.0)))] = 0.0

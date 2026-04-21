@@ -7,7 +7,6 @@ from xic_extractor.settings_schema import (
     CANONICAL_SETTINGS_DESCRIPTIONS,
 )
 
-
 SETTINGS_FIELDS = ["key", "value", "description"]
 TARGET_FIELDS = [
     "label",

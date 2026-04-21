@@ -28,7 +28,7 @@ def _read_csv(path: Path) -> dict[str, int]:
             order = row.get("Injection_Order")
             if not name or order in (None, ""):
                 continue
-            out[name] = int(order)
+            out[name] = int(str(order).strip())
     return out
 
 
@@ -47,7 +47,7 @@ def _read_xlsx(path: Path) -> dict[str, int]:
             order = row[order_i]
             if name is None or order is None:
                 continue
-            out[str(name).strip()] = int(order)
+            out[str(name).strip()] = int(str(order).strip())
         return out
     finally:
         wb.close()

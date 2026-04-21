@@ -1,6 +1,7 @@
-import tomllib
 from pathlib import Path
 from types import SimpleNamespace
+
+import tomllib
 
 from xic_extractor.config import ConfigError, ExtractionConfig, Target
 from xic_extractor.extractor import DiagnosticRecord, RunOutput
