@@ -99,7 +99,7 @@ class ExtractionResult:
     target_label: str = ""
     role: str = ""
     istd_pair: str = ""
-    confidence: str = "HIGH"
+    confidence: str = ""
     reason: str = ""
     severities: tuple[tuple[int, str], ...] = ()
     prior_rt: float | None = None
@@ -408,7 +408,11 @@ def _extract_one_target(
         target_label=target.label,
         role="ISTD" if target.is_istd else "Analyte",
         istd_pair=target.istd_pair,
-        confidence=peak_result.confidence or "HIGH",
+        confidence=(
+            peak_result.confidence or "HIGH"
+            if peak_result.peak is not None
+            else ""
+        ),
         reason=peak_result.reason or "",
         severities=peak_result.severities,
         prior_rt=getattr(scoring_context_builder, "rt_prior", None),
@@ -848,7 +852,7 @@ def _long_output_rows(
             "PeakStart": "",
             "PeakEnd": "",
             "PeakWidth": "",
-            "Confidence": "HIGH",
+            "Confidence": "",
             "Reason": "",
         }
         if file_result.error is not None:
@@ -1094,7 +1098,8 @@ def _write_summary_sheet(
             key,
             {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "VERY_LOW": 0},
         )
-        target_counts[extraction_result.confidence] += 1
+        if extraction_result.confidence in target_counts:
+            target_counts[extraction_result.confidence] += 1
 
     for (target_label, role), target_counts in counts.items():
         sheet.append(

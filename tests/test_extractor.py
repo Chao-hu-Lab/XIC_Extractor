@@ -286,6 +286,82 @@ def test_run_writes_nd_for_peak_failure_but_keeps_nl_result(
     assert "max=1234" in diagnostics[0]["Reason"]
 
 
+def test_run_leaves_confidence_blank_for_nd_rows_with_failed_nl(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("WithNL")]
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence(
+            [_failed_peak("PEAK_NOT_FOUND", n_points=15, max_smoothed=1234.0)]
+        ),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.check_nl",
+        _nl_sequence([NLResult("NL_FAIL", 78.4, None, 10, 1, 3)]),
+    )
+
+    output = _run(config, targets)
+
+    long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
+    assert long_rows == [
+        {
+            "SampleName": "SampleA",
+            "Group": "Other",
+            "Target": "WithNL",
+            "Role": "Analyte",
+            "ISTD Pair": "",
+            "RT": "ND",
+            "Area": "ND",
+            "NL": "NL_FAIL",
+            "Int": "ND",
+            "PeakStart": "ND",
+            "PeakEnd": "ND",
+            "PeakWidth": "ND",
+            "Confidence": "",
+            "Reason": "",
+        }
+    ]
+    assert output.file_results[0].results["WithNL"].confidence == ""
+
+
+def test_run_leaves_confidence_blank_for_file_error_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "Bad.raw").write_text("", encoding="utf-8")
+    targets = [_target("WithNL")]
+    monkeypatch.setattr(
+        "xic_extractor.extractor.open_raw",
+        _open_raw_factory(errors={"Bad.raw": RuntimeError("file locked")}),
+    )
+
+    _run(config, targets)
+
+    long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
+    assert long_rows == [
+        {
+            "SampleName": "Bad",
+            "Group": "Other",
+            "Target": "WithNL",
+            "Role": "Analyte",
+            "ISTD Pair": "",
+            "RT": "ERROR",
+            "Area": "ERROR",
+            "NL": "ERROR",
+            "Int": "ERROR",
+            "PeakStart": "ERROR",
+            "PeakEnd": "ERROR",
+            "PeakWidth": "ERROR",
+            "Confidence": "",
+            "Reason": "",
+        }
+    ]
+
+
 def test_run_writes_file_error_row_and_continues(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
