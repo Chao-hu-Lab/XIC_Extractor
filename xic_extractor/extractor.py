@@ -6,6 +6,8 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Literal
 
+from openpyxl import Workbook
+
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
 from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
@@ -71,13 +73,34 @@ class DiagnosticRecord:
 class ExtractionResult:
     peak_result: PeakDetectionResult
     nl: NLResult | None
+    target_label: str = ""
+    role: str = ""
+    istd_pair: str = ""
+    confidence: str = "HIGH"
+    reason: str = ""
+    severities: tuple[tuple[int, str], ...] = ()
+    prior_rt: float | None = None
+    prior_source: str = ""
+
+    @property
+    def peak(self) -> PeakResult | None:
+        return self.peak_result.peak
+
+    @property
+    def nl_result(self) -> NLResult | None:
+        return self.nl
 
 
 @dataclass
 class FileResult:
     sample_name: str
     results: dict[str, ExtractionResult]
+    group: str | None = None
     error: str | None = None
+
+    @property
+    def extraction_results(self) -> list[ExtractionResult]:
+        return list(self.results.values())
 
 
 @dataclass
@@ -323,7 +346,15 @@ def _extract_one_target(
     if paired_rejection is not None:
         peak_result = replace(peak_result, peak=None)
 
-    result = ExtractionResult(peak_result=peak_result, nl=nl_result)
+    result = ExtractionResult(
+        peak_result=peak_result,
+        nl=nl_result,
+        target_label=target.label,
+        role="ISTD" if target.is_istd else "Analyte",
+        istd_pair=target.istd_pair,
+        confidence=peak_result.confidence or "HIGH",
+        reason=peak_result.reason or "",
+    )
     results[target.label] = result
     diagnostics.extend(_build_diagnostics(sample_name, target, result, config))
     if paired_rejection is not None:
@@ -858,6 +889,145 @@ def _format_optional_number(value: float | None) -> str:
 
 def _sample_group(name: str) -> str:
     return classify_sample_group(name)
+
+
+def _write_xlsx(
+    output_path: Path,
+    run_output: RunOutput,
+    targets: list[Target],
+    emit_score_breakdown: bool,
+) -> None:
+    workbook = Workbook()
+    results_sheet = workbook.active
+    results_sheet.title = "XIC Results"
+    _write_xic_results_sheet(results_sheet, run_output, targets)
+
+    summary_sheet = workbook.create_sheet("Summary")
+    _write_summary_sheet(summary_sheet, run_output, targets)
+
+    if emit_score_breakdown:
+        breakdown_sheet = workbook.create_sheet("Score Breakdown")
+        _write_score_breakdown_sheet(breakdown_sheet, run_output)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(output_path)
+    workbook.close()
+
+
+def _write_xic_results_sheet(
+    sheet: Any, run_output: RunOutput, targets: list[Target]
+) -> None:
+    headers = [
+        "SampleName",
+        "Group",
+        "Target",
+        "Role",
+        "ISTD Pair",
+        "RT",
+        "Area",
+        "NL",
+        "Int",
+        "PeakStart",
+        "PeakEnd",
+        "PeakWidth",
+        "Confidence",
+        "Reason",
+    ]
+    sheet.append(headers)
+    for file_result, extraction_result in _iter_output_rows(run_output, targets):
+        peak = extraction_result.peak
+        sheet.append(
+            [
+                file_result.sample_name,
+                file_result.group,
+                extraction_result.target_label,
+                extraction_result.role,
+                extraction_result.istd_pair,
+                peak.rt if peak is not None else None,
+                peak.area if peak is not None else None,
+                (
+                    extraction_result.nl_result.to_token()
+                    if extraction_result.nl_result is not None
+                    else None
+                ),
+                peak.intensity if peak is not None else None,
+                peak.peak_start if peak is not None else None,
+                peak.peak_end if peak is not None else None,
+                abs(peak.peak_end - peak.peak_start) if peak is not None else None,
+                extraction_result.confidence,
+                extraction_result.reason,
+            ]
+        )
+
+
+def _write_summary_sheet(
+    sheet: Any, run_output: RunOutput, targets: list[Target]
+) -> None:
+    headers = [
+        "Target",
+        "Role",
+        "Confidence HIGH",
+        "Confidence MEDIUM",
+        "Confidence LOW",
+        "Confidence VERY_LOW",
+    ]
+    sheet.append(headers)
+    counts: dict[tuple[str, str], dict[str, int]] = {}
+    for _, extraction_result in _iter_output_rows(run_output, targets):
+        key = (extraction_result.target_label, extraction_result.role)
+        target_counts = counts.setdefault(
+            key,
+            {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "VERY_LOW": 0},
+        )
+        target_counts[extraction_result.confidence] += 1
+
+    for (target_label, role), target_counts in counts.items():
+        sheet.append(
+            [
+                target_label,
+                role,
+                target_counts["HIGH"],
+                target_counts["MEDIUM"],
+                target_counts["LOW"],
+                target_counts["VERY_LOW"],
+            ]
+        )
+
+
+def _write_score_breakdown_sheet(sheet: Any, run_output: RunOutput) -> None:
+    sheet.append(
+        [
+            "SampleName",
+            "Target",
+            "symmetry",
+            "local_sn",
+            "nl_support",
+            "rt_prior",
+            "rt_centrality",
+            "noise_shape",
+            "peak_width",
+            "Total Severity",
+            "Confidence",
+            "Prior RT",
+            "Prior Source",
+        ]
+    )
+
+
+def _iter_output_rows(
+    run_output: RunOutput, targets: list[Target]
+) -> list[tuple[FileResult, ExtractionResult]]:
+    rows: list[tuple[FileResult, ExtractionResult]] = []
+    for file_result in run_output.file_results:
+        if targets:
+            for target in targets:
+                extraction_result = file_result.results.get(target.label)
+                if extraction_result is not None:
+                    rows.append((file_result, extraction_result))
+            continue
+        for extraction_result in file_result.extraction_results:
+            rows.append((file_result, extraction_result))
+    return rows
 
 
 def _istd_confidence_note(istd_confidence: str | None) -> str | None:
