@@ -7,6 +7,28 @@ on:
     branches: ["master", "main"]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --all-extras --dev
+      - run: uv run ruff check xic_extractor tests
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --all-extras --dev
+      - run: uv run mypy xic_extractor
+
   test:
     uses: Chao-hu-Lab/shared-workflows/.github/workflows/python-ci.yml@c5276382aafc2ee6c0f14b3651cad8aca9f74758
     with:

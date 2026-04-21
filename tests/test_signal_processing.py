@@ -5,7 +5,7 @@ import pytest
 from scipy.signal import savgol_filter
 
 from xic_extractor.config import ExtractionConfig
-from xic_extractor.signal_processing import find_peak_and_area
+from xic_extractor.signal_processing import find_peak_and_area, find_peak_candidates
 
 
 def _config(
@@ -66,6 +66,55 @@ def test_two_peak_signal_chooses_highest_smoothed_peak() -> None:
     assert result.n_prominent_peaks == 2
 
 
+def test_candidate_enumeration_returns_all_prominent_peaks() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = _gaussian(rt, center=8.7, sigma=0.05, height=500.0)
+    intensity += _gaussian(rt, center=9.4, sigma=0.06, height=1200.0)
+
+    result = find_peak_candidates(rt, intensity, _config())
+
+    assert result.status == "OK"
+    assert len(result.candidates) == 2
+    assert [candidate.peak.rt for candidate in result.candidates] == pytest.approx(
+        [8.7, 9.4],
+        abs=0.01,
+    )
+    assert result.candidates[1].peak.intensity > result.candidates[0].peak.intensity
+
+
+def test_raw_apex_reporting_does_not_return_zero_intensity_when_area_is_positive(
+) -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = _gaussian(rt, center=9.0, sigma=0.08, height=1000.0)
+    intensity[int(np.argmin(np.abs(rt - 9.0)))] = 0.0
+
+    result = find_peak_and_area(rt, intensity, _config(smooth_window=31))
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.area > 0.0
+    assert result.peak.intensity > 900.0
+    assert result.peak.rt == pytest.approx(9.0, abs=0.01)
+    assert result.peak.intensity_smoothed > 900.0
+    assert result.candidates[0].raw_apex_rt == pytest.approx(8.995, abs=0.01)
+
+
+def test_raw_spike_inside_peak_window_does_not_move_reported_peak_rt() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = _gaussian(rt, center=9.0, sigma=0.08, height=1000.0)
+    spike_idx = int(np.argmin(np.abs(rt - 8.88)))
+    intensity[spike_idx] = 1400.0
+
+    result = find_peak_and_area(rt, intensity, _config(smooth_window=31))
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(9.0, abs=0.01)
+    assert result.peak.intensity == pytest.approx(1400.0)
+    assert result.candidates[0].smoothed_apex_rt == pytest.approx(9.0, abs=0.01)
+    assert result.candidates[0].raw_apex_rt == pytest.approx(8.88, abs=0.01)
+
+
 def test_strict_preferred_rt_chooses_anchor_peak_even_when_neighbor_is_higher() -> None:
     rt = np.linspace(12.7, 14.8, 421)
     intensity = _gaussian(rt, center=13.06, sigma=0.06, height=330000.0)
@@ -83,6 +132,57 @@ def test_strict_preferred_rt_chooses_anchor_peak_even_when_neighbor_is_higher() 
     assert result.peak is not None
     assert result.peak.rt == pytest.approx(13.79, abs=0.02)
     assert result.n_prominent_peaks == 2
+
+
+def test_preferred_rt_recovers_weaker_anchor_peak_when_strong_peak_is_far() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = _gaussian(rt, center=8.48, sigma=0.04, height=1000.0)
+    intensity += _gaussian(rt, center=9.03, sigma=0.05, height=80.0)
+
+    result = find_peak_and_area(
+        rt,
+        intensity,
+        _config(),
+        preferred_rt=9.03,
+    )
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(9.03, abs=0.02)
+
+
+def test_preferred_rt_recovers_peak_below_standard_prominence_threshold() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = np.full_like(rt, 100000.0)
+    intensity += _gaussian(rt, center=9.05, sigma=0.05, height=5000.0)
+
+    result = find_peak_and_area(
+        rt,
+        intensity,
+        _config(),
+        preferred_rt=9.05,
+    )
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(9.05, abs=0.02)
+
+
+def test_strict_preferred_rt_does_not_relax_prominence_threshold() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = np.full_like(rt, 100000.0)
+    intensity += _gaussian(rt, center=9.05, sigma=0.05, height=5000.0)
+
+    result = find_peak_and_area(
+        rt,
+        intensity,
+        _config(),
+        preferred_rt=9.05,
+        strict_preferred_rt=True,
+    )
+
+    assert result.status == "PEAK_NOT_FOUND"
+    assert result.peak is None
 
 
 def test_positive_flat_noise_returns_peak_not_found() -> None:
@@ -189,10 +289,11 @@ def test_area_is_computed_from_raw_intensity_not_smoothed() -> None:
     raw_area = np.trapezoid(intensity[left:right], rt[left:right]) * 60.0
     smoothed_area = np.trapezoid(smoothed[left:right], rt[left:right]) * 60.0
     apex_idx = int(np.argmin(np.abs(rt - result.peak.rt)))
+    raw_apex_idx = result.candidates[0].raw_apex_index
 
     assert result.peak.area == pytest.approx(raw_area)
     assert result.peak.area != pytest.approx(smoothed_area, rel=1e-4)
-    assert result.peak.intensity == pytest.approx(intensity[apex_idx])
+    assert result.peak.intensity == pytest.approx(intensity[raw_apex_idx])
     assert result.peak.intensity_smoothed == pytest.approx(smoothed[apex_idx])
 
 

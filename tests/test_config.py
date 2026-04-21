@@ -218,6 +218,8 @@ def test_migrate_settings_dict_drops_smooth_sigma_with_warning() -> None:
         ("nl_rt_anchor_half_window_min", "-0.1"),
         ("nl_fallback_half_window_min", "0"),
         ("nl_fallback_half_window_min", "-0.1"),
+        ("rolling_window_size", "0"),
+        ("rolling_window_size", "-1"),
     ],
 )
 def test_load_config_rejects_invalid_settings(

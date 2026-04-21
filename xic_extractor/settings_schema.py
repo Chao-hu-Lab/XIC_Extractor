@@ -8,6 +8,11 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "ms2_precursor_tol_da": "1.6",
     "nl_min_intensity_ratio": "0.01",
     "count_no_ms2_as_detected": "false",
+    "injection_order_source": "",
+    "rolling_window_size": "5",
+    "dirty_matrix_mode": "false",
+    "rt_prior_library_path": "",
+    "emit_score_breakdown": "false",
     "nl_rt_anchor_search_margin_min": "2.0",
     "nl_rt_anchor_half_window_min": "1.0",
     "nl_fallback_half_window_min": "2.0",
@@ -34,6 +39,14 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "count_no_ms2_as_detected": (
         "是否將無 MS2 觸發的樣品算為偵測到（DDA 隨機性假陰性補救用）"
     ),
+    "injection_order_source": (
+        "Sample 注射順序來源檔（CSV/XLSX 有 Sample_Name 與 Injection_Order 欄；"
+        "留空則 fallback to RAW mtime）"
+    ),
+    "rolling_window_size": "ISTD RT prior 的滾動視窗半徑（±N 個注射）",
+    "dirty_matrix_mode": "髒基質模式（放寬 S/N、收緊峰形；尿液等複雜基質用）",
+    "rt_prior_library_path": "外部 RT prior library CSV 路徑，留空則停用",
+    "emit_score_breakdown": "是否輸出 Score Breakdown sheet（預設關閉）",
     "nl_rt_anchor_search_margin_min": (
         "NL 錨定搜尋半徑（min）：以 rt_center ±此值搜尋 NL 確認的 MS2 作為 RT anchor"
     ),
