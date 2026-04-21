@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_scoring import ScoringContext
@@ -55,3 +56,41 @@ def test_find_peak_and_area_with_scoring_returns_same_best_for_clean_peak() -> N
     assert result.status == "OK"
     assert result.peak is not None
     assert abs(result.peak.rt - 5.0) < 0.05
+
+
+def test_recovery_path_preserves_scoring_metadata() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    y = 1000 * np.exp(-((rt - 8.48) / 0.04) ** 2)
+    y += 80 * np.exp(-((rt - 9.03) / 0.05) ** 2)
+
+    def ctx_builder(candidate) -> ScoringContext:
+        return ScoringContext(
+            rt_array=rt,
+            intensity_array=y,
+            apex_index=candidate.smoothed_apex_index,
+            half_width_ratio=1.0,
+            fwhm_ratio=1.0,
+            ms2_present=False,
+            nl_match=False,
+            rt_prior=9.03,
+            rt_prior_sigma=0.02,
+            rt_min=8.0,
+            rt_max=10.0,
+            dirty_matrix=False,
+        )
+
+    result = find_peak_and_area(
+        rt,
+        y,
+        _cfg(),
+        preferred_rt=9.03,
+        scoring_context_builder=ctx_builder,
+        istd_confidence_note="ISTD anchor was LOW",
+    )
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(9.03, abs=0.02)
+    assert result.confidence is not None
+    assert result.reason is not None
+    assert len(result.severities) == 7

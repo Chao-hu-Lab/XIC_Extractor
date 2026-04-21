@@ -34,3 +34,8 @@ addopts = "-p no:cacheprovider -p no:tmpdir"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.20.1",
+]

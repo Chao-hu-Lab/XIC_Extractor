@@ -111,6 +111,20 @@ def find_peak_and_area(
             current_candidate=best_candidate,
         )
         if recovery_candidate is not None and recovery_result is not None:
+            if scoring_context_builder is not None:
+                scored_recovery = score_candidate(
+                    recovery_candidate,
+                    scoring_context_builder(recovery_candidate),
+                    prior_rt=preferred_rt,
+                    istd_confidence_note=istd_confidence_note,
+                )
+                return _detection_success(
+                    recovery_result,
+                    recovery_candidate,
+                    confidence=scored_recovery.confidence.value,
+                    reason=scored_recovery.reason,
+                    severities=scored_recovery.severities,
+                )
             return _detection_success(recovery_result, recovery_candidate)
         return _detection_success(
             candidates_result,
@@ -129,6 +143,20 @@ def find_peak_and_area(
         current_candidate=None,
     )
     if recovery_candidate is not None and recovery_result is not None:
+        if scoring_context_builder is not None:
+            scored_recovery = score_candidate(
+                recovery_candidate,
+                scoring_context_builder(recovery_candidate),
+                prior_rt=preferred_rt,
+                istd_confidence_note=istd_confidence_note,
+            )
+            return _detection_success(
+                recovery_result,
+                recovery_candidate,
+                confidence=scored_recovery.confidence.value,
+                reason=scored_recovery.reason,
+                severities=scored_recovery.severities,
+            )
         return _detection_success(recovery_result, recovery_candidate)
     return _detection_failure(candidates_result)
 
