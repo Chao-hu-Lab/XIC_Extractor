@@ -102,6 +102,38 @@ def test_local_minimum_preferred_rt_selects_nearest_region() -> None:
     assert result.peak.rt == pytest.approx(9.08, abs=0.02)
 
 
+def test_local_minimum_recovery_relaxes_region_filters_for_preferred_rt() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    y = 1000 * np.exp(-((rt - 8.48) / 0.04) ** 2)
+    y += 80 * np.exp(-((rt - 9.03) / 0.05) ** 2)
+    y += 5.0
+
+    config = _cfg()
+    config = config.__class__(
+        **{
+            **config.__dict__,
+            "resolver_mode": "local_minimum",
+            "resolver_min_relative_height": 0.10,
+            "resolver_min_absolute_height": 25.0,
+            "resolver_min_ratio_top_edge": 1.2,
+            "resolver_peak_duration_min": 0.03,
+            "resolver_peak_duration_max": 1.00,
+            "resolver_min_scans": 5,
+        }
+    )
+
+    result = find_peak_and_area(
+        rt,
+        y,
+        config,
+        preferred_rt=9.03,
+    )
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(9.03, abs=0.03)
+
+
 def test_recovery_path_preserves_scoring_metadata() -> None:
     rt = np.linspace(8.0, 10.0, 401)
     y = 1000 * np.exp(-((rt - 8.48) / 0.04) ** 2)

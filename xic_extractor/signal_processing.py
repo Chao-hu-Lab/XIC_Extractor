@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 import numpy as np
@@ -20,6 +20,11 @@ _PREFERRED_RT_RECOVERY_PROMINENCE_FRACTION: float = 0.2
 _PREFERRED_RT_RECOVERY_MIN_PROMINENCE_RATIO: float = 0.01
 _PREFERRED_RT_RECOVERY_MAX_DELTA_MIN: float = 0.35
 _PREFERRED_RT_RECOVERY_MIN_INTENSITY_RATIO: float = 0.03
+_LOCAL_RECOVERY_RELATIVE_HEIGHT_FRACTION: float = 0.25
+_LOCAL_RECOVERY_MIN_RELATIVE_HEIGHT: float = 0.01
+_LOCAL_RECOVERY_ABSOLUTE_HEIGHT_FRACTION: float = 0.5
+_LOCAL_RECOVERY_MIN_ABSOLUTE_HEIGHT: float = 5.0
+_LOCAL_RECOVERY_TOP_EDGE_RATIO: float = 1.05
 
 
 @dataclass(frozen=True)
@@ -366,20 +371,30 @@ def _preferred_rt_recovery(
     ):
         return None, None
 
-    relaxed_ratio = max(
-        _PREFERRED_RT_RECOVERY_MIN_PROMINENCE_RATIO,
-        config.peak_min_prominence_ratio
-        * _PREFERRED_RT_RECOVERY_PROMINENCE_FRACTION,
-    )
-    if relaxed_ratio >= config.peak_min_prominence_ratio:
-        return None, None
-
-    relaxed_result = find_peak_candidates(
-        rt,
-        intensity,
-        config,
-        peak_min_prominence_ratio=relaxed_ratio,
-    )
+    resolver_mode = getattr(config, "resolver_mode", "legacy_savgol")
+    if resolver_mode == "local_minimum":
+        relaxed_config = _relaxed_local_minimum_recovery_config(config)
+        if relaxed_config == config:
+            return None, None
+        relaxed_result = find_peak_candidates(
+            rt,
+            intensity,
+            relaxed_config,
+        )
+    else:
+        relaxed_ratio = max(
+            _PREFERRED_RT_RECOVERY_MIN_PROMINENCE_RATIO,
+            config.peak_min_prominence_ratio
+            * _PREFERRED_RT_RECOVERY_PROMINENCE_FRACTION,
+        )
+        if relaxed_ratio >= config.peak_min_prominence_ratio:
+            return None, None
+        relaxed_result = find_peak_candidates(
+            rt,
+            intensity,
+            config,
+            peak_min_prominence_ratio=relaxed_ratio,
+        )
     if relaxed_result.status != "OK":
         return None, None
 
@@ -390,6 +405,28 @@ def _preferred_rt_recovery(
     if candidate is None:
         return None, None
     return candidate, relaxed_result
+
+
+def _relaxed_local_minimum_recovery_config(
+    config: ExtractionConfig,
+) -> ExtractionConfig:
+    return replace(
+        config,
+        resolver_min_relative_height=max(
+            _LOCAL_RECOVERY_MIN_RELATIVE_HEIGHT,
+            config.resolver_min_relative_height
+            * _LOCAL_RECOVERY_RELATIVE_HEIGHT_FRACTION,
+        ),
+        resolver_min_absolute_height=max(
+            _LOCAL_RECOVERY_MIN_ABSOLUTE_HEIGHT,
+            config.resolver_min_absolute_height
+            * _LOCAL_RECOVERY_ABSOLUTE_HEIGHT_FRACTION,
+        ),
+        resolver_min_ratio_top_edge=min(
+            config.resolver_min_ratio_top_edge,
+            _LOCAL_RECOVERY_TOP_EDGE_RATIO,
+        ),
+    )
 
 
 def _select_preferred_recovery_candidate(
