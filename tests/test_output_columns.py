@@ -2,8 +2,35 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from xic_extractor.extractor import ExtractionResult, FileResult, RunOutput, _write_xlsx
-from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
+from xic_extractor.config import Target
+from xic_extractor.extractor import (
+    ExtractionResult,
+    FileResult,
+    RunOutput,
+    _long_output_rows,
+    _output_row,
+    _write_xlsx,
+)
+from xic_extractor.signal_processing import (
+    PeakCandidate,
+    PeakDetectionResult,
+    PeakResult,
+)
+
+
+def _target(label: str) -> Target:
+    return Target(
+        label=label,
+        mz=258.1085,
+        rt_min=8.0,
+        rt_max=10.0,
+        ppm_tol=20.0,
+        neutral_loss_da=116.0474,
+        nl_ppm_warn=20.0,
+        nl_ppm_max=50.0,
+        is_istd=False,
+        istd_pair="",
+    )
 
 
 def _fabricate_run_output() -> RunOutput:
@@ -15,12 +42,23 @@ def _fabricate_run_output() -> RunOutput:
         peak_start=8.9,
         peak_end=9.2,
     )
+    candidate = PeakCandidate(
+        peak=peak,
+        smoothed_apex_rt=9.0,
+        smoothed_apex_intensity=500.0,
+        smoothed_apex_index=10,
+        raw_apex_rt=9.03,
+        raw_apex_intensity=500.0,
+        raw_apex_index=10,
+        prominence=100.0,
+    )
     peak_result = PeakDetectionResult(
         status="OK",
         peak=peak,
         n_points=10,
         max_smoothed=500.0,
         n_prominent_peaks=1,
+        candidates=(candidate,),
         confidence="HIGH",
         reason="all checks passed",
     )
@@ -125,3 +163,39 @@ def test_score_breakdown_sheet_emitted_when_flag_on(tmp_path: Path) -> None:
     assert row["Confidence"] == "VERY_LOW"
     assert row["Prior RT"] == 9.01
     assert row["Prior Source"] == "rolling_median"
+
+
+def test_output_rows_use_smoothed_apex_rt_for_reporting() -> None:
+    run_output = _fabricate_run_output()
+    file_result = run_output.file_results[0]
+    target = _target("d3-5-hmdC")
+
+    wide_row = _output_row(file_result, [target])
+    long_row = _long_output_rows(file_result, [target])[0]
+
+    assert wide_row["d3-5-hmdC_RT"] == "9.0000"
+    assert long_row["RT"] == "9.0000"
+    assert wide_row["d3-5-hmdC_Area"] == "123.00"
+    assert long_row["Area"] == "123.00"
+
+
+def test_xlsx_results_sheet_uses_smoothed_apex_rt_for_reporting(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "r.xlsx"
+    target = _target("d3-5-hmdC")
+    _write_xlsx(
+        out,
+        _fabricate_run_output(),
+        targets=[target],
+        emit_score_breakdown=False,
+    )
+    wb = load_workbook(out, read_only=True)
+    ws = wb["XIC Results"]
+    rows = list(ws.iter_rows(values_only=True))
+    headers = list(rows[0])
+    row = dict(zip(headers, rows[1], strict=False))
+
+    assert row["Target"] == "d3-5-hmdC"
+    assert row["RT"] == 9
+    assert row["Area"] == 123

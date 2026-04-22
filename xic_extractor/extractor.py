@@ -125,6 +125,17 @@ class ExtractionResult:
     def total_severity(self) -> int:
         return sum(severity for severity, _ in self.severities) + self.quality_penalty
 
+    @property
+    def reported_rt(self) -> float | None:
+        """User-facing RT uses the selected candidate's smoothed apex when available."""
+        candidate = _selected_candidate(self.peak_result)
+        if candidate is not None:
+            return candidate.smoothed_apex_rt
+        peak = self.peak
+        if peak is None:
+            return None
+        return peak.rt
+
 
 @dataclass
 class FileResult:
@@ -994,7 +1005,7 @@ def _long_output_rows(
             row["NL"] = "ERROR" if target.neutral_loss_da is not None else ""
         else:
             result = file_result.results[target.label]
-            _set_long_peak_values(row, result.peak_result.peak)
+            _set_long_peak_values(row, result)
             row["NL"] = (
                 result.nl.to_token()
                 if target.neutral_loss_da is not None and result.nl is not None
@@ -1067,11 +1078,13 @@ def _set_long_ms1_values(row: dict[str, str], value: str) -> None:
     row["PeakWidth"] = value
 
 
-def _set_long_peak_values(row: dict[str, str], peak: PeakResult | None) -> None:
+def _set_long_peak_values(row: dict[str, str], result: ExtractionResult) -> None:
+    peak = result.peak_result.peak
     if peak is None:
         _set_long_ms1_values(row, "ND")
         return
-    row["RT"] = f"{peak.rt:.4f}"
+    reported_rt = result.reported_rt
+    row["RT"] = f"{reported_rt:.4f}" if reported_rt is not None else "ND"
     row["Area"] = f"{peak.area:.2f}"
     row["Int"] = f"{peak.intensity:.0f}"
     row["PeakStart"] = f"{peak.peak_start:.4f}"
@@ -1101,7 +1114,7 @@ def _output_row(file_result: FileResult, targets: list[Target]) -> dict[str, str
             continue
 
         result = file_result.results[target.label]
-        _set_peak_values(row, target, result.peak_result.peak)
+        _set_peak_values(row, target, result)
         if target.neutral_loss_da is not None:
             row[f"{target.label}_NL"] = result.nl.to_token() if result.nl else "ND"
     return row
@@ -1115,14 +1128,20 @@ def _set_target_values(row: dict[str, str], target: Target, value: str) -> None:
 
 
 def _set_peak_values(
-    row: dict[str, str], target: Target, peak: PeakResult | None
+    row: dict[str, str],
+    target: Target,
+    result: ExtractionResult,
 ) -> None:
+    peak = result.peak_result.peak
     if peak is None:
         for suffix in _MS1_SUFFIXES:
             row[f"{target.label}_{suffix}"] = "ND"
         return
 
-    row[f"{target.label}_RT"] = f"{peak.rt:.4f}"
+    reported_rt = result.reported_rt
+    row[f"{target.label}_RT"] = (
+        f"{reported_rt:.4f}" if reported_rt is not None else "ND"
+    )
     row[f"{target.label}_Int"] = f"{peak.intensity:.0f}"
     row[f"{target.label}_Area"] = f"{peak.area:.2f}"
     row[f"{target.label}_PeakStart"] = f"{peak.peak_start:.4f}"
@@ -1196,7 +1215,7 @@ def _write_xic_results_sheet(
                 extraction_result.target_label,
                 extraction_result.role,
                 extraction_result.istd_pair,
-                peak.rt if peak is not None else None,
+                extraction_result.reported_rt if peak is not None else None,
                 peak.area if peak is not None else None,
                 (
                     extraction_result.nl_result.to_token()
