@@ -36,6 +36,7 @@ def test_istd_context_uses_rolling_median_prior() -> None:
     assert ctx.rt_prior == pytest.approx(10.0)
     assert ctx.rt_prior_sigma is None
     assert ctx.dirty_matrix is False
+    assert ctx.prefer_rt_prior_tiebreak is False
 
 
 def test_analyte_context_uses_delta_rt_library_and_shape_ratio() -> None:
@@ -86,6 +87,7 @@ def test_analyte_context_uses_delta_rt_library_and_shape_ratio() -> None:
     assert ctx.fwhm_ratio is not None
     assert ctx.fwhm_ratio > 0
     assert ctx.dirty_matrix is True
+    assert ctx.prefer_rt_prior_tiebreak is True
 
 
 def test_context_without_injection_order_or_library_has_no_prior() -> None:
@@ -119,6 +121,7 @@ def test_context_without_injection_order_or_library_has_no_prior() -> None:
     assert ctx.rt_prior_sigma is None
     assert ctx.ms2_present is False
     assert ctx.nl_match is False
+    assert ctx.prefer_rt_prior_tiebreak is False
 
 
 def test_scoring_context_caches_asls_inputs_per_xic(

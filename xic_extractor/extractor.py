@@ -13,7 +13,11 @@ from scipy.signal import peak_widths
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.injection_rolling import read_injection_order, rolling_median_rt
 from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
-from xic_extractor.peak_scoring import ScoringContext, compute_local_sn_cache
+from xic_extractor.peak_scoring import (
+    ScoringContext,
+    candidate_quality_penalty,
+    compute_local_sn_cache,
+)
 from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
 from xic_extractor.rt_prior_library import LibraryEntry, load_library
 from xic_extractor.sample_groups import classify_sample_group
@@ -77,6 +81,8 @@ _SCORE_BREAKDOWN_FIELDS = (
     "rt_centrality",
     "noise_shape",
     "peak_width",
+    "Quality Penalty",
+    "Quality Flags",
     "Total Severity",
     "Confidence",
     "Prior RT",
@@ -104,6 +110,8 @@ class ExtractionResult:
     severities: tuple[tuple[int, str], ...] = ()
     prior_rt: float | None = None
     prior_source: str = ""
+    quality_penalty: int = 0
+    quality_flags: tuple[str, ...] = ()
 
     @property
     def peak(self) -> PeakResult | None:
@@ -112,6 +120,10 @@ class ExtractionResult:
     @property
     def nl_result(self) -> NLResult | None:
         return self.nl
+
+    @property
+    def total_severity(self) -> int:
+        return sum(severity for severity, _ in self.severities) + self.quality_penalty
 
 
 @dataclass
@@ -423,6 +435,14 @@ def _extract_one_target(
             paired_rejection.reason,
         )
     shape_metrics = _selected_shape_metrics(intensity, peak_result)
+    selected_candidate = _selected_candidate(peak_result)
+    quality_penalty = 0
+    quality_flags: tuple[str, ...] = ()
+    if selected_candidate is not None:
+        quality_penalty, _ = candidate_quality_penalty(selected_candidate)
+        quality_flags = tuple(
+            str(flag) for flag in getattr(selected_candidate, "quality_flags", ())
+        )
     if shape_metrics_by_label is not None and shape_metrics is not None:
         shape_metrics_by_label[target.label] = shape_metrics
 
@@ -441,6 +461,8 @@ def _extract_one_target(
         severities=peak_result.severities,
         prior_rt=getattr(scoring_context_builder, "rt_prior", None),
         prior_source=getattr(scoring_context_builder, "prior_source", ""),
+        quality_penalty=quality_penalty,
+        quality_flags=quality_flags,
     )
     results[target.label] = result
     diagnostics.extend(_build_diagnostics(sample_name, target, result, config))
@@ -1020,9 +1042,9 @@ def _write_score_breakdown_csv(
                         "peak_width": _format_optional_severity(
                             severities.get("peak_width")
                         ),
-                        "Total Severity": str(
-                            sum(severity for severity, _ in result.severities)
-                        ),
+                        "Quality Penalty": str(result.quality_penalty),
+                        "Quality Flags": ",".join(result.quality_flags),
+                        "Total Severity": str(result.total_severity),
                         "Confidence": result.confidence,
                         "Prior RT": _format_optional_number(result.prior_rt),
                         "Prior Source": result.prior_source,
@@ -1237,6 +1259,8 @@ def _write_score_breakdown_sheet(sheet: Any, run_output: RunOutput) -> None:
         "rt_centrality",
         "noise_shape",
         "peak_width",
+        "Quality Penalty",
+        "Quality Flags",
         "Total Severity",
         "Confidence",
         "Prior RT",
@@ -1249,9 +1273,6 @@ def _write_score_breakdown_sheet(sheet: Any, run_output: RunOutput) -> None:
                 label: severity
                 for severity, label in extraction_result.severities
             }
-            total_severity = sum(
-                severity for severity, _ in extraction_result.severities
-            )
             sheet.append(
                 [
                     file_result.sample_name,
@@ -1263,7 +1284,9 @@ def _write_score_breakdown_sheet(sheet: Any, run_output: RunOutput) -> None:
                     severities.get("rt_centrality"),
                     severities.get("noise_shape"),
                     severities.get("peak_width"),
-                    total_severity,
+                    extraction_result.quality_penalty,
+                    ",".join(extraction_result.quality_flags),
+                    extraction_result.total_severity,
                     extraction_result.confidence,
                     extraction_result.prior_rt,
                     extraction_result.prior_source,
@@ -1346,7 +1369,12 @@ def _extract_istd_anchors_only(
                     diagnostics=diagnostics,
                     shape_metrics_by_label=shape_metrics_by_label,
                 )
-                if anchor_rt is not None:
+                result = results.get(target.label)
+                if (
+                    anchor_rt is not None
+                    and result is not None
+                    and _allow_prepass_anchor(result)
+                ):
                     anchors[target.label] = anchor_rt
             return anchors, results, diagnostics, shape_metrics_by_label
     except Exception:
@@ -1410,6 +1438,13 @@ def _build_scoring_context_factory(
         baseline_array, residual_mad = compute_local_sn_cache(intensity_values)
         ms2_present = nl_result is not None and nl_result.matched_scan_count > 0
         nl_match = nl_result is not None and nl_result.status in {"OK", "WARN"}
+        prefer_rt_prior_tiebreak = (
+            not target.is_istd
+            and bool(target.istd_pair)
+            and istd_rt_in_this_sample is not None
+            and rt_prior is not None
+            and prior_source == "delta_rt_library"
+        )
 
         def builder(candidate: PeakCandidate) -> ScoringContext:
             half_width_ratio, fwhm = _compute_shape_metrics(
@@ -1439,6 +1474,7 @@ def _build_scoring_context_factory(
                 dirty_matrix=config.dirty_matrix_mode,
                 baseline_array=baseline_array,
                 residual_mad=residual_mad,
+                prefer_rt_prior_tiebreak=prefer_rt_prior_tiebreak,
             )
 
         setattr(builder, "rt_prior", rt_prior)
@@ -1498,6 +1534,13 @@ def _selected_candidate(peak_result: PeakDetectionResult) -> PeakCandidate | Non
         if candidate.peak == peak_result.peak:
             return candidate
     return None
+
+
+def _allow_prepass_anchor(result: ExtractionResult) -> bool:
+    candidate = _selected_candidate(result.peak_result)
+    if candidate is None:
+        return False
+    return not bool(getattr(candidate, "quality_flags", ()))
 
 
 def _paired_istd_fwhm(

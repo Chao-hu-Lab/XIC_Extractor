@@ -46,6 +46,7 @@ class ScoredCandidate:
     reason: str
     prior_rt: float | None
     quality_penalty: int = 0
+    prefer_rt_prior_tiebreak: bool = False
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,7 @@ class ScoringContext:
     dirty_matrix: bool
     baseline_array: np.ndarray | None = None
     residual_mad: float | None = None
+    prefer_rt_prior_tiebreak: bool = False
 
 
 _CONFIDENCE_RANK = {
@@ -114,16 +116,27 @@ def select_candidate_with_confidence(scored: list[ScoredCandidate]) -> ScoredCan
             "select_candidate_with_confidence requires at least one candidate"
         )
 
-    def key(scored_candidate: ScoredCandidate) -> tuple[int, int, float, float]:
+    def key(scored_candidate: ScoredCandidate) -> tuple[int, float, float, float]:
         candidate = scored_candidate.candidate
         distance = (
             abs(candidate.smoothed_apex_rt - scored_candidate.prior_rt)
             if scored_candidate.prior_rt is not None
-            else 0.0
+            else float("inf")
         )
+        confidence_rank = _CONFIDENCE_RANK[scored_candidate.confidence]
+        if (
+            scored_candidate.prefer_rt_prior_tiebreak
+            and scored_candidate.prior_rt is not None
+        ):
+            return (
+                confidence_rank,
+                distance,
+                scored_candidate.quality_penalty,
+                -candidate.smoothed_apex_intensity,
+            )
         return (
-            _CONFIDENCE_RANK[scored_candidate.confidence],
-            scored_candidate.quality_penalty,
+            confidence_rank,
+            float(scored_candidate.quality_penalty),
             distance,
             -candidate.smoothed_apex_intensity,
         )
@@ -167,6 +180,7 @@ def score_candidate(
         reason=reason,
         prior_rt=prior_rt,
         quality_penalty=quality_penalty,
+        prefer_rt_prior_tiebreak=ctx.prefer_rt_prior_tiebreak,
     )
 
 

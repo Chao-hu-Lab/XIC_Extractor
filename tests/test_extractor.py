@@ -7,7 +7,11 @@ import pytest
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import NLResult
 from xic_extractor.raw_reader import RawReaderError
-from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
+from xic_extractor.signal_processing import (
+    PeakCandidate,
+    PeakDetectionResult,
+    PeakResult,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -209,6 +213,60 @@ def test_run_falls_back_to_main_pass_when_prepass_returns_none(
 
     assert output.file_results[0].results["ISTD"].peak_result.peak is not None
     assert output.file_results[0].results["Analyte"].peak_result.peak is not None
+
+
+def test_prepass_excludes_flagged_istd_anchor_from_prior_map(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from xic_extractor.extractor import ExtractionResult, _extract_istd_anchors_only
+
+    config = _config(tmp_path)
+    raw_path = config.data_dir / "SampleA.raw"
+    raw_path.write_text("", encoding="utf-8")
+    target = _target("ISTD", is_istd=True)
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+
+    def _fake_extract_one_target(
+        raw,
+        config,
+        sample_name,
+        target,
+        *,
+        reference_rt,
+        strict_preferred_rt,
+        results,
+        diagnostics,
+        shape_metrics_by_label,
+        **kwargs,
+    ) -> float | None:
+        results[target.label] = ExtractionResult(
+            peak_result=_ok_peak(
+                9.05,
+                1500.0,
+                2000.0,
+                quality_flags=("too_broad",),
+            ),
+            nl=None,
+            target_label=target.label,
+            role="ISTD",
+        )
+        return 9.05
+
+    monkeypatch.setattr(
+        "xic_extractor.extractor._extract_one_target",
+        _fake_extract_one_target,
+    )
+
+    anchors, results, diagnostics, shape_metrics = _extract_istd_anchors_only(
+        config,
+        [target],
+        raw_path,
+    )
+
+    assert anchors == {}
+    assert results[target.label].peak_result.peak is not None
+    assert diagnostics == []
+    assert shape_metrics == {}
 
 
 def test_run_reextracts_istd_in_main_pass_to_keep_scoring_metadata(
@@ -958,20 +1016,37 @@ def _ok_peak(
     confidence: str | None = None,
     reason: str | None = None,
     severities: tuple[tuple[int, str], ...] = (),
+    quality_flags: tuple[str, ...] = (),
 ) -> PeakDetectionResult:
+    peak = PeakResult(
+        rt=rt,
+        intensity=intensity,
+        intensity_smoothed=intensity,
+        area=area,
+        peak_start=rt - 0.5,
+        peak_end=rt + 0.5,
+    )
+    candidate = PeakCandidate(
+        peak=peak,
+        smoothed_apex_rt=rt,
+        smoothed_apex_intensity=intensity,
+        smoothed_apex_index=7,
+        raw_apex_rt=rt,
+        raw_apex_intensity=intensity,
+        raw_apex_index=7,
+        prominence=intensity * 0.5,
+        quality_flags=quality_flags,
+        region_scan_count=15,
+        region_duration_min=1.0,
+        region_edge_ratio=1.5,
+    )
     return PeakDetectionResult(
         status="OK",
-        peak=PeakResult(
-            rt=rt,
-            intensity=intensity,
-            intensity_smoothed=intensity,
-            area=area,
-            peak_start=rt - 0.5,
-            peak_end=rt + 0.5,
-        ),
+        peak=peak,
         n_points=15,
         max_smoothed=intensity,
         n_prominent_peaks=1,
+        candidates=(candidate,),
         confidence=confidence,
         reason=reason,
         severities=severities,

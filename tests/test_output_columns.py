@@ -30,8 +30,8 @@ def _fabricate_run_output() -> RunOutput:
         target_label="d3-5-hmdC",
         role="ISTD",
         istd_pair="",
-        confidence="HIGH",
-        reason="all checks passed",
+        confidence="VERY_LOW",
+        reason="concerns: rt_prior (major); weak candidate: too_broad",
         severities=(
             (0, "symmetry"),
             (1, "local_sn"),
@@ -43,6 +43,8 @@ def _fabricate_run_output() -> RunOutput:
         ),
         prior_rt=9.01,
         prior_source="rolling_median",
+        quality_penalty=1,
+        quality_flags=("too_broad",),
     )
     file_result = FileResult(
         sample_name="S1",
@@ -102,6 +104,8 @@ def test_score_breakdown_sheet_emitted_when_flag_on(tmp_path: Path) -> None:
         "rt_centrality",
         "noise_shape",
         "peak_width",
+        "Quality Penalty",
+        "Quality Flags",
         "Total Severity",
         "Confidence",
         "Prior RT",
@@ -115,7 +119,9 @@ def test_score_breakdown_sheet_emitted_when_flag_on(tmp_path: Path) -> None:
     assert row["local_sn"] == 1
     assert row["rt_prior"] == 2
     assert row["noise_shape"] == 1
-    assert row["Total Severity"] == 4
-    assert row["Confidence"] == "HIGH"
+    assert row["Quality Penalty"] == 1
+    assert row["Quality Flags"] == "too_broad"
+    assert row["Total Severity"] == 5
+    assert row["Confidence"] == "VERY_LOW"
     assert row["Prior RT"] == 9.01
     assert row["Prior Source"] == "rolling_median"
