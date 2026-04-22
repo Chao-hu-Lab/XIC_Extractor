@@ -45,6 +45,7 @@ class ScoredCandidate:
     confidence: Confidence
     reason: str
     prior_rt: float | None
+    quality_penalty: int = 0
 
 
 @dataclass(frozen=True)
@@ -86,9 +87,10 @@ def confidence_from_total(total_severity: int) -> Confidence:
 def build_reason(
     signals: list[tuple[int, str]],
     istd_confidence_note: str | None,
+    extra_notes: list[str] | None = None,
 ) -> str:
     concerns = [(severity, label) for severity, label in signals if severity >= 1]
-    if not concerns and istd_confidence_note is None:
+    if not concerns and istd_confidence_note is None and not extra_notes:
         return "all checks passed"
 
     parts: list[str] = []
@@ -99,6 +101,8 @@ def build_reason(
             for severity, label in concerns
         )
         parts.append(f"concerns: {phrase}")
+    if extra_notes:
+        parts.extend(extra_notes)
     if istd_confidence_note is not None:
         parts.append(istd_confidence_note)
     return "; ".join(parts)
@@ -110,7 +114,7 @@ def select_candidate_with_confidence(scored: list[ScoredCandidate]) -> ScoredCan
             "select_candidate_with_confidence requires at least one candidate"
         )
 
-    def key(scored_candidate: ScoredCandidate) -> tuple[int, float, float]:
+    def key(scored_candidate: ScoredCandidate) -> tuple[int, int, float, float]:
         candidate = scored_candidate.candidate
         distance = (
             abs(candidate.smoothed_apex_rt - scored_candidate.prior_rt)
@@ -119,6 +123,7 @@ def select_candidate_with_confidence(scored: list[ScoredCandidate]) -> ScoredCan
         )
         return (
             _CONFIDENCE_RANK[scored_candidate.confidence],
+            scored_candidate.quality_penalty,
             distance,
             -candidate.smoothed_apex_intensity,
         )
@@ -132,6 +137,7 @@ def score_candidate(
     prior_rt: float | None,
     istd_confidence_note: str | None = None,
 ) -> ScoredCandidate:
+    quality_penalty, quality_notes = candidate_quality_penalty(candidate)
     severities: list[tuple[int, str]] = [
         symmetry_severity(ctx.half_width_ratio),
         local_sn_severity(
@@ -147,16 +153,30 @@ def score_candidate(
         noise_shape_severity(ctx.intensity_array),
         peak_width_severity(ctx.fwhm_ratio),
     ]
-    total = sum(severity for severity, _ in severities)
+    total = sum(severity for severity, _ in severities) + quality_penalty
     confidence = confidence_from_total(total)
-    reason = build_reason(severities, istd_confidence_note)
+    reason = build_reason(
+        severities,
+        istd_confidence_note,
+        extra_notes=quality_notes,
+    )
     return ScoredCandidate(
         candidate=candidate,
         severities=tuple(severities),
         confidence=confidence,
         reason=reason,
         prior_rt=prior_rt,
+        quality_penalty=quality_penalty,
     )
+
+
+def candidate_quality_penalty(candidate: Any) -> tuple[int, list[str]]:
+    raw_flags = getattr(candidate, "quality_flags", ())
+    flags = tuple(dict.fromkeys(str(flag) for flag in raw_flags))
+    if not flags:
+        return 0, []
+    penalty = min(2, len(flags))
+    return penalty, [f"weak candidate: {', '.join(flags)}"]
 
 
 def _is_finite(value: float) -> bool:

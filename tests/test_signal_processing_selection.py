@@ -197,6 +197,53 @@ def test_local_minimum_detects_broad_peak_without_preferred_rt_recovery() -> Non
     assert "too_broad" in result.candidates[0].quality_flags
 
 
+def test_local_minimum_flagged_candidate_scores_lower_confidence() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    y = 320000 * np.exp(-((rt - 9.0) / 0.30) ** 2)
+    y += 500.0
+
+    def ctx_builder(candidate) -> ScoringContext:
+        return ScoringContext(
+            rt_array=rt,
+            intensity_array=y,
+            apex_index=candidate.smoothed_apex_index,
+            half_width_ratio=1.0,
+            fwhm_ratio=1.0,
+            ms2_present=True,
+            nl_match=True,
+            rt_prior=9.0,
+            rt_prior_sigma=0.1,
+            rt_min=8.0,
+            rt_max=10.0,
+            dirty_matrix=False,
+        )
+
+    config = _cfg()
+    config = config.__class__(
+        **{
+            **config.__dict__,
+            "resolver_mode": "local_minimum",
+            "resolver_chrom_threshold": 0.05,
+            "resolver_min_search_range_min": 0.04,
+            "resolver_min_relative_height": 0.05,
+            "resolver_min_absolute_height": 25.0,
+            "resolver_min_ratio_top_edge": 1.3,
+            "resolver_peak_duration_min": 0.03,
+            "resolver_peak_duration_max": 1.00,
+            "resolver_min_scans": 5,
+        }
+    )
+
+    result = find_peak_and_area(rt, y, config, scoring_context_builder=ctx_builder)
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.confidence == "MEDIUM"
+    assert result.reason is not None
+    assert "weak candidate" in result.reason
+    assert "too_broad" in result.reason
+
+
 def test_recovery_path_preserves_scoring_metadata() -> None:
     rt = np.linspace(8.0, 10.0, 401)
     y = 1000 * np.exp(-((rt - 8.48) / 0.04) ** 2)

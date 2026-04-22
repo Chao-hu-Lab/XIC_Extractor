@@ -123,6 +123,24 @@ def _make_candidate(apex_rt: float, apex_intensity: float) -> PeakCandidate:
     )
 
 
+def _make_flagged_candidate(
+    apex_rt: float,
+    apex_intensity: float,
+    *,
+    quality_flags: tuple[str, ...],
+) -> PeakCandidate:
+    candidate = _make_candidate(apex_rt=apex_rt, apex_intensity=apex_intensity)
+    return PeakCandidate(
+        **{
+            **candidate.__dict__,
+            "quality_flags": quality_flags,
+            "region_scan_count": 4,
+            "region_duration_min": 1.2,
+            "region_edge_ratio": 1.05,
+        }
+    )
+
+
 def test_score_candidate_returns_seven_severities() -> None:
     cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
     x = np.linspace(9, 11, 201)
@@ -145,6 +163,58 @@ def test_score_candidate_returns_seven_severities() -> None:
     assert len(scored.severities) == 7
     assert scored.confidence == Confidence.HIGH
     assert scored.reason == "all checks passed"
+
+
+def test_score_candidate_penalizes_flagged_candidate_quality() -> None:
+    cand = _make_flagged_candidate(
+        apex_rt=10.0,
+        apex_intensity=1000.0,
+        quality_flags=("too_broad",),
+    )
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.MEDIUM
+    assert "weak candidate" in scored.reason
+    assert "too_broad" in scored.reason
+    assert len(scored.severities) == 7
+
+
+def test_selector_tiebreak_prefers_lower_quality_penalty() -> None:
+    clean = ScoredCandidate(
+        candidate=_FakePeak(10.10, 500.0),
+        severities=tuple(),
+        confidence=Confidence.LOW,
+        reason="",
+        prior_rt=10.0,
+        quality_penalty=0,
+    )
+    weak = ScoredCandidate(
+        candidate=_FakePeak(10.10, 1000.0),
+        severities=tuple(),
+        confidence=Confidence.LOW,
+        reason="",
+        prior_rt=10.0,
+        quality_penalty=1,
+    )
+
+    assert select_candidate_with_confidence([clean, weak]) is clean
 
 
 @pytest.mark.parametrize(
