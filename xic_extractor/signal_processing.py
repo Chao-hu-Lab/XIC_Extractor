@@ -13,6 +13,13 @@ from xic_extractor.peak_scoring import (
 )
 
 PeakStatus = Literal["OK", "NO_SIGNAL", "WINDOW_TOO_SHORT", "PEAK_NOT_FOUND"]
+LocalMinimumQualityFlag = Literal[
+    "edge_clipped",
+    "too_broad",
+    "too_short",
+    "low_scan_count",
+    "low_top_edge_ratio",
+]
 
 # preferred_rt 選峰時，若最靠近 anchor 的峰強度 < 最高峰的這個比例，改選最高峰
 _PREFERRED_RT_MIN_INTENSITY_RATIO: float = 0.2
@@ -48,6 +55,18 @@ class PeakCandidate:
     raw_apex_intensity: float
     raw_apex_index: int
     prominence: float
+    quality_flags: tuple[LocalMinimumQualityFlag, ...] = ()
+    region_scan_count: int | None = None
+    region_duration_min: float | None = None
+    region_edge_ratio: float | None = None
+
+
+@dataclass(frozen=True)
+class LocalMinimumRegionQuality:
+    flags: tuple[LocalMinimumQualityFlag, ...]
+    scan_count: int
+    duration_min: float
+    edge_ratio: float | None
 
 
 @dataclass(frozen=True)
@@ -293,15 +312,9 @@ def _find_peak_candidates_local_minimum(
         threshold,
         config,
     )
-    candidates = tuple(
-        _build_local_minimum_candidate(
-            rt_values,
-            intensity_values,
-            left=left,
-            right=right,
-        )
-        for left, right in regions
-        if _passes_local_region_filters(
+    candidates: list[PeakCandidate] = []
+    for left, right in regions:
+        quality = _local_minimum_region_quality(
             rt_values,
             intensity_values,
             left=left,
@@ -309,16 +322,27 @@ def _find_peak_candidates_local_minimum(
             max_intensity=max_intensity,
             config=config,
         )
-    )
-    if not candidates:
+        if quality is None:
+            continue
+        candidates.append(
+            _build_local_minimum_candidate(
+                rt_values,
+                intensity_values,
+                left=left,
+                right=right,
+                quality=quality,
+            )
+        )
+    candidates_result = tuple(candidates)
+    if not candidates_result:
         return _candidate_failure("PEAK_NOT_FOUND", n_points, max_intensity)
 
     return PeakCandidatesResult(
         status="OK",
-        candidates=candidates,
+        candidates=candidates_result,
         n_points=n_points,
         max_smoothed=max_intensity,
-        n_prominent_peaks=len(candidates),
+        n_prominent_peaks=len(candidates_result),
     )
 
 
@@ -552,6 +576,7 @@ def _build_local_minimum_candidate(
     *,
     left: int,
     right: int,
+    quality: LocalMinimumRegionQuality,
 ) -> PeakCandidate:
     raw_apex_idx = _raw_apex_index(intensity_values, left, right)
     apex_intensity = float(intensity_values[raw_apex_idx])
@@ -575,6 +600,10 @@ def _build_local_minimum_candidate(
         raw_apex_intensity=apex_intensity,
         raw_apex_index=raw_apex_idx,
         prominence=max(0.0, apex_intensity - edge_height),
+        quality_flags=quality.flags,
+        region_scan_count=quality.scan_count,
+        region_duration_min=quality.duration_min,
+        region_edge_ratio=quality.edge_ratio,
     )
 
 
@@ -734,7 +763,7 @@ def _should_split_local_region(
     )
 
 
-def _passes_local_region_filters(
+def _local_minimum_region_quality(
     rt_values: np.ndarray,
     intensity_values: np.ndarray,
     *,
@@ -742,24 +771,39 @@ def _passes_local_region_filters(
     right: int,
     max_intensity: float,
     config: ExtractionConfig,
-) -> bool:
-    if right - left < config.resolver_min_scans:
-        return False
+) -> LocalMinimumRegionQuality | None:
+    scan_count = right - left
     duration = float(rt_values[right - 1] - rt_values[left])
-    if duration < config.resolver_peak_duration_min:
-        return False
-    if duration > config.resolver_peak_duration_max:
-        return False
 
     apex_idx = _raw_apex_index(intensity_values, left, right)
     apex_intensity = float(intensity_values[apex_idx])
     if not _passes_local_peak_height_filters(apex_intensity, max_intensity, config):
-        return False
+        return None
 
     edge_height = max(float(intensity_values[left]), float(intensity_values[right - 1]))
-    if edge_height <= 0:
-        return True
-    return apex_intensity / edge_height >= config.resolver_min_ratio_top_edge
+    edge_ratio = (
+        None if edge_height <= 0 else float(apex_intensity / edge_height)
+    )
+    flags: list[LocalMinimumQualityFlag] = []
+    if left == 0 or right == len(intensity_values):
+        flags.append("edge_clipped")
+    if scan_count < config.resolver_min_scans:
+        flags.append("low_scan_count")
+    if duration < config.resolver_peak_duration_min:
+        flags.append("too_short")
+    if duration > config.resolver_peak_duration_max:
+        flags.append("too_broad")
+    if (
+        edge_ratio is not None
+        and edge_ratio < config.resolver_min_ratio_top_edge
+    ):
+        flags.append("low_top_edge_ratio")
+    return LocalMinimumRegionQuality(
+        flags=tuple(flags),
+        scan_count=scan_count,
+        duration_min=duration,
+        edge_ratio=edge_ratio,
+    )
 
 
 def _peak_bounds(

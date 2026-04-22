@@ -167,6 +167,36 @@ def test_local_minimum_recovery_relaxes_duration_cap_for_broad_preferred_peak() 
     assert result.peak.rt == pytest.approx(9.0, abs=0.03)
 
 
+def test_local_minimum_detects_broad_peak_without_preferred_rt_recovery() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    y = 320000 * np.exp(-((rt - 9.0) / 0.30) ** 2)
+    y += 500.0
+
+    config = _cfg()
+    config = config.__class__(
+        **{
+            **config.__dict__,
+            "resolver_mode": "local_minimum",
+            "resolver_chrom_threshold": 0.05,
+            "resolver_min_search_range_min": 0.04,
+            "resolver_min_relative_height": 0.05,
+            "resolver_min_absolute_height": 25.0,
+            "resolver_min_ratio_top_edge": 1.3,
+            "resolver_peak_duration_min": 0.03,
+            "resolver_peak_duration_max": 1.00,
+            "resolver_min_scans": 5,
+        }
+    )
+
+    result = find_peak_and_area(rt, y, config)
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(9.0, abs=0.03)
+    assert len(result.candidates) == 1
+    assert "too_broad" in result.candidates[0].quality_flags
+
+
 def test_recovery_path_preserves_scoring_metadata() -> None:
     rt = np.linspace(8.0, 10.0, 401)
     y = 1000 * np.exp(-((rt - 8.48) / 0.04) ** 2)

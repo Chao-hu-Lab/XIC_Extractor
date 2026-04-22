@@ -457,3 +457,58 @@ def test_local_minimum_resolver_uses_valley_minimum_as_region_boundary() -> None
         abs=0.01,
     )
     assert legacy_result.status == "OK"
+
+
+def test_local_minimum_retains_broad_region_as_flagged_candidate() -> None:
+    rt = np.linspace(8.0, 10.0, 401)
+    intensity = _gaussian(rt, center=9.0, sigma=0.30, height=320000.0) + 500.0
+
+    result = find_peak_candidates(
+        rt,
+        intensity,
+        _config(
+            resolver_mode="local_minimum",
+            resolver_chrom_threshold=0.05,
+            resolver_min_search_range_min=0.04,
+            resolver_min_relative_height=0.05,
+            resolver_min_absolute_height=25.0,
+            resolver_min_ratio_top_edge=1.3,
+            resolver_peak_duration_min=0.03,
+            resolver_peak_duration_max=1.00,
+            resolver_min_scans=5,
+        ),
+    )
+
+    assert result.status == "OK"
+    assert len(result.candidates) == 1
+    assert result.candidates[0].peak.rt == pytest.approx(9.0, abs=0.03)
+    assert "too_broad" in result.candidates[0].quality_flags
+    assert result.candidates[0].region_duration_min is not None
+    assert result.candidates[0].region_duration_min > 1.0
+
+
+def test_local_minimum_retains_edge_clipped_region_as_flagged_candidate() -> None:
+    rt = np.linspace(8.0, 8.30, 31)
+    intensity = _gaussian(rt, center=7.96, sigma=0.06, height=1500.0) + 5.0
+
+    result = find_peak_candidates(
+        rt,
+        intensity,
+        _config(
+            resolver_mode="local_minimum",
+            resolver_chrom_threshold=0.05,
+            resolver_min_search_range_min=0.04,
+            resolver_min_relative_height=0.05,
+            resolver_min_absolute_height=25.0,
+            resolver_min_ratio_top_edge=1.3,
+            resolver_peak_duration_min=0.03,
+            resolver_peak_duration_max=0.50,
+            resolver_min_scans=5,
+        ),
+    )
+
+    assert result.status == "OK"
+    assert len(result.candidates) == 1
+    assert result.candidates[0].peak.rt == pytest.approx(8.0, abs=0.01)
+    assert "edge_clipped" in result.candidates[0].quality_flags
+    assert "low_top_edge_ratio" in result.candidates[0].quality_flags
