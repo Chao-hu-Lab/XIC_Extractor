@@ -2,329 +2,330 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Replace the current Savitzky-Golay-based peak boundary model with an MZmine-inspired local-minimum resolver for targeted XIC extraction, without disturbing scoring/output plumbing.
+**Goal:** Migrate targeted XIC extraction from width-based `legacy_savgol` peak
+boundaries toward an MZmine-inspired `local_minimum` resolver, then make that
+resolver generic enough to handle weak, broad, and clipped peaks without
+exploding into target-specific recovery logic.
 
-**Architecture:** Keep `extractor.py`, scoring, RT prior logic, and output writers unchanged. Constrain the change to `config.py` plus `signal_processing.py`, introducing a resolver-mode dispatch so the new algorithm can be validated against real RAW data before becoming the default. The new resolver should segment a trace by local minima and validate candidate regions by height, duration, top/edge ratio, and scan count, then continue to use the existing candidate-selection/scoring pipeline.
+**Architecture:** Keep the two-mode `resolver_mode=legacy_savgol|local_minimum`
+boundary and the current scoring/output plumbing. Treat the already-landed
+resolver dispatch, comparison harness, and branch-only recovery patches as the
+starting point, not as work still to do. The next implementation phase focuses
+on changing `local_minimum` from a hard-pruning resolver into a
+candidate-producing resolver that emits region-quality metadata for downstream
+selection and scoring.
 
-**Tech Stack:** Python 3.13, `numpy`, `scipy.signal.find_peaks`, existing `pytest` suite, real RAW regression via `scripts/run_extraction.py`.
-
----
-
-## Research Summary
-
-1. **Current repo reality**
-   - Current code is **not** using derivative zero-crossings. It already uses `scipy.signal.find_peaks(...)` on a Savitzky-Golay-smoothed trace, then estimates peak boundaries with `scipy.signal.peak_widths(...)`.
-   - Relevant code:
-     - `xic_extractor/signal_processing.py`
-       - `find_peak_candidates()` smooths with `savgol_filter(...)`
-       - `find_peaks(smoothed, prominence=...)` finds apex candidates
-       - `_peak_bounds()` uses `peak_widths(...)` at `peak_rel_height`
-   - Therefore, the meaningful migration is **from width-based boundary estimation to local-minimum region segmentation**, not “remove zero-crossing logic”.
-
-2. **What MZmine Local Minimum Resolver actually does**
-   - Official docs: MZmine describes LMR as a **chromatogram resolving** step that splits overlapping/co-eluting peaks by valleys/local minima, especially shoulder peaks.
-   - It applies:
-     - percentile-based low-intensity pruning (`Chromatographic threshold`)
-     - local-minimum search inside a configurable search range
-     - filters on minimum height, minimum scans, duration, and top/edge ratio
-   - It is described as most suitable for **LC-MS data with little noise and nice peak shapes**.
-   - Primary sources:
-     - MZmine docs: https://mzmine.github.io/mzmine_documentation/module_docs/featdet_resolver_local_minimum/local-minimum-resolver.html
-     - MZmine source:
-       - `MinimumSearchFeatureResolver.java`
-       - `MinimumSearchFeatureResolverParameters.java`
-
-3. **Important mismatch to acknowledge**
-   - MZmine LMR is designed as a **resolver after chromatogram building** in an untargeted workflow.
-   - Our repo is doing **targeted XIC extraction** inside a pre-defined RT window.
-   - So the correct plan is **MZmine-inspired adaptation**, not a blind one-to-one port.
-
-4. **Why this is still a good fit here**
-   - Your reported pain is exactly where width-based boundaries tend to fail:
-     - low abundance
-     - partial co-elution
-     - messy baseline / complex matrix
-     - RT drift making anchor-centric fallback brittle
-   - A local-minimum resolver gives you an explicit valley model between adjacent candidate regions instead of inferring boundaries from smoothed width alone.
-
-5. **What should not change in the first migration**
-   - `extractor.py` orchestration
-   - scoring severity logic in `peak_scoring.py`
-   - confidence / reason output format
-   - RT prior / rolling prior / ISTD propagation
-   - CSV/XLSX writer schema
+**Tech Stack:** Python 3.13, `numpy`, `scipy.signal.find_peaks`, existing
+`pytest` suite, real RAW regression via `scripts/run_extraction.py` and
+`scripts/compare_resolvers.py`.
 
 ---
 
-## Decision
+## Why This Plan Was Rewritten
 
-Implement the new algorithm as **`resolver_mode=local_minimum`**, keep the current path as **`resolver_mode=legacy_savgol`** during validation, and only switch the default after real-data comparison is acceptable.
+The original migration plan was correct about the algorithmic direction, but it
+predated several facts now learned on the branch:
 
-This is the smallest high-signal path:
+1. `resolver_mode` dual-mode dispatch already exists.
+2. The A/B comparison harness already exists.
+3. Paired anchor mismatch is already downgraded from `ND` to soft penalty.
+4. Two real-data ISTD regression clusters showed that the next generic problem
+   is not paired `ΔRT` logic, but `local_minimum` using too many shape rules as
+   candidate existence gates.
 
-- avoids a risky “big bang” rewrite
-- preserves an exact A/B switch for real RAW evaluation
-- isolates the algorithmic difference to the place that actually changed
+This rewritten plan merges the original migration work with the newer review
+conclusion:
+
+**keep `local_minimum`, but make candidate generation more permissive before
+continuing RT-rule simplification.**
 
 ---
 
-## Proposed Parameter Model
+## Current Branch Status
 
-### New settings to add
+### Already completed on this branch
 
-- `resolver_mode`
-  - `legacy_savgol` | `local_minimum`
-- `resolver_chrom_threshold`
-  - Percentile of low-intensity datapoints to prune before minimum search
-- `resolver_min_search_range_min`
-  - Local minimum search window in minutes
-- `resolver_min_relative_height`
-  - Region apex / trace max filter
-- `resolver_min_absolute_height`
-  - Region apex absolute intensity filter
-- `resolver_min_ratio_top_edge`
-  - Apex must exceed both region edges by this ratio
-- `resolver_peak_duration_min`
+- `resolver_mode=legacy_savgol|local_minimum`
+- config/schema support for resolver parameters
+- resolver dispatch in `signal_processing.py`
+- local-minimum candidate segmentation backend
+- A/B comparison harness in `scripts/compare_resolvers.py`
+- paired anchor mismatch downgraded to diagnostic + confidence penalty
+- temporary ISTD recoveries for broad peaks and anchor-clipped traces
+
+### Important current limitation
+
+`local_minimum` still decides `PEAK_NOT_FOUND` too early when a region fails:
+
 - `resolver_peak_duration_max`
 - `resolver_min_scans`
+- `resolver_min_ratio_top_edge`
 
-### Existing settings to keep temporarily
+That means the current branch still mixes up:
 
-- `smooth_window`
-- `smooth_polyorder`
-- `peak_rel_height`
-- `peak_min_prominence_ratio`
+1. **does a plausible candidate region exist?**
+2. **is this candidate strong enough to trust?**
 
-These remain active only for `legacy_savgol`.
-
-### Why not overload old settings
-
-Do **not** silently reinterpret `peak_rel_height` or `smooth_window` as local-minimum parameters. That would make configs lie about what the pipeline is doing and break reproducibility.
+Those must be separated.
 
 ---
 
-## Algorithm Shape
+## Stable Decisions
 
-### `legacy_savgol` (existing)
+These decisions remain correct and should not be revisited in the next slice:
 
-1. Smooth trace with `savgol_filter`
-2. Detect apex candidates with `find_peaks(..., prominence=...)`
-3. Estimate boundaries with `peak_widths(..., rel_height=peak_rel_height)`
-4. Build `PeakCandidate`
-5. Run existing selector / scoring / preferred-RT recovery
-
-### `local_minimum` (new)
-
-1. Use raw intensity trace as the segmentation basis
-2. Compute percentile threshold and zero/prune datapoints below it
-3. Walk the trace left-to-right and identify local minima using `resolver_min_search_range_min`
-4. Split the trace into candidate regions between accepted minima
-5. For each region:
-   - region apex = raw maximum inside region
-   - apply:
-     - min absolute height
-     - min relative height
-     - min scans
-     - peak duration range
-     - top/edge ratio
-6. Convert each valid region into `PeakCandidate`
-   - `peak.rt` from raw apex RT
-   - `area` from raw integration over the region
-   - `peak_start` / `peak_end` from region borders
-7. Reuse:
-   - `_select_candidate(...)`
-   - `_preferred_rt_recovery(...)` (possibly with local-minimum-specific fallback later)
-   - scoring and output logic unchanged
-
-### Important design constraint
-
-`PeakCandidate` and `PeakDetectionResult` should stay structurally unchanged. Only the candidate-generation backend changes.
+1. Keep `local_minimum` as opt-in until real-data acceptance is clear.
+2. Keep `legacy_savgol` available as the fallback and A/B baseline.
+3. Keep scoring/output schema stable.
+4. Use `output/xic_results_20260420_0309.xlsx` as the current trusted workbook
+   reference.
 
 ---
 
-## Plan
+## Core Design Direction
 
-### Task 1: Freeze the migration boundary in tests
+The next generic iteration should follow two rules:
+
+1. **Candidate generation 寬進**
+2. **Ranking / scoring 嚴出**
+
+Concretely:
+
+- `local_minimum` should keep more plausible regions
+- weak regions should survive as flagged candidates, not disappear as
+  `PEAK_NOT_FOUND`
+- selector/scorer should decide whether flagged candidates become selected
+  low-confidence peaks or remain unselected
+
+This is the branch's main architectural goal now.
+
+---
+
+## Scope for the Next Implementation Slice
+
+### In scope
+
+- `xic_extractor/signal_processing.py`
+- `xic_extractor/peak_scoring.py`
+- tests in:
+  - `tests/test_signal_processing.py`
+  - `tests/test_signal_processing_selection.py`
+  - `tests/test_peak_scoring.py` if scoring consumes new metadata
+
+### Explicitly out of scope for this slice
+
+- changing workbook schema
+- changing shipped CSV/XLSX columns
+- switching the default resolver
+- removing the compare harness
+- large extractor orchestration rewrites
+- more target-specific recoveries unless needed to preserve current behavior
+  during the refactor
+
+---
+
+## Next Tasks
+
+### Task 1: Freeze current branch behavior before generic refactor
 
 **Files:**
 - Modify: `tests/test_signal_processing.py`
 - Modify: `tests/test_signal_processing_selection.py`
+- Modify: `tests/test_extractor.py` only if temporary recoveries need guardrail tests
 
 **Goal:**
-Add tests that make the intended behavior explicit before any implementation:
+Capture the branch behaviors that must not regress during the generic
+refactor:
 
-- `legacy_savgol` path remains unchanged
-- `local_minimum` can split shoulder peaks by valley
-- `local_minimum` uses region minima as peak borders, not rel-height width
-- selection/scoring still works on candidates from either resolver
-
-**Key tests to add:**
-- shoulder peak with visible valley should produce 2 candidates in `local_minimum`
-- broad/flat composite peak without valid valley should remain 1 candidate
-- low-abundance analyte near a strong neighbor should retain a local-minimum region if top/edge ratio passes
-- `preferred_rt` selection still chooses the correct region under `local_minimum`
+- broad ISTD recovery still finds the previously recovered peak
+- edge-clipped ISTD retry still finds the previously recovered peak
+- paired anchor mismatch remains low-confidence, not `ND`
+- `legacy_savgol` output path remains unchanged
 
 **Verification:**
-- `uv run pytest tests\test_signal_processing.py tests\test_signal_processing_selection.py -v`
+- `uv run pytest tests\test_signal_processing.py tests\test_signal_processing_selection.py tests\test_extractor.py -v`
 
-
-### Task 2: Add config/schema support for resolver mode
-
-**Files:**
-- Modify: `xic_extractor/config.py`
-- Modify: `xic_extractor/settings_schema.py`
-- Modify: `config/settings.example.csv`
-- Test: `tests/test_config.py`
-
-**Goal:**
-Introduce explicit resolver settings without changing current default behavior.
-
-**Decision:**
-- Default stays `legacy_savgol` for now
-- New local-minimum parameters must validate independently
-
-**Verification:**
-- `uv run pytest tests\test_config.py -v`
-
-
-### Task 3: Extract candidate-generation backends behind a resolver dispatch
+### Task 2: Extend candidate data with region-quality metadata
 
 **Files:**
 - Modify: `xic_extractor/signal_processing.py`
 - Test: `tests/test_signal_processing.py`
 
 **Goal:**
-Refactor `find_peak_candidates()` into:
+Add candidate-level metadata that can represent weak-but-plausible regions,
+such as:
 
-- `_find_peak_candidates_legacy_savgol(...)`
-- `_find_peak_candidates_local_minimum(...)`
-- `find_peak_candidates(...)` dispatch
+- edge-clipped
+- too broad
+- too short
+- low top/edge ratio
+- low scan count
 
-This should be a pure refactor first for the legacy path, before adding the new backend.
+This metadata should describe quality, not force immediate rejection.
 
 **Verification:**
-- `uv run pytest tests\test_signal_processing.py -v -k \"legacy or gaussian or area or preferred\"`
+- `uv run pytest tests\test_signal_processing.py -v -k "local_minimum or candidate"`
 
-
-### Task 4: Implement the MZmine-inspired local minimum resolver
+### Task 3: Convert local-minimum region filters from hard reject to flagged retention
 
 **Files:**
 - Modify: `xic_extractor/signal_processing.py`
 - Test: `tests/test_signal_processing.py`
 
 **Goal:**
-Implement the new candidate-generation backend with:
+Change `local_minimum` so that the following mostly become flags rather than
+existence gates:
 
-- threshold pruning
-- local minimum search over an absolute RT window
-- region finalization
-- filters:
-  - absolute height
-  - relative height
-  - top/edge ratio
-  - peak duration min/max
-  - min scans
+- `resolver_peak_duration_min`
+- `resolver_peak_duration_max`
+- `resolver_min_scans`
+- `resolver_min_ratio_top_edge`
 
-**Non-goals in this task:**
-- changing scorer logic
-- changing extractor orchestration
-- changing outputs
+Only keep hard candidate failure for:
+
+- no signal
+- window too short
+- malformed arrays / invalid trace
 
 **Verification:**
 - `uv run pytest tests\test_signal_processing.py -v`
 
-
-### Task 5: Make `find_peak_and_area()` resolver-agnostic
+### Task 4: Teach selector/scorer to consume weak-candidate metadata
 
 **Files:**
 - Modify: `xic_extractor/signal_processing.py`
-- Modify: `tests/test_signal_processing_selection.py`
+- Modify: `xic_extractor/peak_scoring.py`
+- Test: `tests/test_signal_processing_selection.py`
+- Test: `tests/test_peak_scoring.py` if needed
 
 **Goal:**
-Ensure candidate selection, preferred RT recovery, and scoring operate identically regardless of backend.
+Make downstream logic prefer stronger candidates while still allowing flagged
+candidates to survive as lower-confidence outcomes when they are the best
+available region.
 
-**Important question to answer in code:**
-Should `_preferred_rt_recovery(...)` remain the same for `local_minimum`, or should it gain a backend-specific relaxed search path? Start by keeping it unchanged unless tests prove it inadequate.
+Expected behavior:
+
+- strong candidate beats weak candidate when both are plausible
+- weak candidate can still beat "no peak" when it is the only plausible region
+- confidence/reason explain the weakness instead of collapsing to `ND`
 
 **Verification:**
-- `uv run pytest tests\test_signal_processing_selection.py -v`
+- `uv run pytest tests\test_signal_processing_selection.py tests\test_peak_scoring.py -v`
 
-
-### Task 6: Real-data A/B harness for resolver comparison
+### Task 5: Re-evaluate temporary recoveries after generic softening
 
 **Files:**
-- Create: `scripts/compare_resolvers.py`
-- Test: light smoke test only if practical, otherwise verify manually
+- Modify: `xic_extractor/extractor.py` only if some temporary recovery becomes redundant
+- Test: `tests/test_extractor.py`
 
 **Goal:**
-Run the same config/targets/raw set under:
+Decide whether the current branch's broad-peak and wider-window recoveries are:
 
-- `resolver_mode=legacy_savgol`
-- `resolver_mode=local_minimum`
+- still necessary
+- simplifiable
+- or removable because the generic resolver now handles the same cases
 
-Produce a compact diff report for:
+This is a cleanup task, not the primary mechanism.
 
-- detected ↔ ND flips
-- RT drift
-- area changes
-- ISTD-specific regressions
-- confidence distribution changes
+**Verification:**
+- `uv run pytest tests\test_extractor.py tests\test_signal_processing_selection.py -v`
 
-**Required focus cohorts:**
+### Task 6: Truth-aware real-data validation
+
+**Files:**
+- Reuse: `scripts/compare_resolvers.py`
+- Manual compare against: `output/xic_results_20260420_0309.xlsx`
+
+**Goal:**
+Evaluate both:
+
+1. `legacy_savgol` vs `local_minimum`
+2. `local_minimum` vs trusted workbook truth proxy
+
+Focus cohorts:
+
 - `d3-N6-medA`
 - `d3-5-hmdC`
 - `8-oxo-Guo`
 - `8-oxodG`
 
-This script is what will let you judge “better chemistry” vs “regression”.
+The comparison should distinguish:
 
+- resolver differences
+- workbook-truth differences
+- domain-truth interpretation for targets like `8-oxo-Guo`
 
-### Task 7: Real-data acceptance gate
+**Verification:**
+- `uv run python scripts\compare_resolvers.py --base-dir .`
+- regenerate workbook and compare against `output/xic_results_20260420_0309.xlsx`
+
+### Task 7: Only then continue RT-rule simplification
 
 **Files:**
-- Modify: `tests/test_tissue_regression.py` only if new mode becomes the default
-- Optional: add a second baseline fixture for local-minimum mode later
+- Later follow-up only
 
 **Goal:**
-Do not switch the default until these are true:
+Do not touch these until Tasks 1-6 are stable:
 
-- the two example cases you already manually validated stay improved
-- `d3-N6-medA` is reviewed on real data and accepted
-- no unexpected catastrophe in ISTD detection across the 85-sample tissue set
-- output schema remains stable except for already-shipped scoring columns
+- paired `strict_preferred_rt=True`
+- target `NL anchor` dependence on paired ISTD RT
+- anchor-centered extraction-window width
 
-**Acceptance recommendation:**
-- keep `resolver_mode=legacy_savgol` as default until manual review of the `d3-N6-medA` cluster is finished
-- after review, switch default in a dedicated small follow-up PR
+Reason: those controls are easier to evaluate once the resolver no longer
+deletes plausible candidates too early.
+
+---
+
+## Acceptance Gate
+
+Do not switch `local_minimum` to default until all of the following are true:
+
+- no unexpected ISTD catastrophe remains in the tissue batch
+- the previously recovered ISTD rows stay recovered without fragile special
+  casing
+- focus targets are at least as explainable as the trusted workbook
+- row-level confidence/reason feels more truthful, not more mysterious
+- the branch behavior can be explained as a generic rule set rather than a pile
+  of one-off escapes
 
 ---
 
 ## Risks
 
-1. **User expectation risk**
-   - The user described the current algorithm as zero-crossing-based, but the repo is already `find_peaks`-based.
-   - If we optimize the wrong thing, we will change code without solving the actual failure mode.
+1. **Over-softening risk**
+   - If the resolver keeps too many bad regions, candidate inventory may become
+     noisy and move the problem downstream.
+   - Mitigation: attach explicit quality metadata and keep scoring penalties
+     strong.
 
-2. **Semantic migration risk**
-   - MZmine LMR is a resolver in an untargeted workflow, not a drop-in targeted XIC detector.
-   - A blind port would create incorrect assumptions about thresholds and region semantics.
+2. **Hidden coupling risk**
+   - Temporary extractor recoveries may mask whether the generic resolver is
+     actually working.
+   - Mitigation: freeze current behavior in tests, then re-evaluate recoveries
+     explicitly in Task 5.
 
-3. **Config reproducibility risk**
-   - Reusing old Savitzky-Golay settings names for the new resolver would make historical outputs irreproducible.
+3. **Truth-source ambiguity**
+   - `output/xic_results_20260420_0309.xlsx` is a trusted reference, but some
+     target-specific domain truth is even stricter than that workbook.
+   - Mitigation: treat workbook compare and domain review as separate layers.
 
-4. **RT-drift masking risk**
-   - A better resolver may expose upstream RT prior / anchor issues more clearly rather than “fix” them.
-   - This is especially relevant for `d3-N6-medA`.
+4. **Premature RT-path edits**
+   - If paired RT logic is simplified before resolver hard gates are fixed, the
+     root cause of improvements or regressions becomes impossible to isolate.
+   - Mitigation: delay RT-rule simplification until after candidate-softening.
 
 ---
 
-## Recommendation
+## Bottom Line
 
-Proceed with a **two-mode migration**:
+The migration direction is still correct:
 
-1. Add `local_minimum` as opt-in
-2. Build the A/B comparison tool
-3. Review the real-data cluster you already flagged (`d3-N6-medA`)
-4. Only then decide whether to switch the default
+- keep `local_minimum`
+- keep two-mode validation
+- keep workbook-truth comparison
 
-Do **not** do a direct default swap in the same change that introduces the new resolver.
+But the next generic step is now clearly:
+
+**stop using local-minimum region-shape checks as early existence gates, emit
+candidate-quality metadata instead, and let selection/scoring make the harder
+judgment.**
