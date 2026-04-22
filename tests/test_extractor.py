@@ -699,7 +699,7 @@ def test_istd_anchor_keeps_strongest_anchor_when_it_is_near_target_center(
     assert preferred_rts == [8.55]
 
 
-def test_paired_analyte_writes_nd_when_peak_is_far_from_target_anchor(
+def test_paired_analyte_keeps_peak_when_far_from_target_anchor_but_downgrades_confidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path)
@@ -734,17 +734,22 @@ def test_paired_analyte_writes_nd_when_peak_is_far_from_target_anchor(
         ),
     )
 
-    _run(config, targets)
+    output = _run(config, targets)
 
     rows = _read_csv(config.output_csv)
-    assert rows[0]["Analyte_RT"] == "ND"
-    assert rows[0]["Analyte_Int"] == "ND"
-    assert rows[0]["Analyte_Area"] == "ND"
+    assert rows[0]["Analyte_RT"] == "13.0600"
+    assert rows[0]["Analyte_Int"] == "5000"
+    assert rows[0]["Analyte_Area"] == "8000.00"
+    long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
+    analyte_row = next(row for row in long_rows if row["Target"] == "Analyte")
+    assert analyte_row["Confidence"] == "LOW"
+    assert "anchor mismatch" in analyte_row["Reason"]
+    assert output.file_results[0].results["Analyte"].confidence == "LOW"
     diagnostics = _read_csv(config.diagnostics_csv)
     assert any(
         record["Target"] == "Analyte"
         and record["Issue"] == "ANCHOR_RT_MISMATCH"
-        and "Rejected paired analyte peak RT 13.060" in record["Reason"]
+        and "Paired analyte peak RT 13.060" in record["Reason"]
         and "target NL anchor at 13.750" in record["Reason"]
         and "allowed ±0.25 min" in record["Reason"]
         for record in diagnostics
@@ -798,7 +803,7 @@ def test_paired_analyte_accepts_peak_close_to_target_anchor_even_if_farther_from
     )
 
 
-def test_paired_analyte_fallback_writes_nd_when_peak_is_far_from_istd_anchor(
+def test_paired_analyte_fallback_keeps_peak_when_far_from_istd_anchor_but_downgrades_confidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path)
@@ -833,14 +838,21 @@ def test_paired_analyte_fallback_writes_nd_when_peak_is_far_from_istd_anchor(
         ),
     )
 
-    _run(config, targets)
+    output = _run(config, targets)
 
     rows = _read_csv(config.output_csv)
-    assert rows[0]["Analyte_RT"] == "ND"
+    assert rows[0]["Analyte_RT"] == "14.3100"
+    assert rows[0]["Analyte_Area"] == "8000.00"
+    long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
+    analyte_row = next(row for row in long_rows if row["Target"] == "Analyte")
+    assert analyte_row["Confidence"] == "LOW"
+    assert "anchor mismatch" in analyte_row["Reason"]
+    assert output.file_results[0].results["Analyte"].confidence == "LOW"
     diagnostics = _read_csv(config.diagnostics_csv)
     assert any(
         record["Target"] == "Analyte"
         and record["Issue"] == "ANCHOR_RT_MISMATCH"
+        and "Paired analyte peak RT 14.310" in record["Reason"]
         and "ISTD anchor at 13.700" in record["Reason"]
         and "allowed ±0.50 min" in record["Reason"]
         for record in diagnostics

@@ -397,7 +397,10 @@ def _extract_one_target(
         strict_preferred_rt=strict_preferred_rt,
     )
     if paired_rejection is not None:
-        peak_result = replace(peak_result, peak=None)
+        peak_result = _apply_anchor_mismatch_penalty(
+            peak_result,
+            paired_rejection.reason,
+        )
     shape_metrics = _selected_shape_metrics(intensity, peak_result)
     if shape_metrics_by_label is not None and shape_metrics is not None:
         shape_metrics_by_label[target.label] = shape_metrics
@@ -612,12 +615,29 @@ def _paired_anchor_mismatch_diagnostic(
         target_label=target.label,
         issue="ANCHOR_RT_MISMATCH",
         reason=(
-            f"Rejected paired analyte peak RT {peak.rt:.3f} min because it "
-            f"deviates {delta:.2f} min from {anchor_label} at "
+            f"Paired analyte peak RT {peak.rt:.3f} min deviates "
+            f"{delta:.2f} min from {anchor_label} at "
             f"{expected_rt:.3f} min (allowed ±{allowed_delta:.2f} min)"
-            f"{secondary_note}; output set to ND to avoid false positive"
+            f"{secondary_note}; retained with downgraded confidence for manual review"
         ),
     )
+
+
+def _apply_anchor_mismatch_penalty(
+    peak_result: PeakDetectionResult,
+    mismatch_reason: str,
+) -> PeakDetectionResult:
+    reason = f"anchor mismatch; {mismatch_reason}"
+    if peak_result.reason:
+        reason = f"{peak_result.reason}; {reason}"
+    confidence = _anchor_mismatch_confidence(peak_result.confidence)
+    return replace(peak_result, confidence=confidence, reason=reason)
+
+
+def _anchor_mismatch_confidence(confidence: str | None) -> str:
+    if confidence == "VERY_LOW":
+        return "VERY_LOW"
+    return "LOW"
 
 
 def _build_diagnostics(
