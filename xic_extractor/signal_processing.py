@@ -25,6 +25,7 @@ _LOCAL_RECOVERY_MIN_RELATIVE_HEIGHT: float = 0.01
 _LOCAL_RECOVERY_ABSOLUTE_HEIGHT_FRACTION: float = 0.5
 _LOCAL_RECOVERY_MIN_ABSOLUTE_HEIGHT: float = 5.0
 _LOCAL_RECOVERY_TOP_EDGE_RATIO: float = 1.05
+_LOCAL_RECOVERY_DURATION_MAX_MULTIPLIER: float = 1.5
 
 
 @dataclass(frozen=True)
@@ -425,6 +426,11 @@ def _relaxed_local_minimum_recovery_config(
         resolver_min_ratio_top_edge=min(
             config.resolver_min_ratio_top_edge,
             _LOCAL_RECOVERY_TOP_EDGE_RATIO,
+        ),
+        resolver_peak_duration_max=max(
+            config.resolver_peak_duration_max,
+            config.resolver_peak_duration_max
+            * _LOCAL_RECOVERY_DURATION_MAX_MULTIPLIER,
         ),
     )
 

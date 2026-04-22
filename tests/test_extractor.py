@@ -699,7 +699,50 @@ def test_istd_anchor_keeps_strongest_anchor_when_it_is_near_target_center(
     assert preferred_rts == [8.55]
 
 
-def test_paired_analyte_keeps_peak_when_far_from_target_anchor_but_downgrades_confidence(
+def test_istd_peak_not_found_retries_with_wider_anchor_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("ISTD", is_istd=True)]
+    raw = _RecordingRaw()
+
+    monkeypatch.setattr(
+        "xic_extractor.extractor.open_raw",
+        lambda *_args, **_kwargs: raw,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor._extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_nl_anchor_rt",
+        _anchor_sequence([9.0]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence(
+            [
+                _failed_peak("PEAK_NOT_FOUND", n_points=15, max_smoothed=1234.0),
+                _ok_peak(9.05, 1200.0, 3400.25),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.check_nl",
+        _nl_sequence([NLResult("OK", 1.0, 9.0, 1, 0, 1)]),
+    )
+
+    output = _run(config, targets)
+
+    result = output.file_results[0].results["ISTD"]
+    assert result.peak_result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(9.05, abs=0.001)
+    assert raw.windows == [(8.0, 10.0), (7.0, 11.0)]
+
+
+def test_paired_analyte_keeps_mismatched_target_anchor_peak_as_low(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path)
@@ -803,7 +846,7 @@ def test_paired_analyte_accepts_peak_close_to_target_anchor_even_if_farther_from
     )
 
 
-def test_paired_analyte_fallback_keeps_peak_when_far_from_istd_anchor_but_downgrades_confidence(
+def test_paired_analyte_fallback_keeps_mismatched_istd_anchor_peak_as_low(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path)
@@ -1028,6 +1071,17 @@ class _FakeRaw:
 
     def iter_ms2_scans(self, rt_min: float, rt_max: float):
         return iter([])
+
+
+class _RecordingRaw(_FakeRaw):
+    def __init__(self) -> None:
+        self.windows: list[tuple[float, float]] = []
+
+    def extract_xic(
+        self, mz: float, rt_min: float, rt_max: float, ppm_tol: float
+    ) -> tuple[np.ndarray, np.ndarray]:
+        self.windows.append((rt_min, rt_max))
+        return super().extract_xic(mz, rt_min, rt_max, ppm_tol)
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:

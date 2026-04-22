@@ -388,6 +388,27 @@ def _extract_one_target(
             preferred_rt=anchor_rt,
             strict_preferred_rt=strict_preferred_rt,
         )
+    if (
+        peak_result.status == "PEAK_NOT_FOUND"
+        and peak_result.peak is None
+        and target.is_istd
+        and anchor_used
+        and anchor_rt is not None
+    ):
+        recovered_peak_result = _recover_istd_peak_with_wider_anchor_window(
+            raw,
+            config,
+            target,
+            anchor_rt=anchor_rt,
+            scoring_context_factory=scoring_context_factory,
+            sample_name=sample_name,
+            nl_result=nl_result,
+            istd_confidence_note=istd_confidence_note,
+            istd_rt_in_this_sample=istd_rt_in_this_sample,
+            paired_istd_fwhm=paired_istd_fwhm,
+        )
+        if recovered_peak_result is not None:
+            peak_result = recovered_peak_result
     paired_rejection = _paired_anchor_mismatch_diagnostic(
         sample_name,
         target,
@@ -532,6 +553,77 @@ def _get_rt_window(
 
     half = config.nl_fallback_half_window_min
     return max(0.0, rt_center - half), rt_center + half, False, None
+
+
+def _recover_istd_peak_with_wider_anchor_window(
+    raw: Any,
+    config: ExtractionConfig,
+    target: Target,
+    *,
+    anchor_rt: float,
+    scoring_context_factory: Callable[..., Any] | None,
+    sample_name: str,
+    nl_result: NLResult | None,
+    istd_confidence_note: str | None,
+    istd_rt_in_this_sample: float | None,
+    paired_istd_fwhm: float | None,
+) -> PeakDetectionResult | None:
+    wider_half_window = max(
+        config.nl_fallback_half_window_min,
+        config.nl_rt_anchor_half_window_min,
+    )
+    if wider_half_window <= config.nl_rt_anchor_half_window_min:
+        return None
+
+    rt_min = max(0.0, anchor_rt - wider_half_window)
+    rt_max = anchor_rt + wider_half_window
+    rt, intensity = raw.extract_xic(target.mz, rt_min, rt_max, target.ppm_tol)
+    scoring_context_builder = None
+    if scoring_context_factory is not None:
+        scoring_context_builder = scoring_context_factory(
+            target=target,
+            sample_name=sample_name,
+            rt=rt,
+            intensity=intensity,
+            istd_rt_in_this_sample=istd_rt_in_this_sample,
+            paired_istd_fwhm=paired_istd_fwhm,
+            nl_result=nl_result,
+        )
+    if scoring_context_builder is not None:
+        try:
+            peak_result = find_peak_and_area(
+                rt,
+                intensity,
+                config,
+                preferred_rt=anchor_rt,
+                strict_preferred_rt=False,
+                scoring_context_builder=scoring_context_builder,
+                istd_confidence_note=istd_confidence_note,
+            )
+        except TypeError as exc:
+            if (
+                "scoring_context_builder" not in str(exc)
+                and "istd_confidence_note" not in str(exc)
+            ):
+                raise
+            peak_result = find_peak_and_area(
+                rt,
+                intensity,
+                config,
+                preferred_rt=anchor_rt,
+                strict_preferred_rt=False,
+            )
+    else:
+        peak_result = find_peak_and_area(
+            rt,
+            intensity,
+            config,
+            preferred_rt=anchor_rt,
+            strict_preferred_rt=False,
+        )
+    if peak_result.peak is None:
+        return None
+    return peak_result
 
 
 def _estimate_sample_drift(
