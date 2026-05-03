@@ -117,3 +117,21 @@ def test_settings_section_numeric_rules_do_not_require_existing_paths(qtbot) -> 
     section._smooth_window_spin.setValue(5)
     section._smooth_polyorder_spin.setValue(5)
     assert not section.is_valid()
+
+
+def test_settings_section_rejects_invalid_loaded_parallel_settings(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+
+    section.load(
+        {
+            **_canonical_settings(),
+            "parallel_mode": "proces",
+            "parallel_workers": "0",
+        }
+    )
+
+    assert not section.is_valid()
+    values = section.get_values()
+    assert values["parallel_mode"] == "proces"
+    assert values["parallel_workers"] == "0"

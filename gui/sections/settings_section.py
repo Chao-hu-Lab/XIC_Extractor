@@ -132,6 +132,8 @@ class SettingsSection(QWidget):
         super().__init__()
         self._dirty = False
         self._settings_values = dict(CANONICAL_SETTINGS_DEFAULTS)
+        self._invalid_parallel_mode: str | None = None
+        self._invalid_parallel_workers: str | None = None
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -305,6 +307,12 @@ class SettingsSection(QWidget):
             migrated, _ = migrate_settings_dict(settings)
             self._settings_values = dict(CANONICAL_SETTINGS_DEFAULTS)
             self._settings_values.update(migrated)
+            self._invalid_parallel_mode = _invalid_parallel_mode(
+                self._settings_values.get("parallel_mode", "")
+            )
+            self._invalid_parallel_workers = _invalid_parallel_workers(
+                self._settings_values.get("parallel_workers", "")
+            )
             self._data_dir_edit.setText(self._settings_values.get("data_dir", ""))
             self._dll_dir_edit.setText(self._settings_values.get("dll_dir", ""))
             self._smooth_window_spin.setValue(
@@ -434,11 +442,19 @@ class SettingsSection(QWidget):
                     "nl_fallback_half_window_min",
                     self._nl_fallback_half_window_min_spin,
                 ),
-                "parallel_mode": self._parallel_mode_combo.currentText(),
-                "parallel_workers": _int_setting_text(
-                    self._settings_values,
-                    "parallel_workers",
-                    self._parallel_workers_spin,
+                "parallel_mode": (
+                    self._invalid_parallel_mode
+                    if self._invalid_parallel_mode is not None
+                    else self._parallel_mode_combo.currentText()
+                ),
+                "parallel_workers": (
+                    self._invalid_parallel_workers
+                    if self._invalid_parallel_workers is not None
+                    else _int_setting_text(
+                        self._settings_values,
+                        "parallel_workers",
+                        self._parallel_workers_spin,
+                    )
                 ),
             }
         )
@@ -452,6 +468,10 @@ class SettingsSection(QWidget):
         peak_min_prominence_ratio = float(values["peak_min_prominence_ratio"])
         ms2_precursor_tol_da = float(values["ms2_precursor_tol_da"])
         nl_min_intensity_ratio = float(values["nl_min_intensity_ratio"])
+        try:
+            parallel_workers = int(values["parallel_workers"])
+        except ValueError:
+            parallel_workers = 0
         return (
             bool(values["data_dir"])
             and bool(values["dll_dir"])
@@ -462,6 +482,8 @@ class SettingsSection(QWidget):
             and 0.01 <= peak_min_prominence_ratio <= 0.50
             and ms2_precursor_tol_da > 0
             and 0 < nl_min_intensity_ratio <= 1
+            and values["parallel_mode"] in {"serial", "process"}
+            and parallel_workers >= 1
         )
 
     def set_enabled(self, enabled: bool) -> None:
@@ -698,12 +720,10 @@ class SettingsSection(QWidget):
         self._resolver_mode_combo.currentTextChanged.connect(
             lambda _: self._set_dirty(True)
         )
-        self._parallel_mode_combo.currentTextChanged.connect(
-            lambda _: self._set_dirty(True)
-        )
+        self._parallel_mode_combo.currentTextChanged.connect(self._on_parallel_mode_changed)
+        self._parallel_workers_spin.valueChanged.connect(self._on_parallel_workers_changed)
         for spin in (
             self._rolling_window_size_spin,
-            self._parallel_workers_spin,
             self._resolver_chrom_threshold_spin,
             self._resolver_min_search_range_min_spin,
             self._resolver_min_relative_height_spin,
@@ -717,6 +737,14 @@ class SettingsSection(QWidget):
             self._nl_fallback_half_window_min_spin,
         ):
             spin.valueChanged.connect(lambda _: self._set_dirty(True))
+
+    def _on_parallel_mode_changed(self, _text: str) -> None:
+        self._invalid_parallel_mode = None
+        self._set_dirty(True)
+
+    def _on_parallel_workers_changed(self, _value: int) -> None:
+        self._invalid_parallel_workers = None
+        self._set_dirty(True)
 
     def _validate_data_dir(self, text: str) -> None:
         stripped = text.strip()
@@ -771,6 +799,17 @@ def _float_value(settings: dict[str, str], key: str) -> float:
 
 def _bool_value(settings: dict[str, str], key: str) -> bool:
     return settings.get(key, CANONICAL_SETTINGS_DEFAULTS[key]).lower() == "true"
+
+
+def _invalid_parallel_mode(value: str) -> str | None:
+    return None if value in {"serial", "process"} else value
+
+
+def _invalid_parallel_workers(value: str) -> str | None:
+    try:
+        return None if int(value) >= 1 else value
+    except ValueError:
+        return value
 
 
 def _int_setting_text(

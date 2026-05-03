@@ -1,10 +1,10 @@
 import re
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
-import tomllib
-
 import pytest
+import tomllib
 
 from xic_extractor.config import ConfigError, ExtractionConfig, Target
 from xic_extractor.extractor import DiagnosticRecord, RunOutput
@@ -175,6 +175,42 @@ def test_cli_rejects_invalid_parallel_mode(capsys) -> None:
 
     assert exc_info.value.code == 2
     assert "invalid choice: 'thread'" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("workers", ["0", "-1"])
+def test_cli_rejects_invalid_parallel_workers(workers: str, capsys) -> None:
+    module = _module()
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main(["--parallel-workers", workers])
+
+    assert exc_info.value.code == 2
+    assert "parallel-workers must be >= 1" in capsys.readouterr().err
+
+
+def test_cli_preserves_loaded_parallel_settings_when_overrides_are_omitted(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=4)
+    targets = [_target("Analyte")]
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: calls.setdefault("excel", True),
+        raising=False,
+    )
+
+    exit_code = module.main(["--base-dir", str(tmp_path), "--skip-excel"])
+
+    assert exit_code == 0
+    assert calls["run_config"].parallel_mode == "process"
+    assert calls["run_config"].parallel_workers == 4
+    assert "Excel skipped" in capsys.readouterr().out
 
 
 def test_cli_accepts_excel_flag_for_compatibility(

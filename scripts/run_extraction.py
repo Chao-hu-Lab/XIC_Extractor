@@ -90,11 +90,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--parallel-workers",
-        type=int,
+        type=_positive_int,
         default=None,
         help="Override settings.csv parallel_workers.",
     )
     return parser.parse_args(argv)
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("parallel-workers must be >= 1")
+    return parsed
 
 
 def _print_progress(current: int, total: int, filename: str) -> None:

@@ -123,7 +123,7 @@ class MainWindow(QMainWindow):
             targets = []
 
         migrated = self._settings.load(settings)
-        if migrated:
+        if migrated and self._settings.is_valid():
             write_settings(self._settings.get_values())
         self._targets.load(targets)
         self._status_bar.showMessage(f"已載入 {len(targets)} 個目標")
@@ -135,6 +135,9 @@ class MainWindow(QMainWindow):
         write_targets(self._targets.get_targets())
 
     def _on_run(self) -> None:
+        if not self._settings.is_valid():
+            self._status_bar.showMessage("設定值無效，請修正後再執行", 5000)
+            return
         self._save_settings()
         self._save_targets()
         self._settings.set_enabled(False)

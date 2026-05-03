@@ -1,6 +1,7 @@
 from PyQt6.QtCore import Qt
 
 from gui.sections.settings_section import SettingsSection
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
 
 def _canonical_settings() -> dict[str, str]:
@@ -133,6 +134,42 @@ def test_advanced_section_preserves_loaded_strings_without_edits(qtbot) -> None:
     assert values["nl_rt_anchor_search_margin_min"] == "2.0"
     assert values["parallel_mode"] == "serial"
     assert values["parallel_workers"] == "1"
+
+
+def test_parallel_defaults_match_canonical_settings_defaults(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load(
+        {
+            key: value
+            for key, value in _canonical_settings().items()
+            if key not in {"parallel_mode", "parallel_workers"}
+        }
+    )
+
+    values = section.get_values()
+
+    assert values["parallel_mode"] == CANONICAL_SETTINGS_DEFAULTS["parallel_mode"]
+    assert values["parallel_workers"] == CANONICAL_SETTINGS_DEFAULTS["parallel_workers"]
+
+
+def test_parallel_loaded_values_round_trip_through_get_values(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load(
+        {
+            **_canonical_settings(),
+            "parallel_mode": "process",
+            "parallel_workers": "4",
+        }
+    )
+
+    values = section.get_values()
+
+    assert values["parallel_mode"] == "process"
+    assert values["parallel_workers"] == "4"
 
 
 def test_advanced_section_records_small_numeric_edits(qtbot) -> None:
