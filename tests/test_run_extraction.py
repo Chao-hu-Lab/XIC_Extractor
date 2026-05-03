@@ -90,6 +90,44 @@ def test_cli_runs_excel_conversion_by_default(
     assert "Excel skipped" not in capsys.readouterr().out
 
 
+def test_cli_accepts_data_dir_override_for_validation_subset(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    validation_dir = tmp_path / "validation"
+    validation_dir.mkdir()
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda excel_config, excel_targets, run_output, *, output_path: calls.update(
+            {
+                "excel_config": excel_config,
+                "excel_targets": excel_targets,
+                "excel_run_output": run_output,
+                "excel_output_path": output_path,
+            }
+        ),
+        raising=False,
+    )
+
+    exit_code = module.main(
+        ["--base-dir", str(tmp_path), "--data-dir", str(validation_dir)]
+    )
+
+    assert exit_code == 0
+    assert calls["run_config"] is not config
+    assert calls["run_config"].data_dir == validation_dir.resolve()
+    assert calls["run_config"].output_csv == config.output_csv
+    assert calls["excel_config"] is calls["run_config"]
+    assert "Excel skipped" not in capsys.readouterr().out
+
+
 def test_cli_accepts_excel_flag_for_compatibility(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:

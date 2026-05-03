@@ -16,6 +16,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     base_dir = args.base_dir.resolve()
     try:
         config, targets = load_config(base_dir / "config")
+        if args.data_dir is not None:
+            data_dir = args.data_dir.resolve()
+            if not data_dir.is_dir():
+                raise ConfigError(f"{data_dir}: data_dir override must be a directory")
+            config = replace(config, data_dir=data_dir)
         run_config = (
             replace(config, keep_intermediate_csv=True)
             if args.skip_excel
@@ -56,6 +61,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=Path,
         default=Path.cwd(),
         help="Project/base directory containing config/ and output/.",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Override settings.csv data_dir for validation subsets.",
     )
     parser.add_argument(
         "--skip-excel",
