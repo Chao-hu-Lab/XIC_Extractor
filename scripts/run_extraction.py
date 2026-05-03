@@ -1,4 +1,5 @@
 import argparse
+import multiprocessing
 import sys
 from collections.abc import Sequence
 from dataclasses import replace
@@ -12,6 +13,7 @@ from xic_extractor.raw_reader import RawReaderError
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    multiprocessing.freeze_support()
     args = _parse_args(argv)
     base_dir = args.base_dir.resolve()
     try:
