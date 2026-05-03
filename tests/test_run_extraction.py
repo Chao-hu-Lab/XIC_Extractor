@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -23,16 +24,18 @@ def test_cli_runs_extraction_with_base_dir_and_skips_excel(
     monkeypatch.setattr(module, "load_config", _load_config)
     monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
     monkeypatch.setattr(
-        module.csv_to_excel,
-        "run",
-        lambda *_args: calls.setdefault("excel", True),
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: calls.setdefault("excel", True),
+        raising=False,
     )
 
     exit_code = module.main(["--base-dir", str(tmp_path), "--skip-excel"])
 
     assert exit_code == 0
     assert calls["config_dir"] == tmp_path / "config"
-    assert calls["run_config"] is config
+    assert calls["run_config"] is not config
+    assert calls["run_config"].keep_intermediate_csv is True
     assert calls["run_targets"] == targets
     assert "excel" not in calls
     stdout = capsys.readouterr().out
@@ -44,6 +47,8 @@ def test_cli_runs_extraction_with_base_dir_and_skips_excel(
 def test_cli_runs_excel_conversion_by_default(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
+    import scripts.csv_to_excel as csv_to_excel
+
     module = _module()
     config = _config(tmp_path)
     targets = [_target("Analyte")]
@@ -52,11 +57,24 @@ def test_cli_runs_excel_conversion_by_default(
     monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
     monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
     monkeypatch.setattr(
-        module.csv_to_excel,
+        csv_to_excel,
         "run",
-        lambda excel_config, excel_targets: calls.update(
-            {"excel_config": excel_config, "excel_targets": excel_targets}
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("csv_to_excel.run should not be called")
         ),
+    )
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda excel_config, excel_targets, run_output, *, output_path: calls.update(
+            {
+                "excel_config": excel_config,
+                "excel_targets": excel_targets,
+                "excel_run_output": run_output,
+                "excel_output_path": output_path,
+            }
+        ),
+        raising=False,
     )
 
     exit_code = module.main(["--base-dir", str(tmp_path)])
@@ -64,12 +82,19 @@ def test_cli_runs_excel_conversion_by_default(
     assert exit_code == 0
     assert calls["excel_config"] is config
     assert calls["excel_targets"] == targets
+    assert calls["excel_run_output"] is calls["run_output"]
+    output_path = calls["excel_output_path"]
+    assert isinstance(output_path, Path)
+    assert output_path.parent == tmp_path / "output"
+    assert re.fullmatch(r"xic_results_\d{8}_\d{4}\.xlsx", output_path.name)
     assert "Excel skipped" not in capsys.readouterr().out
 
 
 def test_cli_accepts_excel_flag_for_compatibility(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
+    import scripts.csv_to_excel as csv_to_excel
+
     module = _module()
     config = _config(tmp_path)
     targets = [_target("Analyte")]
@@ -78,11 +103,24 @@ def test_cli_accepts_excel_flag_for_compatibility(
     monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
     monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
     monkeypatch.setattr(
-        module.csv_to_excel,
+        csv_to_excel,
         "run",
-        lambda excel_config, excel_targets: calls.update(
-            {"excel_config": excel_config, "excel_targets": excel_targets}
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("csv_to_excel.run should not be called")
         ),
+    )
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda excel_config, excel_targets, run_output, *, output_path: calls.update(
+            {
+                "excel_config": excel_config,
+                "excel_targets": excel_targets,
+                "excel_run_output": run_output,
+                "excel_output_path": output_path,
+            }
+        ),
+        raising=False,
     )
 
     exit_code = module.main(["--base-dir", str(tmp_path), "--excel"])
@@ -90,6 +128,11 @@ def test_cli_accepts_excel_flag_for_compatibility(
     assert exit_code == 0
     assert calls["excel_config"] is config
     assert calls["excel_targets"] == targets
+    assert calls["excel_run_output"] is calls["run_output"]
+    output_path = calls["excel_output_path"]
+    assert isinstance(output_path, Path)
+    assert output_path.parent == tmp_path / "output"
+    assert re.fullmatch(r"xic_results_\d{8}_\d{4}\.xlsx", output_path.name)
     assert "Excel skipped" not in capsys.readouterr().out
 
 
@@ -165,7 +208,7 @@ def _fake_run(calls: dict[str, object]):
         calls["run_targets"] = targets
         if progress_callback is not None:
             progress_callback(1, 2, "SampleA.raw")
-        return RunOutput(
+        output = RunOutput(
             file_results=[
                 SimpleNamespace(sample_name="SampleA"),
                 SimpleNamespace(sample_name="SampleB"),
@@ -179,6 +222,8 @@ def _fake_run(calls: dict[str, object]):
                 )
             ],
         )
+        calls["run_output"] = output
+        return output
 
     return _run
 

@@ -144,6 +144,26 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
     ]
 
 
+def test_run_does_not_write_intermediate_csv_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path, keep_intermediate_csv=False)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("NoNL", neutral_loss_da=None)]
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence([_ok_peak(8.5, 1200.0, 3400.25)]),
+    )
+
+    output = _run(config, targets)
+
+    assert len(output.file_results) == 1
+    assert not config.output_csv.exists()
+    assert not config.output_csv.with_name("xic_results_long.csv").exists()
+    assert not config.diagnostics_csv.exists()
+
+
 def test_run_loads_scoring_inputs_from_config_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -970,7 +990,7 @@ def _run(config: ExtractionConfig, targets: list[Target], **kwargs):
     return run(config, targets, **kwargs)
 
 
-def _config(tmp_path: Path) -> ExtractionConfig:
+def _config(tmp_path: Path, *, keep_intermediate_csv: bool = True) -> ExtractionConfig:
     data_dir = tmp_path / "raw"
     output_dir = tmp_path / "output"
     dll_dir = tmp_path / "dll"
@@ -988,6 +1008,7 @@ def _config(tmp_path: Path) -> ExtractionConfig:
         peak_min_prominence_ratio=0.10,
         ms2_precursor_tol_da=0.5,
         nl_min_intensity_ratio=0.01,
+        keep_intermediate_csv=keep_intermediate_csv,
     )
 
 

@@ -29,6 +29,7 @@ def test_new_keys_present() -> None:
         "dirty_matrix_mode": "false",
         "rt_prior_library_path": "",
         "emit_score_breakdown": "false",
+        "keep_intermediate_csv": "false",
     }.items():
         assert CANONICAL_SETTINGS_DEFAULTS[key] == default
 
@@ -40,6 +41,7 @@ def test_new_key_descriptions_present() -> None:
         "dirty_matrix_mode",
         "rt_prior_library_path",
         "emit_score_breakdown",
+        "keep_intermediate_csv",
     ):
         assert CANONICAL_SETTINGS_DESCRIPTIONS[key]
     assert "fallback" in CANONICAL_SETTINGS_DESCRIPTIONS["injection_order_source"]
@@ -69,6 +71,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
         "dirty_matrix_mode": "true",
         "rt_prior_library_path": str(rt_library),
         "emit_score_breakdown": "true",
+        "keep_intermediate_csv": "true",
     }
 
     config_dir.mkdir()
@@ -105,6 +108,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
     assert config.dirty_matrix_mode is True
     assert config.rt_prior_library_path == rt_library
     assert config.emit_score_breakdown is True
+    assert config.keep_intermediate_csv is True
     assert config.config_hash == compute_config_hash(targets_path, settings_path)
 
 
@@ -164,3 +168,4 @@ def test_load_config_defaults_scoring_settings_for_legacy_settings_csv(
     assert config.dirty_matrix_mode is False
     assert config.rt_prior_library_path is None
     assert config.emit_score_breakdown is False
+    assert config.keep_intermediate_csv is False
