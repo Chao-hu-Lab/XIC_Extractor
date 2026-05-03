@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task.
 
-**Goal:** Add opt-in per-RAW process parallelism to reduce real-data extraction time while preserving serial default behavior and workbook-equivalent results.  
-**Architecture:** Keep `xic_extractor.extractor.run()` as the public entry point, split execution into serial and process backends, parallelize Stage 1 ISTD pre-pass and Stage 2 per-file extraction by raw file, and keep output writing in the main process.  
-**Tech Stack:** Python, pytest, uv, pandas/openpyxl, Windows multiprocessing spawn, PyInstaller-compatible entry points.  
+**Goal:** Add opt-in per-RAW process parallelism to reduce real-data extraction time while preserving serial default behavior and workbook-equivalent results.
+**Architecture:** Keep `xic_extractor.extractor.run()` as the public entry point, split execution into serial and process backends, parallelize Stage 1 ISTD pre-pass and Stage 2 per-file extraction by raw file, and keep output writing in the main process.
+**Tech Stack:** Python, pytest, uv, pandas/openpyxl, Windows multiprocessing spawn, PyInstaller-compatible entry points.
 **Spec:** `docs/superpowers/specs/2026-05-03-parallel-raw-processing-spec.md`
 
 ---

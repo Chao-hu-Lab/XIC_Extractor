@@ -1,7 +1,7 @@
 # Parallel RAW Processing — Spec
 
-**日期**：2026-05-03  
-**狀態**：Draft  
+**日期**：2026-05-03
+**狀態**：Draft
 **對應計畫**：`docs/superpowers/plans/2026-05-03-parallel-raw-processing-implementation.md`
 
 ---
