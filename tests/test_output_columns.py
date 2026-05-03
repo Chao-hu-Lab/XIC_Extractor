@@ -2,14 +2,19 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from xic_extractor.config import Target
+from scripts import csv_to_excel
+from xic_extractor import extractor as extractor_module
+from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extractor import (
     ExtractionResult,
     FileResult,
     RunOutput,
-    _write_xlsx,
 )
-from xic_extractor.output.csv_writers import _long_output_rows, _output_row
+from xic_extractor.output.csv_writers import (
+    _long_output_rows,
+    _output_row,
+    write_all,
+)
 from xic_extractor.signal_processing import (
     PeakCandidate,
     PeakDetectionResult,
@@ -17,7 +22,7 @@ from xic_extractor.signal_processing import (
 )
 
 
-def _target(label: str) -> Target:
+def _target(label: str, *, is_istd: bool = False) -> Target:
     return Target(
         label=label,
         mz=258.1085,
@@ -27,7 +32,7 @@ def _target(label: str) -> Target:
         neutral_loss_da=116.0474,
         nl_ppm_warn=20.0,
         nl_ppm_max=50.0,
-        is_istd=False,
+        is_istd=is_istd,
         istd_pair="",
     )
 
@@ -91,9 +96,42 @@ def _fabricate_run_output() -> RunOutput:
     return RunOutput(file_results=[file_result], diagnostics=[])
 
 
+def _config(tmp_path: Path, *, emit_score_breakdown: bool = False) -> ExtractionConfig:
+    return ExtractionConfig(
+        data_dir=tmp_path / "raw",
+        dll_dir=tmp_path / "dll",
+        output_csv=tmp_path / "output" / "xic_results.csv",
+        diagnostics_csv=tmp_path / "output" / "xic_diagnostics.csv",
+        smooth_window=7,
+        smooth_polyorder=3,
+        peak_rel_height=0.95,
+        peak_min_prominence_ratio=0.1,
+        ms2_precursor_tol_da=1.6,
+        nl_min_intensity_ratio=0.01,
+        emit_score_breakdown=emit_score_breakdown,
+    )
+
+
+def _write_workbook(tmp_path: Path, *, emit_score_breakdown: bool = False) -> Path:
+    config = _config(tmp_path, emit_score_breakdown=emit_score_breakdown)
+    target = _target("d3-5-hmdC", is_istd=True)
+    run_output = _fabricate_run_output()
+    write_all(
+        config,
+        [target],
+        run_output.file_results,
+        run_output.diagnostics,
+        emit_score_breakdown=emit_score_breakdown,
+    )
+    return csv_to_excel.run(config, [target])
+
+
+def test_extractor_no_longer_exposes_test_only_xlsx_writer() -> None:
+    assert not hasattr(extractor_module, "_write_xlsx")
+
+
 def test_main_sheet_has_confidence_and_reason(tmp_path: Path) -> None:
-    out = tmp_path / "r.xlsx"
-    _write_xlsx(out, _fabricate_run_output(), targets=[], emit_score_breakdown=False)
+    out = _write_workbook(tmp_path)
     wb = load_workbook(out, read_only=True)
     ws = wb["XIC Results"]
     headers = [cell.value for cell in next(ws.iter_rows(max_row=1))]
@@ -102,8 +140,7 @@ def test_main_sheet_has_confidence_and_reason(tmp_path: Path) -> None:
 
 
 def test_summary_sheet_has_confidence_counts(tmp_path: Path) -> None:
-    out = tmp_path / "r.xlsx"
-    _write_xlsx(out, _fabricate_run_output(), targets=[], emit_score_breakdown=False)
+    out = _write_workbook(tmp_path)
     wb = load_workbook(out, read_only=True)
     ws = wb["Summary"]
     headers = [cell.value for cell in next(ws.iter_rows(max_row=1))]
@@ -117,15 +154,13 @@ def test_summary_sheet_has_confidence_counts(tmp_path: Path) -> None:
 
 
 def test_score_breakdown_sheet_absent_by_default(tmp_path: Path) -> None:
-    out = tmp_path / "r.xlsx"
-    _write_xlsx(out, _fabricate_run_output(), targets=[], emit_score_breakdown=False)
+    out = _write_workbook(tmp_path)
     wb = load_workbook(out, read_only=True)
     assert "Score Breakdown" not in wb.sheetnames
 
 
 def test_score_breakdown_sheet_emitted_when_flag_on(tmp_path: Path) -> None:
-    out = tmp_path / "r.xlsx"
-    _write_xlsx(out, _fabricate_run_output(), targets=[], emit_score_breakdown=True)
+    out = _write_workbook(tmp_path, emit_score_breakdown=True)
     wb = load_workbook(out, read_only=True)
     assert "Score Breakdown" in wb.sheetnames
     ws = wb["Score Breakdown"]
@@ -181,14 +216,7 @@ def test_output_rows_use_smoothed_apex_rt_for_reporting() -> None:
 def test_xlsx_results_sheet_uses_smoothed_apex_rt_for_reporting(
     tmp_path: Path,
 ) -> None:
-    out = tmp_path / "r.xlsx"
-    target = _target("d3-5-hmdC")
-    _write_xlsx(
-        out,
-        _fabricate_run_output(),
-        targets=[target],
-        emit_score_breakdown=False,
-    )
+    out = _write_workbook(tmp_path)
     wb = load_workbook(out, read_only=True)
     ws = wb["XIC Results"]
     rows = list(ws.iter_rows(values_only=True))
