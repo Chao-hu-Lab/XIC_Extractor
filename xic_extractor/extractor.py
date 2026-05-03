@@ -1,4 +1,3 @@
-import csv
 import gc
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -13,18 +12,7 @@ from scipy.signal import peak_widths
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.injection_rolling import read_injection_order, rolling_median_rt
 from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
-from xic_extractor.output.schema import (
-    DIAGNOSTIC_HEADERS as _DIAGNOSTIC_FIELDS,
-)
-from xic_extractor.output.schema import (
-    LONG_HEADERS as _LONG_OUTPUT_FIELDS,
-)
-from xic_extractor.output.schema import (
-    MS1_SUFFIXES as _MS1_SUFFIXES,
-)
-from xic_extractor.output.schema import (
-    SCORE_BREAKDOWN_HEADERS as _SCORE_BREAKDOWN_FIELDS,
-)
+from xic_extractor.output import csv_writers
 from xic_extractor.peak_scoring import (
     ScoringContext,
     candidate_quality_penalty,
@@ -32,7 +20,6 @@ from xic_extractor.peak_scoring import (
 )
 from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
 from xic_extractor.rt_prior_library import LibraryEntry, load_library
-from xic_extractor.sample_groups import classify_sample_group
 from xic_extractor.signal_processing import (
     PeakCandidate,
     PeakDetectionResult,
@@ -193,11 +180,13 @@ def run(
             gc.collect()
 
     output = RunOutput(file_results=file_results, diagnostics=diagnostics)
-    _write_output_csv(config, targets, file_results)
-    _write_long_output_csv(config, targets, file_results)
-    _write_diagnostics_csv(config, diagnostics)
-    if config.emit_score_breakdown:
-        _write_score_breakdown_csv(config, file_results)
+    csv_writers.write_all(
+        config,
+        targets,
+        file_results,
+        diagnostics,
+        emit_score_breakdown=config.emit_score_breakdown,
+    )
     return output
 
 
@@ -912,230 +901,10 @@ def _istd_confidence_diagnostic(
     )
 
 
-def _write_output_csv(
-    config: ExtractionConfig, targets: list[Target], file_results: list[FileResult]
-) -> None:
-    config.output_csv.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = _output_fieldnames(targets)
-    with config.output_csv.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        for file_result in file_results:
-            writer.writerow(_output_row(file_result, targets))
-
-
-def _write_diagnostics_csv(
-    config: ExtractionConfig, diagnostics: list[DiagnosticRecord]
-) -> None:
-    config.diagnostics_csv.parent.mkdir(parents=True, exist_ok=True)
-    with config.diagnostics_csv.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=_DIAGNOSTIC_FIELDS)
-        writer.writeheader()
-        for record in diagnostics:
-            writer.writerow(
-                {
-                    "SampleName": record.sample_name,
-                    "Target": record.target_label,
-                    "Issue": record.issue,
-                    "Reason": record.reason,
-                }
-            )
-
-
-def _write_long_output_csv(
-    config: ExtractionConfig, targets: list[Target], file_results: list[FileResult]
-) -> None:
-    path = config.output_csv.with_name("xic_results_long.csv")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=_LONG_OUTPUT_FIELDS)
-        writer.writeheader()
-        for file_result in file_results:
-            writer.writerows(_long_output_rows(file_result, targets))
-
-
-def _long_output_rows(
-    file_result: FileResult, targets: list[Target]
-) -> list[dict[str, str]]:
-    rows: list[dict[str, str]] = []
-    for target in targets:
-        row = {
-            "SampleName": file_result.sample_name,
-            "Group": _sample_group(file_result.sample_name),
-            "Target": target.label,
-            "Role": "ISTD" if target.is_istd else "Analyte",
-            "ISTD Pair": target.istd_pair,
-            "RT": "",
-            "Area": "",
-            "NL": "",
-            "Int": "",
-            "PeakStart": "",
-            "PeakEnd": "",
-            "PeakWidth": "",
-            "Confidence": "",
-            "Reason": "",
-        }
-        if file_result.error is not None:
-            _set_long_ms1_values(row, "ERROR")
-            row["NL"] = "ERROR" if target.neutral_loss_da is not None else ""
-        else:
-            result = file_result.results[target.label]
-            _set_long_peak_values(row, result)
-            row["NL"] = (
-                result.nl.to_token()
-                if target.neutral_loss_da is not None and result.nl is not None
-                else ""
-            )
-            row["Confidence"] = result.confidence
-            row["Reason"] = result.reason
-        rows.append(row)
-    return rows
-
-
-def _write_score_breakdown_csv(
-    config: ExtractionConfig, file_results: list[FileResult]
-) -> None:
-    path = config.output_csv.with_name("xic_score_breakdown.csv")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=_SCORE_BREAKDOWN_FIELDS)
-        writer.writeheader()
-        for file_result in file_results:
-            for result in file_result.extraction_results:
-                severities = {label: severity for severity, label in result.severities}
-                writer.writerow(
-                    {
-                        "SampleName": file_result.sample_name,
-                        "Target": result.target_label,
-                        "symmetry": _format_optional_severity(
-                            severities.get("symmetry")
-                        ),
-                        "local_sn": _format_optional_severity(
-                            severities.get("local_sn")
-                        ),
-                        "nl_support": _format_optional_severity(
-                            severities.get("nl_support")
-                        ),
-                        "rt_prior": _format_optional_severity(
-                            severities.get("rt_prior")
-                        ),
-                        "rt_centrality": _format_optional_severity(
-                            severities.get("rt_centrality")
-                        ),
-                        "noise_shape": _format_optional_severity(
-                            severities.get("noise_shape")
-                        ),
-                        "peak_width": _format_optional_severity(
-                            severities.get("peak_width")
-                        ),
-                        "Quality Penalty": str(result.quality_penalty),
-                        "Quality Flags": ",".join(result.quality_flags),
-                        "Total Severity": str(result.total_severity),
-                        "Confidence": result.confidence,
-                        "Prior RT": _format_optional_number(result.prior_rt),
-                        "Prior Source": result.prior_source,
-                    }
-                )
-
-
-def _format_optional_severity(value: int | None) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _set_long_ms1_values(row: dict[str, str], value: str) -> None:
-    row["RT"] = value
-    row["Area"] = value
-    row["Int"] = value
-    row["PeakStart"] = value
-    row["PeakEnd"] = value
-    row["PeakWidth"] = value
-
-
-def _set_long_peak_values(row: dict[str, str], result: ExtractionResult) -> None:
-    peak = result.peak_result.peak
-    if peak is None:
-        _set_long_ms1_values(row, "ND")
-        return
-    reported_rt = result.reported_rt
-    row["RT"] = f"{reported_rt:.4f}" if reported_rt is not None else "ND"
-    row["Area"] = f"{peak.area:.2f}"
-    row["Int"] = f"{peak.intensity:.0f}"
-    row["PeakStart"] = f"{peak.peak_start:.4f}"
-    row["PeakEnd"] = f"{peak.peak_end:.4f}"
-    row["PeakWidth"] = _format_peak_width(peak)
-
-
-def _output_fieldnames(targets: list[Target]) -> list[str]:
-    fieldnames = ["SampleName"]
-    for target in targets:
-        fieldnames.extend(_target_fieldnames(target))
-    return fieldnames
-
-
-def _target_fieldnames(target: Target) -> list[str]:
-    fieldnames = [f"{target.label}_{suffix}" for suffix in _MS1_SUFFIXES]
-    if target.neutral_loss_da is not None:
-        fieldnames.append(f"{target.label}_NL")
-    return fieldnames
-
-
-def _output_row(file_result: FileResult, targets: list[Target]) -> dict[str, str]:
-    row = {"SampleName": file_result.sample_name}
-    for target in targets:
-        if file_result.error is not None:
-            _set_target_values(row, target, "ERROR")
-            continue
-
-        result = file_result.results[target.label]
-        _set_peak_values(row, target, result)
-        if target.neutral_loss_da is not None:
-            row[f"{target.label}_NL"] = result.nl.to_token() if result.nl else "ND"
-    return row
-
-
-def _set_target_values(row: dict[str, str], target: Target, value: str) -> None:
-    for suffix in _MS1_SUFFIXES:
-        row[f"{target.label}_{suffix}"] = value
-    if target.neutral_loss_da is not None:
-        row[f"{target.label}_NL"] = value
-
-
-def _set_peak_values(
-    row: dict[str, str],
-    target: Target,
-    result: ExtractionResult,
-) -> None:
-    peak = result.peak_result.peak
-    if peak is None:
-        for suffix in _MS1_SUFFIXES:
-            row[f"{target.label}_{suffix}"] = "ND"
-        return
-
-    reported_rt = result.reported_rt
-    row[f"{target.label}_RT"] = (
-        f"{reported_rt:.4f}" if reported_rt is not None else "ND"
-    )
-    row[f"{target.label}_Int"] = f"{peak.intensity:.0f}"
-    row[f"{target.label}_Area"] = f"{peak.area:.2f}"
-    row[f"{target.label}_PeakStart"] = f"{peak.peak_start:.4f}"
-    row[f"{target.label}_PeakEnd"] = f"{peak.peak_end:.4f}"
-    row[f"{target.label}_PeakWidth"] = _format_peak_width(peak)
-
-
-def _format_peak_width(peak: PeakResult) -> str:
-    return f"{abs(peak.peak_end - peak.peak_start):.4f}"
-
-
 def _format_optional_number(value: float | None) -> str:
     if value is None:
         return "NA"
     return f"{value:g}"
-
-
-def _sample_group(name: str) -> str:
-    return classify_sample_group(name)
 
 
 def _write_xlsx(

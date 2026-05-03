@@ -7,10 +7,9 @@ from xic_extractor.extractor import (
     ExtractionResult,
     FileResult,
     RunOutput,
-    _long_output_rows,
-    _output_row,
     _write_xlsx,
 )
+from xic_extractor.output.csv_writers import _long_output_rows, _output_row
 from xic_extractor.signal_processing import (
     PeakCandidate,
     PeakDetectionResult,
