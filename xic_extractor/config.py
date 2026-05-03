@@ -49,6 +49,15 @@ class ExtractionConfig:
     peak_min_prominence_ratio: float
     ms2_precursor_tol_da: float
     nl_min_intensity_ratio: float
+    resolver_mode: str = "legacy_savgol"
+    resolver_chrom_threshold: float = 0.05
+    resolver_min_search_range_min: float = 0.04
+    resolver_min_relative_height: float = 0.05
+    resolver_min_absolute_height: float = 25.0
+    resolver_min_ratio_top_edge: float = 1.3
+    resolver_peak_duration_min: float = 0.03
+    resolver_peak_duration_max: float = 1.00
+    resolver_min_scans: int = 5
     count_no_ms2_as_detected: bool = False
     nl_rt_anchor_search_margin_min: float = 2.0
     nl_rt_anchor_half_window_min: float = 1.0
@@ -87,6 +96,15 @@ class _ParsedSettings:
     smooth_polyorder: int
     peak_rel_height: float
     peak_min_prominence_ratio: float
+    resolver_mode: str
+    resolver_chrom_threshold: float
+    resolver_min_search_range_min: float
+    resolver_min_relative_height: float
+    resolver_min_absolute_height: float
+    resolver_min_ratio_top_edge: float
+    resolver_peak_duration_min: float
+    resolver_peak_duration_max: float
+    resolver_min_scans: int
     ms2_precursor_tol_da: float
     nl_min_intensity_ratio: float
     count_no_ms2_as_detected: bool
@@ -211,6 +229,55 @@ def _parse_settings_values(
             "peak_min_prominence_ratio",
             _setting_value(settings, settings_path, "peak_min_prominence_ratio"),
         ),
+        resolver_mode=_setting_value(settings, settings_path, "resolver_mode"),
+        resolver_chrom_threshold=_parse_float(
+            settings_path,
+            None,
+            "resolver_chrom_threshold",
+            _setting_value(settings, settings_path, "resolver_chrom_threshold"),
+        ),
+        resolver_min_search_range_min=_parse_float(
+            settings_path,
+            None,
+            "resolver_min_search_range_min",
+            _setting_value(settings, settings_path, "resolver_min_search_range_min"),
+        ),
+        resolver_min_relative_height=_parse_float(
+            settings_path,
+            None,
+            "resolver_min_relative_height",
+            _setting_value(settings, settings_path, "resolver_min_relative_height"),
+        ),
+        resolver_min_absolute_height=_parse_float(
+            settings_path,
+            None,
+            "resolver_min_absolute_height",
+            _setting_value(settings, settings_path, "resolver_min_absolute_height"),
+        ),
+        resolver_min_ratio_top_edge=_parse_float(
+            settings_path,
+            None,
+            "resolver_min_ratio_top_edge",
+            _setting_value(settings, settings_path, "resolver_min_ratio_top_edge"),
+        ),
+        resolver_peak_duration_min=_parse_float(
+            settings_path,
+            None,
+            "resolver_peak_duration_min",
+            _setting_value(settings, settings_path, "resolver_peak_duration_min"),
+        ),
+        resolver_peak_duration_max=_parse_float(
+            settings_path,
+            None,
+            "resolver_peak_duration_max",
+            _setting_value(settings, settings_path, "resolver_peak_duration_max"),
+        ),
+        resolver_min_scans=_parse_int(
+            settings_path,
+            None,
+            "resolver_min_scans",
+            _setting_value(settings, settings_path, "resolver_min_scans"),
+        ),
         ms2_precursor_tol_da=_parse_float(
             settings_path,
             None,
@@ -309,6 +376,86 @@ def _validate_settings_ranges(
         0.01,
         0.50,
     )
+    if parsed.resolver_mode not in {"legacy_savgol", "local_minimum"}:
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_mode",
+            settings["resolver_mode"],
+            "must be legacy_savgol or local_minimum",
+        )
+    if not 0 <= parsed.resolver_chrom_threshold <= 1:
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_chrom_threshold",
+            settings["resolver_chrom_threshold"],
+            "must be between 0 and 1",
+        )
+    if parsed.resolver_min_search_range_min <= 0:
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_min_search_range_min",
+            settings["resolver_min_search_range_min"],
+            "must be > 0",
+        )
+    if not 0 < parsed.resolver_min_relative_height <= 1:
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_min_relative_height",
+            settings["resolver_min_relative_height"],
+            "must be > 0 and <= 1",
+        )
+    if parsed.resolver_min_absolute_height < 0:
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_min_absolute_height",
+            settings["resolver_min_absolute_height"],
+            "must be >= 0",
+        )
+    if parsed.resolver_min_ratio_top_edge <= 1:
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_min_ratio_top_edge",
+            settings["resolver_min_ratio_top_edge"],
+            "must be > 1",
+        )
+    if parsed.resolver_peak_duration_min <= 0:
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_peak_duration_min",
+            settings["resolver_peak_duration_min"],
+            "must be > 0",
+        )
+    if parsed.resolver_peak_duration_max <= 0:
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_peak_duration_max",
+            settings["resolver_peak_duration_max"],
+            "must be > 0",
+        )
+    if parsed.resolver_peak_duration_min > parsed.resolver_peak_duration_max:
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_peak_duration_min",
+            settings["resolver_peak_duration_min"],
+            "must be <= resolver_peak_duration_max",
+        )
+    if parsed.resolver_min_scans < 1:
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_min_scans",
+            settings["resolver_min_scans"],
+            "must be >= 1",
+        )
     if parsed.ms2_precursor_tol_da <= 0:
         raise _config_error(
             settings_path,
@@ -369,6 +516,15 @@ def _build_config(
         smooth_polyorder=parsed.smooth_polyorder,
         peak_rel_height=parsed.peak_rel_height,
         peak_min_prominence_ratio=parsed.peak_min_prominence_ratio,
+        resolver_mode=parsed.resolver_mode,
+        resolver_chrom_threshold=parsed.resolver_chrom_threshold,
+        resolver_min_search_range_min=parsed.resolver_min_search_range_min,
+        resolver_min_relative_height=parsed.resolver_min_relative_height,
+        resolver_min_absolute_height=parsed.resolver_min_absolute_height,
+        resolver_min_ratio_top_edge=parsed.resolver_min_ratio_top_edge,
+        resolver_peak_duration_min=parsed.resolver_peak_duration_min,
+        resolver_peak_duration_max=parsed.resolver_peak_duration_max,
+        resolver_min_scans=parsed.resolver_min_scans,
         ms2_precursor_tol_da=parsed.ms2_precursor_tol_da,
         nl_min_intensity_ratio=parsed.nl_min_intensity_ratio,
         count_no_ms2_as_detected=parsed.count_no_ms2_as_detected,

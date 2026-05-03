@@ -583,6 +583,7 @@ def _build_score_breakdown_sheet(ws, rows: list[dict[str, str]]) -> None:
                     "rt_centrality",
                     "noise_shape",
                     "peak_width",
+                    "Quality Penalty",
                     "Total Severity",
                     "Prior RT",
                 }

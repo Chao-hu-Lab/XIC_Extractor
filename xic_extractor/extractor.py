@@ -13,7 +13,11 @@ from scipy.signal import peak_widths
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.injection_rolling import read_injection_order, rolling_median_rt
 from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
-from xic_extractor.peak_scoring import ScoringContext, compute_local_sn_cache
+from xic_extractor.peak_scoring import (
+    ScoringContext,
+    candidate_quality_penalty,
+    compute_local_sn_cache,
+)
 from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
 from xic_extractor.rt_prior_library import LibraryEntry, load_library
 from xic_extractor.sample_groups import classify_sample_group
@@ -77,6 +81,8 @@ _SCORE_BREAKDOWN_FIELDS = (
     "rt_centrality",
     "noise_shape",
     "peak_width",
+    "Quality Penalty",
+    "Quality Flags",
     "Total Severity",
     "Confidence",
     "Prior RT",
@@ -99,11 +105,13 @@ class ExtractionResult:
     target_label: str = ""
     role: str = ""
     istd_pair: str = ""
-    confidence: str = "HIGH"
+    confidence: str = ""
     reason: str = ""
     severities: tuple[tuple[int, str], ...] = ()
     prior_rt: float | None = None
     prior_source: str = ""
+    quality_penalty: int = 0
+    quality_flags: tuple[str, ...] = ()
 
     @property
     def peak(self) -> PeakResult | None:
@@ -112,6 +120,21 @@ class ExtractionResult:
     @property
     def nl_result(self) -> NLResult | None:
         return self.nl
+
+    @property
+    def total_severity(self) -> int:
+        return sum(severity for severity, _ in self.severities) + self.quality_penalty
+
+    @property
+    def reported_rt(self) -> float | None:
+        """User-facing RT uses the selected candidate's smoothed apex when available."""
+        candidate = _selected_candidate(self.peak_result)
+        if candidate is not None:
+            return candidate.smoothed_apex_rt
+        peak = self.peak
+        if peak is None:
+            return None
+        return peak.rt
 
 
 @dataclass
@@ -388,6 +411,27 @@ def _extract_one_target(
             preferred_rt=anchor_rt,
             strict_preferred_rt=strict_preferred_rt,
         )
+    if (
+        peak_result.status == "PEAK_NOT_FOUND"
+        and peak_result.peak is None
+        and target.is_istd
+        and anchor_used
+        and anchor_rt is not None
+    ):
+        recovered_peak_result = _recover_istd_peak_with_wider_anchor_window(
+            raw,
+            config,
+            target,
+            anchor_rt=anchor_rt,
+            scoring_context_factory=scoring_context_factory,
+            sample_name=sample_name,
+            nl_result=nl_result,
+            istd_confidence_note=istd_confidence_note,
+            istd_rt_in_this_sample=istd_rt_in_this_sample,
+            paired_istd_fwhm=paired_istd_fwhm,
+        )
+        if recovered_peak_result is not None:
+            peak_result = recovered_peak_result
     paired_rejection = _paired_anchor_mismatch_diagnostic(
         sample_name,
         target,
@@ -397,8 +441,19 @@ def _extract_one_target(
         strict_preferred_rt=strict_preferred_rt,
     )
     if paired_rejection is not None:
-        peak_result = replace(peak_result, peak=None)
+        peak_result = _apply_anchor_mismatch_penalty(
+            peak_result,
+            paired_rejection.reason,
+        )
     shape_metrics = _selected_shape_metrics(intensity, peak_result)
+    selected_candidate = _selected_candidate(peak_result)
+    quality_penalty = 0
+    quality_flags: tuple[str, ...] = ()
+    if selected_candidate is not None:
+        quality_penalty, _ = candidate_quality_penalty(selected_candidate)
+        quality_flags = tuple(
+            str(flag) for flag in getattr(selected_candidate, "quality_flags", ())
+        )
     if shape_metrics_by_label is not None and shape_metrics is not None:
         shape_metrics_by_label[target.label] = shape_metrics
 
@@ -408,11 +463,17 @@ def _extract_one_target(
         target_label=target.label,
         role="ISTD" if target.is_istd else "Analyte",
         istd_pair=target.istd_pair,
-        confidence=peak_result.confidence or "HIGH",
+        confidence=(
+            peak_result.confidence or "HIGH"
+            if peak_result.peak is not None
+            else ""
+        ),
         reason=peak_result.reason or "",
         severities=peak_result.severities,
         prior_rt=getattr(scoring_context_builder, "rt_prior", None),
         prior_source=getattr(scoring_context_builder, "prior_source", ""),
+        quality_penalty=quality_penalty,
+        quality_flags=quality_flags,
     )
     results[target.label] = result
     diagnostics.extend(_build_diagnostics(sample_name, target, result, config))
@@ -527,6 +588,77 @@ def _get_rt_window(
     return max(0.0, rt_center - half), rt_center + half, False, None
 
 
+def _recover_istd_peak_with_wider_anchor_window(
+    raw: Any,
+    config: ExtractionConfig,
+    target: Target,
+    *,
+    anchor_rt: float,
+    scoring_context_factory: Callable[..., Any] | None,
+    sample_name: str,
+    nl_result: NLResult | None,
+    istd_confidence_note: str | None,
+    istd_rt_in_this_sample: float | None,
+    paired_istd_fwhm: float | None,
+) -> PeakDetectionResult | None:
+    wider_half_window = max(
+        config.nl_fallback_half_window_min,
+        config.nl_rt_anchor_half_window_min,
+    )
+    if wider_half_window <= config.nl_rt_anchor_half_window_min:
+        return None
+
+    rt_min = max(0.0, anchor_rt - wider_half_window)
+    rt_max = anchor_rt + wider_half_window
+    rt, intensity = raw.extract_xic(target.mz, rt_min, rt_max, target.ppm_tol)
+    scoring_context_builder = None
+    if scoring_context_factory is not None:
+        scoring_context_builder = scoring_context_factory(
+            target=target,
+            sample_name=sample_name,
+            rt=rt,
+            intensity=intensity,
+            istd_rt_in_this_sample=istd_rt_in_this_sample,
+            paired_istd_fwhm=paired_istd_fwhm,
+            nl_result=nl_result,
+        )
+    if scoring_context_builder is not None:
+        try:
+            peak_result = find_peak_and_area(
+                rt,
+                intensity,
+                config,
+                preferred_rt=anchor_rt,
+                strict_preferred_rt=False,
+                scoring_context_builder=scoring_context_builder,
+                istd_confidence_note=istd_confidence_note,
+            )
+        except TypeError as exc:
+            if (
+                "scoring_context_builder" not in str(exc)
+                and "istd_confidence_note" not in str(exc)
+            ):
+                raise
+            peak_result = find_peak_and_area(
+                rt,
+                intensity,
+                config,
+                preferred_rt=anchor_rt,
+                strict_preferred_rt=False,
+            )
+    else:
+        peak_result = find_peak_and_area(
+            rt,
+            intensity,
+            config,
+            preferred_rt=anchor_rt,
+            strict_preferred_rt=False,
+        )
+    if peak_result.peak is None:
+        return None
+    return peak_result
+
+
 def _estimate_sample_drift(
     targets: list[Target], istd_anchor_rts: dict[str, float]
 ) -> float:
@@ -608,12 +740,29 @@ def _paired_anchor_mismatch_diagnostic(
         target_label=target.label,
         issue="ANCHOR_RT_MISMATCH",
         reason=(
-            f"Rejected paired analyte peak RT {peak.rt:.3f} min because it "
-            f"deviates {delta:.2f} min from {anchor_label} at "
+            f"Paired analyte peak RT {peak.rt:.3f} min deviates "
+            f"{delta:.2f} min from {anchor_label} at "
             f"{expected_rt:.3f} min (allowed ±{allowed_delta:.2f} min)"
-            f"{secondary_note}; output set to ND to avoid false positive"
+            f"{secondary_note}; retained with downgraded confidence for manual review"
         ),
     )
+
+
+def _apply_anchor_mismatch_penalty(
+    peak_result: PeakDetectionResult,
+    mismatch_reason: str,
+) -> PeakDetectionResult:
+    reason = f"anchor mismatch; {mismatch_reason}"
+    if peak_result.reason:
+        reason = f"{peak_result.reason}; {reason}"
+    confidence = _anchor_mismatch_confidence(peak_result.confidence)
+    return replace(peak_result, confidence=confidence, reason=reason)
+
+
+def _anchor_mismatch_confidence(confidence: str | None) -> str:
+    if confidence == "VERY_LOW":
+        return "VERY_LOW"
+    return "LOW"
 
 
 def _build_diagnostics(
@@ -848,7 +997,7 @@ def _long_output_rows(
             "PeakStart": "",
             "PeakEnd": "",
             "PeakWidth": "",
-            "Confidence": "HIGH",
+            "Confidence": "",
             "Reason": "",
         }
         if file_result.error is not None:
@@ -856,7 +1005,7 @@ def _long_output_rows(
             row["NL"] = "ERROR" if target.neutral_loss_da is not None else ""
         else:
             result = file_result.results[target.label]
-            _set_long_peak_values(row, result.peak_result.peak)
+            _set_long_peak_values(row, result)
             row["NL"] = (
                 result.nl.to_token()
                 if target.neutral_loss_da is not None and result.nl is not None
@@ -904,9 +1053,9 @@ def _write_score_breakdown_csv(
                         "peak_width": _format_optional_severity(
                             severities.get("peak_width")
                         ),
-                        "Total Severity": str(
-                            sum(severity for severity, _ in result.severities)
-                        ),
+                        "Quality Penalty": str(result.quality_penalty),
+                        "Quality Flags": ",".join(result.quality_flags),
+                        "Total Severity": str(result.total_severity),
                         "Confidence": result.confidence,
                         "Prior RT": _format_optional_number(result.prior_rt),
                         "Prior Source": result.prior_source,
@@ -929,11 +1078,13 @@ def _set_long_ms1_values(row: dict[str, str], value: str) -> None:
     row["PeakWidth"] = value
 
 
-def _set_long_peak_values(row: dict[str, str], peak: PeakResult | None) -> None:
+def _set_long_peak_values(row: dict[str, str], result: ExtractionResult) -> None:
+    peak = result.peak_result.peak
     if peak is None:
         _set_long_ms1_values(row, "ND")
         return
-    row["RT"] = f"{peak.rt:.4f}"
+    reported_rt = result.reported_rt
+    row["RT"] = f"{reported_rt:.4f}" if reported_rt is not None else "ND"
     row["Area"] = f"{peak.area:.2f}"
     row["Int"] = f"{peak.intensity:.0f}"
     row["PeakStart"] = f"{peak.peak_start:.4f}"
@@ -963,7 +1114,7 @@ def _output_row(file_result: FileResult, targets: list[Target]) -> dict[str, str
             continue
 
         result = file_result.results[target.label]
-        _set_peak_values(row, target, result.peak_result.peak)
+        _set_peak_values(row, target, result)
         if target.neutral_loss_da is not None:
             row[f"{target.label}_NL"] = result.nl.to_token() if result.nl else "ND"
     return row
@@ -977,14 +1128,20 @@ def _set_target_values(row: dict[str, str], target: Target, value: str) -> None:
 
 
 def _set_peak_values(
-    row: dict[str, str], target: Target, peak: PeakResult | None
+    row: dict[str, str],
+    target: Target,
+    result: ExtractionResult,
 ) -> None:
+    peak = result.peak_result.peak
     if peak is None:
         for suffix in _MS1_SUFFIXES:
             row[f"{target.label}_{suffix}"] = "ND"
         return
 
-    row[f"{target.label}_RT"] = f"{peak.rt:.4f}"
+    reported_rt = result.reported_rt
+    row[f"{target.label}_RT"] = (
+        f"{reported_rt:.4f}" if reported_rt is not None else "ND"
+    )
     row[f"{target.label}_Int"] = f"{peak.intensity:.0f}"
     row[f"{target.label}_Area"] = f"{peak.area:.2f}"
     row[f"{target.label}_PeakStart"] = f"{peak.peak_start:.4f}"
@@ -1058,7 +1215,7 @@ def _write_xic_results_sheet(
                 extraction_result.target_label,
                 extraction_result.role,
                 extraction_result.istd_pair,
-                peak.rt if peak is not None else None,
+                extraction_result.reported_rt if peak is not None else None,
                 peak.area if peak is not None else None,
                 (
                     extraction_result.nl_result.to_token()
@@ -1094,7 +1251,8 @@ def _write_summary_sheet(
             key,
             {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "VERY_LOW": 0},
         )
-        target_counts[extraction_result.confidence] += 1
+        if extraction_result.confidence in target_counts:
+            target_counts[extraction_result.confidence] += 1
 
     for (target_label, role), target_counts in counts.items():
         sheet.append(
@@ -1120,6 +1278,8 @@ def _write_score_breakdown_sheet(sheet: Any, run_output: RunOutput) -> None:
         "rt_centrality",
         "noise_shape",
         "peak_width",
+        "Quality Penalty",
+        "Quality Flags",
         "Total Severity",
         "Confidence",
         "Prior RT",
@@ -1132,9 +1292,6 @@ def _write_score_breakdown_sheet(sheet: Any, run_output: RunOutput) -> None:
                 label: severity
                 for severity, label in extraction_result.severities
             }
-            total_severity = sum(
-                severity for severity, _ in extraction_result.severities
-            )
             sheet.append(
                 [
                     file_result.sample_name,
@@ -1146,7 +1303,9 @@ def _write_score_breakdown_sheet(sheet: Any, run_output: RunOutput) -> None:
                     severities.get("rt_centrality"),
                     severities.get("noise_shape"),
                     severities.get("peak_width"),
-                    total_severity,
+                    extraction_result.quality_penalty,
+                    ",".join(extraction_result.quality_flags),
+                    extraction_result.total_severity,
                     extraction_result.confidence,
                     extraction_result.prior_rt,
                     extraction_result.prior_source,
@@ -1229,7 +1388,12 @@ def _extract_istd_anchors_only(
                     diagnostics=diagnostics,
                     shape_metrics_by_label=shape_metrics_by_label,
                 )
-                if anchor_rt is not None:
+                result = results.get(target.label)
+                if (
+                    anchor_rt is not None
+                    and result is not None
+                    and _allow_prepass_anchor(result)
+                ):
                     anchors[target.label] = anchor_rt
             return anchors, results, diagnostics, shape_metrics_by_label
     except Exception:
@@ -1293,6 +1457,13 @@ def _build_scoring_context_factory(
         baseline_array, residual_mad = compute_local_sn_cache(intensity_values)
         ms2_present = nl_result is not None and nl_result.matched_scan_count > 0
         nl_match = nl_result is not None and nl_result.status in {"OK", "WARN"}
+        prefer_rt_prior_tiebreak = (
+            not target.is_istd
+            and bool(target.istd_pair)
+            and istd_rt_in_this_sample is not None
+            and rt_prior is not None
+            and prior_source == "delta_rt_library"
+        )
 
         def builder(candidate: PeakCandidate) -> ScoringContext:
             half_width_ratio, fwhm = _compute_shape_metrics(
@@ -1322,6 +1493,7 @@ def _build_scoring_context_factory(
                 dirty_matrix=config.dirty_matrix_mode,
                 baseline_array=baseline_array,
                 residual_mad=residual_mad,
+                prefer_rt_prior_tiebreak=prefer_rt_prior_tiebreak,
             )
 
         setattr(builder, "rt_prior", rt_prior)
@@ -1381,6 +1553,13 @@ def _selected_candidate(peak_result: PeakDetectionResult) -> PeakCandidate | Non
         if candidate.peak == peak_result.peak:
             return candidate
     return None
+
+
+def _allow_prepass_anchor(result: ExtractionResult) -> bool:
+    candidate = _selected_candidate(result.peak_result)
+    if candidate is None:
+        return False
+    return not bool(getattr(candidate, "quality_flags", ()))
 
 
 def _paired_istd_fwhm(

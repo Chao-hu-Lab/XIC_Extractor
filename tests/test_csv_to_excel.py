@@ -376,7 +376,9 @@ def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
                 "rt_centrality": "0",
                 "noise_shape": "0",
                 "peak_width": "0",
-                "Total Severity": "1",
+                "Quality Penalty": "1",
+                "Quality Flags": "too_broad",
+                "Total Severity": "2",
                 "Confidence": "MEDIUM",
                 "Prior RT": "9.05",
                 "Prior Source": "rolling_median",
@@ -390,9 +392,14 @@ def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
     wb = load_workbook(excel_path)
     assert "Score Breakdown" in wb.sheetnames
     ws = wb["Score Breakdown"]
-    assert ws["A1"].value == "SampleName"
-    assert ws["J2"].value == 1
-    assert ws["K2"].value == "MEDIUM"
+    headers = [cell.value for cell in next(ws.iter_rows(max_row=1))]
+    values = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))
+    row = dict(zip(headers, values, strict=False))
+    assert row["SampleName"] == "Tumor_1"
+    assert row["Quality Penalty"] == 1
+    assert row["Quality Flags"] == "too_broad"
+    assert row["Total Severity"] == 2
+    assert row["Confidence"] == "MEDIUM"
 
 
 def _long_row(

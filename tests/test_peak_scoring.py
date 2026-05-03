@@ -73,7 +73,13 @@ class _FakePeak:
 
 
 def _sc(
-    confidence: Confidence, apex_rt: float, intensity: float, prior: float | None
+    confidence: Confidence,
+    apex_rt: float,
+    intensity: float,
+    prior: float | None,
+    *,
+    quality_penalty: int = 0,
+    prefer_rt_prior_tiebreak: bool = False,
 ) -> ScoredCandidate:
     return ScoredCandidate(
         candidate=_FakePeak(apex_rt, intensity),
@@ -81,6 +87,8 @@ def _sc(
         confidence=confidence,
         reason="",
         prior_rt=prior,
+        quality_penalty=quality_penalty,
+        prefer_rt_prior_tiebreak=prefer_rt_prior_tiebreak,
     )
 
 
@@ -91,14 +99,38 @@ def test_selector_prefers_higher_confidence() -> None:
 
 
 def test_selector_tiebreak_by_prior_distance() -> None:
-    a = _sc(Confidence.HIGH, 10.3, 1000, prior=10.0)
-    b = _sc(Confidence.HIGH, 10.05, 500, prior=10.0)
+    a = _sc(
+        Confidence.HIGH,
+        10.3,
+        1000,
+        prior=10.0,
+        prefer_rt_prior_tiebreak=True,
+    )
+    b = _sc(
+        Confidence.HIGH,
+        10.05,
+        500,
+        prior=10.0,
+        prefer_rt_prior_tiebreak=True,
+    )
     assert select_candidate_with_confidence([a, b]) is b
 
 
 def test_selector_final_tiebreak_by_intensity() -> None:
-    a = _sc(Confidence.HIGH, 10.1, 1000, prior=10.0)
-    b = _sc(Confidence.HIGH, 10.1, 500, prior=10.0)
+    a = _sc(
+        Confidence.HIGH,
+        10.1,
+        1000,
+        prior=10.0,
+        prefer_rt_prior_tiebreak=True,
+    )
+    b = _sc(
+        Confidence.HIGH,
+        10.1,
+        500,
+        prior=10.0,
+        prefer_rt_prior_tiebreak=True,
+    )
     assert select_candidate_with_confidence([a, b]) is a
 
 
@@ -123,6 +155,24 @@ def _make_candidate(apex_rt: float, apex_intensity: float) -> PeakCandidate:
     )
 
 
+def _make_flagged_candidate(
+    apex_rt: float,
+    apex_intensity: float,
+    *,
+    quality_flags: tuple[str, ...],
+) -> PeakCandidate:
+    candidate = _make_candidate(apex_rt=apex_rt, apex_intensity=apex_intensity)
+    return PeakCandidate(
+        **{
+            **candidate.__dict__,
+            "quality_flags": quality_flags,
+            "region_scan_count": 4,
+            "region_duration_min": 1.2,
+            "region_edge_ratio": 1.05,
+        }
+    )
+
+
 def test_score_candidate_returns_seven_severities() -> None:
     cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
     x = np.linspace(9, 11, 201)
@@ -140,11 +190,73 @@ def test_score_candidate_returns_seven_severities() -> None:
         rt_min=9.0,
         rt_max=11.0,
         dirty_matrix=False,
+        prefer_rt_prior_tiebreak=True,
     )
     scored = score_candidate(cand, ctx, prior_rt=10.0)
     assert len(scored.severities) == 7
     assert scored.confidence == Confidence.HIGH
     assert scored.reason == "all checks passed"
+
+
+def test_score_candidate_penalizes_flagged_candidate_quality() -> None:
+    cand = _make_flagged_candidate(
+        apex_rt=10.0,
+        apex_intensity=1000.0,
+        quality_flags=("too_broad",),
+    )
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        prefer_rt_prior_tiebreak=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.MEDIUM
+    assert "weak candidate" in scored.reason
+    assert "too_broad" in scored.reason
+    assert len(scored.severities) == 7
+
+
+def test_selector_tiebreak_prefers_lower_quality_penalty() -> None:
+    clean = _sc(Confidence.LOW, 10.10, 500.0, 10.0, quality_penalty=0)
+    weak = _sc(Confidence.LOW, 10.10, 1000.0, 10.0, quality_penalty=1)
+
+    assert select_candidate_with_confidence([clean, weak]) is clean
+
+
+def test_selector_with_paired_prior_evidence_prefers_prior_distance_before_quality(
+) -> None:
+    clean_far = _sc(
+        Confidence.LOW,
+        10.35,
+        1000.0,
+        10.0,
+        quality_penalty=0,
+        prefer_rt_prior_tiebreak=True,
+    )
+    weak_near = _sc(
+        Confidence.LOW,
+        10.03,
+        700.0,
+        10.0,
+        quality_penalty=1,
+        prefer_rt_prior_tiebreak=True,
+    )
+
+    assert select_candidate_with_confidence([clean_far, weak_near]) is weak_near
 
 
 @pytest.mark.parametrize(
