@@ -22,6 +22,11 @@ XIC Extractor 會從 Thermo Xcalibur `.raw` 檔案批次提取多目標化合物
 ### Settings
 
 `config/settings.csv` 是 GUI 與 CLI 共用的唯一 runtime 設定來源。
+GUI 會把常用欄位放在基本區；進階設定預設摺疊，除錯或方法開發者需要時再展開。
+
+![GUI Advanced settings section](assets/screenshots/gui-advanced.png)
+
+基本設定：
 
 | key | 說明 |
 | --- | --- |
@@ -34,6 +39,21 @@ XIC Extractor 會從 Thermo Xcalibur `.raw` 檔案批次提取多目標化合物
 | `ms2_precursor_tol_da` | MS2 precursor matching tolerance（Da） |
 | `nl_min_intensity_ratio` | NL product ion intensity floor，相對 base peak 的比例 |
 | `count_no_ms2_as_detected` | 是否將 `NO_MS2` 視為偵測到 |
+
+進階設定：
+
+| key | 說明 |
+| --- | --- |
+| `keep_intermediate_csv` | 保留中間 CSV 檔，主要供除錯使用 |
+| `emit_score_breakdown` | 輸出 `Score Breakdown` worksheet |
+| `dirty_matrix_mode` | 啟用複雜基質 scoring 參數 |
+| `rolling_window_size` | ISTD RT prior 的滾動視窗半徑 |
+| `rt_prior_library_path` | 外部 RT prior library CSV 路徑 |
+| `injection_order_source` | 注射順序來源檔；留空時使用 RAW mtime fallback |
+| `resolver_mode` / `resolver_*` | 峰切割演算法與 local minimum resolver 參數 |
+| `nl_rt_anchor_search_margin_min` | NL anchor 搜尋半徑（min） |
+| `nl_rt_anchor_half_window_min` | 找到 NL anchor 後的 XIC 半寬（min） |
+| `nl_fallback_half_window_min` | 找不到 NL anchor 時的 fallback XIC 半寬（min） |
 
 舊版 `smooth_points` 會自動 migrate 成 `smooth_window`；`smooth_sigma` 已不再使用。
 
