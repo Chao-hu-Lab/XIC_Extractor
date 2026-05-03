@@ -177,6 +177,13 @@ def test_per_file_result_primitive_captures_file_errors(
     assert result.diagnostics[0].issue == "FILE_ERROR"
 
 
+def test_raw_file_extraction_result_remains_internal() -> None:
+    from xic_extractor import extractor
+
+    assert hasattr(extractor, "RawFileExtractionResult")
+    assert "RawFileExtractionResult" not in extractor.__all__
+
+
 def _config(tmp_path: Path, *, keep_intermediate_csv: bool) -> ExtractionConfig:
     data_dir = tmp_path / "raw"
     output_dir = tmp_path / "output"

@@ -36,7 +36,6 @@ __all__ = [
     "DiagnosticRecord",
     "ExtractionResult",
     "FileResult",
-    "RawFileExtractionResult",
     "RunOutput",
     "run",
 ]
@@ -220,6 +219,11 @@ def _extract_raw_file_result(
     *,
     scoring_context_factory: Callable[..., Any] | None = None,
 ) -> RawFileExtractionResult:
+    """Extract one RAW file and return a pickleable result object.
+
+    Process backends may pass a scoring context factory only after rebuilding it
+    inside the worker process; nested factories must not be sent in job payloads.
+    """
     file_result, diagnostics = _process_file(
         config,
         targets,
