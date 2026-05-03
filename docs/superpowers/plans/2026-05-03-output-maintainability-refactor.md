@@ -623,6 +623,15 @@ def main():
     )
 ```
 
+同時新增 CLI-only 的 `--data-dir` override，供 real-data validation subset 使用。
+這個 override 只影響本次 run，不回寫 `config/settings.csv`：
+
+```powershell
+uv run python -m scripts.run_extraction --base-dir . --data-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation
+```
+
+`--skip-excel` 仍保留舊語意：跳過 xlsx，但要強制保留 CSV-only 輸出。
+
 ## 2.8 改 `gui/workers/pipeline_worker.py`
 
 把現行透過 `csv_to_excel.run(base_dir)` 的呼叫改為走 `write_excel_from_run_output(config, targets, run_output, output_path=...)`。worker 從 `extractor.run` 拿到 `RunOutput`，直接傳給新 pipeline，不經 CSV。
@@ -702,13 +711,26 @@ def test_run_metadata_sheet_has_required_keys(tmp_run_dir):
 
 ## 2.11 PR2 驗收條件
 
+### 2.11.0 Real-data validation 分層
+
+除非本 PR 是 release gate、重大算法改動，或需要建立 byte-level baseline，否則
+不要每次跑完整 tissue batch（85 個 `.raw`）。PR-level real-data smoke 使用：
+
+```powershell
+uv run python -m scripts.run_extraction --base-dir . --data-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation
+```
+
+目前 validation subset 由使用者維護，位於
+`C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation`，含 8 個代表性 `.raw`。
+驗收重點是 pipeline 能跑完、預設輸出 0 CSV + 1 xlsx、sheet contract 正確。
+
 ```powershell
 # 1. 跑全部測試
 uv run pytest --tb=short -q
 
-# 2. 預設執行 output 只有 1 xlsx
+# 2. validation subset 預設執行 output 只有 1 xlsx
 Remove-Item output\xic_*.csv, output\xic_results_*.xlsx -ErrorAction SilentlyContinue
-uv run python -m scripts.run_extraction --base-dir .
+uv run python -m scripts.run_extraction --base-dir . --data-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation
 $csv_count  = (Get-ChildItem output\*.csv).Count
 $xlsx_count = (Get-ChildItem output\*.xlsx).Count
 if ($csv_count -ne 0)  { throw "expected 0 CSV, got $csv_count" }
@@ -731,6 +753,9 @@ $py | uv run python
 # 暫改 settings.csv 跑一次後比對
 # (Get-FileHash output\xic_results_long.csv).Hash 對 baseline
 ```
+
+完整 85 `.raw` 驗證只在 release、重大算法變更、或明確需要 cohort-level
+regression 時執行；不要作為 PR2 之後每次小改動的預設驗收。
 
 ---
 
