@@ -17,6 +17,7 @@ from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
 from xic_extractor.output import csv_writers
 from xic_extractor.output.messages import (
+    DiagnosticIssue,
     DiagnosticRecord,
     build_diagnostic_records,
     istd_confidence_note,
@@ -29,6 +30,15 @@ from xic_extractor.signal_processing import (
     PeakResult,
     find_peak_and_area,
 )
+
+__all__ = [
+    "DiagnosticIssue",
+    "DiagnosticRecord",
+    "ExtractionResult",
+    "FileResult",
+    "RunOutput",
+    "run",
+]
 
 # paired analyte 有自己的 NL anchor 時，以 target anchor 作為最直接的證據。
 _PAIRED_TARGET_ANCHOR_PEAK_DELTA_MAX_MIN: float = 0.25

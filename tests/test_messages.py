@@ -77,6 +77,12 @@ def test_build_diagnostic_records_reports_istd_confidence() -> None:
     assert istd_confidence_note("LOW") == "ISTD anchor was LOW"
 
 
+def test_extractor_re_exports_diagnostic_issue_for_legacy_imports() -> None:
+    from xic_extractor.extractor import DiagnosticIssue
+
+    assert DiagnosticIssue is not None
+
+
 def _config() -> ExtractionConfig:
     return ExtractionConfig(
         data_dir=Path("."),
