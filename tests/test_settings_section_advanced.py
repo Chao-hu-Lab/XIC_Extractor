@@ -32,6 +32,8 @@ def _canonical_settings() -> dict[str, str]:
         "nl_rt_anchor_search_margin_min": "2.0",
         "nl_rt_anchor_half_window_min": "1.0",
         "nl_fallback_half_window_min": "2.0",
+        "parallel_mode": "serial",
+        "parallel_workers": "1",
     }
 
 
@@ -80,6 +82,8 @@ def test_advanced_section_contains_required_flags(qtbot) -> None:
         "nl_rt_anchor_search_margin_min",
         "nl_rt_anchor_half_window_min",
         "nl_fallback_half_window_min",
+        "parallel_mode",
+        "parallel_workers",
     } <= advanced_keys
 
 
@@ -98,6 +102,8 @@ def test_advanced_section_edits_round_trip_through_get_values(qtbot) -> None:
     section._resolver_mode_combo.setCurrentText("local_minimum")
     section._resolver_min_absolute_height_spin.setValue(80.0)
     section._nl_rt_anchor_half_window_min_spin.setValue(0.75)
+    section._parallel_mode_combo.setCurrentText("process")
+    section._parallel_workers_spin.setValue(4)
 
     values = section.get_values()
 
@@ -110,6 +116,8 @@ def test_advanced_section_edits_round_trip_through_get_values(qtbot) -> None:
     assert values["resolver_mode"] == "local_minimum"
     assert values["resolver_min_absolute_height"] == "80"
     assert values["nl_rt_anchor_half_window_min"] == "0.75"
+    assert values["parallel_mode"] == "process"
+    assert values["parallel_workers"] == "4"
 
 
 def test_advanced_section_preserves_loaded_strings_without_edits(qtbot) -> None:
@@ -123,6 +131,8 @@ def test_advanced_section_preserves_loaded_strings_without_edits(qtbot) -> None:
     assert values["resolver_min_absolute_height"] == "25.0"
     assert values["resolver_peak_duration_max"] == "1.00"
     assert values["nl_rt_anchor_search_margin_min"] == "2.0"
+    assert values["parallel_mode"] == "serial"
+    assert values["parallel_workers"] == "1"
 
 
 def test_advanced_section_records_small_numeric_edits(qtbot) -> None:

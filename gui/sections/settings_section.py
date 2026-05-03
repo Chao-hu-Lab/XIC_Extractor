@@ -120,6 +120,8 @@ _ADVANCED_SETTING_KEYS = (
     "nl_rt_anchor_search_margin_min",
     "nl_rt_anchor_half_window_min",
     "nl_fallback_half_window_min",
+    "parallel_mode",
+    "parallel_workers",
 )
 
 
@@ -184,6 +186,8 @@ class SettingsSection(QWidget):
         self._nl_rt_anchor_search_margin_min_spin = QDoubleSpinBox()
         self._nl_rt_anchor_half_window_min_spin = QDoubleSpinBox()
         self._nl_fallback_half_window_min_spin = QDoubleSpinBox()
+        self._parallel_mode_combo = QComboBox()
+        self._parallel_workers_spin = QSpinBox()
         self._save_button = QPushButton("儲存設定")
         self._save_button.setObjectName("btn_save")
         self._save_button.setVisible(False)
@@ -294,6 +298,8 @@ class SettingsSection(QWidget):
             QSignalBlocker(self._nl_rt_anchor_search_margin_min_spin),
             QSignalBlocker(self._nl_rt_anchor_half_window_min_spin),
             QSignalBlocker(self._nl_fallback_half_window_min_spin),
+            QSignalBlocker(self._parallel_mode_combo),
+            QSignalBlocker(self._parallel_workers_spin),
         ]
         try:
             migrated, _ = migrate_settings_dict(settings)
@@ -428,6 +434,12 @@ class SettingsSection(QWidget):
                     "nl_fallback_half_window_min",
                     self._nl_fallback_half_window_min_spin,
                 ),
+                "parallel_mode": self._parallel_mode_combo.currentText(),
+                "parallel_workers": _int_setting_text(
+                    self._settings_values,
+                    "parallel_workers",
+                    self._parallel_workers_spin,
+                ),
             }
         )
         return values
@@ -460,7 +472,9 @@ class SettingsSection(QWidget):
 
     def _configure_advanced_controls(self) -> None:
         self._resolver_mode_combo.addItems(["legacy_savgol", "local_minimum"])
+        self._parallel_mode_combo.addItems(["serial", "process"])
         self._rolling_window_size_spin.setRange(1, 999)
+        self._parallel_workers_spin.setRange(1, 999)
         self._resolver_min_scans_spin.setRange(1, 999)
 
         self._set_float_range(self._resolver_chrom_threshold_spin, 0.0, 1.0, 3)
@@ -494,20 +508,26 @@ class SettingsSection(QWidget):
         layout.addWidget(QLabel("Rolling window size"), 3, 0)
         layout.addWidget(self._rolling_window_size_spin, 3, 1)
 
-        layout.addWidget(QLabel("RT prior library"), 4, 0)
-        layout.addWidget(self._rt_prior_library_path_edit, 4, 1)
+        layout.addWidget(QLabel("Parallel mode"), 4, 0)
+        layout.addWidget(self._parallel_mode_combo, 4, 1)
+
+        layout.addWidget(QLabel("Parallel workers"), 5, 0)
+        layout.addWidget(self._parallel_workers_spin, 5, 1)
+
+        layout.addWidget(QLabel("RT prior library"), 6, 0)
+        layout.addWidget(self._rt_prior_library_path_edit, 6, 1)
         layout.addWidget(
-            self._make_file_browse_button(self._rt_prior_library_path_edit), 4, 2
+            self._make_file_browse_button(self._rt_prior_library_path_edit), 6, 2
         )
 
-        layout.addWidget(QLabel("Injection order source"), 5, 0)
-        layout.addWidget(self._injection_order_source_edit, 5, 1)
+        layout.addWidget(QLabel("Injection order source"), 7, 0)
+        layout.addWidget(self._injection_order_source_edit, 7, 1)
         layout.addWidget(
-            self._make_file_browse_button(self._injection_order_source_edit), 5, 2
+            self._make_file_browse_button(self._injection_order_source_edit), 7, 2
         )
 
-        layout.addWidget(QLabel("Resolver mode"), 6, 0)
-        layout.addWidget(self._resolver_mode_combo, 6, 1)
+        layout.addWidget(QLabel("Resolver mode"), 8, 0)
+        layout.addWidget(self._resolver_mode_combo, 8, 1)
 
         resolver_layout = QHBoxLayout()
         resolver_layout.setContentsMargins(0, 0, 0, 0)
@@ -525,7 +545,7 @@ class SettingsSection(QWidget):
             _LabeledSpin("Min abs height", self._resolver_min_absolute_height_spin)
         )
         resolver_layout.addStretch()
-        layout.addLayout(resolver_layout, 7, 0, 1, 3)
+        layout.addLayout(resolver_layout, 9, 0, 1, 3)
 
         resolver_layout_2 = QHBoxLayout()
         resolver_layout_2.setContentsMargins(0, 0, 0, 0)
@@ -543,7 +563,7 @@ class SettingsSection(QWidget):
             _LabeledSpin("Min scans", self._resolver_min_scans_spin)
         )
         resolver_layout_2.addStretch()
-        layout.addLayout(resolver_layout_2, 8, 0, 1, 3)
+        layout.addLayout(resolver_layout_2, 10, 0, 1, 3)
 
         nl_layout = QHBoxLayout()
         nl_layout.setContentsMargins(0, 0, 0, 0)
@@ -558,8 +578,8 @@ class SettingsSection(QWidget):
             _LabeledSpin("NL fallback", self._nl_fallback_half_window_min_spin)
         )
         nl_layout.addStretch()
-        layout.addWidget(QLabel("NL RT windows"), 9, 0)
-        layout.addLayout(nl_layout, 9, 1, 1, 2)
+        layout.addWidget(QLabel("NL RT windows"), 11, 0)
+        layout.addLayout(nl_layout, 11, 1, 1, 2)
 
         layout.setColumnStretch(1, 1)
         self.advanced_section.add_row(body)
@@ -620,6 +640,13 @@ class SettingsSection(QWidget):
         self._nl_fallback_half_window_min_spin.setValue(
             _float_value(self._settings_values, "nl_fallback_half_window_min")
         )
+        parallel_mode = self._settings_values.get("parallel_mode", "serial")
+        if parallel_mode not in {"serial", "process"}:
+            parallel_mode = "serial"
+        self._parallel_mode_combo.setCurrentText(parallel_mode)
+        self._parallel_workers_spin.setValue(
+            _int_value(self._settings_values, "parallel_workers")
+        )
 
     def _set_float_range(
         self,
@@ -671,8 +698,12 @@ class SettingsSection(QWidget):
         self._resolver_mode_combo.currentTextChanged.connect(
             lambda _: self._set_dirty(True)
         )
+        self._parallel_mode_combo.currentTextChanged.connect(
+            lambda _: self._set_dirty(True)
+        )
         for spin in (
             self._rolling_window_size_spin,
+            self._parallel_workers_spin,
             self._resolver_chrom_threshold_spin,
             self._resolver_min_search_range_min_spin,
             self._resolver_min_relative_height_spin,
