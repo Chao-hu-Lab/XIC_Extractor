@@ -3,61 +3,41 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from statistics import median
-from typing import Any, Literal, cast
+from typing import Any
 
-import numpy as np
 from openpyxl import Workbook
-from scipy.signal import peak_widths
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.injection_rolling import read_injection_order, rolling_median_rt
+from xic_extractor.extraction.scoring_factory import (
+    allow_prepass_anchor,
+    build_scoring_context_factory,
+    paired_istd_fwhm,
+    selected_candidate,
+    selected_shape_metrics,
+)
+from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
 from xic_extractor.output import csv_writers
-from xic_extractor.peak_scoring import (
-    ScoringContext,
-    candidate_quality_penalty,
-    compute_local_sn_cache,
+from xic_extractor.output.messages import (
+    DiagnosticRecord,
+    build_diagnostic_records,
+    istd_confidence_note,
 )
+from xic_extractor.peak_scoring import candidate_quality_penalty
 from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
 from xic_extractor.rt_prior_library import LibraryEntry, load_library
 from xic_extractor.signal_processing import (
-    PeakCandidate,
     PeakDetectionResult,
     PeakResult,
     find_peak_and_area,
 )
 
-DiagnosticIssue = Literal[
-    "PEAK_NOT_FOUND",
-    "NO_SIGNAL",
-    "WINDOW_TOO_SHORT",
-    "NL_FAIL",
-    "NO_MS2",
-    "FILE_ERROR",
-    "MULTI_PEAK",
-    "TAILING",
-    "NL_ANCHOR_FALLBACK",
-    "ISTD_ANCHOR_MISSING",
-    "ANCHOR_RT_MISMATCH",
-    "ISTD_CONFIDENCE",
-]
-
-# Asymmetry ratio (right / left half-width at 5 % peak height) above this
-# threshold triggers a TAILING warning.  USP guideline is 2.0 for quantification.
-_TAILING_THRESHOLD: float = 2.0
 # paired analyte 有自己的 NL anchor 時，以 target anchor 作為最直接的證據。
 _PAIRED_TARGET_ANCHOR_PEAK_DELTA_MAX_MIN: float = 0.25
 # target anchor 缺失時才退回 ISTD anchor，門檻較寬但仍擋掉明顯旁峰。
 _PAIRED_FALLBACK_ISTD_PEAK_DELTA_MAX_MIN: float = 0.5
 # 非 paired/非拒絕情境下，選出的峰 RT 距 NL anchor 超過此距離時發出警告。
 _ANCHOR_PEAK_DELTA_WARN_MIN: float = 0.5
-
-@dataclass(frozen=True)
-class DiagnosticRecord:
-    sample_name: str
-    target_label: str
-    issue: DiagnosticIssue
-    reason: str
 
 
 @dataclass(frozen=True)
@@ -90,7 +70,7 @@ class ExtractionResult:
     @property
     def reported_rt(self) -> float | None:
         """User-facing RT uses the selected candidate's smoothed apex when available."""
-        candidate = _selected_candidate(self.peak_result)
+        candidate = selected_candidate(self.peak_result)
         if candidate is not None:
             return candidate.smoothed_apex_rt
         peak = self.peak
@@ -146,7 +126,7 @@ def run(
         for istd_label, anchor_rt in anchors.items():
             istd_rts_by_sample.setdefault(istd_label, {})[raw_path.stem] = anchor_rt
 
-    scoring_context_factory = _build_scoring_context_factory(
+    scoring_context_factory = build_scoring_context_factory(
         config=config,
         injection_order=(
             resolved_injection_order
@@ -280,11 +260,11 @@ def _process_file(
                     results=results,
                     diagnostics=diagnostics,
                     scoring_context_factory=scoring_context_factory,
-                    istd_confidence_note=_istd_confidence_note(
+                    istd_confidence_note=istd_confidence_note(
                         istd_confidence_by_label.get(target.istd_pair)
                     ),
                     istd_rt_in_this_sample=istd_anchor_rts.get(target.istd_pair),
-                    paired_istd_fwhm=_paired_istd_fwhm(
+                    paired_istd_fwhm=paired_istd_fwhm(
                         target,
                         istd_shape_metrics_by_label,
                     ),
@@ -344,29 +324,15 @@ def _extract_one_target(
             nl_result=nl_result,
         )
     if scoring_context_builder is not None:
-        try:
-            peak_result = find_peak_and_area(
-                rt,
-                intensity,
-                config,
-                preferred_rt=anchor_rt,
-                strict_preferred_rt=strict_preferred_rt,
-                scoring_context_builder=scoring_context_builder,
-                istd_confidence_note=istd_confidence_note,
-            )
-        except TypeError as exc:
-            if (
-                "scoring_context_builder" not in str(exc)
-                and "istd_confidence_note" not in str(exc)
-            ):
-                raise
-            peak_result = find_peak_and_area(
-                rt,
-                intensity,
-                config,
-                preferred_rt=anchor_rt,
-                strict_preferred_rt=strict_preferred_rt,
-            )
+        peak_result = find_peak_and_area(
+            rt,
+            intensity,
+            config,
+            preferred_rt=anchor_rt,
+            strict_preferred_rt=strict_preferred_rt,
+            scoring_context_builder=scoring_context_builder,
+            istd_confidence_note=istd_confidence_note,
+        )
     else:
         peak_result = find_peak_and_area(
             rt,
@@ -409,14 +375,14 @@ def _extract_one_target(
             peak_result,
             paired_rejection.reason,
         )
-    shape_metrics = _selected_shape_metrics(intensity, peak_result)
-    selected_candidate = _selected_candidate(peak_result)
+    shape_metrics = selected_shape_metrics(intensity, peak_result)
+    candidate = selected_candidate(peak_result)
     quality_penalty = 0
     quality_flags: tuple[str, ...] = ()
-    if selected_candidate is not None:
-        quality_penalty, _ = candidate_quality_penalty(selected_candidate)
+    if candidate is not None:
+        quality_penalty, _ = candidate_quality_penalty(candidate)
         quality_flags = tuple(
-            str(flag) for flag in getattr(selected_candidate, "quality_flags", ())
+            str(flag) for flag in getattr(candidate, "quality_flags", ())
         )
     if shape_metrics_by_label is not None and shape_metrics is not None:
         shape_metrics_by_label[target.label] = shape_metrics
@@ -440,7 +406,7 @@ def _extract_one_target(
         quality_flags=quality_flags,
     )
     results[target.label] = result
-    diagnostics.extend(_build_diagnostics(sample_name, target, result, config))
+    diagnostics.extend(build_diagnostic_records(sample_name, target, result, config))
     if paired_rejection is not None:
         diagnostics.append(paired_rejection)
 
@@ -587,29 +553,15 @@ def _recover_istd_peak_with_wider_anchor_window(
             nl_result=nl_result,
         )
     if scoring_context_builder is not None:
-        try:
-            peak_result = find_peak_and_area(
-                rt,
-                intensity,
-                config,
-                preferred_rt=anchor_rt,
-                strict_preferred_rt=False,
-                scoring_context_builder=scoring_context_builder,
-                istd_confidence_note=istd_confidence_note,
-            )
-        except TypeError as exc:
-            if (
-                "scoring_context_builder" not in str(exc)
-                and "istd_confidence_note" not in str(exc)
-            ):
-                raise
-            peak_result = find_peak_and_area(
-                rt,
-                intensity,
-                config,
-                preferred_rt=anchor_rt,
-                strict_preferred_rt=False,
-            )
+        peak_result = find_peak_and_area(
+            rt,
+            intensity,
+            config,
+            preferred_rt=anchor_rt,
+            strict_preferred_rt=False,
+            scoring_context_builder=scoring_context_builder,
+            istd_confidence_note=istd_confidence_note,
+        )
     else:
         peak_result = find_peak_and_area(
             rt,
@@ -727,184 +679,6 @@ def _anchor_mismatch_confidence(confidence: str | None) -> str:
     if confidence == "VERY_LOW":
         return "VERY_LOW"
     return "LOW"
-
-
-def _build_diagnostics(
-    sample_name: str,
-    target: Target,
-    result: ExtractionResult,
-    config: ExtractionConfig,
-) -> list[DiagnosticRecord]:
-    records: list[DiagnosticRecord] = []
-    if result.peak_result.status != "OK":
-        records.append(
-            DiagnosticRecord(
-                sample_name=sample_name,
-                target_label=target.label,
-                issue=result.peak_result.status,
-                reason=_peak_reason(target, result.peak_result, config),
-            )
-        )
-
-    if result.nl is not None and result.nl.status in {"NL_FAIL", "NO_MS2"}:
-        records.append(
-            DiagnosticRecord(
-                sample_name=sample_name,
-                target_label=target.label,
-                issue=cast(DiagnosticIssue, result.nl.status),
-                reason=_nl_reason(target, result.nl, config),
-            )
-        )
-
-    if result.peak_result.status == "OK" and result.peak_result.peak is not None:
-        peak = result.peak_result.peak
-        if result.peak_result.n_prominent_peaks > 1:
-            records.append(
-                DiagnosticRecord(
-                    sample_name=sample_name,
-                    target_label=target.label,
-                    issue="MULTI_PEAK",
-                    reason=_multi_peak_reason(target, result.peak_result, result.nl),
-                )
-            )
-        left_half = peak.rt - peak.peak_start
-        right_half = peak.peak_end - peak.rt
-        if left_half > 0 and (right_half / left_half) > _TAILING_THRESHOLD:
-            records.append(
-                DiagnosticRecord(
-                    sample_name=sample_name,
-                    target_label=target.label,
-                    issue="TAILING",
-                    reason=_tailing_reason(peak),
-                )
-            )
-
-        istd_confidence = _istd_confidence_diagnostic(sample_name, target, result)
-        if istd_confidence is not None:
-            records.append(istd_confidence)
-
-    return records
-
-
-def _peak_reason(
-    target: Target, peak_result: PeakDetectionResult, config: ExtractionConfig
-) -> str:
-    if peak_result.status == "NO_SIGNAL":
-        return (
-            f"XIC empty in window [{target.rt_min}, {target.rt_max}] for "
-            f"m/z {target.mz} +/- {target.ppm_tol:g} ppm"
-        )
-    if peak_result.status == "WINDOW_TOO_SHORT":
-        return (
-            f"Only {peak_result.n_points} scans in window; "
-            f"savgol requires >= {config.smooth_window}"
-        )
-    max_value = _format_optional_number(peak_result.max_smoothed)
-    prominence_pct = config.peak_min_prominence_ratio * 100
-    return (
-        "No peak met prominence >= "
-        f"{prominence_pct:g}% of max smoothed (max={max_value})"
-    )
-
-
-def _nl_reason(target: Target, nl: NLResult, config: ExtractionConfig) -> str:
-    if nl.status == "NO_MS2":
-        return (
-            f"No MS2 scan targeting precursor {target.mz} +/- "
-            f"{config.ms2_precursor_tol_da:g} Da within RT "
-            f"[{target.rt_min}, {target.rt_max}]; "
-            f"{nl.valid_ms2_scan_count} valid MS2 scans in window "
-            f"({nl.parse_error_count} parse errors)"
-        )
-
-    limit = target.nl_ppm_max if target.nl_ppm_max is not None else 0.0
-    assert (
-        target.neutral_loss_da is not None
-    )  # NL is only checked when neutral_loss_da is set
-    nl_da = target.neutral_loss_da
-    expected_product = target.mz - nl_da
-
-    if nl.best_ppm is not None:
-        rt_info = (
-            f" at scan RT {nl.best_scan_rt:.3f} min"
-            if nl.best_scan_rt is not None
-            else ""
-        )
-        return (
-            f"Precursor {target.mz} triggered {nl.matched_scan_count} MS2 scans; "
-            f"NL {nl_da:g} Da → expected product m/z {expected_product:.4f}; "
-            f"best match {nl.best_ppm:.1f} ppm (limit {limit:g} ppm){rt_info}"
-        )
-
-    return (
-        f"Precursor {target.mz} triggered {nl.matched_scan_count} MS2 scans; "
-        f"NL {nl_da:g} Da → expected product m/z {expected_product:.4f}; "
-        f"not detected in any matched scan"
-    )
-
-
-def _multi_peak_reason(
-    target: Target, peak_result: PeakDetectionResult, nl: NLResult | None
-) -> str:
-    base = (
-        f"{peak_result.n_prominent_peaks} prominent peaks detected in window "
-        f"[{target.rt_min}, {target.rt_max}]; tallest peak selected — "
-        f"verify integration window or split into separate targets"
-    )
-    if nl is not None and nl.best_scan_rt is not None:
-        base += f"; NL-confirmed MS2 at RT {nl.best_scan_rt:.3f} min"
-    return base
-
-
-def _tailing_reason(peak: PeakResult) -> str:
-    left_half = peak.rt - peak.peak_start
-    right_half = peak.peak_end - peak.rt
-    ratio = right_half / left_half if left_half > 0 else float("inf")
-    return (
-        f"Asymmetry ratio {ratio:.2f} (right/left half-width at 5% peak height, "
-        f"USP limit 2.0); apex RT {peak.rt:.4f} min, "
-        f"peak [{peak.peak_start:.4f}, {peak.peak_end:.4f}]"
-    )
-
-
-def _istd_confidence_diagnostic(
-    sample_name: str, target: Target, result: ExtractionResult
-) -> DiagnosticRecord | None:
-    if not target.is_istd:
-        return None
-
-    flags: list[str] = []
-    confidence = "HIGH"
-    if result.nl is not None:
-        if result.nl.status == "NO_MS2":
-            flags.append("NO_MS2")
-            confidence = "MEDIUM"
-        elif result.nl.status == "NL_FAIL":
-            flags.append("NL_FAIL")
-            confidence = "LOW"
-        elif result.nl.status == "WARN":
-            flags.append("NL_WARN")
-            confidence = "MEDIUM"
-
-    if not flags:
-        return None
-
-    return DiagnosticRecord(
-        sample_name=sample_name,
-        target_label=target.label,
-        issue="ISTD_CONFIDENCE",
-        reason=(
-            f"ISTD confidence={confidence}; flags={','.join(flags)}; "
-            "MS1 peak retained because ISTD NL evidence is diagnostic support, "
-            "not a hard detection gate"
-        ),
-    )
-
-
-def _format_optional_number(value: float | None) -> str:
-    if value is None:
-        return "NA"
-    return f"{value:g}"
 
 
 def _write_xlsx(
@@ -1073,12 +847,6 @@ def _iter_output_rows(
     return rows
 
 
-def _istd_confidence_note(istd_confidence: str | None) -> str | None:
-    if istd_confidence in (None, "HIGH", "MEDIUM"):
-        return None
-    return f"ISTD anchor was {istd_confidence}"
-
-
 def _resolve_injection_order(
     config: ExtractionConfig,
     raw_paths: list[Path],
@@ -1136,186 +904,12 @@ def _extract_istd_anchors_only(
                 if (
                     anchor_rt is not None
                     and result is not None
-                    and _allow_prepass_anchor(result)
+                    and allow_prepass_anchor(result.peak_result)
                 ):
                     anchors[target.label] = anchor_rt
             return anchors, results, diagnostics, shape_metrics_by_label
     except Exception:
         return None
-
-
-def _build_scoring_context_factory(
-    *,
-    config: ExtractionConfig,
-    injection_order: dict[str, int],
-    istd_rts_by_sample: dict[str, dict[str, float]],
-    rt_prior_library: dict[tuple[str, str], LibraryEntry],
-) -> Callable[..., Callable[[PeakCandidate], ScoringContext]]:
-    def _factory(
-        *,
-        target: Target,
-        sample_name: str,
-        rt: np.ndarray,
-        intensity: np.ndarray,
-        istd_rt_in_this_sample: float | None,
-        paired_istd_fwhm: float | None,
-        nl_result: NLResult | None,
-    ) -> Callable[[PeakCandidate], ScoringContext]:
-        rt_prior: float | None = None
-        rt_prior_sigma: float | None = None
-        prior_source = ""
-
-        if target.is_istd:
-            rt_map = istd_rts_by_sample.get(target.label, {})
-            rt_prior = rolling_median_rt(
-                target.label,
-                sample_name,
-                rt_map,
-                injection_order,
-                window=config.rolling_window_size,
-            )
-            if rt_prior is not None:
-                prior_source = "rolling_median"
-            else:
-                library_entry = rt_prior_library.get((target.label, "ISTD"))
-                if (
-                    library_entry is not None
-                    and library_entry.median_abs_rt is not None
-                ):
-                    rt_prior = library_entry.median_abs_rt
-                    rt_prior_sigma = library_entry.sigma_abs_rt
-                    prior_source = "library_abs"
-        else:
-            library_entry = rt_prior_library.get((target.label, "analyte"))
-            if (
-                library_entry is not None
-                and istd_rt_in_this_sample is not None
-                and library_entry.median_delta_rt is not None
-            ):
-                rt_prior = istd_rt_in_this_sample + library_entry.median_delta_rt
-                rt_prior_sigma = library_entry.sigma_delta_rt
-                prior_source = "delta_rt_library"
-
-        rt_values = np.asarray(rt, dtype=float)
-        intensity_values = np.asarray(intensity, dtype=float)
-        baseline_array, residual_mad = compute_local_sn_cache(intensity_values)
-        ms2_present = nl_result is not None and nl_result.matched_scan_count > 0
-        nl_match = nl_result is not None and nl_result.status in {"OK", "WARN"}
-        prefer_rt_prior_tiebreak = (
-            not target.is_istd
-            and bool(target.istd_pair)
-            and istd_rt_in_this_sample is not None
-            and rt_prior is not None
-            and prior_source == "delta_rt_library"
-        )
-
-        def builder(candidate: PeakCandidate) -> ScoringContext:
-            half_width_ratio, fwhm = _compute_shape_metrics(
-                intensity_values,
-                candidate.smoothed_apex_index,
-            )
-            fwhm_ratio: float | None = None
-            if (
-                not target.is_istd
-                and fwhm is not None
-                and paired_istd_fwhm is not None
-                and paired_istd_fwhm > 0
-            ):
-                fwhm_ratio = fwhm / paired_istd_fwhm
-            return ScoringContext(
-                rt_array=rt_values,
-                intensity_array=intensity_values,
-                apex_index=candidate.smoothed_apex_index,
-                half_width_ratio=half_width_ratio,
-                fwhm_ratio=fwhm_ratio,
-                ms2_present=ms2_present,
-                nl_match=nl_match,
-                rt_prior=rt_prior,
-                rt_prior_sigma=rt_prior_sigma,
-                rt_min=target.rt_min,
-                rt_max=target.rt_max,
-                dirty_matrix=config.dirty_matrix_mode,
-                baseline_array=baseline_array,
-                residual_mad=residual_mad,
-                prefer_rt_prior_tiebreak=prefer_rt_prior_tiebreak,
-            )
-
-        setattr(builder, "rt_prior", rt_prior)
-        setattr(builder, "prior_source", prior_source)
-        return builder
-
-    return _factory
-
-
-def _make_scoring_context_factory(
-    *,
-    config: ExtractionConfig,
-    injection_order: dict[str, int],
-    istd_rts_by_sample: dict[str, dict[str, float]],
-    rt_prior_library: dict[tuple[str, str], Any],
-) -> Callable[..., Any]:
-    return _build_scoring_context_factory(
-        config=config,
-        injection_order=injection_order,
-        istd_rts_by_sample=istd_rts_by_sample,
-        rt_prior_library=rt_prior_library,
-    )
-
-
-def _compute_shape_metrics(
-    intensity: np.ndarray,
-    apex_index: int,
-) -> tuple[float, float | None]:
-    values = np.asarray(intensity, dtype=float)
-    if len(values) == 0 or apex_index < 0 or apex_index >= len(values):
-        return 1.0, None
-    widths, _, left_ips, right_ips = peak_widths(values, [apex_index], rel_height=0.5)
-    if len(widths) == 0:
-        return 1.0, None
-    fwhm = float(widths[0])
-    left = apex_index - float(left_ips[0])
-    right = float(right_ips[0]) - apex_index
-    if left <= 0 or right <= 0:
-        return 1.0, fwhm
-    return float(left / right), fwhm
-
-
-def _selected_shape_metrics(
-    intensity: np.ndarray,
-    peak_result: PeakDetectionResult,
-) -> tuple[float, float | None] | None:
-    candidate = _selected_candidate(peak_result)
-    if candidate is None:
-        return None
-    return _compute_shape_metrics(intensity, candidate.smoothed_apex_index)
-
-
-def _selected_candidate(peak_result: PeakDetectionResult) -> PeakCandidate | None:
-    if peak_result.peak is None:
-        return None
-    for candidate in peak_result.candidates:
-        if candidate.peak == peak_result.peak:
-            return candidate
-    return None
-
-
-def _allow_prepass_anchor(result: ExtractionResult) -> bool:
-    candidate = _selected_candidate(result.peak_result)
-    if candidate is None:
-        return False
-    return not bool(getattr(candidate, "quality_flags", ()))
-
-
-def _paired_istd_fwhm(
-    target: Target,
-    istd_shape_metrics_by_label: dict[str, tuple[float, float | None]],
-) -> float | None:
-    if not target.istd_pair:
-        return None
-    metrics = istd_shape_metrics_by_label.get(target.istd_pair)
-    if metrics is None:
-        return None
-    return metrics[1]
 
 
 def _fallback_injection_order_from_mtime(raw_paths: list[Path]) -> dict[str, int]:

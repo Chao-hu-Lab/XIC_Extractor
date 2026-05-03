@@ -681,6 +681,8 @@ def test_istd_anchor_rechecks_target_center_when_strongest_anchor_is_far(
         *,
         preferred_rt: float | None = None,
         strict_preferred_rt: bool = False,
+        scoring_context_builder: object | None = None,
+        istd_confidence_note: str | None = None,
     ) -> PeakDetectionResult:
         preferred_rts.append(preferred_rt)
         return _ok_peak(8.94, 1200.0, 3400.25)
@@ -729,6 +731,8 @@ def test_istd_anchor_keeps_strongest_anchor_when_it_is_near_target_center(
         *,
         preferred_rt: float | None = None,
         strict_preferred_rt: bool = False,
+        scoring_context_builder: object | None = None,
+        istd_confidence_note: str | None = None,
     ) -> PeakDetectionResult:
         preferred_rts.append(preferred_rt)
         return _ok_peak(8.55, 1200.0, 3400.25)
@@ -1075,6 +1079,8 @@ def _peak_sequence(results: list[PeakDetectionResult]):
         *,
         preferred_rt: float | None = None,
         strict_preferred_rt: bool = False,
+        scoring_context_builder: object | None = None,
+        istd_confidence_note: str | None = None,
     ) -> PeakDetectionResult:
         return pending.pop(0)
 
@@ -1094,6 +1100,8 @@ def _capturing_peak_sequence(
         *,
         preferred_rt: float | None = None,
         strict_preferred_rt: bool = False,
+        scoring_context_builder: object | None = None,
+        istd_confidence_note: str | None = None,
     ) -> PeakDetectionResult:
         strict_flags.append(strict_preferred_rt)
         return pending.pop(0)

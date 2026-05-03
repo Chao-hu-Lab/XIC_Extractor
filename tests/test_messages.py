@@ -1,0 +1,107 @@
+from pathlib import Path
+
+from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.extractor import ExtractionResult
+from xic_extractor.neutral_loss import NLResult
+from xic_extractor.output.messages import (
+    DiagnosticRecord,
+    build_diagnostic_records,
+    istd_confidence_note,
+)
+from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
+
+
+def test_build_diagnostic_records_reports_peak_and_nl_failures() -> None:
+    result = ExtractionResult(
+        peak_result=PeakDetectionResult(
+            status="PEAK_NOT_FOUND",
+            peak=None,
+            n_points=8,
+            max_smoothed=1234.0,
+            n_prominent_peaks=0,
+        ),
+        nl=NLResult(
+            status="NL_FAIL",
+            best_ppm=80.0,
+            best_scan_rt=9.12,
+            valid_ms2_scan_count=2,
+            parse_error_count=0,
+            matched_scan_count=2,
+        ),
+        target_label="WithNL",
+    )
+
+    records = build_diagnostic_records("SampleA", _target("WithNL"), result, _config())
+
+    assert [record.issue for record in records] == ["PEAK_NOT_FOUND", "NL_FAIL"]
+    assert "max=1234" in records[0].reason
+    assert "best match 80.0 ppm" in records[1].reason
+
+
+def test_build_diagnostic_records_reports_istd_confidence() -> None:
+    result = ExtractionResult(
+        peak_result=PeakDetectionResult(
+            status="OK",
+            peak=PeakResult(
+                rt=9.0,
+                intensity=500.0,
+                intensity_smoothed=450.0,
+                area=100.0,
+                peak_start=8.9,
+                peak_end=9.2,
+            ),
+            n_points=12,
+            max_smoothed=450.0,
+            n_prominent_peaks=1,
+        ),
+        nl=NLResult("WARN", 18.0, 9.0, 2, 0, 2),
+        target_label="ISTD",
+    )
+
+    records = build_diagnostic_records(
+        "SampleA", _target("ISTD", is_istd=True), result, _config()
+    )
+
+    assert records == [
+        DiagnosticRecord(
+            sample_name="SampleA",
+            target_label="ISTD",
+            issue="ISTD_CONFIDENCE",
+            reason=(
+                "ISTD confidence=MEDIUM; flags=NL_WARN; "
+                "MS1 peak retained because ISTD NL evidence is diagnostic support, "
+                "not a hard detection gate"
+            ),
+        )
+    ]
+    assert istd_confidence_note("LOW") == "ISTD anchor was LOW"
+
+
+def _config() -> ExtractionConfig:
+    return ExtractionConfig(
+        data_dir=Path("."),
+        dll_dir=Path("."),
+        output_csv=Path("out.csv"),
+        diagnostics_csv=Path("diag.csv"),
+        smooth_window=7,
+        smooth_polyorder=3,
+        peak_rel_height=0.95,
+        peak_min_prominence_ratio=0.1,
+        ms2_precursor_tol_da=1.6,
+        nl_min_intensity_ratio=0.01,
+    )
+
+
+def _target(label: str, *, is_istd: bool = False) -> Target:
+    return Target(
+        label=label,
+        mz=100.0,
+        rt_min=8.0,
+        rt_max=10.0,
+        ppm_tol=20.0,
+        neutral_loss_da=116.0474,
+        nl_ppm_warn=20.0,
+        nl_ppm_max=50.0,
+        is_istd=is_istd,
+        istd_pair="",
+    )
