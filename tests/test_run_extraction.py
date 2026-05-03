@@ -102,7 +102,16 @@ def test_cli_accepts_data_dir_override_for_validation_subset(
     validation_dir.mkdir()
     calls: dict[str, object] = {}
 
-    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+    def fake_load_config(_config_dir, *, settings_overrides=None):
+        calls["settings_overrides"] = settings_overrides
+        loaded_config = (
+            replace(config, data_dir=Path(settings_overrides["data_dir"]))
+            if settings_overrides
+            else config
+        )
+        return loaded_config, targets
+
+    monkeypatch.setattr(module, "load_config", fake_load_config)
     monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
     monkeypatch.setattr(
         module,
@@ -127,6 +136,7 @@ def test_cli_accepts_data_dir_override_for_validation_subset(
     assert calls["run_config"].data_dir == validation_dir.resolve()
     assert calls["run_config"].output_csv == config.output_csv
     assert calls["excel_config"] is calls["run_config"]
+    assert calls["settings_overrides"] == {"data_dir": str(validation_dir.resolve())}
     assert "Excel skipped" not in capsys.readouterr().out
 
 

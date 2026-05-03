@@ -17,12 +17,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     base_dir = args.base_dir.resolve()
     try:
-        config, targets = load_config(base_dir / "config")
+        settings_overrides = {}
         if args.data_dir is not None:
             data_dir = args.data_dir.resolve()
             if not data_dir.is_dir():
                 raise ConfigError(f"{data_dir}: data_dir override must be a directory")
-            config = replace(config, data_dir=data_dir)
+            settings_overrides["data_dir"] = str(data_dir)
+        if settings_overrides:
+            config, targets = load_config(
+                base_dir / "config",
+                settings_overrides=settings_overrides,
+            )
+        else:
+            config, targets = load_config(base_dir / "config")
         if args.parallel_mode is not None:
             config = replace(config, parallel_mode=args.parallel_mode)
         if args.parallel_workers is not None:

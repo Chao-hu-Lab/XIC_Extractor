@@ -116,7 +116,10 @@ def _run_extraction_once(
     workers: int,
     output_dir: Path,
 ) -> Path:
-    config, targets = load_config(base_dir / "config")
+    config, targets = load_config(
+        base_dir / "config",
+        settings_overrides={"data_dir": str(data_dir)},
+    )
     run_config = replace(
         config,
         data_dir=data_dir,

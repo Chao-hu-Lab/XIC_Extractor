@@ -153,11 +153,15 @@ def migrate_settings_dict(raw: dict[str, str]) -> tuple[dict[str, str], list[str
     return migrated, warnings
 
 
-def load_config(config_dir: Path) -> tuple[ExtractionConfig, list[Target]]:
+def load_config(
+    config_dir: Path, *, settings_overrides: dict[str, str] | None = None
+) -> tuple[ExtractionConfig, list[Target]]:
     settings_path = config_dir / "settings.csv"
     targets_path = config_dir / "targets.csv"
 
     raw_settings = _read_settings(settings_path)
+    if settings_overrides:
+        raw_settings = {**raw_settings, **settings_overrides}
     migrated, warnings = migrate_settings_dict(raw_settings)
     for warning in warnings:
         LOGGER.warning(warning)
