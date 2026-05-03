@@ -79,11 +79,13 @@ Worker process receives only pickleable data:
 - raw index
 - extraction config or a serializable config snapshot
 - parsed targets
-- Stage 2 scoring context inputs
+- Stage 2 scoring context inputs, not a callable factory
 
 Worker process must open and close its own raw handle. A raw handle, pythonnet object, COM-like object, or Thermo reader object must never cross process boundaries.
 
 Worker functions must be top-level importable functions so Windows `spawn` multiprocessing and PyInstaller frozen builds can import them.
+
+The current scoring context factory is a nested closure. Process mode must not send it to workers. The main process sends only pickleable inputs such as injection order, ISTD RT maps, and RT prior library entries; each worker rebuilds its own scoring context factory inside the worker process.
 
 ### 5.4 Ordering and determinism
 
@@ -96,6 +98,24 @@ Process completion order is not output order. Main process must sort worker resu
 - workbook sheet generation
 
 Serial and process mode must produce equivalent analytical results for the same inputs.
+
+### 5.5 Progress and cancellation
+
+`extractor.run()` already accepts `progress_callback` and `should_stop`; process mode must preserve those contracts.
+
+Progress contract:
+
+- Stage 1 ISTD pre-pass may report coarse progress as `prepass: <raw name>` or may remain silent, but the GUI must not appear frozen.
+- Stage 2 reports one progress event per completed raw file, using the same `(current, total, filename)` shape as serial mode.
+- `total` is the number of raw files in the run, not the number of futures or targets.
+
+Cancellation contract:
+
+- `should_stop()` is checked before scheduling each job batch and while collecting completed futures.
+- If cancellation is requested, pending futures are cancelled where possible.
+- Already-running worker processes may finish their current raw file, but no new raw work is scheduled.
+- Cancelled runs do not write workbook output.
+- GUI Stop must keep the same user-visible behavior as serial mode: no success summary is emitted after cancellation.
 
 ## 6. Settings / CLI / GUI Contract
 
@@ -210,6 +230,8 @@ PR description 應包含至少一次 validation subset timing：
 | pythonnet / Thermo DLL 在多 process 下初始化不穩 | 每個 worker 自己 open/close raw；真實 8 raw subset smoke 必跑 |
 | process completion order 導致 workbook row order drift | 所有 worker result 帶 `raw_index`，main process 排序後寫出 |
 | process worker exception 被吞掉 | worker result 必須回傳 structured error；fatal worker exception 讓 run fail loudly |
+| nested scoring_context_factory 無法 pickle | worker payload 不含 callable；worker 內重建 factory |
+| GUI Stop 在 process mode 失效 | process collector polling `should_stop()`，取消 pending futures，取消後不寫 workbook |
 | memory / IO contention 讓 workers 過多反而變慢 | default workers=1；PR report 比 2/4 workers；不自動切 default |
 | serial 與 process path 行為分叉 | serial path 保留為 baseline；process path 走同一個 per-file extraction primitive |
 | full dataset validation 太慢導致日常驗證被跳過 | 8 raw subset 寫入 plan 作為日常 gate，full dataset 只作 final gate |
@@ -233,13 +255,15 @@ PR description 應包含至少一次 validation subset timing：
 
 ### 9.2 Engineering Review
 
-**Score：8.5 / 10**
+**Score：9 / 10**
 
 計畫可執行，但 implementation 必須避免以下陷阱：
 
 - 不要在 tests 內依賴真實 Thermo DLL 才能驗證 ordering / error propagation；unit tests 應使用 injectable runner 或 fake workers。
 - 不要讓 process mode 複製整個 output writer；parallel boundary 應在 per-file extraction result 層，而不是 workbook writer 層。
 - 不要把 benchmarking script 變成 production dependency；它應是 scripts/tooling。
+- 不要把 nested scoring context factory 傳進 worker；worker 只接收 pickleable inputs。
+- 不要讓 process mode 破壞 GUI Stop/progress contract。
 
 ## 10. Acceptance Criteria
 
@@ -250,4 +274,9 @@ PR description 應包含至少一次 validation subset timing：
 3. Process mode 在 8 raw validation subset 可完成 extraction。
 4. 8 raw serial baseline 與 process output workbook compare 通過。
 5. PR description 記錄 8 raw serial / process 2 / process 4 timing。
-6. PR 收斂時至少跑一次完整 85 raw 或明確記錄未跑原因與剩餘風險。
+6. Process mode preserves progress and cancellation behavior in GUI/CLI callers.
+7. PR 收斂時至少跑一次完整 85 raw 或明確記錄未跑原因與剩餘風險。
+8. Merge decision gate:
+   - If process mode is equivalent but slower on the 8 raw subset, it may merge only as experimental with serial default retained.
+   - If process mode is faster on the 8 raw subset but not validated on the full dataset, it may merge as opt-in only.
+   - Changing the default away from `serial` requires both validation subset and full dataset to show stable speedup with workbook-equivalent output.

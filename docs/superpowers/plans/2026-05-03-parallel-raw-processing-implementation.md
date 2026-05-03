@@ -98,6 +98,13 @@ Validation:
 - allowed `parallel_mode`: `serial`, `process`
 - `parallel_workers >= 1`
 
+Files that must be updated:
+
+- `xic_extractor/config.py`
+- `xic_extractor/settings_schema.py`
+- `config/settings.example.csv`
+- tests covering canonical defaults and config round-trip
+
 **Green test**
 
 ```powershell
@@ -263,6 +270,8 @@ Add tests confirming the wrapper builds the expected command matrix for:
 - serial workers=1
 - process workers=2
 - process workers=4
+- one isolated output directory or explicit workbook path per run
+- workbook compare receives exact returned workbook paths, not glob guesses
 
 Do not require real `.raw` files in unit tests.
 
@@ -288,6 +297,17 @@ uv run python scripts/benchmark_parallel.py `
   --workers 2,4 `
   --output-dir output\parallel_benchmark
 ```
+
+The script must isolate outputs by mode/worker count, for example:
+
+```text
+output\parallel_benchmark\
+  serial_w1\
+  process_w2\
+  process_w4\
+```
+
+Do not rely on timestamped workbook globbing. Use explicit output paths or the exact paths returned from each run when comparing workbooks.
 
 The script should record:
 
@@ -415,6 +435,8 @@ Add tests for:
 - worker job/result objects are pickleable
 - aggregation sorts by `raw_index`
 - worker error result is surfaced clearly
+- job payload does not contain callables, closures, raw handles, pythonnet objects, or open file handles
+- a tiny actual `ProcessPoolExecutor` spawn smoke can run a top-level worker with a small pickleable job on Windows
 
 Use fake workers or an injectable runner. Do not require Thermo DLL in these unit tests.
 
@@ -432,6 +454,8 @@ uv run pytest tests/test_parallel_execution.py -v
 **Implementation**
 
 Create a parallel execution module with top-level importable functions and dataclasses.
+
+Add a pure no-RAW spawn smoke test before any real data validation. This test should fail if worker functions are not importable under Windows `spawn` or if job payloads are not pickleable.
 
 **Green test**
 
@@ -493,6 +517,9 @@ Add tests confirming process mode Stage 2:
 - preserves diagnostics and score breakdown rows
 - leaves output writing in main process
 - process worker exception fails loudly
+- sends only pickleable scoring inputs to workers
+- rebuilds `build_scoring_context_factory(...)` inside the worker process
+- does not pass the nested `scoring_context_factory` closure across process boundaries
 
 Run:
 
@@ -505,8 +532,9 @@ uv run pytest tests/test_parallel_execution.py -v
 Wire `parallel_mode=process` into `extractor.run()`:
 
 - Stage 1: process ISTD pre-pass
-- main process: build scoring context factory
+- main process: build pickleable scoring inputs
 - Stage 2: process full extraction
+- worker process: rebuild scoring context factory from pickleable scoring inputs
 - main process: aggregate and write output
 
 **Green test**
@@ -523,7 +551,57 @@ git add <changed files>
 git commit -m "feat(perf): add process raw execution backend"
 ```
 
-### Task 4.4 — Add Windows frozen-entry support
+### Task 4.4 — Preserve progress and cancellation contracts
+
+**Red test**
+
+Add tests confirming process mode:
+
+- calls `progress_callback(current, total, filename)` once per completed Stage 2 raw file
+- uses `total == len(raw_paths)`
+- polls `should_stop()` before scheduling work and while collecting futures
+- cancels pending futures when `should_stop()` becomes true
+- does not write workbook output for cancelled GUI runs
+- does not emit GUI success summary after cancellation
+
+Likely files:
+
+- `tests/test_parallel_progress_cancellation.py`
+- `tests/test_pipeline_worker.py`
+
+Run:
+
+```powershell
+uv run pytest tests/test_parallel_progress_cancellation.py -v
+uv run pytest tests/test_pipeline_worker.py -v
+```
+
+**Implementation**
+
+Add process collector behavior that preserves the existing serial `extractor.run()` contract:
+
+- Stage 1 may report coarse pre-pass progress or no progress, but must not block cancellation polling.
+- Stage 2 emits one progress event per completed raw file.
+- Pending futures are cancelled on stop.
+- Already-running raw jobs may finish, but no new jobs are scheduled after stop.
+- `PipelineWorker` keeps the existing post-run `isInterruptionRequested()` guard before writing Excel.
+
+**Green test**
+
+```powershell
+uv run pytest tests/test_parallel_progress_cancellation.py -v
+uv run pytest tests/test_pipeline_worker.py -v
+uv run pytest --tb=short -q
+```
+
+**Commit**
+
+```powershell
+git add <changed files>
+git commit -m "fix(perf): preserve process progress and cancellation"
+```
+
+### Task 4.5 — Add Windows frozen-entry support
 
 **Red test**
 
@@ -606,6 +684,7 @@ uv run pytest tests/test_settings_section.py -v
 uv run pytest tests/test_workbook_compare.py -v
 uv run pytest tests/test_benchmark_parallel.py -v
 uv run pytest tests/test_parallel_execution.py -v
+uv run pytest tests/test_parallel_progress_cancellation.py -v
 uv run pytest tests/test_multiprocessing_entrypoints.py -v
 uv run pytest --tb=short -q
 ```
@@ -674,6 +753,11 @@ Include:
 | process | 2 | 8 | ... | ... | pass/fail |
 | process | 4 | 8 | ... | ... | pass/fail |
 
+## Speed Decision
+- Equivalent but slower: merge only as experimental opt-in, keep serial default.
+- Faster on validation subset only: merge opt-in, do not change default.
+- Candidate for default: validation subset and full dataset both show stable speedup with workbook-equivalent output.
+
 ## Full Dataset
 - Run / deferred with reason:
 
@@ -705,7 +789,7 @@ Changes applied after review:
 
 ### Engineering Plan Review
 
-**Score：8.5 / 10**
+**Score：9 / 10**
 
 Key engineering constraints now covered:
 
@@ -714,6 +798,9 @@ Key engineering constraints now covered:
 - Output writing stays single-process.
 - Result ordering is based on `raw_index`, not completion order.
 - Worker errors fail loudly and identify the raw file.
+- Nested scoring context factories are rebuilt in workers rather than pickled.
+- Progress and cancellation keep the existing GUI/CLI contract.
+- Benchmark workbooks are compared by explicit output path.
 
 Residual risk:
 
