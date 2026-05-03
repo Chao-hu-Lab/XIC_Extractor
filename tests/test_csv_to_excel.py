@@ -250,7 +250,7 @@ def test_wide_to_long_rows_classifies_qc_from_sample_name_token() -> None:
     assert long_rows[2]["Group"] == "QC"
 
 
-def test_run_writes_row_based_results_sheet_and_makes_diagnostics_active(
+def test_run_writes_row_based_results_sheet_and_keeps_results_active(
     tmp_path: Path,
 ) -> None:
     config = _config(tmp_path)
@@ -290,8 +290,14 @@ def test_run_writes_row_based_results_sheet_and_makes_diagnostics_active(
     excel_path = run(config, targets)
 
     wb = load_workbook(excel_path)
-    assert wb.sheetnames == ["XIC Results", "Summary", "Targets", "Diagnostics"]
-    assert wb.active.title == "Diagnostics"
+    assert wb.sheetnames == [
+        "XIC Results",
+        "Summary",
+        "Targets",
+        "Diagnostics",
+        "Run Metadata",
+    ]
+    assert wb.active.title == "XIC Results"
     ws_results = wb["XIC Results"]
     assert ws_results["A1"].value == "SampleName"
     assert ws_results["C1"].value == "Target"
@@ -311,6 +317,13 @@ def test_run_writes_row_based_results_sheet_and_makes_diagnostics_active(
     assert ws["C2"].value == "NL_FAIL"
     assert ws["D2"].value == "'=unsafe reason"
     assert ws["C2"].fill.fgColor.rgb.endswith("FFCDD2")
+    ws_metadata = wb["Run Metadata"]
+    assert ws_metadata["A1"].value == "Key"
+    assert ws_metadata["B1"].value == "Value"
+    assert ws_metadata["A2"].value == "config_hash"
+    assert config.output_csv.exists()
+    assert config.output_csv.with_name("xic_results_long.csv").exists()
+    assert config.diagnostics_csv.exists()
 
 
 def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
@@ -339,7 +352,13 @@ def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
     excel_path = run(config, targets)
 
     wb = load_workbook(excel_path)
-    assert wb.sheetnames == ["XIC Results", "Summary", "Targets", "Diagnostics"]
+    assert wb.sheetnames == [
+        "XIC Results",
+        "Summary",
+        "Targets",
+        "Diagnostics",
+        "Run Metadata",
+    ]
     assert wb.active.title == "XIC Results"
     assert wb["XIC Results"]["C2"].value == "Analyte"
     assert wb["Diagnostics"].auto_filter.ref == "A1:D1"
@@ -391,6 +410,7 @@ def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
 
     wb = load_workbook(excel_path)
     assert "Score Breakdown" in wb.sheetnames
+    assert "Run Metadata" in wb.sheetnames
     ws = wb["Score Breakdown"]
     headers = [cell.value for cell in next(ws.iter_rows(max_row=1))]
     values = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))

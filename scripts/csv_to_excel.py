@@ -18,6 +18,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from xic_extractor.config import ExtractionConfig, Target, load_config
+from xic_extractor.output import metadata
 from xic_extractor.output.schema import (
     DIAGNOSTIC_HEADERS as _DIAGNOSTIC_HEADERS,
 )
@@ -97,9 +98,11 @@ def _header_style(hex6: str) -> dict[str, object]:
 
 
 def _safe_float(value: object) -> float | None:
+    if not isinstance(value, str | int | float):
+        return None
     try:
         return float(value)
-    except (ValueError, TypeError):
+    except ValueError:
         return None
 
 
@@ -507,6 +510,35 @@ def _build_targets_sheet(ws, targets: list[Target]) -> None:
     ws.freeze_panes = "A2"
 
 
+def _build_metadata_sheet(ws, config: ExtractionConfig) -> None:
+    for col_idx, header in enumerate(("Key", "Value"), start=1):
+        _apply(
+            ws.cell(row=1, column=col_idx, value=header),
+            **_header_style(_SAMPLE_HEADER),
+        )
+
+    for row_idx, (key, value) in enumerate(
+        metadata.build_metadata_rows(config), start=2
+    ):
+        fill_hex = GREY if row_idx % 2 == 0 else WHITE
+        _apply(
+            ws.cell(row=row_idx, column=1, value=key),
+            fill=_fill(fill_hex),
+            alignment=CENTER,
+            border=BORDER,
+        )
+        _apply(
+            ws.cell(row=row_idx, column=2, value=value),
+            fill=_fill(fill_hex),
+            alignment=CENTER,
+            border=BORDER,
+        )
+
+    ws.column_dimensions["A"].width = 28
+    ws.column_dimensions["B"].width = 48
+    ws.freeze_panes = "A2"
+
+
 def _read_diagnostics(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         return []
@@ -640,20 +672,14 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
 
     ws_diagnostics = wb.create_sheet("Diagnostics")
     _build_diagnostics_sheet(ws_diagnostics, diagnostics)
+    ws_metadata = wb.create_sheet("Run Metadata")
+    _build_metadata_sheet(ws_metadata, config)
     if config.emit_score_breakdown and score_breakdown:
         ws_breakdown = wb.create_sheet("Score Breakdown")
         _build_score_breakdown_sheet(ws_breakdown, score_breakdown)
-    if diagnostics:
-        wb.active = wb.index(ws_diagnostics)
+    wb.active = wb.index(ws_data)
 
     wb.save(excel_path)
-    for _csv in [
-        config.output_csv,
-        config.output_csv.with_name("xic_results_long.csv"),
-        config.output_csv.with_name("xic_score_breakdown.csv"),
-        config.diagnostics_csv,
-    ]:
-        _csv.unlink(missing_ok=True)
     _print_summary(excel_path, rows, config.count_no_ms2_as_detected)
     return excel_path
 

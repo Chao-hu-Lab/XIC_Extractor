@@ -1,14 +1,15 @@
 import statistics
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from scripts import csv_to_excel
 from xic_extractor import config as config_module
 from xic_extractor import extractor
 from xic_extractor.config import ConfigError, ExtractionConfig, Target
 from xic_extractor.extractor import ExtractionResult, RunOutput
+from xic_extractor.output.excel_pipeline import write_excel_from_run_output
 from xic_extractor.raw_reader import RawReaderError
 
 
@@ -35,7 +36,12 @@ class PipelineWorker(QThread):
             )
             if self.isInterruptionRequested():
                 return
-            excel_path = csv_to_excel.run(config, targets)
+            excel_path = write_excel_from_run_output(
+                config,
+                targets,
+                output,
+                output_path=_excel_output_path(config),
+            )
             summary = build_summary(config, targets, output, excel_path)
             self.finished.emit(summary)
         except ConfigError as exc:
@@ -44,6 +50,11 @@ class PipelineWorker(QThread):
             self.error.emit(f"Raw file 讀取失敗：{exc}")
         except Exception as exc:
             self.error.emit(str(exc))
+
+
+def _excel_output_path(config: ExtractionConfig) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    return config.output_csv.parent / f"xic_results_{timestamp}.xlsx"
 
 
 def build_summary(

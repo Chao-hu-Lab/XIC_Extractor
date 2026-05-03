@@ -26,6 +26,7 @@ def _canonical_settings() -> dict[str, str]:
         "dirty_matrix_mode": "false",
         "rt_prior_library_path": "",
         "emit_score_breakdown": "false",
+        "keep_intermediate_csv": "false",
         "nl_rt_anchor_search_margin_min": "2.0",
         "nl_rt_anchor_half_window_min": "1.0",
         "nl_fallback_half_window_min": "2.0",

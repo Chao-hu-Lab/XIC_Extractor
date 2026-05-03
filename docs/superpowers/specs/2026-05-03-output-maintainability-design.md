@@ -257,6 +257,27 @@ if diagnostics:
 | 移除 Diagnostics auto-jump 讓使用者沒注意到問題 | 低 | 中 | `Summary` sheet 已含 detection 計數；GUI Results 區已顯示 diagnostics count |
 | `Run Metadata` sheet 多一頁讓使用者誤點 | 低 | 低 | 放在 sheet tab 最右側；`hidden` 不設，但不是 default |
 
+### 6.1 Real-data validation 分層
+
+完整 tissue batch（目前 85 個 `.raw`）耗時高，不應作為每次 PR 或小改動的
+預設驗證。後續 real-data validation 分為三層：
+
+1. **PR / 日常 smoke**：預設使用固定 validation subset：
+   `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation`。此資料夾由使用者維護，
+   目前含 8 個代表性 `.raw`，用來快速驗證 pipeline 可跑完、output contract
+   正確、sheet/CSV 行為正確。
+2. **方法學變更**：peak picking、scoring、NL/RT anchoring 等行為改動，先跑
+   validation subset；若 subset 顯示回歸或結果需要 cohort-level 判斷，再升級跑
+   完整 tissue batch。
+3. **Release / merge 前重大 gate**：只有在 release、重大算法變更、或需要建立
+   byte-level baseline 時，才跑完整 85 `.raw`。
+
+CLI 必須支援不修改 `config/settings.csv` 的資料夾覆寫：
+
+```powershell
+uv run python -m scripts.run_extraction --base-dir . --data-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation
+```
+
 ## 7. 驗收條件
 
 ### 可維護性（內部）
@@ -270,17 +291,19 @@ if diagnostics:
 
 5. xlsx 內含 `Run Metadata` sheet，欄位至少含 `config_hash`、`app_version`、`generated_at`、`resolver_mode`
 6. 同一份 settings + targets + raw 跑前後，`XIC Results` sheet 數值欄位 byte-level 等同
+7. PR-level real-data smoke 使用 validation subset，除非本次變更屬 release gate 或重大算法改動，否則不要求每次跑完整 85 `.raw`
 
 ### 使用者體驗
 
-7. 預設執行後 `output/` 目錄**僅含 1 個** xlsx 檔（無 CSV）
-8. xlsx 開啟時 active sheet 為 `XIC Results`，不論 diagnostics 是否為空
-9. xlsx 含且僅含 5 個日常 sheet：`XIC Results` / `Summary` / `Diagnostics` / `Targets` / `Run Metadata`
-10. `emit_score_breakdown=true` 時才額外含 `Score Breakdown` sheet
-11. `keep_intermediate_csv=true` 時才額外輸出 4 個 CSV
-12. `Long format` sheet 欄位數 = 14（與重構前相同）
-13. GUI Settings 畫面有可摺疊 `Advanced` 區，預設摺疊
-14. Advanced 區至少包含 `keep_intermediate_csv`、`emit_score_breakdown`、`dirty_matrix_mode`、`rt_prior_library_path`、`injection_order_source`
+8. 預設執行後 `output/` 目錄**僅含 1 個** xlsx 檔（無 CSV）
+9. xlsx 開啟時 active sheet 為 `XIC Results`，不論 diagnostics 是否為空
+10. xlsx 含且僅含 5 個日常 sheet：`XIC Results` / `Summary` / `Diagnostics` / `Targets` / `Run Metadata`
+11. `emit_score_breakdown=true` 時才額外含 `Score Breakdown` sheet
+12. `keep_intermediate_csv=true` 時才額外輸出 4 個 CSV
+13. `Long format` sheet 欄位數 = 14（與重構前相同）
+14. CLI 支援 `--data-dir` 作為本次 run 的 validation subset 覆寫，不修改 `settings.csv`
+15. GUI Settings 畫面有可摺疊 `Advanced` 區，預設摺疊
+16. Advanced 區至少包含 `keep_intermediate_csv`、`emit_score_breakdown`、`dirty_matrix_mode`、`rt_prior_library_path`、`injection_order_source`
 
 ## 8. 參考
 

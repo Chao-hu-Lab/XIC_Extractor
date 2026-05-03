@@ -168,13 +168,14 @@ def run(
             gc.collect()
 
     output = RunOutput(file_results=file_results, diagnostics=diagnostics)
-    csv_writers.write_all(
-        config,
-        targets,
-        file_results,
-        diagnostics,
-        emit_score_breakdown=config.emit_score_breakdown,
-    )
+    if config.keep_intermediate_csv:
+        csv_writers.write_all(
+            config,
+            targets,
+            file_results,
+            diagnostics,
+            emit_score_breakdown=config.emit_score_breakdown,
+        )
     return output
 
 

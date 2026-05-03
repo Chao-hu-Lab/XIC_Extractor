@@ -67,6 +67,7 @@ class ExtractionConfig:
     dirty_matrix_mode: bool = False
     rt_prior_library_path: Path | None = None
     emit_score_breakdown: bool = False
+    keep_intermediate_csv: bool = False
     config_hash: str = ""
 
 
@@ -116,6 +117,7 @@ class _ParsedSettings:
     dirty_matrix_mode: bool
     rt_prior_library_path: Path | None
     emit_score_breakdown: bool
+    keep_intermediate_csv: bool
 
 
 def migrate_settings_dict(raw: dict[str, str]) -> tuple[dict[str, str], list[str]]:
@@ -338,6 +340,12 @@ def _parse_settings_values(
             "emit_score_breakdown",
             _setting_value(settings, settings_path, "emit_score_breakdown"),
         ),
+        keep_intermediate_csv=_parse_bool(
+            settings_path,
+            None,
+            "keep_intermediate_csv",
+            _setting_value(settings, settings_path, "keep_intermediate_csv"),
+        ),
     )
 
 
@@ -536,6 +544,7 @@ def _build_config(
         dirty_matrix_mode=parsed.dirty_matrix_mode,
         rt_prior_library_path=parsed.rt_prior_library_path,
         emit_score_breakdown=parsed.emit_score_breakdown,
+        keep_intermediate_csv=parsed.keep_intermediate_csv,
         config_hash=config_hash,
     )
 

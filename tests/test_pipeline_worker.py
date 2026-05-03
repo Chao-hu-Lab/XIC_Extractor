@@ -65,14 +65,22 @@ def test_worker_runs_shared_pipeline_and_emits_structured_summary(
         progress_callback(1, 2, "Tumor_1.raw")
         return output
 
-    def _excel(actual_config: ExtractionConfig, actual_targets: list[Target]) -> Path:
+    def _excel(
+        actual_config: ExtractionConfig,
+        actual_targets: list[Target],
+        actual_output: RunOutput,
+        *,
+        output_path: Path,
+    ) -> Path:
         calls["excel_config"] = actual_config
         calls["excel_targets"] = actual_targets
-        return tmp_path / "output" / "xic_results.xlsx"
+        calls["excel_output"] = actual_output
+        calls["excel_output_path"] = output_path
+        return output_path
 
     monkeypatch.setattr(module.config_module, "load_config", _load_config)
     monkeypatch.setattr(module.extractor, "run", _extract)
-    monkeypatch.setattr(module.csv_to_excel, "run", _excel)
+    monkeypatch.setattr(module, "write_excel_from_run_output", _excel)
     worker = PipelineWorker(config_dir)
     emissions: dict[str, object] = {}
     worker.progress.connect(lambda *args: emissions.setdefault("progress", args))
@@ -85,10 +93,14 @@ def test_worker_runs_shared_pipeline_and_emits_structured_summary(
     assert calls["extract_targets"] == targets
     assert calls["excel_config"] is config
     assert calls["excel_targets"] == targets
+    assert calls["excel_output"] is output
+    assert Path(calls["excel_output_path"]).parent == config.output_csv.parent
+    assert Path(calls["excel_output_path"]).name.startswith("xic_results_")
+    assert Path(calls["excel_output_path"]).suffix == ".xlsx"
     assert emissions["progress"] == (1, 2, "Tumor_1.raw")
     summary = emissions["summary"]
     assert summary["total_files"] == 2
-    assert summary["excel_path"].endswith("xic_results.xlsx")
+    assert summary["excel_path"].endswith(".xlsx")
     assert summary["diagnostics_count"] == 0
     analyte = summary["targets"][0]
     assert analyte == {
@@ -116,9 +128,9 @@ def test_worker_should_stop_reflects_interruption(tmp_path: Path, monkeypatch) -
         lambda _path: (config, [target]),
     )
     monkeypatch.setattr(
-        module.csv_to_excel,
-        "run",
-        lambda *_args: tmp_path / "out.xlsx",
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: tmp_path / "out.xlsx",
     )
 
     worker = PipelineWorker(tmp_path / "config")
