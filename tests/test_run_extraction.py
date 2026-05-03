@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 import tomllib
 
+import pytest
+
 from xic_extractor.config import ConfigError, ExtractionConfig, Target
 from xic_extractor.extractor import DiagnosticRecord, RunOutput
 from xic_extractor.raw_reader import RawReaderError
@@ -126,6 +128,53 @@ def test_cli_accepts_data_dir_override_for_validation_subset(
     assert calls["run_config"].output_csv == config.output_csv
     assert calls["excel_config"] is calls["run_config"]
     assert "Excel skipped" not in capsys.readouterr().out
+
+
+def test_cli_accepts_parallel_execution_overrides(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: calls.setdefault("excel", True),
+        raising=False,
+    )
+
+    exit_code = module.main(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--skip-excel",
+            "--parallel-mode",
+            "process",
+            "--parallel-workers",
+            "4",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls["run_config"] is not config
+    assert calls["run_config"].parallel_mode == "process"
+    assert calls["run_config"].parallel_workers == 4
+    assert "excel" not in calls
+    assert "Excel skipped" in capsys.readouterr().out
+
+
+def test_cli_rejects_invalid_parallel_mode(capsys) -> None:
+    module = _module()
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main(["--parallel-mode", "thread"])
+
+    assert exc_info.value.code == 2
+    assert "invalid choice: 'thread'" in capsys.readouterr().err
 
 
 def test_cli_accepts_excel_flag_for_compatibility(

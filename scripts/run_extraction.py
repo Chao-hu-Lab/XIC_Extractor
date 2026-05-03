@@ -21,6 +21,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if not data_dir.is_dir():
                 raise ConfigError(f"{data_dir}: data_dir override must be a directory")
             config = replace(config, data_dir=data_dir)
+        if args.parallel_mode is not None:
+            config = replace(config, parallel_mode=args.parallel_mode)
+        if args.parallel_workers is not None:
+            config = replace(config, parallel_workers=args.parallel_workers)
         run_config = (
             replace(config, keep_intermediate_csv=True)
             if args.skip_excel
@@ -77,6 +81,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--excel",
         action="store_true",
         help="Run Excel conversion after writing CSV outputs; this is the default.",
+    )
+    parser.add_argument(
+        "--parallel-mode",
+        choices=("serial", "process"),
+        default=None,
+        help="Override settings.csv parallel_mode.",
+    )
+    parser.add_argument(
+        "--parallel-workers",
+        type=int,
+        default=None,
+        help="Override settings.csv parallel_workers.",
     )
     return parser.parse_args(argv)
 
