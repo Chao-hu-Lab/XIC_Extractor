@@ -1,5 +1,6 @@
 import csv
 import hashlib
+import io
 import logging
 import math
 from collections.abc import Sequence
@@ -169,10 +170,10 @@ def load_config(
     output_dir = config_dir.parent / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    config_hash = (
-        compute_config_hash(targets_path, settings_path)
-        if targets_path.exists()
-        else ""
+    config_hash = _compute_config_hash(
+        targets_path,
+        settings_path,
+        settings_overrides=settings_overrides,
     )
     config = _validate_settings(migrated, settings_path, output_dir, config_hash)
     targets = _read_targets(targets_path)
@@ -190,6 +191,55 @@ def _read_settings(path: Path) -> dict[str, str]:
             for row in rows
             if str(row.get("key", "")).strip()
         }
+
+
+def _compute_config_hash(
+    targets_path: Path,
+    settings_path: Path,
+    *,
+    settings_overrides: dict[str, str] | None,
+) -> str:
+    if not targets_path.exists():
+        return ""
+    if not settings_overrides:
+        return compute_config_hash(targets_path, settings_path)
+
+    digest = hashlib.sha256()
+    digest.update(targets_path.read_bytes())
+    digest.update(_settings_csv_bytes_with_overrides(settings_path, settings_overrides))
+    return digest.hexdigest()[:8]
+
+
+def _settings_csv_bytes_with_overrides(
+    settings_path: Path, settings_overrides: dict[str, str]
+) -> bytes:
+    with settings_path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+
+    overridden_keys: set[str] = set()
+    for row in rows:
+        key = str(row.get("key", "")).strip()
+        if key in settings_overrides:
+            row["value"] = settings_overrides[key]
+            overridden_keys.add(key)
+
+    for key, value in settings_overrides.items():
+        if key in overridden_keys:
+            continue
+        row = {field: "" for field in fieldnames}
+        row["key"] = key
+        row["value"] = value
+        if "description" in row:
+            row["description"] = key
+        rows.append(row)
+
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue().encode("utf-8-sig")
 
 
 def _validate_settings(

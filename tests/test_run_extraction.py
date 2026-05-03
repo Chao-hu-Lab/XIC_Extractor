@@ -1,3 +1,4 @@
+import csv
 import re
 from dataclasses import replace
 from pathlib import Path
@@ -138,6 +139,39 @@ def test_cli_accepts_data_dir_override_for_validation_subset(
     assert calls["excel_config"] is calls["run_config"]
     assert calls["settings_overrides"] == {"data_dir": str(validation_dir.resolve())}
     assert "Excel skipped" not in capsys.readouterr().out
+
+
+def test_cli_applies_data_dir_override_before_real_config_validation(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    config_dir = tmp_path / "config"
+    validation_dir = tmp_path / "validation"
+    dll_dir = tmp_path / "dll"
+    validation_dir.mkdir()
+    dll_dir.mkdir()
+    _write_cli_config(
+        config_dir,
+        data_dir=tmp_path / "placeholder_missing",
+        dll_dir=dll_dir,
+    )
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: None,
+        raising=False,
+    )
+
+    exit_code = module.main(
+        ["--base-dir", str(tmp_path), "--data-dir", str(validation_dir)]
+    )
+
+    assert exit_code == 0
+    assert calls["run_config"].data_dir == validation_dir.resolve()
+    assert "settings.csv" not in capsys.readouterr().err
 
 
 def test_cli_accepts_parallel_execution_overrides(
@@ -389,3 +423,57 @@ def _target(label: str) -> Target:
         is_istd=False,
         istd_pair="",
     )
+
+
+def _write_cli_config(config_dir: Path, *, data_dir: Path, dll_dir: Path) -> None:
+    config_dir.mkdir(parents=True, exist_ok=True)
+    settings = {
+        "data_dir": str(data_dir),
+        "dll_dir": str(dll_dir),
+        "smooth_window": "15",
+        "smooth_polyorder": "3",
+        "peak_rel_height": "0.95",
+        "peak_min_prominence_ratio": "0.10",
+        "ms2_precursor_tol_da": "0.5",
+        "nl_min_intensity_ratio": "0.01",
+        "count_no_ms2_as_detected": "false",
+    }
+    with (config_dir / "settings.csv").open(
+        "w", newline="", encoding="utf-8-sig"
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=["key", "value", "description"])
+        writer.writeheader()
+        for key, value in settings.items():
+            writer.writerow({"key": key, "value": value, "description": key})
+
+    fields = [
+        "label",
+        "mz",
+        "rt_min",
+        "rt_max",
+        "ppm_tol",
+        "neutral_loss_da",
+        "nl_ppm_warn",
+        "nl_ppm_max",
+        "is_istd",
+        "istd_pair",
+    ]
+    with (config_dir / "targets.csv").open(
+        "w", newline="", encoding="utf-8-sig"
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "label": "Analyte",
+                "mz": "258.1085",
+                "rt_min": "8.0",
+                "rt_max": "10.0",
+                "ppm_tol": "20",
+                "neutral_loss_da": "116.0474",
+                "nl_ppm_warn": "20",
+                "nl_ppm_max": "50",
+                "is_istd": "false",
+                "istd_pair": "",
+            }
+        )

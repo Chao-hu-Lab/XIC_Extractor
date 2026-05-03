@@ -122,6 +122,22 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert targets[0].neutral_loss_da == pytest.approx(116.0474)
 
 
+def test_load_config_hash_reflects_settings_overrides(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_valid_config(config_dir)
+    validation_dir = tmp_path / "validation"
+    validation_dir.mkdir()
+
+    base_config, _ = load_config(config_dir)
+    override_config, _ = load_config(
+        config_dir,
+        settings_overrides={"data_dir": str(validation_dir)},
+    )
+
+    assert override_config.data_dir == validation_dir
+    assert override_config.config_hash != base_config.config_hash
+
+
 def test_load_config_missing_settings_file_raises_config_error(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     _write_targets(config_dir)
