@@ -126,6 +126,109 @@ def test_process_pool_spawn_can_run_importable_no_raw_worker(
         assert future.result(timeout=30) == "5:SampleA.raw"
 
 
+def test_parallel_istd_prepass_submits_one_job_per_raw_file(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.execution import IstdPrepassResult
+    from xic_extractor.extractor import _collect_istd_prepass_process
+
+    config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
+    raw_paths = [tmp_path / "A.raw", tmp_path / "B.raw"]
+    targets = (_target("ISTD", is_istd=True),)
+    submitted = []
+
+    def _runner(jobs, *, max_workers):
+        submitted.extend(jobs)
+        assert max_workers == 2
+        return [
+            IstdPrepassResult(
+                raw_index=job.raw_index,
+                raw_name=job.raw_path.name,
+                sample_name=job.raw_path.stem,
+                anchors={"ISTD": float(job.raw_index)},
+                results={},
+                diagnostics=[],
+                shape_metrics={},
+            )
+            for job in reversed(jobs)
+        ]
+
+    _collect_istd_prepass_process(
+        config,
+        targets,
+        raw_paths,
+        runner=_runner,
+    )
+
+    assert [(job.raw_index, job.raw_path.name) for job in submitted] == [
+        (1, "A.raw"),
+        (2, "B.raw"),
+    ]
+    assert all(job.targets == targets for job in submitted)
+
+
+def test_parallel_istd_prepass_aggregates_out_of_completion_order(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.execution import IstdPrepassResult
+    from xic_extractor.extractor import _collect_istd_prepass_process
+
+    config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
+    raw_paths = [tmp_path / "A.raw", tmp_path / "B.raw"]
+
+    def _runner(jobs, *, max_workers):
+        return [
+            IstdPrepassResult(
+                raw_index=2,
+                raw_name="B.raw",
+                sample_name="B",
+                anchors={"ISTD": 9.2},
+                results={},
+                diagnostics=[],
+                shape_metrics={},
+            ),
+            IstdPrepassResult(
+                raw_index=1,
+                raw_name="A.raw",
+                sample_name="A",
+                anchors={"ISTD": 9.1},
+                results={},
+                diagnostics=[],
+                shape_metrics={},
+            ),
+        ]
+
+    istd_rts_by_sample = _collect_istd_prepass_process(
+        config,
+        (_target("ISTD", is_istd=True),),
+        raw_paths,
+        runner=_runner,
+    )
+
+    assert istd_rts_by_sample == {"ISTD": {"A": 9.1, "B": 9.2}}
+
+
+def test_parallel_istd_prepass_reports_worker_failure_with_raw_name(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.execution import ParallelExecutionError, WorkerError
+    from xic_extractor.extractor import _collect_istd_prepass_process
+
+    config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
+    raw_paths = [tmp_path / "A.raw"]
+
+    def _runner(jobs, *, max_workers):
+        return [WorkerError(raw_index=1, raw_name="A.raw", message="boom")]
+
+    with pytest.raises(ParallelExecutionError, match="A.raw"):
+        _collect_istd_prepass_process(
+            config,
+            (_target("ISTD", is_istd=True),),
+            raw_paths,
+            runner=_runner,
+        )
+
+
 def _config(tmp_path: Path) -> ExtractionConfig:
     data_dir = tmp_path / "raw"
     output_dir = tmp_path / "output"
@@ -147,7 +250,7 @@ def _config(tmp_path: Path) -> ExtractionConfig:
     )
 
 
-def _target(label: str) -> Target:
+def _target(label: str, *, is_istd: bool = False) -> Target:
     return Target(
         label=label,
         mz=258.1085,
@@ -157,6 +260,6 @@ def _target(label: str) -> Target:
         neutral_loss_da=None,
         nl_ppm_warn=None,
         nl_ppm_max=None,
-        is_istd=False,
+        is_istd=is_istd,
         istd_pair="",
     )

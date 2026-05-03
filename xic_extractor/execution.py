@@ -3,7 +3,9 @@ from __future__ import annotations
 import io
 import pickle
 from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, fields, is_dataclass
+from multiprocessing import get_context
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -30,6 +32,17 @@ class RawFileJob:
 
 
 @dataclass(frozen=True)
+class IstdPrepassResult:
+    raw_index: int
+    raw_name: str
+    sample_name: str
+    anchors: dict[str, float]
+    results: dict[str, Any]
+    diagnostics: list[Any]
+    shape_metrics: dict[str, tuple[float, float | None]]
+
+
+@dataclass(frozen=True)
 class WorkerError:
     raw_index: int
     raw_name: str
@@ -47,6 +60,7 @@ class ParallelExecutionError(RuntimeError):
 
 
 WorkerResult = RawFileExtractionResult | WorkerError
+IstdPrepassWorkerResult = IstdPrepassResult | WorkerError
 
 
 def validate_job_payload(job: RawFileJob) -> None:
@@ -77,6 +91,73 @@ def collect_ordered_results(
         )
         raise ParallelExecutionError(messages)
     return sorted(successes, key=lambda item: item.raw_index)
+
+
+def run_istd_prepass_jobs(
+    jobs: Iterable[RawFileJob],
+    *,
+    max_workers: int,
+) -> list[IstdPrepassWorkerResult]:
+    pending_jobs = list(jobs)
+    for job in pending_jobs:
+        validate_job_payload(job)
+    context = get_context("spawn")
+    results: list[IstdPrepassWorkerResult] = []
+    with ProcessPoolExecutor(max_workers=max_workers, mp_context=context) as executor:
+        future_to_job = {
+            executor.submit(extract_istd_prepass_job, job): job
+            for job in pending_jobs
+        }
+        for future in as_completed(future_to_job):
+            job = future_to_job[future]
+            try:
+                results.append(future.result())
+            except Exception as exc:
+                results.append(
+                    WorkerError(
+                        raw_index=job.raw_index,
+                        raw_name=job.raw_path.name,
+                        message=f"{type(exc).__name__}: {exc}",
+                    )
+                )
+    return results
+
+
+def extract_istd_prepass_job(job: RawFileJob) -> IstdPrepassWorkerResult:
+    from xic_extractor.extractor import _extract_istd_anchors_only
+
+    try:
+        prepass = _extract_istd_anchors_only(
+            job.config,
+            list(job.targets),
+            job.raw_path,
+        )
+        if prepass is None:
+            return IstdPrepassResult(
+                raw_index=job.raw_index,
+                raw_name=job.raw_path.name,
+                sample_name=job.raw_path.stem,
+                anchors={},
+                results={},
+                diagnostics=[],
+                shape_metrics={},
+            )
+        anchors, results, diagnostics, shape_metrics = prepass
+        return IstdPrepassResult(
+            raw_index=job.raw_index,
+            raw_name=job.raw_path.name,
+            sample_name=job.raw_path.stem,
+            anchors=anchors,
+            results=results,
+            diagnostics=diagnostics,
+            shape_metrics=shape_metrics,
+        )
+    except Exception as exc:
+        return WorkerError(
+            raw_index=job.raw_index,
+            raw_name=job.raw_path.name,
+            message=f"{type(exc).__name__}: {exc}",
+        )
 
 
 def spawn_smoke_worker(job: SpawnSmokeJob) -> str:

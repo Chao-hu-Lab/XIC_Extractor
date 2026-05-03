@@ -129,6 +129,16 @@ def run(
     if reader_errors:
         raise RawReaderError(" ".join(reader_errors))
 
+    if config.parallel_mode == "process":
+        return _run_process(
+            config,
+            targets,
+            progress_callback=progress_callback,
+            should_stop=should_stop,
+            injection_order=injection_order,
+            rt_prior_library=rt_prior_library,
+        )
+
     return _run_serial(
         config,
         targets,
@@ -209,6 +219,122 @@ def _run_serial(
             emit_score_breakdown=config.emit_score_breakdown,
         )
     return output
+
+
+def _run_process(
+    config: ExtractionConfig,
+    targets: list[Target],
+    *,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
+    injection_order: dict[str, int] | None = None,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
+) -> RunOutput:
+    raw_paths = sorted(config.data_dir.glob("*.raw"))
+    resolved_injection_order = _resolve_injection_order(
+        config, raw_paths, injection_order
+    )
+    resolved_rt_prior_library = _resolve_rt_prior_library(config, rt_prior_library)
+    istd_targets = tuple(target for target in targets if target.is_istd)
+    istd_rts_by_sample = _collect_istd_prepass_process(
+        config,
+        istd_targets,
+        raw_paths,
+    )
+    scoring_context_factory = build_scoring_context_factory(
+        config=config,
+        injection_order=(
+            resolved_injection_order
+            if resolved_injection_order is not None
+            else _fallback_injection_order_from_mtime(raw_paths)
+        ),
+        istd_rts_by_sample=istd_rts_by_sample,
+        rt_prior_library=resolved_rt_prior_library or {},
+    )
+
+    file_results: list[FileResult] = []
+    diagnostics: list[DiagnosticRecord] = []
+    total = len(raw_paths)
+
+    for index, raw_path in enumerate(raw_paths, start=1):
+        if should_stop is not None and should_stop():
+            break
+
+        raw_result = _extract_raw_file_result(
+            index,
+            config,
+            targets,
+            raw_path,
+            scoring_context_factory=scoring_context_factory,
+        )
+        file_results.append(raw_result.file_result)
+        diagnostics.extend(raw_result.diagnostics)
+
+        if progress_callback is not None:
+            progress_callback(index, total, raw_path.name)
+        if index % 50 == 0:
+            gc.collect()
+
+    output = RunOutput(file_results=file_results, diagnostics=diagnostics)
+    if config.keep_intermediate_csv:
+        csv_writers.write_all(
+            config,
+            targets,
+            file_results,
+            diagnostics,
+            emit_score_breakdown=config.emit_score_breakdown,
+        )
+    return output
+
+
+def _collect_istd_prepass_process(
+    config: ExtractionConfig,
+    istd_targets: tuple[Target, ...],
+    raw_paths: list[Path],
+    *,
+    runner: Callable[..., list[Any]] | None = None,
+) -> dict[str, dict[str, float]]:
+    from xic_extractor.execution import (
+        IstdPrepassResult,
+        ParallelExecutionError,
+        RawFileJob,
+        WorkerError,
+        run_istd_prepass_jobs,
+    )
+
+    if not istd_targets:
+        return {}
+    jobs = [
+        RawFileJob(
+            raw_index=index,
+            raw_path=raw_path,
+            config=config,
+            targets=istd_targets,
+        )
+        for index, raw_path in enumerate(raw_paths, start=1)
+    ]
+    prepass_runner = runner if runner is not None else run_istd_prepass_jobs
+    results = prepass_runner(jobs, max_workers=config.parallel_workers)
+
+    errors = [result for result in results if isinstance(result, WorkerError)]
+    if errors:
+        messages = "; ".join(
+            f"{error.raw_name}: {error.message}"
+            for error in sorted(errors, key=lambda item: item.raw_index)
+        )
+        raise ParallelExecutionError(messages)
+
+    istd_rts_by_sample: dict[str, dict[str, float]] = {}
+    ordered_results = sorted(
+        (result for result in results if isinstance(result, IstdPrepassResult)),
+        key=lambda item: item.raw_index,
+    )
+    for result in ordered_results:
+        for istd_label, anchor_rt in result.anchors.items():
+            istd_rts_by_sample.setdefault(istd_label, {})[
+                result.sample_name
+            ] = anchor_rt
+    return istd_rts_by_sample
 
 
 def _extract_raw_file_result(
