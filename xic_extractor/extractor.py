@@ -117,6 +117,25 @@ def run(
     if reader_errors:
         raise RawReaderError(" ".join(reader_errors))
 
+    return _run_serial(
+        config,
+        targets,
+        progress_callback=progress_callback,
+        should_stop=should_stop,
+        injection_order=injection_order,
+        rt_prior_library=rt_prior_library,
+    )
+
+
+def _run_serial(
+    config: ExtractionConfig,
+    targets: list[Target],
+    *,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
+    injection_order: dict[str, int] | None = None,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
+) -> RunOutput:
     raw_paths = sorted(config.data_dir.glob("*.raw"))
     resolved_injection_order = _resolve_injection_order(
         config, raw_paths, injection_order
