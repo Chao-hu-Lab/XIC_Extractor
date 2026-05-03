@@ -150,6 +150,43 @@ def test_worker_should_stop_reflects_interruption(tmp_path: Path, monkeypatch) -
     assert calls == {"before_stop": False, "after_stop": True}
 
 
+def test_worker_does_not_write_excel_or_emit_summary_after_cancellation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _module()
+    config = _config(tmp_path)
+    target = _target("Analyte")
+    interrupted = {"value": False}
+    wrote_excel: list[bool] = []
+    summaries: list[dict] = []
+
+    monkeypatch.setattr(
+        module.config_module,
+        "load_config",
+        lambda _path: (config, [target]),
+    )
+
+    def _extract(*_args, **_kwargs) -> RunOutput:
+        interrupted["value"] = True
+        return RunOutput(file_results=[], diagnostics=[])
+
+    def _excel(*_args, **_kwargs) -> Path:
+        wrote_excel.append(True)
+        return tmp_path / "out.xlsx"
+
+    worker = PipelineWorker(tmp_path / "config")
+    monkeypatch.setattr(worker, "isInterruptionRequested", lambda: interrupted["value"])
+    monkeypatch.setattr(module.extractor, "run", _extract)
+    monkeypatch.setattr(module, "write_excel_from_run_output", _excel)
+    worker.finished.connect(summaries.append)
+
+    worker.run()
+
+    assert wrote_excel == []
+    assert summaries == []
+
+
 @pytest.mark.parametrize(
     ("exception", "expected"),
     [

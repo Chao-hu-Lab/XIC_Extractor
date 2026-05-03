@@ -138,7 +138,7 @@ def test_parallel_istd_prepass_submits_one_job_per_raw_file(
     targets = (_target("ISTD", is_istd=True),)
     submitted = []
 
-    def _runner(jobs, *, max_workers):
+    def _runner(jobs, *, max_workers, **_kwargs):
         submitted.extend(jobs)
         assert max_workers == 2
         return [
@@ -177,7 +177,7 @@ def test_parallel_istd_prepass_aggregates_out_of_completion_order(
     config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
     raw_paths = [tmp_path / "A.raw", tmp_path / "B.raw"]
 
-    def _runner(jobs, *, max_workers):
+    def _runner(jobs, *, max_workers, **_kwargs):
         return [
             IstdPrepassResult(
                 raw_index=2,
@@ -218,7 +218,7 @@ def test_parallel_istd_prepass_reports_worker_failure_with_raw_name(
     config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
     raw_paths = [tmp_path / "A.raw"]
 
-    def _runner(jobs, *, max_workers):
+    def _runner(jobs, *, max_workers, **_kwargs):
         return [WorkerError(raw_index=1, raw_name="A.raw", message="boom")]
 
     with pytest.raises(ParallelExecutionError, match="A.raw"):
@@ -250,7 +250,7 @@ def test_parallel_full_extraction_submits_pickleable_scoring_jobs_and_sorts(
     )
     submitted = []
 
-    def _runner(jobs, *, max_workers):
+    def _runner(jobs, *, max_workers, **_kwargs):
         submitted.extend(jobs)
         for job in jobs:
             validate_job_payload(job)
@@ -315,7 +315,7 @@ def test_parallel_full_extraction_worker_error_fails_with_raw_name(
     config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
     raw_paths = [tmp_path / "A.raw"]
 
-    def _runner(jobs, *, max_workers):
+    def _runner(jobs, *, max_workers, **_kwargs):
         return [WorkerError(raw_index=1, raw_name="A.raw", message="worker died")]
 
     with pytest.raises(ParallelExecutionError, match="A.raw"):

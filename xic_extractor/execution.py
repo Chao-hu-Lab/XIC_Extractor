@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import io
 import pickle
-from collections.abc import Iterable
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from collections.abc import Callable, Iterable
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from dataclasses import dataclass, fields, is_dataclass
 from multiprocessing import get_context
 from pathlib import Path
@@ -98,58 +98,106 @@ def run_istd_prepass_jobs(
     jobs: Iterable[RawFileJob],
     *,
     max_workers: int,
+    should_stop: Callable[[], bool] | None = None,
 ) -> list[IstdPrepassWorkerResult]:
-    pending_jobs = list(jobs)
-    for job in pending_jobs:
-        validate_job_payload(job)
-    context = get_context("spawn")
-    results: list[IstdPrepassWorkerResult] = []
-    with ProcessPoolExecutor(max_workers=max_workers, mp_context=context) as executor:
-        future_to_job = {
-            executor.submit(extract_istd_prepass_job, job): job
-            for job in pending_jobs
-        }
-        for future in as_completed(future_to_job):
-            job = future_to_job[future]
-            try:
-                results.append(future.result())
-            except Exception as exc:
-                results.append(
-                    WorkerError(
-                        raw_index=job.raw_index,
-                        raw_name=job.raw_path.name,
-                        message=f"{type(exc).__name__}: {exc}",
-                    )
-                )
-    return results
+    return _run_jobs(
+        jobs,
+        worker=extract_istd_prepass_job,
+        max_workers=max_workers,
+        should_stop=should_stop,
+    )
 
 
 def run_raw_file_jobs(
     jobs: Iterable[RawFileJob],
     *,
     max_workers: int,
+    should_stop: Callable[[], bool] | None = None,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+    total: int | None = None,
+    executor_factory: Callable[..., Any] | None = None,
 ) -> list[WorkerResult]:
+    return _run_jobs(
+        jobs,
+        worker=extract_raw_file_job,
+        max_workers=max_workers,
+        should_stop=should_stop,
+        progress_callback=progress_callback,
+        total=total,
+        executor_factory=executor_factory,
+    )
+
+
+def _run_jobs(
+    jobs: Iterable[RawFileJob],
+    *,
+    worker: Callable[[RawFileJob], Any],
+    max_workers: int,
+    should_stop: Callable[[], bool] | None = None,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+    total: int | None = None,
+    executor_factory: Callable[..., Any] | None = None,
+) -> list[Any]:
     pending_jobs = list(jobs)
     for job in pending_jobs:
         validate_job_payload(job)
     context = get_context("spawn")
-    results: list[WorkerResult] = []
-    with ProcessPoolExecutor(max_workers=max_workers, mp_context=context) as executor:
-        future_to_job = {
-            executor.submit(extract_raw_file_job, job): job for job in pending_jobs
-        }
-        for future in as_completed(future_to_job):
-            job = future_to_job[future]
-            try:
-                results.append(future.result())
-            except Exception as exc:
-                results.append(
-                    WorkerError(
-                        raw_index=job.raw_index,
-                        raw_name=job.raw_path.name,
-                        message=f"{type(exc).__name__}: {exc}",
+    factory = executor_factory or ProcessPoolExecutor
+    results: list[Any] = []
+    next_job_index = 0
+
+    with factory(max_workers=max_workers, mp_context=context) as executor:
+        future_to_job: dict[Any, RawFileJob] = {}
+
+        def _submit_until_capacity() -> None:
+            nonlocal next_job_index
+            while (
+                len(future_to_job) < max_workers
+                and next_job_index < len(pending_jobs)
+            ):
+                if should_stop is not None and should_stop():
+                    return
+                job = pending_jobs[next_job_index]
+                future_to_job[executor.submit(worker, job)] = job
+                next_job_index += 1
+
+        _submit_until_capacity()
+        while future_to_job:
+            if should_stop is not None and should_stop():
+                for future in future_to_job:
+                    future.cancel()
+                break
+
+            done, _not_done = wait(
+                future_to_job,
+                timeout=0.1,
+                return_when=FIRST_COMPLETED,
+            )
+            if not done:
+                continue
+
+            for future in done:
+                job = future_to_job.pop(future)
+                if future.cancelled():
+                    continue
+                result_count = len(results) + 1
+                if progress_callback is not None:
+                    progress_callback(
+                        result_count,
+                        total if total is not None else len(pending_jobs),
+                        job.raw_path.name,
                     )
-                )
+                _submit_until_capacity()
+                try:
+                    results.append(future.result())
+                except Exception as exc:
+                    results.append(
+                        WorkerError(
+                            raw_index=job.raw_index,
+                            raw_name=job.raw_path.name,
+                            message=f"{type(exc).__name__}: {exc}",
+                        )
+                    )
     return results
 
 

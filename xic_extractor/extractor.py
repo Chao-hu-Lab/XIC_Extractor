@@ -240,6 +240,7 @@ def _run_process(
         config,
         istd_targets,
         raw_paths,
+        should_stop=should_stop,
     )
     process_injection_order = (
         resolved_injection_order
@@ -258,17 +259,14 @@ def _run_process(
         tuple(targets),
         raw_paths,
         scoring_inputs,
+        progress_callback=progress_callback,
+        should_stop=should_stop,
     )
 
     file_results = [result.file_result for result in raw_results]
     diagnostics: list[DiagnosticRecord] = []
     for result in raw_results:
         diagnostics.extend(result.diagnostics)
-
-    total = len(raw_paths)
-    if progress_callback is not None:
-        for current, result in enumerate(raw_results, start=1):
-            progress_callback(current, total, f"{result.sample_name}.raw")
 
     output = RunOutput(file_results=file_results, diagnostics=diagnostics)
     if config.keep_intermediate_csv:
@@ -288,6 +286,8 @@ def _collect_raw_file_results_process(
     raw_paths: list[Path],
     scoring_inputs: Any,
     *,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
     runner: Callable[..., list[Any]] | None = None,
 ) -> list[RawFileExtractionResult]:
     from xic_extractor.execution import (
@@ -296,6 +296,8 @@ def _collect_raw_file_results_process(
         run_raw_file_jobs,
     )
 
+    if should_stop is not None and should_stop():
+        return []
     jobs = [
         RawFileJob(
             raw_index=index,
@@ -307,7 +309,13 @@ def _collect_raw_file_results_process(
         for index, raw_path in enumerate(raw_paths, start=1)
     ]
     raw_runner = runner if runner is not None else run_raw_file_jobs
-    results = raw_runner(jobs, max_workers=config.parallel_workers)
+    results = raw_runner(
+        jobs,
+        max_workers=config.parallel_workers,
+        should_stop=should_stop,
+        progress_callback=progress_callback,
+        total=len(raw_paths),
+    )
     return collect_ordered_results(results)
 
 
@@ -316,6 +324,7 @@ def _collect_istd_prepass_process(
     istd_targets: tuple[Target, ...],
     raw_paths: list[Path],
     *,
+    should_stop: Callable[[], bool] | None = None,
     runner: Callable[..., list[Any]] | None = None,
 ) -> dict[str, dict[str, float]]:
     from xic_extractor.execution import (
@@ -328,6 +337,8 @@ def _collect_istd_prepass_process(
 
     if not istd_targets:
         return {}
+    if should_stop is not None and should_stop():
+        return {}
     jobs = [
         RawFileJob(
             raw_index=index,
@@ -338,7 +349,11 @@ def _collect_istd_prepass_process(
         for index, raw_path in enumerate(raw_paths, start=1)
     ]
     prepass_runner = runner if runner is not None else run_istd_prepass_jobs
-    results = prepass_runner(jobs, max_workers=config.parallel_workers)
+    results = prepass_runner(
+        jobs,
+        max_workers=config.parallel_workers,
+        should_stop=should_stop,
+    )
 
     errors = [result for result in results if isinstance(result, WorkerError)]
     if errors:
