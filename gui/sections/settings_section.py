@@ -4,6 +4,7 @@ from PyQt6.QtCore import QSignalBlocker, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QFrame,
@@ -13,6 +14,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSpinBox,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -67,6 +69,60 @@ class _LabeledSpin(QWidget):
         lay.addLayout(row)
 
 
+class CollapsibleSection(QWidget):
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._toggle = QToolButton(self)
+        self._toggle.setText(title)
+        self._toggle.setCheckable(True)
+        self._toggle.setChecked(False)
+        self._toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self._toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._toggle.toggled.connect(self._on_toggled)
+
+        self._content = QFrame(self)
+        self._content_layout = QVBoxLayout(self._content)
+        self._content_layout.setContentsMargins(12, 8, 0, 0)
+        self._content_layout.setSpacing(8)
+        self._content.setVisible(False)
+
+        outer = QVBoxLayout(self)
+        outer.addWidget(self._toggle)
+        outer.addWidget(self._content)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+    def add_row(self, widget: QWidget) -> None:
+        self._content_layout.addWidget(widget)
+
+    def _on_toggled(self, checked: bool) -> None:
+        self._content.setVisible(checked)
+        self._toggle.setArrowType(
+            Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
+        )
+
+
+_ADVANCED_SETTING_KEYS = (
+    "keep_intermediate_csv",
+    "emit_score_breakdown",
+    "dirty_matrix_mode",
+    "rolling_window_size",
+    "rt_prior_library_path",
+    "injection_order_source",
+    "resolver_mode",
+    "resolver_chrom_threshold",
+    "resolver_min_search_range_min",
+    "resolver_min_relative_height",
+    "resolver_min_absolute_height",
+    "resolver_min_ratio_top_edge",
+    "resolver_peak_duration_min",
+    "resolver_peak_duration_max",
+    "resolver_min_scans",
+    "nl_rt_anchor_search_margin_min",
+    "nl_rt_anchor_half_window_min",
+    "nl_fallback_half_window_min",
+)
+
+
 class SettingsSection(QWidget):
     settings_saved = pyqtSignal()
 
@@ -110,6 +166,24 @@ class SettingsSection(QWidget):
         self._ms2_precursor_tol_da_spin = QDoubleSpinBox()
         self._nl_min_intensity_ratio_spin = QDoubleSpinBox()
         self._count_no_ms2_checkbox = QCheckBox("將 NO_MS2 視為偵測到")
+        self._keep_intermediate_csv_checkbox = QCheckBox("保留中間 CSV 檔")
+        self._emit_score_breakdown_checkbox = QCheckBox("輸出 Score Breakdown sheet")
+        self._dirty_matrix_mode_checkbox = QCheckBox("啟用 dirty matrix mode")
+        self._rolling_window_size_spin = QSpinBox()
+        self._rt_prior_library_path_edit = QLineEdit()
+        self._injection_order_source_edit = QLineEdit()
+        self._resolver_mode_combo = QComboBox()
+        self._resolver_chrom_threshold_spin = QDoubleSpinBox()
+        self._resolver_min_search_range_min_spin = QDoubleSpinBox()
+        self._resolver_min_relative_height_spin = QDoubleSpinBox()
+        self._resolver_min_absolute_height_spin = QDoubleSpinBox()
+        self._resolver_min_ratio_top_edge_spin = QDoubleSpinBox()
+        self._resolver_peak_duration_min_spin = QDoubleSpinBox()
+        self._resolver_peak_duration_max_spin = QDoubleSpinBox()
+        self._resolver_min_scans_spin = QSpinBox()
+        self._nl_rt_anchor_search_margin_min_spin = QDoubleSpinBox()
+        self._nl_rt_anchor_half_window_min_spin = QDoubleSpinBox()
+        self._nl_fallback_half_window_min_spin = QDoubleSpinBox()
         self._save_button = QPushButton("儲存設定")
         self._save_button.setObjectName("btn_save")
         self._save_button.setVisible(False)
@@ -129,6 +203,7 @@ class SettingsSection(QWidget):
         self._nl_min_intensity_ratio_spin.setRange(0.01, 1.0)
         self._nl_min_intensity_ratio_spin.setSingleStep(0.01)
         self._nl_min_intensity_ratio_spin.setDecimals(2)
+        self._configure_advanced_controls()
 
         # ── Data directory row ───────────────────────────────────────────────
         body_layout.addWidget(QLabel("Data directory"), 0, 0)
@@ -176,6 +251,12 @@ class SettingsSection(QWidget):
         ms2_layout.addStretch()
         body_layout.addLayout(ms2_layout, 4, 1, 1, 2)
 
+        self.advanced_section = CollapsibleSection(
+            "⚙ Advanced — debug 與方法開發專用"
+        )
+        self._build_advanced_section()
+        body_layout.addWidget(self.advanced_section, 5, 0, 1, 3)
+
         button_row = QHBoxLayout()
         button_row.setContentsMargins(16, 0, 16, 16)
         button_row.addStretch()
@@ -195,6 +276,24 @@ class SettingsSection(QWidget):
             QSignalBlocker(self._ms2_precursor_tol_da_spin),
             QSignalBlocker(self._nl_min_intensity_ratio_spin),
             QSignalBlocker(self._count_no_ms2_checkbox),
+            QSignalBlocker(self._keep_intermediate_csv_checkbox),
+            QSignalBlocker(self._emit_score_breakdown_checkbox),
+            QSignalBlocker(self._dirty_matrix_mode_checkbox),
+            QSignalBlocker(self._rolling_window_size_spin),
+            QSignalBlocker(self._rt_prior_library_path_edit),
+            QSignalBlocker(self._injection_order_source_edit),
+            QSignalBlocker(self._resolver_mode_combo),
+            QSignalBlocker(self._resolver_chrom_threshold_spin),
+            QSignalBlocker(self._resolver_min_search_range_min_spin),
+            QSignalBlocker(self._resolver_min_relative_height_spin),
+            QSignalBlocker(self._resolver_min_absolute_height_spin),
+            QSignalBlocker(self._resolver_min_ratio_top_edge_spin),
+            QSignalBlocker(self._resolver_peak_duration_min_spin),
+            QSignalBlocker(self._resolver_peak_duration_max_spin),
+            QSignalBlocker(self._resolver_min_scans_spin),
+            QSignalBlocker(self._nl_rt_anchor_search_margin_min_spin),
+            QSignalBlocker(self._nl_rt_anchor_half_window_min_spin),
+            QSignalBlocker(self._nl_fallback_half_window_min_spin),
         ]
         try:
             migrated, _ = migrate_settings_dict(settings)
@@ -224,6 +323,7 @@ class SettingsSection(QWidget):
                 self._settings_values.get("count_no_ms2_as_detected", "false").lower()
                 == "true"
             )
+            self._load_advanced_values()
         finally:
             del blockers
         self._set_dirty(False)
@@ -247,6 +347,86 @@ class SettingsSection(QWidget):
                 ),
                 "count_no_ms2_as_detected": (
                     "true" if self._count_no_ms2_checkbox.isChecked() else "false"
+                ),
+                "keep_intermediate_csv": (
+                    "true"
+                    if self._keep_intermediate_csv_checkbox.isChecked()
+                    else "false"
+                ),
+                "emit_score_breakdown": (
+                    "true"
+                    if self._emit_score_breakdown_checkbox.isChecked()
+                    else "false"
+                ),
+                "dirty_matrix_mode": (
+                    "true" if self._dirty_matrix_mode_checkbox.isChecked() else "false"
+                ),
+                "rolling_window_size": _int_setting_text(
+                    self._settings_values,
+                    "rolling_window_size",
+                    self._rolling_window_size_spin,
+                ),
+                "rt_prior_library_path": (
+                    self._rt_prior_library_path_edit.text().strip()
+                ),
+                "injection_order_source": (
+                    self._injection_order_source_edit.text().strip()
+                ),
+                "resolver_mode": self._resolver_mode_combo.currentText(),
+                "resolver_chrom_threshold": _float_setting_text(
+                    self._settings_values,
+                    "resolver_chrom_threshold",
+                    self._resolver_chrom_threshold_spin,
+                ),
+                "resolver_min_search_range_min": _float_setting_text(
+                    self._settings_values,
+                    "resolver_min_search_range_min",
+                    self._resolver_min_search_range_min_spin,
+                ),
+                "resolver_min_relative_height": _float_setting_text(
+                    self._settings_values,
+                    "resolver_min_relative_height",
+                    self._resolver_min_relative_height_spin,
+                ),
+                "resolver_min_absolute_height": _float_setting_text(
+                    self._settings_values,
+                    "resolver_min_absolute_height",
+                    self._resolver_min_absolute_height_spin,
+                ),
+                "resolver_min_ratio_top_edge": _float_setting_text(
+                    self._settings_values,
+                    "resolver_min_ratio_top_edge",
+                    self._resolver_min_ratio_top_edge_spin,
+                ),
+                "resolver_peak_duration_min": _float_setting_text(
+                    self._settings_values,
+                    "resolver_peak_duration_min",
+                    self._resolver_peak_duration_min_spin,
+                ),
+                "resolver_peak_duration_max": _float_setting_text(
+                    self._settings_values,
+                    "resolver_peak_duration_max",
+                    self._resolver_peak_duration_max_spin,
+                ),
+                "resolver_min_scans": _int_setting_text(
+                    self._settings_values,
+                    "resolver_min_scans",
+                    self._resolver_min_scans_spin,
+                ),
+                "nl_rt_anchor_search_margin_min": _float_setting_text(
+                    self._settings_values,
+                    "nl_rt_anchor_search_margin_min",
+                    self._nl_rt_anchor_search_margin_min_spin,
+                ),
+                "nl_rt_anchor_half_window_min": _float_setting_text(
+                    self._settings_values,
+                    "nl_rt_anchor_half_window_min",
+                    self._nl_rt_anchor_half_window_min_spin,
+                ),
+                "nl_fallback_half_window_min": _float_setting_text(
+                    self._settings_values,
+                    "nl_fallback_half_window_min",
+                    self._nl_fallback_half_window_min_spin,
                 ),
             }
         )
@@ -275,6 +455,183 @@ class SettingsSection(QWidget):
     def set_enabled(self, enabled: bool) -> None:
         self.setEnabled(enabled)
 
+    def advanced_section_field_keys(self) -> tuple[str, ...]:
+        return _ADVANCED_SETTING_KEYS
+
+    def _configure_advanced_controls(self) -> None:
+        self._resolver_mode_combo.addItems(["legacy_savgol", "local_minimum"])
+        self._rolling_window_size_spin.setRange(1, 999)
+        self._resolver_min_scans_spin.setRange(1, 999)
+
+        self._set_float_range(self._resolver_chrom_threshold_spin, 0.0, 1.0, 3)
+        self._set_float_range(self._resolver_min_search_range_min_spin, 0.001, 100.0, 3)
+        self._set_float_range(self._resolver_min_relative_height_spin, 0.001, 1.0, 3)
+        self._set_float_range(self._resolver_min_absolute_height_spin, 0.0, 1e12, 3)
+        self._set_float_range(self._resolver_min_ratio_top_edge_spin, 1.01, 100.0, 3)
+        self._set_float_range(self._resolver_peak_duration_min_spin, 0.001, 100.0, 3)
+        self._set_float_range(self._resolver_peak_duration_max_spin, 0.001, 100.0, 3)
+        self._set_float_range(self._nl_rt_anchor_search_margin_min_spin, 0.0, 100.0, 3)
+        self._set_float_range(self._nl_rt_anchor_half_window_min_spin, 0.0, 100.0, 3)
+        self._set_float_range(self._nl_fallback_half_window_min_spin, 0.0, 100.0, 3)
+
+    def _build_advanced_section(self) -> None:
+        help_label = QLabel(
+            "下列選項僅在除錯或方法開發時需要。日常使用請保持預設值。"
+        )
+        help_label.setStyleSheet("color: #57606a; font-size: 9pt;")
+        self.advanced_section.add_row(help_label)
+
+        body = QWidget()
+        layout = QGridLayout(body)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setHorizontalSpacing(12)
+        layout.setVerticalSpacing(8)
+
+        layout.addWidget(self._keep_intermediate_csv_checkbox, 0, 0, 1, 3)
+        layout.addWidget(self._emit_score_breakdown_checkbox, 1, 0, 1, 3)
+        layout.addWidget(self._dirty_matrix_mode_checkbox, 2, 0, 1, 3)
+
+        layout.addWidget(QLabel("Rolling window size"), 3, 0)
+        layout.addWidget(self._rolling_window_size_spin, 3, 1)
+
+        layout.addWidget(QLabel("RT prior library"), 4, 0)
+        layout.addWidget(self._rt_prior_library_path_edit, 4, 1)
+        layout.addWidget(
+            self._make_file_browse_button(self._rt_prior_library_path_edit), 4, 2
+        )
+
+        layout.addWidget(QLabel("Injection order source"), 5, 0)
+        layout.addWidget(self._injection_order_source_edit, 5, 1)
+        layout.addWidget(
+            self._make_file_browse_button(self._injection_order_source_edit), 5, 2
+        )
+
+        layout.addWidget(QLabel("Resolver mode"), 6, 0)
+        layout.addWidget(self._resolver_mode_combo, 6, 1)
+
+        resolver_layout = QHBoxLayout()
+        resolver_layout.setContentsMargins(0, 0, 0, 0)
+        resolver_layout.setSpacing(16)
+        resolver_layout.addWidget(
+            _LabeledSpin("Chrom threshold", self._resolver_chrom_threshold_spin)
+        )
+        resolver_layout.addWidget(
+            _LabeledSpin("Search range", self._resolver_min_search_range_min_spin)
+        )
+        resolver_layout.addWidget(
+            _LabeledSpin("Min rel height", self._resolver_min_relative_height_spin)
+        )
+        resolver_layout.addWidget(
+            _LabeledSpin("Min abs height", self._resolver_min_absolute_height_spin)
+        )
+        resolver_layout.addStretch()
+        layout.addLayout(resolver_layout, 7, 0, 1, 3)
+
+        resolver_layout_2 = QHBoxLayout()
+        resolver_layout_2.setContentsMargins(0, 0, 0, 0)
+        resolver_layout_2.setSpacing(16)
+        resolver_layout_2.addWidget(
+            _LabeledSpin("Top/edge", self._resolver_min_ratio_top_edge_spin)
+        )
+        resolver_layout_2.addWidget(
+            _LabeledSpin("Min duration", self._resolver_peak_duration_min_spin)
+        )
+        resolver_layout_2.addWidget(
+            _LabeledSpin("Max duration", self._resolver_peak_duration_max_spin)
+        )
+        resolver_layout_2.addWidget(
+            _LabeledSpin("Min scans", self._resolver_min_scans_spin)
+        )
+        resolver_layout_2.addStretch()
+        layout.addLayout(resolver_layout_2, 8, 0, 1, 3)
+
+        nl_layout = QHBoxLayout()
+        nl_layout.setContentsMargins(0, 0, 0, 0)
+        nl_layout.setSpacing(16)
+        nl_layout.addWidget(
+            _LabeledSpin("NL search", self._nl_rt_anchor_search_margin_min_spin)
+        )
+        nl_layout.addWidget(
+            _LabeledSpin("NL anchor window", self._nl_rt_anchor_half_window_min_spin)
+        )
+        nl_layout.addWidget(
+            _LabeledSpin("NL fallback", self._nl_fallback_half_window_min_spin)
+        )
+        nl_layout.addStretch()
+        layout.addWidget(QLabel("NL RT windows"), 9, 0)
+        layout.addLayout(nl_layout, 9, 1, 1, 2)
+
+        layout.setColumnStretch(1, 1)
+        self.advanced_section.add_row(body)
+
+    def _load_advanced_values(self) -> None:
+        self._keep_intermediate_csv_checkbox.setChecked(
+            _bool_value(self._settings_values, "keep_intermediate_csv")
+        )
+        self._emit_score_breakdown_checkbox.setChecked(
+            _bool_value(self._settings_values, "emit_score_breakdown")
+        )
+        self._dirty_matrix_mode_checkbox.setChecked(
+            _bool_value(self._settings_values, "dirty_matrix_mode")
+        )
+        self._rolling_window_size_spin.setValue(
+            _int_value(self._settings_values, "rolling_window_size")
+        )
+        self._rt_prior_library_path_edit.setText(
+            self._settings_values.get("rt_prior_library_path", "")
+        )
+        self._injection_order_source_edit.setText(
+            self._settings_values.get("injection_order_source", "")
+        )
+        resolver_mode = self._settings_values.get("resolver_mode", "legacy_savgol")
+        if resolver_mode not in {"legacy_savgol", "local_minimum"}:
+            resolver_mode = "legacy_savgol"
+        self._resolver_mode_combo.setCurrentText(resolver_mode)
+        self._resolver_chrom_threshold_spin.setValue(
+            _float_value(self._settings_values, "resolver_chrom_threshold")
+        )
+        self._resolver_min_search_range_min_spin.setValue(
+            _float_value(self._settings_values, "resolver_min_search_range_min")
+        )
+        self._resolver_min_relative_height_spin.setValue(
+            _float_value(self._settings_values, "resolver_min_relative_height")
+        )
+        self._resolver_min_absolute_height_spin.setValue(
+            _float_value(self._settings_values, "resolver_min_absolute_height")
+        )
+        self._resolver_min_ratio_top_edge_spin.setValue(
+            _float_value(self._settings_values, "resolver_min_ratio_top_edge")
+        )
+        self._resolver_peak_duration_min_spin.setValue(
+            _float_value(self._settings_values, "resolver_peak_duration_min")
+        )
+        self._resolver_peak_duration_max_spin.setValue(
+            _float_value(self._settings_values, "resolver_peak_duration_max")
+        )
+        self._resolver_min_scans_spin.setValue(
+            _int_value(self._settings_values, "resolver_min_scans")
+        )
+        self._nl_rt_anchor_search_margin_min_spin.setValue(
+            _float_value(self._settings_values, "nl_rt_anchor_search_margin_min")
+        )
+        self._nl_rt_anchor_half_window_min_spin.setValue(
+            _float_value(self._settings_values, "nl_rt_anchor_half_window_min")
+        )
+        self._nl_fallback_half_window_min_spin.setValue(
+            _float_value(self._settings_values, "nl_fallback_half_window_min")
+        )
+
+    def _set_float_range(
+        self,
+        spin: QDoubleSpinBox,
+        minimum: float,
+        maximum: float,
+        decimals: int,
+    ) -> None:
+        spin.setRange(minimum, maximum)
+        spin.setDecimals(decimals)
+        spin.setSingleStep(0.01)
+
     def _wire_signals(self) -> None:
         self._data_dir_edit.textChanged.connect(self._validate_data_dir)
         self._data_dir_edit.textChanged.connect(lambda _: self._set_dirty(True))
@@ -296,7 +653,39 @@ class SettingsSection(QWidget):
         self._count_no_ms2_checkbox.stateChanged.connect(
             lambda _: self._set_dirty(True)
         )
+        self._wire_advanced_signals()
         self._save_button.clicked.connect(self._save)
+
+    def _wire_advanced_signals(self) -> None:
+        for checkbox in (
+            self._keep_intermediate_csv_checkbox,
+            self._emit_score_breakdown_checkbox,
+            self._dirty_matrix_mode_checkbox,
+        ):
+            checkbox.stateChanged.connect(lambda _: self._set_dirty(True))
+        for line_edit in (
+            self._rt_prior_library_path_edit,
+            self._injection_order_source_edit,
+        ):
+            line_edit.textChanged.connect(lambda _: self._set_dirty(True))
+        self._resolver_mode_combo.currentTextChanged.connect(
+            lambda _: self._set_dirty(True)
+        )
+        for spin in (
+            self._rolling_window_size_spin,
+            self._resolver_chrom_threshold_spin,
+            self._resolver_min_search_range_min_spin,
+            self._resolver_min_relative_height_spin,
+            self._resolver_min_absolute_height_spin,
+            self._resolver_min_ratio_top_edge_spin,
+            self._resolver_peak_duration_min_spin,
+            self._resolver_peak_duration_max_spin,
+            self._resolver_min_scans_spin,
+            self._nl_rt_anchor_search_margin_min_spin,
+            self._nl_rt_anchor_half_window_min_spin,
+            self._nl_fallback_half_window_min_spin,
+        ):
+            spin.valueChanged.connect(lambda _: self._set_dirty(True))
 
     def _validate_data_dir(self, text: str) -> None:
         stripped = text.strip()
@@ -309,12 +698,22 @@ class SettingsSection(QWidget):
         button.clicked.connect(lambda: self._browse_for_directory(target))
         return button
 
+    def _make_file_browse_button(self, target: QLineEdit) -> QPushButton:
+        button = QPushButton("Browse…")
+        button.clicked.connect(lambda: self._browse_for_file(target))
+        return button
+
     def _browse_for_directory(self, target: QLineEdit) -> None:
         directory = QFileDialog.getExistingDirectory(
             self, "Select directory", target.text()
         )
         if directory:
             target.setText(directory)
+
+    def _browse_for_file(self, target: QLineEdit) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Select file", target.text())
+        if path:
+            target.setText(path)
 
     def _save(self) -> None:
         self._set_dirty(False)
@@ -337,3 +736,36 @@ def _float_value(settings: dict[str, str], key: str) -> float:
         return float(settings.get(key, CANONICAL_SETTINGS_DEFAULTS[key]))
     except ValueError:
         return float(CANONICAL_SETTINGS_DEFAULTS[key])
+
+
+def _bool_value(settings: dict[str, str], key: str) -> bool:
+    return settings.get(key, CANONICAL_SETTINGS_DEFAULTS[key]).lower() == "true"
+
+
+def _int_setting_text(
+    settings: dict[str, str],
+    key: str,
+    spin: QSpinBox,
+) -> str:
+    original = settings.get(key, CANONICAL_SETTINGS_DEFAULTS[key])
+    try:
+        if spin.value() == int(original):
+            return original
+    except ValueError:
+        pass
+    return str(spin.value())
+
+
+def _float_setting_text(
+    settings: dict[str, str],
+    key: str,
+    spin: QDoubleSpinBox,
+) -> str:
+    original = settings.get(key, CANONICAL_SETTINGS_DEFAULTS[key])
+    try:
+        tolerance = 10 ** -spin.decimals()
+        if abs(spin.value() - float(original)) <= tolerance:
+            return original
+    except ValueError:
+        pass
+    return f"{spin.value():g}"
