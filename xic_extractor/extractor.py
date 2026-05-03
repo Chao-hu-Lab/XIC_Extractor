@@ -36,6 +36,7 @@ __all__ = [
     "DiagnosticRecord",
     "ExtractionResult",
     "FileResult",
+    "RawFileExtractionResult",
     "RunOutput",
     "run",
 ]
@@ -105,6 +106,18 @@ class RunOutput:
     diagnostics: list[DiagnosticRecord]
 
 
+@dataclass
+class RawFileExtractionResult:
+    raw_index: int
+    sample_name: str
+    file_result: FileResult
+    diagnostics: list[DiagnosticRecord]
+    wide_rows: list[dict[str, str]]
+    long_rows: list[dict[str, str]]
+    score_breakdown_rows: list[dict[str, str]]
+    error: str | None = None
+
+
 def run(
     config: ExtractionConfig,
     targets: list[Target],
@@ -172,14 +185,15 @@ def _run_serial(
         if should_stop is not None and should_stop():
             break
 
-        file_result, file_diagnostics = _process_file(
+        raw_result = _extract_raw_file_result(
+            index,
             config,
             targets,
             raw_path,
             scoring_context_factory=scoring_context_factory,
         )
-        file_results.append(file_result)
-        diagnostics.extend(file_diagnostics)
+        file_results.append(raw_result.file_result)
+        diagnostics.extend(raw_result.diagnostics)
 
         if progress_callback is not None:
             progress_callback(index, total, raw_path.name)
@@ -196,6 +210,32 @@ def _run_serial(
             emit_score_breakdown=config.emit_score_breakdown,
         )
     return output
+
+
+def _extract_raw_file_result(
+    raw_index: int,
+    config: ExtractionConfig,
+    targets: list[Target],
+    raw_path: Path,
+    *,
+    scoring_context_factory: Callable[..., Any] | None = None,
+) -> RawFileExtractionResult:
+    file_result, diagnostics = _process_file(
+        config,
+        targets,
+        raw_path,
+        scoring_context_factory=scoring_context_factory,
+    )
+    return RawFileExtractionResult(
+        raw_index=raw_index,
+        sample_name=file_result.sample_name,
+        file_result=file_result,
+        diagnostics=diagnostics,
+        wide_rows=[csv_writers._output_row(file_result, targets)],
+        long_rows=csv_writers._long_output_rows(file_result, targets),
+        score_breakdown_rows=csv_writers._score_breakdown_rows(file_result),
+        error=file_result.error,
+    )
 
 
 def _process_file(

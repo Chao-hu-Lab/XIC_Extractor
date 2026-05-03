@@ -1,3 +1,4 @@
+import pickle
 from pathlib import Path
 
 import numpy as np
@@ -5,7 +6,11 @@ import pytest
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extractor import RunOutput
-from xic_extractor.signal_processing import PeakCandidate, PeakDetectionResult, PeakResult
+from xic_extractor.signal_processing import (
+    PeakCandidate,
+    PeakDetectionResult,
+    PeakResult,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -87,6 +92,89 @@ def test_serial_backend_keeps_sorted_raw_output_order(
         "A",
         "B",
     ]
+
+
+def test_per_file_result_primitive_returns_rows_and_is_pickleable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from xic_extractor.extractor import _extract_raw_file_result
+
+    config = _config(tmp_path, keep_intermediate_csv=False)
+    raw_path = config.data_dir / "SampleA.raw"
+    raw_path.write_text("", encoding="utf-8")
+    targets = [_target("Analyte")]
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence([_ok_peak(8.5, 1000.0, 2000.0)]),
+    )
+
+    result = _extract_raw_file_result(
+        7,
+        config,
+        targets,
+        raw_path,
+        scoring_context_factory=None,
+    )
+
+    restored = pickle.loads(pickle.dumps(result))
+    assert restored.raw_index == 7
+    assert restored.sample_name == "SampleA"
+    assert restored.file_result.sample_name == "SampleA"
+    assert restored.error is None
+    assert restored.diagnostics == []
+    assert restored.wide_rows == [
+        {
+            "SampleName": "SampleA",
+            "Analyte_RT": "8.5000",
+            "Analyte_Int": "1000",
+            "Analyte_Area": "2000.00",
+            "Analyte_PeakStart": "8.0000",
+            "Analyte_PeakEnd": "9.0000",
+            "Analyte_PeakWidth": "1.0000",
+        }
+    ]
+    assert restored.long_rows[0]["SampleName"] == "SampleA"
+    assert restored.long_rows[0]["Target"] == "Analyte"
+    assert restored.long_rows[0]["RT"] == "8.5000"
+    assert restored.score_breakdown_rows[0]["SampleName"] == "SampleA"
+    assert restored.score_breakdown_rows[0]["Target"] == "Analyte"
+    assert restored.score_breakdown_rows[0]["Total Severity"] == "0"
+
+
+def test_per_file_result_primitive_captures_file_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from xic_extractor.extractor import _extract_raw_file_result
+
+    config = _config(tmp_path, keep_intermediate_csv=False)
+    raw_path = config.data_dir / "Bad.raw"
+    raw_path.write_text("", encoding="utf-8")
+    targets = [_target("Analyte")]
+    monkeypatch.setattr(
+        "xic_extractor.extractor.open_raw",
+        _open_raw_factory(errors={"Bad.raw": RuntimeError("file locked")}),
+    )
+
+    result = _extract_raw_file_result(
+        2,
+        config,
+        targets,
+        raw_path,
+        scoring_context_factory=None,
+    )
+
+    assert result.raw_index == 2
+    assert result.sample_name == "Bad"
+    assert result.error is not None
+    assert "file locked" in result.error
+    assert result.file_result.error == result.error
+    assert result.wide_rows[0]["Analyte_RT"] == "ERROR"
+    assert result.long_rows[0]["RT"] == "ERROR"
+    assert result.score_breakdown_rows == []
+    assert result.diagnostics[0].issue == "FILE_ERROR"
 
 
 def _config(tmp_path: Path, *, keep_intermediate_csv: bool) -> ExtractionConfig:
@@ -177,8 +265,12 @@ def _peak_sequence(results: list[PeakDetectionResult]):
     return _fake_find_peak_and_area
 
 
-def _open_raw_factory():
+def _open_raw_factory(*, errors: dict[str, Exception] | None = None):
+    error_by_name = errors or {}
+
     def _fake_open_raw(path: Path, dll_dir: Path):
+        if path.name in error_by_name:
+            raise error_by_name[path.name]
         return _FakeRaw()
 
     return _fake_open_raw
