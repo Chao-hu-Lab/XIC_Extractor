@@ -18,6 +18,8 @@ a = Analysis(
         "PyQt6.QtWidgets",
         "PyQt6.QtGui",
         "PyQt6.sip",
+        "pythonnet",
+        "clr",
         "openpyxl",
         "openpyxl.styles",
         "openpyxl.utils",
