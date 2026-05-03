@@ -11,6 +11,7 @@ from types import ModuleType
 from typing import Any
 
 from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.extraction.scoring_factory import build_scoring_context_factory
 from xic_extractor.extractor import RawFileExtractionResult
 from xic_extractor.rt_prior_library import LibraryEntry
 
@@ -121,6 +122,62 @@ def run_istd_prepass_jobs(
                     )
                 )
     return results
+
+
+def run_raw_file_jobs(
+    jobs: Iterable[RawFileJob],
+    *,
+    max_workers: int,
+) -> list[WorkerResult]:
+    pending_jobs = list(jobs)
+    for job in pending_jobs:
+        validate_job_payload(job)
+    context = get_context("spawn")
+    results: list[WorkerResult] = []
+    with ProcessPoolExecutor(max_workers=max_workers, mp_context=context) as executor:
+        future_to_job = {
+            executor.submit(extract_raw_file_job, job): job for job in pending_jobs
+        }
+        for future in as_completed(future_to_job):
+            job = future_to_job[future]
+            try:
+                results.append(future.result())
+            except Exception as exc:
+                results.append(
+                    WorkerError(
+                        raw_index=job.raw_index,
+                        raw_name=job.raw_path.name,
+                        message=f"{type(exc).__name__}: {exc}",
+                    )
+                )
+    return results
+
+
+def extract_raw_file_job(job: RawFileJob) -> WorkerResult:
+    from xic_extractor.extractor import _extract_raw_file_result
+
+    try:
+        scoring_context_factory = None
+        if job.scoring_inputs is not None:
+            scoring_context_factory = build_scoring_context_factory(
+                config=job.config,
+                injection_order=job.scoring_inputs.injection_order,
+                istd_rts_by_sample=job.scoring_inputs.istd_rts_by_sample,
+                rt_prior_library=job.scoring_inputs.rt_prior_library,
+            )
+        return _extract_raw_file_result(
+            job.raw_index,
+            job.config,
+            list(job.targets),
+            job.raw_path,
+            scoring_context_factory=scoring_context_factory,
+        )
+    except Exception as exc:
+        return WorkerError(
+            raw_index=job.raw_index,
+            raw_name=job.raw_path.name,
+            message=f"{type(exc).__name__}: {exc}",
+        )
 
 
 def extract_istd_prepass_job(job: RawFileJob) -> IstdPrepassWorkerResult:

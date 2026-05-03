@@ -241,39 +241,34 @@ def _run_process(
         istd_targets,
         raw_paths,
     )
-    scoring_context_factory = build_scoring_context_factory(
-        config=config,
-        injection_order=(
-            resolved_injection_order
-            if resolved_injection_order is not None
-            else _fallback_injection_order_from_mtime(raw_paths)
-        ),
+    process_injection_order = (
+        resolved_injection_order
+        if resolved_injection_order is not None
+        else _fallback_injection_order_from_mtime(raw_paths)
+    )
+    from xic_extractor.execution import ScoringInputs
+
+    scoring_inputs = ScoringInputs(
+        injection_order=process_injection_order,
         istd_rts_by_sample=istd_rts_by_sample,
         rt_prior_library=resolved_rt_prior_library or {},
     )
+    raw_results = _collect_raw_file_results_process(
+        config,
+        tuple(targets),
+        raw_paths,
+        scoring_inputs,
+    )
 
-    file_results: list[FileResult] = []
+    file_results = [result.file_result for result in raw_results]
     diagnostics: list[DiagnosticRecord] = []
+    for result in raw_results:
+        diagnostics.extend(result.diagnostics)
+
     total = len(raw_paths)
-
-    for index, raw_path in enumerate(raw_paths, start=1):
-        if should_stop is not None and should_stop():
-            break
-
-        raw_result = _extract_raw_file_result(
-            index,
-            config,
-            targets,
-            raw_path,
-            scoring_context_factory=scoring_context_factory,
-        )
-        file_results.append(raw_result.file_result)
-        diagnostics.extend(raw_result.diagnostics)
-
-        if progress_callback is not None:
-            progress_callback(index, total, raw_path.name)
-        if index % 50 == 0:
-            gc.collect()
+    if progress_callback is not None:
+        for current, result in enumerate(raw_results, start=1):
+            progress_callback(current, total, f"{result.sample_name}.raw")
 
     output = RunOutput(file_results=file_results, diagnostics=diagnostics)
     if config.keep_intermediate_csv:
@@ -285,6 +280,35 @@ def _run_process(
             emit_score_breakdown=config.emit_score_breakdown,
         )
     return output
+
+
+def _collect_raw_file_results_process(
+    config: ExtractionConfig,
+    targets: tuple[Target, ...],
+    raw_paths: list[Path],
+    scoring_inputs: Any,
+    *,
+    runner: Callable[..., list[Any]] | None = None,
+) -> list[RawFileExtractionResult]:
+    from xic_extractor.execution import (
+        RawFileJob,
+        collect_ordered_results,
+        run_raw_file_jobs,
+    )
+
+    jobs = [
+        RawFileJob(
+            raw_index=index,
+            raw_path=raw_path,
+            config=config,
+            targets=targets,
+            scoring_inputs=scoring_inputs,
+        )
+        for index, raw_path in enumerate(raw_paths, start=1)
+    ]
+    raw_runner = runner if runner is not None else run_raw_file_jobs
+    results = raw_runner(jobs, max_workers=config.parallel_workers)
+    return collect_ordered_results(results)
 
 
 def _collect_istd_prepass_process(
