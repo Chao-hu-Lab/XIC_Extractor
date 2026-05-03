@@ -7,14 +7,14 @@ import numpy as np
 import pytest
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.extractor import _build_scoring_context_factory
+from xic_extractor.extraction.scoring_factory import build_scoring_context_factory
 from xic_extractor.neutral_loss import NLResult
 from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import find_peak_and_area
 
 
 def test_istd_context_uses_rolling_median_prior() -> None:
-    factory = _build_scoring_context_factory(
+    factory = build_scoring_context_factory(
         config=_config(),
         injection_order={"S1": 1, "S2": 2, "S3": 3},
         istd_rts_by_sample={"ISTD-A": {"S1": 9.8, "S2": 10.0, "S3": 10.2}},
@@ -54,7 +54,7 @@ def test_analyte_context_uses_delta_rt_library_and_shape_ratio() -> None:
             updated_at="2026-04-20T00:00:00",
         )
     }
-    factory = _build_scoring_context_factory(
+    factory = build_scoring_context_factory(
         config=_config(dirty_matrix_mode=True),
         injection_order={},
         istd_rts_by_sample={},
@@ -91,7 +91,7 @@ def test_analyte_context_uses_delta_rt_library_and_shape_ratio() -> None:
 
 
 def test_context_without_injection_order_or_library_has_no_prior() -> None:
-    factory = _build_scoring_context_factory(
+    factory = build_scoring_context_factory(
         config=_config(),
         injection_order={},
         istd_rts_by_sample={},
@@ -141,7 +141,7 @@ def test_scoring_context_caches_asls_inputs_per_xic(
     intensity += 300 * np.exp(-((rt - 10.25) / 0.03) ** 2)
     intensity += 2.0
 
-    factory = _build_scoring_context_factory(
+    factory = build_scoring_context_factory(
         config=_config(),
         injection_order={},
         istd_rts_by_sample={},

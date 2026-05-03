@@ -18,6 +18,15 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from xic_extractor.config import ExtractionConfig, Target, load_config
+from xic_extractor.output.schema import (
+    DIAGNOSTIC_HEADERS as _DIAGNOSTIC_HEADERS,
+)
+from xic_extractor.output.schema import (
+    LONG_ADVANCED_HEADERS as _ADVANCED_HEADERS,
+)
+from xic_extractor.output.schema import (
+    LONG_HEADERS as _LONG_HEADERS,
+)
 from xic_extractor.sample_groups import classify_sample_group
 
 _MS2_HEADER = "37474F"
@@ -34,24 +43,6 @@ CENTER = Alignment(horizontal="center", vertical="center")
 CENTER_WRAP = Alignment(horizontal="center", vertical="center", wrap_text=True)
 ND_ERROR = {"ND", "ERROR"}
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
-_DIAGNOSTIC_HEADERS = ["SampleName", "Target", "Issue", "Reason"]
-_LONG_HEADERS = [
-    "SampleName",
-    "Group",
-    "Target",
-    "Role",
-    "ISTD Pair",
-    "RT",
-    "Area",
-    "NL",
-    "Int",
-    "PeakStart",
-    "PeakEnd",
-    "PeakWidth",
-    "Confidence",
-    "Reason",
-]
-_ADVANCED_HEADERS = {"Int", "PeakStart", "PeakEnd", "PeakWidth"}
 _TARGETS_HEADERS = [
     "Label",
     "Role",

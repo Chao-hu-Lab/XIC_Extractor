@@ -1,0 +1,223 @@
+from dataclasses import dataclass
+from typing import Literal, Protocol, cast
+
+from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.neutral_loss import NLResult
+from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
+
+DiagnosticIssue = Literal[
+    "PEAK_NOT_FOUND",
+    "NO_SIGNAL",
+    "WINDOW_TOO_SHORT",
+    "NL_FAIL",
+    "NO_MS2",
+    "FILE_ERROR",
+    "MULTI_PEAK",
+    "TAILING",
+    "NL_ANCHOR_FALLBACK",
+    "ISTD_ANCHOR_MISSING",
+    "ANCHOR_RT_MISMATCH",
+    "ISTD_CONFIDENCE",
+]
+
+_TAILING_THRESHOLD: float = 2.0
+
+
+@dataclass(frozen=True)
+class DiagnosticRecord:
+    sample_name: str
+    target_label: str
+    issue: DiagnosticIssue
+    reason: str
+
+
+class ExtractionResultLike(Protocol):
+    @property
+    def peak_result(self) -> PeakDetectionResult: ...
+
+    @property
+    def nl(self) -> NLResult | None: ...
+
+
+def build_diagnostic_records(
+    sample_name: str,
+    target: Target,
+    result: ExtractionResultLike,
+    config: ExtractionConfig,
+) -> list[DiagnosticRecord]:
+    records: list[DiagnosticRecord] = []
+    if result.peak_result.status != "OK":
+        records.append(
+            DiagnosticRecord(
+                sample_name=sample_name,
+                target_label=target.label,
+                issue=result.peak_result.status,
+                reason=_peak_reason(target, result.peak_result, config),
+            )
+        )
+
+    if result.nl is not None and result.nl.status in {"NL_FAIL", "NO_MS2"}:
+        records.append(
+            DiagnosticRecord(
+                sample_name=sample_name,
+                target_label=target.label,
+                issue=cast(DiagnosticIssue, result.nl.status),
+                reason=_nl_reason(target, result.nl, config),
+            )
+        )
+
+    if result.peak_result.status == "OK" and result.peak_result.peak is not None:
+        peak = result.peak_result.peak
+        if result.peak_result.n_prominent_peaks > 1:
+            records.append(
+                DiagnosticRecord(
+                    sample_name=sample_name,
+                    target_label=target.label,
+                    issue="MULTI_PEAK",
+                    reason=_multi_peak_reason(target, result.peak_result, result.nl),
+                )
+            )
+        left_half = peak.rt - peak.peak_start
+        right_half = peak.peak_end - peak.rt
+        if left_half > 0 and (right_half / left_half) > _TAILING_THRESHOLD:
+            records.append(
+                DiagnosticRecord(
+                    sample_name=sample_name,
+                    target_label=target.label,
+                    issue="TAILING",
+                    reason=_tailing_reason(peak),
+                )
+            )
+
+        istd_confidence = _istd_confidence_diagnostic(sample_name, target, result)
+        if istd_confidence is not None:
+            records.append(istd_confidence)
+
+    return records
+
+
+def istd_confidence_note(istd_confidence: str | None) -> str | None:
+    if istd_confidence in (None, "HIGH", "MEDIUM"):
+        return None
+    return f"ISTD anchor was {istd_confidence}"
+
+
+def _peak_reason(
+    target: Target, peak_result: PeakDetectionResult, config: ExtractionConfig
+) -> str:
+    if peak_result.status == "NO_SIGNAL":
+        return (
+            f"XIC empty in window [{target.rt_min}, {target.rt_max}] for "
+            f"m/z {target.mz} +/- {target.ppm_tol:g} ppm"
+        )
+    if peak_result.status == "WINDOW_TOO_SHORT":
+        return (
+            f"Only {peak_result.n_points} scans in window; "
+            f"savgol requires >= {config.smooth_window}"
+        )
+    max_value = _format_optional_number(peak_result.max_smoothed)
+    prominence_pct = config.peak_min_prominence_ratio * 100
+    return (
+        "No peak met prominence >= "
+        f"{prominence_pct:g}% of max smoothed (max={max_value})"
+    )
+
+
+def _nl_reason(target: Target, nl: NLResult, config: ExtractionConfig) -> str:
+    if nl.status == "NO_MS2":
+        return (
+            f"No MS2 scan targeting precursor {target.mz} +/- "
+            f"{config.ms2_precursor_tol_da:g} Da within RT "
+            f"[{target.rt_min}, {target.rt_max}]; "
+            f"{nl.valid_ms2_scan_count} valid MS2 scans in window "
+            f"({nl.parse_error_count} parse errors)"
+        )
+
+    limit = target.nl_ppm_max if target.nl_ppm_max is not None else 0.0
+    assert (
+        target.neutral_loss_da is not None
+    )  # NL is only checked when neutral_loss_da is set
+    nl_da = target.neutral_loss_da
+    expected_product = target.mz - nl_da
+
+    if nl.best_ppm is not None:
+        rt_info = (
+            f" at scan RT {nl.best_scan_rt:.3f} min"
+            if nl.best_scan_rt is not None
+            else ""
+        )
+        return (
+            f"Precursor {target.mz} triggered {nl.matched_scan_count} MS2 scans; "
+            f"NL {nl_da:g} Da → expected product m/z {expected_product:.4f}; "
+            f"best match {nl.best_ppm:.1f} ppm (limit {limit:g} ppm){rt_info}"
+        )
+
+    return (
+        f"Precursor {target.mz} triggered {nl.matched_scan_count} MS2 scans; "
+        f"NL {nl_da:g} Da → expected product m/z {expected_product:.4f}; "
+        f"not detected in any matched scan"
+    )
+
+
+def _multi_peak_reason(
+    target: Target, peak_result: PeakDetectionResult, nl: NLResult | None
+) -> str:
+    base = (
+        f"{peak_result.n_prominent_peaks} prominent peaks detected in window "
+        f"[{target.rt_min}, {target.rt_max}]; tallest peak selected — "
+        f"verify integration window or split into separate targets"
+    )
+    if nl is not None and nl.best_scan_rt is not None:
+        base += f"; NL-confirmed MS2 at RT {nl.best_scan_rt:.3f} min"
+    return base
+
+
+def _tailing_reason(peak: PeakResult) -> str:
+    left_half = peak.rt - peak.peak_start
+    right_half = peak.peak_end - peak.rt
+    ratio = right_half / left_half if left_half > 0 else float("inf")
+    return (
+        f"Asymmetry ratio {ratio:.2f} (right/left half-width at 5% peak height, "
+        f"USP limit 2.0); apex RT {peak.rt:.4f} min, "
+        f"peak [{peak.peak_start:.4f}, {peak.peak_end:.4f}]"
+    )
+
+
+def _istd_confidence_diagnostic(
+    sample_name: str, target: Target, result: ExtractionResultLike
+) -> DiagnosticRecord | None:
+    if not target.is_istd:
+        return None
+
+    flags: list[str] = []
+    confidence = "HIGH"
+    if result.nl is not None:
+        if result.nl.status == "NO_MS2":
+            flags.append("NO_MS2")
+            confidence = "MEDIUM"
+        elif result.nl.status == "NL_FAIL":
+            flags.append("NL_FAIL")
+            confidence = "LOW"
+        elif result.nl.status == "WARN":
+            flags.append("NL_WARN")
+            confidence = "MEDIUM"
+
+    if not flags:
+        return None
+
+    return DiagnosticRecord(
+        sample_name=sample_name,
+        target_label=target.label,
+        issue="ISTD_CONFIDENCE",
+        reason=(
+            f"ISTD confidence={confidence}; flags={','.join(flags)}; "
+            "MS1 peak retained because ISTD NL evidence is diagnostic support, "
+            "not a hard detection gate"
+        ),
+    )
+
+
+def _format_optional_number(value: float | None) -> str:
+    if value is None:
+        return "NA"
+    return f"{value:g}"

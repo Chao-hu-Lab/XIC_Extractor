@@ -1,0 +1,136 @@
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.extraction.scoring_factory import (
+    allow_prepass_anchor,
+    build_scoring_context_factory,
+    selected_candidate,
+)
+from xic_extractor.rt_prior_library import LibraryEntry
+from xic_extractor.signal_processing import (
+    PeakCandidate,
+    PeakDetectionResult,
+    PeakResult,
+)
+
+
+def test_factory_uses_delta_rt_library_and_exposes_prior_metadata() -> None:
+    factory = build_scoring_context_factory(
+        config=_config(dirty_matrix_mode=True),
+        injection_order={},
+        istd_rts_by_sample={},
+        rt_prior_library={
+            ("Analyte-A", "analyte"): LibraryEntry(
+                config_hash="abcd1234",
+                target_label="Analyte-A",
+                role="analyte",
+                istd_pair="ISTD-A",
+                median_delta_rt=0.25,
+                sigma_delta_rt=0.05,
+                median_abs_rt=None,
+                sigma_abs_rt=None,
+                n_samples=10,
+                updated_at="2026-04-20T00:00:00",
+            )
+        },
+    )
+
+    builder = factory(
+        target=_target(label="Analyte-A", is_istd=False, istd_pair="ISTD-A"),
+        sample_name="S2",
+        rt=np.linspace(9.9, 10.5, 7),
+        intensity=np.array([0.0, 1.0, 4.0, 8.0, 4.0, 1.0, 0.0]),
+        istd_rt_in_this_sample=10.0,
+        paired_istd_fwhm=2.0,
+        nl_result=None,
+    )
+
+    ctx = builder(_candidate(apex_index=3))
+
+    assert ctx.rt_prior == pytest.approx(10.25)
+    assert ctx.rt_prior_sigma == pytest.approx(0.05)
+    assert ctx.dirty_matrix is True
+    assert ctx.prefer_rt_prior_tiebreak is True
+    assert getattr(builder, "rt_prior") == pytest.approx(10.25)
+    assert getattr(builder, "prior_source") == "delta_rt_library"
+
+
+def test_selected_candidate_and_prepass_anchor_reject_quality_flags() -> None:
+    candidate = _candidate(apex_index=1, quality_flags=("too_broad",))
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        n_points=3,
+        max_smoothed=10.0,
+        n_prominent_peaks=1,
+        candidates=(candidate,),
+    )
+
+    assert selected_candidate(peak_result) is candidate
+    assert allow_prepass_anchor(peak_result) is False
+
+
+def _config(**overrides: object) -> ExtractionConfig:
+    config = ExtractionConfig(
+        data_dir=Path("."),
+        dll_dir=Path("."),
+        output_csv=Path("out.csv"),
+        diagnostics_csv=Path("diag.csv"),
+        smooth_window=7,
+        smooth_polyorder=3,
+        peak_rel_height=0.95,
+        peak_min_prominence_ratio=0.1,
+        ms2_precursor_tol_da=1.6,
+        nl_min_intensity_ratio=0.01,
+        injection_order_source=None,
+        rolling_window_size=1,
+        dirty_matrix_mode=False,
+        rt_prior_library_path=None,
+        emit_score_breakdown=False,
+        config_hash="abcd1234",
+    )
+    return ExtractionConfig(**{**config.__dict__, **overrides})
+
+
+def _target(*, label: str, is_istd: bool, istd_pair: str) -> Target:
+    return Target(
+        label=label,
+        mz=100.0,
+        rt_min=9.0,
+        rt_max=11.0,
+        ppm_tol=20.0,
+        neutral_loss_da=116.0474,
+        nl_ppm_warn=20.0,
+        nl_ppm_max=50.0,
+        is_istd=is_istd,
+        istd_pair=istd_pair,
+    )
+
+
+def _candidate(
+    *, apex_index: int, quality_flags: tuple[str, ...] = ()
+) -> PeakCandidate:
+    peak = PeakResult(
+        rt=10.0,
+        intensity=8.0,
+        intensity_smoothed=8.0,
+        area=20.0,
+        peak_start=9.9,
+        peak_end=10.1,
+    )
+    candidate = PeakCandidate(
+        peak=peak,
+        smoothed_apex_rt=10.0,
+        smoothed_apex_intensity=8.0,
+        smoothed_apex_index=apex_index,
+        raw_apex_rt=10.0,
+        raw_apex_intensity=8.0,
+        raw_apex_index=apex_index,
+        prominence=7.0,
+    )
+    if quality_flags:
+        object.__setattr__(candidate, "quality_flags", quality_flags)
+    return candidate
