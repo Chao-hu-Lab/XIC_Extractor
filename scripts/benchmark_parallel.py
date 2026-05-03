@@ -6,6 +6,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from time import perf_counter
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from scripts.compare_workbooks import WorkbookCompareResult, compare_workbooks
 from xic_extractor import extractor
 from xic_extractor.config import ConfigError, load_config
@@ -168,7 +171,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         results = run_benchmark(
             base_dir=args.base_dir.resolve(),
             data_dir=args.data_dir.resolve(),
-            workers=_parse_workers(args.workers),
+            workers=args.workers,
             output_dir=args.output_dir.resolve(),
         )
     except (ConfigError, RawReaderError) as exc:
@@ -202,7 +205,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--workers",
-        default="2,4",
+        type=_parse_workers,
+        default=(2, 4),
         help="Comma-separated process worker counts, for example 2,4.",
     )
     parser.add_argument(
@@ -217,7 +221,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 def _parse_workers(value: str) -> tuple[int, ...]:
     workers: list[int] = []
     for part in value.split(","):
-        worker_count = int(part.strip())
+        try:
+            worker_count = int(part.strip())
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(
+                "workers must be comma-separated integers"
+            ) from exc
         if worker_count < 1:
             raise argparse.ArgumentTypeError("workers must be >= 1")
         workers.append(worker_count)

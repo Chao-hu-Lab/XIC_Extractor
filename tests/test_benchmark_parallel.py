@@ -1,4 +1,8 @@
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from scripts.benchmark_parallel import build_run_specs, run_benchmark
 from scripts.compare_workbooks import WorkbookCompareResult
@@ -119,6 +123,33 @@ def test_run_benchmark_writes_summary_csv(tmp_path: Path) -> None:
     assert "process,2,1," in summary
     assert "fail" in summary
     assert "XIC Results!R2C3: 1 != 2" in summary
+
+
+def test_benchmark_parallel_script_help_runs_from_documented_path() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+
+    completed = subprocess.run(
+        [sys.executable, "scripts/benchmark_parallel.py", "--help"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "Benchmark serial and process RAW extraction modes." in completed.stdout
+
+
+@pytest.mark.parametrize("workers", ["0", "bad"])
+def test_benchmark_parallel_rejects_invalid_workers(
+    tmp_path: Path, workers: str
+) -> None:
+    import scripts.benchmark_parallel as module
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main(["--data-dir", str(tmp_path), "--workers", workers])
+
+    assert exc_info.value.code == 2
 
 
 def _fake_timer():

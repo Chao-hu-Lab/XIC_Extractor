@@ -44,6 +44,28 @@ def test_compare_workbooks_ignores_generated_at_metadata(tmp_path: Path) -> None
     assert result.differences == []
 
 
+def test_compare_workbooks_ignores_runtime_and_output_path_metadata(
+    tmp_path: Path,
+) -> None:
+    left = tmp_path / "left.xlsx"
+    right = tmp_path / "right.xlsx"
+    _write_workbook(
+        left,
+        elapsed_seconds="1.0",
+        output_path="C:\\old\\xic_results.xlsx",
+    )
+    _write_workbook(
+        right,
+        elapsed_seconds="2.0",
+        output_path="D:\\new\\xic_results.xlsx",
+    )
+
+    result = compare_workbooks(left, right)
+
+    assert result.matched
+    assert result.differences == []
+
+
 def test_compare_workbooks_ignores_sheet_order(tmp_path: Path) -> None:
     left = tmp_path / "left.xlsx"
     right = tmp_path / "right.xlsx"
@@ -93,6 +115,8 @@ def _write_workbook(
     *,
     area: float = 100.0,
     generated_at: str = "2026-05-03T00:00:00Z",
+    elapsed_seconds: str = "1.0",
+    output_path: str = "C:\\output\\xic_results.xlsx",
     include_score_breakdown: bool = False,
     score: float = 0.9,
     sheet_order: tuple[str, ...] = (
@@ -121,6 +145,8 @@ def _write_workbook(
         elif name == "Run Metadata":
             ws.append(["key", "value"])
             ws.append(["generated_at", generated_at])
+            ws.append(["elapsed_seconds", elapsed_seconds])
+            ws.append(["output_path", output_path])
             ws.append(["resolver_mode", "legacy_savgol"])
     if include_score_breakdown:
         ws = wb.create_sheet("Score Breakdown")
