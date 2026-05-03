@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from xic_extractor.config import ConfigError, load_config, migrate_settings_dict
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
 SETTINGS_FIELDS = ["key", "value", "description"]
 TARGET_FIELDS = [
@@ -115,6 +116,8 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.resolver_peak_duration_min == pytest.approx(0.03)
     assert config.resolver_peak_duration_max == pytest.approx(1.00)
     assert config.resolver_min_scans == 5
+    assert config.parallel_mode == "serial"
+    assert config.parallel_workers == 1
     assert targets[0].label == "Analyte"
     assert targets[0].neutral_loss_da == pytest.approx(116.0474)
 
@@ -195,6 +198,8 @@ def test_migrate_settings_dict_renames_legacy_key_and_backfills_defaults() -> No
     assert "smooth_points" not in migrated
     assert migrated["smooth_polyorder"] == "3"
     assert migrated["peak_rel_height"] == "0.95"
+    assert migrated["parallel_mode"] == "serial"
+    assert migrated["parallel_workers"] == "1"
     assert any(
         "smooth_points" in warning and "smooth_window" in warning
         for warning in warnings
@@ -240,6 +245,38 @@ def test_load_config_accepts_local_minimum_resolver_settings(tmp_path: Path) -> 
     assert config.resolver_min_scans == 9
 
 
+def test_load_config_accepts_process_parallel_settings(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(
+        config_dir,
+        {
+            "parallel_mode": "process",
+            "parallel_workers": "4",
+        },
+    )
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.parallel_mode == "process"
+    assert config.parallel_workers == 4
+
+
+def test_canonical_settings_defaults_include_parallel_settings() -> None:
+    assert CANONICAL_SETTINGS_DEFAULTS["parallel_mode"] == "serial"
+    assert CANONICAL_SETTINGS_DEFAULTS["parallel_workers"] == "1"
+
+
+def test_settings_example_includes_parallel_settings() -> None:
+    example_path = Path("config/settings.example.csv")
+
+    with example_path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = {row["key"]: row["value"] for row in csv.DictReader(handle)}
+
+    assert rows["parallel_mode"] == "serial"
+    assert rows["parallel_workers"] == "1"
+
+
 @pytest.mark.parametrize(
     ("column", "value"),
     [
@@ -270,6 +307,8 @@ def test_load_config_accepts_local_minimum_resolver_settings(tmp_path: Path) -> 
         ("resolver_peak_duration_min", "0"),
         ("resolver_peak_duration_max", "0"),
         ("resolver_min_scans", "0"),
+        ("parallel_workers", "0"),
+        ("parallel_workers", "-1"),
     ],
 )
 def test_load_config_rejects_invalid_settings(
@@ -294,6 +333,17 @@ def test_load_config_rejects_unknown_resolver_mode(tmp_path: Path) -> None:
         load_config(config_dir)
 
     _assert_error(exc_info, "settings.csv", "resolver_mode", "wavelet")
+
+
+def test_load_config_rejects_unknown_parallel_mode(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"parallel_mode": "thread"})
+    _write_targets(config_dir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "settings.csv", "parallel_mode", "thread")
 
 
 def test_load_config_rejects_peak_duration_min_above_max(tmp_path: Path) -> None:

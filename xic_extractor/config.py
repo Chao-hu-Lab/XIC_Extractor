@@ -68,6 +68,8 @@ class ExtractionConfig:
     rt_prior_library_path: Path | None = None
     emit_score_breakdown: bool = False
     keep_intermediate_csv: bool = False
+    parallel_mode: str = "serial"
+    parallel_workers: int = 1
     config_hash: str = ""
 
 
@@ -118,6 +120,8 @@ class _ParsedSettings:
     rt_prior_library_path: Path | None
     emit_score_breakdown: bool
     keep_intermediate_csv: bool
+    parallel_mode: str
+    parallel_workers: int
 
 
 def migrate_settings_dict(raw: dict[str, str]) -> tuple[dict[str, str], list[str]]:
@@ -346,6 +350,13 @@ def _parse_settings_values(
             "keep_intermediate_csv",
             _setting_value(settings, settings_path, "keep_intermediate_csv"),
         ),
+        parallel_mode=_setting_value(settings, settings_path, "parallel_mode"),
+        parallel_workers=_parse_int(
+            settings_path,
+            None,
+            "parallel_workers",
+            _setting_value(settings, settings_path, "parallel_workers"),
+        ),
     )
 
 
@@ -510,6 +521,22 @@ def _validate_settings_ranges(
             settings["rolling_window_size"],
             "must be >= 1",
         )
+    if parsed.parallel_mode not in {"serial", "process"}:
+        raise _config_error(
+            settings_path,
+            None,
+            "parallel_mode",
+            settings["parallel_mode"],
+            "must be serial or process",
+        )
+    if parsed.parallel_workers < 1:
+        raise _config_error(
+            settings_path,
+            None,
+            "parallel_workers",
+            settings["parallel_workers"],
+            "must be >= 1",
+        )
 
 
 def _build_config(
@@ -545,6 +572,8 @@ def _build_config(
         rt_prior_library_path=parsed.rt_prior_library_path,
         emit_score_breakdown=parsed.emit_score_breakdown,
         keep_intermediate_csv=parsed.keep_intermediate_csv,
+        parallel_mode=parsed.parallel_mode,
+        parallel_workers=parsed.parallel_workers,
         config_hash=config_hash,
     )
 
