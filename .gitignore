@@ -16,6 +16,8 @@ tmp_runtime/
 
 # Output (generated files)
 output/
+!xic_extractor/output/
+!xic_extractor/output/*.py
 local_raw_samples/
 local_validation_raw/
 

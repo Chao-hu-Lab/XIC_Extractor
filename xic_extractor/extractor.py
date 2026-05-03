@@ -13,6 +13,18 @@ from scipy.signal import peak_widths
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.injection_rolling import read_injection_order, rolling_median_rt
 from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
+from xic_extractor.output.schema import (
+    DIAGNOSTIC_HEADERS as _DIAGNOSTIC_FIELDS,
+)
+from xic_extractor.output.schema import (
+    LONG_HEADERS as _LONG_OUTPUT_FIELDS,
+)
+from xic_extractor.output.schema import (
+    MS1_SUFFIXES as _MS1_SUFFIXES,
+)
+from xic_extractor.output.schema import (
+    SCORE_BREAKDOWN_HEADERS as _SCORE_BREAKDOWN_FIELDS,
+)
 from xic_extractor.peak_scoring import (
     ScoringContext,
     candidate_quality_penalty,
@@ -52,43 +64,6 @@ _PAIRED_TARGET_ANCHOR_PEAK_DELTA_MAX_MIN: float = 0.25
 _PAIRED_FALLBACK_ISTD_PEAK_DELTA_MAX_MIN: float = 0.5
 # 非 paired/非拒絕情境下，選出的峰 RT 距 NL anchor 超過此距離時發出警告。
 _ANCHOR_PEAK_DELTA_WARN_MIN: float = 0.5
-
-_MS1_SUFFIXES = ("RT", "Int", "Area", "PeakStart", "PeakEnd", "PeakWidth")
-_DIAGNOSTIC_FIELDS = ("SampleName", "Target", "Issue", "Reason")
-_LONG_OUTPUT_FIELDS = (
-    "SampleName",
-    "Group",
-    "Target",
-    "Role",
-    "ISTD Pair",
-    "RT",
-    "Area",
-    "NL",
-    "Int",
-    "PeakStart",
-    "PeakEnd",
-    "PeakWidth",
-    "Confidence",
-    "Reason",
-)
-_SCORE_BREAKDOWN_FIELDS = (
-    "SampleName",
-    "Target",
-    "symmetry",
-    "local_sn",
-    "nl_support",
-    "rt_prior",
-    "rt_centrality",
-    "noise_shape",
-    "peak_width",
-    "Quality Penalty",
-    "Quality Flags",
-    "Total Severity",
-    "Confidence",
-    "Prior RT",
-    "Prior Source",
-)
-
 
 @dataclass(frozen=True)
 class DiagnosticRecord:
