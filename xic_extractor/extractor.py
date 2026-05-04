@@ -14,7 +14,12 @@ from xic_extractor.extraction.scoring_factory import (
     selected_shape_metrics,
 )
 from xic_extractor.injection_rolling import read_injection_order
-from xic_extractor.neutral_loss import NLResult, check_nl, find_nl_anchor_rt
+from xic_extractor.neutral_loss import (
+    NLResult,
+    check_nl,
+    collect_candidate_ms2_evidence,
+    find_nl_anchor_rt,
+)
 from xic_extractor.output import csv_writers
 from xic_extractor.output.messages import (
     DiagnosticIssue,
@@ -26,6 +31,7 @@ from xic_extractor.peak_scoring import candidate_quality_penalty
 from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
 from xic_extractor.rt_prior_library import LibraryEntry, load_library
 from xic_extractor.signal_processing import (
+    PeakCandidate,
     PeakDetectionResult,
     PeakResult,
     find_peak_and_area,
@@ -554,6 +560,9 @@ def _extract_one_target(
             istd_rt_in_this_sample=istd_rt_in_this_sample,
             paired_istd_fwhm=paired_istd_fwhm,
             nl_result=nl_result,
+            candidate_ms2_evidence_builder=_candidate_ms2_evidence_builder(
+                raw, target, config
+            ),
         )
     if scoring_context_builder is not None:
         peak_result = find_peak_and_area(
@@ -783,6 +792,9 @@ def _recover_istd_peak_with_wider_anchor_window(
             istd_rt_in_this_sample=istd_rt_in_this_sample,
             paired_istd_fwhm=paired_istd_fwhm,
             nl_result=nl_result,
+            candidate_ms2_evidence_builder=_candidate_ms2_evidence_builder(
+                raw, target, config
+            ),
         )
     if scoring_context_builder is not None:
         peak_result = find_peak_and_area(
@@ -849,6 +861,31 @@ def _check_target_nl(
         ms2_precursor_tol_da=config.ms2_precursor_tol_da,
         nl_min_intensity_ratio=config.nl_min_intensity_ratio,
     )
+
+
+def _candidate_ms2_evidence_builder(
+    raw: Any,
+    target: Target,
+    config: ExtractionConfig,
+) -> Callable[[PeakCandidate], Any] | None:
+    if target.neutral_loss_da is None:
+        return None
+    if target.nl_ppm_warn is None or target.nl_ppm_max is None:
+        return None
+
+    def _builder(candidate: PeakCandidate) -> Any:
+        return collect_candidate_ms2_evidence(
+            raw,
+            candidate=candidate,
+            precursor_mz=target.mz,
+            neutral_loss_da=target.neutral_loss_da,
+            nl_ppm_warn=target.nl_ppm_warn,
+            nl_ppm_max=target.nl_ppm_max,
+            ms2_precursor_tol_da=config.ms2_precursor_tol_da,
+            nl_min_intensity_ratio=config.nl_min_intensity_ratio,
+        )
+
+    return _builder
 
 
 def _paired_anchor_mismatch_diagnostic(
