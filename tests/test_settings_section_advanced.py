@@ -68,6 +68,7 @@ def test_advanced_section_contains_required_flags(qtbot) -> None:
         "keep_intermediate_csv",
         "emit_score_breakdown",
         "dirty_matrix_mode",
+        "count_no_ms2_as_detected",
         "rolling_window_size",
         "rt_prior_library_path",
         "injection_order_source",
@@ -100,12 +101,14 @@ def test_advanced_section_uses_compact_rows_for_related_controls(qtbot) -> None:
         section._emit_score_breakdown_checkbox
     )
     dirty_layout, dirty_index = _containing_layout(section._dirty_matrix_mode_checkbox)
+    no_ms2_layout, no_ms2_index = _containing_layout(section._count_no_ms2_checkbox)
     mode_layout, mode_index = _containing_layout(section._parallel_mode_combo)
     workers_layout, workers_index = _containing_layout(section._parallel_workers_spin)
 
     assert _direct_grid_position(section._dirty_matrix_mode_checkbox) is None
-    assert keep_layout is score_layout is dirty_layout
-    assert [keep_index, score_index, dirty_index] == [0, 1, 2]
+    assert _direct_grid_position(section._count_no_ms2_checkbox) is None
+    assert keep_layout is score_layout is dirty_layout is no_ms2_layout
+    assert [keep_index, score_index, dirty_index, no_ms2_index] == [0, 1, 2, 3]
     assert mode_layout is workers_layout
     assert mode_index < workers_index
 
@@ -119,6 +122,7 @@ def test_advanced_section_edits_round_trip_through_get_values(qtbot) -> None:
     section._keep_intermediate_csv_checkbox.setChecked(True)
     section._emit_score_breakdown_checkbox.setChecked(True)
     section._dirty_matrix_mode_checkbox.setChecked(True)
+    section._count_no_ms2_checkbox.setChecked(False)
     section._rolling_window_size_spin.setValue(9)
     section._rt_prior_library_path_edit.setText("C:\\data\\rt_prior.csv")
     section._injection_order_source_edit.setText("C:\\data\\sample_order.csv")
@@ -133,6 +137,7 @@ def test_advanced_section_edits_round_trip_through_get_values(qtbot) -> None:
     assert values["keep_intermediate_csv"] == "true"
     assert values["emit_score_breakdown"] == "true"
     assert values["dirty_matrix_mode"] == "true"
+    assert values["count_no_ms2_as_detected"] == "false"
     assert values["rolling_window_size"] == "9"
     assert values["rt_prior_library_path"] == "C:\\data\\rt_prior.csv"
     assert values["injection_order_source"] == "C:\\data\\sample_order.csv"

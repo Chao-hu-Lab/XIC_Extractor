@@ -105,6 +105,7 @@ _ADVANCED_SETTING_KEYS = (
     "keep_intermediate_csv",
     "emit_score_breakdown",
     "dirty_matrix_mode",
+    "count_no_ms2_as_detected",
     "rolling_window_size",
     "rt_prior_library_path",
     "injection_order_source",
@@ -252,9 +253,6 @@ class SettingsSection(QWidget):
         )
         ms2_layout.addWidget(
             _LabeledSpin("Min intensity", self._nl_min_intensity_ratio_spin)
-        )
-        ms2_layout.addWidget(
-            self._count_no_ms2_checkbox, alignment=Qt.AlignmentFlag.AlignBottom
         )
         ms2_layout.addStretch()
         body_layout.addLayout(ms2_layout, 4, 1, 1, 2)
@@ -531,6 +529,7 @@ class SettingsSection(QWidget):
         debug_flags_layout.addWidget(self._keep_intermediate_csv_checkbox)
         debug_flags_layout.addWidget(self._emit_score_breakdown_checkbox)
         debug_flags_layout.addWidget(self._dirty_matrix_mode_checkbox)
+        debug_flags_layout.addWidget(self._count_no_ms2_checkbox)
         debug_flags_layout.addStretch()
         layout.addLayout(debug_flags_layout, 0, 0, 1, 3)
 
