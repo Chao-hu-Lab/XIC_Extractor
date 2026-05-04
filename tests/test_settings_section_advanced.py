@@ -227,6 +227,7 @@ def test_local_minimum_profile_preserves_cli_valid_large_values(qtbot) -> None:
             "resolver_mode": "local_minimum",
             "resolver_min_search_range_min": "120.0",
             "resolver_min_ratio_top_edge": "120.0",
+            "resolver_peak_duration_min": "120.0",
             "resolver_peak_duration_max": "120.0",
         }
     )
@@ -235,6 +236,7 @@ def test_local_minimum_profile_preserves_cli_valid_large_values(qtbot) -> None:
 
     assert values["resolver_min_search_range_min"] == "120.0"
     assert values["resolver_min_ratio_top_edge"] == "120.0"
+    assert values["resolver_peak_duration_min"] == "120.0"
     assert values["resolver_peak_duration_max"] == "120.0"
 
 

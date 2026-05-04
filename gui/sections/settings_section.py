@@ -616,7 +616,12 @@ class SettingsSection(QWidget):
             _GUI_UNBOUNDED_FLOAT_MAX,
             3,
         )
-        self._set_float_range(self._resolver_peak_duration_min_spin, 0.0, 100.0, 3)
+        self._set_float_range(
+            self._resolver_peak_duration_min_spin,
+            0.0,
+            _GUI_UNBOUNDED_FLOAT_MAX,
+            3,
+        )
         self._set_float_range(
             self._resolver_peak_duration_max_spin,
             0.001,
