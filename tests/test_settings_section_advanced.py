@@ -185,10 +185,10 @@ def test_apply_local_minimum_preset_button_applies_validated_preset(qtbot) -> No
     values = section.get_values()
     assert values["resolver_chrom_threshold"] == "0.05"
     assert values["resolver_min_search_range_min"] == "0.08"
-    assert values["resolver_min_relative_height"] == "0"
+    assert values["resolver_min_relative_height"] == "0.0"
     assert values["resolver_min_ratio_top_edge"] == "1.7"
-    assert values["resolver_peak_duration_min"] == "0"
-    assert values["resolver_peak_duration_max"] == "10"
+    assert values["resolver_peak_duration_min"] == "0.0"
+    assert values["resolver_peak_duration_max"] == "10.0"
 
 
 def test_local_minimum_profile_allows_zero_floor_values(qtbot) -> None:
@@ -203,6 +203,39 @@ def test_local_minimum_profile_allows_zero_floor_values(qtbot) -> None:
     values = section.get_values()
     assert values["resolver_min_relative_height"] == "0"
     assert values["resolver_peak_duration_min"] == "0"
+
+
+def test_local_minimum_profile_rejects_duration_min_above_max(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load({**_canonical_settings(), "resolver_mode": "local_minimum"})
+
+    section._resolver_peak_duration_min_spin.setValue(20.0)
+    section._resolver_peak_duration_max_spin.setValue(10.0)
+
+    assert not section.is_valid()
+
+
+def test_local_minimum_profile_preserves_cli_valid_large_values(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load(
+        {
+            **_canonical_settings(),
+            "resolver_mode": "local_minimum",
+            "resolver_min_search_range_min": "120.0",
+            "resolver_min_ratio_top_edge": "120.0",
+            "resolver_peak_duration_max": "120.0",
+        }
+    )
+
+    values = section.get_values()
+
+    assert values["resolver_min_search_range_min"] == "120.0"
+    assert values["resolver_min_ratio_top_edge"] == "120.0"
+    assert values["resolver_peak_duration_max"] == "120.0"
 
 
 def test_loading_local_minimum_preserves_existing_local_values(qtbot) -> None:

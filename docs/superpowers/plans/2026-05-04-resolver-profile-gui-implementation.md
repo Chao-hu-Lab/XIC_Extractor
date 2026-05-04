@@ -537,7 +537,7 @@ Check:
 - `Peak resolver` selector is visible.
 - `legacy_savgol` shows legacy controls only.
 - `local_minimum` shows local controls only.
-- Switching local minimum applies preset.
+- Clicking `Apply Local Minimum Preset` applies preset.
 - Switching back does not erase saved local values.
 
 ### Task 4.4 — Final broader test

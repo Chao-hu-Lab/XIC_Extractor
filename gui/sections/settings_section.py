@@ -125,16 +125,21 @@ _ADVANCED_SETTING_KEYS = (
     "parallel_workers",
 )
 
+_GUI_UNBOUNDED_FLOAT_MAX = 1e12
+
+_LOCAL_MINIMUM_PRESET_KEYS = (
+    "resolver_chrom_threshold",
+    "resolver_min_search_range_min",
+    "resolver_min_relative_height",
+    "resolver_min_absolute_height",
+    "resolver_min_ratio_top_edge",
+    "resolver_peak_duration_min",
+    "resolver_peak_duration_max",
+    "resolver_min_scans",
+)
 
 _LOCAL_MINIMUM_GUI_PRESET = {
-    "resolver_chrom_threshold": "0.05",
-    "resolver_min_search_range_min": "0.08",
-    "resolver_min_relative_height": "0",
-    "resolver_min_absolute_height": "25.0",
-    "resolver_min_ratio_top_edge": "1.7",
-    "resolver_peak_duration_min": "0",
-    "resolver_peak_duration_max": "10",
-    "resolver_min_scans": "5",
+    key: CANONICAL_SETTINGS_DEFAULTS[key] for key in _LOCAL_MINIMUM_PRESET_KEYS
 }
 
 
@@ -473,6 +478,13 @@ class SettingsSection(QWidget):
         peak_min_prominence_ratio = float(values["peak_min_prominence_ratio"])
         ms2_precursor_tol_da = float(values["ms2_precursor_tol_da"])
         nl_min_intensity_ratio = float(values["nl_min_intensity_ratio"])
+        resolver_min_search_range_min = float(values["resolver_min_search_range_min"])
+        resolver_min_relative_height = float(values["resolver_min_relative_height"])
+        resolver_min_absolute_height = float(values["resolver_min_absolute_height"])
+        resolver_min_ratio_top_edge = float(values["resolver_min_ratio_top_edge"])
+        resolver_peak_duration_min = float(values["resolver_peak_duration_min"])
+        resolver_peak_duration_max = float(values["resolver_peak_duration_max"])
+        resolver_min_scans = int(values["resolver_min_scans"])
         try:
             parallel_workers = int(values["parallel_workers"])
         except ValueError:
@@ -487,6 +499,15 @@ class SettingsSection(QWidget):
             and 0.01 <= peak_min_prominence_ratio <= 0.50
             and ms2_precursor_tol_da > 0
             and 0 < nl_min_intensity_ratio <= 1
+            and values["resolver_mode"] in {"legacy_savgol", "local_minimum"}
+            and resolver_min_search_range_min > 0
+            and 0 <= resolver_min_relative_height <= 1
+            and resolver_min_absolute_height >= 0
+            and resolver_min_ratio_top_edge > 1
+            and resolver_peak_duration_min >= 0
+            and resolver_peak_duration_max > 0
+            and resolver_peak_duration_min <= resolver_peak_duration_max
+            and resolver_min_scans >= 1
             and values["parallel_mode"] in {"serial", "process"}
             and parallel_workers >= 1
         )
@@ -576,12 +597,32 @@ class SettingsSection(QWidget):
         self._resolver_min_scans_spin.setRange(1, 999)
 
         self._set_float_range(self._resolver_chrom_threshold_spin, 0.0, 1.0, 3)
-        self._set_float_range(self._resolver_min_search_range_min_spin, 0.001, 100.0, 3)
+        self._set_float_range(
+            self._resolver_min_search_range_min_spin,
+            0.001,
+            _GUI_UNBOUNDED_FLOAT_MAX,
+            3,
+        )
         self._set_float_range(self._resolver_min_relative_height_spin, 0.0, 1.0, 3)
-        self._set_float_range(self._resolver_min_absolute_height_spin, 0.0, 1e12, 3)
-        self._set_float_range(self._resolver_min_ratio_top_edge_spin, 1.01, 100.0, 3)
+        self._set_float_range(
+            self._resolver_min_absolute_height_spin,
+            0.0,
+            _GUI_UNBOUNDED_FLOAT_MAX,
+            3,
+        )
+        self._set_float_range(
+            self._resolver_min_ratio_top_edge_spin,
+            1.01,
+            _GUI_UNBOUNDED_FLOAT_MAX,
+            3,
+        )
         self._set_float_range(self._resolver_peak_duration_min_spin, 0.0, 100.0, 3)
-        self._set_float_range(self._resolver_peak_duration_max_spin, 0.001, 100.0, 3)
+        self._set_float_range(
+            self._resolver_peak_duration_max_spin,
+            0.001,
+            _GUI_UNBOUNDED_FLOAT_MAX,
+            3,
+        )
         self._set_float_range(self._nl_rt_anchor_search_margin_min_spin, 0.0, 100.0, 3)
         self._set_float_range(self._nl_rt_anchor_half_window_min_spin, 0.0, 100.0, 3)
         self._set_float_range(self._nl_fallback_half_window_min_spin, 0.0, 100.0, 3)
@@ -739,6 +780,7 @@ class SettingsSection(QWidget):
         self._set_dirty(True)
 
     def _apply_local_minimum_preset(self) -> None:
+        self._settings_values.update(_LOCAL_MINIMUM_GUI_PRESET)
         self._resolver_chrom_threshold_spin.setValue(
             float(_LOCAL_MINIMUM_GUI_PRESET["resolver_chrom_threshold"])
         )
