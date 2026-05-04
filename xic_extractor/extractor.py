@@ -283,7 +283,7 @@ def _collect_raw_file_results_process(
     config: ExtractionConfig,
     targets: tuple[Target, ...],
     raw_paths: list[Path],
-    scoring_inputs: ScoringInputs,
+    scoring_inputs: "ScoringInputs",
     *,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
