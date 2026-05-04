@@ -88,6 +88,23 @@ def test_advanced_section_contains_required_flags(qtbot) -> None:
     } <= advanced_keys
 
 
+def test_advanced_section_uses_compact_rows_for_related_controls(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+
+    keep_position = _grid_position(section._keep_intermediate_csv_checkbox)
+    score_position = _grid_position(section._emit_score_breakdown_checkbox)
+    dirty_position = _grid_position(section._dirty_matrix_mode_checkbox)
+    mode_layout, mode_index = _containing_layout(section._parallel_mode_combo)
+    workers_layout, workers_index = _containing_layout(section._parallel_workers_spin)
+
+    assert keep_position[0] == score_position[0] == dirty_position[0]
+    assert [keep_position[1], score_position[1], dirty_position[1]] == [0, 1, 2]
+    assert mode_layout is workers_layout
+    assert mode_index < workers_index
+
+
 def test_advanced_section_edits_round_trip_through_get_values(qtbot) -> None:
     section = SettingsSection()
     qtbot.addWidget(section)
@@ -183,3 +200,30 @@ def test_advanced_section_records_small_numeric_edits(qtbot) -> None:
     values = section.get_values()
 
     assert values["resolver_min_absolute_height"] == "25.001"
+
+
+def _grid_position(widget) -> tuple[int, int, int, int]:
+    layout = widget.parentWidget().layout()
+    index = layout.indexOf(widget)
+    assert index >= 0
+    return layout.getItemPosition(index)
+
+
+def _containing_layout(widget):
+    layout = widget.parentWidget().layout()
+    found = _find_layout_item(layout, widget)
+    assert found is not None
+    return found
+
+
+def _find_layout_item(layout, widget):
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+        if item.widget() is widget:
+            return layout, index
+        nested = item.layout()
+        if nested is not None:
+            found = _find_layout_item(nested, widget)
+            if found is not None:
+                return found
+    return None

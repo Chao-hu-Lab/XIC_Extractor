@@ -523,33 +523,38 @@ class SettingsSection(QWidget):
         layout.setHorizontalSpacing(12)
         layout.setVerticalSpacing(8)
 
-        layout.addWidget(self._keep_intermediate_csv_checkbox, 0, 0, 1, 3)
-        layout.addWidget(self._emit_score_breakdown_checkbox, 1, 0, 1, 3)
-        layout.addWidget(self._dirty_matrix_mode_checkbox, 2, 0, 1, 3)
+        layout.addWidget(self._keep_intermediate_csv_checkbox, 0, 0)
+        layout.addWidget(self._emit_score_breakdown_checkbox, 0, 1)
+        layout.addWidget(self._dirty_matrix_mode_checkbox, 0, 2)
 
-        layout.addWidget(QLabel("Rolling window size"), 3, 0)
-        layout.addWidget(self._rolling_window_size_spin, 3, 1)
+        layout.addWidget(QLabel("Rolling window size"), 1, 0)
+        layout.addWidget(self._rolling_window_size_spin, 1, 1)
 
-        layout.addWidget(QLabel("Parallel mode"), 4, 0)
-        layout.addWidget(self._parallel_mode_combo, 4, 1)
+        parallel_layout = QHBoxLayout()
+        parallel_layout.setContentsMargins(0, 0, 0, 0)
+        parallel_layout.setSpacing(8)
+        parallel_layout.addWidget(QLabel("Mode"))
+        parallel_layout.addWidget(self._parallel_mode_combo)
+        parallel_layout.addWidget(QLabel("Workers"))
+        parallel_layout.addWidget(self._parallel_workers_spin)
+        parallel_layout.addStretch()
+        layout.addWidget(QLabel("Parallel execution"), 2, 0)
+        layout.addLayout(parallel_layout, 2, 1, 1, 2)
 
-        layout.addWidget(QLabel("Parallel workers"), 5, 0)
-        layout.addWidget(self._parallel_workers_spin, 5, 1)
-
-        layout.addWidget(QLabel("RT prior library"), 6, 0)
-        layout.addWidget(self._rt_prior_library_path_edit, 6, 1)
+        layout.addWidget(QLabel("RT prior library"), 3, 0)
+        layout.addWidget(self._rt_prior_library_path_edit, 3, 1)
         layout.addWidget(
-            self._make_file_browse_button(self._rt_prior_library_path_edit), 6, 2
+            self._make_file_browse_button(self._rt_prior_library_path_edit), 3, 2
         )
 
-        layout.addWidget(QLabel("Injection order source"), 7, 0)
-        layout.addWidget(self._injection_order_source_edit, 7, 1)
+        layout.addWidget(QLabel("Injection order source"), 4, 0)
+        layout.addWidget(self._injection_order_source_edit, 4, 1)
         layout.addWidget(
-            self._make_file_browse_button(self._injection_order_source_edit), 7, 2
+            self._make_file_browse_button(self._injection_order_source_edit), 4, 2
         )
 
-        layout.addWidget(QLabel("Resolver mode"), 8, 0)
-        layout.addWidget(self._resolver_mode_combo, 8, 1)
+        layout.addWidget(QLabel("Resolver mode"), 5, 0)
+        layout.addWidget(self._resolver_mode_combo, 5, 1)
 
         resolver_layout = QHBoxLayout()
         resolver_layout.setContentsMargins(0, 0, 0, 0)
@@ -567,7 +572,7 @@ class SettingsSection(QWidget):
             _LabeledSpin("Min abs height", self._resolver_min_absolute_height_spin)
         )
         resolver_layout.addStretch()
-        layout.addLayout(resolver_layout, 9, 0, 1, 3)
+        layout.addLayout(resolver_layout, 6, 0, 1, 3)
 
         resolver_layout_2 = QHBoxLayout()
         resolver_layout_2.setContentsMargins(0, 0, 0, 0)
@@ -585,7 +590,7 @@ class SettingsSection(QWidget):
             _LabeledSpin("Min scans", self._resolver_min_scans_spin)
         )
         resolver_layout_2.addStretch()
-        layout.addLayout(resolver_layout_2, 10, 0, 1, 3)
+        layout.addLayout(resolver_layout_2, 7, 0, 1, 3)
 
         nl_layout = QHBoxLayout()
         nl_layout.setContentsMargins(0, 0, 0, 0)
@@ -600,8 +605,8 @@ class SettingsSection(QWidget):
             _LabeledSpin("NL fallback", self._nl_fallback_half_window_min_spin)
         )
         nl_layout.addStretch()
-        layout.addWidget(QLabel("NL RT windows"), 11, 0)
-        layout.addLayout(nl_layout, 11, 1, 1, 2)
+        layout.addWidget(QLabel("NL RT windows"), 8, 0)
+        layout.addLayout(nl_layout, 8, 1, 1, 2)
 
         layout.setColumnStretch(1, 1)
         self.advanced_section.add_row(body)
