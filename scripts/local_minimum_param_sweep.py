@@ -6,7 +6,9 @@ from pathlib import Path
 from statistics import median
 from typing import Callable, Iterable
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 
@@ -106,6 +108,12 @@ _GRID_VALUES = {
     },
 }
 
+_THIN = Side(style="thin", color="BDBDBD")
+_BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
+_CENTER = Alignment(horizontal="center", vertical="center")
+_HEADER_FILL = PatternFill("solid", fgColor="37474F")
+_FAIL_FILL = PatternFill("solid", fgColor="FFCDD2")
+
 
 def build_parameter_sets(*, grid: str) -> list[ParameterSet]:
     if grid not in _GRID_VALUES:
@@ -161,6 +169,27 @@ def run_sweep(
             )
         )
     return SweepResult(scores=scores)
+
+
+def write_sweep_workbook(output_path: Path, scores: list[ParameterSetScore]) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    workbook = Workbook()
+
+    summary = workbook.active
+    summary.title = "Summary"
+    _write_summary_sheet(summary, scores)
+
+    per_target = workbook.create_sheet("PerTarget")
+    _write_per_target_sheet(per_target, scores)
+
+    failures = workbook.create_sheet("Failures")
+    _write_failures_sheet(failures, scores)
+
+    run_config = workbook.create_sheet("RunConfig")
+    _write_run_config_sheet(run_config, scores)
+
+    workbook.save(output_path)
+    return output_path
 
 
 def score_parameter_set(
@@ -311,6 +340,212 @@ def _cell_text(value: object | None) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _write_summary_sheet(worksheet: Worksheet, scores: list[ParameterSetScore]) -> None:
+    headers = [
+        "Rank",
+        "Name",
+        "GuardrailStatus",
+        "DetectedRows",
+        "ScoredRows",
+        "MissingManualPeaks",
+        "ISTDMisses",
+        "AreaMedianAbsPctError",
+        "AreaWithin10Pct",
+        "AreaWithin20Pct",
+        "LargeAreaMisses",
+        "HeightMedianAbsPctError",
+        "RTMedianAbsDeltaMin",
+        "RTMaxAbsDeltaMin",
+    ]
+    _write_header(worksheet, headers)
+    for rank, score in enumerate(_rank_scores(scores), start=1):
+        _write_row(
+            worksheet,
+            rank + 1,
+            [
+                rank,
+                score.name,
+                "PASS" if _guardrail_passes(score) else "FAIL",
+                score.detected_rows,
+                score.scored_rows,
+                score.missing_manual_peaks,
+                score.istd_misses,
+                score.area_median_abs_pct_error,
+                score.area_within_10pct,
+                score.area_within_20pct,
+                score.large_area_misses,
+                score.height_median_abs_pct_error,
+                score.rt_median_abs_delta_min,
+                score.rt_max_abs_delta_min,
+            ],
+            failed=not _guardrail_passes(score),
+        )
+    _autosize(worksheet, len(headers))
+
+
+def _write_per_target_sheet(
+    worksheet: Worksheet, scores: list[ParameterSetScore]
+) -> None:
+    headers = [
+        "Name",
+        "SampleName",
+        "Target",
+        "ISTD",
+        "ManualRT",
+        "ProgramRT",
+        "RTAbsDeltaMin",
+        "ManualHeight",
+        "ProgramHeight",
+        "HeightAbsPctError",
+        "ManualArea",
+        "ProgramArea",
+        "AreaAbsPctError",
+        "MissingPeak",
+        "ManualShape",
+    ]
+    _write_header(worksheet, headers)
+    row_idx = 2
+    for score in scores:
+        for row in score.per_target_rows:
+            _write_row(
+                worksheet,
+                row_idx,
+                [
+                    row.name,
+                    row.sample_name,
+                    row.target,
+                    row.is_istd,
+                    row.manual_rt,
+                    row.program_rt,
+                    row.rt_abs_delta_min,
+                    row.manual_height,
+                    row.program_height,
+                    row.height_abs_pct_error,
+                    row.manual_area,
+                    row.program_area,
+                    row.area_abs_pct_error,
+                    row.missing_peak,
+                    row.manual_shape,
+                ],
+                failed=_target_row_failed(row),
+            )
+            row_idx += 1
+    _autosize(worksheet, len(headers))
+
+
+def _write_failures_sheet(
+    worksheet: Worksheet, scores: list[ParameterSetScore]
+) -> None:
+    headers = ["Name", "SampleName", "Target", "Issue", "MetricValue", "Limit"]
+    _write_header(worksheet, headers)
+    row_idx = 2
+    for score in scores:
+        for row in score.per_target_rows:
+            for issue, metric_value, limit in _failure_records(row):
+                _write_row(
+                    worksheet,
+                    row_idx,
+                    [score.name, row.sample_name, row.target, issue, metric_value, limit],
+                    failed=True,
+                )
+                row_idx += 1
+    _autosize(worksheet, len(headers))
+
+
+def _write_run_config_sheet(
+    worksheet: Worksheet, scores: list[ParameterSetScore]
+) -> None:
+    headers = ["Name", "Key", "Value"]
+    _write_header(worksheet, headers)
+    row_idx = 2
+    for score in scores:
+        for key, value in sorted(score.settings_overrides.items()):
+            _write_row(worksheet, row_idx, [score.name, key, value], failed=False)
+            row_idx += 1
+    _autosize(worksheet, len(headers))
+
+
+def _rank_scores(scores: list[ParameterSetScore]) -> list[ParameterSetScore]:
+    return sorted(
+        scores,
+        key=lambda score: (
+            not _guardrail_passes(score),
+            score.missing_manual_peaks,
+            _none_last(score.area_median_abs_pct_error),
+            _none_last(score.rt_median_abs_delta_min),
+            score.name,
+        ),
+    )
+
+
+def _guardrail_passes(score: ParameterSetScore) -> bool:
+    return (
+        score.missing_manual_peaks == 0
+        and score.istd_misses == 0
+        and score.large_area_misses == 0
+        and (score.rt_median_abs_delta_min is None or score.rt_median_abs_delta_min <= 0.05)
+        and (score.rt_max_abs_delta_min is None or score.rt_max_abs_delta_min <= 0.20)
+    )
+
+
+def _target_row_failed(row: PerTargetScoreRow) -> bool:
+    return any(_failure_records(row))
+
+
+def _failure_records(row: PerTargetScoreRow) -> list[tuple[str, object, str]]:
+    failures: list[tuple[str, object, str]] = []
+    if row.missing_peak:
+        failures.append(("MISSING_PEAK", "", "manual peak must be detected"))
+    if row.rt_abs_delta_min is not None and row.rt_abs_delta_min > 0.20:
+        failures.append(("RT_MAX_DELTA", row.rt_abs_delta_min, "<=0.20"))
+    if row.area_abs_pct_error is not None and row.area_abs_pct_error > 0.20:
+        failures.append(("AREA_ERROR", row.area_abs_pct_error, "<=0.20"))
+    return failures
+
+
+def _none_last(value: float | None) -> float:
+    return float("inf") if value is None else value
+
+
+def _write_header(worksheet: Worksheet, headers: list[str]) -> None:
+    for col_idx, header in enumerate(headers, start=1):
+        cell = worksheet.cell(row=1, column=col_idx, value=header)
+        cell.font = Font(name="Arial", bold=True, color="FFFFFF")
+        cell.fill = _HEADER_FILL
+        cell.alignment = _CENTER
+        cell.border = _BORDER
+    worksheet.freeze_panes = "A2"
+
+
+def _write_row(
+    worksheet: Worksheet, row_idx: int, values: list[object], *, failed: bool
+) -> None:
+    for col_idx, value in enumerate(values, start=1):
+        cell = worksheet.cell(row=row_idx, column=col_idx, value=value)
+        cell.font = Font(name="Arial")
+        cell.alignment = _CENTER
+        cell.border = _BORDER
+        if failed:
+            cell.fill = _FAIL_FILL
+
+
+def _autosize(worksheet: Worksheet, n_cols: int) -> None:
+    for col_idx in range(1, n_cols + 1):
+        letter = get_column_letter(col_idx)
+        width = max(
+            12,
+            min(
+                60,
+                max(
+                    len(str(worksheet.cell(row=row_idx, column=col_idx).value or ""))
+                    for row_idx in range(1, worksheet.max_row + 1)
+                )
+                + 2,
+            ),
+        )
+        worksheet.column_dimensions[letter].width = width
 
 
 def _program_peak_detected(row: ProgramPeakRow | None) -> bool:

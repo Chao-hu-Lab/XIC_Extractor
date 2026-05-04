@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from scripts.local_minimum_param_sweep import (
     ManualTruthRow,
@@ -10,6 +10,7 @@ from scripts.local_minimum_param_sweep import (
     read_manual_truth,
     run_sweep,
     score_parameter_set,
+    write_sweep_workbook,
 )
 
 
@@ -203,3 +204,34 @@ def test_run_sweep_scores_each_parameter_set_with_injected_runner() -> None:
     ]
     assert result.scores[0].area_median_abs_pct_error == 0.0
     assert result.scores[1].area_median_abs_pct_error == 0.2
+
+
+def test_write_sweep_workbook_contains_required_sheets(tmp_path: Path) -> None:
+    truth = [
+        ManualTruthRow(
+            "DNA",
+            "SampleA",
+            "TargetA",
+            10.0,
+            1000.0,
+            10000.0,
+            1.0,
+            "正常",
+        )
+    ]
+    peaks = [
+        ProgramPeakRow("SampleA", "TargetA", False, 10.01, 1000.0, 10000.0, True)
+    ]
+    score = score_parameter_set(
+        "legacy_savgol",
+        {"resolver_mode": "legacy_savgol"},
+        truth,
+        peaks,
+    )
+    output = tmp_path / "summary.xlsx"
+
+    write_sweep_workbook(output, [score])
+
+    wb = load_workbook(output, read_only=True, data_only=True)
+    assert wb.sheetnames == ["Summary", "PerTarget", "Failures", "RunConfig"]
+    assert wb["Summary"]["A1"].value == "Rank"
