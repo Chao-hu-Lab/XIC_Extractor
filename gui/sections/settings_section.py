@@ -126,6 +126,18 @@ _ADVANCED_SETTING_KEYS = (
 )
 
 
+_LOCAL_MINIMUM_GUI_PRESET = {
+    "resolver_chrom_threshold": "0.05",
+    "resolver_min_search_range_min": "0.08",
+    "resolver_min_relative_height": "0",
+    "resolver_min_absolute_height": "25.0",
+    "resolver_min_ratio_top_edge": "1.7",
+    "resolver_peak_duration_min": "0",
+    "resolver_peak_duration_max": "10",
+    "resolver_min_scans": "5",
+}
+
+
 class SettingsSection(QWidget):
     settings_saved = pyqtSignal()
 
@@ -191,6 +203,11 @@ class SettingsSection(QWidget):
         self._nl_fallback_half_window_min_spin = QDoubleSpinBox()
         self._parallel_mode_combo = QComboBox()
         self._parallel_workers_spin = QSpinBox()
+        self._legacy_resolver_panel = QWidget()
+        self._local_minimum_resolver_panel = QWidget()
+        self._apply_local_minimum_preset_button = QPushButton(
+            "Apply Local Minimum Preset"
+        )
         self._save_button = QPushButton("儲存設定")
         self._save_button.setObjectName("btn_save")
         self._save_button.setVisible(False)
@@ -227,22 +244,8 @@ class SettingsSection(QWidget):
         body_layout.addWidget(self._dll_dir_edit, 2, 1)
         body_layout.addWidget(self._make_browse_button(self._dll_dir_edit), 2, 2)
 
-        body_layout.addWidget(QLabel("Signal processing"), 3, 0)
-        smoothing_layout = QHBoxLayout()
-        smoothing_layout.setContentsMargins(0, 0, 0, 0)
-        smoothing_layout.setSpacing(16)
-        smoothing_layout.addWidget(_LabeledSpin("Window", self._smooth_window_spin))
-        smoothing_layout.addWidget(
-            _LabeledSpin("Polyorder", self._smooth_polyorder_spin)
-        )
-        smoothing_layout.addWidget(
-            _LabeledSpin("Peak height", self._peak_rel_height_spin)
-        )
-        smoothing_layout.addWidget(
-            _LabeledSpin("Prominence", self._peak_min_prominence_ratio_spin)
-        )
-        smoothing_layout.addStretch()
-        body_layout.addLayout(smoothing_layout, 3, 1, 1, 2)
+        body_layout.addWidget(QLabel("Peak resolver"), 3, 0)
+        body_layout.addWidget(self._build_peak_resolver_panel(), 3, 1, 1, 2)
 
         body_layout.addWidget(QLabel("MS2 / NL"), 4, 0)
         ms2_layout = QHBoxLayout()
@@ -270,6 +273,7 @@ class SettingsSection(QWidget):
         card_layout.addLayout(button_row)
 
         self._wire_signals()
+        self._update_resolver_profile_visibility()
 
     def load(self, settings: dict[str, str]) -> bool:
         blockers = [
@@ -338,6 +342,7 @@ class SettingsSection(QWidget):
                 == "true"
             )
             self._load_advanced_values()
+            self._update_resolver_profile_visibility()
         finally:
             del blockers
         self._set_dirty(False)
@@ -492,6 +497,77 @@ class SettingsSection(QWidget):
     def advanced_section_field_keys(self) -> tuple[str, ...]:
         return _ADVANCED_SETTING_KEYS
 
+    def _build_peak_resolver_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        mode_layout = QHBoxLayout()
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        mode_layout.setSpacing(8)
+        mode_layout.addWidget(QLabel("Mode"))
+        mode_layout.addWidget(self._resolver_mode_combo)
+        mode_layout.addStretch()
+        layout.addLayout(mode_layout)
+
+        legacy_layout = QHBoxLayout(self._legacy_resolver_panel)
+        legacy_layout.setContentsMargins(0, 0, 0, 0)
+        legacy_layout.setSpacing(16)
+        legacy_layout.addWidget(_LabeledSpin("Window", self._smooth_window_spin))
+        legacy_layout.addWidget(
+            _LabeledSpin("Polyorder", self._smooth_polyorder_spin)
+        )
+        legacy_layout.addWidget(
+            _LabeledSpin("Peak height", self._peak_rel_height_spin)
+        )
+        legacy_layout.addWidget(
+            _LabeledSpin("Prominence", self._peak_min_prominence_ratio_spin)
+        )
+        legacy_layout.addStretch()
+        layout.addWidget(self._legacy_resolver_panel)
+
+        local_layout = QVBoxLayout(self._local_minimum_resolver_panel)
+        local_layout.setContentsMargins(0, 0, 0, 0)
+        local_layout.setSpacing(8)
+        local_row_1 = QHBoxLayout()
+        local_row_1.setContentsMargins(0, 0, 0, 0)
+        local_row_1.setSpacing(16)
+        local_row_1.addWidget(
+            _LabeledSpin("Chrom threshold", self._resolver_chrom_threshold_spin)
+        )
+        local_row_1.addWidget(
+            _LabeledSpin("Search range", self._resolver_min_search_range_min_spin)
+        )
+        local_row_1.addWidget(
+            _LabeledSpin("Min rel height", self._resolver_min_relative_height_spin)
+        )
+        local_row_1.addWidget(
+            _LabeledSpin("Min abs height", self._resolver_min_absolute_height_spin)
+        )
+        local_row_1.addStretch()
+        local_layout.addLayout(local_row_1)
+
+        local_row_2 = QHBoxLayout()
+        local_row_2.setContentsMargins(0, 0, 0, 0)
+        local_row_2.setSpacing(16)
+        local_row_2.addWidget(
+            _LabeledSpin("Top/edge", self._resolver_min_ratio_top_edge_spin)
+        )
+        local_row_2.addWidget(
+            _LabeledSpin("Min duration", self._resolver_peak_duration_min_spin)
+        )
+        local_row_2.addWidget(
+            _LabeledSpin("Max duration", self._resolver_peak_duration_max_spin)
+        )
+        local_row_2.addWidget(_LabeledSpin("Min scans", self._resolver_min_scans_spin))
+        local_row_2.addWidget(self._apply_local_minimum_preset_button)
+        local_row_2.addStretch()
+        local_layout.addLayout(local_row_2)
+        layout.addWidget(self._local_minimum_resolver_panel)
+
+        return panel
+
     def _configure_advanced_controls(self) -> None:
         self._resolver_mode_combo.addItems(["legacy_savgol", "local_minimum"])
         self._parallel_mode_combo.addItems(["serial", "process"])
@@ -501,10 +577,10 @@ class SettingsSection(QWidget):
 
         self._set_float_range(self._resolver_chrom_threshold_spin, 0.0, 1.0, 3)
         self._set_float_range(self._resolver_min_search_range_min_spin, 0.001, 100.0, 3)
-        self._set_float_range(self._resolver_min_relative_height_spin, 0.001, 1.0, 3)
+        self._set_float_range(self._resolver_min_relative_height_spin, 0.0, 1.0, 3)
         self._set_float_range(self._resolver_min_absolute_height_spin, 0.0, 1e12, 3)
         self._set_float_range(self._resolver_min_ratio_top_edge_spin, 1.01, 100.0, 3)
-        self._set_float_range(self._resolver_peak_duration_min_spin, 0.001, 100.0, 3)
+        self._set_float_range(self._resolver_peak_duration_min_spin, 0.0, 100.0, 3)
         self._set_float_range(self._resolver_peak_duration_max_spin, 0.001, 100.0, 3)
         self._set_float_range(self._nl_rt_anchor_search_margin_min_spin, 0.0, 100.0, 3)
         self._set_float_range(self._nl_rt_anchor_half_window_min_spin, 0.0, 100.0, 3)
@@ -559,45 +635,6 @@ class SettingsSection(QWidget):
             self._make_file_browse_button(self._injection_order_source_edit), 4, 2
         )
 
-        layout.addWidget(QLabel("Resolver mode"), 5, 0)
-        layout.addWidget(self._resolver_mode_combo, 5, 1)
-
-        resolver_layout = QHBoxLayout()
-        resolver_layout.setContentsMargins(0, 0, 0, 0)
-        resolver_layout.setSpacing(16)
-        resolver_layout.addWidget(
-            _LabeledSpin("Chrom threshold", self._resolver_chrom_threshold_spin)
-        )
-        resolver_layout.addWidget(
-            _LabeledSpin("Search range", self._resolver_min_search_range_min_spin)
-        )
-        resolver_layout.addWidget(
-            _LabeledSpin("Min rel height", self._resolver_min_relative_height_spin)
-        )
-        resolver_layout.addWidget(
-            _LabeledSpin("Min abs height", self._resolver_min_absolute_height_spin)
-        )
-        resolver_layout.addStretch()
-        layout.addLayout(resolver_layout, 6, 0, 1, 3)
-
-        resolver_layout_2 = QHBoxLayout()
-        resolver_layout_2.setContentsMargins(0, 0, 0, 0)
-        resolver_layout_2.setSpacing(16)
-        resolver_layout_2.addWidget(
-            _LabeledSpin("Top/edge", self._resolver_min_ratio_top_edge_spin)
-        )
-        resolver_layout_2.addWidget(
-            _LabeledSpin("Min duration", self._resolver_peak_duration_min_spin)
-        )
-        resolver_layout_2.addWidget(
-            _LabeledSpin("Max duration", self._resolver_peak_duration_max_spin)
-        )
-        resolver_layout_2.addWidget(
-            _LabeledSpin("Min scans", self._resolver_min_scans_spin)
-        )
-        resolver_layout_2.addStretch()
-        layout.addLayout(resolver_layout_2, 7, 0, 1, 3)
-
         nl_layout = QHBoxLayout()
         nl_layout.setContentsMargins(0, 0, 0, 0)
         nl_layout.setSpacing(16)
@@ -611,8 +648,8 @@ class SettingsSection(QWidget):
             _LabeledSpin("NL fallback", self._nl_fallback_half_window_min_spin)
         )
         nl_layout.addStretch()
-        layout.addWidget(QLabel("NL RT windows"), 8, 0)
-        layout.addLayout(nl_layout, 8, 1, 1, 2)
+        layout.addWidget(QLabel("NL RT windows"), 5, 0)
+        layout.addLayout(nl_layout, 5, 1, 1, 2)
 
         layout.setColumnStretch(1, 1)
         self.advanced_section.add_row(body)
@@ -692,6 +729,42 @@ class SettingsSection(QWidget):
         spin.setDecimals(decimals)
         spin.setSingleStep(0.01)
 
+    def _update_resolver_profile_visibility(self) -> None:
+        is_local = self._resolver_mode_combo.currentText() == "local_minimum"
+        self._legacy_resolver_panel.setVisible(not is_local)
+        self._local_minimum_resolver_panel.setVisible(is_local)
+
+    def _on_resolver_mode_changed(self, _mode: str) -> None:
+        self._update_resolver_profile_visibility()
+        self._set_dirty(True)
+
+    def _apply_local_minimum_preset(self) -> None:
+        self._resolver_chrom_threshold_spin.setValue(
+            float(_LOCAL_MINIMUM_GUI_PRESET["resolver_chrom_threshold"])
+        )
+        self._resolver_min_search_range_min_spin.setValue(
+            float(_LOCAL_MINIMUM_GUI_PRESET["resolver_min_search_range_min"])
+        )
+        self._resolver_min_relative_height_spin.setValue(
+            float(_LOCAL_MINIMUM_GUI_PRESET["resolver_min_relative_height"])
+        )
+        self._resolver_min_absolute_height_spin.setValue(
+            float(_LOCAL_MINIMUM_GUI_PRESET["resolver_min_absolute_height"])
+        )
+        self._resolver_min_ratio_top_edge_spin.setValue(
+            float(_LOCAL_MINIMUM_GUI_PRESET["resolver_min_ratio_top_edge"])
+        )
+        self._resolver_peak_duration_min_spin.setValue(
+            float(_LOCAL_MINIMUM_GUI_PRESET["resolver_peak_duration_min"])
+        )
+        self._resolver_peak_duration_max_spin.setValue(
+            float(_LOCAL_MINIMUM_GUI_PRESET["resolver_peak_duration_max"])
+        )
+        self._resolver_min_scans_spin.setValue(
+            int(_LOCAL_MINIMUM_GUI_PRESET["resolver_min_scans"])
+        )
+        self._set_dirty(True)
+
     def _wire_signals(self) -> None:
         self._data_dir_edit.textChanged.connect(self._validate_data_dir)
         self._data_dir_edit.textChanged.connect(lambda _: self._set_dirty(True))
@@ -729,7 +802,10 @@ class SettingsSection(QWidget):
         ):
             line_edit.textChanged.connect(lambda _: self._set_dirty(True))
         self._resolver_mode_combo.currentTextChanged.connect(
-            lambda _: self._set_dirty(True)
+            self._on_resolver_mode_changed
+        )
+        self._apply_local_minimum_preset_button.clicked.connect(
+            self._apply_local_minimum_preset
         )
         self._parallel_mode_combo.currentTextChanged.connect(self._on_parallel_mode_changed)
         self._parallel_workers_spin.valueChanged.connect(self._on_parallel_workers_changed)
