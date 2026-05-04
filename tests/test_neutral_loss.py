@@ -3,6 +3,7 @@ from collections.abc import Iterator
 import numpy as np
 import pytest
 
+from xic_extractor import neutral_loss as neutral_loss_module
 from xic_extractor.neutral_loss import check_nl, find_nl_anchor_rt
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
 
@@ -356,6 +357,125 @@ def test_find_nl_anchor_rt_with_reference_breaks_distance_tie_by_base_peak() -> 
     assert anchor_rt == pytest.approx(9.00)
 
 
+def test_candidate_evidence_counts_trigger_inside_peak_region() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.1,
+                masses=[150.0],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.ms2_present is True
+    assert evidence.nl_match is False
+    assert evidence.trigger_scan_count == 1
+    assert evidence.strict_nl_scan_count == 0
+    assert evidence.alignment_source == "region"
+
+
+def test_candidate_evidence_does_not_borrow_trigger_from_other_candidate_region() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.9,
+                masses=[150.0],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.ms2_present is False
+    assert evidence.nl_match is False
+    assert evidence.trigger_scan_count == 0
+    assert evidence.alignment_source == "none"
+
+
+def test_candidate_evidence_uses_apex_fallback_for_sparse_ms2() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.18)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.25,
+                masses=[150.0],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.ms2_present is True
+    assert evidence.nl_match is False
+    assert evidence.trigger_scan_count == 1
+    assert evidence.alignment_source == "apex_fallback"
+
+
+def test_candidate_evidence_reports_strict_nl_match() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.1,
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 5.0)],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.ms2_present is True
+    assert evidence.nl_match is True
+    assert evidence.nl_status == "OK"
+    assert evidence.strict_nl_scan_count == 1
+    assert evidence.best_loss_ppm == pytest.approx(5.0)
+    assert evidence.best_scan_rt == pytest.approx(8.1)
+    assert evidence.best_product_base_ratio == pytest.approx(1.0)
+
+
+def test_candidate_evidence_separates_trigger_from_failed_nl() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=262.156006,
+                rt=8.1,
+                masses=[145.079849],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = neutral_loss_module.collect_candidate_ms2_evidence(
+        raw,
+        candidate=candidate,
+        precursor_mz=261.127276,
+        neutral_loss_da=116.0474,
+        nl_ppm_warn=20.0,
+        nl_ppm_max=50.0,
+        ms2_precursor_tol_da=1.6,
+        nl_min_intensity_ratio=0.01,
+    )
+
+    assert evidence.ms2_present is True
+    assert evidence.nl_match is False
+    assert evidence.nl_status == "NL_FAIL"
+    assert evidence.trigger_scan_count == 1
+    assert evidence.strict_nl_scan_count == 0
+
+
 def _check(raw: "_FakeRaw"):
     return check_nl(
         raw,
@@ -381,6 +501,19 @@ def _anchor(raw: "_FakeRaw", reference_rt: float | None = None) -> float | None:
         ms2_precursor_tol_da=0.5,
         nl_min_intensity_ratio=0.05,
         reference_rt=reference_rt,
+    )
+
+
+def _candidate_evidence(raw: "_FakeRaw", candidate: "_FakeCandidate"):
+    return neutral_loss_module.collect_candidate_ms2_evidence(
+        raw,
+        candidate=candidate,
+        precursor_mz=PRECURSOR_MZ,
+        neutral_loss_da=NEUTRAL_LOSS_DA,
+        nl_ppm_warn=10.0,
+        nl_ppm_max=20.0,
+        ms2_precursor_tol_da=0.5,
+        nl_min_intensity_ratio=0.05,
     )
 
 
@@ -423,3 +556,22 @@ class _FakeRaw:
     def iter_ms2_scans(self, rt_min: float, rt_max: float) -> Iterator[Ms2ScanEvent]:
         self.requested_window = (rt_min, rt_max)
         yield from self.events
+
+
+def _candidate(*, peak_start: float, peak_end: float, apex_rt: float) -> "_FakeCandidate":
+    return _FakeCandidate(
+        peak=_FakePeak(peak_start=peak_start, peak_end=peak_end),
+        selection_apex_rt=apex_rt,
+    )
+
+
+class _FakePeak:
+    def __init__(self, *, peak_start: float, peak_end: float) -> None:
+        self.peak_start = peak_start
+        self.peak_end = peak_end
+
+
+class _FakeCandidate:
+    def __init__(self, *, peak: _FakePeak, selection_apex_rt: float) -> None:
+        self.peak = peak
+        self.selection_apex_rt = selection_apex_rt

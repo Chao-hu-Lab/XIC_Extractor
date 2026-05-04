@@ -7,7 +7,9 @@ import numpy as np
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
 
 NL_DIAGNOSTIC_PPM_FLOOR = 500.0
+CandidateMS2AlignmentSource = Literal["region", "apex_fallback", "none"]
 NLStatus = Literal["OK", "WARN", "NL_FAIL", "NO_MS2"]
+_CANDIDATE_MS2_APEX_FALLBACK_MIN = 0.08
 
 
 class MS2ScanSource(Protocol):
@@ -41,6 +43,19 @@ class MS2ProductEvidence:
     target_product_ppm: float
     observed_loss_da: float
     observed_loss_error_ppm: float
+
+
+@dataclass(frozen=True)
+class CandidateMS2Evidence:
+    ms2_present: bool
+    nl_match: bool
+    nl_status: NLStatus
+    trigger_scan_count: int
+    strict_nl_scan_count: int
+    best_loss_ppm: float | None
+    best_scan_rt: float | None
+    best_product_base_ratio: float | None
+    alignment_source: CandidateMS2AlignmentSource
 
 
 def find_nl_anchor_rt(
@@ -164,6 +179,97 @@ def check_nl(
         valid_ms2_scan_count=valid_count,
         parse_error_count=parse_error_count,
         matched_scan_count=matched_count,
+    )
+
+
+def collect_candidate_ms2_evidence(
+    raw: MS2ScanSource,
+    *,
+    candidate: object,
+    precursor_mz: float,
+    neutral_loss_da: float,
+    nl_ppm_warn: float,
+    nl_ppm_max: float,
+    ms2_precursor_tol_da: float,
+    nl_min_intensity_ratio: float,
+) -> CandidateMS2Evidence:
+    peak = getattr(candidate, "peak")
+    peak_start = float(getattr(peak, "peak_start"))
+    peak_end = float(getattr(peak, "peak_end"))
+    apex_rt = float(getattr(candidate, "selection_apex_rt"))
+    rt_min = max(0.0, min(peak_start, apex_rt) - _CANDIDATE_MS2_APEX_FALLBACK_MIN)
+    rt_max = max(peak_end, apex_rt) + _CANDIDATE_MS2_APEX_FALLBACK_MIN
+    diagnostic_ppm = max(3.0 * nl_ppm_max, NL_DIAGNOSTIC_PPM_FLOOR)
+
+    trigger_scan_count = 0
+    strict_nl_scan_count = 0
+    best_evidence: MS2ProductEvidence | None = None
+    region_trigger_seen = False
+    fallback_trigger_seen = False
+
+    for event in raw.iter_ms2_scans(rt_min, rt_max):
+        if event.parse_error is not None or event.scan is None:
+            continue
+        scan = event.scan
+        if abs(scan.precursor_mz - precursor_mz) > ms2_precursor_tol_da:
+            continue
+
+        inside_region = peak_start <= scan.rt <= peak_end
+        near_apex = abs(scan.rt - apex_rt) <= _CANDIDATE_MS2_APEX_FALLBACK_MIN
+        if not inside_region and not near_apex:
+            continue
+
+        trigger_scan_count += 1
+        region_trigger_seen = region_trigger_seen or inside_region
+        fallback_trigger_seen = fallback_trigger_seen or (not inside_region and near_apex)
+
+        evidence = _best_product_evidence(
+            scan,
+            target_precursor_mz=precursor_mz,
+            neutral_loss_da=neutral_loss_da,
+            nl_ppm_max=nl_ppm_max,
+            min_intensity_ratio=nl_min_intensity_ratio,
+            diagnostic_ppm=diagnostic_ppm,
+        )
+        if evidence is None:
+            continue
+        if evidence.observed_loss_error_ppm <= nl_ppm_max:
+            strict_nl_scan_count += 1
+        if (
+            best_evidence is None
+            or evidence.observed_loss_error_ppm
+            < best_evidence.observed_loss_error_ppm
+        ):
+            best_evidence = evidence
+
+    best_loss_ppm = (
+        best_evidence.observed_loss_error_ppm if best_evidence is not None else None
+    )
+    nl_status = _classify_nl_result(
+        matched_scan_count=trigger_scan_count,
+        best_ppm=best_loss_ppm,
+        nl_ppm_warn=nl_ppm_warn,
+        nl_ppm_max=nl_ppm_max,
+    )
+    if region_trigger_seen:
+        alignment_source: CandidateMS2AlignmentSource = "region"
+    elif fallback_trigger_seen:
+        alignment_source = "apex_fallback"
+    else:
+        alignment_source = "none"
+
+    return CandidateMS2Evidence(
+        ms2_present=trigger_scan_count > 0,
+        nl_match=nl_status in {"OK", "WARN"},
+        nl_status=nl_status,
+        trigger_scan_count=trigger_scan_count,
+        strict_nl_scan_count=strict_nl_scan_count,
+        best_loss_ppm=best_loss_ppm,
+        best_scan_rt=best_evidence.scan_rt if best_evidence is not None else None,
+        best_product_base_ratio=(
+            best_evidence.product_base_ratio if best_evidence is not None else None
+        ),
+        alignment_source=alignment_source,
     )
 
 
