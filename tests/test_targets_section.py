@@ -40,6 +40,13 @@ def test_load_row_count(qtbot):
     assert section._table.rowCount() == 2
 
 
+def test_targets_table_keeps_readable_minimum_height(qtbot):
+    section = TargetsSection()
+    qtbot.addWidget(section)
+
+    assert section._table.minimumHeight() >= 260
+
+
 def test_get_targets_round_trips(qtbot):
     section = TargetsSection()
     qtbot.addWidget(section)
