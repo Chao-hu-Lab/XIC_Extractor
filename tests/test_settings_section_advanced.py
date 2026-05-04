@@ -191,6 +191,20 @@ def test_apply_local_minimum_preset_button_applies_validated_preset(qtbot) -> No
     assert values["resolver_peak_duration_max"] == "10"
 
 
+def test_local_minimum_profile_allows_zero_floor_values(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load({**_canonical_settings(), "resolver_mode": "local_minimum"})
+
+    section._resolver_min_relative_height_spin.setValue(0.0)
+    section._resolver_peak_duration_min_spin.setValue(0.0)
+
+    values = section.get_values()
+    assert values["resolver_min_relative_height"] == "0"
+    assert values["resolver_peak_duration_min"] == "0"
+
+
 def test_loading_local_minimum_preserves_existing_local_values(qtbot) -> None:
     section = SettingsSection()
     qtbot.addWidget(section)
