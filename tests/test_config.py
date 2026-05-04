@@ -109,12 +109,12 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.count_no_ms2_as_detected is False
     assert config.resolver_mode == "legacy_savgol"
     assert config.resolver_chrom_threshold == pytest.approx(0.05)
-    assert config.resolver_min_search_range_min == pytest.approx(0.04)
-    assert config.resolver_min_relative_height == pytest.approx(0.05)
+    assert config.resolver_min_search_range_min == pytest.approx(0.08)
+    assert config.resolver_min_relative_height == pytest.approx(0.0)
     assert config.resolver_min_absolute_height == pytest.approx(25.0)
-    assert config.resolver_min_ratio_top_edge == pytest.approx(1.3)
-    assert config.resolver_peak_duration_min == pytest.approx(0.03)
-    assert config.resolver_peak_duration_max == pytest.approx(1.00)
+    assert config.resolver_min_ratio_top_edge == pytest.approx(1.7)
+    assert config.resolver_peak_duration_min == pytest.approx(0.0)
+    assert config.resolver_peak_duration_max == pytest.approx(10.0)
     assert config.resolver_min_scans == 5
     assert config.parallel_mode == "serial"
     assert config.parallel_workers == 1
@@ -278,6 +278,26 @@ def test_load_config_accepts_local_minimum_resolver_settings(tmp_path: Path) -> 
     assert config.resolver_min_scans == 9
 
 
+def test_load_config_accepts_zero_local_minimum_floor_values(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(
+        config_dir,
+        {
+            "resolver_mode": "local_minimum",
+            "resolver_min_relative_height": "0.0",
+            "resolver_peak_duration_min": "0.0",
+            "resolver_peak_duration_max": "10.0",
+        },
+    )
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.resolver_min_relative_height == pytest.approx(0.0)
+    assert config.resolver_peak_duration_min == pytest.approx(0.0)
+    assert config.resolver_peak_duration_max == pytest.approx(10.0)
+
+
 def test_load_config_accepts_process_parallel_settings(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     _write_settings(
@@ -300,6 +320,17 @@ def test_canonical_settings_defaults_include_parallel_settings() -> None:
     assert CANONICAL_SETTINGS_DEFAULTS["parallel_workers"] == "1"
 
 
+def test_canonical_settings_defaults_include_local_minimum_preset() -> None:
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_chrom_threshold"] == "0.05"
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_search_range_min"] == "0.08"
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_relative_height"] == "0.0"
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_absolute_height"] == "25.0"
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_ratio_top_edge"] == "1.7"
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_min"] == "0.0"
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_max"] == "10.0"
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_scans"] == "5"
+
+
 def test_settings_example_includes_parallel_settings() -> None:
     example_path = Path("config/settings.example.csv")
 
@@ -308,6 +339,22 @@ def test_settings_example_includes_parallel_settings() -> None:
 
     assert rows["parallel_mode"] == "serial"
     assert rows["parallel_workers"] == "1"
+
+
+def test_settings_example_includes_local_minimum_preset() -> None:
+    example_path = Path("config/settings.example.csv")
+
+    with example_path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = {row["key"]: row["value"] for row in csv.DictReader(handle)}
+
+    assert rows["resolver_chrom_threshold"] == "0.05"
+    assert rows["resolver_min_search_range_min"] == "0.08"
+    assert rows["resolver_min_relative_height"] == "0.0"
+    assert rows["resolver_min_absolute_height"] == "25.0"
+    assert rows["resolver_min_ratio_top_edge"] == "1.7"
+    assert rows["resolver_peak_duration_min"] == "0.0"
+    assert rows["resolver_peak_duration_max"] == "10.0"
+    assert rows["resolver_min_scans"] == "5"
 
 
 @pytest.mark.parametrize(
@@ -333,11 +380,11 @@ def test_settings_example_includes_parallel_settings() -> None:
         ("resolver_chrom_threshold", "-0.01"),
         ("resolver_chrom_threshold", "1.01"),
         ("resolver_min_search_range_min", "0"),
-        ("resolver_min_relative_height", "0"),
+        ("resolver_min_relative_height", "-0.01"),
         ("resolver_min_relative_height", "1.1"),
         ("resolver_min_absolute_height", "-1"),
         ("resolver_min_ratio_top_edge", "1.0"),
-        ("resolver_peak_duration_min", "0"),
+        ("resolver_peak_duration_min", "-0.01"),
         ("resolver_peak_duration_max", "0"),
         ("resolver_min_scans", "0"),
         ("parallel_workers", "0"),

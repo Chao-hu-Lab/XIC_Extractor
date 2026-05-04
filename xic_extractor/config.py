@@ -52,12 +52,12 @@ class ExtractionConfig:
     nl_min_intensity_ratio: float
     resolver_mode: str = "legacy_savgol"
     resolver_chrom_threshold: float = 0.05
-    resolver_min_search_range_min: float = 0.04
-    resolver_min_relative_height: float = 0.05
+    resolver_min_search_range_min: float = 0.08
+    resolver_min_relative_height: float = 0.0
     resolver_min_absolute_height: float = 25.0
-    resolver_min_ratio_top_edge: float = 1.3
-    resolver_peak_duration_min: float = 0.03
-    resolver_peak_duration_max: float = 1.00
+    resolver_min_ratio_top_edge: float = 1.7
+    resolver_peak_duration_min: float = 0.0
+    resolver_peak_duration_max: float = 10.0
     resolver_min_scans: int = 5
     count_no_ms2_as_detected: bool = False
     nl_rt_anchor_search_margin_min: float = 2.0
@@ -483,13 +483,13 @@ def _validate_settings_ranges(
             settings["resolver_min_search_range_min"],
             "must be > 0",
         )
-    if not 0 < parsed.resolver_min_relative_height <= 1:
+    if not 0 <= parsed.resolver_min_relative_height <= 1:
         raise _config_error(
             settings_path,
             None,
             "resolver_min_relative_height",
             settings["resolver_min_relative_height"],
-            "must be > 0 and <= 1",
+            "must be >= 0 and <= 1",
         )
     if parsed.resolver_min_absolute_height < 0:
         raise _config_error(
@@ -507,13 +507,13 @@ def _validate_settings_ranges(
             settings["resolver_min_ratio_top_edge"],
             "must be > 1",
         )
-    if parsed.resolver_peak_duration_min <= 0:
+    if parsed.resolver_peak_duration_min < 0:
         raise _config_error(
             settings_path,
             None,
             "resolver_peak_duration_min",
             settings["resolver_peak_duration_min"],
-            "must be > 0",
+            "must be >= 0",
         )
     if parsed.resolver_peak_duration_max <= 0:
         raise _config_error(

@@ -56,6 +56,7 @@ _DISPLAY_TO_VALUE = {d: v for v, d in _NL_PRESETS}
 _DEFAULT_PPM = "20"
 _DEFAULT_NL_PPM_WARN = "20"
 _DEFAULT_NL_PPM_MAX = "50"
+_TARGETS_TABLE_MIN_HEIGHT = 260
 
 
 class _NoScrollComboBox(QComboBox):
@@ -135,6 +136,7 @@ class TargetsSection(QWidget):
         self._table.setColumnWidth(_COL_PPM, 70)
         self._table.setColumnWidth(_COL_NL, 150)
         self._table.setColumnWidth(_COL_DEL, 60)
+        self._table.setMinimumHeight(_TARGETS_TABLE_MIN_HEIGHT)
         card_layout.addWidget(self._table)
 
         self._table.itemChanged.connect(self._on_item_changed)
