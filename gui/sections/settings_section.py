@@ -523,9 +523,14 @@ class SettingsSection(QWidget):
         layout.setHorizontalSpacing(12)
         layout.setVerticalSpacing(8)
 
-        layout.addWidget(self._keep_intermediate_csv_checkbox, 0, 0)
-        layout.addWidget(self._emit_score_breakdown_checkbox, 0, 1)
-        layout.addWidget(self._dirty_matrix_mode_checkbox, 0, 2)
+        debug_flags_layout = QHBoxLayout()
+        debug_flags_layout.setContentsMargins(0, 0, 0, 0)
+        debug_flags_layout.setSpacing(16)
+        debug_flags_layout.addWidget(self._keep_intermediate_csv_checkbox)
+        debug_flags_layout.addWidget(self._emit_score_breakdown_checkbox)
+        debug_flags_layout.addWidget(self._dirty_matrix_mode_checkbox)
+        debug_flags_layout.addStretch()
+        layout.addLayout(debug_flags_layout, 0, 0, 1, 3)
 
         layout.addWidget(QLabel("Rolling window size"), 1, 0)
         layout.addWidget(self._rolling_window_size_spin, 1, 1)

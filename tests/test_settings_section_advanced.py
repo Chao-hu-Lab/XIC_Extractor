@@ -93,14 +93,19 @@ def test_advanced_section_uses_compact_rows_for_related_controls(qtbot) -> None:
     qtbot.addWidget(section)
     section.show()
 
-    keep_position = _grid_position(section._keep_intermediate_csv_checkbox)
-    score_position = _grid_position(section._emit_score_breakdown_checkbox)
-    dirty_position = _grid_position(section._dirty_matrix_mode_checkbox)
+    keep_layout, keep_index = _containing_layout(
+        section._keep_intermediate_csv_checkbox
+    )
+    score_layout, score_index = _containing_layout(
+        section._emit_score_breakdown_checkbox
+    )
+    dirty_layout, dirty_index = _containing_layout(section._dirty_matrix_mode_checkbox)
     mode_layout, mode_index = _containing_layout(section._parallel_mode_combo)
     workers_layout, workers_index = _containing_layout(section._parallel_workers_spin)
 
-    assert keep_position[0] == score_position[0] == dirty_position[0]
-    assert [keep_position[1], score_position[1], dirty_position[1]] == [0, 1, 2]
+    assert _direct_grid_position(section._dirty_matrix_mode_checkbox) is None
+    assert keep_layout is score_layout is dirty_layout
+    assert [keep_index, score_index, dirty_index] == [0, 1, 2]
     assert mode_layout is workers_layout
     assert mode_index < workers_index
 
@@ -206,6 +211,14 @@ def _grid_position(widget) -> tuple[int, int, int, int]:
     layout = widget.parentWidget().layout()
     index = layout.indexOf(widget)
     assert index >= 0
+    return layout.getItemPosition(index)
+
+
+def _direct_grid_position(widget) -> tuple[int, int, int, int] | None:
+    layout = widget.parentWidget().layout()
+    index = layout.indexOf(widget)
+    if index < 0:
+        return None
     return layout.getItemPosition(index)
 
 
