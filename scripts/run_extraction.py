@@ -1,4 +1,5 @@
 import argparse
+import multiprocessing
 import sys
 from collections.abc import Sequence
 from dataclasses import replace
@@ -12,15 +13,27 @@ from xic_extractor.raw_reader import RawReaderError
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    multiprocessing.freeze_support()
     args = _parse_args(argv)
     base_dir = args.base_dir.resolve()
     try:
-        config, targets = load_config(base_dir / "config")
+        settings_overrides = {}
         if args.data_dir is not None:
             data_dir = args.data_dir.resolve()
             if not data_dir.is_dir():
                 raise ConfigError(f"{data_dir}: data_dir override must be a directory")
-            config = replace(config, data_dir=data_dir)
+            settings_overrides["data_dir"] = str(data_dir)
+        if settings_overrides:
+            config, targets = load_config(
+                base_dir / "config",
+                settings_overrides=settings_overrides,
+            )
+        else:
+            config, targets = load_config(base_dir / "config")
+        if args.parallel_mode is not None:
+            config = replace(config, parallel_mode=args.parallel_mode)
+        if args.parallel_workers is not None:
+            config = replace(config, parallel_workers=args.parallel_workers)
         run_config = (
             replace(config, keep_intermediate_csv=True)
             if args.skip_excel
@@ -78,7 +91,26 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Run Excel conversion after writing CSV outputs; this is the default.",
     )
+    parser.add_argument(
+        "--parallel-mode",
+        choices=("serial", "process"),
+        default=None,
+        help="Override settings.csv parallel_mode.",
+    )
+    parser.add_argument(
+        "--parallel-workers",
+        type=_positive_int,
+        default=None,
+        help="Override settings.csv parallel_workers.",
+    )
     return parser.parse_args(argv)
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("parallel-workers must be >= 1")
+    return parsed
 
 
 def _print_progress(current: int, total: int, filename: str) -> None:

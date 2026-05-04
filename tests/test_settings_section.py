@@ -30,6 +30,8 @@ def _canonical_settings() -> dict[str, str]:
         "nl_rt_anchor_search_margin_min": "2.0",
         "nl_rt_anchor_half_window_min": "1.0",
         "nl_fallback_half_window_min": "2.0",
+        "parallel_mode": "serial",
+        "parallel_workers": "1",
     }
 
 
@@ -48,6 +50,8 @@ def test_settings_section_saves_canonical_keys_after_canonical_load(qtbot) -> No
     assert values["ms2_precursor_tol_da"] == "0.4"
     assert values["nl_min_intensity_ratio"] == "0.02"
     assert values["count_no_ms2_as_detected"] == "true"
+    assert values["parallel_mode"] == "serial"
+    assert values["parallel_workers"] == "1"
     assert "smooth_points" not in values
     assert "smooth_sigma" not in values
 
@@ -113,3 +117,21 @@ def test_settings_section_numeric_rules_do_not_require_existing_paths(qtbot) -> 
     section._smooth_window_spin.setValue(5)
     section._smooth_polyorder_spin.setValue(5)
     assert not section.is_valid()
+
+
+def test_settings_section_rejects_invalid_loaded_parallel_settings(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+
+    section.load(
+        {
+            **_canonical_settings(),
+            "parallel_mode": "proces",
+            "parallel_workers": "0",
+        }
+    )
+
+    assert not section.is_valid()
+    values = section.get_values()
+    assert values["parallel_mode"] == "proces"
+    assert values["parallel_workers"] == "0"

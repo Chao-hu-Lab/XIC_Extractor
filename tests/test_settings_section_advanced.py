@@ -1,6 +1,7 @@
 from PyQt6.QtCore import Qt
 
 from gui.sections.settings_section import SettingsSection
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
 
 def _canonical_settings() -> dict[str, str]:
@@ -32,6 +33,8 @@ def _canonical_settings() -> dict[str, str]:
         "nl_rt_anchor_search_margin_min": "2.0",
         "nl_rt_anchor_half_window_min": "1.0",
         "nl_fallback_half_window_min": "2.0",
+        "parallel_mode": "serial",
+        "parallel_workers": "1",
     }
 
 
@@ -65,6 +68,7 @@ def test_advanced_section_contains_required_flags(qtbot) -> None:
         "keep_intermediate_csv",
         "emit_score_breakdown",
         "dirty_matrix_mode",
+        "count_no_ms2_as_detected",
         "rolling_window_size",
         "rt_prior_library_path",
         "injection_order_source",
@@ -80,7 +84,33 @@ def test_advanced_section_contains_required_flags(qtbot) -> None:
         "nl_rt_anchor_search_margin_min",
         "nl_rt_anchor_half_window_min",
         "nl_fallback_half_window_min",
+        "parallel_mode",
+        "parallel_workers",
     } <= advanced_keys
+
+
+def test_advanced_section_uses_compact_rows_for_related_controls(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+
+    keep_layout, keep_index = _containing_layout(
+        section._keep_intermediate_csv_checkbox
+    )
+    score_layout, score_index = _containing_layout(
+        section._emit_score_breakdown_checkbox
+    )
+    dirty_layout, dirty_index = _containing_layout(section._dirty_matrix_mode_checkbox)
+    no_ms2_layout, no_ms2_index = _containing_layout(section._count_no_ms2_checkbox)
+    mode_layout, mode_index = _containing_layout(section._parallel_mode_combo)
+    workers_layout, workers_index = _containing_layout(section._parallel_workers_spin)
+
+    assert _direct_grid_position(section._dirty_matrix_mode_checkbox) is None
+    assert _direct_grid_position(section._count_no_ms2_checkbox) is None
+    assert keep_layout is score_layout is dirty_layout is no_ms2_layout
+    assert [keep_index, score_index, dirty_index, no_ms2_index] == [0, 1, 2, 3]
+    assert mode_layout is workers_layout
+    assert mode_index < workers_index
 
 
 def test_advanced_section_edits_round_trip_through_get_values(qtbot) -> None:
@@ -92,24 +122,30 @@ def test_advanced_section_edits_round_trip_through_get_values(qtbot) -> None:
     section._keep_intermediate_csv_checkbox.setChecked(True)
     section._emit_score_breakdown_checkbox.setChecked(True)
     section._dirty_matrix_mode_checkbox.setChecked(True)
+    section._count_no_ms2_checkbox.setChecked(False)
     section._rolling_window_size_spin.setValue(9)
     section._rt_prior_library_path_edit.setText("C:\\data\\rt_prior.csv")
     section._injection_order_source_edit.setText("C:\\data\\sample_order.csv")
     section._resolver_mode_combo.setCurrentText("local_minimum")
     section._resolver_min_absolute_height_spin.setValue(80.0)
     section._nl_rt_anchor_half_window_min_spin.setValue(0.75)
+    section._parallel_mode_combo.setCurrentText("process")
+    section._parallel_workers_spin.setValue(4)
 
     values = section.get_values()
 
     assert values["keep_intermediate_csv"] == "true"
     assert values["emit_score_breakdown"] == "true"
     assert values["dirty_matrix_mode"] == "true"
+    assert values["count_no_ms2_as_detected"] == "false"
     assert values["rolling_window_size"] == "9"
     assert values["rt_prior_library_path"] == "C:\\data\\rt_prior.csv"
     assert values["injection_order_source"] == "C:\\data\\sample_order.csv"
     assert values["resolver_mode"] == "local_minimum"
     assert values["resolver_min_absolute_height"] == "80"
     assert values["nl_rt_anchor_half_window_min"] == "0.75"
+    assert values["parallel_mode"] == "process"
+    assert values["parallel_workers"] == "4"
 
 
 def test_advanced_section_preserves_loaded_strings_without_edits(qtbot) -> None:
@@ -123,6 +159,44 @@ def test_advanced_section_preserves_loaded_strings_without_edits(qtbot) -> None:
     assert values["resolver_min_absolute_height"] == "25.0"
     assert values["resolver_peak_duration_max"] == "1.00"
     assert values["nl_rt_anchor_search_margin_min"] == "2.0"
+    assert values["parallel_mode"] == "serial"
+    assert values["parallel_workers"] == "1"
+
+
+def test_parallel_defaults_match_canonical_settings_defaults(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load(
+        {
+            key: value
+            for key, value in _canonical_settings().items()
+            if key not in {"parallel_mode", "parallel_workers"}
+        }
+    )
+
+    values = section.get_values()
+
+    assert values["parallel_mode"] == CANONICAL_SETTINGS_DEFAULTS["parallel_mode"]
+    assert values["parallel_workers"] == CANONICAL_SETTINGS_DEFAULTS["parallel_workers"]
+
+
+def test_parallel_loaded_values_round_trip_through_get_values(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load(
+        {
+            **_canonical_settings(),
+            "parallel_mode": "process",
+            "parallel_workers": "4",
+        }
+    )
+
+    values = section.get_values()
+
+    assert values["parallel_mode"] == "process"
+    assert values["parallel_workers"] == "4"
 
 
 def test_advanced_section_records_small_numeric_edits(qtbot) -> None:
@@ -136,3 +210,38 @@ def test_advanced_section_records_small_numeric_edits(qtbot) -> None:
     values = section.get_values()
 
     assert values["resolver_min_absolute_height"] == "25.001"
+
+
+def _grid_position(widget) -> tuple[int, int, int, int]:
+    layout = widget.parentWidget().layout()
+    index = layout.indexOf(widget)
+    assert index >= 0
+    return layout.getItemPosition(index)
+
+
+def _direct_grid_position(widget) -> tuple[int, int, int, int] | None:
+    layout = widget.parentWidget().layout()
+    index = layout.indexOf(widget)
+    if index < 0:
+        return None
+    return layout.getItemPosition(index)
+
+
+def _containing_layout(widget):
+    layout = widget.parentWidget().layout()
+    found = _find_layout_item(layout, widget)
+    assert found is not None
+    return found
+
+
+def _find_layout_item(layout, widget):
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+        if item.widget() is widget:
+            return layout, index
+        nested = item.layout()
+        if nested is not None:
+            found = _find_layout_item(nested, widget)
+            if found is not None:
+                return found
+    return None

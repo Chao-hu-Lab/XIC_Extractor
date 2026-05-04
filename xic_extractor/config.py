@@ -1,5 +1,6 @@
 import csv
 import hashlib
+import io
 import logging
 import math
 from collections.abc import Sequence
@@ -68,6 +69,8 @@ class ExtractionConfig:
     rt_prior_library_path: Path | None = None
     emit_score_breakdown: bool = False
     keep_intermediate_csv: bool = False
+    parallel_mode: str = "serial"
+    parallel_workers: int = 1
     config_hash: str = ""
 
 
@@ -118,6 +121,8 @@ class _ParsedSettings:
     rt_prior_library_path: Path | None
     emit_score_breakdown: bool
     keep_intermediate_csv: bool
+    parallel_mode: str
+    parallel_workers: int
 
 
 def migrate_settings_dict(raw: dict[str, str]) -> tuple[dict[str, str], list[str]]:
@@ -149,11 +154,15 @@ def migrate_settings_dict(raw: dict[str, str]) -> tuple[dict[str, str], list[str
     return migrated, warnings
 
 
-def load_config(config_dir: Path) -> tuple[ExtractionConfig, list[Target]]:
-    settings_path = config_dir / "settings.csv"
-    targets_path = config_dir / "targets.csv"
+def load_config(
+    config_dir: Path, *, settings_overrides: dict[str, str] | None = None
+) -> tuple[ExtractionConfig, list[Target]]:
+    settings_path = _config_input_path(config_dir, "settings")
+    targets_path = _config_input_path(config_dir, "targets")
 
     raw_settings = _read_settings(settings_path)
+    if settings_overrides:
+        raw_settings = {**raw_settings, **settings_overrides}
     migrated, warnings = migrate_settings_dict(raw_settings)
     for warning in warnings:
         LOGGER.warning(warning)
@@ -161,14 +170,24 @@ def load_config(config_dir: Path) -> tuple[ExtractionConfig, list[Target]]:
     output_dir = config_dir.parent / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    config_hash = (
-        compute_config_hash(targets_path, settings_path)
-        if targets_path.exists()
-        else ""
+    config_hash = _compute_config_hash(
+        targets_path,
+        settings_path,
+        settings_overrides=settings_overrides,
     )
     config = _validate_settings(migrated, settings_path, output_dir, config_hash)
     targets = _read_targets(targets_path)
     return config, targets
+
+
+def _config_input_path(config_dir: Path, name: str) -> Path:
+    runtime_path = config_dir / f"{name}.csv"
+    if runtime_path.exists():
+        return runtime_path
+    example_path = config_dir / f"{name}.example.csv"
+    if example_path.exists():
+        return example_path
+    return runtime_path
 
 
 def _read_settings(path: Path) -> dict[str, str]:
@@ -182,6 +201,55 @@ def _read_settings(path: Path) -> dict[str, str]:
             for row in rows
             if str(row.get("key", "")).strip()
         }
+
+
+def _compute_config_hash(
+    targets_path: Path,
+    settings_path: Path,
+    *,
+    settings_overrides: dict[str, str] | None,
+) -> str:
+    if not targets_path.exists():
+        return ""
+    if not settings_overrides:
+        return compute_config_hash(targets_path, settings_path)
+
+    digest = hashlib.sha256()
+    digest.update(targets_path.read_bytes())
+    digest.update(_settings_csv_bytes_with_overrides(settings_path, settings_overrides))
+    return digest.hexdigest()[:8]
+
+
+def _settings_csv_bytes_with_overrides(
+    settings_path: Path, settings_overrides: dict[str, str]
+) -> bytes:
+    with settings_path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+
+    overridden_keys: set[str] = set()
+    for row in rows:
+        key = str(row.get("key", "")).strip()
+        if key in settings_overrides:
+            row["value"] = settings_overrides[key]
+            overridden_keys.add(key)
+
+    for key, value in settings_overrides.items():
+        if key in overridden_keys:
+            continue
+        row = {field: "" for field in fieldnames}
+        row["key"] = key
+        row["value"] = value
+        if "description" in row:
+            row["description"] = key
+        rows.append(row)
+
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue().encode("utf-8-sig")
 
 
 def _validate_settings(
@@ -345,6 +413,13 @@ def _parse_settings_values(
             None,
             "keep_intermediate_csv",
             _setting_value(settings, settings_path, "keep_intermediate_csv"),
+        ),
+        parallel_mode=_setting_value(settings, settings_path, "parallel_mode"),
+        parallel_workers=_parse_int(
+            settings_path,
+            None,
+            "parallel_workers",
+            _setting_value(settings, settings_path, "parallel_workers"),
         ),
     )
 
@@ -510,6 +585,22 @@ def _validate_settings_ranges(
             settings["rolling_window_size"],
             "must be >= 1",
         )
+    if parsed.parallel_mode not in {"serial", "process"}:
+        raise _config_error(
+            settings_path,
+            None,
+            "parallel_mode",
+            settings["parallel_mode"],
+            "must be serial or process",
+        )
+    if parsed.parallel_workers < 1:
+        raise _config_error(
+            settings_path,
+            None,
+            "parallel_workers",
+            settings["parallel_workers"],
+            "must be >= 1",
+        )
 
 
 def _build_config(
@@ -545,6 +636,8 @@ def _build_config(
         rt_prior_library_path=parsed.rt_prior_library_path,
         emit_score_breakdown=parsed.emit_score_breakdown,
         keep_intermediate_csv=parsed.keep_intermediate_csv,
+        parallel_mode=parsed.parallel_mode,
+        parallel_workers=parsed.parallel_workers,
         config_hash=config_hash,
     )
 

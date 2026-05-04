@@ -1,7 +1,10 @@
+import csv
 import re
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 import tomllib
 
 from xic_extractor.config import ConfigError, ExtractionConfig, Target
@@ -100,7 +103,16 @@ def test_cli_accepts_data_dir_override_for_validation_subset(
     validation_dir.mkdir()
     calls: dict[str, object] = {}
 
-    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+    def fake_load_config(_config_dir, *, settings_overrides=None):
+        calls["settings_overrides"] = settings_overrides
+        loaded_config = (
+            replace(config, data_dir=Path(settings_overrides["data_dir"]))
+            if settings_overrides
+            else config
+        )
+        return loaded_config, targets
+
+    monkeypatch.setattr(module, "load_config", fake_load_config)
     monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
     monkeypatch.setattr(
         module,
@@ -125,7 +137,162 @@ def test_cli_accepts_data_dir_override_for_validation_subset(
     assert calls["run_config"].data_dir == validation_dir.resolve()
     assert calls["run_config"].output_csv == config.output_csv
     assert calls["excel_config"] is calls["run_config"]
+    assert calls["settings_overrides"] == {"data_dir": str(validation_dir.resolve())}
     assert "Excel skipped" not in capsys.readouterr().out
+
+
+def test_cli_applies_data_dir_override_before_real_config_validation(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    config_dir = tmp_path / "config"
+    validation_dir = tmp_path / "validation"
+    dll_dir = tmp_path / "dll"
+    validation_dir.mkdir()
+    dll_dir.mkdir()
+    _write_cli_config(
+        config_dir,
+        data_dir=tmp_path / "placeholder_missing",
+        dll_dir=dll_dir,
+    )
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: None,
+        raising=False,
+    )
+
+    exit_code = module.main(
+        ["--base-dir", str(tmp_path), "--data-dir", str(validation_dir)]
+    )
+
+    assert exit_code == 0
+    assert calls["run_config"].data_dir == validation_dir.resolve()
+    assert "settings.csv" not in capsys.readouterr().err
+
+
+def test_cli_accepts_example_defaults_when_runtime_config_is_missing(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    config_dir = tmp_path / "config"
+    validation_dir = tmp_path / "validation"
+    dll_dir = tmp_path / "dll"
+    validation_dir.mkdir()
+    dll_dir.mkdir()
+    _write_cli_config(
+        config_dir,
+        data_dir=tmp_path / "placeholder_missing",
+        dll_dir=dll_dir,
+    )
+    (config_dir / "settings.csv").rename(config_dir / "settings.example.csv")
+    (config_dir / "targets.csv").rename(config_dir / "targets.example.csv")
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: None,
+        raising=False,
+    )
+
+    exit_code = module.main(
+        ["--base-dir", str(tmp_path), "--data-dir", str(validation_dir)]
+    )
+
+    assert exit_code == 0
+    assert calls["run_config"].data_dir == validation_dir.resolve()
+    assert calls["run_targets"][0].label == "Analyte"
+    assert not (config_dir / "settings.csv").exists()
+    assert not (config_dir / "targets.csv").exists()
+    assert capsys.readouterr().err == ""
+
+
+def test_cli_accepts_parallel_execution_overrides(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: calls.setdefault("excel", True),
+        raising=False,
+    )
+
+    exit_code = module.main(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--skip-excel",
+            "--parallel-mode",
+            "process",
+            "--parallel-workers",
+            "4",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls["run_config"] is not config
+    assert calls["run_config"].parallel_mode == "process"
+    assert calls["run_config"].parallel_workers == 4
+    assert "excel" not in calls
+    assert "Excel skipped" in capsys.readouterr().out
+
+
+def test_cli_rejects_invalid_parallel_mode(capsys) -> None:
+    module = _module()
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main(["--parallel-mode", "thread"])
+
+    assert exc_info.value.code == 2
+    assert "invalid choice: 'thread'" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("workers", ["0", "-1"])
+def test_cli_rejects_invalid_parallel_workers(workers: str, capsys) -> None:
+    module = _module()
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main(["--parallel-workers", workers])
+
+    assert exc_info.value.code == 2
+    assert "parallel-workers must be >= 1" in capsys.readouterr().err
+
+
+def test_cli_preserves_loaded_parallel_settings_when_overrides_are_omitted(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=4)
+    targets = [_target("Analyte")]
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: calls.setdefault("excel", True),
+        raising=False,
+    )
+
+    exit_code = module.main(["--base-dir", str(tmp_path), "--skip-excel"])
+
+    assert exit_code == 0
+    assert calls["run_config"].parallel_mode == "process"
+    assert calls["run_config"].parallel_workers == 4
+    assert "Excel skipped" in capsys.readouterr().out
 
 
 def test_cli_accepts_excel_flag_for_compatibility(
@@ -294,3 +461,57 @@ def _target(label: str) -> Target:
         is_istd=False,
         istd_pair="",
     )
+
+
+def _write_cli_config(config_dir: Path, *, data_dir: Path, dll_dir: Path) -> None:
+    config_dir.mkdir(parents=True, exist_ok=True)
+    settings = {
+        "data_dir": str(data_dir),
+        "dll_dir": str(dll_dir),
+        "smooth_window": "15",
+        "smooth_polyorder": "3",
+        "peak_rel_height": "0.95",
+        "peak_min_prominence_ratio": "0.10",
+        "ms2_precursor_tol_da": "0.5",
+        "nl_min_intensity_ratio": "0.01",
+        "count_no_ms2_as_detected": "false",
+    }
+    with (config_dir / "settings.csv").open(
+        "w", newline="", encoding="utf-8-sig"
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=["key", "value", "description"])
+        writer.writeheader()
+        for key, value in settings.items():
+            writer.writerow({"key": key, "value": value, "description": key})
+
+    fields = [
+        "label",
+        "mz",
+        "rt_min",
+        "rt_max",
+        "ppm_tol",
+        "neutral_loss_da",
+        "nl_ppm_warn",
+        "nl_ppm_max",
+        "is_istd",
+        "istd_pair",
+    ]
+    with (config_dir / "targets.csv").open(
+        "w", newline="", encoding="utf-8-sig"
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "label": "Analyte",
+                "mz": "258.1085",
+                "rt_min": "8.0",
+                "rt_max": "10.0",
+                "ppm_tol": "20",
+                "neutral_loss_da": "116.0474",
+                "nl_ppm_warn": "20",
+                "nl_ppm_max": "50",
+                "is_istd": "false",
+                "istd_pair": "",
+            }
+        )

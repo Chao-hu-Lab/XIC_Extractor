@@ -188,41 +188,41 @@ def write_score_breakdown_csv(
         writer = csv.DictWriter(handle, fieldnames=SCORE_BREAKDOWN_HEADERS)
         writer.writeheader()
         for file_result in file_results:
-            for result in file_result.extraction_results:
-                severities = {label: severity for severity, label in result.severities}
-                writer.writerow(
-                    {
-                        "SampleName": file_result.sample_name,
-                        "Target": result.target_label,
-                        "symmetry": _format_optional_severity(
-                            severities.get("symmetry")
-                        ),
-                        "local_sn": _format_optional_severity(
-                            severities.get("local_sn")
-                        ),
-                        "nl_support": _format_optional_severity(
-                            severities.get("nl_support")
-                        ),
-                        "rt_prior": _format_optional_severity(
-                            severities.get("rt_prior")
-                        ),
-                        "rt_centrality": _format_optional_severity(
-                            severities.get("rt_centrality")
-                        ),
-                        "noise_shape": _format_optional_severity(
-                            severities.get("noise_shape")
-                        ),
-                        "peak_width": _format_optional_severity(
-                            severities.get("peak_width")
-                        ),
-                        "Quality Penalty": str(result.quality_penalty),
-                        "Quality Flags": ",".join(result.quality_flags),
-                        "Total Severity": str(result.total_severity),
-                        "Confidence": result.confidence,
-                        "Prior RT": _format_optional_number(result.prior_rt),
-                        "Prior Source": result.prior_source,
-                    }
-                )
+            writer.writerows(_score_breakdown_rows(file_result))
+
+
+def _score_breakdown_rows(file_result: FileResultLike) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for result in file_result.extraction_results:
+        severities = {label: severity for severity, label in result.severities}
+        rows.append(
+            {
+                "SampleName": file_result.sample_name,
+                "Target": result.target_label,
+                "symmetry": _format_optional_severity(severities.get("symmetry")),
+                "local_sn": _format_optional_severity(severities.get("local_sn")),
+                "nl_support": _format_optional_severity(
+                    severities.get("nl_support")
+                ),
+                "rt_prior": _format_optional_severity(severities.get("rt_prior")),
+                "rt_centrality": _format_optional_severity(
+                    severities.get("rt_centrality")
+                ),
+                "noise_shape": _format_optional_severity(
+                    severities.get("noise_shape")
+                ),
+                "peak_width": _format_optional_severity(
+                    severities.get("peak_width")
+                ),
+                "Quality Penalty": str(result.quality_penalty),
+                "Quality Flags": ",".join(result.quality_flags),
+                "Total Severity": str(result.total_severity),
+                "Confidence": result.confidence,
+                "Prior RT": _format_optional_number(result.prior_rt),
+                "Prior Source": result.prior_source,
+            }
+        )
+    return rows
 
 
 def _format_optional_severity(value: int | None) -> str:

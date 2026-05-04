@@ -150,6 +150,43 @@ def test_worker_should_stop_reflects_interruption(tmp_path: Path, monkeypatch) -
     assert calls == {"before_stop": False, "after_stop": True}
 
 
+def test_worker_does_not_write_excel_or_emit_summary_after_cancellation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _module()
+    config = _config(tmp_path)
+    target = _target("Analyte")
+    interrupted = {"value": False}
+    wrote_excel: list[bool] = []
+    summaries: list[dict] = []
+
+    monkeypatch.setattr(
+        module.config_module,
+        "load_config",
+        lambda _path: (config, [target]),
+    )
+
+    def _extract(*_args, **_kwargs) -> RunOutput:
+        interrupted["value"] = True
+        return RunOutput(file_results=[], diagnostics=[])
+
+    def _excel(*_args, **_kwargs) -> Path:
+        wrote_excel.append(True)
+        return tmp_path / "out.xlsx"
+
+    worker = PipelineWorker(tmp_path / "config")
+    monkeypatch.setattr(worker, "isInterruptionRequested", lambda: interrupted["value"])
+    monkeypatch.setattr(module.extractor, "run", _extract)
+    monkeypatch.setattr(module, "write_excel_from_run_output", _excel)
+    worker.finished.connect(summaries.append)
+
+    worker.run()
+
+    assert wrote_excel == []
+    assert summaries == []
+
+
 @pytest.mark.parametrize(
     ("exception", "expected"),
     [
@@ -215,6 +252,58 @@ def test_main_window_run_uses_user_writable_config_dir(monkeypatch, qtbot) -> No
     window._on_run()
 
     assert created == [module._ROOT / "config"]
+
+
+def test_main_window_does_not_start_worker_when_parallel_settings_are_invalid(
+    monkeypatch, qtbot
+) -> None:
+    import gui.main_window as module
+
+    created: list[Path] = []
+    saved: list[dict[str, str]] = []
+
+    class FakeWorker:
+        progress = _Signal()
+        finished = _Signal()
+        error = _Signal()
+
+        def __init__(self, config_dir: Path) -> None:
+            created.append(config_dir)
+
+        def start(self) -> None:
+            pass
+
+    monkeypatch.setattr(module, "PipelineWorker", FakeWorker)
+    monkeypatch.setattr(
+        module,
+        "read_settings",
+        lambda: {
+            "data_dir": "C:\\data",
+            "dll_dir": "C:\\dll",
+            "smooth_window": "15",
+            "smooth_polyorder": "3",
+            "peak_rel_height": "0.95",
+            "peak_min_prominence_ratio": "0.10",
+            "ms2_precursor_tol_da": "0.5",
+            "nl_min_intensity_ratio": "0.01",
+            "count_no_ms2_as_detected": "false",
+            "parallel_mode": "proces",
+            "parallel_workers": "0",
+        },
+    )
+    monkeypatch.setattr(module, "read_targets", lambda: [])
+    monkeypatch.setattr(
+        module, "write_settings", lambda settings: saved.append(settings)
+    )
+    monkeypatch.setattr(module, "write_targets", lambda _targets: None)
+    window = module.MainWindow()
+    qtbot.addWidget(window)
+
+    window._on_run()
+
+    assert saved == []
+    assert created == []
+    assert "設定值無效" in window.statusBar().currentMessage()
 
 
 def test_main_window_load_config_persists_first_run_settings_migration(

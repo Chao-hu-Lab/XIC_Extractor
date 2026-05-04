@@ -26,6 +26,8 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "nl_rt_anchor_search_margin_min": "2.0",
     "nl_rt_anchor_half_window_min": "1.0",
     "nl_fallback_half_window_min": "2.0",
+    "parallel_mode": "serial",
+    "parallel_workers": "1",
 }
 
 CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
@@ -80,4 +82,6 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "nl_fallback_half_window_min": (
         "NL 錨定失敗時的 fallback XIC 半寬（min）：窗口 = [rt_center ± 此值]"
     ),
+    "parallel_mode": "執行後端（serial 或 process；預設 serial）",
+    "parallel_workers": "Process mode worker 數量（>= 1；預設 1）",
 }

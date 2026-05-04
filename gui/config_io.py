@@ -1,5 +1,4 @@
 import csv
-import shutil
 import sys
 from pathlib import Path
 
@@ -29,26 +28,23 @@ _TARGETS_FIELDS = [
 ]
 
 
-def _ensure_config(name: str) -> None:
-    """若 {name}.csv 不存在，從 bundle 內的 {name}.example.csv 複製一份。"""
-    dst = CONFIG_DIR / f"{name}.csv"
-    if not dst.exists():
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        src = _BUNDLE_CONFIG / f"{name}.example.csv"
-        if src.exists():
-            shutil.copy2(src, dst)
+def _read_path(name: str) -> Path:
+    runtime_path = CONFIG_DIR / f"{name}.csv"
+    if runtime_path.exists():
+        return runtime_path
+    return _BUNDLE_CONFIG / f"{name}.example.csv"
 
 
 def read_settings() -> dict[str, str]:
-    _ensure_config("settings")
-    with (CONFIG_DIR / "settings.csv").open(newline="", encoding="utf-8-sig") as handle:
+    with _read_path("settings").open(newline="", encoding="utf-8-sig") as handle:
         return {row["key"]: row["value"] for row in csv.DictReader(handle)}
 
 
 def write_settings(settings: dict[str, str]) -> None:
-    _ensure_config("settings")
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     path = CONFIG_DIR / "settings.csv"
-    with path.open(newline="", encoding="utf-8-sig") as handle:
+    source_path = path if path.exists() else _read_path("settings")
+    with source_path.open(newline="", encoding="utf-8-sig") as handle:
         existing = {row["key"]: row for row in csv.DictReader(handle)}
 
     with path.open("w", newline="", encoding="utf-8-sig") as handle:
@@ -66,12 +62,12 @@ def write_settings(settings: dict[str, str]) -> None:
 
 
 def read_targets() -> list[dict[str, str]]:
-    _ensure_config("targets")
-    with (CONFIG_DIR / "targets.csv").open(newline="", encoding="utf-8-sig") as handle:
+    with _read_path("targets").open(newline="", encoding="utf-8-sig") as handle:
         return list(csv.DictReader(handle))
 
 
 def write_targets(targets: list[dict[str, str]]) -> None:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with (CONFIG_DIR / "targets.csv").open(
         "w", newline="", encoding="utf-8-sig"
     ) as handle:
