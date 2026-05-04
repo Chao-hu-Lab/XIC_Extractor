@@ -8,7 +8,8 @@ import pytest
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.scoring_factory import build_scoring_context_factory
-from xic_extractor.neutral_loss import NLResult
+from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
+from xic_extractor.peak_scoring import score_candidate, select_candidate_with_confidence
 from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import find_peak_and_area
 
@@ -124,6 +125,136 @@ def test_context_without_injection_order_or_library_has_no_prior() -> None:
     assert ctx.prefer_rt_prior_tiebreak is False
 
 
+def test_scoring_context_uses_candidate_ms2_evidence_not_target_window_nl() -> None:
+    factory = build_scoring_context_factory(
+        config=_config(),
+        injection_order={},
+        istd_rts_by_sample={},
+        rt_prior_library={},
+    )
+    candidate = SimpleNamespace(selection_apex_index=3)
+    builder = factory(
+        target=_target(label="Analyte-A", is_istd=False, istd_pair=""),
+        sample_name="S2",
+        rt=np.linspace(9.9, 10.5, 7),
+        intensity=np.array([0.0, 1.0, 4.0, 8.0, 4.0, 1.0, 0.0]),
+        istd_rt_in_this_sample=None,
+        paired_istd_fwhm=None,
+        nl_result=NLResult(
+            status="OK",
+            best_ppm=1.0,
+            best_scan_rt=10.2,
+            valid_ms2_scan_count=3,
+            parse_error_count=0,
+            matched_scan_count=3,
+        ),
+        candidate_ms2_evidence_builder=lambda _candidate: CandidateMS2Evidence(
+            ms2_present=False,
+            nl_match=False,
+            nl_status="NO_MS2",
+            trigger_scan_count=0,
+            strict_nl_scan_count=0,
+            best_loss_ppm=None,
+            best_scan_rt=None,
+            best_product_base_ratio=None,
+            alignment_source="none",
+        ),
+    )
+
+    ctx = builder(candidate)
+
+    assert ctx.ms2_present is False
+    assert ctx.nl_match is False
+
+
+def test_scoring_context_keeps_trigger_without_strict_nl_match() -> None:
+    factory = build_scoring_context_factory(
+        config=_config(),
+        injection_order={},
+        istd_rts_by_sample={},
+        rt_prior_library={},
+    )
+    builder = factory(
+        target=_target(label="Analyte-A", is_istd=False, istd_pair=""),
+        sample_name="S2",
+        rt=np.linspace(9.9, 10.5, 7),
+        intensity=np.array([0.0, 1.0, 4.0, 8.0, 4.0, 1.0, 0.0]),
+        istd_rt_in_this_sample=None,
+        paired_istd_fwhm=None,
+        nl_result=None,
+        candidate_ms2_evidence_builder=lambda _candidate: CandidateMS2Evidence(
+            ms2_present=True,
+            nl_match=False,
+            nl_status="NL_FAIL",
+            trigger_scan_count=1,
+            strict_nl_scan_count=0,
+            best_loss_ppm=None,
+            best_scan_rt=None,
+            best_product_base_ratio=None,
+            alignment_source="region",
+        ),
+    )
+
+    ctx = builder(SimpleNamespace(selection_apex_index=3))
+
+    assert ctx.ms2_present is True
+    assert ctx.nl_match is False
+
+
+def test_strict_nl_candidate_beats_candidate_with_trigger_but_failed_nl() -> None:
+    factory = build_scoring_context_factory(
+        config=_config(),
+        injection_order={},
+        istd_rts_by_sample={},
+        rt_prior_library={},
+    )
+    candidate_with_nl = _candidate(apex_index=3, apex_rt=10.1, intensity=70.0)
+    candidate_without_nl = _candidate(apex_index=4, apex_rt=10.2, intensity=100.0)
+
+    def _candidate_ms2_evidence(candidate: SimpleNamespace) -> CandidateMS2Evidence:
+        return CandidateMS2Evidence(
+            ms2_present=True,
+            nl_match=candidate is candidate_with_nl,
+            nl_status="OK" if candidate is candidate_with_nl else "NL_FAIL",
+            trigger_scan_count=1,
+            strict_nl_scan_count=1 if candidate is candidate_with_nl else 0,
+            best_loss_ppm=1.0 if candidate is candidate_with_nl else None,
+            best_scan_rt=10.1 if candidate is candidate_with_nl else None,
+            best_product_base_ratio=0.5 if candidate is candidate_with_nl else None,
+            alignment_source="region",
+        )
+
+    builder = factory(
+        target=_target(label="Analyte-A", is_istd=False, istd_pair=""),
+        sample_name="S2",
+        rt=np.linspace(9.8, 10.4, 7),
+        intensity=np.array([0.0, 1.0, 4.0, 8.0, 7.0, 1.0, 0.0]),
+        istd_rt_in_this_sample=None,
+        paired_istd_fwhm=None,
+        nl_result=NLResult(
+            status="OK",
+            best_ppm=1.0,
+            best_scan_rt=10.2,
+            valid_ms2_scan_count=3,
+            parse_error_count=0,
+            matched_scan_count=3,
+        ),
+        candidate_ms2_evidence_builder=_candidate_ms2_evidence,
+    )
+    scored = [
+        score_candidate(candidate_with_nl, builder(candidate_with_nl), prior_rt=None),
+        score_candidate(
+            candidate_without_nl,
+            builder(candidate_without_nl),
+            prior_rt=None,
+        ),
+    ]
+
+    selected = select_candidate_with_confidence(scored)
+
+    assert selected.candidate is candidate_with_nl
+
+
 def test_scoring_context_caches_asls_inputs_per_xic(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -202,4 +333,15 @@ def _target(*, label: str, is_istd: bool, istd_pair: str) -> Target:
         nl_ppm_max=50.0,
         is_istd=is_istd,
         istd_pair=istd_pair,
+    )
+
+
+def _candidate(
+    *, apex_index: int, apex_rt: float, intensity: float
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        selection_apex_index=apex_index,
+        selection_apex_rt=apex_rt,
+        selection_apex_intensity=intensity,
+        quality_flags=(),
     )
