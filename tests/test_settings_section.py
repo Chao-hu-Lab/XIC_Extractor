@@ -1,3 +1,6 @@
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QLayout
+
 from gui.sections.settings_section import SettingsSection
 
 
@@ -98,6 +101,17 @@ def test_settings_section_exposes_new_processing_controls(qtbot) -> None:
     assert values["count_no_ms2_as_detected"] == "false"
 
 
+def test_count_no_ms2_checkbox_aligns_with_ms2_spin_row(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+
+    layout, index = _containing_layout(section._count_no_ms2_checkbox)
+
+    assert layout is not None
+    assert index is not None
+    assert layout.itemAt(index).alignment() & Qt.AlignmentFlag.AlignBottom
+
+
 def test_settings_section_numeric_rules_do_not_require_existing_paths(qtbot) -> None:
     section = SettingsSection()
     qtbot.addWidget(section)
@@ -117,6 +131,32 @@ def test_settings_section_numeric_rules_do_not_require_existing_paths(qtbot) -> 
     section._smooth_window_spin.setValue(5)
     section._smooth_polyorder_spin.setValue(5)
     assert not section.is_valid()
+
+
+def _containing_layout(widget) -> tuple[QLayout | None, int | None]:
+    section = widget.window() or widget.parentWidget()
+    root_layout = section.layout()
+    if root_layout is None:
+        return None, None
+    return _find_in_layout(root_layout, widget)
+
+
+def _find_in_layout(layout: QLayout, widget) -> tuple[QLayout | None, int | None]:
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+        if item.widget() is widget:
+            return layout, index
+        nested = item.layout()
+        if nested is not None:
+            found = _find_in_layout(nested, widget)
+            if found[0] is not None:
+                return found
+        child = item.widget()
+        if child is not None and child.layout() is not None:
+            found = _find_in_layout(child.layout(), widget)
+            if found[0] is not None:
+                return found
+    return None, None
 
 
 def test_settings_section_rejects_invalid_loaded_parallel_settings(qtbot) -> None:

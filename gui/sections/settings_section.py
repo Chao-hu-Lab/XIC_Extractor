@@ -253,7 +253,9 @@ class SettingsSection(QWidget):
         ms2_layout.addWidget(
             _LabeledSpin("Min intensity", self._nl_min_intensity_ratio_spin)
         )
-        ms2_layout.addWidget(self._count_no_ms2_checkbox)
+        ms2_layout.addWidget(
+            self._count_no_ms2_checkbox, alignment=Qt.AlignmentFlag.AlignBottom
+        )
         ms2_layout.addStretch()
         body_layout.addLayout(ms2_layout, 4, 1, 1, 2)
 

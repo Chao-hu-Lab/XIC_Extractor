@@ -12,11 +12,17 @@ COLORS: dict[str, str] = {
     "text_muted": "#57606a",
 }
 
+APPLICATION_FONT_FAMILY = "Segoe UI Variable"
+APPLICATION_FONT_POINT_SIZE = 10
+UI_FONT_STACK = (
+    '"Segoe UI Variable", "Segoe UI", "Microsoft JhengHei UI", sans-serif'
+)
+
 STYLESHEET = f"""
 QWidget {{
     background-color: {COLORS["bg_header"]};
     color: {COLORS["text"]};
-    font-family: "Segoe UI";
+    font-family: {UI_FONT_STACK};
     font-size: 10pt;
 }}
 
