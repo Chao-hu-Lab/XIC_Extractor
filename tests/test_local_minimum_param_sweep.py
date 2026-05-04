@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
@@ -296,6 +298,22 @@ def test_main_writes_workbook_with_injected_runner(
 
     assert exit_code == 0
     assert (output_dir / "local_minimum_param_sweep_summary.xlsx").exists()
+
+
+def test_script_file_exposes_cli_help() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/local_minimum_param_sweep.py",
+            "--help",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "Sweep local_minimum resolver parameters" in completed.stdout
 
 
 def _write_manual_workbook(path: Path) -> None:

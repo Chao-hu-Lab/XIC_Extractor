@@ -784,3 +784,7 @@ def _round_optional(value: float | None) -> float | None:
     if value is None:
         return None
     return round(value, 6)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
