@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+import argparse
+import csv
+import multiprocessing
+import os
+import shutil
+import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
@@ -10,6 +17,14 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
+
+from xic_extractor import extractor
+from xic_extractor.config import ConfigError, Target, load_config
+from xic_extractor.raw_reader import RawReaderError
+from xic_extractor.settings_schema import (
+    CANONICAL_SETTINGS_DEFAULTS,
+    CANONICAL_SETTINGS_DESCRIPTIONS,
+)
 
 
 @dataclass(frozen=True)
@@ -39,6 +54,14 @@ class ProgramPeakRow:
 class ParameterSet:
     name: str
     settings_overrides: dict[str, str]
+
+
+@dataclass(frozen=True)
+class SweepCase:
+    name: str
+    sample_name: str
+    raw_path: Path
+    targets_path: Path
 
 
 @dataclass(frozen=True)
@@ -137,6 +160,33 @@ def build_parameter_sets(*, grid: str) -> list[ParameterSet]:
     return parameter_sets
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    multiprocessing.freeze_support()
+    args = _parse_args(argv)
+    output_dir = args.output_dir.resolve()
+    try:
+        truth_rows = read_manual_truth(args.manual_workbook.resolve())
+        parameter_sets = build_parameter_sets(grid=args.grid)
+        cases = _build_cases(args)
+        result = run_sweep(
+            truth_rows,
+            parameter_sets,
+            lambda parameter_set: _run_parameter_set(
+                parameter_set, cases, output_dir
+            ),
+        )
+        output_path = write_sweep_workbook(
+            output_dir / "local_minimum_param_sweep_summary.xlsx",
+            result.scores,
+        )
+    except (ConfigError, RawReaderError, OSError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    _print_summary(output_path, result)
+    return 0
+
+
 def read_manual_truth(path: Path) -> list[ManualTruthRow]:
     workbook = load_workbook(path, read_only=True, data_only=True)
     rows: list[ManualTruthRow] = []
@@ -147,6 +197,161 @@ def read_manual_truth(path: Path) -> list[ManualTruthRow]:
         rows.extend(_read_sheet_truth(worksheet))
     workbook.close()
     return rows
+
+
+def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Sweep local_minimum resolver parameters against manual truth."
+    )
+    parser.add_argument("--manual-workbook", type=Path, required=True)
+    parser.add_argument("--nosplit-raw", type=Path, required=True)
+    parser.add_argument("--split-raw", type=Path, required=True)
+    parser.add_argument("--nosplit-targets", type=Path, required=True)
+    parser.add_argument("--split-targets", type=Path, required=True)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("output/local_minimum_param_sweep_manual"),
+    )
+    parser.add_argument(
+        "--grid",
+        choices=tuple(_GRID_VALUES.keys()),
+        default="quick",
+    )
+    return parser.parse_args(argv)
+
+
+def _build_cases(args: argparse.Namespace) -> list[SweepCase]:
+    return [
+        SweepCase(
+            name="nosplit",
+            sample_name=args.nosplit_raw.resolve().stem,
+            raw_path=args.nosplit_raw.resolve(),
+            targets_path=args.nosplit_targets.resolve(),
+        ),
+        SweepCase(
+            name="split",
+            sample_name=args.split_raw.resolve().stem,
+            raw_path=args.split_raw.resolve(),
+            targets_path=args.split_targets.resolve(),
+        ),
+    ]
+
+
+def _run_parameter_set(
+    parameter_set: ParameterSet,
+    cases: list[SweepCase],
+    output_dir: Path,
+) -> list[ProgramPeakRow]:
+    rows: list[ProgramPeakRow] = []
+    for case in cases:
+        rows.extend(_run_case(parameter_set, case, output_dir))
+    return rows
+
+
+def _run_case(
+    parameter_set: ParameterSet,
+    case: SweepCase,
+    output_dir: Path,
+) -> list[ProgramPeakRow]:
+    data_dir = _stage_raw_case(case, output_dir / "staged_raw" / case.name)
+    config_dir = output_dir / "runs" / parameter_set.name / case.name / "config"
+    _write_case_config(
+        config_dir,
+        data_dir=data_dir,
+        targets_path=case.targets_path,
+        settings_overrides=parameter_set.settings_overrides,
+    )
+    config, targets = load_config(config_dir)
+    run_output = extractor.run(config, targets)
+    return _collect_program_rows(run_output, targets)
+
+
+def _stage_raw_case(case: SweepCase, data_dir: Path) -> Path:
+    if not case.raw_path.exists():
+        raise FileNotFoundError(f"{case.raw_path}: raw file is missing")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    staged_raw = data_dir / case.raw_path.name
+    if staged_raw.exists():
+        return data_dir
+    try:
+        os.link(case.raw_path, staged_raw)
+    except OSError:
+        shutil.copy2(case.raw_path, staged_raw)
+    return data_dir
+
+
+def _write_case_config(
+    config_dir: Path,
+    *,
+    data_dir: Path,
+    targets_path: Path,
+    settings_overrides: dict[str, str],
+) -> None:
+    if not targets_path.exists():
+        raise FileNotFoundError(f"{targets_path}: targets file is missing")
+    config_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(targets_path, config_dir / "targets.csv")
+    settings = {
+        **CANONICAL_SETTINGS_DEFAULTS,
+        "data_dir": str(data_dir),
+        **settings_overrides,
+    }
+    _write_settings_csv(config_dir / "settings.csv", settings)
+
+
+def _write_settings_csv(path: Path, settings: dict[str, str]) -> None:
+    with path.open("w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["key", "value", "description"])
+        writer.writeheader()
+        for key, value in settings.items():
+            writer.writerow(
+                {
+                    "key": key,
+                    "value": value,
+                    "description": CANONICAL_SETTINGS_DESCRIPTIONS.get(key, ""),
+                }
+            )
+
+
+def _collect_program_rows(
+    run_output: extractor.RunOutput,
+    targets: list[Target],
+) -> list[ProgramPeakRow]:
+    rows: list[ProgramPeakRow] = []
+    for file_result in run_output.file_results:
+        for target in targets:
+            result = file_result.results.get(target.label)
+            peak = result.peak if result is not None else None
+            rows.append(
+                ProgramPeakRow(
+                    sample_name=file_result.sample_name,
+                    target=target.label,
+                    is_istd=target.is_istd,
+                    rt=result.reported_rt if result is not None else None,
+                    height=(
+                        peak.intensity_smoothed
+                        if peak is not None and peak.intensity_smoothed is not None
+                        else peak.intensity if peak is not None else None
+                    ),
+                    area=peak.area if peak is not None else None,
+                    detected=peak is not None,
+                )
+            )
+    return rows
+
+
+def _print_summary(output_path: Path, result: SweepResult) -> None:
+    ranked = _rank_scores(result.scores)
+    best = ranked[0] if ranked else None
+    print(f"Summary workbook: {output_path}")
+    if best is not None:
+        print(
+            "Best: "
+            f"{best.name}, area_median_abs_pct_error="
+            f"{best.area_median_abs_pct_error}, "
+            f"missing_manual_peaks={best.missing_manual_peaks}"
+        )
 
 
 def run_sweep(

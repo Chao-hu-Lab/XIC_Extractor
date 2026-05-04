@@ -235,3 +235,107 @@ def test_write_sweep_workbook_contains_required_sheets(tmp_path: Path) -> None:
     wb = load_workbook(output, read_only=True, data_only=True)
     assert wb.sheetnames == ["Summary", "PerTarget", "Failures", "RunConfig"]
     assert wb["Summary"]["A1"].value == "Rank"
+
+
+def test_main_writes_workbook_with_injected_runner(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import scripts.local_minimum_param_sweep as module
+
+    manual_workbook = tmp_path / "manual.xlsx"
+    _write_manual_workbook(manual_workbook)
+    nosplit_raw = tmp_path / "NoSplit.raw"
+    split_raw = tmp_path / "Split.raw"
+    nosplit_raw.write_text("raw", encoding="utf-8")
+    split_raw.write_text("raw", encoding="utf-8")
+    nosplit_targets = tmp_path / "targets1.csv"
+    split_targets = tmp_path / "targets2.csv"
+    nosplit_targets.write_text("label\nTargetA\n", encoding="utf-8")
+    split_targets.write_text("label\nTargetA\n", encoding="utf-8")
+
+    def fake_runner(
+        parameter_set: module.ParameterSet,
+        cases: list[module.SweepCase],
+        _output_dir: Path,
+    ) -> list[module.ProgramPeakRow]:
+        area = 10000.0 if parameter_set.name == "legacy_savgol" else 12000.0
+        return [
+            module.ProgramPeakRow(
+                case.sample_name,
+                "TargetA",
+                False,
+                10.01,
+                1000.0,
+                area,
+                True,
+            )
+            for case in cases
+        ]
+
+    monkeypatch.setattr(module, "_run_parameter_set", fake_runner)
+    output_dir = tmp_path / "sweep"
+
+    exit_code = module.main(
+        [
+            "--manual-workbook",
+            str(manual_workbook),
+            "--nosplit-raw",
+            str(nosplit_raw),
+            "--split-raw",
+            str(split_raw),
+            "--nosplit-targets",
+            str(nosplit_targets),
+            "--split-targets",
+            str(split_targets),
+            "--output-dir",
+            str(output_dir),
+            "--grid",
+            "quick",
+        ]
+    )
+
+    assert exit_code == 0
+    assert (output_dir / "local_minimum_param_sweep_summary.xlsx").exists()
+
+
+def _write_manual_workbook(path: Path) -> None:
+    wb = Workbook()
+    header_1 = [
+        "No.",
+        "Name",
+        "m/z",
+        "NoSplit",
+        None,
+        None,
+        None,
+        None,
+        "Split",
+        None,
+        None,
+        None,
+        None,
+    ]
+    header_2 = [
+        None,
+        None,
+        None,
+        "RT\n(min)",
+        "Peak height",
+        "Peak area",
+        "Peak width\n(min)",
+        "Shape",
+        "RT\n(min)",
+        "Peak height",
+        "Peak area",
+        "Peak width\n(min)",
+        "Shape",
+    ]
+    ws = wb.active
+    ws.title = "DNA"
+    ws.append(header_1)
+    ws.append(header_2)
+    ws.append([1, "TargetA", 100.0, 10.0, 1000, 10000, 1.0, "正常", 10.0, 1000, 10000, 1.0, "正常"])
+    ws_rna = wb.create_sheet("RNA")
+    ws_rna.append(header_1)
+    ws_rna.append(header_2)
+    wb.save(path)
