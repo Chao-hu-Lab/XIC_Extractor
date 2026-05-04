@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import product
 from pathlib import Path
 from statistics import median
 from typing import Iterable
@@ -30,6 +31,12 @@ class ProgramPeakRow:
     height: float | None
     area: float | None
     detected: bool
+
+
+@dataclass(frozen=True)
+class ParameterSet:
+    name: str
+    settings_overrides: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -67,6 +74,51 @@ class ParameterSetScore:
     area_within_20pct: int
     large_area_misses: int
     per_target_rows: list[PerTargetScoreRow]
+
+
+_STATIC_LOCAL_MINIMUM_PARAMS = {
+    "resolver_min_relative_height": "0.0",
+    "resolver_min_absolute_height": "25.0",
+    "resolver_peak_duration_min": "0.0",
+    "resolver_peak_duration_max": "10.0",
+}
+
+_GRID_VALUES = {
+    "quick": {
+        "resolver_chrom_threshold": ("0.03", "0.05"),
+        "resolver_min_search_range_min": ("0.05", "0.08"),
+        "resolver_min_ratio_top_edge": ("1.5", "1.7"),
+        "resolver_min_scans": ("3", "5"),
+    },
+    "standard": {
+        "resolver_chrom_threshold": ("0.03", "0.05", "0.08"),
+        "resolver_min_search_range_min": ("0.05", "0.08", "0.12"),
+        "resolver_min_ratio_top_edge": ("1.3", "1.5", "1.7", "2.0"),
+        "resolver_min_scans": ("3", "5"),
+    },
+}
+
+
+def build_parameter_sets(*, grid: str) -> list[ParameterSet]:
+    if grid not in _GRID_VALUES:
+        raise ValueError(f"Unknown grid: {grid}")
+
+    parameter_sets = [
+        ParameterSet("legacy_savgol", {"resolver_mode": "legacy_savgol"}),
+        ParameterSet("local_minimum_current", {"resolver_mode": "local_minimum"}),
+    ]
+    grid_values = _GRID_VALUES[grid]
+    keys = list(grid_values.keys())
+    for idx, values in enumerate(product(*(grid_values[key] for key in keys)), start=1):
+        settings = {
+            "resolver_mode": "local_minimum",
+            **_STATIC_LOCAL_MINIMUM_PARAMS,
+            **dict(zip(keys, values)),
+        }
+        parameter_sets.append(
+            ParameterSet(f"local_minimum_grid_{idx:03d}", settings)
+        )
+    return parameter_sets
 
 
 def read_manual_truth(path: Path) -> list[ManualTruthRow]:

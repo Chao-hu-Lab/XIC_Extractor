@@ -5,6 +5,7 @@ from openpyxl import Workbook
 from scripts.local_minimum_param_sweep import (
     ManualTruthRow,
     ProgramPeakRow,
+    build_parameter_sets,
     read_manual_truth,
     score_parameter_set,
 )
@@ -147,3 +148,14 @@ def test_score_parameter_set_ranks_by_area_mape_and_tracks_guardrails() -> None:
     assert score.rt_median_abs_delta_min == 0.06
     assert score.rt_max_abs_delta_min == 0.10
     assert score.large_area_misses == 1
+
+
+def test_build_parameter_sets_includes_legacy_current_and_candidate_grid() -> None:
+    parameter_sets = build_parameter_sets(grid="quick")
+
+    names = [item.name for item in parameter_sets]
+    assert names[0] == "legacy_savgol"
+    assert names[1] == "local_minimum_current"
+    assert any(name.startswith("local_minimum_grid_") for name in names)
+    assert parameter_sets[0].settings_overrides["resolver_mode"] == "legacy_savgol"
+    assert parameter_sets[1].settings_overrides["resolver_mode"] == "local_minimum"
