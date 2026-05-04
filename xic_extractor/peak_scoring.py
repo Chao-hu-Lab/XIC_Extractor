@@ -142,7 +142,7 @@ def select_candidate_with_confidence(
         if selection_reference is None:
             selection_reference = scored_candidate.prior_rt
         distance = (
-            abs(candidate.smoothed_apex_rt - selection_reference)
+            abs(candidate.selection_apex_rt - selection_reference)
             if selection_reference is not None
             else float("inf")
         )
@@ -158,7 +158,7 @@ def select_candidate_with_confidence(
                 float(confidence_rank),
                 selection_quality_penalty,
                 0.0,
-                -candidate.smoothed_apex_intensity,
+                -candidate.selection_apex_intensity,
             )
         if (
             scored_candidate.prefer_rt_prior_tiebreak
@@ -170,7 +170,7 @@ def select_candidate_with_confidence(
                 distance,
                 selection_quality_penalty,
                 0.0,
-                -candidate.smoothed_apex_intensity,
+                -candidate.selection_apex_intensity,
             )
         if selection_reference is not None:
             adjusted_distance = distance + (
@@ -182,14 +182,14 @@ def select_candidate_with_confidence(
                 adjusted_distance,
                 selection_quality_penalty,
                 distance,
-                -candidate.smoothed_apex_intensity,
+                -candidate.selection_apex_intensity,
             )
         return (
             float(confidence_rank),
             selection_quality_penalty,
             0.0,
             0.0,
-            -candidate.smoothed_apex_intensity,
+            -candidate.selection_apex_intensity,
         )
 
     return min(scored, key=key)
@@ -215,8 +215,8 @@ def score_candidate(
             residual_mad=ctx.residual_mad,
         ),
         nl_support_severity(ctx.ms2_present, ctx.nl_match),
-        rt_prior_severity(candidate.smoothed_apex_rt, ctx.rt_prior, ctx.rt_prior_sigma),
-        rt_centrality_severity(candidate.smoothed_apex_rt, ctx.rt_min, ctx.rt_max),
+        rt_prior_severity(candidate.selection_apex_rt, ctx.rt_prior, ctx.rt_prior_sigma),
+        rt_centrality_severity(candidate.selection_apex_rt, ctx.rt_min, ctx.rt_max),
         noise_shape_severity(ctx.intensity_array),
         peak_width_severity(ctx.fwhm_ratio),
     ]

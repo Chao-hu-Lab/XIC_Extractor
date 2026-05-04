@@ -68,8 +68,8 @@ def test_reason_appends_istd_note() -> None:
 
 @dataclass
 class _FakePeak:
-    smoothed_apex_rt: float
-    smoothed_apex_intensity: float
+    selection_apex_rt: float
+    selection_apex_intensity: float
 
 
 def _sc(
@@ -147,9 +147,9 @@ def _make_candidate(apex_rt: float, apex_intensity: float) -> PeakCandidate:
     )
     return PeakCandidate(
         peak=peak,
-        smoothed_apex_rt=apex_rt,
-        smoothed_apex_intensity=apex_intensity,
-        smoothed_apex_index=100,
+        selection_apex_rt=apex_rt,
+        selection_apex_intensity=apex_intensity,
+        selection_apex_index=100,
         raw_apex_rt=apex_rt,
         raw_apex_intensity=apex_intensity,
         raw_apex_index=100,

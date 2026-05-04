@@ -148,9 +148,9 @@ def _run_output(*, with_diagnostics: bool) -> RunOutput:
     )
     candidate = PeakCandidate(
         peak=peak,
-        smoothed_apex_rt=9.0,
-        smoothed_apex_intensity=450.0,
-        smoothed_apex_index=10,
+        selection_apex_rt=9.0,
+        selection_apex_intensity=450.0,
+        selection_apex_index=10,
         raw_apex_rt=9.03,
         raw_apex_intensity=500.0,
         raw_apex_index=11,

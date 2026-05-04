@@ -5,7 +5,11 @@ import pytest
 from scipy.signal import savgol_filter
 
 from xic_extractor.config import ExtractionConfig
-from xic_extractor.signal_processing import find_peak_and_area, find_peak_candidates
+from xic_extractor.signal_processing import (
+    _local_minimum_regions,
+    find_peak_and_area,
+    find_peak_candidates,
+)
 
 
 def _config(
@@ -100,6 +104,24 @@ def test_candidate_enumeration_returns_all_prominent_peaks() -> None:
     assert result.candidates[1].peak.intensity > result.candidates[0].peak.intensity
 
 
+def test_local_minimum_split_reanchors_second_region_after_flat_valley() -> None:
+    rt = np.arange(9, dtype=float) * 0.1
+    intensity = np.array([0, 50, 100, 5, 0, 5, 80, 50, 0], dtype=float)
+
+    regions = _local_minimum_regions(
+        rt,
+        intensity,
+        peak_indices=[2, 6],
+        threshold=10.0,
+        config=_config(
+            resolver_min_search_range_min=0.01,
+            resolver_min_ratio_top_edge=1.3,
+        ),
+    )
+
+    assert regions == [(1, 5), (5, 8)]
+
+
 def test_raw_apex_reporting_does_not_return_zero_intensity_when_area_is_positive(
 ) -> None:
     rt = np.linspace(8.0, 10.0, 401)
@@ -129,7 +151,7 @@ def test_raw_spike_inside_peak_window_does_not_move_reported_peak_rt() -> None:
     assert result.peak is not None
     assert result.peak.rt == pytest.approx(9.0, abs=0.01)
     assert result.peak.intensity == pytest.approx(1400.0)
-    assert result.candidates[0].smoothed_apex_rt == pytest.approx(9.0, abs=0.01)
+    assert result.candidates[0].selection_apex_rt == pytest.approx(9.0, abs=0.01)
     assert result.candidates[0].raw_apex_rt == pytest.approx(8.88, abs=0.01)
 
 

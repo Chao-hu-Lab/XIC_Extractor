@@ -80,10 +80,10 @@ class ExtractionResult:
 
     @property
     def reported_rt(self) -> float | None:
-        """User-facing RT uses the selected candidate's smoothed apex when available."""
+        """User-facing RT uses the selected candidate's selection apex when available."""
         candidate = selected_candidate(self.peak_result)
         if candidate is not None:
-            return candidate.smoothed_apex_rt
+            return candidate.selection_apex_rt
         peak = self.peak
         if peak is None:
             return None

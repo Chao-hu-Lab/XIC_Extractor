@@ -87,7 +87,7 @@ def build_scoring_context_factory(
         def builder(candidate: PeakCandidate) -> ScoringContext:
             half_width_ratio, fwhm = compute_shape_metrics(
                 intensity_values,
-                candidate.smoothed_apex_index,
+                candidate.selection_apex_index,
             )
             fwhm_ratio: float | None = None
             if (
@@ -100,7 +100,7 @@ def build_scoring_context_factory(
             return ScoringContext(
                 rt_array=rt_values,
                 intensity_array=intensity_values,
-                apex_index=candidate.smoothed_apex_index,
+                apex_index=candidate.selection_apex_index,
                 half_width_ratio=half_width_ratio,
                 fwhm_ratio=fwhm_ratio,
                 ms2_present=ms2_present,
@@ -162,7 +162,7 @@ def selected_shape_metrics(
     candidate = selected_candidate(peak_result)
     if candidate is None:
         return None
-    return compute_shape_metrics(intensity, candidate.smoothed_apex_index)
+    return compute_shape_metrics(intensity, candidate.selection_apex_index)
 
 
 def selected_candidate(peak_result: PeakDetectionResult) -> PeakCandidate | None:

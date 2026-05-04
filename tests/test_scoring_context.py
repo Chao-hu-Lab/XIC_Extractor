@@ -31,7 +31,7 @@ def test_istd_context_uses_rolling_median_prior() -> None:
         nl_result=None,
     )
 
-    ctx = builder(SimpleNamespace(smoothed_apex_index=3))
+    ctx = builder(SimpleNamespace(selection_apex_index=3))
 
     assert ctx.rt_prior == pytest.approx(10.0)
     assert ctx.rt_prior_sigma is None
@@ -78,7 +78,7 @@ def test_analyte_context_uses_delta_rt_library_and_shape_ratio() -> None:
         ),
     )
 
-    ctx = builder(SimpleNamespace(smoothed_apex_index=3))
+    ctx = builder(SimpleNamespace(selection_apex_index=3))
 
     assert ctx.rt_prior == pytest.approx(10.25)
     assert ctx.rt_prior_sigma == pytest.approx(0.05)
@@ -115,7 +115,7 @@ def test_context_without_injection_order_or_library_has_no_prior() -> None:
         ),
     )
 
-    ctx = builder(SimpleNamespace(smoothed_apex_index=3))
+    ctx = builder(SimpleNamespace(selection_apex_index=3))
 
     assert ctx.rt_prior is None
     assert ctx.rt_prior_sigma is None

@@ -141,9 +141,9 @@ def _candidate(
     )
     candidate = PeakCandidate(
         peak=peak,
-        smoothed_apex_rt=10.0,
-        smoothed_apex_intensity=8.0,
-        smoothed_apex_index=apex_index,
+        selection_apex_rt=10.0,
+        selection_apex_intensity=8.0,
+        selection_apex_index=apex_index,
         raw_apex_rt=10.0,
         raw_apex_intensity=8.0,
         raw_apex_index=apex_index,
