@@ -171,8 +171,13 @@ uv run xic-extractor-cli --base-dir .
 | --- | --- |
 | `--base-dir` | 專案資料夾，底下需有 `config/` 與 `output/` |
 | `--data-dir` | 本次 run 覆寫 `.raw` 來源資料夾，不回寫 `config/settings.csv`；日常 real-data smoke 建議指向 validation subset |
+| `--parallel-mode` | 覆寫本次 run 的執行後端：`serial` 或 `process`；預設仍是 `serial` |
+| `--parallel-workers` | 覆寫本次 run 的 process worker 數量；只在 `--parallel-mode process` 時用於平行處理 `.raw` |
 | `--skip-excel` | 只輸出 CSV，跳過 Excel workbook；等同本次 run 保留 `keep_intermediate_csv` debug outputs |
 | `--excel` | 保留作相容旗標；Excel conversion 是預設行為 |
+
+GUI 可在 Settings 的 Advanced 區塊調整 `parallel_mode` 與 `parallel_workers`。
+process mode 目前是 opt-in；預設設定仍保留 serial，確保既有 workflow 不會自動改變。
 
 `scripts/01_extract_xic.ps1` 已不再是支援的 extraction entry point。
 
