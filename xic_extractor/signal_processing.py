@@ -19,6 +19,9 @@ LocalMinimumQualityFlag = Literal[
     "too_short",
     "low_scan_count",
     "low_top_edge_ratio",
+    "low_scan_support",
+    "low_trace_continuity",
+    "poor_edge_recovery",
 ]
 
 # preferred_rt 選峰時，若最靠近 anchor 的峰強度 < 最高峰的這個比例，改選最高峰
@@ -33,6 +36,8 @@ _LOCAL_RECOVERY_ABSOLUTE_HEIGHT_FRACTION: float = 0.5
 _LOCAL_RECOVERY_MIN_ABSOLUTE_HEIGHT: float = 5.0
 _LOCAL_RECOVERY_TOP_EDGE_RATIO: float = 1.05
 _LOCAL_RECOVERY_DURATION_MAX_MULTIPLIER: float = 1.5
+_TRACE_CONTINUITY_MIN_SCORE: float = 0.70
+_TRACE_CONTINUITY_SIGNIFICANT_STEP_FRACTION: float = 0.05
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,7 @@ class PeakCandidate:
     region_scan_count: int | None = None
     region_duration_min: float | None = None
     region_edge_ratio: float | None = None
+    region_trace_continuity: float | None = None
 
 
 @dataclass(frozen=True)
@@ -67,6 +73,7 @@ class LocalMinimumRegionQuality:
     scan_count: int
     duration_min: float
     edge_ratio: float | None
+    trace_continuity: float | None
 
 
 @dataclass(frozen=True)
@@ -604,6 +611,7 @@ def _build_local_minimum_candidate(
         region_scan_count=quality.scan_count,
         region_duration_min=quality.duration_min,
         region_edge_ratio=quality.edge_ratio,
+        region_trace_continuity=quality.trace_continuity,
     )
 
 
@@ -784,11 +792,17 @@ def _local_minimum_region_quality(
     edge_ratio = (
         None if edge_height <= 0 else float(apex_intensity / edge_height)
     )
+    trace_continuity = _trace_continuity_score(
+        intensity_values,
+        left=left,
+        right=right,
+    )
     flags: list[LocalMinimumQualityFlag] = []
     if left == 0 or right == len(intensity_values):
         flags.append("edge_clipped")
     if scan_count < config.resolver_min_scans:
         flags.append("low_scan_count")
+        flags.append("low_scan_support")
     if duration < config.resolver_peak_duration_min:
         flags.append("too_short")
     if duration > config.resolver_peak_duration_max:
@@ -798,12 +812,45 @@ def _local_minimum_region_quality(
         and edge_ratio < config.resolver_min_ratio_top_edge
     ):
         flags.append("low_top_edge_ratio")
+        flags.append("poor_edge_recovery")
+    if (
+        trace_continuity is not None
+        and trace_continuity < _TRACE_CONTINUITY_MIN_SCORE
+    ):
+        flags.append("low_trace_continuity")
     return LocalMinimumRegionQuality(
         flags=tuple(flags),
         scan_count=scan_count,
         duration_min=duration,
         edge_ratio=edge_ratio,
+        trace_continuity=trace_continuity,
     )
+
+
+def _trace_continuity_score(
+    intensity_values: np.ndarray,
+    *,
+    left: int,
+    right: int,
+) -> float | None:
+    region = np.asarray(intensity_values[left:right], dtype=float)
+    if len(region) < 5:
+        return None
+    apex = float(np.max(region))
+    edge = max(float(region[0]), float(region[-1]))
+    dynamic_range = apex - edge
+    if dynamic_range <= 0:
+        return 0.0
+
+    diffs = np.diff(region)
+    significant = np.abs(diffs) >= (
+        dynamic_range * _TRACE_CONTINUITY_SIGNIFICANT_STEP_FRACTION
+    )
+    signs = np.sign(diffs[significant])
+    if len(signs) <= 2:
+        return 1.0
+    sign_changes = int(np.count_nonzero(signs[1:] != signs[:-1]))
+    return max(0.0, 1.0 - sign_changes / max(1, len(signs) - 1))
 
 
 def _peak_bounds(

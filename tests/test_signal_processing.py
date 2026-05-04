@@ -387,6 +387,60 @@ def test_local_minimum_resolver_splits_shoulder_peaks_with_visible_valley() -> N
         [8.93, 9.08],
         abs=0.02,
     )
+    assert result.candidates[0].quality_flags == ()
+
+
+def test_local_minimum_low_scan_support_is_soft_quality_flag() -> None:
+    rt = np.linspace(8.0, 8.8, 17)
+    intensity = _gaussian(rt, center=8.4, sigma=0.05, height=600.0) + 10.0
+
+    result = find_peak_candidates(
+        rt,
+        intensity,
+        _config(
+            resolver_mode="local_minimum",
+            resolver_chrom_threshold=0.05,
+            resolver_min_search_range_min=0.04,
+            resolver_min_relative_height=0.0,
+            resolver_min_absolute_height=25.0,
+            resolver_min_ratio_top_edge=1.3,
+            resolver_peak_duration_min=0.0,
+            resolver_peak_duration_max=10.0,
+            resolver_min_scans=15,
+        ),
+    )
+
+    assert result.status == "OK"
+    assert len(result.candidates) == 1
+    assert "low_scan_support" in result.candidates[0].quality_flags
+
+
+def test_local_minimum_jagged_trace_is_soft_continuity_flag() -> None:
+    rt = np.linspace(8.0, 8.8, 81)
+    intensity = _gaussian(rt, center=8.4, sigma=0.12, height=900.0) + 20.0
+    jagged = intensity.copy()
+    mask = (rt > 8.25) & (rt < 8.55)
+    jagged[mask & ((np.arange(len(rt)) % 4) == 0)] *= 0.45
+
+    result = find_peak_candidates(
+        rt,
+        jagged,
+        _config(
+            resolver_mode="local_minimum",
+            resolver_chrom_threshold=0.02,
+            resolver_min_search_range_min=0.20,
+            resolver_min_relative_height=0.0,
+            resolver_min_absolute_height=25.0,
+            resolver_min_ratio_top_edge=1.3,
+            resolver_peak_duration_min=0.0,
+            resolver_peak_duration_max=10.0,
+            resolver_min_scans=5,
+        ),
+    )
+
+    assert result.status == "OK"
+    assert len(result.candidates) == 1
+    assert "low_trace_continuity" in result.candidates[0].quality_flags
 
 
 def test_local_minimum_resolver_keeps_single_broad_peak_without_valid_valley() -> None:
@@ -512,3 +566,4 @@ def test_local_minimum_retains_edge_clipped_region_as_flagged_candidate() -> Non
     assert result.candidates[0].peak.rt == pytest.approx(8.0, abs=0.01)
     assert "edge_clipped" in result.candidates[0].quality_flags
     assert "low_top_edge_ratio" in result.candidates[0].quality_flags
+    assert "poor_edge_recovery" in result.candidates[0].quality_flags

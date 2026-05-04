@@ -29,6 +29,17 @@ _RT_PRIOR_SIGMA_SOFT = 2.0
 _RT_PRIOR_SIGMA_HARD = 5.0
 _RT_PRIOR_NO_SIGMA_SOFT_MIN = 0.2
 _RT_PRIOR_NO_SIGMA_HARD_MIN = 1.0
+_ADAP_LIKE_FLAG_LABELS = {
+    "low_scan_support": "low scan support",
+    "low_trace_continuity": "low trace continuity",
+    "poor_edge_recovery": "poor edge recovery",
+}
+_ADAP_LIKE_SELECTION_WEIGHT = 0.25
+_ADAP_LIKE_SELECTION_MAX = 0.5
+_ADAP_EQUIVALENT_LEGACY_FLAGS = {
+    "low_scan_support": "low_scan_count",
+    "poor_edge_recovery": "low_top_edge_ratio",
+}
 
 
 class Confidence(Enum):
@@ -46,6 +57,7 @@ class ScoredCandidate:
     reason: str
     prior_rt: float | None
     quality_penalty: int = 0
+    selection_quality_penalty: float | None = None
     prefer_rt_prior_tiebreak: bool = False
 
 
@@ -124,6 +136,11 @@ def select_candidate_with_confidence(scored: list[ScoredCandidate]) -> ScoredCan
             else float("inf")
         )
         confidence_rank = _CONFIDENCE_RANK[scored_candidate.confidence]
+        selection_quality_penalty = (
+            scored_candidate.selection_quality_penalty
+            if scored_candidate.selection_quality_penalty is not None
+            else float(scored_candidate.quality_penalty)
+        )
         if (
             scored_candidate.prefer_rt_prior_tiebreak
             and scored_candidate.prior_rt is not None
@@ -131,12 +148,12 @@ def select_candidate_with_confidence(scored: list[ScoredCandidate]) -> ScoredCan
             return (
                 confidence_rank,
                 distance,
-                scored_candidate.quality_penalty,
+                selection_quality_penalty,
                 -candidate.smoothed_apex_intensity,
             )
         return (
             confidence_rank,
-            float(scored_candidate.quality_penalty),
+            selection_quality_penalty,
             distance,
             -candidate.smoothed_apex_intensity,
         )
@@ -151,6 +168,9 @@ def score_candidate(
     istd_confidence_note: str | None = None,
 ) -> ScoredCandidate:
     quality_penalty, quality_notes = candidate_quality_penalty(candidate)
+    selection_quality_penalty = quality_penalty + candidate_selection_quality_penalty(
+        candidate
+    )
     severities: list[tuple[int, str]] = [
         symmetry_severity(ctx.half_width_ratio),
         local_sn_severity(
@@ -180,6 +200,7 @@ def score_candidate(
         reason=reason,
         prior_rt=prior_rt,
         quality_penalty=quality_penalty,
+        selection_quality_penalty=selection_quality_penalty,
         prefer_rt_prior_tiebreak=ctx.prefer_rt_prior_tiebreak,
     )
 
@@ -189,8 +210,42 @@ def candidate_quality_penalty(candidate: Any) -> tuple[int, list[str]]:
     flags = tuple(dict.fromkeys(str(flag) for flag in raw_flags))
     if not flags:
         return 0, []
-    penalty = min(2, len(flags))
-    return penalty, [f"weak candidate: {', '.join(flags)}"]
+    adap_labels = [
+        _ADAP_LIKE_FLAG_LABELS[flag]
+        for flag in flags
+        if flag in _ADAP_LIKE_FLAG_LABELS
+    ]
+    notes: list[str] = []
+    if adap_labels:
+        notes.append(
+            "concerns: "
+            + "; ".join(f"{label} (minor)" for label in adap_labels)
+        )
+
+    legacy_flags = [
+        flag
+        for flag in flags
+        if flag not in _ADAP_LIKE_FLAG_LABELS
+    ]
+    penalty = min(2, len(legacy_flags))
+    if legacy_flags:
+        notes.append(f"weak candidate: {', '.join(legacy_flags)}")
+    return penalty, notes
+
+
+def candidate_selection_quality_penalty(candidate: Any) -> float:
+    raw_flags = getattr(candidate, "quality_flags", ())
+    flags = tuple(dict.fromkeys(str(flag) for flag in raw_flags))
+    weighted_flags = [
+        flag
+        for flag in flags
+        if flag in _ADAP_LIKE_FLAG_LABELS
+        and _ADAP_EQUIVALENT_LEGACY_FLAGS.get(flag) not in flags
+    ]
+    return min(
+        _ADAP_LIKE_SELECTION_MAX,
+        len(weighted_flags) * _ADAP_LIKE_SELECTION_WEIGHT,
+    )
 
 
 def _is_finite(value: float) -> bool:
