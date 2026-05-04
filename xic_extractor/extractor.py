@@ -3,7 +3,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from statistics import median
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.scoring_factory import (
@@ -30,6 +30,9 @@ from xic_extractor.signal_processing import (
     PeakResult,
     find_peak_and_area,
 )
+
+if TYPE_CHECKING:
+    from xic_extractor.execution import ScoringInputs
 
 __all__ = [
     "DiagnosticIssue",
@@ -111,10 +114,6 @@ class RawFileExtractionResult:
     sample_name: str
     file_result: FileResult
     diagnostics: list[DiagnosticRecord]
-    wide_rows: list[dict[str, str]]
-    long_rows: list[dict[str, str]]
-    score_breakdown_rows: list[dict[str, str]]
-    error: str | None = None
 
 
 def run(
@@ -284,7 +283,7 @@ def _collect_raw_file_results_process(
     config: ExtractionConfig,
     targets: tuple[Target, ...],
     raw_paths: list[Path],
-    scoring_inputs: Any,
+    scoring_inputs: ScoringInputs,
     *,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
@@ -400,10 +399,6 @@ def _extract_raw_file_result(
         sample_name=file_result.sample_name,
         file_result=file_result,
         diagnostics=diagnostics,
-        wide_rows=[csv_writers._output_row(file_result, targets)],
-        long_rows=csv_writers._long_output_rows(file_result, targets),
-        score_breakdown_rows=csv_writers._score_breakdown_rows(file_result),
-        error=file_result.error,
     )
 
 

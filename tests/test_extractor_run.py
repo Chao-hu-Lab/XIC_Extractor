@@ -94,7 +94,7 @@ def test_serial_backend_keeps_sorted_raw_output_order(
     ]
 
 
-def test_per_file_result_primitive_returns_rows_and_is_pickleable(
+def test_per_file_result_primitive_returns_worker_payload_and_is_pickleable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -122,25 +122,11 @@ def test_per_file_result_primitive_returns_rows_and_is_pickleable(
     assert restored.raw_index == 7
     assert restored.sample_name == "SampleA"
     assert restored.file_result.sample_name == "SampleA"
-    assert restored.error is None
     assert restored.diagnostics == []
-    assert restored.wide_rows == [
-        {
-            "SampleName": "SampleA",
-            "Analyte_RT": "8.5000",
-            "Analyte_Int": "1000",
-            "Analyte_Area": "2000.00",
-            "Analyte_PeakStart": "8.0000",
-            "Analyte_PeakEnd": "9.0000",
-            "Analyte_PeakWidth": "1.0000",
-        }
-    ]
-    assert restored.long_rows[0]["SampleName"] == "SampleA"
-    assert restored.long_rows[0]["Target"] == "Analyte"
-    assert restored.long_rows[0]["RT"] == "8.5000"
-    assert restored.score_breakdown_rows[0]["SampleName"] == "SampleA"
-    assert restored.score_breakdown_rows[0]["Target"] == "Analyte"
-    assert restored.score_breakdown_rows[0]["Total Severity"] == "0"
+    assert not hasattr(restored, "wide_rows")
+    assert not hasattr(restored, "long_rows")
+    assert not hasattr(restored, "score_breakdown_rows")
+    assert not hasattr(restored, "error")
 
 
 def test_per_file_result_primitive_captures_file_errors(
@@ -168,12 +154,12 @@ def test_per_file_result_primitive_captures_file_errors(
 
     assert result.raw_index == 2
     assert result.sample_name == "Bad"
-    assert result.error is not None
-    assert "file locked" in result.error
-    assert result.file_result.error == result.error
-    assert result.wide_rows[0]["Analyte_RT"] == "ERROR"
-    assert result.long_rows[0]["RT"] == "ERROR"
-    assert result.score_breakdown_rows == []
+    assert result.file_result.error is not None
+    assert "file locked" in result.file_result.error
+    assert not hasattr(result, "error")
+    assert not hasattr(result, "wide_rows")
+    assert not hasattr(result, "long_rows")
+    assert not hasattr(result, "score_breakdown_rows")
     assert result.diagnostics[0].issue == "FILE_ERROR"
 
 

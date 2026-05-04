@@ -121,8 +121,4 @@ def _raw_result(raw_index: int, sample_name: str) -> RawFileExtractionResult:
         sample_name=sample_name,
         file_result=FileResult(sample_name=sample_name, results={}),
         diagnostics=[],
-        wide_rows=[],
-        long_rows=[],
-        score_breakdown_rows=[],
-        error=None,
     )

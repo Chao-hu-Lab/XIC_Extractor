@@ -5,6 +5,7 @@ import multiprocessing
 import pickle
 from dataclasses import replace
 from pathlib import Path
+from typing import Any, get_args, get_type_hints
 
 import pytest
 
@@ -49,13 +50,19 @@ def test_worker_job_and_result_objects_are_pickleable(tmp_path: Path) -> None:
         sample_name="SampleA",
         file_result=None,
         diagnostics=[],
-        wide_rows=[],
-        long_rows=[],
-        score_breakdown_rows=[],
-        error=None,
     )
     restored_result = pickle.loads(pickle.dumps(result))
     assert restored_result.raw_index == 3
+
+
+def test_raw_file_job_scoring_inputs_type_contract_excludes_any() -> None:
+    from xic_extractor.execution import RawFileJob, ScoringInputs
+
+    scoring_inputs_hint = get_type_hints(RawFileJob)["scoring_inputs"]
+
+    assert Any not in get_args(scoring_inputs_hint)
+    assert ScoringInputs in get_args(scoring_inputs_hint)
+    assert type(None) in get_args(scoring_inputs_hint)
 
 
 def test_aggregation_sorts_successful_results_by_raw_index(tmp_path: Path) -> None:
@@ -67,10 +74,6 @@ def test_aggregation_sorts_successful_results_by_raw_index(tmp_path: Path) -> No
         sample_name="B",
         file_result=None,
         diagnostics=[],
-        wide_rows=[],
-        long_rows=[],
-        score_breakdown_rows=[],
-        error=None,
     )
     result_a = replace(result_b, raw_index=1, sample_name="A")
 
@@ -264,10 +267,6 @@ def test_parallel_full_extraction_submits_pickleable_scoring_jobs_and_sorts(
                 diagnostics=[
                     DiagnosticRecord("B", "Analyte", "B_DIAG", "kept")
                 ],
-                wide_rows=[{"SampleName": "B"}],
-                long_rows=[{"SampleName": "B", "Target": "Analyte"}],
-                score_breakdown_rows=[{"SampleName": "B", "Target": "Analyte"}],
-                error=None,
             ),
             RawFileExtractionResult(
                 raw_index=1,
@@ -276,10 +275,6 @@ def test_parallel_full_extraction_submits_pickleable_scoring_jobs_and_sorts(
                 diagnostics=[
                     DiagnosticRecord("A", "Analyte", "A_DIAG", "kept")
                 ],
-                wide_rows=[{"SampleName": "A"}],
-                long_rows=[{"SampleName": "A", "Target": "Analyte"}],
-                score_breakdown_rows=[{"SampleName": "A", "Target": "Analyte"}],
-                error=None,
             ),
         ]
 
@@ -297,9 +292,7 @@ def test_parallel_full_extraction_submits_pickleable_scoring_jobs_and_sorts(
     ]
     assert [result.sample_name for result in ordered] == ["A", "B"]
     assert ordered[0].diagnostics[0].issue == "A_DIAG"
-    assert ordered[1].score_breakdown_rows == [
-        {"SampleName": "B", "Target": "Analyte"}
-    ]
+    assert not hasattr(ordered[1], "score_breakdown_rows")
 
 
 def test_parallel_full_extraction_worker_error_fails_with_raw_name(
@@ -367,10 +360,6 @@ def test_raw_worker_rebuilds_scoring_factory_inside_worker(
             sample_name=raw_path_arg.stem,
             file_result=FileResult(sample_name=raw_path_arg.stem, results={}),
             diagnostics=[],
-            wide_rows=[],
-            long_rows=[],
-            score_breakdown_rows=[],
-            error=None,
         )
 
     monkeypatch.setattr(
@@ -437,10 +426,6 @@ def test_process_run_writes_output_only_after_collecting_worker_results(
                 sample_name="A",
                 file_result=FileResult(sample_name="A", results={}),
                 diagnostics=[],
-                wide_rows=[{"SampleName": "A"}],
-                long_rows=[{"SampleName": "A", "Target": "Analyte"}],
-                score_breakdown_rows=[],
-                error=None,
             )
         ]
 

@@ -29,7 +29,7 @@ class RawFileJob:
     raw_path: Path
     config: ExtractionConfig
     targets: tuple[Target, ...]
-    scoring_inputs: ScoringInputs | Any | None = None
+    scoring_inputs: ScoringInputs | None = None
 
 
 @dataclass(frozen=True)
