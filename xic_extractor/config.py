@@ -157,8 +157,8 @@ def migrate_settings_dict(raw: dict[str, str]) -> tuple[dict[str, str], list[str
 def load_config(
     config_dir: Path, *, settings_overrides: dict[str, str] | None = None
 ) -> tuple[ExtractionConfig, list[Target]]:
-    settings_path = config_dir / "settings.csv"
-    targets_path = config_dir / "targets.csv"
+    settings_path = _config_input_path(config_dir, "settings")
+    targets_path = _config_input_path(config_dir, "targets")
 
     raw_settings = _read_settings(settings_path)
     if settings_overrides:
@@ -178,6 +178,16 @@ def load_config(
     config = _validate_settings(migrated, settings_path, output_dir, config_hash)
     targets = _read_targets(targets_path)
     return config, targets
+
+
+def _config_input_path(config_dir: Path, name: str) -> Path:
+    runtime_path = config_dir / f"{name}.csv"
+    if runtime_path.exists():
+        return runtime_path
+    example_path = config_dir / f"{name}.example.csv"
+    if example_path.exists():
+        return example_path
+    return runtime_path
 
 
 def _read_settings(path: Path) -> dict[str, str]:

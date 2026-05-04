@@ -174,6 +174,44 @@ def test_cli_applies_data_dir_override_before_real_config_validation(
     assert "settings.csv" not in capsys.readouterr().err
 
 
+def test_cli_accepts_example_defaults_when_runtime_config_is_missing(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    module = _module()
+    config_dir = tmp_path / "config"
+    validation_dir = tmp_path / "validation"
+    dll_dir = tmp_path / "dll"
+    validation_dir.mkdir()
+    dll_dir.mkdir()
+    _write_cli_config(
+        config_dir,
+        data_dir=tmp_path / "placeholder_missing",
+        dll_dir=dll_dir,
+    )
+    (config_dir / "settings.csv").rename(config_dir / "settings.example.csv")
+    (config_dir / "targets.csv").rename(config_dir / "targets.example.csv")
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: None,
+        raising=False,
+    )
+
+    exit_code = module.main(
+        ["--base-dir", str(tmp_path), "--data-dir", str(validation_dir)]
+    )
+
+    assert exit_code == 0
+    assert calls["run_config"].data_dir == validation_dir.resolve()
+    assert calls["run_targets"][0].label == "Analyte"
+    assert not (config_dir / "settings.csv").exists()
+    assert not (config_dir / "targets.csv").exists()
+    assert capsys.readouterr().err == ""
+
+
 def test_cli_accepts_parallel_execution_overrides(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:

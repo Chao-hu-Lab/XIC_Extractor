@@ -138,6 +138,23 @@ def test_load_config_hash_reflects_settings_overrides(tmp_path: Path) -> None:
     assert override_config.config_hash != base_config.config_hash
 
 
+def test_load_config_uses_examples_when_runtime_files_are_missing(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_valid_config(config_dir)
+    (config_dir / "settings.csv").rename(config_dir / "settings.example.csv")
+    (config_dir / "targets.csv").rename(config_dir / "targets.example.csv")
+
+    config, targets = load_config(config_dir)
+
+    assert config.data_dir == tmp_path / "raw"
+    assert targets[0].label == "Analyte"
+    assert config.config_hash
+    assert not (config_dir / "settings.csv").exists()
+    assert not (config_dir / "targets.csv").exists()
+
+
 def test_load_config_missing_settings_file_raises_config_error(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     _write_targets(config_dir)

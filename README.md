@@ -23,7 +23,7 @@ XIC Extractor 會從 Thermo Xcalibur `.raw` 檔案批次提取多目標化合物
 
 `config/settings.csv` 是 GUI 與 CLI 共用的 runtime 設定來源；未建立 runtime 檔前，GUI 會先讀取 `.example.csv` 範本作為初始畫面。
 GUI 會把常用欄位放在基本區；進階設定預設摺疊，除錯或方法開發者需要時再展開。
-打包版本內含 `config/settings.example.csv` 與 `config/targets.example.csv`；這兩份是範本，不是 runtime working copy。CLI 執行前請先複製或透過 GUI Save/Run 產生 `config/settings.csv` 與 `config/targets.csv`。
+打包版本內含 `config/settings.example.csv` 與 `config/targets.example.csv`；這兩份是範本，不是 runtime working copy。GUI 與 CLI 都可在 runtime 檔不存在時讀取範本預設值；使用 GUI Save/Run 後才會建立可編輯的 runtime `config/settings.csv` 與 `config/targets.csv`。
 
 ![GUI Advanced settings section](assets/screenshots/gui-advanced.png)
 
