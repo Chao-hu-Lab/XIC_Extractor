@@ -31,6 +31,18 @@ class NLResult:
         return self.status
 
 
+@dataclass(frozen=True)
+class MS2ProductEvidence:
+    scan_rt: float
+    precursor_mz: float
+    product_mz: float
+    product_intensity: float
+    product_base_ratio: float
+    target_product_ppm: float
+    observed_loss_da: float
+    observed_loss_error_ppm: float
+
+
 def find_nl_anchor_rt(
     raw: MS2ScanSource,
     *,
@@ -104,7 +116,6 @@ def check_nl(
     ms2_precursor_tol_da: float,
     nl_min_intensity_ratio: float,
 ) -> NLResult:
-    expected_product = precursor_mz - neutral_loss_da
     diagnostic_ppm = max(3.0 * nl_ppm_max, NL_DIAGNOSTIC_PPM_FLOOR)
 
     valid_count = 0
@@ -125,14 +136,18 @@ def check_nl(
             continue
 
         matched_count += 1
-        candidate_ppm = _best_product_ppm(
+        evidence = _best_product_evidence(
             event.scan,
-            expected_product=expected_product,
+            target_precursor_mz=precursor_mz,
+            neutral_loss_da=neutral_loss_da,
+            nl_ppm_max=nl_ppm_max,
             min_intensity_ratio=nl_min_intensity_ratio,
             diagnostic_ppm=diagnostic_ppm,
         )
-        if candidate_ppm is not None and (best_ppm is None or candidate_ppm < best_ppm):
-            best_ppm = candidate_ppm
+        if evidence is not None and (
+            best_ppm is None or evidence.observed_loss_error_ppm < best_ppm
+        ):
+            best_ppm = evidence.observed_loss_error_ppm
             best_scan_rt = event.scan.rt
 
     status = _classify_nl_result(
@@ -149,6 +164,61 @@ def check_nl(
         parse_error_count=parse_error_count,
         matched_scan_count=matched_count,
     )
+
+
+def _best_product_evidence(
+    scan: Ms2Scan,
+    *,
+    target_precursor_mz: float,
+    neutral_loss_da: float,
+    nl_ppm_max: float,
+    min_intensity_ratio: float,
+    diagnostic_ppm: float,
+) -> MS2ProductEvidence | None:
+    expected_product = scan.precursor_mz - neutral_loss_da
+    if expected_product <= 0.0 or target_precursor_mz <= 0.0 or scan.base_peak <= 0.0:
+        return None
+
+    masses = np.asarray(scan.masses, dtype=float)
+    intensities = np.asarray(scan.intensities, dtype=float)
+    intensity_floor = scan.base_peak * min_intensity_ratio
+
+    scan_product_ppm = np.abs(masses - expected_product) / expected_product * 1_000_000.0
+    mask = (intensities >= intensity_floor) & (scan_product_ppm <= diagnostic_ppm)
+    if not mask.any():
+        return None
+
+    target_product = target_precursor_mz - neutral_loss_da
+    if target_product <= 0.0:
+        return None
+
+    candidates: list[MS2ProductEvidence] = []
+    for index in np.flatnonzero(mask):
+        product_mz = float(masses[int(index)])
+        observed_loss_da = scan.precursor_mz - product_mz
+        observed_loss_error_ppm = (
+            abs(observed_loss_da - neutral_loss_da) / neutral_loss_da * 1_000_000.0
+        )
+        if observed_loss_error_ppm > max(diagnostic_ppm, 3.0 * nl_ppm_max):
+            continue
+        candidates.append(
+            MS2ProductEvidence(
+                scan_rt=scan.rt,
+                precursor_mz=scan.precursor_mz,
+                product_mz=product_mz,
+                product_intensity=float(intensities[int(index)]),
+                product_base_ratio=float(intensities[int(index)] / scan.base_peak),
+                target_product_ppm=float(
+                    abs(product_mz - target_product) / target_product * 1_000_000.0
+                ),
+                observed_loss_da=observed_loss_da,
+                observed_loss_error_ppm=observed_loss_error_ppm,
+            )
+        )
+
+    if not candidates:
+        return None
+    return min(candidates, key=lambda evidence: evidence.observed_loss_error_ppm)
 
 
 def _best_product_ppm(

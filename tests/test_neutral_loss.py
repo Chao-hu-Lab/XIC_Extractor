@@ -16,7 +16,7 @@ def test_check_nl_returns_ok_when_best_ppm_is_at_or_below_warn() -> None:
         [
             _scan_event(
                 precursor_mz=PRECURSOR_MZ,
-                masses=[120.0, _mass_at_ppm(EXPECTED_PRODUCT_MZ, 5.0)],
+                masses=[120.0, _product_for_loss_ppm(PRECURSOR_MZ, 5.0)],
                 intensities=[100.0, 80.0],
             )
         ]
@@ -37,7 +37,7 @@ def test_check_nl_returns_warn_token_when_ppm_is_between_warn_and_max() -> None:
         [
             _scan_event(
                 precursor_mz=PRECURSOR_MZ,
-                masses=[_mass_at_ppm(EXPECTED_PRODUCT_MZ, 12.34)],
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 12.34)],
                 intensities=[100.0],
             )
         ]
@@ -55,7 +55,7 @@ def test_check_nl_returns_fail_with_best_ppm_when_product_is_only_diagnostic() -
         [
             _scan_event(
                 precursor_mz=PRECURSOR_MZ,
-                masses=[_mass_at_ppm(EXPECTED_PRODUCT_MZ, 55.0)],
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 55.0)],
                 intensities=[100.0],
             )
         ]
@@ -84,6 +84,86 @@ def test_check_nl_returns_fail_without_best_ppm_when_no_product_is_diagnostic() 
     assert result.status == "NL_FAIL"
     assert result.best_ppm is None
     assert result.matched_scan_count == 1
+
+
+def test_check_nl_rejects_target_product_when_observed_loss_is_wrong() -> None:
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=262.156006,
+                masses=[145.079849],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    result = check_nl(
+        raw,
+        precursor_mz=261.127276,
+        rt_min=8.0,
+        rt_max=10.0,
+        neutral_loss_da=116.0474,
+        nl_ppm_warn=20.0,
+        nl_ppm_max=50.0,
+        ms2_precursor_tol_da=1.6,
+        nl_min_intensity_ratio=0.01,
+    )
+
+    assert result.status == "NL_FAIL"
+    assert result.best_ppm is None
+    assert result.matched_scan_count == 1
+
+
+def test_check_nl_accepts_observed_loss_within_threshold() -> None:
+    precursor_mz = 258.110077
+    neutral_loss_da = 116.0474
+    product_mz = 142.061813
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=precursor_mz,
+                masses=[product_mz],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    result = check_nl(
+        raw,
+        precursor_mz=258.1085,
+        rt_min=8.0,
+        rt_max=10.0,
+        neutral_loss_da=neutral_loss_da,
+        nl_ppm_warn=20.0,
+        nl_ppm_max=50.0,
+        ms2_precursor_tol_da=1.6,
+        nl_min_intensity_ratio=0.01,
+    )
+
+    observed_loss_ppm = abs((precursor_mz - product_mz) - neutral_loss_da)
+    observed_loss_ppm = observed_loss_ppm / neutral_loss_da * 1_000_000.0
+    assert result.status == "OK"
+    assert result.best_ppm == pytest.approx(observed_loss_ppm)
+
+
+def test_check_nl_warns_on_observed_loss_between_warn_and_max() -> None:
+    precursor_mz = PRECURSOR_MZ + 0.04
+    observed_loss = NEUTRAL_LOSS_DA * (1.0 + 12.34 / 1_000_000.0)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=precursor_mz,
+                masses=[precursor_mz - observed_loss],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    result = _check(raw)
+
+    assert result.status == "WARN"
+    assert result.best_ppm == pytest.approx(12.34)
+    assert result.to_token() == "WARN_12.3ppm"
 
 
 def test_check_nl_returns_no_ms2_when_no_scan_matches_precursor() -> None:
@@ -261,6 +341,11 @@ def _anchor(raw: "_FakeRaw", reference_rt: float | None = None) -> float | None:
 
 def _mass_at_ppm(mass: float, ppm: float) -> float:
     return mass * (1.0 + ppm / 1_000_000.0)
+
+
+def _product_for_loss_ppm(precursor_mz: float, ppm: float) -> float:
+    observed_loss = NEUTRAL_LOSS_DA * (1.0 + ppm / 1_000_000.0)
+    return precursor_mz - observed_loss
 
 
 def _scan_event(
