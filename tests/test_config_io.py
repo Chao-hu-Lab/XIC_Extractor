@@ -145,8 +145,10 @@ def test_read_targets_backward_compat_missing_istd_cols(tmp_path, monkeypatch):
     assert targets[0].get("is_istd", "false") == "false"
 
 
-def test_read_settings_copies_example_when_missing(tmp_path, monkeypatch):
-    """read_settings() 在 settings.csv 不存在時自動從 bundle 複製 .example.csv。"""
+def test_read_settings_uses_example_when_missing_without_creating_runtime_copy(
+    tmp_path, monkeypatch
+):
+    """read_settings() 可讀取範本，但不主動產生 settings.csv。"""
     (tmp_path / "settings.example.csv").write_text(
         "key,value,description\ndata_dir,/placeholder,資料目錄\n",
         encoding="utf-8-sig",
@@ -155,11 +157,13 @@ def test_read_settings_copies_example_when_missing(tmp_path, monkeypatch):
     monkeypatch.setattr("gui.config_io._BUNDLE_CONFIG", tmp_path)
     result = read_settings()
     assert result["data_dir"] == "/placeholder"
-    assert (tmp_path / "settings.csv").exists()
+    assert not (tmp_path / "settings.csv").exists()
 
 
-def test_read_targets_copies_example_when_missing(tmp_path, monkeypatch):
-    """read_targets() 在 targets.csv 不存在時自動從 bundle 複製 .example.csv。"""
+def test_read_targets_uses_example_when_missing_without_creating_runtime_copy(
+    tmp_path, monkeypatch
+):
+    """read_targets() 可讀取範本，但不主動產生 targets.csv。"""
     (tmp_path / "targets.example.csv").write_text(
         "label,mz,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,nl_ppm_max\n"
         "ExA,258.1085,8.0,10.0,20,116.0474,20,50\n",
@@ -169,4 +173,46 @@ def test_read_targets_copies_example_when_missing(tmp_path, monkeypatch):
     monkeypatch.setattr("gui.config_io._BUNDLE_CONFIG", tmp_path)
     result = read_targets()
     assert result[0]["label"] == "ExA"
+    assert not (tmp_path / "targets.csv").exists()
+
+
+def test_write_settings_creates_runtime_copy_from_values_and_example_descriptions(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "settings.example.csv").write_text(
+        "key,value,description\ndata_dir,/placeholder,資料目錄\n",
+        encoding="utf-8-sig",
+    )
+    monkeypatch.setattr("gui.config_io.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("gui.config_io._BUNDLE_CONFIG", tmp_path)
+
+    write_settings({"data_dir": "C:\\real"})
+
+    rows = list(
+        csv.DictReader((tmp_path / "settings.csv").open(encoding="utf-8-sig"))
+    )
+    assert rows == [
+        {"key": "data_dir", "value": "C:\\real", "description": "資料目錄"}
+    ]
+
+
+def test_write_targets_creates_runtime_copy_only_on_save(tmp_path, monkeypatch):
+    monkeypatch.setattr("gui.config_io.CONFIG_DIR", tmp_path)
+
+    write_targets(
+        [
+            {
+                "label": "ExA",
+                "mz": "258.1085",
+                "rt_min": "8.0",
+                "rt_max": "10.0",
+                "ppm_tol": "20",
+                "neutral_loss_da": "116.0474",
+                "nl_ppm_warn": "20",
+                "nl_ppm_max": "50",
+            }
+        ]
+    )
+
     assert (tmp_path / "targets.csv").exists()
+    assert read_targets()[0]["label"] == "ExA"

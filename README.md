@@ -11,7 +11,7 @@ XIC Extractor 會從 Thermo Xcalibur `.raw` 檔案批次提取多目標化合物
 1. 前往 [Releases](../../releases) 下載最新版 `XIC_Extractor-Windows-vX.Y.Z.zip`
 2. 解壓縮到任意資料夾
 3. 雙擊 `XIC_Extractor.exe` 執行（不需自行安裝 Python）
-4. 首次啟動時，程式會從打包內的範本複製出可編輯的 `config/settings.csv` 與 `config/targets.csv`
+4. 首次啟動時，GUI 會載入打包內的 `config/settings.example.csv` 與 `config/targets.example.csv` 作為初始範本；按下 Save 或 Run 後才會建立可編輯的 runtime `config/settings.csv` 與 `config/targets.csv`
 
 系統需求：Windows 10/11、已安裝 .NET 6+ runtime，以及 Thermo Xcalibur / RawFileReader DLL。
 
@@ -21,9 +21,9 @@ XIC Extractor 會從 Thermo Xcalibur `.raw` 檔案批次提取多目標化合物
 
 ### Settings
 
-`config/settings.csv` 是 GUI 與 CLI 共用的唯一 runtime 設定來源。
+`config/settings.csv` 是 GUI 與 CLI 共用的 runtime 設定來源；未建立 runtime 檔前，GUI 會先讀取 `.example.csv` 範本作為初始畫面。
 GUI 會把常用欄位放在基本區；進階設定預設摺疊，除錯或方法開發者需要時再展開。
-打包版本內含 `config/settings.example.csv` 與 `config/targets.example.csv`；若 runtime `config/settings.csv` 或 `config/targets.csv` 不存在，首次啟動會自動從範本建立。
+打包版本內含 `config/settings.example.csv` 與 `config/targets.example.csv`；這兩份是範本，不是 runtime working copy。CLI 執行前請先複製或透過 GUI Save/Run 產生 `config/settings.csv` 與 `config/targets.csv`。
 
 ![GUI Advanced settings section](assets/screenshots/gui-advanced.png)
 
