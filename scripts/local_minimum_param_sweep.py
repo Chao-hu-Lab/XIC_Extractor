@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
 from statistics import median
-from typing import Iterable
+from typing import Callable, Iterable
 
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
@@ -76,6 +76,14 @@ class ParameterSetScore:
     per_target_rows: list[PerTargetScoreRow]
 
 
+@dataclass(frozen=True)
+class SweepResult:
+    scores: list[ParameterSetScore]
+
+
+SweepRunner = Callable[[ParameterSet], list[ProgramPeakRow]]
+
+
 _STATIC_LOCAL_MINIMUM_PARAMS = {
     "resolver_min_relative_height": "0.0",
     "resolver_min_absolute_height": "25.0",
@@ -131,6 +139,28 @@ def read_manual_truth(path: Path) -> list[ManualTruthRow]:
         rows.extend(_read_sheet_truth(worksheet))
     workbook.close()
     return rows
+
+
+def run_sweep(
+    truth_rows: list[ManualTruthRow],
+    parameter_sets: list[ParameterSet],
+    runner: SweepRunner,
+    *,
+    istd_targets: set[str] | None = None,
+) -> SweepResult:
+    scores: list[ParameterSetScore] = []
+    for parameter_set in parameter_sets:
+        program_rows = runner(parameter_set)
+        scores.append(
+            score_parameter_set(
+                parameter_set.name,
+                parameter_set.settings_overrides,
+                truth_rows,
+                program_rows,
+                istd_targets=istd_targets,
+            )
+        )
+    return SweepResult(scores=scores)
 
 
 def score_parameter_set(

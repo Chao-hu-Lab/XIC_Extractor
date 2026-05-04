@@ -4,9 +4,11 @@ from openpyxl import Workbook
 
 from scripts.local_minimum_param_sweep import (
     ManualTruthRow,
+    ParameterSet,
     ProgramPeakRow,
     build_parameter_sets,
     read_manual_truth,
+    run_sweep,
     score_parameter_set,
 )
 
@@ -159,3 +161,45 @@ def test_build_parameter_sets_includes_legacy_current_and_candidate_grid() -> No
     assert any(name.startswith("local_minimum_grid_") for name in names)
     assert parameter_sets[0].settings_overrides["resolver_mode"] == "legacy_savgol"
     assert parameter_sets[1].settings_overrides["resolver_mode"] == "local_minimum"
+
+
+def test_run_sweep_scores_each_parameter_set_with_injected_runner() -> None:
+    truth = [
+        ManualTruthRow(
+            "DNA",
+            "SampleA",
+            "TargetA",
+            10.0,
+            1000.0,
+            10000.0,
+            1.0,
+            "正常",
+        )
+    ]
+    parameter_sets = [
+        ParameterSet("legacy_savgol", {"resolver_mode": "legacy_savgol"}),
+        ParameterSet("local_minimum_current", {"resolver_mode": "local_minimum"}),
+    ]
+
+    def fake_runner(parameter_set: ParameterSet) -> list[ProgramPeakRow]:
+        area = 10000.0 if parameter_set.name == "legacy_savgol" else 12000.0
+        return [
+            ProgramPeakRow(
+                "SampleA",
+                "TargetA",
+                False,
+                10.01,
+                1000.0,
+                area,
+                True,
+            )
+        ]
+
+    result = run_sweep(truth, parameter_sets, fake_runner)
+
+    assert [score.name for score in result.scores] == [
+        "legacy_savgol",
+        "local_minimum_current",
+    ]
+    assert result.scores[0].area_median_abs_pct_error == 0.0
+    assert result.scores[1].area_median_abs_pct_error == 0.2
