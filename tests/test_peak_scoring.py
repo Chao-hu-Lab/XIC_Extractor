@@ -287,6 +287,27 @@ def test_selector_uses_weighted_adap_like_selection_penalty() -> None:
     assert select_candidate_with_confidence([clean, weak]) is clean
 
 
+def test_selector_does_not_let_soft_quality_penalty_beat_large_rt_distance() -> None:
+    far_clean = _sc(
+        Confidence.HIGH,
+        12.00,
+        1000.0,
+        10.0,
+        quality_penalty=0,
+        selection_quality_penalty=0.0,
+    )
+    near_flagged = _sc(
+        Confidence.HIGH,
+        10.00,
+        500.0,
+        10.0,
+        quality_penalty=0,
+        selection_quality_penalty=0.25,
+    )
+
+    assert select_candidate_with_confidence([far_clean, near_flagged]) is near_flagged
+
+
 def test_selector_tiebreak_prefers_lower_quality_penalty() -> None:
     clean = _sc(Confidence.LOW, 10.10, 500.0, 10.0, quality_penalty=0)
     weak = _sc(Confidence.LOW, 10.10, 1000.0, 10.0, quality_penalty=1)

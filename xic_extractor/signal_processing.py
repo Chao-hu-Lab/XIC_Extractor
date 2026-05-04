@@ -122,7 +122,16 @@ def find_peak_and_area(
                 )
                 for candidate in candidates_result.candidates
             ]
-            chosen = select_candidate_with_confidence(scored_candidates)
+            selection_rt = _selection_rt_for_scored_candidates(
+                candidates_result.candidates,
+                preferred_rt=preferred_rt,
+                strict_preferred_rt=strict_preferred_rt,
+            )
+            chosen = select_candidate_with_confidence(
+                scored_candidates,
+                selection_rt=selection_rt,
+                strict_selection_rt=strict_preferred_rt,
+            )
             best_candidate = chosen.candidate
             chosen_confidence = chosen.confidence.value
             chosen_reason = chosen.reason
@@ -148,14 +157,20 @@ def find_peak_and_area(
                     scoring_context_builder(recovery_candidate),
                     istd_confidence_note=istd_confidence_note,
                 )
-                return _detection_success(
-                    recovery_result,
-                    recovery_candidate,
-                    confidence=scored_recovery.confidence.value,
-                    reason=scored_recovery.reason,
-                    severities=scored_recovery.severities,
+                chosen_after_recovery = select_candidate_with_confidence(
+                    [chosen, scored_recovery],
+                    selection_rt=preferred_rt,
                 )
-            return _detection_success(recovery_result, recovery_candidate)
+                if chosen_after_recovery is scored_recovery:
+                    return _detection_success(
+                        recovery_result,
+                        recovery_candidate,
+                        confidence=scored_recovery.confidence.value,
+                        reason=scored_recovery.reason,
+                        severities=scored_recovery.severities,
+                    )
+            else:
+                return _detection_success(recovery_result, recovery_candidate)
         return _detection_success(
             candidates_result,
             best_candidate,
@@ -437,6 +452,32 @@ def _preferred_rt_recovery(
     if candidate is None:
         return None, None
     return candidate, relaxed_result
+
+
+def _selection_rt_for_scored_candidates(
+    candidates: tuple[PeakCandidate, ...],
+    *,
+    preferred_rt: float | None,
+    strict_preferred_rt: bool,
+) -> float | None:
+    if preferred_rt is None or not candidates:
+        return None
+    if strict_preferred_rt:
+        return preferred_rt
+
+    nearest_candidate = min(
+        candidates, key=lambda candidate: abs(candidate.smoothed_apex_rt - preferred_rt)
+    )
+    strongest_candidate = max(
+        candidates, key=lambda candidate: candidate.smoothed_apex_intensity
+    )
+    if (
+        nearest_candidate.smoothed_apex_intensity
+        >= strongest_candidate.smoothed_apex_intensity
+        * _PREFERRED_RT_MIN_INTENSITY_RATIO
+    ):
+        return preferred_rt
+    return None
 
 
 def _relaxed_local_minimum_recovery_config(

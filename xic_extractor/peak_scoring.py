@@ -36,6 +36,7 @@ _ADAP_LIKE_FLAG_LABELS = {
 }
 _ADAP_LIKE_SELECTION_WEIGHT = 0.25
 _ADAP_LIKE_SELECTION_MAX = 0.5
+_SELECTION_QUALITY_DISTANCE_WEIGHT_MIN = 0.05
 _ADAP_EQUIVALENT_LEGACY_FLAGS = {
     "low_scan_support": "low_scan_count",
     "poor_edge_recovery": "low_top_edge_ratio",
@@ -122,17 +123,27 @@ def build_reason(
     return "; ".join(parts)
 
 
-def select_candidate_with_confidence(scored: list[ScoredCandidate]) -> ScoredCandidate:
+def select_candidate_with_confidence(
+    scored: list[ScoredCandidate],
+    *,
+    selection_rt: float | None = None,
+    strict_selection_rt: bool = False,
+) -> ScoredCandidate:
     if not scored:
         raise ValueError(
             "select_candidate_with_confidence requires at least one candidate"
         )
 
-    def key(scored_candidate: ScoredCandidate) -> tuple[int, float, float, float]:
+    def key(
+        scored_candidate: ScoredCandidate,
+    ) -> tuple[float, float, float, float, float]:
         candidate = scored_candidate.candidate
+        selection_reference = selection_rt
+        if selection_reference is None:
+            selection_reference = scored_candidate.prior_rt
         distance = (
-            abs(candidate.smoothed_apex_rt - scored_candidate.prior_rt)
-            if scored_candidate.prior_rt is not None
+            abs(candidate.smoothed_apex_rt - selection_reference)
+            if selection_reference is not None
             else float("inf")
         )
         confidence_rank = _CONFIDENCE_RANK[scored_candidate.confidence]
@@ -141,20 +152,43 @@ def select_candidate_with_confidence(scored: list[ScoredCandidate]) -> ScoredCan
             if scored_candidate.selection_quality_penalty is not None
             else float(scored_candidate.quality_penalty)
         )
+        if strict_selection_rt and selection_rt is not None:
+            return (
+                distance,
+                float(confidence_rank),
+                selection_quality_penalty,
+                0.0,
+                -candidate.smoothed_apex_intensity,
+            )
         if (
             scored_candidate.prefer_rt_prior_tiebreak
             and scored_candidate.prior_rt is not None
+            and selection_rt is None
         ):
             return (
-                confidence_rank,
+                float(confidence_rank),
                 distance,
                 selection_quality_penalty,
+                0.0,
+                -candidate.smoothed_apex_intensity,
+            )
+        if selection_reference is not None:
+            adjusted_distance = distance + (
+                selection_quality_penalty
+                * _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN
+            )
+            return (
+                float(confidence_rank),
+                adjusted_distance,
+                selection_quality_penalty,
+                distance,
                 -candidate.smoothed_apex_intensity,
             )
         return (
-            confidence_rank,
+            float(confidence_rank),
             selection_quality_penalty,
-            distance,
+            0.0,
+            0.0,
             -candidate.smoothed_apex_intensity,
         )
 
@@ -246,6 +280,10 @@ def candidate_selection_quality_penalty(candidate: Any) -> float:
         _ADAP_LIKE_SELECTION_MAX,
         len(weighted_flags) * _ADAP_LIKE_SELECTION_WEIGHT,
     )
+
+
+def is_adap_like_quality_flag(flag: object) -> bool:
+    return str(flag) in _ADAP_LIKE_FLAG_LABELS
 
 
 def _is_finite(value: float) -> bool:

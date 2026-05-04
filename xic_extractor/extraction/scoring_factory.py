@@ -7,7 +7,11 @@ from scipy.signal import peak_widths
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.injection_rolling import rolling_median_rt
 from xic_extractor.neutral_loss import NLResult
-from xic_extractor.peak_scoring import ScoringContext, compute_local_sn_cache
+from xic_extractor.peak_scoring import (
+    ScoringContext,
+    compute_local_sn_cache,
+    is_adap_like_quality_flag,
+)
 from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -174,7 +178,8 @@ def allow_prepass_anchor(peak_result: PeakDetectionResult) -> bool:
     candidate = selected_candidate(peak_result)
     if candidate is None:
         return False
-    return not bool(getattr(candidate, "quality_flags", ()))
+    flags = tuple(str(flag) for flag in getattr(candidate, "quality_flags", ()))
+    return not any(not is_adap_like_quality_flag(flag) for flag in flags)
 
 
 def paired_istd_fwhm(
