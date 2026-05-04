@@ -265,6 +265,51 @@ def test_find_nl_anchor_rt_without_reference_uses_strongest_base_peak() -> None:
     assert anchor_rt == pytest.approx(8.90)
 
 
+def test_find_nl_anchor_rt_ignores_wrong_observed_loss_even_with_matching_target_product() -> None:
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=262.156006,
+                rt=8.94,
+                masses=[145.079849],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    anchor_rt = find_nl_anchor_rt(
+        raw,
+        precursor_mz=261.127276,
+        rt_center=9.0,
+        search_margin_min=1.0,
+        neutral_loss_da=116.0474,
+        nl_ppm_max=50.0,
+        ms2_precursor_tol_da=1.6,
+        nl_min_intensity_ratio=0.01,
+        reference_rt=None,
+    )
+
+    assert anchor_rt is None
+
+
+def test_find_nl_anchor_rt_accepts_shifted_precursor_when_observed_loss_matches() -> None:
+    precursor_mz = PRECURSOR_MZ + 0.04
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=precursor_mz,
+                rt=8.75,
+                masses=[_product_for_loss_ppm(precursor_mz, 5.0)],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    anchor_rt = _anchor(raw)
+
+    assert anchor_rt == pytest.approx(8.75)
+
+
 def test_find_nl_anchor_rt_with_reference_uses_nearest_scan_even_when_weaker() -> None:
     raw = _FakeRaw(
         [

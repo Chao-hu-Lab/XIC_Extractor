@@ -67,7 +67,6 @@ def find_nl_anchor_rt(
     """
     rt_min = max(0.0, rt_center - search_margin_min)
     rt_max = rt_center + search_margin_min
-    expected_product = precursor_mz - neutral_loss_da
     diagnostic_ppm = max(3.0 * nl_ppm_max, NL_DIAGNOSTIC_PPM_FLOOR)
 
     best_rt: float | None = None
@@ -79,13 +78,15 @@ def find_nl_anchor_rt(
             continue
         if abs(event.scan.precursor_mz - precursor_mz) > ms2_precursor_tol_da:
             continue
-        ppm = _best_product_ppm(
+        evidence = _best_product_evidence(
             event.scan,
-            expected_product=expected_product,
+            target_precursor_mz=precursor_mz,
+            neutral_loss_da=neutral_loss_da,
+            nl_ppm_max=nl_ppm_max,
             min_intensity_ratio=nl_min_intensity_ratio,
             diagnostic_ppm=diagnostic_ppm,
         )
-        if ppm is None or ppm > nl_ppm_max:
+        if evidence is None or evidence.observed_loss_error_ppm > nl_ppm_max:
             continue
         if reference_rt is None:
             if event.scan.base_peak > best_base_peak:
