@@ -2,7 +2,12 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from scripts.local_minimum_param_sweep import read_manual_truth
+from scripts.local_minimum_param_sweep import (
+    ManualTruthRow,
+    ProgramPeakRow,
+    read_manual_truth,
+    score_parameter_set,
+)
 
 
 def test_read_manual_truth_parses_dna_rna_two_raw_blocks(tmp_path: Path) -> None:
@@ -92,3 +97,53 @@ def test_read_manual_truth_parses_dna_rna_two_raw_blocks(tmp_path: Path) -> None
     assert rows[0].manual_area == 67300000
     assert rows[1].manual_width == 0.95
     assert rows[2].manual_shape == "正常"
+
+
+def test_score_parameter_set_ranks_by_area_mape_and_tracks_guardrails() -> None:
+    truth = [
+        ManualTruthRow(
+            "DNA",
+            "SampleA",
+            "ISTD",
+            10.0,
+            1000.0,
+            10000.0,
+            0.8,
+            "正常",
+        ),
+        ManualTruthRow(
+            "DNA",
+            "SampleA",
+            "Analyte",
+            11.0,
+            2000.0,
+            20000.0,
+            1.0,
+            "正常",
+        ),
+        ManualTruthRow(
+            "DNA",
+            "SampleA",
+            "Missing",
+            12.0,
+            3000.0,
+            30000.0,
+            1.0,
+            "正常",
+        ),
+    ]
+    peaks = [
+        ProgramPeakRow("SampleA", "ISTD", True, 10.02, 900.0, 9000.0, True),
+        ProgramPeakRow("SampleA", "Analyte", False, 11.10, 2300.0, 26000.0, True),
+    ]
+
+    score = score_parameter_set("candidate", {}, truth, peaks)
+
+    assert score.area_median_abs_pct_error == 0.2
+    assert score.area_within_10pct == 1
+    assert score.area_within_20pct == 1
+    assert score.missing_manual_peaks == 1
+    assert score.istd_misses == 0
+    assert score.rt_median_abs_delta_min == 0.06
+    assert score.rt_max_abs_delta_min == 0.10
+    assert score.large_area_misses == 1
