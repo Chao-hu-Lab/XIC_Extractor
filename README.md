@@ -136,7 +136,7 @@ concerns: low trace continuity (minor); poor edge recovery (minor)
 | `Diagnostics` | issue rows；不會再自動成為 active sheet，避免打斷主要審閱動線 |
 | `Run Metadata` | 重現性 metadata，至少包含 `config_hash`、`app_version`、`generated_at`、`resolver_mode`、smoothing 與 scoring 相關設定 |
 
-`Detected %` 回答 target 是否產生可用 RT / Area rows；`Flagged %` 回答 rows 有多少需要人工檢查。兩者不同：target 可以高度檢出，同時也因 MS2/NL、confidence 或 diagnostics 被頻繁標記。
+`Summary` 的 `Detection %` 是 analytical inclusion rate：必須有可用 RT / Area，且 NL 狀態需為空白、`OK` 或 `WARN_*`；`NL_FAIL` 不進入 detected median、ratio 或 RT delta，`NO_MS2` 則依 `count_no_ms2_as_detected` 設定決定是否納入。`Flagged %` 是 review workload：只回答 rows 有多少需要人工檢查。兩者不同，target 可以有可用峰並被標記為需要 review，例如 numeric `NL_FAIL` 會在 review metrics 裡呈現為 detected-but-flagged，但不會進入 Summary 的 analytical aggregates。
 
 `Overview` / `Review Queue` 是日常審閱入口，`XIC Results` / `Summary` 是查詢與 target health，`Targets` / `Diagnostics` / `Run Metadata` 是技術追溯。`emit_score_breakdown=true` 時會額外加入 `Score Breakdown` sheet；它是 scoring signals、severity、confidence、quality penalty、prior source 與 selected reason 的 technical audit sheet，不應被當成主要人工審閱 queue。
 
