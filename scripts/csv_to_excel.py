@@ -39,6 +39,9 @@ _MS2_FAIL = "FFCDD2"
 _MS2_NO_MS2 = "E0E0E0"
 _SAMPLE_HEADER = "2E4057"
 _OVERVIEW_HEADER_FILL = "1F4E5F"
+_DAILY_REVIEW_TAB = "1F4E5F"
+_RESULT_TAB = "5B7C99"
+_TECHNICAL_TAB = "B0BEC5"
 WHITE = "FFFFFF"
 GREY = "F5F5F5"
 _THIN = Side(style="thin", color="BDBDBD")
@@ -339,6 +342,22 @@ def _build_overview_sheet(
     ws.column_dimensions["B"].width = 16
     ws.column_dimensions["C"].width = 18
     ws.column_dimensions["D"].width = 18
+
+
+def _apply_sheet_role_styles(wb: Workbook) -> None:
+    role_colors = {
+        "Overview": _DAILY_REVIEW_TAB,
+        "Review Queue": _DAILY_REVIEW_TAB,
+        "XIC Results": _RESULT_TAB,
+        "Summary": _RESULT_TAB,
+        "Targets": _TECHNICAL_TAB,
+        "Diagnostics": _TECHNICAL_TAB,
+        "Run Metadata": _TECHNICAL_TAB,
+        "Score Breakdown": _TECHNICAL_TAB,
+    }
+    for name, color in role_colors.items():
+        if name in wb.sheetnames:
+            wb[name].sheet_properties.tabColor = color
 
 
 def _distinct_values(rows: list[dict[str, str]], key: str) -> set[str]:
@@ -1162,6 +1181,7 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
         ws_breakdown = wb.create_sheet("Score Breakdown")
         _build_score_breakdown_sheet(ws_breakdown, score_breakdown)
     wb.active = wb.index(ws_overview)
+    _apply_sheet_role_styles(wb)
 
     wb.save(excel_path)
     _print_summary(excel_path, rows, config.count_no_ms2_as_detected)

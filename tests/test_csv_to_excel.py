@@ -742,6 +742,49 @@ def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
     assert row["Confidence"] == "MEDIUM"
 
 
+def test_workbook_sheet_tabs_signal_review_and_technical_roles(tmp_path: Path) -> None:
+    config = _config(tmp_path, emit_score_breakdown=True)
+    targets = [_target("Analyte")]
+    config.output_csv.parent.mkdir(parents=True)
+    _write_csv(
+        config.output_csv.with_name("xic_results_long.csv"),
+        [_long_row("Tumor_1", "Analyte", "ND", "ND", "NL_FAIL")],
+    )
+    _write_csv(
+        config.output_csv.with_name("xic_score_breakdown.csv"),
+        [
+            {
+                "SampleName": "Tumor_1",
+                "Target": "Analyte",
+                "symmetry": "0",
+                "local_sn": "1",
+                "nl_support": "2",
+                "rt_prior": "0",
+                "rt_centrality": "0",
+                "noise_shape": "0",
+                "peak_width": "0",
+                "Quality Penalty": "0",
+                "Quality Flags": "",
+                "Total Severity": "3",
+                "Confidence": "LOW",
+                "Prior RT": "NA",
+                "Prior Source": "",
+            }
+        ],
+    )
+    _write_empty_diagnostics_csv(config.diagnostics_csv)
+
+    excel_path = run(config, targets)
+
+    wb = load_workbook(excel_path)
+    assert wb["Overview"].sheet_properties.tabColor.rgb.endswith("1F4E5F")
+    assert wb["Review Queue"].sheet_properties.tabColor.rgb.endswith("1F4E5F")
+    assert wb["XIC Results"].sheet_properties.tabColor.rgb.endswith("5B7C99")
+    assert wb["Summary"].sheet_properties.tabColor.rgb.endswith("5B7C99")
+    assert wb["Diagnostics"].sheet_properties.tabColor.rgb.endswith("B0BEC5")
+    assert wb["Score Breakdown"].sheet_properties.tabColor.rgb.endswith("B0BEC5")
+
+
 def _long_row(
     sample_name: str,
     target: str,

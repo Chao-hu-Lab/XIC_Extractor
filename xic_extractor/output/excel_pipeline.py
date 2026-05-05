@@ -5,6 +5,7 @@ from pathlib import Path
 from openpyxl import Workbook
 
 from scripts.csv_to_excel import (
+    _apply_sheet_role_styles,
     _build_data_sheet,
     _build_diagnostics_sheet,
     _build_metadata_sheet,
@@ -70,6 +71,7 @@ def write_excel_from_run_output(
         _build_score_breakdown_sheet(ws_breakdown, score_breakdown)
 
     wb.active = wb.index(ws_overview)
+    _apply_sheet_role_styles(wb)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_path)
     wb.close()
