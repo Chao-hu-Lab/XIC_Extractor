@@ -57,6 +57,11 @@ class CandidateMS2Evidence:
     best_product_base_ratio: float | None
     alignment_source: CandidateMS2AlignmentSource
 
+    def to_token(self) -> str:
+        if self.nl_status == "WARN" and self.best_loss_ppm is not None:
+            return f"WARN_{self.best_loss_ppm:.1f}ppm"
+        return self.nl_status
+
 
 def find_nl_anchor_rt(
     raw: MS2ScanSource,
@@ -326,27 +331,6 @@ def _best_product_evidence(
     if not candidates:
         return None
     return min(candidates, key=lambda evidence: evidence.observed_loss_error_ppm)
-
-
-def _best_product_ppm(
-    scan: Ms2Scan,
-    *,
-    expected_product: float,
-    min_intensity_ratio: float,
-    diagnostic_ppm: float,
-) -> float | None:
-    if expected_product <= 0.0 or scan.base_peak <= 0.0:
-        return None
-
-    masses = np.asarray(scan.masses, dtype=float)
-    intensities = np.asarray(scan.intensities, dtype=float)
-    intensity_floor = scan.base_peak * min_intensity_ratio
-
-    ppm = np.abs(masses - expected_product) / expected_product * 1_000_000.0
-    mask = (intensities >= intensity_floor) & (ppm <= diagnostic_ppm)
-    if not mask.any():
-        return None
-    return float(ppm[mask].min())
 
 
 def _classify_nl_result(

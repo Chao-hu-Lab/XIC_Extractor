@@ -15,6 +15,7 @@ from xic_extractor.extraction.scoring_factory import (
 )
 from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.neutral_loss import (
+    CandidateMS2Evidence,
     NLResult,
     check_nl,
     collect_candidate_ms2_evidence,
@@ -61,6 +62,7 @@ _ANCHOR_PEAK_DELTA_WARN_MIN: float = 0.5
 class ExtractionResult:
     peak_result: PeakDetectionResult
     nl: NLResult | None
+    candidate_ms2_evidence: CandidateMS2Evidence | None = None
     target_label: str = ""
     role: str = ""
     istd_pair: str = ""
@@ -79,6 +81,14 @@ class ExtractionResult:
     @property
     def nl_result(self) -> NLResult | None:
         return self.nl
+
+    @property
+    def nl_token(self) -> str | None:
+        if self.candidate_ms2_evidence is not None:
+            return self.candidate_ms2_evidence.to_token()
+        if self.nl is not None:
+            return self.nl.to_token()
+        return None
 
     @property
     def total_severity(self) -> int:
@@ -551,6 +561,20 @@ def _extract_one_target(
     rt, intensity = raw.extract_xic(target.mz, rt_min, rt_max, target.ppm_tol)
     nl_result = _check_target_nl(raw, target, config)
     scoring_context_builder = None
+    candidate_ms2_builder = _candidate_ms2_evidence_builder(raw, target, config)
+    candidate_ms2_cache: dict[PeakCandidate, CandidateMS2Evidence] = {}
+
+    def _cached_candidate_ms2_builder(
+        candidate: PeakCandidate,
+    ) -> CandidateMS2Evidence | None:
+        if candidate_ms2_builder is None:
+            return None
+        evidence = candidate_ms2_cache.get(candidate)
+        if evidence is None:
+            evidence = candidate_ms2_builder(candidate)
+            candidate_ms2_cache[candidate] = evidence
+        return evidence
+
     if scoring_context_factory is not None:
         scoring_context_builder = scoring_context_factory(
             target=target,
@@ -560,9 +584,7 @@ def _extract_one_target(
             istd_rt_in_this_sample=istd_rt_in_this_sample,
             paired_istd_fwhm=paired_istd_fwhm,
             nl_result=nl_result,
-            candidate_ms2_evidence_builder=_candidate_ms2_evidence_builder(
-                raw, target, config
-            ),
+            candidate_ms2_evidence_builder=_cached_candidate_ms2_builder,
         )
     if scoring_context_builder is not None:
         peak_result = find_peak_and_area(
@@ -595,6 +617,7 @@ def _extract_one_target(
             target,
             anchor_rt=anchor_rt,
             scoring_context_factory=scoring_context_factory,
+            candidate_ms2_evidence_builder=_cached_candidate_ms2_builder,
             sample_name=sample_name,
             nl_result=nl_result,
             istd_confidence_note=istd_confidence_note,
@@ -618,6 +641,9 @@ def _extract_one_target(
         )
     shape_metrics = selected_shape_metrics(intensity, peak_result)
     candidate = selected_candidate(peak_result)
+    candidate_ms2_evidence = (
+        candidate_ms2_cache.get(candidate) if candidate is not None else None
+    )
     quality_penalty = 0
     quality_flags: tuple[str, ...] = ()
     if candidate is not None:
@@ -631,6 +657,7 @@ def _extract_one_target(
     result = ExtractionResult(
         peak_result=peak_result,
         nl=nl_result,
+        candidate_ms2_evidence=candidate_ms2_evidence,
         target_label=target.label,
         role="ISTD" if target.is_istd else "Analyte",
         istd_pair=target.istd_pair,
@@ -766,6 +793,9 @@ def _recover_istd_peak_with_wider_anchor_window(
     *,
     anchor_rt: float,
     scoring_context_factory: Callable[..., Any] | None,
+    candidate_ms2_evidence_builder: Callable[
+        [PeakCandidate], CandidateMS2Evidence | None
+    ],
     sample_name: str,
     nl_result: NLResult | None,
     istd_confidence_note: str | None,
@@ -792,9 +822,7 @@ def _recover_istd_peak_with_wider_anchor_window(
             istd_rt_in_this_sample=istd_rt_in_this_sample,
             paired_istd_fwhm=paired_istd_fwhm,
             nl_result=nl_result,
-            candidate_ms2_evidence_builder=_candidate_ms2_evidence_builder(
-                raw, target, config
-            ),
+            candidate_ms2_evidence_builder=candidate_ms2_evidence_builder,
         )
     if scoring_context_builder is not None:
         peak_result = find_peak_and_area(
