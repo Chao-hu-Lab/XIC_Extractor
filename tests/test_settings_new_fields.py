@@ -35,7 +35,7 @@ def test_new_keys_present() -> None:
         assert CANONICAL_SETTINGS_DEFAULTS[key] == default
 
 
-def test_new_key_descriptions_present() -> None:
+def test_new_settings_are_in_canonical_defaults_and_descriptions() -> None:
     for key in (
         "injection_order_source",
         "rolling_window_size",
@@ -48,6 +48,8 @@ def test_new_key_descriptions_present() -> None:
         assert CANONICAL_SETTINGS_DESCRIPTIONS[key]
     assert "fallback" in CANONICAL_SETTINGS_DESCRIPTIONS["injection_order_source"]
     assert "RAW mtime" in CANONICAL_SETTINGS_DESCRIPTIONS["injection_order_source"]
+    assert "developer/debug" in CANONICAL_SETTINGS_DESCRIPTIONS["rt_prior_library_path"]
+    assert "leave empty" in CANONICAL_SETTINGS_DESCRIPTIONS["rt_prior_library_path"]
 
 
 def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:

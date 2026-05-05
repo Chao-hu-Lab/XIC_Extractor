@@ -71,7 +71,9 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     ),
     "rolling_window_size": "ISTD RT prior 的滾動視窗半徑（±N 個注射）",
     "dirty_matrix_mode": "髒基質模式（放寬 S/N、收緊峰形；尿液等複雜基質用）",
-    "rt_prior_library_path": "外部 RT prior library CSV 路徑，留空則停用",
+    "rt_prior_library_path": (
+        "developer/debug RT prior library CSV path; leave empty for normal use"
+    ),
     "emit_score_breakdown": "是否輸出 Score Breakdown sheet（預設關閉）",
     "emit_review_report": "是否輸出 Review Report HTML（預設關閉）",
     "keep_intermediate_csv": "是否保留中間 CSV 檔（除錯用，預設關閉）",

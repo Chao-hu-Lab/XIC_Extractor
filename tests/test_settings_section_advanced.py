@@ -1,4 +1,5 @@
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QLabel
 
 from gui.sections.settings_section import SettingsSection
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
@@ -89,6 +90,18 @@ def test_advanced_section_contains_required_flags(qtbot) -> None:
         "parallel_mode",
         "parallel_workers",
     } <= advanced_keys
+
+
+def test_rt_prior_library_gui_label_marks_developer_debug(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.load(_canonical_settings())
+
+    labels = section.findChildren(QLabel)
+    text = "\n".join(label.text() for label in labels)
+
+    assert "RT prior library" in text
+    assert "developer/debug" in text
 
 
 def test_advanced_section_uses_compact_rows_for_related_controls(qtbot) -> None:

@@ -21,3 +21,4 @@ keep_intermediate_csv,false,是否保留中間 CSV 檔（除錯用，預設關�
 emit_review_report,false,是否輸出 Review Report HTML（預設關閉）
 parallel_mode,serial,執行後端（serial 或 process；預設 serial）
 parallel_workers,1,Process mode worker 數量（>= 1；預設 1）
+rt_prior_library_path,,developer/debug RT prior library CSV path; leave empty for normal use

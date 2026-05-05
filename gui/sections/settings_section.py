@@ -267,9 +267,7 @@ class SettingsSection(QWidget):
         ms2_layout.addStretch()
         body_layout.addLayout(ms2_layout, 4, 1, 1, 2)
 
-        self.advanced_section = CollapsibleSection(
-            "⚙ Advanced — debug 與方法開發專用"
-        )
+        self.advanced_section = CollapsibleSection("⚙ Advanced — debug 與方法開發專用")
         self._build_advanced_section()
         body_layout.addWidget(self.advanced_section, 5, 0, 1, 3)
 
@@ -386,9 +384,7 @@ class SettingsSection(QWidget):
                     else "false"
                 ),
                 "emit_review_report": (
-                    "true"
-                    if self._emit_review_report_checkbox.isChecked()
-                    else "false"
+                    "true" if self._emit_review_report_checkbox.isChecked() else "false"
                 ),
                 "dirty_matrix_mode": (
                     "true" if self._dirty_matrix_mode_checkbox.isChecked() else "false"
@@ -544,12 +540,8 @@ class SettingsSection(QWidget):
         legacy_layout.setContentsMargins(0, 0, 0, 0)
         legacy_layout.setSpacing(16)
         legacy_layout.addWidget(_LabeledSpin("Window", self._smooth_window_spin))
-        legacy_layout.addWidget(
-            _LabeledSpin("Polyorder", self._smooth_polyorder_spin)
-        )
-        legacy_layout.addWidget(
-            _LabeledSpin("Peak height", self._peak_rel_height_spin)
-        )
+        legacy_layout.addWidget(_LabeledSpin("Polyorder", self._smooth_polyorder_spin))
+        legacy_layout.addWidget(_LabeledSpin("Peak height", self._peak_rel_height_spin))
         legacy_layout.addWidget(
             _LabeledSpin("Prominence", self._peak_min_prominence_ratio_spin)
         )
@@ -641,9 +633,7 @@ class SettingsSection(QWidget):
         self._set_float_range(self._nl_fallback_half_window_min_spin, 0.0, 100.0, 3)
 
     def _build_advanced_section(self) -> None:
-        help_label = QLabel(
-            "下列選項僅在除錯或方法開發時需要。日常使用請保持預設值。"
-        )
+        help_label = QLabel("下列選項僅在除錯或方法開發時需要。日常使用請保持預設值。")
         help_label.setStyleSheet("color: #57606a; font-size: 9pt;")
         self.advanced_section.add_row(help_label)
 
@@ -678,7 +668,7 @@ class SettingsSection(QWidget):
         layout.addWidget(QLabel("Parallel execution"), 2, 0)
         layout.addLayout(parallel_layout, 2, 1, 1, 2)
 
-        layout.addWidget(QLabel("RT prior library"), 3, 0)
+        layout.addWidget(QLabel("RT prior library (developer/debug)"), 3, 0)
         layout.addWidget(self._rt_prior_library_path_edit, 3, 1)
         layout.addWidget(
             self._make_file_browse_button(self._rt_prior_library_path_edit), 3, 2
@@ -867,8 +857,12 @@ class SettingsSection(QWidget):
         self._apply_local_minimum_preset_button.clicked.connect(
             self._apply_local_minimum_preset
         )
-        self._parallel_mode_combo.currentTextChanged.connect(self._on_parallel_mode_changed)
-        self._parallel_workers_spin.valueChanged.connect(self._on_parallel_workers_changed)
+        self._parallel_mode_combo.currentTextChanged.connect(
+            self._on_parallel_mode_changed
+        )
+        self._parallel_workers_spin.valueChanged.connect(
+            self._on_parallel_workers_changed
+        )
         for spin in (
             self._rolling_window_size_spin,
             self._resolver_chrom_threshold_spin,
