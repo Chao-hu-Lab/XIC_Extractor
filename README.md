@@ -129,12 +129,14 @@ concerns: low trace continuity (minor); poor edge recovery (minor)
 | `Overview` | workbook 開啟時的 landing sheet；提供 sample/target/review/diagnostics counts，以及需要優先檢查的 targets/samples |
 | `Review Queue` | 人工審閱 worklist；每個需要檢查的 sample-target 只列一列，欄位包含 `Priority`、`Status`、`Why`、`Action`、`Issue Count` 與 `Evidence` |
 | `XIC Results` | row-based sample-target review table；預設顯示 `RT`、`Area`、`NL`、`Confidence`、`Reason`，`Int`、`PeakStart`、`PeakEnd`、`PeakWidth` 以 Excel outline hidden 作為 advanced info |
-| `Summary` | one row per target，包含 `Review Items`、`Problem Rate`、`NL Problems`、`Low Confidence`、detection rate、Mean RT、Median Area (detected)、QC-only Area / ISTD ratio mean±SD / CV% (paired detected)、NL counts、RT delta、confidence counts |
+| `Summary` | one row per target，包含 `Flagged Rows`、`Flagged %`、`MS2/NL Flags`、`Low Confidence Rows`、`Detection %`、Mean RT、Median Area (detected)、QC-only Area / ISTD ratio mean±SD / CV% (paired detected)、NL counts、RT delta、confidence counts |
 | `Targets` | 本次使用的 target table snapshot，方便回溯輸入設定；`Expected product m/z` 是 nominal target product，strict NL 以實際 MS2 precursor-product observed loss 判斷 |
 | `Diagnostics` | issue rows；不會再自動成為 active sheet，避免打斷主要審閱動線 |
 | `Run Metadata` | 重現性 metadata，至少包含 `config_hash`、`app_version`、`generated_at`、`resolver_mode`、smoothing 與 scoring 相關設定 |
 
-`Overview` / `Review Queue` 是日常審閱入口，`XIC Results` / `Summary` 是查詢與 target health，`Targets` / `Diagnostics` / `Run Metadata` 是技術追溯。`emit_score_breakdown=true` 時會額外加入 `Score Breakdown` sheet，用來檢查 scoring signals、severity、confidence、quality penalty、prior source 與 selected reason；日常輸出預設不產生。
+`Detected %` 回答 target 是否產生可用 RT / Area rows；`Flagged %` 回答 rows 有多少需要人工檢查。兩者不同：target 可以高度檢出，同時也因 MS2/NL、confidence 或 diagnostics 被頻繁標記。
+
+`Overview` / `Review Queue` 是日常審閱入口，`XIC Results` / `Summary` 是查詢與 target health，`Targets` / `Diagnostics` / `Run Metadata` 是技術追溯。`emit_score_breakdown=true` 時會額外加入 `Score Breakdown` sheet；它是 scoring signals、severity、confidence、quality penalty、prior source 與 selected reason 的 technical audit sheet，不應被當成主要人工審閱 queue。
 
 ### Debug CSV outputs
 
@@ -231,7 +233,7 @@ process mode 目前是 opt-in；預設設定仍保留 serial，確保既有 work
 | 缺 pythonnet / .NET runtime | 重新安裝 packaged app，或在開發環境使用 Python 3.10-3.13 執行 `uv sync --extra dev`；Python 3.14 目前不支援 pythonnet |
 | 單一 `.raw` 無法讀取 | pipeline 會繼續處理其他檔案，並在 Diagnostics 寫入 `FILE_ERROR` |
 | 需要檢查中間 CSV | 到 GUI Settings 展開 Advanced，啟用 `keep_intermediate_csv`；CLI 可用 `--skip-excel` 做 CSV-only debug run |
-| 需要逐項檢查 scoring 判斷 | 到 GUI Settings 展開 Advanced，啟用 `emit_score_breakdown`，輸出 workbook 會多一張 `Score Breakdown` sheet |
+| 需要逐項檢查 scoring 判斷 | 到 GUI Settings 展開 Advanced，啟用 `emit_score_breakdown`，輸出 workbook 會多一張 `Score Breakdown` technical audit sheet |
 
 ---
 
