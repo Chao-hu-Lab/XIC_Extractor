@@ -57,6 +57,7 @@ Default workbook sheets changed from the legacy conversion flow to an Excel-firs
 | `emit_score_breakdown=true` | 8 | Default sheets plus `Score Breakdown` |
 
 `Overview` is always the active sheet when the workbook opens, even when diagnostics are present.
+`Review Queue` is a one-row-per-sample-target worklist, while `Summary` now includes target-health fields (`Review Items`, `Problem Rate`, `NL Problems`, `Low Confidence`) before the existing detection and scoring counts.
 
 ## Output File Count
 

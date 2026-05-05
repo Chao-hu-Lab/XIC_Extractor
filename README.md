@@ -127,14 +127,14 @@ concerns: low trace continuity (minor); poor edge recovery (minor)
 | Sheet | 內容 |
 | --- | --- |
 | `Overview` | workbook 開啟時的 landing sheet；提供 sample/target/review/diagnostics counts，以及需要優先檢查的 targets/samples |
-| `Review Queue` | 人工審閱入口；只列出 diagnostics、`LOW` / `VERY_LOW` confidence、`NL_FAIL`、`NO_MS2`、`WARN_*` 等需要優先檢查的 sample-target，並提供 primary concern 與 suggested action |
+| `Review Queue` | 人工審閱 worklist；每個需要檢查的 sample-target 只列一列，欄位包含 `Priority`、`Status`、`Why`、`Action`、`Issue Count` 與 `Evidence` |
 | `XIC Results` | row-based sample-target review table；預設顯示 `RT`、`Area`、`NL`、`Confidence`、`Reason`，`Int`、`PeakStart`、`PeakEnd`、`PeakWidth` 以 Excel outline hidden 作為 advanced info |
-| `Summary` | one row per target，包含 detection rate、Mean RT、Median Area (detected)、QC-only Area / ISTD ratio mean±SD / CV% (paired detected)、NL counts、RT delta、confidence counts |
+| `Summary` | one row per target，包含 `Review Items`、`Problem Rate`、`NL Problems`、`Low Confidence`、detection rate、Mean RT、Median Area (detected)、QC-only Area / ISTD ratio mean±SD / CV% (paired detected)、NL counts、RT delta、confidence counts |
 | `Targets` | 本次使用的 target table snapshot，方便回溯輸入設定；`Expected product m/z` 是 nominal target product，strict NL 以實際 MS2 precursor-product observed loss 判斷 |
 | `Diagnostics` | issue rows；不會再自動成為 active sheet，避免打斷主要審閱動線 |
 | `Run Metadata` | 重現性 metadata，至少包含 `config_hash`、`app_version`、`generated_at`、`resolver_mode`、smoothing 與 scoring 相關設定 |
 
-`emit_score_breakdown=true` 時會額外加入 `Score Breakdown` sheet，用來檢查 scoring signals、severity、confidence、quality penalty、prior source 與 selected reason；日常輸出預設不產生。
+`Overview` / `Review Queue` 是日常審閱入口，`XIC Results` / `Summary` 是查詢與 target health，`Targets` / `Diagnostics` / `Run Metadata` 是技術追溯。`emit_score_breakdown=true` 時會額外加入 `Score Breakdown` sheet，用來檢查 scoring signals、severity、confidence、quality penalty、prior source 與 selected reason；日常輸出預設不產生。
 
 ### Debug CSV outputs
 
