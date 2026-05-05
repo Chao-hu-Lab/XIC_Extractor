@@ -53,6 +53,7 @@ def write_excel_from_run_output(
         ws_summary,
         rows,
         count_no_ms2_as_detected=config.count_no_ms2_as_detected,
+        review_rows=review_rows,
     )
 
     ws_targets = wb.create_sheet("Targets")

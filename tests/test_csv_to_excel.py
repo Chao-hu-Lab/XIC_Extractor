@@ -234,7 +234,7 @@ def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     assert "Median Area (detected)" in data["headers"]
     assert "Area / ISTD ratio (paired detected)" in data["headers"]
     assert data["Analyte"]["Median Area (detected)"] == 40000.0
-    assert ws["H2"].number_format == "0.00E+00"
+    assert ws["L2"].number_format == "0.00E+00"
     assert data["Analyte"]["Area / ISTD ratio (paired detected)"] == "—"
     assert data["Analyte"]["NL OK"] == 2
     assert data["Analyte"]["NL WARN"] == 1
@@ -246,6 +246,49 @@ def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     assert data["Analyte"]["Confidence LOW"] == 1
     assert data["Analyte"]["Confidence VERY_LOW"] == 0
     assert data["ISTD"]["Area / ISTD ratio (paired detected)"] == "—"
+
+
+def test_summary_sheet_includes_target_health_metrics() -> None:
+    rows = [
+        _long_row("Tumor_1", "Analyte", "9.0", "10000", "OK", confidence="HIGH"),
+        _long_row("Tumor_2", "Analyte", "9.1", "11000", "NL_FAIL", confidence="LOW"),
+        _long_row(
+            "Tumor_3",
+            "Analyte",
+            "9.2",
+            "12000",
+            "NO_MS2",
+            confidence="MEDIUM",
+        ),
+    ]
+    diagnostics = [
+        {
+            "SampleName": "Tumor_2",
+            "Target": "Analyte",
+            "Issue": "NL_FAIL",
+            "Reason": "strict observed neutral loss missing",
+        }
+    ]
+    review_rows = _review_queue_rows(rows, diagnostics)
+    wb = Workbook()
+    ws = wb.active
+
+    _build_summary_sheet(
+        ws,
+        rows,
+        count_no_ms2_as_detected=False,
+        review_rows=review_rows,
+    )
+    data = _summary_rows(ws)
+
+    assert "Review Items" in data["headers"]
+    assert "Problem Rate" in data["headers"]
+    assert "NL Problems" in data["headers"]
+    assert "Low Confidence" in data["headers"]
+    assert data["Analyte"]["Review Items"] == 2
+    assert data["Analyte"]["Problem Rate"] == "67%"
+    assert data["Analyte"]["NL Problems"] == 2
+    assert data["Analyte"]["Low Confidence"] == 1
 
 
 def test_build_review_queue_sheet_prioritizes_rows_that_need_manual_review() -> None:

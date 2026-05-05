@@ -64,6 +64,10 @@ _SUMMARY_HEADERS = [
     "Target",
     "Role",
     "ISTD Pair",
+    "Review Items",
+    "Problem Rate",
+    "NL Problems",
+    "Low Confidence",
     "Detected",
     "Total",
     "Detection %",
@@ -419,6 +423,7 @@ def _build_summary_sheet(
     ws,
     rows: list[dict[str, str]],
     count_no_ms2_as_detected: bool = False,
+    review_rows: list[dict[str, str]] | None = None,
 ) -> None:
     for col_idx, header in enumerate(_SUMMARY_HEADERS, start=1):
         _apply(
@@ -427,9 +432,15 @@ def _build_summary_sheet(
         )
     ws.row_dimensions[1].height = 30
 
+    review_rows_by_target = _review_rows_by_target(review_rows or [])
     for row_idx, target in enumerate(_target_summaries(rows), start=2):
         fill_hex = GREY if row_idx % 2 == 0 else WHITE
-        values = _summary_row_values(target, rows, count_no_ms2_as_detected)
+        values = _summary_row_values(
+            target,
+            rows,
+            count_no_ms2_as_detected,
+            review_rows_by_target,
+        )
         for col_idx, value in enumerate(values, start=1):
             cell = ws.cell(row=row_idx, column=col_idx, value=value)
             _apply(
@@ -441,7 +452,30 @@ def _build_summary_sheet(
             if _SUMMARY_HEADERS[col_idx - 1] == "Median Area (detected)":
                 cell.number_format = "0.00E+00"
 
-    widths = [24, 12, 24, 12, 10, 12, 12, 16, 24, 10, 10, 10, 10, 22, 14, 16, 12, 14]
+    widths = [
+        24,
+        12,
+        24,
+        14,
+        14,
+        12,
+        14,
+        12,
+        10,
+        12,
+        12,
+        16,
+        24,
+        10,
+        10,
+        10,
+        10,
+        22,
+        14,
+        16,
+        12,
+        14,
+    ]
     for col_idx, width in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
     ws.auto_filter.ref = (
@@ -734,6 +768,7 @@ def _summary_row_values(
     target_row: dict[str, str],
     rows: list[dict[str, str]],
     count_no_ms2_as_detected: bool,
+    review_rows_by_target: dict[str, list[dict[str, str]]] | None = None,
 ) -> list[object]:
     target = target_row["Target"]
     target_rows = [row for row in rows if row.get("Target") == target]
@@ -744,10 +779,16 @@ def _summary_row_values(
     detected = len(detected_rows)
     nl_counts = _long_nl_counts(target_rows)
     confidence_counts = _long_confidence_counts(target_rows)
+    target_review_rows = (review_rows_by_target or {}).get(target, [])
+    review_items = len(target_review_rows)
     return [
         _excel_text(target),
         target_row.get("Role", ""),
         _excel_text(target_row.get("ISTD Pair", "")),
+        review_items,
+        f"{review_items / total * 100:.0f}%" if total else "0%",
+        nl_counts["WARN"] + nl_counts["NL_FAIL"] + nl_counts["NO_MS2"],
+        confidence_counts["LOW"] + confidence_counts["VERY_LOW"],
         detected,
         total,
         f"{detected / total * 100:.0f}%" if total else "0%",
@@ -764,6 +805,15 @@ def _summary_row_values(
         confidence_counts["LOW"],
         confidence_counts["VERY_LOW"],
     ]
+
+
+def _review_rows_by_target(
+    review_rows: list[dict[str, str]],
+) -> dict[str, list[dict[str, str]]]:
+    grouped: dict[str, list[dict[str, str]]] = {}
+    for row in review_rows:
+        grouped.setdefault(row.get("Target", ""), []).append(row)
+    return grouped
 
 
 def _long_confidence_counts(target_rows: list[dict[str, str]]) -> dict[str, int]:
@@ -1098,6 +1148,7 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
         ws_summary,
         rows,
         count_no_ms2_as_detected=config.count_no_ms2_as_detected,
+        review_rows=review_rows,
     )
 
     ws_targets = wb.create_sheet("Targets")
