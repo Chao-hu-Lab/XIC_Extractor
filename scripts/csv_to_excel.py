@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import statistics
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import overload
@@ -81,24 +82,17 @@ _SUMMARY_HEADERS = [
 ]
 _REVIEW_HEADERS = [
     "Priority",
-    "SampleName",
+    "Sample",
     "Target",
     "Role",
-    "Confidence",
-    "NL",
-    "Issue",
-    "Primary Concern",
+    "Status",
+    "Why",
     "RT",
     "Area",
-    "Suggested Action",
-    "Detail",
+    "Action",
+    "Issue Count",
+    "Evidence",
 ]
-_CONFIDENCE_FILL = {
-    "HIGH": "C8E6C9",
-    "MEDIUM": "FFF9C4",
-    "LOW": "FFE0B2",
-    "VERY_LOW": "FFCDD2",
-}
 
 
 def _fill(hex6: str) -> PatternFill:
@@ -334,7 +328,7 @@ def _build_overview_sheet(
         next_row + 1,
         "Top Samples",
         "Sample",
-        _top_review_counts(review_rows, "SampleName"),
+        _top_review_counts(review_rows, "Sample"),
     )
 
     ws.column_dimensions["A"].width = 26
@@ -479,7 +473,7 @@ def _build_review_queue_sheet(
                 fill=_review_cell_fill(header, raw_value, fill_hex),
                 alignment=(
                     CENTER_WRAP
-                    if header in {"Suggested Action", "Detail"}
+                    if header in {"Action", "Evidence"}
                     else CENTER
                 ),
                 border=BORDER,
@@ -487,7 +481,7 @@ def _build_review_queue_sheet(
             if isinstance(value, float):
                 cell.number_format = _review_number_format(header)
 
-    widths = [10, 28, 24, 12, 14, 14, 18, 28, 12, 16, 38, 72]
+    widths = [10, 28, 24, 12, 12, 28, 12, 16, 38, 12, 72]
     for col_idx, width in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
     ws.auto_filter.ref = (
@@ -501,52 +495,114 @@ def _review_queue_rows(
     rows: list[dict[str, str]],
     diagnostics: list[dict[str, str]],
 ) -> list[dict[str, str]]:
-    diagnostics_by_key = _diagnostics_by_key(diagnostics)
+    diagnostics_by_key = _diagnostics_grouped_by_key(diagnostics)
+    rows_by_key = _results_grouped_by_key(rows)
     queue: list[dict[str, str]] = []
-    for row in rows:
-        key = (row.get("SampleName", ""), row.get("Target", ""))
-        diagnostic = diagnostics_by_key.get(key)
-        issue = diagnostic.get("Issue", "") if diagnostic else _row_review_issue(row)
+    for key, key_rows in rows_by_key.items():
+        row_diagnostics = diagnostics_by_key.get(key, [])
+        row, issue = _primary_review_row(key_rows, row_diagnostics)
         if not issue:
             continue
-        detail = diagnostic.get("Reason", "") if diagnostic else row.get("Reason", "")
+        evidence = _review_evidence(row, row_diagnostics)
         queue.append(
             {
                 "Priority": str(_review_priority(row, issue)),
-                "SampleName": row.get("SampleName", ""),
+                "Sample": row.get("SampleName", ""),
                 "Target": row.get("Target", ""),
                 "Role": row.get("Role", ""),
-                "Confidence": row.get("Confidence", ""),
-                "NL": row.get("NL", ""),
-                "Issue": issue,
-                "Primary Concern": _primary_concern(
-                    issue, detail, row.get("Reason", "")
-                ),
+                "Status": _review_status(issue, row.get("Confidence", "")),
+                "Why": _review_why(issue, row.get("Reason", ""), evidence),
                 "RT": row.get("RT", ""),
                 "Area": row.get("Area", ""),
-                "Suggested Action": _suggested_action(issue, row),
-                "Detail": detail,
+                "Action": _suggested_action(issue, row),
+                "Issue Count": str(len(row_diagnostics) if row_diagnostics else 1),
+                "Evidence": evidence,
             }
         )
     queue.sort(
         key=lambda item: (
             int(item["Priority"]),
-            item["SampleName"],
+            item["Sample"],
             item["Target"],
-            item["Issue"],
+            item["Why"],
         )
     )
     return queue
 
 
-def _diagnostics_by_key(
+def _results_grouped_by_key(
+    rows: list[dict[str, str]],
+) -> dict[tuple[str, str], list[dict[str, str]]]:
+    by_key: dict[tuple[str, str], list[dict[str, str]]] = {}
+    for row in rows:
+        key = (row.get("SampleName", ""), row.get("Target", ""))
+        by_key.setdefault(key, []).append(row)
+    return by_key
+
+
+def _diagnostics_grouped_by_key(
     diagnostics: list[dict[str, str]],
-) -> dict[tuple[str, str], dict[str, str]]:
-    by_key: dict[tuple[str, str], dict[str, str]] = {}
+) -> dict[tuple[str, str], list[dict[str, str]]]:
+    by_key: dict[tuple[str, str], list[dict[str, str]]] = {}
     for row in diagnostics:
         key = (row.get("SampleName", ""), row.get("Target", ""))
-        by_key.setdefault(key, row)
+        by_key.setdefault(key, []).append(row)
     return by_key
+
+
+def _primary_review_row(
+    rows: list[dict[str, str]],
+    diagnostics: list[dict[str, str]],
+) -> tuple[dict[str, str], str]:
+    ranked: list[tuple[int, int, dict[str, str], str]] = []
+    for index, row in enumerate(rows):
+        issue = _primary_review_issue(row, diagnostics)
+        if issue:
+            ranked.append((_review_priority(row, issue), index, row, issue))
+    if not ranked:
+        return rows[0], ""
+    _, _, row, issue = min(ranked, key=lambda item: (item[0], item[1]))
+    return row, issue
+
+
+def _primary_review_issue(
+    row: dict[str, str], diagnostics: list[dict[str, str]]
+) -> str:
+    candidates = [diagnostic.get("Issue", "") for diagnostic in diagnostics]
+    row_issue = _row_review_issue(row)
+    if row_issue:
+        candidates.append(row_issue)
+    candidates = [issue for issue in candidates if issue]
+    if not candidates:
+        return ""
+    return min(
+        enumerate(candidates),
+        key=lambda item: (_review_priority(row, item[1]), item[0]),
+    )[1]
+
+
+def _review_evidence(
+    row: dict[str, str], diagnostics: list[dict[str, str]]
+) -> str:
+    if diagnostics:
+        parts = [
+            diagnostic.get("Reason", "") or diagnostic.get("Issue", "")
+            for diagnostic in diagnostics
+        ]
+    else:
+        parts = [row.get("Reason", "") or _row_review_issue(row)]
+    return "; ".join(_dedupe_text(part for part in parts if part))
+
+
+def _dedupe_text(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
 
 
 def _row_review_issue(row: dict[str, str]) -> str:
@@ -574,12 +630,30 @@ def _review_priority(row: dict[str, str], issue: str) -> int:
     return 3
 
 
-def _primary_concern(issue: str, detail: str, reason: str) -> str:
-    for source in (reason, detail):
-        parsed = _first_concern(source)
+def _review_status(issue: str, confidence: str) -> str:
+    if issue in {"NL_FAIL", "PEAK_NOT_FOUND", "NO_SIGNAL", "FILE_ERROR"}:
+        return "Review"
+    if issue in {"NO_MS2", "NL_WARN"} or confidence in {"LOW", "VERY_LOW"}:
+        return "Check"
+    return "Info"
+
+
+def _review_why(issue: str, reason: str, evidence: str) -> str:
+    if issue == "NL_FAIL":
+        return "NL support failed"
+    if issue == "NO_MS2":
+        return "MS2 trigger missing"
+    if issue == "NL_WARN":
+        return "NL support is borderline"
+    if issue in {"PEAK_NOT_FOUND", "NO_SIGNAL"}:
+        return "Peak not found"
+    if issue.startswith("CONFIDENCE_"):
+        parsed = _first_concern(reason)
         if parsed and parsed != "all checks passed":
             return parsed
-    return issue
+        return issue.removeprefix("CONFIDENCE_") + " confidence"
+    parsed = _first_concern(reason) or _first_concern(evidence)
+    return parsed if parsed and parsed != "all checks passed" else issue
 
 
 def _first_concern(text: str) -> str:
@@ -609,33 +683,26 @@ def _suggested_action(issue: str, row: dict[str, str]) -> str:
 
 
 def _review_cell_value(header: str, raw_value: str) -> object:
-    if header == "Priority":
+    if header in {"Priority", "Issue Count"}:
         parsed = _safe_float(raw_value)
         return int(parsed) if parsed is not None else raw_value
-    if header == "NL":
-        return _nl_to_display(raw_value) if raw_value else ""
     if header in {"RT", "Area"}:
         if raw_value in ND_ERROR:
             return raw_value
         parsed = _safe_float(raw_value)
         return parsed if parsed is not None else raw_value
     if header in {
-        "SampleName",
+        "Sample",
         "Target",
-        "Issue",
-        "Primary Concern",
-        "Suggested Action",
-        "Detail",
+        "Why",
+        "Action",
+        "Evidence",
     }:
         return _excel_text(raw_value)
     return raw_value
 
 
 def _review_cell_fill(header: str, raw_value: str, row_fill_hex: str) -> PatternFill:
-    if header == "NL" and raw_value:
-        return _nl_cell_fill(raw_value)
-    if header == "Confidence" and raw_value in _CONFIDENCE_FILL:
-        return _fill(_CONFIDENCE_FILL[raw_value])
     return _fill(row_fill_hex)
 
 

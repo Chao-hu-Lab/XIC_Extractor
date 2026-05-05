@@ -286,28 +286,116 @@ def test_build_review_queue_sheet_prioritizes_rows_that_need_manual_review() -> 
     headers = [ws.cell(row=1, column=i).value for i in range(1, ws.max_column + 1)]
     assert headers == [
         "Priority",
-        "SampleName",
+        "Sample",
         "Target",
         "Role",
-        "Confidence",
-        "NL",
-        "Issue",
-        "Primary Concern",
+        "Status",
+        "Why",
         "RT",
         "Area",
-        "Suggested Action",
-        "Detail",
+        "Action",
+        "Issue Count",
+        "Evidence",
     ]
     assert ws.freeze_panes == "A2"
-    assert ws.auto_filter.ref == "A1:L3"
+    assert ws.auto_filter.ref == "A1:K3"
     assert ws["A2"].value == 1
-    assert ws["G2"].value == "NL_FAIL"
-    assert ws["H2"].value == "peak_width (major)"
-    assert ws["K2"].value == "Check MS2 / NL evidence near selected RT"
-    assert ws["F3"].value == "— MS2"
-    assert ws["K3"].value == "Check whether missing DDA trigger is acceptable"
+    assert ws["E2"].value == "Review"
+    assert ws["F2"].value == "NL support failed"
+    assert ws["I2"].value == "Check MS2 / NL evidence near selected RT"
+    assert ws["E3"].value == "Check"
+    assert ws["F3"].value == "MS2 trigger missing"
+    assert ws["I3"].value == "Check whether missing DDA trigger is acceptable"
     assert ws["A2"].fill.fgColor.rgb.endswith("FFCDD2")
     assert ws["A3"].fill.fgColor.rgb.endswith("FFF9C4")
+
+
+def test_review_queue_aggregates_diagnostics_by_sample_target() -> None:
+    rows = [
+        _long_row(
+            "Tumor_1",
+            "Analyte",
+            "9.0",
+            "10000",
+            "NL_FAIL",
+            confidence="LOW",
+            reason="concerns: nl_support (major); local_sn (minor)",
+        ),
+        _long_row(
+            "Tumor_1",
+            "Analyte",
+            "9.1",
+            "11000",
+            "OK",
+            confidence="MEDIUM",
+            reason="all checks passed",
+        ),
+    ]
+    diagnostics = [
+        {
+            "SampleName": "Tumor_1",
+            "Target": "Analyte",
+            "Issue": "NL_FAIL",
+            "Reason": "strict observed neutral loss missing",
+        },
+        {
+            "SampleName": "Tumor_1",
+            "Target": "Analyte",
+            "Issue": "ANCHOR_MISMATCH",
+            "Reason": "selected RT is far from anchor",
+        },
+    ]
+
+    review_rows = _review_queue_rows(rows, diagnostics)
+
+    assert len(review_rows) == 1
+    assert review_rows[0]["Priority"] == "1"
+    assert review_rows[0]["Sample"] == "Tumor_1"
+    assert review_rows[0]["Target"] == "Analyte"
+    assert review_rows[0]["Status"] == "Review"
+    assert review_rows[0]["Why"] == "NL support failed"
+    assert review_rows[0]["Action"] == "Check MS2 / NL evidence near selected RT"
+    assert review_rows[0]["Issue Count"] == "2"
+    assert "strict observed neutral loss missing" in review_rows[0]["Evidence"]
+    assert "selected RT is far from anchor" in review_rows[0]["Evidence"]
+
+
+def test_review_queue_sheet_uses_worklist_columns() -> None:
+    rows = [
+        {
+            "Priority": "1",
+            "Sample": "Tumor_1",
+            "Target": "Analyte",
+            "Role": "Analyte",
+            "Status": "Review",
+            "Why": "NL support failed",
+            "RT": "9.0",
+            "Area": "10000",
+            "Action": "Check MS2 / NL evidence near selected RT",
+            "Issue Count": "2",
+            "Evidence": "strict observed neutral loss missing",
+        }
+    ]
+    wb = Workbook()
+    ws = wb.active
+
+    _build_review_queue_sheet(ws, rows)
+
+    assert [ws.cell(row=1, column=i).value for i in range(1, ws.max_column + 1)] == [
+        "Priority",
+        "Sample",
+        "Target",
+        "Role",
+        "Status",
+        "Why",
+        "RT",
+        "Area",
+        "Action",
+        "Issue Count",
+        "Evidence",
+    ]
+    assert ws["E2"].value == "Review"
+    assert ws["F2"].value == "NL support failed"
 
 
 def test_build_review_queue_sheet_keeps_empty_queue_readable() -> None:
@@ -323,7 +411,7 @@ def test_build_review_queue_sheet_keeps_empty_queue_readable() -> None:
     )
 
     assert ws.max_row == 1
-    assert ws.auto_filter.ref == "A1:L1"
+    assert ws.auto_filter.ref == "A1:K1"
 
 
 def test_targets_sheet_marks_expected_product_as_nominal_reference() -> None:
@@ -500,8 +588,9 @@ def test_run_writes_row_based_results_sheet_and_makes_overview_active(
     assert config.output_csv.with_name("xic_results_long.csv").exists()
     assert config.diagnostics_csv.exists()
     ws_review = wb["Review Queue"]
-    assert ws_review["G2"].value == "NL_FAIL"
-    assert ws_review["H2"].value == "NL_FAIL"
+    assert ws_review["E2"].value == "Review"
+    assert ws_review["F2"].value == "NL support failed"
+    assert ws_review["K2"].value == "'=unsafe reason"
 
 
 def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
