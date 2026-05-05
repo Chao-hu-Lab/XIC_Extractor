@@ -1123,6 +1123,7 @@ def _build_diagnostics_sheet(ws, rows: list[dict[str, str]]) -> None:
 
 def _diagnostic_reason_for_sheet(row: dict[str, str]) -> str:
     issue = row.get("Issue", "")
+    reason = row.get("Reason", "")
     if issue == "NL_FAIL":
         return "selected candidate lacks strict NL match"
     if issue == "NO_MS2":
@@ -1141,7 +1142,7 @@ def _diagnostic_reason_for_sheet(row: dict[str, str]) -> str:
         )
     if issue in {"PEAK_NOT_FOUND", "NO_SIGNAL"}:
         return "peak not found"
-    return row.get("Reason", "")
+    return reason or issue
 
 
 def _diagnostic_fill(issue: str) -> str:

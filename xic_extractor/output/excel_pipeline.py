@@ -66,6 +66,7 @@ def write_excel_from_run_output(
 
     ws_diagnostics = wb.create_sheet("Diagnostics")
     _build_diagnostics_sheet(ws_diagnostics, diagnostics)
+    ws_diagnostics.sheet_state = "hidden"
 
     ws_metadata = wb.create_sheet("Run Metadata")
     _build_metadata_sheet(ws_metadata, config)
@@ -122,18 +123,12 @@ def _run_output_to_score_breakdown_rows(run_output: RunOutput) -> list[dict[str,
                 {
                     "SampleName": file_result.sample_name,
                     "Target": result.target_label,
-                    "symmetry": _format_optional_severity(
-                        severities.get("symmetry")
-                    ),
-                    "local_sn": _format_optional_severity(
-                        severities.get("local_sn")
-                    ),
+                    "symmetry": _format_optional_severity(severities.get("symmetry")),
+                    "local_sn": _format_optional_severity(severities.get("local_sn")),
                     "nl_support": _format_optional_severity(
                         severities.get("nl_support")
                     ),
-                    "rt_prior": _format_optional_severity(
-                        severities.get("rt_prior")
-                    ),
+                    "rt_prior": _format_optional_severity(severities.get("rt_prior")),
                     "rt_centrality": _format_optional_severity(
                         severities.get("rt_centrality")
                     ),

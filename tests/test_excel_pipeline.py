@@ -65,6 +65,7 @@ def test_write_excel_from_run_output_uses_in_memory_rows_and_metadata(
     assert ws["M2"].value == "LOW"
 
     ws_diagnostics = wb["Diagnostics"]
+    assert ws_diagnostics.sheet_state == "hidden"
     assert ws_diagnostics["A2"].value == "SampleA"
     assert ws_diagnostics["C2"].value == "NL_FAIL"
     ws_review = wb["Review Queue"]

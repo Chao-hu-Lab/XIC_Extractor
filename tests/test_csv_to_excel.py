@@ -1006,6 +1006,23 @@ def test_diagnostics_sheet_uses_short_reason_text() -> None:
     assert ws["D2"].value == "selected candidate lacks strict NL match"
 
 
+def test_diagnostics_sheet_falls_back_to_issue_when_reason_is_empty() -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "A",
+            "Issue": "ODD_TECHNICAL_WARNING",
+            "Reason": "",
+        }
+    ]
+    wb = Workbook()
+    ws = wb.active
+
+    _build_diagnostics_sheet(ws, rows)
+
+    assert ws["D2"].value == "ODD_TECHNICAL_WARNING"
+
+
 def _long_row(
     sample_name: str,
     target: str,
