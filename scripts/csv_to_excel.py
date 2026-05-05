@@ -8,6 +8,7 @@ area、peak boundary、四態 neutral-loss 結果與 diagnostics sheet。
 from __future__ import annotations
 
 import csv
+import re
 import statistics
 from collections.abc import Iterable
 from datetime import datetime
@@ -674,13 +675,33 @@ def _primary_review_issue(
 
 def _review_evidence(row: dict[str, str], diagnostics: list[dict[str, str]]) -> str:
     if diagnostics:
-        parts = [
-            diagnostic.get("Reason", "") or diagnostic.get("Issue", "")
-            for diagnostic in diagnostics
-        ]
+        parts = [_diagnostic_tag(diagnostic) for diagnostic in diagnostics]
     else:
-        parts = [row.get("Reason", "") or _row_review_issue(row)]
+        parts = [_row_review_issue(row)]
     return "; ".join(_dedupe_text(part for part in parts if part))
+
+
+def _diagnostic_tag(diagnostic: dict[str, str]) -> str:
+    issue = diagnostic.get("Issue", "")
+    reason = diagnostic.get("Reason", "")
+    if issue in {"NL_FAIL", "NO_MS2"}:
+        return issue
+    if issue == "NL_ANCHOR_FALLBACK":
+        return "NL_anchor_fallback"
+    if issue == "ANCHOR_RT_MISMATCH":
+        delta = _first_regex_group(reason, r"deviates ([0-9.]+) min")
+        return f"anchor dRT={delta} min" if delta else "anchor_mismatch"
+    if issue == "MULTI_PEAK":
+        count = _first_regex_group(reason, r"(\d+) prominent peaks")
+        return f"multi_peak={count}" if count else "multi_peak"
+    if issue in {"PEAK_NOT_FOUND", "NO_SIGNAL"}:
+        return "peak_not_found"
+    return issue
+
+
+def _first_regex_group(text: str, pattern: str) -> str:
+    match = re.search(pattern, text)
+    return match.group(1) if match else ""
 
 
 def _dedupe_text(values: Iterable[str]) -> list[str]:
@@ -1077,7 +1098,11 @@ def _build_diagnostics_sheet(ws, rows: list[dict[str, str]]) -> None:
     for row_idx, row in enumerate(rows, start=2):
         issue = row.get("Issue", "")
         for col_idx, header in enumerate(_DIAGNOSTIC_HEADERS, start=1):
-            raw = row.get(header, "")
+            raw = (
+                _diagnostic_reason_for_sheet(row)
+                if header == "Reason"
+                else row.get(header, "")
+            )
             value = (
                 _excel_text(raw)
                 if header in {"SampleName", "Target", "Reason"}
@@ -1094,6 +1119,29 @@ def _build_diagnostics_sheet(ws, rows: list[dict[str, str]]) -> None:
     for col_idx, width in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
     ws.freeze_panes = "A2"
+
+
+def _diagnostic_reason_for_sheet(row: dict[str, str]) -> str:
+    issue = row.get("Issue", "")
+    if issue == "NL_FAIL":
+        return "selected candidate lacks strict NL match"
+    if issue == "NO_MS2":
+        return "no aligned MS2 trigger scan"
+    if issue == "NL_ANCHOR_FALLBACK":
+        return "neutral-loss anchor fallback used"
+    if issue == "ANCHOR_RT_MISMATCH":
+        delta = _first_regex_group(row.get("Reason", ""), r"deviates ([0-9.]+) min")
+        return f"anchor RT mismatch by {delta} min" if delta else "anchor RT mismatch"
+    if issue == "MULTI_PEAK":
+        count = _first_regex_group(row.get("Reason", ""), r"(\d+) prominent peaks")
+        return (
+            f"{count} prominent peaks in window"
+            if count
+            else "multiple peaks in window"
+        )
+    if issue in {"PEAK_NOT_FOUND", "NO_SIGNAL"}:
+        return "peak not found"
+    return row.get("Reason", "")
 
 
 def _diagnostic_fill(issue: str) -> str:
@@ -1199,6 +1247,7 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
 
     ws_diagnostics = wb.create_sheet("Diagnostics")
     _build_diagnostics_sheet(ws_diagnostics, diagnostics)
+    ws_diagnostics.sheet_state = "hidden"
     ws_metadata = wb.create_sheet("Run Metadata")
     _build_metadata_sheet(ws_metadata, config)
     if config.emit_score_breakdown and score_breakdown:

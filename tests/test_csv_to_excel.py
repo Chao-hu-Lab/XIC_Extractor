@@ -6,6 +6,7 @@ from openpyxl import Workbook, load_workbook
 import scripts.csv_to_excel as csv_to_excel
 from scripts.csv_to_excel import (
     _build_data_sheet,
+    _build_diagnostics_sheet,
     _build_review_queue_sheet,
     _build_summary_sheet,
     _build_targets_sheet,
@@ -514,8 +515,7 @@ def test_review_queue_aggregates_diagnostics_by_sample_target() -> None:
     assert review_rows[0]["Why"] == "NL support failed"
     assert review_rows[0]["Action"] == "Check MS2 / NL evidence near selected RT"
     assert review_rows[0]["Issue Count"] == "2"
-    assert "strict observed neutral loss missing" in review_rows[0]["Evidence"]
-    assert "selected RT is far from anchor" in review_rows[0]["Evidence"]
+    assert review_rows[0]["Evidence"] == "NL_FAIL; ANCHOR_MISMATCH"
 
 
 def test_review_queue_sheet_uses_worklist_columns() -> None:
@@ -736,8 +736,9 @@ def test_run_writes_row_based_results_sheet_and_makes_overview_active(
     ]
     assert ws.auto_filter.ref == "A1:D2"
     assert ws["C2"].value == "NL_FAIL"
-    assert ws["D2"].value == "'=unsafe reason"
+    assert ws["D2"].value == "selected candidate lacks strict NL match"
     assert ws["C2"].fill.fgColor.rgb.endswith("FFCDD2")
+    assert ws.sheet_state == "hidden"
     ws_metadata = wb["Run Metadata"]
     assert ws_metadata["A1"].value == "Key"
     assert ws_metadata["B1"].value == "Value"
@@ -748,7 +749,23 @@ def test_run_writes_row_based_results_sheet_and_makes_overview_active(
     ws_review = wb["Review Queue"]
     assert ws_review["E2"].value == "Review"
     assert ws_review["F2"].value == "NL support failed"
-    assert ws_review["K2"].value == "'=unsafe reason"
+    assert ws_review["K2"].value == "NL_FAIL"
+
+
+def test_run_hides_diagnostics_as_technical_log(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.output_csv.parent.mkdir(parents=True, exist_ok=True)
+    _write_csv(
+        config.output_csv,
+        [_wide_row("S1", [_target("Analyte")])],
+    )
+    _write_empty_diagnostics_csv(config.diagnostics_csv)
+
+    out = run(config, [_target("Analyte")])
+    wb = load_workbook(out)
+
+    assert wb["Diagnostics"].sheet_state == "hidden"
+    assert wb["Review Queue"].sheet_state == "visible"
 
 
 def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
@@ -919,6 +936,76 @@ def test_workbook_sheet_tabs_signal_review_and_technical_roles(tmp_path: Path) -
     assert wb["Score Breakdown"].sheet_properties.tabColor.rgb.endswith("B0BEC5")
 
 
+def test_review_queue_evidence_uses_short_tags() -> None:
+    rows = [
+        _long_row(
+            "BenignfatBC1055_DNA",
+            "8-oxodG",
+            "17.177",
+            "1850221.22",
+            "NL_FAIL",
+            confidence="LOW",
+            reason="concerns: rt_prior (major); weak candidate: too_broad",
+        )
+    ]
+    diagnostics = [
+        {
+            "SampleName": "BenignfatBC1055_DNA",
+            "Target": "8-oxodG",
+            "Issue": "NL_FAIL",
+            "Reason": (
+                "selected candidate has 2 candidate-aligned MS2 trigger scans; "
+                "strict observed neutral loss 116.047 Da not detected in any "
+                "aligned scan; "
+                "alignment=region"
+            ),
+        },
+        {
+            "SampleName": "BenignfatBC1055_DNA",
+            "Target": "8-oxodG",
+            "Issue": "ANCHOR_RT_MISMATCH",
+            "Reason": (
+                "Paired analyte peak RT 17.177 min deviates 0.71 min from "
+                "ISTD anchor at 16.470 min (allowed +/-0.50 min)"
+            ),
+        },
+        {
+            "SampleName": "BenignfatBC1055_DNA",
+            "Target": "8-oxodG",
+            "Issue": "MULTI_PEAK",
+            "Reason": "4 prominent peaks detected in window [16.0, 18.0]",
+        },
+    ]
+
+    queue = _review_queue_rows(rows, diagnostics)
+
+    assert queue[0]["Evidence"] == "NL_FAIL; anchor dRT=0.71 min; multi_peak=4"
+    assert "selected candidate has" not in queue[0]["Evidence"]
+    assert len(queue[0]["Evidence"]) < 80
+
+
+def test_diagnostics_sheet_uses_short_reason_text() -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "A",
+            "Issue": "NL_FAIL",
+            "Reason": (
+                "selected candidate has 2 candidate-aligned MS2 trigger scans; "
+                "strict observed neutral loss 116.047 Da not detected in any "
+                "aligned scan; "
+                "alignment=region"
+            ),
+        }
+    ]
+    wb = Workbook()
+    ws = wb.active
+
+    _build_diagnostics_sheet(ws, rows)
+
+    assert ws["D2"].value == "selected candidate lacks strict NL match"
+
+
 def _long_row(
     sample_name: str,
     target: str,
@@ -947,6 +1034,23 @@ def _long_row(
         "Confidence": confidence,
         "Reason": reason,
     }
+
+
+def _wide_row(sample_name: str, targets: list[Target]) -> dict[str, str]:
+    row = {"SampleName": sample_name}
+    for target in targets:
+        row.update(
+            {
+                f"{target.label}_RT": "9.1",
+                f"{target.label}_Int": "1000",
+                f"{target.label}_Area": "10000",
+                f"{target.label}_PeakStart": "8.9",
+                f"{target.label}_PeakEnd": "9.3",
+                f"{target.label}_PeakWidth": "0.4000",
+                f"{target.label}_NL": "OK",
+            }
+        )
+    return row
 
 
 def _summary_rows(ws) -> dict[str, object]:
