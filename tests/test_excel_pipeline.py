@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -146,6 +147,41 @@ def test_write_excel_from_run_output_emits_review_report_when_enabled(
     report_path = output_path.with_name("review_report_20260505_1200.html")
     assert report_path.exists()
     assert "XIC Review Report" in report_path.read_text(encoding="utf-8")
+
+
+def test_write_excel_from_run_output_passes_injection_order_to_review_report(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from xic_extractor.output.excel_pipeline import write_excel_from_run_output
+
+    config = replace(
+        _config(tmp_path, emit_review_report=True),
+        injection_order_source=tmp_path / "SampleInfo.csv",
+    )
+    config.injection_order_source.write_text(
+        "Sample_Name,Injection_Order\nSampleA,1\n",
+        encoding="utf-8",
+    )
+    calls = {}
+
+    def _fake_write_review_report(path, rows, **kwargs):
+        calls["injection_order"] = kwargs["injection_order"]
+        path.write_text("<html></html>", encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(
+        "xic_extractor.output.excel_pipeline.write_review_report",
+        _fake_write_review_report,
+    )
+
+    write_excel_from_run_output(
+        config,
+        [_target("WithNL")],
+        _run_output(with_diagnostics=False),
+        output_path=tmp_path / "output" / "xic_results_20260505_1200.xlsx",
+    )
+
+    assert calls["injection_order"] == {"SampleA": 1}
 
 
 def _config(

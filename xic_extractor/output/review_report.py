@@ -198,7 +198,7 @@ def _istd_rt_trend(
         return ""
     x_values = _ordered_unique(order for order, _, _, _ in points)
     y_values = _ordered_unique(rt for _, rt, _, _ in points)
-    if len(x_values) < 2 or len(y_values) < 2:
+    if len(x_values) < 2:
         return ""
 
     points.sort(key=lambda item: (item[0], item[2], item[3]))
@@ -214,6 +214,9 @@ def _istd_rt_trend(
     max_x = max(x_values)
     min_y = min(y_values)
     max_y = max(y_values)
+    if min_y == max_y:
+        min_y -= 0.0005
+        max_y += 0.0005
 
     def x_pos(order: int) -> float:
         return left + ((order - min_x) / (max_x - min_x)) * plot_width

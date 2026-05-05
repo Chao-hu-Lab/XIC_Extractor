@@ -18,6 +18,7 @@ from scripts.csv_to_excel import (
 )
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extractor import RunOutput
+from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.output import csv_writers
 from xic_extractor.output.messages import DiagnosticRecord
 from xic_extractor.output.review_report import (
@@ -81,12 +82,18 @@ def write_excel_from_run_output(
     wb.save(output_path)
     wb.close()
     if config.emit_review_report:
+        injection_order = (
+            read_injection_order(config.injection_order_source)
+            if config.injection_order_source is not None
+            else None
+        )
         write_review_report(
             review_report_path_for_excel(output_path),
             rows,
             diagnostics=diagnostics,
             review_rows=review_rows,
             count_no_ms2_as_detected=config.count_no_ms2_as_detected,
+            injection_order=injection_order,
         )
     return output_path
 
