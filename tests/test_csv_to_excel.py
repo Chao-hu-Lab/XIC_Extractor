@@ -1,4 +1,5 @@
 import csv
+from dataclasses import replace
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
@@ -891,6 +892,37 @@ def test_run_emits_review_report_when_enabled(tmp_path: Path) -> None:
     ).with_suffix(".html")
     assert report_path.exists()
     assert "XIC Review Report" in report_path.read_text(encoding="utf-8")
+
+
+def test_run_passes_injection_order_to_review_report(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config = replace(
+        _config(tmp_path, emit_review_report=True),
+        injection_order_source=tmp_path / "SampleInfo.csv",
+    )
+    config.injection_order_source.write_text(
+        "Sample_Name,Injection_Order\nS1,1\n",
+        encoding="utf-8",
+    )
+    config.output_csv.parent.mkdir(parents=True, exist_ok=True)
+    _write_csv(config.output_csv, [_wide_row("S1", [_target("Analyte")])])
+    _write_empty_diagnostics_csv(config.diagnostics_csv)
+    calls = {}
+
+    def _fake_write_review_report(path, rows, **kwargs):
+        calls["injection_order"] = kwargs["injection_order"]
+        path.write_text("<html></html>", encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(
+        "scripts.csv_to_excel.write_review_report",
+        _fake_write_review_report,
+    )
+
+    run(config, [_target("Analyte")])
+
+    assert calls["injection_order"] == {"S1": 1}
 
 
 def test_workbook_sheet_tabs_signal_review_and_technical_roles(tmp_path: Path) -> None:

@@ -189,6 +189,81 @@ def test_review_report_contains_visual_detection_and_flag_charts(
     assert "B</td><td>50%</td>" not in html
 
 
+def test_review_report_draws_istd_rt_injection_trend(tmp_path: Path) -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "8.90",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "9.10",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S1",
+            "Target": "A",
+            "Role": "Analyte",
+            "RT": "9.00",
+            "Area": "50",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+        injection_order={"S1": 1, "S2": 2},
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert "<h2>ISTD RT Injection Trend</h2>" in html
+    assert "<svg" in html
+    assert "d3-A" in html
+    assert "RT 8.9000 min" in html
+    assert "Injection 1" in html
+
+
+def test_review_report_omits_istd_trend_without_injection_order(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "8.90",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert "ISTD RT Injection Trend" not in html
+
+
 def test_review_report_heatmap_sorts_low_detection_targets_first(
     tmp_path: Path,
 ) -> None:

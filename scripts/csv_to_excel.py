@@ -21,6 +21,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from xic_extractor.config import ExtractionConfig, Target, load_config
+from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.output import metadata
 from xic_extractor.output.review_metrics import ReviewMetrics, build_review_metrics
 from xic_extractor.output.review_report import (
@@ -1259,12 +1260,18 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
 
     wb.save(excel_path)
     if config.emit_review_report:
+        injection_order = (
+            read_injection_order(config.injection_order_source)
+            if config.injection_order_source is not None
+            else None
+        )
         write_review_report(
             review_report_path_for_excel(excel_path),
             rows,
             diagnostics=diagnostics,
             review_rows=review_rows,
             count_no_ms2_as_detected=config.count_no_ms2_as_detected,
+            injection_order=injection_order,
         )
     _print_summary(excel_path, rows, config.count_no_ms2_as_detected)
     return excel_path

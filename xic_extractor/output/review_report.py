@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from html import escape
 from pathlib import Path
+from typing import TypeVar
 
 from xic_extractor.output.review_metrics import ReviewMetrics, build_review_metrics
+
+T = TypeVar("T")
 
 
 def review_report_path_for_excel(excel_path: Path) -> Path:
@@ -19,6 +23,7 @@ def write_review_report(
     diagnostics: list[dict[str, str]],
     review_rows: list[dict[str, str]],
     count_no_ms2_as_detected: bool,
+    injection_order: dict[str, int] | None = None,
 ) -> Path:
     metrics = build_review_metrics(
         rows,
@@ -46,6 +51,7 @@ def write_review_report(
                 _batch_overview(metrics),
                 _detection_rate_chart(metrics, targets),
                 _flag_burden_chart(metrics, targets),
+                _istd_rt_trend(rows, injection_order),
                 _heatmap(metrics, samples, targets),
                 _review_queue(review_rows),
                 "</main>",
@@ -82,6 +88,12 @@ th{background:#f6f8fa;font-weight:700}
 .bar-fill{height:100%}
 .bar-fill.detection{background:#2da44e}
 .bar-fill.flagged{background:#cf222e}
+.trend-svg{max-width:100%;height:auto;border:1px solid #d0d7de;background:#fff}
+.trend-axis{stroke:#57606a;stroke-width:1}
+.trend-grid{stroke:#d8dee4;stroke-width:1}
+.trend-line{fill:none;stroke:#0969da;stroke-width:2}
+.trend-point{fill:#cf222e;stroke:#fff;stroke-width:1}
+.trend-label{fill:#57606a;font-size:12px}
 .dashboard-note{color:#57606a;font-size:13px;margin:4px 0 14px}
 .small{color:#57606a;font-size:12px}
 """.strip()
@@ -164,6 +176,96 @@ def _flag_burden_chart(metrics: ReviewMetrics, targets: list[str]) -> str:
     )
 
 
+def _istd_rt_trend(
+    rows: list[dict[str, str]], injection_order: dict[str, int] | None
+) -> str:
+    if not injection_order:
+        return ""
+
+    points: list[tuple[int, float, str, str]] = []
+    for row in rows:
+        if row.get("Role") != "ISTD":
+            continue
+        sample = row.get("SampleName", "")
+        order = injection_order.get(sample)
+        rt = _float_value(row.get("RT", ""))
+        target = row.get("Target", "")
+        if order is None or rt is None or not target:
+            continue
+        points.append((order, rt, target, sample))
+
+    if len(points) < 2:
+        return ""
+    x_values = _ordered_unique(order for order, _, _, _ in points)
+    y_values = _ordered_unique(rt for _, rt, _, _ in points)
+    if len(x_values) < 2 or len(y_values) < 2:
+        return ""
+
+    points.sort(key=lambda item: (item[0], item[2], item[3]))
+    width = 720
+    height = 280
+    left = 58
+    right = 24
+    top = 20
+    bottom = 42
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+    min_x = min(x_values)
+    max_x = max(x_values)
+    min_y = min(y_values)
+    max_y = max(y_values)
+
+    def x_pos(order: int) -> float:
+        return left + ((order - min_x) / (max_x - min_x)) * plot_width
+
+    def y_pos(rt: float) -> float:
+        return top + ((max_y - rt) / (max_y - min_y)) * plot_height
+
+    circles = []
+    line_points = []
+    for order, rt, target, sample in points:
+        x = x_pos(order)
+        y = y_pos(rt)
+        line_points.append(f"{x:.1f},{y:.1f}")
+        title = (
+            f"{escape(target)}: Injection {order}, RT {rt:.4f} min ({escape(sample)})"
+        )
+        circles.append(
+            f'<circle class="trend-point" cx="{x:.1f}" cy="{y:.1f}" r="4">'
+            f"<title>{title}</title></circle>"
+        )
+
+    labels = ", ".join(
+        escape(target) for target in _ordered_unique(p[2] for p in points)
+    )
+    line_path = " ".join(line_points)
+    return (
+        "<section><h2>ISTD RT Injection Trend</h2>"
+        '<p class="dashboard-note">'
+        f"{labels}</p>"
+        f'<svg class="trend-svg" viewBox="0 0 {width} {height}" '
+        'role="img" aria-label="ISTD RT by injection order">'
+        f'<line class="trend-grid" x1="{left}" y1="{top}" x2="{left + plot_width}" '
+        f'y2="{top}"></line>'
+        f'<line class="trend-grid" x1="{left}" y1="{top + plot_height}" '
+        f'x2="{left + plot_width}" y2="{top + plot_height}"></line>'
+        f'<line class="trend-axis" x1="{left}" y1="{top}" x2="{left}" '
+        f'y2="{top + plot_height}"></line>'
+        f'<line class="trend-axis" x1="{left}" y1="{top + plot_height}" '
+        f'x2="{left + plot_width}" y2="{top + plot_height}"></line>'
+        f'<polyline class="trend-line" points="{line_path}"></polyline>'
+        f"{''.join(circles)}"
+        f'<text class="trend-label" x="{left}" y="{height - 12}">'
+        f"Injection {min_x}</text>"
+        f'<text class="trend-label" x="{left + plot_width - 70}" '
+        f'y="{height - 12}">Injection {max_x}</text>'
+        f'<text class="trend-label" x="4" y="{top + 4}">{max_y:.4f} min</text>'
+        f'<text class="trend-label" x="4" y="{top + plot_height}">'
+        f"{min_y:.4f} min</text>"
+        "</svg></section>"
+    )
+
+
 def _heatmap(metrics: ReviewMetrics, samples: list[str], targets: list[str]) -> str:
     legend = (
         '<div class="legend">'
@@ -230,6 +332,17 @@ def _ordered_values(rows: list[dict[str, str]], key: str) -> list[str]:
     return values
 
 
+def _ordered_unique(values: Iterable[T]) -> list[T]:
+    ordered: list[T] = []
+    seen: set[T] = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
+
+
 def _targets_by_detection(metrics: ReviewMetrics) -> list[str]:
     return sorted(
         metrics.targets,
@@ -245,6 +358,13 @@ def _percent_value(text: str) -> int:
         return int(text.rstrip("%"))
     except ValueError:
         return 0
+
+
+def _float_value(text: str) -> float | None:
+    try:
+        return float(text)
+    except ValueError:
+        return None
 
 
 def _state_label(state: str) -> str:
