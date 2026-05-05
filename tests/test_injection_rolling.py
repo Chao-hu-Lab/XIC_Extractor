@@ -66,3 +66,46 @@ def test_read_xlsx_releases_file_handle(tmp_path: Path) -> None:
     assert read_injection_order(p) == {"S_X": 3}
     p.unlink()
     assert not p.exists()
+
+
+def test_read_xlsx_adds_canonical_aliases_for_tissue_sampleinfo(
+    tmp_path: Path,
+) -> None:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Sample_Name", "Injection_Order"])
+    ws.append(["Tumor tissue BC2257_DNA ", 2])
+    ws.append(["Normal tissue BC2257_DNA ", 36])
+    ws.append(["Benign fat BC1055_DNA ", 76])
+    ws.append(["Tumor tissue BC2286* DNA +RNA", 20])
+    ws.append(["Breast Cancer Tissue_ pooled_QC_1 ", 1])
+    ws.append(["Breast Cancer Tissue_pooled_QC_4", 49])
+    path = tmp_path / "SampleInfo.xlsx"
+    wb.save(path)
+
+    order = read_injection_order(path)
+
+    assert order["Tumor tissue BC2257_DNA"] == 2
+    assert order["TumorBC2257_DNA"] == 2
+    assert order["NormalBC2257_DNA"] == 36
+    assert order["BenignfatBC1055_DNA"] == 76
+    assert order["TumorBC2286_DNAandRNA"] == 20
+    assert order["Breast_Cancer_Tissue_pooled_QC1"] == 1
+    assert order["Breast_Cancer_Tissue_pooled_QC_4"] == 49
+
+
+def test_canonical_alias_collision_raises(tmp_path: Path) -> None:
+    p = tmp_path / "info.csv"
+    p.write_text(
+        "Sample_Name,Injection_Order\nTumor tissue BC2257_DNA,2\nTumorBC2257_DNA,3\n",
+        encoding="utf-8",
+    )
+
+    try:
+        read_injection_order(p)
+    except ValueError as exc:
+        assert "Conflicting injection order" in str(exc)
+    else:
+        raise AssertionError("expected conflicting alias to raise")
