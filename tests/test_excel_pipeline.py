@@ -44,6 +44,7 @@ def test_write_excel_from_run_output_uses_in_memory_rows_and_metadata(
     assert wb.sheetnames == [
         "XIC Results",
         "Summary",
+        "Review Queue",
         "Targets",
         "Diagnostics",
         "Run Metadata",
@@ -60,6 +61,11 @@ def test_write_excel_from_run_output_uses_in_memory_rows_and_metadata(
     ws_diagnostics = wb["Diagnostics"]
     assert ws_diagnostics["A2"].value == "SampleA"
     assert ws_diagnostics["C2"].value == "NL_FAIL"
+    ws_review = wb["Review Queue"]
+    assert ws_review["B2"].value == "SampleA"
+    assert ws_review["C2"].value == "WithNL"
+    assert ws_review["G2"].value == "NL_FAIL"
+    assert ws_review["K2"].value == "Check MS2 / NL evidence near selected RT"
 
     ws_metadata = wb["Run Metadata"]
     metadata_keys = {

@@ -5,7 +5,9 @@ from openpyxl import Workbook, load_workbook
 
 from scripts.csv_to_excel import (
     _build_data_sheet,
+    _build_review_queue_sheet,
     _build_summary_sheet,
+    _build_targets_sheet,
     _wide_to_long_rows,
     run,
 )
@@ -170,6 +172,94 @@ def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     assert data["ISTD"]["Area / ISTD ratio (paired detected)"] == "—"
 
 
+def test_build_review_queue_sheet_prioritizes_rows_that_need_manual_review() -> None:
+    rows = [
+        _long_row(
+            "Tumor_1",
+            "Analyte",
+            "9.0",
+            "10000",
+            "OK",
+            confidence="LOW",
+            reason="concerns: peak_width (major); noise_shape (minor)",
+        ),
+        _long_row(
+            "Tumor_2",
+            "Analyte",
+            "9.2",
+            "30000",
+            "NO_MS2",
+            confidence="MEDIUM",
+            reason="all checks passed",
+        ),
+        _long_row("Tumor_3", "Analyte", "9.3", "40000", "OK"),
+    ]
+    diagnostics = [
+        {
+            "SampleName": "Tumor_1",
+            "Target": "Analyte",
+            "Issue": "NL_FAIL",
+            "Reason": "selected candidate has trigger-only MS2 evidence",
+        }
+    ]
+    wb = Workbook()
+    ws = wb.active
+
+    _build_review_queue_sheet(ws, rows, diagnostics)
+
+    headers = [ws.cell(row=1, column=i).value for i in range(1, ws.max_column + 1)]
+    assert headers == [
+        "Priority",
+        "SampleName",
+        "Target",
+        "Role",
+        "Confidence",
+        "NL",
+        "Issue",
+        "Primary Concern",
+        "RT",
+        "Area",
+        "Suggested Action",
+        "Detail",
+    ]
+    assert ws.freeze_panes == "A2"
+    assert ws.auto_filter.ref == "A1:L3"
+    assert ws["A2"].value == 1
+    assert ws["G2"].value == "NL_FAIL"
+    assert ws["H2"].value == "peak_width (major)"
+    assert ws["K2"].value == "Check MS2 / NL evidence near selected RT"
+    assert ws["F3"].value == "— MS2"
+    assert ws["K3"].value == "Check whether missing DDA trigger is acceptable"
+    assert ws["A2"].fill.fgColor.rgb.endswith("FFCDD2")
+    assert ws["A3"].fill.fgColor.rgb.endswith("FFF9C4")
+
+
+def test_build_review_queue_sheet_keeps_empty_queue_readable() -> None:
+    wb = Workbook()
+    ws = wb.active
+
+    _build_review_queue_sheet(
+        ws,
+        [_long_row("Tumor_1", "Analyte", "9.3", "40000", "OK")],
+        [],
+    )
+
+    assert ws.max_row == 1
+    assert ws.auto_filter.ref == "A1:L1"
+
+
+def test_targets_sheet_marks_expected_product_as_nominal_reference() -> None:
+    wb = Workbook()
+    ws = wb.active
+
+    _build_targets_sheet(ws, [_target("Analyte")])
+
+    assert ws["I1"].value == "Expected product m/z"
+    assert ws["I1"].comment is not None
+    assert "Nominal target product" in ws["I1"].comment.text
+    assert "strict observed-loss" in ws["I1"].comment.text.lower()
+
+
 def test_summary_area_ratio_uses_only_explicit_qc_samples() -> None:
     rows = [
         _long_row("Tumor_1", "Analyte", "9.0", "10000", "OK", istd_pair="ISTD"),
@@ -293,6 +383,7 @@ def test_run_writes_row_based_results_sheet_and_keeps_results_active(
     assert wb.sheetnames == [
         "XIC Results",
         "Summary",
+        "Review Queue",
         "Targets",
         "Diagnostics",
         "Run Metadata",
@@ -324,6 +415,9 @@ def test_run_writes_row_based_results_sheet_and_keeps_results_active(
     assert config.output_csv.exists()
     assert config.output_csv.with_name("xic_results_long.csv").exists()
     assert config.diagnostics_csv.exists()
+    ws_review = wb["Review Queue"]
+    assert ws_review["G2"].value == "NL_FAIL"
+    assert ws_review["H2"].value == "NL_FAIL"
 
 
 def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
@@ -355,6 +449,7 @@ def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
     assert wb.sheetnames == [
         "XIC Results",
         "Summary",
+        "Review Queue",
         "Targets",
         "Diagnostics",
         "Run Metadata",

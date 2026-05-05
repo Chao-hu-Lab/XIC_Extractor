@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import overload
 
 from openpyxl import Workbook
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -77,6 +78,26 @@ _SUMMARY_HEADERS = [
     "Confidence LOW",
     "Confidence VERY_LOW",
 ]
+_REVIEW_HEADERS = [
+    "Priority",
+    "SampleName",
+    "Target",
+    "Role",
+    "Confidence",
+    "NL",
+    "Issue",
+    "Primary Concern",
+    "RT",
+    "Area",
+    "Suggested Action",
+    "Detail",
+]
+_CONFIDENCE_FILL = {
+    "HIGH": "C8E6C9",
+    "MEDIUM": "FFF9C4",
+    "LOW": "FFE0B2",
+    "VERY_LOW": "FFCDD2",
+}
 
 
 def _fill(hex6: str) -> PatternFill:
@@ -297,6 +318,202 @@ def _build_summary_sheet(
     ws.freeze_panes = "A2"
 
 
+def _build_review_queue_sheet(
+    ws,
+    rows: list[dict[str, str]],
+    diagnostics: list[dict[str, str]],
+) -> None:
+    for col_idx, header in enumerate(_REVIEW_HEADERS, start=1):
+        _apply(
+            ws.cell(row=1, column=col_idx, value=header),
+            **_header_style(_MS2_HEADER),
+        )
+    ws.row_dimensions[1].height = 30
+
+    queue_rows = _review_queue_rows(rows, diagnostics)
+    for row_idx, row in enumerate(queue_rows, start=2):
+        fill_hex = _review_priority_fill(row["Priority"])
+        for col_idx, header in enumerate(_REVIEW_HEADERS, start=1):
+            raw_value = row.get(header, "")
+            value = _review_cell_value(header, raw_value)
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            _apply(
+                cell,
+                fill=_review_cell_fill(header, raw_value, fill_hex),
+                alignment=(
+                    CENTER_WRAP
+                    if header in {"Suggested Action", "Detail"}
+                    else CENTER
+                ),
+                border=BORDER,
+            )
+            if isinstance(value, float):
+                cell.number_format = _review_number_format(header)
+
+    widths = [10, 28, 24, 12, 14, 14, 18, 28, 12, 16, 38, 72]
+    for col_idx, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+    ws.auto_filter.ref = (
+        f"A1:{get_column_letter(len(_REVIEW_HEADERS))}"
+        f"{max(1, len(queue_rows) + 1)}"
+    )
+    ws.freeze_panes = "A2"
+
+
+def _review_queue_rows(
+    rows: list[dict[str, str]],
+    diagnostics: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    diagnostics_by_key = _diagnostics_by_key(diagnostics)
+    queue: list[dict[str, str]] = []
+    for row in rows:
+        key = (row.get("SampleName", ""), row.get("Target", ""))
+        diagnostic = diagnostics_by_key.get(key)
+        issue = diagnostic.get("Issue", "") if diagnostic else _row_review_issue(row)
+        if not issue:
+            continue
+        detail = diagnostic.get("Reason", "") if diagnostic else row.get("Reason", "")
+        queue.append(
+            {
+                "Priority": str(_review_priority(row, issue)),
+                "SampleName": row.get("SampleName", ""),
+                "Target": row.get("Target", ""),
+                "Role": row.get("Role", ""),
+                "Confidence": row.get("Confidence", ""),
+                "NL": row.get("NL", ""),
+                "Issue": issue,
+                "Primary Concern": _primary_concern(
+                    issue, detail, row.get("Reason", "")
+                ),
+                "RT": row.get("RT", ""),
+                "Area": row.get("Area", ""),
+                "Suggested Action": _suggested_action(issue, row),
+                "Detail": detail,
+            }
+        )
+    queue.sort(
+        key=lambda item: (
+            int(item["Priority"]),
+            item["SampleName"],
+            item["Target"],
+            item["Issue"],
+        )
+    )
+    return queue
+
+
+def _diagnostics_by_key(
+    diagnostics: list[dict[str, str]],
+) -> dict[tuple[str, str], dict[str, str]]:
+    by_key: dict[tuple[str, str], dict[str, str]] = {}
+    for row in diagnostics:
+        key = (row.get("SampleName", ""), row.get("Target", ""))
+        by_key.setdefault(key, row)
+    return by_key
+
+
+def _row_review_issue(row: dict[str, str]) -> str:
+    nl = row.get("NL", "")
+    if nl == "NL_FAIL":
+        return "NL_FAIL"
+    if nl == "NO_MS2":
+        return "NO_MS2"
+    if nl.startswith("WARN_"):
+        return "NL_WARN"
+    confidence = row.get("Confidence", "")
+    if confidence in {"LOW", "VERY_LOW"}:
+        return f"CONFIDENCE_{confidence}"
+    return ""
+
+
+def _review_priority(row: dict[str, str], issue: str) -> int:
+    confidence = row.get("Confidence", "")
+    if issue in {"PEAK_NOT_FOUND", "NO_SIGNAL", "FILE_ERROR", "NL_FAIL"}:
+        return 1
+    if confidence == "VERY_LOW":
+        return 1
+    if issue in {"NO_MS2", "NL_WARN"} or confidence == "LOW":
+        return 2
+    return 3
+
+
+def _primary_concern(issue: str, detail: str, reason: str) -> str:
+    for source in (reason, detail):
+        parsed = _first_concern(source)
+        if parsed and parsed != "all checks passed":
+            return parsed
+    return issue
+
+
+def _first_concern(text: str) -> str:
+    if not text:
+        return ""
+    if text.startswith(_FORMULA_PREFIXES):
+        return ""
+    normalized = text.removeprefix("concerns:").strip()
+    first = normalized.split(";", 1)[0].strip()
+    if first.startswith("weak candidate:"):
+        first = first.removeprefix("weak candidate:").strip()
+    return first
+
+
+def _suggested_action(issue: str, row: dict[str, str]) -> str:
+    if issue in {"NL_FAIL", "NL_WARN"}:
+        return "Check MS2 / NL evidence near selected RT"
+    if issue == "NO_MS2":
+        return "Check whether missing DDA trigger is acceptable"
+    if issue in {"PEAK_NOT_FOUND", "NO_SIGNAL"}:
+        return "Inspect XIC trace and target RT window"
+    if issue == "FILE_ERROR":
+        return "Check RAW file readability"
+    if row.get("Confidence") in {"LOW", "VERY_LOW"}:
+        return "Review peak shape, RT prior, and ISTD pairing"
+    return "Review diagnostic detail"
+
+
+def _review_cell_value(header: str, raw_value: str) -> object:
+    if header == "Priority":
+        parsed = _safe_float(raw_value)
+        return int(parsed) if parsed is not None else raw_value
+    if header == "NL":
+        return _nl_to_display(raw_value) if raw_value else ""
+    if header in {"RT", "Area"}:
+        if raw_value in ND_ERROR:
+            return raw_value
+        parsed = _safe_float(raw_value)
+        return parsed if parsed is not None else raw_value
+    if header in {
+        "SampleName",
+        "Target",
+        "Issue",
+        "Primary Concern",
+        "Suggested Action",
+        "Detail",
+    }:
+        return _excel_text(raw_value)
+    return raw_value
+
+
+def _review_cell_fill(header: str, raw_value: str, row_fill_hex: str) -> PatternFill:
+    if header == "NL" and raw_value:
+        return _nl_cell_fill(raw_value)
+    if header == "Confidence" and raw_value in _CONFIDENCE_FILL:
+        return _fill(_CONFIDENCE_FILL[raw_value])
+    return _fill(row_fill_hex)
+
+
+def _review_priority_fill(priority: str) -> str:
+    return {"1": _MS2_FAIL, "2": _MS2_WARN}.get(priority, GREY)
+
+
+def _review_number_format(header: str) -> str:
+    if header == "RT":
+        return "0.0000"
+    if header == "Area":
+        return "0.00E+00"
+    return "#,##0"
+
+
 def _target_summaries(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     seen: set[str] = set()
     summaries: list[dict[str, str]] = []
@@ -471,6 +688,12 @@ def _build_targets_sheet(ws, targets: list[Target]) -> None:
             ws.cell(row=1, column=col_idx, value=header),
             **_header_style(_SAMPLE_HEADER),
         )
+    ws["I1"].comment = Comment(
+        "Nominal target product m/z = target m/z - neutral_loss_da. "
+        "Strict observed-loss NL evidence is evaluated from each MS2 scan precursor "
+        "and selected candidate alignment.",
+        "XIC Extractor",
+    )
     ws.row_dimensions[1].height = 30
 
     for row_idx, target in enumerate(targets, start=2):
@@ -666,6 +889,9 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
         rows,
         count_no_ms2_as_detected=config.count_no_ms2_as_detected,
     )
+
+    ws_review = wb.create_sheet("Review Queue")
+    _build_review_queue_sheet(ws_review, rows, diagnostics)
 
     ws_targets = wb.create_sheet("Targets")
     _build_targets_sheet(ws_targets, targets)

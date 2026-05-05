@@ -8,6 +8,7 @@ from scripts.csv_to_excel import (
     _build_data_sheet,
     _build_diagnostics_sheet,
     _build_metadata_sheet,
+    _build_review_queue_sheet,
     _build_score_breakdown_sheet,
     _build_summary_sheet,
     _build_targets_sheet,
@@ -45,6 +46,9 @@ def write_excel_from_run_output(
         rows,
         count_no_ms2_as_detected=config.count_no_ms2_as_detected,
     )
+
+    ws_review = wb.create_sheet("Review Queue")
+    _build_review_queue_sheet(ws_review, rows, diagnostics)
 
     ws_targets = wb.create_sheet("Targets")
     _build_targets_sheet(ws_targets, targets)

@@ -37,13 +37,14 @@ def test_keep_intermediate_csv_emits_csvs(tmp_path: Path, monkeypatch) -> None:
     assert {"xic_results.csv", "xic_results_long.csv", "xic_diagnostics.csv"} <= actual
 
 
-def test_default_xlsx_has_five_sheets(tmp_path: Path, monkeypatch) -> None:
+def test_default_xlsx_has_six_sheets(tmp_path: Path, monkeypatch) -> None:
     xlsx_path = _run_pipeline(tmp_path, monkeypatch, emit_score_breakdown=False)
 
     wb = load_workbook(xlsx_path)
     assert wb.sheetnames == [
         "XIC Results",
         "Summary",
+        "Review Queue",
         "Targets",
         "Diagnostics",
         "Run Metadata",

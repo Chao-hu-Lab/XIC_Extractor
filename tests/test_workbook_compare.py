@@ -74,6 +74,7 @@ def test_compare_workbooks_ignores_sheet_order(tmp_path: Path) -> None:
         sheet_order=(
             "XIC Results",
             "Summary",
+            "Review Queue",
             "Targets",
             "Diagnostics",
             "Run Metadata",
@@ -85,6 +86,7 @@ def test_compare_workbooks_ignores_sheet_order(tmp_path: Path) -> None:
             "Run Metadata",
             "Diagnostics",
             "Targets",
+            "Review Queue",
             "Summary",
             "XIC Results",
         ),
@@ -122,6 +124,7 @@ def _write_workbook(
     sheet_order: tuple[str, ...] = (
         "XIC Results",
         "Summary",
+        "Review Queue",
         "Targets",
         "Diagnostics",
         "Run Metadata",
@@ -137,6 +140,8 @@ def _write_workbook(
         elif name == "Summary":
             ws.append(["Target", "Detected"])
             ws.append(["Analyte", 1])
+        elif name == "Review Queue":
+            ws.append(["Priority", "Sample", "Target", "Issue"])
         elif name == "Targets":
             ws.append(["label", "mz"])
             ws.append(["Analyte", 258.1085])
