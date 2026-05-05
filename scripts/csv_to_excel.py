@@ -37,6 +37,7 @@ _MS2_WARN = "FFF9C4"
 _MS2_FAIL = "FFCDD2"
 _MS2_NO_MS2 = "E0E0E0"
 _SAMPLE_HEADER = "2E4057"
+_OVERVIEW_HEADER_FILL = "1F4E5F"
 WHITE = "FFFFFF"
 GREY = "F5F5F5"
 _THIN = Side(style="thin", color="BDBDBD")
@@ -282,6 +283,144 @@ def _sample_group(name: str) -> str:
     return classify_sample_group(name)
 
 
+def _build_overview_sheet(
+    ws,
+    rows: list[dict[str, str]],
+    diagnostics: list[dict[str, str]],
+    review_rows: list[dict[str, str]],
+) -> None:
+    ws.title = "Overview"
+    ws.merge_cells("A1:D1")
+    _apply(
+        ws["A1"],
+        value="XIC Review Overview",
+        font=Font(bold=True, color="FFFFFF", size=14),
+        fill=_fill(_OVERVIEW_HEADER_FILL),
+        alignment=Alignment(horizontal="left", vertical="center"),
+        border=BORDER,
+    )
+    ws.row_dimensions[1].height = 28
+
+    metrics = [
+        ("Samples", len(_distinct_values(rows, "SampleName"))),
+        ("Targets", len(_distinct_values(rows, "Target"))),
+        ("Review Items", len(review_rows)),
+        ("Diagnostics", len(diagnostics)),
+    ]
+    for row_idx, (label, value) in enumerate(metrics, start=3):
+        _apply(
+            ws.cell(row=row_idx, column=1, value=label),
+            font=Font(bold=True),
+            fill=_fill(GREY),
+            alignment=CENTER,
+            border=BORDER,
+        )
+        _apply(
+            ws.cell(row=row_idx, column=2, value=value),
+            fill=_fill(WHITE),
+            alignment=CENTER,
+            border=BORDER,
+        )
+
+    next_row = _write_overview_count_section(
+        ws,
+        8,
+        "Top Targets",
+        "Target",
+        _top_review_counts(review_rows, "Target"),
+    )
+    _write_overview_count_section(
+        ws,
+        next_row + 1,
+        "Top Samples",
+        "Sample",
+        _top_review_counts(review_rows, "SampleName"),
+    )
+
+    ws.column_dimensions["A"].width = 26
+    ws.column_dimensions["B"].width = 16
+    ws.column_dimensions["C"].width = 18
+    ws.column_dimensions["D"].width = 18
+
+
+def _distinct_values(rows: list[dict[str, str]], key: str) -> set[str]:
+    return {value for row in rows if (value := row.get(key, ""))}
+
+
+def _top_review_counts(
+    review_rows: list[dict[str, str]], key: str
+) -> list[tuple[str, int]]:
+    counts: dict[str, int] = {}
+    for row in review_rows:
+        value = row.get(key, "")
+        if not value:
+            continue
+        counts[value] = counts.get(value, 0) + 1
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:5]
+
+
+def _write_overview_count_section(
+    ws,
+    start_row: int,
+    title: str,
+    label_header: str,
+    counts: list[tuple[str, int]],
+) -> int:
+    _apply(
+        ws.cell(row=start_row, column=1, value=title),
+        font=Font(bold=True, color="FFFFFF"),
+        fill=_fill(_OVERVIEW_HEADER_FILL),
+        alignment=CENTER,
+        border=BORDER,
+    )
+    _apply(
+        ws.cell(row=start_row + 1, column=1, value=label_header),
+        font=Font(bold=True),
+        fill=_fill(GREY),
+        alignment=CENTER,
+        border=BORDER,
+    )
+    _apply(
+        ws.cell(row=start_row + 1, column=2, value="Review Items"),
+        font=Font(bold=True),
+        fill=_fill(GREY),
+        alignment=CENTER,
+        border=BORDER,
+    )
+
+    if not counts:
+        _apply(
+            ws.cell(row=start_row + 2, column=1, value="None"),
+            fill=_fill(WHITE),
+            alignment=CENTER,
+            border=BORDER,
+        )
+        _apply(
+            ws.cell(row=start_row + 2, column=2, value=0),
+            fill=_fill(WHITE),
+            alignment=CENTER,
+            border=BORDER,
+        )
+        return start_row + 3
+
+    for offset, (label, count) in enumerate(counts, start=2):
+        row_idx = start_row + offset
+        fill_hex = GREY if row_idx % 2 == 0 else WHITE
+        _apply(
+            ws.cell(row=row_idx, column=1, value=_excel_text(label)),
+            fill=_fill(fill_hex),
+            alignment=CENTER,
+            border=BORDER,
+        )
+        _apply(
+            ws.cell(row=row_idx, column=2, value=count),
+            fill=_fill(fill_hex),
+            alignment=CENTER,
+            border=BORDER,
+        )
+    return start_row + len(counts) + 2
+
+
 def _build_summary_sheet(
     ws,
     rows: list[dict[str, str]],
@@ -320,8 +459,7 @@ def _build_summary_sheet(
 
 def _build_review_queue_sheet(
     ws,
-    rows: list[dict[str, str]],
-    diagnostics: list[dict[str, str]],
+    queue_rows: list[dict[str, str]],
 ) -> None:
     for col_idx, header in enumerate(_REVIEW_HEADERS, start=1):
         _apply(
@@ -330,7 +468,6 @@ def _build_review_queue_sheet(
         )
     ws.row_dimensions[1].height = 30
 
-    queue_rows = _review_queue_rows(rows, diagnostics)
     for row_idx, row in enumerate(queue_rows, start=2):
         fill_hex = _review_priority_fill(row["Priority"])
         for col_idx, header in enumerate(_REVIEW_HEADERS, start=1):
@@ -877,10 +1014,16 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
 
     diagnostics = _read_diagnostics(config.diagnostics_csv)
     score_breakdown = _read_score_breakdown(config)
+    review_rows = _review_queue_rows(rows, diagnostics)
 
     wb = Workbook()
-    ws_data = wb.active
-    ws_data.title = "XIC Results"
+    ws_overview = wb.active
+    _build_overview_sheet(ws_overview, rows, diagnostics, review_rows)
+
+    ws_review = wb.create_sheet("Review Queue")
+    _build_review_queue_sheet(ws_review, review_rows)
+
+    ws_data = wb.create_sheet("XIC Results")
     _build_data_sheet(ws_data, rows)
 
     ws_summary = wb.create_sheet("Summary")
@@ -889,9 +1032,6 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
         rows,
         count_no_ms2_as_detected=config.count_no_ms2_as_detected,
     )
-
-    ws_review = wb.create_sheet("Review Queue")
-    _build_review_queue_sheet(ws_review, rows, diagnostics)
 
     ws_targets = wb.create_sheet("Targets")
     _build_targets_sheet(ws_targets, targets)
@@ -903,7 +1043,7 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
     if config.emit_score_breakdown and score_breakdown:
         ws_breakdown = wb.create_sheet("Score Breakdown")
         _build_score_breakdown_sheet(ws_breakdown, score_breakdown)
-    wb.active = wb.index(ws_data)
+    wb.active = wb.index(ws_overview)
 
     wb.save(excel_path)
     _print_summary(excel_path, rows, config.count_no_ms2_as_detected)

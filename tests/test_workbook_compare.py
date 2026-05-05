@@ -32,6 +32,18 @@ def test_compare_workbooks_rejects_changed_analytical_value(tmp_path: Path) -> N
     )
 
 
+def test_compare_workbooks_compares_overview_sheet(tmp_path: Path) -> None:
+    left = tmp_path / "left.xlsx"
+    right = tmp_path / "right.xlsx"
+    _write_workbook(left, overview_review_items=1)
+    _write_workbook(right, overview_review_items=2)
+
+    result = compare_workbooks(left, right)
+
+    assert not result.matched
+    assert any("Overview" in diff for diff in result.differences)
+
+
 def test_compare_workbooks_ignores_generated_at_metadata(tmp_path: Path) -> None:
     left = tmp_path / "left.xlsx"
     right = tmp_path / "right.xlsx"
@@ -72,9 +84,10 @@ def test_compare_workbooks_ignores_sheet_order(tmp_path: Path) -> None:
     _write_workbook(
         left,
         sheet_order=(
+            "Overview",
+            "Review Queue",
             "XIC Results",
             "Summary",
-            "Review Queue",
             "Targets",
             "Diagnostics",
             "Run Metadata",
@@ -86,9 +99,10 @@ def test_compare_workbooks_ignores_sheet_order(tmp_path: Path) -> None:
             "Run Metadata",
             "Diagnostics",
             "Targets",
-            "Review Queue",
             "Summary",
             "XIC Results",
+            "Review Queue",
+            "Overview",
         ),
     )
 
@@ -121,10 +135,12 @@ def _write_workbook(
     output_path: str = "C:\\output\\xic_results.xlsx",
     include_score_breakdown: bool = False,
     score: float = 0.9,
+    overview_review_items: int = 1,
     sheet_order: tuple[str, ...] = (
+        "Overview",
+        "Review Queue",
         "XIC Results",
         "Summary",
-        "Review Queue",
         "Targets",
         "Diagnostics",
         "Run Metadata",
@@ -134,7 +150,10 @@ def _write_workbook(
     wb.remove(wb.active)
     for name in sheet_order:
         ws = wb.create_sheet(name)
-        if name == "XIC Results":
+        if name == "Overview":
+            ws.append(["Metric", "Value"])
+            ws.append(["Review Items", overview_review_items])
+        elif name == "XIC Results":
             ws.append(["Sample", "Target", "Area"])
             ws.append(["SampleA", "Analyte", area])
         elif name == "Summary":

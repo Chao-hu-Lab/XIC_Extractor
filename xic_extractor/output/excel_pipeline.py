@@ -8,10 +8,12 @@ from scripts.csv_to_excel import (
     _build_data_sheet,
     _build_diagnostics_sheet,
     _build_metadata_sheet,
+    _build_overview_sheet,
     _build_review_queue_sheet,
     _build_score_breakdown_sheet,
     _build_summary_sheet,
     _build_targets_sheet,
+    _review_queue_rows,
 )
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extractor import RunOutput
@@ -34,10 +36,16 @@ def write_excel_from_run_output(
         if config.emit_score_breakdown
         else []
     )
+    review_rows = _review_queue_rows(rows, diagnostics)
 
     wb = Workbook()
-    ws_data = wb.active
-    ws_data.title = "XIC Results"
+    ws_overview = wb.active
+    _build_overview_sheet(ws_overview, rows, diagnostics, review_rows)
+
+    ws_review = wb.create_sheet("Review Queue")
+    _build_review_queue_sheet(ws_review, review_rows)
+
+    ws_data = wb.create_sheet("XIC Results")
     _build_data_sheet(ws_data, rows)
 
     ws_summary = wb.create_sheet("Summary")
@@ -46,9 +54,6 @@ def write_excel_from_run_output(
         rows,
         count_no_ms2_as_detected=config.count_no_ms2_as_detected,
     )
-
-    ws_review = wb.create_sheet("Review Queue")
-    _build_review_queue_sheet(ws_review, rows, diagnostics)
 
     ws_targets = wb.create_sheet("Targets")
     _build_targets_sheet(ws_targets, targets)
@@ -63,7 +68,7 @@ def write_excel_from_run_output(
         ws_breakdown = wb.create_sheet("Score Breakdown")
         _build_score_breakdown_sheet(ws_breakdown, score_breakdown)
 
-    wb.active = wb.index(ws_data)
+    wb.active = wb.index(ws_overview)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_path)
     wb.close()

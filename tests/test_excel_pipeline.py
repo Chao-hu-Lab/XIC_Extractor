@@ -42,14 +42,20 @@ def test_write_excel_from_run_output_uses_in_memory_rows_and_metadata(
 
     wb = load_workbook(output_path)
     assert wb.sheetnames == [
+        "Overview",
+        "Review Queue",
         "XIC Results",
         "Summary",
-        "Review Queue",
         "Targets",
         "Diagnostics",
         "Run Metadata",
     ]
-    assert wb.active.title == "XIC Results"
+    assert wb.active.title == "Overview"
+    ws_overview = wb["Overview"]
+    assert ws_overview["A1"].value == "XIC Review Overview"
+    assert ws_overview["B3"].value == 1
+    assert ws_overview["B5"].value == 1
+    assert ws_overview["B6"].value == 1
     ws = wb["XIC Results"]
     assert ws["A2"].value == "SampleA"
     assert ws["C2"].value == "WithNL"
@@ -96,7 +102,16 @@ def test_write_excel_from_run_output_adds_score_breakdown_when_enabled(
     )
 
     wb = load_workbook(output_path)
-    assert "Score Breakdown" in wb.sheetnames
+    assert wb.sheetnames == [
+        "Overview",
+        "Review Queue",
+        "XIC Results",
+        "Summary",
+        "Targets",
+        "Diagnostics",
+        "Run Metadata",
+        "Score Breakdown",
+    ]
     ws = wb["Score Breakdown"]
     headers = [cell.value for cell in next(ws.iter_rows(max_row=1))]
     values = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))

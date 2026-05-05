@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 
 DEFAULT_NUMERIC_TOLERANCE = 1e-9
 COMPARE_SHEETS = (
+    "Overview",
     "XIC Results",
     "Summary",
     "Review Queue",

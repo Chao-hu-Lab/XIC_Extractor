@@ -3,11 +3,13 @@ from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 
+import scripts.csv_to_excel as csv_to_excel
 from scripts.csv_to_excel import (
     _build_data_sheet,
     _build_review_queue_sheet,
     _build_summary_sheet,
     _build_targets_sheet,
+    _review_queue_rows,
     _wide_to_long_rows,
     run,
 )
@@ -99,6 +101,80 @@ def test_data_sheet_forces_sample_names_and_target_labels_to_literal_text() -> N
     assert ws["A2"].data_type != "f"
     assert ws["C2"].value == "'=Bad"
     assert ws["C2"].data_type != "f"
+
+
+def test_build_overview_sheet_summarizes_batch_review_health() -> None:
+    rows = [
+        _long_row("Tumor_1", "AnalyteA", "9.0", "10000", "OK"),
+        _long_row(
+            "Tumor_2",
+            "AnalyteA",
+            "ND",
+            "ND",
+            "NL_FAIL",
+            confidence="VERY_LOW",
+            reason="concerns: nl_support (major)",
+        ),
+        _long_row(
+            "Tumor_2",
+            "AnalyteB",
+            "12.0",
+            "20000",
+            "NO_MS2",
+            confidence="MEDIUM",
+        ),
+    ]
+    diagnostics = [
+        {
+            "SampleName": "Tumor_2",
+            "Target": "AnalyteA",
+            "Issue": "NL_FAIL",
+            "Reason": "strict observed neutral loss missing",
+        }
+    ]
+    review_rows = _review_queue_rows(rows, diagnostics)
+    wb = Workbook()
+    ws = wb.active
+
+    csv_to_excel._build_overview_sheet(ws, rows, diagnostics, review_rows)
+
+    assert ws.title == "Overview"
+    assert ws["A1"].value == "XIC Review Overview"
+    assert ws["A3"].value == "Samples"
+    assert ws["B3"].value == 2
+    assert ws["A4"].value == "Targets"
+    assert ws["B4"].value == 2
+    assert ws["A5"].value == "Review Items"
+    assert ws["B5"].value == 2
+    assert ws["A6"].value == "Diagnostics"
+    assert ws["B6"].value == 1
+    section_labels = [ws.cell(row=r, column=1).value for r in range(1, ws.max_row + 1)]
+    assert "Top Targets" in section_labels
+    assert "Top Samples" in section_labels
+
+
+def test_build_overview_sheet_forces_top_labels_to_literal_text() -> None:
+    rows = [
+        _long_row("+Sample", "=Analyte", "ND", "ND", "NL_FAIL"),
+    ]
+    diagnostics = [
+        {
+            "SampleName": "+Sample",
+            "Target": "=Analyte",
+            "Issue": "NL_FAIL",
+            "Reason": "strict observed neutral loss missing",
+        }
+    ]
+    review_rows = _review_queue_rows(rows, diagnostics)
+    wb = Workbook()
+    ws = wb.active
+
+    csv_to_excel._build_overview_sheet(ws, rows, diagnostics, review_rows)
+
+    assert ws["A10"].value == "'=Analyte"
+    assert ws["A10"].data_type != "f"
+    assert ws["A14"].value == "'+Sample"
+    assert ws["A14"].data_type != "f"
 
 
 def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
@@ -205,7 +281,7 @@ def test_build_review_queue_sheet_prioritizes_rows_that_need_manual_review() -> 
     wb = Workbook()
     ws = wb.active
 
-    _build_review_queue_sheet(ws, rows, diagnostics)
+    _build_review_queue_sheet(ws, _review_queue_rows(rows, diagnostics))
 
     headers = [ws.cell(row=1, column=i).value for i in range(1, ws.max_column + 1)]
     assert headers == [
@@ -240,8 +316,10 @@ def test_build_review_queue_sheet_keeps_empty_queue_readable() -> None:
 
     _build_review_queue_sheet(
         ws,
-        [_long_row("Tumor_1", "Analyte", "9.3", "40000", "OK")],
-        [],
+        _review_queue_rows(
+            [_long_row("Tumor_1", "Analyte", "9.3", "40000", "OK")],
+            [],
+        ),
     )
 
     assert ws.max_row == 1
@@ -340,7 +418,7 @@ def test_wide_to_long_rows_classifies_qc_from_sample_name_token() -> None:
     assert long_rows[2]["Group"] == "QC"
 
 
-def test_run_writes_row_based_results_sheet_and_keeps_results_active(
+def test_run_writes_row_based_results_sheet_and_makes_overview_active(
     tmp_path: Path,
 ) -> None:
     config = _config(tmp_path)
@@ -381,14 +459,20 @@ def test_run_writes_row_based_results_sheet_and_keeps_results_active(
 
     wb = load_workbook(excel_path)
     assert wb.sheetnames == [
+        "Overview",
+        "Review Queue",
         "XIC Results",
         "Summary",
-        "Review Queue",
         "Targets",
         "Diagnostics",
         "Run Metadata",
     ]
-    assert wb.active.title == "XIC Results"
+    assert wb.active.title == "Overview"
+    ws_overview = wb["Overview"]
+    assert ws_overview["A1"].value == "XIC Review Overview"
+    assert ws_overview["B3"].value == 1
+    assert ws_overview["B5"].value == 1
+    assert ws_overview["B6"].value == 1
     ws_results = wb["XIC Results"]
     assert ws_results["A1"].value == "SampleName"
     assert ws_results["C1"].value == "Target"
@@ -447,14 +531,15 @@ def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
 
     wb = load_workbook(excel_path)
     assert wb.sheetnames == [
+        "Overview",
+        "Review Queue",
         "XIC Results",
         "Summary",
-        "Review Queue",
         "Targets",
         "Diagnostics",
         "Run Metadata",
     ]
-    assert wb.active.title == "XIC Results"
+    assert wb.active.title == "Overview"
     assert wb["XIC Results"]["C2"].value == "Analyte"
     assert wb["Diagnostics"].auto_filter.ref == "A1:D1"
 
@@ -504,8 +589,16 @@ def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
     excel_path = run(config, targets)
 
     wb = load_workbook(excel_path)
-    assert "Score Breakdown" in wb.sheetnames
-    assert "Run Metadata" in wb.sheetnames
+    assert wb.sheetnames == [
+        "Overview",
+        "Review Queue",
+        "XIC Results",
+        "Summary",
+        "Targets",
+        "Diagnostics",
+        "Run Metadata",
+        "Score Breakdown",
+    ]
     ws = wb["Score Breakdown"]
     headers = [cell.value for cell in next(ws.iter_rows(max_row=1))]
     values = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))

@@ -53,10 +53,10 @@ Default workbook sheets changed from the legacy conversion flow to an Excel-firs
 
 | Mode | Sheet count | Sheets |
 | --- | ---: | --- |
-| Default | 6 | `XIC Results`, `Summary`, `Review Queue`, `Targets`, `Diagnostics`, `Run Metadata` |
-| `emit_score_breakdown=true` | 7 | Default sheets plus `Score Breakdown` |
+| Default | 7 | `Overview`, `Review Queue`, `XIC Results`, `Summary`, `Targets`, `Diagnostics`, `Run Metadata` |
+| `emit_score_breakdown=true` | 8 | Default sheets plus `Score Breakdown` |
 
-`XIC Results` is always the active sheet when the workbook opens, even when diagnostics are present.
+`Overview` is always the active sheet when the workbook opens, even when diagnostics are present.
 
 ## Output File Count
 
