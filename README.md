@@ -122,6 +122,7 @@ concerns: low trace continuity (minor); poor edge recovery (minor)
 
 預設輸出只有一個 timestamped workbook：`output/xic_results_YYYYMMDD_HHMM.xlsx`。
 日常審閱以 workbook 為準；CSV 是 debug / downstream 相容用的中間檔，需在 GUI Advanced 展開後啟用 `keep_intermediate_csv`，或在 CLI 使用 `--skip-excel`。
+`emit_review_report=true` 時會額外輸出同 timestamp 的 static HTML companion：`output/review_report_YYYYMMDD_HHMM.html`，用於快速瀏覽 review workload、target health 與 detection / flag heatmap；Excel 仍是主要交付檔。
 
 ### Excel workbook
 

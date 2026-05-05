@@ -763,6 +763,25 @@ def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
     assert row["Confidence"] == "MEDIUM"
 
 
+def test_run_emits_review_report_when_enabled(tmp_path: Path) -> None:
+    config = _config(tmp_path, emit_review_report=True)
+    targets = [_target("Analyte")]
+    config.output_csv.parent.mkdir(parents=True)
+    _write_csv(
+        config.output_csv.with_name("xic_results_long.csv"),
+        [_long_row("Tumor_1", "Analyte", "9.1", "10000", "OK")],
+    )
+    _write_empty_diagnostics_csv(config.diagnostics_csv)
+
+    excel_path = run(config, targets)
+
+    report_path = excel_path.with_name(
+        excel_path.name.replace("xic_results_", "review_report_")
+    ).with_suffix(".html")
+    assert report_path.exists()
+    assert "XIC Review Report" in report_path.read_text(encoding="utf-8")
+
+
 def test_workbook_sheet_tabs_signal_review_and_technical_roles(tmp_path: Path) -> None:
     config = _config(tmp_path, emit_score_breakdown=True)
     targets = [_target("Analyte")]
@@ -867,6 +886,7 @@ def _config(
     tmp_path: Path,
     *,
     emit_score_breakdown: bool = False,
+    emit_review_report: bool = False,
 ) -> ExtractionConfig:
     return ExtractionConfig(
         data_dir=tmp_path / "raw",
@@ -881,6 +901,7 @@ def _config(
         nl_min_intensity_ratio=0.01,
         count_no_ms2_as_detected=True,
         emit_score_breakdown=emit_score_breakdown,
+        emit_review_report=emit_review_report,
     )
 
 

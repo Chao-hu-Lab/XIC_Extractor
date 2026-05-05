@@ -127,7 +127,32 @@ def test_write_excel_from_run_output_adds_score_breakdown_when_enabled(
     assert row["Prior RT"] is None
 
 
-def _config(tmp_path: Path, *, emit_score_breakdown: bool = False) -> ExtractionConfig:
+def test_write_excel_from_run_output_emits_review_report_when_enabled(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.output.excel_pipeline import write_excel_from_run_output
+
+    config = _config(tmp_path, emit_review_report=True)
+    output_path = tmp_path / "output" / "xic_results_20260505_1200.xlsx"
+
+    write_excel_from_run_output(
+        config,
+        [_target("WithNL")],
+        _run_output(with_diagnostics=False),
+        output_path=output_path,
+    )
+
+    report_path = output_path.with_name("review_report_20260505_1200.html")
+    assert report_path.exists()
+    assert "XIC Review Report" in report_path.read_text(encoding="utf-8")
+
+
+def _config(
+    tmp_path: Path,
+    *,
+    emit_score_breakdown: bool = False,
+    emit_review_report: bool = False,
+) -> ExtractionConfig:
     return ExtractionConfig(
         data_dir=tmp_path / "raw",
         dll_dir=tmp_path / "dll",
@@ -140,6 +165,7 @@ def _config(tmp_path: Path, *, emit_score_breakdown: bool = False) -> Extraction
         ms2_precursor_tol_da=0.5,
         nl_min_intensity_ratio=0.01,
         emit_score_breakdown=emit_score_breakdown,
+        emit_review_report=emit_review_report,
         config_hash="abc12345",
     )
 

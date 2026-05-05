@@ -6,6 +6,12 @@ from pathlib import Path
 from xic_extractor.output.review_metrics import ReviewMetrics, build_review_metrics
 
 
+def review_report_path_for_excel(excel_path: Path) -> Path:
+    return excel_path.with_name(
+        excel_path.name.replace("xic_results_", "review_report_")
+    ).with_suffix(".html")
+
+
 def write_review_report(
     path: Path,
     rows: list[dict[str, str]],

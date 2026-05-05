@@ -22,6 +22,10 @@ from openpyxl.utils import get_column_letter
 from xic_extractor.config import ExtractionConfig, Target, load_config
 from xic_extractor.output import metadata
 from xic_extractor.output.review_metrics import ReviewMetrics, build_review_metrics
+from xic_extractor.output.review_report import (
+    review_report_path_for_excel,
+    write_review_report,
+)
 from xic_extractor.output.schema import (
     DIAGNOSTIC_HEADERS as _DIAGNOSTIC_HEADERS,
 )
@@ -1210,6 +1214,14 @@ def _run_with_config(config: ExtractionConfig, targets: list[Target]) -> Path:
     _apply_sheet_role_styles(wb)
 
     wb.save(excel_path)
+    if config.emit_review_report:
+        write_review_report(
+            review_report_path_for_excel(excel_path),
+            rows,
+            diagnostics=diagnostics,
+            review_rows=review_rows,
+            count_no_ms2_as_detected=config.count_no_ms2_as_detected,
+        )
     _print_summary(excel_path, rows, config.count_no_ms2_as_detected)
     return excel_path
 
