@@ -72,25 +72,25 @@ _SUMMARY_HEADERS = [
     "Target",
     "Role",
     "ISTD Pair",
-    "Flagged Rows",
-    "Flagged %",
-    "MS2/NL Flags",
-    "Low Confidence Rows",
     "Detected",
     "Total",
     "Detection %",
-    "Mean RT",
     "Median Area (detected)",
+    "Mean RT",
     "Area / ISTD ratio (paired detected)",
+    "RT Delta vs ISTD",
     "NL OK",
     "NL WARN",
     "NL FAIL",
     "NO MS2",
-    "RT Delta vs ISTD",
     "Confidence HIGH",
     "Confidence MEDIUM",
     "Confidence LOW",
     "Confidence VERY_LOW",
+    "Flagged Rows",
+    "Flagged %",
+    "MS2/NL Flags",
+    "Low Confidence Rows",
 ]
 _REVIEW_HEADERS = [
     "Priority",
@@ -518,23 +518,23 @@ def _build_summary_sheet(
         24,
         12,
         24,
-        14,
-        14,
-        12,
-        14,
         12,
         10,
         12,
-        12,
         16,
+        12,
         24,
-        10,
-        10,
-        10,
-        10,
         22,
+        10,
+        10,
+        10,
+        10,
         14,
         16,
+        12,
+        14,
+        14,
+        14,
         12,
         14,
     ]
@@ -567,11 +567,7 @@ def _build_review_queue_sheet(
             _apply(
                 cell,
                 fill=_review_cell_fill(header, raw_value, fill_hex),
-                alignment=(
-                    CENTER_WRAP
-                    if header in {"Action", "Evidence"}
-                    else CENTER
-                ),
+                alignment=(CENTER_WRAP if header in {"Action", "Evidence"} else CENTER),
                 border=BORDER,
             )
             if isinstance(value, float):
@@ -581,8 +577,7 @@ def _build_review_queue_sheet(
     for col_idx, width in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
     ws.auto_filter.ref = (
-        f"A1:{get_column_letter(len(_REVIEW_HEADERS))}"
-        f"{max(1, len(queue_rows) + 1)}"
+        f"A1:{get_column_letter(len(_REVIEW_HEADERS))}{max(1, len(queue_rows) + 1)}"
     )
     ws.freeze_panes = "A2"
 
@@ -677,9 +672,7 @@ def _primary_review_issue(
     )[1]
 
 
-def _review_evidence(
-    row: dict[str, str], diagnostics: list[dict[str, str]]
-) -> str:
+def _review_evidence(row: dict[str, str], diagnostics: list[dict[str, str]]) -> str:
     if diagnostics:
         parts = [
             diagnostic.get("Reason", "") or diagnostic.get("Issue", "")
@@ -846,25 +839,25 @@ def _summary_row_values(
         _excel_text(target),
         target_row.get("Role", ""),
         _excel_text(target_row.get("ISTD Pair", "")),
-        target_metrics.flagged_rows,
-        target_metrics.flagged_percent,
-        target_metrics.ms2_nl_flags,
-        target_metrics.low_confidence_rows,
         detected,
         total,
         f"{detected / total * 100:.0f}%" if total else "0%",
-        _long_mean_rt(detected_rows),
         _long_median_area(detected_rows),
+        _long_mean_rt(detected_rows),
         _long_area_ratio(target_row, rows, count_no_ms2_as_detected),
+        _long_rt_delta(target_row, rows, count_no_ms2_as_detected),
         nl_counts["OK"],
         nl_counts["WARN"],
         nl_counts["NL_FAIL"],
         nl_counts["NO_MS2"],
-        _long_rt_delta(target_row, rows, count_no_ms2_as_detected),
         confidence_counts["HIGH"],
         confidence_counts["MEDIUM"],
         confidence_counts["LOW"],
         confidence_counts["VERY_LOW"],
+        target_metrics.flagged_rows,
+        target_metrics.flagged_percent,
+        target_metrics.ms2_nl_flags,
+        target_metrics.low_confidence_rows,
     ]
 
 
@@ -1145,9 +1138,7 @@ def _build_score_breakdown_sheet(ws, rows: list[dict[str, str]]) -> None:
             _apply(cell, fill=_fill(fill_hex), alignment=CENTER, border=BORDER)
             if isinstance(value, float) and header == "Prior RT":
                 cell.number_format = "0.0000"
-    ws.auto_filter.ref = (
-        f"A1:{get_column_letter(len(headers))}{max(1, len(rows) + 1)}"
-    )
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}{max(1, len(rows) + 1)}"
     ws.freeze_panes = "A2"
 
 

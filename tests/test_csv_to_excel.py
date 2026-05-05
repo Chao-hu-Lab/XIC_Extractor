@@ -252,7 +252,7 @@ def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     assert "Median Area (detected)" in data["headers"]
     assert "Area / ISTD ratio (paired detected)" in data["headers"]
     assert data["Analyte"]["Median Area (detected)"] == 40000.0
-    assert ws["L2"].number_format == "0.00E+00"
+    assert ws["G2"].number_format == "0.00E+00"
     assert data["Analyte"]["Area / ISTD ratio (paired detected)"] == "—"
     assert data["Analyte"]["NL OK"] == 2
     assert data["Analyte"]["NL WARN"] == 1
@@ -311,6 +311,34 @@ def test_summary_sheet_includes_target_health_metrics() -> None:
     assert data["Analyte"]["Flagged %"] == "67%"
     assert data["Analyte"]["MS2/NL Flags"] == 2
     assert data["Analyte"]["Low Confidence Rows"] == 1
+
+
+def test_summary_puts_detection_rate_before_review_workload() -> None:
+    rows = [
+        _long_row("S1", "Analyte", "9.0", "100", "OK", istd_pair="ISTD"),
+        _long_row("S1", "ISTD", "8.9", "50", "OK", role="ISTD"),
+        _long_row("S2", "Analyte", "ND", "ND", "ND", istd_pair="ISTD"),
+        _long_row("S2", "ISTD", "8.8", "50", "OK", role="ISTD"),
+    ]
+    wb = Workbook()
+    ws = wb.active
+
+    _build_summary_sheet(ws, rows, count_no_ms2_as_detected=False, review_rows=[])
+
+    headers = [ws.cell(row=1, column=i).value for i in range(1, ws.max_column + 1)]
+    assert headers[:10] == [
+        "Target",
+        "Role",
+        "ISTD Pair",
+        "Detected",
+        "Total",
+        "Detection %",
+        "Median Area (detected)",
+        "Mean RT",
+        "Area / ISTD ratio (paired detected)",
+        "RT Delta vs ISTD",
+    ]
+    assert headers.index("Flagged Rows") > headers.index("Confidence VERY_LOW")
 
 
 def test_summary_analytical_aggregates_exclude_numeric_nl_fail_rows() -> None:
