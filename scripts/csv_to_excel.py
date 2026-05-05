@@ -21,6 +21,7 @@ from openpyxl.utils import get_column_letter
 
 from xic_extractor.config import ExtractionConfig, Target, load_config
 from xic_extractor.output import metadata
+from xic_extractor.output.review_metrics import ReviewMetrics, build_review_metrics
 from xic_extractor.output.schema import (
     DIAGNOSTIC_HEADERS as _DIAGNOSTIC_HEADERS,
 )
@@ -67,10 +68,10 @@ _SUMMARY_HEADERS = [
     "Target",
     "Role",
     "ISTD Pair",
-    "Review Items",
-    "Problem Rate",
-    "NL Problems",
-    "Low Confidence",
+    "Flagged Rows",
+    "Flagged %",
+    "MS2/NL Flags",
+    "Low Confidence Rows",
     "Detected",
     "Total",
     "Detection %",
@@ -451,14 +452,19 @@ def _build_summary_sheet(
         )
     ws.row_dimensions[1].height = 30
 
-    review_rows_by_target = _review_rows_by_target(review_rows or [])
+    metrics = build_review_metrics(
+        rows,
+        diagnostics=[],
+        review_rows=review_rows or [],
+        count_no_ms2_as_detected=count_no_ms2_as_detected,
+    )
     for row_idx, target in enumerate(_target_summaries(rows), start=2):
         fill_hex = GREY if row_idx % 2 == 0 else WHITE
         values = _summary_row_values(
             target,
             rows,
             count_no_ms2_as_detected,
-            review_rows_by_target,
+            metrics,
         )
         for col_idx, value in enumerate(values, start=1):
             cell = ws.cell(row=row_idx, column=col_idx, value=value)
@@ -787,7 +793,7 @@ def _summary_row_values(
     target_row: dict[str, str],
     rows: list[dict[str, str]],
     count_no_ms2_as_detected: bool,
-    review_rows_by_target: dict[str, list[dict[str, str]]] | None = None,
+    metrics: ReviewMetrics,
 ) -> list[object]:
     target = target_row["Target"]
     target_rows = [row for row in rows if row.get("Target") == target]
@@ -798,16 +804,15 @@ def _summary_row_values(
     detected = len(detected_rows)
     nl_counts = _long_nl_counts(target_rows)
     confidence_counts = _long_confidence_counts(target_rows)
-    target_review_rows = (review_rows_by_target or {}).get(target, [])
-    review_items = len(target_review_rows)
+    target_metrics = metrics.targets[target]
     return [
         _excel_text(target),
         target_row.get("Role", ""),
         _excel_text(target_row.get("ISTD Pair", "")),
-        review_items,
-        f"{review_items / total * 100:.0f}%" if total else "0%",
-        nl_counts["WARN"] + nl_counts["NL_FAIL"] + nl_counts["NO_MS2"],
-        confidence_counts["LOW"] + confidence_counts["VERY_LOW"],
+        target_metrics.flagged_rows,
+        target_metrics.flagged_percent,
+        target_metrics.ms2_nl_flags,
+        target_metrics.low_confidence_rows,
         detected,
         total,
         f"{detected / total * 100:.0f}%" if total else "0%",
@@ -824,15 +829,6 @@ def _summary_row_values(
         confidence_counts["LOW"],
         confidence_counts["VERY_LOW"],
     ]
-
-
-def _review_rows_by_target(
-    review_rows: list[dict[str, str]],
-) -> dict[str, list[dict[str, str]]]:
-    grouped: dict[str, list[dict[str, str]]] = {}
-    for row in review_rows:
-        grouped.setdefault(row.get("Target", ""), []).append(row)
-    return grouped
 
 
 def _long_confidence_counts(target_rows: list[dict[str, str]]) -> dict[str, int]:
@@ -852,11 +848,9 @@ def _is_long_detected(
     if _safe_float(row.get("Area", "")) is None:
         return False
     nl = row.get("NL", "")
-    if nl == "":
-        return True
-    if nl == "OK" or nl.startswith("WARN_"):
-        return True
-    return count_no_ms2_as_detected and nl == "NO_MS2"
+    if nl == "NO_MS2":
+        return count_no_ms2_as_detected
+    return True
 
 
 def _long_mean_rt(rows: list[dict[str, str]]) -> str:

@@ -281,14 +281,18 @@ def test_summary_sheet_includes_target_health_metrics() -> None:
     )
     data = _summary_rows(ws)
 
-    assert "Review Items" in data["headers"]
-    assert "Problem Rate" in data["headers"]
-    assert "NL Problems" in data["headers"]
-    assert "Low Confidence" in data["headers"]
-    assert data["Analyte"]["Review Items"] == 2
-    assert data["Analyte"]["Problem Rate"] == "67%"
-    assert data["Analyte"]["NL Problems"] == 2
-    assert data["Analyte"]["Low Confidence"] == 1
+    assert "Flagged Rows" in data["headers"]
+    assert "Flagged %" in data["headers"]
+    assert "MS2/NL Flags" in data["headers"]
+    assert "Low Confidence Rows" in data["headers"]
+    assert "Review Items" not in data["headers"]
+    assert "Problem Rate" not in data["headers"]
+    assert "NL Problems" not in data["headers"]
+    assert "Low Confidence" not in data["headers"]
+    assert data["Analyte"]["Flagged Rows"] == 2
+    assert data["Analyte"]["Flagged %"] == "67%"
+    assert data["Analyte"]["MS2/NL Flags"] == 2
+    assert data["Analyte"]["Low Confidence Rows"] == 1
 
 
 def test_build_review_queue_sheet_prioritizes_rows_that_need_manual_review() -> None:
