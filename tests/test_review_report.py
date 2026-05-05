@@ -94,7 +94,7 @@ def test_write_review_report_escapes_user_controlled_text(tmp_path: Path) -> Non
     assert "&lt;img src=x&gt;" in html
 
 
-def test_write_review_report_omits_clean_targets_from_top_flagged(
+def test_write_review_report_omits_clean_targets_from_flag_burden(
     tmp_path: Path,
 ) -> None:
     rows = [
@@ -117,6 +117,123 @@ def test_write_review_report_omits_clean_targets_from_top_flagged(
     )
 
     html = path.read_text(encoding="utf-8")
-    assert '<section><h2>Top Flagged Targets</h2>' in html
+    assert "<section><h2>Flag Burden By Target</h2>" in html
     assert '<td colspan="4">None</td>' in html
     assert "<td>Clean</td><td>0</td>" not in html
+
+
+def test_review_report_contains_visual_detection_and_flag_charts(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "A",
+            "RT": "1.0",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "A",
+            "RT": "ND",
+            "Area": "ND",
+            "NL": "ND",
+            "Confidence": "LOW",
+        },
+        {
+            "SampleName": "S1",
+            "Target": "B",
+            "RT": "2.0",
+            "Area": "200",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "B",
+            "RT": "2.1",
+            "Area": "210",
+            "NL": "NL_FAIL",
+            "Confidence": "LOW",
+        },
+    ]
+    review_rows = [
+        {
+            "Priority": "1",
+            "Sample": "S2",
+            "Target": "B",
+            "Status": "Review",
+            "Why": "NL support failed",
+            "Action": "Check",
+            "Issue Count": "1",
+            "Evidence": "NL_FAIL",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=review_rows,
+        count_no_ms2_as_detected=False,
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert "<h2>Detection Rate By Target</h2>" in html
+    assert "<h2>Flag Burden By Target</h2>" in html
+    assert 'class="bar-fill detection"' in html
+    assert 'class="bar-fill flagged"' in html
+    assert "A</td><td>50%</td>" in html
+    assert "B</td><td>50%</td>" not in html
+
+
+def test_review_report_heatmap_sorts_low_detection_targets_first(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "High",
+            "RT": "1",
+            "Area": "1",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "High",
+            "RT": "2",
+            "Area": "1",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S1",
+            "Target": "Low",
+            "RT": "ND",
+            "Area": "ND",
+            "NL": "ND",
+            "Confidence": "LOW",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "Low",
+            "RT": "2",
+            "Area": "1",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert html.index("<th>Low</th>") < html.index("<th>High</th>")

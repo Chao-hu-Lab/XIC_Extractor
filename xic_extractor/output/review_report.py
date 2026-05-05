@@ -27,7 +27,7 @@ def write_review_report(
         count_no_ms2_as_detected=count_no_ms2_as_detected,
     )
     samples = _ordered_values(rows, "SampleName")
-    targets = _ordered_values(rows, "Target")
+    targets = _targets_by_detection(metrics)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -44,9 +44,9 @@ def write_review_report(
                 "<main>",
                 "<h1>XIC Review Report</h1>",
                 _batch_overview(metrics),
-                _top_flagged_targets(metrics),
+                _detection_rate_chart(metrics, targets),
+                _flag_burden_chart(metrics, targets),
                 _heatmap(metrics, samples, targets),
-                _target_health_table(metrics, targets),
                 _review_queue(review_rows),
                 "</main>",
                 "</body>",
@@ -77,6 +77,12 @@ th{background:#f6f8fa;font-weight:700}
 .not-detected{background:#ffebe9}
 .error{background:#ffd8d3}
 .heatmap td{text-align:center;min-width:28px}
+.bar-table td:nth-child(2){width:90px;font-weight:700}
+.bar-track{height:14px;background:#eaeef2;border:1px solid #d0d7de}
+.bar-fill{height:100%}
+.bar-fill.detection{background:#2da44e}
+.bar-fill.flagged{background:#cf222e}
+.dashboard-note{color:#57606a;font-size:13px;margin:4px 0 14px}
 .small{color:#57606a;font-size:12px}
 """.strip()
 
@@ -100,30 +106,60 @@ def _batch_overview(metrics: ReviewMetrics) -> str:
     )
 
 
-def _top_flagged_targets(metrics: ReviewMetrics) -> str:
-    top_targets = sorted(
-        (
-            target
-            for target in metrics.targets.values()
-            if target.flagged_rows > 0
-        ),
-        key=lambda item: (-item.flagged_rows, item.target),
-    )[:10]
-    rows = "".join(
-        "<tr>"
-        f"<td>{escape(target.target)}</td>"
-        f"<td>{target.flagged_rows}</td>"
-        f"<td>{target.flagged_percent}</td>"
-        f"<td>{target.detected_percent}</td>"
-        "</tr>"
-        for target in top_targets
+def _detection_rate_chart(metrics: ReviewMetrics, targets: list[str]) -> str:
+    rows = ""
+    for target in targets:
+        item = metrics.targets[target]
+        detected_percent = _percent_value(item.detected_percent)
+        rows += (
+            "<tr>"
+            f"<td>{escape(item.target)}</td>"
+            f"<td>{item.detected_percent}</td>"
+            '<td><div class="bar-track">'
+            f'<div class="bar-fill detection" style="width:{detected_percent}%">'
+            "</div></div></td>"
+            "</tr>"
+        )
+    if not rows:
+        rows = '<tr><td colspan="3">None</td></tr>'
+    return (
+        "<section><h2>Detection Rate By Target</h2>"
+        '<p class="dashboard-note">Lowest detection rates are listed first.</p>'
+        '<table class="bar-table"><thead><tr><th>Target</th><th>Detected %</th>'
+        "<th>Rate</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table></section>"
     )
+
+
+def _flag_burden_chart(metrics: ReviewMetrics, targets: list[str]) -> str:
+    flagged_targets = sorted(
+        (
+            metrics.targets[target]
+            for target in targets
+            if metrics.targets[target].flagged_rows > 0
+        ),
+        key=lambda item: (-_percent_value(item.flagged_percent), item.target),
+    )
+    rows = ""
+    for item in flagged_targets:
+        flagged_percent = _percent_value(item.flagged_percent)
+        rows += (
+            "<tr>"
+            f"<td>{escape(item.target)}</td>"
+            f"<td>{item.flagged_rows}</td>"
+            f"<td>{item.flagged_percent}</td>"
+            '<td><div class="bar-track">'
+            f'<div class="bar-fill flagged" style="width:{flagged_percent}%">'
+            "</div></div></td>"
+            "</tr>"
+        )
     if not rows:
         rows = '<tr><td colspan="4">None</td></tr>'
     return (
-        "<section><h2>Top Flagged Targets</h2>"
-        "<table><thead><tr><th>Target</th><th>Flagged Rows</th>"
-        "<th>Flagged %</th><th>Detected %</th></tr></thead>"
+        "<section><h2>Flag Burden By Target</h2>"
+        '<p class="dashboard-note">Only targets with review rows are included.</p>'
+        '<table class="bar-table"><thead><tr><th>Target</th><th>Flagged Rows</th>'
+        "<th>Flagged %</th><th>Burden</th></tr></thead>"
         f"<tbody>{rows}</tbody></table></section>"
     )
 
@@ -153,33 +189,8 @@ def _heatmap(metrics: ReviewMetrics, samples: list[str], targets: list[str]) -> 
     body = "".join(body_rows) or '<tr><td colspan="2">None</td></tr>'
     return (
         "<section><h2>Detection / Flag Heatmap</h2>"
-        f"{legend}<table class=\"heatmap\"><thead><tr><th>Target</th>{header}</tr>"
+        f'{legend}<table class="heatmap"><thead><tr><th>Target</th>{header}</tr>'
         f"</thead><tbody>{body}</tbody></table></section>"
-    )
-
-
-def _target_health_table(metrics: ReviewMetrics, targets: list[str]) -> str:
-    body = []
-    for target in targets:
-        item = metrics.targets[target]
-        body.append(
-            "<tr>"
-            f"<td>{escape(item.target)}</td>"
-            f"<td>{item.detected_percent}</td>"
-            f"<td>{item.flagged_rows}</td>"
-            f"<td>{item.flagged_percent}</td>"
-            f"<td>{item.ms2_nl_flags}</td>"
-            f"<td>{item.low_confidence_rows}</td>"
-            "</tr>"
-        )
-    rows = "".join(body) or '<tr><td colspan="6">None</td></tr>'
-    return (
-        "<section><h2>Target Health Table</h2>"
-        "<table><thead><tr><th>Target</th><th>Detected %</th>"
-        "<th>Flagged Rows</th><th>Flagged %</th><th>MS2/NL Flags</th>"
-        f"<th>Low Confidence Rows</th></tr></thead><tbody>{rows}</tbody></table>"
-        '<p class="small">Flagged % is review workload, not detection failure.</p>'
-        "</section>"
     )
 
 
@@ -217,6 +228,23 @@ def _ordered_values(rows: list[dict[str, str]], key: str) -> list[str]:
         seen.add(value)
         values.append(value)
     return values
+
+
+def _targets_by_detection(metrics: ReviewMetrics) -> list[str]:
+    return sorted(
+        metrics.targets,
+        key=lambda target: (
+            _percent_value(metrics.targets[target].detected_percent),
+            target,
+        ),
+    )
+
+
+def _percent_value(text: str) -> int:
+    try:
+        return int(text.rstrip("%"))
+    except ValueError:
+        return 0
 
 
 def _state_label(state: str) -> str:
