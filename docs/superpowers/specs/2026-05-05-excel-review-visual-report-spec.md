@@ -27,6 +27,7 @@ This makes the workbook harder to trust even when the underlying values are corr
 - Clarify summary field names so `Detected %` and review burden are not conflated.
 - Keep `Score Breakdown` optional and clearly technical.
 - Add a lightweight visual report that helps users see batch health, target/sample patterns, and review priorities quickly.
+- Use one shared review-metrics layer for Excel and HTML so both artifacts report the same counts.
 - Avoid new runtime dependencies for v1 unless the existing environment already provides what is needed.
 
 ## Non-Goals
@@ -35,7 +36,7 @@ This makes the workbook harder to trust even when the underlying values are corr
 - No scoring weight changes.
 - No area integration changes.
 - No CSV schema changes.
-- No GUI changes in v1.
+- No new CLI flag in v1. CLI users enable the report through settings.
 - No interactive web server.
 - No raw XIC thumbnail rendering in v1.
 
@@ -79,6 +80,28 @@ It is not a daily review sheet and remains gated by `emit_score_breakdown=true`.
 
 ## Static Visual Report
 
+### Shared Metrics Contract
+
+Excel and HTML must not calculate target health independently.
+
+Add a shared output metrics module:
+
+```text
+xic_extractor/output/review_metrics.py
+```
+
+Both `scripts/csv_to_excel.py` and `xic_extractor/output/review_report.py` should use the same metrics helpers for:
+
+- detected row count
+- `Detected %`
+- `Flagged Rows`
+- `Flagged %`
+- `MS2/NL Flags`
+- `Low Confidence Rows`
+- heatmap cell state
+
+The detection policy must receive `count_no_ms2_as_detected`. This prevents HTML from disagreeing with the workbook when `NO_MS2` rows are treated as detected.
+
 ### Artifact
 
 When enabled, produce:
@@ -91,6 +114,8 @@ The report should be static HTML. It should open by double-clicking, require no 
 
 ### v1 Sections
 
+The report order is fixed:
+
 1. Batch Overview
    - Sample count
    - Target count
@@ -98,7 +123,20 @@ The report should be static HTML. It should open by double-clicking, require no 
    - Diagnostics count
    - Detected row count
 
-2. Target Health Table
+2. Top Flagged Targets
+   - Top targets by `Flagged Rows`
+   - Helps the user decide where to look first
+
+3. Detection / Flag Heatmap
+   - Rows: targets
+   - Columns: samples
+   - Cell state and CSS class:
+     - `clean-detected`: detected and not flagged
+     - `flagged-detected`: detected and flagged
+     - `not-detected`: no usable RT/area
+     - `error`: extraction or file error
+
+4. Target Health Table
    - Target
    - Detected %
    - Flagged %
@@ -106,18 +144,11 @@ The report should be static HTML. It should open by double-clicking, require no 
    - Low Confidence Rows
    - Review Queue priority distribution
 
-3. Detection / Flag Heatmap
-   - Rows: targets
-   - Columns: samples
-   - Cell state:
-     - detected and clean
-     - detected but flagged
-     - not detected
-     - error
-
-4. Review Queue Summary
+5. Review Queue Summary
    - Same semantic rows as workbook `Review Queue`
    - Grouped or sortable only if simple static behavior is available without adding dependencies
+
+The report must include a visible legend with the four heatmap states above.
 
 ### Future Sections
 
@@ -149,15 +180,15 @@ Add one optional setting:
 emit_review_report=false
 ```
 
-Default remains `false` in v1 to avoid surprising users with extra files. GUI exposure can come later after the report proves useful.
+Default remains `false` in v1 to avoid surprising users with extra files.
 
-CLI may expose:
+Expose it in GUI Advanced as:
 
-```powershell
-uv run python scripts\run_extraction.py --emit-review-report
+```text
+輸出 Review Report HTML
 ```
 
-If the codebase already prefers settings-only control for output toggles, the CLI flag can be deferred.
+Do not add a CLI flag in v1. CLI users can enable the report by editing `config/settings.csv` or `config/settings.example.csv`.
 
 ## Testing Contract
 
@@ -166,14 +197,17 @@ Unit tests:
 - Summary headers use renamed fields.
 - Overview includes "How to read" copy.
 - Score Breakdown remains optional and absent by default.
+- Review metrics helpers are shared by Excel and HTML.
+- Detection metrics honor `count_no_ms2_as_detected`.
 - HTML report writer escapes formula-like and HTML-like sample/target names.
-- HTML report contains batch counts, target health rows, and heatmap cells.
+- HTML report contains batch counts, target health rows, heatmap cells, and a visible legend.
 
 Integration tests:
 
 - Excel output still has stable sheet order and active `Overview`.
 - Workbook compare catches renamed Summary header drift.
 - Report generation does not change workbook values.
+- GUI settings round-trip preserves `emit_review_report`.
 
 Real-data validation:
 
@@ -188,4 +222,5 @@ Real-data validation:
 - `Score Breakdown` is documented as technical audit, not a manual review entry point.
 - Default workbook remains the official delivery artifact.
 - Static report is optional and does not affect extraction output values.
+- Workbook and HTML report use the same review metrics and agree on flagged row counts.
 - Existing Excel tests remain green.

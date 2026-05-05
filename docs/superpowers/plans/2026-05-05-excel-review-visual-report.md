@@ -4,9 +4,9 @@
 
 **Goal:** Clarify Excel review-health terminology and add an optional static HTML companion report while keeping Excel as the primary delivery artifact.
 
-**Architecture:** Keep extraction, scoring, and workbook analytical values unchanged. First rename ambiguous workbook presentation fields and documentation, then add a report writer that consumes the same row data used by the workbook. The report is static HTML and opt-in through settings.
+**Architecture:** Keep extraction, scoring, and analytical values unchanged. Move review-health counting into a shared metrics module, then make both Excel and HTML consume that same module so the two artifacts cannot drift. The report is static HTML, opt-in through settings and GUI Advanced, and uses no server or external dependencies.
 
-**Tech Stack:** Python 3.13, openpyxl, pytest, existing `uv run pytest` workflow, PowerShell on Windows.
+**Tech Stack:** Python 3.13, openpyxl, pytest, standard-library `html.escape`, existing `uv run pytest` workflow, PowerShell on Windows.
 
 ---
 
@@ -30,15 +30,94 @@ These should become:
 
 This keeps `Detected %` separate from review workload.
 
-## Task 1: Rename Summary Target-Health Fields
+## Required Architecture Decision
+
+Do not let Excel and HTML calculate review-health numbers separately.
+
+Create:
+
+```text
+xic_extractor/output/review_metrics.py
+```
+
+Use it from:
+
+- `scripts/csv_to_excel.py`
+- `xic_extractor/output/review_report.py`
+
+The shared helpers must receive `count_no_ms2_as_detected`, because detection semantics depend on that setting.
+
+## v1 Surface Decisions
+
+- `emit_review_report=false` is the default.
+- GUI Advanced gets a checkbox: `輸出 Review Report HTML`.
+- CLI gets no new flag in v1. CLI users enable the report through settings.
+- HTML is static and non-interactive.
+- No XIC or MS2 thumbnails in v1.
+- Workbook field rename is accepted even though Summary headers change.
+
+## Task 1: Extract Shared Review Metrics And Rename Summary Fields
 
 **Files:**
 
+- Create: `xic_extractor/output/review_metrics.py`
 - Modify: `scripts/csv_to_excel.py`
+- Test: `tests/test_review_metrics.py`
 - Test: `tests/test_csv_to_excel.py`
 - Test: `tests/test_workbook_compare.py` if summary fixture headers assert old names
 
-**Step 1: Write the failing test**
+**Step 1: Write failing metrics tests**
+
+Create `tests/test_review_metrics.py`:
+
+```python
+from xic_extractor.output.review_metrics import build_review_metrics
+
+
+def test_review_metrics_separates_detection_from_flagged_workload() -> None:
+    rows = [
+        {"SampleName": "S1", "Target": "A", "RT": "1.0", "Area": "100", "NL": "OK", "Confidence": "HIGH"},
+        {"SampleName": "S2", "Target": "A", "RT": "1.1", "Area": "110", "NL": "NL_FAIL", "Confidence": "LOW"},
+        {"SampleName": "S3", "Target": "A", "RT": "1.2", "Area": "120", "NL": "NO_MS2", "Confidence": "MEDIUM"},
+    ]
+    review_rows = [
+        {"Priority": "1", "Sample": "S2", "Target": "A", "Status": "Review"},
+        {"Priority": "2", "Sample": "S3", "Target": "A", "Status": "Check"},
+    ]
+
+    metrics = build_review_metrics(
+        rows,
+        diagnostics=[],
+        review_rows=review_rows,
+        count_no_ms2_as_detected=False,
+    )
+
+    target = metrics.targets["A"]
+    assert target.detected == 2
+    assert target.total == 3
+    assert target.detected_percent == "67%"
+    assert target.flagged_rows == 2
+    assert target.flagged_percent == "67%"
+    assert target.ms2_nl_flags == 2
+    assert target.low_confidence_rows == 1
+```
+
+Add a `NO_MS2` policy test:
+
+```python
+def test_review_metrics_honors_count_no_ms2_as_detected() -> None:
+    rows = [
+        {"SampleName": "S1", "Target": "A", "RT": "1.0", "Area": "100", "NL": "NO_MS2", "Confidence": "HIGH"},
+    ]
+
+    strict = build_review_metrics(rows, diagnostics=[], review_rows=[], count_no_ms2_as_detected=False)
+    permissive = build_review_metrics(rows, diagnostics=[], review_rows=[], count_no_ms2_as_detected=True)
+
+    assert strict.targets["A"].detected == 0
+    assert permissive.targets["A"].detected == 1
+```
+
+**Step 2: Update failing Summary header test**
 
 Update `tests/test_csv_to_excel.py::test_summary_sheet_includes_target_health_metrics`:
 
@@ -57,42 +136,93 @@ assert data["Analyte"]["MS2/NL Flags"] == 2
 assert data["Analyte"]["Low Confidence Rows"] == 1
 ```
 
-**Step 2: Run test to verify failure**
+**Step 3: Run tests to verify failure**
 
 ```powershell
 $env:UV_CACHE_DIR='C:\Users\user\Desktop\XIC_Extractor\.worktrees\local-minimum-param-optimization\.uv-cache'
-uv run pytest tests\test_csv_to_excel.py::test_summary_sheet_includes_target_health_metrics -v
+uv run pytest tests\test_review_metrics.py tests\test_csv_to_excel.py::test_summary_sheet_includes_target_health_metrics -v
 ```
 
-Expected: FAIL because old headers still exist.
+Expected: FAIL because `review_metrics.py` does not exist and old Summary headers still exist.
 
-**Step 3: Implement minimal code**
+**Step 4: Implement shared metrics**
 
-In `scripts/csv_to_excel.py`, update `_SUMMARY_HEADERS`:
+Create `xic_extractor/output/review_metrics.py`.
+
+Suggested shape:
 
 ```python
-"Flagged Rows",
-"Flagged %",
-"MS2/NL Flags",
-"Low Confidence Rows",
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class TargetReviewMetrics:
+    target: str
+    total: int
+    detected: int
+    detected_percent: str
+    flagged_rows: int
+    flagged_percent: str
+    ms2_nl_flags: int
+    low_confidence_rows: int
+    priority_counts: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ReviewMetrics:
+    sample_count: int
+    target_count: int
+    flagged_rows: int
+    diagnostics_count: int
+    detected_rows: int
+    targets: dict[str, TargetReviewMetrics]
+    heatmap: dict[tuple[str, str], str]
 ```
 
-Keep the underlying calculations unchanged.
+Implement:
 
-**Step 4: Run tests**
+```python
+def build_review_metrics(
+    rows: list[dict[str, str]],
+    *,
+    diagnostics: list[dict[str, str]],
+    review_rows: list[dict[str, str]],
+    count_no_ms2_as_detected: bool,
+) -> ReviewMetrics:
+    ...
+```
+
+Heatmap states:
+
+- `clean-detected`
+- `flagged-detected`
+- `not-detected`
+- `error`
+
+**Step 5: Wire Summary to shared metrics**
+
+In `scripts/csv_to_excel.py`:
+
+- Import `build_review_metrics`.
+- Rename `_SUMMARY_HEADERS` to use `Flagged Rows`, `Flagged %`, `MS2/NL Flags`, `Low Confidence Rows`.
+- Change `_build_summary_sheet()` to compute `metrics = build_review_metrics(...)`.
+- Use `metrics.targets[target]` for the four renamed fields.
+- Keep existing RT, area, ratio, NL count, and confidence count helpers unless they are already covered by the shared metrics.
+
+**Step 6: Run tests**
 
 ```powershell
 $env:UV_CACHE_DIR='C:\Users\user\Desktop\XIC_Extractor\.worktrees\local-minimum-param-optimization\.uv-cache'
-uv run pytest tests\test_csv_to_excel.py tests\test_workbook_compare.py -v
+uv run pytest tests\test_review_metrics.py tests\test_csv_to_excel.py tests\test_workbook_compare.py -v
 ```
 
 Expected: PASS.
 
-**Step 5: Commit**
+**Step 7: Commit**
 
 ```powershell
-git add scripts\csv_to_excel.py tests\test_csv_to_excel.py tests\test_workbook_compare.py
-git commit -m "refactor: clarify Excel target health labels"
+git add xic_extractor\output\review_metrics.py scripts\csv_to_excel.py tests\test_review_metrics.py tests\test_csv_to_excel.py tests\test_workbook_compare.py
+git commit -m "refactor: share Excel review metrics"
 ```
 
 ## Task 2: Add Overview How-To-Read Copy
@@ -146,8 +276,6 @@ Flagged % is review workload, not detection failure.
 Score Breakdown is a technical audit sheet when enabled.
 ```
 
-Use `_excel_text()` for user-controlled text only. These static strings do not need formula escaping.
-
 **Step 4: Run tests**
 
 ```powershell
@@ -171,15 +299,13 @@ git commit -m "docs: explain Excel review metrics in overview"
 - Modify: `README.md`
 - Modify: `docs/superpowers/notes/2026-05-03-output-refactor-retrospective.md`
 
-**Step 1: Write docs smoke expectation**
-
-Use `rg` as the verification target:
+**Step 1: Run docs smoke before edit**
 
 ```powershell
 rg -n "Flagged Rows|Flagged %|MS2/NL Flags|Score Breakdown.*technical audit|Detected %.*Flagged %" README.md docs\superpowers\notes\2026-05-03-output-refactor-retrospective.md
 ```
 
-Expected before edit: missing at least some terms.
+Expected: missing at least some terms.
 
 **Step 2: Update README**
 
@@ -191,7 +317,7 @@ Low Confidence Rows, Detection %, Mean RT, Median Area, QC-only Area / ISTD rati
 NL counts, RT delta, and confidence counts.
 ```
 
-Add a short note:
+Add:
 
 ```text
 Detected % answers whether a target produced usable RT/area rows.
@@ -225,62 +351,94 @@ git add README.md docs\superpowers\notes\2026-05-03-output-refactor-retrospectiv
 git commit -m "docs: clarify Excel review metric semantics"
 ```
 
-## Task 4: Add Review Report Setting Surface
+## Task 4: Add Review Report Setting Surface And GUI Toggle
 
 **Files:**
 
 - Modify: `xic_extractor/config.py`
 - Modify: `xic_extractor/settings_schema.py`
+- Modify: `config/settings.csv`
 - Modify: `config/settings.example.csv`
+- Modify: `gui/sections/settings_section.py`
 - Modify: `README.md`
-- Test: relevant config/settings tests discovered with `rg -n "emit_score_breakdown|settings_schema|settings.example" tests xic_extractor`
+- Test: `tests/test_config.py`
+- Test: `tests/test_settings_new_fields.py`
+- Test: `tests/test_settings_section_advanced.py`
 
-**Step 1: Write failing config test**
+**Step 1: Write failing config tests**
 
-Add a test near existing settings tests:
+In `tests/test_settings_new_fields.py`, add `emit_review_report` to the defaults and parsed boolean assertions.
+
+Example expectations:
 
 ```python
-def test_emit_review_report_defaults_false() -> None:
-    config = load_settings(...)
-    assert config.emit_review_report is False
+assert CANONICAL_SETTINGS_DEFAULTS["emit_review_report"] == "false"
+assert config.emit_review_report is True
 ```
 
-Add a parser test that `emit_review_report,true` maps to `True`.
+In `tests/test_config.py`, update example coverage so both tracked config files contain `emit_review_report`.
 
-**Step 2: Run narrow test**
+**Step 2: Write failing GUI round-trip test**
+
+In `tests/test_settings_section_advanced.py`, assert:
+
+```python
+assert "emit_review_report" in values
+section._emit_review_report_checkbox.setChecked(True)
+assert section.get_values()["emit_review_report"] == "true"
+```
+
+**Step 3: Run tests to verify failure**
 
 ```powershell
 $env:UV_CACHE_DIR='C:\Users\user\Desktop\XIC_Extractor\.worktrees\local-minimum-param-optimization\.uv-cache'
-uv run pytest <discovered_settings_test_path> -v
+uv run pytest tests\test_settings_new_fields.py tests\test_config.py tests\test_settings_section_advanced.py -v
 ```
 
-Expected: FAIL because field does not exist.
+Expected: FAIL because field and checkbox do not exist.
 
-**Step 3: Implement setting**
+**Step 4: Implement setting**
 
-Add `emit_review_report: bool = False` to the config dataclass and settings schema using the same pattern as `emit_score_breakdown`.
+Add `emit_review_report: bool = False` to `ExtractionConfig`.
 
-Add to `config/settings.example.csv`:
+Parse it in `load_config()` using the same boolean parser pattern as `emit_score_breakdown`.
+
+Add defaults and description in `settings_schema.py`:
+
+```python
+"emit_review_report": "false"
+"emit_review_report": "是否輸出 Review Report HTML（預設關閉）"
+```
+
+Add rows to both tracked files:
 
 ```csv
-emit_review_report,false
+emit_review_report,false,是否輸出 Review Report HTML（預設關閉）
 ```
 
-Do not add GUI controls in this task.
+**Step 5: Implement GUI Advanced checkbox**
 
-**Step 4: Run tests**
+In `gui/sections/settings_section.py`:
+
+- Add `emit_review_report` to `_ADVANCED_SETTING_KEYS`.
+- Add `_emit_review_report_checkbox = QCheckBox("輸出 Review Report HTML")`.
+- Include it in `load()`, `get_values()`, dirty tracking, and the Advanced debug flags row.
+
+Do not add a CLI flag in v1.
+
+**Step 6: Run tests**
 
 ```powershell
 $env:UV_CACHE_DIR='C:\Users\user\Desktop\XIC_Extractor\.worktrees\local-minimum-param-optimization\.uv-cache'
-uv run pytest <discovered_settings_test_path> -v
+uv run pytest tests\test_settings_new_fields.py tests\test_config.py tests\test_settings_section_advanced.py -v
 ```
 
 Expected: PASS.
 
-**Step 5: Commit**
+**Step 7: Commit**
 
 ```powershell
-git add xic_extractor\config.py xic_extractor\settings_schema.py config\settings.example.csv README.md <test_path>
+git add xic_extractor\config.py xic_extractor\settings_schema.py config\settings.csv config\settings.example.csv gui\sections\settings_section.py README.md tests\test_config.py tests\test_settings_new_fields.py tests\test_settings_section_advanced.py
 git commit -m "feat: add optional review report setting"
 ```
 
@@ -289,7 +447,6 @@ git commit -m "feat: add optional review report setting"
 **Files:**
 
 - Create: `xic_extractor/output/review_report.py`
-- Modify: `xic_extractor/output/excel_pipeline.py` only if shared helpers are useful
 - Test: `tests/test_review_report.py`
 
 **Step 1: Write failing tests**
@@ -300,7 +457,7 @@ Create `tests/test_review_report.py`:
 from xic_extractor.output.review_report import write_review_report
 
 
-def test_write_review_report_contains_batch_counts_and_target_health(tmp_path: Path) -> None:
+def test_write_review_report_contains_batch_counts_target_health_and_legend(tmp_path: Path) -> None:
     rows = [
         {"SampleName": "S1", "Target": "A", "RT": "1.0", "Area": "100", "NL": "OK", "Confidence": "HIGH"},
         {"SampleName": "S2", "Target": "A", "RT": "ND", "Area": "ND", "NL": "NL_FAIL", "Confidence": "LOW"},
@@ -309,28 +466,44 @@ def test_write_review_report_contains_batch_counts_and_target_health(tmp_path: P
         {"Priority": "1", "Sample": "S2", "Target": "A", "Status": "Review", "Why": "NL support failed", "Action": "Check MS2 / NL evidence near selected RT", "Issue Count": "1", "Evidence": "strict observed neutral loss missing"}
     ]
 
-    path = write_review_report(tmp_path / "review_report.html", rows, diagnostics=[], review_rows=review_rows)
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=review_rows,
+        count_no_ms2_as_detected=False,
+    )
 
     html = path.read_text(encoding="utf-8")
     assert "XIC Review Report" in html
-    assert "Samples" in html
-    assert "Targets" in html
     assert "Flagged Rows" in html
     assert "Detected %" in html
     assert "Flagged %" in html
+    assert "clean-detected" in html
+    assert "not-detected" in html
+    assert "Review Queue" in html
 ```
 
-Add escaping test:
+Add escaping coverage for all user-controlled table fields:
 
 ```python
 def test_write_review_report_escapes_user_controlled_text(tmp_path: Path) -> None:
     rows = [{"SampleName": "<script>alert(1)</script>", "Target": "=A", "RT": "1", "Area": "1", "NL": "OK", "Confidence": "HIGH"}]
+    review_rows = [{"Priority": "1", "Sample": "<script>alert(1)</script>", "Target": "=A", "Status": "Review", "Why": "<b>bad</b>", "Action": "Check", "Issue Count": "1", "Evidence": "<img src=x>"}]
 
-    path = write_review_report(tmp_path / "review_report.html", rows, diagnostics=[], review_rows=[])
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=review_rows,
+        count_no_ms2_as_detected=False,
+    )
 
     html = path.read_text(encoding="utf-8")
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "&lt;b&gt;bad&lt;/b&gt;" in html
+    assert "&lt;img src=x&gt;" in html
 ```
 
 **Step 2: Run tests to verify failure**
@@ -344,28 +517,37 @@ Expected: FAIL because module does not exist.
 
 **Step 3: Implement minimal report writer**
 
-Implement `write_review_report(path, rows, diagnostics, review_rows) -> Path`.
+Implement:
 
-Use only the standard library:
+```python
+def write_review_report(
+    path: Path,
+    rows: list[dict[str, str]],
+    *,
+    diagnostics: list[dict[str, str]],
+    review_rows: list[dict[str, str]],
+    count_no_ms2_as_detected: bool,
+) -> Path:
+    ...
+```
 
-- `html.escape`
-- `pathlib.Path`
-- small string templates
+Implementation rules:
 
-Include:
-
-- Batch Overview cards
-- Target Health table
-- Detection / flag heatmap table
-- Review Queue table
-
-Do not include external CSS/JS. Use inline `<style>`.
+- Use `build_review_metrics()` from `review_metrics.py`.
+- Use `html.escape()` for all user-controlled text.
+- Use inline CSS only.
+- Include sections in this order:
+  1. Batch Overview
+  2. Top Flagged Targets
+  3. Detection / Flag Heatmap with legend
+  4. Target Health Table
+  5. Review Queue
 
 **Step 4: Run tests**
 
 ```powershell
 $env:UV_CACHE_DIR='C:\Users\user\Desktop\XIC_Extractor\.worktrees\local-minimum-param-optimization\.uv-cache'
-uv run pytest tests\test_review_report.py -v
+uv run pytest tests\test_review_report.py tests\test_review_metrics.py -v
 ```
 
 Expected: PASS.
@@ -377,16 +559,17 @@ git add xic_extractor\output\review_report.py tests\test_review_report.py
 git commit -m "feat: add static Excel companion review report"
 ```
 
-## Task 6: Wire Optional Report Generation Into Run Output
+## Task 6: Wire Optional Report Generation Into Both Workbook Paths
 
 **Files:**
 
 - Modify: `scripts/csv_to_excel.py`
-- Modify: `xic_extractor/output/excel_pipeline.py` if in-memory run output owns final output artifacts
+- Modify: `xic_extractor/output/excel_pipeline.py`
 - Test: `tests/test_csv_to_excel.py`
-- Test: `tests/test_excel_pipeline.py` if applicable
+- Test: `tests/test_excel_pipeline.py`
+- Test: `tests/test_run_extraction.py`
 
-**Step 1: Write failing integration test**
+**Step 1: Write failing CSV conversion test**
 
 Add to `tests/test_csv_to_excel.py`:
 
@@ -409,16 +592,32 @@ def test_run_emits_review_report_when_enabled(tmp_path: Path) -> None:
     assert "XIC Review Report" in report_path.read_text(encoding="utf-8")
 ```
 
-**Step 2: Run test to verify failure**
+**Step 2: Write failing in-memory pipeline test**
+
+Add to `tests/test_excel_pipeline.py`:
+
+```python
+def test_write_excel_from_run_output_emits_review_report_when_enabled(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.emit_review_report = True
+    output_path = tmp_path / "output" / "xic_results_20260505_1200.xlsx"
+
+    write_excel_from_run_output(config, [_target("Analyte")], _run_output(), output_path=output_path)
+
+    report_path = output_path.with_name("review_report_20260505_1200.html")
+    assert report_path.exists()
+```
+
+**Step 3: Run tests to verify failure**
 
 ```powershell
 $env:UV_CACHE_DIR='C:\Users\user\Desktop\XIC_Extractor\.worktrees\local-minimum-param-optimization\.uv-cache'
-uv run pytest tests\test_csv_to_excel.py::test_run_emits_review_report_when_enabled -v
+uv run pytest tests\test_csv_to_excel.py::test_run_emits_review_report_when_enabled tests\test_excel_pipeline.py::test_write_excel_from_run_output_emits_review_report_when_enabled -v
 ```
 
 Expected: FAIL because no report is written.
 
-**Step 3: Implement wiring**
+**Step 4: Implement wiring**
 
 After workbook save succeeds, if `config.emit_review_report` is true:
 
@@ -426,24 +625,35 @@ After workbook save succeeds, if `config.emit_review_report` is true:
 report_path = excel_path.with_name(
     excel_path.name.replace("xic_results_", "review_report_")
 ).with_suffix(".html")
-write_review_report(report_path, rows, diagnostics, review_rows)
+write_review_report(
+    report_path,
+    rows,
+    diagnostics=diagnostics,
+    review_rows=review_rows,
+    count_no_ms2_as_detected=config.count_no_ms2_as_detected,
+)
 ```
 
-Do not write the report when workbook conversion exits early because rows are empty unless the codebase already writes empty workbooks.
+Do this in both:
 
-**Step 4: Run tests**
+- `scripts/csv_to_excel.py`
+- `xic_extractor/output/excel_pipeline.py`
+
+Do not add a CLI flag. Add or update `tests/test_run_extraction.py` only to assert settings-driven behavior remains enough and no new flag is documented.
+
+**Step 5: Run tests**
 
 ```powershell
 $env:UV_CACHE_DIR='C:\Users\user\Desktop\XIC_Extractor\.worktrees\local-minimum-param-optimization\.uv-cache'
-uv run pytest tests\test_csv_to_excel.py tests\test_review_report.py -v
+uv run pytest tests\test_csv_to_excel.py tests\test_excel_pipeline.py tests\test_review_report.py tests\test_review_metrics.py tests\test_run_extraction.py -v
 ```
 
 Expected: PASS.
 
-**Step 5: Commit**
+**Step 6: Commit**
 
 ```powershell
-git add scripts\csv_to_excel.py xic_extractor\output\review_report.py tests\test_csv_to_excel.py tests\test_review_report.py
+git add scripts\csv_to_excel.py xic_extractor\output\excel_pipeline.py tests\test_csv_to_excel.py tests\test_excel_pipeline.py tests\test_run_extraction.py
 git commit -m "feat: emit optional review report"
 ```
 
@@ -458,8 +668,8 @@ git commit -m "feat: emit optional review report"
 
 ```powershell
 $env:UV_CACHE_DIR='C:\Users\user\Desktop\XIC_Extractor\.worktrees\local-minimum-param-optimization\.uv-cache'
-uv run ruff check scripts\csv_to_excel.py xic_extractor\output\excel_pipeline.py xic_extractor\output\review_report.py tests\test_csv_to_excel.py tests\test_review_report.py
-uv run pytest tests\test_csv_to_excel.py tests\test_excel_pipeline.py tests\test_excel_sheets_contract.py tests\test_output_columns.py tests\test_workbook_compare.py tests\test_review_report.py -v
+uv run ruff check scripts\csv_to_excel.py xic_extractor\output\excel_pipeline.py xic_extractor\output\review_metrics.py xic_extractor\output\review_report.py tests\test_csv_to_excel.py tests\test_excel_pipeline.py tests\test_review_metrics.py tests\test_review_report.py
+uv run pytest tests\test_csv_to_excel.py tests\test_excel_pipeline.py tests\test_excel_sheets_contract.py tests\test_output_columns.py tests\test_workbook_compare.py tests\test_review_metrics.py tests\test_review_report.py -v
 ```
 
 Expected: PASS.
@@ -482,14 +692,15 @@ Expected:
 - Workbook exists.
 - Review report exists.
 - Workbook active sheet is `Overview`.
-- Overview `Flagged Rows` equals HTML report flagged count.
+- HTML report contains `XIC Review Report`.
+- HTML `Flagged Rows` count equals workbook Overview flagged row count.
 
 **Step 4: Inspect report smoke**
 
-Use a small script to verify:
+Use a small script or `rg`:
 
 ```powershell
-rg -n "XIC Review Report|Flagged Rows|Detected %|Flagged %|Review Queue" output\excel_review_validation
+rg -n "XIC Review Report|Flagged Rows|Detected %|Flagged %|Review Queue|clean-detected|flagged-detected|not-detected" output\excel_review_validation
 ```
 
 Expected: new HTML report contains all terms.
@@ -498,13 +709,45 @@ Expected: new HTML report contains all terms.
 
 No empty commit.
 
+## Failure Modes
+
+| Failure mode | Test coverage | User impact |
+|---|---|---|
+| Excel and HTML flagged counts diverge | Shared `review_metrics.py` unit tests plus real-data workbook/report comparison | User sees conflicting batch health |
+| `NO_MS2` detection differs between workbook and report | `count_no_ms2_as_detected` metrics test | Heatmap disagrees with Excel `Detected %` |
+| User-controlled text injects HTML | report escaping tests for sample, target, why, evidence | Browser renders unsafe or misleading content |
+| GUI saves settings but drops `emit_review_report` | GUI Advanced round-trip tests | User enables report but no file appears |
+| CLI users cannot discover setting | README docs smoke | Feature exists but is hard to use |
+
+## What Already Exists
+
+- `scripts/csv_to_excel.py` already builds `Overview`, `Review Queue`, and `Summary`.
+- `xic_extractor/output/excel_pipeline.py` is the GUI and normal CLI workbook writer.
+- `settings_schema.py` owns canonical defaults and descriptions.
+- Both `config/settings.csv` and `config/settings.example.csv` are tracked and must stay in sync.
+- GUI Advanced already has checkbox patterns for `keep_intermediate_csv` and `emit_score_breakdown`.
+
+## NOT In Scope
+
+- XIC thumbnails: deferred until trace image generation and file count are designed.
+- MS2 spectrum thumbnails: deferred for the same reason.
+- Interactive dashboard/server: not needed for v1 and harder to package.
+- Peak selection/scoring/integration changes: this is output UX only.
+- New CLI flag: settings and GUI are enough for v1.
+
+## Parallelization Strategy
+
+Sequential implementation, no parallelization opportunity.
+
+Reason: every task touches the same output and settings contract, especially `scripts/csv_to_excel.py`, `excel_pipeline.py`, settings schema, and README. Parallel edits would create avoidable conflicts.
+
 ## Review Gate
 
 Before implementation, confirm these decisions:
 
 - `emit_review_report` default remains `false`.
+- GUI Advanced checkbox is included in v1.
+- CLI flag is explicitly not included in v1.
 - First HTML report version is static and non-interactive.
 - No XIC thumbnails in v1.
 - Workbook field rename is acceptable despite public workbook header drift.
-
-If any of these changes, update this plan before coding.
