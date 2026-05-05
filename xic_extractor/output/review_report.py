@@ -102,7 +102,11 @@ def _batch_overview(metrics: ReviewMetrics) -> str:
 
 def _top_flagged_targets(metrics: ReviewMetrics) -> str:
     top_targets = sorted(
-        metrics.targets.values(),
+        (
+            target
+            for target in metrics.targets.values()
+            if target.flagged_rows > 0
+        ),
         key=lambda item: (-item.flagged_rows, item.target),
     )[:10]
     rows = "".join(

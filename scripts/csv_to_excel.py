@@ -886,7 +886,9 @@ def _is_long_detected(
     nl = row.get("NL", "")
     if nl == "NO_MS2":
         return count_no_ms2_as_detected
-    return True
+    if nl == "NL_FAIL":
+        return False
+    return nl == "" or nl == "OK" or nl.startswith("WARN_")
 
 
 def _long_mean_rt(rows: list[dict[str, str]]) -> str:

@@ -312,6 +312,71 @@ def test_summary_sheet_includes_target_health_metrics() -> None:
     assert data["Analyte"]["Low Confidence Rows"] == 1
 
 
+def test_summary_analytical_aggregates_exclude_numeric_nl_fail_rows() -> None:
+    rows = [
+        _long_row(
+            "QC_1",
+            "Analyte",
+            "9.0",
+            "100",
+            "OK",
+            istd_pair="ISTD",
+        ),
+        _long_row("QC_1", "ISTD", "8.9", "50", "OK", role="ISTD"),
+        _long_row(
+            "QC_2",
+            "Analyte",
+            "9.5",
+            "1000",
+            "NL_FAIL",
+            istd_pair="ISTD",
+            confidence="LOW",
+        ),
+        _long_row("QC_2", "ISTD", "9.1", "50", "OK", role="ISTD"),
+        _long_row(
+            "QC_3",
+            "Analyte",
+            "9.7",
+            "500",
+            "NO_MS2",
+            istd_pair="ISTD",
+            confidence="MEDIUM",
+        ),
+        _long_row("QC_3", "ISTD", "9.6", "50", "OK", role="ISTD"),
+    ]
+    review_rows = _review_queue_rows(
+        rows,
+        [
+            {
+                "SampleName": "QC_2",
+                "Target": "Analyte",
+                "Issue": "NL_FAIL",
+                "Reason": "strict observed neutral loss missing",
+            }
+        ],
+    )
+    wb = Workbook()
+    ws = wb.active
+
+    _build_summary_sheet(
+        ws,
+        rows,
+        count_no_ms2_as_detected=False,
+        review_rows=review_rows,
+    )
+    data = _summary_rows(ws)
+
+    assert data["Analyte"]["Flagged Rows"] == 2
+    assert data["Analyte"]["Detected"] == 1
+    assert data["Analyte"]["Detection %"] == "33%"
+    assert data["Analyte"]["Mean RT"] == "9.0000"
+    assert data["Analyte"]["Median Area (detected)"] == 100.0
+    assert data["Analyte"]["Area / ISTD ratio (paired detected)"] == (
+        "2.0000±0.0000, CV=— (n=1)"
+    )
+    assert data["Analyte"]["RT Delta vs ISTD"] == "0.1000±0.0000 min (n=1)"
+
+
 def test_build_review_queue_sheet_prioritizes_rows_that_need_manual_review() -> None:
     rows = [
         _long_row(

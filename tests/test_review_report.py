@@ -92,3 +92,31 @@ def test_write_review_report_escapes_user_controlled_text(tmp_path: Path) -> Non
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "&lt;b&gt;bad&lt;/b&gt;" in html
     assert "&lt;img src=x&gt;" in html
+
+
+def test_write_review_report_omits_clean_targets_from_top_flagged(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "Clean",
+            "RT": "1",
+            "Area": "1",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        }
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert '<section><h2>Top Flagged Targets</h2>' in html
+    assert '<td colspan="4">None</td>' in html
+    assert "<td>Clean</td><td>0</td>" not in html
