@@ -331,13 +331,14 @@ def _build_overview_sheet(
         "Target",
         _top_review_counts(review_rows, "Target"),
     )
-    _write_overview_count_section(
+    next_row = _write_overview_count_section(
         ws,
         next_row + 1,
         "Top Samples",
         "Sample",
         _top_review_counts(review_rows, "Sample"),
     )
+    _write_overview_how_to_read(ws, next_row + 1)
 
     ws.column_dimensions["A"].width = 26
     ws.column_dimensions["B"].width = 16
@@ -437,6 +438,37 @@ def _write_overview_count_section(
             border=BORDER,
         )
     return start_row + len(counts) + 2
+
+
+def _write_overview_how_to_read(ws, start_row: int) -> int:
+    _apply(
+        ws.cell(row=start_row, column=1, value="How to read"),
+        font=Font(bold=True, color="FFFFFF"),
+        fill=_fill(_OVERVIEW_HEADER_FILL),
+        alignment=CENTER,
+        border=BORDER,
+    )
+    notes = [
+        "Detected % = rows with usable RT and area.",
+        "Flagged Rows = rows sent to Review Queue for manual attention.",
+        "Flagged % is review workload, not detection failure.",
+        "Score Breakdown is a technical audit sheet when enabled.",
+    ]
+    for offset, note in enumerate(notes, start=1):
+        row_idx = start_row + offset
+        ws.merge_cells(
+            start_row=row_idx,
+            start_column=1,
+            end_row=row_idx,
+            end_column=4,
+        )
+        _apply(
+            ws.cell(row=row_idx, column=1, value=note),
+            fill=_fill(WHITE),
+            alignment=Alignment(horizontal="left", vertical="center", wrap_text=True),
+            border=BORDER,
+        )
+    return start_row + len(notes) + 1
 
 
 def _build_summary_sheet(

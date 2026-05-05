@@ -177,6 +177,23 @@ def test_build_overview_sheet_forces_top_labels_to_literal_text() -> None:
     assert ws["A14"].data_type != "f"
 
 
+def test_overview_explains_detected_and_flagged_rates() -> None:
+    rows = [_long_row("Tumor_1", "Analyte", "9.0", "10000", "OK")]
+    wb = Workbook()
+    ws = wb.active
+
+    csv_to_excel._build_overview_sheet(ws, rows, diagnostics=[], review_rows=[])
+
+    values = [
+        ws.cell(row=row_idx, column=1).value for row_idx in range(1, ws.max_row + 1)
+    ]
+    joined = "\n".join(str(value) for value in values if value)
+    assert "Detected %" in joined
+    assert "Flagged Rows" in joined
+    assert "Flagged % is review workload" in joined
+    assert "Score Breakdown is a technical audit sheet" in joined
+
+
 def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     rows = [
         _long_row(
