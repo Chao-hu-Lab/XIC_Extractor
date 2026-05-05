@@ -29,6 +29,7 @@ def _canonical_settings() -> dict[str, str]:
         "dirty_matrix_mode": "false",
         "rt_prior_library_path": "",
         "emit_score_breakdown": "false",
+        "emit_review_report": "false",
         "keep_intermediate_csv": "false",
         "nl_rt_anchor_search_margin_min": "2.0",
         "nl_rt_anchor_half_window_min": "1.0",
@@ -67,6 +68,7 @@ def test_advanced_section_contains_required_flags(qtbot) -> None:
     assert {
         "keep_intermediate_csv",
         "emit_score_breakdown",
+        "emit_review_report",
         "dirty_matrix_mode",
         "count_no_ms2_as_detected",
         "rolling_window_size",
@@ -100,6 +102,9 @@ def test_advanced_section_uses_compact_rows_for_related_controls(qtbot) -> None:
     score_layout, score_index = _containing_layout(
         section._emit_score_breakdown_checkbox
     )
+    report_layout, report_index = _containing_layout(
+        section._emit_review_report_checkbox
+    )
     dirty_layout, dirty_index = _containing_layout(section._dirty_matrix_mode_checkbox)
     no_ms2_layout, no_ms2_index = _containing_layout(section._count_no_ms2_checkbox)
     mode_layout, mode_index = _containing_layout(section._parallel_mode_combo)
@@ -107,8 +112,14 @@ def test_advanced_section_uses_compact_rows_for_related_controls(qtbot) -> None:
 
     assert _direct_grid_position(section._dirty_matrix_mode_checkbox) is None
     assert _direct_grid_position(section._count_no_ms2_checkbox) is None
-    assert keep_layout is score_layout is dirty_layout is no_ms2_layout
-    assert [keep_index, score_index, dirty_index, no_ms2_index] == [0, 1, 2, 3]
+    assert keep_layout is score_layout is report_layout is dirty_layout is no_ms2_layout
+    assert [keep_index, score_index, report_index, dirty_index, no_ms2_index] == [
+        0,
+        1,
+        2,
+        3,
+        4,
+    ]
     assert mode_layout is workers_layout
     assert mode_index < workers_index
 
@@ -268,6 +279,7 @@ def test_advanced_section_edits_round_trip_through_get_values(qtbot) -> None:
 
     section._keep_intermediate_csv_checkbox.setChecked(True)
     section._emit_score_breakdown_checkbox.setChecked(True)
+    section._emit_review_report_checkbox.setChecked(True)
     section._dirty_matrix_mode_checkbox.setChecked(True)
     section._count_no_ms2_checkbox.setChecked(False)
     section._rolling_window_size_spin.setValue(9)
@@ -283,6 +295,7 @@ def test_advanced_section_edits_round_trip_through_get_values(qtbot) -> None:
 
     assert values["keep_intermediate_csv"] == "true"
     assert values["emit_score_breakdown"] == "true"
+    assert values["emit_review_report"] == "true"
     assert values["dirty_matrix_mode"] == "true"
     assert values["count_no_ms2_as_detected"] == "false"
     assert values["rolling_window_size"] == "9"

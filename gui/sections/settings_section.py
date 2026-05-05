@@ -104,6 +104,7 @@ class CollapsibleSection(QWidget):
 _ADVANCED_SETTING_KEYS = (
     "keep_intermediate_csv",
     "emit_score_breakdown",
+    "emit_review_report",
     "dirty_matrix_mode",
     "count_no_ms2_as_detected",
     "rolling_window_size",
@@ -190,6 +191,7 @@ class SettingsSection(QWidget):
         self._count_no_ms2_checkbox = QCheckBox("將 NO_MS2 視為偵測到")
         self._keep_intermediate_csv_checkbox = QCheckBox("保留中間 CSV 檔")
         self._emit_score_breakdown_checkbox = QCheckBox("輸出 Score Breakdown sheet")
+        self._emit_review_report_checkbox = QCheckBox("輸出 Review Report HTML")
         self._dirty_matrix_mode_checkbox = QCheckBox("啟用 dirty matrix mode")
         self._rolling_window_size_spin = QSpinBox()
         self._rt_prior_library_path_edit = QLineEdit()
@@ -293,6 +295,7 @@ class SettingsSection(QWidget):
             QSignalBlocker(self._count_no_ms2_checkbox),
             QSignalBlocker(self._keep_intermediate_csv_checkbox),
             QSignalBlocker(self._emit_score_breakdown_checkbox),
+            QSignalBlocker(self._emit_review_report_checkbox),
             QSignalBlocker(self._dirty_matrix_mode_checkbox),
             QSignalBlocker(self._rolling_window_size_spin),
             QSignalBlocker(self._rt_prior_library_path_edit),
@@ -380,6 +383,11 @@ class SettingsSection(QWidget):
                 "emit_score_breakdown": (
                     "true"
                     if self._emit_score_breakdown_checkbox.isChecked()
+                    else "false"
+                ),
+                "emit_review_report": (
+                    "true"
+                    if self._emit_review_report_checkbox.isChecked()
                     else "false"
                 ),
                 "dirty_matrix_mode": (
@@ -650,6 +658,7 @@ class SettingsSection(QWidget):
         debug_flags_layout.setSpacing(16)
         debug_flags_layout.addWidget(self._keep_intermediate_csv_checkbox)
         debug_flags_layout.addWidget(self._emit_score_breakdown_checkbox)
+        debug_flags_layout.addWidget(self._emit_review_report_checkbox)
         debug_flags_layout.addWidget(self._dirty_matrix_mode_checkbox)
         debug_flags_layout.addWidget(self._count_no_ms2_checkbox)
         debug_flags_layout.addStretch()
@@ -706,6 +715,9 @@ class SettingsSection(QWidget):
         )
         self._emit_score_breakdown_checkbox.setChecked(
             _bool_value(self._settings_values, "emit_score_breakdown")
+        )
+        self._emit_review_report_checkbox.setChecked(
+            _bool_value(self._settings_values, "emit_review_report")
         )
         self._dirty_matrix_mode_checkbox.setChecked(
             _bool_value(self._settings_values, "dirty_matrix_mode")
@@ -840,6 +852,7 @@ class SettingsSection(QWidget):
         for checkbox in (
             self._keep_intermediate_csv_checkbox,
             self._emit_score_breakdown_checkbox,
+            self._emit_review_report_checkbox,
             self._dirty_matrix_mode_checkbox,
         ):
             checkbox.stateChanged.connect(lambda _: self._set_dirty(True))

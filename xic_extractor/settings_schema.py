@@ -22,6 +22,7 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "dirty_matrix_mode": "false",
     "rt_prior_library_path": "",
     "emit_score_breakdown": "false",
+    "emit_review_report": "false",
     "keep_intermediate_csv": "false",
     "nl_rt_anchor_search_margin_min": "2.0",
     "nl_rt_anchor_half_window_min": "1.0",
@@ -72,6 +73,7 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "dirty_matrix_mode": "髒基質模式（放寬 S/N、收緊峰形；尿液等複雜基質用）",
     "rt_prior_library_path": "外部 RT prior library CSV 路徑，留空則停用",
     "emit_score_breakdown": "是否輸出 Score Breakdown sheet（預設關閉）",
+    "emit_review_report": "是否輸出 Review Report HTML（預設關閉）",
     "keep_intermediate_csv": "是否保留中間 CSV 檔（除錯用，預設關閉）",
     "nl_rt_anchor_search_margin_min": (
         "NL 錨定搜尋半徑（min）：以 rt_center ±此值搜尋 NL 確認的 MS2 作為 RT anchor"
