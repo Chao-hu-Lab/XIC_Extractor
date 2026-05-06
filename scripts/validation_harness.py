@@ -9,6 +9,7 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from scripts.local_minimum_param_sweep import GRID_CHOICES
 from scripts.validation_harness_core import (
     DEFAULT_FULL_TISSUE_DIR,
     DEFAULT_TISSUE_VALIDATION_DIR,
@@ -54,6 +55,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         grid=args.grid,
         parallel_mode=args.parallel_mode,
         data_dir_override=args.data_dir.resolve() if args.data_dir else None,
+        settings_overrides=tuple(args.setting or ()),
     )
 
     if args.dry_run:
@@ -97,7 +99,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--baseline-root", type=Path, default=None)
     parser.add_argument("--data-dir", type=Path, default=None)
-    parser.add_argument("--grid", choices=("quick", "standard"), default="quick")
+    parser.add_argument("--grid", choices=GRID_CHOICES, default="quick")
+    parser.add_argument(
+        "--setting",
+        action="append",
+        type=_setting_override,
+        default=None,
+        metavar="KEY=VALUE",
+        help=(
+            "Additional settings override for extraction suites. Repeatable. "
+            "Used for candidate parameter validation."
+        ),
+    )
     parser.add_argument(
         "--resolver-mode",
         choices=("legacy_savgol", "local_minimum"),
@@ -119,6 +132,17 @@ def _positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("parallel-workers must be >= 1")
     return parsed
+
+
+def _setting_override(value: str) -> tuple[str, str]:
+    key, separator, setting_value = value.partition("=")
+    key = key.strip()
+    setting_value = setting_value.strip()
+    if not separator or not key or not setting_value:
+        raise argparse.ArgumentTypeError("setting must be KEY=VALUE")
+    if key == "resolver_mode":
+        raise argparse.ArgumentTypeError("use --resolver-mode instead of --setting")
+    return key, setting_value
 
 
 if __name__ == "__main__":

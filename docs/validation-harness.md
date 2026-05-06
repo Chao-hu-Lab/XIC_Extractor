@@ -31,11 +31,56 @@ Defaults:
 - `parallel_mode=process`
 - `parallel_workers=4`
 - suites: `manual-2raw`, `tissue-8raw`
+- manual sweep grid: `quick`
 
 `manual-2raw` uses the same worker setting, but the quick grid is still mostly
 sequential because NoSplit and Split use different target CSVs and are staged as
 single-RAW runs. `parallel_workers=4` matters most for `tissue-8raw` and
 `tissue-85raw`, where each extraction run contains multiple RAW files.
+
+For local-minimum preset calibration, use the focused grid instead of the daily
+quick grid:
+
+```powershell
+uv run python scripts\validation_harness.py `
+  --suite manual-2raw `
+  --grid calibration-v1 `
+  --run-id local_minimum_calibration_v1 `
+  --output-root output\validation_harness
+```
+
+`calibration-v1` keeps the sweep small and targets the current method questions:
+whether the historical `resolver_peak_duration_max=10.0` was too permissive, and whether
+`resolver_min_search_range_min=0.08` should move toward `0.04-0.05` minutes.
+If a candidate is equivalent on clean-matrix manual truth and improves parameter
+semantics, it may justify a preset-only change even without a large metric gain.
+
+After `calibration-v1`, use `calibration-v2` to test the next permissive
+parameters:
+
+```powershell
+uv run python scripts\validation_harness.py `
+  --suite manual-2raw `
+  --grid calibration-v2 `
+  --run-id local_minimum_calibration_v2 `
+  --output-root output\validation_harness
+```
+
+`calibration-v2` focuses on `resolver_peak_duration_min` and
+`resolver_min_relative_height`. The manual 2-raw tier is pure standard material:
+it is the first gate for integration behavior. Within that tier, NoSplit STD
+has higher decision weight than Split STD because its acquisition method is
+closer to the real tissue samples when matrix effects are ignored. Tissue 8-raw
+is the next real-sample smoke test. Urine and other complex matrices are later
+robustness stress tests, not the source of the first clean-model preset.
+
+The first `calibration-v2` run found that positive
+`resolver_min_relative_height` values improved NoSplit STD area agreement, but
+also narrowed tissue candidate regions enough to flip candidate-aligned MS2/NL
+status for several 5-medC rows. After adding strict-NL boundary rescue,
+`resolver_min_relative_height=0.02` kept the 8-raw tissue subset stable with no
+detection, RT, area, NL, or confidence regressions. `0.03` still moved a QC
+8-oxodG row, so the shipped preset uses `0.02`.
 
 ## Inspect Exact Commands
 

@@ -101,11 +101,58 @@ The candidate grid should stay small enough to run on the two raw files during d
 | `resolver_min_ratio_top_edge` | `1.3`, `1.5`, `1.7`, `2.0` |
 | `resolver_min_scans` | `3`, `5` |
 | `resolver_peak_duration_min` | `0.0` |
-| `resolver_peak_duration_max` | `10.0` |
-| `resolver_min_relative_height` | `0.0` |
+| `resolver_peak_duration_max` | `2.0` |
+| `resolver_min_relative_height` | `0.02` |
 | `resolver_min_absolute_height` | `25.0` |
 
 This is 72 local-minimum combinations plus baselines. If runtime is too high, the script should allow a named quick grid.
+
+For preset calibration v1, the sweep also exposes a focused `calibration-v1`
+grid. This grid is intentionally smaller than `standard` and targets the two
+highest-risk preset questions identified after the first real-data checks:
+
+| Question | Starting value | Candidate values |
+|---|---:|---|
+| Maximum local-minimum region duration | `10.0` min | `1.5`, `2.0`, `3.0` min |
+| Minimum valley search range | `0.08` min | `0.04`, `0.05` min |
+
+The focused grid may combine these with the current edge-ratio setting and one
+moderately relaxed edge-ratio candidate. Calibration v1 found no observed
+manual-truth cost for shrinking the duration cap, so the shipped preset uses
+`resolver_peak_duration_max=2.0`. Search-range remains `0.08` because the
+`0.04-0.05` candidates increased large area misses.
+
+Preset calibration v2 tests the next permissive parameters after the duration
+cap:
+
+| Question | Starting value | Candidate values |
+|---|---:|---|
+| Minimum local-minimum region duration | `0.0` min | `0.02`, `0.03` min |
+| Minimum relative apex height | `0.02` | `0.0`, `0.01`, `0.03` |
+
+The data hierarchy matters for decisions:
+
+1. The two manual-truth RAW files are pure standard material. They are the
+   first gate for area/RT behavior. The NoSplit STD method is closer to the
+   real tissue method when matrix effects are ignored, so NoSplit evidence has
+   higher decision weight than the Split method-development run.
+2. The 8-raw tissue subset is the daily real-sample smoke test across selected
+   tissue groups.
+3. The 85-raw tissue run is the full release gate for the same tissue batch.
+4. Urine and other complex matrices are robustness stress tests after the clean
+    standard/tissue model is stable; they should not drive the first preset.
+
+Calibration v2 result:
+
+- `resolver_peak_duration_min=0.02-0.03` had no meaningful effect on the
+  two-raw manual truth sweep.
+- `resolver_min_relative_height=0.02` improved pure STD area agreement,
+  especially for NoSplit STD. Positive values initially narrowed selected
+  tissue peak regions enough to change candidate-aligned MS2/NL status for
+  several 5-medC rows without moving the apex; strict-NL boundary rescue fixes
+  that semantic mismatch. After the rescue, `0.02` had no detection, RT, area,
+  NL, or confidence regression on the 8-raw tissue subset. `0.03` still moved a
+  QC 8-oxodG row, so the shipped preset uses `0.02`.
 
 ### 5.2 Case execution
 
@@ -199,6 +246,7 @@ After the two-raw manual sweep:
 
 - If no local-minimum candidate beats the current preset on `area_median_abs_pct_error` without guardrail failures, keep the current local-minimum preset.
 - If one candidate clearly beats the current preset and passes guardrails, update only the local-minimum preset values and docs.
+- If a candidate is equivalent on clean-matrix manual truth and improves parameter semantics or removes an overly broad placeholder value, a preset-only update is allowed when it does not increase missing peaks or large area misses.
 - If results are mixed, do not update defaults; keep the sweep report as evidence and run the 8-raw validation subset before making a preset decision.
 
 The 8-raw validation subset is:

@@ -303,6 +303,10 @@ Supported grids:
 
 - `quick`: small deterministic grid for development and tests
 - `standard`: spec grid
+- `calibration-v1`: focused preset-calibration grid for
+  `resolver_peak_duration_max` and `resolver_min_search_range_min`
+- `calibration-v2`: focused preset-calibration grid for
+  `resolver_peak_duration_min` and `resolver_min_relative_height`
 
 **Step 4: Run test**
 
@@ -531,7 +535,9 @@ uv run python scripts\local_minimum_param_sweep.py `
   --nosplit-targets "C:\Xcalibur\data\20251219_need process data\XIC test\combined_targets_file1.csv" `
   --split-targets "C:\Xcalibur\data\20251219_need process data\XIC test\combined_targets_file2.csv" `
   --output-dir output\local_minimum_param_sweep_manual `
-  --grid quick
+  --grid calibration-v1 `
+  --parallel-mode process `
+  --parallel-workers 4
 ```
 
 Real runner responsibilities:
@@ -595,7 +601,18 @@ If quick grid shows a plausible candidate:
 uv run python scripts\local_minimum_param_sweep.py ... --grid standard
 ```
 
-If quick grid does not improve current local-minimum preset, stop and report that evidence.
+If `calibration-v1` does not improve current local-minimum preset, stop and
+report that evidence. Use `standard` only when the focused grid produces a
+plausible candidate but leaves the exact setting ambiguous.
+
+For `calibration-v2`, report NoSplit STD and Split STD separately. NoSplit STD
+has higher decision weight because its acquisition method is closer to real
+tissue samples when matrix effects are ignored. A relative-height candidate
+must also pass the 8-raw tissue smoke check without introducing candidate
+boundary/MS2 alignment regressions before it can justify a preset update.
+After strict-NL boundary rescue, `resolver_min_relative_height=0.02` passed this
+gate; `0.03` still moved a QC 8-oxodG row and remains too aggressive for the
+shipped preset.
 
 ### Task 7.3 — Report checkpoint
 

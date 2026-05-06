@@ -110,11 +110,11 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.resolver_mode == "legacy_savgol"
     assert config.resolver_chrom_threshold == pytest.approx(0.05)
     assert config.resolver_min_search_range_min == pytest.approx(0.08)
-    assert config.resolver_min_relative_height == pytest.approx(0.0)
+    assert config.resolver_min_relative_height == pytest.approx(0.02)
     assert config.resolver_min_absolute_height == pytest.approx(25.0)
     assert config.resolver_min_ratio_top_edge == pytest.approx(1.7)
     assert config.resolver_peak_duration_min == pytest.approx(0.0)
-    assert config.resolver_peak_duration_max == pytest.approx(10.0)
+    assert config.resolver_peak_duration_max == pytest.approx(2.0)
     assert config.resolver_min_scans == 5
     assert config.parallel_mode == "serial"
     assert config.parallel_workers == 1
@@ -323,11 +323,11 @@ def test_canonical_settings_defaults_include_parallel_settings() -> None:
 def test_canonical_settings_defaults_include_local_minimum_preset() -> None:
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_chrom_threshold"] == "0.05"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_search_range_min"] == "0.08"
-    assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_relative_height"] == "0.0"
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_relative_height"] == "0.02"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_absolute_height"] == "25.0"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_ratio_top_edge"] == "1.7"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_min"] == "0.0"
-    assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_max"] == "10.0"
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_max"] == "2.0"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_scans"] == "5"
 
 
@@ -358,11 +358,11 @@ def test_settings_example_includes_local_minimum_preset() -> None:
 
     assert rows["resolver_chrom_threshold"] == "0.05"
     assert rows["resolver_min_search_range_min"] == "0.08"
-    assert rows["resolver_min_relative_height"] == "0.0"
+    assert rows["resolver_min_relative_height"] == "0.02"
     assert rows["resolver_min_absolute_height"] == "25.0"
     assert rows["resolver_min_ratio_top_edge"] == "1.7"
     assert rows["resolver_peak_duration_min"] == "0.0"
-    assert rows["resolver_peak_duration_max"] == "10.0"
+    assert rows["resolver_peak_duration_max"] == "2.0"
     assert rows["resolver_min_scans"] == "5"
 
 

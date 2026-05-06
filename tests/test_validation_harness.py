@@ -66,6 +66,43 @@ def test_build_validation_specs_freezes_tiers_commands_and_output_paths(
     assert "--confirm-full-run" in full_command
 
 
+def test_build_validation_specs_includes_candidate_settings_in_commands(
+    tmp_path: Path,
+) -> None:
+    specs = build_validation_specs(
+        suite_names=("tissue-8raw",),
+        base_dir=Path("C:/repo/XIC_Extractor"),
+        output_root=tmp_path / "validation_harness",
+        run_id="candidate",
+        workers=4,
+        resolver_mode="local_minimum",
+        grid="quick",
+        settings_overrides=(("resolver_min_relative_height", "0.03"),),
+    )
+
+    assert specs[0].settings_overrides == (
+        ("resolver_min_relative_height", "0.03"),
+    )
+    command = command_to_powershell(specs[0].command)
+    assert "--setting resolver_min_relative_height=0.03" in command
+
+
+def test_build_validation_specs_rejects_resolver_mode_setting(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="resolver_mode"):
+        build_validation_specs(
+            suite_names=("tissue-8raw",),
+            base_dir=Path("C:/repo/XIC_Extractor"),
+            output_root=tmp_path / "validation_harness",
+            run_id="candidate",
+            workers=4,
+            resolver_mode="local_minimum",
+            grid="quick",
+            settings_overrides=(("resolver_mode", "legacy_savgol"),),
+        )
+
+
 def test_run_validation_specs_compares_exact_baseline_workbook_paths(
     tmp_path: Path,
 ) -> None:
@@ -139,6 +176,55 @@ def test_run_validation_specs_compares_exact_baseline_workbook_paths(
     assert "suite,kind,raw_count,output_path,compare_result" in summary
     assert "tissue-8raw,extraction,8," in summary
     assert ",pass," in summary
+
+
+def test_run_validation_specs_passes_candidate_settings_to_extraction_runner(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "validation"
+    data_dir.mkdir()
+    for index in range(8):
+        (data_dir / f"Sample{index + 1}.raw").mkdir()
+
+    output_root = tmp_path / "validation_harness"
+    spec = ValidationRunSpec(
+        name="tissue-8raw",
+        kind="extraction",
+        description="8 raw subset",
+        output_dir=output_root / "run1" / "tissue_8raw_local_minimum",
+        output_path=(
+            output_root
+            / "run1"
+            / "tissue_8raw_local_minimum"
+            / "xic_results_process_w4.xlsx"
+        ),
+        command=("uv", "run", "python", "scripts/validate.py"),
+        data_dir=data_dir,
+        expected_raw_count=8,
+        resolver_mode="local_minimum",
+        parallel_mode="process",
+        workers=4,
+        settings_overrides=(("resolver_min_relative_height", "0.03"),),
+    )
+    runner_calls: list[dict[str, object]] = []
+
+    def fake_extraction_runner(**kwargs) -> Path:
+        runner_calls.append(kwargs)
+        return spec.output_path
+
+    results = run_validation_specs(
+        [spec],
+        base_dir=tmp_path,
+        output_root=output_root,
+        run_id="run1",
+        extraction_runner=fake_extraction_runner,
+    )
+
+    assert results[0].status == "passed"
+    assert runner_calls[0]["settings_overrides"] == {
+        "resolver_mode": "local_minimum",
+        "resolver_min_relative_height": "0.03",
+    }
 
 
 def test_run_validation_specs_records_compare_errors_without_traceback(
@@ -313,6 +399,100 @@ def test_run_validation_specs_runs_manual_sweep_with_script_arguments(
     assert sweep_args[0] == "--manual-workbook"
     assert "scripts\\local_minimum_param_sweep.py" not in sweep_args
     assert "--parallel-workers" in sweep_args
+
+
+@pytest.mark.parametrize("grid", ["calibration-v1", "calibration-v2"])
+def test_cli_accepts_calibration_grid_for_manual_sweep(
+    tmp_path: Path, capsys, grid: str
+) -> None:
+    exit_code = main(
+        [
+            "--suite",
+            "manual-2raw",
+            "--grid",
+            grid,
+            "--output-root",
+            str(tmp_path / "validation_harness"),
+            "--run-id",
+            "run1",
+            "--dry-run",
+        ]
+    )
+
+    assert exit_code == 0
+    assert f"--grid {grid}" in capsys.readouterr().out
+
+
+def test_cli_accepts_repeated_candidate_settings_for_extraction_suite(
+    tmp_path: Path, capsys
+) -> None:
+    exit_code = main(
+        [
+            "--suite",
+            "tissue-8raw",
+            "--setting",
+            "resolver_peak_duration_max=2.0",
+            "--setting",
+            "resolver_min_relative_height=0.03",
+            "--output-root",
+            str(tmp_path / "validation_harness"),
+            "--run-id",
+            "candidate",
+            "--dry-run",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "--setting resolver_peak_duration_max=2.0" in output
+    assert "--setting resolver_min_relative_height=0.03" in output
+
+
+def test_cli_strips_candidate_setting_values(tmp_path: Path, capsys) -> None:
+    exit_code = main(
+        [
+            "--suite",
+            "tissue-8raw",
+            "--setting",
+            "resolver_peak_duration_max= 2.0 ",
+            "--output-root",
+            str(tmp_path / "validation_harness"),
+            "--run-id",
+            "candidate",
+            "--dry-run",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "--setting resolver_peak_duration_max=2.0" in output
+
+
+@pytest.mark.parametrize(
+    "setting",
+    [
+        "resolver_peak_duration_max=",
+        "resolver_peak_duration_max=   ",
+        "resolver_mode=legacy_savgol",
+    ],
+)
+def test_cli_rejects_invalid_candidate_setting(
+    tmp_path: Path, setting: str
+) -> None:
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--suite",
+                "tissue-8raw",
+                "--setting",
+                setting,
+                "--output-root",
+                str(tmp_path / "validation_harness"),
+                "--run-id",
+                "candidate",
+                "--dry-run",
+            ]
+        )
 
 
 def test_run_validation_specs_rejects_wrong_raw_count(tmp_path: Path) -> None:

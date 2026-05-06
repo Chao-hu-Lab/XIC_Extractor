@@ -26,6 +26,7 @@ DEFAULT_TISSUE_VALIDATION_DIR = Path(
 DEFAULT_FULL_TISSUE_DIR = Path(r"C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R")
 
 SUITE_CHOICES = ("manual-2raw", "tissue-8raw", "tissue-85raw")
+_RESERVED_SETTING_OVERRIDE_KEYS = {"resolver_mode"}
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class ValidationRunSpec:
     resolver_mode: str = "local_minimum"
     parallel_mode: str = "process"
     workers: int = 4
+    settings_overrides: tuple[tuple[str, str], ...] = ()
     requires_confirmation: bool = False
 
 
@@ -72,7 +74,9 @@ def build_validation_specs(
     grid: str,
     parallel_mode: str = "process",
     data_dir_override: Path | None = None,
+    settings_overrides: tuple[tuple[str, str], ...] = (),
 ) -> list[ValidationRunSpec]:
+    settings_overrides = _normalize_settings_overrides(settings_overrides)
     run_root = output_root / run_id
     specs: list[ValidationRunSpec] = []
     for suite_name in _expand_suite_names(suite_names):
@@ -117,12 +121,14 @@ def build_validation_specs(
                         parallel_mode=parallel_mode,
                         workers=workers,
                         data_dir=data_dir,
+                        settings_overrides=settings_overrides,
                     ),
                     data_dir=data_dir,
                     expected_raw_count=8,
                     resolver_mode=resolver_mode,
                     parallel_mode=parallel_mode,
                     workers=workers,
+                    settings_overrides=settings_overrides,
                 )
             )
         elif suite_name == "tissue-85raw":
@@ -147,6 +153,7 @@ def build_validation_specs(
                             parallel_mode=parallel_mode,
                             workers=workers,
                             data_dir=data_dir,
+                            settings_overrides=settings_overrides,
                         ),
                         "--confirm-full-run",
                     ),
@@ -155,10 +162,28 @@ def build_validation_specs(
                     resolver_mode=resolver_mode,
                     parallel_mode=parallel_mode,
                     workers=workers,
+                    settings_overrides=settings_overrides,
                     requires_confirmation=True,
                 )
             )
     return specs
+
+
+def _normalize_settings_overrides(
+    settings_overrides: tuple[tuple[str, str], ...],
+) -> tuple[tuple[str, str], ...]:
+    normalized: list[tuple[str, str]] = []
+    for key, value in settings_overrides:
+        normalized_key = key.strip()
+        normalized_value = value.strip()
+        if not normalized_key or not normalized_value:
+            raise ValueError(
+                "settings_overrides must contain non-empty KEY=VALUE pairs"
+            )
+        if normalized_key in _RESERVED_SETTING_OVERRIDE_KEYS:
+            raise ValueError("settings_overrides cannot include resolver_mode")
+        normalized.append((normalized_key, normalized_value))
+    return tuple(normalized)
 
 
 def command_to_powershell(command: Sequence[str]) -> str:
@@ -247,7 +272,10 @@ def _run_one_spec(
                 mode=spec.parallel_mode,
                 workers=spec.workers,
                 output_dir=spec.output_dir,
-                settings_overrides={"resolver_mode": spec.resolver_mode},
+                settings_overrides={
+                    "resolver_mode": spec.resolver_mode,
+                    **dict(spec.settings_overrides),
+                },
             )
             if workbook_path != spec.output_path:
                 raise ValueError(
@@ -338,8 +366,9 @@ def _harness_command(
     parallel_mode: str,
     workers: int,
     data_dir: Path,
+    settings_overrides: tuple[tuple[str, str], ...] = (),
 ) -> tuple[str, ...]:
-    return (
+    command = (
         "uv",
         "run",
         "python",
@@ -361,6 +390,9 @@ def _harness_command(
         "--data-dir",
         str(data_dir),
     )
+    for key, value in settings_overrides:
+        command = (*command, "--setting", f"{key}={value}")
+    return command
 
 
 def _expand_suite_names(suite_names: Sequence[str]) -> tuple[str, ...]:

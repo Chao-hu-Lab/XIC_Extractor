@@ -13,6 +13,9 @@ from pathlib import Path
 from statistics import median
 from typing import Callable, Iterable
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -110,11 +113,98 @@ SweepRunner = Callable[[ParameterSet], list[ProgramPeakRow]]
 
 
 _STATIC_LOCAL_MINIMUM_PARAMS = {
-    "resolver_min_relative_height": "0.0",
+    "resolver_min_relative_height": "0.02",
     "resolver_min_absolute_height": "25.0",
     "resolver_peak_duration_min": "0.0",
-    "resolver_peak_duration_max": "10.0",
+    "resolver_peak_duration_max": "2.0",
 }
+
+_CALIBRATION_V1_OVERRIDES = (
+    ("local_minimum_duration_1p5", {"resolver_peak_duration_max": "1.5"}),
+    ("local_minimum_duration_2p0", {"resolver_peak_duration_max": "2.0"}),
+    ("local_minimum_duration_3p0", {"resolver_peak_duration_max": "3.0"}),
+    (
+        "local_minimum_search_0p05",
+        {"resolver_min_search_range_min": "0.05"},
+    ),
+    (
+        "local_minimum_search_0p04",
+        {"resolver_min_search_range_min": "0.04"},
+    ),
+    (
+        "local_minimum_search_0p05_duration_2p0",
+        {
+            "resolver_min_search_range_min": "0.05",
+            "resolver_peak_duration_max": "2.0",
+        },
+    ),
+    (
+        "local_minimum_search_0p04_duration_2p0",
+        {
+            "resolver_min_search_range_min": "0.04",
+            "resolver_peak_duration_max": "2.0",
+        },
+    ),
+    (
+        "local_minimum_search_0p05_duration_1p5",
+        {
+            "resolver_min_search_range_min": "0.05",
+            "resolver_peak_duration_max": "1.5",
+        },
+    ),
+    (
+        "local_minimum_search_0p05_duration_2p0_edge_1p5",
+        {
+            "resolver_min_search_range_min": "0.05",
+            "resolver_peak_duration_max": "2.0",
+            "resolver_min_ratio_top_edge": "1.5",
+        },
+    ),
+)
+
+_CALIBRATION_V2_OVERRIDES = (
+    (
+        "local_minimum_min_duration_0p02",
+        {"resolver_peak_duration_min": "0.02"},
+    ),
+    (
+        "local_minimum_min_duration_0p03",
+        {"resolver_peak_duration_min": "0.03"},
+    ),
+    (
+        "local_minimum_rel_height_0p01",
+        {"resolver_min_relative_height": "0.01"},
+    ),
+    (
+        "local_minimum_rel_height_0p00",
+        {"resolver_min_relative_height": "0.0"},
+    ),
+    (
+        "local_minimum_rel_height_0p03",
+        {"resolver_min_relative_height": "0.03"},
+    ),
+    (
+        "local_minimum_min_duration_0p02_rel_height_0p01",
+        {
+            "resolver_peak_duration_min": "0.02",
+            "resolver_min_relative_height": "0.01",
+        },
+    ),
+    (
+        "local_minimum_min_duration_0p02_rel_height_0p00",
+        {
+            "resolver_peak_duration_min": "0.02",
+            "resolver_min_relative_height": "0.0",
+        },
+    ),
+    (
+        "local_minimum_min_duration_0p03_rel_height_0p01",
+        {
+            "resolver_peak_duration_min": "0.03",
+            "resolver_min_relative_height": "0.01",
+        },
+    ),
+)
 
 _GRID_VALUES = {
     "quick": {
@@ -131,6 +221,8 @@ _GRID_VALUES = {
     },
 }
 
+GRID_CHOICES = (*_GRID_VALUES.keys(), "calibration-v1", "calibration-v2")
+
 _THIN = Side(style="thin", color="BDBDBD")
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 _CENTER = Alignment(horizontal="center", vertical="center")
@@ -139,13 +231,44 @@ _FAIL_FILL = PatternFill("solid", fgColor="FFCDD2")
 
 
 def build_parameter_sets(*, grid: str) -> list[ParameterSet]:
-    if grid not in _GRID_VALUES:
+    if grid not in GRID_CHOICES:
         raise ValueError(f"Unknown grid: {grid}")
 
     parameter_sets = [
         ParameterSet("legacy_savgol", {"resolver_mode": "legacy_savgol"}),
-        ParameterSet("local_minimum_current", {"resolver_mode": "local_minimum"}),
+        ParameterSet(
+            "local_minimum_current",
+            {"resolver_mode": "local_minimum", **_STATIC_LOCAL_MINIMUM_PARAMS},
+        ),
     ]
+    if grid == "calibration-v1":
+        parameter_sets.extend(
+            ParameterSet(
+                name,
+                {
+                    "resolver_mode": "local_minimum",
+                    **_STATIC_LOCAL_MINIMUM_PARAMS,
+                    **overrides,
+                },
+            )
+            for name, overrides in _CALIBRATION_V1_OVERRIDES
+        )
+        return parameter_sets
+
+    if grid == "calibration-v2":
+        parameter_sets.extend(
+            ParameterSet(
+                name,
+                {
+                    "resolver_mode": "local_minimum",
+                    **_STATIC_LOCAL_MINIMUM_PARAMS,
+                    **overrides,
+                },
+            )
+            for name, overrides in _CALIBRATION_V2_OVERRIDES
+        )
+        return parameter_sets
+
     grid_values = _GRID_VALUES[grid]
     keys = list(grid_values.keys())
     for idx, values in enumerate(product(*(grid_values[key] for key in keys)), start=1):
@@ -219,7 +342,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--grid",
-        choices=tuple(_GRID_VALUES.keys()),
+        choices=GRID_CHOICES,
         default="quick",
     )
     parser.add_argument(
