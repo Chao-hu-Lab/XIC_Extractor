@@ -491,7 +491,7 @@ def test_candidate_evidence_does_not_rescue_trigger_only_boundary_scan() -> None
     assert evidence.alignment_source == "none"
 
 
-def test_candidate_evidence_boundary_strict_nl_overrides_region_trigger_failure() -> None:
+def test_boundary_strict_nl_overrides_region_trigger_failure() -> None:
     candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
     raw = _FakeRaw(
         [

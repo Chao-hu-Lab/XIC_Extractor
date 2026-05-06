@@ -288,10 +288,11 @@ def collect_candidate_ms2_evidence(
         nl_ppm_warn=nl_ppm_warn,
         nl_ppm_max=nl_ppm_max,
     )
+    alignment_source: CandidateMS2AlignmentSource
     if nl_status in {"OK", "WARN"} and best_evidence_source is not None:
         alignment_source = best_evidence_source
     elif region_trigger_seen:
-        alignment_source: CandidateMS2AlignmentSource = "region"
+        alignment_source = "region"
     elif fallback_trigger_seen:
         alignment_source = "apex_fallback"
     else:
