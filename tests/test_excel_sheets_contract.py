@@ -51,6 +51,7 @@ def test_default_xlsx_has_overview_landing_sheet(tmp_path: Path, monkeypatch) ->
         "Run Metadata",
     ]
     assert wb.active.title == "Overview"
+    assert wb["Diagnostics"].sheet_state == "hidden"
 
 
 def test_score_breakdown_appears_when_enabled(tmp_path: Path, monkeypatch) -> None:
@@ -67,6 +68,7 @@ def test_score_breakdown_appears_when_enabled(tmp_path: Path, monkeypatch) -> No
         "Run Metadata",
         "Score Breakdown",
     ]
+    assert wb["Diagnostics"].sheet_state == "hidden"
 
 
 def test_landing_sheet_when_diagnostics_empty(tmp_path: Path, monkeypatch) -> None:

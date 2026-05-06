@@ -190,8 +190,10 @@ def test_overview_explains_detected_and_flagged_rates() -> None:
         ws.cell(row=row_idx, column=1).value for row_idx in range(1, ws.max_row + 1)
     ]
     joined = "\n".join(str(value) for value in values if value)
-    assert "Summary Detection % excludes NL_FAIL rows" in joined
-    assert "Flagged Rows" in joined
+    assert "Start with Summary Detection %" in joined
+    assert "Review Queue has one row per sample-target needing attention" in joined
+    assert "Diagnostics is a hidden technical log" in joined
+    assert "HTML Review Report is for visual batch QA" in joined
     assert "Flagged % is review workload" in joined
     assert "detected-but-flagged" in joined
     assert "Score Breakdown is a technical audit sheet" in joined

@@ -455,11 +455,19 @@ def _write_overview_how_to_read(ws, start_row: int) -> int:
         border=BORDER,
     )
     notes = [
-        "Summary Detection % excludes NL_FAIL rows from analytical aggregates.",
-        "Flagged Rows = rows sent to Review Queue for manual attention.",
+        (
+            "Start with Summary Detection % to find targets with systematic "
+            "detection loss."
+        ),
+        "Review Queue has one row per sample-target needing attention.",
         "Flagged % is review workload, not detection failure.",
-        "Numeric NL_FAIL rows can be detected-but-flagged for review.",
+        (
+            "Numeric NL_FAIL rows can be detected-but-flagged for review but "
+            "excluded from Summary analytical aggregates."
+        ),
+        "Diagnostics is a hidden technical log for debugging verbose evidence.",
         "Score Breakdown is a technical audit sheet when enabled.",
+        "HTML Review Report is for visual batch QA when enabled.",
     ]
     for offset, note in enumerate(notes, start=1):
         row_idx = start_row + offset
