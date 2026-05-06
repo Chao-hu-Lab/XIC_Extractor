@@ -2,29 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from openpyxl import Workbook
-
-from scripts.csv_to_excel import (
-    _apply_sheet_role_styles,
-    _build_data_sheet,
-    _build_diagnostics_sheet,
-    _build_metadata_sheet,
-    _build_overview_sheet,
-    _build_review_queue_sheet,
-    _build_score_breakdown_sheet,
-    _build_summary_sheet,
-    _build_targets_sheet,
-    _review_queue_rows,
-)
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extractor import RunOutput
-from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.output import csv_writers
 from xic_extractor.output.messages import DiagnosticRecord
-from xic_extractor.output.review_report import (
-    review_report_path_for_excel,
-    write_review_report,
-)
+from xic_extractor.output.review_report import write_review_report
+from xic_extractor.output.workbook_builder import write_workbook_from_rows
 
 
 def write_excel_from_run_output(
@@ -42,60 +25,15 @@ def write_excel_from_run_output(
         if config.emit_score_breakdown
         else []
     )
-    review_rows = _review_queue_rows(rows, diagnostics)
-
-    wb = Workbook()
-    ws_overview = wb.active
-    _build_overview_sheet(ws_overview, rows, diagnostics, review_rows)
-
-    ws_review = wb.create_sheet("Review Queue")
-    _build_review_queue_sheet(ws_review, review_rows)
-
-    ws_data = wb.create_sheet("XIC Results")
-    _build_data_sheet(ws_data, rows)
-
-    ws_summary = wb.create_sheet("Summary")
-    _build_summary_sheet(
-        ws_summary,
+    return write_workbook_from_rows(
+        config,
+        targets,
         rows,
-        count_no_ms2_as_detected=config.count_no_ms2_as_detected,
-        review_rows=review_rows,
+        diagnostics=diagnostics,
+        score_breakdown=score_breakdown,
+        output_path=output_path,
+        report_writer=write_review_report,
     )
-
-    ws_targets = wb.create_sheet("Targets")
-    _build_targets_sheet(ws_targets, targets)
-
-    ws_diagnostics = wb.create_sheet("Diagnostics")
-    _build_diagnostics_sheet(ws_diagnostics, diagnostics)
-    ws_diagnostics.sheet_state = "hidden"
-
-    ws_metadata = wb.create_sheet("Run Metadata")
-    _build_metadata_sheet(ws_metadata, config)
-
-    if config.emit_score_breakdown and score_breakdown:
-        ws_breakdown = wb.create_sheet("Score Breakdown")
-        _build_score_breakdown_sheet(ws_breakdown, score_breakdown)
-
-    wb.active = wb.index(ws_overview)
-    _apply_sheet_role_styles(wb)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(output_path)
-    wb.close()
-    if config.emit_review_report:
-        injection_order = (
-            read_injection_order(config.injection_order_source)
-            if config.injection_order_source is not None
-            else None
-        )
-        write_review_report(
-            review_report_path_for_excel(output_path),
-            rows,
-            diagnostics=diagnostics,
-            review_rows=review_rows,
-            count_no_ms2_as_detected=config.count_no_ms2_as_detected,
-            injection_order=injection_order,
-        )
-    return output_path
 
 
 def _run_output_to_long_rows(
