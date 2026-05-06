@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from scripts.compare_workbooks import WorkbookCompareResult
 from scripts.validation_harness import (
     DEFAULT_FULL_TISSUE_DIR,
@@ -10,6 +12,8 @@ from scripts.validation_harness import (
     main,
     run_validation_specs,
 )
+from xic_extractor.config import ConfigError
+from xic_extractor.raw_reader import RawReaderError
 
 
 def test_build_validation_specs_freezes_tiers_commands_and_output_paths(
@@ -220,6 +224,63 @@ def test_run_validation_specs_records_baseline_path_errors_without_traceback(
     assert results[0].status == "failed"
     assert results[0].compare_result == "fail"
     assert "outside" in results[0].message
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_message"),
+    [
+        (ConfigError("settings.csv missing"), "settings.csv missing"),
+        (RawReaderError("pythonnet is not installed"), "pythonnet is not installed"),
+    ],
+)
+def test_run_validation_specs_records_extraction_setup_errors_without_traceback(
+    tmp_path: Path,
+    error: Exception,
+    expected_message: str,
+) -> None:
+    data_dir = tmp_path / "validation"
+    data_dir.mkdir()
+    for index in range(8):
+        (data_dir / f"Sample{index + 1}.raw").mkdir()
+
+    output_root = tmp_path / "validation_harness"
+    spec = ValidationRunSpec(
+        name="tissue-8raw",
+        kind="extraction",
+        description="8 raw subset",
+        output_dir=output_root / "run1" / "tissue_8raw_local_minimum",
+        output_path=(
+            output_root
+            / "run1"
+            / "tissue_8raw_local_minimum"
+            / "xic_results_process_w4.xlsx"
+        ),
+        command=("uv", "run", "python", "scripts/validate.py"),
+        data_dir=data_dir,
+        expected_raw_count=8,
+        resolver_mode="local_minimum",
+        parallel_mode="process",
+        workers=4,
+    )
+
+    def failing_extraction_runner(**_kwargs) -> Path:
+        raise error
+
+    results = run_validation_specs(
+        [spec],
+        base_dir=tmp_path,
+        output_root=output_root,
+        run_id="run1",
+        extraction_runner=failing_extraction_runner,
+    )
+
+    assert results[0].status == "failed"
+    assert results[0].compare_result == "not_run"
+    assert expected_message in results[0].message
+    summary = (output_root / "run1" / "validation_summary.csv").read_text(
+        encoding="utf-8-sig"
+    )
+    assert expected_message in summary
 
 
 def test_run_validation_specs_runs_manual_sweep_with_script_arguments(

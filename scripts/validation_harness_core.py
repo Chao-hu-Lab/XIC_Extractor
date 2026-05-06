@@ -7,6 +7,8 @@ from pathlib import Path
 
 from scripts.benchmark_parallel import _run_extraction_once
 from scripts.compare_workbooks import WorkbookCompareResult, compare_workbooks
+from xic_extractor.config import ConfigError
+from xic_extractor.raw_reader import RawReaderError
 
 DEFAULT_MANUAL_DIR = Path(r"C:\Xcalibur\data\20251219_need process data\XIC test")
 DEFAULT_MANUAL_WORKBOOK = DEFAULT_MANUAL_DIR / "20260112 UPLC splitting_forXIC.xlsx"
@@ -254,7 +256,7 @@ def _run_one_spec(
                 )
         else:
             raise ValueError(f"Unknown validation kind: {spec.kind}")
-    except (OSError, ValueError) as exc:
+    except (ConfigError, OSError, RawReaderError, ValueError) as exc:
         return ValidationRunResult(
             suite=spec.name,
             kind=spec.kind,
