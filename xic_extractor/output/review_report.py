@@ -8,10 +8,14 @@ from xic_extractor.output.review_report_components import (
     _batch_overview,
     _detection_rate_chart,
     _flag_burden_chart,
-    _heatmap,
     _ordered_values,
-    _review_queue,
     _targets_by_detection,
+)
+from xic_extractor.output.review_report_focus import (
+    _FOCUS_CSS,
+    _compact_heatmap,
+    _review_focus,
+    _review_queue_details,
 )
 from xic_extractor.output.review_report_trend import _istd_rt_trend
 
@@ -49,17 +53,18 @@ def write_review_report(
                 "<head>",
                 '<meta charset="utf-8">',
                 "<title>XIC Review Report</title>",
-                f"<style>{_CSS}</style>",
+                f"<style>{_CSS}\n{_FOCUS_CSS}</style>",
                 "</head>",
                 "<body>",
                 "<main>",
                 "<h1>XIC Review Report</h1>",
                 _batch_overview(metrics),
+                _review_focus(review_rows),
+                _compact_heatmap(metrics, samples, targets),
                 _detection_rate_chart(metrics, targets),
                 _flag_burden_chart(metrics, targets),
                 _istd_rt_trend(rows, injection_order),
-                _heatmap(metrics, samples, targets),
-                _review_queue(review_rows),
+                _review_queue_details(review_rows),
                 "</main>",
                 "</body>",
                 "</html>",

@@ -57,13 +57,13 @@ def _istd_rt_trend(
         median_rt = statistics.median(point[1] for point in target_points)
         band_edges.extend([median_rt - 0.5, median_rt + 0.5])
 
-    width = 720
-    height = 280
-    left = 58
-    right = 24
-    top = 20
-    bottom = 42
-    plot_width = width - left - right
+    width = 1100
+    height = 560
+    left = 78
+    legend_left = 872
+    top = 58
+    bottom = 70
+    plot_width = legend_left - left - 32
     plot_height = height - top - bottom
     min_x = min(x_values)
     max_x = max(x_values)
@@ -78,6 +78,29 @@ def _istd_rt_trend(
 
     def y_pos(rt: float) -> float:
         return top + ((max_y - rt) / (max_y - min_y)) * plot_height
+
+    x_ticks = _integer_ticks(min_x, max_x, count=7)
+    y_ticks = _float_ticks(min_y, max_y, count=6)
+    horizontal_grid = [
+        f'<line class="trend-grid" x1="{left}" y1="{y_pos(tick):.1f}" '
+        f'x2="{left + plot_width}" y2="{y_pos(tick):.1f}"></line>'
+        for tick in y_ticks
+    ]
+    vertical_grid = [
+        f'<line class="trend-grid" x1="{x_pos(tick):.1f}" y1="{top}" '
+        f'x2="{x_pos(tick):.1f}" y2="{top + plot_height}"></line>'
+        for tick in x_ticks
+    ]
+    x_tick_labels = [
+        f'<text class="trend-tick trend-x-tick" x="{x_pos(tick):.1f}" '
+        f'y="{top + plot_height + 20}">{tick}</text>'
+        for tick in x_ticks
+    ]
+    y_tick_labels = [
+        f'<text class="trend-tick trend-y-tick" x="{left - 8}" '
+        f'y="{y_pos(tick) + 4:.1f}">{tick:.1f}</text>'
+        for tick in y_ticks
+    ]
 
     qc_orders = sorted(
         {order for order, _, _, sample in points if "QC" in sample.upper()}
@@ -135,52 +158,79 @@ def _istd_rt_trend(
             f"<title>{title}</title></circle>"
         )
 
-    legend = _trend_legend(target_colors)
+    legend = _trend_legend(target_colors, x=legend_left + 16, y=58)
     return (
         "<section><h2>ISTD RT Injection Trend</h2>"
         '<p class="dashboard-note">'
         "Acceptable bands show each ISTD median +/- 0.5 min; dashed lines mark QC "
         "injections.</p>"
-        f"{legend}"
-        f'<svg class="trend-svg" viewBox="0 0 {width} {height}" '
+        f'<svg class="trend-svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" '
         'role="img" aria-label="ISTD RT by injection order">'
-        f'<line class="trend-grid" x1="{left}" y1="{top}" x2="{left + plot_width}" '
-        f'y2="{top}"></line>'
-        f'<line class="trend-grid" x1="{left}" y1="{top + plot_height}" '
-        f'x2="{left + plot_width}" y2="{top + plot_height}"></line>'
+        f'<text class="trend-title" x="{left + plot_width / 2:.1f}" y="28">'
+        "Internal Standard (ISTD) Retention Time Trend</text>"
+        f"{''.join(horizontal_grid)}"
+        f"{''.join(vertical_grid)}"
         f'<line class="trend-axis" x1="{left}" y1="{top}" x2="{left}" '
         f'y2="{top + plot_height}"></line>'
         f'<line class="trend-axis" x1="{left}" y1="{top + plot_height}" '
         f'x2="{left + plot_width}" y2="{top + plot_height}"></line>'
+        f"{''.join(x_tick_labels)}"
+        f"{''.join(y_tick_labels)}"
         f"{''.join(bands)}"
         f"{''.join(qc_markers)}"
         f"{''.join(lines)}"
         f"{''.join(circles)}"
-        f'<text class="trend-label" x="{left}" y="{height - 12}">'
-        f"Injection {min_x}</text>"
-        f'<text class="trend-label" x="{left + plot_width - 70}" '
-        f'y="{height - 12}">Injection {max_x}</text>'
-        f'<text class="trend-label" x="4" y="{top + 4}">{max_y:.4f} min</text>'
-        f'<text class="trend-label" x="4" y="{top + plot_height}">'
-        f"{min_y:.4f} min</text>"
+        f'<text class="trend-axis-label trend-x-label" '
+        f'x="{left + plot_width / 2:.1f}" y="{height - 20}">Injection Order</text>'
+        f'<text class="trend-axis-label trend-y-label" '
+        f'transform="translate(18 {top + plot_height / 2:.1f}) rotate(-90)">'
+        "Retention Time (min)</text>"
+        f"{legend}"
         "</svg></section>"
     )
 
 
-def _trend_legend(target_colors: dict[str, str]) -> str:
-    target_chips = "".join(
-        '<span class="chip">'
-        f'<span class="box" style="background:{color}"></span>'
-        f"{escape(target)}</span>"
-        for target, color in target_colors.items()
-    )
-    return (
-        '<div class="legend">'
-        '<span class="chip"><span class="box trend-band"></span>'
-        "Acceptable Range (Median +/- 0.5 min)</span>"
-        '<span class="chip"><span class="box"></span>QC Injection</span>'
-        f"{target_chips}</div>"
-    )
+def _trend_legend(target_colors: dict[str, str], *, x: int, y: int) -> str:
+    rows = [
+        (
+            f'<line class="trend-legend-qc" x1="{x}" y1="{y + 6}" '
+            f'x2="{x + 26}" y2="{y + 6}"></line>'
+            f'<text x="{x + 34}" y="{y + 10}">QC Injection</text>'
+        ),
+        (
+            f'<rect class="trend-legend-band" x="{x}" y="{y + 24}" '
+            'width="26" height="12"></rect>'
+            f'<text x="{x + 34}" y="{y + 34}">Acceptable Range</text>'
+            f'<text x="{x + 34}" y="{y + 48}">(Median +/- 0.5 min)</text>'
+        ),
+    ]
+    target_y = y + 74
+    for index, (target, color) in enumerate(target_colors.items()):
+        row_y = target_y + index * 22
+        rows.append(
+            f'<line class="trend-legend-line" stroke="{color}" '
+            f'x1="{x}" y1="{row_y}" x2="{x + 26}" y2="{row_y}"></line>'
+            f'<text x="{x + 34}" y="{row_y + 4}">{escape(target)}</text>'
+        )
+    return f'<g class="trend-svg-legend">{"".join(rows)}</g>'
+
+
+def _integer_ticks(min_value: int, max_value: int, *, count: int) -> list[int]:
+    if count <= 1 or min_value == max_value:
+        return [min_value]
+    span = max_value - min_value
+    ticks = [round(min_value + span * index / (count - 1)) for index in range(count)]
+    ticks[0] = min_value
+    ticks[-1] = max_value
+    return _ordered_unique(ticks)
+
+
+def _float_ticks(min_value: float, max_value: float, *, count: int) -> list[float]:
+    if count <= 1 or min_value == max_value:
+        return [min_value]
+    span = max_value - min_value
+    return [min_value + span * index / (count - 1) for index in range(count)]
 
 def _ordered_unique(values: Iterable[T]) -> list[T]:
     ordered: list[T] = []
