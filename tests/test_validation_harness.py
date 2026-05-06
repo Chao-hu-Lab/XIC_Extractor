@@ -186,6 +186,42 @@ def test_run_validation_specs_records_compare_errors_without_traceback(
     assert "baseline workbook is missing" in results[0].message
 
 
+def test_run_validation_specs_records_baseline_path_errors_without_traceback(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "validation"
+    data_dir.mkdir()
+    for index in range(8):
+        (data_dir / f"Sample{index + 1}.raw").mkdir()
+
+    spec = ValidationRunSpec(
+        name="tissue-8raw",
+        kind="extraction",
+        description="8 raw subset",
+        output_dir=tmp_path / "outside",
+        output_path=tmp_path / "outside" / "xic_results_process_w4.xlsx",
+        command=("uv", "run", "python", "scripts/validate.py"),
+        data_dir=data_dir,
+        expected_raw_count=8,
+        resolver_mode="local_minimum",
+        parallel_mode="process",
+        workers=4,
+    )
+
+    results = run_validation_specs(
+        [spec],
+        base_dir=tmp_path,
+        output_root=tmp_path / "validation_harness",
+        run_id="run1",
+        baseline_root=tmp_path / "baseline",
+        extraction_runner=lambda **_kwargs: spec.output_path,
+    )
+
+    assert results[0].status == "failed"
+    assert results[0].compare_result == "fail"
+    assert "outside" in results[0].message
+
+
 def test_run_validation_specs_runs_manual_sweep_with_script_arguments(
     tmp_path: Path,
 ) -> None:

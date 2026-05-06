@@ -272,7 +272,7 @@ def _run_one_spec(
             baseline_root=baseline_root,
             comparer=comparer,
         )
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         return ValidationRunResult(
             suite=spec.name,
             kind=spec.kind,
