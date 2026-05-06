@@ -43,6 +43,17 @@ def test_backends_delegate_output_dispatch() -> None:
         assert "keep_intermediate_csv" not in source
 
 
+def test_pipeline_owns_raw_path_resolution() -> None:
+    extraction_dir = ROOT / "xic_extractor" / "extraction"
+
+    pipeline_source = (extraction_dir / "pipeline.py").read_text(encoding="utf-8")
+    assert 'glob("*.raw")' in pipeline_source
+
+    for module_name in ("serial_backend.py", "process_backend.py"):
+        source = (extraction_dir / module_name).read_text(encoding="utf-8")
+        assert 'glob("*.raw")' not in source
+
+
 def test_extractor_delegates_pipeline_flow() -> None:
     assert importlib.util.find_spec("xic_extractor.extraction.pipeline")
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gc
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from xic_extractor.config import ExtractionConfig, Target
@@ -24,6 +25,7 @@ def run_serial(
     config: ExtractionConfig,
     targets: list[Target],
     *,
+    raw_paths: list[Path],
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
     injection_order: dict[str, int] | None = None,
@@ -31,7 +33,6 @@ def run_serial(
 ) -> RunOutput:
     from xic_extractor import extractor
 
-    raw_paths = sorted(config.data_dir.glob("*.raw"))
     resolved_injection_order = resolve_injection_order(
         config, raw_paths, injection_order
     )

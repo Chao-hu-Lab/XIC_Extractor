@@ -22,6 +22,7 @@ def run_process(
     config: ExtractionConfig,
     targets: list[Target],
     *,
+    raw_paths: list[Path],
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
     injection_order: dict[str, int] | None = None,
@@ -30,7 +31,6 @@ def run_process(
     from xic_extractor import extractor
     from xic_extractor.extraction.jobs import ScoringInputs
 
-    raw_paths = sorted(config.data_dir.glob("*.raw"))
     resolved_injection_order = resolve_injection_order(
         config, raw_paths, injection_order
     )

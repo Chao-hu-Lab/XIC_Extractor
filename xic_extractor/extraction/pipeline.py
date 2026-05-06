@@ -60,12 +60,15 @@ def run_pipeline(
     if reader_errors:
         raise RawReaderError(" ".join(reader_errors))
 
+    raw_paths = sorted(config.data_dir.glob("*.raw"))
+
     if config.parallel_mode == "process":
         from xic_extractor.extraction.process_backend import run_process
 
         output = run_process(
             config,
             targets,
+            raw_paths=raw_paths,
             progress_callback=progress_callback,
             should_stop=should_stop,
             injection_order=injection_order,
@@ -77,6 +80,7 @@ def run_pipeline(
         output = run_serial(
             config,
             targets,
+            raw_paths=raw_paths,
             progress_callback=progress_callback,
             should_stop=should_stop,
             injection_order=injection_order,

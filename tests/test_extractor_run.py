@@ -30,20 +30,23 @@ def test_run_uses_serial_backend_by_default(
     from xic_extractor.extraction import serial_backend
 
     config = _config(tmp_path, keep_intermediate_csv=False)
+    (config.data_dir / "B.raw").write_text("", encoding="utf-8")
+    (config.data_dir / "A.raw").write_text("", encoding="utf-8")
     targets = [_target("Analyte")]
     returned = RunOutput(file_results=[], diagnostics=[])
-    calls: list[tuple[ExtractionConfig, list[Target]]] = []
+    calls: list[tuple[ExtractionConfig, list[Target], list[str]]] = []
 
     def _fake_run_serial(
         config_arg: ExtractionConfig,
         targets_arg: list[Target],
         *,
+        raw_paths: list[Path],
         progress_callback=None,
         should_stop=None,
         injection_order=None,
         rt_prior_library=None,
     ) -> RunOutput:
-        calls.append((config_arg, targets_arg))
+        calls.append((config_arg, targets_arg, [path.name for path in raw_paths]))
         assert progress_callback is _progress
         assert should_stop is _should_stop
         assert injection_order == {"SampleA": 1}
@@ -68,7 +71,7 @@ def test_run_uses_serial_backend_by_default(
     )
 
     assert output is returned
-    assert calls == [(config, targets)]
+    assert calls == [(config, targets, ["A.raw", "B.raw"])]
 
 
 def test_serial_backend_keeps_sorted_raw_output_order(
