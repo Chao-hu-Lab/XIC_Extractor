@@ -248,6 +248,12 @@ def test_review_report_draws_istd_rt_injection_trend(tmp_path: Path) -> None:
     html = path.read_text(encoding="utf-8")
     assert "<h2>ISTD RT Injection Trend</h2>" in html
     assert "<svg" in html
+    assert "Internal Standard (ISTD) Retention Time Trend" in html
+    assert "Injection Order" in html
+    assert "Retention Time (min)" in html
+    assert 'class="trend-svg-legend"' in html
+    assert 'class="trend-axis-label trend-x-label"' in html
+    assert 'class="trend-axis-label trend-y-label"' in html
     assert "d3-A" in html
     assert "RT 8.9000 min" in html
     assert "Injection 1" in html

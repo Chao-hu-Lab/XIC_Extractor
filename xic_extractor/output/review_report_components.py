@@ -43,14 +43,25 @@ border:1px solid #d0d7de;background:#fff
 .target-bar.flag-bar{fill:#cf222e}
 .target-bar-label{font-size:12px;fill:#24292f}
 .target-bar-value{font-size:12px;fill:#57606a}
-.trend-svg{max-width:100%;height:auto;border:1px solid #d0d7de;background:#fff}
+.trend-svg{
+width:1100px;max-width:100%;height:auto;
+border:1px solid #d0d7de;background:#fff}
 .trend-axis{stroke:#57606a;stroke-width:1}
-.trend-grid{stroke:#d8dee4;stroke-width:1}
+.trend-grid{stroke:#d8dee4;stroke-width:1;stroke-dasharray:2 2}
 .trend-band{opacity:.16}
 .trend-qc{stroke:#8c959f;stroke-width:1.5;stroke-dasharray:6 4}
 .trend-line{fill:none;stroke-width:2}
 .trend-point{stroke:#fff;stroke-width:1}
 .trend-label{fill:#57606a;font-size:12px}
+.trend-title{fill:#1f2328;font-size:18px;font-weight:700;text-anchor:middle}
+.trend-axis-label{fill:#1f2328;font-size:13px;text-anchor:middle}
+.trend-tick{fill:#57606a;font-size:11px}
+.trend-x-tick{text-anchor:middle}
+.trend-y-tick{text-anchor:end}
+.trend-svg-legend text{fill:#1f2328;font-size:12px}
+.trend-legend-line{stroke-width:2}
+.trend-legend-qc{stroke:#8c959f;stroke-width:1.5;stroke-dasharray:6 4}
+.trend-legend-band{fill:#8c959f;opacity:.22;stroke:#8c959f}
 .dashboard-note{color:#57606a;font-size:13px;margin:4px 0 14px}
 .small{color:#57606a;font-size:12px}
 """.strip()
