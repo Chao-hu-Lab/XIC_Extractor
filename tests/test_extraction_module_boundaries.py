@@ -46,14 +46,17 @@ def test_backends_delegate_output_dispatch() -> None:
 def test_extractor_delegates_pipeline_flow() -> None:
     assert importlib.util.find_spec("xic_extractor.extraction.pipeline")
 
-    source = (ROOT / "xic_extractor" / "extractor.py").read_text(
-        encoding="utf-8"
-    )
+    extractor_path = ROOT / "xic_extractor" / "extractor.py"
+    source = extractor_path.read_text(encoding="utf-8")
+    function_names = _function_names(extractor_path)
 
     assert "run_serial" not in source
     assert "run_process" not in source
     assert "write_outputs" not in source
     assert "preflight_raw_reader" not in source
+    assert "_resolve_injection_order" not in function_names
+    assert "_resolve_rt_prior_library" not in function_names
+    assert "_fallback_injection_order_from_mtime" not in function_names
 
 
 def test_extractor_delegates_istd_prepass() -> None:

@@ -1,16 +1,14 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 
 from xic_extractor import neutral_loss, raw_reader, signal_processing
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.scoring_factory import selected_candidate
-from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.output.messages import (
     DiagnosticIssue,
     DiagnosticRecord,
 )
-from xic_extractor.rt_prior_library import LibraryEntry, load_library
+from xic_extractor.rt_prior_library import LibraryEntry
 
 open_raw = raw_reader.open_raw
 CandidateMS2Evidence = neutral_loss.CandidateMS2Evidence
@@ -122,36 +120,3 @@ def run(
         injection_order=injection_order,
         rt_prior_library=rt_prior_library,
     )
-
-
-def _resolve_injection_order(
-    config: ExtractionConfig,
-    raw_paths: list[Path],
-    injection_order: dict[str, int] | None,
-) -> dict[str, int] | None:
-    if injection_order is not None:
-        return injection_order
-    if config.injection_order_source is not None:
-        return read_injection_order(config.injection_order_source)
-    if not raw_paths:
-        return None
-    return _fallback_injection_order_from_mtime(raw_paths)
-
-
-def _resolve_rt_prior_library(
-    config: ExtractionConfig,
-    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None,
-) -> dict[tuple[str, str], LibraryEntry]:
-    if rt_prior_library is not None:
-        return rt_prior_library
-    if config.rt_prior_library_path is None:
-        return {}
-    return load_library(config.rt_prior_library_path, config.config_hash)
-
-
-def _fallback_injection_order_from_mtime(raw_paths: list[Path]) -> dict[str, int]:
-    ordered_paths = sorted(
-        raw_paths,
-        key=lambda path: (path.stat().st_mtime, path.name),
-    )
-    return {path.stem: index for index, path in enumerate(ordered_paths, start=1)}
