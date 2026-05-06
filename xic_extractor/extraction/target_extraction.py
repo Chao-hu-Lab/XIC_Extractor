@@ -6,9 +6,14 @@ from typing import Any
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.anchors import (
-    ANCHOR_PEAK_DELTA_WARN_MIN,
     apply_anchor_mismatch_penalty,
     paired_anchor_mismatch_diagnostic,
+)
+from xic_extractor.extraction.diagnostics import (
+    anchor_rt_mismatch_diagnostic,
+    candidate_ms2_evidence_builder,
+    check_target_nl,
+    nl_anchor_fallback_diagnostic,
 )
 from xic_extractor.extraction.drift import estimate_sample_drift
 from xic_extractor.extraction.rt_windows import (
@@ -20,7 +25,7 @@ from xic_extractor.extraction.scoring_factory import (
     selected_candidate,
     selected_shape_metrics,
 )
-from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
+from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.output.messages import (
     DiagnosticRecord,
     build_diagnostic_records,
@@ -200,9 +205,9 @@ def extract_one_target(
         raw, target, config, reference_rt=reference_rt, sample_drift=sample_drift
     )
     rt, intensity = raw.extract_xic(target.mz, rt_min, rt_max, target.ppm_tol)
-    nl_result = _check_target_nl(raw, target, config)
+    nl_result = check_target_nl(raw, target, config)
     scoring_context_builder = None
-    candidate_ms2_builder = _candidate_ms2_evidence_builder(raw, target, config)
+    candidate_ms2_builder = candidate_ms2_evidence_builder(raw, target, config)
     candidate_ms2_cache: dict[PeakCandidate, CandidateMS2Evidence] = {}
 
     def _cached_candidate_ms2_builder(
@@ -322,98 +327,24 @@ def extract_one_target(
     if paired_rejection is not None:
         diagnostics.append(paired_rejection)
 
-    if (
-        paired_rejection is None
-        and anchor_rt is not None
-        and peak_result.peak is not None
-    ):
-        delta = abs(peak_result.peak.rt - anchor_rt)
-        if delta > ANCHOR_PEAK_DELTA_WARN_MIN:
-            diagnostics.append(
-                DiagnosticRecord(
-                    sample_name=sample_name,
-                    target_label=target.label,
-                    issue="ANCHOR_RT_MISMATCH",
-                    reason=(
-                        f"Peak RT {peak_result.peak.rt:.3f} min deviates "
-                        f"{delta:.2f} min "
-                        f"from NL anchor at {anchor_rt:.3f} min "
-                        f"(threshold {ANCHOR_PEAK_DELTA_WARN_MIN} min); "
-                        f"anchor scan may be noise — verify manually"
-                    ),
-                )
-            )
-
-    if not anchor_used and target.neutral_loss_da is not None:
-        rt_center = (target.rt_min + target.rt_max) / 2.0
-        nl_note = ""
-        if result.nl is not None and result.nl.status in {"NL_FAIL", "NO_MS2"}:
-            nl_note = f"; NL check also {result.nl.status} within fallback window"
-        diagnostics.append(
-            DiagnosticRecord(
-                sample_name=sample_name,
-                target_label=target.label,
-                issue="NL_ANCHOR_FALLBACK",
-                reason=(
-                    f"No NL-confirmed MS2 within RT center "
-                    f"{rt_center:.2f} ± {config.nl_rt_anchor_search_margin_min} min; "
-                    f"fallback window [{rt_min:.2f}, {rt_max:.2f}]{nl_note}"
-                ),
-            )
-        )
-    return anchor_rt
-
-
-def _check_target_nl(
-    raw: Any,
-    target: Target,
-    config: ExtractionConfig,
-) -> NLResult | None:
-    """NL quality uses the original target window for full matched scan counts."""
-    from xic_extractor import extractor
-
-    if target.neutral_loss_da is None:
-        return None
-    if target.nl_ppm_warn is None or target.nl_ppm_max is None:
-        return None
-    return extractor.check_nl(
-        raw,
-        precursor_mz=target.mz,
-        rt_min=target.rt_min,
-        rt_max=target.rt_max,
-        neutral_loss_da=target.neutral_loss_da,
-        nl_ppm_warn=target.nl_ppm_warn,
-        nl_ppm_max=target.nl_ppm_max,
-        ms2_precursor_tol_da=config.ms2_precursor_tol_da,
-        nl_min_intensity_ratio=config.nl_min_intensity_ratio,
+    anchor_diagnostic = anchor_rt_mismatch_diagnostic(
+        sample_name,
+        target,
+        peak_result,
+        anchor_rt=anchor_rt,
+        paired_rejection=paired_rejection,
     )
-
-
-def _candidate_ms2_evidence_builder(
-    raw: Any,
-    target: Target,
-    config: ExtractionConfig,
-) -> Callable[[PeakCandidate], Any] | None:
-    from xic_extractor import extractor
-
-    if target.neutral_loss_da is None:
-        return None
-    if target.nl_ppm_warn is None or target.nl_ppm_max is None:
-        return None
-    neutral_loss_da = target.neutral_loss_da
-    nl_ppm_warn = target.nl_ppm_warn
-    nl_ppm_max = target.nl_ppm_max
-
-    def _builder(candidate: PeakCandidate) -> Any:
-        return extractor.collect_candidate_ms2_evidence(
-            raw,
-            candidate=candidate,
-            precursor_mz=target.mz,
-            neutral_loss_da=neutral_loss_da,
-            nl_ppm_warn=nl_ppm_warn,
-            nl_ppm_max=nl_ppm_max,
-            ms2_precursor_tol_da=config.ms2_precursor_tol_da,
-            nl_min_intensity_ratio=config.nl_min_intensity_ratio,
-        )
-
-    return _builder
+    if anchor_diagnostic is not None:
+        diagnostics.append(anchor_diagnostic)
+    fallback_diagnostic = nl_anchor_fallback_diagnostic(
+        sample_name,
+        target,
+        config,
+        anchor_used=anchor_used,
+        rt_min=rt_min,
+        rt_max=rt_max,
+        nl_result=result.nl,
+    )
+    if fallback_diagnostic is not None:
+        diagnostics.append(fallback_diagnostic)
+    return anchor_rt

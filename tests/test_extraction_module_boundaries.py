@@ -62,6 +62,17 @@ def test_extractor_delegates_target_extraction() -> None:
     assert "_extract_one_target" not in function_names
 
 
+def test_target_extraction_delegates_diagnostic_evidence_helpers() -> None:
+    assert importlib.util.find_spec("xic_extractor.extraction.diagnostics")
+
+    target_path = ROOT / "xic_extractor" / "extraction" / "target_extraction.py"
+    function_names = _function_names(target_path)
+
+    assert "_check_target_nl" not in function_names
+    assert "_candidate_ms2_evidence_builder" not in function_names
+    assert len(target_path.read_text(encoding="utf-8").splitlines()) <= 350
+
+
 def test_extractor_delegates_rt_anchor_and_drift_helpers() -> None:
     assert importlib.util.find_spec("xic_extractor.extraction.rt_windows")
     assert importlib.util.find_spec("xic_extractor.extraction.anchors")
