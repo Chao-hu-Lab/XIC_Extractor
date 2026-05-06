@@ -87,6 +87,22 @@ def test_build_validation_specs_includes_candidate_settings_in_commands(
     assert "--setting resolver_min_relative_height=0.03" in command
 
 
+def test_build_validation_specs_rejects_resolver_mode_setting(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="resolver_mode"):
+        build_validation_specs(
+            suite_names=("tissue-8raw",),
+            base_dir=Path("C:/repo/XIC_Extractor"),
+            output_root=tmp_path / "validation_harness",
+            run_id="candidate",
+            workers=4,
+            resolver_mode="local_minimum",
+            grid="quick",
+            settings_overrides=(("resolver_mode", "legacy_savgol"),),
+        )
+
+
 def test_run_validation_specs_compares_exact_baseline_workbook_paths(
     tmp_path: Path,
 ) -> None:
@@ -430,6 +446,53 @@ def test_cli_accepts_repeated_candidate_settings_for_extraction_suite(
     assert exit_code == 0
     assert "--setting resolver_peak_duration_max=2.0" in output
     assert "--setting resolver_min_relative_height=0.03" in output
+
+
+def test_cli_strips_candidate_setting_values(tmp_path: Path, capsys) -> None:
+    exit_code = main(
+        [
+            "--suite",
+            "tissue-8raw",
+            "--setting",
+            "resolver_peak_duration_max= 2.0 ",
+            "--output-root",
+            str(tmp_path / "validation_harness"),
+            "--run-id",
+            "candidate",
+            "--dry-run",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "--setting resolver_peak_duration_max=2.0" in output
+
+
+@pytest.mark.parametrize(
+    "setting",
+    [
+        "resolver_peak_duration_max=",
+        "resolver_peak_duration_max=   ",
+        "resolver_mode=legacy_savgol",
+    ],
+)
+def test_cli_rejects_invalid_candidate_setting(
+    tmp_path: Path, setting: str
+) -> None:
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--suite",
+                "tissue-8raw",
+                "--setting",
+                setting,
+                "--output-root",
+                str(tmp_path / "validation_harness"),
+                "--run-id",
+                "candidate",
+                "--dry-run",
+            ]
+        )
 
 
 def test_run_validation_specs_rejects_wrong_raw_count(tmp_path: Path) -> None:

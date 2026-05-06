@@ -9,6 +9,7 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from scripts.local_minimum_param_sweep import GRID_CHOICES
 from scripts.validation_harness_core import (
     DEFAULT_FULL_TISSUE_DIR,
     DEFAULT_TISSUE_VALIDATION_DIR,
@@ -19,7 +20,6 @@ from scripts.validation_harness_core import (
     command_to_powershell,
     run_validation_specs,
 )
-from scripts.local_minimum_param_sweep import GRID_CHOICES
 
 __all__ = [
     "DEFAULT_FULL_TISSUE_DIR",
@@ -136,9 +136,13 @@ def _positive_int(value: str) -> int:
 
 def _setting_override(value: str) -> tuple[str, str]:
     key, separator, setting_value = value.partition("=")
-    if not separator or not key.strip():
+    key = key.strip()
+    setting_value = setting_value.strip()
+    if not separator or not key or not setting_value:
         raise argparse.ArgumentTypeError("setting must be KEY=VALUE")
-    return key.strip(), setting_value
+    if key == "resolver_mode":
+        raise argparse.ArgumentTypeError("use --resolver-mode instead of --setting")
+    return key, setting_value
 
 
 if __name__ == "__main__":
