@@ -224,12 +224,24 @@ def _istd_rt_trend(
     def y_pos(rt: float) -> float:
         return top + ((max_y - rt) / (max_y - min_y)) * plot_height
 
+    lines = []
     circles = []
-    line_points = []
+    for target in _ordered_unique(point[2] for point in points):
+        target_points = [point for point in points if point[2] == target]
+        target_points.sort(key=lambda item: (item[0], item[3]))
+        if len(target_points) < 2:
+            continue
+        line_points = [
+            f"{x_pos(order):.1f},{y_pos(rt):.1f}" for order, rt, _, _ in target_points
+        ]
+        lines.append(
+            '<polyline class="trend-line" '
+            f'data-target="{escape(target)}" '
+            f'points="{" ".join(line_points)}"></polyline>'
+        )
     for order, rt, target, sample in points:
         x = x_pos(order)
         y = y_pos(rt)
-        line_points.append(f"{x:.1f},{y:.1f}")
         title = (
             f"{escape(target)}: Injection {order}, RT {rt:.4f} min ({escape(sample)})"
         )
@@ -241,7 +253,6 @@ def _istd_rt_trend(
     labels = ", ".join(
         escape(target) for target in _ordered_unique(p[2] for p in points)
     )
-    line_path = " ".join(line_points)
     return (
         "<section><h2>ISTD RT Injection Trend</h2>"
         '<p class="dashboard-note">'
@@ -256,7 +267,7 @@ def _istd_rt_trend(
         f'y2="{top + plot_height}"></line>'
         f'<line class="trend-axis" x1="{left}" y1="{top + plot_height}" '
         f'x2="{left + plot_width}" y2="{top + plot_height}"></line>'
-        f'<polyline class="trend-line" points="{line_path}"></polyline>'
+        f"{''.join(lines)}"
         f"{''.join(circles)}"
         f'<text class="trend-label" x="{left}" y="{height - 12}">'
         f"Injection {min_x}</text>"
