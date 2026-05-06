@@ -371,7 +371,7 @@ def test_raw_worker_rebuilds_scoring_factory_inside_worker(
         _fake_build_factory,
     )
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_raw_file_result",
+        "xic_extractor.extraction.target_extraction.extract_raw_file_result",
         _fake_extract_raw_file_result,
     )
 

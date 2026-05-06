@@ -202,7 +202,7 @@ def _run_jobs(
 
 
 def extract_raw_file_job(job: RawFileJob) -> WorkerResult:
-    from xic_extractor.extractor import _extract_raw_file_result
+    from xic_extractor.extraction.target_extraction import extract_raw_file_result
 
     try:
         scoring_context_factory = None
@@ -213,7 +213,7 @@ def extract_raw_file_job(job: RawFileJob) -> WorkerResult:
                 istd_rts_by_sample=job.scoring_inputs.istd_rts_by_sample,
                 rt_prior_library=job.scoring_inputs.rt_prior_library,
             )
-        return _extract_raw_file_result(
+        return extract_raw_file_result(
             job.raw_index,
             job.config,
             list(job.targets),

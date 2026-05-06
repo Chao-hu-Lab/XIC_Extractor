@@ -99,7 +99,7 @@ def test_per_file_result_primitive_returns_worker_payload_and_is_pickleable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from xic_extractor.extractor import _extract_raw_file_result
+    from xic_extractor.extraction.target_extraction import extract_raw_file_result
 
     config = _config(tmp_path, keep_intermediate_csv=False)
     raw_path = config.data_dir / "SampleA.raw"
@@ -111,7 +111,7 @@ def test_per_file_result_primitive_returns_worker_payload_and_is_pickleable(
         _peak_sequence([_ok_peak(8.5, 1000.0, 2000.0)]),
     )
 
-    result = _extract_raw_file_result(
+    result = extract_raw_file_result(
         7,
         config,
         targets,
@@ -134,7 +134,7 @@ def test_per_file_result_primitive_captures_file_errors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from xic_extractor.extractor import _extract_raw_file_result
+    from xic_extractor.extraction.target_extraction import extract_raw_file_result
 
     config = _config(tmp_path, keep_intermediate_csv=False)
     raw_path = config.data_dir / "Bad.raw"
@@ -145,7 +145,7 @@ def test_per_file_result_primitive_captures_file_errors(
         _open_raw_factory(errors={"Bad.raw": RuntimeError("file locked")}),
     )
 
-    result = _extract_raw_file_result(
+    result = extract_raw_file_result(
         2,
         config,
         targets,

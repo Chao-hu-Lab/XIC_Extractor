@@ -346,7 +346,7 @@ def test_prepass_excludes_flagged_istd_anchor_from_prior_map(
         return 9.05
 
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_one_target",
+        "xic_extractor.extraction.target_extraction.extract_one_target",
         _fake_extract_one_target,
     )
 

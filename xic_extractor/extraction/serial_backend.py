@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.istd_prepass import extract_istd_anchors_only
 from xic_extractor.extraction.scoring_factory import build_scoring_context_factory
+from xic_extractor.extraction.target_extraction import extract_raw_file_result
 from xic_extractor.output.messages import DiagnosticRecord
 from xic_extractor.rt_prior_library import LibraryEntry
 
@@ -63,7 +64,7 @@ def run_serial(
         if should_stop is not None and should_stop():
             break
 
-        raw_result = extractor._extract_raw_file_result(
+        raw_result = extract_raw_file_result(
             index,
             config,
             targets,

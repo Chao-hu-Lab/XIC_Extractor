@@ -51,6 +51,17 @@ def test_extractor_delegates_istd_prepass() -> None:
     assert "_extract_istd_anchors_only" not in function_names
 
 
+def test_extractor_delegates_target_extraction() -> None:
+    assert importlib.util.find_spec("xic_extractor.extraction.target_extraction")
+
+    extractor_path = ROOT / "xic_extractor" / "extractor.py"
+    function_names = _function_names(extractor_path)
+
+    assert "_extract_raw_file_result" not in function_names
+    assert "_process_file" not in function_names
+    assert "_extract_one_target" not in function_names
+
+
 def _function_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return {
