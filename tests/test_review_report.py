@@ -587,6 +587,12 @@ def test_review_report_uses_at_a_glance_focus_and_compact_heatmap(
     assert "display:inline-block" in html
     assert 'class="heat-cell flagged-detected"' in html
     assert 'class="heat-cell not-detected"' in html
+    assert "#1f9d55" in html
+    assert "#f59e0b" in html
+    assert "#cbd5e1" in html
+    assert "#d1242f" in html
+    assert "#fff8c5" not in html
+    assert "#ffebe9" not in html
     assert "<details class=\"review-details\">" in html
     assert "<summary>Review Queue details" in html
     assert "Excel workbook remains the row-level source" in html

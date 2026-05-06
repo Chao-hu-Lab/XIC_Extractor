@@ -18,11 +18,11 @@ th{background:#f6f8fa;font-weight:700}
 .metric strong{display:block;font-size:20px}
 .legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 12px}
 .chip{display:inline-flex;align-items:center;gap:6px}
-.box{display:inline-block;width:14px;height:14px;border:1px solid #8c959f}
-.clean-detected{background:#dafbe1}
-.flagged-detected{background:#fff8c5}
-.not-detected{background:#ffebe9}
-.error{background:#ffd8d3}
+.box{display:inline-block;width:14px;height:14px;border:1px solid #4b5563}
+.clean-detected{background:#1f9d55}
+.flagged-detected{background:#f59e0b}
+.not-detected{background:#cbd5e1}
+.error{background:#d1242f}
 .heatmap td{text-align:center;min-width:28px}
 .bar-table{table-layout:fixed}
 .bar-table .target-col{width:36%}

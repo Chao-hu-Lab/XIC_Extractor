@@ -25,7 +25,7 @@ gap:var(--heat-cell-gap);align-items:center;flex-wrap:nowrap;overflow:hidden
 }
 .heat-cell{
 box-sizing:border-box;width:var(--heat-cell-size);height:var(--heat-cell-size);
-border:1px solid #8c959f;display:inline-block
+border:1px solid #4b5563;display:inline-block
 }
 .review-details{margin-top:12px}
 .review-details summary{cursor:pointer;font-weight:700;margin-bottom:8px}
