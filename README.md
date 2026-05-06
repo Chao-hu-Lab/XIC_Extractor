@@ -223,6 +223,21 @@ process mode 目前是 opt-in；預設設定仍保留 serial，確保既有 work
 
 `scripts/01_extract_xic.ps1` 已不再是支援的 extraction entry point。
 
+### Real-data validation harness
+
+開發用 real-data validation 固定走三層，不把 85 個 `.raw` 當成日常預設：
+
+```powershell
+uv run python scripts\validation_harness.py --run-id method_dev --output-root output\validation_harness
+```
+
+預設會跑 `manual-2raw` 與 `tissue-8raw`，使用 `local_minimum`、
+`parallel_mode=process`、`parallel_workers=4`，並寫出
+`validation_summary.csv`。完整 85-raw gate 必須顯式加
+`--suite tissue-85raw --confirm-full-run`。
+
+詳細命令、baseline compare 路徑與各層用途見 `docs/validation-harness.md`。
+
 ---
 
 ## 常見錯誤

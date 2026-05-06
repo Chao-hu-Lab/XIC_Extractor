@@ -169,6 +169,48 @@ def test_run_extraction_once_applies_data_dir_override_before_validation(
     assert workbook_path == tmp_path / "out" / "xic_results_serial_w1.xlsx"
 
 
+def test_run_extraction_once_applies_additional_settings_overrides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_dir = tmp_path / "config"
+    validation_dir = tmp_path / "validation"
+    dll_dir = tmp_path / "dll"
+    validation_dir.mkdir()
+    dll_dir.mkdir()
+    _write_benchmark_settings(
+        config_dir,
+        data_dir=tmp_path / "placeholder_missing",
+        dll_dir=dll_dir,
+    )
+    _write_benchmark_targets(config_dir)
+    captured: dict[str, object] = {}
+
+    def fake_run(config, targets):
+        captured["config"] = config
+        captured["targets"] = targets
+        return object()
+
+    monkeypatch.setattr("scripts.benchmark_parallel.extractor.run", fake_run)
+    monkeypatch.setattr(
+        "scripts.benchmark_parallel.write_excel_from_run_output",
+        lambda _config, _targets, _output, *, output_path: output_path,
+    )
+
+    _run_extraction_once(
+        base_dir=tmp_path,
+        data_dir=validation_dir,
+        mode="process",
+        workers=4,
+        output_dir=tmp_path / "out",
+        settings_overrides={"resolver_mode": "local_minimum"},
+    )
+
+    assert captured["config"].data_dir == validation_dir
+    assert captured["config"].resolver_mode == "local_minimum"
+    assert captured["config"].parallel_mode == "process"
+    assert captured["config"].parallel_workers == 4
+
+
 def test_benchmark_parallel_script_help_runs_from_documented_path() -> None:
     repo_root = Path(__file__).resolve().parents[1]
 
