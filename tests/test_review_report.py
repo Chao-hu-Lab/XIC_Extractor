@@ -52,6 +52,7 @@ def test_write_review_report_contains_batch_counts_target_health_and_legend(
     assert "Flagged %" in html
     assert "clean-detected" in html
     assert "not-detected" in html
+    assert "Review Focus" in html
     assert "Review Queue" in html
 
 
@@ -191,6 +192,9 @@ def test_review_report_contains_visual_detection_and_flag_charts(
     assert '<svg class="target-bar-chart detection-chart" width="720"' in html
     assert '<svg class="target-bar-chart flag-chart" width="720"' in html
     assert ".bar-table{table-layout:fixed}" in html
+    assert '<details class="chart-details">' in html
+    assert "<summary>Detection rate table</summary>" in html
+    assert "<summary>Flag burden table</summary>" in html
     assert (
         '<colgroup><col class="target-col"><col class="percent-col">'
         '<col class="bar-col"></colgroup>'
@@ -487,4 +491,111 @@ def test_review_report_heatmap_sorts_low_detection_targets_first(
     )
 
     html = path.read_text(encoding="utf-8")
-    assert html.index("<th>Low</th>") < html.index("<th>High</th>")
+    assert html.index('class="heatmap-target">Low</span>') < html.index(
+        'class="heatmap-target">High</span>'
+    )
+
+
+def test_review_report_uses_at_a_glance_focus_and_compact_heatmap(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "A",
+            "RT": "1",
+            "Area": "1",
+            "NL": "OK",
+            "Confidence": "HIGH",
+            "Role": "Analyte",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "A",
+            "RT": "ND",
+            "Area": "ND",
+            "NL": "ND",
+            "Confidence": "LOW",
+            "Role": "Analyte",
+        },
+        {
+            "SampleName": "S1",
+            "Target": "B",
+            "RT": "2",
+            "Area": "1",
+            "NL": "NL_FAIL",
+            "Confidence": "LOW",
+            "Role": "Analyte",
+        },
+        {
+            "SampleName": "S1",
+            "Target": "d3-A",
+            "RT": "1.1",
+            "Area": "10",
+            "NL": "OK",
+            "Confidence": "HIGH",
+            "Role": "ISTD",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "d3-A",
+            "RT": "1.2",
+            "Area": "11",
+            "NL": "OK",
+            "Confidence": "HIGH",
+            "Role": "ISTD",
+        },
+    ]
+    review_rows = [
+        {
+            "Priority": "1",
+            "Sample": "S2",
+            "Target": "A",
+            "Status": "Review",
+            "Why": "ND",
+            "Action": "Open workbook",
+            "Issue Count": "1",
+            "Evidence": "missing peak",
+        },
+        {
+            "Priority": "2",
+            "Sample": "S1",
+            "Target": "B",
+            "Status": "Review",
+            "Why": "NL",
+            "Action": "Open workbook",
+            "Issue Count": "1",
+            "Evidence": "NL fail",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=review_rows,
+        count_no_ms2_as_detected=False,
+        injection_order={"S1": 1, "S2": 2},
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert "<h2>Review Focus</h2>" in html
+    assert "Top Targets" in html
+    assert "Top Samples" in html
+    assert 'class="focus-grid"' in html
+    assert 'class="compact-heatmap"' in html
+    assert "display:inline-block" in html
+    assert 'class="heat-cell flagged-detected"' in html
+    assert 'class="heat-cell not-detected"' in html
+    assert "<details class=\"review-details\">" in html
+    assert "<summary>Review Queue details" in html
+    assert "Excel workbook remains the row-level source" in html
+    assert html.index("<h2>Review Focus</h2>") < html.index(
+        "<h2>Detection / Flag Map</h2>"
+    )
+    assert html.index("<h2>Detection / Flag Map</h2>") < html.index(
+        "<h2>Detection Rate By Target</h2>"
+    )
+    assert html.index("<h2>Detection Rate By Target</h2>") < html.index(
+        "<h2>ISTD RT Injection Trend</h2>"
+    )

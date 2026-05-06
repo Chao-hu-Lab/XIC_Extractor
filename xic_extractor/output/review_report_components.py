@@ -30,6 +30,8 @@ th{background:#f6f8fa;font-weight:700}
 .bar-table .percent-col{width:110px}
 .bar-table .bar-col{width:auto}
 .bar-table td:nth-child(2){width:90px;font-weight:700}
+.chart-details{margin:8px 0 18px}
+.chart-details summary{cursor:pointer;font-weight:700;color:#57606a}
 .bar-track{height:14px;background:#eaeef2;border:1px solid #d0d7de}
 .bar-fill{height:100%}
 .bar-fill.detection{background:#2da44e}
@@ -109,16 +111,19 @@ def _detection_rate_chart(metrics: ReviewMetrics, targets: list[str]) -> str:
         chart_class="detection-chart",
         bar_class="detection-bar",
     )
-    return (
-        "<section><h2>Detection Rate By Target</h2>"
-        '<p class="dashboard-note">Lowest detection rates are listed first.</p>'
-        f"{chart_html}"
+    table = (
         '<table class="bar-table">'
         '<colgroup><col class="target-col"><col class="percent-col">'
         '<col class="bar-col"></colgroup>'
         "<thead><tr><th>Target</th><th>Detected %</th>"
         "<th>Rate</th></tr></thead>"
-        f"<tbody>{rows}</tbody></table></section>"
+        f"<tbody>{rows}</tbody></table>"
+    )
+    return (
+        "<section><h2>Detection Rate By Target</h2>"
+        '<p class="dashboard-note">Lowest detection rates are listed first.</p>'
+        f"{chart_html}"
+        f'{_chart_details("Detection rate table", table)}</section>'
     )
 
 
@@ -153,70 +158,19 @@ def _flag_burden_chart(metrics: ReviewMetrics, targets: list[str]) -> str:
         chart_class="flag-chart",
         bar_class="flag-bar",
     )
-    return (
-        "<section><h2>Flag Burden By Target</h2>"
-        '<p class="dashboard-note">Only targets with review rows are included.</p>'
-        f"{chart_html}"
+    table = (
         '<table class="bar-table">'
         '<colgroup><col class="target-col"><col class="count-col">'
         '<col class="percent-col"><col class="bar-col"></colgroup>'
         "<thead><tr><th>Target</th><th>Flagged Rows</th>"
         "<th>Flagged %</th><th>Burden</th></tr></thead>"
-        f"<tbody>{rows}</tbody></table></section>"
+        f"<tbody>{rows}</tbody></table>"
     )
-
-
-def _heatmap(metrics: ReviewMetrics, samples: list[str], targets: list[str]) -> str:
-    legend = (
-        '<div class="legend">'
-        '<span class="chip"><span class="box clean-detected"></span>'
-        "clean-detected</span>"
-        '<span class="chip"><span class="box flagged-detected"></span>'
-        "flagged-detected</span>"
-        '<span class="chip"><span class="box not-detected"></span>'
-        "not-detected</span>"
-        '<span class="chip"><span class="box error"></span>error</span>'
-        "</div>"
-    )
-    header = "".join(f"<th>{escape(sample)}</th>" for sample in samples)
-    body_rows = []
-    for target in targets:
-        cells = []
-        for sample in samples:
-            state = metrics.heatmap.get((target, sample), "not-detected")
-            cells.append(
-                f'<td class="{state}" title="{state}">{_state_label(state)}</td>'
-            )
-        body_rows.append(f"<tr><th>{escape(target)}</th>{''.join(cells)}</tr>")
-    body = "".join(body_rows) or '<tr><td colspan="2">None</td></tr>'
     return (
-        "<section><h2>Detection / Flag Heatmap</h2>"
-        f'{legend}<table class="heatmap"><thead><tr><th>Target</th>{header}</tr>'
-        f"</thead><tbody>{body}</tbody></table></section>"
-    )
-
-
-def _review_queue(review_rows: list[dict[str, str]]) -> str:
-    headers = [
-        "Priority",
-        "Sample",
-        "Target",
-        "Status",
-        "Why",
-        "Action",
-        "Issue Count",
-        "Evidence",
-    ]
-    body = []
-    for row in review_rows:
-        cells = "".join(f"<td>{escape(row.get(header, ''))}</td>" for header in headers)
-        body.append(f"<tr>{cells}</tr>")
-    rows = "".join(body) or f'<tr><td colspan="{len(headers)}">None</td></tr>'
-    head = "".join(f"<th>{escape(header)}</th>" for header in headers)
-    return (
-        "<section><h2>Review Queue</h2>"
-        f"<table><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table>"
-        "</section>"
+        "<section><h2>Flag Burden By Target</h2>"
+        '<p class="dashboard-note">Only targets with review rows are included.</p>'
+        f"{chart_html}"
+        f'{_chart_details("Flag burden table", table)}</section>'
     )
 
 
@@ -230,6 +184,15 @@ def _ordered_values(rows: list[dict[str, str]], key: str) -> list[str]:
         seen.add(value)
         values.append(value)
     return values
+
+
+def _chart_details(summary: str, table: str) -> str:
+    return (
+        '<details class="chart-details">'
+        f"<summary>{escape(summary)}</summary>"
+        f"{table}"
+        "</details>"
+    )
 
 
 
@@ -248,13 +211,3 @@ def _percent_value(text: str) -> int:
         return int(text.rstrip("%"))
     except ValueError:
         return 0
-
-
-
-def _state_label(state: str) -> str:
-    return {
-        "clean-detected": "OK",
-        "flagged-detected": "Flag",
-        "not-detected": "ND",
-        "error": "Error",
-    }.get(state, "")
