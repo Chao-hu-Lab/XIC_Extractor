@@ -9,7 +9,7 @@ from xic_extractor.output.messages import DiagnosticRecord
 from xic_extractor.rt_prior_library import LibraryEntry
 
 if TYPE_CHECKING:
-    from xic_extractor.execution import ScoringInputs
+    from xic_extractor.extraction.jobs import ScoringInputs
     from xic_extractor.extractor import RawFileExtractionResult, RunOutput
 
 
@@ -23,7 +23,7 @@ def run_process(
     rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
 ) -> RunOutput:
     from xic_extractor import extractor
-    from xic_extractor.execution import ScoringInputs
+    from xic_extractor.extraction.jobs import ScoringInputs
 
     raw_paths = sorted(config.data_dir.glob("*.raw"))
     resolved_injection_order = extractor._resolve_injection_order(
@@ -77,7 +77,7 @@ def collect_raw_file_results_process(
     should_stop: Callable[[], bool] | None = None,
     runner: Callable[..., list[Any]] | None = None,
 ) -> list[RawFileExtractionResult]:
-    from xic_extractor.execution import (
+    from xic_extractor.extraction.jobs import (
         RawFileJob,
         collect_ordered_results,
         run_raw_file_jobs,
@@ -114,7 +114,7 @@ def collect_istd_prepass_process(
     should_stop: Callable[[], bool] | None = None,
     runner: Callable[..., list[Any]] | None = None,
 ) -> dict[str, dict[str, float]]:
-    from xic_extractor.execution import (
+    from xic_extractor.extraction.jobs import (
         IstdPrepassResult,
         ParallelExecutionError,
         RawFileJob,

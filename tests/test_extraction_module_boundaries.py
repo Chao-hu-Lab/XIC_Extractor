@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_extractor_delegates_backend_orchestration() -> None:
     assert importlib.util.find_spec("xic_extractor.extraction.serial_backend")
     assert importlib.util.find_spec("xic_extractor.extraction.process_backend")
+    assert importlib.util.find_spec("xic_extractor.extraction.jobs")
 
     extractor_path = ROOT / "xic_extractor" / "extractor.py"
     function_names = _function_names(extractor_path)
@@ -17,6 +18,19 @@ def test_extractor_delegates_backend_orchestration() -> None:
     assert "_collect_raw_file_results_process" not in function_names
     assert "_collect_istd_prepass_process" not in function_names
     assert len(extractor_path.read_text(encoding="utf-8").splitlines()) <= 850
+
+
+def test_process_jobs_live_under_extraction_package() -> None:
+    execution_path = ROOT / "xic_extractor" / "execution.py"
+    process_backend_path = (
+        ROOT / "xic_extractor" / "extraction" / "process_backend.py"
+    )
+
+    assert _function_names(execution_path) == set()
+    assert len(execution_path.read_text(encoding="utf-8").splitlines()) <= 60
+    assert "xic_extractor.execution" not in process_backend_path.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_backends_delegate_output_dispatch() -> None:

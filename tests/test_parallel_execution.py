@@ -367,7 +367,7 @@ def test_raw_worker_rebuilds_scoring_factory_inside_worker(
         )
 
     monkeypatch.setattr(
-        "xic_extractor.execution.build_scoring_context_factory",
+        "xic_extractor.extraction.jobs.build_scoring_context_factory",
         _fake_build_factory,
     )
     monkeypatch.setattr(
