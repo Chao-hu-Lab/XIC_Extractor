@@ -5,12 +5,22 @@ from pathlib import Path
 from typing import Any
 
 from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.extraction.anchors import (
+    ANCHOR_PEAK_DELTA_WARN_MIN,
+    apply_anchor_mismatch_penalty,
+    paired_anchor_mismatch_diagnostic,
+)
+from xic_extractor.extraction.drift import estimate_sample_drift
+from xic_extractor.extraction.rt_windows import (
+    get_rt_window,
+    recover_istd_peak_with_wider_anchor_window,
+)
 from xic_extractor.extraction.scoring_factory import (
     paired_istd_fwhm,
     selected_candidate,
     selected_shape_metrics,
 )
-from xic_extractor.neutral_loss import CandidateMS2Evidence
+from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.output.messages import (
     DiagnosticRecord,
     build_diagnostic_records,
@@ -103,7 +113,7 @@ def process_file(
             else:
                 istd_anchor_rts = dict(precomputed_istd_anchor_rts)
 
-            sample_drift = extractor._estimate_sample_drift(targets, istd_anchor_rts)
+            sample_drift = estimate_sample_drift(targets, istd_anchor_rts)
 
             for target in targets:
                 if target.is_istd:
@@ -186,15 +196,13 @@ def extract_one_target(
     """處理單一 target 並將結果寫入 results/diagnostics。"""
     from xic_extractor import extractor
 
-    rt_min, rt_max, anchor_used, anchor_rt = extractor._get_rt_window(
+    rt_min, rt_max, anchor_used, anchor_rt = get_rt_window(
         raw, target, config, reference_rt=reference_rt, sample_drift=sample_drift
     )
     rt, intensity = raw.extract_xic(target.mz, rt_min, rt_max, target.ppm_tol)
-    nl_result = extractor._check_target_nl(raw, target, config)
+    nl_result = _check_target_nl(raw, target, config)
     scoring_context_builder = None
-    candidate_ms2_builder = extractor._candidate_ms2_evidence_builder(
-        raw, target, config
-    )
+    candidate_ms2_builder = _candidate_ms2_evidence_builder(raw, target, config)
     candidate_ms2_cache: dict[PeakCandidate, CandidateMS2Evidence] = {}
 
     def _cached_candidate_ms2_builder(
@@ -244,7 +252,7 @@ def extract_one_target(
         and anchor_used
         and anchor_rt is not None
     ):
-        recovered_peak_result = extractor._recover_istd_peak_with_wider_anchor_window(
+        recovered_peak_result = recover_istd_peak_with_wider_anchor_window(
             raw,
             config,
             target,
@@ -256,10 +264,11 @@ def extract_one_target(
             istd_confidence_note=istd_confidence_note,
             istd_rt_in_this_sample=istd_rt_in_this_sample,
             paired_istd_fwhm=paired_istd_fwhm,
+            peak_finder=extractor.find_peak_and_area,
         )
         if recovered_peak_result is not None:
             peak_result = recovered_peak_result
-    paired_rejection = extractor._paired_anchor_mismatch_diagnostic(
+    paired_rejection = paired_anchor_mismatch_diagnostic(
         sample_name,
         target,
         peak_result,
@@ -268,7 +277,7 @@ def extract_one_target(
         strict_preferred_rt=strict_preferred_rt,
     )
     if paired_rejection is not None:
-        peak_result = extractor._apply_anchor_mismatch_penalty(
+        peak_result = apply_anchor_mismatch_penalty(
             peak_result,
             paired_rejection.reason,
         )
@@ -319,7 +328,7 @@ def extract_one_target(
         and peak_result.peak is not None
     ):
         delta = abs(peak_result.peak.rt - anchor_rt)
-        if delta > extractor._ANCHOR_PEAK_DELTA_WARN_MIN:
+        if delta > ANCHOR_PEAK_DELTA_WARN_MIN:
             diagnostics.append(
                 DiagnosticRecord(
                     sample_name=sample_name,
@@ -329,7 +338,7 @@ def extract_one_target(
                         f"Peak RT {peak_result.peak.rt:.3f} min deviates "
                         f"{delta:.2f} min "
                         f"from NL anchor at {anchor_rt:.3f} min "
-                        f"(threshold {extractor._ANCHOR_PEAK_DELTA_WARN_MIN} min); "
+                        f"(threshold {ANCHOR_PEAK_DELTA_WARN_MIN} min); "
                         f"anchor scan may be noise — verify manually"
                     ),
                 )
@@ -353,3 +362,58 @@ def extract_one_target(
             )
         )
     return anchor_rt
+
+
+def _check_target_nl(
+    raw: Any,
+    target: Target,
+    config: ExtractionConfig,
+) -> NLResult | None:
+    """NL quality uses the original target window for full matched scan counts."""
+    from xic_extractor import extractor
+
+    if target.neutral_loss_da is None:
+        return None
+    if target.nl_ppm_warn is None or target.nl_ppm_max is None:
+        return None
+    return extractor.check_nl(
+        raw,
+        precursor_mz=target.mz,
+        rt_min=target.rt_min,
+        rt_max=target.rt_max,
+        neutral_loss_da=target.neutral_loss_da,
+        nl_ppm_warn=target.nl_ppm_warn,
+        nl_ppm_max=target.nl_ppm_max,
+        ms2_precursor_tol_da=config.ms2_precursor_tol_da,
+        nl_min_intensity_ratio=config.nl_min_intensity_ratio,
+    )
+
+
+def _candidate_ms2_evidence_builder(
+    raw: Any,
+    target: Target,
+    config: ExtractionConfig,
+) -> Callable[[PeakCandidate], Any] | None:
+    from xic_extractor import extractor
+
+    if target.neutral_loss_da is None:
+        return None
+    if target.nl_ppm_warn is None or target.nl_ppm_max is None:
+        return None
+    neutral_loss_da = target.neutral_loss_da
+    nl_ppm_warn = target.nl_ppm_warn
+    nl_ppm_max = target.nl_ppm_max
+
+    def _builder(candidate: PeakCandidate) -> Any:
+        return extractor.collect_candidate_ms2_evidence(
+            raw,
+            candidate=candidate,
+            precursor_mz=target.mz,
+            neutral_loss_da=neutral_loss_da,
+            nl_ppm_warn=nl_ppm_warn,
+            nl_ppm_max=nl_ppm_max,
+            ms2_precursor_tol_da=config.ms2_precursor_tol_da,
+            nl_min_intensity_ratio=config.nl_min_intensity_ratio,
+        )
+
+    return _builder

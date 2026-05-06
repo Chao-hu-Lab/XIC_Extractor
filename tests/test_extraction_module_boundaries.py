@@ -62,6 +62,25 @@ def test_extractor_delegates_target_extraction() -> None:
     assert "_extract_one_target" not in function_names
 
 
+def test_extractor_delegates_rt_anchor_and_drift_helpers() -> None:
+    assert importlib.util.find_spec("xic_extractor.extraction.rt_windows")
+    assert importlib.util.find_spec("xic_extractor.extraction.anchors")
+    assert importlib.util.find_spec("xic_extractor.extraction.drift")
+
+    extractor_path = ROOT / "xic_extractor" / "extractor.py"
+    function_names = _function_names(extractor_path)
+
+    assert "_get_rt_window" not in function_names
+    assert "_recover_istd_peak_with_wider_anchor_window" not in function_names
+    assert "_estimate_sample_drift" not in function_names
+    assert "_paired_anchor_mismatch_diagnostic" not in function_names
+    assert "_apply_anchor_mismatch_penalty" not in function_names
+    assert "_anchor_mismatch_confidence" not in function_names
+    assert "_check_target_nl" not in function_names
+    assert "_candidate_ms2_evidence_builder" not in function_names
+    assert len(extractor_path.read_text(encoding="utf-8").splitlines()) <= 250
+
+
 def _function_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return {
