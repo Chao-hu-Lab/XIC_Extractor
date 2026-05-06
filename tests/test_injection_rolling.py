@@ -96,6 +96,31 @@ def test_read_xlsx_adds_canonical_aliases_for_tissue_sampleinfo(
     assert order["Breast_Cancer_Tissue_pooled_QC_4"] == 49
 
 
+def test_read_xlsx_adds_aliases_for_all_tissue_qc_injections(tmp_path: Path) -> None:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Sample_Name", "Injection_Order"])
+    ws.append(["Breast Cancer Tissue *pooled_QC_2", 17])
+    ws.append(["Breast Cancer Tissue_pooled_QC_3", 33])
+    ws.append(["Breast Cancer Tissue_pooled_QC_4", 49])
+    ws.append(["Breast Cancer Tissue_pooled_QC_5", 65])
+    ws.append(["Breast Cancer Tissue_pooled_QC_6", 81])
+    ws.append(["Breast Cancer Tissue_pooled_QC_7", 91])
+    path = tmp_path / "SampleInfo.xlsx"
+    wb.save(path)
+
+    order = read_injection_order(path)
+
+    assert order["Breast_Cancer_Tissue_pooled_QC2"] == 17
+    assert order["Breast_Cancer_Tissue_pooled_QC3"] == 33
+    assert order["Breast_Cancer_Tissue_pooled_QC_4"] == 49
+    assert order["Breast_Cancer_Tissue_pooled_QC5"] == 65
+    assert order["Breast_Cancer_Tissue_pooled_QC6"] == 81
+    assert order["Breast_Cancer_Tissue_pooled_QC7"] == 91
+
+
 def test_canonical_alias_collision_raises(tmp_path: Path) -> None:
     p = tmp_path / "info.csv"
     p.write_text(

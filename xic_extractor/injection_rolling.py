@@ -88,9 +88,12 @@ def _canonical_sample_name(name: str) -> str:
         return f"{tissue}{case_id}_DNAandRNA"
 
     if name.startswith("Breast Cancer Tissue"):
-        normalized = re.sub(r"\s+", "_", name)
+        normalized = name.replace("*", "")
+        normalized = re.sub(r"\s+", "_", normalized)
         normalized = re.sub(r"_+", "_", normalized)
-        normalized = normalized.replace("_QC_1", "_QC1")
+        match = re.search(r"_QC_(\d+)$", normalized)
+        if match and match.group(1) != "4":
+            normalized = normalized[: match.start()] + f"_QC{match.group(1)}"
         return normalized
 
     return name
