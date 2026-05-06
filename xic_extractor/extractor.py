@@ -96,7 +96,7 @@ class ExtractionResult:
 
     @property
     def reported_rt(self) -> float | None:
-        """User-facing RT uses the selected candidate's selection apex when available."""
+        """User-facing RT uses the selected candidate apex when available."""
         candidate = selected_candidate(self.peak_result)
         if candidate is not None:
             return candidate.selection_apex_rt
@@ -900,15 +900,18 @@ def _candidate_ms2_evidence_builder(
         return None
     if target.nl_ppm_warn is None or target.nl_ppm_max is None:
         return None
+    neutral_loss_da = target.neutral_loss_da
+    nl_ppm_warn = target.nl_ppm_warn
+    nl_ppm_max = target.nl_ppm_max
 
     def _builder(candidate: PeakCandidate) -> Any:
         return collect_candidate_ms2_evidence(
             raw,
             candidate=candidate,
             precursor_mz=target.mz,
-            neutral_loss_da=target.neutral_loss_da,
-            nl_ppm_warn=target.nl_ppm_warn,
-            nl_ppm_max=target.nl_ppm_max,
+            neutral_loss_da=neutral_loss_da,
+            nl_ppm_warn=nl_ppm_warn,
+            nl_ppm_max=nl_ppm_max,
             ms2_precursor_tol_da=config.ms2_precursor_tol_da,
             nl_min_intensity_ratio=config.nl_min_intensity_ratio,
         )

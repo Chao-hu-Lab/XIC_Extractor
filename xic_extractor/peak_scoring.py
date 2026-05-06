@@ -215,7 +215,11 @@ def score_candidate(
             residual_mad=ctx.residual_mad,
         ),
         nl_support_severity(ctx.ms2_present, ctx.nl_match),
-        rt_prior_severity(candidate.selection_apex_rt, ctx.rt_prior, ctx.rt_prior_sigma),
+        rt_prior_severity(
+            candidate.selection_apex_rt,
+            ctx.rt_prior,
+            ctx.rt_prior_sigma,
+        ),
         rt_centrality_severity(candidate.selection_apex_rt, ctx.rt_min, ctx.rt_max),
         noise_shape_severity(ctx.intensity_array),
         peak_width_severity(ctx.fwhm_ratio),

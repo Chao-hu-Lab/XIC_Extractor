@@ -485,7 +485,8 @@ def _selection_rt_for_scored_candidates(
         return preferred_rt
 
     nearest_candidate = min(
-        candidates, key=lambda candidate: abs(candidate.selection_apex_rt - preferred_rt)
+        candidates,
+        key=lambda candidate: abs(candidate.selection_apex_rt - preferred_rt),
     )
     strongest_candidate = max(
         candidates, key=lambda candidate: candidate.selection_apex_intensity
@@ -532,7 +533,8 @@ def _select_preferred_recovery_candidate(
     preferred_rt: float,
 ) -> PeakCandidate | None:
     nearest_candidate = min(
-        candidates, key=lambda candidate: abs(candidate.selection_apex_rt - preferred_rt)
+        candidates,
+        key=lambda candidate: abs(candidate.selection_apex_rt - preferred_rt),
     )
     delta = abs(nearest_candidate.selection_apex_rt - preferred_rt)
     if delta > _PREFERRED_RT_RECOVERY_MAX_DELTA_MIN:
@@ -590,7 +592,8 @@ def _select_candidate(
     # paired analyte 已由 ISTD anchor 約束時強制尊重最近峰；其他路徑若最近峰
     # 強度 < 最高峰的 20%，anchor 可能是雜訊，回到選最高峰。
     nearest_candidate = min(
-        candidates, key=lambda candidate: abs(candidate.selection_apex_rt - preferred_rt)
+        candidates,
+        key=lambda candidate: abs(candidate.selection_apex_rt - preferred_rt),
     )
     if strict_preferred_rt:
         return nearest_candidate

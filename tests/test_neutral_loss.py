@@ -266,7 +266,7 @@ def test_find_nl_anchor_rt_without_reference_uses_strongest_base_peak() -> None:
     assert anchor_rt == pytest.approx(8.90)
 
 
-def test_find_nl_anchor_rt_ignores_wrong_observed_loss_even_with_matching_target_product() -> None:
+def test_find_nl_anchor_rt_ignores_wrong_observed_loss_with_target_product() -> None:
     raw = _FakeRaw(
         [
             _scan_event(
@@ -293,7 +293,7 @@ def test_find_nl_anchor_rt_ignores_wrong_observed_loss_even_with_matching_target
     assert anchor_rt is None
 
 
-def test_find_nl_anchor_rt_accepts_shifted_precursor_when_observed_loss_matches() -> None:
+def test_find_nl_anchor_rt_accepts_shifted_precursor_observed_loss() -> None:
     precursor_mz = PRECURSOR_MZ + 0.04
     raw = _FakeRaw(
         [
@@ -379,7 +379,7 @@ def test_candidate_evidence_counts_trigger_inside_peak_region() -> None:
     assert evidence.alignment_source == "region"
 
 
-def test_candidate_evidence_does_not_borrow_trigger_from_other_candidate_region() -> None:
+def test_candidate_evidence_does_not_borrow_other_region_trigger() -> None:
     candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
     raw = _FakeRaw(
         [
@@ -562,7 +562,12 @@ class _FakeRaw:
         yield from self.events
 
 
-def _candidate(*, peak_start: float, peak_end: float, apex_rt: float) -> "_FakeCandidate":
+def _candidate(
+    *,
+    peak_start: float,
+    peak_end: float,
+    apex_rt: float,
+) -> "_FakeCandidate":
     return _FakeCandidate(
         peak=_FakePeak(peak_start=peak_start, peak_end=peak_end),
         selection_apex_rt=apex_rt,

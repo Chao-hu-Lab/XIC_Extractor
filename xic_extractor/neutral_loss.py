@@ -226,7 +226,9 @@ def collect_candidate_ms2_evidence(
 
         trigger_scan_count += 1
         region_trigger_seen = region_trigger_seen or inside_region
-        fallback_trigger_seen = fallback_trigger_seen or (not inside_region and near_apex)
+        fallback_trigger_seen = fallback_trigger_seen or (
+            not inside_region and near_apex
+        )
 
         evidence = _best_product_evidence(
             scan,
@@ -295,7 +297,9 @@ def _best_product_evidence(
     intensities = np.asarray(scan.intensities, dtype=float)
     intensity_floor = scan.base_peak * min_intensity_ratio
 
-    scan_product_ppm = np.abs(masses - expected_product) / expected_product * 1_000_000.0
+    scan_product_ppm = (
+        np.abs(masses - expected_product) / expected_product * 1_000_000.0
+    )
     mask = (intensities >= intensity_floor) & (scan_product_ppm <= diagnostic_ppm)
     if not mask.any():
         return None

@@ -352,7 +352,23 @@ def _write_manual_workbook(path: Path) -> None:
     ws.title = "DNA"
     ws.append(header_1)
     ws.append(header_2)
-    ws.append([1, "TargetA", 100.0, 10.0, 1000, 10000, 1.0, "正常", 10.0, 1000, 10000, 1.0, "正常"])
+    ws.append(
+        [
+            1,
+            "TargetA",
+            100.0,
+            10.0,
+            1000,
+            10000,
+            1.0,
+            "正常",
+            10.0,
+            1000,
+            10000,
+            1.0,
+            "正常",
+        ]
+    )
     ws_rna = wb.create_sheet("RNA")
     ws_rna.append(header_1)
     ws_rna.append(header_2)

@@ -174,7 +174,9 @@ def _long_output_rows(
         else:
             result = file_result.results[target.label]
             _set_long_peak_values(row, result)
-            row["NL"] = result.nl_token if target.neutral_loss_da is not None else ""
+            row["NL"] = (
+                result.nl_token or "" if target.neutral_loss_da is not None else ""
+            )
             row["Confidence"] = result.confidence
             row["Reason"] = result.reason
         rows.append(row)
