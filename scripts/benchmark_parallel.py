@@ -1,7 +1,7 @@
 import argparse
 import csv
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from time import perf_counter
@@ -115,10 +115,15 @@ def _run_extraction_once(
     mode: str,
     workers: int,
     output_dir: Path,
+    settings_overrides: Mapping[str, str] | None = None,
 ) -> Path:
+    effective_overrides = {
+        **dict(settings_overrides or {}),
+        "data_dir": str(data_dir),
+    }
     config, targets = load_config(
         base_dir / "config",
-        settings_overrides={"data_dir": str(data_dir)},
+        settings_overrides=effective_overrides,
     )
     run_config = replace(
         config,

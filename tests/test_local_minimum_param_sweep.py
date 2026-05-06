@@ -300,6 +300,73 @@ def test_main_writes_workbook_with_injected_runner(
     assert (output_dir / "local_minimum_param_sweep_summary.xlsx").exists()
 
 
+def test_main_applies_parallel_overrides_to_every_parameter_set(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import scripts.local_minimum_param_sweep as module
+
+    manual_workbook = tmp_path / "manual.xlsx"
+    _write_manual_workbook(manual_workbook)
+    nosplit_raw = tmp_path / "NoSplit.raw"
+    split_raw = tmp_path / "Split.raw"
+    nosplit_raw.write_text("raw", encoding="utf-8")
+    split_raw.write_text("raw", encoding="utf-8")
+    nosplit_targets = tmp_path / "targets1.csv"
+    split_targets = tmp_path / "targets2.csv"
+    nosplit_targets.write_text("label\nTargetA\n", encoding="utf-8")
+    split_targets.write_text("label\nTargetA\n", encoding="utf-8")
+    seen_overrides: list[dict[str, str]] = []
+
+    def fake_runner(
+        parameter_set: module.ParameterSet,
+        cases: list[module.SweepCase],
+        _output_dir: Path,
+    ) -> list[module.ProgramPeakRow]:
+        seen_overrides.append(parameter_set.settings_overrides)
+        return [
+            module.ProgramPeakRow(
+                case.sample_name,
+                "TargetA",
+                False,
+                10.01,
+                1000.0,
+                10000.0,
+                True,
+            )
+            for case in cases
+        ]
+
+    monkeypatch.setattr(module, "_run_parameter_set", fake_runner)
+
+    exit_code = module.main(
+        [
+            "--manual-workbook",
+            str(manual_workbook),
+            "--nosplit-raw",
+            str(nosplit_raw),
+            "--split-raw",
+            str(split_raw),
+            "--nosplit-targets",
+            str(nosplit_targets),
+            "--split-targets",
+            str(split_targets),
+            "--output-dir",
+            str(tmp_path / "sweep"),
+            "--grid",
+            "quick",
+            "--parallel-mode",
+            "process",
+            "--parallel-workers",
+            "4",
+        ]
+    )
+
+    assert exit_code == 0
+    assert seen_overrides
+    assert all(settings["parallel_mode"] == "process" for settings in seen_overrides)
+    assert all(settings["parallel_workers"] == "4" for settings in seen_overrides)
+
+
 def test_script_file_exposes_cli_help() -> None:
     completed = subprocess.run(
         [

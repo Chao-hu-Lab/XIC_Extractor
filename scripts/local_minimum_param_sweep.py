@@ -166,7 +166,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_dir = args.output_dir.resolve()
     try:
         truth_rows = read_manual_truth(args.manual_workbook.resolve())
-        parameter_sets = build_parameter_sets(grid=args.grid)
+        parameter_sets = _apply_execution_overrides(
+            build_parameter_sets(grid=args.grid),
+            parallel_mode=args.parallel_mode,
+            parallel_workers=args.parallel_workers,
+        )
         cases = _build_cases(args)
         result = run_sweep(
             truth_rows,
@@ -218,7 +222,48 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         choices=tuple(_GRID_VALUES.keys()),
         default="quick",
     )
+    parser.add_argument(
+        "--parallel-mode",
+        choices=("serial", "process"),
+        default=None,
+        help="Optional execution backend override for every sweep run.",
+    )
+    parser.add_argument(
+        "--parallel-workers",
+        type=_positive_int,
+        default=None,
+        help="Optional process worker override for every sweep run.",
+    )
     return parser.parse_args(argv)
+
+
+def _apply_execution_overrides(
+    parameter_sets: list[ParameterSet],
+    *,
+    parallel_mode: str | None,
+    parallel_workers: int | None,
+) -> list[ParameterSet]:
+    overrides: dict[str, str] = {}
+    if parallel_mode is not None:
+        overrides["parallel_mode"] = parallel_mode
+    if parallel_workers is not None:
+        overrides["parallel_workers"] = str(parallel_workers)
+    if not overrides:
+        return parameter_sets
+    return [
+        ParameterSet(
+            parameter_set.name,
+            {**parameter_set.settings_overrides, **overrides},
+        )
+        for parameter_set in parameter_sets
+    ]
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("parallel-workers must be >= 1")
+    return parsed
 
 
 def _build_cases(args: argparse.Namespace) -> list[SweepCase]:
@@ -652,7 +697,14 @@ def _write_failures_sheet(
                 _write_row(
                     worksheet,
                     row_idx,
-                    [score.name, row.sample_name, row.target, issue, metric_value, limit],
+                    [
+                        score.name,
+                        row.sample_name,
+                        row.target,
+                        issue,
+                        metric_value,
+                        limit,
+                    ],
                     failed=True,
                 )
                 row_idx += 1
@@ -690,7 +742,10 @@ def _guardrail_passes(score: ParameterSetScore) -> bool:
         score.missing_manual_peaks == 0
         and score.istd_misses == 0
         and score.large_area_misses == 0
-        and (score.rt_median_abs_delta_min is None or score.rt_median_abs_delta_min <= 0.05)
+        and (
+            score.rt_median_abs_delta_min is None
+            or score.rt_median_abs_delta_min <= 0.05
+        )
         and (score.rt_max_abs_delta_min is None or score.rt_max_abs_delta_min <= 0.20)
     )
 
