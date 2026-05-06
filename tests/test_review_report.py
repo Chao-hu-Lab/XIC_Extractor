@@ -599,3 +599,37 @@ def test_review_report_uses_at_a_glance_focus_and_compact_heatmap(
     assert html.index("<h2>Detection Rate By Target</h2>") < html.index(
         "<h2>ISTD RT Injection Trend</h2>"
     )
+
+
+def test_review_report_keeps_full_batch_heatmap_on_one_row_per_target(
+    tmp_path: Path,
+) -> None:
+    samples = [f"S{i:02d}" for i in range(1, 86)]
+    rows = [
+        {
+            "SampleName": sample,
+            "Target": "A",
+            "RT": "1",
+            "Area": "1",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        }
+        for sample in samples
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert "flex-wrap:nowrap" in html
+    assert "box-sizing:border-box" in html
+    assert "--sample-count:85" in html
+    assert "--heat-cell-size:8px" in html
+    assert "--heat-cell-gap:2px" in html
+    assert html.count('class="heat-cell clean-detected"') == 85
+    assert html.count('class="heatmap-target">A</span>') == 1

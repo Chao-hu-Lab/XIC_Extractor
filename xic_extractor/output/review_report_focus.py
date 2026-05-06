@@ -12,13 +12,21 @@ _FOCUS_CSS = """
 .focus-list li{display:flex;justify-content:space-between;padding:4px 0}
 .focus-list strong{font-size:16px}
 .compact-heatmap{
-display:inline-block;border:1px solid #d0d7de;padding:10px;background:#fff
+display:block;border:1px solid #d0d7de;padding:10px;background:#fff;max-width:100%
 }
-.heatmap-row{display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:8px}
+.heatmap-row{
+display:grid;grid-template-columns:minmax(140px,220px) minmax(0,1fr);gap:8px
+}
 .heatmap-row+.heatmap-row{margin-top:5px}
 .heatmap-target{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.heatmap-cells{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
-.heat-cell{width:18px;height:18px;border:1px solid #8c959f;display:inline-block}
+.heatmap-cells{
+display:grid;grid-template-columns:repeat(var(--sample-count),var(--heat-cell-size));
+gap:var(--heat-cell-gap);align-items:center;flex-wrap:nowrap;overflow:hidden
+}
+.heat-cell{
+box-sizing:border-box;width:var(--heat-cell-size);height:var(--heat-cell-size);
+border:1px solid #8c959f;display:inline-block
+}
 .review-details{margin-top:12px}
 .review-details summary{cursor:pointer;font-weight:700;margin-bottom:8px}
 """.strip()
@@ -55,12 +63,18 @@ def _compact_heatmap(
     rows = "".join(_heatmap_row(metrics, target, samples) for target in targets)
     if not rows:
         rows = '<div class="heatmap-row">None</div>'
+    cell_size, cell_gap = _heatmap_cell_metrics(len(samples))
+    style = (
+        f"--sample-count:{len(samples)};"
+        f"--heat-cell-size:{cell_size}px;"
+        f"--heat-cell-gap:{cell_gap}px"
+    )
     return (
         "<section><h2>Detection / Flag Map</h2>"
         '<p class="dashboard-note">'
-        "Each square is one sample-target result; hover for sample details."
+        "Each target stays on one row; hover for sample details."
         "</p>"
-        f'{legend}<div class="compact-heatmap">{rows}</div></section>'
+        f'{legend}<div class="compact-heatmap" style="{style}">{rows}</div></section>'
     )
 
 
@@ -130,6 +144,16 @@ def _ranked_counts(rows: list[dict[str, str]], key: str) -> list[tuple[str, int]
             continue
         counts[value] = counts.get(value, 0) + 1
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+
+
+def _heatmap_cell_metrics(sample_count: int) -> tuple[int, int]:
+    if sample_count <= 24:
+        return 18, 4
+    if sample_count <= 60:
+        return 12, 3
+    if sample_count <= 100:
+        return 8, 2
+    return 6, 1
 
 
 def _state_label(state: str) -> str:
