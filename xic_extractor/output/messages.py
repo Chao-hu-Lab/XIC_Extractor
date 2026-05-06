@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.neutral_loss import NLResult
+from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
 
 DiagnosticIssue = Literal[
@@ -38,6 +38,9 @@ class ExtractionResultLike(Protocol):
     @property
     def nl(self) -> NLResult | None: ...
 
+    @property
+    def candidate_ms2_evidence(self) -> CandidateMS2Evidence | None: ...
+
 
 def build_diagnostic_records(
     sample_name: str,
@@ -56,13 +59,14 @@ def build_diagnostic_records(
             )
         )
 
-    if result.nl is not None and result.nl.status in {"NL_FAIL", "NO_MS2"}:
+    nl_issue = _selected_or_window_nl_issue(result)
+    if nl_issue is not None:
         records.append(
             DiagnosticRecord(
                 sample_name=sample_name,
                 target_label=target.label,
-                issue=cast(DiagnosticIssue, result.nl.status),
-                reason=_nl_reason(target, result.nl, config),
+                issue=cast(DiagnosticIssue, nl_issue),
+                reason=_nl_reason(target, result, config),
             )
         )
 
@@ -123,7 +127,26 @@ def _peak_reason(
     )
 
 
-def _nl_reason(target: Target, nl: NLResult, config: ExtractionConfig) -> str:
+def _selected_or_window_nl_issue(result: ExtractionResultLike) -> str | None:
+    candidate_ms2 = result.candidate_ms2_evidence
+    if candidate_ms2 is not None and candidate_ms2.nl_status in {"NL_FAIL", "NO_MS2"}:
+        return candidate_ms2.nl_status
+    if candidate_ms2 is None and result.nl is not None and result.nl.status in {
+        "NL_FAIL",
+        "NO_MS2",
+    }:
+        return result.nl.status
+    return None
+
+
+def _nl_reason(
+    target: Target, result: ExtractionResultLike, config: ExtractionConfig
+) -> str:
+    candidate_ms2 = result.candidate_ms2_evidence
+    if candidate_ms2 is not None:
+        return _candidate_ms2_reason(target, candidate_ms2)
+    assert result.nl is not None
+    nl = result.nl
     if nl.status == "NO_MS2":
         return (
             f"No MS2 scan targeting precursor {target.mz} +/- "
@@ -156,6 +179,37 @@ def _nl_reason(target: Target, nl: NLResult, config: ExtractionConfig) -> str:
         f"Precursor {target.mz} triggered {nl.matched_scan_count} MS2 scans; "
         f"NL {nl_da:g} Da → expected product m/z {expected_product:.4f}; "
         f"not detected in any matched scan"
+    )
+
+
+def _candidate_ms2_reason(target: Target, evidence: CandidateMS2Evidence) -> str:
+    assert target.neutral_loss_da is not None
+    nl_da = target.neutral_loss_da
+    if evidence.nl_status == "NO_MS2":
+        return (
+            "selected candidate has no candidate-aligned MS2 trigger "
+            f"for precursor {target.mz}; strict observed neutral loss "
+            f"{nl_da:g} Da could not be evaluated"
+        )
+    rt_info = (
+        f" at scan RT {evidence.best_scan_rt:.3f} min"
+        if evidence.best_scan_rt is not None
+        else ""
+    )
+    if evidence.best_loss_ppm is not None:
+        limit = target.nl_ppm_max if target.nl_ppm_max is not None else 0.0
+        return (
+            f"selected candidate has {evidence.trigger_scan_count} "
+            f"candidate-aligned MS2 trigger scans; strict observed neutral loss "
+            f"{nl_da:g} Da not matched; best observed-loss error "
+            f"{evidence.best_loss_ppm:.1f} ppm (limit {limit:g} ppm){rt_info}; "
+            f"alignment={evidence.alignment_source}"
+        )
+    return (
+        f"selected candidate has {evidence.trigger_scan_count} "
+        f"candidate-aligned MS2 trigger scans; strict observed neutral loss "
+        f"{nl_da:g} Da not detected in any aligned scan; "
+        f"alignment={evidence.alignment_source}"
     )
 
 

@@ -29,23 +29,27 @@ def test_new_keys_present() -> None:
         "dirty_matrix_mode": "false",
         "rt_prior_library_path": "",
         "emit_score_breakdown": "false",
+        "emit_review_report": "false",
         "keep_intermediate_csv": "false",
     }.items():
         assert CANONICAL_SETTINGS_DEFAULTS[key] == default
 
 
-def test_new_key_descriptions_present() -> None:
+def test_new_settings_are_in_canonical_defaults_and_descriptions() -> None:
     for key in (
         "injection_order_source",
         "rolling_window_size",
         "dirty_matrix_mode",
         "rt_prior_library_path",
         "emit_score_breakdown",
+        "emit_review_report",
         "keep_intermediate_csv",
     ):
         assert CANONICAL_SETTINGS_DESCRIPTIONS[key]
     assert "fallback" in CANONICAL_SETTINGS_DESCRIPTIONS["injection_order_source"]
     assert "RAW mtime" in CANONICAL_SETTINGS_DESCRIPTIONS["injection_order_source"]
+    assert "developer/debug" in CANONICAL_SETTINGS_DESCRIPTIONS["rt_prior_library_path"]
+    assert "leave empty" in CANONICAL_SETTINGS_DESCRIPTIONS["rt_prior_library_path"]
 
 
 def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
@@ -71,6 +75,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
         "dirty_matrix_mode": "true",
         "rt_prior_library_path": str(rt_library),
         "emit_score_breakdown": "true",
+        "emit_review_report": "true",
         "keep_intermediate_csv": "true",
     }
 
@@ -108,6 +113,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
     assert config.dirty_matrix_mode is True
     assert config.rt_prior_library_path == rt_library
     assert config.emit_score_breakdown is True
+    assert config.emit_review_report is True
     assert config.keep_intermediate_csv is True
     assert config.config_hash == compute_config_hash(targets_path, settings_path)
 
@@ -168,4 +174,5 @@ def test_load_config_defaults_scoring_settings_for_legacy_settings_csv(
     assert config.dirty_matrix_mode is False
     assert config.rt_prior_library_path is None
     assert config.emit_score_breakdown is False
+    assert config.emit_review_report is False
     assert config.keep_intermediate_csv is False

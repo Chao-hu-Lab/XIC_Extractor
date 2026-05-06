@@ -73,6 +73,47 @@ def test_selected_candidate_and_prepass_anchor_reject_quality_flags() -> None:
     assert allow_prepass_anchor(peak_result) is False
 
 
+def test_prepass_anchor_allows_soft_adap_like_quality_flags() -> None:
+    candidate = _candidate(
+        apex_index=1,
+        quality_flags=("low_trace_continuity", "poor_edge_recovery"),
+    )
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        candidates=(candidate,),
+        n_points=3,
+        max_smoothed=20.0,
+        n_prominent_peaks=1,
+    )
+
+    assert selected_candidate(peak_result) is candidate
+    assert allow_prepass_anchor(peak_result) is True
+
+
+def test_prepass_anchor_allows_adap_equivalent_legacy_flags() -> None:
+    candidate = _candidate(
+        apex_index=1,
+        quality_flags=(
+            "low_scan_count",
+            "low_scan_support",
+            "low_top_edge_ratio",
+            "poor_edge_recovery",
+        ),
+    )
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        candidates=(candidate,),
+        n_points=3,
+        max_smoothed=20.0,
+        n_prominent_peaks=1,
+    )
+
+    assert selected_candidate(peak_result) is candidate
+    assert allow_prepass_anchor(peak_result) is True
+
+
 def _config(**overrides: object) -> ExtractionConfig:
     config = ExtractionConfig(
         data_dir=Path("."),
@@ -123,9 +164,9 @@ def _candidate(
     )
     candidate = PeakCandidate(
         peak=peak,
-        smoothed_apex_rt=10.0,
-        smoothed_apex_intensity=8.0,
-        smoothed_apex_index=apex_index,
+        selection_apex_rt=10.0,
+        selection_apex_intensity=8.0,
+        selection_apex_index=apex_index,
         raw_apex_rt=10.0,
         raw_apex_intensity=8.0,
         raw_apex_index=apex_index,

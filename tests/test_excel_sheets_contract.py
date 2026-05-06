@@ -37,38 +37,52 @@ def test_keep_intermediate_csv_emits_csvs(tmp_path: Path, monkeypatch) -> None:
     assert {"xic_results.csv", "xic_results_long.csv", "xic_diagnostics.csv"} <= actual
 
 
-def test_default_xlsx_has_five_sheets(tmp_path: Path, monkeypatch) -> None:
+def test_default_xlsx_has_overview_landing_sheet(tmp_path: Path, monkeypatch) -> None:
     xlsx_path = _run_pipeline(tmp_path, monkeypatch, emit_score_breakdown=False)
 
     wb = load_workbook(xlsx_path)
     assert wb.sheetnames == [
+        "Overview",
+        "Review Queue",
         "XIC Results",
         "Summary",
         "Targets",
         "Diagnostics",
         "Run Metadata",
     ]
+    assert wb.active.title == "Overview"
+    assert wb["Diagnostics"].sheet_state == "hidden"
 
 
 def test_score_breakdown_appears_when_enabled(tmp_path: Path, monkeypatch) -> None:
     xlsx_path = _run_pipeline(tmp_path, monkeypatch, emit_score_breakdown=True)
 
     wb = load_workbook(xlsx_path)
-    assert "Score Breakdown" in wb.sheetnames
+    assert wb.sheetnames == [
+        "Overview",
+        "Review Queue",
+        "XIC Results",
+        "Summary",
+        "Targets",
+        "Diagnostics",
+        "Run Metadata",
+        "Score Breakdown",
+    ]
+    assert wb["Diagnostics"].sheet_state == "hidden"
 
 
 def test_landing_sheet_when_diagnostics_empty(tmp_path: Path, monkeypatch) -> None:
     xlsx_path = _run_pipeline(tmp_path, monkeypatch, with_diagnostics=False)
 
     wb = load_workbook(xlsx_path)
-    assert wb.active.title == "XIC Results"
+    assert wb.active.title == "Overview"
 
 
 def test_landing_sheet_when_diagnostics_present(tmp_path: Path, monkeypatch) -> None:
     xlsx_path = _run_pipeline(tmp_path, monkeypatch, with_diagnostics=True)
 
     wb = load_workbook(xlsx_path)
-    assert wb.active.title == "XIC Results"
+    assert wb.active.title == "Overview"
 
 
 def test_run_metadata_sheet_has_required_keys(tmp_path: Path, monkeypatch) -> None:

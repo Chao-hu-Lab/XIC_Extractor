@@ -341,6 +341,15 @@ def test_settings_example_includes_parallel_settings() -> None:
     assert rows["parallel_workers"] == "1"
 
 
+def test_settings_example_includes_review_report_setting() -> None:
+    example_path = Path("config/settings.example.csv")
+
+    with example_path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = {row["key"]: row["value"] for row in csv.DictReader(handle)}
+
+    assert rows["emit_review_report"] == "false"
+
+
 def test_settings_example_includes_local_minimum_preset() -> None:
     example_path = Path("config/settings.example.csv")
 

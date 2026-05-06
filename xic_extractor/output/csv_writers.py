@@ -3,7 +3,7 @@ from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.neutral_loss import NLResult
+from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.output.schema import (
     DIAGNOSTIC_HEADERS,
     LONG_HEADERS,
@@ -34,6 +34,12 @@ class ExtractionResultLike(Protocol):
 
     @property
     def nl(self) -> NLResult | None: ...
+
+    @property
+    def candidate_ms2_evidence(self) -> CandidateMS2Evidence | None: ...
+
+    @property
+    def nl_token(self) -> str | None: ...
 
     @property
     def target_label(self) -> str: ...
@@ -169,9 +175,7 @@ def _long_output_rows(
             result = file_result.results[target.label]
             _set_long_peak_values(row, result)
             row["NL"] = (
-                result.nl.to_token()
-                if target.neutral_loss_da is not None and result.nl is not None
-                else ""
+                result.nl_token or "" if target.neutral_loss_da is not None else ""
             )
             row["Confidence"] = result.confidence
             row["Reason"] = result.reason
@@ -286,7 +290,7 @@ def _output_row(
         result = file_result.results[target.label]
         _set_peak_values(row, target, result)
         if target.neutral_loss_da is not None:
-            row[f"{target.label}_NL"] = result.nl.to_token() if result.nl else "ND"
+            row[f"{target.label}_NL"] = result.nl_token or "ND"
     return row
 
 

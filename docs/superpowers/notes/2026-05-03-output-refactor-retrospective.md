@@ -53,10 +53,12 @@ Default workbook sheets changed from the legacy conversion flow to an Excel-firs
 
 | Mode | Sheet count | Sheets |
 | --- | ---: | --- |
-| Default | 5 | `XIC Results`, `Summary`, `Targets`, `Diagnostics`, `Run Metadata` |
-| `emit_score_breakdown=true` | 6 | Default sheets plus `Score Breakdown` |
+| Default | 7 | `Overview`, `Review Queue`, `XIC Results`, `Summary`, `Targets`, `Diagnostics`, `Run Metadata` |
+| `emit_score_breakdown=true` | 8 | Default sheets plus `Score Breakdown` |
 
-`XIC Results` is always the active sheet when the workbook opens, even when diagnostics are present.
+`Overview` is always the active sheet when the workbook opens, even when diagnostics are present.
+`Review Queue` is a one-row-per-sample-target worklist, while `Summary` now includes target-health fields (`Flagged Rows`, `Flagged %`, `MS2/NL Flags`, `Low Confidence Rows`) before the existing detection and scoring counts.
+`Detected %` answers whether a target produced usable RT/area rows; `Flagged %` answers how often rows require manual review. `Score Breakdown` is a technical audit sheet for scoring signals and should not be treated as the primary manual review queue.
 
 ## Output File Count
 

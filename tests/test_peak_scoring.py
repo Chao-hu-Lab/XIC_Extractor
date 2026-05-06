@@ -68,8 +68,8 @@ def test_reason_appends_istd_note() -> None:
 
 @dataclass
 class _FakePeak:
-    smoothed_apex_rt: float
-    smoothed_apex_intensity: float
+    selection_apex_rt: float
+    selection_apex_intensity: float
 
 
 def _sc(
@@ -79,6 +79,7 @@ def _sc(
     prior: float | None,
     *,
     quality_penalty: int = 0,
+    selection_quality_penalty: float | None = None,
     prefer_rt_prior_tiebreak: bool = False,
 ) -> ScoredCandidate:
     return ScoredCandidate(
@@ -88,6 +89,7 @@ def _sc(
         reason="",
         prior_rt=prior,
         quality_penalty=quality_penalty,
+        selection_quality_penalty=selection_quality_penalty,
         prefer_rt_prior_tiebreak=prefer_rt_prior_tiebreak,
     )
 
@@ -145,9 +147,9 @@ def _make_candidate(apex_rt: float, apex_intensity: float) -> PeakCandidate:
     )
     return PeakCandidate(
         peak=peak,
-        smoothed_apex_rt=apex_rt,
-        smoothed_apex_intensity=apex_intensity,
-        smoothed_apex_index=100,
+        selection_apex_rt=apex_rt,
+        selection_apex_intensity=apex_intensity,
+        selection_apex_index=100,
         raw_apex_rt=apex_rt,
         raw_apex_intensity=apex_intensity,
         raw_apex_index=100,
@@ -228,6 +230,123 @@ def test_score_candidate_penalizes_flagged_candidate_quality() -> None:
     assert "weak candidate" in scored.reason
     assert "too_broad" in scored.reason
     assert len(scored.severities) == 7
+
+
+def test_score_candidate_formats_adap_like_quality_flags_as_minor_concerns() -> None:
+    cand = _make_flagged_candidate(
+        apex_rt=10.0,
+        apex_intensity=1000.0,
+        quality_flags=("low_trace_continuity", "poor_edge_recovery"),
+    )
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        prefer_rt_prior_tiebreak=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.HIGH
+    assert scored.quality_penalty == 0
+    assert scored.selection_quality_penalty == 0.5
+    assert scored.reason == (
+        "concerns: low trace continuity (minor); poor edge recovery (minor)"
+    )
+
+
+def test_score_candidate_does_not_double_penalize_adap_equivalent_legacy_flags(
+) -> None:
+    cand = _make_flagged_candidate(
+        apex_rt=10.0,
+        apex_intensity=1000.0,
+        quality_flags=(
+            "low_scan_count",
+            "low_scan_support",
+            "low_top_edge_ratio",
+            "poor_edge_recovery",
+        ),
+    )
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        prefer_rt_prior_tiebreak=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.HIGH
+    assert scored.quality_penalty == 0
+    assert scored.selection_quality_penalty == 0.5
+    assert "weak candidate" not in scored.reason
+    assert scored.reason == (
+        "concerns: low scan support (minor); poor edge recovery (minor)"
+    )
+
+
+def test_selector_uses_weighted_adap_like_selection_penalty() -> None:
+    clean = _sc(
+        Confidence.HIGH,
+        10.10,
+        500.0,
+        10.0,
+        quality_penalty=0,
+        selection_quality_penalty=0.0,
+    )
+    weak = _sc(
+        Confidence.HIGH,
+        10.10,
+        1000.0,
+        10.0,
+        quality_penalty=0,
+        selection_quality_penalty=0.25,
+    )
+
+    assert select_candidate_with_confidence([clean, weak]) is clean
+
+
+def test_selector_does_not_let_soft_quality_penalty_beat_large_rt_distance() -> None:
+    far_clean = _sc(
+        Confidence.HIGH,
+        12.00,
+        1000.0,
+        10.0,
+        quality_penalty=0,
+        selection_quality_penalty=0.0,
+    )
+    near_flagged = _sc(
+        Confidence.HIGH,
+        10.00,
+        500.0,
+        10.0,
+        quality_penalty=0,
+        selection_quality_penalty=0.25,
+    )
+
+    assert select_candidate_with_confidence([far_clean, near_flagged]) is near_flagged
 
 
 def test_selector_tiebreak_prefers_lower_quality_penalty() -> None:

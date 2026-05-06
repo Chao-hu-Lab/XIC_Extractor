@@ -1,9 +1,11 @@
 import csv
+from dataclasses import replace
 from pathlib import Path
+from typing import Literal
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extractor import DiagnosticRecord, ExtractionResult, FileResult
-from xic_extractor.neutral_loss import NLResult
+from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.output.csv_writers import (
     _long_output_rows,
     _output_row,
@@ -62,9 +64,9 @@ def _result(*, nl: NLResult | None = None) -> ExtractionResult:
     )
     candidate = PeakCandidate(
         peak=peak,
-        smoothed_apex_rt=9.0,
-        smoothed_apex_intensity=450.0,
-        smoothed_apex_index=10,
+        selection_apex_rt=9.0,
+        selection_apex_intensity=450.0,
+        selection_apex_index=10,
         raw_apex_rt=9.03,
         raw_apex_intensity=500.0,
         raw_apex_index=11,
@@ -97,6 +99,23 @@ def _result(*, nl: NLResult | None = None) -> ExtractionResult:
     )
 
 
+def _candidate_ms2_evidence(
+    status: Literal["OK", "WARN", "NL_FAIL", "NO_MS2"],
+    best_loss_ppm: float | None,
+) -> CandidateMS2Evidence:
+    return CandidateMS2Evidence(
+        ms2_present=status != "NO_MS2",
+        nl_match=status in {"OK", "WARN"},
+        nl_status=status,
+        trigger_scan_count=1 if status != "NO_MS2" else 0,
+        strict_nl_scan_count=1 if status in {"OK", "WARN"} else 0,
+        best_loss_ppm=best_loss_ppm,
+        best_scan_rt=9.0 if best_loss_ppm is not None else None,
+        best_product_base_ratio=0.5 if best_loss_ppm is not None else None,
+        alignment_source="region" if status != "NO_MS2" else "none",
+    )
+
+
 def _file_result() -> FileResult:
     return FileResult(
         sample_name="SampleA",
@@ -123,6 +142,22 @@ def test_row_builders_use_smoothed_rt_and_preserve_area() -> None:
     assert long_row["RT"] == "9.0000"
     assert long_row["Area"] == "123.45"
     assert long_row["Confidence"] == "LOW"
+
+
+def test_row_builders_report_selected_candidate_nl_before_target_window_nl() -> None:
+    target = _target("WithNL")
+    result = _result(nl=NLResult("OK", 1.0, 9.1, 3, 0, 3))
+    result = replace(
+        result,
+        candidate_ms2_evidence=_candidate_ms2_evidence("NL_FAIL", 125.0),
+    )
+    file_result = FileResult(sample_name="SampleA", results={"WithNL": result})
+
+    wide_row = _output_row(file_result, [target])
+    long_row = _long_output_rows(file_result, [target])[0]
+
+    assert wide_row["WithNL_NL"] == "NL_FAIL"
+    assert long_row["NL"] == "NL_FAIL"
 
 
 def test_write_wide_and_long_csv(tmp_path: Path) -> None:

@@ -218,9 +218,9 @@ def _ok_peak(rt: float, intensity: float, area: float) -> PeakDetectionResult:
     )
     candidate = PeakCandidate(
         peak=peak,
-        smoothed_apex_rt=rt,
-        smoothed_apex_intensity=intensity,
-        smoothed_apex_index=7,
+        selection_apex_rt=rt,
+        selection_apex_intensity=intensity,
+        selection_apex_index=7,
         raw_apex_rt=rt,
         raw_apex_intensity=intensity,
         raw_apex_index=7,

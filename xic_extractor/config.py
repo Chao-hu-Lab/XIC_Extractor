@@ -68,6 +68,7 @@ class ExtractionConfig:
     dirty_matrix_mode: bool = False
     rt_prior_library_path: Path | None = None
     emit_score_breakdown: bool = False
+    emit_review_report: bool = False
     keep_intermediate_csv: bool = False
     parallel_mode: str = "serial"
     parallel_workers: int = 1
@@ -120,6 +121,7 @@ class _ParsedSettings:
     dirty_matrix_mode: bool
     rt_prior_library_path: Path | None
     emit_score_breakdown: bool
+    emit_review_report: bool
     keep_intermediate_csv: bool
     parallel_mode: str
     parallel_workers: int
@@ -408,6 +410,12 @@ def _parse_settings_values(
             "emit_score_breakdown",
             _setting_value(settings, settings_path, "emit_score_breakdown"),
         ),
+        emit_review_report=_parse_bool(
+            settings_path,
+            None,
+            "emit_review_report",
+            _setting_value(settings, settings_path, "emit_review_report"),
+        ),
         keep_intermediate_csv=_parse_bool(
             settings_path,
             None,
@@ -635,6 +643,7 @@ def _build_config(
         dirty_matrix_mode=parsed.dirty_matrix_mode,
         rt_prior_library_path=parsed.rt_prior_library_path,
         emit_score_breakdown=parsed.emit_score_breakdown,
+        emit_review_report=parsed.emit_review_report,
         keep_intermediate_csv=parsed.keep_intermediate_csv,
         parallel_mode=parsed.parallel_mode,
         parallel_workers=parsed.parallel_workers,

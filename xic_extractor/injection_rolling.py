@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import re
 import statistics
 from pathlib import Path
 
@@ -28,7 +29,7 @@ def _read_csv(path: Path) -> dict[str, int]:
             order = row.get("Injection_Order")
             if not name or order in (None, ""):
                 continue
-            out[name] = int(str(order).strip())
+            _add_sample_order(out, name, int(str(order).strip()))
     return out
 
 
@@ -47,10 +48,55 @@ def _read_xlsx(path: Path) -> dict[str, int]:
             order = row[order_i]
             if name is None or order is None:
                 continue
-            out[str(name).strip()] = int(str(order).strip())
+            _add_sample_order(out, str(name), int(str(order).strip()))
         return out
     finally:
         wb.close()
+
+
+def _add_sample_order(out: dict[str, int], name: str, order: int) -> None:
+    trimmed = name.strip()
+    _set_sample_order(out, trimmed, order)
+    alias = _canonical_sample_name(trimmed)
+    if alias != trimmed:
+        _set_sample_order(out, alias, order)
+
+
+def _set_sample_order(out: dict[str, int], name: str, order: int) -> None:
+    existing = out.get(name)
+    if existing is not None and existing != order:
+        raise ValueError(
+            f"Conflicting injection order for sample name {name!r}: "
+            f"{existing} != {order}"
+        )
+    out[name] = order
+
+
+def _canonical_sample_name(name: str) -> str:
+    match = re.fullmatch(r"(Tumor|Normal) tissue (BC\d+)_DNA", name)
+    if match:
+        tissue, case_id = match.groups()
+        return f"{tissue}{case_id}_DNA"
+
+    match = re.fullmatch(r"Benign fat (BC\d+)_DNA", name)
+    if match:
+        return f"Benignfat{match.group(1)}_DNA"
+
+    match = re.fullmatch(r"(Tumor|Normal) tissue (BC\d+)\*? DNA \+RNA", name)
+    if match:
+        tissue, case_id = match.groups()
+        return f"{tissue}{case_id}_DNAandRNA"
+
+    if name.startswith("Breast Cancer Tissue"):
+        normalized = name.replace("*", "")
+        normalized = re.sub(r"\s+", "_", normalized)
+        normalized = re.sub(r"_+", "_", normalized)
+        match = re.search(r"_QC_(\d+)$", normalized)
+        if match and match.group(1) != "4":
+            normalized = normalized[: match.start()] + f"_QC{match.group(1)}"
+        return normalized
+
+    return name
 
 
 def rolling_median_rt(

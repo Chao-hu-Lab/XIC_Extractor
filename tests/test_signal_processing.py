@@ -5,7 +5,11 @@ import pytest
 from scipy.signal import savgol_filter
 
 from xic_extractor.config import ExtractionConfig
-from xic_extractor.signal_processing import find_peak_and_area, find_peak_candidates
+from xic_extractor.signal_processing import (
+    _local_minimum_regions,
+    find_peak_and_area,
+    find_peak_candidates,
+)
 
 
 def _config(
@@ -100,6 +104,24 @@ def test_candidate_enumeration_returns_all_prominent_peaks() -> None:
     assert result.candidates[1].peak.intensity > result.candidates[0].peak.intensity
 
 
+def test_local_minimum_split_reanchors_second_region_after_flat_valley() -> None:
+    rt = np.arange(9, dtype=float) * 0.1
+    intensity = np.array([0, 50, 100, 5, 0, 5, 80, 50, 0], dtype=float)
+
+    regions = _local_minimum_regions(
+        rt,
+        intensity,
+        peak_indices=[2, 6],
+        threshold=10.0,
+        config=_config(
+            resolver_min_search_range_min=0.01,
+            resolver_min_ratio_top_edge=1.3,
+        ),
+    )
+
+    assert regions == [(1, 5), (5, 8)]
+
+
 def test_raw_apex_reporting_does_not_return_zero_intensity_when_area_is_positive(
 ) -> None:
     rt = np.linspace(8.0, 10.0, 401)
@@ -129,7 +151,7 @@ def test_raw_spike_inside_peak_window_does_not_move_reported_peak_rt() -> None:
     assert result.peak is not None
     assert result.peak.rt == pytest.approx(9.0, abs=0.01)
     assert result.peak.intensity == pytest.approx(1400.0)
-    assert result.candidates[0].smoothed_apex_rt == pytest.approx(9.0, abs=0.01)
+    assert result.candidates[0].selection_apex_rt == pytest.approx(9.0, abs=0.01)
     assert result.candidates[0].raw_apex_rt == pytest.approx(8.88, abs=0.01)
 
 
@@ -387,6 +409,61 @@ def test_local_minimum_resolver_splits_shoulder_peaks_with_visible_valley() -> N
         [8.93, 9.08],
         abs=0.02,
     )
+    assert result.candidates[0].quality_flags == ()
+
+
+def test_local_minimum_low_scan_support_is_soft_quality_flag() -> None:
+    rt = np.linspace(8.0, 8.8, 17)
+    intensity = _gaussian(rt, center=8.4, sigma=0.05, height=600.0) + 10.0
+
+    result = find_peak_candidates(
+        rt,
+        intensity,
+        _config(
+            resolver_mode="local_minimum",
+            resolver_chrom_threshold=0.05,
+            resolver_min_search_range_min=0.04,
+            resolver_min_relative_height=0.0,
+            resolver_min_absolute_height=25.0,
+            resolver_min_ratio_top_edge=1.3,
+            resolver_peak_duration_min=0.0,
+            resolver_peak_duration_max=10.0,
+            resolver_min_scans=15,
+        ),
+    )
+
+    assert result.status == "OK"
+    assert len(result.candidates) == 1
+    assert "low_scan_support" in result.candidates[0].quality_flags
+    assert "low_scan_count" not in result.candidates[0].quality_flags
+
+
+def test_local_minimum_jagged_trace_is_soft_continuity_flag() -> None:
+    rt = np.linspace(8.0, 8.8, 81)
+    intensity = _gaussian(rt, center=8.4, sigma=0.12, height=900.0) + 20.0
+    jagged = intensity.copy()
+    mask = (rt > 8.25) & (rt < 8.55)
+    jagged[mask & ((np.arange(len(rt)) % 4) == 0)] *= 0.45
+
+    result = find_peak_candidates(
+        rt,
+        jagged,
+        _config(
+            resolver_mode="local_minimum",
+            resolver_chrom_threshold=0.02,
+            resolver_min_search_range_min=0.20,
+            resolver_min_relative_height=0.0,
+            resolver_min_absolute_height=25.0,
+            resolver_min_ratio_top_edge=1.3,
+            resolver_peak_duration_min=0.0,
+            resolver_peak_duration_max=10.0,
+            resolver_min_scans=5,
+        ),
+    )
+
+    assert result.status == "OK"
+    assert len(result.candidates) == 1
+    assert "low_trace_continuity" in result.candidates[0].quality_flags
 
 
 def test_local_minimum_resolver_keeps_single_broad_peak_without_valid_valley() -> None:
@@ -511,4 +588,5 @@ def test_local_minimum_retains_edge_clipped_region_as_flagged_candidate() -> Non
     assert len(result.candidates) == 1
     assert result.candidates[0].peak.rt == pytest.approx(8.0, abs=0.01)
     assert "edge_clipped" in result.candidates[0].quality_flags
-    assert "low_top_edge_ratio" in result.candidates[0].quality_flags
+    assert "poor_edge_recovery" in result.candidates[0].quality_flags
+    assert "low_top_edge_ratio" not in result.candidates[0].quality_flags

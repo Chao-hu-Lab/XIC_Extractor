@@ -6,8 +6,12 @@ from scipy.signal import peak_widths
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.injection_rolling import rolling_median_rt
-from xic_extractor.neutral_loss import NLResult
-from xic_extractor.peak_scoring import ScoringContext, compute_local_sn_cache
+from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
+from xic_extractor.peak_scoring import (
+    ScoringContext,
+    compute_local_sn_cache,
+    hard_quality_flags,
+)
 from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -31,6 +35,10 @@ def build_scoring_context_factory(
         istd_rt_in_this_sample: float | None,
         paired_istd_fwhm: float | None,
         nl_result: NLResult | None,
+        candidate_ms2_evidence_builder: Callable[
+            [PeakCandidate], CandidateMS2Evidence | None
+        ]
+        | None = None,
     ) -> Callable[[PeakCandidate], ScoringContext]:
         rt_prior: float | None = None
         rt_prior_sigma: float | None = None
@@ -70,8 +78,12 @@ def build_scoring_context_factory(
         rt_values = np.asarray(rt, dtype=float)
         intensity_values = np.asarray(intensity, dtype=float)
         baseline_array, residual_mad = compute_local_sn_cache(intensity_values)
-        ms2_present = nl_result is not None and nl_result.matched_scan_count > 0
-        nl_match = nl_result is not None and nl_result.status in {"OK", "WARN"}
+        target_window_ms2_present = (
+            nl_result is not None and nl_result.matched_scan_count > 0
+        )
+        target_window_nl_match = (
+            nl_result is not None and nl_result.status in {"OK", "WARN"}
+        )
         prefer_rt_prior_tiebreak = (
             not target.is_istd
             and bool(target.istd_pair)
@@ -81,9 +93,24 @@ def build_scoring_context_factory(
         )
 
         def builder(candidate: PeakCandidate) -> ScoringContext:
+            candidate_ms2 = (
+                candidate_ms2_evidence_builder(candidate)
+                if candidate_ms2_evidence_builder is not None
+                else None
+            )
+            ms2_present = (
+                candidate_ms2.ms2_present
+                if candidate_ms2 is not None
+                else target_window_ms2_present
+            )
+            nl_match = (
+                candidate_ms2.nl_match
+                if candidate_ms2 is not None
+                else target_window_nl_match
+            )
             half_width_ratio, fwhm = compute_shape_metrics(
                 intensity_values,
-                candidate.smoothed_apex_index,
+                candidate.selection_apex_index,
             )
             fwhm_ratio: float | None = None
             if (
@@ -96,7 +123,7 @@ def build_scoring_context_factory(
             return ScoringContext(
                 rt_array=rt_values,
                 intensity_array=intensity_values,
-                apex_index=candidate.smoothed_apex_index,
+                apex_index=candidate.selection_apex_index,
                 half_width_ratio=half_width_ratio,
                 fwhm_ratio=fwhm_ratio,
                 ms2_present=ms2_present,
@@ -158,7 +185,7 @@ def selected_shape_metrics(
     candidate = selected_candidate(peak_result)
     if candidate is None:
         return None
-    return compute_shape_metrics(intensity, candidate.smoothed_apex_index)
+    return compute_shape_metrics(intensity, candidate.selection_apex_index)
 
 
 def selected_candidate(peak_result: PeakDetectionResult) -> PeakCandidate | None:
@@ -174,7 +201,8 @@ def allow_prepass_anchor(peak_result: PeakDetectionResult) -> bool:
     candidate = selected_candidate(peak_result)
     if candidate is None:
         return False
-    return not bool(getattr(candidate, "quality_flags", ()))
+    flags = tuple(str(flag) for flag in getattr(candidate, "quality_flags", ()))
+    return not hard_quality_flags(flags)
 
 
 def paired_istd_fwhm(

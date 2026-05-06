@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -42,13 +43,20 @@ def test_write_excel_from_run_output_uses_in_memory_rows_and_metadata(
 
     wb = load_workbook(output_path)
     assert wb.sheetnames == [
+        "Overview",
+        "Review Queue",
         "XIC Results",
         "Summary",
         "Targets",
         "Diagnostics",
         "Run Metadata",
     ]
-    assert wb.active.title == "XIC Results"
+    assert wb.active.title == "Overview"
+    ws_overview = wb["Overview"]
+    assert ws_overview["A1"].value == "XIC Review Overview"
+    assert ws_overview["B3"].value == 1
+    assert ws_overview["B5"].value == 1
+    assert ws_overview["B6"].value == 1
     ws = wb["XIC Results"]
     assert ws["A2"].value == "SampleA"
     assert ws["C2"].value == "WithNL"
@@ -58,8 +66,15 @@ def test_write_excel_from_run_output_uses_in_memory_rows_and_metadata(
     assert ws["M2"].value == "LOW"
 
     ws_diagnostics = wb["Diagnostics"]
+    assert ws_diagnostics.sheet_state == "hidden"
     assert ws_diagnostics["A2"].value == "SampleA"
     assert ws_diagnostics["C2"].value == "NL_FAIL"
+    ws_review = wb["Review Queue"]
+    assert ws_review["B2"].value == "SampleA"
+    assert ws_review["C2"].value == "WithNL"
+    assert ws_review["E2"].value == "Review"
+    assert ws_review["F2"].value == "NL support failed"
+    assert ws_review["I2"].value == "Check MS2 / NL evidence near selected RT"
 
     ws_metadata = wb["Run Metadata"]
     metadata_keys = {
@@ -90,7 +105,16 @@ def test_write_excel_from_run_output_adds_score_breakdown_when_enabled(
     )
 
     wb = load_workbook(output_path)
-    assert "Score Breakdown" in wb.sheetnames
+    assert wb.sheetnames == [
+        "Overview",
+        "Review Queue",
+        "XIC Results",
+        "Summary",
+        "Targets",
+        "Diagnostics",
+        "Run Metadata",
+        "Score Breakdown",
+    ]
     ws = wb["Score Breakdown"]
     headers = [cell.value for cell in next(ws.iter_rows(max_row=1))]
     values = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))
@@ -105,7 +129,67 @@ def test_write_excel_from_run_output_adds_score_breakdown_when_enabled(
     assert row["Prior RT"] is None
 
 
-def _config(tmp_path: Path, *, emit_score_breakdown: bool = False) -> ExtractionConfig:
+def test_write_excel_from_run_output_emits_review_report_when_enabled(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.output.excel_pipeline import write_excel_from_run_output
+
+    config = _config(tmp_path, emit_review_report=True)
+    output_path = tmp_path / "output" / "xic_results_20260505_1200.xlsx"
+
+    write_excel_from_run_output(
+        config,
+        [_target("WithNL")],
+        _run_output(with_diagnostics=False),
+        output_path=output_path,
+    )
+
+    report_path = output_path.with_name("review_report_20260505_1200.html")
+    assert report_path.exists()
+    assert "XIC Review Report" in report_path.read_text(encoding="utf-8")
+
+
+def test_write_excel_from_run_output_passes_injection_order_to_review_report(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from xic_extractor.output.excel_pipeline import write_excel_from_run_output
+
+    config = replace(
+        _config(tmp_path, emit_review_report=True),
+        injection_order_source=tmp_path / "SampleInfo.csv",
+    )
+    config.injection_order_source.write_text(
+        "Sample_Name,Injection_Order\nSampleA,1\n",
+        encoding="utf-8",
+    )
+    calls = {}
+
+    def _fake_write_review_report(path, rows, **kwargs):
+        calls["injection_order"] = kwargs["injection_order"]
+        path.write_text("<html></html>", encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(
+        "xic_extractor.output.excel_pipeline.write_review_report",
+        _fake_write_review_report,
+    )
+
+    write_excel_from_run_output(
+        config,
+        [_target("WithNL")],
+        _run_output(with_diagnostics=False),
+        output_path=tmp_path / "output" / "xic_results_20260505_1200.xlsx",
+    )
+
+    assert calls["injection_order"] == {"SampleA": 1}
+
+
+def _config(
+    tmp_path: Path,
+    *,
+    emit_score_breakdown: bool = False,
+    emit_review_report: bool = False,
+) -> ExtractionConfig:
     return ExtractionConfig(
         data_dir=tmp_path / "raw",
         dll_dir=tmp_path / "dll",
@@ -118,6 +202,7 @@ def _config(tmp_path: Path, *, emit_score_breakdown: bool = False) -> Extraction
         ms2_precursor_tol_da=0.5,
         nl_min_intensity_ratio=0.01,
         emit_score_breakdown=emit_score_breakdown,
+        emit_review_report=emit_review_report,
         config_hash="abc12345",
     )
 
@@ -148,9 +233,9 @@ def _run_output(*, with_diagnostics: bool) -> RunOutput:
     )
     candidate = PeakCandidate(
         peak=peak,
-        smoothed_apex_rt=9.0,
-        smoothed_apex_intensity=450.0,
-        smoothed_apex_index=10,
+        selection_apex_rt=9.0,
+        selection_apex_intensity=450.0,
+        selection_apex_index=10,
         raw_apex_rt=9.03,
         raw_apex_intensity=500.0,
         raw_apex_index=11,

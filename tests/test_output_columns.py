@@ -48,9 +48,9 @@ def _fabricate_run_output() -> RunOutput:
     )
     candidate = PeakCandidate(
         peak=peak,
-        smoothed_apex_rt=9.0,
-        smoothed_apex_intensity=500.0,
-        smoothed_apex_index=10,
+        selection_apex_rt=9.0,
+        selection_apex_intensity=500.0,
+        selection_apex_index=10,
         raw_apex_rt=9.03,
         raw_apex_intensity=500.0,
         raw_apex_index=10,
@@ -199,7 +199,7 @@ def test_score_breakdown_sheet_emitted_when_flag_on(tmp_path: Path) -> None:
     assert row["Prior Source"] == "rolling_median"
 
 
-def test_output_rows_use_smoothed_apex_rt_for_reporting() -> None:
+def test_output_rows_use_selection_apex_rt_for_reporting() -> None:
     run_output = _fabricate_run_output()
     file_result = run_output.file_results[0]
     target = _target("d3-5-hmdC")
@@ -213,7 +213,7 @@ def test_output_rows_use_smoothed_apex_rt_for_reporting() -> None:
     assert long_row["Area"] == "123.00"
 
 
-def test_xlsx_results_sheet_uses_smoothed_apex_rt_for_reporting(
+def test_xlsx_results_sheet_uses_selection_apex_rt_for_reporting(
     tmp_path: Path,
 ) -> None:
     out = _write_workbook(tmp_path)

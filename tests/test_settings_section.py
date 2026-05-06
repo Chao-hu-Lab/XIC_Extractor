@@ -26,6 +26,7 @@ def _canonical_settings() -> dict[str, str]:
         "dirty_matrix_mode": "false",
         "rt_prior_library_path": "",
         "emit_score_breakdown": "false",
+        "emit_review_report": "false",
         "keep_intermediate_csv": "false",
         "nl_rt_anchor_search_margin_min": "2.0",
         "nl_rt_anchor_half_window_min": "1.0",
@@ -52,6 +53,7 @@ def test_settings_section_saves_canonical_keys_after_canonical_load(qtbot) -> No
     assert values["count_no_ms2_as_detected"] == "true"
     assert values["parallel_mode"] == "serial"
     assert values["parallel_workers"] == "1"
+    assert values["emit_review_report"] == "false"
     assert "smooth_points" not in values
     assert "smooth_sigma" not in values
 

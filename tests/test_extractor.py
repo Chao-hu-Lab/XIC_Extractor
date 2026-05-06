@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.neutral_loss import NLResult
+from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -142,6 +142,72 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
             "Reason": "",
         },
     ]
+
+
+def test_run_wires_candidate_ms2_evidence_into_scoring_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    evidence_calls: list[object] = []
+
+    def _fake_collect_candidate_ms2_evidence(*_args, candidate: object, **_kwargs):
+        evidence_calls.append(candidate)
+        return CandidateMS2Evidence(
+            ms2_present=True,
+            nl_match=True,
+            nl_status="OK",
+            trigger_scan_count=1,
+            strict_nl_scan_count=1,
+            best_loss_ppm=1.0,
+            best_scan_rt=8.5,
+            best_product_base_ratio=0.5,
+            alignment_source="region",
+        )
+
+    def _fake_find_peak_and_area(
+        _rt: np.ndarray,
+        _intensity: np.ndarray,
+        _config: ExtractionConfig,
+        **kwargs: object,
+    ) -> PeakDetectionResult:
+        builder = kwargs.get("scoring_context_builder")
+        assert builder is not None
+        builder(
+            PeakCandidate(
+                peak=PeakResult(
+                    rt=8.5,
+                    intensity=1200.0,
+                    intensity_smoothed=1200.0,
+                    area=3400.25,
+                    peak_start=8.0,
+                    peak_end=9.0,
+                ),
+                selection_apex_rt=8.5,
+                selection_apex_intensity=1200.0,
+                selection_apex_index=1,
+                raw_apex_rt=8.5,
+                raw_apex_intensity=1200.0,
+                raw_apex_index=1,
+                prominence=1200.0,
+            )
+        )
+        return _ok_peak(8.5, 1200.0, 3400.25)
+
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.collect_candidate_ms2_evidence",
+        _fake_collect_candidate_ms2_evidence,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _fake_find_peak_and_area,
+    )
+
+    _run(config, [_target("WithNL")])
+
+    assert len(evidence_calls) == 1
 
 
 def test_run_does_not_write_intermediate_csv_by_default(
@@ -1053,9 +1119,9 @@ def _ok_peak(
     )
     candidate = PeakCandidate(
         peak=peak,
-        smoothed_apex_rt=rt,
-        smoothed_apex_intensity=intensity,
-        smoothed_apex_index=7,
+        selection_apex_rt=rt,
+        selection_apex_intensity=intensity,
+        selection_apex_index=7,
         raw_apex_rt=rt,
         raw_apex_intensity=intensity,
         raw_apex_index=7,
