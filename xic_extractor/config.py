@@ -57,7 +57,7 @@ class ExtractionConfig:
     resolver_min_absolute_height: float = 25.0
     resolver_min_ratio_top_edge: float = 1.7
     resolver_peak_duration_min: float = 0.0
-    resolver_peak_duration_max: float = 10.0
+    resolver_peak_duration_max: float = 2.0
     resolver_min_scans: int = 5
     count_no_ms2_as_detected: bool = False
     nl_rt_anchor_search_margin_min: float = 2.0

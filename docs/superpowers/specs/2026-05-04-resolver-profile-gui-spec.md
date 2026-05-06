@@ -133,7 +133,7 @@ Local preset：
 | `resolver_min_absolute_height` | `25.0` |
 | `resolver_min_ratio_top_edge` | `1.7` |
 | `resolver_peak_duration_min` | `0.0` |
-| `resolver_peak_duration_max` | `10.0` |
+| `resolver_peak_duration_max` | `2.0` |
 | `resolver_min_scans` | `5` |
 
 ### 4.5 Validation changes for zero-valued local preset

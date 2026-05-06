@@ -116,7 +116,7 @@ _STATIC_LOCAL_MINIMUM_PARAMS = {
     "resolver_min_relative_height": "0.0",
     "resolver_min_absolute_height": "25.0",
     "resolver_peak_duration_min": "0.0",
-    "resolver_peak_duration_max": "10.0",
+    "resolver_peak_duration_max": "2.0",
 }
 
 _CALIBRATION_V1_OVERRIDES = (

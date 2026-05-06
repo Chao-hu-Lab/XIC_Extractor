@@ -101,7 +101,7 @@ The candidate grid should stay small enough to run on the two raw files during d
 | `resolver_min_ratio_top_edge` | `1.3`, `1.5`, `1.7`, `2.0` |
 | `resolver_min_scans` | `3`, `5` |
 | `resolver_peak_duration_min` | `0.0` |
-| `resolver_peak_duration_max` | `10.0` |
+| `resolver_peak_duration_max` | `2.0` |
 | `resolver_min_relative_height` | `0.0` |
 | `resolver_min_absolute_height` | `25.0` |
 
@@ -111,15 +111,16 @@ For preset calibration v1, the sweep also exposes a focused `calibration-v1`
 grid. This grid is intentionally smaller than `standard` and targets the two
 highest-risk preset questions identified after the first real-data checks:
 
-| Question | Current value | Candidate values |
+| Question | Starting value | Candidate values |
 |---|---:|---|
 | Maximum local-minimum region duration | `10.0` min | `1.5`, `2.0`, `3.0` min |
 | Minimum valley search range | `0.08` min | `0.04`, `0.05` min |
 
 The focused grid may combine these with the current edge-ratio setting and one
-moderately relaxed edge-ratio candidate. It is for evidence generation only; it
-must not update canonical defaults unless the decision gate passes and the user
-confirms the preset change.
+moderately relaxed edge-ratio candidate. Calibration v1 found no observed
+manual-truth cost for shrinking the duration cap, so the shipped preset uses
+`resolver_peak_duration_max=2.0`. Search-range remains `0.08` because the
+`0.04-0.05` candidates increased large area misses.
 
 ### 5.2 Case execution
 
@@ -213,6 +214,7 @@ After the two-raw manual sweep:
 
 - If no local-minimum candidate beats the current preset on `area_median_abs_pct_error` without guardrail failures, keep the current local-minimum preset.
 - If one candidate clearly beats the current preset and passes guardrails, update only the local-minimum preset values and docs.
+- If a candidate is equivalent on clean-matrix manual truth and improves parameter semantics or removes an overly broad placeholder value, a preset-only update is allowed when it does not increase missing peaks or large area misses.
 - If results are mixed, do not update defaults; keep the sweep report as evidence and run the 8-raw validation subset before making a preset decision.
 
 The 8-raw validation subset is:

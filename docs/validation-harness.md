@@ -50,9 +50,10 @@ uv run python scripts\validation_harness.py `
 ```
 
 `calibration-v1` keeps the sweep small and targets the current method questions:
-whether `resolver_peak_duration_max=10.0` is too permissive, and whether
+whether the historical `resolver_peak_duration_max=10.0` was too permissive, and whether
 `resolver_min_search_range_min=0.08` should move toward `0.04-0.05` minutes.
-It does not change runtime defaults by itself.
+If a candidate is equivalent on clean-matrix manual truth and improves parameter
+semantics, it may justify a preset-only change even without a large metric gain.
 
 ## Inspect Exact Commands
 

@@ -180,6 +180,10 @@ def test_build_parameter_sets_calibration_v1_focuses_duration_and_search() -> No
         == "0.05"
     )
     assert (
+        by_name["local_minimum_search_0p05"]["resolver_peak_duration_max"]
+        == "2.0"
+    )
+    assert (
         by_name["local_minimum_search_0p04_duration_2p0"][
             "resolver_min_search_range_min"
         ]

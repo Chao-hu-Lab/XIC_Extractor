@@ -245,7 +245,7 @@ def test_apply_local_minimum_preset_button_applies_validated_preset(qtbot) -> No
     assert values["resolver_min_relative_height"] == "0"
     assert values["resolver_min_ratio_top_edge"] == "1.7"
     assert values["resolver_peak_duration_min"] == "0"
-    assert values["resolver_peak_duration_max"] == "10"
+    assert values["resolver_peak_duration_max"] == "2.0"
 ```
 
 **Step 2: Run test**
@@ -313,7 +313,7 @@ _LOCAL_MINIMUM_GUI_PRESET = {
     "resolver_min_absolute_height": "25.0",
     "resolver_min_ratio_top_edge": "1.7",
     "resolver_peak_duration_min": "0",
-    "resolver_peak_duration_max": "10",
+    "resolver_peak_duration_max": "2.0",
     "resolver_min_scans": "5",
 }
 ```
@@ -328,7 +328,7 @@ def _apply_local_minimum_preset(self) -> None:
     self._resolver_min_absolute_height_spin.setValue(25.0)
     self._resolver_min_ratio_top_edge_spin.setValue(1.7)
     self._resolver_peak_duration_min_spin.setValue(0.0)
-    self._resolver_peak_duration_max_spin.setValue(10.0)
+    self._resolver_peak_duration_max_spin.setValue(2.0)
     self._resolver_min_scans_spin.setValue(5)
 ```
 
@@ -386,7 +386,7 @@ def test_local_minimum_defaults_match_validated_gui_preset() -> None:
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_relative_height"] == "0.0"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_ratio_top_edge"] == "1.7"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_min"] == "0.0"
-    assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_max"] == "10.0"
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_max"] == "2.0"
 ```
 
 Also add parser tests:
@@ -398,7 +398,7 @@ def test_local_minimum_zero_threshold_like_values_are_valid(tmp_path: Path) -> N
         settings_overrides={
             "resolver_min_relative_height": "0.0",
             "resolver_peak_duration_min": "0.0",
-            "resolver_peak_duration_max": "10.0",
+            "resolver_peak_duration_max": "2.0",
         },
     )
 
@@ -452,7 +452,7 @@ resolver_min_search_range_min = 0.08
 resolver_min_relative_height = 0.0
 resolver_min_ratio_top_edge = 1.7
 resolver_peak_duration_min = 0.0
-resolver_peak_duration_max = 10.0
+resolver_peak_duration_max = 2.0
 ```
 
 Update validation:

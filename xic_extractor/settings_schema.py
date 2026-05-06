@@ -12,7 +12,7 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "resolver_min_absolute_height": "25.0",
     "resolver_min_ratio_top_edge": "1.7",
     "resolver_peak_duration_min": "0.0",
-    "resolver_peak_duration_max": "10.0",
+    "resolver_peak_duration_max": "2.0",
     "resolver_min_scans": "5",
     "ms2_precursor_tol_da": "1.6",
     "nl_min_intensity_ratio": "0.01",
