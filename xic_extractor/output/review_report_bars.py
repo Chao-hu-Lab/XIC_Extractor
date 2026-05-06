@@ -32,8 +32,8 @@ def target_bar_chart(
             f'y="{y + 12}">{escape(value_text)}</text>'
         )
     return (
-        f'<svg class="target-bar-chart {chart_class}" viewBox="0 0 {width} {height}" '
-        'role="img">'
+        f'<svg class="target-bar-chart {chart_class}" width="{width}" '
+        f'height="{height}" viewBox="0 0 {width} {height}" role="img">'
         f"{''.join(rows)}"
         "</svg>"
     )

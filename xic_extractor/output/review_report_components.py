@@ -30,7 +30,7 @@ th{background:#f6f8fa;font-weight:700}
 .bar-fill.detection{background:#2da44e}
 .bar-fill.flagged{background:#cf222e}
 .target-bar-chart{
-width:100%;height:auto;margin:8px 0 12px;
+display:block;width:720px;max-width:100%;height:auto;margin:8px 0 12px;
 border:1px solid #d0d7de;background:#fff
 }
 .target-bar{rx:3;ry:3}

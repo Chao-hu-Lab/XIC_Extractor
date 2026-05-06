@@ -187,6 +187,9 @@ def test_review_report_contains_visual_detection_and_flag_charts(
     assert 'class="target-bar-chart flag-chart"' in html
     assert 'class="target-bar detection-bar"' in html
     assert 'class="target-bar flag-bar"' in html
+    assert "width:720px;max-width:100%;height:auto" in html
+    assert '<svg class="target-bar-chart detection-chart" width="720"' in html
+    assert '<svg class="target-bar-chart flag-chart" width="720"' in html
     assert 'class="bar-fill detection"' in html
     assert 'class="bar-fill flagged"' in html
     assert "A</td><td>50%</td>" in html
