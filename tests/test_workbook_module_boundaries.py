@@ -27,11 +27,14 @@ def test_workbook_inputs_exists_and_is_openpyxl_free() -> None:
 
 def test_review_report_writer_delegates_visual_components() -> None:
     assert importlib.util.find_spec("xic_extractor.output.review_report_components")
+    assert importlib.util.find_spec("xic_extractor.output.review_report_bars")
     assert importlib.util.find_spec("xic_extractor.output.review_report_trend")
 
     report_path = ROOT / "xic_extractor" / "output" / "review_report.py"
+    bars_path = ROOT / "xic_extractor" / "output" / "review_report_bars.py"
     components_path = ROOT / "xic_extractor" / "output" / "review_report_components.py"
     assert len(report_path.read_text(encoding="utf-8").splitlines()) <= 220
+    assert len(bars_path.read_text(encoding="utf-8").splitlines()) <= 120
     assert len(components_path.read_text(encoding="utf-8").splitlines()) <= 260
 
 

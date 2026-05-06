@@ -183,6 +183,10 @@ def test_review_report_contains_visual_detection_and_flag_charts(
     html = path.read_text(encoding="utf-8")
     assert "<h2>Detection Rate By Target</h2>" in html
     assert "<h2>Flag Burden By Target</h2>" in html
+    assert 'class="target-bar-chart detection-chart"' in html
+    assert 'class="target-bar-chart flag-chart"' in html
+    assert 'class="target-bar detection-bar"' in html
+    assert 'class="target-bar flag-bar"' in html
     assert 'class="bar-fill detection"' in html
     assert 'class="bar-fill flagged"' in html
     assert "A</td><td>50%</td>" in html

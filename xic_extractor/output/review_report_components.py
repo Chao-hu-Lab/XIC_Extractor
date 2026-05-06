@@ -3,6 +3,7 @@ from __future__ import annotations
 from html import escape
 
 from xic_extractor.output.review_metrics import ReviewMetrics
+from xic_extractor.output.review_report_bars import target_bar_chart
 
 _CSS = """
 body{font-family:Arial,Helvetica,sans-serif;margin:24px;color:#1f2328;background:#fff}
@@ -28,6 +29,15 @@ th{background:#f6f8fa;font-weight:700}
 .bar-fill{height:100%}
 .bar-fill.detection{background:#2da44e}
 .bar-fill.flagged{background:#cf222e}
+.target-bar-chart{
+width:100%;height:auto;margin:8px 0 12px;
+border:1px solid #d0d7de;background:#fff
+}
+.target-bar{rx:3;ry:3}
+.target-bar.detection-bar{fill:#2da44e}
+.target-bar.flag-bar{fill:#cf222e}
+.target-bar-label{font-size:12px;fill:#24292f}
+.target-bar-value{font-size:12px;fill:#57606a}
 .trend-svg{max-width:100%;height:auto;border:1px solid #d0d7de;background:#fff}
 .trend-axis{stroke:#57606a;stroke-width:1}
 .trend-grid{stroke:#d8dee4;stroke-width:1}
@@ -62,9 +72,11 @@ def _batch_overview(metrics: ReviewMetrics) -> str:
 
 def _detection_rate_chart(metrics: ReviewMetrics, targets: list[str]) -> str:
     rows = ""
+    chart_items: list[tuple[str, int, str]] = []
     for target in targets:
         item = metrics.targets[target]
         detected_percent = _percent_value(item.detected_percent)
+        chart_items.append((item.target, detected_percent, item.detected_percent))
         rows += (
             "<tr>"
             f"<td>{escape(item.target)}</td>"
@@ -76,9 +88,15 @@ def _detection_rate_chart(metrics: ReviewMetrics, targets: list[str]) -> str:
         )
     if not rows:
         rows = '<tr><td colspan="3">None</td></tr>'
+    chart_html = target_bar_chart(
+        chart_items,
+        chart_class="detection-chart",
+        bar_class="detection-bar",
+    )
     return (
         "<section><h2>Detection Rate By Target</h2>"
         '<p class="dashboard-note">Lowest detection rates are listed first.</p>'
+        f"{chart_html}"
         '<table class="bar-table"><thead><tr><th>Target</th><th>Detected %</th>'
         "<th>Rate</th></tr></thead>"
         f"<tbody>{rows}</tbody></table></section>"
@@ -95,8 +113,10 @@ def _flag_burden_chart(metrics: ReviewMetrics, targets: list[str]) -> str:
         key=lambda item: (-_percent_value(item.flagged_percent), item.target),
     )
     rows = ""
+    chart_items: list[tuple[str, int, str]] = []
     for item in flagged_targets:
         flagged_percent = _percent_value(item.flagged_percent)
+        chart_items.append((item.target, flagged_percent, item.flagged_percent))
         rows += (
             "<tr>"
             f"<td>{escape(item.target)}</td>"
@@ -109,14 +129,19 @@ def _flag_burden_chart(metrics: ReviewMetrics, targets: list[str]) -> str:
         )
     if not rows:
         rows = '<tr><td colspan="4">None</td></tr>'
+    chart_html = target_bar_chart(
+        chart_items,
+        chart_class="flag-chart",
+        bar_class="flag-bar",
+    )
     return (
         "<section><h2>Flag Burden By Target</h2>"
         '<p class="dashboard-note">Only targets with review rows are included.</p>'
+        f"{chart_html}"
         '<table class="bar-table"><thead><tr><th>Target</th><th>Flagged Rows</th>'
         "<th>Flagged %</th><th>Burden</th></tr></thead>"
         f"<tbody>{rows}</tbody></table></section>"
     )
-
 
 
 def _heatmap(metrics: ReviewMetrics, samples: list[str], targets: list[str]) -> str:
