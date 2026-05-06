@@ -1,14 +1,12 @@
-import gc
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from statistics import median
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.scoring_factory import (
     allow_prepass_anchor,
-    build_scoring_context_factory,
     paired_istd_fwhm,
     selected_candidate,
     selected_shape_metrics,
@@ -21,7 +19,6 @@ from xic_extractor.neutral_loss import (
     collect_candidate_ms2_evidence,
     find_nl_anchor_rt,
 )
-from xic_extractor.output import csv_writers
 from xic_extractor.output.messages import (
     DiagnosticIssue,
     DiagnosticRecord,
@@ -37,9 +34,6 @@ from xic_extractor.signal_processing import (
     PeakResult,
     find_peak_and_area,
 )
-
-if TYPE_CHECKING:
-    from xic_extractor.execution import ScoringInputs
 
 __all__ = [
     "DiagnosticIssue",
@@ -145,7 +139,9 @@ def run(
         raise RawReaderError(" ".join(reader_errors))
 
     if config.parallel_mode == "process":
-        return _run_process(
+        from xic_extractor.extraction.process_backend import run_process
+
+        return run_process(
             config,
             targets,
             progress_callback=progress_callback,
@@ -154,7 +150,9 @@ def run(
             rt_prior_library=rt_prior_library,
         )
 
-    return _run_serial(
+    from xic_extractor.extraction.serial_backend import run_serial
+
+    return run_serial(
         config,
         targets,
         progress_callback=progress_callback,
@@ -162,233 +160,6 @@ def run(
         injection_order=injection_order,
         rt_prior_library=rt_prior_library,
     )
-
-
-def _run_serial(
-    config: ExtractionConfig,
-    targets: list[Target],
-    *,
-    progress_callback: Callable[[int, int, str], None] | None = None,
-    should_stop: Callable[[], bool] | None = None,
-    injection_order: dict[str, int] | None = None,
-    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
-) -> RunOutput:
-    raw_paths = sorted(config.data_dir.glob("*.raw"))
-    resolved_injection_order = _resolve_injection_order(
-        config, raw_paths, injection_order
-    )
-    resolved_rt_prior_library = _resolve_rt_prior_library(config, rt_prior_library)
-    istd_targets = [target for target in targets if target.is_istd]
-    istd_rts_by_sample: dict[str, dict[str, float]] = {}
-    for raw_path in raw_paths:
-        if should_stop is not None and should_stop():
-            break
-        prepass = _extract_istd_anchors_only(config, istd_targets, raw_path)
-        if prepass is None:
-            continue
-        anchors, _, _, _ = prepass
-        for istd_label, anchor_rt in anchors.items():
-            istd_rts_by_sample.setdefault(istd_label, {})[raw_path.stem] = anchor_rt
-
-    scoring_context_factory = build_scoring_context_factory(
-        config=config,
-        injection_order=(
-            resolved_injection_order
-            if resolved_injection_order is not None
-            else _fallback_injection_order_from_mtime(raw_paths)
-        ),
-        istd_rts_by_sample=istd_rts_by_sample,
-        rt_prior_library=resolved_rt_prior_library or {},
-    )
-
-    file_results: list[FileResult] = []
-    diagnostics: list[DiagnosticRecord] = []
-    total = len(raw_paths)
-
-    for index, raw_path in enumerate(raw_paths, start=1):
-        if should_stop is not None and should_stop():
-            break
-
-        raw_result = _extract_raw_file_result(
-            index,
-            config,
-            targets,
-            raw_path,
-            scoring_context_factory=scoring_context_factory,
-        )
-        file_results.append(raw_result.file_result)
-        diagnostics.extend(raw_result.diagnostics)
-
-        if progress_callback is not None:
-            progress_callback(index, total, raw_path.name)
-        if index % 50 == 0:
-            gc.collect()
-
-    output = RunOutput(file_results=file_results, diagnostics=diagnostics)
-    if config.keep_intermediate_csv:
-        csv_writers.write_all(
-            config,
-            targets,
-            file_results,
-            diagnostics,
-            emit_score_breakdown=config.emit_score_breakdown,
-        )
-    return output
-
-
-def _run_process(
-    config: ExtractionConfig,
-    targets: list[Target],
-    *,
-    progress_callback: Callable[[int, int, str], None] | None = None,
-    should_stop: Callable[[], bool] | None = None,
-    injection_order: dict[str, int] | None = None,
-    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
-) -> RunOutput:
-    raw_paths = sorted(config.data_dir.glob("*.raw"))
-    resolved_injection_order = _resolve_injection_order(
-        config, raw_paths, injection_order
-    )
-    resolved_rt_prior_library = _resolve_rt_prior_library(config, rt_prior_library)
-    istd_targets = tuple(target for target in targets if target.is_istd)
-    istd_rts_by_sample = _collect_istd_prepass_process(
-        config,
-        istd_targets,
-        raw_paths,
-        should_stop=should_stop,
-    )
-    process_injection_order = (
-        resolved_injection_order
-        if resolved_injection_order is not None
-        else _fallback_injection_order_from_mtime(raw_paths)
-    )
-    from xic_extractor.execution import ScoringInputs
-
-    scoring_inputs = ScoringInputs(
-        injection_order=process_injection_order,
-        istd_rts_by_sample=istd_rts_by_sample,
-        rt_prior_library=resolved_rt_prior_library or {},
-    )
-    raw_results = _collect_raw_file_results_process(
-        config,
-        tuple(targets),
-        raw_paths,
-        scoring_inputs,
-        progress_callback=progress_callback,
-        should_stop=should_stop,
-    )
-
-    file_results = [result.file_result for result in raw_results]
-    diagnostics: list[DiagnosticRecord] = []
-    for result in raw_results:
-        diagnostics.extend(result.diagnostics)
-
-    output = RunOutput(file_results=file_results, diagnostics=diagnostics)
-    if config.keep_intermediate_csv:
-        csv_writers.write_all(
-            config,
-            targets,
-            file_results,
-            diagnostics,
-            emit_score_breakdown=config.emit_score_breakdown,
-        )
-    return output
-
-
-def _collect_raw_file_results_process(
-    config: ExtractionConfig,
-    targets: tuple[Target, ...],
-    raw_paths: list[Path],
-    scoring_inputs: "ScoringInputs",
-    *,
-    progress_callback: Callable[[int, int, str], None] | None = None,
-    should_stop: Callable[[], bool] | None = None,
-    runner: Callable[..., list[Any]] | None = None,
-) -> list[RawFileExtractionResult]:
-    from xic_extractor.execution import (
-        RawFileJob,
-        collect_ordered_results,
-        run_raw_file_jobs,
-    )
-
-    if should_stop is not None and should_stop():
-        return []
-    jobs = [
-        RawFileJob(
-            raw_index=index,
-            raw_path=raw_path,
-            config=config,
-            targets=targets,
-            scoring_inputs=scoring_inputs,
-        )
-        for index, raw_path in enumerate(raw_paths, start=1)
-    ]
-    raw_runner = runner if runner is not None else run_raw_file_jobs
-    results = raw_runner(
-        jobs,
-        max_workers=config.parallel_workers,
-        should_stop=should_stop,
-        progress_callback=progress_callback,
-        total=len(raw_paths),
-    )
-    return collect_ordered_results(results)
-
-
-def _collect_istd_prepass_process(
-    config: ExtractionConfig,
-    istd_targets: tuple[Target, ...],
-    raw_paths: list[Path],
-    *,
-    should_stop: Callable[[], bool] | None = None,
-    runner: Callable[..., list[Any]] | None = None,
-) -> dict[str, dict[str, float]]:
-    from xic_extractor.execution import (
-        IstdPrepassResult,
-        ParallelExecutionError,
-        RawFileJob,
-        WorkerError,
-        run_istd_prepass_jobs,
-    )
-
-    if not istd_targets:
-        return {}
-    if should_stop is not None and should_stop():
-        return {}
-    jobs = [
-        RawFileJob(
-            raw_index=index,
-            raw_path=raw_path,
-            config=config,
-            targets=istd_targets,
-        )
-        for index, raw_path in enumerate(raw_paths, start=1)
-    ]
-    prepass_runner = runner if runner is not None else run_istd_prepass_jobs
-    results = prepass_runner(
-        jobs,
-        max_workers=config.parallel_workers,
-        should_stop=should_stop,
-    )
-
-    errors = [result for result in results if isinstance(result, WorkerError)]
-    if errors:
-        messages = "; ".join(
-            f"{error.raw_name}: {error.message}"
-            for error in sorted(errors, key=lambda item: item.raw_index)
-        )
-        raise ParallelExecutionError(messages)
-
-    istd_rts_by_sample: dict[str, dict[str, float]] = {}
-    ordered_results = sorted(
-        (result for result in results if isinstance(result, IstdPrepassResult)),
-        key=lambda item: item.raw_index,
-    )
-    for result in ordered_results:
-        for istd_label, anchor_rt in result.anchors.items():
-            istd_rts_by_sample.setdefault(istd_label, {})[
-                result.sample_name
-            ] = anchor_rt
-    return istd_rts_by_sample
 
 
 def _extract_raw_file_result(

@@ -27,6 +27,7 @@ def test_run_uses_serial_backend_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from xic_extractor import extractor
+    from xic_extractor.extraction import serial_backend
 
     config = _config(tmp_path, keep_intermediate_csv=False)
     targets = [_target("Analyte")]
@@ -55,7 +56,7 @@ def test_run_uses_serial_backend_by_default(
     def _should_stop() -> bool:
         return False
 
-    monkeypatch.setattr(extractor, "_run_serial", _fake_run_serial)
+    monkeypatch.setattr(serial_backend, "run_serial", _fake_run_serial)
 
     output = extractor.run(
         config,

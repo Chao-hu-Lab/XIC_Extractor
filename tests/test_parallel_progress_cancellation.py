@@ -63,7 +63,9 @@ def test_raw_process_collector_does_not_schedule_when_already_cancelled(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.execution import ScoringInputs
-    from xic_extractor.extractor import _collect_raw_file_results_process
+    from xic_extractor.extraction.process_backend import (
+        collect_raw_file_results_process,
+    )
 
     config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
     calls = []
@@ -72,7 +74,7 @@ def test_raw_process_collector_does_not_schedule_when_already_cancelled(
         calls.extend(jobs)
         return []
 
-    results = _collect_raw_file_results_process(
+    results = collect_raw_file_results_process(
         config,
         (_target("Analyte"),),
         [tmp_path / "A.raw"],
