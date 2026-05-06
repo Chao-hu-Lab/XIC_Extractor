@@ -24,6 +24,11 @@ th{background:#f6f8fa;font-weight:700}
 .not-detected{background:#ffebe9}
 .error{background:#ffd8d3}
 .heatmap td{text-align:center;min-width:28px}
+.bar-table{table-layout:fixed}
+.bar-table .target-col{width:36%}
+.bar-table .count-col{width:110px}
+.bar-table .percent-col{width:110px}
+.bar-table .bar-col{width:auto}
 .bar-table td:nth-child(2){width:90px;font-weight:700}
 .bar-track{height:14px;background:#eaeef2;border:1px solid #d0d7de}
 .bar-fill{height:100%}
@@ -97,7 +102,10 @@ def _detection_rate_chart(metrics: ReviewMetrics, targets: list[str]) -> str:
         "<section><h2>Detection Rate By Target</h2>"
         '<p class="dashboard-note">Lowest detection rates are listed first.</p>'
         f"{chart_html}"
-        '<table class="bar-table"><thead><tr><th>Target</th><th>Detected %</th>'
+        '<table class="bar-table">'
+        '<colgroup><col class="target-col"><col class="percent-col">'
+        '<col class="bar-col"></colgroup>'
+        "<thead><tr><th>Target</th><th>Detected %</th>"
         "<th>Rate</th></tr></thead>"
         f"<tbody>{rows}</tbody></table></section>"
     )
@@ -138,7 +146,10 @@ def _flag_burden_chart(metrics: ReviewMetrics, targets: list[str]) -> str:
         "<section><h2>Flag Burden By Target</h2>"
         '<p class="dashboard-note">Only targets with review rows are included.</p>'
         f"{chart_html}"
-        '<table class="bar-table"><thead><tr><th>Target</th><th>Flagged Rows</th>'
+        '<table class="bar-table">'
+        '<colgroup><col class="target-col"><col class="count-col">'
+        '<col class="percent-col"><col class="bar-col"></colgroup>'
+        "<thead><tr><th>Target</th><th>Flagged Rows</th>"
         "<th>Flagged %</th><th>Burden</th></tr></thead>"
         f"<tbody>{rows}</tbody></table></section>"
     )
