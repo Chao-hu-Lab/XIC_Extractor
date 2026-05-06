@@ -4,6 +4,23 @@ This file defines repo-local engineering contracts for XIC Extractor. Global
 agent rules still apply; this file only records project-specific architecture
 and maintenance expectations.
 
+## Design References
+
+These rules are adapted to this repo from a few mature Python and clean-code
+guides:
+
+- The Hitchhiker's Guide to Python emphasizes that project structure should make
+  logic, dependencies, data flow, and grouping clear.
+- Clean Code guidance emphasizes one responsibility per function/module, one
+  level of abstraction per function, and descriptive names over explanatory
+  comments.
+- `clean-code-python` frames SOLID/Clean Code ideas as guidelines, not laws.
+- Cosmic Python's service-layer pattern separates workflow orchestration from
+  domain behavior and keeps entry points thin.
+
+Use these as pragmatic guardrails. Do not introduce extra layers when a small,
+cohesive module is easier to understand and test.
+
 ## Architecture Boundaries
 
 XIC Extractor should prefer thin orchestration modules that coordinate focused
@@ -17,6 +34,11 @@ Preferred pattern:
   mechanics.
 - The entry module wires those pieces together and contains minimal domain
   logic.
+- Dependency direction should point from orchestration/adapters toward focused
+  domain helpers, not from domain helpers back into CLI, GUI, workbook, or
+  process-runner code.
+- Workflow orchestration belongs in one module layer; algorithm details and IO
+  rendering belong in separate modules.
 
 Examples:
 
@@ -34,6 +56,17 @@ Examples:
 
 Before adding non-trivial behavior to a module, check whether the change belongs
 to an existing focused owner or deserves a new focused module.
+
+Ask these questions before editing a large module:
+
+- What single actor or reason-to-change owns this behavior?
+- Is this workflow orchestration, domain logic, IO, rendering, or test/validation
+  support?
+- Does the new code operate at the same abstraction level as nearby code?
+- Would a future change to Excel formatting, process execution, peak detection,
+  or scoring force an unrelated part of this module to change?
+- Can this behavior be tested without Thermo RAW files, Excel workbooks, or GUI
+  widgets?
 
 Use these ownership boundaries by default:
 
@@ -55,6 +88,53 @@ Use these ownership boundaries by default:
 - Workbook styles: formatting helpers only.
 - HTML report: static visual report rendering only.
 
+Avoid modules that mix more than one of these ownership groups unless they are
+explicit orchestration facades.
+
+## Orchestration Module Rules
+
+An orchestration module may know the sequence of a workflow, but it should not
+own the implementation details of every step.
+
+Good orchestration modules:
+
+- expose the public entry point,
+- validate and normalize high-level inputs,
+- call focused submodules in a readable order,
+- pass explicit data structures between steps,
+- preserve cancellation/progress contracts when they are part of the workflow,
+- stay easy to characterize with high-level tests.
+
+Bad orchestration modules:
+
+- contain low-level algorithm internals,
+- render workbook/HTML details inline,
+- build process-pool payloads and also score peaks,
+- mutate global state for convenience,
+- rely on long flag-argument branches that effectively implement multiple
+  workflows inside one function.
+
+If a function has distinct sections such as setup, parsing, algorithm,
+rendering, diagnostics, and writing, split those sections into named helpers or
+submodules unless the function is already a short facade.
+
+## Dependency And Data Flow Rules
+
+Prefer explicit data flow over hidden coupling.
+
+- Pass typed dataclasses or simple dictionaries at module boundaries when the
+  project already uses them.
+- Keep IO adapters at the edges: RAW reading, CSV reading/writing, workbook
+  rendering, HTML rendering, GUI widgets, and GitHub/CLI wrappers should not be
+  imported by core scoring or peak-detection logic.
+- Core algorithms should accept arrays, config values, and small context objects,
+  not full GUI/config/workbook objects.
+- Avoid circular imports by moving shared models to a small `models.py` or
+  contract module.
+- When a process backend is involved, module boundaries must preserve Windows
+  spawn picklability. Do not pass nested closures or non-pickleable factories
+  across process boundaries.
+
 ## Size And Refactor Triggers
 
 Line count is not a hard quality metric, but it is a useful maintenance signal.
@@ -68,6 +148,24 @@ follow-up maintainability issue/spec.
 For scripts and validation tools, a larger file can be acceptable, but only when
 it owns one coherent workflow. If a script mixes parsing, execution, scoring,
 and workbook rendering, split it before adding more features.
+
+Counting responsibilities is more important than counting lines. A 350-line
+module that owns one algorithm can be acceptable. A 250-line module that mixes
+GUI, IO, scoring, and formatting is already a design smell.
+
+## Function-Level Rules
+
+Functions should read at one level of abstraction.
+
+- A high-level workflow function should call named steps, not inline every
+  implementation detail.
+- A low-level helper should do one mechanical thing and be easy to unit test.
+- Avoid boolean flag arguments that switch between unrelated behaviors. Prefer
+  separate functions or strategy objects when the branches represent different
+  workflows.
+- Keep names domain-specific and consistent: use the same vocabulary for target,
+  candidate, anchor, trace quality, NL evidence, review row, and workbook sheet
+  concepts across modules.
 
 ## Public Contract Preservation
 
@@ -99,4 +197,15 @@ For maintainability refactors:
   could affect real workbook output.
 - Do not mix scoring threshold changes, selection-rule changes, or area
   integration changes into structural refactor commits.
+- After a structural refactor, check that module dependencies still match the
+  intended ownership boundaries. If a low-level module imports a high-level
+  entry point, workbook builder, GUI section, or process backend, treat it as a
+  design regression.
 
+## Source Links
+
+- Python project structure: `https://docs.python-guide.org/writing/structure/`
+- Clean Code for Python: `https://github.com/zedr/clean-code-python`
+- Clean Code summary: `https://github.com/thomasruegg/clean-code-summary`
+- Cosmic Python service layer: `https://www.cosmicpython.com/book/chapter_04_service_layer.html`
+- Clean Architecture Python example: `https://github.com/cdddg/py-clean-arch`
