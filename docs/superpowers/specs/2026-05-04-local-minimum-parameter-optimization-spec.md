@@ -102,7 +102,7 @@ The candidate grid should stay small enough to run on the two raw files during d
 | `resolver_min_scans` | `3`, `5` |
 | `resolver_peak_duration_min` | `0.0` |
 | `resolver_peak_duration_max` | `2.0` |
-| `resolver_min_relative_height` | `0.0` |
+| `resolver_min_relative_height` | `0.02` |
 | `resolver_min_absolute_height` | `25.0` |
 
 This is 72 local-minimum combinations plus baselines. If runtime is too high, the script should allow a named quick grid.
@@ -128,7 +128,7 @@ cap:
 | Question | Starting value | Candidate values |
 |---|---:|---|
 | Minimum local-minimum region duration | `0.0` min | `0.02`, `0.03` min |
-| Minimum relative apex height | `0.0` | `0.01`, `0.02`, `0.03` |
+| Minimum relative apex height | `0.02` | `0.0`, `0.01`, `0.03` |
 
 The data hierarchy matters for decisions:
 
@@ -146,12 +146,13 @@ Calibration v2 result:
 
 - `resolver_peak_duration_min=0.02-0.03` had no meaningful effect on the
   two-raw manual truth sweep.
-- `resolver_min_relative_height=0.01-0.03` improved pure STD area agreement,
-  especially for NoSplit STD, but all tested positive values narrowed selected
+- `resolver_min_relative_height=0.02` improved pure STD area agreement,
+  especially for NoSplit STD. Positive values initially narrowed selected
   tissue peak regions enough to change candidate-aligned MS2/NL status for
-  several 5-medC rows without moving the apex. Keep the shipped preset at
-  `resolver_min_relative_height=0.0` until the boundary/MS2 alignment contract
-  is reviewed.
+  several 5-medC rows without moving the apex; strict-NL boundary rescue fixes
+  that semantic mismatch. After the rescue, `0.02` had no detection, RT, area,
+  NL, or confidence regression on the 8-raw tissue subset. `0.03` still moved a
+  QC 8-oxodG row, so the shipped preset uses `0.02`.
 
 ### 5.2 Case execution
 

@@ -129,16 +129,17 @@ Local preset：
 |---|---:|
 | `resolver_chrom_threshold` | `0.05` |
 | `resolver_min_search_range_min` | `0.08` |
-| `resolver_min_relative_height` | `0.0` |
+| `resolver_min_relative_height` | `0.02` |
 | `resolver_min_absolute_height` | `25.0` |
 | `resolver_min_ratio_top_edge` | `1.7` |
 | `resolver_peak_duration_min` | `0.0` |
 | `resolver_peak_duration_max` | `2.0` |
 | `resolver_min_scans` | `5` |
 
-### 4.5 Validation changes for zero-valued local preset
+### 4.5 Validation changes for zero-valued local floors
 
-Local preset 中的兩個 key 必須允許 `0.0`：
+Local profile 中的兩個 key 必須允許 `0.0`，即使目前 preset 只把
+`resolver_peak_duration_min` 設為 `0.0`：
 
 | Key | 新 validation |
 |---|---|
@@ -152,7 +153,7 @@ GUI spinbox range 也必須同步：
 | `resolver_min_relative_height` | `0.0` |
 | `resolver_peak_duration_min` | `0.0` |
 
-原因：MZmine local minimum presets 允許 minimum relative height 與 minimum peak duration 為 0；本 repo 的人工 truth set 參數矩陣也使用這兩個 0 值。
+原因：MZmine local minimum profiles 允許 minimum relative height 與 minimum peak duration 為 0；本 repo 也需要 round-trip 舊設定與 calibration 對照值。
 
 這組 preset 來自人工 truth set 參數矩陣：
 

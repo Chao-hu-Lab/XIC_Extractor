@@ -203,6 +203,16 @@ def test_build_parameter_sets_calibration_v2_focuses_min_duration_and_height() -
 
     assert list(by_name)[:2] == ["legacy_savgol", "local_minimum_current"]
     assert (
+        by_name["local_minimum_current"]["resolver_min_relative_height"]
+        == "0.02"
+    )
+    assert (
+        by_name["local_minimum_rel_height_0p00"][
+            "resolver_min_relative_height"
+        ]
+        == "0.0"
+    )
+    assert (
         by_name["local_minimum_min_duration_0p02"][
             "resolver_peak_duration_min"
         ]

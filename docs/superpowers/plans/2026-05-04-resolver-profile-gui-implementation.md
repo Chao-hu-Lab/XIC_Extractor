@@ -383,7 +383,7 @@ from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 def test_local_minimum_defaults_match_validated_gui_preset() -> None:
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_chrom_threshold"] == "0.05"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_search_range_min"] == "0.08"
-    assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_relative_height"] == "0.0"
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_relative_height"] == "0.02"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_ratio_top_edge"] == "1.7"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_min"] == "0.0"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_max"] == "2.0"
@@ -449,7 +449,7 @@ Update local minimum defaults:
 
 ```text
 resolver_min_search_range_min = 0.08
-resolver_min_relative_height = 0.0
+resolver_min_relative_height = 0.02
 resolver_min_ratio_top_edge = 1.7
 resolver_peak_duration_min = 0.0
 resolver_peak_duration_max = 2.0

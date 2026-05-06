@@ -77,8 +77,10 @@ robustness stress tests, not the source of the first clean-model preset.
 The first `calibration-v2` run found that positive
 `resolver_min_relative_height` values improved NoSplit STD area agreement, but
 also narrowed tissue candidate regions enough to flip candidate-aligned MS2/NL
-status for several 5-medC rows. Treat this as evidence to review the boundary
-and MS2 alignment contract before changing the preset.
+status for several 5-medC rows. After adding strict-NL boundary rescue,
+`resolver_min_relative_height=0.02` kept the 8-raw tissue subset stable with no
+detection, RT, area, NL, or confidence regressions. `0.03` still moved a QC
+8-oxodG row, so the shipped preset uses `0.02`.
 
 ## Inspect Exact Commands
 

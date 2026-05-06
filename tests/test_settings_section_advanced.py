@@ -209,7 +209,7 @@ def test_apply_local_minimum_preset_button_applies_validated_preset(qtbot) -> No
     values = section.get_values()
     assert values["resolver_chrom_threshold"] == "0.05"
     assert values["resolver_min_search_range_min"] == "0.08"
-    assert values["resolver_min_relative_height"] == "0.0"
+    assert values["resolver_min_relative_height"] == "0.02"
     assert values["resolver_min_ratio_top_edge"] == "1.7"
     assert values["resolver_peak_duration_min"] == "0.0"
     assert values["resolver_peak_duration_max"] == "2.0"

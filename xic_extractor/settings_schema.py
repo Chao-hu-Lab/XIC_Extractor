@@ -8,7 +8,7 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "resolver_mode": "legacy_savgol",
     "resolver_chrom_threshold": "0.05",
     "resolver_min_search_range_min": "0.08",
-    "resolver_min_relative_height": "0.0",
+    "resolver_min_relative_height": "0.02",
     "resolver_min_absolute_height": "25.0",
     "resolver_min_ratio_top_edge": "1.7",
     "resolver_peak_duration_min": "0.0",

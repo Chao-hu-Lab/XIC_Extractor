@@ -610,6 +610,9 @@ has higher decision weight because its acquisition method is closer to real
 tissue samples when matrix effects are ignored. A relative-height candidate
 must also pass the 8-raw tissue smoke check without introducing candidate
 boundary/MS2 alignment regressions before it can justify a preset update.
+After strict-NL boundary rescue, `resolver_min_relative_height=0.02` passed this
+gate; `0.03` still moved a QC 8-oxodG row and remains too aggressive for the
+shipped preset.
 
 ### Task 7.3 — Report checkpoint
 

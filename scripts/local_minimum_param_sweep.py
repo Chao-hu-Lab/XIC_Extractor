@@ -113,7 +113,7 @@ SweepRunner = Callable[[ParameterSet], list[ProgramPeakRow]]
 
 
 _STATIC_LOCAL_MINIMUM_PARAMS = {
-    "resolver_min_relative_height": "0.0",
+    "resolver_min_relative_height": "0.02",
     "resolver_min_absolute_height": "25.0",
     "resolver_peak_duration_min": "0.0",
     "resolver_peak_duration_max": "2.0",
@@ -176,8 +176,8 @@ _CALIBRATION_V2_OVERRIDES = (
         {"resolver_min_relative_height": "0.01"},
     ),
     (
-        "local_minimum_rel_height_0p02",
-        {"resolver_min_relative_height": "0.02"},
+        "local_minimum_rel_height_0p00",
+        {"resolver_min_relative_height": "0.0"},
     ),
     (
         "local_minimum_rel_height_0p03",
@@ -191,10 +191,10 @@ _CALIBRATION_V2_OVERRIDES = (
         },
     ),
     (
-        "local_minimum_min_duration_0p02_rel_height_0p02",
+        "local_minimum_min_duration_0p02_rel_height_0p00",
         {
             "resolver_peak_duration_min": "0.02",
-            "resolver_min_relative_height": "0.02",
+            "resolver_min_relative_height": "0.0",
         },
     ),
     (
@@ -236,7 +236,10 @@ def build_parameter_sets(*, grid: str) -> list[ParameterSet]:
 
     parameter_sets = [
         ParameterSet("legacy_savgol", {"resolver_mode": "legacy_savgol"}),
-        ParameterSet("local_minimum_current", {"resolver_mode": "local_minimum"}),
+        ParameterSet(
+            "local_minimum_current",
+            {"resolver_mode": "local_minimum", **_STATIC_LOCAL_MINIMUM_PARAMS},
+        ),
     ]
     if grid == "calibration-v1":
         parameter_sets.extend(

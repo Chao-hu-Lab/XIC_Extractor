@@ -53,7 +53,7 @@ class ExtractionConfig:
     resolver_mode: str = "legacy_savgol"
     resolver_chrom_threshold: float = 0.05
     resolver_min_search_range_min: float = 0.08
-    resolver_min_relative_height: float = 0.0
+    resolver_min_relative_height: float = 0.02
     resolver_min_absolute_height: float = 25.0
     resolver_min_ratio_top_edge: float = 1.7
     resolver_peak_duration_min: float = 0.0
