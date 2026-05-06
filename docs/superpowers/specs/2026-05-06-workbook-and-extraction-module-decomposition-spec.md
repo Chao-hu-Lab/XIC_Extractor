@@ -139,6 +139,7 @@ xic_extractor/output/
   sheet_overview.py
   sheet_results.py
   sheet_summary.py
+  review_queue_model.py
   sheet_review_queue.py
   sheet_targets.py
   sheet_diagnostics.py
@@ -183,12 +184,15 @@ Each sheet module owns exactly one worksheet:
 | `sheet_overview.py` | Overview landing sheet and "How to read" copy. |
 | `sheet_results.py` | XIC Results long-form sheet. |
 | `sheet_summary.py` | target-level Summary rows. |
-| `sheet_review_queue.py` | Review Queue row creation and rendering. |
+| `review_queue_model.py` | Review Queue classification: priority, status, why, action, and evidence. |
+| `sheet_review_queue.py` | Review Queue worksheet rendering. |
 | `sheet_targets.py` | Targets sheet. |
 | `sheet_diagnostics.py` | hidden Diagnostics technical log. |
 | `sheet_score_breakdown.py` | optional Score Breakdown technical audit. |
 
 Sheet modules may use `review_metrics.py` and `workbook_styles.py`, but should not read files from disk.
+`sheet_review_queue.py` may consume `review_queue_model.py` rows, but it should
+not own review classification policy.
 
 ### 5.4 `workbook_builder.py`
 
@@ -523,7 +527,7 @@ Additional approval checks:
 
 ### 9.4 Real-data validation
 
-After both refactors:
+After each behavior-affecting refactor phase:
 
 1. run the 8-raw tissue validation subset with `parallel_workers=4`,
 2. compare workbook shape and key values against the pre-refactor output,

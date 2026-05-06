@@ -141,9 +141,10 @@ Line count is not a hard quality metric, but it is a useful maintenance signal.
 
 When a production module approaches roughly 500 lines, new behavior should come
 with an explicit reason for staying in that file. When a module approaches
-roughly 800 lines, avoid adding new responsibilities unless the task is an
-immediate bug fix. Prefer extracting a focused submodule first or opening a
-follow-up maintainability issue/spec.
+roughly 800 lines, avoid adding a new ownership group unless the task is an
+immediate bug fix. Small local fixes may still happen in large modules, but they
+should not make the module responsible for another workflow. Prefer extracting a
+focused submodule first or opening a follow-up maintainability issue/spec.
 
 For scripts and validation tools, a larger file can be acceptable, but only when
 it owns one coherent workflow. If a script mixes parsing, execution, scoring,
@@ -160,9 +161,11 @@ Functions should read at one level of abstraction.
 - A high-level workflow function should call named steps, not inline every
   implementation detail.
 - A low-level helper should do one mechanical thing and be easy to unit test.
-- Avoid boolean flag arguments that switch between unrelated behaviors. Prefer
-  separate functions or strategy objects when the branches represent different
-  workflows.
+- Avoid boolean flag arguments that switch between unrelated behaviors. This is
+  not a ban on boolean config values such as `emit_review_report` or
+  `strict_preferred_rt`; it is a warning against one function owning multiple
+  unrelated workflows behind a flag. Prefer separate functions or strategy
+  objects when the branches represent different workflows.
 - Keep names domain-specific and consistent: use the same vocabulary for target,
   candidate, anchor, trace quality, NL evidence, review row, and workbook sheet
   concepts across modules.
