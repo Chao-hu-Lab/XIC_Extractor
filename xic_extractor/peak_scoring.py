@@ -260,11 +260,7 @@ def candidate_quality_penalty(candidate: Any) -> tuple[int, list[str]]:
             + "; ".join(f"{label} (minor)" for label in adap_labels)
         )
 
-    legacy_flags = [
-        flag
-        for flag in flags
-        if flag not in _ADAP_LIKE_FLAG_LABELS
-    ]
+    legacy_flags = list(hard_quality_flags(flags))
     penalty = min(2, len(legacy_flags))
     if legacy_flags:
         notes.append(f"weak candidate: {', '.join(legacy_flags)}")
@@ -278,7 +274,6 @@ def candidate_selection_quality_penalty(candidate: Any) -> float:
         flag
         for flag in flags
         if flag in _ADAP_LIKE_FLAG_LABELS
-        and _ADAP_EQUIVALENT_LEGACY_FLAGS.get(flag) not in flags
     ]
     return min(
         _ADAP_LIKE_SELECTION_MAX,
@@ -286,8 +281,28 @@ def candidate_selection_quality_penalty(candidate: Any) -> float:
     )
 
 
+def hard_quality_flags(raw_flags: tuple[object, ...]) -> tuple[str, ...]:
+    flags = tuple(dict.fromkeys(str(flag) for flag in raw_flags))
+    suppressed_legacy = _suppressed_legacy_flags(flags)
+    return tuple(
+        flag
+        for flag in flags
+        if flag not in _ADAP_LIKE_FLAG_LABELS
+        and flag not in suppressed_legacy
+    )
+
+
 def is_adap_like_quality_flag(flag: object) -> bool:
     return str(flag) in _ADAP_LIKE_FLAG_LABELS
+
+
+def _suppressed_legacy_flags(flags: tuple[str, ...]) -> set[str]:
+    flag_set = set(flags)
+    return {
+        legacy_flag
+        for adap_flag, legacy_flag in _ADAP_EQUIVALENT_LEGACY_FLAGS.items()
+        if adap_flag in flag_set and legacy_flag in flag_set
+    }
 
 
 def _is_finite(value: float) -> bool:

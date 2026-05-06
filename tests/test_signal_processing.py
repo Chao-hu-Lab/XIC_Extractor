@@ -435,6 +435,7 @@ def test_local_minimum_low_scan_support_is_soft_quality_flag() -> None:
     assert result.status == "OK"
     assert len(result.candidates) == 1
     assert "low_scan_support" in result.candidates[0].quality_flags
+    assert "low_scan_count" not in result.candidates[0].quality_flags
 
 
 def test_local_minimum_jagged_trace_is_soft_continuity_flag() -> None:
@@ -587,5 +588,5 @@ def test_local_minimum_retains_edge_clipped_region_as_flagged_candidate() -> Non
     assert len(result.candidates) == 1
     assert result.candidates[0].peak.rt == pytest.approx(8.0, abs=0.01)
     assert "edge_clipped" in result.candidates[0].quality_flags
-    assert "low_top_edge_ratio" in result.candidates[0].quality_flags
     assert "poor_edge_recovery" in result.candidates[0].quality_flags
+    assert "low_top_edge_ratio" not in result.candidates[0].quality_flags

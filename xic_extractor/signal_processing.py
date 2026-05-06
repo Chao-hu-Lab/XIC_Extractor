@@ -864,7 +864,6 @@ def _local_minimum_region_quality(
     if left == 0 or right == len(intensity_values):
         flags.append("edge_clipped")
     if scan_count < config.resolver_min_scans:
-        flags.append("low_scan_count")
         flags.append("low_scan_support")
     if duration < config.resolver_peak_duration_min:
         flags.append("too_short")
@@ -874,7 +873,6 @@ def _local_minimum_region_quality(
         edge_ratio is not None
         and edge_ratio < config.resolver_min_ratio_top_edge
     ):
-        flags.append("low_top_edge_ratio")
         flags.append("poor_edge_recovery")
     if (
         trace_continuity is not None

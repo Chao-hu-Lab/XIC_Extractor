@@ -10,7 +10,7 @@ from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.peak_scoring import (
     ScoringContext,
     compute_local_sn_cache,
-    is_adap_like_quality_flag,
+    hard_quality_flags,
 )
 from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import (
@@ -202,7 +202,7 @@ def allow_prepass_anchor(peak_result: PeakDetectionResult) -> bool:
     if candidate is None:
         return False
     flags = tuple(str(flag) for flag in getattr(candidate, "quality_flags", ()))
-    return not any(not is_adap_like_quality_flag(flag) for flag in flags)
+    return not hard_quality_flags(flags)
 
 
 def paired_istd_fwhm(

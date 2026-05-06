@@ -266,6 +266,47 @@ def test_score_candidate_formats_adap_like_quality_flags_as_minor_concerns() -> 
     )
 
 
+def test_score_candidate_does_not_double_penalize_adap_equivalent_legacy_flags(
+) -> None:
+    cand = _make_flagged_candidate(
+        apex_rt=10.0,
+        apex_intensity=1000.0,
+        quality_flags=(
+            "low_scan_count",
+            "low_scan_support",
+            "low_top_edge_ratio",
+            "poor_edge_recovery",
+        ),
+    )
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        prefer_rt_prior_tiebreak=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.HIGH
+    assert scored.quality_penalty == 0
+    assert scored.selection_quality_penalty == 0.5
+    assert "weak candidate" not in scored.reason
+    assert scored.reason == (
+        "concerns: low scan support (minor); poor edge recovery (minor)"
+    )
+
+
 def test_selector_uses_weighted_adap_like_selection_penalty() -> None:
     clean = _sc(
         Confidence.HIGH,
