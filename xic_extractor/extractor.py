@@ -5,6 +5,7 @@ from statistics import median
 from typing import Any
 
 from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.extraction.output_dispatch import write_outputs
 from xic_extractor.extraction.scoring_factory import (
     allow_prepass_anchor,
     paired_istd_fwhm,
@@ -141,7 +142,7 @@ def run(
     if config.parallel_mode == "process":
         from xic_extractor.extraction.process_backend import run_process
 
-        return run_process(
+        output = run_process(
             config,
             targets,
             progress_callback=progress_callback,
@@ -149,10 +150,12 @@ def run(
             injection_order=injection_order,
             rt_prior_library=rt_prior_library,
         )
+        write_outputs(config, targets, output)
+        return output
 
     from xic_extractor.extraction.serial_backend import run_serial
 
-    return run_serial(
+    output = run_serial(
         config,
         targets,
         progress_callback=progress_callback,
@@ -160,6 +163,8 @@ def run(
         injection_order=injection_order,
         rt_prior_library=rt_prior_library,
     )
+    write_outputs(config, targets, output)
+    return output
 
 
 def _extract_raw_file_result(

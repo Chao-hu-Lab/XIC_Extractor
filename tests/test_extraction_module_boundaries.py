@@ -19,6 +19,16 @@ def test_extractor_delegates_backend_orchestration() -> None:
     assert len(extractor_path.read_text(encoding="utf-8").splitlines()) <= 850
 
 
+def test_backends_delegate_output_dispatch() -> None:
+    assert importlib.util.find_spec("xic_extractor.extraction.output_dispatch")
+
+    extraction_dir = ROOT / "xic_extractor" / "extraction"
+    for module_name in ("serial_backend.py", "process_backend.py"):
+        source = (extraction_dir / module_name).read_text(encoding="utf-8")
+        assert "csv_writers" not in source
+        assert "keep_intermediate_csv" not in source
+
+
 def _function_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return {

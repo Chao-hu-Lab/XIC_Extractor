@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.output import csv_writers
 from xic_extractor.output.messages import DiagnosticRecord
 from xic_extractor.rt_prior_library import LibraryEntry
 
@@ -65,16 +64,7 @@ def run_process(
     for result in raw_results:
         diagnostics.extend(result.diagnostics)
 
-    output = extractor.RunOutput(file_results=file_results, diagnostics=diagnostics)
-    if config.keep_intermediate_csv:
-        csv_writers.write_all(
-            config,
-            targets,
-            file_results,
-            diagnostics,
-            emit_score_breakdown=config.emit_score_breakdown,
-        )
-    return output
+    return extractor.RunOutput(file_results=file_results, diagnostics=diagnostics)
 
 
 def collect_raw_file_results_process(
