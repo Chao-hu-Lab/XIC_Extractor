@@ -236,6 +236,19 @@ uv run python scripts\validation_harness.py --run-id method_dev --output-root ou
 `validation_summary.csv`。完整 85-raw gate 必須顯式加
 `--suite tissue-85raw --confirm-full-run`。
 
+`local_minimum` preset calibration 使用較小的 focused grid，專門比較
+`resolver_peak_duration_max` 與 `resolver_min_search_range_min` 的候選值：
+
+```powershell
+uv run python scripts\validation_harness.py `
+  --suite manual-2raw `
+  --grid calibration-v1 `
+  --run-id local_minimum_calibration_v1 `
+  --output-root output\validation_harness
+```
+
+這個 grid 只產生 evidence，不會自動改 `settings.example.csv` 或 GUI preset。
+
 詳細命令、baseline compare 路徑與各層用途見 `docs/validation-harness.md`。
 
 ---

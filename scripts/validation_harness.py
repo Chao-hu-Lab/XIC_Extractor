@@ -19,6 +19,7 @@ from scripts.validation_harness_core import (
     command_to_powershell,
     run_validation_specs,
 )
+from scripts.local_minimum_param_sweep import GRID_CHOICES
 
 __all__ = [
     "DEFAULT_FULL_TISSUE_DIR",
@@ -97,7 +98,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--baseline-root", type=Path, default=None)
     parser.add_argument("--data-dir", type=Path, default=None)
-    parser.add_argument("--grid", choices=("quick", "standard"), default="quick")
+    parser.add_argument("--grid", choices=GRID_CHOICES, default="quick")
     parser.add_argument(
         "--resolver-mode",
         choices=("legacy_savgol", "local_minimum"),

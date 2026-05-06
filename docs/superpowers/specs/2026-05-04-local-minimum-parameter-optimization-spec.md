@@ -107,6 +107,20 @@ The candidate grid should stay small enough to run on the two raw files during d
 
 This is 72 local-minimum combinations plus baselines. If runtime is too high, the script should allow a named quick grid.
 
+For preset calibration v1, the sweep also exposes a focused `calibration-v1`
+grid. This grid is intentionally smaller than `standard` and targets the two
+highest-risk preset questions identified after the first real-data checks:
+
+| Question | Current value | Candidate values |
+|---|---:|---|
+| Maximum local-minimum region duration | `10.0` min | `1.5`, `2.0`, `3.0` min |
+| Minimum valley search range | `0.08` min | `0.04`, `0.05` min |
+
+The focused grid may combine these with the current edge-ratio setting and one
+moderately relaxed edge-ratio candidate. It is for evidence generation only; it
+must not update canonical defaults unless the decision gate passes and the user
+confirms the preset change.
+
 ### 5.2 Case execution
 
 The two raw files require different target CSVs because their methods have different RT windows. The sweep must stage and run each case separately:

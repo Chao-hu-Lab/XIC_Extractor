@@ -31,11 +31,28 @@ Defaults:
 - `parallel_mode=process`
 - `parallel_workers=4`
 - suites: `manual-2raw`, `tissue-8raw`
+- manual sweep grid: `quick`
 
 `manual-2raw` uses the same worker setting, but the quick grid is still mostly
 sequential because NoSplit and Split use different target CSVs and are staged as
 single-RAW runs. `parallel_workers=4` matters most for `tissue-8raw` and
 `tissue-85raw`, where each extraction run contains multiple RAW files.
+
+For local-minimum preset calibration, use the focused grid instead of the daily
+quick grid:
+
+```powershell
+uv run python scripts\validation_harness.py `
+  --suite manual-2raw `
+  --grid calibration-v1 `
+  --run-id local_minimum_calibration_v1 `
+  --output-root output\validation_harness
+```
+
+`calibration-v1` keeps the sweep small and targets the current method questions:
+whether `resolver_peak_duration_max=10.0` is too permissive, and whether
+`resolver_min_search_range_min=0.08` should move toward `0.04-0.05` minutes.
+It does not change runtime defaults by itself.
 
 ## Inspect Exact Commands
 

@@ -303,6 +303,8 @@ Supported grids:
 
 - `quick`: small deterministic grid for development and tests
 - `standard`: spec grid
+- `calibration-v1`: focused preset-calibration grid for
+  `resolver_peak_duration_max` and `resolver_min_search_range_min`
 
 **Step 4: Run test**
 
@@ -531,7 +533,9 @@ uv run python scripts\local_minimum_param_sweep.py `
   --nosplit-targets "C:\Xcalibur\data\20251219_need process data\XIC test\combined_targets_file1.csv" `
   --split-targets "C:\Xcalibur\data\20251219_need process data\XIC test\combined_targets_file2.csv" `
   --output-dir output\local_minimum_param_sweep_manual `
-  --grid quick
+  --grid calibration-v1 `
+  --parallel-mode process `
+  --parallel-workers 4
 ```
 
 Real runner responsibilities:
@@ -595,7 +599,9 @@ If quick grid shows a plausible candidate:
 uv run python scripts\local_minimum_param_sweep.py ... --grid standard
 ```
 
-If quick grid does not improve current local-minimum preset, stop and report that evidence.
+If `calibration-v1` does not improve current local-minimum preset, stop and
+report that evidence. Use `standard` only when the focused grid produces a
+plausible candidate but leaves the exact setting ambiguous.
 
 ### Task 7.3 — Report checkpoint
 

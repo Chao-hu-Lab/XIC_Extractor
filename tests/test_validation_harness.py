@@ -315,6 +315,27 @@ def test_run_validation_specs_runs_manual_sweep_with_script_arguments(
     assert "--parallel-workers" in sweep_args
 
 
+def test_cli_accepts_calibration_v1_grid_for_manual_sweep(
+    tmp_path: Path, capsys
+) -> None:
+    exit_code = main(
+        [
+            "--suite",
+            "manual-2raw",
+            "--grid",
+            "calibration-v1",
+            "--output-root",
+            str(tmp_path / "validation_harness"),
+            "--run-id",
+            "run1",
+            "--dry-run",
+        ]
+    )
+
+    assert exit_code == 0
+    assert "--grid calibration-v1" in capsys.readouterr().out
+
+
 def test_run_validation_specs_rejects_wrong_raw_count(tmp_path: Path) -> None:
     data_dir = tmp_path / "validation"
     data_dir.mkdir()
