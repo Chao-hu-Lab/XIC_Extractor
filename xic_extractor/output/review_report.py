@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import statistics
 from collections.abc import Iterable
 from html import escape
 from pathlib import Path
@@ -91,12 +92,25 @@ th{background:#f6f8fa;font-weight:700}
 .trend-svg{max-width:100%;height:auto;border:1px solid #d0d7de;background:#fff}
 .trend-axis{stroke:#57606a;stroke-width:1}
 .trend-grid{stroke:#d8dee4;stroke-width:1}
-.trend-line{fill:none;stroke:#0969da;stroke-width:2}
-.trend-point{fill:#cf222e;stroke:#fff;stroke-width:1}
+.trend-band{opacity:.16}
+.trend-qc{stroke:#8c959f;stroke-width:1.5;stroke-dasharray:6 4}
+.trend-line{fill:none;stroke-width:2}
+.trend-point{stroke:#fff;stroke-width:1}
 .trend-label{fill:#57606a;font-size:12px}
 .dashboard-note{color:#57606a;font-size:13px;margin:4px 0 14px}
 .small{color:#57606a;font-size:12px}
 """.strip()
+
+_TREND_PALETTE = (
+    "#1f77b4",
+    "#d62728",
+    "#2ca02c",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#17becf",
+    "#7f7f7f",
+)
 
 
 def _batch_overview(metrics: ReviewMetrics) -> str:
@@ -202,6 +216,19 @@ def _istd_rt_trend(
         return ""
 
     points.sort(key=lambda item: (item[0], item[2], item[3]))
+    targets = _ordered_unique(point[2] for point in points)
+    target_colors = {
+        target: _TREND_PALETTE[index % len(_TREND_PALETTE)]
+        for index, target in enumerate(targets)
+    }
+    target_points_by_name = {
+        target: [point for point in points if point[2] == target] for target in targets
+    }
+    band_edges = []
+    for target_points in target_points_by_name.values():
+        median_rt = statistics.median(point[1] for point in target_points)
+        band_edges.extend([median_rt - 0.5, median_rt + 0.5])
+
     width = 720
     height = 280
     left = 58
@@ -212,8 +239,8 @@ def _istd_rt_trend(
     plot_height = height - top - bottom
     min_x = min(x_values)
     max_x = max(x_values)
-    min_y = min(y_values)
-    max_y = max(y_values)
+    min_y = min([*y_values, *band_edges])
+    max_y = max([*y_values, *band_edges])
     if min_y == max_y:
         min_y -= 0.0005
         max_y += 0.0005
@@ -224,39 +251,69 @@ def _istd_rt_trend(
     def y_pos(rt: float) -> float:
         return top + ((max_y - rt) / (max_y - min_y)) * plot_height
 
+    qc_orders = sorted(
+        {order for order, _, _, sample in points if "QC" in sample.upper()}
+    )
+    qc_markers = [
+        f'<line class="trend-qc" x1="{x_pos(order):.1f}" y1="{top}" '
+        f'x2="{x_pos(order):.1f}" y2="{top + plot_height}">'
+        f"<title>QC Injection {order}</title></line>"
+        for order in qc_orders
+    ]
+
+    bands = []
+    for target, target_points in target_points_by_name.items():
+        color = target_colors[target]
+        median_rt = statistics.median(point[1] for point in target_points)
+        y_high = y_pos(median_rt + 0.5)
+        y_low = y_pos(median_rt - 0.5)
+        bands.append(
+            '<rect class="trend-band" '
+            f'data-target="{escape(target)}" '
+            f'x="{left}" y="{min(y_high, y_low):.1f}" '
+            f'width="{plot_width}" height="{abs(y_low - y_high):.1f}" '
+            f'fill="{color}">'
+            f"<title>{escape(target)} Acceptable Range (Median +/- 0.5 min)</title>"
+            "</rect>"
+        )
+
     lines = []
     circles = []
-    for target in _ordered_unique(point[2] for point in points):
-        target_points = [point for point in points if point[2] == target]
+    for target in targets:
+        target_points = target_points_by_name[target]
         target_points.sort(key=lambda item: (item[0], item[3]))
         if len(target_points) < 2:
             continue
+        color = target_colors[target]
         line_points = [
             f"{x_pos(order):.1f},{y_pos(rt):.1f}" for order, rt, _, _ in target_points
         ]
         lines.append(
             '<polyline class="trend-line" '
             f'data-target="{escape(target)}" '
+            f'stroke="{color}" '
             f'points="{" ".join(line_points)}"></polyline>'
         )
     for order, rt, target, sample in points:
         x = x_pos(order)
         y = y_pos(rt)
+        color = target_colors[target]
         title = (
             f"{escape(target)}: Injection {order}, RT {rt:.4f} min ({escape(sample)})"
         )
         circles.append(
-            f'<circle class="trend-point" cx="{x:.1f}" cy="{y:.1f}" r="4">'
+            f'<circle class="trend-point" cx="{x:.1f}" cy="{y:.1f}" r="4" '
+            f'fill="{color}">'
             f"<title>{title}</title></circle>"
         )
 
-    labels = ", ".join(
-        escape(target) for target in _ordered_unique(p[2] for p in points)
-    )
+    legend = _trend_legend(target_colors)
     return (
         "<section><h2>ISTD RT Injection Trend</h2>"
         '<p class="dashboard-note">'
-        f"{labels}</p>"
+        "Acceptable bands show each ISTD median +/- 0.5 min; dashed lines mark QC "
+        "injections.</p>"
+        f"{legend}"
         f'<svg class="trend-svg" viewBox="0 0 {width} {height}" '
         'role="img" aria-label="ISTD RT by injection order">'
         f'<line class="trend-grid" x1="{left}" y1="{top}" x2="{left + plot_width}" '
@@ -267,6 +324,8 @@ def _istd_rt_trend(
         f'y2="{top + plot_height}"></line>'
         f'<line class="trend-axis" x1="{left}" y1="{top + plot_height}" '
         f'x2="{left + plot_width}" y2="{top + plot_height}"></line>'
+        f"{''.join(bands)}"
+        f"{''.join(qc_markers)}"
         f"{''.join(lines)}"
         f"{''.join(circles)}"
         f'<text class="trend-label" x="{left}" y="{height - 12}">'
@@ -277,6 +336,22 @@ def _istd_rt_trend(
         f'<text class="trend-label" x="4" y="{top + plot_height}">'
         f"{min_y:.4f} min</text>"
         "</svg></section>"
+    )
+
+
+def _trend_legend(target_colors: dict[str, str]) -> str:
+    target_chips = "".join(
+        '<span class="chip">'
+        f'<span class="box" style="background:{color}"></span>'
+        f"{escape(target)}</span>"
+        for target, color in target_colors.items()
+    )
+    return (
+        '<div class="legend">'
+        '<span class="chip"><span class="box trend-band"></span>'
+        "Acceptable Range (Median +/- 0.5 min)</span>"
+        '<span class="chip"><span class="box"></span>QC Injection</span>'
+        f"{target_chips}</div>"
     )
 
 

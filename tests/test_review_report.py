@@ -358,6 +358,66 @@ def test_review_report_draws_separate_rt_trend_line_per_istd(
     assert html.count('class="trend-line"') == 2
 
 
+def test_review_report_rt_trend_includes_qc_markers_bands_and_legend(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "QC1",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "8.90",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "9.10",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "QC1",
+            "Target": "d3-B",
+            "Role": "ISTD",
+            "RT": "12.20",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "d3-B",
+            "Role": "ISTD",
+            "RT": "12.40",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+        injection_order={"QC1": 1, "S2": 2},
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert html.count('class="trend-band"') == 2
+    assert html.count('class="trend-qc"') == 1
+    assert "QC Injection" in html
+    assert "Acceptable Range (Median +/- 0.5 min)" in html
+    assert 'data-target="d3-A"' in html
+    assert 'data-target="d3-B"' in html
+
+
 def test_review_report_heatmap_sorts_low_detection_targets_first(
     tmp_path: Path,
 ) -> None:
