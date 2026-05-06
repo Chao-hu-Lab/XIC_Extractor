@@ -249,6 +249,17 @@ uv run python scripts\validation_harness.py `
 
 這個 grid 產生 preset evidence；若乾淨基質 manual truth 不變差，且候選值讓參數語意更合理，可以作為更新 `settings.example.csv` 與 GUI preset 的依據。
 
+後續參數收斂可用 `--grid calibration-v2`，聚焦
+`resolver_peak_duration_min` 與 `resolver_min_relative_height`。校準順序以
+純標準品 manual truth 先確認積分行為，其中 NoSplit STD 的方法較接近真實
+tissue 樣本，因此判讀權重高於 Split 方法開發樣本；接著再用 8-raw tissue
+subset 做真實樣本 smoke。尿液等複雜基質作為後段 robustness stress test。
+
+目前 `calibration-v2` 的結論是：提高 `resolver_min_relative_height` 可改善
+NoSplit STD 面積誤差，但會讓 tissue candidate boundary 變窄，造成部分
+5-medC candidate-aligned MS2/NL 狀態改變；因此 shipped preset 暫時保留
+`resolver_min_relative_height=0.0`。
+
 詳細命令、baseline compare 路徑與各層用途見 `docs/validation-harness.md`。
 
 ---

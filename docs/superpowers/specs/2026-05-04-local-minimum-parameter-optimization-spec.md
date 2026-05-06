@@ -122,6 +122,37 @@ manual-truth cost for shrinking the duration cap, so the shipped preset uses
 `resolver_peak_duration_max=2.0`. Search-range remains `0.08` because the
 `0.04-0.05` candidates increased large area misses.
 
+Preset calibration v2 tests the next permissive parameters after the duration
+cap:
+
+| Question | Starting value | Candidate values |
+|---|---:|---|
+| Minimum local-minimum region duration | `0.0` min | `0.02`, `0.03` min |
+| Minimum relative apex height | `0.0` | `0.01`, `0.02`, `0.03` |
+
+The data hierarchy matters for decisions:
+
+1. The two manual-truth RAW files are pure standard material. They are the
+   first gate for area/RT behavior. The NoSplit STD method is closer to the
+   real tissue method when matrix effects are ignored, so NoSplit evidence has
+   higher decision weight than the Split method-development run.
+2. The 8-raw tissue subset is the daily real-sample smoke test across selected
+   tissue groups.
+3. The 85-raw tissue run is the full release gate for the same tissue batch.
+4. Urine and other complex matrices are robustness stress tests after the clean
+    standard/tissue model is stable; they should not drive the first preset.
+
+Calibration v2 result:
+
+- `resolver_peak_duration_min=0.02-0.03` had no meaningful effect on the
+  two-raw manual truth sweep.
+- `resolver_min_relative_height=0.01-0.03` improved pure STD area agreement,
+  especially for NoSplit STD, but all tested positive values narrowed selected
+  tissue peak regions enough to change candidate-aligned MS2/NL status for
+  several 5-medC rows without moving the apex. Keep the shipped preset at
+  `resolver_min_relative_height=0.0` until the boundary/MS2 alignment contract
+  is reviewed.
+
 ### 5.2 Case execution
 
 The two raw files require different target CSVs because their methods have different RT windows. The sweep must stage and run each case separately:

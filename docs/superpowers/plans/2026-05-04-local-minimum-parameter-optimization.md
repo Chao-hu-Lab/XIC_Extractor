@@ -305,6 +305,8 @@ Supported grids:
 - `standard`: spec grid
 - `calibration-v1`: focused preset-calibration grid for
   `resolver_peak_duration_max` and `resolver_min_search_range_min`
+- `calibration-v2`: focused preset-calibration grid for
+  `resolver_peak_duration_min` and `resolver_min_relative_height`
 
 **Step 4: Run test**
 
@@ -602,6 +604,12 @@ uv run python scripts\local_minimum_param_sweep.py ... --grid standard
 If `calibration-v1` does not improve current local-minimum preset, stop and
 report that evidence. Use `standard` only when the focused grid produces a
 plausible candidate but leaves the exact setting ambiguous.
+
+For `calibration-v2`, report NoSplit STD and Split STD separately. NoSplit STD
+has higher decision weight because its acquisition method is closer to real
+tissue samples when matrix effects are ignored. A relative-height candidate
+must also pass the 8-raw tissue smoke check without introducing candidate
+boundary/MS2 alignment regressions before it can justify a preset update.
 
 ### Task 7.3 — Report checkpoint
 

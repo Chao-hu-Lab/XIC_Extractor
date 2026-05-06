@@ -162,6 +162,50 @@ _CALIBRATION_V1_OVERRIDES = (
     ),
 )
 
+_CALIBRATION_V2_OVERRIDES = (
+    (
+        "local_minimum_min_duration_0p02",
+        {"resolver_peak_duration_min": "0.02"},
+    ),
+    (
+        "local_minimum_min_duration_0p03",
+        {"resolver_peak_duration_min": "0.03"},
+    ),
+    (
+        "local_minimum_rel_height_0p01",
+        {"resolver_min_relative_height": "0.01"},
+    ),
+    (
+        "local_minimum_rel_height_0p02",
+        {"resolver_min_relative_height": "0.02"},
+    ),
+    (
+        "local_minimum_rel_height_0p03",
+        {"resolver_min_relative_height": "0.03"},
+    ),
+    (
+        "local_minimum_min_duration_0p02_rel_height_0p01",
+        {
+            "resolver_peak_duration_min": "0.02",
+            "resolver_min_relative_height": "0.01",
+        },
+    ),
+    (
+        "local_minimum_min_duration_0p02_rel_height_0p02",
+        {
+            "resolver_peak_duration_min": "0.02",
+            "resolver_min_relative_height": "0.02",
+        },
+    ),
+    (
+        "local_minimum_min_duration_0p03_rel_height_0p01",
+        {
+            "resolver_peak_duration_min": "0.03",
+            "resolver_min_relative_height": "0.01",
+        },
+    ),
+)
+
 _GRID_VALUES = {
     "quick": {
         "resolver_chrom_threshold": ("0.03", "0.05"),
@@ -177,7 +221,7 @@ _GRID_VALUES = {
     },
 }
 
-GRID_CHOICES = (*_GRID_VALUES.keys(), "calibration-v1")
+GRID_CHOICES = (*_GRID_VALUES.keys(), "calibration-v1", "calibration-v2")
 
 _THIN = Side(style="thin", color="BDBDBD")
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
@@ -205,6 +249,20 @@ def build_parameter_sets(*, grid: str) -> list[ParameterSet]:
                 },
             )
             for name, overrides in _CALIBRATION_V1_OVERRIDES
+        )
+        return parameter_sets
+
+    if grid == "calibration-v2":
+        parameter_sets.extend(
+            ParameterSet(
+                name,
+                {
+                    "resolver_mode": "local_minimum",
+                    **_STATIC_LOCAL_MINIMUM_PARAMS,
+                    **overrides,
+                },
+            )
+            for name, overrides in _CALIBRATION_V2_OVERRIDES
         )
         return parameter_sets
 

@@ -55,6 +55,31 @@ whether the historical `resolver_peak_duration_max=10.0` was too permissive, and
 If a candidate is equivalent on clean-matrix manual truth and improves parameter
 semantics, it may justify a preset-only change even without a large metric gain.
 
+After `calibration-v1`, use `calibration-v2` to test the next permissive
+parameters:
+
+```powershell
+uv run python scripts\validation_harness.py `
+  --suite manual-2raw `
+  --grid calibration-v2 `
+  --run-id local_minimum_calibration_v2 `
+  --output-root output\validation_harness
+```
+
+`calibration-v2` focuses on `resolver_peak_duration_min` and
+`resolver_min_relative_height`. The manual 2-raw tier is pure standard material:
+it is the first gate for integration behavior. Within that tier, NoSplit STD
+has higher decision weight than Split STD because its acquisition method is
+closer to the real tissue samples when matrix effects are ignored. Tissue 8-raw
+is the next real-sample smoke test. Urine and other complex matrices are later
+robustness stress tests, not the source of the first clean-model preset.
+
+The first `calibration-v2` run found that positive
+`resolver_min_relative_height` values improved NoSplit STD area agreement, but
+also narrowed tissue candidate regions enough to flip candidate-aligned MS2/NL
+status for several 5-medC rows. Treat this as evidence to review the boundary
+and MS2 alignment contract before changing the preset.
+
 ## Inspect Exact Commands
 
 Dry-run prints the exact commands without touching RAW files:

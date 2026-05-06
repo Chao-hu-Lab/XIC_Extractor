@@ -196,6 +196,44 @@ def test_build_parameter_sets_calibration_v1_focuses_duration_and_search() -> No
     assert len(parameter_sets) <= 12
 
 
+def test_build_parameter_sets_calibration_v2_focuses_min_duration_and_height() -> None:
+    parameter_sets = build_parameter_sets(grid="calibration-v2")
+
+    by_name = {item.name: item.settings_overrides for item in parameter_sets}
+
+    assert list(by_name)[:2] == ["legacy_savgol", "local_minimum_current"]
+    assert (
+        by_name["local_minimum_min_duration_0p02"][
+            "resolver_peak_duration_min"
+        ]
+        == "0.02"
+    )
+    assert (
+        by_name["local_minimum_rel_height_0p01"][
+            "resolver_min_relative_height"
+        ]
+        == "0.01"
+    )
+    assert (
+        by_name["local_minimum_min_duration_0p02_rel_height_0p01"][
+            "resolver_peak_duration_min"
+        ]
+        == "0.02"
+    )
+    assert (
+        by_name["local_minimum_min_duration_0p02_rel_height_0p01"][
+            "resolver_min_relative_height"
+        ]
+        == "0.01"
+    )
+    assert all(
+        settings.get("resolver_peak_duration_max") == "2.0"
+        for name, settings in by_name.items()
+        if name.startswith("local_minimum_") and name != "local_minimum_current"
+    )
+    assert len(parameter_sets) <= 12
+
+
 def test_run_sweep_scores_each_parameter_set_with_injected_runner() -> None:
     truth = [
         ManualTruthRow(
