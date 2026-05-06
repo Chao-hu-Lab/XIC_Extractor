@@ -445,6 +445,82 @@ def test_candidate_evidence_reports_strict_nl_match() -> None:
     assert evidence.best_product_base_ratio == pytest.approx(1.0)
 
 
+def test_candidate_evidence_rescues_strict_nl_just_outside_peak_boundary() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.29,
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 5.0)],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.ms2_present is True
+    assert evidence.nl_match is True
+    assert evidence.nl_status == "OK"
+    assert evidence.strict_nl_scan_count == 1
+    assert evidence.best_scan_rt == pytest.approx(8.29)
+    assert evidence.alignment_source == "boundary_rescue"
+
+
+def test_candidate_evidence_does_not_rescue_trigger_only_boundary_scan() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.29,
+                masses=[150.0],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.ms2_present is False
+    assert evidence.nl_match is False
+    assert evidence.nl_status == "NO_MS2"
+    assert evidence.trigger_scan_count == 0
+    assert evidence.strict_nl_scan_count == 0
+    assert evidence.alignment_source == "none"
+
+
+def test_candidate_evidence_boundary_strict_nl_overrides_region_trigger_failure() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.1,
+                masses=[150.0],
+                intensities=[100.0],
+            ),
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.29,
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 5.0)],
+                intensities=[100.0],
+            ),
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.ms2_present is True
+    assert evidence.nl_match is True
+    assert evidence.nl_status == "OK"
+    assert evidence.trigger_scan_count == 2
+    assert evidence.strict_nl_scan_count == 1
+    assert evidence.best_scan_rt == pytest.approx(8.29)
+    assert evidence.alignment_source == "boundary_rescue"
+
+
 def test_candidate_evidence_separates_trigger_from_failed_nl() -> None:
     candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
     raw = _FakeRaw(

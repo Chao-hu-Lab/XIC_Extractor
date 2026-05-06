@@ -7,9 +7,14 @@ import numpy as np
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
 
 NL_DIAGNOSTIC_PPM_FLOOR = 500.0
-CandidateMS2AlignmentSource = Literal["region", "apex_fallback", "none"]
+CandidateMS2AlignmentSource = Literal[
+    "region", "apex_fallback", "boundary_rescue", "none"
+]
 NLStatus = Literal["OK", "WARN", "NL_FAIL", "NO_MS2"]
 _CANDIDATE_MS2_APEX_FALLBACK_MIN = 0.08
+_CANDIDATE_MS2_BOUNDARY_RESCUE_MIN = 0.08
+_CANDIDATE_MS2_BOUNDARY_RESCUE_MAX = 0.20
+_CANDIDATE_MS2_BOUNDARY_RESCUE_WIDTH_FRACTION = 0.5
 
 
 class MS2ScanSource(Protocol):
@@ -202,13 +207,17 @@ def collect_candidate_ms2_evidence(
     peak_start = float(getattr(peak, "peak_start"))
     peak_end = float(getattr(peak, "peak_end"))
     apex_rt = float(getattr(candidate, "selection_apex_rt"))
-    rt_min = max(0.0, min(peak_start, apex_rt) - _CANDIDATE_MS2_APEX_FALLBACK_MIN)
-    rt_max = max(peak_end, apex_rt) + _CANDIDATE_MS2_APEX_FALLBACK_MIN
+    boundary_rescue_margin = _candidate_ms2_boundary_rescue_margin(
+        peak_start, peak_end
+    )
+    rt_min = max(0.0, min(peak_start, apex_rt) - boundary_rescue_margin)
+    rt_max = max(peak_end, apex_rt) + boundary_rescue_margin
     diagnostic_ppm = max(3.0 * nl_ppm_max, NL_DIAGNOSTIC_PPM_FLOOR)
 
     trigger_scan_count = 0
     strict_nl_scan_count = 0
     best_evidence: MS2ProductEvidence | None = None
+    best_evidence_source: CandidateMS2AlignmentSource | None = None
     region_trigger_seen = False
     fallback_trigger_seen = False
 
@@ -221,14 +230,29 @@ def collect_candidate_ms2_evidence(
 
         inside_region = peak_start <= scan.rt <= peak_end
         near_apex = abs(scan.rt - apex_rt) <= _CANDIDATE_MS2_APEX_FALLBACK_MIN
-        if not inside_region and not near_apex:
+        inside_boundary_rescue = (
+            peak_start - boundary_rescue_margin
+            <= scan.rt
+            <= peak_end + boundary_rescue_margin
+        )
+        if not inside_region and not near_apex and not inside_boundary_rescue:
             continue
 
-        trigger_scan_count += 1
-        region_trigger_seen = region_trigger_seen or inside_region
-        fallback_trigger_seen = fallback_trigger_seen or (
-            not inside_region and near_apex
-        )
+        primary_aligned = inside_region or near_apex
+        source: CandidateMS2AlignmentSource
+        if inside_region:
+            source = "region"
+        elif near_apex:
+            source = "apex_fallback"
+        else:
+            source = "boundary_rescue"
+
+        if primary_aligned:
+            trigger_scan_count += 1
+            region_trigger_seen = region_trigger_seen or inside_region
+            fallback_trigger_seen = fallback_trigger_seen or (
+                not inside_region and near_apex
+            )
 
         evidence = _best_product_evidence(
             scan,
@@ -240,7 +264,12 @@ def collect_candidate_ms2_evidence(
         )
         if evidence is None:
             continue
-        if evidence.observed_loss_error_ppm <= nl_ppm_max:
+        strict_nl_match = evidence.observed_loss_error_ppm <= nl_ppm_max
+        if not primary_aligned and not strict_nl_match:
+            continue
+        if not primary_aligned:
+            trigger_scan_count += 1
+        if strict_nl_match:
             strict_nl_scan_count += 1
         if (
             best_evidence is None
@@ -248,6 +277,7 @@ def collect_candidate_ms2_evidence(
             < best_evidence.observed_loss_error_ppm
         ):
             best_evidence = evidence
+            best_evidence_source = source
 
     best_loss_ppm = (
         best_evidence.observed_loss_error_ppm if best_evidence is not None else None
@@ -258,7 +288,9 @@ def collect_candidate_ms2_evidence(
         nl_ppm_warn=nl_ppm_warn,
         nl_ppm_max=nl_ppm_max,
     )
-    if region_trigger_seen:
+    if nl_status in {"OK", "WARN"} and best_evidence_source is not None:
+        alignment_source = best_evidence_source
+    elif region_trigger_seen:
         alignment_source: CandidateMS2AlignmentSource = "region"
     elif fallback_trigger_seen:
         alignment_source = "apex_fallback"
@@ -277,6 +309,17 @@ def collect_candidate_ms2_evidence(
             best_evidence.product_base_ratio if best_evidence is not None else None
         ),
         alignment_source=alignment_source,
+    )
+
+
+def _candidate_ms2_boundary_rescue_margin(peak_start: float, peak_end: float) -> float:
+    peak_width = max(0.0, peak_end - peak_start)
+    return min(
+        _CANDIDATE_MS2_BOUNDARY_RESCUE_MAX,
+        max(
+            _CANDIDATE_MS2_BOUNDARY_RESCUE_MIN,
+            peak_width * _CANDIDATE_MS2_BOUNDARY_RESCUE_WIDTH_FRACTION,
+        ),
     )
 
 
