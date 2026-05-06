@@ -78,6 +78,33 @@ Line count is a signal, not a hard rule. Responsibility count matters more.
 - Use the 8-raw validation subset for extraction/output refactors that can
   affect real workbook output.
 
+## Test Structure Rules
+
+- Keep tests in `tests/`; do not place test code inside `xic_extractor/` or
+  production scripts.
+- Mirror the ownership map. When production behavior moves to a focused module,
+  put its tests in a matching focused `test_*.py` file instead of expanding a
+  broad legacy test file.
+- Test behavior and public contracts first. Reach into private helpers only for
+  characterization tests, algorithm edge cases, or compatibility seams that are
+  hard to observe through the public entry point.
+- Each test should prove one behavior with explicit inputs and assertions.
+  Prefer descriptive test names over comments explaining the scenario.
+- Keep unit tests deterministic, small, and independent. Use synthetic traces,
+  `tmp_path`, `monkeypatch`, and small fakes before real RAW files, GUI widgets,
+  or full workbooks.
+- Put shared fixtures in `tests/conftest.py` only when several test files need
+  them. Keep file-local fixture factories near the tests that own them.
+- Parameterize equivalent edge cases instead of copy-pasting near-identical
+  tests, but split cases when failures would become hard to diagnose.
+- Separate real-data validation from normal unit/contract tests. Real RAW
+  checks should be explicit, fixture-gated, or run through validation scripts,
+  not silently required by the default suite.
+- For output changes, pair narrow writer/sheet tests with at least one workbook
+  contract or compare test. Do not rely on visual inspection alone.
+- For process-mode changes, include a no-RAW spawn/pickling smoke test before
+  any raw-data benchmark.
+
 ## Public Contracts
 
 Treat these as public unless a plan explicitly changes them:
@@ -112,6 +139,11 @@ See:
 ## Source References
 
 - Python project structure: `https://docs.python-guide.org/writing/structure/`
+- pytest good integration practices:
+  `https://docs.pytest.org/en/stable/explanation/goodpractices.html`
+- pytest fixtures:
+  `https://docs.pytest.org/en/stable/how-to/fixtures.html`
+- Python testing guidance: `https://docs.python-guide.org/writing/tests/`
 - Zen of Python: `https://peps.python.org/pep-0020/`
 - Clean Code for Python: `https://github.com/zedr/clean-code-python`
 - Google Python Style Guide: `https://google.github.io/styleguide/pyguide.html`
