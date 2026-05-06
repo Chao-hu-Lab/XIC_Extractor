@@ -6,6 +6,7 @@ import pytest
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extractor import RunOutput
+from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import (
     PeakCandidate,
     PeakDetectionResult,
@@ -72,6 +73,72 @@ def test_run_uses_serial_backend_by_default(
 
     assert output is returned
     assert calls == [(config, targets, ["A.raw", "B.raw"])]
+
+
+def test_run_resolves_scoring_inputs_before_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from xic_extractor import extractor
+    from xic_extractor.extraction import serial_backend
+
+    config = _config(tmp_path, keep_intermediate_csv=False)
+    config = ExtractionConfig(
+        **{
+            **config.__dict__,
+            "injection_order_source": tmp_path / "sample_info.csv",
+            "rt_prior_library_path": tmp_path / "rt_prior_library.csv",
+            "config_hash": "abcd1234",
+        }
+    )
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("Analyte")]
+    library = {
+        ("Analyte", "Analyte"): LibraryEntry(
+            config_hash="abcd1234",
+            target_label="Analyte",
+            role="Analyte",
+            istd_pair="",
+            median_delta_rt=None,
+            sigma_delta_rt=None,
+            median_abs_rt=8.5,
+            sigma_abs_rt=0.1,
+            n_samples=3,
+            updated_at="2026-05-07",
+        )
+    }
+
+    monkeypatch.setattr(
+        "xic_extractor.extraction.pipeline.read_injection_order",
+        lambda path: {"SampleA": 1},
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extraction.pipeline.load_library",
+        lambda path, config_hash: library,
+    )
+
+    def _fake_run_serial(
+        config_arg: ExtractionConfig,
+        targets_arg: list[Target],
+        *,
+        raw_paths: list[Path],
+        progress_callback=None,
+        should_stop=None,
+        injection_order=None,
+        rt_prior_library=None,
+    ) -> RunOutput:
+        assert config_arg is config
+        assert targets_arg is targets
+        assert [path.name for path in raw_paths] == ["SampleA.raw"]
+        assert injection_order == {"SampleA": 1}
+        assert rt_prior_library == library
+        return RunOutput(file_results=[], diagnostics=[])
+
+    monkeypatch.setattr(serial_backend, "run_serial", _fake_run_serial)
+
+    output = extractor.run(config, targets)
+
+    assert output.file_results == []
 
 
 def test_serial_backend_keeps_sorted_raw_output_order(

@@ -5,11 +5,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.extraction.pipeline import (
-    fallback_injection_order_from_mtime,
-    resolve_injection_order,
-    resolve_rt_prior_library,
-)
 from xic_extractor.output.messages import DiagnosticRecord
 from xic_extractor.rt_prior_library import LibraryEntry
 
@@ -23,18 +18,14 @@ def run_process(
     targets: list[Target],
     *,
     raw_paths: list[Path],
+    injection_order: dict[str, int],
+    rt_prior_library: dict[tuple[str, str], LibraryEntry],
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
-    injection_order: dict[str, int] | None = None,
-    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
 ) -> RunOutput:
     from xic_extractor import extractor
     from xic_extractor.extraction.jobs import ScoringInputs
 
-    resolved_injection_order = resolve_injection_order(
-        config, raw_paths, injection_order
-    )
-    resolved_rt_prior_library = resolve_rt_prior_library(config, rt_prior_library)
     istd_targets = tuple(target for target in targets if target.is_istd)
     istd_rts_by_sample = collect_istd_prepass_process(
         config,
@@ -42,16 +33,10 @@ def run_process(
         raw_paths,
         should_stop=should_stop,
     )
-    process_injection_order = (
-        resolved_injection_order
-        if resolved_injection_order is not None
-        else fallback_injection_order_from_mtime(raw_paths)
-    )
-
     scoring_inputs = ScoringInputs(
-        injection_order=process_injection_order,
+        injection_order=injection_order,
         istd_rts_by_sample=istd_rts_by_sample,
-        rt_prior_library=resolved_rt_prior_library or {},
+        rt_prior_library=rt_prior_library,
     )
     raw_results = collect_raw_file_results_process(
         config,

@@ -7,11 +7,6 @@ from typing import TYPE_CHECKING
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.istd_prepass import extract_istd_anchors_only
-from xic_extractor.extraction.pipeline import (
-    fallback_injection_order_from_mtime,
-    resolve_injection_order,
-    resolve_rt_prior_library,
-)
 from xic_extractor.extraction.scoring_factory import build_scoring_context_factory
 from xic_extractor.extraction.target_extraction import extract_raw_file_result
 from xic_extractor.output.messages import DiagnosticRecord
@@ -26,17 +21,13 @@ def run_serial(
     targets: list[Target],
     *,
     raw_paths: list[Path],
+    injection_order: dict[str, int],
+    rt_prior_library: dict[tuple[str, str], LibraryEntry],
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
-    injection_order: dict[str, int] | None = None,
-    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
 ) -> RunOutput:
     from xic_extractor import extractor
 
-    resolved_injection_order = resolve_injection_order(
-        config, raw_paths, injection_order
-    )
-    resolved_rt_prior_library = resolve_rt_prior_library(config, rt_prior_library)
     istd_targets = [target for target in targets if target.is_istd]
     istd_rts_by_sample: dict[str, dict[str, float]] = {}
     for raw_path in raw_paths:
@@ -51,13 +42,9 @@ def run_serial(
 
     scoring_context_factory = build_scoring_context_factory(
         config=config,
-        injection_order=(
-            resolved_injection_order
-            if resolved_injection_order is not None
-            else fallback_injection_order_from_mtime(raw_paths)
-        ),
+        injection_order=injection_order,
         istd_rts_by_sample=istd_rts_by_sample,
-        rt_prior_library=resolved_rt_prior_library or {},
+        rt_prior_library=rt_prior_library,
     )
 
     file_results: list[FileResult] = []

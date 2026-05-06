@@ -54,6 +54,16 @@ def test_pipeline_owns_raw_path_resolution() -> None:
         assert 'glob("*.raw")' not in source
 
 
+def test_backends_do_not_depend_on_pipeline() -> None:
+    extraction_dir = ROOT / "xic_extractor" / "extraction"
+
+    for module_name in ("serial_backend.py", "process_backend.py"):
+        source = (extraction_dir / module_name).read_text(encoding="utf-8")
+        assert "xic_extractor.extraction.pipeline" not in source
+        assert "resolve_injection_order" not in source
+        assert "resolve_rt_prior_library" not in source
+
+
 def test_extractor_delegates_pipeline_flow() -> None:
     assert importlib.util.find_spec("xic_extractor.extraction.pipeline")
 

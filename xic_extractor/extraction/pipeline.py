@@ -61,6 +61,17 @@ def run_pipeline(
         raise RawReaderError(" ".join(reader_errors))
 
     raw_paths = sorted(config.data_dir.glob("*.raw"))
+    resolved_injection_order = resolve_injection_order(
+        config,
+        raw_paths,
+        injection_order,
+    )
+    scoring_injection_order = (
+        resolved_injection_order
+        if resolved_injection_order is not None
+        else fallback_injection_order_from_mtime(raw_paths)
+    )
+    resolved_rt_prior_library = resolve_rt_prior_library(config, rt_prior_library)
 
     if config.parallel_mode == "process":
         from xic_extractor.extraction.process_backend import run_process
@@ -71,8 +82,8 @@ def run_pipeline(
             raw_paths=raw_paths,
             progress_callback=progress_callback,
             should_stop=should_stop,
-            injection_order=injection_order,
-            rt_prior_library=rt_prior_library,
+            injection_order=scoring_injection_order,
+            rt_prior_library=resolved_rt_prior_library,
         )
     else:
         from xic_extractor.extraction.serial_backend import run_serial
@@ -83,8 +94,8 @@ def run_pipeline(
             raw_paths=raw_paths,
             progress_callback=progress_callback,
             should_stop=should_stop,
-            injection_order=injection_order,
-            rt_prior_library=rt_prior_library,
+            injection_order=scoring_injection_order,
+            rt_prior_library=resolved_rt_prior_library,
         )
 
     write_outputs(config, targets, output)
