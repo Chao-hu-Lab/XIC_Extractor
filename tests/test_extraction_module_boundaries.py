@@ -42,6 +42,15 @@ def test_extractor_delegates_pipeline_flow() -> None:
     assert "preflight_raw_reader" not in source
 
 
+def test_extractor_delegates_istd_prepass() -> None:
+    assert importlib.util.find_spec("xic_extractor.extraction.istd_prepass")
+
+    extractor_path = ROOT / "xic_extractor" / "extractor.py"
+    function_names = _function_names(extractor_path)
+
+    assert "_extract_istd_anchors_only" not in function_names
+
+
 def _function_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return {

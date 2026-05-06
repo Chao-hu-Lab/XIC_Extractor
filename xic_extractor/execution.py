@@ -229,10 +229,10 @@ def extract_raw_file_job(job: RawFileJob) -> WorkerResult:
 
 
 def extract_istd_prepass_job(job: RawFileJob) -> IstdPrepassWorkerResult:
-    from xic_extractor.extractor import _extract_istd_anchors_only
+    from xic_extractor.extraction.istd_prepass import extract_istd_anchors_only
 
     try:
-        prepass = _extract_istd_anchors_only(
+        prepass = extract_istd_anchors_only(
             job.config,
             list(job.targets),
             job.raw_path,

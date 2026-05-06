@@ -6,7 +6,6 @@ from typing import Any
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.scoring_factory import (
-    allow_prepass_anchor,
     paired_istd_fwhm,
     selected_candidate,
     selected_shape_metrics,
@@ -759,46 +758,6 @@ def _resolve_rt_prior_library(
     if config.rt_prior_library_path is None:
         return {}
     return load_library(config.rt_prior_library_path, config.config_hash)
-
-
-def _extract_istd_anchors_only(
-    config: ExtractionConfig, istd_targets: list[Target], raw_path: Path
-) -> tuple[
-    dict[str, float],
-    dict[str, ExtractionResult],
-    list[DiagnosticRecord],
-    dict[str, tuple[float, float | None]],
-] | None:
-    if not istd_targets:
-        return {}, {}, [], {}
-    try:
-        with open_raw(raw_path, config.dll_dir) as raw:
-            results: dict[str, ExtractionResult] = {}
-            diagnostics: list[DiagnosticRecord] = []
-            anchors: dict[str, float] = {}
-            shape_metrics_by_label: dict[str, tuple[float, float | None]] = {}
-            for target in istd_targets:
-                anchor_rt = _extract_one_target(
-                    raw,
-                    config,
-                    raw_path.stem,
-                    target,
-                    reference_rt=None,
-                    strict_preferred_rt=False,
-                    results=results,
-                    diagnostics=diagnostics,
-                    shape_metrics_by_label=shape_metrics_by_label,
-                )
-                result = results.get(target.label)
-                if (
-                    anchor_rt is not None
-                    and result is not None
-                    and allow_prepass_anchor(result.peak_result)
-                ):
-                    anchors[target.label] = anchor_rt
-            return anchors, results, diagnostics, shape_metrics_by_label
-    except Exception:
-        return None
 
 
 def _fallback_injection_order_from_mtime(raw_paths: list[Path]) -> dict[str, int]:
