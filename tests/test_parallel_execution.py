@@ -414,7 +414,7 @@ def test_process_run_writes_output_only_after_collecting_worker_results(
     calls = []
 
     monkeypatch.setattr(
-        "xic_extractor.extractor.preflight_raw_reader",
+        "xic_extractor.extraction.pipeline.preflight_raw_reader",
         lambda _dll_dir: [],
     )
     monkeypatch.setattr(
@@ -440,7 +440,10 @@ def test_process_run_writes_output_only_after_collecting_worker_results(
         "xic_extractor.extraction.process_backend.collect_raw_file_results_process",
         _fake_collect_raw_results,
     )
-    monkeypatch.setattr("xic_extractor.extractor.write_outputs", _fake_write_all)
+    monkeypatch.setattr(
+        "xic_extractor.extraction.pipeline.write_outputs",
+        _fake_write_all,
+    )
 
     output = run(config, targets)
 

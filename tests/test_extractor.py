@@ -17,7 +17,7 @@ from xic_extractor.signal_processing import (
 @pytest.fixture(autouse=True)
 def _disable_reader_preflight(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "xic_extractor.extractor.preflight_raw_reader",
+        "xic_extractor.extraction.pipeline.preflight_raw_reader",
         lambda _dll_dir: [],
         raising=False,
     )
@@ -29,7 +29,7 @@ def test_run_raises_before_processing_when_reader_preflight_fails(
     config = _config(tmp_path)
     (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
     monkeypatch.setattr(
-        "xic_extractor.extractor.preflight_raw_reader",
+        "xic_extractor.extraction.pipeline.preflight_raw_reader",
         lambda _dll_dir: ["pythonnet is not installed"],
         raising=False,
     )

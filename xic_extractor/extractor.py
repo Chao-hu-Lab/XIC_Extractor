@@ -5,7 +5,6 @@ from statistics import median
 from typing import Any
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.extraction.output_dispatch import write_outputs
 from xic_extractor.extraction.scoring_factory import (
     allow_prepass_anchor,
     paired_istd_fwhm,
@@ -27,7 +26,7 @@ from xic_extractor.output.messages import (
     istd_confidence_note,
 )
 from xic_extractor.peak_scoring import candidate_quality_penalty
-from xic_extractor.raw_reader import RawReaderError, open_raw, preflight_raw_reader
+from xic_extractor.raw_reader import open_raw
 from xic_extractor.rt_prior_library import LibraryEntry, load_library
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -135,27 +134,9 @@ def run(
     injection_order: dict[str, int] | None = None,
     rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
 ) -> RunOutput:
-    reader_errors = preflight_raw_reader(config.dll_dir)
-    if reader_errors:
-        raise RawReaderError(" ".join(reader_errors))
+    from xic_extractor.extraction.pipeline import run_pipeline
 
-    if config.parallel_mode == "process":
-        from xic_extractor.extraction.process_backend import run_process
-
-        output = run_process(
-            config,
-            targets,
-            progress_callback=progress_callback,
-            should_stop=should_stop,
-            injection_order=injection_order,
-            rt_prior_library=rt_prior_library,
-        )
-        write_outputs(config, targets, output)
-        return output
-
-    from xic_extractor.extraction.serial_backend import run_serial
-
-    output = run_serial(
+    return run_pipeline(
         config,
         targets,
         progress_callback=progress_callback,
@@ -163,8 +144,6 @@ def run(
         injection_order=injection_order,
         rt_prior_library=rt_prior_library,
     )
-    write_outputs(config, targets, output)
-    return output
 
 
 def _extract_raw_file_result(

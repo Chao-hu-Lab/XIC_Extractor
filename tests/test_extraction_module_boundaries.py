@@ -29,6 +29,19 @@ def test_backends_delegate_output_dispatch() -> None:
         assert "keep_intermediate_csv" not in source
 
 
+def test_extractor_delegates_pipeline_flow() -> None:
+    assert importlib.util.find_spec("xic_extractor.extraction.pipeline")
+
+    source = (ROOT / "xic_extractor" / "extractor.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "run_serial" not in source
+    assert "run_process" not in source
+    assert "write_outputs" not in source
+    assert "preflight_raw_reader" not in source
+
+
 def _function_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return {
