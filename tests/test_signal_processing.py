@@ -5,8 +5,8 @@ import pytest
 from scipy.signal import savgol_filter
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.local_minimum import _local_minimum_regions
 from xic_extractor.signal_processing import (
-    _local_minimum_regions,
     find_peak_and_area,
     find_peak_candidates,
 )

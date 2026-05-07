@@ -127,6 +127,42 @@ def test_peak_detection_legacy_savgol_owns_default_candidate_formation() -> None
     assert "local_minimum" not in legacy_source
 
 
+def test_peak_detection_local_minimum_owns_region_candidate_formation() -> None:
+    assert importlib.util.find_spec("xic_extractor.peak_detection.local_minimum")
+
+    signal_processing_path = ROOT / "xic_extractor" / "signal_processing.py"
+    local_minimum_path = (
+        ROOT / "xic_extractor" / "peak_detection" / "local_minimum.py"
+    )
+
+    signal_functions = _function_names(signal_processing_path)
+    local_functions = _function_names(local_minimum_path)
+
+    assert {
+        "find_peak_candidates_local_minimum",
+        "_local_peak_indices",
+        "_local_minimum_regions",
+        "_should_split_local_region",
+        "_build_local_minimum_candidate",
+    } <= local_functions
+    assert {
+        "_find_peak_candidates_local_minimum",
+        "_local_minimum_threshold",
+        "_local_peak_indices",
+        "_local_minimum_regions",
+        "_left_threshold_boundary",
+        "_right_threshold_boundary",
+        "_valley_index",
+        "_should_split_local_region",
+        "_build_local_minimum_candidate",
+    }.isdisjoint(signal_functions)
+
+    local_source = local_minimum_path.read_text(encoding="utf-8")
+    assert "find_peaks" in local_source
+    assert "savgol_filter" not in local_source
+    assert "peak_scoring" not in local_source
+
+
 def _class_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
