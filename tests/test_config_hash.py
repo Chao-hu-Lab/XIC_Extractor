@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from xic_extractor.config import compute_config_hash
+from xic_extractor.config import compute_config_hash, load_config
 
 
 def test_same_bytes_same_hash(tmp_path: Path) -> None:
@@ -59,3 +59,44 @@ def test_hash_is_8_hex_chars(tmp_path: Path) -> None:
     h = compute_config_hash(t, s)
     assert len(h) == 8
     assert all(c in "0123456789abcdef" for c in h)
+
+
+def test_load_config_hash_reflects_new_override_key(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    data_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    data_dir.mkdir(parents=True)
+    dll_dir.mkdir(parents=True)
+    config_dir.mkdir()
+    (config_dir / "settings.csv").write_text(
+        "\ufeffkey,value,description\n"
+        f"data_dir,{data_dir},data_dir\n"
+        f"dll_dir,{dll_dir},dll_dir\n"
+        "smooth_window,15,smooth_window\n"
+        "smooth_polyorder,3,smooth_polyorder\n"
+        "peak_rel_height,0.95,peak_rel_height\n"
+        "peak_min_prominence_ratio,0.10,peak_min_prominence_ratio\n"
+        "ms2_precursor_tol_da,0.5,ms2_precursor_tol_da\n"
+        "nl_min_intensity_ratio,0.01,nl_min_intensity_ratio\n"
+        "count_no_ms2_as_detected,false,count_no_ms2_as_detected\n",
+        encoding="utf-8",
+    )
+    (config_dir / "targets.csv").write_text(
+        "\ufefflabel,mz,rt_min,rt_max,ppm_tol,neutral_loss_da,nl_ppm_warn,"
+        "nl_ppm_max,is_istd,istd_pair\n"
+        "Analyte,258.1085,8.0,10.0,20,116.0474,20,50,false,\n",
+        encoding="utf-8",
+    )
+
+    base_config, _ = load_config(config_dir)
+    override_a, _ = load_config(
+        config_dir,
+        settings_overrides={"temporary_validation_marker": "alpha"},
+    )
+    override_b, _ = load_config(
+        config_dir,
+        settings_overrides={"temporary_validation_marker": "alpha"},
+    )
+
+    assert override_a.config_hash != base_config.config_hash
+    assert override_a.config_hash == override_b.config_hash
