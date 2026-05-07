@@ -1,6 +1,7 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
+    QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -15,7 +16,7 @@ class _LabeledSpin(QWidget):
     """SpinBox with a sub-label and explicit − / + buttons.
 
     Solves the Qt arrow-button hit-target problem: removes the built-in
-    arrows and replaces them with 28×28 px buttons that never overlap the
+    arrows and replaces them with 32×32 px buttons that never overlap the
     text field.
     """
 
@@ -87,3 +88,14 @@ class CollapsibleSection(QWidget):
         self._toggle.setArrowType(
             Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
         )
+
+
+def _set_float_range(
+    spin: QDoubleSpinBox,
+    minimum: float,
+    maximum: float,
+    decimals: int,
+) -> None:
+    spin.setRange(minimum, maximum)
+    spin.setDecimals(decimals)
+    spin.setSingleStep(0.01)

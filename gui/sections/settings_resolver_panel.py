@@ -1,11 +1,11 @@
-from PyQt6.QtWidgets import QDoubleSpinBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from gui.sections.settings_constants import (
     _GUI_UNBOUNDED_FLOAT_MAX,
     _LOCAL_MINIMUM_GUI_PRESET,
 )
 from gui.sections.settings_controls import ResolverControls
-from gui.sections.settings_widgets import _LabeledSpin
+from gui.sections.settings_widgets import _LabeledSpin, _set_float_range
 
 
 def configure_resolver_controls(controls: ResolverControls) -> None:
@@ -151,14 +151,3 @@ def apply_local_minimum_preset(
     controls.min_scans_spin.setValue(
         int(_LOCAL_MINIMUM_GUI_PRESET["resolver_min_scans"])
     )
-
-
-def _set_float_range(
-    spin: QDoubleSpinBox,
-    minimum: float,
-    maximum: float,
-    decimals: int,
-) -> None:
-    spin.setRange(minimum, maximum)
-    spin.setDecimals(decimals)
-    spin.setSingleStep(0.01)

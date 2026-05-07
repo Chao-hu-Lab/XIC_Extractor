@@ -1,7 +1,6 @@
 from collections.abc import Callable
 
 from PyQt6.QtWidgets import (
-    QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -12,7 +11,11 @@ from PyQt6.QtWidgets import (
 
 from gui.sections.settings_controls import AdvancedControls, ResolverControls
 from gui.sections.settings_value_helpers import _bool_value, _float_value, _int_value
-from gui.sections.settings_widgets import CollapsibleSection, _LabeledSpin
+from gui.sections.settings_widgets import (
+    CollapsibleSection,
+    _LabeledSpin,
+    _set_float_range,
+)
 
 
 def configure_advanced_controls(controls: AdvancedControls) -> None:
@@ -166,14 +169,3 @@ def load_advanced_values(
     advanced_controls.parallel_workers_spin.setValue(
         _int_value(settings_values, "parallel_workers")
     )
-
-
-def _set_float_range(
-    spin: QDoubleSpinBox,
-    minimum: float,
-    maximum: float,
-    decimals: int,
-) -> None:
-    spin.setRange(minimum, maximum)
-    spin.setDecimals(decimals)
-    spin.setSingleStep(0.01)

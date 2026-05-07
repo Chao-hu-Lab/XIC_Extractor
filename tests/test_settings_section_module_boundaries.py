@@ -1,8 +1,10 @@
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def test_settings_section_remains_orchestration_module() -> None:
-    source = Path("gui/sections/settings_section.py").read_text(encoding="utf-8")
+    source = (ROOT / "gui/sections/settings_section.py").read_text(encoding="utf-8")
 
     assert source.count("\n") < 650
     assert "class _LabeledSpin" not in source
