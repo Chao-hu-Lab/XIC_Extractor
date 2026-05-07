@@ -29,6 +29,41 @@ def test_peak_detection_models_own_result_dataclasses() -> None:
     assert "peak_scoring" not in model_source
 
 
+def test_peak_detection_integration_owns_area_and_apex_helpers() -> None:
+    assert importlib.util.find_spec("xic_extractor.peak_detection.integration")
+
+    signal_processing_path = ROOT / "xic_extractor" / "signal_processing.py"
+    integration_path = ROOT / "xic_extractor" / "peak_detection" / "integration.py"
+
+    signal_functions = _function_names(signal_processing_path)
+    integration_functions = _function_names(integration_path)
+
+    expected_helpers = {
+        "raw_apex_index",
+        "integrate_area_counts_seconds",
+        "peak_bounds",
+    }
+    assert expected_helpers <= integration_functions
+    assert {
+        "_raw_apex_index",
+        "_integrate_area_counts_seconds",
+        "_peak_bounds",
+    }.isdisjoint(signal_functions)
+
+    integration_source = integration_path.read_text(encoding="utf-8")
+    assert "peak_scoring" not in integration_source
+    assert "ExtractionConfig" not in integration_source
+
+
 def _class_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
+
+
+def _function_names(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    }

@@ -3,9 +3,14 @@ from dataclasses import replace
 from typing import Literal
 
 import numpy as np
-from scipy.signal import find_peaks, peak_widths, savgol_filter
+from scipy.signal import find_peaks, savgol_filter
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.integration import (
+    integrate_area_counts_seconds,
+    peak_bounds,
+    raw_apex_index,
+)
 from xic_extractor.peak_detection.models import (
     LocalMinimumQualityFlag,
     LocalMinimumRegionQuality,
@@ -567,9 +572,9 @@ def _build_candidate(
     peak_rel_height: float,
 ) -> PeakCandidate:
     n_points = len(intensity_values)
-    left, right = _peak_bounds(smoothed, selection_apex_idx, peak_rel_height, n_points)
-    raw_apex_idx = _raw_apex_index(intensity_values, left, right)
-    area = _integrate_area_counts_seconds(intensity_values, rt_values, left, right)
+    left, right = peak_bounds(smoothed, selection_apex_idx, peak_rel_height, n_points)
+    raw_apex_idx = raw_apex_index(intensity_values, left, right)
+    area = integrate_area_counts_seconds(intensity_values, rt_values, left, right)
 
     peak = PeakResult(
         rt=float(rt_values[selection_apex_idx]),
@@ -599,10 +604,10 @@ def _build_local_minimum_candidate(
     right: int,
     quality: LocalMinimumRegionQuality,
 ) -> PeakCandidate:
-    raw_apex_idx = _raw_apex_index(intensity_values, left, right)
+    raw_apex_idx = raw_apex_index(intensity_values, left, right)
     apex_intensity = float(intensity_values[raw_apex_idx])
     edge_height = max(float(intensity_values[left]), float(intensity_values[right - 1]))
-    area = _integrate_area_counts_seconds(intensity_values, rt_values, left, right)
+    area = integrate_area_counts_seconds(intensity_values, rt_values, left, right)
 
     peak = PeakResult(
         rt=float(rt_values[raw_apex_idx]),
@@ -627,28 +632,6 @@ def _build_local_minimum_candidate(
         region_edge_ratio=quality.edge_ratio,
         region_trace_continuity=quality.trace_continuity,
     )
-
-
-def _raw_apex_index(intensity_values: np.ndarray, left: int, right: int) -> int:
-    if right <= left:
-        return left
-    local_offset = int(np.argmax(intensity_values[left:right]))
-    return left + local_offset
-
-
-def _integrate_area_counts_seconds(
-    intensity_values: np.ndarray,
-    rt_values: np.ndarray,
-    left: int,
-    right: int,
-) -> float:
-    # Thermo returns rt in minutes, but LC-MS convention (Xcalibur, MassHunter,
-    # manual integration) reports area in counts·seconds — convert so downstream
-    # numbers match what chemists see in Xcalibur.
-    area_counts_minutes = float(
-        np.trapezoid(intensity_values[left:right], rt_values[left:right])
-    )
-    return area_counts_minutes * 60.0
 
 
 def _prominence_threshold(
@@ -797,7 +780,7 @@ def _local_minimum_region_quality(
     scan_count = right - left
     duration = float(rt_values[right - 1] - rt_values[left])
 
-    apex_idx = _raw_apex_index(intensity_values, left, right)
+    apex_idx = raw_apex_index(intensity_values, left, right)
     apex_intensity = float(intensity_values[apex_idx])
     if not _passes_local_peak_height_filters(apex_intensity, max_intensity, config):
         return None
@@ -865,10 +848,3 @@ def _trace_continuity_score(
     return max(0.0, 1.0 - sign_changes / max(1, len(signs) - 1))
 
 
-def _peak_bounds(
-    smoothed: np.ndarray, best_idx: int, peak_rel_height: float, n_points: int
-) -> tuple[int, int]:
-    widths = peak_widths(smoothed, [best_idx], rel_height=peak_rel_height)
-    left = max(0, int(np.floor(widths[2][0])))
-    right = min(n_points, int(np.ceil(widths[3][0])) + 1)
-    return left, right
