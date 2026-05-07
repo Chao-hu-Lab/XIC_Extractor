@@ -1,0 +1,39 @@
+import logging
+from pathlib import Path
+
+from xic_extractor.configuration.csv_io import _config_input_path, _read_settings
+from xic_extractor.configuration.hashing import _compute_config_hash
+from xic_extractor.configuration.models import ExtractionConfig, Target
+from xic_extractor.configuration.settings import (
+    _validate_settings,
+    migrate_settings_dict,
+)
+from xic_extractor.configuration.targets import _read_targets
+
+LOGGER = logging.getLogger(__name__)
+
+
+def load_config(
+    config_dir: Path, *, settings_overrides: dict[str, str] | None = None
+) -> tuple[ExtractionConfig, list[Target]]:
+    settings_path = _config_input_path(config_dir, "settings")
+    targets_path = _config_input_path(config_dir, "targets")
+
+    raw_settings = _read_settings(settings_path)
+    if settings_overrides:
+        raw_settings = {**raw_settings, **settings_overrides}
+    migrated, warnings = migrate_settings_dict(raw_settings)
+    for warning in warnings:
+        LOGGER.warning(warning)
+
+    output_dir = config_dir.parent / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    config_hash = _compute_config_hash(
+        targets_path,
+        settings_path,
+        settings_overrides=settings_overrides,
+    )
+    config = _validate_settings(migrated, settings_path, output_dir, config_hash)
+    targets = _read_targets(targets_path)
+    return config, targets

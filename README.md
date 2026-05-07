@@ -323,7 +323,8 @@ XIC_Extractor/
 │   ├── csv_to_excel.py          # CSV → Excel 報告
 │   └── validate_migration.py    # developer-only migration gate
 ├── xic_extractor/
-│   ├── config.py                # typed config loading / migration / validation
+│   ├── config.py                # public config compatibility facade
+│   ├── configuration/           # config models, CSV loading, parsing, validation
 │   ├── raw_reader.py            # Thermo RawFileReader wrapper
 │   ├── signal_processing.py     # peak detection and area integration
 │   ├── neutral_loss.py          # MS2 NL confirmation
