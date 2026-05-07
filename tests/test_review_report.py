@@ -506,7 +506,10 @@ def test_review_report_draws_istd_area_cv_table_and_normalized_chart(
 
     html = path.read_text(encoding="utf-8")
     assert "<h2>ISTD Area Injection Stability</h2>" in html
-    assert "Detected n/total uses positive numeric ISTD area rows" in html
+    assert (
+        "Detected counts positive numeric ISTD area rows; total counts ISTD rows "
+        "with injection order."
+    ) in html
     assert "<th>Mean Area</th><th>SD</th><th>CV%</th>" in html
     assert (
         "<td>d3-A</td><td>3/3</td><td>1.00e+02</td><td>1.00e+01</td>"

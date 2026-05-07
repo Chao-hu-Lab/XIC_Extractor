@@ -240,7 +240,8 @@ def _istd_area_stability(
     return (
         "<section><h2>ISTD Area Injection Stability</h2>"
         '<p class="dashboard-note">'
-        "Detected n/total uses positive numeric ISTD area rows with injection order. "
+        "Detected counts positive numeric ISTD area rows; total counts ISTD rows "
+        "with injection order. "
         "CV% = sample SD / mean area."
         "</p>"
         '<div class="area-stability-layout">'
