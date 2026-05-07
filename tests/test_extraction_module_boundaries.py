@@ -1,5 +1,6 @@
 import ast
 import importlib.util
+import inspect
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +63,25 @@ def test_backends_do_not_depend_on_pipeline() -> None:
         assert "xic_extractor.extraction.pipeline" not in source
         assert "resolve_injection_order" not in source
         assert "resolve_rt_prior_library" not in source
+
+
+def test_target_extraction_uses_concrete_result_annotations() -> None:
+    from xic_extractor.extraction import target_extraction
+
+    assert (
+        inspect.signature(target_extraction.extract_raw_file_result).return_annotation
+        == "RawFileExtractionResult"
+    )
+    assert (
+        inspect.signature(target_extraction.process_file).return_annotation
+        == "tuple[FileResult, list[DiagnosticRecord]]"
+    )
+    assert (
+        inspect.signature(target_extraction.extract_one_target)
+        .parameters["results"]
+        .annotation
+        == "dict[str, ExtractionResult]"
+    )
 
 
 def test_extractor_delegates_pipeline_flow() -> None:

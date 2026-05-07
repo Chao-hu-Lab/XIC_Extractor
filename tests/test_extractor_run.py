@@ -141,6 +141,16 @@ def test_run_resolves_scoring_inputs_before_backend(
     assert output.file_results == []
 
 
+def test_resolve_injection_order_returns_empty_dict_without_raw_files(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.extraction.pipeline import resolve_injection_order
+
+    config = _config(tmp_path, keep_intermediate_csv=False)
+
+    assert resolve_injection_order(config, [], None) == {}
+
+
 def test_serial_backend_keeps_sorted_raw_output_order(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

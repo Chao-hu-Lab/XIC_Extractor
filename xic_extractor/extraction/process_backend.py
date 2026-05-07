@@ -103,10 +103,8 @@ def collect_istd_prepass_process(
     runner: Callable[..., list[Any]] | None = None,
 ) -> dict[str, dict[str, float]]:
     from xic_extractor.extraction.jobs import (
-        IstdPrepassResult,
-        ParallelExecutionError,
         RawFileJob,
-        WorkerError,
+        collect_istd_prepass_results,
         run_istd_prepass_jobs,
     )
 
@@ -130,19 +128,8 @@ def collect_istd_prepass_process(
         should_stop=should_stop,
     )
 
-    errors = [result for result in results if isinstance(result, WorkerError)]
-    if errors:
-        messages = "; ".join(
-            f"{error.raw_name}: {error.message}"
-            for error in sorted(errors, key=lambda item: item.raw_index)
-        )
-        raise ParallelExecutionError(messages)
-
     istd_rts_by_sample: dict[str, dict[str, float]] = {}
-    ordered_results = sorted(
-        (result for result in results if isinstance(result, IstdPrepassResult)),
-        key=lambda item: item.raw_index,
-    )
+    ordered_results = collect_istd_prepass_results(results)
     for result in ordered_results:
         for istd_label, anchor_rt in result.anchors.items():
             istd_rts_by_sample.setdefault(istd_label, {})[

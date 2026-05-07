@@ -93,6 +93,43 @@ def test_worker_error_result_is_surfaced_with_raw_name() -> None:
         )
 
 
+def test_istd_prepass_result_collection_reuses_worker_error_contract() -> None:
+    from xic_extractor.extraction.jobs import (
+        IstdPrepassResult,
+        ParallelExecutionError,
+        WorkerError,
+        collect_istd_prepass_results,
+    )
+
+    result_b = IstdPrepassResult(
+        raw_index=2,
+        raw_name="B.raw",
+        sample_name="B",
+        anchors={},
+        results={},
+        diagnostics=[],
+        shape_metrics={},
+    )
+    result_a = IstdPrepassResult(
+        raw_index=1,
+        raw_name="A.raw",
+        sample_name="A",
+        anchors={},
+        results={},
+        diagnostics=[],
+        shape_metrics={},
+    )
+
+    assert collect_istd_prepass_results([result_b, result_a]) == [
+        result_a,
+        result_b,
+    ]
+    with pytest.raises(ParallelExecutionError, match="A.raw"):
+        collect_istd_prepass_results(
+            [WorkerError(raw_index=1, raw_name="A.raw", message="boom")]
+        )
+
+
 def test_job_payload_rejects_callables_and_open_file_handles(tmp_path: Path) -> None:
     from xic_extractor.execution import RawFileJob, validate_job_payload
 

@@ -18,13 +18,11 @@ def resolve_injection_order(
     config: ExtractionConfig,
     raw_paths: list[Path],
     injection_order: dict[str, int] | None,
-) -> dict[str, int] | None:
+) -> dict[str, int]:
     if injection_order is not None:
         return injection_order
     if config.injection_order_source is not None:
         return read_injection_order(config.injection_order_source)
-    if not raw_paths:
-        return None
     return fallback_injection_order_from_mtime(raw_paths)
 
 
@@ -61,15 +59,10 @@ def run_pipeline(
         raise RawReaderError(" ".join(reader_errors))
 
     raw_paths = sorted(config.data_dir.glob("*.raw"))
-    resolved_injection_order = resolve_injection_order(
+    scoring_injection_order = resolve_injection_order(
         config,
         raw_paths,
         injection_order,
-    )
-    scoring_injection_order = (
-        resolved_injection_order
-        if resolved_injection_order is not None
-        else fallback_injection_order_from_mtime(raw_paths)
     )
     resolved_rt_prior_library = resolve_rt_prior_library(config, rt_prior_library)
 

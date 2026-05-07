@@ -8,12 +8,16 @@ from dataclasses import dataclass, fields, is_dataclass
 from multiprocessing import get_context
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.scoring_factory import build_scoring_context_factory
 from xic_extractor.extractor import RawFileExtractionResult
 from xic_extractor.rt_prior_library import LibraryEntry
+
+if TYPE_CHECKING:
+    from xic_extractor.extractor import ExtractionResult
+    from xic_extractor.output.messages import DiagnosticRecord
 
 
 @dataclass(frozen=True)
@@ -38,8 +42,8 @@ class IstdPrepassResult:
     raw_name: str
     sample_name: str
     anchors: dict[str, float]
-    results: dict[str, Any]
-    diagnostics: list[Any]
+    results: dict[str, ExtractionResult]
+    diagnostics: list[DiagnosticRecord]
     shape_metrics: dict[str, tuple[float, float | None]]
 
 
@@ -83,15 +87,36 @@ def collect_ordered_results(
         else:
             successes.append(result)
 
-    if errors:
-        messages = "; ".join(
-            f"{error.raw_name}: {error.message}" for error in sorted(
-                errors,
-                key=lambda item: item.raw_index,
-            )
-        )
-        raise ParallelExecutionError(messages)
+    _raise_worker_errors(errors)
     return sorted(successes, key=lambda item: item.raw_index)
+
+
+def collect_istd_prepass_results(
+    results: Iterable[IstdPrepassWorkerResult],
+) -> list[IstdPrepassResult]:
+    successes: list[IstdPrepassResult] = []
+    errors: list[WorkerError] = []
+    for result in results:
+        if isinstance(result, WorkerError):
+            errors.append(result)
+        else:
+            successes.append(result)
+
+    _raise_worker_errors(errors)
+    return sorted(successes, key=lambda item: item.raw_index)
+
+
+def _raise_worker_errors(errors: list[WorkerError]) -> None:
+    if not errors:
+        return
+    messages = "; ".join(
+        f"{error.raw_name}: {error.message}"
+        for error in sorted(
+            errors,
+            key=lambda item: item.raw_index,
+        )
+    )
+    raise ParallelExecutionError(messages)
 
 
 def run_istd_prepass_jobs(

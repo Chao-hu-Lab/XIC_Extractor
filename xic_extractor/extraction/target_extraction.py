@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.anchors import (
@@ -34,6 +34,13 @@ from xic_extractor.output.messages import (
 from xic_extractor.peak_scoring import candidate_quality_penalty
 from xic_extractor.signal_processing import PeakCandidate
 
+if TYPE_CHECKING:
+    from xic_extractor.extractor import (
+        ExtractionResult,
+        FileResult,
+        RawFileExtractionResult,
+    )
+
 
 def extract_raw_file_result(
     raw_index: int,
@@ -42,12 +49,7 @@ def extract_raw_file_result(
     raw_path: Path,
     *,
     scoring_context_factory: Callable[..., Any] | None = None,
-) -> Any:
-    """Extract one RAW file and return a pickleable result object.
-
-    Process backends may pass a scoring context factory only after rebuilding it
-    inside the worker process; nested factories must not be sent in job payloads.
-    """
+) -> RawFileExtractionResult:
     from xic_extractor import extractor
 
     file_result, diagnostics = process_file(
@@ -70,17 +72,17 @@ def process_file(
     raw_path: Path,
     *,
     scoring_context_factory: Callable[..., Any] | None = None,
-    precomputed_istd_results: dict[str, Any] | None = None,
+    precomputed_istd_results: dict[str, ExtractionResult] | None = None,
     precomputed_istd_diagnostics: list[DiagnosticRecord] | None = None,
     precomputed_istd_anchor_rts: dict[str, float] | None = None,
     precomputed_istd_shape_metrics: dict[str, tuple[float, float | None]] | None = None,
-) -> tuple[Any, list[DiagnosticRecord]]:
+) -> tuple[FileResult, list[DiagnosticRecord]]:
     from xic_extractor import extractor
 
     sample_name = raw_path.stem
     try:
         with extractor.open_raw(raw_path, config.dll_dir) as raw:
-            results = dict(precomputed_istd_results or {})
+            results: dict[str, ExtractionResult] = dict(precomputed_istd_results or {})
             diagnostics: list[DiagnosticRecord] = list(
                 precomputed_istd_diagnostics or []
             )
@@ -190,7 +192,7 @@ def extract_one_target(
     reference_rt: float | None,
     sample_drift: float = 0.0,
     strict_preferred_rt: bool = False,
-    results: dict[str, Any],
+    results: dict[str, ExtractionResult],
     diagnostics: list[DiagnosticRecord],
     scoring_context_factory: Callable[..., Any] | None = None,
     istd_confidence_note: str | None = None,
@@ -198,7 +200,6 @@ def extract_one_target(
     paired_istd_fwhm: float | None = None,
     shape_metrics_by_label: dict[str, tuple[float, float | None]] | None = None,
 ) -> float | None:
-    """處理單一 target 並將結果寫入 results/diagnostics。"""
     from xic_extractor import extractor
 
     rt_min, rt_max, anchor_used, anchor_rt = get_rt_window(
@@ -321,9 +322,7 @@ def extract_one_target(
         quality_flags=quality_flags,
     )
     results[target.label] = result
-    diagnostics.extend(
-        build_diagnostic_records(sample_name, target, result, config)
-    )
+    diagnostics.extend(build_diagnostic_records(sample_name, target, result, config))
     if paired_rejection is not None:
         diagnostics.append(paired_rejection)
 
