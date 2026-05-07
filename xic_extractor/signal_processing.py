@@ -20,6 +20,10 @@ from xic_extractor.peak_detection.models import (
     PeakResult,
     PeakStatus,
 )
+from xic_extractor.peak_detection.selection import (
+    select_candidate,
+    selection_rt_for_scored_candidates,
+)
 from xic_extractor.peak_scoring import (
     ScoringContext,
     score_candidate,
@@ -38,8 +42,6 @@ __all__ = [
     "find_peak_candidates",
 ]
 
-# preferred_rt 選峰時，若最靠近 anchor 的峰強度 < 最高峰的這個比例，改選最高峰
-_ANCHOR_SELECTION_MIN_INTENSITY_RATIO: float = 0.2
 _PREFERRED_RT_RECOVERY_PROMINENCE_FRACTION: float = 0.2
 _PREFERRED_RT_RECOVERY_MIN_PROMINENCE_RATIO: float = 0.01
 _PREFERRED_RT_RECOVERY_MAX_DELTA_MIN: float = 0.35
@@ -69,7 +71,7 @@ def find_peak_and_area(
     chosen_reason: str | None = None
     chosen_severities: tuple[tuple[int, str], ...] = ()
     if candidates_result.status == "OK":
-        preliminary_candidate = _select_candidate(
+        preliminary_candidate = select_candidate(
             candidates_result.candidates,
             preferred_rt=preferred_rt,
             strict_preferred_rt=strict_preferred_rt,
@@ -97,7 +99,7 @@ def find_peak_and_area(
                 )
                 for candidate in all_candidates
             ]
-            selection_rt = _selection_rt_for_scored_candidates(
+            selection_rt = selection_rt_for_scored_candidates(
                 candidates_result.candidates,
                 preferred_rt=preferred_rt,
                 strict_preferred_rt=strict_preferred_rt,
@@ -119,7 +121,7 @@ def find_peak_and_area(
                     result_for_output,
                     recovery_candidate,
                 )
-            best_candidate = _select_candidate(
+            best_candidate = select_candidate(
                 all_candidates,
                 preferred_rt=preferred_rt,
                 strict_preferred_rt=strict_preferred_rt,
@@ -429,33 +431,6 @@ def _preferred_rt_recovery(
     return candidate, relaxed_result
 
 
-def _selection_rt_for_scored_candidates(
-    candidates: tuple[PeakCandidate, ...],
-    *,
-    preferred_rt: float | None,
-    strict_preferred_rt: bool,
-) -> float | None:
-    if preferred_rt is None or not candidates:
-        return None
-    if strict_preferred_rt:
-        return preferred_rt
-
-    nearest_candidate = min(
-        candidates,
-        key=lambda candidate: abs(candidate.selection_apex_rt - preferred_rt),
-    )
-    strongest_candidate = max(
-        candidates, key=lambda candidate: candidate.selection_apex_intensity
-    )
-    if (
-        nearest_candidate.selection_apex_intensity
-        >= strongest_candidate.selection_apex_intensity
-        * _ANCHOR_SELECTION_MIN_INTENSITY_RATIO
-    ):
-        return preferred_rt
-    return None
-
-
 def _relaxed_local_minimum_recovery_config(
     config: ExtractionConfig,
 ) -> ExtractionConfig:
@@ -530,36 +505,6 @@ def _candidate_failure(
         max_smoothed=max_smoothed,
         n_prominent_peaks=0,
     )
-
-
-def _select_candidate(
-    candidates: tuple[PeakCandidate, ...],
-    *,
-    preferred_rt: float | None,
-    strict_preferred_rt: bool,
-) -> PeakCandidate:
-    strongest_candidate = max(
-        candidates, key=lambda candidate: candidate.selection_apex_intensity
-    )
-    if preferred_rt is None or len(candidates) == 1:
-        return strongest_candidate
-
-    # NL anchor 指向化合物實際 RT；多峰時優先選距 anchor 最近的峰。
-    # paired analyte 已由 ISTD anchor 約束時強制尊重最近峰；其他路徑若最近峰
-    # 強度 < 最高峰的 20%，anchor 可能是雜訊，回到選最高峰。
-    nearest_candidate = min(
-        candidates,
-        key=lambda candidate: abs(candidate.selection_apex_rt - preferred_rt),
-    )
-    if strict_preferred_rt:
-        return nearest_candidate
-    if (
-        nearest_candidate.selection_apex_intensity
-        >= strongest_candidate.selection_apex_intensity
-        * _ANCHOR_SELECTION_MIN_INTENSITY_RATIO
-    ):
-        return nearest_candidate
-    return strongest_candidate
 
 
 def _build_candidate(
