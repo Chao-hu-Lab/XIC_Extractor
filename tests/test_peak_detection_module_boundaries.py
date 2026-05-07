@@ -104,6 +104,29 @@ def test_peak_detection_trace_quality_owns_quality_signals() -> None:
     assert "find_peaks" not in trace_quality_source
 
 
+def test_peak_detection_legacy_savgol_owns_default_candidate_formation() -> None:
+    assert importlib.util.find_spec("xic_extractor.peak_detection.legacy_savgol")
+
+    signal_processing_path = ROOT / "xic_extractor" / "signal_processing.py"
+    legacy_path = ROOT / "xic_extractor" / "peak_detection" / "legacy_savgol.py"
+
+    signal_functions = _function_names(signal_processing_path)
+    legacy_functions = _function_names(legacy_path)
+
+    assert "find_peak_candidates_legacy_savgol" in legacy_functions
+    assert {
+        "_find_peak_candidates_legacy_savgol",
+        "_prominence_threshold",
+        "_build_candidate",
+    }.isdisjoint(signal_functions)
+
+    legacy_source = legacy_path.read_text(encoding="utf-8")
+    assert "savgol_filter" in legacy_source
+    assert "find_peaks" in legacy_source
+    assert "peak_scoring" not in legacy_source
+    assert "local_minimum" not in legacy_source
+
+
 def _class_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
