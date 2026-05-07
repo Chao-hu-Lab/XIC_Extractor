@@ -1,27 +1,36 @@
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Literal
 
 import numpy as np
 from scipy.signal import find_peaks, peak_widths, savgol_filter
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.models import (
+    LocalMinimumQualityFlag,
+    LocalMinimumRegionQuality,
+    PeakCandidate,
+    PeakCandidatesResult,
+    PeakDetectionResult,
+    PeakResult,
+    PeakStatus,
+)
 from xic_extractor.peak_scoring import (
     ScoringContext,
     score_candidate,
     select_candidate_with_confidence,
 )
 
-PeakStatus = Literal["OK", "NO_SIGNAL", "WINDOW_TOO_SHORT", "PEAK_NOT_FOUND"]
-LocalMinimumQualityFlag = Literal[
-    "edge_clipped",
-    "too_broad",
-    "too_short",
-    "low_scan_count",
-    "low_top_edge_ratio",
-    "low_scan_support",
-    "low_trace_continuity",
-    "poor_edge_recovery",
+__all__ = [
+    "LocalMinimumQualityFlag",
+    "LocalMinimumRegionQuality",
+    "PeakCandidate",
+    "PeakCandidatesResult",
+    "PeakDetectionResult",
+    "PeakResult",
+    "PeakStatus",
+    "find_peak_and_area",
+    "find_peak_candidates",
 ]
 
 # preferred_rt 選峰時，若最靠近 anchor 的峰強度 < 最高峰的這個比例，改選最高峰
@@ -38,64 +47,6 @@ _LOCAL_RECOVERY_TOP_EDGE_RATIO: float = 1.05
 _LOCAL_RECOVERY_DURATION_MAX_MULTIPLIER: float = 1.5
 _TRACE_CONTINUITY_MIN_SCORE: float = 0.70
 _TRACE_CONTINUITY_SIGNIFICANT_STEP_FRACTION: float = 0.05
-
-
-@dataclass(frozen=True)
-class PeakResult:
-    rt: float
-    intensity: float
-    intensity_smoothed: float
-    area: float
-    peak_start: float
-    peak_end: float
-
-
-@dataclass(frozen=True)
-class PeakCandidate:
-    peak: PeakResult
-    selection_apex_rt: float
-    selection_apex_intensity: float
-    selection_apex_index: int
-    raw_apex_rt: float
-    raw_apex_intensity: float
-    raw_apex_index: int
-    prominence: float
-    quality_flags: tuple[LocalMinimumQualityFlag, ...] = ()
-    region_scan_count: int | None = None
-    region_duration_min: float | None = None
-    region_edge_ratio: float | None = None
-    region_trace_continuity: float | None = None
-
-
-@dataclass(frozen=True)
-class LocalMinimumRegionQuality:
-    flags: tuple[LocalMinimumQualityFlag, ...]
-    scan_count: int
-    duration_min: float
-    edge_ratio: float | None
-    trace_continuity: float | None
-
-
-@dataclass(frozen=True)
-class PeakCandidatesResult:
-    status: PeakStatus
-    candidates: tuple[PeakCandidate, ...]
-    n_points: int
-    max_smoothed: float | None
-    n_prominent_peaks: int
-
-
-@dataclass(frozen=True)
-class PeakDetectionResult:
-    status: PeakStatus
-    peak: PeakResult | None
-    n_points: int
-    max_smoothed: float | None
-    n_prominent_peaks: int
-    candidates: tuple[PeakCandidate, ...] = ()
-    confidence: str | None = None
-    reason: str | None = None
-    severities: tuple[tuple[int, str], ...] = ()
 
 
 def find_peak_and_area(
