@@ -508,9 +508,23 @@ def test_review_report_draws_istd_area_cv_table_and_normalized_chart(
     assert "<h2>ISTD Area Injection Stability</h2>" in html
     assert "Detected n/total uses positive numeric ISTD area rows" in html
     assert "<th>Mean Area</th><th>SD</th><th>CV%</th>" in html
-    assert "<td>d3-A</td><td>3/3</td><td>100.0</td><td>10.0</td><td>10.0%</td>" in html
-    assert "<td>d3-B</td><td>2/2</td><td>1050.0</td><td>70.7</td><td>6.7%</td>" in html
+    assert (
+        "<td>d3-A</td><td>3/3</td><td>1.00e+02</td><td>1.00e+01</td>"
+        "<td>10.0%</td>"
+    ) in html
+    assert (
+        "<td>d3-B</td><td>2/2</td><td>1.05e+03</td><td>7.07e+01</td>"
+        "<td>6.7%</td>"
+    ) in html
     assert '<svg class="area-stability-svg"' in html
+    assert '<div class="area-stability-layout">' in html
+    assert '<div class="area-stability-chart">' in html
+    assert '<div class="area-stability-table-wrap">' in html
+    assert ".area-stability-table-wrap{max-width:940px}" in html
+    assert ".area-stability-table{width:100%;min-width:900px;" in html
+    assert html.index('<div class="area-stability-chart">') < html.index(
+        '<table class="area-stability-table">'
+    )
     assert "Normalized Area (%)" in html
     assert "Injection Order" in html
     assert "d3-A: Injection 1, area 90.0, normalized 90.0%" in html
@@ -594,7 +608,10 @@ def test_review_report_area_cv_excludes_invalid_area_values(
     )
 
     html = path.read_text(encoding="utf-8")
-    assert "<td>d3-A</td><td>2/6</td><td>110.0</td><td>14.1</td><td>12.9%</td>" in html
+    assert (
+        "<td>d3-A</td><td>2/6</td><td>1.10e+02</td><td>1.41e+01</td>"
+        "<td>12.9%</td>"
+    ) in html
     assert html.count('class="area-point"') == 2
 
 
@@ -632,7 +649,7 @@ def test_review_report_area_cv_uses_na_with_less_than_two_valid_points(
     )
 
     html = path.read_text(encoding="utf-8")
-    assert "<td>d3-A</td><td>1/2</td><td>100.0</td><td>NA</td><td>NA</td>" in html
+    assert "<td>d3-A</td><td>1/2</td><td>1.00e+02</td><td>NA</td><td>NA</td>" in html
     assert '<svg class="area-stability-svg"' not in html
 
 

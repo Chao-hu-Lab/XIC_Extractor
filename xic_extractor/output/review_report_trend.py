@@ -235,15 +235,18 @@ def _istd_area_stability(
         target: [point for point in points if point.target == target]
         for target in targets
     }
-    table = _area_cv_table(targets, target_totals, points_by_target)
     chart = _area_stability_chart(points_by_target)
+    table = _area_cv_table(targets, target_totals, points_by_target)
     return (
         "<section><h2>ISTD Area Injection Stability</h2>"
         '<p class="dashboard-note">'
         "Detected n/total uses positive numeric ISTD area rows with injection order. "
         "CV% = sample SD / mean area."
         "</p>"
-        f"{table}{chart}</section>"
+        '<div class="area-stability-layout">'
+        f'<div class="area-stability-chart">{chart}</div>'
+        f'<div class="area-stability-table-wrap">{table}</div>'
+        "</div></section>"
     )
 
 
@@ -307,12 +310,12 @@ def _area_stability_chart(points_by_target: dict[str, list[_AreaPoint]]) -> str:
         target: _TREND_PALETTE[index % len(_TREND_PALETTE)]
         for index, target in enumerate(targets)
     }
-    width = 1100
-    height = 420
+    width = 1200
+    height = 680
     left = 78
-    legend_left = 872
-    top = 50
-    bottom = 70
+    legend_left = 944
+    top = 54
+    bottom = 86
     plot_width = legend_left - left - 32
     plot_height = height - top - bottom
     x_values = [point[0] for point in normalized_points]
@@ -507,7 +510,7 @@ def _positive_float_value(text: str) -> float | None:
 def _format_area_metric(value: float | None) -> str:
     if value is None:
         return "NA"
-    return f"{value:.1f}"
+    return f"{value:.2e}"
 
 def _format_cv_percent(value: float | None) -> str:
     if value is None:
