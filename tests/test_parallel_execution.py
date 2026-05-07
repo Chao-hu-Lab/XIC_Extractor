@@ -93,6 +93,43 @@ def test_worker_error_result_is_surfaced_with_raw_name() -> None:
         )
 
 
+def test_istd_prepass_result_collection_reuses_worker_error_contract() -> None:
+    from xic_extractor.extraction.jobs import (
+        IstdPrepassResult,
+        ParallelExecutionError,
+        WorkerError,
+        collect_istd_prepass_results,
+    )
+
+    result_b = IstdPrepassResult(
+        raw_index=2,
+        raw_name="B.raw",
+        sample_name="B",
+        anchors={},
+        results={},
+        diagnostics=[],
+        shape_metrics={},
+    )
+    result_a = IstdPrepassResult(
+        raw_index=1,
+        raw_name="A.raw",
+        sample_name="A",
+        anchors={},
+        results={},
+        diagnostics=[],
+        shape_metrics={},
+    )
+
+    assert collect_istd_prepass_results([result_b, result_a]) == [
+        result_a,
+        result_b,
+    ]
+    with pytest.raises(ParallelExecutionError, match="A.raw"):
+        collect_istd_prepass_results(
+            [WorkerError(raw_index=1, raw_name="A.raw", message="boom")]
+        )
+
+
 def test_job_payload_rejects_callables_and_open_file_handles(tmp_path: Path) -> None:
     from xic_extractor.execution import RawFileJob, validate_job_payload
 
@@ -134,7 +171,7 @@ def test_parallel_istd_prepass_submits_one_job_per_raw_file(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.execution import IstdPrepassResult
-    from xic_extractor.extractor import _collect_istd_prepass_process
+    from xic_extractor.extraction.process_backend import collect_istd_prepass_process
 
     config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
     raw_paths = [tmp_path / "A.raw", tmp_path / "B.raw"]
@@ -157,7 +194,7 @@ def test_parallel_istd_prepass_submits_one_job_per_raw_file(
             for job in reversed(jobs)
         ]
 
-    _collect_istd_prepass_process(
+    collect_istd_prepass_process(
         config,
         targets,
         raw_paths,
@@ -175,7 +212,7 @@ def test_parallel_istd_prepass_aggregates_out_of_completion_order(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.execution import IstdPrepassResult
-    from xic_extractor.extractor import _collect_istd_prepass_process
+    from xic_extractor.extraction.process_backend import collect_istd_prepass_process
 
     config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
     raw_paths = [tmp_path / "A.raw", tmp_path / "B.raw"]
@@ -202,7 +239,7 @@ def test_parallel_istd_prepass_aggregates_out_of_completion_order(
             ),
         ]
 
-    istd_rts_by_sample = _collect_istd_prepass_process(
+    istd_rts_by_sample = collect_istd_prepass_process(
         config,
         (_target("ISTD", is_istd=True),),
         raw_paths,
@@ -216,7 +253,7 @@ def test_parallel_istd_prepass_reports_worker_failure_with_raw_name(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.execution import ParallelExecutionError, WorkerError
-    from xic_extractor.extractor import _collect_istd_prepass_process
+    from xic_extractor.extraction.process_backend import collect_istd_prepass_process
 
     config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
     raw_paths = [tmp_path / "A.raw"]
@@ -225,7 +262,7 @@ def test_parallel_istd_prepass_reports_worker_failure_with_raw_name(
         return [WorkerError(raw_index=1, raw_name="A.raw", message="boom")]
 
     with pytest.raises(ParallelExecutionError, match="A.raw"):
-        _collect_istd_prepass_process(
+        collect_istd_prepass_process(
             config,
             (_target("ISTD", is_istd=True),),
             raw_paths,
@@ -237,10 +274,12 @@ def test_parallel_full_extraction_submits_pickleable_scoring_jobs_and_sorts(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.execution import ScoringInputs, validate_job_payload
+    from xic_extractor.extraction.process_backend import (
+        collect_raw_file_results_process,
+    )
     from xic_extractor.extractor import (
         FileResult,
         RawFileExtractionResult,
-        _collect_raw_file_results_process,
     )
 
     config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
@@ -278,7 +317,7 @@ def test_parallel_full_extraction_submits_pickleable_scoring_jobs_and_sorts(
             ),
         ]
 
-    ordered = _collect_raw_file_results_process(
+    ordered = collect_raw_file_results_process(
         config,
         targets,
         raw_paths,
@@ -303,7 +342,9 @@ def test_parallel_full_extraction_worker_error_fails_with_raw_name(
         ScoringInputs,
         WorkerError,
     )
-    from xic_extractor.extractor import _collect_raw_file_results_process
+    from xic_extractor.extraction.process_backend import (
+        collect_raw_file_results_process,
+    )
 
     config = replace(_config(tmp_path), parallel_mode="process", parallel_workers=2)
     raw_paths = [tmp_path / "A.raw"]
@@ -312,7 +353,7 @@ def test_parallel_full_extraction_worker_error_fails_with_raw_name(
         return [WorkerError(raw_index=1, raw_name="A.raw", message="worker died")]
 
     with pytest.raises(ParallelExecutionError, match="A.raw"):
-        _collect_raw_file_results_process(
+        collect_raw_file_results_process(
             config,
             (_target("Analyte"),),
             raw_paths,
@@ -363,11 +404,11 @@ def test_raw_worker_rebuilds_scoring_factory_inside_worker(
         )
 
     monkeypatch.setattr(
-        "xic_extractor.execution.build_scoring_context_factory",
+        "xic_extractor.extraction.jobs.build_scoring_context_factory",
         _fake_build_factory,
     )
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_raw_file_result",
+        "xic_extractor.extraction.target_extraction.extract_raw_file_result",
         _fake_extract_raw_file_result,
     )
 
@@ -410,11 +451,11 @@ def test_process_run_writes_output_only_after_collecting_worker_results(
     calls = []
 
     monkeypatch.setattr(
-        "xic_extractor.extractor.preflight_raw_reader",
+        "xic_extractor.extraction.pipeline.preflight_raw_reader",
         lambda _dll_dir: [],
     )
     monkeypatch.setattr(
-        "xic_extractor.extractor._collect_istd_prepass_process",
+        "xic_extractor.extraction.process_backend.collect_istd_prepass_process",
         lambda *_args, **_kwargs: {},
     )
 
@@ -433,11 +474,11 @@ def test_process_run_writes_output_only_after_collecting_worker_results(
         calls.append("write")
 
     monkeypatch.setattr(
-        "xic_extractor.extractor._collect_raw_file_results_process",
+        "xic_extractor.extraction.process_backend.collect_raw_file_results_process",
         _fake_collect_raw_results,
     )
     monkeypatch.setattr(
-        "xic_extractor.extractor.csv_writers.write_all",
+        "xic_extractor.extraction.pipeline.write_outputs",
         _fake_write_all,
     )
 

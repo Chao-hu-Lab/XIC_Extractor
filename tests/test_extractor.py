@@ -17,7 +17,7 @@ from xic_extractor.signal_processing import (
 @pytest.fixture(autouse=True)
 def _disable_reader_preflight(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "xic_extractor.extractor.preflight_raw_reader",
+        "xic_extractor.extraction.pipeline.preflight_raw_reader",
         lambda _dll_dir: [],
         raising=False,
     )
@@ -29,7 +29,7 @@ def test_run_raises_before_processing_when_reader_preflight_fails(
     config = _config(tmp_path)
     (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
     monkeypatch.setattr(
-        "xic_extractor.extractor.preflight_raw_reader",
+        "xic_extractor.extraction.pipeline.preflight_raw_reader",
         lambda _dll_dir: ["pythonnet is not installed"],
         raising=False,
     )
@@ -194,7 +194,10 @@ def test_run_wires_candidate_ms2_evidence_into_scoring_context(
         )
         return _ok_peak(8.5, 1200.0, 3400.25)
 
-    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.open_raw",
+        _open_raw_factory(),
+    )
     monkeypatch.setattr(
         "xic_extractor.extractor.collect_candidate_ms2_evidence",
         _fake_collect_candidate_ms2_evidence,
@@ -260,10 +263,10 @@ def test_run_loads_scoring_inputs_from_config_paths(
         return {}
 
     monkeypatch.setattr(
-        "xic_extractor.extractor.read_injection_order",
+        "xic_extractor.extraction.pipeline.read_injection_order",
         _read_injection_order,
     )
-    monkeypatch.setattr("xic_extractor.extractor.load_library", _load_library)
+    monkeypatch.setattr("xic_extractor.extraction.pipeline.load_library", _load_library)
 
     _run(config, targets)
 
@@ -282,7 +285,7 @@ def test_run_falls_back_to_main_pass_when_prepass_returns_none(
     targets = [_target("ISTD", is_istd=True), _target("Analyte", istd_pair="ISTD")]
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_istd_anchors_only",
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -304,13 +307,17 @@ def test_run_falls_back_to_main_pass_when_prepass_returns_none(
 def test_prepass_excludes_flagged_istd_anchor_from_prior_map(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from xic_extractor.extractor import ExtractionResult, _extract_istd_anchors_only
+    from xic_extractor.extraction.istd_prepass import extract_istd_anchors_only
+    from xic_extractor.extractor import ExtractionResult
 
     config = _config(tmp_path)
     raw_path = config.data_dir / "SampleA.raw"
     raw_path.write_text("", encoding="utf-8")
     target = _target("ISTD", is_istd=True)
-    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extraction.istd_prepass.open_raw",
+        _open_raw_factory(),
+    )
 
     def _fake_extract_one_target(
         raw,
@@ -339,11 +346,11 @@ def test_prepass_excludes_flagged_istd_anchor_from_prior_map(
         return 9.05
 
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_one_target",
+        "xic_extractor.extraction.target_extraction.extract_one_target",
         _fake_extract_one_target,
     )
 
-    anchors, results, diagnostics, shape_metrics = _extract_istd_anchors_only(
+    anchors, results, diagnostics, shape_metrics = extract_istd_anchors_only(
         config,
         [target],
         raw_path,
@@ -363,7 +370,7 @@ def test_run_reextracts_istd_in_main_pass_to_keep_scoring_metadata(
     targets = [_target("ISTD", is_istd=True)]
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_istd_anchors_only",
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
         lambda *_args, **_kwargs: (
             {"ISTD": 9.05},
             {},
@@ -643,7 +650,7 @@ def test_istd_no_ms2_keeps_ms1_peak_and_writes_confidence_flags(
     targets = [_target("ISTD", is_istd=True)]
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_istd_anchors_only",
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -718,7 +725,7 @@ def test_paired_analyte_uses_strict_anchor_peak_selection(
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_istd_anchors_only",
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -775,7 +782,7 @@ def test_istd_anchor_rechecks_target_center_when_strongest_anchor_is_far(
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_istd_anchors_only",
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -825,7 +832,7 @@ def test_istd_anchor_keeps_strongest_anchor_when_it_is_near_target_center(
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_istd_anchors_only",
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -860,7 +867,7 @@ def test_istd_peak_not_found_retries_with_wider_anchor_window(
         lambda *_args, **_kwargs: raw,
     )
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_istd_anchors_only",
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -902,7 +909,7 @@ def test_paired_analyte_keeps_mismatched_target_anchor_peak_as_low(
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_istd_anchors_only",
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -959,7 +966,7 @@ def test_paired_analyte_accepts_peak_close_to_target_anchor_even_if_farther_from
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_istd_anchors_only",
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -1006,7 +1013,7 @@ def test_paired_analyte_fallback_keeps_mismatched_istd_anchor_peak_as_low(
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
     monkeypatch.setattr(
-        "xic_extractor.extractor._extract_istd_anchors_only",
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
