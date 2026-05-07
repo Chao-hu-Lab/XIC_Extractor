@@ -137,3 +137,66 @@ def test_settings_section_rejects_invalid_loaded_parallel_settings(qtbot) -> Non
     values = section.get_values()
     assert values["parallel_mode"] == "proces"
     assert values["parallel_workers"] == "0"
+
+
+def test_settings_section_load_keeps_save_button_hidden(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+
+    section.load(_canonical_settings())
+
+    assert not section._save_button.isVisible()
+
+
+def test_settings_section_editing_main_fields_marks_dirty(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load(_canonical_settings())
+
+    section._data_dir_edit.setText("C:\\new-data")
+
+    assert section._save_button.isVisible()
+
+    section.load(_canonical_settings())
+    section._peak_rel_height_spin.setValue(0.91)
+
+    assert section._save_button.isVisible()
+
+
+def test_settings_section_save_emits_signal_and_clears_dirty(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load(_canonical_settings())
+    section._data_dir_edit.setText("C:\\new-data")
+    emitted: list[bool] = []
+    section.settings_saved.connect(lambda: emitted.append(True))
+
+    section._save_button.click()
+
+    assert emitted == [True]
+    assert not section._save_button.isVisible()
+
+
+def test_settings_section_resolver_mode_change_marks_dirty(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load(_canonical_settings())
+
+    section._resolver_mode_combo.setCurrentText("local_minimum")
+
+    assert section._save_button.isVisible()
+
+
+def test_settings_section_advanced_flag_change_marks_dirty(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load(_canonical_settings())
+
+    section._keep_intermediate_csv_checkbox.setChecked(True)
+
+    assert section._save_button.isVisible()
