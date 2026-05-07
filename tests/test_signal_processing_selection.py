@@ -394,7 +394,7 @@ def test_scored_recovery_candidate_must_win_scored_comparison(
         )
 
     monkeypatch.setattr(
-        "xic_extractor.signal_processing.score_candidate",
+        "xic_extractor.peak_detection.facade.score_candidate",
         _score_candidate,
     )
 
@@ -446,7 +446,7 @@ def test_recovery_candidate_uses_single_scored_selection_pass(
         )
 
     monkeypatch.setattr(
-        "xic_extractor.signal_processing.select_candidate_with_confidence",
+        "xic_extractor.peak_detection.facade.select_candidate_with_confidence",
         _select_once,
     )
 
@@ -502,7 +502,7 @@ def test_find_peak_and_area_passes_context_prior_into_scoring(
         )
 
     monkeypatch.setattr(
-        "xic_extractor.signal_processing.score_candidate",
+        "xic_extractor.peak_detection.facade.score_candidate",
         _score_candidate,
     )
 

@@ -189,6 +189,31 @@ def test_peak_detection_recovery_owns_preferred_rt_recovery_policy() -> None:
     assert "savgol_filter" not in recovery_source
 
 
+def test_peak_detection_facade_owns_public_peak_flow() -> None:
+    assert importlib.util.find_spec("xic_extractor.peak_detection.facade")
+
+    signal_processing_path = ROOT / "xic_extractor" / "signal_processing.py"
+    facade_path = ROOT / "xic_extractor" / "peak_detection" / "facade.py"
+
+    signal_functions = _function_names(signal_processing_path)
+    facade_functions = _function_names(facade_path)
+
+    assert {"find_peak_and_area", "find_peak_candidates"} <= facade_functions
+    assert {
+        "_score_with_context",
+        "_detection_success",
+        "_detection_failure",
+        "_append_candidate_once",
+        "_with_candidates",
+    }.isdisjoint(signal_functions)
+
+    facade_source = facade_path.read_text(encoding="utf-8")
+    assert "preferred_rt_recovery" in facade_source
+    assert "select_candidate_with_confidence" in facade_source
+    assert "savgol_filter" not in facade_source
+    assert "find_peaks" not in facade_source
+
+
 def _class_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
