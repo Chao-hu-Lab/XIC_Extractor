@@ -80,6 +80,7 @@ def test_read_xlsx_adds_canonical_aliases_for_tissue_sampleinfo(
     ws.append(["Normal tissue BC2257_DNA ", 36])
     ws.append(["Benign fat BC1055_DNA ", 76])
     ws.append(["Tumor tissue BC2286* DNA +RNA", 20])
+    ws.append(["Tumor tissue BC2304_ DNA +RNA ", 31])
     ws.append(["Breast Cancer Tissue_ pooled_QC_1 ", 1])
     ws.append(["Breast Cancer Tissue_pooled_QC_4", 49])
     path = tmp_path / "SampleInfo.xlsx"
@@ -92,6 +93,7 @@ def test_read_xlsx_adds_canonical_aliases_for_tissue_sampleinfo(
     assert order["NormalBC2257_DNA"] == 36
     assert order["BenignfatBC1055_DNA"] == 76
     assert order["TumorBC2286_DNAandRNA"] == 20
+    assert order["TumorBC2304_DNAandRNA"] == 31
     assert order["Breast_Cancer_Tissue_pooled_QC1"] == 1
     assert order["Breast_Cancer_Tissue_pooled_QC_4"] == 49
 

@@ -82,7 +82,10 @@ def _canonical_sample_name(name: str) -> str:
     if match:
         return f"Benignfat{match.group(1)}_DNA"
 
-    match = re.fullmatch(r"(Tumor|Normal) tissue (BC\d+)\*? DNA \+RNA", name)
+    match = re.fullmatch(
+        r"(Tumor|Normal) tissue (BC\d+)(?:\*|_)?\s*DNA\s*\+RNA",
+        name,
+    )
     if match:
         tissue, case_id = match.groups()
         return f"{tissue}{case_id}_DNAandRNA"

@@ -444,6 +444,273 @@ def test_review_report_rt_trend_includes_qc_markers_bands_and_legend(
     assert 'data-target="d3-B"' in html
 
 
+def test_review_report_draws_istd_area_cv_table_and_normalized_chart(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "QC1",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "8.90",
+            "Area": "90",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "9.00",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S3",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "9.10",
+            "Area": "110",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "QC1",
+            "Target": "d3-B",
+            "Role": "ISTD",
+            "RT": "12.00",
+            "Area": "1000",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "d3-B",
+            "Role": "ISTD",
+            "RT": "12.10",
+            "Area": "1100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+        injection_order={"QC1": 1, "S2": 2, "S3": 3},
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert "<h2>ISTD Area Injection Stability</h2>" in html
+    assert "Detected n/total uses positive numeric ISTD area rows" in html
+    assert "<th>Mean Area</th><th>SD</th><th>CV%</th>" in html
+    assert "<td>d3-A</td><td>3/3</td><td>100.0</td><td>10.0</td><td>10.0%</td>" in html
+    assert "<td>d3-B</td><td>2/2</td><td>1050.0</td><td>70.7</td><td>6.7%</td>" in html
+    assert '<svg class="area-stability-svg"' in html
+    assert "Normalized Area (%)" in html
+    assert "Injection Order" in html
+    assert "d3-A: Injection 1, area 90.0, normalized 90.0%" in html
+    assert html.count('class="area-point"') == 5
+    assert html.count('class="area-qc"') == 1
+    area_section = html.split("<h2>ISTD Area Injection Stability</h2>", 1)[1].split(
+        "</section>",
+        1,
+    )[0]
+    assert "QC Injection" in area_section
+    assert "Acceptable Range" not in area_section
+
+
+def test_review_report_area_cv_excludes_invalid_area_values(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "8.90",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "8.95",
+            "Area": "ND",
+            "NL": "ND",
+            "Confidence": "LOW",
+        },
+        {
+            "SampleName": "S3",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "9.00",
+            "Area": "",
+            "NL": "ND",
+            "Confidence": "LOW",
+        },
+        {
+            "SampleName": "S4",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "9.05",
+            "Area": "not-a-number",
+            "NL": "ND",
+            "Confidence": "LOW",
+        },
+        {
+            "SampleName": "S5",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "9.10",
+            "Area": "0",
+            "NL": "ND",
+            "Confidence": "LOW",
+        },
+        {
+            "SampleName": "S6",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "9.15",
+            "Area": "120",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+        injection_order={f"S{i}": i for i in range(1, 7)},
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert "<td>d3-A</td><td>2/6</td><td>110.0</td><td>14.1</td><td>12.9%</td>" in html
+    assert html.count('class="area-point"') == 2
+
+
+def test_review_report_area_cv_uses_na_with_less_than_two_valid_points(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "8.90",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "8.95",
+            "Area": "ND",
+            "NL": "ND",
+            "Confidence": "LOW",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+        injection_order={"S1": 1, "S2": 2},
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert "<td>d3-A</td><td>1/2</td><td>100.0</td><td>NA</td><td>NA</td>" in html
+    assert '<svg class="area-stability-svg"' not in html
+
+
+def test_review_report_omits_istd_area_cv_without_injection_order(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "8.90",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "9.00",
+            "Area": "110",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert "ISTD Area Injection Stability" not in html
+
+
+def test_review_report_area_stability_escapes_user_controlled_text(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "S<1>",
+            "Target": "<d3-A>",
+            "Role": "ISTD",
+            "RT": "8.90",
+            "Area": "90",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+        {
+            "SampleName": "S<2>",
+            "Target": "<d3-A>",
+            "Role": "ISTD",
+            "RT": "9.00",
+            "Area": "110",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+        injection_order={"S<1>": 1, "S<2>": 2},
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert "<td><d3-A></td>" not in html
+    assert "&lt;d3-A&gt;" in html
+    assert "S&lt;1&gt;" in html
+
+
 def test_review_report_heatmap_sorts_low_detection_targets_first(
     tmp_path: Path,
 ) -> None:

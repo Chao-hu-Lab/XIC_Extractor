@@ -64,6 +64,12 @@ border:1px solid #d0d7de;background:#fff}
 .trend-legend-line{stroke-width:2}
 .trend-legend-qc{stroke:#8c959f;stroke-width:1.5;stroke-dasharray:6 4}
 .trend-legend-band{fill:#8c959f;opacity:.22;stroke:#8c959f}
+.area-stability-svg{
+width:1100px;max-width:100%;height:auto;
+border:1px solid #d0d7de;background:#fff}
+.area-line{fill:none;stroke-width:2}
+.area-qc{stroke:#8c959f;stroke-width:1.5;stroke-dasharray:6 4}
+.area-point{stroke:#fff;stroke-width:1}
 .dashboard-note{color:#57606a;font-size:13px;margin:4px 0 14px}
 .small{color:#57606a;font-size:12px}
 """.strip()
