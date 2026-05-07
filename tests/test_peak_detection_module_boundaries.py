@@ -163,6 +163,32 @@ def test_peak_detection_local_minimum_owns_region_candidate_formation() -> None:
     assert "peak_scoring" not in local_source
 
 
+def test_peak_detection_recovery_owns_preferred_rt_recovery_policy() -> None:
+    assert importlib.util.find_spec("xic_extractor.peak_detection.recovery")
+
+    signal_processing_path = ROOT / "xic_extractor" / "signal_processing.py"
+    recovery_path = ROOT / "xic_extractor" / "peak_detection" / "recovery.py"
+
+    signal_functions = _function_names(signal_processing_path)
+    recovery_functions = _function_names(recovery_path)
+
+    assert {
+        "preferred_rt_recovery",
+        "relaxed_local_minimum_recovery_config",
+        "select_preferred_recovery_candidate",
+    } <= recovery_functions
+    assert {
+        "_preferred_rt_recovery",
+        "_relaxed_local_minimum_recovery_config",
+        "_select_preferred_recovery_candidate",
+    }.isdisjoint(signal_functions)
+
+    recovery_source = recovery_path.read_text(encoding="utf-8")
+    assert "peak_scoring" not in recovery_source
+    assert "find_peaks" not in recovery_source
+    assert "savgol_filter" not in recovery_source
+
+
 def _class_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
