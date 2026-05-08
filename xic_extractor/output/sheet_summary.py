@@ -161,6 +161,8 @@ def _is_long_detected(
         return False
     if _safe_float(row.get("Area", "")) is None:
         return False
+    if row.get("Confidence", "") == "VERY_LOW":
+        return False
     nl = row.get("NL", "")
     if nl == "NO_MS2":
         return count_no_ms2_as_detected

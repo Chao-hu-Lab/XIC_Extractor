@@ -1037,7 +1037,7 @@ def test_istd_wider_recovery_shape_metrics_use_recovered_trace(
     assert paired_fwhm_values[0] is not None
 
 
-def test_paired_analyte_keeps_mismatched_target_anchor_peak_as_low(
+def test_paired_analyte_keeps_mismatched_target_anchor_peak_as_very_low(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path)
@@ -1080,9 +1080,9 @@ def test_paired_analyte_keeps_mismatched_target_anchor_peak_as_low(
     assert rows[0]["Analyte_Area"] == "8000.00"
     long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
     analyte_row = next(row for row in long_rows if row["Target"] == "Analyte")
-    assert analyte_row["Confidence"] == "LOW"
+    assert analyte_row["Confidence"] == "VERY_LOW"
     assert "anchor mismatch" in analyte_row["Reason"]
-    assert output.file_results[0].results["Analyte"].confidence == "LOW"
+    assert output.file_results[0].results["Analyte"].confidence == "VERY_LOW"
     diagnostics = _read_csv(config.diagnostics_csv)
     assert any(
         record["Target"] == "Analyte"
@@ -1141,7 +1141,7 @@ def test_paired_analyte_accepts_peak_close_to_target_anchor_even_if_farther_from
     )
 
 
-def test_paired_analyte_fallback_keeps_mismatched_istd_anchor_peak_as_low(
+def test_paired_analyte_fallback_keeps_mismatched_istd_anchor_peak_as_very_low(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path)
@@ -1183,9 +1183,9 @@ def test_paired_analyte_fallback_keeps_mismatched_istd_anchor_peak_as_low(
     assert rows[0]["Analyte_Area"] == "8000.00"
     long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
     analyte_row = next(row for row in long_rows if row["Target"] == "Analyte")
-    assert analyte_row["Confidence"] == "LOW"
+    assert analyte_row["Confidence"] == "VERY_LOW"
     assert "anchor mismatch" in analyte_row["Reason"]
-    assert output.file_results[0].results["Analyte"].confidence == "LOW"
+    assert output.file_results[0].results["Analyte"].confidence == "VERY_LOW"
     diagnostics = _read_csv(config.diagnostics_csv)
     assert any(
         record["Target"] == "Analyte"

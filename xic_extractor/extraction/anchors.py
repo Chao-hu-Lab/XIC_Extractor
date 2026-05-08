@@ -67,7 +67,5 @@ def apply_anchor_mismatch_penalty(
     return replace(peak_result, confidence=confidence, reason=reason)
 
 
-def anchor_mismatch_confidence(confidence: str | None) -> str:
-    if confidence == "VERY_LOW":
-        return "VERY_LOW"
-    return "LOW"
+def anchor_mismatch_confidence(_confidence: str | None) -> str:
+    return "VERY_LOW"
