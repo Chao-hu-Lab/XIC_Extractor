@@ -434,14 +434,14 @@ def score_breakdown_fields(evidence_score: EvidenceScore | None) -> tuple[tuple[
     if evidence_score is None:
         return ()
     return (
+        ("Final Confidence", evidence_score.confidence),
+        ("Caps", "; ".join(evidence_score.cap_labels)),
+        ("Raw Score", str(evidence_score.raw_score)),
+        ("Support", "; ".join(evidence_score.support_labels)),
+        ("Concerns", "; ".join(evidence_score.concern_labels)),
         ("Base Score", str(evidence_score.base_score)),
         ("Positive Points", str(evidence_score.positive_points)),
         ("Negative Points", str(evidence_score.negative_points)),
-        ("Raw Score", str(evidence_score.raw_score)),
-        ("Caps", "; ".join(evidence_score.cap_labels)),
-        ("Final Confidence", evidence_score.confidence),
-        ("Support", "; ".join(evidence_score.support_labels)),
-        ("Concerns", "; ".join(evidence_score.concern_labels)),
     )
 ```
 
@@ -539,6 +539,7 @@ def test_anchor_mismatch_reason_reports_confidence_cap(
     long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
     analyte_row = next(row for row in long_rows if row["Target"] == "Analyte")
     assert analyte_row["Confidence"] == "VERY_LOW"
+    assert analyte_row["Reason"].startswith("decision: review only, not counted")
     assert "cap: VERY_LOW due to anchor mismatch" in analyte_row["Reason"]
 ```
 
@@ -562,11 +563,12 @@ def apply_anchor_mismatch_penalty(
     mismatch_reason: str,
 ) -> PeakDetectionResult:
     reason = (
-        f"anchor mismatch; {mismatch_reason}; "
-        "cap: VERY_LOW due to anchor mismatch"
+        "decision: review only, not counted; "
+        "cap: VERY_LOW due to anchor mismatch; "
+        f"concerns: anchor mismatch; {mismatch_reason}"
     )
     if peak_result.reason:
-        reason = f"{peak_result.reason}; {reason}"
+        reason = f"{reason}; {peak_result.reason}"
     return replace(peak_result, confidence="VERY_LOW", reason=reason)
 ```
 
@@ -723,7 +725,7 @@ git commit -m "feat: select peaks by weighted effective score"
 
 ---
 
-## Task 5 — Reason Text Shows Support, Concerns, And Caps
+## Task 5 — Reason Text Shows Decision, Support, Concerns, And Caps
 
 **Files:**
 
@@ -735,7 +737,7 @@ git commit -m "feat: select peaks by weighted effective score"
 Add:
 
 ```python
-def test_reason_text_lists_support_concerns_and_caps() -> None:
+def test_reason_text_leads_with_decision_then_support_concerns_and_caps() -> None:
     cand = _make_candidate(apex_rt=10.8, apex_intensity=1000)
     x = np.linspace(9, 11, 201)
     y = 1000 * np.exp(-((x - 10.8) / 0.1) ** 2) + 5
@@ -756,12 +758,50 @@ def test_reason_text_lists_support_concerns_and_caps() -> None:
 
     scored = score_candidate(cand, ctx, prior_rt=10.0)
 
-    assert scored.reason.startswith("support:")
+    assert scored.reason.startswith("decision: review only, not counted")
+    assert "cap: VERY_LOW due to nl fail" in scored.reason
     assert "strict NL OK" not in scored.reason
+    assert scored.reason.index("cap:") < scored.reason.index("support:")
+    assert scored.reason.index("support:") < scored.reason.index("concerns:")
     assert "concerns:" in scored.reason
     assert "nl fail" in scored.reason
     assert "rt prior far" in scored.reason
-    assert "cap: VERY_LOW due to nl fail" in scored.reason
+```
+
+Add a focused grammar test so default `Reason` stays readable:
+
+```python
+def test_reason_text_limits_default_evidence_labels() -> None:
+    score = EvidenceScore(
+        base_score=50,
+        positive_points=50,
+        negative_points=90,
+        raw_score=10,
+        score_confidence="VERY_LOW",
+        confidence="VERY_LOW",
+        support_labels=(
+            "strict_nl_ok",
+            "rt_prior_close",
+            "local_sn_strong",
+            "shape_clean",
+        ),
+        concern_labels=(
+            "nl_fail",
+            "rt_prior_far",
+            "anchor_mismatch",
+            "low_trace_continuity",
+            "poor_edge_recovery",
+        ),
+        cap_labels=("nl_fail_cap",),
+    )
+
+    reason = build_evidence_reason(score, istd_confidence_note=None)
+
+    assert reason.startswith("decision: review only, not counted; cap:")
+    assert "support: strict NL OK; RT prior close; local S/N strong" in reason
+    assert "shape clean" not in reason
+    assert "concerns: nl fail; rt prior far; anchor mismatch; low trace continuity" in reason
+    assert "poor edge recovery" not in reason
 ```
 
 - [ ] **Step 2: Run red test**
@@ -769,7 +809,7 @@ def test_reason_text_lists_support_concerns_and_caps() -> None:
 Run:
 
 ```powershell
-uv run pytest tests/test_peak_scoring.py::test_reason_text_lists_support_concerns_and_caps -v
+uv run pytest tests/test_peak_scoring.py::test_reason_text_leads_with_decision_then_support_concerns_and_caps tests/test_peak_scoring.py::test_reason_text_limits_default_evidence_labels -v
 ```
 
 Expected: FAIL because reason still uses severity-only wording.
@@ -795,25 +835,44 @@ _EVIDENCE_REASON_LABELS = {
     "poor_edge_recovery": "poor edge recovery",
 }
 
+_CAP_REASON_LABELS = {
+    "nl_fail_cap": ("VERY_LOW", "nl fail"),
+    "no_ms2_cap": ("LOW", "no MS2"),
+    "anchor_mismatch_cap": ("VERY_LOW", "anchor mismatch"),
+    "zero_area_cap": ("VERY_LOW", "zero area"),
+}
+
 
 def build_evidence_reason(
     evidence_score: EvidenceScore,
     istd_confidence_note: str | None,
 ) -> str:
     parts: list[str] = []
+    if evidence_score.confidence == "VERY_LOW":
+        parts.append("decision: review only, not counted")
+    else:
+        parts.append("decision: accepted")
+    for cap in evidence_score.cap_labels:
+        max_confidence, cap_name = _CAP_REASON_LABELS.get(
+            cap, ("VERY_LOW", cap.removesuffix("_cap").replace("_", " "))
+        )
+        parts.append(f"cap: {max_confidence} due to {cap_name}")
     if evidence_score.support_labels:
         parts.append(
             "support: "
-            + "; ".join(_EVIDENCE_REASON_LABELS.get(label, label) for label in evidence_score.support_labels)
+            + "; ".join(
+                _EVIDENCE_REASON_LABELS.get(label, label)
+                for label in evidence_score.support_labels[:3]
+            )
         )
     if evidence_score.concern_labels:
         parts.append(
             "concerns: "
-            + "; ".join(_EVIDENCE_REASON_LABELS.get(label, label) for label in evidence_score.concern_labels)
+            + "; ".join(
+                _EVIDENCE_REASON_LABELS.get(label, label)
+                for label in evidence_score.concern_labels[:4]
+            )
         )
-    for cap in evidence_score.cap_labels:
-        cap_name = cap.removesuffix("_cap").replace("_", " ")
-        parts.append(f"cap: VERY_LOW due to {cap_name}")
     if istd_confidence_note is not None:
         parts.append(istd_confidence_note)
     return "; ".join(parts) if parts else "all checks passed"
@@ -826,7 +885,7 @@ Use this reason when `evidence_score` is present.
 Run:
 
 ```powershell
-uv run pytest tests/test_peak_scoring.py::test_reason_text_lists_support_concerns_and_caps -v
+uv run pytest tests/test_peak_scoring.py::test_reason_text_leads_with_decision_then_support_concerns_and_caps tests/test_peak_scoring.py::test_reason_text_limits_default_evidence_labels -v
 ```
 
 Expected: PASS.
@@ -884,6 +943,7 @@ def test_score_breakdown_csv_includes_weighted_evidence_fields(tmp_path: Path) -
     assert breakdown["Raw Score"] == "90"
     assert breakdown["Caps"] == ""
     assert breakdown["Final Confidence"] == "HIGH"
+    assert breakdown["Detection Counted"] == "TRUE"
     assert breakdown["Support"] == "strict_nl_ok; local_sn_strong"
     assert breakdown["Concerns"] == ""
 ```
@@ -922,6 +982,10 @@ class ExtractionResult:
     score_breakdown: tuple[tuple[str, str], ...] = ()
 ```
 
+Also extend `ExtractionResultLike` in `xic_extractor/output/csv_writers.py` with
+`score_breakdown: tuple[tuple[str, str], ...]` so writer tests and type checks
+use the same contract as `ExtractionResult`.
+
 In `xic_extractor/extraction/target_extraction.py`, set:
 
 ```python
@@ -934,6 +998,15 @@ Modify `xic_extractor/output/schema.py`:
 SCORE_BREAKDOWN_HEADERS: tuple[str, ...] = (
     "SampleName",
     "Target",
+    "Final Confidence",
+    "Detection Counted",
+    "Caps",
+    "Raw Score",
+    "Support",
+    "Concerns",
+    "Base Score",
+    "Positive Points",
+    "Negative Points",
     "symmetry",
     "local_sn",
     "nl_support",
@@ -947,16 +1020,12 @@ SCORE_BREAKDOWN_HEADERS: tuple[str, ...] = (
     "Confidence",
     "Prior RT",
     "Prior Source",
-    "Base Score",
-    "Positive Points",
-    "Negative Points",
-    "Raw Score",
-    "Caps",
-    "Final Confidence",
-    "Support",
-    "Concerns",
 )
 ```
+
+Modify `write_score_breakdown_csv()` to pass
+`count_no_ms2_as_detected=config.count_no_ms2_as_detected` into
+`_score_breakdown_rows()`.
 
 Modify `_score_breakdown_rows()` in `xic_extractor/output/csv_writers.py`:
 
@@ -965,6 +1034,17 @@ weighted_fields = dict(result.score_breakdown)
 row = {
     "SampleName": file_result.sample_name,
     "Target": result.target_label,
+    "Final Confidence": weighted_fields.get("Final Confidence", result.confidence),
+    "Detection Counted": "TRUE"
+    if is_accepted_result_detection(result, count_no_ms2_as_detected)
+    else "FALSE",
+    "Caps": weighted_fields.get("Caps", ""),
+    "Raw Score": weighted_fields.get("Raw Score", ""),
+    "Support": weighted_fields.get("Support", ""),
+    "Concerns": weighted_fields.get("Concerns", ""),
+    "Base Score": weighted_fields.get("Base Score", ""),
+    "Positive Points": weighted_fields.get("Positive Points", ""),
+    "Negative Points": weighted_fields.get("Negative Points", ""),
     "symmetry": _format_optional_severity(severities.get("symmetry")),
     "local_sn": _format_optional_severity(severities.get("local_sn")),
     "nl_support": _format_optional_severity(severities.get("nl_support")),
@@ -978,17 +1058,15 @@ row = {
     "Confidence": result.confidence,
     "Prior RT": _format_optional_number(result.prior_rt),
     "Prior Source": result.prior_source,
-    "Base Score": weighted_fields.get("Base Score", ""),
-    "Positive Points": weighted_fields.get("Positive Points", ""),
-    "Negative Points": weighted_fields.get("Negative Points", ""),
-    "Raw Score": weighted_fields.get("Raw Score", ""),
-    "Caps": weighted_fields.get("Caps", ""),
-    "Final Confidence": weighted_fields.get("Final Confidence", ""),
-    "Support": weighted_fields.get("Support", ""),
-    "Concerns": weighted_fields.get("Concerns", ""),
 }
 rows.append(row)
 ```
+
+If accepted-detection logic currently exists only as private row helpers,
+promote shared helpers such as `is_accepted_row_detection()` and
+`is_accepted_result_detection()`. Summary and HTML heatmap should call the row
+helper; Score Breakdown should call the result helper so it does not need to
+reconstruct a long-row dictionary only to answer a yes/no decision.
 
 - [ ] **Step 4: Run green CSV test**
 
@@ -1012,6 +1090,7 @@ by extending the fake `xic_score_breakdown.csv` row:
 "Raw Score": "90",
 "Caps": "",
 "Final Confidence": "HIGH",
+"Detection Counted": "TRUE",
 "Support": "strict_nl_ok; local_sn_strong",
 "Concerns": "",
 ```
@@ -1024,6 +1103,7 @@ assert row["Positive Points"] == 40
 assert row["Negative Points"] == 0
 assert row["Raw Score"] == 90
 assert row["Final Confidence"] == "HIGH"
+assert row["Detection Counted"] == "TRUE"
 assert row["Support"] == "strict_nl_ok; local_sn_strong"
 assert row["Concerns"] is None
 ```
@@ -1082,7 +1162,7 @@ Expected: PASS.
 - [ ] **Step 9: Run score-breakdown schema contract**
 
 Modify `tests/test_output_schema_contract.py` so the expected column count is
-`23`, then run:
+`24`, then run:
 
 ```powershell
 uv run pytest tests/test_output_schema_contract.py tests/test_csv_writers.py tests/test_csv_to_excel.py::test_run_emits_score_breakdown_sheet_when_enabled -v
@@ -1178,6 +1258,7 @@ git commit -m "feat: carry weighted evidence through excel pipeline"
 
 - Modify: `tests/test_csv_to_excel.py`
 - Modify: `tests/test_review_metrics.py`
+- Modify: `tests/test_review_report.py`
 - Modify: `xic_extractor/output/sheet_summary.py`
 - Modify: `xic_extractor/output/review_metrics.py`
 
@@ -1207,6 +1288,7 @@ def test_review_metrics_do_not_count_nl_fail_or_very_low_as_detected() -> None:
         {"SampleName": "S1", "Target": "A", "RT": "1.0", "Area": "100", "NL": "NL_FAIL", "Confidence": "LOW"},
         {"SampleName": "S2", "Target": "A", "RT": "1.1", "Area": "110", "NL": "OK", "Confidence": "VERY_LOW"},
         {"SampleName": "S3", "Target": "A", "RT": "1.2", "Area": "120", "NL": "OK", "Confidence": "LOW"},
+        {"SampleName": "S4", "Target": "A", "RT": "1.3", "Area": "0", "NL": "OK", "Confidence": "LOW"},
     ]
 
     metrics = build_review_metrics(
@@ -1217,18 +1299,48 @@ def test_review_metrics_do_not_count_nl_fail_or_very_low_as_detected() -> None:
     )
 
     assert metrics.targets["A"].detected == 1
-    assert metrics.targets["A"].detected_percent == "33%"
+    assert metrics.targets["A"].detected_percent == "25%"
     assert metrics.heatmap[("A", "S1")] == "not-detected"
     assert metrics.heatmap[("A", "S2")] == "not-detected"
     assert metrics.heatmap[("A", "S3")] == "clean-detected"
+    assert metrics.heatmap[("A", "S4")] == "not-detected"
 ```
+
+Add a direct decision-table test for the shared predicate:
+
+```python
+@pytest.mark.parametrize(
+    ("row", "count_no_ms2_as_detected", "expected"),
+    [
+        ({"RT": "1.0", "Area": "100", "NL": "OK", "Confidence": "HIGH"}, False, True),
+        ({"RT": "1.0", "Area": "100", "NL": "WARN_LOW_PRODUCT", "Confidence": "LOW"}, False, True),
+        ({"RT": "1.0", "Area": "100", "NL": "OK", "Confidence": "VERY_LOW"}, False, False),
+        ({"RT": "1.0", "Area": "100", "NL": "NL_FAIL", "Confidence": "LOW"}, False, False),
+        ({"RT": "1.0", "Area": "100", "NL": "NO_MS2", "Confidence": "LOW"}, False, False),
+        ({"RT": "1.0", "Area": "100", "NL": "NO_MS2", "Confidence": "LOW"}, True, True),
+        ({"RT": "1.0", "Area": "0", "NL": "OK", "Confidence": "LOW"}, False, False),
+        ({"RT": "ND", "Area": "100", "NL": "OK", "Confidence": "HIGH"}, False, False),
+    ],
+)
+def test_accepted_detection_decision_table(
+    row: dict[str, str],
+    count_no_ms2_as_detected: bool,
+    expected: bool,
+) -> None:
+    assert is_accepted_row_detection(row, count_no_ms2_as_detected) is expected
+```
+
+Also add an HTML contract test in `tests/test_review_report.py` proving that
+`VERY_LOW` rows are rendered as review/not-detected states rather than
+flagged-detected states. This prevents the same "RT exists, therefore detected"
+misread from re-entering the report.
 
 - [ ] **Step 2: Run tests**
 
 Run:
 
 ```powershell
-uv run pytest tests/test_csv_to_excel.py::test_summary_detection_excludes_very_low_rows tests/test_review_metrics.py::test_review_metrics_do_not_count_nl_fail_or_very_low_as_detected -v
+uv run pytest tests/test_csv_to_excel.py::test_summary_detection_excludes_very_low_rows tests/test_review_metrics.py::test_review_metrics_do_not_count_nl_fail_or_very_low_as_detected tests/test_review_metrics.py::test_accepted_detection_decision_table tests/test_review_report.py::test_review_report_marks_very_low_rows_as_not_detected -v
 ```
 
 Expected: PASS if this branch already contains the current detection fix; FAIL
@@ -1236,14 +1348,17 @@ only if implementation moved or regressed the contract.
 
 - [ ] **Step 3: Implement detection contract when the tests expose a regression**
 
-If the tests fail, make `_is_long_detected()` and review metrics `_is_detected()`
-match this exact predicate:
+If the tests fail, promote shared output predicates named
+`is_accepted_row_detection()` and `is_accepted_result_detection()`. Make
+`_is_long_detected()`, review metrics, HTML heatmap, and Score Breakdown use
+the shared predicates. The row predicate must match this exact contract:
 
 ```python
-def _accepted_detection(row: dict[str, str], count_no_ms2_as_detected: bool) -> bool:
+def is_accepted_row_detection(row: dict[str, str], count_no_ms2_as_detected: bool) -> bool:
     if _safe_float(row.get("RT", "")) is None:
         return False
-    if _safe_float(row.get("Area", "")) is None:
+    area = _safe_float(row.get("Area", ""))
+    if area is None or area <= 0:
         return False
     if row.get("Confidence", "") == "VERY_LOW":
         return False
@@ -1254,6 +1369,10 @@ def _accepted_detection(row: dict[str, str], count_no_ms2_as_detected: bool) -> 
         return False
     return nl == "" or nl == "OK" or nl.startswith("WARN_")
 ```
+
+The result predicate must be equivalent, using `result.peak_result.peak`,
+`result.reported_rt`, `result.nl_token`, and `result.confidence` instead of row
+strings.
 
 - [ ] **Step 4: Commit**
 
@@ -1352,6 +1471,16 @@ Use the workbook Summary, not raw RT/Area counts. Expected checks:
 Area=0 detected rows: 0
 d3-N6-medA accepted ISTD CV does not materially regress from the post-fix baseline
 d3-dG-C8-MeIQx remains 85/85 but CV remains flagged for future investigation if high
+```
+
+Then inspect the optional Score Breakdown sheet for those same rows:
+
+```text
+8-oxo-Guo non-accepted rows: Detection Counted = FALSE
+8-oxodG RT/ISTD-mismatched rows: Final Confidence = VERY_LOW, Detection Counted = FALSE
+Area=0 rows: Detection Counted = FALSE
+Reason first segment always starts with decision:
+Rows excluded from detection never appear as clean/flagged detected in HTML heatmap
 ```
 
 - [ ] **Step 8: Commit final verification docs only if changed**

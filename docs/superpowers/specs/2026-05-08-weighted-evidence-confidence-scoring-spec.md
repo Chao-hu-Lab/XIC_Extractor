@@ -104,6 +104,55 @@ Confidence is HIGH, MEDIUM, or LOW
 Rows with `NL_FAIL`, `NO_MS2` when `count_no_ms2_as_detected=false`, or
 `VERY_LOW` are review rows, not detected rows.
 
+### 4.4 Reader Contract
+
+Confidence must map to a user-facing decision, not only an internal score:
+
+| Confidence | Detection role | Reader meaning |
+|---|---|---|
+| `HIGH` | Counted | Strong accepted detection. |
+| `MEDIUM` | Counted | Accepted detection with minor concerns. |
+| `LOW` | Counted | Accepted detection that deserves review. |
+| `VERY_LOW` | Not counted | Evidence retained for review only. |
+
+Default `Reason` text should lead with the decision, then the strongest cap,
+then the evidence. A row with a cap should not start with positive support,
+because that hides the reason the row was excluded from detection.
+
+Preferred reason order:
+
+```text
+decision: accepted
+decision: review only, not counted; cap: VERY_LOW due to anchor mismatch
+support: strict NL OK; local S/N strong
+concerns: anchor mismatch; RT prior far
+```
+
+Reason grammar:
+
+1. The first segment is always `decision: ...`.
+2. If a cap exists, the second segment is always `cap: ...`.
+3. `support:` appears before `concerns:`.
+4. Default reason text shows at most three support labels and four concern
+   labels.
+5. Extra details stay in optional Score Breakdown, not the default `Reason`
+   column.
+
+### 4.5 Accepted Detection Decision Table
+
+This table is the shared contract for Summary, HTML charts, heatmap states, and
+Score Breakdown `Detection Counted`.
+
+| Row state | RT | Area | NL | Confidence | Detection Counted | HTML / review state |
+|---|---|---:|---|---|---|---|
+| Accepted clean detection | numeric | `>0` | `OK`, `WARN_*`, or blank no-NL | `HIGH` or `MEDIUM` | `TRUE` | Clean detected unless separately queued. |
+| Accepted review detection | numeric | `>0` | `OK`, `WARN_*`, or blank no-NL | `LOW` | `TRUE` | Detected but review-worthy. |
+| Review-only evidence | numeric | `>0` | any allowed value | `VERY_LOW` | `FALSE` | Review only, not detected. |
+| Strict NL failure | numeric | `>0` | `NL_FAIL` | any confidence | `FALSE` | Not detected, NL concern. |
+| No MS2 excluded by setting | numeric | `>0` | `NO_MS2` | any confidence | `FALSE` when `count_no_ms2_as_detected=false` | Not detected, no-MS2 concern. |
+| Zero or invalid area | numeric or missing | `<=0` or invalid | any | any confidence | `FALSE` | Not detected. |
+| No peak | `ND` or invalid | `ND` or invalid | any | any confidence | `FALSE` | Not detected. |
+
 ## 5. Evidence Categories
 
 ### 5.1 Positive Evidence
@@ -152,9 +201,9 @@ one feature alone.
 Caps should be surfaced in reason text. For example:
 
 ```text
+decision: review only, not counted; cap: VERY_LOW due to anchor mismatch
 support: strict NL OK; local S/N strong
 concerns: anchor mismatch; RT prior far
-cap: VERY_LOW due to anchor mismatch
 ```
 
 ## 6. Selection Contract
@@ -195,19 +244,28 @@ Default workbook columns stay unchanged:
 
 Optional Score Breakdown should become more useful if enabled:
 
+Decision fields must appear immediately after identity fields. The sheet is a
+debug surface, but it should still answer "why was this counted or not counted?"
+before showing raw severity components.
+
 | Field | Meaning |
 |---|---|
+| `Final Confidence` | Confidence after caps. |
+| `Detection Counted` | `TRUE` only if the row satisfies the accepted detection predicate. |
+| `Caps` | Applied caps, if any. |
+| `Raw Score` | Base + positive - negative. |
+| `Support` | Semicolon-separated positive evidence labels. |
+| `Concerns` | Semicolon-separated negative evidence labels. |
 | `Base Score` | Always `50` in v1. |
 | `Positive Points` | Sum of supporting evidence. |
 | `Negative Points` | Sum of concerns. |
-| `Raw Score` | Base + positive - negative. |
-| `Caps` | Applied caps, if any. |
-| `Final Confidence` | Confidence after caps. |
-| `Support` | Semicolon-separated positive evidence labels. |
-| `Concerns` | Semicolon-separated negative evidence labels. |
 
 This optional sheet may change because it is explicitly a debug surface. Default
 delivery workbook sheets and row-level columns must stay stable.
+
+HTML review report widgets must use the same accepted-detection predicate as
+the workbook Summary. `VERY_LOW` rows may appear in review details, but charts
+and detection-rate labels must not present them as detected.
 
 ## 8. Real-Data Acceptance
 
@@ -226,6 +284,15 @@ Acceptance criteria:
 - `Area=0` detected rows remain `0`.
 - Major changes in `N6-HE-dA`, `N6-medA`, or `dG-C8-MeIQx` must be explained by
   support/concern/cap reason text.
+
+Concrete expected outcomes:
+
+| Case | Expected Summary behavior | Expected row-level behavior |
+|---|---|---|
+| `8-oxo-Guo` tissue full run | `2/85` accepted detections unless new manual evidence says otherwise. | Other rows may retain RT/Area evidence but must be `VERY_LOW` or otherwise not counted. |
+| `8-oxodG` RT/ISTD-mismatched rows | `0/85` if only mismatched rows remain. | Rows should lead with `decision: review only, not counted` and an anchor/RT concern. |
+| `d3-N6-medA` ISTD | Accepted ISTD detections should remain stable. | Soft trace-quality concerns must not alone remove good ISTD anchors. |
+| `Area=0` rows | Always excluded from detection counts. | Row may exist for audit, but `Detection Counted` must be `FALSE`. |
 
 ## 9. Open Design Decisions For Implementation Review
 
