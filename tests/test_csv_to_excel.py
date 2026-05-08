@@ -195,7 +195,8 @@ def test_overview_explains_detected_and_flagged_rates() -> None:
     assert "Diagnostics is a hidden technical log" in joined
     assert "HTML Review Report is for visual batch QA" in joined
     assert "Flagged % is review workload" in joined
-    assert "detected-but-flagged" in joined
+    assert "NL_FAIL rows are review evidence, not counted detections" in joined
+    assert "detected-but-flagged" not in joined
     assert "Score Breakdown is a technical audit sheet" in joined
 
 
@@ -333,6 +334,21 @@ def test_summary_detection_excludes_very_low_and_non_positive_area_rows() -> Non
     assert data["Analyte"]["Detected"] == 1
     assert data["Analyte"]["Detection %"] == "25%"
     assert data["Analyte"]["Median Area (detected)"] == 110.0
+
+
+def test_summary_detection_excludes_very_low_rows() -> None:
+    rows = [
+        _long_row("S1", "Analyte", "9.0", "100", "OK", confidence="VERY_LOW"),
+        _long_row("S2", "Analyte", "9.1", "110", "OK", confidence="LOW"),
+    ]
+    wb = Workbook()
+    ws = wb.active
+
+    _build_summary_sheet(ws, rows, count_no_ms2_as_detected=False, review_rows=[])
+    data = _summary_rows(ws)
+
+    assert data["Analyte"]["Detected"] == 1
+    assert data["Analyte"]["Detection %"] == "50%"
 
 
 def test_summary_puts_detection_rate_before_review_workload() -> None:
@@ -853,6 +869,15 @@ def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
             {
                 "SampleName": "Tumor_1",
                 "Target": "Analyte",
+                "Final Confidence": "HIGH",
+                "Detection Counted": "TRUE",
+                "Caps": "",
+                "Raw Score": "90",
+                "Support": "strict_nl_ok; local_sn_strong",
+                "Concerns": "",
+                "Base Score": "50",
+                "Positive Points": "40",
+                "Negative Points": "0",
                 "symmetry": "0",
                 "local_sn": "1",
                 "nl_support": "0",
@@ -889,6 +914,14 @@ def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
     values = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))
     row = dict(zip(headers, values, strict=False))
     assert row["SampleName"] == "Tumor_1"
+    assert row["Base Score"] == 50
+    assert row["Positive Points"] == 40
+    assert row["Negative Points"] == 0
+    assert row["Raw Score"] == 90
+    assert row["Final Confidence"] == "HIGH"
+    assert row["Detection Counted"] == "TRUE"
+    assert row["Support"] == "strict_nl_ok; local_sn_strong"
+    assert row["Concerns"] is None
     assert row["Quality Penalty"] == 1
     assert row["Quality Flags"] == "too_broad"
     assert row["Total Severity"] == 2

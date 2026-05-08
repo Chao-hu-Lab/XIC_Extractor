@@ -1,12 +1,10 @@
-from dataclasses import dataclass
-
 import numpy as np
 import pytest
 
 from xic_extractor.peak_scoring import (
     Confidence,
-    ScoredCandidate,
     ScoringContext,
+    build_evidence_reason,
     build_reason,
     confidence_from_total,
     local_sn_severity,
@@ -16,9 +14,9 @@ from xic_extractor.peak_scoring import (
     rt_centrality_severity,
     rt_prior_severity,
     score_candidate,
-    select_candidate_with_confidence,
     symmetry_severity,
 )
+from xic_extractor.peak_scoring_evidence import EvidenceScore
 from xic_extractor.signal_processing import PeakCandidate, PeakResult
 
 
@@ -64,78 +62,6 @@ def test_reason_appends_istd_note() -> None:
     assert reason.startswith("ISTD anchor was LOW") or reason.endswith(
         "ISTD anchor was LOW"
     )
-
-
-@dataclass
-class _FakePeak:
-    selection_apex_rt: float
-    selection_apex_intensity: float
-    quality_flags: tuple[str, ...] = ()
-
-
-def _sc(
-    confidence: Confidence,
-    apex_rt: float,
-    intensity: float,
-    prior: float | None,
-    *,
-    quality_penalty: int = 0,
-    selection_quality_penalty: float | None = None,
-    prefer_rt_prior_tiebreak: bool = False,
-    quality_flags: tuple[str, ...] = (),
-) -> ScoredCandidate:
-    return ScoredCandidate(
-        candidate=_FakePeak(apex_rt, intensity, quality_flags),
-        severities=tuple(),
-        confidence=confidence,
-        reason="",
-        prior_rt=prior,
-        quality_penalty=quality_penalty,
-        selection_quality_penalty=selection_quality_penalty,
-        prefer_rt_prior_tiebreak=prefer_rt_prior_tiebreak,
-    )
-
-
-def test_selector_prefers_higher_confidence() -> None:
-    a = _sc(Confidence.MEDIUM, 10.0, 1000, prior=10.0)
-    b = _sc(Confidence.HIGH, 10.5, 500, prior=10.0)
-    assert select_candidate_with_confidence([a, b]) is b
-
-
-def test_selector_tiebreak_by_prior_distance() -> None:
-    a = _sc(
-        Confidence.HIGH,
-        10.3,
-        1000,
-        prior=10.0,
-        prefer_rt_prior_tiebreak=True,
-    )
-    b = _sc(
-        Confidence.HIGH,
-        10.05,
-        500,
-        prior=10.0,
-        prefer_rt_prior_tiebreak=True,
-    )
-    assert select_candidate_with_confidence([a, b]) is b
-
-
-def test_selector_final_tiebreak_by_intensity() -> None:
-    a = _sc(
-        Confidence.HIGH,
-        10.1,
-        1000,
-        prior=10.0,
-        prefer_rt_prior_tiebreak=True,
-    )
-    b = _sc(
-        Confidence.HIGH,
-        10.1,
-        500,
-        prior=10.0,
-        prefer_rt_prior_tiebreak=True,
-    )
-    assert select_candidate_with_confidence([a, b]) is a
 
 
 def _make_candidate(apex_rt: float, apex_intensity: float) -> PeakCandidate:
@@ -199,7 +125,350 @@ def test_score_candidate_returns_base_and_trace_quality_severities() -> None:
     scored = score_candidate(cand, ctx, prior_rt=10.0)
     assert len(scored.severities) == 10
     assert scored.confidence == Confidence.HIGH
-    assert scored.reason == "all checks passed"
+    assert scored.reason.startswith("decision: accepted")
+    assert (
+        "support: strict NL OK; RT prior close; paired ISTD aligned"
+        in scored.reason
+    )
+
+
+def test_score_candidate_records_positive_and_negative_evidence() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.HIGH
+    assert scored.evidence_score.raw_score >= 80
+    assert "strict_nl_ok" in scored.evidence_score.support_labels
+    assert "rt_prior_close" in scored.evidence_score.support_labels
+    assert scored.evidence_score.concern_labels == ()
+
+
+def test_score_candidate_records_paired_istd_alignment_support() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        prefer_rt_prior_tiebreak=True,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert "paired_istd_aligned" in scored.evidence_score.support_labels
+    assert "paired ISTD aligned" in scored.reason
+
+
+def test_score_candidate_nl_fail_caps_confidence_to_very_low() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=False,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.VERY_LOW
+    assert "nl_fail" in scored.evidence_score.concern_labels
+    assert "nl_fail_cap" in scored.evidence_score.cap_labels
+
+
+def test_reason_text_leads_with_decision_then_support_concerns_and_caps() -> None:
+    cand = _make_candidate(apex_rt=10.8, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10.8) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=180,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=False,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.reason.startswith("decision: review only, not counted")
+    assert "cap: VERY_LOW due to nl fail" in scored.reason
+    assert "strict NL OK" not in scored.reason
+    assert scored.reason.index("cap:") < scored.reason.index("support:")
+    assert scored.reason.index("support:") < scored.reason.index("concerns:")
+    assert "concerns:" in scored.reason
+    assert "nl fail" in scored.reason
+    assert "rt prior far" in scored.reason
+
+
+def test_reason_text_limits_default_evidence_labels() -> None:
+    score = EvidenceScore(
+        base_score=50,
+        positive_points=50,
+        negative_points=90,
+        raw_score=10,
+        score_confidence="VERY_LOW",
+        confidence="VERY_LOW",
+        support_labels=(
+            "strict_nl_ok",
+            "rt_prior_close",
+            "local_sn_strong",
+            "shape_clean",
+        ),
+        concern_labels=(
+            "nl_fail",
+            "rt_prior_far",
+            "anchor_mismatch",
+            "low_trace_continuity",
+            "poor_edge_recovery",
+        ),
+        cap_labels=("nl_fail_cap",),
+    )
+
+    reason = build_evidence_reason(score, istd_confidence_note=None)
+
+    assert reason.startswith("decision: review only, not counted; cap:")
+    assert "support: strict NL OK; RT prior close; local S/N strong" in reason
+    assert "shape clean" not in reason
+    assert (
+        "concerns: nl fail; rt prior far; anchor mismatch; low trace continuity"
+        in reason
+    )
+    assert "poor edge recovery" not in reason
+
+
+def test_score_candidate_no_nl_target_records_no_nl_support() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=False,
+        nl_match=False,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        neutral_loss_required=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.HIGH
+    assert "no_nl_required" in scored.evidence_score.support_labels
+    assert "no_ms2" not in scored.evidence_score.concern_labels
+    assert "no_ms2_cap" not in scored.evidence_score.cap_labels
+    assert scored.reason.startswith("decision: accepted")
+    assert "support: no NL required; RT prior close; local S/N strong" in scored.reason
+
+
+def test_score_candidate_no_ms2_default_reason_is_not_counted() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=False,
+        nl_match=False,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        neutral_loss_required=True,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.LOW
+    assert "no_ms2_cap" in scored.evidence_score.cap_labels
+    assert scored.reason.startswith("decision: review only, not counted")
+    assert "decision: accepted" not in scored.reason
+
+
+def test_score_candidate_no_ms2_allowed_reason_is_accepted() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=False,
+        nl_match=False,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        neutral_loss_required=True,
+        count_no_ms2_as_detected=True,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.LOW
+    assert "no_ms2_cap" in scored.evidence_score.cap_labels
+    assert scored.reason.startswith("decision: accepted")
+
+
+def test_score_candidate_maps_rt_centrality_and_noise_shape_concerns() -> None:
+    cand = _make_candidate(apex_rt=9.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = np.where(np.arange(201) % 2 == 0, 1000.0, 0.0)
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=9.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=9.0)
+
+    assert "rt_centrality_poor" in scored.evidence_score.concern_labels
+    assert "noise_shape_poor" in scored.evidence_score.concern_labels
+
+
+def test_score_candidate_caps_out_of_window_peak_without_rt_prior() -> None:
+    cand = _make_candidate(apex_rt=15.166, apex_intensity=1000)
+    x = np.linspace(14.5, 15.8, 131)
+    y = 1000 * np.exp(-((x - 15.166) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=67,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=None,
+        rt_prior_sigma=None,
+        rt_min=16.0,
+        rt_max=18.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=None)
+
+    assert scored.confidence == Confidence.VERY_LOW
+    assert "rt_window_cap" in scored.evidence_score.cap_labels
+    assert "rt_centrality_poor" in scored.evidence_score.concern_labels
+    assert scored.reason.startswith("decision: review only, not counted")
+    assert "cap: VERY_LOW due to target RT window" in scored.reason
+
+
+def test_score_candidate_allows_out_of_window_peak_with_close_rt_prior() -> None:
+    cand = _make_candidate(apex_rt=15.166, apex_intensity=1000)
+    x = np.linspace(14.5, 15.8, 131)
+    y = 1000 * np.exp(-((x - 15.166) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=67,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=15.166,
+        rt_prior_sigma=0.1,
+        rt_min=16.0,
+        rt_max=18.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=15.166)
+
+    assert scored.confidence == Confidence.HIGH
+    assert "rt_window_cap" not in scored.evidence_score.cap_labels
+    assert "rt_prior_close" in scored.evidence_score.support_labels
+    assert "rt_centrality_poor" in scored.evidence_score.concern_labels
+
+
+def test_score_candidate_keeps_in_window_edge_peak_as_rt_centrality_concern() -> None:
+    cand = _make_candidate(apex_rt=16.005, apex_intensity=1000)
+    x = np.linspace(15.8, 16.3, 101)
+    y = 1000 * np.exp(-((x - 16.005) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=41,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=None,
+        rt_prior_sigma=None,
+        rt_min=16.0,
+        rt_max=18.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=None)
+
+    assert scored.confidence == Confidence.HIGH
+    assert "rt_window_cap" not in scored.evidence_score.cap_labels
+    assert "rt_centrality_poor" in scored.evidence_score.concern_labels
 
 
 def test_score_candidate_penalizes_flagged_candidate_quality() -> None:
@@ -265,9 +534,9 @@ def test_score_candidate_formats_adap_like_quality_flags_as_minor_concerns() -> 
     assert scored.selection_quality_penalty == 0.5
     assert (1, "low trace continuity") in scored.severities
     assert (1, "poor edge recovery") in scored.severities
-    assert scored.reason == (
-        "concerns: low trace continuity (minor); poor edge recovery (minor)"
-    )
+    assert scored.reason.startswith("decision: accepted")
+    assert "cap: MEDIUM due to trace quality" in scored.reason
+    assert "concerns: low trace continuity; poor edge recovery" in scored.reason
 
 
 def test_score_candidate_does_not_double_penalize_adap_equivalent_legacy_flags(
@@ -308,133 +577,9 @@ def test_score_candidate_does_not_double_penalize_adap_equivalent_legacy_flags(
     assert (1, "low scan support") in scored.severities
     assert (1, "poor edge recovery") in scored.severities
     assert "weak candidate" not in scored.reason
-    assert scored.reason == (
-        "concerns: low scan support (minor); poor edge recovery (minor)"
-    )
-
-
-def test_selector_uses_weighted_adap_like_selection_penalty() -> None:
-    clean = _sc(
-        Confidence.HIGH,
-        10.10,
-        500.0,
-        10.0,
-        quality_penalty=0,
-        selection_quality_penalty=0.0,
-    )
-    weak = _sc(
-        Confidence.HIGH,
-        10.10,
-        1000.0,
-        10.0,
-        quality_penalty=0,
-        selection_quality_penalty=0.25,
-    )
-
-    assert select_candidate_with_confidence([clean, weak]) is clean
-
-
-def test_selector_does_not_let_soft_quality_penalty_beat_large_rt_distance() -> None:
-    far_clean = _sc(
-        Confidence.HIGH,
-        12.00,
-        1000.0,
-        10.0,
-        quality_penalty=0,
-        selection_quality_penalty=0.0,
-    )
-    near_flagged = _sc(
-        Confidence.HIGH,
-        10.00,
-        500.0,
-        10.0,
-        quality_penalty=0,
-        selection_quality_penalty=0.25,
-    )
-
-    assert select_candidate_with_confidence([far_clean, near_flagged]) is near_flagged
-
-
-def test_selector_tiebreak_prefers_lower_quality_penalty() -> None:
-    clean = _sc(Confidence.LOW, 10.10, 500.0, 10.0, quality_penalty=0)
-    weak = _sc(Confidence.LOW, 10.10, 1000.0, 10.0, quality_penalty=1)
-
-    assert select_candidate_with_confidence([clean, weak]) is clean
-
-
-def test_selector_low_scan_anchor_spike_yields_to_much_stronger_candidate() -> None:
-    spike = _sc(
-        Confidence.MEDIUM,
-        25.90,
-        10_000.0,
-        None,
-        selection_quality_penalty=0.25,
-        quality_flags=("low_scan_support",),
-    )
-    supported_peak = _sc(
-        Confidence.LOW,
-        26.15,
-        31_000.0,
-        None,
-        selection_quality_penalty=0.25,
-        quality_flags=("low_trace_continuity",),
-    )
-
-    assert (
-        select_candidate_with_confidence(
-            [spike, supported_peak],
-            selection_rt=25.94,
-        )
-        is supported_peak
-    )
-
-
-def test_selector_keeps_low_scan_anchor_when_alternative_is_too_far() -> None:
-    spike = _sc(
-        Confidence.MEDIUM,
-        25.90,
-        10_000.0,
-        None,
-        selection_quality_penalty=0.25,
-        quality_flags=("low_scan_support",),
-    )
-    far_peak = _sc(
-        Confidence.LOW,
-        27.00,
-        100_000.0,
-        None,
-        selection_quality_penalty=0.25,
-    )
-
-    assert (
-        select_candidate_with_confidence(
-            [spike, far_peak],
-            selection_rt=25.94,
-        )
-        is spike
-    )
-
-
-def test_selector_with_paired_prior_evidence_prefers_prior_distance_before_quality(
-) -> None:
-    clean_far = _sc(
-        Confidence.LOW,
-        10.35,
-        1000.0,
-        10.0,
-        quality_penalty=0,
-        prefer_rt_prior_tiebreak=True,
-    )
-    weak_near = _sc(
-        Confidence.LOW,
-        10.03,
-        700.0,
-        10.0,
-        quality_penalty=1,
-        prefer_rt_prior_tiebreak=True,
-    )
-
-    assert select_candidate_with_confidence([clean_far, weak_near]) is weak_near
+    assert scored.reason.startswith("decision: accepted")
+    assert "cap: MEDIUM due to trace quality" in scored.reason
+    assert "concerns: low scan support; poor edge recovery" in scored.reason
 
 
 @pytest.mark.parametrize(

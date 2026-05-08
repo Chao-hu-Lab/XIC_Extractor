@@ -139,7 +139,12 @@ def _should_try_wider_istd_anchor_recovery(
     candidate = selected_candidate(peak_result)
     if candidate is None:
         return False
-    return bool(getattr(candidate, "quality_flags", ()))
+    if getattr(candidate, "quality_flags", ()):
+        return True
+    return any(
+        label == "local_sn" and severity >= 1
+        for severity, label in peak_result.severities
+    )
 
 
 def _should_use_wider_istd_recovery(
@@ -158,7 +163,7 @@ def _should_use_wider_istd_recovery(
 
     current_penalty = _selection_penalty(current_candidate)
     recovered_penalty = _selection_penalty(recovered_candidate)
-    if recovered_penalty >= current_penalty:
+    if recovered_penalty > current_penalty:
         return False
 
     return recovered_candidate.selection_apex_intensity >= (

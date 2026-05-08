@@ -15,5 +15,5 @@ def test_diagnostic_schema_has_4_columns() -> None:
     assert DIAGNOSTIC_HEADERS == ("SampleName", "Target", "Issue", "Reason")
 
 
-def test_score_breakdown_schema_has_15_columns() -> None:
-    assert len(SCORE_BREAKDOWN_HEADERS) == 15
+def test_score_breakdown_schema_has_24_columns() -> None:
+    assert len(SCORE_BREAKDOWN_HEADERS) == 24

@@ -133,6 +133,8 @@ def build_scoring_context_factory(
                 rt_min=target.rt_min,
                 rt_max=target.rt_max,
                 dirty_matrix=config.dirty_matrix_mode,
+                neutral_loss_required=target.neutral_loss_da is not None,
+                count_no_ms2_as_detected=config.count_no_ms2_as_detected,
                 baseline_array=baseline_array,
                 residual_mad=residual_mad,
                 prefer_rt_prior_tiebreak=prefer_rt_prior_tiebreak,

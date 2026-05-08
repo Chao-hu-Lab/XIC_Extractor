@@ -21,7 +21,7 @@ def write_excel_from_run_output(
     rows = _run_output_to_long_rows(run_output, targets)
     diagnostics = _diagnostics_to_rows(run_output.diagnostics)
     score_breakdown = (
-        _run_output_to_score_breakdown_rows(run_output)
+        _run_output_to_score_breakdown_rows(config, run_output)
         if config.emit_score_breakdown
         else []
     )
@@ -59,48 +59,16 @@ def _diagnostics_to_rows(
     ]
 
 
-def _run_output_to_score_breakdown_rows(run_output: RunOutput) -> list[dict[str, str]]:
+def _run_output_to_score_breakdown_rows(
+    config: ExtractionConfig,
+    run_output: RunOutput,
+) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for file_result in run_output.file_results:
-        for result in file_result.extraction_results:
-            severities = {label: severity for severity, label in result.severities}
-            rows.append(
-                {
-                    "SampleName": file_result.sample_name,
-                    "Target": result.target_label,
-                    "symmetry": _format_optional_severity(severities.get("symmetry")),
-                    "local_sn": _format_optional_severity(severities.get("local_sn")),
-                    "nl_support": _format_optional_severity(
-                        severities.get("nl_support")
-                    ),
-                    "rt_prior": _format_optional_severity(severities.get("rt_prior")),
-                    "rt_centrality": _format_optional_severity(
-                        severities.get("rt_centrality")
-                    ),
-                    "noise_shape": _format_optional_severity(
-                        severities.get("noise_shape")
-                    ),
-                    "peak_width": _format_optional_severity(
-                        severities.get("peak_width")
-                    ),
-                    "Quality Penalty": str(result.quality_penalty),
-                    "Quality Flags": ",".join(result.quality_flags),
-                    "Total Severity": str(result.total_severity),
-                    "Confidence": result.confidence,
-                    "Prior RT": _format_optional_number(result.prior_rt),
-                    "Prior Source": result.prior_source,
-                }
+        rows.extend(
+            csv_writers._score_breakdown_rows(
+                file_result,
+                count_no_ms2_as_detected=config.count_no_ms2_as_detected,
             )
+        )
     return rows
-
-
-def _format_optional_severity(value: int | None) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _format_optional_number(value: float | None) -> str:
-    if value is None:
-        return "NA"
-    return f"{value:g}"

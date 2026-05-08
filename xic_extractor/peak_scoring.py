@@ -10,6 +10,12 @@ from typing import Any
 import numpy as np
 
 from xic_extractor.baseline import asls_baseline
+from xic_extractor.peak_scoring_evidence import (
+    ConfidenceCap,
+    EvidenceScore,
+    EvidenceSignal,
+    score_evidence,
+)
 
 _LABEL_SYMMETRY = "symmetry"
 _LABEL_LOCAL_SN = "local_sn"
@@ -37,10 +43,19 @@ _ADAP_LIKE_FLAG_LABELS = {
 _ADAP_LIKE_SELECTION_WEIGHT = 0.25
 _ADAP_LIKE_SELECTION_MAX = 0.5
 _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN = 0.05
+_SELECTION_DISTANCE_POINTS_PER_MIN = 60.0
+_SELECTION_QUALITY_POINTS_PER_UNIT = 10.0
+_SELECTION_FAR_DISTANCE_MAX_MIN = 0.75
+_LOW_SCAN_DEMOTION_SCORE_PENALTY = 80.0
 _LOW_SCAN_STRONGER_CANDIDATE_INTENSITY_RATIO = 2.0
+_LOW_SCAN_STRONGER_CANDIDATE_AREA_RATIO = 15.0
 _LOW_SCAN_MAX_CONFIDENCE_RANK_GAP = 1
 _LOW_SCAN_CONFIDENCE_DEMOTION = 2
 _LOW_SCAN_STRONGER_CANDIDATE_MAX_SELECTION_DISTANCE_MIN = 0.35
+_LOW_SCAN_STRONGER_CANDIDATE_EXTENDED_DISTANCE_MIN = 2.5
+_DOMINANT_STRICT_NL_AREA_RATIO = 100.0
+_DOMINANT_STRICT_NL_MAX_SELECTION_DISTANCE_MIN = 3.0
+_DOMINANT_STRICT_NL_DEMOTION_SCORE_PENALTY = 200.0
 _ADAP_EQUIVALENT_LEGACY_FLAGS = {
     "low_scan_support": "low_scan_count",
     "poor_edge_recovery": "low_top_edge_ratio",
@@ -64,6 +79,7 @@ class ScoredCandidate:
     quality_penalty: int = 0
     selection_quality_penalty: float | None = None
     prefer_rt_prior_tiebreak: bool = False
+    evidence_score: EvidenceScore | None = None
 
 
 @dataclass(frozen=True)
@@ -80,6 +96,8 @@ class ScoringContext:
     rt_min: float
     rt_max: float
     dirty_matrix: bool
+    neutral_loss_required: bool = True
+    count_no_ms2_as_detected: bool = False
     baseline_array: np.ndarray | None = None
     residual_mad: float | None = None
     prefer_rt_prior_tiebreak: bool = False
@@ -101,6 +119,10 @@ def confidence_from_total(total_severity: int) -> Confidence:
     if total_severity <= 4:
         return Confidence.LOW
     return Confidence.VERY_LOW
+
+
+def _confidence_from_value(value: str) -> Confidence:
+    return Confidence(value)
 
 
 def build_reason(
@@ -127,6 +149,99 @@ def build_reason(
     return "; ".join(parts)
 
 
+_EVIDENCE_REASON_LABELS = {
+    "strict_nl_ok": "strict NL OK",
+    "no_nl_required": "no NL required",
+    "rt_prior_close": "RT prior close",
+    "paired_istd_aligned": "paired ISTD aligned",
+    "local_sn_strong": "local S/N strong",
+    "shape_clean": "shape clean",
+    "trace_clean": "trace clean",
+    "nl_fail": "nl fail",
+    "no_ms2": "no MS2",
+    "rt_prior_far": "rt prior far",
+    "rt_prior_borderline": "rt prior borderline",
+    "rt_centrality_borderline": "RT centrality borderline",
+    "rt_centrality_poor": "RT centrality poor",
+    "local_sn_borderline": "local S/N borderline",
+    "local_sn_poor": "local S/N poor",
+    "shape_borderline": "shape borderline",
+    "shape_poor": "shape poor",
+    "noise_shape_borderline": "noise shape borderline",
+    "noise_shape_poor": "noise shape poor",
+    "anchor_mismatch": "anchor mismatch",
+    "low_scan_support": "low scan support",
+    "low_trace_continuity": "low trace continuity",
+    "poor_edge_recovery": "poor edge recovery",
+    "hard_quality_flag": "hard quality flag",
+}
+
+_CAP_REASON_LABELS = {
+    "nl_fail_cap": ("VERY_LOW", "nl fail"),
+    "no_ms2_cap": ("LOW", "no MS2"),
+    "anchor_mismatch_cap": ("VERY_LOW", "anchor mismatch"),
+    "zero_area_cap": ("VERY_LOW", "zero area"),
+    "rt_window_cap": ("VERY_LOW", "target RT window"),
+    "trace_quality_cap": ("MEDIUM", "trace quality"),
+    "hard_quality_flag_cap": ("MEDIUM", "hard quality flag"),
+}
+
+
+def build_evidence_reason(
+    evidence_score: EvidenceScore,
+    istd_confidence_note: str | None,
+    extra_notes: list[str] | None = None,
+    *,
+    count_no_ms2_as_detected: bool = False,
+) -> str:
+    parts: list[str] = []
+    if _is_review_only_evidence(
+        evidence_score,
+        count_no_ms2_as_detected=count_no_ms2_as_detected,
+    ):
+        parts.append("decision: review only, not counted")
+    else:
+        parts.append("decision: accepted")
+
+    for cap in evidence_score.cap_labels:
+        max_confidence, cap_name = _CAP_REASON_LABELS.get(
+            cap, ("VERY_LOW", cap.removesuffix("_cap").replace("_", " "))
+        )
+        parts.append(f"cap: {max_confidence} due to {cap_name}")
+
+    if evidence_score.support_labels:
+        support = "; ".join(
+            _EVIDENCE_REASON_LABELS.get(label, label)
+            for label in evidence_score.support_labels[:3]
+        )
+        parts.append(f"support: {support}")
+
+    if evidence_score.concern_labels:
+        concerns = "; ".join(
+            _EVIDENCE_REASON_LABELS.get(label, label)
+            for label in evidence_score.concern_labels[:4]
+        )
+        parts.append(f"concerns: {concerns}")
+
+    if extra_notes:
+        parts.extend(extra_notes)
+
+    if istd_confidence_note is not None:
+        parts.append(istd_confidence_note)
+
+    return "; ".join(parts) if parts else "all checks passed"
+
+
+def _is_review_only_evidence(
+    evidence_score: EvidenceScore,
+    *,
+    count_no_ms2_as_detected: bool,
+) -> bool:
+    if evidence_score.confidence == Confidence.VERY_LOW.value:
+        return True
+    return "no_ms2_cap" in evidence_score.cap_labels and not count_no_ms2_as_detected
+
+
 def select_candidate_with_confidence(
     scored: list[ScoredCandidate],
     *,
@@ -139,10 +254,24 @@ def select_candidate_with_confidence(
         )
 
     low_scan_demotions = set()
+    dominant_area_demotions = set()
     if not strict_selection_rt:
         low_scan_demotions = _low_scan_demotion_ids(
             scored,
             selection_rt=selection_rt,
+        )
+        dominant_area_demotions = _dominant_area_demotion_ids(
+            scored,
+            selection_rt=selection_rt,
+        )
+    selection_demotion_penalties = {
+        candidate_id: _LOW_SCAN_DEMOTION_SCORE_PENALTY
+        for candidate_id in low_scan_demotions
+    }
+    for candidate_id in dominant_area_demotions:
+        selection_demotion_penalties[candidate_id] = max(
+            selection_demotion_penalties.get(candidate_id, 0.0),
+            _DOMINANT_STRICT_NL_DEMOTION_SCORE_PENALTY,
         )
 
     def key(
@@ -158,7 +287,12 @@ def select_candidate_with_confidence(
             else float("inf")
         )
         confidence_rank = _CONFIDENCE_RANK[scored_candidate.confidence]
-        if id(scored_candidate) in low_scan_demotions:
+        selection_demotion_penalty = selection_demotion_penalties.get(
+            id(scored_candidate),
+            0.0,
+        )
+        selection_demoted = selection_demotion_penalty > 0
+        if selection_demoted:
             confidence_rank += _LOW_SCAN_CONFIDENCE_DEMOTION
         selection_quality_penalty = (
             scored_candidate.selection_quality_penalty
@@ -177,6 +311,7 @@ def select_candidate_with_confidence(
             scored_candidate.prefer_rt_prior_tiebreak
             and scored_candidate.prior_rt is not None
             and selection_rt is None
+            and scored_candidate.evidence_score is None
         ):
             return (
                 float(confidence_rank),
@@ -186,15 +321,52 @@ def select_candidate_with_confidence(
                 -candidate.selection_apex_intensity,
             )
         if selection_reference is not None:
-            adjusted_distance = distance + (
-                selection_quality_penalty
-                * _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN
-            )
-            return (
-                float(confidence_rank),
-                adjusted_distance,
-                selection_quality_penalty,
+            if scored_candidate.evidence_score is None:
+                adjusted_distance = distance + (
+                    selection_quality_penalty
+                    * _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN
+                )
+                return (
+                    float(confidence_rank),
+                    adjusted_distance,
+                    selection_quality_penalty,
+                    distance,
+                    -candidate.selection_apex_intensity,
+                )
+            effective_score = _effective_score(
+                scored_candidate,
                 distance,
+                demotion_penalty=selection_demotion_penalty,
+            )
+            if distance > _SELECTION_FAR_DISTANCE_MAX_MIN and not selection_demoted:
+                if selection_demotion_penalties:
+                    return (
+                        1.0,
+                        -effective_score,
+                        distance,
+                        selection_quality_penalty,
+                        -candidate.selection_apex_intensity,
+                    )
+                return (
+                    1.0,
+                    distance,
+                    -effective_score,
+                    selection_quality_penalty,
+                    -candidate.selection_apex_intensity,
+                )
+            if selection_demoted:
+                return (
+                    1.0,
+                    -effective_score,
+                    distance,
+                    selection_quality_penalty,
+                    -candidate.selection_apex_intensity,
+                )
+            return (
+                0.0,
+                -effective_score,
+                distance,
+                selection_quality_penalty,
                 -candidate.selection_apex_intensity,
             )
         return (
@@ -226,6 +398,22 @@ def _low_scan_demotion_ids(
     return demotions
 
 
+def _dominant_area_demotion_ids(
+    scored: list[ScoredCandidate],
+    *,
+    selection_rt: float | None,
+) -> set[int]:
+    demotions: set[int] = set()
+    for scored_candidate in scored:
+        if _has_dominant_strict_nl_alternative(
+            scored_candidate,
+            scored,
+            selection_rt=selection_rt,
+        ):
+            demotions.add(id(scored_candidate))
+    return demotions
+
+
 def _has_much_stronger_supported_alternative(
     low_scan_candidate: ScoredCandidate,
     scored: list[ScoredCandidate],
@@ -235,7 +423,8 @@ def _has_much_stronger_supported_alternative(
     chosen_rank = _CONFIDENCE_RANK[low_scan_candidate.confidence]
     chosen_penalty = _selection_penalty_value(low_scan_candidate)
     chosen_intensity = float(low_scan_candidate.candidate.selection_apex_intensity)
-    if chosen_intensity <= 0:
+    chosen_abundance = _candidate_abundance(low_scan_candidate)
+    if chosen_intensity <= 0 and chosen_abundance <= 0:
         return False
 
     reference = selection_rt
@@ -252,13 +441,69 @@ def _has_much_stronger_supported_alternative(
             continue
         if _selection_penalty_value(candidate) > chosen_penalty:
             continue
-        if float(candidate.candidate.selection_apex_intensity) < (
+        candidate_distance = (
+            abs(candidate.candidate.selection_apex_rt - reference)
+            if reference is not None
+            else 0.0
+        )
+        close_intensity_support = (
+            reference is None
+            or candidate_distance
+            <= _LOW_SCAN_STRONGER_CANDIDATE_MAX_SELECTION_DISTANCE_MIN
+        ) and float(candidate.candidate.selection_apex_intensity) >= (
             chosen_intensity * _LOW_SCAN_STRONGER_CANDIDATE_INTENSITY_RATIO
-        ):
+        )
+        extended_area_support = (
+            reference is None
+            or candidate_distance
+            <= _LOW_SCAN_STRONGER_CANDIDATE_EXTENDED_DISTANCE_MIN
+        ) and _candidate_abundance(candidate) >= (
+            chosen_abundance * _LOW_SCAN_STRONGER_CANDIDATE_AREA_RATIO
+        )
+        if not close_intensity_support and not extended_area_support:
             continue
-        if reference is not None and abs(
-            candidate.candidate.selection_apex_rt - reference
-        ) > _LOW_SCAN_STRONGER_CANDIDATE_MAX_SELECTION_DISTANCE_MIN:
+        return True
+    return False
+
+
+def _has_dominant_strict_nl_alternative(
+    scored_candidate: ScoredCandidate,
+    scored: list[ScoredCandidate],
+    *,
+    selection_rt: float | None,
+) -> bool:
+    chosen_abundance = _candidate_abundance(scored_candidate)
+    if chosen_abundance <= 0:
+        return False
+
+    reference = selection_rt
+    if reference is None:
+        reference = scored_candidate.prior_rt
+    if reference is None:
+        return False
+
+    chosen_distance = abs(scored_candidate.candidate.selection_apex_rt - reference)
+    if chosen_distance > _SELECTION_FAR_DISTANCE_MAX_MIN:
+        return False
+
+    chosen_penalty = _selection_penalty_value(scored_candidate)
+    for candidate in scored:
+        if candidate is scored_candidate:
+            continue
+        if candidate.confidence is Confidence.VERY_LOW:
+            continue
+        if _has_candidate_flag(candidate, "low_scan_support"):
+            continue
+        if _selection_penalty_value(candidate) > chosen_penalty:
+            continue
+        candidate_distance = abs(candidate.candidate.selection_apex_rt - reference)
+        if candidate_distance > _DOMINANT_STRICT_NL_MAX_SELECTION_DISTANCE_MIN:
+            continue
+        if not _has_evidence_support(candidate, "strict_nl_ok"):
+            continue
+        if _candidate_abundance(candidate) < (
+            chosen_abundance * _DOMINANT_STRICT_NL_AREA_RATIO
+        ):
             continue
         return True
     return False
@@ -269,10 +514,182 @@ def _has_candidate_flag(scored_candidate: ScoredCandidate, flag: str) -> bool:
     return flag in {str(candidate_flag) for candidate_flag in flags}
 
 
+def _has_evidence_support(scored_candidate: ScoredCandidate, label: str) -> bool:
+    evidence_score = scored_candidate.evidence_score
+    if evidence_score is None:
+        return False
+    return label in {
+        str(support_label) for support_label in evidence_score.support_labels
+    }
+
+
 def _selection_penalty_value(scored_candidate: ScoredCandidate) -> float:
     if scored_candidate.selection_quality_penalty is not None:
         return scored_candidate.selection_quality_penalty
     return float(scored_candidate.quality_penalty)
+
+
+def _candidate_abundance(scored_candidate: ScoredCandidate) -> float:
+    peak = getattr(scored_candidate.candidate, "peak", None)
+    area = getattr(peak, "area", None)
+    area_value = 0.0
+    if area is not None:
+        try:
+            area_value = float(area)
+        except (TypeError, ValueError):
+            area_value = 0.0
+    else:
+        area_value = 0.0
+    if _is_finite(area_value) and area_value > 0:
+        return area_value
+
+    try:
+        intensity_value = float(scored_candidate.candidate.selection_apex_intensity)
+    except (TypeError, ValueError):
+        return 0.0
+    if _is_finite(intensity_value) and intensity_value > 0:
+        return intensity_value
+    return 0.0
+
+
+def _effective_score(
+    scored_candidate: ScoredCandidate,
+    distance: float,
+    *,
+    demotion_penalty: float = 0.0,
+) -> float:
+    raw_score = (
+        float(scored_candidate.evidence_score.raw_score)
+        if scored_candidate.evidence_score is not None
+        else 50.0 - float(_CONFIDENCE_RANK[scored_candidate.confidence]) * 20.0
+    )
+    selection_quality_penalty = _selection_penalty_value(scored_candidate)
+    return (
+        raw_score
+        - (distance * _SELECTION_DISTANCE_POINTS_PER_MIN)
+        - (selection_quality_penalty * _SELECTION_QUALITY_POINTS_PER_UNIT)
+        - demotion_penalty
+    )
+
+
+def _evidence_from_context(
+    candidate: Any,
+    ctx: ScoringContext,
+    severities: list[tuple[int, str]],
+    quality_penalty: int,
+) -> tuple[list[EvidenceSignal], list[EvidenceSignal], list[ConfidenceCap]]:
+    positive: list[EvidenceSignal] = []
+    negative: list[EvidenceSignal] = []
+    caps: list[ConfidenceCap] = []
+
+    if not ctx.neutral_loss_required:
+        positive.append(EvidenceSignal("no_nl_required", 10))
+    elif ctx.ms2_present and ctx.nl_match:
+        positive.append(EvidenceSignal("strict_nl_ok", 30))
+    elif ctx.ms2_present and not ctx.nl_match:
+        negative.append(EvidenceSignal("nl_fail", 45))
+        caps.append(ConfidenceCap("nl_fail_cap", "VERY_LOW"))
+    else:
+        negative.append(EvidenceSignal("no_ms2", 25))
+        caps.append(ConfidenceCap("no_ms2_cap", "LOW"))
+
+    severity_by_label = {label: severity for severity, label in severities}
+    rt_prior_close = False
+    if ctx.rt_prior is not None:
+        rt_severity = severity_by_label[_LABEL_RT_PRIOR]
+        if rt_severity == 0:
+            positive.append(EvidenceSignal("rt_prior_close", 15))
+            rt_prior_close = True
+            if ctx.prefer_rt_prior_tiebreak:
+                positive.append(EvidenceSignal("paired_istd_aligned", 20))
+        elif rt_severity == 1:
+            negative.append(EvidenceSignal("rt_prior_borderline", 15))
+        else:
+            negative.append(EvidenceSignal("rt_prior_far", 35))
+
+    rt_centrality = severity_by_label[_LABEL_RT_CENTRALITY]
+    if rt_centrality == 1:
+        negative.append(EvidenceSignal("rt_centrality_borderline", 10))
+    elif rt_centrality == 2:
+        negative.append(EvidenceSignal("rt_centrality_poor", 20))
+        if (
+            _outside_rt_window(candidate.selection_apex_rt, ctx.rt_min, ctx.rt_max)
+            and not rt_prior_close
+        ):
+            caps.append(ConfidenceCap("rt_window_cap", "VERY_LOW"))
+
+    local_sn = severity_by_label[_LABEL_LOCAL_SN]
+    if local_sn == 0:
+        positive.append(EvidenceSignal("local_sn_strong", 10))
+    elif local_sn == 1:
+        negative.append(EvidenceSignal("local_sn_borderline", 10))
+    else:
+        negative.append(EvidenceSignal("local_sn_poor", 25))
+
+    shape = max(
+        severity_by_label[_LABEL_SYMMETRY],
+        severity_by_label[_LABEL_PEAK_WIDTH],
+    )
+    if shape == 0:
+        positive.append(EvidenceSignal("shape_clean", 10))
+    elif shape == 1:
+        negative.append(EvidenceSignal("shape_borderline", 10))
+    else:
+        negative.append(EvidenceSignal("shape_poor", 20))
+
+    noise_shape = severity_by_label[_LABEL_NOISE_SHAPE]
+    if noise_shape == 1:
+        negative.append(EvidenceSignal("noise_shape_borderline", 10))
+    elif noise_shape == 2:
+        negative.append(EvidenceSignal("noise_shape_poor", 20))
+
+    flags = {str(flag) for flag in getattr(candidate, "quality_flags", ())}
+    if not flags.intersection(_ADAP_LIKE_FLAG_LABELS):
+        positive.append(EvidenceSignal("trace_clean", 10))
+
+    trace_evidence = {
+        "low scan support": ("low_scan_support", 15),
+        "low trace continuity": ("low_trace_continuity", 10),
+        "poor edge recovery": ("poor_edge_recovery", 10),
+    }
+    trace_quality_flagged = False
+    for severity, label in severities:
+        if severity == 0 or label not in trace_evidence:
+            continue
+        evidence_label, points = trace_evidence[label]
+        negative.append(EvidenceSignal(evidence_label, points))
+        trace_quality_flagged = True
+    if trace_quality_flagged:
+        caps.append(ConfidenceCap("trace_quality_cap", "MEDIUM"))
+
+    if quality_penalty > 0:
+        negative.append(EvidenceSignal("hard_quality_flag", 25 * quality_penalty))
+        caps.append(ConfidenceCap("hard_quality_flag_cap", "MEDIUM"))
+
+    return positive, negative, caps
+
+
+def _outside_rt_window(observed: float, rt_min: float, rt_max: float) -> bool:
+    if not (_is_finite(observed) and _is_finite(rt_min) and _is_finite(rt_max)):
+        return True
+    return observed < rt_min or observed > rt_max
+
+
+def score_breakdown_fields(
+    evidence_score: EvidenceScore | None,
+) -> tuple[tuple[str, str], ...]:
+    if evidence_score is None:
+        return ()
+    return (
+        ("Final Confidence", evidence_score.confidence),
+        ("Caps", "; ".join(evidence_score.cap_labels)),
+        ("Raw Score", str(evidence_score.raw_score)),
+        ("Support", "; ".join(evidence_score.support_labels)),
+        ("Concerns", "; ".join(evidence_score.concern_labels)),
+        ("Base Score", str(evidence_score.base_score)),
+        ("Positive Points", str(evidence_score.positive_points)),
+        ("Negative Points", str(evidence_score.negative_points)),
+    )
 
 
 def score_candidate(
@@ -294,7 +711,11 @@ def score_candidate(
             baseline=ctx.baseline_array,
             residual_mad=ctx.residual_mad,
         ),
-        nl_support_severity(ctx.ms2_present, ctx.nl_match),
+        (
+            nl_support_severity(ctx.ms2_present, ctx.nl_match)
+            if ctx.neutral_loss_required
+            else (0, _LABEL_NL)
+        ),
         rt_prior_severity(
             candidate.selection_apex_rt,
             ctx.rt_prior,
@@ -305,12 +726,19 @@ def score_candidate(
         peak_width_severity(ctx.fwhm_ratio),
         *trace_quality_severities(candidate),
     ]
-    total = sum(severity for severity, _ in severities) + quality_penalty
-    confidence = confidence_from_total(total)
-    reason = build_reason(
+    positive, negative, caps = _evidence_from_context(
+        candidate,
+        ctx,
         severities,
+        quality_penalty,
+    )
+    evidence_score = score_evidence(positive=positive, negative=negative, caps=caps)
+    confidence = _confidence_from_value(evidence_score.confidence)
+    reason = build_evidence_reason(
+        evidence_score,
         istd_confidence_note,
         extra_notes=quality_notes,
+        count_no_ms2_as_detected=ctx.count_no_ms2_as_detected,
     )
     return ScoredCandidate(
         candidate=candidate,
@@ -321,6 +749,7 @@ def score_candidate(
         quality_penalty=quality_penalty,
         selection_quality_penalty=selection_quality_penalty,
         prefer_rt_prior_tiebreak=ctx.prefer_rt_prior_tiebreak,
+        evidence_score=evidence_score,
     )
 
 

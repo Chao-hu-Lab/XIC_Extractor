@@ -168,8 +168,8 @@ def _write_overview_how_to_read(ws, start_row: int) -> int:
         "Review Queue has one row per sample-target needing attention.",
         "Flagged % is review workload, not detection failure.",
         (
-            "Numeric NL_FAIL rows can be detected-but-flagged for review but "
-            "excluded from Summary analytical aggregates."
+            "NL_FAIL rows are review evidence, not counted detections or "
+            "Summary analytical aggregates."
         ),
         "Diagnostics is a hidden technical log for debugging verbose evidence.",
         "Score Breakdown is a technical audit sheet when enabled.",
