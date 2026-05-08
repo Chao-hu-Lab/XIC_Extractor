@@ -195,7 +195,8 @@ def test_overview_explains_detected_and_flagged_rates() -> None:
     assert "Diagnostics is a hidden technical log" in joined
     assert "HTML Review Report is for visual batch QA" in joined
     assert "Flagged % is review workload" in joined
-    assert "detected-but-flagged" in joined
+    assert "NL_FAIL rows are review evidence, not counted detections" in joined
+    assert "detected-but-flagged" not in joined
     assert "Score Breakdown is a technical audit sheet" in joined
 
 

@@ -447,7 +447,10 @@ def _evidence_from_context(
         negative.append(EvidenceSignal("rt_centrality_borderline", 10))
     elif rt_centrality == 2:
         negative.append(EvidenceSignal("rt_centrality_poor", 20))
-        if not rt_prior_close:
+        if (
+            _outside_rt_window(candidate.selection_apex_rt, ctx.rt_min, ctx.rt_max)
+            and not rt_prior_close
+        ):
             caps.append(ConfidenceCap("rt_window_cap", "VERY_LOW"))
 
     local_sn = severity_by_label[_LABEL_LOCAL_SN]
@@ -499,6 +502,12 @@ def _evidence_from_context(
         caps.append(ConfidenceCap("hard_quality_flag_cap", "MEDIUM"))
 
     return positive, negative, caps
+
+
+def _outside_rt_window(observed: float, rt_min: float, rt_max: float) -> bool:
+    if not (_is_finite(observed) and _is_finite(rt_min) and _is_finite(rt_max)):
+        return True
+    return observed < rt_min or observed > rt_max
 
 
 def score_breakdown_fields(

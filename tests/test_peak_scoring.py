@@ -507,6 +507,32 @@ def test_score_candidate_allows_out_of_window_peak_with_close_rt_prior() -> None
     assert "rt_centrality_poor" in scored.evidence_score.concern_labels
 
 
+def test_score_candidate_keeps_in_window_edge_peak_as_rt_centrality_concern() -> None:
+    cand = _make_candidate(apex_rt=16.005, apex_intensity=1000)
+    x = np.linspace(15.8, 16.3, 101)
+    y = 1000 * np.exp(-((x - 16.005) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=41,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=None,
+        rt_prior_sigma=None,
+        rt_min=16.0,
+        rt_max=18.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=None)
+
+    assert scored.confidence == Confidence.HIGH
+    assert "rt_window_cap" not in scored.evidence_score.cap_labels
+    assert "rt_centrality_poor" in scored.evidence_score.concern_labels
+
+
 def test_score_candidate_penalizes_flagged_candidate_quality() -> None:
     cand = _make_flagged_candidate(
         apex_rt=10.0,
