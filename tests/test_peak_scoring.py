@@ -7,6 +7,7 @@ from xic_extractor.peak_scoring import (
     Confidence,
     ScoredCandidate,
     ScoringContext,
+    build_evidence_reason,
     build_reason,
     confidence_from_total,
     local_sn_severity,
@@ -271,7 +272,8 @@ def test_score_candidate_returns_base_and_trace_quality_severities() -> None:
     scored = score_candidate(cand, ctx, prior_rt=10.0)
     assert len(scored.severities) == 10
     assert scored.confidence == Confidence.HIGH
-    assert scored.reason == "all checks passed"
+    assert scored.reason.startswith("decision: accepted")
+    assert "support: strict NL OK; RT prior close; local S/N strong" in scored.reason
 
 
 def test_score_candidate_records_positive_and_negative_evidence() -> None:
@@ -328,6 +330,73 @@ def test_score_candidate_nl_fail_caps_confidence_to_very_low() -> None:
     assert "nl_fail_cap" in scored.evidence_score.cap_labels
 
 
+def test_reason_text_leads_with_decision_then_support_concerns_and_caps() -> None:
+    cand = _make_candidate(apex_rt=10.8, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10.8) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=180,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=False,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.reason.startswith("decision: review only, not counted")
+    assert "cap: VERY_LOW due to nl fail" in scored.reason
+    assert "strict NL OK" not in scored.reason
+    assert scored.reason.index("cap:") < scored.reason.index("support:")
+    assert scored.reason.index("support:") < scored.reason.index("concerns:")
+    assert "concerns:" in scored.reason
+    assert "nl fail" in scored.reason
+    assert "rt prior far" in scored.reason
+
+
+def test_reason_text_limits_default_evidence_labels() -> None:
+    score = EvidenceScore(
+        base_score=50,
+        positive_points=50,
+        negative_points=90,
+        raw_score=10,
+        score_confidence="VERY_LOW",
+        confidence="VERY_LOW",
+        support_labels=(
+            "strict_nl_ok",
+            "rt_prior_close",
+            "local_sn_strong",
+            "shape_clean",
+        ),
+        concern_labels=(
+            "nl_fail",
+            "rt_prior_far",
+            "anchor_mismatch",
+            "low_trace_continuity",
+            "poor_edge_recovery",
+        ),
+        cap_labels=("nl_fail_cap",),
+    )
+
+    reason = build_evidence_reason(score, istd_confidence_note=None)
+
+    assert reason.startswith("decision: review only, not counted; cap:")
+    assert "support: strict NL OK; RT prior close; local S/N strong" in reason
+    assert "shape clean" not in reason
+    assert (
+        "concerns: nl fail; rt prior far; anchor mismatch; low trace continuity"
+        in reason
+    )
+    assert "poor edge recovery" not in reason
+
+
 def test_score_candidate_no_nl_target_records_no_nl_support() -> None:
     cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
     x = np.linspace(9, 11, 201)
@@ -354,7 +423,8 @@ def test_score_candidate_no_nl_target_records_no_nl_support() -> None:
     assert "no_nl_required" in scored.evidence_score.support_labels
     assert "no_ms2" not in scored.evidence_score.concern_labels
     assert "no_ms2_cap" not in scored.evidence_score.cap_labels
-    assert scored.reason == "all checks passed"
+    assert scored.reason.startswith("decision: accepted")
+    assert "support: no NL required; RT prior close; local S/N strong" in scored.reason
 
 
 def test_score_candidate_maps_rt_centrality_and_noise_shape_concerns() -> None:
@@ -445,9 +515,9 @@ def test_score_candidate_formats_adap_like_quality_flags_as_minor_concerns() -> 
     assert scored.selection_quality_penalty == 0.5
     assert (1, "low trace continuity") in scored.severities
     assert (1, "poor edge recovery") in scored.severities
-    assert scored.reason == (
-        "concerns: low trace continuity (minor); poor edge recovery (minor)"
-    )
+    assert scored.reason.startswith("decision: accepted")
+    assert "cap: MEDIUM due to trace quality" in scored.reason
+    assert "concerns: low trace continuity; poor edge recovery" in scored.reason
 
 
 def test_score_candidate_does_not_double_penalize_adap_equivalent_legacy_flags(
@@ -488,9 +558,9 @@ def test_score_candidate_does_not_double_penalize_adap_equivalent_legacy_flags(
     assert (1, "low scan support") in scored.severities
     assert (1, "poor edge recovery") in scored.severities
     assert "weak candidate" not in scored.reason
-    assert scored.reason == (
-        "concerns: low scan support (minor); poor edge recovery (minor)"
-    )
+    assert scored.reason.startswith("decision: accepted")
+    assert "cap: MEDIUM due to trace quality" in scored.reason
+    assert "concerns: low scan support; poor edge recovery" in scored.reason
 
 
 def test_selector_uses_weighted_adap_like_selection_penalty() -> None:

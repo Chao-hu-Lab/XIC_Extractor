@@ -143,6 +143,82 @@ def build_reason(
     return "; ".join(parts)
 
 
+_EVIDENCE_REASON_LABELS = {
+    "strict_nl_ok": "strict NL OK",
+    "no_nl_required": "no NL required",
+    "rt_prior_close": "RT prior close",
+    "local_sn_strong": "local S/N strong",
+    "shape_clean": "shape clean",
+    "trace_clean": "trace clean",
+    "nl_fail": "nl fail",
+    "no_ms2": "no MS2",
+    "rt_prior_far": "rt prior far",
+    "rt_prior_borderline": "rt prior borderline",
+    "rt_centrality_borderline": "RT centrality borderline",
+    "rt_centrality_poor": "RT centrality poor",
+    "local_sn_borderline": "local S/N borderline",
+    "local_sn_poor": "local S/N poor",
+    "shape_borderline": "shape borderline",
+    "shape_poor": "shape poor",
+    "noise_shape_borderline": "noise shape borderline",
+    "noise_shape_poor": "noise shape poor",
+    "anchor_mismatch": "anchor mismatch",
+    "low_scan_support": "low scan support",
+    "low_trace_continuity": "low trace continuity",
+    "poor_edge_recovery": "poor edge recovery",
+    "hard_quality_flag": "hard quality flag",
+}
+
+_CAP_REASON_LABELS = {
+    "nl_fail_cap": ("VERY_LOW", "nl fail"),
+    "no_ms2_cap": ("LOW", "no MS2"),
+    "anchor_mismatch_cap": ("VERY_LOW", "anchor mismatch"),
+    "zero_area_cap": ("VERY_LOW", "zero area"),
+    "trace_quality_cap": ("MEDIUM", "trace quality"),
+    "hard_quality_flag_cap": ("MEDIUM", "hard quality flag"),
+}
+
+
+def build_evidence_reason(
+    evidence_score: EvidenceScore,
+    istd_confidence_note: str | None,
+    extra_notes: list[str] | None = None,
+) -> str:
+    parts: list[str] = []
+    if evidence_score.confidence == Confidence.VERY_LOW.value:
+        parts.append("decision: review only, not counted")
+    else:
+        parts.append("decision: accepted")
+
+    for cap in evidence_score.cap_labels:
+        max_confidence, cap_name = _CAP_REASON_LABELS.get(
+            cap, ("VERY_LOW", cap.removesuffix("_cap").replace("_", " "))
+        )
+        parts.append(f"cap: {max_confidence} due to {cap_name}")
+
+    if evidence_score.support_labels:
+        support = "; ".join(
+            _EVIDENCE_REASON_LABELS.get(label, label)
+            for label in evidence_score.support_labels[:3]
+        )
+        parts.append(f"support: {support}")
+
+    if evidence_score.concern_labels:
+        concerns = "; ".join(
+            _EVIDENCE_REASON_LABELS.get(label, label)
+            for label in evidence_score.concern_labels[:4]
+        )
+        parts.append(f"concerns: {concerns}")
+
+    if extra_notes:
+        parts.extend(extra_notes)
+
+    if istd_confidence_note is not None:
+        parts.append(istd_confidence_note)
+
+    return "; ".join(parts) if parts else "all checks passed"
+
+
 def select_candidate_with_confidence(
     scored: list[ScoredCandidate],
     *,
@@ -479,8 +555,8 @@ def score_candidate(
     )
     evidence_score = score_evidence(positive=positive, negative=negative, caps=caps)
     confidence = _confidence_from_value(evidence_score.confidence)
-    reason = build_reason(
-        severities,
+    reason = build_evidence_reason(
+        evidence_score,
         istd_confidence_note,
         extra_notes=quality_notes,
     )
