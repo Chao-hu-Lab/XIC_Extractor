@@ -57,6 +57,11 @@ _LOW_SCAN_STRONGER_CANDIDATE_EXTENDED_DISTANCE_MIN = 2.5
 _DOMINANT_STRICT_NL_AREA_RATIO = 100.0
 _DOMINANT_STRICT_NL_MAX_SELECTION_DISTANCE_MIN = 3.0
 _DOMINANT_STRICT_NL_DEMOTION_SCORE_PENALTY = 200.0
+_MS2_TRACE_SELECTION_POINTS = {
+    "ms2_trace_strong": 10.0,
+    "ms2_trace_moderate": 5.0,
+    "ms2_trace_weak": -8.0,
+}
 _ADAP_EQUIVALENT_LEGACY_FLAGS = {
     "low_scan_support": "low_scan_count",
     "poor_edge_recovery": "low_top_edge_ratio",
@@ -281,7 +286,7 @@ def select_candidate_with_confidence(
 
     def key(
         scored_candidate: ScoredCandidate,
-    ) -> tuple[float, float, float, float, float]:
+    ) -> tuple[float, ...]:
         candidate = scored_candidate.candidate
         selection_reference = selection_rt
         if selection_reference is None:
@@ -343,6 +348,7 @@ def select_candidate_with_confidence(
                 distance,
                 demotion_penalty=selection_demotion_penalty,
             )
+            ms2_trace_tiebreak = _ms2_trace_selection_tiebreak(scored_candidate)
             if distance > _SELECTION_FAR_DISTANCE_MAX_MIN and not selection_demoted:
                 if selection_demotion_penalties:
                     return (
@@ -350,6 +356,7 @@ def select_candidate_with_confidence(
                         -effective_score,
                         distance,
                         selection_quality_penalty,
+                        -ms2_trace_tiebreak,
                         -candidate.selection_apex_intensity,
                     )
                 return (
@@ -357,6 +364,7 @@ def select_candidate_with_confidence(
                     distance,
                     -effective_score,
                     selection_quality_penalty,
+                    -ms2_trace_tiebreak,
                     -candidate.selection_apex_intensity,
                 )
             if selection_demoted:
@@ -365,6 +373,7 @@ def select_candidate_with_confidence(
                     -effective_score,
                     distance,
                     selection_quality_penalty,
+                    -ms2_trace_tiebreak,
                     -candidate.selection_apex_intensity,
                 )
             return (
@@ -372,6 +381,7 @@ def select_candidate_with_confidence(
                 -effective_score,
                 distance,
                 selection_quality_penalty,
+                -ms2_trace_tiebreak,
                 -candidate.selection_apex_intensity,
             )
         return (
@@ -564,7 +574,7 @@ def _effective_score(
     demotion_penalty: float = 0.0,
 ) -> float:
     raw_score = (
-        float(scored_candidate.evidence_score.raw_score)
+        _selection_raw_score(scored_candidate)
         if scored_candidate.evidence_score is not None
         else 50.0 - float(_CONFIDENCE_RANK[scored_candidate.confidence]) * 20.0
     )
@@ -575,6 +585,29 @@ def _effective_score(
         - (selection_quality_penalty * _SELECTION_QUALITY_POINTS_PER_UNIT)
         - demotion_penalty
     )
+
+
+def _selection_raw_score(scored_candidate: ScoredCandidate) -> float:
+    evidence_score = scored_candidate.evidence_score
+    if evidence_score is None:
+        return 50.0 - float(_CONFIDENCE_RANK[scored_candidate.confidence]) * 20.0
+
+    return float(evidence_score.raw_score) - _ms2_trace_selection_tiebreak(
+        scored_candidate
+    )
+
+
+def _ms2_trace_selection_tiebreak(scored_candidate: ScoredCandidate) -> float:
+    evidence_score = scored_candidate.evidence_score
+    if evidence_score is None:
+        return 0.0
+
+    points = 0.0
+    for label in evidence_score.support_labels:
+        points += _MS2_TRACE_SELECTION_POINTS.get(str(label), 0.0)
+    for label in evidence_score.concern_labels:
+        points += _MS2_TRACE_SELECTION_POINTS.get(str(label), 0.0)
+    return points
 
 
 def _evidence_from_context(

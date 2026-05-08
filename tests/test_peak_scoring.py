@@ -3,6 +3,7 @@ import pytest
 
 from xic_extractor.peak_scoring import (
     Confidence,
+    ScoredCandidate,
     ScoringContext,
     build_evidence_reason,
     build_reason,
@@ -17,7 +18,11 @@ from xic_extractor.peak_scoring import (
     select_candidate_with_confidence,
     symmetry_severity,
 )
-from xic_extractor.peak_scoring_evidence import EvidenceScore
+from xic_extractor.peak_scoring_evidence import (
+    EvidenceScore,
+    EvidenceSignal,
+    score_evidence,
+)
 from xic_extractor.signal_processing import PeakCandidate, PeakResult
 
 
@@ -301,6 +306,40 @@ def test_strong_ms2_trace_breaks_same_confidence_tie_by_score() -> None:
     )
 
     assert selected is strong_trace
+
+
+def test_ms2_trace_bonus_does_not_override_selection_rt_distance() -> None:
+    near_prior = ScoredCandidate(
+        candidate=_make_candidate(apex_rt=9.0, apex_intensity=1000),
+        severities=(),
+        confidence=Confidence.HIGH,
+        reason="",
+        prior_rt=9.0,
+        evidence_score=score_evidence(
+            positive=[],
+            negative=[],
+            base_score=100,
+        ),
+    )
+    farther_ms2_trace = ScoredCandidate(
+        candidate=_make_candidate(apex_rt=9.1, apex_intensity=500),
+        severities=(),
+        confidence=Confidence.HIGH,
+        reason="",
+        prior_rt=9.0,
+        evidence_score=score_evidence(
+            positive=[EvidenceSignal("ms2_trace_strong", 10)],
+            negative=[],
+            base_score=100,
+        ),
+    )
+
+    selected = select_candidate_with_confidence(
+        [near_prior, farther_ms2_trace],
+        selection_rt=9.0,
+    )
+
+    assert selected is near_prior
 
 
 def test_score_candidate_nl_fail_caps_confidence_to_very_low() -> None:
