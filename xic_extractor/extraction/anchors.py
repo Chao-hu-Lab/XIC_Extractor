@@ -67,7 +67,9 @@ def apply_anchor_mismatch_penalty(
         f"concerns: anchor mismatch; {mismatch_reason}"
     )
     if peak_result.reason:
-        reason = f"{reason}; {peak_result.reason}"
+        details = _reason_without_decision(peak_result.reason)
+        if details:
+            reason = f"{reason}; {details}"
     confidence = anchor_mismatch_confidence(peak_result.confidence)
     return replace(
         peak_result,
@@ -112,6 +114,12 @@ def _anchor_mismatch_score_breakdown(
         ),
     }
     return tuple((label, updates.get(label, value)) for label, value in score_breakdown)
+
+
+def _reason_without_decision(reason: str) -> str:
+    parts = [part.strip() for part in reason.split(";") if part.strip()]
+    filtered = [part for part in parts if not part.startswith("decision:")]
+    return "; ".join(filtered)
 
 
 def _append_semicolon_label(value: str, label: str) -> str:

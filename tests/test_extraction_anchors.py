@@ -40,3 +40,5 @@ def test_anchor_mismatch_penalty_syncs_score_breakdown_confidence_and_caps() -> 
     assert breakdown["Concerns"] == "anchor_mismatch"
     assert breakdown["Raw Score"] == "45"
     assert breakdown["Negative Points"] == "45"
+    assert downgraded.reason.startswith("decision: review only, not counted")
+    assert "decision: accepted" not in downgraded.reason

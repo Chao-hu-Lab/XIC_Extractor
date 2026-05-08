@@ -97,6 +97,7 @@ class ScoringContext:
     rt_max: float
     dirty_matrix: bool
     neutral_loss_required: bool = True
+    count_no_ms2_as_detected: bool = False
     baseline_array: np.ndarray | None = None
     residual_mad: float | None = None
     prefer_rt_prior_tiebreak: bool = False
@@ -190,9 +191,14 @@ def build_evidence_reason(
     evidence_score: EvidenceScore,
     istd_confidence_note: str | None,
     extra_notes: list[str] | None = None,
+    *,
+    count_no_ms2_as_detected: bool = False,
 ) -> str:
     parts: list[str] = []
-    if evidence_score.confidence == Confidence.VERY_LOW.value:
+    if _is_review_only_evidence(
+        evidence_score,
+        count_no_ms2_as_detected=count_no_ms2_as_detected,
+    ):
         parts.append("decision: review only, not counted")
     else:
         parts.append("decision: accepted")
@@ -224,6 +230,16 @@ def build_evidence_reason(
         parts.append(istd_confidence_note)
 
     return "; ".join(parts) if parts else "all checks passed"
+
+
+def _is_review_only_evidence(
+    evidence_score: EvidenceScore,
+    *,
+    count_no_ms2_as_detected: bool,
+) -> bool:
+    if evidence_score.confidence == Confidence.VERY_LOW.value:
+        return True
+    return "no_ms2_cap" in evidence_score.cap_labels and not count_no_ms2_as_detected
 
 
 def select_candidate_with_confidence(
@@ -722,6 +738,7 @@ def score_candidate(
         evidence_score,
         istd_confidence_note,
         extra_notes=quality_notes,
+        count_no_ms2_as_detected=ctx.count_no_ms2_as_detected,
     )
     return ScoredCandidate(
         candidate=candidate,

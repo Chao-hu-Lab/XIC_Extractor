@@ -309,6 +309,62 @@ def test_score_candidate_no_nl_target_records_no_nl_support() -> None:
     assert "support: no NL required; RT prior close; local S/N strong" in scored.reason
 
 
+def test_score_candidate_no_ms2_default_reason_is_not_counted() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=False,
+        nl_match=False,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        neutral_loss_required=True,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.LOW
+    assert "no_ms2_cap" in scored.evidence_score.cap_labels
+    assert scored.reason.startswith("decision: review only, not counted")
+    assert "decision: accepted" not in scored.reason
+
+
+def test_score_candidate_no_ms2_allowed_reason_is_accepted() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=False,
+        nl_match=False,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        neutral_loss_required=True,
+        count_no_ms2_as_detected=True,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.LOW
+    assert "no_ms2_cap" in scored.evidence_score.cap_labels
+    assert scored.reason.startswith("decision: accepted")
+
+
 def test_score_candidate_maps_rt_centrality_and_noise_shape_concerns() -> None:
     cand = _make_candidate(apex_rt=9.0, apex_intensity=1000)
     x = np.linspace(9, 11, 201)
