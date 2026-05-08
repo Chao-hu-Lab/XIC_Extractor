@@ -60,9 +60,13 @@ def apply_anchor_mismatch_penalty(
     peak_result: PeakDetectionResult,
     mismatch_reason: str,
 ) -> PeakDetectionResult:
-    reason = f"anchor mismatch; {mismatch_reason}"
+    reason = (
+        "decision: review only, not counted; "
+        "cap: VERY_LOW due to anchor mismatch; "
+        f"concerns: anchor mismatch; {mismatch_reason}"
+    )
     if peak_result.reason:
-        reason = f"{peak_result.reason}; {reason}"
+        reason = f"{reason}; {peak_result.reason}"
     confidence = anchor_mismatch_confidence(peak_result.confidence)
     return replace(peak_result, confidence=confidence, reason=reason)
 

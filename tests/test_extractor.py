@@ -1081,7 +1081,8 @@ def test_paired_analyte_keeps_mismatched_target_anchor_peak_as_very_low(
     long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
     analyte_row = next(row for row in long_rows if row["Target"] == "Analyte")
     assert analyte_row["Confidence"] == "VERY_LOW"
-    assert "anchor mismatch" in analyte_row["Reason"]
+    assert analyte_row["Reason"].startswith("decision: review only, not counted")
+    assert "cap: VERY_LOW due to anchor mismatch" in analyte_row["Reason"]
     assert output.file_results[0].results["Analyte"].confidence == "VERY_LOW"
     diagnostics = _read_csv(config.diagnostics_csv)
     assert any(
