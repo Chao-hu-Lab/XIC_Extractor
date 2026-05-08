@@ -17,7 +17,10 @@ from xic_extractor.output.review_report_focus import (
     _review_focus,
     _review_queue_details,
 )
-from xic_extractor.output.review_report_trend import _istd_rt_trend
+from xic_extractor.output.review_report_trend import (
+    _istd_area_stability,
+    _istd_rt_trend,
+)
 
 
 def review_report_path_for_excel(excel_path: Path) -> Path:
@@ -64,6 +67,7 @@ def write_review_report(
                 _detection_rate_chart(metrics, targets),
                 _flag_burden_chart(metrics, targets),
                 _istd_rt_trend(rows, injection_order),
+                _istd_area_stability(rows, injection_order),
                 _review_queue_details(review_rows),
                 "</main>",
                 "</body>",
