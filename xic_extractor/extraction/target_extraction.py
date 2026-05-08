@@ -315,6 +315,7 @@ def extract_one_target(
         prior_source=getattr(scoring_context_builder, "prior_source", ""),
         quality_penalty=quality_penalty,
         quality_flags=quality_flags,
+        score_breakdown=peak_result.score_breakdown,
     )
     results[target.label] = result
     diagnostics.extend(build_diagnostic_records(sample_name, target, result, config))

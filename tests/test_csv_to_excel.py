@@ -853,6 +853,15 @@ def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
             {
                 "SampleName": "Tumor_1",
                 "Target": "Analyte",
+                "Final Confidence": "HIGH",
+                "Detection Counted": "TRUE",
+                "Caps": "",
+                "Raw Score": "90",
+                "Support": "strict_nl_ok; local_sn_strong",
+                "Concerns": "",
+                "Base Score": "50",
+                "Positive Points": "40",
+                "Negative Points": "0",
                 "symmetry": "0",
                 "local_sn": "1",
                 "nl_support": "0",
@@ -889,6 +898,14 @@ def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
     values = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))
     row = dict(zip(headers, values, strict=False))
     assert row["SampleName"] == "Tumor_1"
+    assert row["Base Score"] == 50
+    assert row["Positive Points"] == 40
+    assert row["Negative Points"] == 0
+    assert row["Raw Score"] == 90
+    assert row["Final Confidence"] == "HIGH"
+    assert row["Detection Counted"] == "TRUE"
+    assert row["Support"] == "strict_nl_ok; local_sn_strong"
+    assert row["Concerns"] is None
     assert row["Quality Penalty"] == 1
     assert row["Quality Flags"] == "too_broad"
     assert row["Total Severity"] == 2

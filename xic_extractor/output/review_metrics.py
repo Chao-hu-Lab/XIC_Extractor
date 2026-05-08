@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from xic_extractor.output.detection import is_accepted_row_detection
+
 
 @dataclass(frozen=True)
 class TargetReviewMetrics:
@@ -148,19 +150,7 @@ def _is_detected(
     row: dict[str, str],
     count_no_ms2_as_detected: bool,
 ) -> bool:
-    if _safe_float(row.get("RT", "")) is None:
-        return False
-    area = _safe_float(row.get("Area", ""))
-    if area is None or area <= 0:
-        return False
-    if row.get("Confidence", "") == "VERY_LOW":
-        return False
-    nl = row.get("NL", "")
-    if nl == "NO_MS2":
-        return count_no_ms2_as_detected
-    if nl == "NL_FAIL":
-        return False
-    return nl == "" or nl == "OK" or nl.startswith("WARN_")
+    return is_accepted_row_detection(row, count_no_ms2_as_detected)
 
 
 def _has_ms2_nl_flag(row: dict[str, str]) -> bool:
@@ -170,10 +160,3 @@ def _has_ms2_nl_flag(row: dict[str, str]) -> bool:
 
 def _percent(numerator: int, denominator: int) -> str:
     return f"{numerator / denominator * 100:.0f}%" if denominator else "0%"
-
-
-def _safe_float(value: str) -> float | None:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None

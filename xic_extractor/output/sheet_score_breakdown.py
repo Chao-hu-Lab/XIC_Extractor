@@ -43,6 +43,10 @@ def _build_score_breakdown_sheet(ws, rows: list[dict[str, str]]) -> None:
                     "Quality Penalty",
                     "Total Severity",
                     "Prior RT",
+                    "Base Score",
+                    "Positive Points",
+                    "Negative Points",
+                    "Raw Score",
                 }
                 else _excel_text(raw_value)
             )

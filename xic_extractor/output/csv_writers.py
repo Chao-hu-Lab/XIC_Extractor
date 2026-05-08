@@ -4,6 +4,7 @@ from typing import Protocol
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
+from xic_extractor.output.detection import is_accepted_result_detection
 from xic_extractor.output.schema import (
     DIAGNOSTIC_HEADERS,
     LONG_HEADERS,
@@ -64,6 +65,9 @@ class ExtractionResultLike(Protocol):
 
     @property
     def quality_flags(self) -> tuple[str, ...]: ...
+
+    @property
+    def score_breakdown(self) -> tuple[tuple[str, str], ...]: ...
 
     @property
     def reported_rt(self) -> float | None: ...
@@ -192,17 +196,45 @@ def write_score_breakdown_csv(
         writer = csv.DictWriter(handle, fieldnames=SCORE_BREAKDOWN_HEADERS)
         writer.writeheader()
         for file_result in file_results:
-            writer.writerows(_score_breakdown_rows(file_result))
+            writer.writerows(
+                _score_breakdown_rows(
+                    file_result,
+                    count_no_ms2_as_detected=config.count_no_ms2_as_detected,
+                )
+            )
 
 
-def _score_breakdown_rows(file_result: FileResultLike) -> list[dict[str, str]]:
+def _score_breakdown_rows(
+    file_result: FileResultLike,
+    *,
+    count_no_ms2_as_detected: bool,
+) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for result in file_result.extraction_results:
         severities = {label: severity for severity, label in result.severities}
+        weighted_fields = dict(result.score_breakdown)
         rows.append(
             {
                 "SampleName": file_result.sample_name,
                 "Target": result.target_label,
+                "Final Confidence": weighted_fields.get(
+                    "Final Confidence", result.confidence
+                ),
+                "Detection Counted": (
+                    "TRUE"
+                    if is_accepted_result_detection(
+                        result,
+                        count_no_ms2_as_detected,
+                    )
+                    else "FALSE"
+                ),
+                "Caps": weighted_fields.get("Caps", ""),
+                "Raw Score": weighted_fields.get("Raw Score", ""),
+                "Support": weighted_fields.get("Support", ""),
+                "Concerns": weighted_fields.get("Concerns", ""),
+                "Base Score": weighted_fields.get("Base Score", ""),
+                "Positive Points": weighted_fields.get("Positive Points", ""),
+                "Negative Points": weighted_fields.get("Negative Points", ""),
                 "symmetry": _format_optional_severity(severities.get("symmetry")),
                 "local_sn": _format_optional_severity(severities.get("local_sn")),
                 "nl_support": _format_optional_severity(

@@ -43,6 +43,7 @@ class ExtractionResult:
     prior_source: str = ""
     quality_penalty: int = 0
     quality_flags: tuple[str, ...] = ()
+    score_breakdown: tuple[tuple[str, str], ...] = ()
 
     @property
     def peak(self) -> PeakResult | None:

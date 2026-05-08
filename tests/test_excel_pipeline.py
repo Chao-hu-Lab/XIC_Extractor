@@ -121,6 +121,14 @@ def test_write_excel_from_run_output_adds_score_breakdown_when_enabled(
     row = dict(zip(headers, values, strict=False))
     assert row["SampleName"] == "SampleA"
     assert row["Target"] == "WithNL"
+    assert row["Base Score"] == 50
+    assert row["Positive Points"] == 40
+    assert row["Negative Points"] == 0
+    assert row["Raw Score"] == 90
+    assert row["Final Confidence"] == "HIGH"
+    assert row["Detection Counted"] == "TRUE"
+    assert row["Support"] == "strict_nl_ok; local_sn_strong"
+    assert row["Concerns"] is None
     assert row["local_sn"] == 1
     assert row["Quality Penalty"] == 1
     assert row["Quality Flags"] == "too_broad"
@@ -251,6 +259,16 @@ def _run_output(*, with_diagnostics: bool) -> RunOutput:
         confidence="LOW",
         reason="concerns: local_sn (minor)",
         severities=((1, "local_sn"),),
+        score_breakdown=(
+            ("Base Score", "50"),
+            ("Positive Points", "40"),
+            ("Negative Points", "0"),
+            ("Raw Score", "90"),
+            ("Caps", ""),
+            ("Final Confidence", "HIGH"),
+            ("Support", "strict_nl_ok; local_sn_strong"),
+            ("Concerns", ""),
+        ),
     )
     result = ExtractionResult(
         peak_result=peak_result,
@@ -263,6 +281,7 @@ def _run_output(*, with_diagnostics: bool) -> RunOutput:
         severities=((1, "local_sn"),),
         quality_penalty=1,
         quality_flags=("too_broad",),
+        score_breakdown=peak_result.score_breakdown,
     )
     diagnostics = []
     if with_diagnostics:

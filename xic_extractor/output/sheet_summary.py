@@ -4,6 +4,7 @@ import statistics
 
 from openpyxl.utils import get_column_letter
 
+from xic_extractor.output.detection import is_accepted_row_detection
 from xic_extractor.output.review_metrics import ReviewMetrics, build_review_metrics
 from xic_extractor.output.workbook_styles import (
     _MS2_HEADER,
@@ -157,19 +158,7 @@ def _long_confidence_counts(target_rows: list[dict[str, str]]) -> dict[str, int]
 def _is_long_detected(
     row: dict[str, str], count_no_ms2_as_detected: bool = False
 ) -> bool:
-    if _safe_float(row.get("RT", "")) is None:
-        return False
-    area = _safe_float(row.get("Area", ""))
-    if area is None or area <= 0:
-        return False
-    if row.get("Confidence", "") == "VERY_LOW":
-        return False
-    nl = row.get("NL", "")
-    if nl == "NO_MS2":
-        return count_no_ms2_as_detected
-    if nl == "NL_FAIL":
-        return False
-    return nl == "" or nl == "OK" or nl.startswith("WARN_")
+    return is_accepted_row_detection(row, count_no_ms2_as_detected)
 
 
 def _long_mean_rt(rows: list[dict[str, str]]) -> str:

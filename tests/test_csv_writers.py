@@ -218,6 +218,37 @@ def test_write_diagnostics_and_score_breakdown_csv(tmp_path: Path) -> None:
     assert breakdown["Prior RT"] == "NA"
 
 
+def test_score_breakdown_csv_includes_weighted_evidence_fields(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    result = replace(
+        _result(),
+        score_breakdown=(
+            ("Base Score", "50"),
+            ("Positive Points", "40"),
+            ("Negative Points", "0"),
+            ("Raw Score", "90"),
+            ("Caps", ""),
+            ("Final Confidence", "HIGH"),
+            ("Support", "strict_nl_ok; local_sn_strong"),
+            ("Concerns", ""),
+        ),
+    )
+    file_result = FileResult(sample_name="SampleA", results={"WithNL": result})
+
+    write_score_breakdown_csv(config, [file_result])
+
+    breakdown = _read_csv(config.output_csv.with_name("xic_score_breakdown.csv"))[0]
+    assert breakdown["Base Score"] == "50"
+    assert breakdown["Positive Points"] == "40"
+    assert breakdown["Negative Points"] == "0"
+    assert breakdown["Raw Score"] == "90"
+    assert breakdown["Caps"] == ""
+    assert breakdown["Final Confidence"] == "HIGH"
+    assert breakdown["Detection Counted"] == "TRUE"
+    assert breakdown["Support"] == "strict_nl_ok; local_sn_strong"
+    assert breakdown["Concerns"] == ""
+
+
 def test_write_all_gates_score_breakdown(tmp_path: Path) -> None:
     config = _config(tmp_path)
     target = _target("WithNL")
