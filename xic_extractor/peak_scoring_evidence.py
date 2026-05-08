@@ -61,6 +61,18 @@ def apply_confidence_caps(
     return capped_confidence
 
 
+def _validate_non_negative_points(
+    signals: Sequence[EvidenceSignal],
+    evidence_kind: str,
+) -> None:
+    for signal in signals:
+        if signal.points < 0:
+            raise ValueError(
+                f"{evidence_kind} evidence points must be non-negative: "
+                f"{signal.label}={signal.points}"
+            )
+
+
 def score_evidence(
     *,
     positive: Sequence[EvidenceSignal],
@@ -68,6 +80,9 @@ def score_evidence(
     base_score: int = 50,
     caps: Sequence[ConfidenceCap] = (),
 ) -> EvidenceScore:
+    _validate_non_negative_points(positive, "positive")
+    _validate_non_negative_points(negative, "negative")
+
     positive_points = sum(signal.points for signal in positive)
     negative_points = sum(signal.points for signal in negative)
     raw_score = base_score + positive_points - negative_points

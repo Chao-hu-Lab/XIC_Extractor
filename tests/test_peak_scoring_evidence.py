@@ -1,3 +1,5 @@
+import pytest
+
 from xic_extractor.peak_scoring_evidence import (
     ConfidenceCap,
     EvidenceSignal,
@@ -55,3 +57,34 @@ def test_multiple_caps_use_strongest_cap() -> None:
             ConfidenceCap("anchor_mismatch_cap", "VERY_LOW"),
         ],
     ) == "VERY_LOW"
+
+
+def test_score_evidence_rejects_negative_evidence_points() -> None:
+    with pytest.raises(
+        ValueError,
+        match="negative evidence points must be non-negative.*nl_fail.*-45",
+    ):
+        score_evidence(
+            positive=[],
+            negative=[EvidenceSignal("nl_fail", -45)],
+        )
+
+
+def test_score_evidence_rejects_negative_support_points() -> None:
+    with pytest.raises(
+        ValueError,
+        match="positive evidence points must be non-negative.*strict_nl_ok.*-30",
+    ):
+        score_evidence(
+            positive=[EvidenceSignal("strict_nl_ok", -30)],
+            negative=[],
+        )
+
+
+def test_caps_do_not_raise_confidence() -> None:
+    assert apply_confidence_caps(
+        "LOW",
+        [
+            ConfidenceCap("some_cap", "MEDIUM"),
+        ],
+    ) == "LOW"
