@@ -1,4 +1,5 @@
 from dataclasses import dataclass, replace
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -73,6 +74,7 @@ class _FakePeak:
     selection_apex_rt: float
     selection_apex_intensity: float
     quality_flags: tuple[str, ...] = ()
+    peak: object | None = None
 
 
 def _sc(
@@ -85,9 +87,15 @@ def _sc(
     selection_quality_penalty: float | None = None,
     prefer_rt_prior_tiebreak: bool = False,
     quality_flags: tuple[str, ...] = (),
+    area: float | None = None,
 ) -> ScoredCandidate:
     return ScoredCandidate(
-        candidate=_FakePeak(apex_rt, intensity, quality_flags),
+        candidate=_FakePeak(
+            apex_rt,
+            intensity,
+            quality_flags,
+            SimpleNamespace(area=area) if area is not None else None,
+        ),
         severities=tuple(),
         confidence=confidence,
         reason="",
@@ -98,7 +106,11 @@ def _sc(
     )
 
 
-def _score_for_selector(raw_score: int) -> EvidenceScore:
+def _score_for_selector(
+    raw_score: int,
+    *,
+    support_labels: tuple[str, ...] = (),
+) -> EvidenceScore:
     confidence = (
         "HIGH"
         if raw_score >= 80
@@ -115,7 +127,7 @@ def _score_for_selector(raw_score: int) -> EvidenceScore:
         raw_score=raw_score,
         score_confidence=confidence,
         confidence=confidence,
-        support_labels=(),
+        support_labels=support_labels,
         concern_labels=(),
         cap_labels=(),
     )
@@ -801,6 +813,203 @@ def test_selector_keeps_low_scan_anchor_when_alternative_is_too_far() -> None:
             selection_rt=25.94,
         )
         is spike
+    )
+
+
+def test_selector_demotes_low_scan_near_prior_when_supported_area_is_much_larger(
+) -> None:
+    near_low_scan = _sc(
+        Confidence.HIGH,
+        25.90,
+        12_000.0,
+        None,
+        selection_quality_penalty=0.25,
+        quality_flags=("low_scan_support",),
+        area=1_000_000.0,
+    )
+    larger_supported_peak = _sc(
+        Confidence.MEDIUM,
+        27.10,
+        80_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=45_000_000.0,
+    )
+    near_low_scan = replace(
+        near_low_scan,
+        evidence_score=_score_for_selector(105),
+    )
+    larger_supported_peak = replace(
+        larger_supported_peak,
+        evidence_score=_score_for_selector(95),
+    )
+
+    assert (
+        select_candidate_with_confidence(
+            [near_low_scan, larger_supported_peak],
+            selection_rt=25.94,
+        )
+        is larger_supported_peak
+    )
+
+
+def test_selector_keeps_low_scan_prior_when_large_alternative_is_outside_rt_context(
+) -> None:
+    near_low_scan = _sc(
+        Confidence.HIGH,
+        25.90,
+        12_000.0,
+        None,
+        selection_quality_penalty=0.25,
+        quality_flags=("low_scan_support",),
+        area=1_000_000.0,
+    )
+    far_large_peak = _sc(
+        Confidence.MEDIUM,
+        29.00,
+        200_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=120_000_000.0,
+    )
+    near_low_scan = replace(
+        near_low_scan,
+        evidence_score=_score_for_selector(105),
+    )
+    far_large_peak = replace(far_large_peak, evidence_score=_score_for_selector(95))
+
+    assert (
+        select_candidate_with_confidence(
+            [near_low_scan, far_large_peak],
+            selection_rt=25.94,
+        )
+        is near_low_scan
+    )
+
+
+def test_selector_demotes_near_prior_tiny_area_when_strict_nl_alternative_dominates(
+) -> None:
+    near_tiny_peak = _sc(
+        Confidence.HIGH,
+        26.26,
+        35_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=100_000.0,
+    )
+    dominant_strict_nl_peak = _sc(
+        Confidence.MEDIUM,
+        24.18,
+        30_000_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=480_000_000.0,
+    )
+    near_tiny_peak = replace(
+        near_tiny_peak,
+        evidence_score=_score_for_selector(
+            105,
+            support_labels=("strict_nl_ok", "rt_prior_close"),
+        ),
+    )
+    dominant_strict_nl_peak = replace(
+        dominant_strict_nl_peak,
+        evidence_score=_score_for_selector(
+            85,
+            support_labels=("strict_nl_ok", "local_sn_strong"),
+        ),
+    )
+
+    assert (
+        select_candidate_with_confidence(
+            [near_tiny_peak, dominant_strict_nl_peak],
+            selection_rt=26.70,
+        )
+        is dominant_strict_nl_peak
+    )
+
+
+def test_selector_keeps_near_prior_tiny_area_when_dominant_alternative_lacks_strict_nl(
+) -> None:
+    near_tiny_peak = _sc(
+        Confidence.HIGH,
+        26.26,
+        35_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=100_000.0,
+    )
+    dominant_ms1_only_peak = _sc(
+        Confidence.MEDIUM,
+        24.18,
+        30_000_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=480_000_000.0,
+    )
+    near_tiny_peak = replace(
+        near_tiny_peak,
+        evidence_score=_score_for_selector(
+            105,
+            support_labels=("strict_nl_ok", "rt_prior_close"),
+        ),
+    )
+    dominant_ms1_only_peak = replace(
+        dominant_ms1_only_peak,
+        evidence_score=_score_for_selector(
+            85,
+            support_labels=("local_sn_strong",),
+        ),
+    )
+
+    assert (
+        select_candidate_with_confidence(
+            [near_tiny_peak, dominant_ms1_only_peak],
+            selection_rt=26.70,
+        )
+        is near_tiny_peak
+    )
+
+
+def test_selector_keeps_near_prior_tiny_area_when_dominant_alternative_is_too_far(
+) -> None:
+    near_tiny_peak = _sc(
+        Confidence.HIGH,
+        26.26,
+        35_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=100_000.0,
+    )
+    far_dominant_peak = _sc(
+        Confidence.MEDIUM,
+        23.20,
+        30_000_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=480_000_000.0,
+    )
+    near_tiny_peak = replace(
+        near_tiny_peak,
+        evidence_score=_score_for_selector(
+            105,
+            support_labels=("strict_nl_ok", "rt_prior_close"),
+        ),
+    )
+    far_dominant_peak = replace(
+        far_dominant_peak,
+        evidence_score=_score_for_selector(
+            85,
+            support_labels=("strict_nl_ok", "local_sn_strong"),
+        ),
+    )
+
+    assert (
+        select_candidate_with_confidence(
+            [near_tiny_peak, far_dominant_peak],
+            selection_rt=26.70,
+        )
+        is near_tiny_peak
     )
 
 

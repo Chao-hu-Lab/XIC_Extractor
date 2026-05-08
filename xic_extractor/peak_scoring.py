@@ -46,11 +46,16 @@ _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN = 0.05
 _SELECTION_DISTANCE_POINTS_PER_MIN = 60.0
 _SELECTION_QUALITY_POINTS_PER_UNIT = 10.0
 _SELECTION_FAR_DISTANCE_MAX_MIN = 0.75
-_LOW_SCAN_DEMOTION_SCORE_PENALTY = 40.0
+_LOW_SCAN_DEMOTION_SCORE_PENALTY = 80.0
 _LOW_SCAN_STRONGER_CANDIDATE_INTENSITY_RATIO = 2.0
+_LOW_SCAN_STRONGER_CANDIDATE_AREA_RATIO = 15.0
 _LOW_SCAN_MAX_CONFIDENCE_RANK_GAP = 1
 _LOW_SCAN_CONFIDENCE_DEMOTION = 2
 _LOW_SCAN_STRONGER_CANDIDATE_MAX_SELECTION_DISTANCE_MIN = 0.35
+_LOW_SCAN_STRONGER_CANDIDATE_EXTENDED_DISTANCE_MIN = 2.5
+_DOMINANT_STRICT_NL_AREA_RATIO = 100.0
+_DOMINANT_STRICT_NL_MAX_SELECTION_DISTANCE_MIN = 3.0
+_DOMINANT_STRICT_NL_DEMOTION_SCORE_PENALTY = 200.0
 _ADAP_EQUIVALENT_LEGACY_FLAGS = {
     "low_scan_support": "low_scan_count",
     "poor_edge_recovery": "low_top_edge_ratio",
@@ -233,10 +238,24 @@ def select_candidate_with_confidence(
         )
 
     low_scan_demotions = set()
+    dominant_area_demotions = set()
     if not strict_selection_rt:
         low_scan_demotions = _low_scan_demotion_ids(
             scored,
             selection_rt=selection_rt,
+        )
+        dominant_area_demotions = _dominant_area_demotion_ids(
+            scored,
+            selection_rt=selection_rt,
+        )
+    selection_demotion_penalties = {
+        candidate_id: _LOW_SCAN_DEMOTION_SCORE_PENALTY
+        for candidate_id in low_scan_demotions
+    }
+    for candidate_id in dominant_area_demotions:
+        selection_demotion_penalties[candidate_id] = max(
+            selection_demotion_penalties.get(candidate_id, 0.0),
+            _DOMINANT_STRICT_NL_DEMOTION_SCORE_PENALTY,
         )
 
     def key(
@@ -252,7 +271,12 @@ def select_candidate_with_confidence(
             else float("inf")
         )
         confidence_rank = _CONFIDENCE_RANK[scored_candidate.confidence]
-        if id(scored_candidate) in low_scan_demotions:
+        selection_demotion_penalty = selection_demotion_penalties.get(
+            id(scored_candidate),
+            0.0,
+        )
+        selection_demoted = selection_demotion_penalty > 0
+        if selection_demoted:
             confidence_rank += _LOW_SCAN_CONFIDENCE_DEMOTION
         selection_quality_penalty = (
             scored_candidate.selection_quality_penalty
@@ -296,13 +320,29 @@ def select_candidate_with_confidence(
             effective_score = _effective_score(
                 scored_candidate,
                 distance,
-                demoted=id(scored_candidate) in low_scan_demotions,
+                demotion_penalty=selection_demotion_penalty,
             )
-            if distance > _SELECTION_FAR_DISTANCE_MAX_MIN:
+            if distance > _SELECTION_FAR_DISTANCE_MAX_MIN and not selection_demoted:
+                if selection_demotion_penalties:
+                    return (
+                        1.0,
+                        -effective_score,
+                        distance,
+                        selection_quality_penalty,
+                        -candidate.selection_apex_intensity,
+                    )
                 return (
                     1.0,
                     distance,
                     -effective_score,
+                    selection_quality_penalty,
+                    -candidate.selection_apex_intensity,
+                )
+            if selection_demoted:
+                return (
+                    1.0,
+                    -effective_score,
+                    distance,
                     selection_quality_penalty,
                     -candidate.selection_apex_intensity,
                 )
@@ -342,6 +382,22 @@ def _low_scan_demotion_ids(
     return demotions
 
 
+def _dominant_area_demotion_ids(
+    scored: list[ScoredCandidate],
+    *,
+    selection_rt: float | None,
+) -> set[int]:
+    demotions: set[int] = set()
+    for scored_candidate in scored:
+        if _has_dominant_strict_nl_alternative(
+            scored_candidate,
+            scored,
+            selection_rt=selection_rt,
+        ):
+            demotions.add(id(scored_candidate))
+    return demotions
+
+
 def _has_much_stronger_supported_alternative(
     low_scan_candidate: ScoredCandidate,
     scored: list[ScoredCandidate],
@@ -351,7 +407,8 @@ def _has_much_stronger_supported_alternative(
     chosen_rank = _CONFIDENCE_RANK[low_scan_candidate.confidence]
     chosen_penalty = _selection_penalty_value(low_scan_candidate)
     chosen_intensity = float(low_scan_candidate.candidate.selection_apex_intensity)
-    if chosen_intensity <= 0:
+    chosen_abundance = _candidate_abundance(low_scan_candidate)
+    if chosen_intensity <= 0 and chosen_abundance <= 0:
         return False
 
     reference = selection_rt
@@ -368,13 +425,69 @@ def _has_much_stronger_supported_alternative(
             continue
         if _selection_penalty_value(candidate) > chosen_penalty:
             continue
-        if float(candidate.candidate.selection_apex_intensity) < (
+        candidate_distance = (
+            abs(candidate.candidate.selection_apex_rt - reference)
+            if reference is not None
+            else 0.0
+        )
+        close_intensity_support = (
+            reference is None
+            or candidate_distance
+            <= _LOW_SCAN_STRONGER_CANDIDATE_MAX_SELECTION_DISTANCE_MIN
+        ) and float(candidate.candidate.selection_apex_intensity) >= (
             chosen_intensity * _LOW_SCAN_STRONGER_CANDIDATE_INTENSITY_RATIO
-        ):
+        )
+        extended_area_support = (
+            reference is None
+            or candidate_distance
+            <= _LOW_SCAN_STRONGER_CANDIDATE_EXTENDED_DISTANCE_MIN
+        ) and _candidate_abundance(candidate) >= (
+            chosen_abundance * _LOW_SCAN_STRONGER_CANDIDATE_AREA_RATIO
+        )
+        if not close_intensity_support and not extended_area_support:
             continue
-        if reference is not None and abs(
-            candidate.candidate.selection_apex_rt - reference
-        ) > _LOW_SCAN_STRONGER_CANDIDATE_MAX_SELECTION_DISTANCE_MIN:
+        return True
+    return False
+
+
+def _has_dominant_strict_nl_alternative(
+    scored_candidate: ScoredCandidate,
+    scored: list[ScoredCandidate],
+    *,
+    selection_rt: float | None,
+) -> bool:
+    chosen_abundance = _candidate_abundance(scored_candidate)
+    if chosen_abundance <= 0:
+        return False
+
+    reference = selection_rt
+    if reference is None:
+        reference = scored_candidate.prior_rt
+    if reference is None:
+        return False
+
+    chosen_distance = abs(scored_candidate.candidate.selection_apex_rt - reference)
+    if chosen_distance > _SELECTION_FAR_DISTANCE_MAX_MIN:
+        return False
+
+    chosen_penalty = _selection_penalty_value(scored_candidate)
+    for candidate in scored:
+        if candidate is scored_candidate:
+            continue
+        if candidate.confidence is Confidence.VERY_LOW:
+            continue
+        if _has_candidate_flag(candidate, "low_scan_support"):
+            continue
+        if _selection_penalty_value(candidate) > chosen_penalty:
+            continue
+        candidate_distance = abs(candidate.candidate.selection_apex_rt - reference)
+        if candidate_distance > _DOMINANT_STRICT_NL_MAX_SELECTION_DISTANCE_MIN:
+            continue
+        if not _has_evidence_support(candidate, "strict_nl_ok"):
+            continue
+        if _candidate_abundance(candidate) < (
+            chosen_abundance * _DOMINANT_STRICT_NL_AREA_RATIO
+        ):
             continue
         return True
     return False
@@ -385,17 +498,49 @@ def _has_candidate_flag(scored_candidate: ScoredCandidate, flag: str) -> bool:
     return flag in {str(candidate_flag) for candidate_flag in flags}
 
 
+def _has_evidence_support(scored_candidate: ScoredCandidate, label: str) -> bool:
+    evidence_score = scored_candidate.evidence_score
+    if evidence_score is None:
+        return False
+    return label in {
+        str(support_label) for support_label in evidence_score.support_labels
+    }
+
+
 def _selection_penalty_value(scored_candidate: ScoredCandidate) -> float:
     if scored_candidate.selection_quality_penalty is not None:
         return scored_candidate.selection_quality_penalty
     return float(scored_candidate.quality_penalty)
 
 
+def _candidate_abundance(scored_candidate: ScoredCandidate) -> float:
+    peak = getattr(scored_candidate.candidate, "peak", None)
+    area = getattr(peak, "area", None)
+    area_value = 0.0
+    if area is not None:
+        try:
+            area_value = float(area)
+        except (TypeError, ValueError):
+            area_value = 0.0
+    else:
+        area_value = 0.0
+    if _is_finite(area_value) and area_value > 0:
+        return area_value
+
+    try:
+        intensity_value = float(scored_candidate.candidate.selection_apex_intensity)
+    except (TypeError, ValueError):
+        return 0.0
+    if _is_finite(intensity_value) and intensity_value > 0:
+        return intensity_value
+    return 0.0
+
+
 def _effective_score(
     scored_candidate: ScoredCandidate,
     distance: float,
     *,
-    demoted: bool = False,
+    demotion_penalty: float = 0.0,
 ) -> float:
     raw_score = (
         float(scored_candidate.evidence_score.raw_score)
@@ -407,7 +552,7 @@ def _effective_score(
         raw_score
         - (distance * _SELECTION_DISTANCE_POINTS_PER_MIN)
         - (selection_quality_penalty * _SELECTION_QUALITY_POINTS_PER_UNIT)
-        - (_LOW_SCAN_DEMOTION_SCORE_PENALTY if demoted else 0.0)
+        - demotion_penalty
     )
 
 
