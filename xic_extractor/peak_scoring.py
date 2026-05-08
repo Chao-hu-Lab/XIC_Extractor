@@ -39,6 +39,8 @@ _ADAP_LIKE_SELECTION_MAX = 0.5
 _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN = 0.05
 _LOW_SCAN_STRONGER_CANDIDATE_INTENSITY_RATIO = 2.0
 _LOW_SCAN_MAX_CONFIDENCE_RANK_GAP = 1
+_LOW_SCAN_CONFIDENCE_DEMOTION = 2
+_LOW_SCAN_STRONGER_CANDIDATE_MAX_SELECTION_DISTANCE_MIN = 0.35
 _ADAP_EQUIVALENT_LEGACY_FLAGS = {
     "low_scan_support": "low_scan_count",
     "poor_edge_recovery": "low_top_edge_ratio",
@@ -136,6 +138,13 @@ def select_candidate_with_confidence(
             "select_candidate_with_confidence requires at least one candidate"
         )
 
+    low_scan_demotions = set()
+    if not strict_selection_rt:
+        low_scan_demotions = _low_scan_demotion_ids(
+            scored,
+            selection_rt=selection_rt,
+        )
+
     def key(
         scored_candidate: ScoredCandidate,
     ) -> tuple[float, float, float, float, float]:
@@ -149,6 +158,8 @@ def select_candidate_with_confidence(
             else float("inf")
         )
         confidence_rank = _CONFIDENCE_RANK[scored_candidate.confidence]
+        if id(scored_candidate) in low_scan_demotions:
+            confidence_rank += _LOW_SCAN_CONFIDENCE_DEMOTION
         selection_quality_penalty = (
             scored_candidate.selection_quality_penalty
             if scored_candidate.selection_quality_penalty is not None
@@ -194,47 +205,63 @@ def select_candidate_with_confidence(
             -candidate.selection_apex_intensity,
         )
 
-    chosen = min(scored, key=key)
-    if strict_selection_rt and selection_rt is not None:
-        return chosen
-    return _prefer_stronger_candidate_over_low_scan_spike(chosen, scored)
+    return min(scored, key=key)
 
 
-def _prefer_stronger_candidate_over_low_scan_spike(
-    chosen: ScoredCandidate,
+def _low_scan_demotion_ids(
     scored: list[ScoredCandidate],
-) -> ScoredCandidate:
-    if not _has_candidate_flag(chosen, "low_scan_support"):
-        return chosen
+    *,
+    selection_rt: float | None,
+) -> set[int]:
+    demotions: set[int] = set()
+    for scored_candidate in scored:
+        if not _has_candidate_flag(scored_candidate, "low_scan_support"):
+            continue
+        if _has_much_stronger_supported_alternative(
+            scored_candidate,
+            scored,
+            selection_rt=selection_rt,
+        ):
+            demotions.add(id(scored_candidate))
+    return demotions
 
-    chosen_rank = _CONFIDENCE_RANK[chosen.confidence]
-    chosen_penalty = _selection_penalty_value(chosen)
-    chosen_intensity = float(chosen.candidate.selection_apex_intensity)
+
+def _has_much_stronger_supported_alternative(
+    low_scan_candidate: ScoredCandidate,
+    scored: list[ScoredCandidate],
+    *,
+    selection_rt: float | None,
+) -> bool:
+    chosen_rank = _CONFIDENCE_RANK[low_scan_candidate.confidence]
+    chosen_penalty = _selection_penalty_value(low_scan_candidate)
+    chosen_intensity = float(low_scan_candidate.candidate.selection_apex_intensity)
     if chosen_intensity <= 0:
-        return chosen
+        return False
 
-    alternatives = [
-        candidate
-        for candidate in scored
-        if candidate is not chosen
-        and not _has_candidate_flag(candidate, "low_scan_support")
-        and _CONFIDENCE_RANK[candidate.confidence]
-        <= chosen_rank + _LOW_SCAN_MAX_CONFIDENCE_RANK_GAP
-        and _selection_penalty_value(candidate) <= chosen_penalty
-        and float(candidate.candidate.selection_apex_intensity)
-        >= chosen_intensity * _LOW_SCAN_STRONGER_CANDIDATE_INTENSITY_RATIO
-    ]
-    if not alternatives:
-        return chosen
-
-    return min(
-        alternatives,
-        key=lambda candidate: (
-            _CONFIDENCE_RANK[candidate.confidence],
-            _selection_penalty_value(candidate),
-            -float(candidate.candidate.selection_apex_intensity),
-        ),
-    )
+    reference = selection_rt
+    if reference is None:
+        reference = low_scan_candidate.prior_rt
+    for candidate in scored:
+        if candidate is low_scan_candidate:
+            continue
+        if _has_candidate_flag(candidate, "low_scan_support"):
+            continue
+        if _CONFIDENCE_RANK[candidate.confidence] > (
+            chosen_rank + _LOW_SCAN_MAX_CONFIDENCE_RANK_GAP
+        ):
+            continue
+        if _selection_penalty_value(candidate) > chosen_penalty:
+            continue
+        if float(candidate.candidate.selection_apex_intensity) < (
+            chosen_intensity * _LOW_SCAN_STRONGER_CANDIDATE_INTENSITY_RATIO
+        ):
+            continue
+        if reference is not None and abs(
+            candidate.candidate.selection_apex_rt - reference
+        ) > _LOW_SCAN_STRONGER_CANDIDATE_MAX_SELECTION_DISTANCE_MIN:
+            continue
+        return True
+    return False
 
 
 def _has_candidate_flag(scored_candidate: ScoredCandidate, flag: str) -> bool:
@@ -276,6 +303,7 @@ def score_candidate(
         rt_centrality_severity(candidate.selection_apex_rt, ctx.rt_min, ctx.rt_max),
         noise_shape_severity(ctx.intensity_array),
         peak_width_severity(ctx.fwhm_ratio),
+        *trace_quality_severities(candidate),
     ]
     total = sum(severity for severity, _ in severities) + quality_penalty
     confidence = confidence_from_total(total)
@@ -301,23 +329,21 @@ def candidate_quality_penalty(candidate: Any) -> tuple[int, list[str]]:
     flags = tuple(dict.fromkeys(str(flag) for flag in raw_flags))
     if not flags:
         return 0, []
-    adap_labels = [
-        _ADAP_LIKE_FLAG_LABELS[flag]
-        for flag in flags
-        if flag in _ADAP_LIKE_FLAG_LABELS
-    ]
     notes: list[str] = []
-    if adap_labels:
-        notes.append(
-            "concerns: "
-            + "; ".join(f"{label} (minor)" for label in adap_labels)
-        )
 
     legacy_flags = list(hard_quality_flags(flags))
     penalty = min(2, len(legacy_flags))
     if legacy_flags:
         notes.append(f"weak candidate: {', '.join(legacy_flags)}")
     return penalty, notes
+
+
+def trace_quality_severities(candidate: Any) -> tuple[tuple[int, str], ...]:
+    flags = {str(flag) for flag in getattr(candidate, "quality_flags", ())}
+    return tuple(
+        (1 if flag in flags else 0, label)
+        for flag, label in _ADAP_LIKE_FLAG_LABELS.items()
+    )
 
 
 def candidate_selection_quality_penalty(candidate: Any) -> float:

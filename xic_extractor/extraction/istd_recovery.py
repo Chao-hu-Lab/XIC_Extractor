@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
+
+import numpy as np
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.rt_windows import (
+    RecoveredPeak,
     recover_istd_peak_with_wider_anchor_window,
 )
 from xic_extractor.extraction.scoring_factory import selected_candidate
@@ -16,6 +20,12 @@ from xic_extractor.peak_scoring import (
 from xic_extractor.signal_processing import PeakCandidate, PeakDetectionResult
 
 _ISTD_WIDER_RECOVERY_MIN_INTENSITY_RATIO = 2.0
+
+
+@dataclass(frozen=True)
+class IstdAnchorRecoveryDecision:
+    peak_result: PeakDetectionResult
+    intensity: np.ndarray | None = None
 
 
 def recover_istd_anchor_peak_if_needed(
@@ -36,9 +46,9 @@ def recover_istd_anchor_peak_if_needed(
     istd_rt_in_this_sample: float | None,
     paired_istd_fwhm: float | None,
     peak_finder: Callable[..., PeakDetectionResult],
-) -> PeakDetectionResult:
+) -> IstdAnchorRecoveryDecision:
     if not target.is_istd or not anchor_used or anchor_rt is None:
-        return peak_result
+        return IstdAnchorRecoveryDecision(peak_result)
 
     if peak_result.status == "PEAK_NOT_FOUND" and peak_result.peak is None:
         recovered = _recover(
@@ -55,10 +65,15 @@ def recover_istd_anchor_peak_if_needed(
             paired_istd_fwhm=paired_istd_fwhm,
             peak_finder=peak_finder,
         )
-        return recovered or peak_result
+        if recovered is None:
+            return IstdAnchorRecoveryDecision(peak_result)
+        return IstdAnchorRecoveryDecision(
+            recovered.peak_result,
+            intensity=recovered.intensity,
+        )
 
     if not _should_try_wider_istd_anchor_recovery(peak_result):
-        return peak_result
+        return IstdAnchorRecoveryDecision(peak_result)
     recovered = _recover(
         raw=raw,
         config=config,
@@ -74,10 +89,13 @@ def recover_istd_anchor_peak_if_needed(
         peak_finder=peak_finder,
     )
     if recovered is not None and _should_use_wider_istd_recovery(
-        peak_result, recovered
+        peak_result, recovered.peak_result
     ):
-        return recovered
-    return peak_result
+        return IstdAnchorRecoveryDecision(
+            recovered.peak_result,
+            intensity=recovered.intensity,
+        )
+    return IstdAnchorRecoveryDecision(peak_result)
 
 
 def _recover(
@@ -96,7 +114,7 @@ def _recover(
     istd_rt_in_this_sample: float | None,
     paired_istd_fwhm: float | None,
     peak_finder: Callable[..., PeakDetectionResult],
-) -> PeakDetectionResult | None:
+) -> RecoveredPeak | None:
     return recover_istd_peak_with_wider_anchor_window(
         raw,
         config,

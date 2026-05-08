@@ -279,7 +279,7 @@ def test_recovery_path_preserves_scoring_metadata() -> None:
     assert result.peak.rt == pytest.approx(9.03, abs=0.02)
     assert result.confidence is not None
     assert result.reason is not None
-    assert len(result.severities) == 7
+    assert len(result.severities) == 10
 
 
 def test_scored_selection_honors_valid_preferred_rt_anchor() -> None:

@@ -249,7 +249,7 @@ def extract_one_target(
             preferred_rt=anchor_rt,
             strict_preferred_rt=strict_preferred_rt,
         )
-    peak_result = recover_istd_anchor_peak_if_needed(
+    recovery_decision = recover_istd_anchor_peak_if_needed(
         peak_result,
         raw=raw,
         config=config,
@@ -265,6 +265,7 @@ def extract_one_target(
         paired_istd_fwhm=paired_istd_fwhm,
         peak_finder=extractor.find_peak_and_area,
     )
+    peak_result = recovery_decision.peak_result
     paired_rejection = paired_anchor_mismatch_diagnostic(
         sample_name,
         target,
@@ -278,7 +279,10 @@ def extract_one_target(
             peak_result,
             paired_rejection.reason,
         )
-    shape_metrics = selected_shape_metrics(intensity, peak_result)
+    shape_intensity = recovery_decision.intensity
+    if shape_intensity is None:
+        shape_intensity = intensity
+    shape_metrics = selected_shape_metrics(shape_intensity, peak_result)
     candidate = selected_candidate(peak_result)
     candidate_ms2_evidence = (
         candidate_ms2_cache.get(candidate) if candidate is not None else None
