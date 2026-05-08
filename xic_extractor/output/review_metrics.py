@@ -150,12 +150,17 @@ def _is_detected(
 ) -> bool:
     if _safe_float(row.get("RT", "")) is None:
         return False
-    if _safe_float(row.get("Area", "")) is None:
+    area = _safe_float(row.get("Area", ""))
+    if area is None or area <= 0:
+        return False
+    if row.get("Confidence", "") == "VERY_LOW":
         return False
     nl = row.get("NL", "")
     if nl == "NO_MS2":
         return count_no_ms2_as_detected
-    return True
+    if nl == "NL_FAIL":
+        return False
+    return nl == "" or nl == "OK" or nl.startswith("WARN_")
 
 
 def _has_ms2_nl_flag(row: dict[str, str]) -> bool:

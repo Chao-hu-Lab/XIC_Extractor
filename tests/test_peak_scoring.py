@@ -70,6 +70,7 @@ def test_reason_appends_istd_note() -> None:
 class _FakePeak:
     selection_apex_rt: float
     selection_apex_intensity: float
+    quality_flags: tuple[str, ...] = ()
 
 
 def _sc(
@@ -81,9 +82,10 @@ def _sc(
     quality_penalty: int = 0,
     selection_quality_penalty: float | None = None,
     prefer_rt_prior_tiebreak: bool = False,
+    quality_flags: tuple[str, ...] = (),
 ) -> ScoredCandidate:
     return ScoredCandidate(
-        candidate=_FakePeak(apex_rt, intensity),
+        candidate=_FakePeak(apex_rt, intensity, quality_flags),
         severities=tuple(),
         confidence=confidence,
         reason="",
@@ -175,7 +177,7 @@ def _make_flagged_candidate(
     )
 
 
-def test_score_candidate_returns_seven_severities() -> None:
+def test_score_candidate_returns_base_and_trace_quality_severities() -> None:
     cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
     x = np.linspace(9, 11, 201)
     y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
@@ -195,7 +197,7 @@ def test_score_candidate_returns_seven_severities() -> None:
         prefer_rt_prior_tiebreak=True,
     )
     scored = score_candidate(cand, ctx, prior_rt=10.0)
-    assert len(scored.severities) == 7
+    assert len(scored.severities) == 10
     assert scored.confidence == Confidence.HIGH
     assert scored.reason == "all checks passed"
 
@@ -229,7 +231,7 @@ def test_score_candidate_penalizes_flagged_candidate_quality() -> None:
     assert scored.confidence == Confidence.MEDIUM
     assert "weak candidate" in scored.reason
     assert "too_broad" in scored.reason
-    assert len(scored.severities) == 7
+    assert len(scored.severities) == 10
 
 
 def test_score_candidate_formats_adap_like_quality_flags_as_minor_concerns() -> None:
@@ -258,9 +260,11 @@ def test_score_candidate_formats_adap_like_quality_flags_as_minor_concerns() -> 
 
     scored = score_candidate(cand, ctx, prior_rt=10.0)
 
-    assert scored.confidence == Confidence.HIGH
+    assert scored.confidence == Confidence.MEDIUM
     assert scored.quality_penalty == 0
     assert scored.selection_quality_penalty == 0.5
+    assert (1, "low trace continuity") in scored.severities
+    assert (1, "poor edge recovery") in scored.severities
     assert scored.reason == (
         "concerns: low trace continuity (minor); poor edge recovery (minor)"
     )
@@ -298,9 +302,11 @@ def test_score_candidate_does_not_double_penalize_adap_equivalent_legacy_flags(
 
     scored = score_candidate(cand, ctx, prior_rt=10.0)
 
-    assert scored.confidence == Confidence.HIGH
+    assert scored.confidence == Confidence.MEDIUM
     assert scored.quality_penalty == 0
     assert scored.selection_quality_penalty == 0.5
+    assert (1, "low scan support") in scored.severities
+    assert (1, "poor edge recovery") in scored.severities
     assert "weak candidate" not in scored.reason
     assert scored.reason == (
         "concerns: low scan support (minor); poor edge recovery (minor)"
@@ -354,6 +360,59 @@ def test_selector_tiebreak_prefers_lower_quality_penalty() -> None:
     weak = _sc(Confidence.LOW, 10.10, 1000.0, 10.0, quality_penalty=1)
 
     assert select_candidate_with_confidence([clean, weak]) is clean
+
+
+def test_selector_low_scan_anchor_spike_yields_to_much_stronger_candidate() -> None:
+    spike = _sc(
+        Confidence.MEDIUM,
+        25.90,
+        10_000.0,
+        None,
+        selection_quality_penalty=0.25,
+        quality_flags=("low_scan_support",),
+    )
+    supported_peak = _sc(
+        Confidence.LOW,
+        26.15,
+        31_000.0,
+        None,
+        selection_quality_penalty=0.25,
+        quality_flags=("low_trace_continuity",),
+    )
+
+    assert (
+        select_candidate_with_confidence(
+            [spike, supported_peak],
+            selection_rt=25.94,
+        )
+        is supported_peak
+    )
+
+
+def test_selector_keeps_low_scan_anchor_when_alternative_is_too_far() -> None:
+    spike = _sc(
+        Confidence.MEDIUM,
+        25.90,
+        10_000.0,
+        None,
+        selection_quality_penalty=0.25,
+        quality_flags=("low_scan_support",),
+    )
+    far_peak = _sc(
+        Confidence.LOW,
+        27.00,
+        100_000.0,
+        None,
+        selection_quality_penalty=0.25,
+    )
+
+    assert (
+        select_candidate_with_confidence(
+            [spike, far_peak],
+            selection_rt=25.94,
+        )
+        is spike
+    )
 
 
 def test_selector_with_paired_prior_evidence_prefers_prior_distance_before_quality(

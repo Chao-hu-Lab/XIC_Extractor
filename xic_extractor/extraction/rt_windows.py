@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
+
+import numpy as np
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
@@ -10,6 +13,12 @@ from xic_extractor.signal_processing import (
     PeakDetectionResult,
     find_peak_and_area,
 )
+
+
+@dataclass(frozen=True)
+class RecoveredPeak:
+    peak_result: PeakDetectionResult
+    intensity: np.ndarray
 
 
 def get_rt_window(
@@ -85,7 +94,7 @@ def recover_istd_peak_with_wider_anchor_window(
     istd_rt_in_this_sample: float | None,
     paired_istd_fwhm: float | None,
     peak_finder: Callable[..., PeakDetectionResult] = find_peak_and_area,
-) -> PeakDetectionResult | None:
+) -> RecoveredPeak | None:
     wider_half_window = max(
         config.nl_fallback_half_window_min,
         config.nl_rt_anchor_half_window_min,
@@ -128,4 +137,4 @@ def recover_istd_peak_with_wider_anchor_window(
         )
     if peak_result.peak is None:
         return None
-    return peak_result
+    return RecoveredPeak(peak_result=peak_result, intensity=intensity)

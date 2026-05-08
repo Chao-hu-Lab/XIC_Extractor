@@ -270,6 +270,24 @@ def test_zero_signal_returns_no_signal() -> None:
     assert result.max_smoothed == pytest.approx(0.0)
 
 
+def test_local_minimum_rejects_zero_duration_candidate() -> None:
+    rt = np.array([8.0, 8.1, 8.2], dtype=float)
+    intensity = np.array([0.0, 1000.0, 0.0], dtype=float)
+
+    result = find_peak_and_area(
+        rt,
+        intensity,
+        _config(
+            resolver_mode="local_minimum",
+            resolver_min_scans=1,
+            resolver_peak_duration_min=0.0,
+        ),
+    )
+
+    assert result.status == "PEAK_NOT_FOUND"
+    assert result.peak is None
+
+
 def test_empty_signal_returns_no_signal() -> None:
     result = find_peak_and_area(np.array([]), np.array([]), _config())
 

@@ -21,7 +21,11 @@ def local_minimum_region_quality(
     config: ExtractionConfig,
 ) -> LocalMinimumRegionQuality | None:
     scan_count = right - left
+    if scan_count < 2:
+        return None
     duration = float(rt_values[right - 1] - rt_values[left])
+    if duration <= 0:
+        return None
 
     apex_idx = raw_apex_index(intensity_values, left, right)
     apex_intensity = float(intensity_values[apex_idx])

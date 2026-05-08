@@ -159,7 +159,10 @@ def _is_long_detected(
 ) -> bool:
     if _safe_float(row.get("RT", "")) is None:
         return False
-    if _safe_float(row.get("Area", "")) is None:
+    area = _safe_float(row.get("Area", ""))
+    if area is None or area <= 0:
+        return False
+    if row.get("Confidence", "") == "VERY_LOW":
         return False
     nl = row.get("NL", "")
     if nl == "NO_MS2":

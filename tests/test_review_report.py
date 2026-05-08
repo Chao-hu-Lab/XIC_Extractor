@@ -206,7 +206,7 @@ def test_review_report_contains_visual_detection_and_flag_charts(
     assert 'class="bar-fill detection"' in html
     assert 'class="bar-fill flagged"' in html
     assert "A</td><td>50%</td>" in html
-    assert "B</td><td>50%</td>" not in html
+    assert "B</td><td>50%</td>" in html
 
 
 def test_review_report_draws_istd_rt_injection_trend(tmp_path: Path) -> None:
@@ -810,7 +810,7 @@ def test_review_report_uses_at_a_glance_focus_and_compact_heatmap(
             "Target": "B",
             "RT": "2",
             "Area": "1",
-            "NL": "NL_FAIL",
+            "NL": "OK",
             "Confidence": "LOW",
             "Role": "Analyte",
         },
@@ -849,10 +849,10 @@ def test_review_report_uses_at_a_glance_focus_and_compact_heatmap(
             "Sample": "S1",
             "Target": "B",
             "Status": "Review",
-            "Why": "NL",
+            "Why": "Low confidence",
             "Action": "Open workbook",
             "Issue Count": "1",
-            "Evidence": "NL fail",
+            "Evidence": "LOW",
         },
     ]
 
