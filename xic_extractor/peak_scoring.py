@@ -10,6 +10,12 @@ from typing import Any
 import numpy as np
 
 from xic_extractor.baseline import asls_baseline
+from xic_extractor.peak_scoring_evidence import (
+    ConfidenceCap,
+    EvidenceScore,
+    EvidenceSignal,
+    score_evidence,
+)
 
 _LABEL_SYMMETRY = "symmetry"
 _LABEL_LOCAL_SN = "local_sn"
@@ -64,6 +70,7 @@ class ScoredCandidate:
     quality_penalty: int = 0
     selection_quality_penalty: float | None = None
     prefer_rt_prior_tiebreak: bool = False
+    evidence_score: EvidenceScore | None = None
 
 
 @dataclass(frozen=True)
@@ -101,6 +108,10 @@ def confidence_from_total(total_severity: int) -> Confidence:
     if total_severity <= 4:
         return Confidence.LOW
     return Confidence.VERY_LOW
+
+
+def _confidence_from_value(value: str) -> Confidence:
+    return Confidence(value)
 
 
 def build_reason(
@@ -275,6 +286,97 @@ def _selection_penalty_value(scored_candidate: ScoredCandidate) -> float:
     return float(scored_candidate.quality_penalty)
 
 
+def _evidence_from_context(
+    candidate: Any,
+    ctx: ScoringContext,
+    severities: list[tuple[int, str]],
+    quality_penalty: int,
+) -> tuple[list[EvidenceSignal], list[EvidenceSignal], list[ConfidenceCap]]:
+    positive: list[EvidenceSignal] = []
+    negative: list[EvidenceSignal] = []
+    caps: list[ConfidenceCap] = []
+
+    if ctx.ms2_present and ctx.nl_match:
+        positive.append(EvidenceSignal("strict_nl_ok", 30))
+    elif ctx.ms2_present and not ctx.nl_match:
+        negative.append(EvidenceSignal("nl_fail", 45))
+        caps.append(ConfidenceCap("nl_fail_cap", "VERY_LOW"))
+    else:
+        negative.append(EvidenceSignal("no_ms2", 25))
+        caps.append(ConfidenceCap("no_ms2_cap", "LOW"))
+
+    severity_by_label = {label: severity for severity, label in severities}
+    if ctx.rt_prior is not None:
+        rt_severity = severity_by_label[_LABEL_RT_PRIOR]
+        if rt_severity == 0:
+            positive.append(EvidenceSignal("rt_prior_close", 15))
+        elif rt_severity == 1:
+            negative.append(EvidenceSignal("rt_prior_borderline", 15))
+        else:
+            negative.append(EvidenceSignal("rt_prior_far", 35))
+
+    local_sn = severity_by_label[_LABEL_LOCAL_SN]
+    if local_sn == 0:
+        positive.append(EvidenceSignal("local_sn_strong", 10))
+    elif local_sn == 1:
+        negative.append(EvidenceSignal("local_sn_borderline", 10))
+    else:
+        negative.append(EvidenceSignal("local_sn_poor", 25))
+
+    shape = max(
+        severity_by_label[_LABEL_SYMMETRY],
+        severity_by_label[_LABEL_PEAK_WIDTH],
+    )
+    if shape == 0:
+        positive.append(EvidenceSignal("shape_clean", 10))
+    elif shape == 1:
+        negative.append(EvidenceSignal("shape_borderline", 10))
+    else:
+        negative.append(EvidenceSignal("shape_poor", 20))
+
+    flags = {str(flag) for flag in getattr(candidate, "quality_flags", ())}
+    if not flags.intersection(_ADAP_LIKE_FLAG_LABELS):
+        positive.append(EvidenceSignal("trace_clean", 10))
+
+    trace_evidence = {
+        "low scan support": ("low_scan_support", 15),
+        "low trace continuity": ("low_trace_continuity", 10),
+        "poor edge recovery": ("poor_edge_recovery", 10),
+    }
+    trace_quality_flagged = False
+    for severity, label in severities:
+        if severity == 0 or label not in trace_evidence:
+            continue
+        evidence_label, points = trace_evidence[label]
+        negative.append(EvidenceSignal(evidence_label, points))
+        trace_quality_flagged = True
+    if trace_quality_flagged:
+        caps.append(ConfidenceCap("trace_quality_cap", "MEDIUM"))
+
+    if quality_penalty > 0:
+        negative.append(EvidenceSignal("hard_quality_flag", 25 * quality_penalty))
+        caps.append(ConfidenceCap("hard_quality_flag_cap", "MEDIUM"))
+
+    return positive, negative, caps
+
+
+def score_breakdown_fields(
+    evidence_score: EvidenceScore | None,
+) -> tuple[tuple[str, str], ...]:
+    if evidence_score is None:
+        return ()
+    return (
+        ("Final Confidence", evidence_score.confidence),
+        ("Caps", "; ".join(evidence_score.cap_labels)),
+        ("Raw Score", str(evidence_score.raw_score)),
+        ("Support", "; ".join(evidence_score.support_labels)),
+        ("Concerns", "; ".join(evidence_score.concern_labels)),
+        ("Base Score", str(evidence_score.base_score)),
+        ("Positive Points", str(evidence_score.positive_points)),
+        ("Negative Points", str(evidence_score.negative_points)),
+    )
+
+
 def score_candidate(
     candidate: Any,
     ctx: ScoringContext,
@@ -305,8 +407,14 @@ def score_candidate(
         peak_width_severity(ctx.fwhm_ratio),
         *trace_quality_severities(candidate),
     ]
-    total = sum(severity for severity, _ in severities) + quality_penalty
-    confidence = confidence_from_total(total)
+    positive, negative, caps = _evidence_from_context(
+        candidate,
+        ctx,
+        severities,
+        quality_penalty,
+    )
+    evidence_score = score_evidence(positive=positive, negative=negative, caps=caps)
+    confidence = _confidence_from_value(evidence_score.confidence)
     reason = build_reason(
         severities,
         istd_confidence_note,
@@ -321,6 +429,7 @@ def score_candidate(
         quality_penalty=quality_penalty,
         selection_quality_penalty=selection_quality_penalty,
         prefer_rt_prior_tiebreak=ctx.prefer_rt_prior_tiebreak,
+        evidence_score=evidence_score,
     )
 
 

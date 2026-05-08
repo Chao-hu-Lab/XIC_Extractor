@@ -22,6 +22,7 @@ from xic_extractor.peak_detection.selection import (
 from xic_extractor.peak_scoring import (
     ScoringContext,
     score_candidate,
+    score_breakdown_fields,
     select_candidate_with_confidence,
 )
 
@@ -40,6 +41,7 @@ def find_peak_and_area(
     chosen_confidence: str | None = None
     chosen_reason: str | None = None
     chosen_severities: tuple[tuple[int, str], ...] = ()
+    chosen_score_breakdown: tuple[tuple[str, str], ...] = ()
     if candidates_result.status == "OK":
         preliminary_candidate = select_candidate(
             candidates_result.candidates,
@@ -86,6 +88,7 @@ def find_peak_and_area(
             chosen_confidence = chosen.confidence.value
             chosen_reason = chosen.reason
             chosen_severities = chosen.severities
+            chosen_score_breakdown = score_breakdown_fields(chosen.evidence_score)
         else:
             if recovery_candidate is not None and recovery_result is not None:
                 return _detection_success(
@@ -103,6 +106,7 @@ def find_peak_and_area(
             confidence=chosen_confidence,
             reason=chosen_reason,
             severities=chosen_severities,
+            score_breakdown=chosen_score_breakdown,
         )
 
     recovery_candidate, recovery_result = preferred_rt_recovery(
@@ -127,6 +131,7 @@ def find_peak_and_area(
                 confidence=scored_recovery.confidence.value,
                 reason=scored_recovery.reason,
                 severities=scored_recovery.severities,
+                score_breakdown=score_breakdown_fields(scored_recovery.evidence_score),
             )
         return _detection_success(recovery_result, recovery_candidate)
     return _detection_failure(candidates_result)
@@ -171,6 +176,7 @@ def _detection_success(
     confidence: str | None = None,
     reason: str | None = None,
     severities: tuple[tuple[int, str], ...] = (),
+    score_breakdown: tuple[tuple[str, str], ...] = (),
 ) -> PeakDetectionResult:
     return PeakDetectionResult(
         status="OK",
@@ -182,6 +188,7 @@ def _detection_success(
         confidence=confidence,
         reason=reason,
         severities=severities,
+        score_breakdown=score_breakdown,
     )
 
 

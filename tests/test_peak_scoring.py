@@ -202,6 +202,60 @@ def test_score_candidate_returns_base_and_trace_quality_severities() -> None:
     assert scored.reason == "all checks passed"
 
 
+def test_score_candidate_records_positive_and_negative_evidence() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.HIGH
+    assert scored.evidence_score.raw_score >= 80
+    assert "strict_nl_ok" in scored.evidence_score.support_labels
+    assert "rt_prior_close" in scored.evidence_score.support_labels
+    assert scored.evidence_score.concern_labels == ()
+
+
+def test_score_candidate_nl_fail_caps_confidence_to_very_low() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=False,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.VERY_LOW
+    assert "nl_fail" in scored.evidence_score.concern_labels
+    assert "nl_fail_cap" in scored.evidence_score.cap_labels
+
+
 def test_score_candidate_penalizes_flagged_candidate_quality() -> None:
     cand = _make_flagged_candidate(
         apex_rt=10.0,

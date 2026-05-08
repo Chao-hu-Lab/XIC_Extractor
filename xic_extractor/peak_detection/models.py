@@ -70,3 +70,4 @@ class PeakDetectionResult:
     confidence: str | None = None
     reason: str | None = None
     severities: tuple[tuple[int, str], ...] = ()
+    score_breakdown: tuple[tuple[str, str], ...] = ()
