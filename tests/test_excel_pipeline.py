@@ -137,6 +137,63 @@ def test_write_excel_from_run_output_adds_score_breakdown_when_enabled(
     assert row["Prior RT"] is None
 
 
+def test_write_excel_score_breakdown_keeps_schema_with_ms2_trace_labels(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.output.excel_pipeline import write_excel_from_run_output
+
+    config = _config(tmp_path, emit_score_breakdown=True)
+    output = _run_output(with_diagnostics=False)
+    result = output.file_results[0].results["WithNL"]
+    score_breakdown = (
+        ("Base Score", "50"),
+        ("Positive Points", "50"),
+        ("Negative Points", "8"),
+        ("Raw Score", "92"),
+        ("Caps", ""),
+        ("Final Confidence", "HIGH"),
+        ("Support", "strict_nl_ok; ms2_trace_strong; local_sn_strong"),
+        ("Concerns", "ms2_trace_weak"),
+    )
+    peak_result = replace(result.peak_result, score_breakdown=score_breakdown)
+    result = replace(
+        result,
+        peak_result=peak_result,
+        score_breakdown=score_breakdown,
+    )
+    file_result = replace(
+        output.file_results[0],
+        results={"WithNL": result},
+    )
+    output = replace(output, file_results=[file_result])
+    output_path = tmp_path / "output" / "xic_results.xlsx"
+
+    write_excel_from_run_output(
+        config,
+        [_target("WithNL")],
+        output,
+        output_path=output_path,
+    )
+
+    wb = load_workbook(output_path)
+    assert wb.sheetnames == [
+        "Overview",
+        "Review Queue",
+        "XIC Results",
+        "Summary",
+        "Targets",
+        "Diagnostics",
+        "Run Metadata",
+        "Score Breakdown",
+    ]
+    ws = wb["Score Breakdown"]
+    headers = [cell.value for cell in next(ws.iter_rows(max_row=1))]
+    values = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))
+    row = dict(zip(headers, values, strict=False))
+    assert row["Support"] == "strict_nl_ok; ms2_trace_strong; local_sn_strong"
+    assert row["Concerns"] == "ms2_trace_weak"
+
+
 def test_write_excel_from_run_output_emits_review_report_when_enabled(
     tmp_path: Path,
 ) -> None:

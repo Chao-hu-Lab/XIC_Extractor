@@ -3,6 +3,7 @@ import pytest
 
 from xic_extractor.peak_scoring import (
     Confidence,
+    ScoredCandidate,
     ScoringContext,
     build_evidence_reason,
     build_reason,
@@ -14,9 +15,14 @@ from xic_extractor.peak_scoring import (
     rt_centrality_severity,
     rt_prior_severity,
     score_candidate,
+    select_candidate_with_confidence,
     symmetry_severity,
 )
-from xic_extractor.peak_scoring_evidence import EvidenceScore
+from xic_extractor.peak_scoring_evidence import (
+    EvidenceScore,
+    EvidenceSignal,
+    score_evidence,
+)
 from xic_extractor.signal_processing import PeakCandidate, PeakResult
 
 
@@ -184,6 +190,156 @@ def test_score_candidate_records_paired_istd_alignment_support() -> None:
 
     assert "paired_istd_aligned" in scored.evidence_score.support_labels
     assert "paired ISTD aligned" in scored.reason
+
+
+def test_score_candidate_records_strong_ms2_trace_support() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        ms2_trace_strength="strong",
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert "ms2_trace_strong" in scored.evidence_score.support_labels
+    assert scored.evidence_score.positive_points >= 10
+    assert "MS2 trace strong" in scored.reason
+
+
+def test_score_candidate_records_moderate_ms2_trace_support() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        ms2_trace_strength="moderate",
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert "ms2_trace_moderate" in scored.evidence_score.support_labels
+    assert "MS2 trace moderate" in scored.reason
+
+
+def test_weak_ms2_trace_concern_keeps_strict_nl_support() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        ms2_trace_strength="weak",
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert "strict_nl_ok" in scored.evidence_score.support_labels
+    assert "ms2_trace_weak" in scored.evidence_score.concern_labels
+    assert "MS2 trace weak" in scored.reason
+
+
+def test_strong_ms2_trace_breaks_same_confidence_tie_by_score() -> None:
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    base_ctx = dict(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+    no_trace = score_candidate(
+        _make_candidate(apex_rt=10.0, apex_intensity=1000),
+        ScoringContext(**base_ctx, ms2_trace_strength="none"),
+        prior_rt=10.0,
+    )
+    strong_trace = score_candidate(
+        _make_candidate(apex_rt=10.0, apex_intensity=500),
+        ScoringContext(**base_ctx, ms2_trace_strength="strong"),
+        prior_rt=10.0,
+    )
+
+    selected = select_candidate_with_confidence(
+        [no_trace, strong_trace],
+        selection_rt=10.0,
+    )
+
+    assert selected is strong_trace
+
+
+def test_ms2_trace_bonus_does_not_override_selection_rt_distance() -> None:
+    near_prior = ScoredCandidate(
+        candidate=_make_candidate(apex_rt=9.0, apex_intensity=1000),
+        severities=(),
+        confidence=Confidence.HIGH,
+        reason="",
+        prior_rt=9.0,
+        evidence_score=score_evidence(
+            positive=[],
+            negative=[],
+            base_score=100,
+        ),
+    )
+    farther_ms2_trace = ScoredCandidate(
+        candidate=_make_candidate(apex_rt=9.1, apex_intensity=500),
+        severities=(),
+        confidence=Confidence.HIGH,
+        reason="",
+        prior_rt=9.0,
+        evidence_score=score_evidence(
+            positive=[EvidenceSignal("ms2_trace_strong", 10)],
+            negative=[],
+            base_score=100,
+        ),
+    )
+
+    selected = select_candidate_with_confidence(
+        [near_prior, farther_ms2_trace],
+        selection_rt=9.0,
+    )
+
+    assert selected is near_prior
 
 
 def test_score_candidate_nl_fail_caps_confidence_to_very_low() -> None:

@@ -445,6 +445,36 @@ def test_candidate_evidence_reports_strict_nl_match() -> None:
     assert evidence.best_product_base_ratio == pytest.approx(1.0)
 
 
+def test_candidate_evidence_populates_strict_nl_product_trace() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.05,
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 5.0)],
+                intensities=[100.0],
+            ),
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.10,
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 4.0)],
+                intensities=[200.0],
+            ),
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.trace.product_point_count == 2
+    assert evidence.trace.product_apex_rt == pytest.approx(8.10)
+    assert evidence.trace.product_apex_delta_min == pytest.approx(0.0)
+    assert evidence.trace.product_height == pytest.approx(200.0)
+    assert evidence.trace.product_area == pytest.approx(7.5)
+    assert evidence.trace.trace_continuity == pytest.approx(1.0)
+    assert evidence.trace.strength == "strong"
+
+
 def test_candidate_evidence_rescues_strict_nl_just_outside_peak_boundary() -> None:
     candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
     raw = _FakeRaw(
@@ -468,6 +498,28 @@ def test_candidate_evidence_rescues_strict_nl_just_outside_peak_boundary() -> No
     assert evidence.alignment_source == "boundary_rescue"
 
 
+def test_boundary_rescue_strict_nl_trace_strength_reflects_apex_delta() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.0)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.29,
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 5.0)],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.nl_status == "OK"
+    assert evidence.alignment_source == "boundary_rescue"
+    assert evidence.trace.product_point_count == 1
+    assert evidence.trace.product_apex_delta_min == pytest.approx(0.29)
+    assert evidence.trace.strength == "weak"
+
+
 def test_candidate_evidence_does_not_rescue_trigger_only_boundary_scan() -> None:
     candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
     raw = _FakeRaw(
@@ -489,6 +541,28 @@ def test_candidate_evidence_does_not_rescue_trigger_only_boundary_scan() -> None
     assert evidence.trigger_scan_count == 0
     assert evidence.strict_nl_scan_count == 0
     assert evidence.alignment_source == "none"
+
+
+def test_trigger_only_candidate_has_no_product_trace_support() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.1,
+                masses=[150.0],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.ms2_present is True
+    assert evidence.nl_status == "NL_FAIL"
+    assert evidence.trace.product_point_count == 0
+    assert evidence.trace.trace_continuity == pytest.approx(0.0)
+    assert evidence.trace.strength == "none"
 
 
 def test_boundary_strict_nl_overrides_region_trigger_failure() -> None:
