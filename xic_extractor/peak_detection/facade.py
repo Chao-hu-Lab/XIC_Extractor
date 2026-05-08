@@ -21,8 +21,8 @@ from xic_extractor.peak_detection.selection import (
 )
 from xic_extractor.peak_scoring import (
     ScoringContext,
-    score_candidate,
     score_breakdown_fields,
+    score_candidate,
     select_candidate_with_confidence,
 )
 

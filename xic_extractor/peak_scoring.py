@@ -87,6 +87,7 @@ class ScoringContext:
     rt_min: float
     rt_max: float
     dirty_matrix: bool
+    neutral_loss_required: bool = True
     baseline_array: np.ndarray | None = None
     residual_mad: float | None = None
     prefer_rt_prior_tiebreak: bool = False
@@ -296,7 +297,9 @@ def _evidence_from_context(
     negative: list[EvidenceSignal] = []
     caps: list[ConfidenceCap] = []
 
-    if ctx.ms2_present and ctx.nl_match:
+    if not ctx.neutral_loss_required:
+        positive.append(EvidenceSignal("no_nl_required", 10))
+    elif ctx.ms2_present and ctx.nl_match:
         positive.append(EvidenceSignal("strict_nl_ok", 30))
     elif ctx.ms2_present and not ctx.nl_match:
         negative.append(EvidenceSignal("nl_fail", 45))
@@ -314,6 +317,12 @@ def _evidence_from_context(
             negative.append(EvidenceSignal("rt_prior_borderline", 15))
         else:
             negative.append(EvidenceSignal("rt_prior_far", 35))
+
+    rt_centrality = severity_by_label[_LABEL_RT_CENTRALITY]
+    if rt_centrality == 1:
+        negative.append(EvidenceSignal("rt_centrality_borderline", 10))
+    elif rt_centrality == 2:
+        negative.append(EvidenceSignal("rt_centrality_poor", 20))
 
     local_sn = severity_by_label[_LABEL_LOCAL_SN]
     if local_sn == 0:
@@ -333,6 +342,12 @@ def _evidence_from_context(
         negative.append(EvidenceSignal("shape_borderline", 10))
     else:
         negative.append(EvidenceSignal("shape_poor", 20))
+
+    noise_shape = severity_by_label[_LABEL_NOISE_SHAPE]
+    if noise_shape == 1:
+        negative.append(EvidenceSignal("noise_shape_borderline", 10))
+    elif noise_shape == 2:
+        negative.append(EvidenceSignal("noise_shape_poor", 20))
 
     flags = {str(flag) for flag in getattr(candidate, "quality_flags", ())}
     if not flags.intersection(_ADAP_LIKE_FLAG_LABELS):
@@ -396,7 +411,11 @@ def score_candidate(
             baseline=ctx.baseline_array,
             residual_mad=ctx.residual_mad,
         ),
-        nl_support_severity(ctx.ms2_present, ctx.nl_match),
+        (
+            nl_support_severity(ctx.ms2_present, ctx.nl_match)
+            if ctx.neutral_loss_required
+            else (0, _LABEL_NL)
+        ),
         rt_prior_severity(
             candidate.selection_apex_rt,
             ctx.rt_prior,

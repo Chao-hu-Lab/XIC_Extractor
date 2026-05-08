@@ -71,6 +71,15 @@ def test_find_peak_and_area_with_scoring_returns_same_best_for_clean_peak(
     assert result.status == "OK"
     assert result.peak is not None
     assert abs(result.peak.rt - 5.0) < 0.05
+    assert result.score_breakdown[:4] == (
+        ("Final Confidence", "HIGH"),
+        ("Caps", ""),
+        ("Raw Score", "125"),
+        (
+            "Support",
+            "strict_nl_ok; rt_prior_close; local_sn_strong; shape_clean; trace_clean",
+        ),
+    )
 
 
 def test_local_minimum_preferred_rt_selects_nearest_region() -> None:

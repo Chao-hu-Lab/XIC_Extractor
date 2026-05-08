@@ -256,6 +256,60 @@ def test_score_candidate_nl_fail_caps_confidence_to_very_low() -> None:
     assert "nl_fail_cap" in scored.evidence_score.cap_labels
 
 
+def test_score_candidate_no_nl_target_records_no_nl_support() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=False,
+        nl_match=False,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        neutral_loss_required=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.HIGH
+    assert "no_nl_required" in scored.evidence_score.support_labels
+    assert "no_ms2" not in scored.evidence_score.concern_labels
+    assert "no_ms2_cap" not in scored.evidence_score.cap_labels
+    assert scored.reason == "all checks passed"
+
+
+def test_score_candidate_maps_rt_centrality_and_noise_shape_concerns() -> None:
+    cand = _make_candidate(apex_rt=9.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = np.where(np.arange(201) % 2 == 0, 1000.0, 0.0)
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=9.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=9.0)
+
+    assert "rt_centrality_poor" in scored.evidence_score.concern_labels
+    assert "noise_shape_poor" in scored.evidence_score.concern_labels
+
+
 def test_score_candidate_penalizes_flagged_candidate_quality() -> None:
     cand = _make_flagged_candidate(
         apex_rt=10.0,

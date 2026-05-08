@@ -38,7 +38,10 @@ def test_confidence_from_score_thresholds() -> None:
 
 def test_caps_limit_final_confidence_without_changing_raw_score() -> None:
     scored = score_evidence(
-        positive=[EvidenceSignal("strict_nl_ok", 30), EvidenceSignal("shape_clean", 10)],
+        positive=[
+            EvidenceSignal("strict_nl_ok", 30),
+            EvidenceSignal("shape_clean", 10),
+        ],
         negative=[],
         caps=[ConfidenceCap("anchor_mismatch_cap", "VERY_LOW")],
     )
