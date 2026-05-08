@@ -569,6 +569,35 @@ def test_selector_low_scan_anchor_spike_yields_to_much_stronger_candidate() -> N
     )
 
 
+def test_selector_low_scan_demotion_applies_to_evidence_score_candidates() -> None:
+    spike = _sc(
+        Confidence.MEDIUM,
+        25.90,
+        10_000.0,
+        None,
+        selection_quality_penalty=0.25,
+        quality_flags=("low_scan_support",),
+    )
+    supported_peak = _sc(
+        Confidence.LOW,
+        26.15,
+        31_000.0,
+        None,
+        selection_quality_penalty=0.25,
+        quality_flags=("low_trace_continuity",),
+    )
+    spike = replace(spike, evidence_score=_score_for_selector(70))
+    supported_peak = replace(supported_peak, evidence_score=_score_for_selector(45))
+
+    assert (
+        select_candidate_with_confidence(
+            [spike, supported_peak],
+            selection_rt=25.94,
+        )
+        is supported_peak
+    )
+
+
 def test_selector_keeps_low_scan_anchor_when_alternative_is_too_far() -> None:
     spike = _sc(
         Confidence.MEDIUM,

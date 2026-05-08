@@ -46,6 +46,7 @@ _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN = 0.05
 _SELECTION_DISTANCE_POINTS_PER_MIN = 60.0
 _SELECTION_QUALITY_POINTS_PER_UNIT = 10.0
 _SELECTION_FAR_DISTANCE_MAX_MIN = 0.75
+_LOW_SCAN_DEMOTION_SCORE_PENALTY = 40.0
 _LOW_SCAN_STRONGER_CANDIDATE_INTENSITY_RATIO = 2.0
 _LOW_SCAN_MAX_CONFIDENCE_RANK_GAP = 1
 _LOW_SCAN_CONFIDENCE_DEMOTION = 2
@@ -213,7 +214,11 @@ def select_candidate_with_confidence(
                     distance,
                     -candidate.selection_apex_intensity,
                 )
-            effective_score = _effective_score(scored_candidate, distance)
+            effective_score = _effective_score(
+                scored_candidate,
+                distance,
+                demoted=id(scored_candidate) in low_scan_demotions,
+            )
             if distance > _SELECTION_FAR_DISTANCE_MAX_MIN:
                 return (
                     1.0,
@@ -307,7 +312,12 @@ def _selection_penalty_value(scored_candidate: ScoredCandidate) -> float:
     return float(scored_candidate.quality_penalty)
 
 
-def _effective_score(scored_candidate: ScoredCandidate, distance: float) -> float:
+def _effective_score(
+    scored_candidate: ScoredCandidate,
+    distance: float,
+    *,
+    demoted: bool = False,
+) -> float:
     raw_score = (
         float(scored_candidate.evidence_score.raw_score)
         if scored_candidate.evidence_score is not None
@@ -318,6 +328,7 @@ def _effective_score(scored_candidate: ScoredCandidate, distance: float) -> floa
         raw_score
         - (distance * _SELECTION_DISTANCE_POINTS_PER_MIN)
         - (selection_quality_penalty * _SELECTION_QUALITY_POINTS_PER_UNIT)
+        - (_LOW_SCAN_DEMOTION_SCORE_PENALTY if demoted else 0.0)
     )
 
 
