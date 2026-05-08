@@ -452,6 +452,61 @@ def test_score_candidate_maps_rt_centrality_and_noise_shape_concerns() -> None:
     assert "noise_shape_poor" in scored.evidence_score.concern_labels
 
 
+def test_score_candidate_caps_out_of_window_peak_without_rt_prior() -> None:
+    cand = _make_candidate(apex_rt=15.166, apex_intensity=1000)
+    x = np.linspace(14.5, 15.8, 131)
+    y = 1000 * np.exp(-((x - 15.166) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=67,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=None,
+        rt_prior_sigma=None,
+        rt_min=16.0,
+        rt_max=18.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=None)
+
+    assert scored.confidence == Confidence.VERY_LOW
+    assert "rt_window_cap" in scored.evidence_score.cap_labels
+    assert "rt_centrality_poor" in scored.evidence_score.concern_labels
+    assert scored.reason.startswith("decision: review only, not counted")
+    assert "cap: VERY_LOW due to target RT window" in scored.reason
+
+
+def test_score_candidate_allows_out_of_window_peak_with_close_rt_prior() -> None:
+    cand = _make_candidate(apex_rt=15.166, apex_intensity=1000)
+    x = np.linspace(14.5, 15.8, 131)
+    y = 1000 * np.exp(-((x - 15.166) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=67,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=15.166,
+        rt_prior_sigma=0.1,
+        rt_min=16.0,
+        rt_max=18.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=15.166)
+
+    assert scored.confidence == Confidence.HIGH
+    assert "rt_window_cap" not in scored.evidence_score.cap_labels
+    assert "rt_prior_close" in scored.evidence_score.support_labels
+    assert "rt_centrality_poor" in scored.evidence_score.concern_labels
+
+
 def test_score_candidate_penalizes_flagged_candidate_quality() -> None:
     cand = _make_flagged_candidate(
         apex_rt=10.0,

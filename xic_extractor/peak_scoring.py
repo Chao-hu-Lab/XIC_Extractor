@@ -174,6 +174,7 @@ _CAP_REASON_LABELS = {
     "no_ms2_cap": ("LOW", "no MS2"),
     "anchor_mismatch_cap": ("VERY_LOW", "anchor mismatch"),
     "zero_area_cap": ("VERY_LOW", "zero area"),
+    "rt_window_cap": ("VERY_LOW", "target RT window"),
     "trace_quality_cap": ("MEDIUM", "trace quality"),
     "hard_quality_flag_cap": ("MEDIUM", "hard quality flag"),
 }
@@ -430,10 +431,12 @@ def _evidence_from_context(
         caps.append(ConfidenceCap("no_ms2_cap", "LOW"))
 
     severity_by_label = {label: severity for severity, label in severities}
+    rt_prior_close = False
     if ctx.rt_prior is not None:
         rt_severity = severity_by_label[_LABEL_RT_PRIOR]
         if rt_severity == 0:
             positive.append(EvidenceSignal("rt_prior_close", 15))
+            rt_prior_close = True
         elif rt_severity == 1:
             negative.append(EvidenceSignal("rt_prior_borderline", 15))
         else:
@@ -444,6 +447,8 @@ def _evidence_from_context(
         negative.append(EvidenceSignal("rt_centrality_borderline", 10))
     elif rt_centrality == 2:
         negative.append(EvidenceSignal("rt_centrality_poor", 20))
+        if not rt_prior_close:
+            caps.append(ConfidenceCap("rt_window_cap", "VERY_LOW"))
 
     local_sn = severity_by_label[_LABEL_LOCAL_SN]
     if local_sn == 0:
