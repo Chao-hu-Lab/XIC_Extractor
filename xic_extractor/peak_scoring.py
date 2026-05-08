@@ -43,6 +43,9 @@ _ADAP_LIKE_FLAG_LABELS = {
 _ADAP_LIKE_SELECTION_WEIGHT = 0.25
 _ADAP_LIKE_SELECTION_MAX = 0.5
 _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN = 0.05
+_SELECTION_DISTANCE_POINTS_PER_MIN = 60.0
+_SELECTION_QUALITY_POINTS_PER_UNIT = 10.0
+_SELECTION_FAR_DISTANCE_MAX_MIN = 0.75
 _LOW_SCAN_STRONGER_CANDIDATE_INTENSITY_RATIO = 2.0
 _LOW_SCAN_MAX_CONFIDENCE_RANK_GAP = 1
 _LOW_SCAN_CONFIDENCE_DEMOTION = 2
@@ -198,15 +201,32 @@ def select_candidate_with_confidence(
                 -candidate.selection_apex_intensity,
             )
         if selection_reference is not None:
-            adjusted_distance = distance + (
-                selection_quality_penalty
-                * _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN
-            )
+            if scored_candidate.evidence_score is None:
+                adjusted_distance = distance + (
+                    selection_quality_penalty
+                    * _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN
+                )
+                return (
+                    float(confidence_rank),
+                    adjusted_distance,
+                    selection_quality_penalty,
+                    distance,
+                    -candidate.selection_apex_intensity,
+                )
+            effective_score = _effective_score(scored_candidate, distance)
+            if distance > _SELECTION_FAR_DISTANCE_MAX_MIN:
+                return (
+                    1.0,
+                    distance,
+                    -effective_score,
+                    selection_quality_penalty,
+                    -candidate.selection_apex_intensity,
+                )
             return (
-                float(confidence_rank),
-                adjusted_distance,
-                selection_quality_penalty,
+                0.0,
+                -effective_score,
                 distance,
+                selection_quality_penalty,
                 -candidate.selection_apex_intensity,
             )
         return (
@@ -285,6 +305,20 @@ def _selection_penalty_value(scored_candidate: ScoredCandidate) -> float:
     if scored_candidate.selection_quality_penalty is not None:
         return scored_candidate.selection_quality_penalty
     return float(scored_candidate.quality_penalty)
+
+
+def _effective_score(scored_candidate: ScoredCandidate, distance: float) -> float:
+    raw_score = (
+        float(scored_candidate.evidence_score.raw_score)
+        if scored_candidate.evidence_score is not None
+        else 50.0 - float(_CONFIDENCE_RANK[scored_candidate.confidence]) * 20.0
+    )
+    selection_quality_penalty = _selection_penalty_value(scored_candidate)
+    return (
+        raw_score
+        - (distance * _SELECTION_DISTANCE_POINTS_PER_MIN)
+        - (selection_quality_penalty * _SELECTION_QUALITY_POINTS_PER_UNIT)
+    )
 
 
 def _evidence_from_context(

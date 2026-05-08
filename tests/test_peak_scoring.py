@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pytest
@@ -19,6 +19,7 @@ from xic_extractor.peak_scoring import (
     select_candidate_with_confidence,
     symmetry_severity,
 )
+from xic_extractor.peak_scoring_evidence import EvidenceScore
 from xic_extractor.signal_processing import PeakCandidate, PeakResult
 
 
@@ -96,6 +97,29 @@ def _sc(
     )
 
 
+def _score_for_selector(raw_score: int) -> EvidenceScore:
+    confidence = (
+        "HIGH"
+        if raw_score >= 80
+        else "MEDIUM"
+        if raw_score >= 60
+        else "LOW"
+        if raw_score >= 40
+        else "VERY_LOW"
+    )
+    return EvidenceScore(
+        base_score=50,
+        positive_points=max(0, raw_score - 50),
+        negative_points=max(0, 50 - raw_score),
+        raw_score=raw_score,
+        score_confidence=confidence,
+        confidence=confidence,
+        support_labels=(),
+        concern_labels=(),
+        cap_labels=(),
+    )
+
+
 def test_selector_prefers_higher_confidence() -> None:
     a = _sc(Confidence.MEDIUM, 10.0, 1000, prior=10.0)
     b = _sc(Confidence.HIGH, 10.5, 500, prior=10.0)
@@ -136,6 +160,54 @@ def test_selector_final_tiebreak_by_intensity() -> None:
         prefer_rt_prior_tiebreak=True,
     )
     assert select_candidate_with_confidence([a, b]) is a
+
+
+def test_selector_uses_effective_score_to_balance_distance_and_evidence() -> None:
+    near_weak = _sc(
+        Confidence.LOW,
+        10.02,
+        1000.0,
+        10.0,
+        selection_quality_penalty=0.5,
+    )
+    far_strong = _sc(
+        Confidence.MEDIUM,
+        10.40,
+        2000.0,
+        10.0,
+        selection_quality_penalty=0.0,
+    )
+    near_weak = replace(near_weak, evidence_score=_score_for_selector(55))
+    far_strong = replace(far_strong, evidence_score=_score_for_selector(70))
+
+    assert (
+        select_candidate_with_confidence(
+            [near_weak, far_strong],
+            selection_rt=10.0,
+        )
+        is near_weak
+    )
+
+
+def test_selector_does_not_let_far_peak_win_on_score_alone() -> None:
+    near = _sc(
+        Confidence.LOW,
+        10.02,
+        1000.0,
+        10.0,
+        selection_quality_penalty=0.0,
+    )
+    far = _sc(
+        Confidence.MEDIUM,
+        11.20,
+        3000.0,
+        10.0,
+        selection_quality_penalty=0.0,
+    )
+    near = replace(near, evidence_score=_score_for_selector(45))
+    far = replace(far, evidence_score=_score_for_selector(75))
+
+    assert select_candidate_with_confidence([near, far], selection_rt=10.0) is near
 
 
 def _make_candidate(apex_rt: float, apex_intensity: float) -> PeakCandidate:
