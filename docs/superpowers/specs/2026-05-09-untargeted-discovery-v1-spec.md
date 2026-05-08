@@ -205,40 +205,65 @@ All seed scan ids should remain available in `seed_scan_ids`.
 
 ### 5.4 Required CSV columns
 
-Suggested v1 columns:
+The CSV must be review-first. The first visible columns should answer the user's first questions without horizontal scrolling:
+
+1. Is this worth opening in Xcalibur?
+2. What scan/RT/mass should I inspect?
+3. Did XIC Extractor find an MS1 peak and area?
+4. Why is this row ranked this way?
+
+The first columns are therefore fixed for v1:
+
+| Order | Column | Meaning |
+|---:|---|---|
+| 1 | `review_priority` | `HIGH`, `MEDIUM`, or `LOW`. Primary sort key. |
+| 2 | `candidate_id` | `<sample_stem>#<best_ms2_scan_id>`. |
+| 3 | `precursor_mz` | Representative precursor m/z. |
+| 4 | `product_mz` | Representative product m/z. |
+| 5 | `observed_neutral_loss_da` | Representative observed neutral loss. |
+| 6 | `best_seed_rt` | RT of representative seed scan. |
+| 7 | `seed_event_count` | Number of strict NL seed events in the group. |
+| 8 | `ms1_peak_found` | `TRUE` / `FALSE`. |
+| 9 | `ms1_apex_rt` | MS1 candidate apex RT. |
+| 10 | `ms1_area` | MS1 integrated area. |
+| 11 | `ms2_product_max_intensity` | Maximum product-ion intensity among seed events. |
+| 12 | `reason` | Short human-readable explanation. |
+
+After those review columns, include provenance and boundary columns:
 
 | Column | Meaning |
 |---|---|
-| `candidate_id` | `<sample_stem>#<best_ms2_scan_id>`. |
 | `raw_file` | Source RAW filename. |
 | `sample_stem` | RAW stem used in candidate id. |
 | `best_ms2_scan_id` | Representative MS2 scan id. |
 | `seed_scan_ids` | Semicolon-separated MS2 scan ids in the group. |
-| `seed_event_count` | Number of strict NL seed events in the group. |
 | `neutral_loss_tag` | Discovery NL profile name or tag. |
 | `configured_neutral_loss_da` | Expected neutral-loss mass. |
-| `observed_neutral_loss_da` | Representative observed neutral loss. |
 | `neutral_loss_mass_error_ppm` | Representative or best mass error. |
-| `precursor_mz` | Representative precursor m/z. |
-| `product_mz` | Representative product m/z. |
-| `best_seed_rt` | RT of representative seed scan. |
 | `rt_seed_min` | Minimum seed RT in group. |
 | `rt_seed_max` | Maximum seed RT in group. |
 | `ms1_search_rt_min` | Padded MS1 search window start. |
 | `ms1_search_rt_max` | Padded MS1 search window end. |
-| `ms1_peak_found` | `TRUE` / `FALSE`. |
-| `ms1_apex_rt` | MS1 candidate apex RT. |
 | `ms1_seed_delta_min` | `ms1_apex_rt - best_seed_rt` when available. |
 | `ms1_peak_rt_start` | MS1 peak boundary start. |
 | `ms1_peak_rt_end` | MS1 peak boundary end. |
 | `ms1_height` | MS1 peak height. |
-| `ms1_area` | MS1 integrated area. |
 | `ms1_trace_quality` | Simple trace-quality label or numeric summary. |
-| `ms2_product_max_intensity` | Maximum product-ion intensity among seed events. |
-| `review_priority` | `HIGH`, `MEDIUM`, or `LOW`. |
-| `reason` | Short human-readable explanation. |
 
-The exact order may be refined during implementation, but review columns should appear before provenance-heavy columns.
+The implementation may add more provenance columns, but it must not push the first 12 review columns later in the file.
+
+### 5.5 CSV readability rules
+
+The CSV will often be opened directly in Excel. It should be readable without a companion HTML report.
+
+Rules:
+
+- Sort rows by review priority and evidence strength by default.
+- Keep `reason` short enough to scan in one cell.
+- Use stable numeric formatting for RT, m/z, and mass error so equivalent rows do not churn across runs.
+- Use numeric values, not display-only strings, for `ms1_area` and intensity fields so downstream tools can sort and filter.
+- If no strict NL seeds are found, still write a CSV with headers and include a short run-level log message. Do not fail just because there are no candidates.
+- If strict NL seeds exist but no MS1 peak is found for any candidate, write the rows as `LOW` priority rather than suppressing them.
 
 ## 6. Review Priority
 
@@ -279,7 +304,19 @@ strict NL seed found; no MS1 peak in seed window
 
 CSV is the v1 contract, not the final discovery UX.
 
-The default one-file output is chosen to avoid the poor experience of producing several artifacts per raw file. The table must therefore be sorted for review:
+The default one-file output is chosen to avoid the poor experience of producing several artifacts per raw file. That only works if the CSV itself behaves like a review surface, not a raw dump.
+
+Design completeness after review: **8/10**.
+
+A 10/10 version would include an interactive review UI or at least optional top-N plots, but that belongs in a later phase. For v1, the design target is:
+
+- one file per raw by default,
+- first 12 columns are enough for first-pass triage,
+- provenance remains available without dominating the table,
+- empty and low-evidence cases are explicit rather than surprising,
+- no batch or GUI commitments leak into the first implementation.
+
+The table must therefore be sorted for review:
 
 1. `review_priority`,
 2. `seed_event_count`,
