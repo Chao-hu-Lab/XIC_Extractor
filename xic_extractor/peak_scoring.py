@@ -147,6 +147,7 @@ _EVIDENCE_REASON_LABELS = {
     "strict_nl_ok": "strict NL OK",
     "no_nl_required": "no NL required",
     "rt_prior_close": "RT prior close",
+    "paired_istd_aligned": "paired ISTD aligned",
     "local_sn_strong": "local S/N strong",
     "shape_clean": "shape clean",
     "trace_clean": "trace clean",
@@ -270,6 +271,7 @@ def select_candidate_with_confidence(
             scored_candidate.prefer_rt_prior_tiebreak
             and scored_candidate.prior_rt is not None
             and selection_rt is None
+            and scored_candidate.evidence_score is None
         ):
             return (
                 float(confidence_rank),
@@ -437,6 +439,8 @@ def _evidence_from_context(
         if rt_severity == 0:
             positive.append(EvidenceSignal("rt_prior_close", 15))
             rt_prior_close = True
+            if ctx.prefer_rt_prior_tiebreak:
+                positive.append(EvidenceSignal("paired_istd_aligned", 20))
         elif rt_severity == 1:
             negative.append(EvidenceSignal("rt_prior_borderline", 15))
         else:

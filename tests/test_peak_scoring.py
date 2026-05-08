@@ -273,7 +273,10 @@ def test_score_candidate_returns_base_and_trace_quality_severities() -> None:
     assert len(scored.severities) == 10
     assert scored.confidence == Confidence.HIGH
     assert scored.reason.startswith("decision: accepted")
-    assert "support: strict NL OK; RT prior close; local S/N strong" in scored.reason
+    assert (
+        "support: strict NL OK; RT prior close; paired ISTD aligned"
+        in scored.reason
+    )
 
 
 def test_score_candidate_records_positive_and_negative_evidence() -> None:
@@ -302,6 +305,32 @@ def test_score_candidate_records_positive_and_negative_evidence() -> None:
     assert "strict_nl_ok" in scored.evidence_score.support_labels
     assert "rt_prior_close" in scored.evidence_score.support_labels
     assert scored.evidence_score.concern_labels == ()
+
+
+def test_score_candidate_records_paired_istd_alignment_support() -> None:
+    cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        prefer_rt_prior_tiebreak=True,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert "paired_istd_aligned" in scored.evidence_score.support_labels
+    assert "paired ISTD aligned" in scored.reason
 
 
 def test_score_candidate_nl_fail_caps_confidence_to_very_low() -> None:
@@ -795,6 +824,37 @@ def test_selector_with_paired_prior_evidence_prefers_prior_distance_before_quali
     )
 
     assert select_candidate_with_confidence([clean_far, weak_near]) is weak_near
+
+
+def test_selector_with_paired_prior_evidence_uses_effective_score() -> None:
+    near_weaker = _sc(
+        Confidence.HIGH,
+        10.02,
+        500.0,
+        10.0,
+        quality_penalty=0,
+        selection_quality_penalty=0.0,
+        prefer_rt_prior_tiebreak=True,
+    )
+    farther_stronger = _sc(
+        Confidence.HIGH,
+        10.15,
+        1200.0,
+        10.0,
+        quality_penalty=0,
+        selection_quality_penalty=0.0,
+        prefer_rt_prior_tiebreak=True,
+    )
+    near_weaker = replace(near_weaker, evidence_score=_score_for_selector(82))
+    farther_stronger = replace(
+        farther_stronger,
+        evidence_score=_score_for_selector(115),
+    )
+
+    assert (
+        select_candidate_with_confidence([near_weaker, farther_stronger])
+        is farther_stronger
+    )
 
 
 @pytest.mark.parametrize(

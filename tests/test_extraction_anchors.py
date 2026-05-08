@@ -24,6 +24,7 @@ def test_anchor_mismatch_penalty_syncs_score_breakdown_confidence_and_caps() -> 
             ("Raw Score", "90"),
             ("Support", "strict_nl_ok"),
             ("Concerns", ""),
+            ("Negative Points", "0"),
         ),
     )
 
@@ -37,3 +38,5 @@ def test_anchor_mismatch_penalty_syncs_score_breakdown_confidence_and_caps() -> 
     assert breakdown["Final Confidence"] == "VERY_LOW"
     assert breakdown["Caps"] == "anchor_mismatch_cap"
     assert breakdown["Concerns"] == "anchor_mismatch"
+    assert breakdown["Raw Score"] == "45"
+    assert breakdown["Negative Points"] == "45"

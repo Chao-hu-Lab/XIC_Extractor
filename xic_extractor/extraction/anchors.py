@@ -9,6 +9,7 @@ from xic_extractor.signal_processing import PeakDetectionResult
 PAIRED_TARGET_ANCHOR_PEAK_DELTA_MAX_MIN: float = 0.25
 PAIRED_FALLBACK_ISTD_PEAK_DELTA_MAX_MIN: float = 0.5
 ANCHOR_PEAK_DELTA_WARN_MIN: float = 0.5
+ANCHOR_MISMATCH_EVIDENCE_POINTS: int = 45
 
 
 def paired_anchor_mismatch_diagnostic(
@@ -101,6 +102,14 @@ def _anchor_mismatch_score_breakdown(
             existing.get("Concerns", ""),
             "anchor_mismatch",
         ),
+        "Negative Points": _add_numeric_text(
+            existing.get("Negative Points", ""),
+            ANCHOR_MISMATCH_EVIDENCE_POINTS,
+        ),
+        "Raw Score": _add_numeric_text(
+            existing.get("Raw Score", ""),
+            -ANCHOR_MISMATCH_EVIDENCE_POINTS,
+        ),
     }
     return tuple((label, updates.get(label, value)) for label, value in score_breakdown)
 
@@ -110,3 +119,12 @@ def _append_semicolon_label(value: str, label: str) -> str:
     if label not in labels:
         labels.append(label)
     return "; ".join(labels)
+
+
+def _add_numeric_text(value: str, delta: int) -> str:
+    if not value:
+        return value
+    try:
+        return str(int(float(value)) + delta)
+    except ValueError:
+        return value
