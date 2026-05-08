@@ -8,6 +8,7 @@ import pytest
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.scoring_factory import build_scoring_context_factory
+from xic_extractor.ms2_trace_evidence import MS2TraceEvidence
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.peak_scoring import score_candidate, select_candidate_with_confidence
 from xic_extractor.rt_prior_library import LibraryEntry
@@ -199,6 +200,48 @@ def test_scoring_context_keeps_trigger_without_strict_nl_match() -> None:
 
     assert ctx.ms2_present is True
     assert ctx.nl_match is False
+
+
+def test_scoring_context_copies_candidate_ms2_trace_strength() -> None:
+    factory = build_scoring_context_factory(
+        config=_config(),
+        injection_order={},
+        istd_rts_by_sample={},
+        rt_prior_library={},
+    )
+    builder = factory(
+        target=_target(label="Analyte-A", is_istd=False, istd_pair=""),
+        sample_name="S2",
+        rt=np.linspace(9.9, 10.5, 7),
+        intensity=np.array([0.0, 1.0, 4.0, 8.0, 4.0, 1.0, 0.0]),
+        istd_rt_in_this_sample=None,
+        paired_istd_fwhm=None,
+        nl_result=None,
+        candidate_ms2_evidence_builder=lambda _candidate: CandidateMS2Evidence(
+            ms2_present=True,
+            nl_match=True,
+            nl_status="OK",
+            trigger_scan_count=2,
+            strict_nl_scan_count=2,
+            best_loss_ppm=1.0,
+            best_scan_rt=10.1,
+            best_product_base_ratio=0.5,
+            alignment_source="region",
+            trace=MS2TraceEvidence(
+                product_point_count=2,
+                product_apex_rt=10.1,
+                product_apex_delta_min=0.0,
+                product_height=200.0,
+                product_area=10.0,
+                trace_continuity=1.0,
+                strength="strong",
+            ),
+        ),
+    )
+
+    ctx = builder(SimpleNamespace(selection_apex_index=3))
+
+    assert ctx.ms2_trace_strength == "strong"
 
 
 def test_strict_nl_candidate_beats_candidate_with_trigger_but_failed_nl() -> None:

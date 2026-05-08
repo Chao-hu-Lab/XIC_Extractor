@@ -249,6 +249,41 @@ def test_score_breakdown_csv_includes_weighted_evidence_fields(tmp_path: Path) -
     assert breakdown["Concerns"] == ""
 
 
+def test_score_breakdown_csv_can_emit_ms2_trace_labels_without_schema_change(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    result = replace(
+        _result(),
+        score_breakdown=(
+            ("Base Score", "50"),
+            ("Positive Points", "50"),
+            ("Negative Points", "8"),
+            ("Raw Score", "92"),
+            ("Caps", ""),
+            ("Final Confidence", "HIGH"),
+            ("Support", "strict_nl_ok; ms2_trace_strong; local_sn_strong"),
+            ("Concerns", "ms2_trace_weak"),
+        ),
+    )
+    file_result = FileResult(sample_name="SampleA", results={"WithNL": result})
+
+    write_score_breakdown_csv(config, [file_result])
+
+    breakdown = _read_csv(config.output_csv.with_name("xic_score_breakdown.csv"))[0]
+    assert set(breakdown) >= {
+        "Support",
+        "Concerns",
+        "Positive Points",
+        "Negative Points",
+        "Raw Score",
+    }
+    assert breakdown["Support"] == (
+        "strict_nl_ok; ms2_trace_strong; local_sn_strong"
+    )
+    assert breakdown["Concerns"] == "ms2_trace_weak"
+
+
 def test_write_all_gates_score_breakdown(tmp_path: Path) -> None:
     config = _config(tmp_path)
     target = _target("WithNL")

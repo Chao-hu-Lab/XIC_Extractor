@@ -1,9 +1,15 @@
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 import numpy as np
 
+from xic_extractor.ms2_trace_evidence import (
+    MS2TraceEvidence,
+    MS2TracePoint,
+    empty_ms2_trace_evidence,
+    summarize_ms2_trace,
+)
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
 
 NL_DIAGNOSTIC_PPM_FLOOR = 500.0
@@ -61,6 +67,7 @@ class CandidateMS2Evidence:
     best_scan_rt: float | None
     best_product_base_ratio: float | None
     alignment_source: CandidateMS2AlignmentSource
+    trace: MS2TraceEvidence = field(default_factory=empty_ms2_trace_evidence)
 
     def to_token(self) -> str:
         if self.nl_status == "WARN" and self.best_loss_ppm is not None:
@@ -218,6 +225,7 @@ def collect_candidate_ms2_evidence(
     strict_nl_scan_count = 0
     best_evidence: MS2ProductEvidence | None = None
     best_evidence_source: CandidateMS2AlignmentSource | None = None
+    product_trace_points: list[MS2TracePoint] = []
     region_trigger_seen = False
     fallback_trigger_seen = False
 
@@ -271,6 +279,14 @@ def collect_candidate_ms2_evidence(
             trigger_scan_count += 1
         if strict_nl_match:
             strict_nl_scan_count += 1
+            product_trace_points.append(
+                MS2TracePoint(
+                    rt=evidence.scan_rt,
+                    intensity=evidence.product_intensity,
+                    base_ratio=evidence.product_base_ratio,
+                    observed_loss_error_ppm=evidence.observed_loss_error_ppm,
+                )
+            )
         if (
             best_evidence is None
             or evidence.observed_loss_error_ppm
@@ -310,6 +326,11 @@ def collect_candidate_ms2_evidence(
             best_evidence.product_base_ratio if best_evidence is not None else None
         ),
         alignment_source=alignment_source,
+        trace=summarize_ms2_trace(
+            product_trace_points,
+            candidate_apex_rt=apex_rt,
+            trigger_scan_count=trigger_scan_count,
+        ),
     )
 
 

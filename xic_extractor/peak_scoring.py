@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 
 from xic_extractor.baseline import asls_baseline
+from xic_extractor.ms2_trace_evidence import MS2TraceStrength
 from xic_extractor.peak_scoring_evidence import (
     ConfidenceCap,
     EvidenceScore,
@@ -98,6 +99,7 @@ class ScoringContext:
     dirty_matrix: bool
     neutral_loss_required: bool = True
     count_no_ms2_as_detected: bool = False
+    ms2_trace_strength: MS2TraceStrength | None = None
     baseline_array: np.ndarray | None = None
     residual_mad: float | None = None
     prefer_rt_prior_tiebreak: bool = False
@@ -154,6 +156,8 @@ _EVIDENCE_REASON_LABELS = {
     "no_nl_required": "no NL required",
     "rt_prior_close": "RT prior close",
     "paired_istd_aligned": "paired ISTD aligned",
+    "ms2_trace_strong": "MS2 trace strong",
+    "ms2_trace_moderate": "MS2 trace moderate",
     "local_sn_strong": "local S/N strong",
     "shape_clean": "shape clean",
     "trace_clean": "trace clean",
@@ -170,6 +174,7 @@ _EVIDENCE_REASON_LABELS = {
     "noise_shape_borderline": "noise shape borderline",
     "noise_shape_poor": "noise shape poor",
     "anchor_mismatch": "anchor mismatch",
+    "ms2_trace_weak": "MS2 trace weak",
     "low_scan_support": "low scan support",
     "low_trace_continuity": "low trace continuity",
     "poor_edge_recovery": "poor edge recovery",
@@ -586,6 +591,12 @@ def _evidence_from_context(
         positive.append(EvidenceSignal("no_nl_required", 10))
     elif ctx.ms2_present and ctx.nl_match:
         positive.append(EvidenceSignal("strict_nl_ok", 30))
+        if ctx.ms2_trace_strength == "strong":
+            positive.append(EvidenceSignal("ms2_trace_strong", 10))
+        elif ctx.ms2_trace_strength == "moderate":
+            positive.append(EvidenceSignal("ms2_trace_moderate", 5))
+        elif ctx.ms2_trace_strength == "weak":
+            negative.append(EvidenceSignal("ms2_trace_weak", 8))
     elif ctx.ms2_present and not ctx.nl_match:
         negative.append(EvidenceSignal("nl_fail", 45))
         caps.append(ConfidenceCap("nl_fail_cap", "VERY_LOW"))
