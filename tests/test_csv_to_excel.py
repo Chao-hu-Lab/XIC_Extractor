@@ -335,6 +335,21 @@ def test_summary_detection_excludes_very_low_and_non_positive_area_rows() -> Non
     assert data["Analyte"]["Median Area (detected)"] == 110.0
 
 
+def test_summary_detection_excludes_very_low_rows() -> None:
+    rows = [
+        _long_row("S1", "Analyte", "9.0", "100", "OK", confidence="VERY_LOW"),
+        _long_row("S2", "Analyte", "9.1", "110", "OK", confidence="LOW"),
+    ]
+    wb = Workbook()
+    ws = wb.active
+
+    _build_summary_sheet(ws, rows, count_no_ms2_as_detected=False, review_rows=[])
+    data = _summary_rows(ws)
+
+    assert data["Analyte"]["Detected"] == 1
+    assert data["Analyte"]["Detection %"] == "50%"
+
+
 def test_summary_puts_detection_rate_before_review_workload() -> None:
     rows = [
         _long_row("S1", "Analyte", "9.0", "100", "OK", istd_pair="ISTD"),

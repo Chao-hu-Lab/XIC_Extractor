@@ -783,6 +783,49 @@ def test_review_report_heatmap_sorts_low_detection_targets_first(
     )
 
 
+def test_review_report_marks_very_low_rows_as_not_detected(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "A",
+            "RT": "1.0",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "VERY_LOW",
+            "Role": "Analyte",
+        }
+    ]
+    review_rows = [
+        {
+            "Priority": "1",
+            "Sample": "S1",
+            "Target": "A",
+            "Status": "Review",
+            "Why": "Very low confidence",
+            "Action": "Open workbook",
+            "Issue Count": "1",
+            "Evidence": "VERY_LOW",
+        }
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=review_rows,
+        count_no_ms2_as_detected=False,
+    )
+
+    html = path.read_text(encoding="utf-8")
+    assert (
+        'class="heat-cell not-detected" title="A / S1: ND"'
+        in html
+    )
+    assert 'class="heat-cell flagged-detected" title="A / S1' not in html
+
+
 def test_review_report_uses_at_a_glance_focus_and_compact_heatmap(
     tmp_path: Path,
 ) -> None:
