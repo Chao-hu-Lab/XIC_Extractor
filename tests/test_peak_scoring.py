@@ -70,6 +70,7 @@ def test_reason_appends_istd_note() -> None:
 class _FakePeak:
     selection_apex_rt: float
     selection_apex_intensity: float
+    quality_flags: tuple[str, ...] = ()
 
 
 def _sc(
@@ -81,9 +82,10 @@ def _sc(
     quality_penalty: int = 0,
     selection_quality_penalty: float | None = None,
     prefer_rt_prior_tiebreak: bool = False,
+    quality_flags: tuple[str, ...] = (),
 ) -> ScoredCandidate:
     return ScoredCandidate(
-        candidate=_FakePeak(apex_rt, intensity),
+        candidate=_FakePeak(apex_rt, intensity, quality_flags),
         severities=tuple(),
         confidence=confidence,
         reason="",
@@ -354,6 +356,33 @@ def test_selector_tiebreak_prefers_lower_quality_penalty() -> None:
     weak = _sc(Confidence.LOW, 10.10, 1000.0, 10.0, quality_penalty=1)
 
     assert select_candidate_with_confidence([clean, weak]) is clean
+
+
+def test_selector_low_scan_anchor_spike_yields_to_much_stronger_candidate() -> None:
+    spike = _sc(
+        Confidence.HIGH,
+        25.90,
+        10_000.0,
+        None,
+        selection_quality_penalty=0.25,
+        quality_flags=("low_scan_support",),
+    )
+    supported_peak = _sc(
+        Confidence.MEDIUM,
+        26.15,
+        31_000.0,
+        None,
+        selection_quality_penalty=0.25,
+        quality_flags=("low_trace_continuity",),
+    )
+
+    assert (
+        select_candidate_with_confidence(
+            [spike, supported_peak],
+            selection_rt=25.94,
+        )
+        is supported_peak
+    )
 
 
 def test_selector_with_paired_prior_evidence_prefers_prior_distance_before_quality(

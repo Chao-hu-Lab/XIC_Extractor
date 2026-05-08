@@ -897,6 +897,55 @@ def test_istd_peak_not_found_retries_with_wider_anchor_window(
     assert raw.windows == [(8.0, 10.0), (7.0, 11.0)]
 
 
+def test_istd_weak_anchor_window_peak_uses_wider_recovery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("ISTD", is_istd=True)]
+    raw = _RecordingRaw()
+
+    monkeypatch.setattr(
+        "xic_extractor.extractor.open_raw",
+        lambda *_args, **_kwargs: raw,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_nl_anchor_rt",
+        _anchor_sequence([9.0]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence(
+            [
+                _ok_peak(
+                    9.05,
+                    100.0,
+                    200.0,
+                    quality_flags=("poor_edge_recovery", "low_trace_continuity"),
+                ),
+                _ok_peak(8.35, 2500.0, 6000.0),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.check_nl",
+        _nl_sequence([NLResult("OK", 1.0, 9.0, 1, 0, 1)]),
+    )
+
+    output = _run(config, targets)
+
+    result = output.file_results[0].results["ISTD"]
+    assert result.peak_result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(8.35, abs=0.001)
+    assert result.peak.area == pytest.approx(6000.0)
+    assert raw.windows == [(8.0, 10.0), (7.0, 11.0)]
+
+
 def test_paired_analyte_keeps_mismatched_target_anchor_peak_as_low(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

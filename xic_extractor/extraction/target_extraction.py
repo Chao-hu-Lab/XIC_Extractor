@@ -16,10 +16,8 @@ from xic_extractor.extraction.diagnostics import (
     nl_anchor_fallback_diagnostic,
 )
 from xic_extractor.extraction.drift import estimate_sample_drift
-from xic_extractor.extraction.rt_windows import (
-    get_rt_window,
-    recover_istd_peak_with_wider_anchor_window,
-)
+from xic_extractor.extraction.istd_recovery import recover_istd_anchor_peak_if_needed
+from xic_extractor.extraction.rt_windows import get_rt_window
 from xic_extractor.extraction.scoring_factory import (
     paired_istd_fwhm,
     selected_candidate,
@@ -251,29 +249,22 @@ def extract_one_target(
             preferred_rt=anchor_rt,
             strict_preferred_rt=strict_preferred_rt,
         )
-    if (
-        peak_result.status == "PEAK_NOT_FOUND"
-        and peak_result.peak is None
-        and target.is_istd
-        and anchor_used
-        and anchor_rt is not None
-    ):
-        recovered_peak_result = recover_istd_peak_with_wider_anchor_window(
-            raw,
-            config,
-            target,
-            anchor_rt=anchor_rt,
-            scoring_context_factory=scoring_context_factory,
-            candidate_ms2_evidence_builder=_cached_candidate_ms2_builder,
-            sample_name=sample_name,
-            nl_result=nl_result,
-            istd_confidence_note=istd_confidence_note,
-            istd_rt_in_this_sample=istd_rt_in_this_sample,
-            paired_istd_fwhm=paired_istd_fwhm,
-            peak_finder=extractor.find_peak_and_area,
-        )
-        if recovered_peak_result is not None:
-            peak_result = recovered_peak_result
+    peak_result = recover_istd_anchor_peak_if_needed(
+        peak_result,
+        raw=raw,
+        config=config,
+        target=target,
+        anchor_used=anchor_used,
+        anchor_rt=anchor_rt,
+        scoring_context_factory=scoring_context_factory,
+        candidate_ms2_evidence_builder=_cached_candidate_ms2_builder,
+        sample_name=sample_name,
+        nl_result=nl_result,
+        istd_confidence_note=istd_confidence_note,
+        istd_rt_in_this_sample=istd_rt_in_this_sample,
+        paired_istd_fwhm=paired_istd_fwhm,
+        peak_finder=extractor.find_peak_and_area,
+    )
     paired_rejection = paired_anchor_mismatch_diagnostic(
         sample_name,
         target,

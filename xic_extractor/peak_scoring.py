@@ -37,6 +37,8 @@ _ADAP_LIKE_FLAG_LABELS = {
 _ADAP_LIKE_SELECTION_WEIGHT = 0.25
 _ADAP_LIKE_SELECTION_MAX = 0.5
 _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN = 0.05
+_LOW_SCAN_STRONGER_CANDIDATE_INTENSITY_RATIO = 2.0
+_LOW_SCAN_MAX_CONFIDENCE_RANK_GAP = 1
 _ADAP_EQUIVALENT_LEGACY_FLAGS = {
     "low_scan_support": "low_scan_count",
     "poor_edge_recovery": "low_top_edge_ratio",
@@ -192,7 +194,58 @@ def select_candidate_with_confidence(
             -candidate.selection_apex_intensity,
         )
 
-    return min(scored, key=key)
+    chosen = min(scored, key=key)
+    if strict_selection_rt and selection_rt is not None:
+        return chosen
+    return _prefer_stronger_candidate_over_low_scan_spike(chosen, scored)
+
+
+def _prefer_stronger_candidate_over_low_scan_spike(
+    chosen: ScoredCandidate,
+    scored: list[ScoredCandidate],
+) -> ScoredCandidate:
+    if not _has_candidate_flag(chosen, "low_scan_support"):
+        return chosen
+
+    chosen_rank = _CONFIDENCE_RANK[chosen.confidence]
+    chosen_penalty = _selection_penalty_value(chosen)
+    chosen_intensity = float(chosen.candidate.selection_apex_intensity)
+    if chosen_intensity <= 0:
+        return chosen
+
+    alternatives = [
+        candidate
+        for candidate in scored
+        if candidate is not chosen
+        and not _has_candidate_flag(candidate, "low_scan_support")
+        and _CONFIDENCE_RANK[candidate.confidence]
+        <= chosen_rank + _LOW_SCAN_MAX_CONFIDENCE_RANK_GAP
+        and _selection_penalty_value(candidate) <= chosen_penalty
+        and float(candidate.candidate.selection_apex_intensity)
+        >= chosen_intensity * _LOW_SCAN_STRONGER_CANDIDATE_INTENSITY_RATIO
+    ]
+    if not alternatives:
+        return chosen
+
+    return min(
+        alternatives,
+        key=lambda candidate: (
+            _CONFIDENCE_RANK[candidate.confidence],
+            _selection_penalty_value(candidate),
+            -float(candidate.candidate.selection_apex_intensity),
+        ),
+    )
+
+
+def _has_candidate_flag(scored_candidate: ScoredCandidate, flag: str) -> bool:
+    flags = getattr(scored_candidate.candidate, "quality_flags", ())
+    return flag in {str(candidate_flag) for candidate_flag in flags}
+
+
+def _selection_penalty_value(scored_candidate: ScoredCandidate) -> float:
+    if scored_candidate.selection_quality_penalty is not None:
+        return scored_candidate.selection_quality_penalty
+    return float(scored_candidate.quality_penalty)
 
 
 def score_candidate(
