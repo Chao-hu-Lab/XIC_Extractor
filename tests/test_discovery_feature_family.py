@@ -72,9 +72,132 @@ def test_assign_feature_families_does_not_group_missing_ms1_peaks() -> None:
     assert [candidate.feature_family_size for candidate in assigned] == [1, 1]
 
 
+def test_assign_feature_superfamilies_groups_close_overlapping_ms1_peaks() -> None:
+    assigned = assign_feature_families(
+        (
+            _candidate(
+                candidate_id="Sample#10",
+                apex_rt=13.100,
+                peak_start=12.90,
+                peak_end=13.30,
+            ),
+            _candidate(
+                candidate_id="Sample#20",
+                apex_rt=13.180,
+                peak_start=13.00,
+                peak_end=13.36,
+            ),
+        )
+    )
+
+    assert {candidate.feature_superfamily_id for candidate in assigned} == {
+        "Sample@SF0001"
+    }
+    assert [candidate.feature_superfamily_size for candidate in assigned] == [2, 2]
+    assert {candidate.feature_superfamily_confidence for candidate in assigned} == {
+        "HIGH"
+    }
+    assert {candidate.feature_superfamily_evidence for candidate in assigned} == {
+        "peak_boundary_overlap;apex_close"
+    }
+
+
+def test_assign_feature_superfamilies_selects_one_representative() -> None:
+    assigned = assign_feature_families(
+        (
+            _candidate(
+                candidate_id="Sample#10",
+                review_priority="MEDIUM",
+                seed_event_count=1,
+                ms2_product_max_intensity=9000.0,
+                apex_rt=13.100,
+                peak_start=12.90,
+                peak_end=13.30,
+            ),
+            _candidate(
+                candidate_id="Sample#20",
+                review_priority="HIGH",
+                seed_event_count=2,
+                ms2_product_max_intensity=1000.0,
+                apex_rt=13.180,
+                peak_start=13.00,
+                peak_end=13.36,
+            ),
+        )
+    )
+
+    roles = {
+        candidate.candidate_id: candidate.feature_superfamily_role
+        for candidate in assigned
+    }
+    assert roles == {
+        "Sample#10": "member",
+        "Sample#20": "representative",
+    }
+
+
+def test_assign_feature_superfamilies_keeps_distant_or_weak_overlap_separate() -> None:
+    assigned = assign_feature_families(
+        (
+            _candidate(
+                candidate_id="Sample#10",
+                apex_rt=13.100,
+                peak_start=12.90,
+                peak_end=13.00,
+            ),
+            _candidate(
+                candidate_id="Sample#20",
+                apex_rt=13.300,
+                peak_start=13.20,
+                peak_end=13.36,
+            ),
+        )
+    )
+
+    assert [candidate.feature_superfamily_id for candidate in assigned] == [
+        "Sample@SF0001",
+        "Sample@SF0002",
+    ]
+    assert [candidate.feature_superfamily_size for candidate in assigned] == [1, 1]
+    assert [candidate.feature_superfamily_role for candidate in assigned] == [
+        "representative",
+        "representative",
+    ]
+
+
+def test_assign_feature_superfamilies_does_not_chain_across_broad_rt_region() -> None:
+    assigned = assign_feature_families(
+        (
+            _candidate(
+                candidate_id="Sample#10",
+                apex_rt=13.00,
+                peak_start=12.90,
+                peak_end=13.20,
+            ),
+            _candidate(
+                candidate_id="Sample#20",
+                apex_rt=13.10,
+                peak_start=12.98,
+                peak_end=13.30,
+            ),
+            _candidate(
+                candidate_id="Sample#30",
+                apex_rt=13.20,
+                peak_start=13.08,
+                peak_end=13.40,
+            ),
+        )
+    )
+
+    assert assigned[0].feature_superfamily_id == assigned[1].feature_superfamily_id
+    assert assigned[2].feature_superfamily_id != assigned[0].feature_superfamily_id
+    assert [candidate.feature_superfamily_size for candidate in assigned] == [2, 2, 1]
+
+
 def _candidate(
     *,
     candidate_id: str,
+    review_priority: str = "MEDIUM",
     sample_stem: str = "Sample",
     precursor_mz: float = 258.1085,
     product_mz: float = 142.0611,
@@ -82,19 +205,21 @@ def _candidate(
     peak_start: float | None = 7.70,
     peak_end: float | None = 7.98,
     ms1_peak_found: bool = True,
+    seed_event_count: int = 1,
+    ms2_product_max_intensity: float = 5000.0,
 ) -> DiscoveryCandidate:
     return DiscoveryCandidate(
-        review_priority="MEDIUM",
+        review_priority=review_priority,  # type: ignore[arg-type]
         candidate_id=candidate_id,
         precursor_mz=precursor_mz,
         product_mz=product_mz,
         observed_neutral_loss_da=116.0474,
         best_seed_rt=apex_rt or 7.84,
-        seed_event_count=1,
+        seed_event_count=seed_event_count,
         ms1_peak_found=ms1_peak_found,
         ms1_apex_rt=apex_rt,
         ms1_area=1000.0 if ms1_peak_found else None,
-        ms2_product_max_intensity=5000.0,
+        ms2_product_max_intensity=ms2_product_max_intensity,
         reason="single MS2 NL seed; MS1 peak found",
         raw_file=Path("C:/data/Sample.raw"),
         sample_stem=sample_stem,

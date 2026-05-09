@@ -9,6 +9,11 @@ DISCOVERY_REVIEW_COLUMNS = (
     "candidate_id",
     "feature_family_id",
     "feature_family_size",
+    "feature_superfamily_id",
+    "feature_superfamily_size",
+    "feature_superfamily_role",
+    "feature_superfamily_confidence",
+    "feature_superfamily_evidence",
     "precursor_mz",
     "product_mz",
     "observed_neutral_loss_da",
@@ -126,6 +131,11 @@ class DiscoveryCandidate:
     ms1_trace_quality: str
     feature_family_id: str = ""
     feature_family_size: int = 1
+    feature_superfamily_id: str = ""
+    feature_superfamily_size: int = 1
+    feature_superfamily_role: str = "representative"
+    feature_superfamily_confidence: str = "LOW"
+    feature_superfamily_evidence: str = "single_candidate"
 
     @classmethod
     def from_values(
