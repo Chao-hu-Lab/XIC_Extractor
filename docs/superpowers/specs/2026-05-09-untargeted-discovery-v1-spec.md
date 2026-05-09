@@ -415,6 +415,24 @@ These should be answered during implementation planning, not by expanding v1 sco
 4. What are the initial values for `seed_rt_gap_min` and `ms1_search_padding_min`?
 5. Should candidate CSV include both raw and smoothed MS1 apex RT, or only the resolver-selected apex RT?
 
+## Implementation Notes
+
+- The first implementation exposes the experimental CLI `xic-discovery-cli`.
+- Default FH comparison smoke command:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run xic-discovery-cli --raw "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation\TumorBC2312_DNA.raw" --dll-dir "C:\Xcalibur\system\programs" --output-dir "output\discovery\TumorBC2312_DNA" --neutral-loss-tag DNA_dR --neutral-loss-da 116.0474 --resolver-mode local_minimum
+```
+
+- If the exact RAW file is unavailable, use the known FH Program2 raw counterpart and record the path in the PR summary.
+- Expected smoke checks:
+  - CSV exists.
+  - Header is the fixed 12 review columns.
+  - Rows are candidate-level, not per MS2 scan.
+  - Candidate IDs map to Xcalibur scan IDs.
+  - At least one candidate has `ms1_area` when signal is valid.
+  - Targeted workbook tests remain unchanged.
+
 ## 12. Acceptance Criteria For This Spec
 
 This spec is ready for implementation planning when:
