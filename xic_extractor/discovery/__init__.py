@@ -1,5 +1,6 @@
 """Untargeted discovery models and contracts."""
 
+from xic_extractor.discovery.csv_writer import write_discovery_candidates_csv
 from xic_extractor.discovery.grouping import group_discovery_seeds
 from xic_extractor.discovery.ms1_backfill import MS1XicSource, backfill_ms1_candidates
 from xic_extractor.discovery.ms2_seeds import MS2ScanSource, collect_strict_nl_seeds
@@ -16,4 +17,5 @@ __all__ = (
     "build_candidate_reason",
     "collect_strict_nl_seeds",
     "group_discovery_seeds",
+    "write_discovery_candidates_csv",
 )
