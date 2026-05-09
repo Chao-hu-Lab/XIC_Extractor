@@ -294,6 +294,42 @@ def test_ms1_peak_far_from_best_seed_is_not_high_priority(
     assert candidate.reason == "MS1 peak offset from seed RT"
 
 
+def test_ms1_seed_delta_is_signed_but_priority_uses_absolute_distance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    group = _group(
+        (
+            _seed(scan_number=10, rt=7.80, product_intensity=3000.0),
+            _seed(scan_number=20, rt=7.90, product_intensity=9000.0),
+        )
+    )
+    raw = _FakeRaw(
+        rt=np.array([7.60, 7.70, 7.80]),
+        intensity=np.array([10.0, 100.0, 10.0]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.discovery.ms1_backfill.find_peak_and_area",
+        lambda *args, **kwargs: _ok_peak(
+            rt=7.70,
+            intensity=100.0,
+            area=50.0,
+            start=7.60,
+            end=7.80,
+        ),
+    )
+
+    candidate = backfill_ms1_candidates(
+        raw,
+        (group,),
+        settings=_settings(ms1_search_padding_min=0.20),
+        peak_config=_peak_config(),
+    )[0]
+
+    assert candidate.ms1_seed_delta_min == pytest.approx(-0.20)
+    assert candidate.review_priority == "HIGH"
+    assert candidate.reason == "strong MS2 NL seed group; MS1 peak found near seed RT"
+
+
 @pytest.mark.parametrize(
     ("seed_values", "expected_scan", "expected_rt"),
     (
@@ -363,7 +399,7 @@ def test_best_seed_tie_breaks_by_error_then_rt_then_scan_for_candidate(
 
     assert candidate.best_ms2_scan_id == expected_scan
     assert candidate.best_seed_rt == expected_rt
-    assert candidate.ms1_seed_delta_min == pytest.approx(abs(7.90 - expected_rt))
+    assert candidate.ms1_seed_delta_min == pytest.approx(7.90 - expected_rt)
 
 
 def _settings(**overrides: float) -> DiscoverySettings:

@@ -61,7 +61,13 @@ def _format_csv_value(column: str, value: object) -> str:
             return ";".join(str(scan_id) for scan_id in value)
         return str(value)
     if isinstance(value, Path):
-        return str(value)
+        return _escape_excel_formula(str(value))
     if isinstance(value, float):
         return f"{value:.6g}"
-    return str(value)
+    return _escape_excel_formula(str(value))
+
+
+def _escape_excel_formula(value: str) -> str:
+    if value.startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value

@@ -148,7 +148,7 @@ def _detect_ms1_peak(
         apex_rt=peak.rt,
         area=peak.area,
         height=peak.intensity,
-        seed_delta_min=abs(peak.rt - best_seed.rt),
+        seed_delta_min=peak.rt - best_seed.rt,
         peak_rt_start=peak.peak_start,
         peak_rt_end=peak.peak_end,
         trace_quality="clean",

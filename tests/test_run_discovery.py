@@ -132,6 +132,33 @@ def test_run_discovery_cli_rejects_non_positive_float_args(
     assert "value must be > 0" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("value", ["nan", "inf"])
+def test_run_discovery_cli_rejects_non_finite_positive_float_args(
+    value: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_discovery.main(
+            [
+                "--raw",
+                str(raw_path),
+                "--dll-dir",
+                str(dll_dir),
+                "--nl-tolerance-ppm",
+                value,
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "value must be > 0" in capsys.readouterr().err
+
+
 def test_run_discovery_cli_rejects_inverted_rt_window(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

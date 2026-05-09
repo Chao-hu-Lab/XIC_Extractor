@@ -139,7 +139,7 @@ def _positive_float(value: str) -> float:
         parsed = float(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError("value must be a float") from exc
-    if parsed <= 0.0:
+    if not math.isfinite(parsed) or parsed <= 0.0:
         raise argparse.ArgumentTypeError("value must be > 0")
     return parsed
 

@@ -262,6 +262,24 @@ def test_write_discovery_candidates_csv_uses_csv_escaping(
     assert row["reason"] == 'neutral loss, requires "review"'
 
 
+def test_write_discovery_candidates_csv_escapes_excel_formula_strings(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "discovery_candidates.csv"
+    candidate = _candidate(
+        raw_file=Path("=cmd.raw"),
+        sample_stem="+sample",
+        reason="@review",
+    )
+
+    write_discovery_candidates_csv(output_path, [candidate])
+
+    row = _read_csv(output_path)[0]
+    assert row["raw_file"] == "'=cmd.raw"
+    assert row["sample_stem"] == "'+sample"
+    assert row["reason"] == "'@review"
+
+
 def test_discovery_settings_require_neutral_loss_profile() -> None:
     profile = NeutralLossProfile("DNA_dR", 116.0474)
 
