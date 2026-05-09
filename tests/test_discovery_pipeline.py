@@ -1,0 +1,235 @@
+import ast
+import csv
+from collections.abc import Iterator
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from xic_extractor.config import ExtractionConfig
+from xic_extractor.discovery.models import DiscoverySettings, NeutralLossProfile
+from xic_extractor.discovery.pipeline import run_discovery
+from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
+from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
+
+
+NEUTRAL_LOSS_DA = 116.0474
+
+
+def test_single_raw_pipeline_groups_strict_ms2_seeds_and_writes_one_candidate_csv(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_path = tmp_path / "TumorBC2312_DNA.raw"
+    output_dir = tmp_path / "out"
+    raw = _FakeRawHandle(
+        [
+            _scan_event(scan_number=101, rt=7.80, product_intensity=3000.0),
+            _scan_event(scan_number=202, rt=7.86, product_intensity=9000.0),
+        ],
+        rt=np.array([7.70, 7.86, 8.00]),
+        intensity=np.array([10.0, 600.0, 20.0]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.discovery.ms1_backfill.find_peak_and_area",
+        lambda *args, **kwargs: _ok_peak(
+            rt=7.86,
+            intensity=600.0,
+            area=42.0,
+            start=7.70,
+            end=8.00,
+        ),
+    )
+
+    csv_path = run_discovery(
+        raw_path,
+        output_dir=output_dir,
+        settings=_settings(seed_rt_gap_min=0.20),
+        peak_config=_peak_config(tmp_path),
+        raw_opener=lambda path, dll_dir: raw,
+    )
+
+    assert csv_path == output_dir / "discovery_candidates.csv"
+    rows = _read_csv(csv_path)
+    assert len(rows) == 1
+    assert rows[0]["candidate_id"] == "TumorBC2312_DNA#202"
+    assert rows[0]["best_ms2_scan_id"] == "202"
+    assert rows[0]["seed_scan_ids"] == "101;202"
+    assert rows[0]["seed_event_count"] == "2"
+    assert rows[0]["ms1_peak_found"] == "TRUE"
+
+
+def test_pipeline_writes_header_only_csv_when_no_strict_seeds(tmp_path: Path) -> None:
+    raw = _FakeRawHandle(events=[])
+
+    csv_path = run_discovery(
+        tmp_path / "Blank.raw",
+        output_dir=tmp_path / "out",
+        settings=_settings(),
+        peak_config=_peak_config(tmp_path),
+        raw_opener=lambda path, dll_dir: raw,
+    )
+
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+
+    assert len(rows) == 1
+    assert "candidate_id" in rows[0]
+
+
+def test_pipeline_uses_injected_raw_opener_with_dll_dir_and_closes_context(
+    tmp_path: Path,
+) -> None:
+    raw_path = tmp_path / "Sample.raw"
+    peak_config = _peak_config(tmp_path)
+    raw = _FakeRawHandle(events=[])
+    calls: list[tuple[Path, Path]] = []
+
+    def _open(path: Path, dll_dir: Path) -> _FakeRawHandle:
+        calls.append((path, dll_dir))
+        return raw
+
+    run_discovery(
+        raw_path,
+        output_dir=tmp_path / "out",
+        settings=_settings(),
+        peak_config=peak_config,
+        raw_opener=_open,
+    )
+
+    assert calls == [(raw_path, peak_config.dll_dir)]
+    assert raw.entered is True
+    assert raw.closed is True
+
+
+def test_pipeline_does_not_import_targeted_extractor_module() -> None:
+    pipeline_path = (
+        Path(__file__).resolve().parents[1]
+        / "xic_extractor"
+        / "discovery"
+        / "pipeline.py"
+    )
+    tree = ast.parse(pipeline_path.read_text(encoding="utf-8"))
+
+    imported_modules = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    imported_from_modules = {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module is not None
+    }
+
+    assert "xic_extractor.extractor" not in imported_modules | imported_from_modules
+
+
+def _settings(**overrides: float) -> DiscoverySettings:
+    values = {
+        "neutral_loss_profile": NeutralLossProfile("DNA_dR", NEUTRAL_LOSS_DA),
+        **overrides,
+    }
+    return DiscoverySettings(**values)
+
+
+def _peak_config(tmp_path: Path) -> ExtractionConfig:
+    return ExtractionConfig(
+        data_dir=tmp_path,
+        dll_dir=tmp_path / "dll",
+        output_csv=tmp_path / "xic_results.csv",
+        diagnostics_csv=tmp_path / "xic_diagnostics.csv",
+        smooth_window=15,
+        smooth_polyorder=3,
+        peak_rel_height=0.95,
+        peak_min_prominence_ratio=0.10,
+        ms2_precursor_tol_da=0.5,
+        nl_min_intensity_ratio=0.01,
+        resolver_mode="local_minimum",
+    )
+
+
+def _scan_event(
+    *,
+    scan_number: int,
+    rt: float,
+    product_intensity: float,
+) -> Ms2ScanEvent:
+    precursor_mz = 258.1085
+    product_mz = precursor_mz - NEUTRAL_LOSS_DA
+    return Ms2ScanEvent(
+        scan=Ms2Scan(
+            scan_number=scan_number,
+            rt=rt,
+            precursor_mz=precursor_mz,
+            masses=np.asarray([product_mz], dtype=float),
+            intensities=np.asarray([product_intensity], dtype=float),
+            base_peak=product_intensity,
+        ),
+        parse_error=None,
+        scan_number=scan_number,
+    )
+
+
+def _ok_peak(
+    *,
+    rt: float,
+    intensity: float,
+    area: float,
+    start: float,
+    end: float,
+) -> PeakDetectionResult:
+    return PeakDetectionResult(
+        status="OK",
+        peak=PeakResult(
+            rt=rt,
+            intensity=intensity,
+            intensity_smoothed=intensity,
+            area=area,
+            peak_start=start,
+            peak_end=end,
+        ),
+        n_points=3,
+        max_smoothed=intensity,
+        n_prominent_peaks=1,
+    )
+
+
+def _read_csv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+class _FakeRawHandle:
+    def __init__(
+        self,
+        events: list[Ms2ScanEvent],
+        *,
+        rt: np.ndarray | None = None,
+        intensity: np.ndarray | None = None,
+    ) -> None:
+        self._events = events
+        self._rt = np.asarray([] if rt is None else rt, dtype=float)
+        self._intensity = np.asarray([] if intensity is None else intensity, dtype=float)
+        self.entered = False
+        self.closed = False
+
+    def __enter__(self) -> "_FakeRawHandle":
+        self.entered = True
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.closed = True
+
+    def iter_ms2_scans(self, rt_min: float, rt_max: float) -> Iterator[Ms2ScanEvent]:
+        yield from self._events
+
+    def extract_xic(
+        self,
+        mz: float,
+        rt_min: float,
+        rt_max: float,
+        ppm_tol: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        return self._rt, self._intensity
