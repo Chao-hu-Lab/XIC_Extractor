@@ -7,6 +7,7 @@ from typing import Protocol, cast
 
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.discovery.csv_writer import write_discovery_candidates_csv
+from xic_extractor.discovery.feature_family import assign_feature_families
 from xic_extractor.discovery.grouping import group_discovery_seeds
 from xic_extractor.discovery.models import DiscoverySettings
 from xic_extractor.discovery.ms1_backfill import MS1XicSource, backfill_ms1_candidates
@@ -41,7 +42,10 @@ def run_discovery(
             peak_config=peak_config,
         )
 
-    return write_discovery_candidates_csv(output_path, candidates)
+    return write_discovery_candidates_csv(
+        output_path,
+        assign_feature_families(candidates),
+    )
 
 
 def _default_raw_opener(

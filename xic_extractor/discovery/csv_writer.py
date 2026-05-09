@@ -34,6 +34,8 @@ def _candidate_sort_key(candidate: DiscoveryCandidate) -> tuple[Any, ...]:
     area_desc = 0.0 if candidate.ms1_area is None else -candidate.ms1_area
     return (
         _PRIORITY_RANK.get(candidate.review_priority, len(_PRIORITY_RANK)),
+        -candidate.feature_family_size,
+        candidate.feature_family_id,
         -candidate.seed_event_count,
         -candidate.ms2_product_max_intensity,
         area_is_missing,

@@ -20,6 +20,8 @@ from xic_extractor.discovery.models import (
 EXPECTED_REVIEW_COLUMNS = (
     "review_priority",
     "candidate_id",
+    "feature_family_id",
+    "feature_family_size",
     "precursor_mz",
     "product_mz",
     "observed_neutral_loss_da",
@@ -65,10 +67,14 @@ def _candidate(
     ms2_product_max_intensity: float = 12000.0,
     ms1_peak_found: bool = True,
     seed_scan_ids: tuple[int, ...] = (6095,),
+    feature_family_id: str = "Sample_1@F0001",
+    feature_family_size: int = 1,
 ) -> DiscoveryCandidate:
     return DiscoveryCandidate(
         review_priority=review_priority,  # type: ignore[arg-type]
         candidate_id=candidate_id,
+        feature_family_id=feature_family_id,
+        feature_family_size=feature_family_size,
         precursor_mz=258.108512345,
         product_mz=142.061112345,
         observed_neutral_loss_da=116.0474,
@@ -112,8 +118,8 @@ def test_discovery_provenance_columns_are_stable_csv_contract() -> None:
 
 
 def test_discovery_candidate_columns_start_with_review_columns() -> None:
-    assert DISCOVERY_CANDIDATE_COLUMNS[:12] == DISCOVERY_REVIEW_COLUMNS
-    assert DISCOVERY_CANDIDATE_COLUMNS[12:] == DISCOVERY_PROVENANCE_COLUMNS
+    assert DISCOVERY_CANDIDATE_COLUMNS[:14] == DISCOVERY_REVIEW_COLUMNS
+    assert DISCOVERY_CANDIDATE_COLUMNS[14:] == DISCOVERY_PROVENANCE_COLUMNS
 
 
 def test_write_discovery_candidates_csv_creates_parent_and_writes_header(
@@ -209,6 +215,40 @@ def test_write_discovery_candidates_csv_sorts_review_queue_rows(
     ]
 
 
+def test_write_discovery_candidates_csv_keeps_feature_families_together(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "discovery_candidates.csv"
+    candidates = [
+        _candidate(
+            candidate_id="family-a-lower-intensity",
+            feature_family_id="Sample_1@F0001",
+            feature_family_size=2,
+            ms2_product_max_intensity=1000.0,
+        ),
+        _candidate(
+            candidate_id="family-b-between",
+            feature_family_id="Sample_1@F0002",
+            feature_family_size=1,
+            ms2_product_max_intensity=9000.0,
+        ),
+        _candidate(
+            candidate_id="family-a-higher-intensity",
+            feature_family_id="Sample_1@F0001",
+            feature_family_size=2,
+            ms2_product_max_intensity=8000.0,
+        ),
+    ]
+
+    write_discovery_candidates_csv(output_path, candidates)
+
+    assert [row["candidate_id"] for row in _read_csv(output_path)] == [
+        "family-a-higher-intensity",
+        "family-a-lower-intensity",
+        "family-b-between",
+    ]
+
+
 def test_write_discovery_candidates_csv_formats_review_values_stably(
     tmp_path: Path,
 ) -> None:
@@ -219,6 +259,8 @@ def test_write_discovery_candidates_csv_formats_review_values_stably(
 
     row = _read_csv(output_path)[0]
     assert row["precursor_mz"] == "258.109"
+    assert row["feature_family_id"] == "Sample_1@F0001"
+    assert row["feature_family_size"] == "1"
     assert row["product_mz"] == "142.061"
     assert row["observed_neutral_loss_da"] == "116.047"
     assert row["best_seed_rt"] == "7.83"

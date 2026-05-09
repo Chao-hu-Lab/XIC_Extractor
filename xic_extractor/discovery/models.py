@@ -7,6 +7,8 @@ ReviewPriority = Literal["HIGH", "MEDIUM", "LOW"]
 DISCOVERY_REVIEW_COLUMNS = (
     "review_priority",
     "candidate_id",
+    "feature_family_id",
+    "feature_family_size",
     "precursor_mz",
     "product_mz",
     "observed_neutral_loss_da",
@@ -122,6 +124,8 @@ class DiscoveryCandidate:
     ms1_peak_rt_end: float | None
     ms1_height: float | None
     ms1_trace_quality: str
+    feature_family_id: str = ""
+    feature_family_size: int = 1
 
     @classmethod
     def from_values(
