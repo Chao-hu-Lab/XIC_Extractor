@@ -1,0 +1,231 @@
+from pathlib import Path
+
+import pytest
+import tomllib
+
+from scripts import run_discovery
+from xic_extractor.raw_reader import RawReaderError
+
+
+def test_run_discovery_cli_passes_single_raw_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "TumorBC2312_DNA.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "out"
+    captured = {}
+
+    def _fake_run_discovery(raw_path_arg, *, output_dir, settings, peak_config):
+        captured["raw_path"] = raw_path_arg
+        captured["output_dir"] = output_dir
+        captured["settings"] = settings
+        captured["peak_config"] = peak_config
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "discovery_candidates.csv"
+        output_path.write_text("review_priority\n", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(run_discovery, "run_discovery", _fake_run_discovery)
+
+    code = run_discovery.main(
+        [
+            "--raw",
+            str(raw_path),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--neutral-loss-da",
+            "116.0474",
+            "--neutral-loss-tag",
+            "DNA_dR",
+            "--resolver-mode",
+            "local_minimum",
+        ]
+    )
+
+    assert code == 0
+    assert captured["raw_path"] == raw_path.resolve()
+    assert captured["output_dir"] == output_dir.resolve()
+    settings = captured["settings"]
+    assert settings.neutral_loss_profile.tag == "DNA_dR"
+    assert settings.neutral_loss_profile.neutral_loss_da == 116.0474
+    assert settings.resolver_mode == "local_minimum"
+    peak_config = captured["peak_config"]
+    assert peak_config.data_dir == raw_path.parent.resolve()
+    assert peak_config.dll_dir == dll_dir.resolve()
+    assert peak_config.output_csv == output_dir.resolve() / "xic_results.csv"
+    assert peak_config.diagnostics_csv == output_dir.resolve() / "xic_diagnostics.csv"
+    assert peak_config.resolver_mode == "local_minimum"
+    assert peak_config.nl_min_intensity_ratio == settings.nl_min_intensity_ratio
+    stdout = capsys.readouterr().out
+    assert "Discovery CSV: " in stdout
+    assert "discovery_candidates.csv" in stdout
+
+
+def test_run_discovery_cli_rejects_missing_raw(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_discovery.main(
+        [
+            "--raw",
+            str(tmp_path / "missing.raw"),
+            "--dll-dir",
+            str(dll_dir),
+        ]
+    )
+
+    assert code == 2
+    assert "raw file does not exist" in capsys.readouterr().err
+
+
+def test_run_discovery_cli_rejects_missing_dll_dir(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+
+    code = run_discovery.main(
+        [
+            "--raw",
+            str(raw_path),
+            "--dll-dir",
+            str(tmp_path / "missing-dll"),
+        ]
+    )
+
+    assert code == 2
+    assert "dll directory does not exist" in capsys.readouterr().err
+
+
+def test_run_discovery_cli_rejects_non_positive_float_args(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_discovery.main(
+            [
+                "--raw",
+                str(raw_path),
+                "--dll-dir",
+                str(dll_dir),
+                "--neutral-loss-da",
+                "0",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "value must be > 0" in capsys.readouterr().err
+
+
+def test_run_discovery_cli_rejects_inverted_rt_window(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_discovery.main(
+            [
+                "--raw",
+                str(raw_path),
+                "--dll-dir",
+                str(dll_dir),
+                "--rt-min",
+                "10",
+                "--rt-max",
+                "5",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "rt-min must be <= rt-max" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--rt-min", "-1"),
+        ("--rt-max", "nan"),
+        ("--rt-max", "inf"),
+    ],
+)
+def test_run_discovery_cli_rejects_invalid_rt_bounds(
+    option: str,
+    value: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_discovery.main(
+            [
+                "--raw",
+                str(raw_path),
+                "--dll-dir",
+                str(dll_dir),
+                option,
+                value,
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "RT bounds must be finite values >= 0" in capsys.readouterr().err
+
+
+def test_run_discovery_cli_returns_2_when_raw_reader_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    def _raise_raw_reader_error(*_args, **_kwargs):
+        raise RawReaderError("boom")
+
+    monkeypatch.setattr(run_discovery, "run_discovery", _raise_raw_reader_error)
+
+    code = run_discovery.main(
+        [
+            "--raw",
+            str(raw_path),
+            "--dll-dir",
+            str(dll_dir),
+        ]
+    )
+
+    assert code == 2
+    assert "boom" in capsys.readouterr().err
+
+
+def test_pyproject_registers_discovery_cli_script() -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    assert (
+        pyproject["project"]["scripts"]["xic-discovery-cli"]
+        == "scripts.run_discovery:main"
+    )
