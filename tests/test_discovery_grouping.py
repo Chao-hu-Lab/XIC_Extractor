@@ -43,7 +43,7 @@ def test_rt_gap_larger_than_setting_splits_groups() -> None:
     assert [group.rt_seed_min for group in groups] == [24.00, 27.00]
 
 
-def test_rt_chain_splits_when_group_span_would_exceed_setting() -> None:
+def test_rt_chain_groups_when_adjacent_gaps_stay_within_setting() -> None:
     groups = group_discovery_seeds(
         (
             _seed(scan_number=1, rt=7.80),
@@ -54,8 +54,7 @@ def test_rt_chain_splits_when_group_span_would_exceed_setting() -> None:
     )
 
     assert [(group.rt_seed_min, group.rt_seed_max) for group in groups] == [
-        (7.80, 7.99),
-        (8.18, 8.18),
+        (7.80, 8.18),
     ]
 
 
@@ -114,6 +113,23 @@ def test_product_mz_outside_tolerance_splits_groups() -> None:
 
     assert len(groups) == 2
     assert [group.product_mz for group in groups] == [200.0000, 200.0100]
+
+
+def test_interleaved_different_mz_seed_does_not_split_matching_group() -> None:
+    groups = group_discovery_seeds(
+        (
+            _seed(scan_number=1, rt=19.00, precursor_mz=254.1260, product_mz=138.0780),
+            _seed(scan_number=2, rt=19.05, precursor_mz=500.0000, product_mz=383.9526),
+            _seed(scan_number=3, rt=19.10, precursor_mz=254.1261, product_mz=138.0781),
+        ),
+        settings=_settings(seed_rt_gap_min=0.20),
+    )
+
+    matching_groups = [
+        group for group in groups if group.precursor_mz == pytest.approx(254.1260)
+    ]
+    assert len(matching_groups) == 1
+    assert tuple(seed.scan_number for seed in matching_groups[0].seeds) == (1, 3)
 
 
 def test_observed_neutral_loss_drift_outside_tolerance_splits_groups() -> None:

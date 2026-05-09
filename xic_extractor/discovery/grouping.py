@@ -18,19 +18,30 @@ def group_discovery_seeds(
     if not sorted_seeds:
         return ()
 
-    groups: list[DiscoverySeedGroup] = []
-    current: list[DiscoverySeed] = []
+    active_groups: list[list[DiscoverySeed]] = []
 
     for seed in sorted_seeds:
-        if current and not _can_join_group(seed, current, settings=settings):
-            groups.append(_build_group(current))
-            current = []
-        current.append(seed)
+        matching_group = _matching_active_group(
+            seed, active_groups, settings=settings
+        )
+        if matching_group is None:
+            active_groups.append([seed])
+        else:
+            matching_group.append(seed)
 
-    if current:
-        groups.append(_build_group(current))
+    return tuple(_build_group(group) for group in active_groups)
 
-    return tuple(groups)
+
+def _matching_active_group(
+    seed: DiscoverySeed,
+    active_groups: list[list[DiscoverySeed]],
+    *,
+    settings: DiscoverySettings,
+) -> list[DiscoverySeed] | None:
+    for group in active_groups:
+        if _can_join_group(seed, group, settings=settings):
+            return group
+    return None
 
 
 def _can_join_group(
@@ -46,9 +57,6 @@ def _can_join_group(
         and seed.sample_stem == first.sample_stem
         and seed.neutral_loss_tag == first.neutral_loss_tag
         and seed.rt - previous.rt <= settings.seed_rt_gap_min
-        and _rt_span_with_candidate_is_within_gap(
-            seed, current, settings.seed_rt_gap_min
-        )
         and all(
             _within_ppm(
                 seed.precursor_mz,
@@ -110,16 +118,6 @@ def _within_ppm(a: float, b: float, tolerance_ppm: float) -> bool:
     ):
         return False
     return abs(a - b) / abs(b) * 1_000_000.0 <= tolerance_ppm
-
-
-def _rt_span_with_candidate_is_within_gap(
-    seed: DiscoverySeed,
-    current: list[DiscoverySeed],
-    seed_rt_gap_min: float,
-) -> bool:
-    rt_min = min(existing.rt for existing in current)
-    rt_max = max(existing.rt for existing in current)
-    return max(rt_max, seed.rt) - min(rt_min, seed.rt) <= seed_rt_gap_min
 
 
 def _seed_sort_key(
