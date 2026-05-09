@@ -57,7 +57,9 @@ def _format_csv_value(column: str, value: object) -> str:
     if column == "seed_scan_ids":
         if isinstance(value, str):
             return value
-        return ";".join(str(scan_id) for scan_id in value)
+        if isinstance(value, tuple):
+            return ";".join(str(scan_id) for scan_id in value)
+        return str(value)
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, float):

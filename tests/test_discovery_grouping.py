@@ -9,7 +9,6 @@ from xic_extractor.discovery.models import (
     NeutralLossProfile,
 )
 
-
 NEUTRAL_LOSS_DA = 116.0474
 RAW_FILE = Path("C:/data/TumorBC2312_DNA.raw")
 
@@ -156,7 +155,11 @@ def test_different_neutral_loss_tag_or_sample_identity_splits_groups() -> None:
     )
 
     assert len(groups) == 4
-    assert [(group.raw_file, group.sample_stem, group.neutral_loss_tag) for group in groups] == [
+    group_keys = [
+        (group.raw_file, group.sample_stem, group.neutral_loss_tag)
+        for group in groups
+    ]
+    assert group_keys == [
         (Path("C:/data/Other.raw"), "TumorBC2312_DNA", "DNA_dR"),
         (RAW_FILE, "OtherSample", "DNA_dR"),
         (RAW_FILE, "TumorBC2312_DNA", "DNA_dR"),
@@ -203,7 +206,10 @@ def test_representative_numeric_fields_come_from_deterministic_best_seed() -> No
     assert group.precursor_mz == highest_intensity.precursor_mz
     assert group.product_mz == highest_intensity.product_mz
     assert group.observed_neutral_loss_da == highest_intensity.observed_neutral_loss_da
-    assert group.neutral_loss_mass_error_ppm == highest_intensity.observed_loss_error_ppm
+    assert (
+        group.neutral_loss_mass_error_ppm
+        == highest_intensity.observed_loss_error_ppm
+    )
 
 
 def test_best_seed_tie_breaks_by_error_then_rt_then_scan_number() -> None:
@@ -241,7 +247,10 @@ def test_best_seed_tie_breaks_by_error_then_rt_then_scan_number() -> None:
     )
 
     assert len(groups) == 1
-    assert groups[0].neutral_loss_mass_error_ppm == smallest_error.observed_loss_error_ppm
+    assert (
+        groups[0].neutral_loss_mass_error_ppm
+        == smallest_error.observed_loss_error_ppm
+    )
 
     same_error_groups = group_discovery_seeds(
         (same_error_later_rt, same_error_earlier_scan, worse_error),
@@ -298,7 +307,9 @@ def _seed(
     )
 
 
-def _replace_seed_value(seed: DiscoverySeed, *, field: str, value: float) -> DiscoverySeed:
+def _replace_seed_value(
+    seed: DiscoverySeed, *, field: str, value: float
+) -> DiscoverySeed:
     values = {
         "raw_file": seed.raw_file,
         "sample_stem": seed.sample_stem,

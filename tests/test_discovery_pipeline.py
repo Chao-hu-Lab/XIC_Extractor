@@ -12,7 +12,6 @@ from xic_extractor.discovery.pipeline import run_discovery
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
 from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
 
-
 NEUTRAL_LOSS_DA = 116.0474
 
 
@@ -211,7 +210,9 @@ class _FakeRawHandle:
     ) -> None:
         self._events = events
         self._rt = np.asarray([] if rt is None else rt, dtype=float)
-        self._intensity = np.asarray([] if intensity is None else intensity, dtype=float)
+        self._intensity = np.asarray(
+            [] if intensity is None else intensity, dtype=float
+        )
         self.entered = False
         self.closed = False
 
