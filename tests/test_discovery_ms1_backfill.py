@@ -294,6 +294,79 @@ def test_ms1_peak_far_from_best_seed_is_not_high_priority(
     assert candidate.reason == "MS1 peak offset from seed RT"
 
 
+def test_backfill_merges_candidates_inside_same_ms1_peak_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_group = _group((_seed(scan_number=10, rt=7.80, product_intensity=3000.0),))
+    second_group = _group((_seed(scan_number=20, rt=8.04, product_intensity=9000.0),))
+    raw = _FakeRaw(
+        rt=np.array([7.70, 7.92, 8.10]),
+        intensity=np.array([20.0, 900.0, 25.0]),
+    )
+    peak_results = iter(
+        (
+            _ok_peak(rt=7.92, intensity=900.0, area=1234.5, start=7.70, end=8.10),
+            _ok_peak(rt=7.92, intensity=900.0, area=1234.5, start=7.70, end=8.10),
+        )
+    )
+    monkeypatch.setattr(
+        "xic_extractor.discovery.ms1_backfill.find_peak_and_area",
+        lambda *args, **kwargs: next(peak_results),
+    )
+
+    candidates = backfill_ms1_candidates(
+        raw,
+        (first_group, second_group),
+        settings=_settings(ms1_search_padding_min=0.20),
+        peak_config=_peak_config(),
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.best_ms2_scan_id == 20
+    assert candidate.seed_scan_ids == (10, 20)
+    assert candidate.seed_event_count == 2
+    assert candidate.rt_seed_min == pytest.approx(7.80)
+    assert candidate.rt_seed_max == pytest.approx(8.04)
+    assert candidate.ms1_area == 1234.5
+    assert candidate.ms2_product_max_intensity == 9000.0
+    assert candidate.review_priority == "HIGH"
+    assert candidate.reason == (
+        "MS2 NL seeds merged by shared MS1 peak; MS1 peak found near seed RT"
+    )
+
+
+def test_backfill_does_not_merge_distinct_ms1_peak_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_group = _group((_seed(scan_number=10, rt=7.80, product_intensity=3000.0),))
+    second_group = _group((_seed(scan_number=20, rt=8.04, product_intensity=9000.0),))
+    raw = _FakeRaw(
+        rt=np.array([7.70, 7.80, 8.04, 8.14]),
+        intensity=np.array([20.0, 900.0, 850.0, 25.0]),
+    )
+    peak_results = iter(
+        (
+            _ok_peak(rt=7.80, intensity=900.0, area=100.0, start=7.70, end=7.88),
+            _ok_peak(rt=8.04, intensity=850.0, area=90.0, start=7.96, end=8.14),
+        )
+    )
+    monkeypatch.setattr(
+        "xic_extractor.discovery.ms1_backfill.find_peak_and_area",
+        lambda *args, **kwargs: next(peak_results),
+    )
+
+    candidates = backfill_ms1_candidates(
+        raw,
+        (first_group, second_group),
+        settings=_settings(ms1_search_padding_min=0.20),
+        peak_config=_peak_config(),
+    )
+
+    assert len(candidates) == 2
+    assert [candidate.seed_scan_ids for candidate in candidates] == [(10,), (20,)]
+
+
 def test_ms1_seed_delta_is_signed_but_priority_uses_absolute_distance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

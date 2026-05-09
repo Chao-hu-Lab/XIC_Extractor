@@ -1,4 +1,6 @@
+import math
 from collections.abc import Iterable
+from dataclasses import replace
 from typing import Protocol
 
 import numpy as np
@@ -98,7 +100,192 @@ def backfill_ms1_candidates(
                 reason=reason,
             )
         )
-    return tuple(candidates)
+    return _merge_candidates_by_ms1_peak(candidates, settings=settings)
+
+
+def _merge_candidates_by_ms1_peak(
+    candidates: list[DiscoveryCandidate],
+    *,
+    settings: DiscoverySettings,
+) -> tuple[DiscoveryCandidate, ...]:
+    merged: list[DiscoveryCandidate] = []
+    for candidate in candidates:
+        merge_index = _matching_ms1_peak_candidate_index(
+            candidate, merged, settings=settings
+        )
+        if merge_index is None:
+            merged.append(candidate)
+            continue
+        merged[merge_index] = _merge_candidate_pair(
+            merged[merge_index],
+            candidate,
+            settings=settings,
+        )
+    return tuple(merged)
+
+
+def _matching_ms1_peak_candidate_index(
+    candidate: DiscoveryCandidate,
+    merged: list[DiscoveryCandidate],
+    *,
+    settings: DiscoverySettings,
+) -> int | None:
+    for index, existing in enumerate(merged):
+        if _can_merge_by_ms1_peak(existing, candidate, settings=settings):
+            return index
+    return None
+
+
+def _can_merge_by_ms1_peak(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+    *,
+    settings: DiscoverySettings,
+) -> bool:
+    return (
+        first.raw_file == second.raw_file
+        and first.sample_stem == second.sample_stem
+        and first.neutral_loss_tag == second.neutral_loss_tag
+        and first.ms1_peak_found
+        and second.ms1_peak_found
+        and _candidate_peak_bounds_present(first)
+        and _candidate_peak_bounds_present(second)
+        and _within_ppm(
+            first.precursor_mz,
+            second.precursor_mz,
+            settings.precursor_mz_tolerance_ppm,
+        )
+        and _within_ppm(
+            first.product_mz,
+            second.product_mz,
+            settings.product_mz_tolerance_ppm,
+        )
+        and _within_ppm(
+            first.observed_neutral_loss_da,
+            second.observed_neutral_loss_da,
+            settings.nl_tolerance_ppm,
+        )
+        and _peak_intervals_overlap(first, second)
+        and _seed_ranges_touch_shared_peak(first, second)
+    )
+
+
+def _merge_candidate_pair(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+    *,
+    settings: DiscoverySettings,
+) -> DiscoveryCandidate:
+    representative = _representative_candidate(first, second)
+    seed_scan_ids = tuple(sorted(set(first.seed_scan_ids + second.seed_scan_ids)))
+    seed_event_count = first.seed_event_count + second.seed_event_count
+    rt_seed_min = min(first.rt_seed_min, second.rt_seed_min)
+    rt_seed_max = max(first.rt_seed_max, second.rt_seed_max)
+    seed_delta = (
+        representative.ms1_apex_rt - representative.best_seed_rt
+        if representative.ms1_apex_rt is not None
+        else None
+    )
+    priority = assign_review_priority(
+        seed_event_count=seed_event_count,
+        ms1_peak_found=True,
+        ms1_seed_delta_min=seed_delta,
+        settings=settings,
+    )
+    reason = "MS2 NL seeds merged by shared MS1 peak; MS1 peak found near seed RT"
+    return replace(
+        representative,
+        seed_event_count=seed_event_count,
+        seed_scan_ids=seed_scan_ids,
+        rt_seed_min=rt_seed_min,
+        rt_seed_max=rt_seed_max,
+        ms1_search_rt_min=min(first.ms1_search_rt_min, second.ms1_search_rt_min),
+        ms1_search_rt_max=max(first.ms1_search_rt_max, second.ms1_search_rt_max),
+        ms1_seed_delta_min=seed_delta,
+        ms2_product_max_intensity=max(
+            first.ms2_product_max_intensity,
+            second.ms2_product_max_intensity,
+        ),
+        review_priority=priority,
+        reason=reason,
+    )
+
+
+def _representative_candidate(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> DiscoveryCandidate:
+    return min(
+        (first, second),
+        key=lambda candidate: (
+            -candidate.ms2_product_max_intensity,
+            abs(candidate.neutral_loss_mass_error_ppm),
+            candidate.best_seed_rt,
+            candidate.best_ms2_scan_id,
+        ),
+    )
+
+
+def _candidate_peak_bounds_present(candidate: DiscoveryCandidate) -> bool:
+    return (
+        candidate.ms1_peak_rt_start is not None
+        and candidate.ms1_peak_rt_end is not None
+        and candidate.ms1_peak_rt_start <= candidate.ms1_peak_rt_end
+    )
+
+
+def _peak_intervals_overlap(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> bool:
+    first_start = first.ms1_peak_rt_start
+    first_end = first.ms1_peak_rt_end
+    second_start = second.ms1_peak_rt_start
+    second_end = second.ms1_peak_rt_end
+    if (
+        first_start is None
+        or first_end is None
+        or second_start is None
+        or second_end is None
+    ):
+        return False
+    return max(first_start, second_start) <= min(first_end, second_end)
+
+
+def _seed_ranges_touch_shared_peak(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> bool:
+    return _seed_range_touches_peak(first, second) and _seed_range_touches_peak(
+        second, first
+    )
+
+
+def _seed_range_touches_peak(
+    seed_candidate: DiscoveryCandidate,
+    peak_candidate: DiscoveryCandidate,
+) -> bool:
+    peak_start = peak_candidate.ms1_peak_rt_start
+    peak_end = peak_candidate.ms1_peak_rt_end
+    if peak_start is None or peak_end is None:
+        return False
+    return (
+        seed_candidate.rt_seed_min <= peak_end
+        and seed_candidate.rt_seed_max >= peak_start
+    )
+
+
+def _within_ppm(a: float, b: float, tolerance_ppm: float) -> bool:
+    if (
+        not math.isfinite(a)
+        or not math.isfinite(b)
+        or not math.isfinite(tolerance_ppm)
+        or a <= 0
+        or b <= 0
+        or tolerance_ppm < 0
+    ):
+        return False
+    return abs(a - b) / abs(b) * 1_000_000.0 <= tolerance_ppm
 
 
 class _Ms1Fields:
