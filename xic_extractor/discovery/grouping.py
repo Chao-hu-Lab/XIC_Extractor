@@ -1,5 +1,5 @@
-from collections.abc import Iterable
 import math
+from collections.abc import Iterable
 from pathlib import Path
 
 from xic_extractor.discovery.models import (
@@ -46,7 +46,9 @@ def _can_join_group(
         and seed.sample_stem == first.sample_stem
         and seed.neutral_loss_tag == first.neutral_loss_tag
         and seed.rt - previous.rt <= settings.seed_rt_gap_min
-        and _rt_span_with_candidate_is_within_gap(seed, current, settings.seed_rt_gap_min)
+        and _rt_span_with_candidate_is_within_gap(
+            seed, current, settings.seed_rt_gap_min
+        )
         and all(
             _within_ppm(
                 seed.precursor_mz,
@@ -120,7 +122,9 @@ def _rt_span_with_candidate_is_within_gap(
     return max(rt_max, seed.rt) - min(rt_min, seed.rt) <= seed_rt_gap_min
 
 
-def _seed_sort_key(seed: DiscoverySeed) -> tuple[str, str, str, float, int, float, float]:
+def _seed_sort_key(
+    seed: DiscoverySeed,
+) -> tuple[str, str, str, float, int, float, float]:
     return (
         _path_sort_key(seed.raw_file),
         seed.sample_stem,
