@@ -65,7 +65,7 @@ The candidate, not the individual MS2 scan, is the primary review unit.
 - MS1 peak search inside seed-group RT range plus padding.
 - MS1 apex RT, height, area, and trace-quality evidence.
 - Candidate-level review priority.
-- One default candidate CSV per RAW: `discovery_candidates.csv`.
+- Standard per-RAW outputs: `discovery_candidates.csv` and `discovery_review.csv`.
 - One batch index CSV for `--raw-dir`: `discovery_batch_index.csv`.
 - Optional implementation seams for later event-level detail, plots, GUI mode, and batch consensus.
 
@@ -161,24 +161,31 @@ MS1 area is a core value proposition. A discovery row without MS1 area is only a
 
 ## 5. Output Contract
 
-### 5.1 Default output
+### 5.1 Standard output
 
-The default v1 single-RAW output is exactly one candidate CSV:
+The standard v1 single-RAW output is a paired review/full CSV set:
 
 ```text
 discovery_candidates.csv
+discovery_review.csv
 ```
 
-One raw file should not produce several default CSV files. Event-level details and plot outputs may be added later as opt-in artifacts, not as default output.
+`discovery_review.csv` is the human review index. `discovery_candidates.csv`
+is the full alignment-ready artifact. Event-level details, HTML, plots, Excel,
+and other heavy outputs may be added later as opt-in artifacts, not as standard
+outputs.
 
 For `--raw-dir`, v1 is batch execution, not batch alignment. The default output is:
 
 ```text
 discovery_batch_index.csv
 <sample_stem>/discovery_candidates.csv
+<sample_stem>/discovery_review.csv
 ```
 
-The index is only a navigation and summary file. It must not imply cross-sample alignment or batch-level consensus.
+The index is only a navigation and summary file. It points to each sample's
+review and full candidate CSVs, and it must not imply cross-sample alignment or
+batch-level consensus.
 
 ### 5.2 Row granularity
 
@@ -496,6 +503,7 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run xic-discovery-cli --raw-dir "C:\Xcalibur\d
 - If the exact RAW file is unavailable, use the known FH Program2 raw counterpart and record the path in the PR summary.
 - Single-RAW or per-sample candidate CSV smoke checks:
   - `discovery_candidates.csv` exists.
+  - `discovery_review.csv` exists.
   - Header starts with the fixed review columns.
   - Rows are candidate-level, not per MS2 scan.
   - Candidate IDs map to Xcalibur scan IDs.
@@ -504,6 +512,7 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run xic-discovery-cli --raw-dir "C:\Xcalibur\d
   - `discovery_batch_index.csv` exists.
   - One index row exists per input RAW file.
   - Each index row points to a per-sample `discovery_candidates.csv`.
+  - Each index row points to a per-sample `discovery_review.csv`.
   - No top-level combined `discovery_candidates.csv` is written for `--raw-dir`.
   - Index rows summarize candidate and priority counts only; they do not imply cross-sample alignment.
 - Targeted workbook tests remain unchanged.

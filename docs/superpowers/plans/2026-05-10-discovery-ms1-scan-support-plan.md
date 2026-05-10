@@ -13,7 +13,7 @@
 ## File Structure Map
 
 - Modify `xic_extractor/discovery/models.py`
-  - Add `ms1_scan_support_score: float | None`.
+- Add `ms1_scan_support_score: float | None`.
   - Append `ms1_scan_support_score` to provenance columns.
 - Modify `xic_extractor/discovery/ms1_backfill.py`
   - Add `compute_ms1_scan_support_score()`.
@@ -162,7 +162,7 @@ git commit -m "feat(discovery): compute MS1 scan support score"
 Add tests that verify:
 
 - A detected MS1 peak writes a numeric `ms1_scan_support_score`.
-- A missing peak writes `0` or an explicitly chosen empty value; choose `0` for v1 because missing scan support is known absence.
+- A missing MS1 peak writes a blank/`None` `ms1_scan_support_score`.
 - The score uses `settings.evidence_profile.thresholds.scan_support_target`.
 
 - [ ] **Step 2: Run the red tests**
@@ -181,7 +181,7 @@ Extend `_Ms1Fields` with `scan_support_score`.
 
 In `_detect_ms1_peak()`, compute it from RT array and selected peak.
 
-In missing peak fields, set `scan_support_score=0.0`.
+In missing peak fields, set `scan_support_score=None`.
 
 Pass `ms1_scan_support_score=ms1_fields.scan_support_score` into `DiscoveryCandidate.from_values()`.
 
@@ -235,6 +235,7 @@ Update scoring helper logic:
 - Use `candidate.ms1_scan_support_score` when present.
 - Compare against evidence profile thresholds.
 - Fall back to `ms1_trace_quality` only when numeric score is `None`.
+- Do not apply the low scan-support penalty when `ms1_peak_found` is false. Missing MS1 peak is already represented by the configured `ms1_peak_absent` score.
 
 Update `classify_ms1_support()` so `strong` / `moderate` considers numeric scan support plus area, not only legacy strings.
 
@@ -270,4 +271,3 @@ Optional real-data smoke after all three plans:
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run xic-discovery-cli --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" --dll-dir "C:\Xcalibur\system\programs" --output-dir "output\discovery\tissue8_review_evidence_scan_support" --neutral-loss-tag DNA_dR --neutral-loss-da 116.0474 --resolver-mode local_minimum
 ```
-

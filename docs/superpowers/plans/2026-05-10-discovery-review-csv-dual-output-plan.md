@@ -27,6 +27,8 @@
   - CLI fakes and stdout report both single-run output paths.
 - Modify `xic_extractor/discovery/__init__.py`
   - Re-export new public discovery output names.
+- Modify `docs/superpowers/specs/2026-05-09-untargeted-discovery-v1-spec.md`
+  - Update the active discovery v1 output contract from one default CSV to standard full + review CSV output.
 - Tests:
   - `tests/test_discovery_review_csv.py`
   - `tests/test_discovery_pipeline.py`
@@ -54,7 +56,39 @@ neutral_loss_tag
 review_note
 ```
 
-Full CSV remains unchanged in this plan.
+The full CSV column schema remains unchanged in this plan. The public output contract changes from a single default CSV to paired standard outputs: full candidate CSV plus brief review CSV.
+
+## Task 0: Update Active Spec Output Contract
+
+**Files:**
+- Modify: `docs/superpowers/specs/2026-05-09-untargeted-discovery-v1-spec.md`
+
+- [ ] **Step 1: Update the spec wording**
+
+Change the v1 output contract so it states:
+
+- Single RAW standard output writes `discovery_candidates.csv` and `discovery_review.csv`.
+- RAW directory standard output writes `discovery_batch_index.csv` plus per-sample `discovery_candidates.csv` and `discovery_review.csv`.
+- `discovery_review.csv` is the human review index.
+- `discovery_candidates.csv` remains the full alignment-ready artifact.
+- Event-level detail, HTML, plots, and Excel remain opt-in future artifacts.
+
+- [ ] **Step 2: Check for stale wording**
+
+Run:
+
+```powershell
+rg -n "exactly one candidate CSV|One raw file should not produce several|single-RAW output is exactly one" docs\superpowers\specs\2026-05-09-untargeted-discovery-v1-spec.md
+```
+
+Expected: no output.
+
+- [ ] **Step 3: Commit**
+
+```powershell
+git add docs/superpowers/specs/2026-05-09-untargeted-discovery-v1-spec.md
+git commit -m "docs(discovery): update v1 review CSV output contract"
+```
 
 ## Task 1: Define Brief Columns And Output Dataclasses
 
@@ -175,6 +209,7 @@ Add or update tests that verify:
 - `run_discovery_batch()` returns `DiscoveryBatchOutputs`.
 - Batch index includes `candidate_csv` and `review_csv`.
 - Batch index escapes Excel formula strings.
+- Stale existing full/review CSVs are not left in a mismatched state if one CSV write fails.
 
 - [ ] **Step 2: Run the red tests**
 
@@ -194,6 +229,15 @@ Use helper functions:
 
 - `_write_dual_csvs(output_dir, candidates) -> DiscoveryRunOutputs`
 - `_batch_index_row(..., outputs: DiscoveryRunOutputs, ...) -> dict[str, str]`
+
+Use a temp-file pair write:
+
+1. Write full CSV to `discovery_candidates.csv.tmp`.
+2. Write review CSV to `discovery_review.csv.tmp`.
+3. Only after both temp writes succeed, replace the final full CSV and final review CSV.
+4. If either temp write fails, delete temp files and leave existing final files untouched.
+
+This is not a filesystem transaction across both files, but it prevents normal writer failures from producing a fresh/stale CSV pair.
 
 - [ ] **Step 4: Run focused tests**
 
@@ -273,4 +317,3 @@ Optional real-data smoke:
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run xic-discovery-cli --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" --dll-dir "C:\Xcalibur\system\programs" --output-dir "output\discovery\tissue8_dual_csv_smoke" --neutral-loss-tag DNA_dR --neutral-loss-da 116.0474 --resolver-mode local_minimum
 ```
-

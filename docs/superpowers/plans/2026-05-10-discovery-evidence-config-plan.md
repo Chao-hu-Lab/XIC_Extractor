@@ -72,15 +72,67 @@ Expected: FAIL because `evidence_config.py` does not exist.
 
 - [ ] **Step 3: Implement config dataclasses**
 
-Create `evidence_config.py` with frozen dataclasses and current default values:
+Create `evidence_config.py` with frozen dataclasses and these exact field names:
 
-- MS1 peak present/absent points.
-- seed-event per/max points.
-- RT aligned/near/shifted thresholds and points.
-- product intensity thresholds and points.
-- area thresholds and points.
-- trace/scan-support thresholds and points.
-- superfamily representative/member points.
+```python
+from dataclasses import dataclass
+from typing import Literal
+
+DiscoveryEvidenceProfileName = Literal["default"]
+
+
+@dataclass(frozen=True)
+class DiscoveryEvidenceWeights:
+    ms1_peak_present: int = 25
+    ms1_peak_absent: int = 5
+    seed_event_per: int = 8
+    seed_event_max: int = 25
+    rt_aligned: int = 15
+    rt_near: int = 10
+    rt_shifted: int = 5
+    product_intensity_high: int = 10
+    product_intensity_med: int = 5
+    area_high: int = 10
+    area_med: int = 5
+    scan_support_high: int = 5
+    scan_support_low: int = -10
+    legacy_trace_quality_high: int = 5
+    legacy_trace_quality_low: int = -10
+    superfamily_representative: int = 5
+    superfamily_member: int = -5
+
+
+@dataclass(frozen=True)
+class DiscoveryEvidenceThresholds:
+    rt_aligned_max_min: float = 0.05
+    rt_near_max_min: float = 0.20
+    rt_shifted_max_min: float = 0.40
+    product_intensity_high_min: float = 100_000.0
+    product_intensity_med_min: float = 10_000.0
+    area_high_min: float = 1_000_000.0
+    area_med_min: float = 100_000.0
+    ms1_support_strong_area_min: float = 10_000_000.0
+    ms1_support_moderate_area_min: float = 1_000_000.0
+    scan_support_target: int = 10
+    scan_support_high_score_min: float = 0.8
+    scan_support_low_score_max: float = 0.2
+
+
+@dataclass(frozen=True)
+class DiscoveryEvidenceProfile:
+    name: DiscoveryEvidenceProfileName
+    weights: DiscoveryEvidenceWeights
+    thresholds: DiscoveryEvidenceThresholds
+
+
+DEFAULT_EVIDENCE_PROFILE = DiscoveryEvidenceProfile(
+    name="default",
+    weights=DiscoveryEvidenceWeights(),
+    thresholds=DiscoveryEvidenceThresholds(),
+)
+```
+
+The `scan_support_*` field names are part of the contract with Plan C.
 
 - [ ] **Step 4: Run green tests**
 
@@ -279,4 +331,3 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_discovery_evidence.py te
 $env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts
 $env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
 ```
-
