@@ -10,11 +10,14 @@ from xic_extractor.config import ExtractionConfig
 from xic_extractor.discovery.csv_writer import (
     format_discovery_csv_value,
     write_discovery_candidates_csv,
+    write_discovery_review_csv,
 )
 from xic_extractor.discovery.feature_family import assign_feature_families
 from xic_extractor.discovery.grouping import group_discovery_seeds
 from xic_extractor.discovery.models import (
+    DiscoveryBatchOutputs,
     DiscoveryCandidate,
+    DiscoveryRunOutputs,
     DiscoverySettings,
     ReviewPriority,
 )
@@ -25,6 +28,7 @@ _BATCH_INDEX_COLUMNS = (
     "sample_stem",
     "raw_file",
     "candidate_csv",
+    "review_csv",
     "candidate_count",
     "high_count",
     "medium_count",
@@ -46,7 +50,7 @@ def run_discovery(
     settings: DiscoverySettings,
     peak_config: ExtractionConfig,
     raw_opener: RawOpener | None = None,
-) -> Path:
+) -> DiscoveryRunOutputs:
     opener = raw_opener or _default_raw_opener
     candidates = assign_feature_families(
         _discover_raw_file(
@@ -56,10 +60,7 @@ def run_discovery(
             raw_opener=opener,
         )
     )
-    return write_discovery_candidates_csv(
-        output_dir / "discovery_candidates.csv",
-        candidates,
-    )
+    return _write_dual_csvs(output_dir, candidates)
 
 
 def run_discovery_batch(
@@ -69,9 +70,10 @@ def run_discovery_batch(
     settings: DiscoverySettings,
     peak_config: ExtractionConfig,
     raw_opener: RawOpener | None = None,
-) -> Path:
+) -> DiscoveryBatchOutputs:
     opener = raw_opener or _default_raw_opener
     index_rows: list[dict[str, str]] = []
+    per_sample: list[DiscoveryRunOutputs] = []
     for raw_path in raw_paths:
         candidates = assign_feature_families(
             _discover_raw_file(
@@ -82,32 +84,64 @@ def run_discovery_batch(
             )
         )
         sample_output_dir = output_dir / raw_path.stem
-        candidate_csv = write_discovery_candidates_csv(
-            sample_output_dir / "discovery_candidates.csv",
-            candidates,
-        )
+        outputs = _write_dual_csvs(sample_output_dir, candidates)
+        per_sample.append(outputs)
         index_rows.append(
             _batch_index_row(
                 raw_path=raw_path,
-                candidate_csv=candidate_csv,
+                outputs=outputs,
                 candidates=candidates,
             )
         )
 
-    return _write_batch_index(output_dir / "discovery_batch_index.csv", index_rows)
+    return DiscoveryBatchOutputs(
+        batch_index_csv=_write_batch_index(
+            output_dir / "discovery_batch_index.csv", index_rows
+        ),
+        per_sample=tuple(per_sample),
+    )
+
+
+def _write_dual_csvs(
+    output_dir: Path,
+    candidates: tuple[DiscoveryCandidate, ...],
+) -> DiscoveryRunOutputs:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    candidates_path = output_dir / "discovery_candidates.csv"
+    review_path = output_dir / "discovery_review.csv"
+    candidates_tmp = candidates_path.with_name(f"{candidates_path.name}.tmp")
+    review_tmp = review_path.with_name(f"{review_path.name}.tmp")
+
+    try:
+        write_discovery_candidates_csv(candidates_tmp, candidates)
+        write_discovery_review_csv(review_tmp, candidates)
+        candidates_tmp.replace(candidates_path)
+        review_tmp.replace(review_path)
+    except Exception:
+        candidates_tmp.unlink(missing_ok=True)
+        review_tmp.unlink(missing_ok=True)
+        raise
+
+    return DiscoveryRunOutputs(
+        candidates_csv=candidates_path,
+        review_csv=review_path,
+    )
 
 
 def _batch_index_row(
     *,
     raw_path: Path,
-    candidate_csv: Path,
+    outputs: DiscoveryRunOutputs,
     candidates: tuple[DiscoveryCandidate, ...],
 ) -> dict[str, str]:
     counts = _priority_counts(candidates)
     return {
         "sample_stem": format_discovery_csv_value("sample_stem", raw_path.stem),
         "raw_file": format_discovery_csv_value("raw_file", raw_path),
-        "candidate_csv": format_discovery_csv_value("candidate_csv", candidate_csv),
+        "candidate_csv": format_discovery_csv_value(
+            "candidate_csv", outputs.candidates_csv
+        ),
+        "review_csv": format_discovery_csv_value("review_csv", outputs.review_csv),
         "candidate_count": str(len(candidates)),
         "high_count": str(counts["HIGH"]),
         "medium_count": str(counts["MEDIUM"]),

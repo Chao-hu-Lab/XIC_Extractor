@@ -7,7 +7,12 @@ import numpy as np
 import pytest
 
 from xic_extractor.config import ExtractionConfig
-from xic_extractor.discovery.models import DiscoverySettings, NeutralLossProfile
+from xic_extractor.discovery.models import (
+    DiscoveryBatchOutputs,
+    DiscoveryRunOutputs,
+    DiscoverySettings,
+    NeutralLossProfile,
+)
 from xic_extractor.discovery.pipeline import run_discovery, run_discovery_batch
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
 from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
@@ -15,7 +20,7 @@ from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
 NEUTRAL_LOSS_DA = 116.0474
 
 
-def test_single_raw_pipeline_groups_strict_ms2_seeds_and_writes_one_candidate_csv(
+def test_single_raw_pipeline_groups_strict_ms2_seeds_and_writes_dual_csvs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -40,7 +45,7 @@ def test_single_raw_pipeline_groups_strict_ms2_seeds_and_writes_one_candidate_cs
         ),
     )
 
-    csv_path = run_discovery(
+    outputs = run_discovery(
         raw_path,
         output_dir=output_dir,
         settings=_settings(seed_rt_gap_min=0.20),
@@ -48,20 +53,27 @@ def test_single_raw_pipeline_groups_strict_ms2_seeds_and_writes_one_candidate_cs
         raw_opener=lambda path, dll_dir: raw,
     )
 
-    assert csv_path == output_dir / "discovery_candidates.csv"
-    rows = _read_csv(csv_path)
+    assert outputs == DiscoveryRunOutputs(
+        candidates_csv=output_dir / "discovery_candidates.csv",
+        review_csv=output_dir / "discovery_review.csv",
+    )
+    rows = _read_csv(outputs.candidates_csv)
     assert len(rows) == 1
     assert rows[0]["candidate_id"] == "TumorBC2312_DNA#202"
     assert rows[0]["best_ms2_scan_id"] == "202"
     assert rows[0]["seed_scan_ids"] == "101;202"
     assert rows[0]["seed_event_count"] == "2"
     assert rows[0]["ms1_peak_found"] == "TRUE"
+    review_rows = _read_csv(outputs.review_csv)
+    assert len(review_rows) == 1
+    assert review_rows[0]["candidate_id"] == "TumorBC2312_DNA#202"
+    assert "review_note" in review_rows[0]
 
 
 def test_pipeline_writes_header_only_csv_when_no_strict_seeds(tmp_path: Path) -> None:
     raw = _FakeRawHandle(events=[])
 
-    csv_path = run_discovery(
+    outputs = run_discovery(
         tmp_path / "Blank.raw",
         output_dir=tmp_path / "out",
         settings=_settings(),
@@ -69,11 +81,15 @@ def test_pipeline_writes_header_only_csv_when_no_strict_seeds(tmp_path: Path) ->
         raw_opener=lambda path, dll_dir: raw,
     )
 
-    with csv_path.open(newline="", encoding="utf-8") as handle:
+    with outputs.candidates_csv.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.reader(handle))
+    with outputs.review_csv.open(newline="", encoding="utf-8") as handle:
+        review_rows = list(csv.reader(handle))
 
     assert len(rows) == 1
     assert "candidate_id" in rows[0]
+    assert len(review_rows) == 1
+    assert "review_note" in review_rows[0]
 
 
 def test_batch_pipeline_writes_per_sample_csvs_and_index(
@@ -107,7 +123,7 @@ def test_batch_pipeline_writes_per_sample_csvs_and_index(
         ),
     )
 
-    csv_path = run_discovery_batch(
+    outputs = run_discovery_batch(
         raw_paths,
         output_dir=tmp_path / "out",
         settings=_settings(),
@@ -115,8 +131,10 @@ def test_batch_pipeline_writes_per_sample_csvs_and_index(
         raw_opener=lambda path, dll_dir: raw_by_path[path],
     )
 
-    assert csv_path == tmp_path / "out" / "discovery_batch_index.csv"
-    index_rows = _read_csv(csv_path)
+    assert isinstance(outputs, DiscoveryBatchOutputs)
+    assert outputs.batch_index_csv == tmp_path / "out" / "discovery_batch_index.csv"
+    assert len(outputs.per_sample) == 2
+    index_rows = _read_csv(outputs.batch_index_csv)
     assert [row["sample_stem"] for row in index_rows] == [
         "TumorBC2312_DNA",
         "NormalBC2257_DNA",
@@ -126,14 +144,23 @@ def test_batch_pipeline_writes_per_sample_csvs_and_index(
     assert [
         Path(row["candidate_csv"]).name for row in index_rows
     ] == ["discovery_candidates.csv", "discovery_candidates.csv"]
+    assert [
+        Path(row["review_csv"]).name for row in index_rows
+    ] == ["discovery_review.csv", "discovery_review.csv"]
 
     first_rows = _read_csv(
         tmp_path / "out" / "TumorBC2312_DNA" / "discovery_candidates.csv"
+    )
+    first_review_rows = _read_csv(
+        tmp_path / "out" / "TumorBC2312_DNA" / "discovery_review.csv"
     )
     second_rows = _read_csv(
         tmp_path / "out" / "NormalBC2257_DNA" / "discovery_candidates.csv"
     )
     assert [row["candidate_id"] for row in first_rows] == ["TumorBC2312_DNA#101"]
+    assert [row["candidate_id"] for row in first_review_rows] == [
+        "TumorBC2312_DNA#101"
+    ]
     assert [row["candidate_id"] for row in second_rows] == ["NormalBC2257_DNA#202"]
     assert not (tmp_path / "out" / "discovery_candidates.csv").exists()
     assert all(raw.entered and raw.closed for raw in raw_by_path.values())
@@ -145,7 +172,7 @@ def test_batch_pipeline_escapes_excel_formula_strings_in_index(
     raw_path = Path("=cmd.raw")
     raw = _FakeRawHandle(events=[])
 
-    csv_path = run_discovery_batch(
+    outputs = run_discovery_batch(
         (raw_path,),
         output_dir=tmp_path / "out",
         settings=_settings(),
@@ -153,10 +180,46 @@ def test_batch_pipeline_escapes_excel_formula_strings_in_index(
         raw_opener=lambda path, dll_dir: raw,
     )
 
-    row = _read_csv(csv_path)[0]
+    row = _read_csv(outputs.batch_index_csv)[0]
     assert row["sample_stem"] == "'=cmd"
     assert row["raw_file"].startswith("'=")
     assert row["candidate_csv"].endswith("discovery_candidates.csv")
+    assert row["review_csv"].endswith("discovery_review.csv")
+
+
+def test_run_discovery_keeps_stale_pair_when_review_write_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    stale_full = output_dir / "discovery_candidates.csv"
+    stale_review = output_dir / "discovery_review.csv"
+    stale_full.write_text("stale full\n", encoding="utf-8")
+    stale_review.write_text("stale review\n", encoding="utf-8")
+    raw = _FakeRawHandle(events=[])
+
+    def _fail_review(path: Path, candidates: object) -> Path:
+        raise OSError("simulated review writer failure")
+
+    monkeypatch.setattr(
+        "xic_extractor.discovery.pipeline.write_discovery_review_csv",
+        _fail_review,
+    )
+
+    with pytest.raises(OSError, match="simulated review writer failure"):
+        run_discovery(
+            tmp_path / "Blank.raw",
+            output_dir=output_dir,
+            settings=_settings(),
+            peak_config=_peak_config(tmp_path),
+            raw_opener=lambda path, dll_dir: raw,
+        )
+
+    assert stale_full.read_text(encoding="utf-8") == "stale full\n"
+    assert stale_review.read_text(encoding="utf-8") == "stale review\n"
+    assert not (output_dir / "discovery_candidates.csv.tmp").exists()
+    assert not (output_dir / "discovery_review.csv.tmp").exists()
 
 
 def test_pipeline_uses_injected_raw_opener_with_dll_dir_and_closes_context(
