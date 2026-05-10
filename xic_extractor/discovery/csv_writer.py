@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from xic_extractor.discovery.models import (
+    DISCOVERY_BRIEF_COLUMNS,
     DISCOVERY_CANDIDATE_COLUMNS,
     DiscoveryCandidate,
 )
@@ -27,6 +28,31 @@ def write_discovery_candidates_csv(
             writer.writerow(_candidate_row(candidate))
 
     return path
+
+
+def write_discovery_review_csv(
+    path: Path, candidates: Iterable[DiscoveryCandidate]
+) -> Path:
+    """Write the compact human review index for discovery candidates."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sorted_candidates = sorted(candidates, key=_candidate_sort_key)
+
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=DISCOVERY_BRIEF_COLUMNS)
+        writer.writeheader()
+        for candidate in sorted_candidates:
+            writer.writerow(_brief_candidate_row(candidate))
+
+    return path
+
+
+def build_discovery_review_note(candidate: DiscoveryCandidate) -> str:
+    return (
+        f"{candidate.ms2_support} MS2; "
+        f"{candidate.ms1_support} MS1; "
+        f"{candidate.rt_alignment} RT; "
+        f"{candidate.family_context}"
+    )
 
 
 def _candidate_sort_key(candidate: DiscoveryCandidate) -> tuple[Any, ...]:
@@ -52,6 +78,18 @@ def _candidate_row(candidate: DiscoveryCandidate) -> dict[str, str]:
     return {
         column: format_discovery_csv_value(column, getattr(candidate, column))
         for column in DISCOVERY_CANDIDATE_COLUMNS
+    }
+
+
+def _brief_candidate_row(candidate: DiscoveryCandidate) -> dict[str, str]:
+    return {
+        column: format_discovery_csv_value(
+            column,
+            build_discovery_review_note(candidate)
+            if column == "review_note"
+            else getattr(candidate, column),
+        )
+        for column in DISCOVERY_BRIEF_COLUMNS
     }
 
 
