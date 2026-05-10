@@ -23,11 +23,11 @@ Splitting also keeps each plan's regression risk bounded: clustering bugs, backf
 
 ## Execution Order
 
-Run these plans in order. **Plans 1 and 2 are written and executable right now.** Plans 3-4 are roadmap placeholders and must be written/reviewed before execution. Plan 4 may slip after Plan 3 without blocking shipping a usable v1.
+Run these plans in order. **Plans 1-3 are written and executable right now.** Plan 4 is a roadmap placeholder and must be written/reviewed before execution.
 
 1. [Plan 1: Alignment Clustering Core](2026-05-10-alignment-clustering-plan.md)
 2. [Plan 2: Cross-Sample MS1 Backfill](2026-05-10-alignment-ms1-backfill-plan.md)
-3. Plan 3: Alignment Output and CLI — pending, not yet written.
+3. [Plan 3: Alignment Output and CLI](2026-05-11-alignment-output-cli-plan.md)
 4. Plan 4: Legacy Pipeline Validation — pending, not yet written.
 
 ## Design Decisions Carried Forward
@@ -186,6 +186,17 @@ class AlignmentMatrix:
 ```
 
 Concrete schema for output TSVs is defined in Plan 3.
+
+Defined in Plan 3:
+
+- Default outputs:
+  - `alignment_review.tsv`
+  - `alignment_matrix.tsv`
+- Debug opt-in outputs:
+  - `alignment_cells.tsv`
+  - `alignment_matrix_status.tsv`
+
+`alignment_matrix.tsv` uses area values only for detected/rescued cells with positive finite area. Absent, unchecked, missing, zero, negative, and non-finite values are blank.
 
 ## Out Of Scope
 
