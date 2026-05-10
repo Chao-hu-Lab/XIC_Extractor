@@ -45,8 +45,7 @@ class AlignmentConfig:
             self.mz_bucket_neighbor_radius,
         )
 
-        if not self.anchor_priorities:
-            raise ValueError("anchor_priorities cannot be empty")
+        _require_anchor_priorities(self.anchor_priorities)
         _require_int_range(
             "anchor_min_evidence_score",
             self.anchor_min_evidence_score,
@@ -79,6 +78,16 @@ def _require_positive(name: str, value: float) -> None:
 def _require_positive_int(name: str, value: int) -> None:
     if type(value) is not int or value < 1:
         raise ValueError(f"{name} must be an integer >= 1")
+
+
+def _require_anchor_priorities(value: tuple[ReviewPriority, ...]) -> None:
+    valid_priorities = {"HIGH", "MEDIUM", "LOW"}
+    if (
+        type(value) is not tuple
+        or not value
+        or any(priority not in valid_priorities for priority in value)
+    ):
+        raise ValueError("anchor_priorities must be a non-empty tuple of valid values")
 
 
 def _require_int_range(name: str, value: int, minimum: int, maximum: int) -> None:

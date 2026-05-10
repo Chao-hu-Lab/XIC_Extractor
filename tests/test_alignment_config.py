@@ -26,6 +26,8 @@ def test_alignment_modules_do_not_import_pipeline_or_io_boundaries():
         "gui",
         "scripts",
         "xic_extractor.discovery",
+        "xic_extractor.extraction",
+        "xic_extractor.extractor",
         "xic_extractor.raw_reader",
         "xic_extractor.output",
     )
@@ -131,6 +133,10 @@ def test_bool_tolerance_windows_are_rejected(field):
     "kwargs",
     [
         {"anchor_priorities": ()},
+        {"anchor_priorities": ["HIGH"]},
+        {"anchor_priorities": "HIGH"},
+        {"anchor_priorities": ("BAD",)},
+        {"anchor_priorities": ("HIGH", "BAD")},
         {"anchor_min_evidence_score": -1},
         {"anchor_min_evidence_score": 101},
         {"anchor_min_evidence_score": True},
