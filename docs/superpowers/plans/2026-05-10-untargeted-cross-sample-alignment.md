@@ -23,12 +23,12 @@ Splitting also keeps each plan's regression risk bounded: clustering bugs, backf
 
 ## Execution Order
 
-Run these plans in order. **Plans 1-3 are written and executable right now.** Plan 4 is a roadmap placeholder and must be written/reviewed before execution.
+Run these plans in order. **Plans 1-4 are written.** Execute Plan 4 only after Plans 1-3 have been implemented and reviewed, because it consumes their output artifacts.
 
 1. [Plan 1: Alignment Clustering Core](2026-05-10-alignment-clustering-plan.md)
 2. [Plan 2: Cross-Sample MS1 Backfill](2026-05-10-alignment-ms1-backfill-plan.md)
 3. [Plan 3: Alignment Output and CLI](2026-05-11-alignment-output-cli-plan.md)
-4. Plan 4: Legacy Pipeline Validation — pending, not yet written.
+4. [Plan 4: Legacy Pipeline Validation](2026-05-11-alignment-legacy-validation-plan.md)
 
 ## Design Decisions Carried Forward
 
