@@ -17,7 +17,8 @@
   - Append `ms1_scan_support_score` to provenance columns.
 - Modify `xic_extractor/discovery/ms1_backfill.py`
   - Add `compute_ms1_scan_support_score()`.
-  - Populate the score for detected and missing peaks.
+  - Populate the score only for detected MS1 peaks.
+  - Keep missing MS1 peaks as `None` / blank so absence is not double-counted as low scan support.
 - Modify `xic_extractor/discovery/evidence_score.py`
   - Prefer numeric scan support for scoring and `ms1_support` classification.
   - Fall back to `ms1_trace_quality` only when numeric score is `None`.

@@ -23,12 +23,12 @@ Splitting also keeps each plan's regression risk bounded: clustering bugs, backf
 
 ## Execution Order
 
-Run these plans in order. Plan 4 may slip after Plan 3 without blocking shipping a usable v1.
+Run these plans in order. **Only Plan 1 is written and executable right now.** Plans 2-4 are roadmap placeholders and must be written/reviewed before execution. Plan 4 may slip after Plan 3 without blocking shipping a usable v1.
 
 1. [Plan 1: Alignment Clustering Core](2026-05-10-alignment-clustering-plan.md)
-2. [Plan 2: Cross-Sample MS1 Backfill](2026-05-10-alignment-backfill-plan.md)
-3. [Plan 3: Alignment Output and CLI](2026-05-10-alignment-output-cli-plan.md)
-4. [Plan 4: Legacy Pipeline Validation](2026-05-10-alignment-validation-plan.md)
+2. Plan 2: Cross-Sample MS1 Backfill — pending, not yet written.
+3. Plan 3: Alignment Output and CLI — pending, not yet written.
+4. Plan 4: Legacy Pipeline Validation — pending, not yet written.
 
 ## Design Decisions Carried Forward
 
@@ -64,6 +64,8 @@ Inside a shared `neutral_loss_tag`, precursor m/z and RT are necessary but insuf
 Current per-sample discovery candidates are strict-NL inputs, so they carry product and observed-loss evidence. If a future backfill or imported-input path introduces missing MS2 evidence into clustering, missing evidence should be treated as unknown rather than contradiction, but it must not create anchor strength.
 
 This prevents the most dangerous false positive: merging two same-m/z/RT signals whose CID/NL evidence points to different chemical hypotheses.
+
+Cluster compatibility is not any-member matching. Anchored clusters require a new candidate to be compatible with every anchor member. Unanchored clusters require compatibility with every primary member. This conservative complete-link rule prevents A-B / B-C chain merging from collapsing distinct hypotheses into one row.
 
 ### Alignment Anchor Policy Drives Seeding With Non-Anchor Fallback
 
@@ -146,6 +148,8 @@ class AlignmentCluster:
     neutral_loss_tag: str
     cluster_center_mz: float
     cluster_center_rt: float  # in minutes
+    cluster_product_mz: float
+    cluster_observed_neutral_loss_da: float
     has_anchor: bool
     members: tuple[DiscoveryCandidate, ...]
 ```

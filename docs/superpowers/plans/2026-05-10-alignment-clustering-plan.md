@@ -59,6 +59,20 @@ Candidates can merge only when all hard guards pass:
 
 Current `DiscoveryCandidate` inputs come from strict NL seeds, so they carry product and observed-loss evidence. If a future plan allows non-MS2 inputs into clustering, missing product / observed-loss evidence may be treated as unknown rather than conflict, but it must not create anchor strength.
 
+### Cluster-Level Compatibility
+
+Do not use "compatible with any existing member" as the merge rule. That recreates chain merging, where A-B and B-C are close but A-C are not.
+
+V1 uses a strict compatibility set:
+
+- Anchored cluster: compatibility set is all anchor members.
+- Unanchored cluster: compatibility set is all current primary members.
+- Candidate may attach only when it is pairwise compatible with every member in the compatibility set.
+- Non-anchor members in an anchored cluster do not expand the compatibility set for later candidates.
+- The cluster representative values are for reporting, sorting, and tie-breaks; they are not sufficient by themselves to override pairwise compatibility.
+
+This is intentionally closer to complete-link clustering than single-link clustering. It is more conservative, but it protects against merging same-m/z/RT false positives with incompatible CID/NL evidence.
+
 ### Anchor Policy
 
 `review_priority == "HIGH"` alone is not the full anchor rule. Review priority is a UX funnel label; alignment anchors need enough evidence to define a cluster center.
@@ -185,11 +199,19 @@ cluster_id: str
 neutral_loss_tag: str
 cluster_center_mz: float
 cluster_center_rt: float
+cluster_product_mz: float
+cluster_observed_neutral_loss_da: float
 has_anchor: bool
 members: tuple[DiscoveryCandidate, ...]
 ```
 
 `cluster_id` is assigned only by top-level `cluster_candidates()` as `ALN000001`, `ALN000002`, etc.
+
+Representative fields:
+
+- `cluster_product_mz` is the median product m/z of the same contributors used for center calculation.
+- `cluster_observed_neutral_loss_da` is the median observed neutral loss of the same contributors used for center calculation.
+- These fields are required so Plans 2-4 can explain what chemical hypothesis a cluster represents without re-deriving it from arbitrary members.
 
 ## Algorithm
 
@@ -207,6 +229,7 @@ members: tuple[DiscoveryCandidate, ...]
 4. For each candidate, find compatible clusters by max tolerances and NL compatibility.
 5. Attach to the best compatible cluster by match score:
    - hard reject outside `max_ppm` / `max_rt_sec`
+   - hard reject if candidate fails pairwise compatibility with the cluster's compatibility set
    - preferred-window score favors candidates within `preferred_ppm` / `preferred_rt_sec`
    - no product-overlap score in v1
 6. Enforce same-sample collision policy.
@@ -254,6 +277,7 @@ TDD:
 - anchor cluster center uses anchors only.
 - non-anchor cluster center uses all members.
 - center uses median m/z and median RT, not raw area weighted mean.
+- product and observed-loss representative fields use the same contributor set as the center.
 - RT fallback uses `best_seed_rt` when `ms1_apex_rt` is missing.
 - empty center input raises a clear `ValueError`.
 
@@ -269,6 +293,9 @@ TDD:
 - different `neutral_loss_tag` is incompatible.
 - same m/z/RT but product m/z conflict is incompatible.
 - same m/z/RT but observed neutral-loss conflict is incompatible.
+- anchored cluster compatibility requires compatibility with every anchor member, not any member.
+- unanchored cluster compatibility requires compatibility with every primary member.
+- non-anchor members in anchored clusters do not allow later candidates to chain through them.
 - compatibility tests use strict-NL `DiscoveryCandidate` inputs with real product and observed-loss values.
 - CID model rejects attempts to use unsupported fragmentation model values.
 
@@ -312,6 +339,7 @@ Implementation:
 TDD:
 
 - final cleanup ejects members outside max tolerances after center drift.
+- final cleanup ejects members that fail pairwise NL compatibility after representative drift.
 - ejected members are reattached once when compatible.
 - chain case A-B close, B-C close, A-C not close does not collapse into one cluster.
 - input permutations produce identical cluster IDs and memberships.
@@ -355,6 +383,7 @@ No real RAW validation is required for Plan 1 because this is pure clustering lo
 - HCD fragment fingerprint similarity is explicitly future scope.
 - `cluster_candidates()` is deterministic and input-order invariant.
 - Same m/z/RT candidates with contradictory CID/NL evidence do not merge.
+- Candidate attachment uses anchor-complete-link / complete-link compatibility, not any-member compatibility.
 - Same-sample duplicates are resolved deterministically.
 - Cluster centers are not raw-area weighted.
 - Non-anchor data are preserved without silently pulling anchored centers.
