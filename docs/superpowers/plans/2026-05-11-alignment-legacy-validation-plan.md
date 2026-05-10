@@ -63,7 +63,7 @@ Hard blockers:
 
 - XIC alignment files cannot be parsed.
 - Required legacy files cannot be parsed when provided.
-- No shared sample names exist between XIC and a provided legacy source.
+- No shared sample names exist within the chosen validation scope between XIC and a provided legacy source.
 - XIC alignment matrix has duplicate `cluster_id` rows.
 - A legacy matrix has duplicate feature IDs after loading.
 - XIC alignment has zero clusters.
@@ -71,9 +71,9 @@ Hard blockers:
 Warnings:
 
 - A provided legacy source has zero matched features.
-- More than 10% of legacy sample columns fail to normalize to a shared XIC sample name.
-- Median matched RT delta exceeds the configured match RT tolerance.
-- Median matched m/z delta exceeds the configured match ppm tolerance.
+- More than 10% of samples inside the chosen validation scope fail to match on both XIC and legacy sides.
+- Median matched `distance_score` is greater than `0.5`.
+- 90th percentile matched `distance_score` is greater than `0.8`.
 
 Advisory only:
 
@@ -233,6 +233,39 @@ def normalize_sample_name(value: str) -> str:
 
 Do not fuzzy-match arbitrary sample names. If a sample remains unmatched after these deterministic rules, report it in summary metrics.
 
+## Sample Scope Contract
+
+Legacy files can contain more samples than the XIC validation run. This is normal for 8-raw validation against a full 85-sample legacy matrix and must not be reported as a sample-name failure.
+
+Validation therefore has an explicit `sample_scope`:
+
+```text
+sample_scope = "xic" | "legacy" | "intersection"
+default = "xic"
+```
+
+Definitions:
+
+- `xic_samples`: normalized `alignment_matrix.tsv` sample columns.
+- `legacy_samples`: normalized legacy matrix sample columns.
+- `scope_samples`:
+  - `xic`: all `xic_samples`, preserving XIC sample order.
+  - `legacy`: all `legacy_samples`, preserving legacy sample order.
+  - `intersection`: samples present in both, preserving XIC sample order.
+- `shared_samples`: `scope_samples` present in both XIC and legacy.
+- `failed_sample_match_count`: `scope_samples` not present in both XIC and legacy.
+- `failed_sample_match_rate = failed_sample_match_count / len(scope_samples)`.
+- `out_of_scope_legacy_sample_count`: legacy samples not included in `scope_samples`.
+
+Rules:
+
+- Default `sample_scope="xic"` is used for 8-raw and 85-raw validation. It asks: "for the samples XIC just processed, does the legacy matrix contain comparable columns?"
+- Legacy samples outside the XIC subset are `out_of_scope_legacy_sample_count` and `INFO`, not `WARN`.
+- If `scope_samples` is empty, `failed_sample_match_rate` is blank and the source is `BLOCK`.
+- If `shared_samples` is empty, the source is `BLOCK`.
+- If `failed_sample_match_rate > 0.10`, the source is `WARN`.
+- Per-feature presence metrics are computed only on `shared_samples`.
+
 ## Feature Matching Contract
 
 For each legacy source, match features to XIC clusters independently.
@@ -242,6 +275,8 @@ Default thresholds:
 ```text
 match_ppm = 20.0
 match_rt_sec = 60.0
+match_distance_warn_median = 0.5
+match_distance_warn_p90 = 0.8
 ```
 
 Candidate pair is eligible when:
@@ -266,9 +301,14 @@ Matching rule:
 
 This is one-to-one validation matching. It does not change alignment clusters and does not introduce chain merging.
 
+Distance warnings use `distance_score`, not raw tolerance exceedance. Matched pairs already passed the hard ppm/RT thresholds, so warnings must detect loose-but-eligible matches:
+
+- `median_distance_score > match_distance_warn_median` is `WARN`.
+- `p90_distance_score > match_distance_warn_p90` is `WARN`.
+
 ## Metric Contract
 
-For each matched feature pair, compute on shared normalized samples:
+For each matched feature pair, compute on `shared_samples` from the Sample Scope Contract:
 
 ```text
 shared_sample_count
@@ -291,6 +331,7 @@ Definitions:
 - `log_area_pearson` uses `log10(area)` for samples where both XIC and legacy are present.
 - If fewer than 3 paired positive areas exist, `log_area_pearson` is blank.
 - Do not compare raw area scale as a pass/fail metric.
+- Sparse overlap rule: when `both_present_count + xic_only_count + legacy_only_count <= 2`, a match with `both_present_count >= 1` is considered sparse-overlap `OK`. Otherwise the normal `present_jaccard >= 0.5` rule decides `OK`.
 
 ## Output Contract
 
@@ -324,11 +365,18 @@ legacy_feature_count
 matched_feature_count
 unmatched_xic_count
 unmatched_legacy_count
+xic_sample_count
+legacy_sample_count
+sample_scope
+scope_sample_count
 shared_sample_count
-legacy_unshared_sample_count
-legacy_unshared_sample_rate
+failed_sample_match_count
+failed_sample_match_rate
+out_of_scope_legacy_sample_count
 median_abs_mz_delta_ppm
 median_abs_rt_delta_sec
+median_distance_score
+p90_distance_score
 median_present_jaccard
 median_log_area_pearson
 ```
@@ -380,8 +428,9 @@ note
 
 Match row statuses:
 
-- `OK`: `present_jaccard >= 0.5` or both sides have sparse but overlapping signal.
-- `REVIEW`: `present_jaccard < 0.5`, no shared samples, or large area-pattern disagreement.
+- `OK`: `present_jaccard >= 0.5`.
+- `OK`: sparse-overlap exception when `both_present_count + xic_only_count + legacy_only_count <= 2` and `both_present_count >= 1`.
+- `REVIEW`: no shared samples, blank `present_jaccard` without sparse overlap, `present_jaccard < 0.5`, or large area-pattern disagreement.
 
 Do not write unmatched feature rows to this default file. Unmatched counts belong in `alignment_validation_summary.tsv`.
 
@@ -395,6 +444,7 @@ xic-align-validate-cli `
   --legacy-fh-tsv "C:\Users\user\Desktop\MS Data process package\MS-data aligner\output\program2_DNA\program2_DNA_v4_alignment_standard.tsv" `
   --legacy-metabcombiner-tsv "C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\metabcombiner_fh_format_20260429_130630.tsv" `
   --legacy-combine-fix-xlsx "C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\metabcombiner_fh_format_20260422_213805_combined_fix_20260422_223242.xlsx" `
+  --sample-scope xic `
   --output-dir output\alignment_validation\tissue85
 ```
 
@@ -411,6 +461,9 @@ Optional arguments:
 - `--output-dir`, default `output\alignment_validation`.
 - `--match-ppm`, default `20.0`.
 - `--match-rt-sec`, default `60.0`.
+- `--sample-scope`, choices `xic`, `legacy`, `intersection`, default `xic`.
+- `--match-distance-warn-median`, default `0.5`.
+- `--match-distance-warn-p90`, default `0.8`.
 
 Exit codes:
 
@@ -566,8 +619,13 @@ git commit -m "feat(alignment): load legacy validation matrices"
   - blank/zero legacy values are missing, not low area.
   - `present_jaccard` is blank when both sides have no present values.
   - `log_area_pearson` is blank when fewer than 3 paired positive values exist.
-  - summary marks no shared samples as `BLOCK`.
-  - summary marks legacy unshared sample rate above `0.10` as `WARN`.
+  - summary marks no shared samples inside the selected sample scope as `BLOCK`.
+  - `sample_scope="xic"` treats legacy-only columns as `out_of_scope_legacy_sample_count`, not sample-name failure.
+  - `sample_scope="legacy"` counts legacy samples missing from XIC as `failed_sample_match_count`.
+  - summary marks `failed_sample_match_rate > 0.10` as `WARN`.
+  - summary marks `median_distance_score > 0.5` as `WARN`.
+  - summary marks `p90_distance_score > 0.8` as `WARN`.
+  - match status uses sparse-overlap `OK` only when union-present count is `<= 2` and `both_present_count >= 1`.
 
 Example matching fixture:
 
@@ -601,7 +659,7 @@ Expected red: missing `xic_extractor.alignment.validation_compare`.
   - `FeatureMatch` dataclass with the columns required by `alignment_legacy_matches.tsv`.
   - `SummaryMetric` dataclass with `source`, `metric`, `value`, `threshold`, `status`, `note`.
   - `match_legacy_source(xic, legacy, match_ppm=20.0, match_rt_sec=60.0) -> tuple[FeatureMatch, ...]`.
-  - `summarize_legacy_source(xic, legacy, matches, match_ppm=20.0, match_rt_sec=60.0) -> tuple[SummaryMetric, ...]`.
+  - `summarize_legacy_source(xic, legacy, matches, sample_scope="xic", match_ppm=20.0, match_rt_sec=60.0, match_distance_warn_median=0.5, match_distance_warn_p90=0.8) -> tuple[SummaryMetric, ...]`.
   - `summarize_global(metrics) -> tuple[SummaryMetric, ...]`.
 
 - [ ] Re-run and commit:
@@ -657,6 +715,7 @@ git commit -m "feat(alignment): write legacy validation reports"
   - pipeline loads XIC alignment once.
   - pipeline accepts any combination of FH, metabCombiner, and combine-fix legacy sources.
   - pipeline rejects a run with zero legacy sources.
+  - pipeline passes `sample_scope` and match-distance warning thresholds to summary generation.
   - pipeline writes exactly summary and matches TSV by default.
   - pipeline does not import or call RAW reader helpers.
   - writer failure leaves no partial output pair from the failed run.
@@ -671,7 +730,7 @@ Expected red: missing `xic_extractor.alignment.validation_pipeline`.
 
 - [ ] Implement:
   - `AlignmentValidationOutputs(summary_tsv: Path, matches_tsv: Path)`.
-  - `run_alignment_validation(alignment_review, alignment_matrix, output_dir, legacy_fh_tsv=None, legacy_metabcombiner_tsv=None, legacy_combine_fix_xlsx=None, match_ppm=20.0, match_rt_sec=60.0)`.
+  - `run_alignment_validation(alignment_review, alignment_matrix, output_dir, legacy_fh_tsv=None, legacy_metabcombiner_tsv=None, legacy_combine_fix_xlsx=None, match_ppm=20.0, match_rt_sec=60.0, sample_scope="xic", match_distance_warn_median=0.5, match_distance_warn_p90=0.8)`.
   - load each provided legacy source.
   - compare each loaded legacy matrix independently.
   - write summary and matches to temp paths, then replace final paths after both writes succeed.
@@ -694,9 +753,10 @@ git commit -m "feat(alignment): orchestrate legacy validation"
 - [ ] Write red tests:
   - CLI resolves `--alignment-dir` into `alignment_review.tsv` and `alignment_matrix.tsv`.
   - CLI accepts explicit `--alignment-review` and `--alignment-matrix`.
-  - CLI passes legacy paths and thresholds to `run_alignment_validation()`.
+  - CLI passes legacy paths, ppm/RT thresholds, sample scope, and distance warning thresholds to `run_alignment_validation()`.
   - CLI rejects missing alignment files with exit code `2`.
   - CLI rejects zero legacy sources with exit code `2`.
+  - CLI rejects invalid `--sample-scope` values with exit code `2`.
   - pyproject registers `xic-align-validate-cli`.
 
 Run:
@@ -740,7 +800,7 @@ git commit -m "feat(alignment): add legacy validation CLI"
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run xic-discovery-cli --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" --dll-dir "C:\Xcalibur\system\programs" --output-dir "output\discovery\tissue8_alignment_v1" --neutral-loss-tag DNA_dR --neutral-loss-da 116.0474 --resolver-mode local_minimum
 $env:UV_CACHE_DIR='.uv-cache'; uv run xic-align-cli --discovery-batch-index "output\discovery\tissue8_alignment_v1\discovery_batch_index.csv" --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" --dll-dir "C:\Xcalibur\system\programs" --output-dir "output\alignment\tissue8_alignment_v1" --resolver-mode local_minimum
-$env:UV_CACHE_DIR='.uv-cache'; uv run xic-align-validate-cli --alignment-dir "output\alignment\tissue8_alignment_v1" --legacy-fh-tsv "C:\Users\user\Desktop\MS Data process package\MS-data aligner\output\program2_DNA\program2_DNA_v4_alignment_standard.tsv" --legacy-metabcombiner-tsv "C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\metabcombiner_fh_format_20260429_130630.tsv" --legacy-combine-fix-xlsx "C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\metabcombiner_fh_format_20260422_213805_combined_fix_20260422_223242.xlsx" --output-dir "output\alignment_validation\tissue8_alignment_v1"
+$env:UV_CACHE_DIR='.uv-cache'; uv run xic-align-validate-cli --alignment-dir "output\alignment\tissue8_alignment_v1" --legacy-fh-tsv "C:\Users\user\Desktop\MS Data process package\MS-data aligner\output\program2_DNA\program2_DNA_v4_alignment_standard.tsv" --legacy-metabcombiner-tsv "C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\metabcombiner_fh_format_20260429_130630.tsv" --legacy-combine-fix-xlsx "C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\metabcombiner_fh_format_20260422_213805_combined_fix_20260422_223242.xlsx" --sample-scope xic --output-dir "output\alignment_validation\tissue8_alignment_v1"
 ```
 
 85-raw validation sequence:
@@ -748,7 +808,7 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run xic-align-validate-cli --alignment-dir "ou
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run xic-discovery-cli --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R" --dll-dir "C:\Xcalibur\system\programs" --output-dir "output\discovery\tissue85_alignment_v1" --neutral-loss-tag DNA_dR --neutral-loss-da 116.0474 --resolver-mode local_minimum
 $env:UV_CACHE_DIR='.uv-cache'; uv run xic-align-cli --discovery-batch-index "output\discovery\tissue85_alignment_v1\discovery_batch_index.csv" --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R" --dll-dir "C:\Xcalibur\system\programs" --output-dir "output\alignment\tissue85_alignment_v1" --resolver-mode local_minimum
-$env:UV_CACHE_DIR='.uv-cache'; uv run xic-align-validate-cli --alignment-dir "output\alignment\tissue85_alignment_v1" --legacy-fh-tsv "C:\Users\user\Desktop\MS Data process package\MS-data aligner\output\program2_DNA\program2_DNA_v4_alignment_standard.tsv" --legacy-metabcombiner-tsv "C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\metabcombiner_fh_format_20260429_130630.tsv" --legacy-combine-fix-xlsx "C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\metabcombiner_fh_format_20260422_213805_combined_fix_20260422_223242.xlsx" --output-dir "output\alignment_validation\tissue85_alignment_v1"
+$env:UV_CACHE_DIR='.uv-cache'; uv run xic-align-validate-cli --alignment-dir "output\alignment\tissue85_alignment_v1" --legacy-fh-tsv "C:\Users\user\Desktop\MS Data process package\MS-data aligner\output\program2_DNA\program2_DNA_v4_alignment_standard.tsv" --legacy-metabcombiner-tsv "C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\metabcombiner_fh_format_20260429_130630.tsv" --legacy-combine-fix-xlsx "C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\metabcombiner_fh_format_20260422_213805_combined_fix_20260422_223242.xlsx" --sample-scope xic --output-dir "output\alignment_validation\tissue85_alignment_v1"
 ```
 
 - [ ] Run stale wording checks:
@@ -794,7 +854,10 @@ No RAW validation is required for unit completion. Real-data commands in Task 6 
 - Validation writes exactly `alignment_validation_summary.tsv` and `alignment_legacy_matches.tsv`.
 - Missing and zero legacy values are treated as missing.
 - Sample name normalization is deterministic and tested.
+- Validation sample scope defaults to XIC sample order so 8-raw validation against a full legacy matrix does not create false sample-name warnings.
 - Feature matching is one-to-one, deterministic, and threshold-bound.
+- Match-distance warnings use median/p90 `distance_score` thresholds, not impossible post-filter tolerance exceedance.
+- Sparse-overlap match status has a numeric rule.
 - Reports distinguish `BLOCK`, `WARN`, `OK`, and `INFO`.
 - Validation modules do not import RAW readers.
 - Roadmap no longer labels Plan 4 as pending.
