@@ -1,8 +1,17 @@
+from dataclasses import replace
 from itertools import permutations
 from pathlib import Path
 
 from xic_extractor.discovery.feature_family import assign_feature_families
-from xic_extractor.discovery.models import DiscoveryCandidate
+from xic_extractor.discovery.evidence_config import (
+    DEFAULT_EVIDENCE_PROFILE,
+    DiscoveryEvidenceProfile,
+)
+from xic_extractor.discovery.models import (
+    DiscoveryCandidate,
+    DiscoverySettings,
+    NeutralLossProfile,
+)
 
 
 def test_assign_feature_families_groups_candidates_sharing_ms1_peak() -> None:
@@ -313,6 +322,28 @@ def test_assign_feature_families_labels_superfamily_context() -> None:
         "Sample#10": "member",
         "Sample#20": "representative",
     }
+
+
+def test_assign_feature_families_threads_custom_evidence_settings() -> None:
+    default_assigned = assign_feature_families((_candidate(candidate_id="Sample#10"),))
+    custom_settings = DiscoverySettings(
+        neutral_loss_profile=NeutralLossProfile("DNA_dR", 116.0474),
+        evidence_profile=DiscoveryEvidenceProfile(
+            name="default",
+            weights=replace(
+                DEFAULT_EVIDENCE_PROFILE.weights,
+                ms1_peak_present=30,
+            ),
+            thresholds=DEFAULT_EVIDENCE_PROFILE.thresholds,
+        ),
+    )
+
+    custom_assigned = assign_feature_families(
+        (_candidate(candidate_id="Sample#10"),),
+        settings=custom_settings,
+    )
+
+    assert custom_assigned[0].evidence_score == default_assigned[0].evidence_score + 5
 
 
 def _candidate(

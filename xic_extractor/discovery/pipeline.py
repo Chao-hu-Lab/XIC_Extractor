@@ -58,7 +58,8 @@ def run_discovery(
             settings=settings,
             peak_config=peak_config,
             raw_opener=opener,
-        )
+        ),
+        settings=settings,
     )
     return _write_dual_csvs(output_dir, candidates)
 
@@ -81,7 +82,8 @@ def run_discovery_batch(
                 settings=settings,
                 peak_config=peak_config,
                 raw_opener=opener,
-            )
+            ),
+            settings=settings,
         )
         sample_output_dir = output_dir / raw_path.stem
         outputs = _write_dual_csvs(sample_output_dir, candidates)

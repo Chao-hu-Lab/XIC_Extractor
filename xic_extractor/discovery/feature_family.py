@@ -1,7 +1,7 @@
 from dataclasses import replace
 
 from xic_extractor.discovery.evidence_score import score_discovery_evidence
-from xic_extractor.discovery.models import DiscoveryCandidate
+from xic_extractor.discovery.models import DiscoveryCandidate, DiscoverySettings
 
 _APEX_RT_EPSILON_MIN = 1e-6
 _SUPERFAMILY_APEX_DELTA_MIN = 0.12
@@ -11,9 +11,11 @@ _PRIORITY_RANK = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
 
 def assign_feature_families(
     candidates: tuple[DiscoveryCandidate, ...],
+    *,
+    settings: DiscoverySettings | None = None,
 ) -> tuple[DiscoveryCandidate, ...]:
     family_assigned = _assign_strict_families(candidates)
-    return _assign_superfamilies(family_assigned)
+    return _assign_superfamilies(family_assigned, settings=settings)
 
 
 def _assign_strict_families(
@@ -46,6 +48,8 @@ def _assign_strict_families(
 
 def _assign_superfamilies(
     candidates: tuple[DiscoveryCandidate, ...],
+    *,
+    settings: DiscoverySettings | None = None,
 ) -> tuple[DiscoveryCandidate, ...]:
     superfamilies: list[list[DiscoveryCandidate]] = []
     for candidate in sorted(candidates, key=_candidate_sort_key):
@@ -81,7 +85,10 @@ def _assign_superfamilies(
                 feature_superfamily_confidence=confidence,
                 feature_superfamily_evidence=evidence_token,
             )
-            discovery_evidence = score_discovery_evidence(assigned)
+            discovery_evidence = score_discovery_evidence(
+                assigned,
+                settings=settings,
+            )
             assigned_by_candidate_id[candidate.candidate_id] = replace(
                 assigned,
                 evidence_score=discovery_evidence.score,

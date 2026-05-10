@@ -1,12 +1,17 @@
 import ast
 import csv
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.discovery.evidence_config import (
+    DEFAULT_EVIDENCE_PROFILE,
+    DiscoveryEvidenceProfile,
+)
 from xic_extractor.discovery.models import (
     DiscoveryBatchOutputs,
     DiscoveryRunOutputs,
@@ -222,6 +227,48 @@ def test_run_discovery_keeps_stale_pair_when_review_write_fails(
     assert not (output_dir / "discovery_review.csv.tmp").exists()
 
 
+def test_pipeline_threads_evidence_profile_into_scoring(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = _FakeRawHandle(
+        [_scan_event(scan_number=101, rt=7.80, product_intensity=3000.0)],
+        rt=np.array([7.70, 7.80, 8.00]),
+        intensity=np.array([10.0, 600.0, 20.0]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.discovery.ms1_backfill.find_peak_and_area",
+        lambda *args, **kwargs: _ok_peak(
+            rt=7.80,
+            intensity=600.0,
+            area=42.0,
+            start=7.70,
+            end=8.00,
+        ),
+    )
+    settings = _settings(
+        evidence_profile=DiscoveryEvidenceProfile(
+            name="default",
+            weights=replace(
+                DEFAULT_EVIDENCE_PROFILE.weights,
+                ms1_peak_present=30,
+            ),
+            thresholds=DEFAULT_EVIDENCE_PROFILE.thresholds,
+        )
+    )
+
+    outputs = run_discovery(
+        tmp_path / "Sample.raw",
+        output_dir=tmp_path / "out",
+        settings=settings,
+        peak_config=_peak_config(tmp_path),
+        raw_opener=lambda path, dll_dir: raw,
+    )
+
+    rows = _read_csv(outputs.candidates_csv)
+    assert rows[0]["evidence_score"] == "58"
+
+
 def test_pipeline_uses_injected_raw_opener_with_dll_dir_and_closes_context(
     tmp_path: Path,
 ) -> None:
@@ -271,7 +318,7 @@ def test_pipeline_does_not_import_targeted_extractor_module() -> None:
     assert "xic_extractor.extractor" not in imported_modules | imported_from_modules
 
 
-def _settings(**overrides: float) -> DiscoverySettings:
+def _settings(**overrides: object) -> DiscoverySettings:
     values = {
         "neutral_loss_profile": NeutralLossProfile("DNA_dR", NEUTRAL_LOSS_DA),
         **overrides,
