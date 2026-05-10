@@ -53,6 +53,23 @@ DISCOVERY_PROVENANCE_COLUMNS = (
 
 DISCOVERY_CANDIDATE_COLUMNS = DISCOVERY_REVIEW_COLUMNS + DISCOVERY_PROVENANCE_COLUMNS
 
+DISCOVERY_BRIEF_COLUMNS = (
+    "review_priority",
+    "evidence_tier",
+    "evidence_score",
+    "ms2_support",
+    "ms1_support",
+    "rt_alignment",
+    "family_context",
+    "candidate_id",
+    "precursor_mz",
+    "best_seed_rt",
+    "ms1_area",
+    "seed_event_count",
+    "neutral_loss_tag",
+    "review_note",
+)
+
 
 @dataclass(frozen=True)
 class NeutralLossProfile:
@@ -216,3 +233,15 @@ class DiscoveryCandidate:
             ms1_height=ms1_height,
             ms1_trace_quality=ms1_trace_quality,
         )
+
+
+@dataclass(frozen=True)
+class DiscoveryRunOutputs:
+    candidates_csv: Path
+    review_csv: Path
+
+
+@dataclass(frozen=True)
+class DiscoveryBatchOutputs:
+    batch_index_csv: Path
+    per_sample: tuple[DiscoveryRunOutputs, ...]
