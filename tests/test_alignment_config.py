@@ -36,20 +36,43 @@ def test_alignment_modules_do_not_import_pipeline_or_io_boundaries():
     for path in alignment_dir.glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                imported_names = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                imported_names = [node.module]
-            else:
-                continue
-
-            for imported_name in imported_names:
+            for imported_name in _imported_module_names(node):
                 if imported_name == "xic_extractor.discovery.models":
                     violations.append((path.name, imported_name))
                 elif imported_name.startswith(banned_roots):
                     violations.append((path.name, imported_name))
 
     assert violations == []
+
+
+def test_import_boundary_detects_package_attribute_imports():
+    tree = ast.parse(
+        "from xic_extractor import extraction, extractor\n"
+        "from xic_extractor import raw_reader\n"
+    )
+    imported_names = [
+        imported_name
+        for node in ast.walk(tree)
+        for imported_name in _imported_module_names(node)
+    ]
+
+    assert "xic_extractor.extraction" in imported_names
+    assert "xic_extractor.extractor" in imported_names
+    assert "xic_extractor.raw_reader" in imported_names
+
+
+def _imported_module_names(node):
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    if isinstance(node, ast.ImportFrom) and node.module:
+        imported_names = [node.module]
+        imported_names.extend(
+            f"{node.module}.{alias.name}"
+            for alias in node.names
+            if alias.name != "*"
+        )
+        return imported_names
+    return []
 
 
 def test_default_config_matches_v1_alignment_contract():
@@ -137,6 +160,7 @@ def test_bool_tolerance_windows_are_rejected(field):
         {"anchor_priorities": "HIGH"},
         {"anchor_priorities": ("BAD",)},
         {"anchor_priorities": ("HIGH", "BAD")},
+        {"anchor_priorities": ([],)},
         {"anchor_min_evidence_score": -1},
         {"anchor_min_evidence_score": 101},
         {"anchor_min_evidence_score": True},

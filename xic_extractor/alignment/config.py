@@ -85,7 +85,10 @@ def _require_anchor_priorities(value: tuple[ReviewPriority, ...]) -> None:
     if (
         type(value) is not tuple
         or not value
-        or any(priority not in valid_priorities for priority in value)
+        or any(
+            not isinstance(priority, str) or priority not in valid_priorities
+            for priority in value
+        )
     ):
         raise ValueError("anchor_priorities must be a non-empty tuple of valid values")
 
