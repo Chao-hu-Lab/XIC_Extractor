@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from statistics import median
-from typing import Any
+from typing import Protocol
 
-CandidateLike = Any
 ClusterCenter = tuple[float, float, float, float, bool]
+
+
+class CandidateLike(Protocol):
+    precursor_mz: float
+    product_mz: float
+    observed_neutral_loss_da: float
+    ms1_apex_rt: float | None
+    best_seed_rt: float | None
 
 
 @dataclass(frozen=True)
@@ -64,11 +72,18 @@ def _center_contributors(
     if not members:
         raise ValueError("Alignment cluster center requires at least one member")
     if anchor_members:
+        member_ids = {id(member) for member in members}
+        if any(id(anchor) not in member_ids for anchor in anchor_members):
+            raise ValueError("Alignment cluster anchor_members must be members")
         return tuple(anchor_members)
     return tuple(members)
 
 
 def _candidate_rt(candidate: CandidateLike) -> float:
     if candidate.ms1_apex_rt is not None:
-        return candidate.ms1_apex_rt
-    return candidate.best_seed_rt
+        rt = candidate.ms1_apex_rt
+    else:
+        rt = candidate.best_seed_rt
+    if rt is None or not math.isfinite(rt):
+        raise ValueError("Alignment cluster center requires finite retention time")
+    return rt
