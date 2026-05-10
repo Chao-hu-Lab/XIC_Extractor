@@ -47,11 +47,19 @@ class AlignmentConfig:
 
         if not self.anchor_priorities:
             raise ValueError("anchor_priorities cannot be empty")
-        if not 0 <= self.anchor_min_evidence_score <= 100:
-            raise ValueError("anchor_min_evidence_score must be between 0 and 100")
+        _require_int_range(
+            "anchor_min_evidence_score",
+            self.anchor_min_evidence_score,
+            0,
+            100,
+        )
         _require_positive_int("anchor_min_seed_events", self.anchor_min_seed_events)
-        if not 0 <= self.anchor_min_scan_support_score <= 1:
-            raise ValueError("anchor_min_scan_support_score must be between 0 and 1")
+        _require_numeric_range(
+            "anchor_min_scan_support_score",
+            self.anchor_min_scan_support_score,
+            0,
+            1,
+        )
         if self.rt_unit != "min":
             raise ValueError('rt_unit must be "min" in v1')
         if self.fragmentation_model != "cid_nl":
@@ -66,6 +74,26 @@ def _require_positive(name: str, value: float) -> None:
 def _require_positive_int(name: str, value: int) -> None:
     if type(value) is not int or value < 1:
         raise ValueError(f"{name} must be an integer >= 1")
+
+
+def _require_int_range(name: str, value: int, minimum: int, maximum: int) -> None:
+    if type(value) is not int or not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be an integer between {minimum} and {maximum}")
+
+
+def _require_numeric_range(
+    name: str,
+    value: float,
+    minimum: float,
+    maximum: float,
+) -> None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or not minimum <= value <= maximum
+    ):
+        raise ValueError(f"{name} must be finite numeric between {minimum} and {maximum}")
 
 
 def _require_at_most(
