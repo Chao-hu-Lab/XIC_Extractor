@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Do not execute this index file directly. Execute the smaller implementation plans listed below in order.
 
-**Goal:** Replace the FH + mzmine + metabCombiner + combine_fix pipeline with a single-tool XIC alignment that produces a neutral-loss-compatible hypothesis × sample matrix with detected/rescued/absent semantics, leveraging XIC's same-tool MS1 backfill at cluster centers.
+**Goal:** Replace the FH + mzmine + metabCombiner + combine_fix pipeline with a single-tool XIC alignment that produces a neutral-loss-compatible hypothesis × sample matrix with detected/rescued/absent/unchecked semantics, leveraging XIC's same-tool MS1 backfill at cluster centers.
 
 **Architecture:** Four sequential sub-projects: (1) cluster per-sample discovery candidates into cross-sample NL-compatible hypotheses; (2) backfill MS1 measurements at cluster centers in samples that lacked an MS2 NL trigger; (3) emit alignment TSVs and a CLI; (4) validate against the legacy FH and combine_fix outputs the user has on disk.
 
@@ -23,10 +23,10 @@ Splitting also keeps each plan's regression risk bounded: clustering bugs, backf
 
 ## Execution Order
 
-Run these plans in order. **Only Plan 1 is written and executable right now.** Plans 2-4 are roadmap placeholders and must be written/reviewed before execution. Plan 4 may slip after Plan 3 without blocking shipping a usable v1.
+Run these plans in order. **Plans 1 and 2 are written and executable right now.** Plans 3-4 are roadmap placeholders and must be written/reviewed before execution. Plan 4 may slip after Plan 3 without blocking shipping a usable v1.
 
 1. [Plan 1: Alignment Clustering Core](2026-05-10-alignment-clustering-plan.md)
-2. Plan 2: Cross-Sample MS1 Backfill — pending, not yet written.
+2. [Plan 2: Cross-Sample MS1 Backfill](2026-05-10-alignment-ms1-backfill-plan.md)
 3. Plan 3: Alignment Output and CLI — pending, not yet written.
 4. Plan 4: Legacy Pipeline Validation — pending, not yet written.
 
@@ -105,6 +105,8 @@ The greedy clustering with m/z-bucket index and two-tier (preferred/max) ppm + R
 
 Cross-sample MS1 backfill calls `xic_extractor.signal_processing.find_peak_and_area` against the same MS1 trace extraction interface (`MS1XicSource`) used by per-sample discovery. No alternate detector. The user's "single-tool, single-evidence-chain" goal collapses if backfill silently swaps in a different peak picker.
 
+Plan 2 uses conservative backfill by default: only `has_anchor=True` clusters are checked in samples that lack a discovery candidate. `has_anchor=False` clusters are detected-only; missing sample cells are `unchecked`, not `absent` or `rescued`.
+
 ### v1 Defaults Mirror MS-Data Aligner
 
 Starting tolerances: `preferred_ppm = 20`, `max_ppm = 50`, `preferred_rt_sec = 60`, `max_rt_sec = 180`, `mz_bucket_neighbor_radius = 2`, `rt_unit = "min"`. v1 ships with these as `AlignmentConfig` defaults. Tuning waits for real data.
@@ -164,10 +166,17 @@ class AlignedCell:
     sample_stem: str
     cluster_id: str
     status: CellStatus
-    intensity: float | None
+    area: float | None
     apex_rt: float | None
+    height: float | None
+    peak_start_rt: float | None
+    peak_end_rt: float | None
+    rt_delta_sec: float | None
     trace_quality: str
     scan_support_score: float | None
+    source_candidate_id: str | None
+    source_raw_file: Path | None
+    reason: str
 
 @dataclass(frozen=True)
 class AlignmentMatrix:
