@@ -1,13 +1,13 @@
 from dataclasses import replace
 from pathlib import Path
 
-from xic_extractor.discovery.evidence_score import score_discovery_evidence
 from xic_extractor.discovery.evidence_config import (
     DEFAULT_EVIDENCE_PROFILE,
     DiscoveryEvidenceProfile,
     DiscoveryEvidenceThresholds,
     DiscoveryEvidenceWeights,
 )
+from xic_extractor.discovery.evidence_score import score_discovery_evidence
 from xic_extractor.discovery.models import (
     DiscoveryCandidate,
     DiscoverySettings,

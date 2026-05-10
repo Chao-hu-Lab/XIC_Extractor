@@ -2,11 +2,11 @@ from dataclasses import replace
 from itertools import permutations
 from pathlib import Path
 
-from xic_extractor.discovery.feature_family import assign_feature_families
 from xic_extractor.discovery.evidence_config import (
     DEFAULT_EVIDENCE_PROFILE,
     DiscoveryEvidenceProfile,
 )
+from xic_extractor.discovery.feature_family import assign_feature_families
 from xic_extractor.discovery.models import (
     DiscoveryCandidate,
     DiscoverySettings,
