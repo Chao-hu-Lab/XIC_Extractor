@@ -191,15 +191,19 @@ Expected interpretation:
 - `MEDIUM`: plausible, but not first-pass unless the reviewer is exploring.
 - `LOW`: retained for traceability, not a normal first-pass target.
 
-Funnel health warning gates for validation runs:
+Funnel health warning gate for validation runs:
 
-- `HIGH > 10%` of candidates: likely too broad for first-pass review.
-- `MEDIUM > 80%` of candidates: funnel is not calibrated enough to reduce
-  reviewer attention.
-- `LOW > 50%` of candidates: seed generation or grouping may be too permissive.
+- `LOW > 50%` of candidates: seed generation, grouping, or evidence thresholds
+  may be too permissive and should be reviewed.
 
-These gates should warn in validation summaries or metrics. They should not make
-the discovery run fail and they should not delete candidates.
+This gate should warn in validation summaries or metrics. It should not make the
+discovery run fail and it should not delete candidates.
+
+High or medium fractions are not warnings by themselves. A high `HIGH` fraction
+can be valid in a clean or information-rich run, and a high `MEDIUM` fraction can
+be acceptable during exploratory discovery. Those cases should be interpreted
+through manual review outcomes, batch recurrence, and future evidence-profile
+calibration rather than a fixed percentage gate.
 
 If `MEDIUM` dominates a batch, the answer is not to add more columns. The next
 step is to improve one of:
