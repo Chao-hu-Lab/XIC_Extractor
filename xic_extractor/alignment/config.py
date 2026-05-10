@@ -40,13 +40,16 @@ class AlignmentConfig:
             "observed_loss_tolerance_ppm",
             self.observed_loss_tolerance_ppm,
         )
+        _require_positive_int(
+            "mz_bucket_neighbor_radius",
+            self.mz_bucket_neighbor_radius,
+        )
 
         if not self.anchor_priorities:
             raise ValueError("anchor_priorities cannot be empty")
         if not 0 <= self.anchor_min_evidence_score <= 100:
             raise ValueError("anchor_min_evidence_score must be between 0 and 100")
-        if self.anchor_min_seed_events < 1:
-            raise ValueError("anchor_min_seed_events must be at least 1")
+        _require_positive_int("anchor_min_seed_events", self.anchor_min_seed_events)
         if not 0 <= self.anchor_min_scan_support_score <= 1:
             raise ValueError("anchor_min_scan_support_score must be between 0 and 1")
         if self.rt_unit != "min":
@@ -58,6 +61,11 @@ class AlignmentConfig:
 def _require_positive(name: str, value: float) -> None:
     if not math.isfinite(value) or value <= 0:
         raise ValueError(f"{name} must be finite and positive")
+
+
+def _require_positive_int(name: str, value: int) -> None:
+    if type(value) is not int or value < 1:
+        raise ValueError(f"{name} must be an integer >= 1")
 
 
 def _require_at_most(
