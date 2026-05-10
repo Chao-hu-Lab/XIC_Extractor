@@ -12,7 +12,7 @@ Untargeted discovery v1 is a new workflow parallel to targeted extraction.
 
 The goal is not full untargeted feature finding, batch alignment, GUI review, or automatic target-list expansion. The first useful version should solve one concrete gap:
 
-> Given a single Thermo RAW file, find strict MS2 neutral-loss seed events, group them into file-level discovery candidates, then backfill MS1 XIC evidence including apex, height, area, and trace quality.
+> Given one Thermo RAW file or a small RAW directory, find strict MS2 neutral-loss seed events, group them into file-level discovery candidates, then backfill MS1 XIC evidence including apex, height, area, and trace quality.
 
 This keeps the workflow close to what FH already does well while adding the part FH does not provide: chromatographic candidate-level MS1 validation.
 
@@ -58,13 +58,15 @@ The candidate, not the individual MS2 scan, is the primary review unit.
 ### 3.1 In scope
 
 - Single RAW file discovery.
+- Small multi-RAW directory discovery that runs the single-file workflow for each RAW and writes a batch index.
 - Strict MS2 neutral-loss seed detection.
 - Conservative within-file seed grouping.
 - MS1 XIC extraction for grouped precursor m/z.
 - MS1 peak search inside seed-group RT range plus padding.
 - MS1 apex RT, height, area, and trace-quality evidence.
 - Candidate-level review priority.
-- One default CSV output: `discovery_candidates.csv`.
+- One default candidate CSV per RAW: `discovery_candidates.csv`.
+- One batch index CSV for `--raw-dir`: `discovery_batch_index.csv`.
 - Optional implementation seams for later event-level detail, plots, GUI mode, and batch consensus.
 
 ### 3.2 Out of scope
@@ -161,13 +163,22 @@ MS1 area is a core value proposition. A discovery row without MS1 area is only a
 
 ### 5.1 Default output
 
-The default v1 output is exactly one CSV:
+The default v1 single-RAW output is exactly one candidate CSV:
 
 ```text
 discovery_candidates.csv
 ```
 
 One raw file should not produce several default CSV files. Event-level details and plot outputs may be added later as opt-in artifacts, not as default output.
+
+For `--raw-dir`, v1 is batch execution, not batch alignment. The default output is:
+
+```text
+discovery_batch_index.csv
+<sample_stem>/discovery_candidates.csv
+```
+
+The index is only a navigation and summary file. It must not imply cross-sample alignment or batch-level consensus.
 
 ### 5.2 Row granularity
 
@@ -212,22 +223,37 @@ The CSV must be review-first. The first visible columns should answer the user's
 3. Did XIC Extractor find an MS1 peak and area?
 4. Why is this row ranked this way?
 
-The first columns are therefore fixed for v1:
+The first columns are therefore fixed for v1. Feature family fields are part of
+the review surface because they explain whether the row is a singleton,
+representative, or member of a likely duplicate MS1 peak signal:
 
 | Order | Column | Meaning |
 |---:|---|---|
 | 1 | `review_priority` | `HIGH`, `MEDIUM`, or `LOW`. Primary sort key. |
-| 2 | `candidate_id` | `<sample_stem>#<best_ms2_scan_id>`. |
-| 3 | `precursor_mz` | Representative precursor m/z. |
-| 4 | `product_mz` | Representative product m/z. |
-| 5 | `observed_neutral_loss_da` | Representative observed neutral loss. |
-| 6 | `best_seed_rt` | RT of representative seed scan. |
-| 7 | `seed_event_count` | Number of strict NL seed events in the group. |
-| 8 | `ms1_peak_found` | `TRUE` / `FALSE`. |
-| 9 | `ms1_apex_rt` | MS1 candidate apex RT. |
-| 10 | `ms1_area` | MS1 integrated area. |
-| 11 | `ms2_product_max_intensity` | Maximum product-ion intensity among seed events. |
-| 12 | `reason` | Short human-readable explanation. |
+| 2 | `evidence_tier` | `A` to `E`, derived from `evidence_score` in 20-point bands. |
+| 3 | `evidence_score` | 0-100 discovery evidence score for sorting within priority. |
+| 4 | `ms2_support` | `strong`, `moderate`, or `weak` summary of strict MS2 seed support. |
+| 5 | `ms1_support` | `strong`, `moderate`, `weak`, or `missing` summary of MS1 peak support. |
+| 6 | `rt_alignment` | `aligned`, `near`, `shifted`, or `missing` summary of MS1 apex vs seed RT. |
+| 7 | `family_context` | `singleton`, `representative`, or `member` summary of duplicate-signal context. |
+| 8 | `candidate_id` | `<sample_stem>#<best_ms2_scan_id>`. |
+| 9 | `feature_family_id` | Strict same-MS1-peak family id. |
+| 10 | `feature_family_size` | Count of candidates sharing the strict same-MS1-peak family. |
+| 11 | `feature_superfamily_id` | Broader close-overlap MS1 peak family id. |
+| 12 | `feature_superfamily_size` | Count of candidates in the broader close-overlap family. |
+| 13 | `feature_superfamily_role` | `representative` or `member`. |
+| 14 | `feature_superfamily_confidence` | `LOW` for singleton; `MEDIUM` for v1 peak-overlap grouping. `HIGH` is reserved for future stronger evidence. |
+| 15 | `feature_superfamily_evidence` | Short evidence token such as `single_candidate` or `peak_boundary_overlap;apex_close`. |
+| 16 | `precursor_mz` | Representative precursor m/z. |
+| 17 | `product_mz` | Representative product m/z. |
+| 18 | `observed_neutral_loss_da` | Representative observed neutral loss. |
+| 19 | `best_seed_rt` | RT of representative seed scan. |
+| 20 | `seed_event_count` | Number of strict NL seed events in the group. |
+| 21 | `ms1_peak_found` | `TRUE` / `FALSE`. |
+| 22 | `ms1_apex_rt` | MS1 candidate apex RT. |
+| 23 | `ms1_area` | MS1 integrated area. |
+| 24 | `ms2_product_max_intensity` | Maximum product-ion intensity among seed events. |
+| 25 | `reason` | Short human-readable explanation. |
 
 After those review columns, include provenance and boundary columns:
 
@@ -250,7 +276,8 @@ After those review columns, include provenance and boundary columns:
 | `ms1_height` | MS1 peak height. |
 | `ms1_trace_quality` | Simple trace-quality label or numeric summary. |
 
-The implementation may add more provenance columns, but it must not push the first 12 review columns later in the file.
+The implementation may add more provenance columns, but it must not push these
+review columns later in the file.
 
 ### 5.5 CSV readability rules
 
@@ -287,7 +314,43 @@ Initial v1 priority:
 
 No candidate without a strict NL seed should appear in v1.
 
-### 6.2 Reason text
+### 6.2 Evidence score and tier
+
+`review_priority` remains the coarse review queue. `evidence_score` provides
+within-priority ranking without changing the meaning of `HIGH` / `MEDIUM` /
+`LOW`. Evidence component columns expose why a score is high or low, so the CSV
+does not rely on a black-box number.
+
+Initial v1 evidence score uses existing fields only:
+
+- MS1 peak presence,
+- strict MS2 seed count,
+- MS1 apex distance from the seed RT,
+- MS2 product max intensity,
+- MS1 area,
+- MS1 trace quality,
+- superfamily representative/member role.
+
+The score is capped to 0-100. Tier bands are:
+
+| Tier | Score range |
+|---|---:|
+| `A` | 80-100 |
+| `B` | 60-79 |
+| `C` | 40-59 |
+| `D` | 20-39 |
+| `E` | 0-19 |
+
+Component labels are intentionally coarse:
+
+| Component | Values |
+|---|---|
+| `ms2_support` | `strong`, `moderate`, `weak` |
+| `ms1_support` | `strong`, `moderate`, `weak`, `missing` |
+| `rt_alignment` | `aligned`, `near`, `shifted`, `missing` |
+| `family_context` | `singleton`, `representative`, `member` |
+
+### 6.3 Reason text
 
 Reason text should be short. It should not reproduce every numeric field.
 
@@ -424,14 +487,26 @@ These should be answered during implementation planning, not by expanding v1 sco
 $env:UV_CACHE_DIR='.uv-cache'; uv run xic-discovery-cli --raw "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation\TumorBC2312_DNA.raw" --dll-dir "C:\Xcalibur\system\programs" --output-dir "output\discovery\TumorBC2312_DNA" --neutral-loss-tag DNA_dR --neutral-loss-da 116.0474 --resolver-mode local_minimum
 ```
 
+- Small multi-RAW smoke command:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run xic-discovery-cli --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" --dll-dir "C:\Xcalibur\system\programs" --output-dir "output\discovery\tissue8" --neutral-loss-tag DNA_dR --neutral-loss-da 116.0474 --resolver-mode local_minimum
+```
+
 - If the exact RAW file is unavailable, use the known FH Program2 raw counterpart and record the path in the PR summary.
-- Expected smoke checks:
-  - CSV exists.
-  - Header is the fixed 12 review columns.
+- Single-RAW or per-sample candidate CSV smoke checks:
+  - `discovery_candidates.csv` exists.
+  - Header starts with the fixed review columns.
   - Rows are candidate-level, not per MS2 scan.
   - Candidate IDs map to Xcalibur scan IDs.
   - At least one candidate has `ms1_area` when signal is valid.
-  - Targeted workbook tests remain unchanged.
+- Multi-RAW batch index smoke checks:
+  - `discovery_batch_index.csv` exists.
+  - One index row exists per input RAW file.
+  - Each index row points to a per-sample `discovery_candidates.csv`.
+  - No top-level combined `discovery_candidates.csv` is written for `--raw-dir`.
+  - Index rows summarize candidate and priority counts only; they do not imply cross-sample alignment.
+- Targeted workbook tests remain unchanged.
 
 ## 12. Acceptance Criteria For This Spec
 
