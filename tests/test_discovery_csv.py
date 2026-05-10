@@ -9,6 +9,7 @@ from xic_extractor.discovery.csv_writer import (
 from xic_extractor.discovery.evidence_config import DEFAULT_EVIDENCE_PROFILE
 from xic_extractor.discovery.models import (
     DISCOVERY_CANDIDATE_COLUMNS,
+    DISCOVERY_CANDIDATE_REVIEW_COLUMNS,
     DISCOVERY_PROVENANCE_COLUMNS,
     DISCOVERY_REVIEW_COLUMNS,
     DiscoveryCandidate,
@@ -18,7 +19,7 @@ from xic_extractor.discovery.models import (
     NeutralLossProfile,
 )
 
-EXPECTED_REVIEW_COLUMNS = (
+EXPECTED_CANDIDATE_REVIEW_COLUMNS = (
     "review_priority",
     "evidence_tier",
     "evidence_score",
@@ -146,8 +147,13 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def test_discovery_review_columns_are_stable_csv_contract() -> None:
-    assert DISCOVERY_REVIEW_COLUMNS == EXPECTED_REVIEW_COLUMNS
+def test_discovery_review_columns_alias_stays_compatible() -> None:
+    assert DISCOVERY_REVIEW_COLUMNS == EXPECTED_CANDIDATE_REVIEW_COLUMNS
+
+
+def test_discovery_candidate_review_columns_are_named_explicitly() -> None:
+    assert DISCOVERY_CANDIDATE_REVIEW_COLUMNS == EXPECTED_CANDIDATE_REVIEW_COLUMNS
+    assert DISCOVERY_REVIEW_COLUMNS == DISCOVERY_CANDIDATE_REVIEW_COLUMNS
 
 
 def test_discovery_provenance_columns_are_stable_csv_contract() -> None:

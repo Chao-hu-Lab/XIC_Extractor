@@ -9,7 +9,7 @@ from xic_extractor.discovery.evidence_config import (
 
 ReviewPriority = Literal["HIGH", "MEDIUM", "LOW"]
 
-DISCOVERY_REVIEW_COLUMNS = (
+DISCOVERY_CANDIDATE_REVIEW_COLUMNS = (
     "review_priority",
     "evidence_tier",
     "evidence_score",
@@ -37,6 +37,10 @@ DISCOVERY_REVIEW_COLUMNS = (
     "reason",
 )
 
+# Compatibility alias. This is the review-first section of
+# discovery_candidates.csv, not the brief discovery_review.csv schema.
+DISCOVERY_REVIEW_COLUMNS = DISCOVERY_CANDIDATE_REVIEW_COLUMNS
+
 DISCOVERY_PROVENANCE_COLUMNS = (
     "raw_file",
     "sample_stem",
@@ -57,7 +61,9 @@ DISCOVERY_PROVENANCE_COLUMNS = (
     "ms1_scan_support_score",
 )
 
-DISCOVERY_CANDIDATE_COLUMNS = DISCOVERY_REVIEW_COLUMNS + DISCOVERY_PROVENANCE_COLUMNS
+DISCOVERY_CANDIDATE_COLUMNS = (
+    DISCOVERY_CANDIDATE_REVIEW_COLUMNS + DISCOVERY_PROVENANCE_COLUMNS
+)
 
 DISCOVERY_BRIEF_COLUMNS = (
     "review_priority",

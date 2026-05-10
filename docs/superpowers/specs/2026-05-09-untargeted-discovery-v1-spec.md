@@ -227,18 +227,40 @@ If a grouped candidate contains multiple seed scans, the best scan should be sel
 
 All seed scan ids should remain available in `seed_scan_ids`.
 
-### 5.4 Required CSV columns
+### 5.4 Brief review CSV columns
 
-The CSV must be review-first. The first visible columns should answer the user's first questions without horizontal scrolling:
+`discovery_review.csv` is the first-pass review queue. It must stay compact and
+should not mirror the full candidate table.
 
-1. Is this worth opening in Xcalibur?
-2. What scan/RT/mass should I inspect?
-3. Did XIC Extractor find an MS1 peak and area?
-4. Why is this row ranked this way?
+The fixed v1 brief columns are:
 
-The first columns are therefore fixed for v1. Feature family fields are part of
-the review surface because they explain whether the row is a singleton,
-representative, or member of a likely duplicate MS1 peak signal:
+| Order | Column | Meaning |
+|---:|---|---|
+| 1 | `review_priority` | `HIGH`, `MEDIUM`, or `LOW`. Primary sort key. |
+| 2 | `evidence_tier` | `A` to `E`, derived from `evidence_score` in 20-point bands. |
+| 3 | `evidence_score` | 0-100 discovery evidence score for sorting within priority. |
+| 4 | `ms2_support` | `strong`, `moderate`, or `weak` summary of strict MS2 seed support. |
+| 5 | `ms1_support` | `strong`, `moderate`, `weak`, or `missing` summary of MS1 peak support. |
+| 6 | `rt_alignment` | `aligned`, `near`, `shifted`, or `missing` summary of MS1 apex vs seed RT. |
+| 7 | `family_context` | `singleton`, `representative`, or `member` summary of duplicate-signal context. |
+| 8 | `candidate_id` | `<sample_stem>#<best_ms2_scan_id>`. |
+| 9 | `precursor_mz` | Representative precursor m/z. |
+| 10 | `best_seed_rt` | RT of representative seed scan. |
+| 11 | `ms1_area` | MS1 integrated area. |
+| 12 | `seed_event_count` | Number of strict NL seed events in the group. |
+| 13 | `neutral_loss_tag` | Discovery NL profile name or tag. |
+| 14 | `review_note` | Short reason assembled from support summaries. |
+
+New evidence should affect these columns through priority, tier, score, support
+labels, family context, or `review_note`. It should not add a new brief column
+unless `2026-05-10-discovery-ux-surface-contract.md` is explicitly updated.
+
+### 5.5 Full candidate CSV columns
+
+`discovery_candidates.csv` is the archival and alignment-ready candidate table.
+It starts with review-first candidate columns, then appends provenance and
+boundary columns. These leading columns are wider than `discovery_review.csv`
+because this file is allowed to carry full candidate context.
 
 | Order | Column | Meaning |
 |---:|---|---|
@@ -268,7 +290,7 @@ representative, or member of a likely duplicate MS1 peak signal:
 | 24 | `ms2_product_max_intensity` | Maximum product-ion intensity among seed events. |
 | 25 | `reason` | Short human-readable explanation. |
 
-After those review columns, include provenance and boundary columns:
+After those candidate review columns, include provenance and boundary columns:
 
 | Column | Meaning |
 |---|---|
@@ -288,13 +310,15 @@ After those review columns, include provenance and boundary columns:
 | `ms1_peak_rt_end` | MS1 peak boundary end. |
 | `ms1_height` | MS1 peak height. |
 | `ms1_trace_quality` | Simple trace-quality label or numeric summary. |
+| `ms1_scan_support_score` | Numeric scan-count support inside the selected MS1 peak boundary. |
 
 The implementation may add more provenance columns, but it must not push these
-review columns later in the file.
+candidate review columns later in the file.
 
-### 5.5 CSV readability rules
+### 5.6 CSV readability rules
 
-The CSV will often be opened directly in Excel. It should be readable without a companion HTML report.
+The CSV files will often be opened directly in Excel. They should be readable
+without a companion HTML report.
 
 Rules:
 

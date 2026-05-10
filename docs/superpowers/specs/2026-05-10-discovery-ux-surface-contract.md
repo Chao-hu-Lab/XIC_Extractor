@@ -29,6 +29,21 @@ This contract exists to prevent repeated drift between "add more information" an
 | Metrics artifact | Developer, performance tuning | Runtime, row counts, output sizes, candidate budget | Opt-in or debug-level unless promoted by a plan. |
 | HTML / plots | Human reviewer, visual confirmation | Show patterns that tables cannot make obvious | Opt-in or batch-level summary. Do not emit per-sample heavy reports by default. |
 
+## Implementation Naming Map
+
+The code names must not obscure the product surfaces:
+
+| Code Constant | Product Surface | Meaning |
+|---|---|---|
+| `DISCOVERY_BRIEF_COLUMNS` | `discovery_review.csv` | The compact human review CSV schema. |
+| `DISCOVERY_CANDIDATE_REVIEW_COLUMNS` | `discovery_candidates.csv` | The review-first leading columns inside the full candidate CSV. |
+| `DISCOVERY_REVIEW_COLUMNS` | compatibility alias | Legacy alias for `DISCOVERY_CANDIDATE_REVIEW_COLUMNS`; do not use it for new code. |
+| `DISCOVERY_PROVENANCE_COLUMNS` | `discovery_candidates.csv` | Full candidate provenance and diagnostics. |
+
+New implementation work should prefer the explicit names above. The legacy alias
+exists only to avoid breaking older imports while discovery output contracts are
+still settling.
+
 ## Core Principle
 
 Do not solve a review UX problem by adding more columns to the primary review CSV.
@@ -175,6 +190,16 @@ Expected interpretation:
 - `HIGH`: inspect first. Should remain a small subset.
 - `MEDIUM`: plausible, but not first-pass unless the reviewer is exploring.
 - `LOW`: retained for traceability, not a normal first-pass target.
+
+Funnel health warning gates for validation runs:
+
+- `HIGH > 10%` of candidates: likely too broad for first-pass review.
+- `MEDIUM > 80%` of candidates: funnel is not calibrated enough to reduce
+  reviewer attention.
+- `LOW > 50%` of candidates: seed generation or grouping may be too permissive.
+
+These gates should warn in validation summaries or metrics. They should not make
+the discovery run fail and they should not delete candidates.
 
 If `MEDIUM` dominates a batch, the answer is not to add more columns. The next
 step is to improve one of:
