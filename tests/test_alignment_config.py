@@ -1,3 +1,6 @@
+import ast
+import math
+from pathlib import Path
 import sys
 
 import pytest
@@ -15,6 +18,36 @@ def test_alignment_public_api_exports_only_config_cluster_and_entrypoint():
         name for name in dir(alignment) if not name.startswith("_")
     } == set(alignment.__all__)
     assert "xic_extractor.discovery.pipeline" not in sys.modules
+
+
+def test_alignment_modules_do_not_import_pipeline_or_io_boundaries():
+    alignment_dir = Path(__file__).parents[1] / "xic_extractor" / "alignment"
+    banned_roots = (
+        "gui",
+        "scripts",
+        "xic_extractor.discovery",
+        "xic_extractor.raw_reader",
+        "xic_extractor.output",
+    )
+
+    violations = []
+    for path in alignment_dir.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported_names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported_names = [node.module]
+            else:
+                continue
+
+            for imported_name in imported_names:
+                if imported_name == "xic_extractor.discovery.models":
+                    violations.append((path.name, imported_name))
+                elif imported_name.startswith(banned_roots):
+                    violations.append((path.name, imported_name))
+
+    assert violations == []
 
 
 def test_default_config_matches_v1_alignment_contract():
@@ -58,6 +91,25 @@ def test_invalid_tolerance_windows_are_rejected(kwargs):
 
 
 @pytest.mark.parametrize(
+    "field",
+    [
+        "preferred_ppm",
+        "max_ppm",
+        "preferred_rt_sec",
+        "max_rt_sec",
+        "product_mz_tolerance_ppm",
+        "observed_loss_tolerance_ppm",
+    ],
+)
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+def test_non_finite_tolerance_windows_are_rejected(field, value):
+    from xic_extractor.alignment import AlignmentConfig
+
+    with pytest.raises(ValueError):
+        AlignmentConfig(**{field: value})
+
+
+@pytest.mark.parametrize(
     "kwargs",
     [
         {"anchor_priorities": ()},
@@ -75,3 +127,16 @@ def test_invalid_anchor_and_v1_fixed_fields_are_rejected(kwargs):
 
     with pytest.raises(ValueError):
         AlignmentConfig(**kwargs)
+
+
+def test_cluster_candidates_stub_returns_empty_tuple_for_empty_input():
+    from xic_extractor.alignment import cluster_candidates
+
+    assert cluster_candidates([]) == ()
+
+
+def test_cluster_candidates_stub_fails_closed_for_non_empty_input():
+    from xic_extractor.alignment import cluster_candidates
+
+    with pytest.raises(NotImplementedError):
+        cluster_candidates([object()])

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Literal
 
 ReviewPriority = Literal["HIGH", "MEDIUM", "LOW"]
@@ -55,8 +56,8 @@ class AlignmentConfig:
 
 
 def _require_positive(name: str, value: float) -> None:
-    if value <= 0:
-        raise ValueError(f"{name} must be positive")
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{name} must be finite and positive")
 
 
 def _require_at_most(

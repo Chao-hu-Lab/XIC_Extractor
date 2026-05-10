@@ -11,4 +11,6 @@ def cluster_candidates(
     candidates: Sequence[Any],
     config: AlignmentConfig | None = None,
 ) -> tuple[AlignmentCluster, ...]:
+    if candidates:
+        raise NotImplementedError("alignment clustering is not implemented yet")
     return ()
