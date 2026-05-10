@@ -55,6 +55,7 @@ def backfill_ms1_candidates(
             intensity,
             peak_config=peak_config,
             best_seed=best_seed,
+            settings=settings,
         )
         priority = assign_review_priority(
             seed_event_count=len(group.seeds),
@@ -89,6 +90,7 @@ def backfill_ms1_candidates(
                 ms1_peak_rt_end=ms1_fields.peak_rt_end,
                 ms1_height=ms1_fields.height,
                 ms1_trace_quality=ms1_fields.trace_quality,
+                ms1_scan_support_score=ms1_fields.scan_support_score,
                 seed_event_count=len(group.seeds),
                 ms1_peak_found=ms1_fields.peak_found,
                 ms1_apex_rt=ms1_fields.apex_rt,
@@ -314,6 +316,7 @@ class _Ms1Fields:
         peak_rt_start: float | None,
         peak_rt_end: float | None,
         trace_quality: str,
+        scan_support_score: float | None,
     ) -> None:
         self.peak_found = peak_found
         self.apex_rt = apex_rt
@@ -323,6 +326,7 @@ class _Ms1Fields:
         self.peak_rt_start = peak_rt_start
         self.peak_rt_end = peak_rt_end
         self.trace_quality = trace_quality
+        self.scan_support_score = scan_support_score
 
 
 def _detect_ms1_peak(
@@ -331,6 +335,7 @@ def _detect_ms1_peak(
     *,
     peak_config: ExtractionConfig,
     best_seed: DiscoverySeed,
+    settings: DiscoverySettings,
 ) -> _Ms1Fields:
     if rt.size == 0 or intensity.size == 0:
         return _missing_ms1_fields()
@@ -344,6 +349,11 @@ def _detect_ms1_peak(
     if result.status != "OK" or result.peak is None:
         return _missing_ms1_fields()
     peak = result.peak
+    scan_support_score = compute_ms1_scan_support_score(
+        rt,
+        peak,
+        scans_target=settings.evidence_profile.thresholds.scan_support_target,
+    )
     return _Ms1Fields(
         peak_found=True,
         apex_rt=peak.rt,
@@ -353,6 +363,7 @@ def _detect_ms1_peak(
         peak_rt_start=peak.peak_start,
         peak_rt_end=peak.peak_end,
         trace_quality="clean",
+        scan_support_score=scan_support_score,
     )
 
 
@@ -366,6 +377,7 @@ def _missing_ms1_fields() -> _Ms1Fields:
         peak_rt_start=None,
         peak_rt_end=None,
         trace_quality="missing",
+        scan_support_score=None,
     )
 
 

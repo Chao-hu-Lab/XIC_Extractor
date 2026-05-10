@@ -269,6 +269,70 @@ def test_pipeline_threads_evidence_profile_into_scoring(
     assert rows[0]["evidence_score"] == "58"
 
 
+def test_pipeline_populates_ms1_scan_support_score_from_profile_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = _FakeRawHandle(
+        [_scan_event(scan_number=101, rt=7.80, product_intensity=3000.0)],
+        rt=np.array([7.60, 7.70, 7.80, 7.90, 8.00]),
+        intensity=np.array([10.0, 100.0, 600.0, 300.0, 20.0]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.discovery.ms1_backfill.find_peak_and_area",
+        lambda *args, **kwargs: _ok_peak(
+            rt=7.80,
+            intensity=600.0,
+            area=42.0,
+            start=7.70,
+            end=8.00,
+        ),
+    )
+    settings = _settings(
+        evidence_profile=DiscoveryEvidenceProfile(
+            name="default",
+            weights=DEFAULT_EVIDENCE_PROFILE.weights,
+            thresholds=replace(
+                DEFAULT_EVIDENCE_PROFILE.thresholds,
+                scan_support_target=8,
+            ),
+        )
+    )
+
+    outputs = run_discovery(
+        tmp_path / "Sample.raw",
+        output_dir=tmp_path / "out",
+        settings=settings,
+        peak_config=_peak_config(tmp_path),
+        raw_opener=lambda path, dll_dir: raw,
+    )
+
+    rows = _read_csv(outputs.candidates_csv)
+    assert rows[0]["ms1_scan_support_score"] == "0.5"
+
+
+def test_pipeline_leaves_ms1_scan_support_blank_for_missing_ms1_peak(
+    tmp_path: Path,
+) -> None:
+    raw = _FakeRawHandle(
+        [_scan_event(scan_number=101, rt=7.80, product_intensity=3000.0)],
+        rt=np.asarray([], dtype=float),
+        intensity=np.asarray([], dtype=float),
+    )
+
+    outputs = run_discovery(
+        tmp_path / "Sample.raw",
+        output_dir=tmp_path / "out",
+        settings=_settings(),
+        peak_config=_peak_config(tmp_path),
+        raw_opener=lambda path, dll_dir: raw,
+    )
+
+    rows = _read_csv(outputs.candidates_csv)
+    assert rows[0]["ms1_peak_found"] == "FALSE"
+    assert rows[0]["ms1_scan_support_score"] == ""
+
+
 def test_pipeline_uses_injected_raw_opener_with_dll_dir_and_closes_context(
     tmp_path: Path,
 ) -> None:
