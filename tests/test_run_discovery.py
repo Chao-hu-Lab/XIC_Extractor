@@ -4,6 +4,7 @@ import pytest
 import tomllib
 
 from scripts import run_discovery
+from xic_extractor.discovery.models import DiscoveryBatchOutputs, DiscoveryRunOutputs
 from xic_extractor.raw_reader import RawReaderError
 
 
@@ -25,9 +26,14 @@ def test_run_discovery_cli_passes_single_raw_settings(
         captured["settings"] = settings
         captured["peak_config"] = peak_config
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / "discovery_candidates.csv"
-        output_path.write_text("review_priority\n", encoding="utf-8")
-        return output_path
+        candidates_csv = output_dir / "discovery_candidates.csv"
+        review_csv = output_dir / "discovery_review.csv"
+        candidates_csv.write_text("review_priority\n", encoding="utf-8")
+        review_csv.write_text("review_priority\n", encoding="utf-8")
+        return DiscoveryRunOutputs(
+            candidates_csv=candidates_csv,
+            review_csv=review_csv,
+        )
 
     monkeypatch.setattr(run_discovery, "run_discovery", _fake_run_discovery)
 
@@ -63,8 +69,10 @@ def test_run_discovery_cli_passes_single_raw_settings(
     assert peak_config.resolver_mode == "local_minimum"
     assert peak_config.nl_min_intensity_ratio == settings.nl_min_intensity_ratio
     stdout = capsys.readouterr().out
-    assert "Discovery CSV: " in stdout
+    assert "Discovery candidates CSV: " in stdout
+    assert "Discovery review CSV: " in stdout
     assert "discovery_candidates.csv" in stdout
+    assert "discovery_review.csv" in stdout
 
 
 def test_run_discovery_cli_passes_raw_dir_batch_settings(
@@ -90,8 +98,15 @@ def test_run_discovery_cli_passes_raw_dir_batch_settings(
         captured["peak_config"] = peak_config
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / "discovery_batch_index.csv"
+        sample_outputs = DiscoveryRunOutputs(
+            candidates_csv=output_dir / "A" / "discovery_candidates.csv",
+            review_csv=output_dir / "A" / "discovery_review.csv",
+        )
         output_path.write_text("sample_stem\n", encoding="utf-8")
-        return output_path
+        return DiscoveryBatchOutputs(
+            batch_index_csv=output_path,
+            per_sample=(sample_outputs,),
+        )
 
     monkeypatch.setattr(
         run_discovery,

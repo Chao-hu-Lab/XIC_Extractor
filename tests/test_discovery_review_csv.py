@@ -12,7 +12,6 @@ from xic_extractor.discovery.models import (
     DiscoveryRunOutputs,
 )
 
-
 EXPECTED_BRIEF_COLUMNS = (
     "review_priority",
     "evidence_tier",
