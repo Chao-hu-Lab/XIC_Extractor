@@ -8,6 +8,11 @@ __all__ = (
     "cluster_candidates",
 )
 
+
+def __dir__() -> tuple[str, ...]:
+    return __all__
+
+
 del clustering
 del config
 del models
