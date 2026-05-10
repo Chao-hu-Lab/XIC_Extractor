@@ -1,7 +1,17 @@
+from dataclasses import replace
+from pathlib import Path
+
+from xic_extractor.discovery.evidence_score import score_discovery_evidence
 from xic_extractor.discovery.evidence_config import (
     DEFAULT_EVIDENCE_PROFILE,
+    DiscoveryEvidenceProfile,
     DiscoveryEvidenceThresholds,
     DiscoveryEvidenceWeights,
+)
+from xic_extractor.discovery.models import (
+    DiscoveryCandidate,
+    DiscoverySettings,
+    NeutralLossProfile,
 )
 
 
@@ -53,3 +63,94 @@ def test_evidence_thresholds_are_frozen_and_hashable() -> None:
     first = DiscoveryEvidenceThresholds()
     second = DiscoveryEvidenceThresholds()
     assert hash(first) == hash(second)
+
+
+def test_score_discovery_evidence_preserves_default_v1_baseline() -> None:
+    evidence = score_discovery_evidence(_candidate())
+
+    assert evidence.score == 71
+    assert evidence.tier == "B"
+    assert evidence.ms2_support == "strong"
+    assert evidence.ms1_support == "moderate"
+    assert evidence.rt_alignment == "aligned"
+
+
+def test_score_discovery_evidence_uses_custom_weight_from_settings() -> None:
+    settings = _settings(
+        weights=replace(
+            DEFAULT_EVIDENCE_PROFILE.weights,
+            ms1_peak_present=30,
+        )
+    )
+
+    evidence = score_discovery_evidence(_candidate(), settings=settings)
+
+    assert evidence.score == 76
+
+
+def test_score_discovery_evidence_uses_custom_thresholds_from_settings() -> None:
+    settings = _settings(
+        thresholds=replace(
+            DEFAULT_EVIDENCE_PROFILE.thresholds,
+            rt_aligned_max_min=0.005,
+        )
+    )
+
+    evidence = score_discovery_evidence(_candidate(), settings=settings)
+
+    assert evidence.score == 66
+    assert evidence.rt_alignment == "near"
+
+
+def _settings(
+    *,
+    weights: DiscoveryEvidenceWeights | None = None,
+    thresholds: DiscoveryEvidenceThresholds | None = None,
+) -> DiscoverySettings:
+    return DiscoverySettings(
+        neutral_loss_profile=NeutralLossProfile("DNA_dR", 116.0474),
+        evidence_profile=DiscoveryEvidenceProfile(
+            name="default",
+            weights=weights or DEFAULT_EVIDENCE_PROFILE.weights,
+            thresholds=thresholds or DEFAULT_EVIDENCE_PROFILE.thresholds,
+        ),
+    )
+
+
+def _candidate() -> DiscoveryCandidate:
+    return DiscoveryCandidate(
+        review_priority="MEDIUM",
+        evidence_score=0,
+        evidence_tier="E",
+        ms2_support="weak",
+        ms1_support="missing",
+        rt_alignment="missing",
+        family_context="singleton",
+        candidate_id="Sample#1",
+        precursor_mz=258.108,
+        product_mz=142.061,
+        observed_neutral_loss_da=116.0474,
+        best_seed_rt=7.83,
+        seed_event_count=2,
+        ms1_peak_found=True,
+        ms1_apex_rt=7.84,
+        ms1_area=500_000.0,
+        ms2_product_max_intensity=50_000.0,
+        reason="",
+        raw_file=Path("C:/x/Sample.raw"),
+        sample_stem="Sample",
+        best_ms2_scan_id=1,
+        seed_scan_ids=(1,),
+        neutral_loss_tag="DNA_dR",
+        configured_neutral_loss_da=116.0474,
+        neutral_loss_mass_error_ppm=2.0,
+        rt_seed_min=7.80,
+        rt_seed_max=7.86,
+        ms1_search_rt_min=7.60,
+        ms1_search_rt_max=8.06,
+        ms1_seed_delta_min=0.01,
+        ms1_peak_rt_start=7.70,
+        ms1_peak_rt_end=7.98,
+        ms1_height=4500.0,
+        ms1_trace_quality="GOOD",
+    )
