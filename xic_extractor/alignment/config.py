@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Literal
+
+ReviewPriority = Literal["HIGH", "MEDIUM", "LOW"]
+
+
+@dataclass(frozen=True)
+class AlignmentConfig:
+    preferred_ppm: float = 20.0
+    max_ppm: float = 50.0
+    preferred_rt_sec: float = 60.0
+    max_rt_sec: float = 180.0
+    product_mz_tolerance_ppm: float = 20.0
+    observed_loss_tolerance_ppm: float = 20.0
+    mz_bucket_neighbor_radius: int = 2
+    anchor_priorities: tuple[ReviewPriority, ...] = ("HIGH",)
+    anchor_min_evidence_score: int = 60
+    anchor_min_seed_events: int = 2
+    anchor_min_scan_support_score: float = 0.5
+    rt_unit: Literal["min"] = "min"
+    fragmentation_model: Literal["cid_nl"] = "cid_nl"
+
+    def __post_init__(self) -> None:
+        _require_positive("preferred_ppm", self.preferred_ppm)
+        _require_positive("max_ppm", self.max_ppm)
+        _require_at_most("preferred_ppm", self.preferred_ppm, "max_ppm", self.max_ppm)
+        _require_positive("preferred_rt_sec", self.preferred_rt_sec)
+        _require_positive("max_rt_sec", self.max_rt_sec)
+        _require_at_most(
+            "preferred_rt_sec",
+            self.preferred_rt_sec,
+            "max_rt_sec",
+            self.max_rt_sec,
+        )
+        _require_positive("product_mz_tolerance_ppm", self.product_mz_tolerance_ppm)
+        _require_positive(
+            "observed_loss_tolerance_ppm",
+            self.observed_loss_tolerance_ppm,
+        )
+
+        if not self.anchor_priorities:
+            raise ValueError("anchor_priorities cannot be empty")
+        if not 0 <= self.anchor_min_evidence_score <= 100:
+            raise ValueError("anchor_min_evidence_score must be between 0 and 100")
+        if self.anchor_min_seed_events < 1:
+            raise ValueError("anchor_min_seed_events must be at least 1")
+        if not 0 <= self.anchor_min_scan_support_score <= 1:
+            raise ValueError("anchor_min_scan_support_score must be between 0 and 1")
+        if self.rt_unit != "min":
+            raise ValueError('rt_unit must be "min" in v1')
+        if self.fragmentation_model != "cid_nl":
+            raise ValueError('fragmentation_model must be "cid_nl" in v1')
+
+
+def _require_positive(name: str, value: float) -> None:
+    if value <= 0:
+        raise ValueError(f"{name} must be positive")
+
+
+def _require_at_most(
+    preferred_name: str,
+    preferred_value: float,
+    max_name: str,
+    max_value: float,
+) -> None:
+    if preferred_value > max_value:
+        raise ValueError(f"{preferred_name} must be <= {max_name}")
