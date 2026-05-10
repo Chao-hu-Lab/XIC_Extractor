@@ -54,6 +54,7 @@ DISCOVERY_PROVENANCE_COLUMNS = (
     "ms1_peak_rt_end",
     "ms1_height",
     "ms1_trace_quality",
+    "ms1_scan_support_score",
 )
 
 DISCOVERY_CANDIDATE_COLUMNS = DISCOVERY_REVIEW_COLUMNS + DISCOVERY_PROVENANCE_COLUMNS
@@ -164,6 +165,7 @@ class DiscoveryCandidate:
     ms1_peak_rt_end: float | None
     ms1_height: float | None
     ms1_trace_quality: str
+    ms1_scan_support_score: float | None = None
     feature_family_id: str = ""
     feature_family_size: int = 1
     feature_superfamily_id: str = ""
@@ -195,6 +197,7 @@ class DiscoveryCandidate:
         ms1_peak_rt_end: float | None,
         ms1_height: float | None,
         ms1_trace_quality: str,
+        ms1_scan_support_score: float | None = None,
         seed_event_count: int,
         ms1_peak_found: bool,
         ms1_apex_rt: float | None,
@@ -238,6 +241,7 @@ class DiscoveryCandidate:
             ms1_peak_rt_end=ms1_peak_rt_end,
             ms1_height=ms1_height,
             ms1_trace_quality=ms1_trace_quality,
+            ms1_scan_support_score=ms1_scan_support_score,
         )
 
 

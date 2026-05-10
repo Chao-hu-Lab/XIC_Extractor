@@ -63,6 +63,7 @@ EXPECTED_PROVENANCE_COLUMNS = (
     "ms1_peak_rt_end",
     "ms1_height",
     "ms1_trace_quality",
+    "ms1_scan_support_score",
 )
 
 
@@ -92,6 +93,7 @@ def _candidate(
     feature_superfamily_role: str = "representative",
     feature_superfamily_confidence: str = "LOW",
     feature_superfamily_evidence: str = "single_candidate",
+    ms1_scan_support_score: float | None = None,
 ) -> DiscoveryCandidate:
     return DiscoveryCandidate(
         review_priority=review_priority,  # type: ignore[arg-type]
@@ -135,6 +137,7 @@ def _candidate(
         ms1_peak_rt_end=7.981234,
         ms1_height=4500.5,
         ms1_trace_quality="GOOD",
+        ms1_scan_support_score=ms1_scan_support_score,
     )
 
 
@@ -154,6 +157,18 @@ def test_discovery_provenance_columns_are_stable_csv_contract() -> None:
 def test_discovery_candidate_columns_start_with_review_columns() -> None:
     assert DISCOVERY_CANDIDATE_COLUMNS[:25] == DISCOVERY_REVIEW_COLUMNS
     assert DISCOVERY_CANDIDATE_COLUMNS[25:] == DISCOVERY_PROVENANCE_COLUMNS
+
+
+def test_discovery_candidate_has_optional_scan_support_score() -> None:
+    field_names = {field.name for field in fields(DiscoveryCandidate)}
+
+    assert "ms1_scan_support_score" in field_names
+    assert _candidate().ms1_scan_support_score is None
+
+
+def test_scan_support_score_is_last_provenance_column() -> None:
+    assert DISCOVERY_CANDIDATE_COLUMNS[:25] == DISCOVERY_REVIEW_COLUMNS
+    assert DISCOVERY_PROVENANCE_COLUMNS[-1] == "ms1_scan_support_score"
 
 
 def test_write_discovery_candidates_csv_creates_parent_and_writes_header(
