@@ -8,7 +8,7 @@ import pytest
 
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.discovery.models import DiscoverySettings, NeutralLossProfile
-from xic_extractor.discovery.pipeline import run_discovery
+from xic_extractor.discovery.pipeline import run_discovery, run_discovery_batch
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
 from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
 
@@ -74,6 +74,89 @@ def test_pipeline_writes_header_only_csv_when_no_strict_seeds(tmp_path: Path) ->
 
     assert len(rows) == 1
     assert "candidate_id" in rows[0]
+
+
+def test_batch_pipeline_writes_per_sample_csvs_and_index(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_paths = (
+        tmp_path / "TumorBC2312_DNA.raw",
+        tmp_path / "NormalBC2257_DNA.raw",
+    )
+    raw_by_path = {
+        raw_paths[0]: _FakeRawHandle(
+            [_scan_event(scan_number=101, rt=7.80, product_intensity=3000.0)],
+            rt=np.array([7.70, 7.80, 8.00]),
+            intensity=np.array([10.0, 600.0, 20.0]),
+        ),
+        raw_paths[1]: _FakeRawHandle(
+            [_scan_event(scan_number=202, rt=9.10, product_intensity=7000.0)],
+            rt=np.array([9.00, 9.10, 9.30]),
+            intensity=np.array([15.0, 900.0, 25.0]),
+        ),
+    }
+    monkeypatch.setattr(
+        "xic_extractor.discovery.ms1_backfill.find_peak_and_area",
+        lambda rt, intensity, peak_config, **kwargs: _ok_peak(
+            rt=float(rt[1]),
+            intensity=float(intensity[1]),
+            area=float(intensity[1] * 0.1),
+            start=float(rt[0]),
+            end=float(rt[-1]),
+        ),
+    )
+
+    csv_path = run_discovery_batch(
+        raw_paths,
+        output_dir=tmp_path / "out",
+        settings=_settings(),
+        peak_config=_peak_config(tmp_path),
+        raw_opener=lambda path, dll_dir: raw_by_path[path],
+    )
+
+    assert csv_path == tmp_path / "out" / "discovery_batch_index.csv"
+    index_rows = _read_csv(csv_path)
+    assert [row["sample_stem"] for row in index_rows] == [
+        "TumorBC2312_DNA",
+        "NormalBC2257_DNA",
+    ]
+    assert [row["candidate_count"] for row in index_rows] == ["1", "1"]
+    assert [row["medium_count"] for row in index_rows] == ["1", "1"]
+    assert [
+        Path(row["candidate_csv"]).name for row in index_rows
+    ] == ["discovery_candidates.csv", "discovery_candidates.csv"]
+
+    first_rows = _read_csv(
+        tmp_path / "out" / "TumorBC2312_DNA" / "discovery_candidates.csv"
+    )
+    second_rows = _read_csv(
+        tmp_path / "out" / "NormalBC2257_DNA" / "discovery_candidates.csv"
+    )
+    assert [row["candidate_id"] for row in first_rows] == ["TumorBC2312_DNA#101"]
+    assert [row["candidate_id"] for row in second_rows] == ["NormalBC2257_DNA#202"]
+    assert not (tmp_path / "out" / "discovery_candidates.csv").exists()
+    assert all(raw.entered and raw.closed for raw in raw_by_path.values())
+
+
+def test_batch_pipeline_escapes_excel_formula_strings_in_index(
+    tmp_path: Path,
+) -> None:
+    raw_path = Path("=cmd.raw")
+    raw = _FakeRawHandle(events=[])
+
+    csv_path = run_discovery_batch(
+        (raw_path,),
+        output_dir=tmp_path / "out",
+        settings=_settings(),
+        peak_config=_peak_config(tmp_path),
+        raw_opener=lambda path, dll_dir: raw,
+    )
+
+    row = _read_csv(csv_path)[0]
+    assert row["sample_stem"] == "'=cmd"
+    assert row["raw_file"].startswith("'=")
+    assert row["candidate_csv"].endswith("discovery_candidates.csv")
 
 
 def test_pipeline_uses_injected_raw_opener_with_dll_dir_and_closes_context(

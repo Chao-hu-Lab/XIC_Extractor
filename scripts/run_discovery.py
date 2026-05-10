@@ -6,7 +6,7 @@ from pathlib import Path
 
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.discovery.models import DiscoverySettings, NeutralLossProfile
-from xic_extractor.discovery.pipeline import run_discovery
+from xic_extractor.discovery.pipeline import run_discovery, run_discovery_batch
 from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
@@ -15,11 +15,19 @@ _RT_BOUND_ERROR = "RT bounds must be finite values >= 0"
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
-    raw_path = args.raw.resolve()
+    raw_path = args.raw.resolve() if args.raw is not None else None
+    raw_dir = args.raw_dir.resolve() if args.raw_dir is not None else None
     dll_dir = args.dll_dir.resolve()
     output_dir = args.output_dir.resolve()
-    if not raw_path.is_file():
+    if raw_path is not None and not raw_path.is_file():
         print(f"{raw_path}: raw file does not exist", file=sys.stderr)
+        return 2
+    if raw_dir is not None and not raw_dir.is_dir():
+        print(f"{raw_dir}: raw directory does not exist", file=sys.stderr)
+        return 2
+    raw_paths = (raw_path,) if raw_path is not None else _raw_paths_from_dir(raw_dir)
+    if not raw_paths:
+        print(f"{raw_dir}: raw directory contains no .raw files", file=sys.stderr)
         return 2
     if not dll_dir.is_dir():
         print(f"{dll_dir}: dll directory does not exist", file=sys.stderr)
@@ -41,27 +49,46 @@ def main(argv: Sequence[str] | None = None) -> int:
         rt_max=args.rt_max,
         resolver_mode=args.resolver_mode,
     )
-    peak_config = _peak_config(raw_path, dll_dir, output_dir, settings)
+    data_dir = raw_path.parent if raw_path is not None else raw_dir
+    peak_config = _peak_config(data_dir, dll_dir, output_dir, settings)
     try:
-        output_path = run_discovery(
-            raw_path,
-            output_dir=output_dir,
-            settings=settings,
-            peak_config=peak_config,
-        )
+        if raw_path is not None:
+            output_path = run_discovery(
+                raw_path,
+                output_dir=output_dir,
+                settings=settings,
+                peak_config=peak_config,
+            )
+            output_label = "Discovery CSV"
+        else:
+            output_path = run_discovery_batch(
+                raw_paths,
+                output_dir=output_dir,
+                settings=settings,
+                peak_config=peak_config,
+            )
+            output_label = "Discovery batch index"
     except RawReaderError as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
-    print(f"Discovery CSV: {output_path}")
+    print(f"{output_label}: {output_path}")
     return 0
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run single-RAW strict MS2 neutral-loss discovery."
+        description=(
+            "Run strict MS2 neutral-loss discovery for one RAW or a RAW directory."
+        )
     )
-    parser.add_argument("--raw", type=Path, required=True, help="Thermo RAW file.")
+    raw_input = parser.add_mutually_exclusive_group(required=True)
+    raw_input.add_argument("--raw", type=Path, help="Thermo RAW file.")
+    raw_input.add_argument(
+        "--raw-dir",
+        type=Path,
+        help="Directory containing .raw files.",
+    )
     parser.add_argument(
         "--dll-dir",
         type=Path,
@@ -72,7 +99,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--output-dir",
         type=Path,
         default=Path("output") / "discovery",
-        help="Directory for discovery_candidates.csv.",
+        help=(
+            "Output directory. Single RAW writes discovery_candidates.csv; "
+            "RAW directory writes discovery_batch_index.csv and per-sample CSVs."
+        ),
     )
     parser.add_argument("--neutral-loss-tag", default="DNA_dR")
     parser.add_argument("--neutral-loss-da", type=_positive_float, default=116.0474)
@@ -105,14 +135,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 
 
 def _peak_config(
-    raw_path: Path,
+    data_dir: Path,
     dll_dir: Path,
     output_dir: Path,
     settings: DiscoverySettings,
 ) -> ExtractionConfig:
     defaults = CANONICAL_SETTINGS_DEFAULTS
     return ExtractionConfig(
-        data_dir=raw_path.parent,
+        data_dir=data_dir,
         dll_dir=dll_dir,
         output_csv=output_dir / "xic_results.csv",
         diagnostics_csv=output_dir / "xic_diagnostics.csv",
@@ -132,6 +162,12 @@ def _peak_config(
         resolver_peak_duration_max=float(defaults["resolver_peak_duration_max"]),
         resolver_min_scans=int(defaults["resolver_min_scans"]),
     )
+
+
+def _raw_paths_from_dir(raw_dir: Path | None) -> tuple[Path, ...]:
+    if raw_dir is None:
+        return ()
+    return tuple(sorted(raw_dir.glob("*.raw"), key=lambda path: path.name.lower()))
 
 
 def _positive_float(value: str) -> float:

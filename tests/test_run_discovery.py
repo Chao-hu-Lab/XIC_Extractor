@@ -67,6 +67,59 @@ def test_run_discovery_cli_passes_single_raw_settings(
     assert "discovery_candidates.csv" in stdout
 
 
+def test_run_discovery_cli_passes_raw_dir_batch_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    first = raw_dir / "B.raw"
+    second = raw_dir / "A.raw"
+    first.write_text("", encoding="utf-8")
+    second.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "out"
+    captured = {}
+
+    def _fake_run_discovery_batch(raw_paths, *, output_dir, settings, peak_config):
+        captured["raw_paths"] = raw_paths
+        captured["output_dir"] = output_dir
+        captured["settings"] = settings
+        captured["peak_config"] = peak_config
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "discovery_batch_index.csv"
+        output_path.write_text("sample_stem\n", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(
+        run_discovery,
+        "run_discovery_batch",
+        _fake_run_discovery_batch,
+    )
+
+    code = run_discovery.main(
+        [
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert code == 0
+    assert captured["raw_paths"] == (second.resolve(), first.resolve())
+    assert captured["output_dir"] == output_dir.resolve()
+    assert captured["peak_config"].data_dir == raw_dir.resolve()
+    assert captured["settings"].resolver_mode == "local_minimum"
+    stdout = capsys.readouterr().out
+    assert "Discovery batch index: " in stdout
+    assert "discovery_batch_index.csv" in stdout
+
+
 def test_run_discovery_cli_rejects_missing_raw(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -85,6 +138,28 @@ def test_run_discovery_cli_rejects_missing_raw(
 
     assert code == 2
     assert "raw file does not exist" in capsys.readouterr().err
+
+
+def test_run_discovery_cli_rejects_raw_dir_without_raw_files(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_discovery.main(
+        [
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+        ]
+    )
+
+    assert code == 2
+    assert "raw directory contains no .raw files" in capsys.readouterr().err
 
 
 def test_run_discovery_cli_rejects_missing_dll_dir(

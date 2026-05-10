@@ -8,6 +8,7 @@ from xic_extractor.discovery.pipeline import (
     DiscoveryRawHandle,
     RawOpener,
     run_discovery,
+    run_discovery_batch,
 )
 from xic_extractor.discovery.priority import (
     assign_review_priority,
@@ -25,5 +26,6 @@ __all__ = (
     "collect_strict_nl_seeds",
     "group_discovery_seeds",
     "run_discovery",
+    "run_discovery_batch",
     "write_discovery_candidates_csv",
 )
