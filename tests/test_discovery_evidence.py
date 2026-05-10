@@ -164,7 +164,7 @@ def test_numeric_scan_support_takes_precedence_over_legacy_trace_quality() -> No
     assert evidence.score == 56
 
 
-def test_legacy_trace_quality_fallback_still_scores_when_scan_support_is_missing() -> None:
+def test_legacy_trace_quality_fallback_scores_when_scan_support_missing() -> None:
     candidate = replace(
         _candidate(),
         ms1_trace_quality="GOOD",
