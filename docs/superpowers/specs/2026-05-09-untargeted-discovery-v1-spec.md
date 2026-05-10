@@ -161,6 +161,12 @@ MS1 area is a core value proposition. A discovery row without MS1 area is only a
 
 ## 5. Output Contract
 
+Discovery output surfaces are constrained by
+`2026-05-10-discovery-ux-surface-contract.md`. New evidence should not
+automatically widen `discovery_review.csv`; it must be routed to the review,
+full candidate, batch, metrics, or visualization surface according to that
+contract.
+
 ### 5.1 Standard output
 
 The standard v1 single-RAW output is a paired review/full CSV set:
