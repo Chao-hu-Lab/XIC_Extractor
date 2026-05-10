@@ -253,7 +253,10 @@ def test_pipeline_threads_evidence_profile_into_scoring(
                 DEFAULT_EVIDENCE_PROFILE.weights,
                 ms1_peak_present=30,
             ),
-            thresholds=DEFAULT_EVIDENCE_PROFILE.thresholds,
+            thresholds=replace(
+                DEFAULT_EVIDENCE_PROFILE.thresholds,
+                scan_support_target=3,
+            ),
         )
     )
 

@@ -66,10 +66,20 @@ def score_discovery_evidence(
         elif candidate.ms1_area >= thresholds.area_med_min:
             score += weights.area_med
 
-    if candidate.ms1_trace_quality.upper() in {"GOOD", "CLEAN"}:
-        score += weights.legacy_trace_quality_high
-    elif candidate.ms1_trace_quality.upper() in {"POOR", "MISSING"}:
-        score += weights.legacy_trace_quality_low
+    if candidate.ms1_scan_support_score is not None:
+        if candidate.ms1_scan_support_score >= thresholds.scan_support_high_score_min:
+            score += weights.scan_support_high
+        elif (
+            candidate.ms1_peak_found
+            and candidate.ms1_scan_support_score
+            <= thresholds.scan_support_low_score_max
+        ):
+            score += weights.scan_support_low
+    elif candidate.ms1_peak_found:
+        if candidate.ms1_trace_quality.upper() in {"GOOD", "CLEAN"}:
+            score += weights.legacy_trace_quality_high
+        elif candidate.ms1_trace_quality.upper() in {"POOR", "MISSING"}:
+            score += weights.legacy_trace_quality_low
 
     if candidate.feature_superfamily_size > 1:
         if candidate.feature_superfamily_role == "representative":
@@ -120,15 +130,22 @@ def classify_ms1_support(
 ) -> str:
     if not candidate.ms1_peak_found or candidate.ms1_area is None:
         return "missing"
-    trace_quality = candidate.ms1_trace_quality.upper()
+    scan_support = candidate.ms1_scan_support_score
+    if scan_support is None:
+        trace_quality = candidate.ms1_trace_quality.upper()
+        high_scan_support = trace_quality in {"GOOD", "CLEAN"}
+        low_scan_support = trace_quality in {"POOR", "MISSING"}
+    else:
+        high_scan_support = scan_support >= thresholds.scan_support_high_score_min
+        low_scan_support = scan_support <= thresholds.scan_support_low_score_max
     if (
         candidate.ms1_area >= thresholds.ms1_support_strong_area_min
-        and trace_quality in {"GOOD", "CLEAN"}
+        and high_scan_support
     ):
         return "strong"
     if (
         candidate.ms1_area >= thresholds.ms1_support_moderate_area_min
-        or trace_quality in {"GOOD", "CLEAN"}
+        or (high_scan_support and not low_scan_support)
     ):
         return "moderate"
     return "weak"

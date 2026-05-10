@@ -102,6 +102,98 @@ def test_score_discovery_evidence_uses_custom_thresholds_from_settings() -> None
     assert evidence.rt_alignment == "near"
 
 
+def test_score_discovery_evidence_adds_high_numeric_scan_support() -> None:
+    settings = _settings(
+        weights=replace(
+            DEFAULT_EVIDENCE_PROFILE.weights,
+            scan_support_high=12,
+        )
+    )
+    candidate = replace(
+        _candidate(),
+        ms1_trace_quality="POOR",
+        ms1_scan_support_score=0.9,
+    )
+
+    evidence = score_discovery_evidence(candidate, settings=settings)
+
+    assert evidence.score == 78
+    assert evidence.ms1_support == "moderate"
+
+
+def test_score_discovery_evidence_penalizes_low_numeric_scan_support() -> None:
+    settings = _settings(
+        weights=replace(
+            DEFAULT_EVIDENCE_PROFILE.weights,
+            scan_support_low=-12,
+        )
+    )
+    candidate = replace(
+        _candidate(),
+        ms1_trace_quality="GOOD",
+        ms1_scan_support_score=0.1,
+    )
+
+    evidence = score_discovery_evidence(candidate, settings=settings)
+
+    assert evidence.score == 54
+    assert evidence.ms1_support == "weak"
+
+
+def test_score_discovery_evidence_keeps_mid_scan_support_neutral() -> None:
+    candidate = replace(
+        _candidate(),
+        ms1_trace_quality="GOOD",
+        ms1_scan_support_score=0.5,
+    )
+
+    evidence = score_discovery_evidence(candidate)
+
+    assert evidence.score == 66
+
+
+def test_numeric_scan_support_takes_precedence_over_legacy_trace_quality() -> None:
+    candidate = replace(
+        _candidate(),
+        ms1_trace_quality="GOOD",
+        ms1_scan_support_score=0.1,
+    )
+
+    evidence = score_discovery_evidence(candidate)
+
+    assert evidence.score == 56
+
+
+def test_legacy_trace_quality_fallback_still_scores_when_scan_support_is_missing() -> None:
+    candidate = replace(
+        _candidate(),
+        ms1_trace_quality="GOOD",
+        ms1_scan_support_score=None,
+    )
+
+    evidence = score_discovery_evidence(candidate)
+
+    assert evidence.score == 71
+    assert evidence.ms1_support == "moderate"
+
+
+def test_missing_ms1_peak_does_not_apply_low_scan_support_penalty() -> None:
+    candidate = replace(
+        _candidate(),
+        ms1_peak_found=False,
+        ms1_apex_rt=None,
+        ms1_area=None,
+        ms1_seed_delta_min=None,
+        ms1_trace_quality="MISSING",
+        ms1_scan_support_score=0.0,
+    )
+
+    evidence = score_discovery_evidence(candidate)
+
+    assert evidence.score == 26
+    assert evidence.ms1_support == "missing"
+
+
 def _settings(
     *,
     weights: DiscoveryEvidenceWeights | None = None,
