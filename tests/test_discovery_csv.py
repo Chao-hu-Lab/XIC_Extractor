@@ -19,6 +19,12 @@ from xic_extractor.discovery.models import (
 
 EXPECTED_REVIEW_COLUMNS = (
     "review_priority",
+    "evidence_tier",
+    "evidence_score",
+    "ms2_support",
+    "ms1_support",
+    "rt_alignment",
+    "family_context",
     "candidate_id",
     "feature_family_id",
     "feature_family_size",
@@ -62,6 +68,12 @@ EXPECTED_PROVENANCE_COLUMNS = (
 def _candidate(
     *,
     review_priority: str = "MEDIUM",
+    evidence_score: int = 50,
+    evidence_tier: str = "C",
+    ms2_support: str = "moderate",
+    ms1_support: str = "moderate",
+    rt_alignment: str = "aligned",
+    family_context: str = "singleton",
     candidate_id: str = "candidate-1",
     sample_stem: str = "Sample_1",
     reason: str = "neutral loss seed",
@@ -82,6 +94,12 @@ def _candidate(
 ) -> DiscoveryCandidate:
     return DiscoveryCandidate(
         review_priority=review_priority,  # type: ignore[arg-type]
+        evidence_score=evidence_score,
+        evidence_tier=evidence_tier,
+        ms2_support=ms2_support,
+        ms1_support=ms1_support,
+        rt_alignment=rt_alignment,
+        family_context=family_context,
         candidate_id=candidate_id,
         feature_family_id=feature_family_id,
         feature_family_size=feature_family_size,
@@ -133,8 +151,8 @@ def test_discovery_provenance_columns_are_stable_csv_contract() -> None:
 
 
 def test_discovery_candidate_columns_start_with_review_columns() -> None:
-    assert DISCOVERY_CANDIDATE_COLUMNS[:19] == DISCOVERY_REVIEW_COLUMNS
-    assert DISCOVERY_CANDIDATE_COLUMNS[19:] == DISCOVERY_PROVENANCE_COLUMNS
+    assert DISCOVERY_CANDIDATE_COLUMNS[:25] == DISCOVERY_REVIEW_COLUMNS
+    assert DISCOVERY_CANDIDATE_COLUMNS[25:] == DISCOVERY_PROVENANCE_COLUMNS
 
 
 def test_write_discovery_candidates_csv_creates_parent_and_writes_header(
@@ -176,6 +194,8 @@ def test_write_discovery_candidates_csv_sorts_review_queue_rows(
         ),
         _candidate(
             review_priority="HIGH",
+            evidence_score=60,
+            evidence_tier="B",
             candidate_id="high-low-count",
             seed_event_count=2,
             ms2_product_max_intensity=99999.0,
@@ -184,6 +204,8 @@ def test_write_discovery_candidates_csv_sorts_review_queue_rows(
         ),
         _candidate(
             review_priority="HIGH",
+            evidence_score=80,
+            evidence_tier="A",
             candidate_id="high-count-intensity",
             seed_event_count=3,
             ms2_product_max_intensity=20000.0,
@@ -192,6 +214,8 @@ def test_write_discovery_candidates_csv_sorts_review_queue_rows(
         ),
         _candidate(
             review_priority="HIGH",
+            evidence_score=80,
+            evidence_tier="A",
             candidate_id="high-count-intensity-area-early",
             seed_event_count=3,
             ms2_product_max_intensity=30000.0,
@@ -200,6 +224,8 @@ def test_write_discovery_candidates_csv_sorts_review_queue_rows(
         ),
         _candidate(
             review_priority="HIGH",
+            evidence_score=80,
+            evidence_tier="A",
             candidate_id="high-count-intensity-area-none",
             seed_event_count=3,
             ms2_product_max_intensity=30000.0,
@@ -208,6 +234,8 @@ def test_write_discovery_candidates_csv_sorts_review_queue_rows(
         ),
         _candidate(
             review_priority="HIGH",
+            evidence_score=80,
+            evidence_tier="A",
             candidate_id="high-count-intensity-area-late",
             seed_event_count=3,
             ms2_product_max_intensity=30000.0,
@@ -227,6 +255,44 @@ def test_write_discovery_candidates_csv_sorts_review_queue_rows(
         "high-low-count",
         "medium",
         "low",
+    ]
+
+
+def test_write_discovery_candidates_csv_sorts_by_evidence_score_within_priority(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "discovery_candidates.csv"
+    candidates = [
+        _candidate(
+            review_priority="MEDIUM",
+            evidence_score=40,
+            evidence_tier="C",
+            candidate_id="medium-c",
+            seed_event_count=9,
+            ms2_product_max_intensity=999999.0,
+        ),
+        _candidate(
+            review_priority="MEDIUM",
+            evidence_score=75,
+            evidence_tier="B",
+            candidate_id="medium-b",
+            seed_event_count=1,
+            ms2_product_max_intensity=1.0,
+        ),
+        _candidate(
+            review_priority="LOW",
+            evidence_score=95,
+            evidence_tier="A",
+            candidate_id="low-a",
+        ),
+    ]
+
+    write_discovery_candidates_csv(output_path, candidates)
+
+    assert [row["candidate_id"] for row in _read_csv(output_path)] == [
+        "medium-b",
+        "medium-c",
+        "low-a",
     ]
 
 
@@ -311,6 +377,12 @@ def test_write_discovery_candidates_csv_formats_review_values_stably(
 
     row = _read_csv(output_path)[0]
     assert row["precursor_mz"] == "258.109"
+    assert row["evidence_score"] == "50"
+    assert row["evidence_tier"] == "C"
+    assert row["ms2_support"] == "moderate"
+    assert row["ms1_support"] == "moderate"
+    assert row["rt_alignment"] == "aligned"
+    assert row["family_context"] == "singleton"
     assert row["feature_family_id"] == "Sample_1@F0001"
     assert row["feature_family_size"] == "1"
     assert row["feature_superfamily_id"] == "Sample_1@SF0001"

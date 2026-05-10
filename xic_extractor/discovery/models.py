@@ -6,6 +6,12 @@ ReviewPriority = Literal["HIGH", "MEDIUM", "LOW"]
 
 DISCOVERY_REVIEW_COLUMNS = (
     "review_priority",
+    "evidence_tier",
+    "evidence_score",
+    "ms2_support",
+    "ms1_support",
+    "rt_alignment",
+    "family_context",
     "candidate_id",
     "feature_family_id",
     "feature_family_size",
@@ -102,6 +108,12 @@ class DiscoverySeedGroup:
 @dataclass(frozen=True)
 class DiscoveryCandidate:
     review_priority: ReviewPriority
+    evidence_score: int
+    evidence_tier: str
+    ms2_support: str
+    ms1_support: str
+    rt_alignment: str
+    family_context: str
     candidate_id: str
     precursor_mz: float
     product_mz: float
@@ -170,6 +182,12 @@ class DiscoveryCandidate:
     ) -> "DiscoveryCandidate":
         return cls(
             review_priority=review_priority,
+            evidence_score=0,
+            evidence_tier="E",
+            ms2_support="weak",
+            ms1_support="missing",
+            rt_alignment="missing",
+            family_context="singleton",
             candidate_id=f"{sample_stem}#{best_seed.scan_number}",
             precursor_mz=precursor_mz,
             product_mz=product_mz,

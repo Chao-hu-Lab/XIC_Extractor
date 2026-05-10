@@ -34,6 +34,7 @@ def _candidate_sort_key(candidate: DiscoveryCandidate) -> tuple[Any, ...]:
     area_desc = 0.0 if candidate.ms1_area is None else -candidate.ms1_area
     return (
         _PRIORITY_RANK.get(candidate.review_priority, len(_PRIORITY_RANK)),
+        -candidate.evidence_score,
         -candidate.feature_superfamily_size,
         candidate.feature_superfamily_id,
         0 if candidate.feature_superfamily_role == "representative" else 1,
@@ -49,12 +50,12 @@ def _candidate_sort_key(candidate: DiscoveryCandidate) -> tuple[Any, ...]:
 
 def _candidate_row(candidate: DiscoveryCandidate) -> dict[str, str]:
     return {
-        column: _format_csv_value(column, getattr(candidate, column))
+        column: format_discovery_csv_value(column, getattr(candidate, column))
         for column in DISCOVERY_CANDIDATE_COLUMNS
     }
 
 
-def _format_csv_value(column: str, value: object) -> str:
+def format_discovery_csv_value(column: str, value: object) -> str:
     if value is None:
         return ""
     if isinstance(value, bool):
@@ -70,6 +71,9 @@ def _format_csv_value(column: str, value: object) -> str:
     if isinstance(value, float):
         return f"{value:.6g}"
     return _escape_excel_formula(str(value))
+
+
+_format_csv_value = format_discovery_csv_value
 
 
 def _escape_excel_formula(value: str) -> str:

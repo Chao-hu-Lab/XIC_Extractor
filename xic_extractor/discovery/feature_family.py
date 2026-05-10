@@ -1,5 +1,6 @@
 from dataclasses import replace
 
+from xic_extractor.discovery.evidence_score import score_discovery_evidence
 from xic_extractor.discovery.models import DiscoveryCandidate
 
 _APEX_RT_EPSILON_MIN = 1e-6
@@ -47,7 +48,7 @@ def _assign_superfamilies(
     candidates: tuple[DiscoveryCandidate, ...],
 ) -> tuple[DiscoveryCandidate, ...]:
     superfamilies: list[list[DiscoveryCandidate]] = []
-    for candidate in candidates:
+    for candidate in sorted(candidates, key=_candidate_sort_key):
         family_index = _matching_superfamily_index(candidate, superfamilies)
         if family_index is None:
             superfamilies.append([candidate])
@@ -61,14 +62,14 @@ def _assign_superfamilies(
     ):
         representative = _representative(superfamily)
         superfamily_size = len(superfamily)
-        confidence = "HIGH" if superfamily_size > 1 else "LOW"
-        evidence = (
+        confidence = "MEDIUM" if superfamily_size > 1 else "LOW"
+        evidence_token = (
             "peak_boundary_overlap;apex_close"
             if superfamily_size > 1
             else "single_candidate"
         )
         for candidate in superfamily:
-            assigned_by_candidate_id[candidate.candidate_id] = replace(
+            assigned = replace(
                 candidate,
                 feature_superfamily_id=superfamily_id,
                 feature_superfamily_size=superfamily_size,
@@ -78,7 +79,17 @@ def _assign_superfamilies(
                     else "member"
                 ),
                 feature_superfamily_confidence=confidence,
-                feature_superfamily_evidence=evidence,
+                feature_superfamily_evidence=evidence_token,
+            )
+            discovery_evidence = score_discovery_evidence(assigned)
+            assigned_by_candidate_id[candidate.candidate_id] = replace(
+                assigned,
+                evidence_score=discovery_evidence.score,
+                evidence_tier=discovery_evidence.tier,
+                ms2_support=discovery_evidence.ms2_support,
+                ms1_support=discovery_evidence.ms1_support,
+                rt_alignment=discovery_evidence.rt_alignment,
+                family_context=discovery_evidence.family_context,
             )
 
     return tuple(
@@ -170,13 +181,17 @@ def _superfamily_ids(superfamilies: list[list[DiscoveryCandidate]]) -> list[str]
 def _family_sort_key(
     family: list[DiscoveryCandidate],
 ) -> tuple[str, float, float, str]:
-    earliest = min(family, key=lambda candidate: candidate.best_seed_rt)
+    earliest = min(family, key=_candidate_sort_key)
+    return _candidate_sort_key(earliest)
+
+
+def _candidate_sort_key(candidate: DiscoveryCandidate) -> tuple[str, float, float, str]:
     apex = (
-        earliest.ms1_apex_rt
-        if earliest.ms1_apex_rt is not None
-        else earliest.best_seed_rt
+        candidate.ms1_apex_rt
+        if candidate.ms1_apex_rt is not None
+        else candidate.best_seed_rt
     )
-    return (earliest.sample_stem, apex, earliest.best_seed_rt, earliest.candidate_id)
+    return (candidate.sample_stem, apex, candidate.best_seed_rt, candidate.candidate_id)
 
 
 def _family_identity_key(family: list[DiscoveryCandidate]) -> tuple[str, ...]:
