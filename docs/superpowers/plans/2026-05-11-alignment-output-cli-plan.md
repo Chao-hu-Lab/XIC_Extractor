@@ -82,10 +82,10 @@ Definitions:
 - `rescued_rate = rescued_count / sample_count`.
 - `representative_samples`: semicolon-separated detected/rescued sample stems, capped at 5 then suffix `;...`.
 - `representative_candidate_ids`: semicolon-separated detected candidate IDs, capped at 5 then suffix `;...`.
-- `warning` should be short:
-  - `no_anchor`
-  - `high_unchecked`
-  - `high_rescue_rate`
+- `warning` should be short and deterministic. Emit only the first matching warning by this precedence:
+  - `no_anchor`: `has_anchor` is false.
+  - `high_unchecked`: `unchecked_count / sample_count > 0.5`.
+  - `high_rescue_rate`: `rescued_count > detected_count`.
   - blank if no warning.
 - `reason` should be concise and derived from counts, e.g. `anchor cluster; 7/8 present; 2 rescued`.
 
@@ -178,6 +178,32 @@ Exit codes:
 
 The CLI does not rerun discovery. If users want a future one-command workflow, add a wrapper in a later plan.
 
+## Input Path And Escaping Contracts
+
+### CSV Formula Escaping On Read
+
+Discovery CSVs are both user-openable files and machine input for alignment. Discovery writers protect Excel users by prefixing formula-like strings with one leading apostrophe (`'`) when a value starts with `=`, `+`, `-`, or `@`.
+
+Alignment loaders must reverse that escape for known machine fields on read:
+
+- `discovery_batch_index.csv`: `sample_stem`, `raw_file`, `candidate_csv`, and `review_csv` if present.
+- `discovery_candidates.csv`: `sample_stem`, `raw_file`, `candidate_id`, `feature_family_id`, and `feature_superfamily_id` if present.
+
+Unescape exactly one leading apostrophe only for values that match `'=`, `'+`, `'-`, or `'@`. Do not strip arbitrary apostrophes from ordinary text. TSV writers still apply Excel formula escaping on output.
+
+### RAW Path Authority
+
+`--raw-dir` is authoritative for backfill RAW files. The `raw_file` value in `discovery_batch_index.csv` is provenance and filename hint only; its original parent directory may be stale.
+
+For each batch row:
+
+1. Unescape `raw_file`.
+2. If `raw_file` is non-empty, try `raw_dir / Path(raw_file).name`.
+3. If that path is missing or `raw_file` is empty, try `raw_dir / f"{sample_stem}.raw"`.
+4. If no RAW file exists, do not fail the run. Pass no RAW source for that sample so Plan 2 backfill leaves eligible missing cells as `unchecked`.
+
+`candidate_csv` remains resolved relative to the batch index parent when it is relative, because it is part of the completed discovery batch artifact.
+
 ## File Structure
 
 Create:
@@ -217,6 +243,15 @@ Write all requested TSVs to `.tmp` paths first. Only after all writes succeed, r
 
 Tests must simulate a writer failure after stale outputs already exist.
 
+## RAW Handle Lifecycle
+
+The pipeline must own RAW reader lifetimes with `contextlib.ExitStack`.
+
+- Open only RAW paths that exist under `--raw-dir` after applying the RAW path authority rule.
+- Enter each RAW reader context before passing handles to `backfill_alignment_matrix()`.
+- Close all entered RAW handles on success and on any failure, including clustering errors, backfill errors, or TSV writer failures.
+- Keep the default opener lazy so tests can inject fake context managers without importing Thermo dependencies.
+
 ## Tasks
 
 ### Task 0: Dependency Check
@@ -253,10 +288,12 @@ Expected: PASS. If Plan 1/2 tests are missing or failing, stop.
 - [ ] Write red tests:
   - reads `discovery_batch_index.csv` preserving row order as `sample_order`.
   - resolves `candidate_csv` paths relative to batch index parent when relative.
+  - unescapes formula-escaped batch fields: `sample_stem`, `raw_file`, `candidate_csv`, and optional `review_csv`.
   - parses a full `discovery_candidates.csv` row into `DiscoveryCandidate`.
+  - unescapes formula-escaped candidate fields: `sample_stem`, `raw_file`, `candidate_id`, `feature_family_id`, and `feature_superfamily_id`.
+  - does not strip ordinary apostrophes from non-escaped text.
   - rejects missing required columns with `ValueError`.
   - rejects malformed bool/int/float tuple fields with row-numbered `ValueError`.
-  - preserves escaped Excel-formula string values as literal text.
 
 Run:
 
@@ -290,6 +327,7 @@ git commit -m "feat(alignment): load discovery batch candidates"
   - `alignment_review.tsv` has the exact default columns in this plan.
   - review rows compute detected/rescued/absent/unchecked counts.
   - review rows compute `present_rate` and `rescued_rate`.
+  - review warning precedence is deterministic: `no_anchor`, then `high_unchecked` when `unchecked_count / sample_count > 0.5`, then `high_rescue_rate` when `rescued_count > detected_count`, otherwise blank.
   - matrix writer blanks `absent`, `unchecked`, `None`, `0`, negative, and non-finite areas.
   - matrix writer includes sample columns in `sample_order`.
   - optional cells TSV writes full per-cell audit columns.
@@ -331,7 +369,12 @@ git commit -m "feat(alignment): write review and matrix TSVs"
   - pipeline calls `cluster_candidates()` and `backfill_alignment_matrix()`.
   - raw sources are opened only for samples present in `sample_order`.
   - raw opener receives `(raw_path, dll_dir)`.
+  - stale batch-index RAW parent paths are ignored; backfill uses `raw_dir / Path(raw_file).name`.
+  - if batch-index `raw_file` is blank or missing, backfill tries `raw_dir / f"{sample_stem}.raw"`.
   - missing per-sample RAW in `raw_dir` does not fail; affected backfill cells can become `unchecked`.
+  - RAW handles are entered before backfill receives them.
+  - RAW handles are closed on success.
+  - RAW handles are closed even when a TSV write fails.
   - default outputs are exactly review + matrix.
   - debug flags add cells/status outputs.
   - stale output pair remains untouched if a later TSV write fails.
@@ -348,6 +391,8 @@ Expected red: missing `xic_extractor.alignment.pipeline`.
   - `AlignmentRunOutputs(review_tsv, matrix_tsv, cells_tsv=None, status_matrix_tsv=None)`.
   - `run_alignment(discovery_batch_index, raw_dir, dll_dir, output_dir, alignment_config, peak_config, emit_alignment_cells=False, emit_alignment_status_matrix=False, raw_opener=None)`.
   - default raw opener lazily imports `xic_extractor.raw_reader.open_raw`.
+  - resolve sample RAW files using the RAW path authority rule in this plan.
+  - own RAW reader contexts with `ExitStack`.
   - temp-write all requested TSVs before replacing final outputs.
 
 - [ ] Re-run and commit:
@@ -453,7 +498,10 @@ No real RAW validation is required in Plan 3. Real data belongs to Plan 4 after 
 - Area matrix blanks absent, unchecked, missing, zero, negative, and non-finite values.
 - Review TSV explains counts and rates without requiring users to inspect debug files.
 - Output writes are atomic as a trusted set.
-- CSV/TSV strings are Excel-formula escaped.
+- TSV strings are Excel-formula escaped.
+- Alignment CSV loaders unescape known formula-escaped machine fields before path and ID handling.
+- `--raw-dir` is the authoritative RAW source root for backfill.
+- RAW reader handles are closed on success and failure.
 - Plan 3 does not rerun discovery and does not add GUI/HTML/Excel output.
 
 ## Self-Review Notes
