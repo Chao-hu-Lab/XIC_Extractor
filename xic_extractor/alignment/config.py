@@ -67,7 +67,12 @@ class AlignmentConfig:
 
 
 def _require_positive(name: str, value: float) -> None:
-    if not math.isfinite(value) or value <= 0:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value <= 0
+    ):
         raise ValueError(f"{name} must be finite and positive")
 
 

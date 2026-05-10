@@ -110,6 +110,24 @@ def test_non_finite_tolerance_windows_are_rejected(field, value):
 
 
 @pytest.mark.parametrize(
+    "field",
+    [
+        "preferred_ppm",
+        "max_ppm",
+        "preferred_rt_sec",
+        "max_rt_sec",
+        "product_mz_tolerance_ppm",
+        "observed_loss_tolerance_ppm",
+    ],
+)
+def test_bool_tolerance_windows_are_rejected(field):
+    from xic_extractor.alignment import AlignmentConfig
+
+    with pytest.raises(ValueError):
+        AlignmentConfig(**{field: True})
+
+
+@pytest.mark.parametrize(
     "kwargs",
     [
         {"anchor_priorities": ()},
