@@ -2,6 +2,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from xic_extractor.discovery.evidence_config import (
+    DEFAULT_EVIDENCE_PROFILE,
+    DiscoveryEvidenceProfile,
+)
+
 ReviewPriority = Literal["HIGH", "MEDIUM", "LOW"]
 
 DISCOVERY_REVIEW_COLUMNS = (
@@ -90,6 +95,7 @@ class DiscoverySettings:
     rt_min: float = 0.0
     rt_max: float = 999.0
     resolver_mode: str = "local_minimum"
+    evidence_profile: DiscoveryEvidenceProfile = DEFAULT_EVIDENCE_PROFILE
 
 
 @dataclass(frozen=True)

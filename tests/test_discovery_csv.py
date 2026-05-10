@@ -6,6 +6,7 @@ from xic_extractor.discovery.csv_writer import (
     _format_csv_value,
     write_discovery_candidates_csv,
 )
+from xic_extractor.discovery.evidence_config import DEFAULT_EVIDENCE_PROFILE
 from xic_extractor.discovery.models import (
     DISCOVERY_CANDIDATE_COLUMNS,
     DISCOVERY_PROVENANCE_COLUMNS,
@@ -467,6 +468,19 @@ def test_discovery_settings_require_neutral_loss_profile() -> None:
     assert settings.rt_min == 0.0
     assert settings.rt_max == 999.0
     assert settings.resolver_mode == "local_minimum"
+
+
+def test_discovery_settings_default_evidence_profile() -> None:
+    profile = NeutralLossProfile("DNA_dR", 116.0474)
+
+    settings = DiscoverySettings(neutral_loss_profile=profile)
+
+    assert settings.evidence_profile == DEFAULT_EVIDENCE_PROFILE
+    assert settings.evidence_profile.weights == DEFAULT_EVIDENCE_PROFILE.weights
+    assert (
+        settings.evidence_profile.thresholds
+        == DEFAULT_EVIDENCE_PROFILE.thresholds
+    )
 
 
 def test_discovery_seed_preserves_full_ms2_seed_contract() -> None:
