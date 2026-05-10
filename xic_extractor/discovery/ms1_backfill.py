@@ -16,7 +16,7 @@ from xic_extractor.discovery.priority import (
     assign_review_priority,
     build_candidate_reason,
 )
-from xic_extractor.signal_processing import find_peak_and_area
+from xic_extractor.signal_processing import PeakResult, find_peak_and_area
 
 
 class MS1XicSource(Protocol):
@@ -101,6 +101,20 @@ def backfill_ms1_candidates(
             )
         )
     return _merge_candidates_by_ms1_peak(candidates, settings=settings)
+
+
+def compute_ms1_scan_support_score(
+    rt: np.ndarray,
+    peak: PeakResult,
+    *,
+    scans_target: int,
+) -> float:
+    if scans_target <= 0:
+        raise ValueError("scans_target must be greater than 0")
+    if rt.size == 0:
+        return 0.0
+    mask = (rt >= peak.peak_start) & (rt <= peak.peak_end)
+    return min(1.0, float(np.count_nonzero(mask)) / float(scans_target))
 
 
 def _merge_candidates_by_ms1_peak(
