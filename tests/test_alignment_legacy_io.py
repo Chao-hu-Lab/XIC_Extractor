@@ -105,6 +105,42 @@ def test_load_metabcombiner_tsv_returns_fh_and_mzmine_blocks(tmp_path: Path):
     assert mzmine_block.features[1].sample_areas["TumorBC2312_DNA"] is None
 
 
+def test_load_metabcombiner_tsv_collapses_duplicate_mzmine_ids(tmp_path: Path):
+    path = tmp_path / "metabcombiner.tsv"
+    path.write_text(
+        "Mz\tRT\tTumorBC2312_DNA\tMZmine ID\tMZmine m/z\tMZmine RT (min)\t"
+        "TumorBC2312_DNA.mzML Peak area\n"
+        "242.1144\t12.35\t100\tmz_dup\t242.1145\t12.36\t200\n"
+        "242.1146\t12.37\t150\tmz_dup\t242.1147\t12.38\t250\n",
+        encoding="utf-8",
+    )
+
+    _fh_block, mzmine_block = load_metabcombiner_tsv(path)
+
+    assert len(mzmine_block.features) == 1
+    assert mzmine_block.features[0].feature_id == "metabcombiner_mzmine:mz_dup"
+    assert mzmine_block.features[0].sample_areas["TumorBC2312_DNA"] == 250.0
+    assert mzmine_block.features[0].metadata["duplicate_row_count"] == "2"
+    assert mzmine_block.features[0].metadata["source_row_numbers"] == "2;3"
+
+
+def test_load_metabcombiner_tsv_skips_unmapped_mzmine_rows(tmp_path: Path):
+    path = tmp_path / "metabcombiner.tsv"
+    path.write_text(
+        "Mz\tRT\tTumorBC2312_DNA\tMZmine ID\tMZmine m/z\tMZmine RT (min)\t"
+        "TumorBC2312_DNA.mzML Peak area\n"
+        "242.1144\t12.35\t100\tmz1\t242.1145\t12.36\t200\n"
+        "300.0000\t20.00\t150\t\t\t\t250\n",
+        encoding="utf-8",
+    )
+
+    _fh_block, mzmine_block = load_metabcombiner_tsv(path)
+
+    assert [feature.feature_id for feature in mzmine_block.features] == [
+        "metabcombiner_mzmine:mz1"
+    ]
+
+
 def test_load_combine_fix_xlsx_reads_first_sheet_and_missing_values(tmp_path: Path):
     path = tmp_path / "combine_fix.xlsx"
     workbook = Workbook()

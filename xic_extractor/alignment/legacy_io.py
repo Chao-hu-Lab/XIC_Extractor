@@ -179,18 +179,72 @@ def load_metabcombiner_tsv(path: Path) -> tuple[LoadedMatrix, ...]:
             column for column in columns if column.endswith(".mzML Peak area")
         )
         matrices.append(
-            _load_tabular_matrix(
+            _load_metabcombiner_mzmine_matrix(
                 path,
                 rows,
-                feature_id_column="MZmine ID",
-                mz_column="MZmine m/z",
-                rt_column="MZmine RT (min)",
                 sample_columns=mzmine_sample_columns,
-                source="metabcombiner_mzmine_block",
-                feature_id_prefix="metabcombiner_mzmine",
             )
         )
     return tuple(matrices)
+
+
+def _load_metabcombiner_mzmine_matrix(
+    path: Path,
+    rows: list[tuple[int, dict[str, str]]],
+    *,
+    sample_columns: tuple[str, ...],
+) -> LoadedMatrix:
+    sample_order = tuple(normalize_sample_name(column) for column in sample_columns)
+    grouped_rows: dict[str, list[tuple[int, dict[str, str]]]] = {}
+    for row_number, row in rows:
+        if row.get("MZmine m/z", "") == "" or row.get("MZmine RT (min)", "") == "":
+            continue
+        mzmine_id = row.get("MZmine ID", "")
+        feature_id = (
+            f"metabcombiner_mzmine:{mzmine_id}"
+            if mzmine_id
+            else f"metabcombiner_mzmine:{row_number:06d}"
+        )
+        grouped_rows.setdefault(feature_id, []).append((row_number, row))
+
+    features: list[LoadedFeature] = []
+    for feature_id, row_group in grouped_rows.items():
+        first_row_number, first_row = row_group[0]
+        sample_areas = {
+            sample: _max_positive_area(
+                row.get(column, "") for _row_number, row in row_group
+            )
+            for column, sample in zip(sample_columns, sample_order, strict=True)
+        }
+        features.append(
+            LoadedFeature(
+                feature_id=feature_id,
+                mz=_parse_float(
+                    path,
+                    first_row_number,
+                    first_row.get("MZmine m/z", ""),
+                    "MZmine m/z",
+                ),
+                rt_min=_parse_float(
+                    path,
+                    first_row_number,
+                    first_row.get("MZmine RT (min)", ""),
+                    "MZmine RT (min)",
+                ),
+                sample_areas=sample_areas,
+                metadata={
+                    "duplicate_row_count": str(len(row_group)),
+                    "source_row_numbers": ";".join(
+                        str(row_number) for row_number, _row in row_group
+                    ),
+                },
+            )
+        )
+    return LoadedMatrix(
+        source="metabcombiner_mzmine_block",
+        features=tuple(features),
+        sample_order=sample_order,
+    )
 
 
 def load_combine_fix_xlsx(path: Path, sheet_name: str | None = None) -> LoadedMatrix:
@@ -337,6 +391,13 @@ def _parse_area(value: Any) -> float | None:
     if not math.isfinite(parsed) or parsed <= 0:
         return None
     return parsed
+
+
+def _max_positive_area(values) -> float | None:
+    positive_values = [
+        area for area in (_parse_area(value) for value in values) if area is not None
+    ]
+    return max(positive_values) if positive_values else None
 
 
 def _is_combine_fix_metadata_column(column: str) -> bool:
