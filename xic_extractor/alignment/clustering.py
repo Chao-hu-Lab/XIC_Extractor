@@ -248,7 +248,7 @@ def _member_fits_cluster_representative(
             _required_positive_number_attr(member, "precursor_mz"),
         )
         <= config.max_ppm
-        and abs(_candidate_rt(member) - cluster.cluster_center_rt) * 60.0
+        and abs(_required_candidate_rt(member) - cluster.cluster_center_rt) * 60.0
         <= config.max_rt_sec
         and ppm_distance(
             cluster.cluster_product_mz,
@@ -436,6 +436,16 @@ def _candidate_rt(candidate: Any) -> float | None:
     if rt is not None:
         return rt
     return _finite_number_attr(candidate, "best_seed_rt")
+
+
+def _required_candidate_rt(candidate: Any) -> float:
+    rt = _candidate_rt(candidate)
+    if rt is None:
+        raise ValueError(
+            "alignment candidate field 'ms1_apex_rt' or 'best_seed_rt' "
+            "must provide finite retention time",
+        )
+    return rt
 
 
 def _string_attr(owner: Any, field: str) -> str | None:

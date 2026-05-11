@@ -9,6 +9,7 @@ ClusterCenter = tuple[float, float, float, float, bool]
 
 
 class CandidateLike(Protocol):
+    neutral_loss_tag: str
     precursor_mz: float
     product_mz: float
     observed_neutral_loss_da: float
@@ -82,10 +83,11 @@ def _center_contributors(
 
 
 def _candidate_rt(candidate: CandidateLike) -> float:
-    if candidate.ms1_apex_rt is not None:
-        rt = candidate.ms1_apex_rt
-    else:
-        rt = candidate.best_seed_rt
+    rt: float | None = (
+        candidate.ms1_apex_rt
+        if candidate.ms1_apex_rt is not None
+        else candidate.best_seed_rt
+    )
     if rt is None or not math.isfinite(rt):
         raise ValueError("Alignment cluster center requires finite retention time")
     return rt

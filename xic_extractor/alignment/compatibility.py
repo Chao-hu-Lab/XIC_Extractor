@@ -7,11 +7,20 @@ from xic_extractor.alignment.models import AlignmentCluster, CandidateLike
 
 
 class CompatibilityConfig(Protocol):
-    max_ppm: float
-    max_rt_sec: float
-    product_mz_tolerance_ppm: float
-    observed_loss_tolerance_ppm: float
-    fragmentation_model: str
+    @property
+    def max_ppm(self) -> float: ...
+
+    @property
+    def max_rt_sec(self) -> float: ...
+
+    @property
+    def product_mz_tolerance_ppm(self) -> float: ...
+
+    @property
+    def observed_loss_tolerance_ppm(self) -> float: ...
+
+    @property
+    def fragmentation_model(self) -> str: ...
 
 
 class CompatibilityCandidate(CandidateLike, Protocol):
@@ -168,8 +177,8 @@ def _require_finite_positive_number(
     *,
     owner: str = "candidate",
 ) -> None:
-    _require_finite_number(value, field, owner=owner)
-    if value <= 0:
+    number = _require_finite_number(value, field, owner=owner)
+    if number <= 0:
         raise ValueError(
             f"compatibility {owner} field '{field}' must be positive",
         )
@@ -180,7 +189,7 @@ def _require_finite_number(
     field: str,
     *,
     owner: str = "candidate",
-) -> None:
+) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(
             f"compatibility {owner} field '{field}' must be numeric",
@@ -189,3 +198,4 @@ def _require_finite_number(
         raise ValueError(
             f"compatibility {owner} field '{field}' must be finite",
         )
+    return float(value)
