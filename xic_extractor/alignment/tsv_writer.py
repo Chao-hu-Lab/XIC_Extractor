@@ -155,7 +155,7 @@ def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
                     cluster.cluster_observed_neutral_loss_da
                 ),
                 "has_anchor": cluster.has_anchor,
-                "member_count": detected_count + rescued_count,
+                "member_count": len(cluster.members),
                 "detected_count": detected_count,
                 "rescued_count": rescued_count,
                 "absent_count": absent_count,

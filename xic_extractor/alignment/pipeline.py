@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from contextlib import AbstractContextManager, ExitStack
+from contextlib import AbstractContextManager, ExitStack, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -144,20 +144,50 @@ def _write_outputs_atomic(
         )
 
     temp_paths = [
-        final_path.with_name(f"{final_path.name}.tmp")
-        for final_path, _writer in output_paths_and_writers
+        _temp_path(final_path) for final_path, _writer in output_paths_and_writers
     ]
+    backup_paths = [
+        _backup_path(final_path) for final_path, _writer in output_paths_and_writers
+    ]
+    backups: list[tuple[Path, Path]] = []
+    replaced_paths: list[Path] = []
     try:
         for final_path, writer in output_paths_and_writers:
-            temp_path = final_path.with_name(f"{final_path.name}.tmp")
+            temp_path = _temp_path(final_path)
             writer(temp_path, matrix)
         for final_path, _writer in output_paths_and_writers:
-            temp_path = final_path.with_name(f"{final_path.name}.tmp")
+            backup_path = _backup_path(final_path)
+            backup_path.unlink(missing_ok=True)
+            if final_path.exists():
+                final_path.replace(backup_path)
+                backups.append((final_path, backup_path))
+        for final_path, _writer in output_paths_and_writers:
+            temp_path = _temp_path(final_path)
             temp_path.replace(final_path)
+            replaced_paths.append(final_path)
+        for _final_path, backup_path in backups:
+            with suppress(OSError):
+                backup_path.unlink(missing_ok=True)
     except Exception:
+        for final_path in replaced_paths:
+            final_path.unlink(missing_ok=True)
+        for final_path, backup_path in reversed(backups):
+            if backup_path.exists():
+                final_path.unlink(missing_ok=True)
+                backup_path.replace(final_path)
         for temp_path in temp_paths:
             temp_path.unlink(missing_ok=True)
+        for backup_path in backup_paths:
+            backup_path.unlink(missing_ok=True)
         raise
+
+
+def _temp_path(final_path: Path) -> Path:
+    return final_path.with_name(f"{final_path.name}.tmp")
+
+
+def _backup_path(final_path: Path) -> Path:
+    return final_path.with_name(f"{final_path.name}.bak")
 
 
 def _default_raw_opener(

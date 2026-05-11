@@ -183,6 +183,38 @@ def test_run_alignment_cli_returns_2_for_user_visible_errors(
     assert str(exc) in capsys.readouterr().err
 
 
+def test_run_alignment_cli_returns_2_for_missing_candidate_csv(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text(
+        "sample_stem,raw_file,candidate_csv\n"
+        "Sample_A,C:/stale/Sample_A.raw,missing/discovery_candidates.csv\n",
+        encoding="utf-8",
+    )
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+        ]
+    )
+
+    assert code == 2
+    stderr = capsys.readouterr().err
+    assert "missing" in stderr
+    assert "discovery_candidates.csv" in stderr
+
+
 def test_pyproject_registers_alignment_cli_script() -> None:
     pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
 

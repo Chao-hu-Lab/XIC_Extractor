@@ -100,10 +100,16 @@ def read_discovery_candidates_csv(path: Path) -> tuple[DiscoveryCandidate, ...]:
 def _read_csv_rows(
     path: Path,
 ) -> tuple[list[tuple[int, dict[str, str]]], tuple[str, ...]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        fieldnames = tuple(reader.fieldnames or ())
-        return [(index, row) for index, row in enumerate(reader, start=2)], fieldnames
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            fieldnames = tuple(reader.fieldnames or ())
+            return (
+                [(index, row) for index, row in enumerate(reader, start=2)],
+                fieldnames,
+            )
+    except OSError as exc:
+        raise ValueError(f"{path}: CSV file could not be read: {exc}") from exc
 
 
 def _require_columns(

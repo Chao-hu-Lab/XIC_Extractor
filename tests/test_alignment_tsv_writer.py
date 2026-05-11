@@ -1,6 +1,7 @@
 import csv
 import math
 from pathlib import Path
+from types import SimpleNamespace
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
@@ -31,7 +32,7 @@ def test_write_alignment_review_tsv_columns_counts_rates_and_reason(tmp_path: Pa
     from xic_extractor.alignment.tsv_writer import write_alignment_review_tsv
 
     matrix = AlignmentMatrix(
-        clusters=(_cluster(has_anchor=True),),
+        clusters=(_cluster(has_anchor=True, member_count=1),),
         cells=(
             _cell("sample-a", "detected", area=10.0, candidate_id="sample-a#1"),
             _cell("sample-b", "rescued", area=20.0),
@@ -53,7 +54,7 @@ def test_write_alignment_review_tsv_columns_counts_rates_and_reason(tmp_path: Pa
         "cluster_product_mz": "384.076",
         "cluster_observed_neutral_loss_da": "116.047",
         "has_anchor": "TRUE",
-        "member_count": "2",
+        "member_count": "1",
         "detected_count": "1",
         "rescued_count": "1",
         "absent_count": "1",
@@ -243,6 +244,7 @@ def _cluster(
     cluster_id: str = "ALN000001",
     neutral_loss_tag: str = "DNA_dR",
     has_anchor: bool = True,
+    member_count: int = 0,
 ) -> AlignmentCluster:
     return AlignmentCluster(
         cluster_id=cluster_id,
@@ -252,7 +254,10 @@ def _cluster(
         cluster_product_mz=384.076,
         cluster_observed_neutral_loss_da=116.047,
         has_anchor=has_anchor,
-        members=(),
+        members=tuple(
+            SimpleNamespace(candidate_id=f"{cluster_id}#member-{index}")
+            for index in range(member_count)
+        ),
         anchor_members=(),
     )
 

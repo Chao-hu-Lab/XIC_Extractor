@@ -262,6 +262,55 @@ def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
     assert not (output_dir / "alignment_matrix.tsv.tmp").exists()
 
 
+def test_pipeline_rolls_back_stale_output_pair_when_replace_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    review = output_dir / "alignment_review.tsv"
+    matrix = output_dir / "alignment_matrix.tsv"
+    review.write_text("old review", encoding="utf-8")
+    matrix.write_text("old matrix", encoding="utf-8")
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_candidates",
+        lambda candidates, *, config: (_cluster(),),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "backfill_alignment_matrix",
+        lambda clusters, *, sample_order, raw_sources, **kwargs: _matrix(sample_order),
+    )
+    original_replace = Path.replace
+
+    def fail_second_replace(self: Path, target: Path):
+        if self.name == "alignment_matrix.tsv.tmp":
+            raise PermissionError("locked matrix")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_second_replace)
+
+    with pytest.raises(PermissionError, match="locked matrix"):
+        pipeline_module.run_alignment(
+            discovery_batch_index=batch_index,
+            raw_dir=raw_dir,
+            dll_dir=tmp_path / "dll",
+            output_dir=output_dir,
+            alignment_config=AlignmentConfig(),
+            peak_config=_peak_config(),
+            raw_opener=FakeRawOpener(),
+        )
+
+    assert review.read_text(encoding="utf-8") == "old review"
+    assert matrix.read_text(encoding="utf-8") == "old matrix"
+
+
 class FakeRawOpener:
     def __init__(self) -> None:
         self.calls: list[tuple[Path, Path]] = []
