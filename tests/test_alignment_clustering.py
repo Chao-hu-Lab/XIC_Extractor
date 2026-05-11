@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass, replace
+from itertools import permutations
 from types import SimpleNamespace
 
 import pytest
@@ -559,6 +560,177 @@ def test_non_anchor_outside_anchor_clusters_becomes_unanchored_cluster():
     assert unanchored.anchor_members == ()
 
 
+def test_final_cleanup_ejects_member_outside_max_tolerance_after_center_drift():
+    config = AlignmentConfig(max_ppm=50.0005)
+    high = _non_anchor_candidate(
+        "high-drifted-out",
+        evidence_score=90,
+        precursor_mz=1000.0,
+        sample_stem="sample-a",
+    )
+    low_a = _non_anchor_candidate(
+        "low-a",
+        evidence_score=80,
+        precursor_mz=999.95,
+        sample_stem="sample-b",
+    )
+    low_b = _non_anchor_candidate(
+        "low-b",
+        evidence_score=70,
+        precursor_mz=999.95,
+        sample_stem="sample-c",
+    )
+
+    clusters = clustering._cluster_candidates_greedy((low_b, high, low_a), config)
+
+    assert _cluster_member_ids(clusters) == {
+        frozenset({"low-a", "low-b"}),
+        frozenset({"high-drifted-out"}),
+    }
+
+
+def test_final_cleanup_ejects_member_after_observed_loss_representative_drift():
+    config = AlignmentConfig(observed_loss_tolerance_ppm=20.0001)
+    high_loss = _non_anchor_candidate(
+        "high-loss-drifted-out",
+        evidence_score=90,
+        observed_neutral_loss_da=141.0,
+        sample_stem="sample-a",
+    )
+    low_loss_a = _non_anchor_candidate(
+        "low-loss-a",
+        evidence_score=80,
+        observed_neutral_loss_da=141.0 * (1 - 20 / 1_000_000),
+        sample_stem="sample-b",
+    )
+    low_loss_b = _non_anchor_candidate(
+        "low-loss-b",
+        evidence_score=70,
+        observed_neutral_loss_da=141.0 * (1 - 20 / 1_000_000),
+        sample_stem="sample-c",
+    )
+
+    clusters = clustering._cluster_candidates_greedy(
+        (low_loss_b, high_loss, low_loss_a),
+        config,
+    )
+
+    assert _cluster_member_ids(clusters) == {
+        frozenset({"low-loss-a", "low-loss-b"}),
+        frozenset({"high-loss-drifted-out"}),
+    }
+
+
+def test_ejected_members_are_reattached_once_when_compatible():
+    config = AlignmentConfig(max_ppm=50.0005)
+    high = _non_anchor_candidate(
+        "reattached",
+        evidence_score=90,
+        precursor_mz=1000.0,
+        sample_stem="sample-a",
+    )
+    low_a = _non_anchor_candidate(
+        "low-a",
+        evidence_score=80,
+        precursor_mz=999.95,
+        sample_stem="sample-b",
+    )
+    low_b = _non_anchor_candidate(
+        "low-b",
+        evidence_score=70,
+        precursor_mz=999.95,
+        sample_stem="sample-c",
+    )
+    compatible_home = _non_anchor_candidate(
+        "compatible-home",
+        evidence_score=60,
+        precursor_mz=1000.0,
+        sample_stem="sample-d",
+    )
+
+    clusters = clustering._cluster_candidates_greedy(
+        (compatible_home, low_b, high, low_a),
+        config,
+    )
+
+    assert _cluster_member_ids(clusters) == {
+        frozenset({"low-a", "low-b"}),
+        frozenset({"compatible-home", "reattached"}),
+    }
+
+
+def test_complete_link_chain_case_does_not_collapse_into_one_cluster():
+    anchor_a = _non_anchor_candidate(
+        "a",
+        evidence_score=90,
+        precursor_mz=500.0,
+        sample_stem="sample-a",
+    )
+    bridge_b = _non_anchor_candidate(
+        "b",
+        evidence_score=80,
+        precursor_mz=500.024,
+        sample_stem="sample-b",
+    )
+    endpoint_c = _non_anchor_candidate(
+        "c",
+        evidence_score=70,
+        precursor_mz=500.048,
+        sample_stem="sample-c",
+    )
+
+    clusters = clustering._cluster_candidates_greedy(
+        (endpoint_c, bridge_b, anchor_a),
+        AlignmentConfig(),
+    )
+
+    assert _cluster_member_ids(clusters) == {
+        frozenset({"a", "b"}),
+        frozenset({"c"}),
+    }
+
+
+def test_input_permutations_produce_identical_internal_ids_and_memberships():
+    config = AlignmentConfig(max_ppm=50.0005)
+    candidates = (
+        _non_anchor_candidate(
+            "reattached",
+            evidence_score=90,
+            precursor_mz=1000.0,
+            sample_stem="sample-a",
+        ),
+        _non_anchor_candidate(
+            "low-a",
+            evidence_score=80,
+            precursor_mz=999.95,
+            sample_stem="sample-b",
+        ),
+        _non_anchor_candidate(
+            "low-b",
+            evidence_score=70,
+            precursor_mz=999.95,
+            sample_stem="sample-c",
+        ),
+        _non_anchor_candidate(
+            "compatible-home",
+            evidence_score=60,
+            precursor_mz=1000.0,
+            sample_stem="sample-d",
+        ),
+    )
+    expected_signature = (
+        ("internal-000001", ("low-a", "low-b")),
+        ("internal-000002", ("compatible-home", "reattached")),
+    )
+
+    signatures = {
+        _cluster_signature(clustering._cluster_candidates_greedy(ordering, config))
+        for ordering in permutations(candidates)
+    }
+
+    assert signatures == {expected_signature}
+
+
 def _ids(candidates):
     return tuple(candidate.candidate_id for candidate in candidates)
 
@@ -572,3 +744,21 @@ def _cluster_containing(clusters, candidate_id):
         if candidate_id in _ids(cluster.members):
             return cluster
     raise AssertionError(f"missing cluster containing {candidate_id}")
+
+
+def _non_anchor_candidate(candidate_id, **updates):
+    return replace(
+        Candidate(
+            candidate_id=candidate_id,
+            review_priority="LOW",
+            evidence_score=50,
+        ),
+        **updates,
+    )
+
+
+def _cluster_signature(clusters):
+    return tuple(
+        (cluster.cluster_id, tuple(sorted(_ids(cluster.members))))
+        for cluster in clusters
+    )
