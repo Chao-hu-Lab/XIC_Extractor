@@ -10,13 +10,13 @@ from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix, CellSta
 from xic_extractor.alignment.models import AlignmentCluster
 
 __all__ = (
-    "AlignedCell",
     "AlignmentConfig",
     "AlignmentCluster",
+    "AlignedCell",
     "AlignmentMatrix",
     "CellStatus",
-    "backfill_alignment_matrix",
     "cluster_candidates",
+    "backfill_alignment_matrix",
 )
 
 

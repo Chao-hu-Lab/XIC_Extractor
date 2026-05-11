@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 
-def test_alignment_public_api_exports_only_config_cluster_and_entrypoint():
+def test_alignment_public_api_exports_plan2_contract():
     before = set(sys.modules)
 
     import xic_extractor.alignment as alignment
@@ -15,7 +15,11 @@ def test_alignment_public_api_exports_only_config_cluster_and_entrypoint():
     assert alignment.__all__ == (
         "AlignmentConfig",
         "AlignmentCluster",
+        "AlignedCell",
+        "AlignmentMatrix",
+        "CellStatus",
         "cluster_candidates",
+        "backfill_alignment_matrix",
     )
     assert {
         name for name in dir(alignment) if not name.startswith("_")

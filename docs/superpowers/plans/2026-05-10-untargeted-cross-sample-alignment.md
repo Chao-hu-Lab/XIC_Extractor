@@ -15,7 +15,7 @@
 The full goal — replacing the legacy multi-tool pipeline — is too big for one plan. Each sub-plan below produces working, testable software on its own:
 
 - Plan 1 alone produces a clustering function that can be exercised against synthetic candidates without any RAW reading.
-- Plan 2 alone consumes Plan 1's clusters plus a RAW source and produces a backfilled matrix object.
+- Plan 2 alone consumes Plan 1's clusters plus already-opened XIC sources and produces a backfilled matrix object.
 - Plan 3 alone consumes Plan 2's matrix and emits files plus a CLI; this is the user-facing deliverable.
 - Plan 4 produces a comparison harness against legacy outputs; it is only useful after Plans 1-3 ship but is separable for review and execution.
 
