@@ -17,18 +17,19 @@ def fold_near_duplicate_clusters(
     *,
     config: AlignmentConfig,
 ) -> AlignmentMatrix:
+    clusters = _alignment_clusters(matrix)
     cells_by_cluster = _cells_by_cluster(matrix.cells)
     original_index = {
-        cluster.cluster_id: index for index, cluster in enumerate(matrix.clusters)
+        cluster.cluster_id: index for index, cluster in enumerate(clusters)
     }
     groups: list[list[AlignmentCluster]] = []
     consumed: set[str] = set()
 
-    for cluster in matrix.clusters:
+    for cluster in clusters:
         if cluster.cluster_id in consumed:
             continue
         group = [cluster]
-        for candidate in matrix.clusters:
+        for candidate in clusters:
             if (
                 candidate.cluster_id == cluster.cluster_id
                 or candidate.cluster_id in consumed
@@ -317,6 +318,15 @@ def _cells_by_cluster(
     for cell in cells:
         grouped[cell.cluster_id].append(cell)
     return {cluster_id: tuple(values) for cluster_id, values in grouped.items()}
+
+
+def _alignment_clusters(matrix: AlignmentMatrix) -> tuple[AlignmentCluster, ...]:
+    clusters: list[AlignmentCluster] = []
+    for cluster in matrix.clusters:
+        if not isinstance(cluster, AlignmentCluster):
+            raise TypeError("fold_near_duplicate_clusters requires event clusters")
+        clusters.append(cluster)
+    return tuple(clusters)
 
 
 def _cells_by_sample(cells: tuple[AlignedCell, ...]) -> dict[str, AlignedCell]:

@@ -10,8 +10,11 @@ CellStatus = Literal["detected", "rescued", "absent", "unchecked"]
 
 
 class AlignmentRowLike(Protocol):
-    neutral_loss_tag: str
-    has_anchor: bool
+    @property
+    def neutral_loss_tag(self) -> str: ...
+
+    @property
+    def has_anchor(self) -> bool: ...
 
 
 @dataclass(frozen=True)
