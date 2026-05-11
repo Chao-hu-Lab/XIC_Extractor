@@ -107,26 +107,21 @@ def _write_outputs_atomic(
     metrics: tuple[SummaryMetric, ...],
     matches: tuple[FeatureMatch, ...],
 ) -> None:
-    output_pairs = (
-        (outputs.summary_tsv, write_validation_summary_tsv, metrics),
-        (outputs.matches_tsv, write_legacy_matches_tsv, matches),
-    )
-    temp_paths = [_temp_path(final_path) for final_path, _writer, _rows in output_pairs]
-    backup_paths = [
-        _backup_path(final_path) for final_path, _writer, _rows in output_pairs
-    ]
+    final_paths = (outputs.summary_tsv, outputs.matches_tsv)
+    temp_paths = [_temp_path(final_path) for final_path in final_paths]
+    backup_paths = [_backup_path(final_path) for final_path in final_paths]
     backups: list[tuple[Path, Path]] = []
     replaced_paths: list[Path] = []
     try:
-        for final_path, writer, rows in output_pairs:
-            writer(_temp_path(final_path), rows)
-        for final_path, _writer, _rows in output_pairs:
+        write_validation_summary_tsv(_temp_path(outputs.summary_tsv), metrics)
+        write_legacy_matches_tsv(_temp_path(outputs.matches_tsv), matches)
+        for final_path in final_paths:
             backup_path = _backup_path(final_path)
             backup_path.unlink(missing_ok=True)
             if final_path.exists():
                 final_path.replace(backup_path)
                 backups.append((final_path, backup_path))
-        for final_path, _writer, _rows in output_pairs:
+        for final_path in final_paths:
             _temp_path(final_path).replace(final_path)
             replaced_paths.append(final_path)
         for _final_path, backup_path in backups:
