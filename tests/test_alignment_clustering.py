@@ -1,3 +1,4 @@
+import inspect
 import math
 from dataclasses import dataclass, replace
 from itertools import permutations
@@ -5,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from xic_extractor.alignment import clustering
+from xic_extractor.alignment import cluster_candidates, clustering
 from xic_extractor.alignment.clustering import (
     alignment_candidate_sort_key,
     is_alignment_anchor,
@@ -30,6 +31,125 @@ class Candidate:
     best_seed_rt: float | None = 5.0
     ms1_apex_rt: float | None = 5.0
     sample_stem: str = "sample-a"
+
+
+def test_public_cluster_candidates_config_is_keyword_only():
+    parameters = inspect.signature(cluster_candidates).parameters
+
+    assert parameters["config"].kind is inspect.Parameter.KEYWORD_ONLY
+    with pytest.raises(TypeError):
+        cluster_candidates((), AlignmentConfig())
+
+
+def test_public_cluster_candidates_rejects_malformed_config_before_clustering():
+    class CandidateThatFailsIfClustered:
+        def __getattr__(self, name):
+            raise AssertionError(f"candidate was accessed before config: {name}")
+
+    with pytest.raises(TypeError, match="AlignmentConfig"):
+        cluster_candidates(
+            (CandidateThatFailsIfClustered(),),
+            config=SimpleNamespace(max_ppm=50.0),
+        )
+
+
+def test_public_cluster_candidates_revalidates_config_before_clustering():
+    class CandidateThatFailsIfClustered:
+        def __getattr__(self, name):
+            raise AssertionError(f"candidate was accessed before config: {name}")
+
+    config = AlignmentConfig()
+    object.__setattr__(config, "max_ppm", 0.0)
+
+    with pytest.raises(ValueError, match="max_ppm"):
+        cluster_candidates((CandidateThatFailsIfClustered(),), config=config)
+
+
+def test_public_cluster_candidates_never_merges_mixed_neutral_loss_strata():
+    nl141 = Candidate(candidate_id="nl141", neutral_loss_tag="NL141")
+    nl120 = replace(
+        Candidate(candidate_id="nl120"),
+        neutral_loss_tag="NL120",
+        sample_stem="sample-b",
+    )
+
+    clusters = cluster_candidates((nl120, nl141), config=AlignmentConfig())
+
+    assert _cluster_member_ids(clusters) == {
+        frozenset({"nl141"}),
+        frozenset({"nl120"}),
+    }
+    assert {cluster.neutral_loss_tag for cluster in clusters} == {"NL141", "NL120"}
+
+
+def test_public_cluster_candidates_uses_public_six_digit_cluster_ids():
+    first = Candidate(candidate_id="first", sample_stem="sample-a")
+    second = replace(
+        Candidate(candidate_id="second"),
+        precursor_mz=501.0,
+        sample_stem="sample-b",
+    )
+
+    clusters = cluster_candidates((second, first), config=AlignmentConfig())
+
+    assert tuple(cluster.cluster_id for cluster in clusters) == (
+        "ALN000001",
+        "ALN000002",
+    )
+
+
+def test_public_cluster_candidates_integration_fixture_groups_multiple_samples_by_nl():
+    candidates = (
+        replace(
+            Candidate(candidate_id="nl141-c", review_priority="LOW"),
+            precursor_mz=500.004,
+            product_mz=359.001,
+            observed_neutral_loss_da=141.001,
+            ms1_apex_rt=5.1,
+            sample_stem="sample-c",
+        ),
+        replace(
+            Candidate(candidate_id="nl120-b", neutral_loss_tag="NL120"),
+            precursor_mz=480.004,
+            product_mz=360.002,
+            observed_neutral_loss_da=120.001,
+            ms1_apex_rt=4.2,
+            sample_stem="sample-b",
+        ),
+        replace(
+            Candidate(candidate_id="nl141-far"),
+            precursor_mz=500.2,
+            product_mz=359.0,
+            observed_neutral_loss_da=141.0,
+            ms1_apex_rt=5.0,
+            sample_stem="sample-d",
+        ),
+        replace(
+            Candidate(candidate_id="nl141-b"),
+            precursor_mz=500.005,
+            product_mz=359.002,
+            observed_neutral_loss_da=141.001,
+            ms1_apex_rt=5.2,
+            sample_stem="sample-b",
+        ),
+        replace(
+            Candidate(candidate_id="nl120-a", neutral_loss_tag="NL120"),
+            precursor_mz=480.0,
+            product_mz=360.0,
+            observed_neutral_loss_da=120.0,
+            ms1_apex_rt=4.0,
+            sample_stem="sample-a",
+        ),
+        Candidate(candidate_id="nl141-a", sample_stem="sample-a"),
+    )
+
+    clusters = cluster_candidates(candidates, config=AlignmentConfig())
+
+    assert _public_cluster_signature(clusters) == (
+        ("ALN000001", "NL120", ("nl120-a", "nl120-b")),
+        ("ALN000002", "NL141", ("nl141-a", "nl141-b", "nl141-c")),
+        ("ALN000003", "NL141", ("nl141-far",)),
+    )
 
 
 @pytest.mark.parametrize(
@@ -760,5 +880,16 @@ def _non_anchor_candidate(candidate_id, **updates):
 def _cluster_signature(clusters):
     return tuple(
         (cluster.cluster_id, tuple(sorted(_ids(cluster.members))))
+        for cluster in clusters
+    )
+
+
+def _public_cluster_signature(clusters):
+    return tuple(
+        (
+            cluster.cluster_id,
+            cluster.neutral_loss_tag,
+            tuple(sorted(_ids(cluster.members))),
+        )
         for cluster in clusters
     )

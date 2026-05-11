@@ -2,6 +2,7 @@ import ast
 import math
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -201,14 +202,35 @@ def test_invalid_anchor_and_v1_fixed_fields_are_rejected(kwargs):
         AlignmentConfig(**kwargs)
 
 
-def test_cluster_candidates_stub_returns_empty_tuple_for_empty_input():
+def test_cluster_candidates_returns_empty_tuple_for_empty_input():
     from xic_extractor.alignment import cluster_candidates
 
     assert cluster_candidates([]) == ()
 
 
-def test_cluster_candidates_stub_fails_closed_for_non_empty_input():
+def test_cluster_candidates_clusters_non_empty_input_from_public_import():
     from xic_extractor.alignment import cluster_candidates
 
-    with pytest.raises(NotImplementedError):
-        cluster_candidates([object()])
+    clusters = cluster_candidates(
+        [
+            SimpleNamespace(
+                candidate_id="nl141-sample-a",
+                neutral_loss_tag="NL141",
+                review_priority="LOW",
+                evidence_score=50,
+                seed_event_count=1,
+                ms1_peak_found=True,
+                ms1_scan_support_score=0.5,
+                ms1_area=100.0,
+                neutral_loss_mass_error_ppm=0.0,
+                precursor_mz=500.0,
+                product_mz=359.0,
+                observed_neutral_loss_da=141.0,
+                best_seed_rt=5.0,
+                ms1_apex_rt=5.0,
+                sample_stem="sample-a",
+            ),
+        ],
+    )
+
+    assert tuple(cluster.cluster_id for cluster in clusters) == ("ALN000001",)

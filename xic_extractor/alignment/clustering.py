@@ -84,11 +84,13 @@ def alignment_candidate_sort_key(
 
 def cluster_candidates(
     candidates: Sequence[Any],
+    *,
     config: AlignmentConfig | None = None,
 ) -> tuple[AlignmentCluster, ...]:
-    if candidates:
-        raise NotImplementedError("alignment clustering is not implemented yet")
-    return ()
+    active_config = _resolve_public_config(config)
+    return _with_public_cluster_ids(
+        _cluster_candidates_greedy(candidates, active_config),
+    )
 
 
 def _cluster_candidates_greedy(
@@ -342,6 +344,29 @@ def _sort_and_reindex_clusters(
     )
 
 
+def _with_public_cluster_ids(
+    clusters: Sequence[AlignmentCluster],
+) -> tuple[AlignmentCluster, ...]:
+    return tuple(
+        build_alignment_cluster(
+            cluster_id=_public_cluster_id(index),
+            neutral_loss_tag=cluster.neutral_loss_tag,
+            members=cluster.members,
+            anchor_members=cluster.anchor_members,
+        )
+        for index, cluster in enumerate(clusters, start=1)
+    )
+
+
+def _resolve_public_config(config: AlignmentConfig | None) -> AlignmentConfig:
+    if config is None:
+        return AlignmentConfig()
+    if type(config) is not AlignmentConfig:
+        raise TypeError("cluster_candidates config must be an AlignmentConfig")
+    config.__post_init__()
+    return config
+
+
 def _sort_clusters(
     clusters: Sequence[AlignmentCluster],
 ) -> tuple[AlignmentCluster, ...]:
@@ -400,6 +425,10 @@ def _cluster_has_sample_member(
 
 def _internal_cluster_id(cluster_index: int) -> str:
     return f"internal-{cluster_index:06d}"
+
+
+def _public_cluster_id(cluster_index: int) -> str:
+    return f"ALN{cluster_index:06d}"
 
 
 def _candidate_rt(candidate: Any) -> float | None:
