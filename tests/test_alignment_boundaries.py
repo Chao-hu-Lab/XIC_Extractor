@@ -90,6 +90,24 @@ def test_alignment_pipeline_raw_reader_import_is_lazy_default_opener_only():
         assert _enclosing_function_name(node, parents) == "_default_raw_opener"
 
 
+def test_alignment_ownership_module_stays_domain_focused():
+    source = (
+        Path(__file__).parents[1]
+        / "xic_extractor"
+        / "alignment"
+        / "ownership.py"
+    ).read_text(encoding="utf-8")
+
+    forbidden = (
+        "xic_extractor.alignment.tsv_writer",
+        "scripts.run_alignment",
+        "openpyxl",
+        "csv.",
+    )
+    for token in forbidden:
+        assert token not in source
+
+
 def _imported_module_names(node):
     if isinstance(node, ast.Import):
         return [alias.name for alias in node.names]

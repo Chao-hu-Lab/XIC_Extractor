@@ -124,6 +124,35 @@ def test_alignment_config_duplicate_fold_defaults_are_conservative():
     assert config.duplicate_fold_min_present_overlap == 0.80
 
 
+def test_alignment_config_owner_gate_defaults_are_explicit():
+    from xic_extractor.alignment import AlignmentConfig
+
+    config = AlignmentConfig()
+
+    assert config.owner_window_overlap_fraction == 0.50
+    assert config.owner_apex_close_sec == 2.0
+    assert config.owner_tail_seed_guard_sec == 30.0
+    assert config.owner_tail_max_secondary_ratio == 0.30
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("owner_window_overlap_fraction", -0.01),
+        ("owner_window_overlap_fraction", 1.01),
+        ("owner_apex_close_sec", 0.0),
+        ("owner_tail_seed_guard_sec", 0.0),
+        ("owner_tail_max_secondary_ratio", -0.01),
+        ("owner_tail_max_secondary_ratio", 1.01),
+    ],
+)
+def test_alignment_config_owner_gate_validation(field, value):
+    from xic_extractor.alignment import AlignmentConfig
+
+    with pytest.raises(ValueError, match=field):
+        AlignmentConfig(**{field: value})
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [

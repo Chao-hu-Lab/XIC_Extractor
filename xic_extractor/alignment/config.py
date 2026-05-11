@@ -28,6 +28,10 @@ class AlignmentConfig:
     duplicate_fold_min_shared_detected_count: int = 3
     duplicate_fold_min_detected_jaccard: float = 0.60
     duplicate_fold_min_present_overlap: float = 0.80
+    owner_window_overlap_fraction: float = 0.50
+    owner_apex_close_sec: float = 2.0
+    owner_tail_seed_guard_sec: float = 30.0
+    owner_tail_max_secondary_ratio: float = 0.30
     rt_unit: Literal["min"] = "min"
     fragmentation_model: Literal["cid_nl"] = "cid_nl"
 
@@ -93,6 +97,23 @@ class AlignmentConfig:
         _require_numeric_range(
             "duplicate_fold_min_present_overlap",
             self.duplicate_fold_min_present_overlap,
+            0,
+            1,
+        )
+        _require_numeric_range(
+            "owner_window_overlap_fraction",
+            self.owner_window_overlap_fraction,
+            0,
+            1,
+        )
+        _require_positive("owner_apex_close_sec", self.owner_apex_close_sec)
+        _require_positive(
+            "owner_tail_seed_guard_sec",
+            self.owner_tail_seed_guard_sec,
+        )
+        _require_numeric_range(
+            "owner_tail_max_secondary_ratio",
+            self.owner_tail_max_secondary_ratio,
             0,
             1,
         )
