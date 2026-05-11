@@ -152,6 +152,48 @@ def test_public_cluster_candidates_integration_fixture_groups_multiple_samples_b
     )
 
 
+def test_public_cluster_candidates_uses_best_compatible_cluster():
+    config = AlignmentConfig(max_ppm=45.0)
+    far_anchor_created_first = replace(
+        Candidate(candidate_id="far-anchor"),
+        evidence_score=90,
+        precursor_mz=499.980,
+        product_mz=359.0,
+        observed_neutral_loss_da=141.0,
+        ms1_apex_rt=5.0,
+        sample_stem="sample-a",
+    )
+    near_anchor_created_second = replace(
+        Candidate(candidate_id="near-anchor"),
+        evidence_score=80,
+        precursor_mz=500.005,
+        product_mz=359.0,
+        observed_neutral_loss_da=141.0,
+        ms1_apex_rt=5.0,
+        sample_stem="sample-b",
+    )
+    query = replace(
+        Candidate(candidate_id="query-near"),
+        review_priority="LOW",
+        evidence_score=10,
+        precursor_mz=500.000,
+        product_mz=359.0,
+        observed_neutral_loss_da=141.0,
+        ms1_apex_rt=5.0,
+        sample_stem="sample-c",
+    )
+
+    clusters = cluster_candidates(
+        (query, near_anchor_created_second, far_anchor_created_first),
+        config=config,
+    )
+
+    assert _cluster_member_ids(clusters) == {
+        frozenset({"far-anchor"}),
+        frozenset({"near-anchor", "query-near"}),
+    }
+
+
 @pytest.mark.parametrize(
     "candidate",
     [

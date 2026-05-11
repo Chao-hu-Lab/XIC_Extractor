@@ -123,7 +123,7 @@ def _cluster_stratum_greedy(
         candidates,
         key=lambda item: alignment_candidate_sort_key(item, config),
     ):
-        if _attach_to_first_compatible_cluster(clusters, candidate, config):
+        if _attach_to_best_compatible_cluster(clusters, candidate, config):
             continue
         clusters.append(
             _build_singleton_cluster(
@@ -149,19 +149,29 @@ def _candidates_by_neutral_loss_tag(
     )
 
 
-def _attach_to_first_compatible_cluster(
+def _attach_to_best_compatible_cluster(
     clusters: list[AlignmentCluster],
     candidate: Any,
     config: AlignmentConfig,
 ) -> bool:
+    attachable_clusters: list[tuple[tuple[object, ...], int]] = []
     for index, cluster in enumerate(clusters):
         if not can_attach_to_cluster(cluster, candidate, config):
             continue
         if _cluster_has_sample_member(cluster, candidate):
             continue
-        clusters[index] = _cluster_with_candidate(cluster, candidate, config)
-        return True
-    return False
+        attachable_clusters.append(
+            (_cluster_match_sort_key(cluster, candidate, config), index),
+        )
+    if not attachable_clusters:
+        return False
+    _, best_index = min(attachable_clusters)
+    clusters[best_index] = _cluster_with_candidate(
+        clusters[best_index],
+        candidate,
+        config,
+    )
+    return True
 
 
 def _finalize_clusters(
@@ -189,7 +199,7 @@ def _finalize_clusters(
         ejected_members,
         key=lambda item: alignment_candidate_sort_key(item, config),
     ):
-        if _attach_to_first_final_compatible_cluster(
+        if _attach_to_best_final_compatible_cluster(
             retained_clusters,
             member,
             config,
@@ -263,11 +273,12 @@ def _member_fits_cluster_representative(
     )
 
 
-def _attach_to_first_final_compatible_cluster(
+def _attach_to_best_final_compatible_cluster(
     clusters: list[AlignmentCluster],
     candidate: Any,
     config: AlignmentConfig,
 ) -> bool:
+    attachable_clusters: list[tuple[tuple[object, ...], int, AlignmentCluster]] = []
     for index, cluster in enumerate(clusters):
         if _cluster_has_sample_member(cluster, candidate):
             continue
@@ -280,9 +291,18 @@ def _attach_to_first_final_compatible_cluster(
         )
         if ejected_members or len(retained_members) != len(candidate_cluster.members):
             continue
-        clusters[index] = candidate_cluster
-        return True
-    return False
+        attachable_clusters.append(
+            (
+                _cluster_match_sort_key(cluster, candidate, config),
+                index,
+                candidate_cluster,
+            ),
+        )
+    if not attachable_clusters:
+        return False
+    _, best_index, best_cluster = min(attachable_clusters)
+    clusters[best_index] = best_cluster
+    return True
 
 
 def _build_singleton_cluster(
@@ -420,6 +440,32 @@ def _cluster_has_sample_member(
     return any(
         _required_string_attr(member, "sample_stem") == sample_stem
         for member in cluster.members
+    )
+
+
+def _cluster_match_sort_key(
+    cluster: AlignmentCluster,
+    candidate: Any,
+    config: AlignmentConfig,
+) -> tuple[object, ...]:
+    precursor_ppm = ppm_distance(
+        cluster.cluster_center_mz,
+        _required_positive_number_attr(candidate, "precursor_mz"),
+    )
+    rt_sec = abs(_required_candidate_rt(candidate) - cluster.cluster_center_rt) * 60.0
+    preferred_mz_miss = precursor_ppm > config.preferred_ppm
+    preferred_rt_miss = rt_sec > config.preferred_rt_sec
+    normalized_distance = (precursor_ppm / config.max_ppm) + (
+        rt_sec / config.max_rt_sec
+    )
+    return (
+        1 if preferred_mz_miss or preferred_rt_miss else 0,
+        1 if preferred_mz_miss else 0,
+        1 if preferred_rt_miss else 0,
+        normalized_distance,
+        precursor_ppm,
+        rt_sec,
+        _cluster_sort_key(cluster),
     )
 
 
