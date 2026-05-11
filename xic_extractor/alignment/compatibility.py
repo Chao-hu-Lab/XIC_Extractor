@@ -27,17 +27,18 @@ def are_candidates_compatible(
     return (
         existing.neutral_loss_tag == candidate.neutral_loss_tag
         and _ppm_distance_for_field(existing, candidate, "precursor_mz")
-        <= _positive_number(config, "max_ppm")
-        and rt_seconds_difference(existing, candidate) <= config.max_rt_sec
+        <= _positive_config_number(config, "max_ppm")
+        and rt_seconds_difference(existing, candidate)
+        <= _positive_config_number(config, "max_rt_sec")
         and product_mz_is_compatible(
             existing,
             candidate,
-            max_ppm=_positive_number(config, "product_mz_tolerance_ppm"),
+            max_ppm=_positive_config_number(config, "product_mz_tolerance_ppm"),
         )
         and observed_loss_is_compatible(
             existing,
             candidate,
-            max_ppm=_positive_number(config, "observed_loss_tolerance_ppm"),
+            max_ppm=_positive_config_number(config, "observed_loss_tolerance_ppm"),
         )
     )
 
@@ -137,6 +138,17 @@ def _positive_number(owner: object, field: str) -> float:
     return value
 
 
+def _positive_config_number(owner: object, field: str) -> float:
+    try:
+        value = getattr(owner, field)
+    except AttributeError as exc:
+        raise ValueError(
+            f"compatibility config field '{field}' is required",
+        ) from exc
+    _require_finite_positive_number(value, field, owner="config")
+    return value
+
+
 def _optional_number(owner: object, field: str) -> float | None:
     try:
         value = getattr(owner, field)
@@ -150,20 +162,30 @@ def _optional_number(owner: object, field: str) -> float | None:
     return value
 
 
-def _require_finite_positive_number(value: object, field: str) -> None:
-    _require_finite_number(value, field)
+def _require_finite_positive_number(
+    value: object,
+    field: str,
+    *,
+    owner: str = "candidate",
+) -> None:
+    _require_finite_number(value, field, owner=owner)
     if value <= 0:
         raise ValueError(
-            f"compatibility candidate field '{field}' must be positive",
+            f"compatibility {owner} field '{field}' must be positive",
         )
 
 
-def _require_finite_number(value: object, field: str) -> None:
+def _require_finite_number(
+    value: object,
+    field: str,
+    *,
+    owner: str = "candidate",
+) -> None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(
-            f"compatibility candidate field '{field}' must be numeric",
+            f"compatibility {owner} field '{field}' must be numeric",
         )
     if not math.isfinite(value):
         raise ValueError(
-            f"compatibility candidate field '{field}' must be finite",
+            f"compatibility {owner} field '{field}' must be finite",
         )

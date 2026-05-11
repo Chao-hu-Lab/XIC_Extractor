@@ -225,6 +225,22 @@ def test_numeric_validation_errors_name_missing_field_and_compatibility_context(
         are_candidates_compatible(existing, candidate, AlignmentConfig())
 
 
+@pytest.mark.parametrize(
+    "bad_value",
+    [True, "180", 0.0, float("nan"), float("inf")],
+)
+def test_config_numeric_validation_errors_name_field_and_compatibility_context(
+    bad_value,
+):
+    existing = _candidate("existing")
+    candidate = _candidate("candidate")
+    config = AlignmentConfig(max_rt_sec=180.0)
+    object.__setattr__(config, "max_rt_sec", bad_value)
+
+    with pytest.raises(ValueError, match="compatibility config field 'max_rt_sec'"):
+        are_candidates_compatible(existing, candidate, config)
+
+
 def _candidate(
     candidate_id: str,
     *,
