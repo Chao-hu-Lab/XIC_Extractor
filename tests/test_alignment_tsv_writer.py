@@ -7,27 +7,22 @@ from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
 
 REVIEW_COLUMNS = [
-    "cluster_id",
+    "feature_family_id",
     "neutral_loss_tag",
-    "cluster_center_mz",
-    "cluster_center_rt",
-    "cluster_product_mz",
-    "cluster_observed_neutral_loss_da",
+    "family_center_mz",
+    "family_center_rt",
+    "family_product_mz",
+    "family_observed_neutral_loss_da",
     "has_anchor",
-    "member_count",
-    "folded_cluster_count",
-    "folded_cluster_ids",
-    "folded_member_count",
-    "folded_sample_fill_count",
-    "fold_evidence",
+    "event_cluster_count",
+    "event_cluster_ids",
+    "event_member_count",
     "detected_count",
-    "rescued_count",
     "absent_count",
     "unchecked_count",
     "present_rate",
-    "rescued_rate",
     "representative_samples",
-    "representative_candidate_ids",
+    "family_evidence",
     "warning",
     "reason",
 ]
@@ -52,29 +47,24 @@ def test_write_alignment_review_tsv_columns_counts_rates_and_reason(tmp_path: Pa
 
     assert list(rows[0]) == REVIEW_COLUMNS
     assert rows[0] == {
-        "cluster_id": "ALN000001",
+        "feature_family_id": "ALN000001",
         "neutral_loss_tag": "DNA_dR",
-        "cluster_center_mz": "500.123",
-        "cluster_center_rt": "8.49",
-        "cluster_product_mz": "384.076",
-        "cluster_observed_neutral_loss_da": "116.047",
+        "family_center_mz": "500.123",
+        "family_center_rt": "8.49",
+        "family_product_mz": "384.076",
+        "family_observed_neutral_loss_da": "116.047",
         "has_anchor": "TRUE",
-        "member_count": "1",
-        "folded_cluster_count": "0",
-        "folded_cluster_ids": "",
-        "folded_member_count": "0",
-        "folded_sample_fill_count": "0",
-        "fold_evidence": "",
+        "event_cluster_count": "1",
+        "event_cluster_ids": "ALN000001",
+        "event_member_count": "1",
         "detected_count": "1",
-        "rescued_count": "1",
         "absent_count": "1",
         "unchecked_count": "1",
         "present_rate": "0.5",
-        "rescued_rate": "0.25",
         "representative_samples": "sample-a;sample-b",
-        "representative_candidate_ids": "sample-a#1",
+        "family_evidence": "",
         "warning": "",
-        "reason": "anchor cluster; 2/4 present; 1 MS1 backfilled",
+        "reason": "anchor family; 2/4 present; 1 MS1 backfilled",
     }
 
 
@@ -137,14 +127,13 @@ def test_write_alignment_review_tsv_reports_folded_clusters(tmp_path: Path):
 
     rows = _read_tsv(write_alignment_review_tsv(tmp_path / "review.tsv", matrix))
 
-    assert rows[0]["folded_cluster_count"] == "2"
-    assert rows[0]["folded_cluster_ids"] == "ALN000002;ALN000003"
-    assert rows[0]["folded_member_count"] == "5"
-    assert rows[0]["folded_sample_fill_count"] == "1"
-    assert rows[0]["fold_evidence"].startswith("cid_nl_only;")
+    assert rows[0]["event_cluster_count"] == "3"
+    assert rows[0]["event_cluster_ids"] == "ALN000001;ALN000002;ALN000003"
+    assert rows[0]["event_member_count"] == "7"
+    assert rows[0]["family_evidence"].startswith("cid_nl_only;")
     assert rows[0]["reason"] == (
-        "anchor cluster; 2/2 present; 1 MS1 backfilled; "
-        "folded 2 near-duplicate clusters"
+        "anchor family; 2/2 present; 1 MS1 backfilled; "
+        "merged 3 event clusters"
     )
 
 
@@ -178,10 +167,10 @@ def test_write_alignment_matrix_tsv_blanks_missing_and_invalid_areas(tmp_path: P
     rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
 
     assert list(rows[0]) == [
-        "cluster_id",
+        "feature_family_id",
         "neutral_loss_tag",
-        "cluster_center_mz",
-        "cluster_center_rt",
+        "family_center_mz",
+        "family_center_rt",
         "detected-positive",
         "rescued-positive",
         "absent-positive",
@@ -222,7 +211,7 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
     )
 
     assert list(cells[0]) == [
-        "cluster_id",
+        "feature_family_id",
         "sample_stem",
         "status",
         "area",
@@ -236,8 +225,8 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
         "source_candidate_id",
         "source_raw_file",
         "neutral_loss_tag",
-        "cluster_center_mz",
-        "cluster_center_rt",
+        "family_center_mz",
+        "family_center_rt",
         "reason",
     ]
     assert cells[0]["status"] == "detected"
@@ -274,10 +263,9 @@ def test_tsv_writers_escape_formula_like_text(tmp_path: Path):
     review = _read_tsv(write_alignment_review_tsv(tmp_path / "review.tsv", matrix))
     matrix_rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
 
-    assert review[0]["cluster_id"] == "'=cluster"
+    assert review[0]["feature_family_id"] == "'=cluster"
     assert review[0]["neutral_loss_tag"] == "'+NL"
     assert review[0]["representative_samples"] == "'=sample"
-    assert review[0]["representative_candidate_ids"] == "'@candidate"
     assert "'=sample" in matrix_rows[0]
 
 

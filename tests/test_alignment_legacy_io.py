@@ -44,6 +44,37 @@ def test_load_xic_alignment_joins_review_and_matrix_by_cluster_id(tmp_path: Path
     assert feature.metadata["neutral_loss_tag"] == "DNA_dR"
 
 
+def test_load_xic_alignment_accepts_feature_family_schema(tmp_path: Path):
+    review = tmp_path / "alignment_review.tsv"
+    matrix = tmp_path / "alignment_matrix.tsv"
+    review.write_text(
+        "feature_family_id\tneutral_loss_tag\tfamily_center_mz\tfamily_center_rt\t"
+        "family_product_mz\tfamily_observed_neutral_loss_da\thas_anchor\t"
+        "event_cluster_count\tevent_cluster_ids\tevent_member_count\t"
+        "detected_count\tabsent_count\tunchecked_count\tpresent_rate\t"
+        "representative_samples\tfamily_evidence\twarning\treason\n"
+        "FAM000001\tDNA_dR\t242.1144\t12.35\t126.067\t116.047\tTRUE\t"
+        "2\tALN000001;ALN000002\t124\t1\t0\t0\t1\tTumorBC2312_DNA\t"
+        "cid_nl_only\t\tfamily row\n",
+        encoding="utf-8",
+    )
+    matrix.write_text(
+        "feature_family_id\tneutral_loss_tag\tfamily_center_mz\tfamily_center_rt\t"
+        "TumorBC2312_DNA\n"
+        "FAM000001\tDNA_dR\t242.1144\t12.35\t1000\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_xic_alignment(review, matrix)
+
+    assert loaded.features[0].feature_id == "FAM000001"
+    assert loaded.features[0].mz == 242.1144
+    assert loaded.features[0].rt_min == 12.35
+    assert loaded.features[0].metadata["event_cluster_ids"] == (
+        "ALN000001;ALN000002"
+    )
+
+
 def test_load_xic_alignment_rejects_duplicate_matrix_cluster_id(tmp_path: Path):
     review = tmp_path / "alignment_review.tsv"
     matrix = tmp_path / "alignment_matrix.tsv"

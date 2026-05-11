@@ -46,25 +46,22 @@ def normalize_sample_name(value: str) -> str:
 def load_xic_alignment(review_tsv: Path, matrix_tsv: Path) -> LoadedMatrix:
     review_rows, review_columns = _read_delimited(review_tsv, delimiter="\t")
     matrix_rows, matrix_columns = _read_delimited(matrix_tsv, delimiter="\t")
-    _require_columns(
-        review_tsv,
-        review_columns,
-        ("cluster_id", "cluster_center_mz", "cluster_center_rt"),
-    )
-    _require_columns(
-        matrix_tsv,
-        matrix_columns,
-        ("cluster_id", "cluster_center_mz", "cluster_center_rt"),
-    )
+    review_id_column = _xic_id_column(review_tsv, review_columns)
+    matrix_id_column = _xic_id_column(matrix_tsv, matrix_columns)
+    review_mz_column = _xic_mz_column(review_tsv, review_columns)
+    matrix_mz_column = _xic_mz_column(matrix_tsv, matrix_columns)
+    review_rt_column = _xic_rt_column(review_tsv, review_columns)
+    matrix_rt_column = _xic_rt_column(matrix_tsv, matrix_columns)
 
     review_by_id: dict[str, dict[str, str]] = {}
     for row_number, row in review_rows:
-        cluster_id = row.get("cluster_id", "")
-        if cluster_id in review_by_id:
+        feature_id = row.get(review_id_column, "")
+        if feature_id in review_by_id:
             raise ValueError(
-                f"{review_tsv}: row {row_number}: duplicate cluster_id {cluster_id!r}"
+                f"{review_tsv}: row {row_number}: "
+                f"duplicate {review_id_column} {feature_id!r}"
             )
-        review_by_id[cluster_id] = row
+        review_by_id[feature_id] = row
 
     sample_columns = tuple(
         normalize_sample_name(column) for column in matrix_columns[4:]
@@ -72,51 +69,52 @@ def load_xic_alignment(review_tsv: Path, matrix_tsv: Path) -> LoadedMatrix:
     features: list[LoadedFeature] = []
     seen_matrix_ids: set[str] = set()
     for row_number, row in matrix_rows:
-        cluster_id = row.get("cluster_id", "")
-        if cluster_id in seen_matrix_ids:
+        feature_id = row.get(matrix_id_column, "")
+        if feature_id in seen_matrix_ids:
             raise ValueError(
-                f"{matrix_tsv}: row {row_number}: duplicate cluster_id {cluster_id!r}"
+                f"{matrix_tsv}: row {row_number}: "
+                f"duplicate {matrix_id_column} {feature_id!r}"
             )
-        seen_matrix_ids.add(cluster_id)
-        review_row = review_by_id.get(cluster_id)
+        seen_matrix_ids.add(feature_id)
+        review_row = review_by_id.get(feature_id)
         if review_row is None:
             raise ValueError(
                 f"{matrix_tsv}: row {row_number}: "
-                f"review row missing for cluster_id {cluster_id!r}"
+                f"review row missing for {matrix_id_column} {feature_id!r}"
             )
         matrix_mz = _parse_float(
             matrix_tsv,
             row_number,
-            row.get("cluster_center_mz", ""),
-            "cluster_center_mz",
+            row.get(matrix_mz_column, ""),
+            matrix_mz_column,
         )
         matrix_rt = _parse_float(
             matrix_tsv,
             row_number,
-            row.get("cluster_center_rt", ""),
-            "cluster_center_rt",
+            row.get(matrix_rt_column, ""),
+            matrix_rt_column,
         )
         review_mz = _parse_float(
             review_tsv,
             row_number,
-            review_row.get("cluster_center_mz", ""),
-            "cluster_center_mz",
+            review_row.get(review_mz_column, ""),
+            review_mz_column,
         )
         review_rt = _parse_float(
             review_tsv,
             row_number,
-            review_row.get("cluster_center_rt", ""),
-            "cluster_center_rt",
+            review_row.get(review_rt_column, ""),
+            review_rt_column,
         )
         if not math.isclose(matrix_mz, review_mz, rel_tol=0.0, abs_tol=1e-9):
             raise ValueError(
                 f"{matrix_tsv}: row {row_number}: "
-                "cluster_center_mz disagrees with review"
+                f"{matrix_mz_column} disagrees with review"
             )
         if not math.isclose(matrix_rt, review_rt, rel_tol=0.0, abs_tol=1e-9):
             raise ValueError(
                 f"{matrix_tsv}: row {row_number}: "
-                "cluster_center_rt disagrees with review"
+                f"{matrix_rt_column} disagrees with review"
             )
         sample_areas = {
             sample: _parse_area(row.get(column, ""))
@@ -124,7 +122,7 @@ def load_xic_alignment(review_tsv: Path, matrix_tsv: Path) -> LoadedMatrix:
         }
         features.append(
             LoadedFeature(
-                feature_id=cluster_id,
+                feature_id=feature_id,
                 mz=matrix_mz,
                 rt_min=matrix_rt,
                 sample_areas=sample_areas,
@@ -138,6 +136,30 @@ def load_xic_alignment(review_tsv: Path, matrix_tsv: Path) -> LoadedMatrix:
         features=tuple(features),
         sample_order=sample_columns,
     )
+
+
+def _xic_id_column(path: Path, columns: tuple[str, ...]) -> str:
+    if "feature_family_id" in columns:
+        return "feature_family_id"
+    if "cluster_id" in columns:
+        return "cluster_id"
+    raise ValueError(f"{path}: missing feature_family_id or cluster_id")
+
+
+def _xic_mz_column(path: Path, columns: tuple[str, ...]) -> str:
+    if "family_center_mz" in columns:
+        return "family_center_mz"
+    if "cluster_center_mz" in columns:
+        return "cluster_center_mz"
+    raise ValueError(f"{path}: missing family_center_mz or cluster_center_mz")
+
+
+def _xic_rt_column(path: Path, columns: tuple[str, ...]) -> str:
+    if "family_center_rt" in columns:
+        return "family_center_rt"
+    if "cluster_center_rt" in columns:
+        return "cluster_center_rt"
+    raise ValueError(f"{path}: missing family_center_rt or cluster_center_rt")
 
 
 def load_fh_alignment_tsv(path: Path) -> LoadedMatrix:

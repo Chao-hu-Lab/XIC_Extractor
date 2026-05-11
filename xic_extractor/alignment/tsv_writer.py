@@ -3,38 +3,33 @@ from __future__ import annotations
 import csv
 import math
 from pathlib import Path
+from typing import Any
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
-from xic_extractor.alignment.models import AlignmentCluster
 
 ALIGNMENT_REVIEW_COLUMNS = (
-    "cluster_id",
+    "feature_family_id",
     "neutral_loss_tag",
-    "cluster_center_mz",
-    "cluster_center_rt",
-    "cluster_product_mz",
-    "cluster_observed_neutral_loss_da",
+    "family_center_mz",
+    "family_center_rt",
+    "family_product_mz",
+    "family_observed_neutral_loss_da",
     "has_anchor",
-    "member_count",
-    "folded_cluster_count",
-    "folded_cluster_ids",
-    "folded_member_count",
-    "folded_sample_fill_count",
-    "fold_evidence",
+    "event_cluster_count",
+    "event_cluster_ids",
+    "event_member_count",
     "detected_count",
-    "rescued_count",
     "absent_count",
     "unchecked_count",
     "present_rate",
-    "rescued_rate",
     "representative_samples",
-    "representative_candidate_ids",
+    "family_evidence",
     "warning",
     "reason",
 )
 
 ALIGNMENT_CELLS_COLUMNS = (
-    "cluster_id",
+    "feature_family_id",
     "sample_stem",
     "status",
     "area",
@@ -48,8 +43,8 @@ ALIGNMENT_CELLS_COLUMNS = (
     "source_candidate_id",
     "source_raw_file",
     "neutral_loss_tag",
-    "cluster_center_mz",
-    "cluster_center_rt",
+    "family_center_mz",
+    "family_center_rt",
     "reason",
 )
 
@@ -60,22 +55,23 @@ def write_alignment_review_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
 
 def write_alignment_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
     columns = (
-        "cluster_id",
+        "feature_family_id",
         "neutral_loss_tag",
-        "cluster_center_mz",
-        "cluster_center_rt",
+        "family_center_mz",
+        "family_center_rt",
         *matrix.sample_order,
     )
     rows: list[dict[str, object]] = []
     cells_by_cluster = _cells_by_cluster(matrix)
     for cluster in matrix.clusters:
-        cells = cells_by_cluster.get(cluster.cluster_id, ())
+        row_id = _row_id(cluster)
+        cells = cells_by_cluster.get(row_id, ())
         cells_by_sample = {cell.sample_stem: cell for cell in cells}
         row: dict[str, object] = {
-            "cluster_id": cluster.cluster_id,
+            "feature_family_id": row_id,
             "neutral_loss_tag": cluster.neutral_loss_tag,
-            "cluster_center_mz": _format_value(cluster.cluster_center_mz),
-            "cluster_center_rt": _format_value(cluster.cluster_center_rt),
+            "family_center_mz": _format_value(_family_center_mz(cluster)),
+            "family_center_rt": _format_value(_family_center_rt(cluster)),
         }
         for sample_stem in matrix.sample_order:
             row[sample_stem] = _matrix_area(cells_by_sample.get(sample_stem))
@@ -84,13 +80,13 @@ def write_alignment_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
 
 
 def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
-    clusters_by_id = {cluster.cluster_id: cluster for cluster in matrix.clusters}
+    clusters_by_id = {_row_id(cluster): cluster for cluster in matrix.clusters}
     rows: list[dict[str, object]] = []
     for cell in matrix.cells:
         cluster = clusters_by_id[cell.cluster_id]
         rows.append(
             {
-                "cluster_id": cell.cluster_id,
+                "feature_family_id": cell.cluster_id,
                 "sample_stem": cell.sample_stem,
                 "status": cell.status,
                 "area": _format_value(cell.area),
@@ -104,8 +100,8 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
                 "source_candidate_id": cell.source_candidate_id or "",
                 "source_raw_file": str(cell.source_raw_file or ""),
                 "neutral_loss_tag": cluster.neutral_loss_tag,
-                "cluster_center_mz": _format_value(cluster.cluster_center_mz),
-                "cluster_center_rt": _format_value(cluster.cluster_center_rt),
+                "family_center_mz": _format_value(_family_center_mz(cluster)),
+                "family_center_rt": _format_value(_family_center_rt(cluster)),
                 "reason": cell.reason,
             }
         )
@@ -114,22 +110,23 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
 
 def write_alignment_status_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
     columns = (
-        "cluster_id",
+        "feature_family_id",
         "neutral_loss_tag",
-        "cluster_center_mz",
-        "cluster_center_rt",
+        "family_center_mz",
+        "family_center_rt",
         *matrix.sample_order,
     )
     rows: list[dict[str, object]] = []
     cells_by_cluster = _cells_by_cluster(matrix)
     for cluster in matrix.clusters:
-        cells = cells_by_cluster.get(cluster.cluster_id, ())
+        row_id = _row_id(cluster)
+        cells = cells_by_cluster.get(row_id, ())
         cells_by_sample = {cell.sample_stem: cell for cell in cells}
         row: dict[str, object] = {
-            "cluster_id": cluster.cluster_id,
+            "feature_family_id": row_id,
             "neutral_loss_tag": cluster.neutral_loss_tag,
-            "cluster_center_mz": _format_value(cluster.cluster_center_mz),
-            "cluster_center_rt": _format_value(cluster.cluster_center_rt),
+            "family_center_mz": _format_value(_family_center_mz(cluster)),
+            "family_center_rt": _format_value(_family_center_rt(cluster)),
         }
         for sample_stem in matrix.sample_order:
             cell = cells_by_sample.get(sample_stem)
@@ -143,7 +140,8 @@ def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
     cells_by_cluster = _cells_by_cluster(matrix)
     sample_count = len(matrix.sample_order)
     for cluster in matrix.clusters:
-        cells = cells_by_cluster.get(cluster.cluster_id, ())
+        row_id = _row_id(cluster)
+        cells = cells_by_cluster.get(row_id, ())
         detected_count = _count(cells, "detected")
         rescued_count = _count(cells, "rescued")
         absent_count = _count(cells, "absent")
@@ -151,29 +149,24 @@ def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
         present_count = detected_count + rescued_count
         rows.append(
             {
-                "cluster_id": cluster.cluster_id,
+                "feature_family_id": row_id,
                 "neutral_loss_tag": cluster.neutral_loss_tag,
-                "cluster_center_mz": cluster.cluster_center_mz,
-                "cluster_center_rt": cluster.cluster_center_rt,
-                "cluster_product_mz": cluster.cluster_product_mz,
-                "cluster_observed_neutral_loss_da": (
-                    cluster.cluster_observed_neutral_loss_da
+                "family_center_mz": _family_center_mz(cluster),
+                "family_center_rt": _family_center_rt(cluster),
+                "family_product_mz": _family_product_mz(cluster),
+                "family_observed_neutral_loss_da": (
+                    _family_observed_neutral_loss_da(cluster)
                 ),
                 "has_anchor": cluster.has_anchor,
-                "member_count": len(cluster.members),
-                "folded_cluster_count": len(cluster.folded_cluster_ids),
-                "folded_cluster_ids": ";".join(cluster.folded_cluster_ids),
-                "folded_member_count": cluster.folded_member_count,
-                "folded_sample_fill_count": cluster.folded_sample_fill_count,
-                "fold_evidence": cluster.fold_evidence,
+                "event_cluster_count": len(_event_cluster_ids(cluster)),
+                "event_cluster_ids": ";".join(_event_cluster_ids(cluster)),
+                "event_member_count": _event_member_count(cluster),
                 "detected_count": detected_count,
-                "rescued_count": rescued_count,
                 "absent_count": absent_count,
                 "unchecked_count": unchecked_count,
                 "present_rate": _safe_rate(present_count, sample_count),
-                "rescued_rate": _safe_rate(rescued_count, sample_count),
                 "representative_samples": _representative_samples(cells),
-                "representative_candidate_ids": _representative_candidate_ids(cells),
+                "family_evidence": _family_evidence(cluster),
                 "warning": _warning(
                     cluster,
                     sample_count=sample_count,
@@ -252,7 +245,7 @@ def _cap_semicolon(values: list[str]) -> str:
 
 
 def _warning(
-    cluster: AlignmentCluster,
+    cluster: Any,
     *,
     sample_count: int,
     detected_count: int,
@@ -269,22 +262,69 @@ def _warning(
 
 
 def _reason(
-    cluster: AlignmentCluster,
+    cluster: Any,
     present_count: int,
     sample_count: int,
     rescued_count: int,
 ) -> str:
-    prefix = "anchor cluster" if cluster.has_anchor else "no anchor"
+    prefix = "anchor family" if cluster.has_anchor else "no anchor"
     parts = [
         prefix,
         f"{present_count}/{sample_count} present",
         f"{rescued_count} MS1 backfilled",
     ]
-    if cluster.folded_cluster_ids:
-        parts.append(
-            f"folded {len(cluster.folded_cluster_ids)} near-duplicate clusters",
-        )
+    event_cluster_count = len(_event_cluster_ids(cluster))
+    if event_cluster_count > 1:
+        parts.append(f"merged {event_cluster_count} event clusters")
     return "; ".join(parts)
+
+
+def _row_id(row: Any) -> str:
+    if hasattr(row, "feature_family_id"):
+        return str(row.feature_family_id)
+    return str(row.cluster_id)
+
+
+def _family_center_mz(row: Any) -> float:
+    if hasattr(row, "family_center_mz"):
+        return row.family_center_mz
+    return row.cluster_center_mz
+
+
+def _family_center_rt(row: Any) -> float:
+    if hasattr(row, "family_center_rt"):
+        return row.family_center_rt
+    return row.cluster_center_rt
+
+
+def _family_product_mz(row: Any) -> float:
+    if hasattr(row, "family_product_mz"):
+        return row.family_product_mz
+    return row.cluster_product_mz
+
+
+def _family_observed_neutral_loss_da(row: Any) -> float:
+    if hasattr(row, "family_observed_neutral_loss_da"):
+        return row.family_observed_neutral_loss_da
+    return row.cluster_observed_neutral_loss_da
+
+
+def _event_cluster_ids(row: Any) -> tuple[str, ...]:
+    if hasattr(row, "event_cluster_ids"):
+        return tuple(row.event_cluster_ids)
+    return (str(row.cluster_id), *tuple(row.folded_cluster_ids))
+
+
+def _event_member_count(row: Any) -> int:
+    if hasattr(row, "event_member_count"):
+        return int(row.event_member_count)
+    return len(row.members) + int(row.folded_member_count)
+
+
+def _family_evidence(row: Any) -> str:
+    if hasattr(row, "evidence"):
+        return str(row.evidence)
+    return str(row.fold_evidence)
 
 
 def _matrix_area(cell: AlignedCell | None) -> str:

@@ -4,7 +4,7 @@
 
 **Goal:** Add the first user-facing alignment CLI and write a minimal, stable alignment output surface from existing discovery batch results.
 
-**Architecture:** Plan 3 consumes `discovery_batch_index.csv`, loads per-sample `discovery_candidates.csv`, runs Plan 1 clustering, runs Plan 2 conservative MS1 backfill, and writes TSV outputs. Default output is intentionally small: `alignment_review.tsv` and `alignment_matrix.tsv`. Per-cell audit and status matrix are debug opt-in files.
+**Architecture:** Plan 3 consumes `discovery_batch_index.csv`, loads per-sample `discovery_candidates.csv`, runs event clustering, consolidates event clusters into MS1 feature-family rows, runs family-centered MS1 integration, and writes TSV outputs. Default output is intentionally small: `alignment_review.tsv` and `alignment_matrix.tsv`. Per-cell audit and status matrix are debug opt-in files.
 
 **Tech Stack:** Python, argparse, csv TSV writer, pytest, existing discovery CSV contracts, existing `xic_extractor.alignment` clustering/backfill, existing `RawFileReader` adapter through injected raw openers.
 
@@ -16,12 +16,12 @@ Plan 3 is the first deliverable alignment surface. It does **not** implement the
 
 Default outputs:
 
-- `alignment_review.tsv`: one row per cluster for human review.
+- `alignment_review.tsv`: one row per MS1 feature family for human review.
 - `alignment_matrix.tsv`: area matrix for downstream analysis.
 
 Debug opt-in outputs:
 
-- `alignment_cells.tsv`: one row per `(cluster, sample)` cell.
+- `alignment_cells.tsv`: one row per `(feature_family, sample)` cell.
 - `alignment_matrix_status.tsv`: same shape as area matrix, values are cell status.
 
 ## Scope
@@ -31,7 +31,9 @@ In scope:
 - Load discovery batch index and candidate CSVs.
 - Convert candidate CSV rows back into `DiscoveryCandidate` objects.
 - Run `cluster_candidates()`.
-- Run `backfill_alignment_matrix()`.
+- Run event-level `backfill_alignment_matrix()` to provide consolidation evidence.
+- Run `build_ms1_feature_families()`.
+- Run family-centered `integrate_feature_family_matrix()`.
 - Write default TSV outputs atomically.
 - Add `xic-align-cli`.
 - Optional debug TSV flags.
@@ -51,57 +53,44 @@ Out of scope:
 
 ### Default File 1: `alignment_review.tsv`
 
-Purpose: human review entry point. One row per cluster.
+Purpose: human review entry point. One row per MS1 feature family.
 
 Columns:
 
 ```text
-cluster_id
+feature_family_id
 neutral_loss_tag
-cluster_center_mz
-cluster_center_rt
-cluster_product_mz
-cluster_observed_neutral_loss_da
+family_center_mz
+family_center_rt
+family_product_mz
+family_observed_neutral_loss_da
 has_anchor
-member_count
-folded_cluster_count
-folded_cluster_ids
-folded_member_count
-folded_sample_fill_count
-fold_evidence
+event_cluster_count
+event_cluster_ids
+event_member_count
 detected_count
-rescued_count
 absent_count
 unchecked_count
 present_rate
-rescued_rate
 representative_samples
-representative_candidate_ids
+family_evidence
 warning
 reason
 ```
 
 Definitions:
 
-- `present_rate = (detected_count + rescued_count) / sample_count`.
-- `rescued_rate = rescued_count / sample_count`.
+- `present_rate = (detected_count + rescued_count) / sample_count`. `rescued_count` is not a default review column, but debug cells may still carry `rescued` status for compatibility checks.
 - `representative_samples`: semicolon-separated detected/rescued sample stems, capped at 5 then suffix `;...`.
-- `representative_candidate_ids`: semicolon-separated detected candidate IDs, capped at 5 then suffix `;...`.
-- Near-duplicate folding may remove secondary cluster rows from the review and
-  matrix outputs. The retained primary row records folded secondaries in
-  `folded_cluster_count`, `folded_cluster_ids`, and `folded_member_count`.
-  `folded_sample_fill_count` records how many sample cells were filled from
-  folded secondaries. `fold_evidence` records compact CID-only audit evidence
-  such as max m/z ppm, max RT seconds, shared detected count, and detected
-  Jaccard. `member_count` remains the detected member count of the retained
-  primary cluster; it does not include MS1-backfilled cells.
+- `family_evidence`: compact CID-only audit evidence, for example `cid_nl_only;event_clusters=2;shared_detected=45;overlap=0.849`.
+- `event_cluster_ids`: semicolon-separated source MS2 event clusters that were consolidated into the final MS1 feature-family row.
+- `event_member_count`: total detected event members across source event clusters. It does not include family-centered integration cells.
 - `warning` should be short and deterministic. Emit only the first matching warning by this precedence:
   - `no_anchor`: `has_anchor` is false.
   - `high_unchecked`: `unchecked_count / sample_count > 0.5`.
-  - `high_backfill_dependency`: `rescued_count > detected_count`.
   - blank if no warning.
 - `reason` should be concise and derived from counts, e.g.
-  `anchor cluster; 7/8 present; 2 MS1 backfilled`.
+  `anchor family; 7/8 present; 0 MS1 backfilled`.
 
 ### Default File 2: `alignment_matrix.tsv`
 
@@ -109,12 +98,12 @@ Purpose: downstream area matrix.
 
 Shape:
 
-- rows = clusters
+- rows = MS1 feature families
 - first columns:
-  - `cluster_id`
+  - `feature_family_id`
   - `neutral_loss_tag`
-  - `cluster_center_mz`
-  - `cluster_center_rt`
+  - `family_center_mz`
+  - `family_center_rt`
 - remaining columns = `sample_order`
 
 Value contract:
@@ -131,10 +120,10 @@ Missing and zero values are both blank by design. Downstream analysis should not
 
 Only written when `--emit-alignment-cells` is set.
 
-Columns mirror `AlignedCell` plus cluster representatives:
+Columns mirror `AlignedCell` plus family representatives:
 
 ```text
-cluster_id
+feature_family_id
 sample_stem
 status
 area
@@ -148,8 +137,8 @@ scan_support_score
 source_candidate_id
 source_raw_file
 neutral_loss_tag
-cluster_center_mz
-cluster_center_rt
+family_center_mz
+family_center_rt
 reason
 ```
 
