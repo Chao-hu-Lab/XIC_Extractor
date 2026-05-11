@@ -6,13 +6,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from xic_extractor.alignment.backfill import MS1BackfillSource, backfill_alignment_matrix
+from xic_extractor.alignment.backfill import (
+    MS1BackfillSource,
+    backfill_alignment_matrix,
+)
+from xic_extractor.alignment.clustering import cluster_candidates
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.csv_io import (
     read_discovery_batch_index,
     read_discovery_candidates_csv,
 )
-from xic_extractor.alignment.clustering import cluster_candidates
+from xic_extractor.alignment.matrix import AlignmentMatrix
 from xic_extractor.alignment.tsv_writer import (
     write_alignment_cells_tsv,
     write_alignment_matrix_tsv,
@@ -27,7 +31,7 @@ class AlignmentRawHandle(MS1BackfillSource, Protocol):
 
 
 RawOpener = Callable[[Path, Path], AbstractContextManager[AlignmentRawHandle]]
-TsvWriter = Callable[[Path, object], Path]
+TsvWriter = Callable[[Path, AlignmentMatrix], Path]
 
 
 @dataclass(frozen=True)
@@ -54,7 +58,9 @@ def run_alignment(
     candidates = tuple(
         candidate
         for sample_stem in batch.sample_order
-        for candidate in read_discovery_candidates_csv(batch.candidate_csvs[sample_stem])
+        for candidate in read_discovery_candidates_csv(
+            batch.candidate_csvs[sample_stem]
+        )
     )
     clusters = cluster_candidates(candidates, config=alignment_config)
     opener = raw_opener or _default_raw_opener
@@ -122,7 +128,10 @@ def _output_paths(
     )
 
 
-def _write_outputs_atomic(outputs: AlignmentRunOutputs, matrix: object) -> None:
+def _write_outputs_atomic(
+    outputs: AlignmentRunOutputs,
+    matrix: AlignmentMatrix,
+) -> None:
     output_paths_and_writers: list[tuple[Path, TsvWriter]] = [
         (outputs.review_tsv, write_alignment_review_tsv),
         (outputs.matrix_tsv, write_alignment_matrix_tsv),

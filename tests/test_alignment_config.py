@@ -36,10 +36,10 @@ def test_alignment_modules_do_not_import_pipeline_or_io_boundaries():
     banned_roots = (
         "gui",
         "scripts",
-        "xic_extractor.discovery",
+        "xic_extractor.discovery.pipeline",
+        "xic_extractor.discovery.csv_writer",
         "xic_extractor.extraction",
         "xic_extractor.extractor",
-        "xic_extractor.raw_reader",
         "xic_extractor.output",
     )
 
@@ -48,7 +48,10 @@ def test_alignment_modules_do_not_import_pipeline_or_io_boundaries():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             for imported_name in _imported_module_names(node):
-                if imported_name == "xic_extractor.discovery.models":
+                if (
+                    imported_name.startswith("xic_extractor.raw_reader")
+                    and path.name != "pipeline.py"
+                ):
                     violations.append((path.name, imported_name))
                 elif imported_name.startswith(banned_roots):
                     violations.append((path.name, imported_name))

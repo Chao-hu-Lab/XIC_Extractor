@@ -61,12 +61,12 @@ def write_alignment_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
         "cluster_center_rt",
         *matrix.sample_order,
     )
-    rows = []
+    rows: list[dict[str, object]] = []
     cells_by_cluster = _cells_by_cluster(matrix)
     for cluster in matrix.clusters:
         cells = cells_by_cluster.get(cluster.cluster_id, ())
         cells_by_sample = {cell.sample_stem: cell for cell in cells}
-        row = {
+        row: dict[str, object] = {
             "cluster_id": cluster.cluster_id,
             "neutral_loss_tag": cluster.neutral_loss_tag,
             "cluster_center_mz": _format_value(cluster.cluster_center_mz),
@@ -80,7 +80,7 @@ def write_alignment_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
 
 def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
     clusters_by_id = {cluster.cluster_id: cluster for cluster in matrix.clusters}
-    rows = []
+    rows: list[dict[str, object]] = []
     for cell in matrix.cells:
         cluster = clusters_by_id[cell.cluster_id]
         rows.append(
@@ -115,12 +115,12 @@ def write_alignment_status_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Pa
         "cluster_center_rt",
         *matrix.sample_order,
     )
-    rows = []
+    rows: list[dict[str, object]] = []
     cells_by_cluster = _cells_by_cluster(matrix)
     for cluster in matrix.clusters:
         cells = cells_by_cluster.get(cluster.cluster_id, ())
         cells_by_sample = {cell.sample_stem: cell for cell in cells}
-        row = {
+        row: dict[str, object] = {
             "cluster_id": cluster.cluster_id,
             "neutral_loss_tag": cluster.neutral_loss_tag,
             "cluster_center_mz": _format_value(cluster.cluster_center_mz),

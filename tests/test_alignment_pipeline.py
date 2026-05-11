@@ -27,7 +27,14 @@ def test_pipeline_loads_candidates_clusters_backfills_and_writes_defaults(
         calls["cluster_config"] = config
         return (_cluster(),)
 
-    def fake_backfill(clusters, *, sample_order, raw_sources, alignment_config, peak_config):
+    def fake_backfill(
+        clusters,
+        *,
+        sample_order,
+        raw_sources,
+        alignment_config,
+        peak_config,
+    ):
         calls["clusters"] = clusters
         calls["sample_order"] = sample_order
         calls["raw_sources"] = raw_sources
@@ -146,7 +153,11 @@ def test_pipeline_enters_and_closes_raw_handles_on_success_and_write_failure(
     def fail_matrix_writer(path, matrix):
         raise RuntimeError("writer failed")
 
-    monkeypatch.setattr(pipeline_module, "write_alignment_matrix_tsv", fail_matrix_writer)
+    monkeypatch.setattr(
+        pipeline_module,
+        "write_alignment_matrix_tsv",
+        fail_matrix_writer,
+    )
     with pytest.raises(RuntimeError, match="writer failed"):
         pipeline_module.run_alignment(
             discovery_batch_index=batch_index,
@@ -161,7 +172,10 @@ def test_pipeline_enters_and_closes_raw_handles_on_success_and_write_failure(
     assert opener.handles[-1].closed is True
 
 
-def test_pipeline_debug_flags_write_optional_outputs(tmp_path: Path, monkeypatch) -> None:
+def test_pipeline_debug_flags_write_optional_outputs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     batch_index = _write_batch(tmp_path, ("Sample_A",))
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
@@ -225,7 +239,11 @@ def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
         Path(path).write_text("partial matrix", encoding="utf-8")
         raise RuntimeError("matrix failed")
 
-    monkeypatch.setattr(pipeline_module, "write_alignment_matrix_tsv", fail_matrix_writer)
+    monkeypatch.setattr(
+        pipeline_module,
+        "write_alignment_matrix_tsv",
+        fail_matrix_writer,
+    )
 
     with pytest.raises(RuntimeError, match="matrix failed"):
         pipeline_module.run_alignment(
@@ -288,7 +306,11 @@ def _write_batch(
         sample_dir = batch_dir / sample_stem
         sample_dir.mkdir(exist_ok=True)
         candidates_csv = sample_dir / "discovery_candidates.csv"
-        _write_csv(candidates_csv, DISCOVERY_CANDIDATE_COLUMNS, [_candidate_row(sample_stem)])
+        _write_csv(
+            candidates_csv,
+            DISCOVERY_CANDIDATE_COLUMNS,
+            [_candidate_row(sample_stem)],
+        )
         rows.append(
             {
                 "sample_stem": sample_stem,
@@ -306,7 +328,11 @@ def _write_batch(
     return batch_index
 
 
-def _write_csv(path: Path, fieldnames: tuple[str, ...], rows: list[dict[str, str]]) -> None:
+def _write_csv(
+    path: Path,
+    fieldnames: tuple[str, ...],
+    rows: list[dict[str, str]],
+) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()

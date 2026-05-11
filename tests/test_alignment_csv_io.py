@@ -81,7 +81,9 @@ def test_read_discovery_batch_index_unescapes_known_formula_fields(
     assert batch.raw_files["'Ordinary"] == Path("'plain.raw")
 
 
-def test_read_discovery_candidates_csv_parses_full_candidate_row(tmp_path: Path) -> None:
+def test_read_discovery_candidates_csv_parses_full_candidate_row(
+    tmp_path: Path,
+) -> None:
     from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
 
     csv_path = tmp_path / "discovery_candidates.csv"

@@ -97,7 +97,9 @@ def read_discovery_candidates_csv(path: Path) -> tuple[DiscoveryCandidate, ...]:
     return tuple(candidates)
 
 
-def _read_csv_rows(path: Path) -> tuple[list[tuple[int, dict[str, str]]], tuple[str, ...]]:
+def _read_csv_rows(
+    path: Path,
+) -> tuple[list[tuple[int, dict[str, str]]], tuple[str, ...]]:
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         fieldnames = tuple(reader.fieldnames or ())
