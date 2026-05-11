@@ -16,7 +16,8 @@ from xic_extractor.alignment.csv_io import (
     read_discovery_batch_index,
     read_discovery_candidates_csv,
 )
-from xic_extractor.alignment.folding import fold_near_duplicate_clusters
+from xic_extractor.alignment.family_integration import integrate_feature_family_matrix
+from xic_extractor.alignment.feature_family import build_ms1_feature_families
 from xic_extractor.alignment.matrix import AlignmentMatrix
 from xic_extractor.alignment.tsv_writer import (
     write_alignment_cells_tsv,
@@ -75,14 +76,25 @@ def run_alignment(
                 raw_dir=raw_dir,
             ).items()
         }
-        matrix = backfill_alignment_matrix(
+        event_matrix = backfill_alignment_matrix(
             clusters,
             sample_order=batch.sample_order,
             raw_sources=raw_sources,
             alignment_config=alignment_config,
             peak_config=peak_config,
         )
-        matrix = fold_near_duplicate_clusters(matrix, config=alignment_config)
+        families = build_ms1_feature_families(
+            clusters,
+            event_matrix=event_matrix,
+            config=alignment_config,
+        )
+        matrix = integrate_feature_family_matrix(
+            families,
+            sample_order=batch.sample_order,
+            raw_sources=raw_sources,
+            alignment_config=alignment_config,
+            peak_config=peak_config,
+        )
         outputs = _output_paths(
             output_dir,
             emit_alignment_cells=emit_alignment_cells,

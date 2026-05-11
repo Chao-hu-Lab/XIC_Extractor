@@ -1,5 +1,6 @@
 import csv
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -209,7 +210,11 @@ def test_pipeline_debug_flags_write_optional_outputs(
     assert outputs.status_matrix_tsv.exists()
 
 
-def test_pipeline_folds_matrix_before_writing(
+def test_pipeline_default_path_no_longer_uses_legacy_near_duplicate_folding() -> None:
+    assert not hasattr(pipeline_module, "fold_near_duplicate_clusters")
+
+
+def test_pipeline_builds_feature_families_before_family_integration(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -217,30 +222,54 @@ def test_pipeline_folds_matrix_before_writing(
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
     (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
-    calls: dict[str, object] = {}
+    calls = {}
 
-    monkeypatch.setattr(
-        pipeline_module,
-        "cluster_candidates",
-        lambda candidates, *, config: (_cluster(),),
+    event_cluster = _cluster(cluster_id="ALN000001")
+    family = SimpleNamespace(
+        feature_family_id="FAM000001",
+        neutral_loss_tag="DNA_dR",
+        family_center_mz=500.0,
+        family_center_rt=8.5,
+        family_product_mz=384.0,
+        family_observed_neutral_loss_da=116.0,
+        has_anchor=True,
+        event_cluster_ids=("ALN000001",),
+        event_member_count=1,
+        evidence="single_event_cluster",
     )
-    monkeypatch.setattr(
-        pipeline_module,
-        "backfill_alignment_matrix",
-        lambda clusters, *, sample_order, raw_sources, **kwargs: _matrix(sample_order),
-    )
-    sentinel_matrix = AlignmentMatrix(
-        clusters=(_cluster(cluster_id="ALN999999"),),
+    family_matrix = AlignmentMatrix(
+        clusters=(family,),
         cells=(),
         sample_order=("Sample_A",),
     )
 
-    def fake_fold(matrix, *, config):
-        calls["folded"] = True
-        calls["config"] = config
-        return sentinel_matrix
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_candidates",
+        lambda candidates, *, config: (event_cluster,),
+    )
 
-    monkeypatch.setattr(pipeline_module, "fold_near_duplicate_clusters", fake_fold)
+    def fake_build_families(clusters, *, event_matrix, config):
+        calls["families_clusters"] = clusters
+        calls["event_matrix"] = event_matrix
+        return (family,)
+
+    def fake_integrate(families, *, sample_order, raw_sources, **kwargs):
+        calls["integrated_families"] = families
+        calls["sample_order"] = sample_order
+        calls["raw_sources"] = raw_sources
+        return family_matrix
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_ms1_feature_families",
+        fake_build_families,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "integrate_feature_family_matrix",
+        fake_integrate,
+    )
     monkeypatch.setattr(
         pipeline_module,
         "_write_outputs_atomic",
@@ -257,9 +286,9 @@ def test_pipeline_folds_matrix_before_writing(
         raw_opener=FakeRawOpener(),
     )
 
-    assert calls["folded"] is True
-    assert isinstance(calls["config"], AlignmentConfig)
-    assert calls["written_matrix"] is sentinel_matrix
+    assert calls["families_clusters"] == (event_cluster,)
+    assert calls["integrated_families"] == (family,)
+    assert calls["written_matrix"] is family_matrix
 
 
 def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(

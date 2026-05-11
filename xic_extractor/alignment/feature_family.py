@@ -25,6 +25,51 @@ class MS1FeatureFamily:
     event_member_count: int
     evidence: str
 
+    @property
+    def cluster_id(self) -> str:
+        return self.feature_family_id
+
+    @property
+    def cluster_center_mz(self) -> float:
+        return self.family_center_mz
+
+    @property
+    def cluster_center_rt(self) -> float:
+        return self.family_center_rt
+
+    @property
+    def cluster_product_mz(self) -> float:
+        return self.family_product_mz
+
+    @property
+    def cluster_observed_neutral_loss_da(self) -> float:
+        return self.family_observed_neutral_loss_da
+
+    @property
+    def members(self) -> tuple[object, ...]:
+        return tuple(
+            member for cluster in self.event_clusters for member in cluster.members
+        )
+
+    @property
+    def folded_cluster_ids(self) -> tuple[str, ...]:
+        return self.event_cluster_ids[1:]
+
+    @property
+    def folded_member_count(self) -> int:
+        first_members = (
+            len(self.event_clusters[0].members) if self.event_clusters else 0
+        )
+        return max(0, self.event_member_count - first_members)
+
+    @property
+    def folded_sample_fill_count(self) -> int:
+        return 0
+
+    @property
+    def fold_evidence(self) -> str:
+        return self.evidence
+
 
 def build_ms1_feature_family(
     *,
