@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from statistics import median
 from typing import Protocol
 
@@ -26,6 +26,7 @@ class AlignmentCluster:
     cluster_observed_neutral_loss_da: float
     has_anchor: bool
     members: tuple[CandidateLike, ...]
+    anchor_members: tuple[CandidateLike, ...] = ()
 
 
 def build_alignment_cluster(
@@ -47,6 +48,7 @@ def build_alignment_cluster(
         cluster_observed_neutral_loss_da=observed_loss,
         has_anchor=has_anchor,
         members=tuple(members),
+        anchor_members=tuple(anchor_members),
     )
 
 

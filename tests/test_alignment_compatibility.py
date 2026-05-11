@@ -12,7 +12,7 @@ from xic_extractor.alignment.compatibility import (
     rt_seconds_difference,
 )
 from xic_extractor.alignment.config import AlignmentConfig
-from xic_extractor.alignment.models import build_alignment_cluster
+from xic_extractor.alignment.models import AlignmentCluster, build_alignment_cluster
 
 
 def test_different_neutral_loss_tag_is_incompatible():
@@ -85,7 +85,6 @@ def test_anchored_cluster_requires_compatibility_with_every_anchor_member():
             cluster,
             candidate,
             AlignmentConfig(),
-            anchor_members=(anchor_a, anchor_b),
         )
         is False
     )
@@ -104,7 +103,7 @@ def test_unanchored_cluster_requires_compatibility_with_every_primary_member():
     assert can_attach_to_cluster(cluster, candidate, AlignmentConfig()) is False
 
 
-def test_non_anchor_members_do_not_allow_later_candidates_to_chain_in_anchored_cluster():
+def test_anchored_cluster_non_anchor_members_do_not_expand_compatibility_set():
     anchor = _candidate("anchor", product_mz=359.0000)
     non_anchor = _candidate("non-anchor", product_mz=359.0300)
     candidate = _candidate("candidate", product_mz=359.0310)
@@ -120,13 +119,12 @@ def test_non_anchor_members_do_not_allow_later_candidates_to_chain_in_anchored_c
             cluster,
             candidate,
             AlignmentConfig(),
-            anchor_members=(anchor,),
         )
         is False
     )
 
 
-def test_candidate_may_attach_when_compatible_with_every_required_member():
+def test_anchored_cluster_uses_stored_anchor_members_without_call_site_repeating_them():
     anchor = _candidate("anchor", product_mz=359.0000)
     non_anchor = _candidate("non-anchor", product_mz=359.0300)
     candidate = _candidate("candidate", product_mz=359.0010)
@@ -137,15 +135,25 @@ def test_candidate_may_attach_when_compatible_with_every_required_member():
         anchor_members=(anchor,),
     )
 
-    assert (
-        can_attach_to_cluster(
-            cluster,
-            candidate,
-            AlignmentConfig(),
-            anchor_members=(anchor,),
-        )
-        is True
+    assert can_attach_to_cluster(cluster, candidate, AlignmentConfig()) is True
+
+
+def test_malformed_anchored_cluster_without_anchor_members_fails_closed():
+    anchor = _candidate("anchor")
+    candidate = _candidate("candidate")
+    cluster = AlignmentCluster(
+        cluster_id="cluster-malformed",
+        neutral_loss_tag="NL141",
+        cluster_center_mz=500.0,
+        cluster_center_rt=5.0,
+        cluster_product_mz=359.0,
+        cluster_observed_neutral_loss_da=141.0,
+        has_anchor=True,
+        members=(anchor,),
     )
+
+    with pytest.raises(ValueError, match="compatibility.*anchor_members"):
+        can_attach_to_cluster(cluster, candidate, AlignmentConfig())
 
 
 def test_cid_compatibility_rejects_unsupported_fragmentation_model_values():
@@ -179,6 +187,42 @@ def test_small_compatibility_helpers_use_ppm_and_rt_seconds():
         _candidate("right", observed_neutral_loss_da=141.002),
         max_ppm=20.0,
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("precursor_mz", True),
+        ("product_mz", "300.0"),
+        ("observed_neutral_loss_da", 0.0),
+        ("observed_neutral_loss_da", float("nan")),
+        ("ms1_apex_rt", float("inf")),
+    ],
+)
+def test_numeric_validation_errors_name_field_and_compatibility_context(
+    field,
+    bad_value,
+):
+    existing = _candidate("existing")
+    candidate = _candidate("candidate")
+    candidate = _replace_candidate_field(candidate, field, bad_value)
+
+    with pytest.raises(ValueError, match=rf"compatibility.*{field}"):
+        are_candidates_compatible(existing, candidate, AlignmentConfig())
+
+
+def test_numeric_validation_errors_name_missing_field_and_compatibility_context():
+    existing = _candidate("existing")
+    candidate = SimpleNamespace(
+        neutral_loss_tag="NL141",
+        precursor_mz=500.0,
+        product_mz=359.0,
+        best_seed_rt=5.0,
+        ms1_apex_rt=5.0,
+    )
+
+    with pytest.raises(ValueError, match="compatibility.*observed_neutral_loss_da"):
+        are_candidates_compatible(existing, candidate, AlignmentConfig())
 
 
 def _candidate(
@@ -229,3 +273,9 @@ def _candidate(
         ms1_height=None,
         ms1_trace_quality="good",
     )
+
+
+def _replace_candidate_field(candidate, field: str, value):
+    data = candidate.__dict__.copy()
+    data[field] = value
+    return SimpleNamespace(**data)

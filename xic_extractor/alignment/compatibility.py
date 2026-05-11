@@ -26,17 +26,18 @@ def are_candidates_compatible(
     _require_cid_model(config)
     return (
         existing.neutral_loss_tag == candidate.neutral_loss_tag
-        and ppm_distance(existing.precursor_mz, candidate.precursor_mz) <= config.max_ppm
+        and _ppm_distance_for_field(existing, candidate, "precursor_mz")
+        <= _positive_number(config, "max_ppm")
         and rt_seconds_difference(existing, candidate) <= config.max_rt_sec
         and product_mz_is_compatible(
             existing,
             candidate,
-            max_ppm=config.product_mz_tolerance_ppm,
+            max_ppm=_positive_number(config, "product_mz_tolerance_ppm"),
         )
         and observed_loss_is_compatible(
             existing,
             candidate,
-            max_ppm=config.observed_loss_tolerance_ppm,
+            max_ppm=_positive_number(config, "observed_loss_tolerance_ppm"),
         )
     )
 
@@ -45,11 +46,9 @@ def can_attach_to_cluster(
     cluster: AlignmentCluster,
     candidate: CompatibilityCandidate,
     config: CompatibilityConfig,
-    *,
-    anchor_members: tuple[CompatibilityCandidate, ...] = (),
 ) -> bool:
     _require_cid_model(config)
-    compatibility_set = anchor_members or cluster.members
+    compatibility_set = _cluster_compatibility_members(cluster)
     if candidate.neutral_loss_tag != cluster.neutral_loss_tag:
         return False
     return all(
@@ -59,8 +58,8 @@ def can_attach_to_cluster(
 
 
 def ppm_distance(reference: float, observed: float) -> float:
-    if not _is_finite_positive(reference) or not math.isfinite(observed):
-        raise ValueError("ppm distance requires finite values and positive reference")
+    _require_finite_positive_number(reference, "reference")
+    _require_finite_positive_number(observed, "observed")
     return abs(observed - reference) / reference * 1_000_000
 
 
@@ -74,7 +73,7 @@ def product_mz_is_compatible(
     *,
     max_ppm: float,
 ) -> bool:
-    return ppm_distance(existing.product_mz, candidate.product_mz) <= max_ppm
+    return _ppm_distance_for_field(existing, candidate, "product_mz") <= max_ppm
 
 
 def observed_loss_is_compatible(
@@ -84,27 +83,87 @@ def observed_loss_is_compatible(
     max_ppm: float,
 ) -> bool:
     return (
-        ppm_distance(
-            existing.observed_neutral_loss_da,
-            candidate.observed_neutral_loss_da,
-        )
+        _ppm_distance_for_field(existing, candidate, "observed_neutral_loss_da")
         <= max_ppm
     )
 
 
 def _candidate_rt_min(candidate: CandidateLike) -> float:
-    rt = candidate.ms1_apex_rt
+    rt = _optional_number(candidate, "ms1_apex_rt")
     if rt is None:
-        rt = candidate.best_seed_rt
-    if rt is None or not math.isfinite(rt):
-        raise ValueError("Compatibility requires finite retention time")
+        rt = _optional_number(candidate, "best_seed_rt")
+    if rt is None:
+        raise ValueError(
+            "compatibility candidate field 'ms1_apex_rt' or 'best_seed_rt' "
+            "must provide finite retention time",
+        )
     return rt
-
-
-def _is_finite_positive(value: float) -> bool:
-    return not isinstance(value, bool) and math.isfinite(value) and value > 0
 
 
 def _require_cid_model(config: CompatibilityConfig) -> None:
     if config.fragmentation_model != "cid_nl":
         raise ValueError('fragmentation_model must be "cid_nl" in v1')
+
+
+def _cluster_compatibility_members(
+    cluster: AlignmentCluster,
+) -> tuple[CandidateLike, ...]:
+    if not cluster.has_anchor:
+        return cluster.members
+    if not cluster.anchor_members:
+        raise ValueError("compatibility anchored cluster requires anchor_members")
+    return cluster.anchor_members
+
+
+def _ppm_distance_for_field(
+    existing: CandidateLike,
+    candidate: CandidateLike,
+    field: str,
+) -> float:
+    return ppm_distance(
+        _positive_number(existing, field),
+        _positive_number(candidate, field),
+    )
+
+
+def _positive_number(owner: object, field: str) -> float:
+    try:
+        value = getattr(owner, field)
+    except AttributeError as exc:
+        raise ValueError(
+            f"compatibility candidate field '{field}' is required",
+        ) from exc
+    _require_finite_positive_number(value, field)
+    return value
+
+
+def _optional_number(owner: object, field: str) -> float | None:
+    try:
+        value = getattr(owner, field)
+    except AttributeError as exc:
+        raise ValueError(
+            f"compatibility candidate field '{field}' is required",
+        ) from exc
+    if value is None:
+        return None
+    _require_finite_number(value, field)
+    return value
+
+
+def _require_finite_positive_number(value: object, field: str) -> None:
+    _require_finite_number(value, field)
+    if value <= 0:
+        raise ValueError(
+            f"compatibility candidate field '{field}' must be positive",
+        )
+
+
+def _require_finite_number(value: object, field: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(
+            f"compatibility candidate field '{field}' must be numeric",
+        )
+    if not math.isfinite(value):
+        raise ValueError(
+            f"compatibility candidate field '{field}' must be finite",
+        )

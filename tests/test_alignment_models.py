@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from typing import get_type_hints
 
 import pytest
@@ -65,6 +65,7 @@ def test_anchor_cluster_center_uses_anchor_members_only():
         cluster_observed_neutral_loss_da=50.1,
         has_anchor=True,
         members=(low_area_anchor, high_area_anchor, non_anchor),
+        anchor_members=(low_area_anchor, high_area_anchor),
     )
 
 
@@ -102,6 +103,7 @@ def test_non_anchor_cluster_center_uses_all_members():
     assert cluster.cluster_product_mz == 54.0
     assert cluster.cluster_observed_neutral_loss_da == 50.2
     assert cluster.has_anchor is False
+    assert cluster.anchor_members == ()
 
 
 def test_center_uses_best_seed_rt_when_ms1_apex_rt_is_missing():

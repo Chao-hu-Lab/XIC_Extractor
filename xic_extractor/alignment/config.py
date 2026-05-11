@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from typing import Literal
 
 ReviewPriority = Literal["HIGH", "MEDIUM", "LOW"]
@@ -110,7 +110,9 @@ def _require_numeric_range(
         or not math.isfinite(value)
         or not minimum <= value <= maximum
     ):
-        raise ValueError(f"{name} must be finite numeric between {minimum} and {maximum}")
+        raise ValueError(
+            f"{name} must be finite numeric between {minimum} and {maximum}",
+        )
 
 
 def _require_at_most(

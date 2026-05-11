@@ -1,12 +1,14 @@
 import ast
 import math
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
 
 
 def test_alignment_public_api_exports_only_config_cluster_and_entrypoint():
+    before = set(sys.modules)
+
     import xic_extractor.alignment as alignment
 
     assert alignment.__all__ == (
@@ -17,7 +19,11 @@ def test_alignment_public_api_exports_only_config_cluster_and_entrypoint():
     assert {
         name for name in dir(alignment) if not name.startswith("_")
     } == set(alignment.__all__)
-    assert "xic_extractor.discovery.pipeline" not in sys.modules
+    newly_imported = set(sys.modules) - before
+    assert "xic_extractor.discovery.pipeline" not in newly_imported
+    assert "xic_extractor.extraction" not in newly_imported
+    assert "xic_extractor.extractor" not in newly_imported
+    assert "xic_extractor.raw_reader" not in newly_imported
 
 
 def test_alignment_modules_do_not_import_pipeline_or_io_boundaries():
