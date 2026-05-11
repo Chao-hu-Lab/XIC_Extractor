@@ -4,8 +4,12 @@ import math
 from collections.abc import Sequence
 from typing import Any
 
+from xic_extractor.alignment.compatibility import can_attach_to_cluster
 from xic_extractor.alignment.config import AlignmentConfig
-from xic_extractor.alignment.models import AlignmentCluster
+from xic_extractor.alignment.models import (
+    AlignmentCluster,
+    build_alignment_cluster,
+)
 
 _INVALID_NUMBER = object()
 
@@ -84,6 +88,133 @@ def cluster_candidates(
     return ()
 
 
+def _cluster_candidates_greedy(
+    candidates: Sequence[Any],
+    config: AlignmentConfig | None = None,
+) -> tuple[AlignmentCluster, ...]:
+    active_config = config or AlignmentConfig()
+    clusters: list[AlignmentCluster] = []
+    next_cluster_index = 1
+
+    for _, stratum_candidates in _candidates_by_neutral_loss_tag(candidates):
+        stratum_clusters = _cluster_stratum_greedy(
+            stratum_candidates,
+            active_config,
+            start_index=next_cluster_index,
+        )
+        clusters.extend(stratum_clusters)
+        next_cluster_index += len(stratum_clusters)
+
+    return tuple(clusters)
+
+
+def _cluster_stratum_greedy(
+    candidates: Sequence[Any],
+    config: AlignmentConfig,
+    *,
+    start_index: int = 1,
+) -> tuple[AlignmentCluster, ...]:
+    clusters: list[AlignmentCluster] = []
+
+    for candidate in sorted(
+        candidates,
+        key=lambda item: alignment_candidate_sort_key(item, config),
+    ):
+        if _attach_to_first_compatible_cluster(clusters, candidate, config):
+            continue
+        clusters.append(
+            _build_singleton_cluster(
+                candidate,
+                config,
+                cluster_index=start_index + len(clusters),
+            ),
+        )
+
+    return tuple(clusters)
+
+
+def _candidates_by_neutral_loss_tag(
+    candidates: Sequence[Any],
+) -> tuple[tuple[str, tuple[Any, ...]], ...]:
+    strata: dict[str, list[Any]] = {}
+    for candidate in candidates:
+        neutral_loss_tag = _required_string_attr(candidate, "neutral_loss_tag")
+        strata.setdefault(neutral_loss_tag, []).append(candidate)
+    return tuple(
+        (neutral_loss_tag, tuple(strata[neutral_loss_tag]))
+        for neutral_loss_tag in sorted(strata)
+    )
+
+
+def _attach_to_first_compatible_cluster(
+    clusters: list[AlignmentCluster],
+    candidate: Any,
+    config: AlignmentConfig,
+) -> bool:
+    for index, cluster in enumerate(clusters):
+        if not can_attach_to_cluster(cluster, candidate, config):
+            continue
+        if _cluster_has_sample_member(cluster, candidate):
+            continue
+        clusters[index] = _cluster_with_candidate(cluster, candidate, config)
+        return True
+    return False
+
+
+def _build_singleton_cluster(
+    candidate: Any,
+    config: AlignmentConfig,
+    *,
+    cluster_index: int,
+) -> AlignmentCluster:
+    return build_alignment_cluster(
+        cluster_id=_internal_cluster_id(cluster_index),
+        neutral_loss_tag=_required_string_attr(candidate, "neutral_loss_tag"),
+        members=(candidate,),
+        anchor_members=_candidate_anchor_members(candidate, config),
+    )
+
+
+def _cluster_with_candidate(
+    cluster: AlignmentCluster,
+    candidate: Any,
+    config: AlignmentConfig,
+) -> AlignmentCluster:
+    return build_alignment_cluster(
+        cluster_id=cluster.cluster_id,
+        neutral_loss_tag=cluster.neutral_loss_tag,
+        members=(*cluster.members, candidate),
+        anchor_members=(
+            *cluster.anchor_members,
+            *_candidate_anchor_members(candidate, config),
+        ),
+    )
+
+
+def _candidate_anchor_members(
+    candidate: Any,
+    config: AlignmentConfig,
+) -> tuple[Any, ...]:
+    if is_alignment_anchor(candidate, config):
+        return (candidate,)
+    return ()
+
+
+def _cluster_has_sample_member(
+    cluster: AlignmentCluster,
+    candidate: Any,
+) -> bool:
+    sample_stem = _required_string_attr(candidate, "sample_stem")
+    return any(
+        _required_string_attr(member, "sample_stem") == sample_stem
+        for member in cluster.members
+    )
+
+
+def _internal_cluster_id(cluster_index: int) -> str:
+    return f"internal-{cluster_index:06d}"
+
+
 def _candidate_rt(candidate: Any) -> float | None:
     rt = _finite_number_attr(candidate, "ms1_apex_rt")
     if rt is not None:
@@ -98,6 +229,13 @@ def _string_attr(owner: Any, field: str) -> str | None:
         return None
     if not isinstance(value, str):
         return None
+    return value
+
+
+def _required_string_attr(owner: Any, field: str) -> str:
+    value = _string_attr(owner, field)
+    if value is None:
+        raise ValueError(f"alignment candidate field '{field}' must be a string")
     return value
 
 
