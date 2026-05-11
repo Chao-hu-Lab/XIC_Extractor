@@ -9,6 +9,7 @@ ClusterCenter = tuple[float, float, float, float, bool]
 
 
 class CandidateLike(Protocol):
+    sample_stem: str
     neutral_loss_tag: str
     precursor_mz: float
     product_mz: float

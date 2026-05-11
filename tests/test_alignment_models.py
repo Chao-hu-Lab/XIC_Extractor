@@ -167,6 +167,7 @@ def test_center_rejects_invalid_rt_values(ms1_apex_rt, best_seed_rt):
 
 def test_candidate_like_protocol_describes_required_alignment_fields():
     assert get_type_hints(CandidateLike) == {
+        "sample_stem": str,
         "neutral_loss_tag": str,
         "precursor_mz": float,
         "product_mz": float,
