@@ -57,7 +57,6 @@ def alignment_candidate_sort_key(
     evidence_score = _int_attr(candidate, "evidence_score")
     seed_event_count = _int_attr(candidate, "seed_event_count")
     ms1_area = _finite_number_attr(candidate, "ms1_area")
-    neutral_loss_error = _finite_number_attr(candidate, "neutral_loss_mass_error_ppm")
     precursor_mz = _finite_number_attr(candidate, "precursor_mz")
     rt = _candidate_rt(candidate)
     sample_stem = _string_attr(candidate, "sample_stem")
@@ -69,16 +68,14 @@ def alignment_candidate_sort_key(
         -(seed_event_count if seed_event_count is not None else -1),
         0 if ms1_area is not None else 1,
         -ms1_area if ms1_area is not None else 0.0,
-        0 if neutral_loss_error is not None else 1,
-        abs(neutral_loss_error) if neutral_loss_error is not None else math.inf,
-        0 if candidate_id is not None else 1,
-        candidate_id or "",
-        0 if sample_stem is not None else 1,
-        sample_stem or "",
         0 if precursor_mz is not None else 1,
         precursor_mz if precursor_mz is not None else math.inf,
         0 if rt is not None else 1,
         rt if rt is not None else math.inf,
+        0 if sample_stem is not None else 1,
+        sample_stem or "",
+        0 if candidate_id is not None else 1,
+        candidate_id or "",
     )
 
 
@@ -118,12 +115,30 @@ def _cluster_stratum_greedy(
     start_index: int = 1,
 ) -> tuple[AlignmentCluster, ...]:
     clusters: list[AlignmentCluster] = []
-
-    for candidate in sorted(
+    pending_candidates = sorted(
         candidates,
         key=lambda item: alignment_candidate_sort_key(item, config),
-    ):
-        if _attach_to_best_compatible_cluster(clusters, candidate, config):
+    )
+    pending_index = 0
+
+    while pending_index < len(pending_candidates):
+        candidate = pending_candidates[pending_index]
+        pending_index += 1
+        attached, ejected_members = _attach_to_best_compatible_cluster(
+            clusters,
+            candidate,
+            config,
+        )
+        if attached:
+            if ejected_members:
+                remaining_candidates = [
+                    *pending_candidates[pending_index:],
+                    *ejected_members,
+                ]
+                pending_candidates[pending_index:] = sorted(
+                    remaining_candidates,
+                    key=lambda item: alignment_candidate_sort_key(item, config),
+                )
             continue
         clusters.append(
             _build_singleton_cluster(
@@ -153,25 +168,51 @@ def _attach_to_best_compatible_cluster(
     clusters: list[AlignmentCluster],
     candidate: Any,
     config: AlignmentConfig,
-) -> bool:
-    attachable_clusters: list[tuple[tuple[object, ...], int]] = []
+) -> tuple[bool, tuple[Any, ...]]:
+    attachable_clusters: list[
+        tuple[tuple[object, ...], int, AlignmentCluster, tuple[Any, ...]]
+    ] = []
     for index, cluster in enumerate(clusters):
-        if not can_attach_to_cluster(cluster, candidate, config):
-            continue
-        if _cluster_has_sample_member(cluster, candidate):
-            continue
+        same_sample_member = _cluster_sample_member(cluster, candidate)
+        ejected_members: tuple[Any, ...]
+        if same_sample_member is not None:
+            if not _candidate_beats_same_sample_member(
+                candidate,
+                same_sample_member,
+                config,
+            ):
+                continue
+            candidate_cluster = _cluster_replacing_member(
+                cluster,
+                old_member=same_sample_member,
+                new_member=candidate,
+                config=config,
+            )
+            if not can_attach_to_cluster(candidate_cluster, candidate, config):
+                continue
+            ejected_members = (same_sample_member,)
+        else:
+            if not can_attach_to_cluster(cluster, candidate, config):
+                continue
+            candidate_cluster = _cluster_with_candidate(
+                cluster,
+                candidate,
+                config,
+            )
+            ejected_members = ()
         attachable_clusters.append(
-            (_cluster_match_sort_key(cluster, candidate, config), index),
+            (
+                _cluster_match_sort_key(cluster, candidate, config),
+                index,
+                candidate_cluster,
+                ejected_members,
+            ),
         )
     if not attachable_clusters:
-        return False
-    _, best_index = min(attachable_clusters)
-    clusters[best_index] = _cluster_with_candidate(
-        clusters[best_index],
-        candidate,
-        config,
-    )
-    return True
+        return False, ()
+    _, best_index, candidate_cluster, ejected_members = min(attachable_clusters)
+    clusters[best_index] = candidate_cluster
+    return True, ejected_members
 
 
 def _finalize_clusters(
@@ -335,6 +376,23 @@ def _cluster_with_candidate(
     )
 
 
+def _cluster_replacing_member(
+    cluster: AlignmentCluster,
+    *,
+    old_member: Any,
+    new_member: Any,
+    config: AlignmentConfig,
+) -> AlignmentCluster:
+    return _rebuild_cluster_with_members(
+        cluster,
+        tuple(
+            new_member if member is old_member else member
+            for member in cluster.members
+        ),
+        config,
+    )
+
+
 def _rebuild_cluster_with_members(
     cluster: AlignmentCluster,
     members: tuple[Any, ...],
@@ -436,10 +494,50 @@ def _cluster_has_sample_member(
     cluster: AlignmentCluster,
     candidate: Any,
 ) -> bool:
+    return _cluster_sample_member(cluster, candidate) is not None
+
+
+def _cluster_sample_member(
+    cluster: AlignmentCluster,
+    candidate: Any,
+) -> Any | None:
     sample_stem = _required_string_attr(candidate, "sample_stem")
-    return any(
-        _required_string_attr(member, "sample_stem") == sample_stem
-        for member in cluster.members
+    for member in cluster.members:
+        if _required_string_attr(member, "sample_stem") == sample_stem:
+            return member
+    return None
+
+
+def _candidate_beats_same_sample_member(
+    candidate: Any,
+    existing_member: Any,
+    config: AlignmentConfig,
+) -> bool:
+    return (
+        _same_sample_member_sort_key(candidate, config)
+        < _same_sample_member_sort_key(existing_member, config)
+    )
+
+
+def _same_sample_member_sort_key(
+    candidate: Any,
+    config: AlignmentConfig,
+) -> tuple[object, ...]:
+    evidence_score = _int_attr(candidate, "evidence_score")
+    seed_event_count = _int_attr(candidate, "seed_event_count")
+    ms1_area = _finite_number_attr(candidate, "ms1_area")
+    neutral_loss_error = _finite_number_attr(candidate, "neutral_loss_mass_error_ppm")
+    candidate_id = _string_attr(candidate, "candidate_id")
+    return (
+        0 if is_alignment_anchor(candidate, config) else 1,
+        -(evidence_score if evidence_score is not None else -1),
+        -(seed_event_count if seed_event_count is not None else -1),
+        0 if ms1_area is not None else 1,
+        -ms1_area if ms1_area is not None else 0.0,
+        0 if neutral_loss_error is not None else 1,
+        abs(neutral_loss_error) if neutral_loss_error is not None else math.inf,
+        0 if candidate_id is not None else 1,
+        candidate_id or "",
     )
 
 

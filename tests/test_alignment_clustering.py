@@ -388,7 +388,7 @@ def test_candidate_ordering_prefers_evidence_before_review_priority():
     ]
 
 
-def test_candidate_ordering_uses_winner_metrics_after_anchor_status():
+def test_candidate_ordering_uses_plan_metrics_after_anchor_status():
     config = AlignmentConfig()
     candidates = [
         replace(
@@ -442,8 +442,8 @@ def test_candidate_ordering_uses_winner_metrics_after_anchor_status():
         "evidence-best",
         "seed-best",
         "z-area-best",
-        "z-nl-best",
         "a-nl-worse",
+        "z-nl-best",
     ]
 
 
@@ -499,29 +499,70 @@ def test_candidate_ordering_uses_stable_tie_breakers_not_input_order():
     )
 
     expected = [
-        "candidate-a",
         "candidate-b",
         "same",
         "same",
         "same",
         "same",
         "same",
+        "candidate-a",
     ]
     assert [candidate.candidate_id for candidate in ordered] == expected
     assert [candidate.candidate_id for candidate in reverse_ordered] == expected
-    assert [candidate.sample_stem for candidate in ordered[2:]] == [
-        "sample-a",
-        "sample-b",
-        "sample-z",
-        "sample-z",
-        "sample-z",
+    assert [
+        (candidate.precursor_mz, candidate.ms1_apex_rt, candidate.sample_stem)
+        for candidate in ordered
+    ] == [
+        (499.0, 1.0, "sample-a"),
+        (499.9, 9.0, "sample-z"),
+        (500.0, 4.9, "sample-z"),
+        (500.0, 5.0, "sample-a"),
+        (500.0, 5.0, "sample-b"),
+        (500.0, 5.0, "sample-z"),
+        (501.0, 9.0, "sample-z"),
     ]
-    assert [candidate.precursor_mz for candidate in ordered[4:]] == [
-        499.9,
-        500.0,
-        500.0,
-    ]
-    assert [candidate.ms1_apex_rt for candidate in ordered[5:]] == [4.9, 5.0]
+
+
+def test_public_cluster_candidates_uses_mz_order_before_candidate_id_for_no_chain():
+    config = AlignmentConfig(max_ppm=50.0)
+    candidates = (
+        _non_anchor_candidate(
+            "a-mid-left",
+            evidence_score=50,
+            precursor_mz=1000.04,
+            sample_stem="sample-b",
+        ),
+        _non_anchor_candidate(
+            "b-mid-right",
+            evidence_score=50,
+            precursor_mz=1000.08,
+            sample_stem="sample-c",
+        ),
+        _non_anchor_candidate(
+            "c-low",
+            evidence_score=50,
+            precursor_mz=1000.00,
+            sample_stem="sample-a",
+        ),
+        _non_anchor_candidate(
+            "d-high",
+            evidence_score=50,
+            precursor_mz=1000.12,
+            sample_stem="sample-d",
+        ),
+    )
+
+    signatures = {
+        frozenset(_cluster_member_ids(cluster_candidates(ordering, config=config)))
+        for ordering in permutations(candidates)
+    }
+
+    assert signatures == {
+        frozenset({
+            frozenset({"c-low", "a-mid-left"}),
+            frozenset({"b-mid-right", "d-high"}),
+        }),
+    }
 
 
 def test_greedy_clustering_merges_compatible_candidates_from_different_samples():
@@ -617,6 +658,40 @@ def test_same_sample_collision_loser_can_join_another_compatible_cluster():
         assert len({candidate.sample_stem for candidate in cluster.members}) == len(
             cluster.members,
         )
+
+
+def test_same_sample_collision_can_replace_incompatible_loser():
+    config = AlignmentConfig(max_ppm=50.0005)
+    lower_mz_loser = _non_anchor_candidate(
+        "sample-b-loser",
+        evidence_score=50,
+        precursor_mz=1000.00,
+        neutral_loss_mass_error_ppm=5.0,
+        sample_stem="sample-b",
+    )
+    bridge = _non_anchor_candidate(
+        "bridge",
+        evidence_score=50,
+        precursor_mz=1000.05,
+        sample_stem="sample-a",
+    )
+    higher_mz_winner = _non_anchor_candidate(
+        "sample-b-winner",
+        evidence_score=50,
+        precursor_mz=1000.10,
+        neutral_loss_mass_error_ppm=1.0,
+        sample_stem="sample-b",
+    )
+
+    clusters = clustering._cluster_candidates_greedy(
+        (higher_mz_winner, bridge, lower_mz_loser),
+        config,
+    )
+
+    assert _cluster_member_ids(clusters) == {
+        frozenset({"bridge", "sample-b-winner"}),
+        frozenset({"sample-b-loser"}),
+    }
 
 
 @pytest.mark.parametrize(
