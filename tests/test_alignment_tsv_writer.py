@@ -146,6 +146,28 @@ def test_write_alignment_review_tsv_counts_duplicate_assigned_separately(
     assert "1 duplicate-assigned" in rows[0]["reason"]
 
 
+def test_write_alignment_review_tsv_reports_ambiguous_ms1_owner_cells(
+    tmp_path: Path,
+):
+    from xic_extractor.alignment.tsv_writer import write_alignment_review_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(has_anchor=True),),
+        cells=(
+            _cell("sample-a", "detected", area=100.0),
+            _cell("sample-b", "ambiguous_ms1_owner"),
+            _cell("sample-c", "absent"),
+        ),
+        sample_order=("sample-a", "sample-b", "sample-c"),
+    )
+
+    rows = _read_tsv(write_alignment_review_tsv(tmp_path / "review.tsv", matrix))
+
+    assert rows[0]["detected_count"] == "1"
+    assert rows[0]["present_rate"] == "0.333333"
+    assert "1 ambiguous MS1 owner" in rows[0]["reason"]
+
+
 def test_write_alignment_review_tsv_reports_folded_clusters(tmp_path: Path):
     from xic_extractor.alignment.tsv_writer import write_alignment_review_tsv
 
@@ -246,6 +268,29 @@ def test_write_alignment_matrix_tsv_blanks_duplicate_assigned_cells(tmp_path: Pa
                 "duplicate_assigned",
                 area=100.0,
                 trace_quality="assigned_duplicate",
+            ),
+        ),
+        sample_order=("sample-a",),
+    )
+
+    rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
+
+    assert rows[0]["sample-a"] == ""
+
+
+def test_write_alignment_matrix_tsv_blanks_ambiguous_ms1_owner_cells(
+    tmp_path: Path,
+):
+    from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(),),
+        cells=(
+            _cell(
+                "sample-a",
+                "ambiguous_ms1_owner",
+                area=100.0,
+                trace_quality="ambiguous_ms1_owner",
             ),
         ),
         sample_order=("sample-a",),

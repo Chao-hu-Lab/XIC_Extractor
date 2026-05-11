@@ -147,6 +147,7 @@ def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
         absent_count = _count(cells, "absent")
         unchecked_count = _count(cells, "unchecked")
         duplicate_assigned_count = _count(cells, "duplicate_assigned")
+        ambiguous_owner_count = _count(cells, "ambiguous_ms1_owner")
         present_count = detected_count + rescued_count
         rows.append(
             {
@@ -181,6 +182,7 @@ def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
                     sample_count,
                     rescued_count,
                     duplicate_assigned_count,
+                    ambiguous_owner_count,
                 ),
             }
         )
@@ -274,6 +276,7 @@ def _reason(
     sample_count: int,
     rescued_count: int,
     duplicate_assigned_count: int,
+    ambiguous_owner_count: int,
 ) -> str:
     prefix = "anchor family" if cluster.has_anchor else "no anchor"
     parts = [
@@ -286,6 +289,8 @@ def _reason(
         parts.append(f"merged {event_cluster_count} event clusters")
     if duplicate_assigned_count:
         parts.append(f"{duplicate_assigned_count} duplicate-assigned")
+    if ambiguous_owner_count:
+        parts.append(f"{ambiguous_owner_count} ambiguous MS1 owner")
     return "; ".join(parts)
 
 

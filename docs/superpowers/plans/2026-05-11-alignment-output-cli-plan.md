@@ -4,7 +4,7 @@
 
 **Goal:** Add the first user-facing alignment CLI and write a minimal, stable alignment output surface from existing discovery batch results.
 
-**Architecture:** Plan 3 consumes `discovery_batch_index.csv`, loads per-sample `discovery_candidates.csv`, runs event clustering, consolidates event clusters into MS1 feature-family rows, runs family-centered MS1 integration, and writes TSV outputs. Default output is intentionally small: `alignment_review.tsv` and `alignment_matrix.tsv`. Per-cell audit and status matrix are debug opt-in files.
+**Architecture:** Plan 3 consumes `discovery_batch_index.csv`, loads per-sample `discovery_candidates.csv`, runs the owner-based alignment pipeline from Plans 1-2, and writes TSV outputs. Default output is intentionally small: `alignment_review.tsv` and `alignment_matrix.tsv`. Per-cell audit and status matrix are debug opt-in files.
 
 **Tech Stack:** Python, argparse, csv TSV writer, pytest, existing discovery CSV contracts, existing `xic_extractor.alignment` clustering/backfill, existing `RawFileReader` adapter through injected raw openers.
 
@@ -30,10 +30,11 @@ In scope:
 
 - Load discovery batch index and candidate CSVs.
 - Convert candidate CSV rows back into `DiscoveryCandidate` objects.
-- Run `cluster_candidates()`.
-- Run event-level `backfill_alignment_matrix()` to provide consolidation evidence.
-- Run `build_ms1_feature_families()`.
-- Run family-centered `integrate_feature_family_matrix()`.
+- Resolve sample-local MS1 owners from candidate CSV rows and available RAW handles.
+- Cluster sample-local owners into cross-sample aligned features.
+- Add review-only ambiguous owner rows where ownership cannot be assigned safely.
+- Run owner-centered MS1 backfill for eligible missing samples.
+- Build the owner-based alignment matrix.
 - Write default TSV outputs atomically.
 - Add `xic-align-cli`.
 - Optional debug TSV flags.
@@ -221,7 +222,7 @@ Create:
   - write debug TSVs.
   - own TSV value formatting and Excel formula escaping.
 - `xic_extractor/alignment/pipeline.py`
-  - orchestrate load -> cluster -> backfill -> write.
+  - orchestrate load -> owner resolution -> owner clustering -> owner backfill -> write.
   - accept injected raw opener for tests.
   - lazily import `open_raw` only in default opener.
 - `scripts/run_alignment.py`
@@ -251,7 +252,7 @@ Tests must simulate a writer failure after stale outputs already exist.
 The pipeline must own RAW reader lifetimes with `contextlib.ExitStack`.
 
 - Open only RAW paths that exist under `--raw-dir` after applying the RAW path authority rule.
-- Enter each RAW reader context before passing handles to `backfill_alignment_matrix()`.
+- Enter each RAW reader context before passing handles to ownership resolution and owner-centered backfill.
 - Close all entered RAW handles on success and on any failure, including clustering errors, backfill errors, or TSV writer failures.
 - Keep the default opener lazy so tests can inject fake context managers without importing Thermo dependencies.
 
@@ -369,12 +370,12 @@ git commit -m "feat(alignment): write review and matrix TSVs"
 
 - [ ] Write red tests:
   - pipeline loads candidate CSVs from batch index.
-  - pipeline calls `cluster_candidates()` and `backfill_alignment_matrix()`.
+  - pipeline calls owner resolution, owner clustering, owner backfill, and owner matrix building.
   - raw sources are opened only for samples present in `sample_order`.
   - raw opener receives `(raw_path, dll_dir)`.
   - stale batch-index RAW parent paths are ignored; backfill uses `raw_dir / Path(raw_file).name`.
   - if batch-index `raw_file` is blank or missing, backfill tries `raw_dir / f"{sample_stem}.raw"`.
-  - missing per-sample RAW in `raw_dir` does not fail; affected backfill cells can become `unchecked`.
+  - missing per-sample RAW in `raw_dir` does not fail; affected owner resolution/backfill cells can become `unchecked` or review-only depending on the owner state.
   - RAW handles are entered before backfill receives them.
   - RAW handles are closed on success.
   - RAW handles are closed even when a TSV write fails.

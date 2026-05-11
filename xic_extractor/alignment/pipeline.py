@@ -10,7 +10,6 @@ from xic_extractor.alignment.backfill import (
     MS1BackfillSource,
     backfill_alignment_matrix,
 )
-from xic_extractor.alignment.clustering import cluster_candidates
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.csv_io import (
     read_discovery_batch_index,
@@ -19,6 +18,13 @@ from xic_extractor.alignment.csv_io import (
 from xic_extractor.alignment.family_integration import integrate_feature_family_matrix
 from xic_extractor.alignment.feature_family import build_ms1_feature_families
 from xic_extractor.alignment.matrix import AlignmentMatrix
+from xic_extractor.alignment.owner_backfill import build_owner_backfill_cells
+from xic_extractor.alignment.owner_clustering import (
+    cluster_sample_local_owners,
+    review_only_features_from_ambiguous_records,
+)
+from xic_extractor.alignment.owner_matrix import build_owner_alignment_matrix
+from xic_extractor.alignment.ownership import build_sample_local_owners
 from xic_extractor.alignment.tsv_writer import (
     write_alignment_cells_tsv,
     write_alignment_matrix_tsv,
@@ -64,7 +70,6 @@ def run_alignment(
             batch.candidate_csvs[sample_stem]
         )
     )
-    clusters = cluster_candidates(candidates, config=alignment_config)
     opener = raw_opener or _default_raw_opener
 
     with ExitStack() as stack:
@@ -76,24 +81,35 @@ def run_alignment(
                 raw_dir=raw_dir,
             ).items()
         }
-        event_matrix = backfill_alignment_matrix(
-            clusters,
-            sample_order=batch.sample_order,
+        ownership = build_sample_local_owners(
+            candidates,
             raw_sources=raw_sources,
             alignment_config=alignment_config,
             peak_config=peak_config,
         )
-        families = build_ms1_feature_families(
-            clusters,
-            event_matrix=event_matrix,
+        owner_features = cluster_sample_local_owners(
+            ownership.owners,
             config=alignment_config,
         )
-        matrix = integrate_feature_family_matrix(
-            families,
+        owner_features = (
+            *owner_features,
+            *review_only_features_from_ambiguous_records(
+                ownership.ambiguous_records,
+                start_index=len(owner_features) + 1,
+            ),
+        )
+        rescued_cells = build_owner_backfill_cells(
+            owner_features,
             sample_order=batch.sample_order,
             raw_sources=raw_sources,
             alignment_config=alignment_config,
             peak_config=peak_config,
+        )
+        matrix = build_owner_alignment_matrix(
+            owner_features,
+            sample_order=batch.sample_order,
+            ambiguous_by_sample={},
+            rescued_cells=rescued_cells,
         )
         outputs = _output_paths(
             output_dir,
@@ -102,6 +118,35 @@ def run_alignment(
         )
         _write_outputs_atomic(outputs, matrix)
         return outputs
+
+
+def _build_event_first_matrix(
+    clusters,
+    *,
+    sample_order,
+    raw_sources,
+    alignment_config: AlignmentConfig,
+    peak_config: ExtractionConfig,
+) -> AlignmentMatrix:
+    event_matrix = backfill_alignment_matrix(
+        clusters,
+        sample_order=sample_order,
+        raw_sources=raw_sources,
+        alignment_config=alignment_config,
+        peak_config=peak_config,
+    )
+    families = build_ms1_feature_families(
+        clusters,
+        event_matrix=event_matrix,
+        config=alignment_config,
+    )
+    return integrate_feature_family_matrix(
+        families,
+        sample_order=sample_order,
+        raw_sources=raw_sources,
+        alignment_config=alignment_config,
+        peak_config=peak_config,
+    )
 
 
 def _existing_raw_paths(

@@ -133,6 +133,7 @@ def test_alignment_config_owner_gate_defaults_are_explicit():
     assert config.owner_apex_close_sec == 2.0
     assert config.owner_tail_seed_guard_sec == 30.0
     assert config.owner_tail_max_secondary_ratio == 0.30
+    assert config.identity_rt_candidate_window_sec == 180.0
 
 
 @pytest.mark.parametrize(
@@ -144,6 +145,7 @@ def test_alignment_config_owner_gate_defaults_are_explicit():
         ("owner_tail_seed_guard_sec", 0.0),
         ("owner_tail_max_secondary_ratio", -0.01),
         ("owner_tail_max_secondary_ratio", 1.01),
+        ("identity_rt_candidate_window_sec", 0.0),
     ],
 )
 def test_alignment_config_owner_gate_validation(field, value):

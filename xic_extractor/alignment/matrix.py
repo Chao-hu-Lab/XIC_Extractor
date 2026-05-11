@@ -6,7 +6,14 @@ from typing import Literal, Protocol
 
 from xic_extractor.alignment.models import AlignmentCluster
 
-CellStatus = Literal["detected", "rescued", "absent", "unchecked"]
+CellStatus = Literal[
+    "detected",
+    "rescued",
+    "absent",
+    "unchecked",
+    "ambiguous_ms1_owner",
+    "duplicate_assigned",
+]
 
 
 class AlignmentRowLike(Protocol):

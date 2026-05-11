@@ -12,7 +12,7 @@ from xic_extractor.config import ExtractionConfig
 from xic_extractor.discovery.models import DISCOVERY_CANDIDATE_COLUMNS
 
 
-def test_pipeline_loads_candidates_clusters_backfills_and_writes_defaults(
+def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -23,28 +23,65 @@ def test_pipeline_loads_candidates_clusters_backfills_and_writes_defaults(
     (raw_dir / "Sample_B.raw").write_text("raw", encoding="utf-8")
     calls: dict[str, object] = {}
 
-    def fake_cluster(candidates, *, config):
+    def fake_build_owners(
+        candidates,
+        *,
+        raw_sources,
+        alignment_config,
+        peak_config,
+    ):
         calls["candidates"] = tuple(candidate.sample_stem for candidate in candidates)
-        calls["cluster_config"] = config
-        return (_cluster(),)
+        calls["owner_raw_sources"] = raw_sources
+        calls["alignment_config"] = alignment_config
+        calls["peak_config"] = peak_config
+        return SimpleNamespace(owners=("owner",), ambiguous_records=())
 
-    def fake_backfill(
-        clusters,
+    def fake_cluster_owners(owners, *, config):
+        calls["owners"] = owners
+        calls["cluster_config"] = config
+        return ("feature",)
+
+    def fake_owner_backfill(
+        features,
         *,
         sample_order,
         raw_sources,
         alignment_config,
         peak_config,
     ):
-        calls["clusters"] = clusters
+        calls["features"] = features
         calls["sample_order"] = sample_order
         calls["raw_sources"] = raw_sources
-        calls["alignment_config"] = alignment_config
-        calls["peak_config"] = peak_config
+        return ("rescued",)
+
+    def fake_owner_matrix(
+        features,
+        *,
+        sample_order,
+        ambiguous_by_sample,
+        rescued_cells,
+    ):
+        calls["matrix_features"] = features
+        calls["ambiguous_by_sample"] = ambiguous_by_sample
+        calls["rescued_cells"] = rescued_cells
         return _matrix(sample_order)
 
-    monkeypatch.setattr(pipeline_module, "cluster_candidates", fake_cluster)
-    monkeypatch.setattr(pipeline_module, "backfill_alignment_matrix", fake_backfill)
+    monkeypatch.setattr(pipeline_module, "build_sample_local_owners", fake_build_owners)
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        fake_cluster_owners,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        fake_owner_backfill,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        fake_owner_matrix,
+    )
 
     outputs = pipeline_module.run_alignment(
         discovery_batch_index=batch_index,
@@ -57,8 +94,13 @@ def test_pipeline_loads_candidates_clusters_backfills_and_writes_defaults(
     )
 
     assert calls["candidates"] == ("Sample_A", "Sample_B")
+    assert calls["owners"] == ("owner",)
+    assert calls["features"] == ("feature",)
     assert calls["sample_order"] == ("Sample_A", "Sample_B")
     assert set(calls["raw_sources"]) == {"Sample_A", "Sample_B"}
+    assert calls["matrix_features"] == ("feature",)
+    assert calls["ambiguous_by_sample"] == {}
+    assert calls["rescued_cells"] == ("rescued",)
     assert outputs.review_tsv == tmp_path / "out" / "alignment_review.tsv"
     assert outputs.matrix_tsv == tmp_path / "out" / "alignment_matrix.tsv"
     assert outputs.cells_tsv is None
@@ -89,17 +131,26 @@ def test_pipeline_uses_raw_dir_as_authority_and_fallbacks_to_sample_stem(
     opener = FakeRawOpener()
     captured_sources = {}
 
+    def fake_build_owners(candidates, *, raw_sources, **kwargs):
+        captured_sources.update(raw_sources)
+        return SimpleNamespace(owners=(), ambiguous_records=())
+
+    monkeypatch.setattr(pipeline_module, "build_sample_local_owners", fake_build_owners)
     monkeypatch.setattr(
         pipeline_module,
-        "cluster_candidates",
-        lambda candidates, *, config: (_cluster(),),
+        "cluster_sample_local_owners",
+        lambda owners, *, config: (),
     )
-
-    def fake_backfill(clusters, *, sample_order, raw_sources, **kwargs):
-        captured_sources.update(raw_sources)
-        return _matrix(sample_order)
-
-    monkeypatch.setattr(pipeline_module, "backfill_alignment_matrix", fake_backfill)
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        lambda features, *, sample_order, raw_sources, **kwargs: (),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
 
     pipeline_module.run_alignment(
         discovery_batch_index=batch_index,
@@ -128,16 +179,7 @@ def test_pipeline_enters_and_closes_raw_handles_on_success_and_write_failure(
     (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
     opener = FakeRawOpener()
 
-    monkeypatch.setattr(
-        pipeline_module,
-        "cluster_candidates",
-        lambda candidates, *, config: (_cluster(),),
-    )
-    monkeypatch.setattr(
-        pipeline_module,
-        "backfill_alignment_matrix",
-        lambda clusters, *, sample_order, raw_sources, **kwargs: _matrix(sample_order),
-    )
+    _patch_owner_pipeline_to_matrix(monkeypatch)
 
     pipeline_module.run_alignment(
         discovery_batch_index=batch_index,
@@ -181,16 +223,7 @@ def test_pipeline_debug_flags_write_optional_outputs(
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
     (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
-    monkeypatch.setattr(
-        pipeline_module,
-        "cluster_candidates",
-        lambda candidates, *, config: (_cluster(),),
-    )
-    monkeypatch.setattr(
-        pipeline_module,
-        "backfill_alignment_matrix",
-        lambda clusters, *, sample_order, raw_sources, **kwargs: _matrix(sample_order),
-    )
+    _patch_owner_pipeline_to_matrix(monkeypatch)
 
     outputs = pipeline_module.run_alignment(
         discovery_batch_index=batch_index,
@@ -214,7 +247,7 @@ def test_pipeline_default_path_no_longer_uses_legacy_near_duplicate_folding() ->
     assert not hasattr(pipeline_module, "fold_near_duplicate_clusters")
 
 
-def test_pipeline_builds_feature_families_before_family_integration(
+def test_pipeline_builds_owner_features_before_owner_matrix(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -223,9 +256,8 @@ def test_pipeline_builds_feature_families_before_family_integration(
     raw_dir.mkdir()
     (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
     calls = {}
-
-    event_cluster = _cluster(cluster_id="ALN000001")
-    family = SimpleNamespace(
+    owner = SimpleNamespace(owner_id="OWN-Sample_A-000001")
+    feature = SimpleNamespace(
         feature_family_id="FAM000001",
         neutral_loss_tag="DNA_dR",
         family_center_mz=500.0,
@@ -235,40 +267,58 @@ def test_pipeline_builds_feature_families_before_family_integration(
         has_anchor=True,
         event_cluster_ids=("ALN000001",),
         event_member_count=1,
-        evidence="single_event_cluster",
+        evidence="single_sample_local_owner",
     )
-    family_matrix = AlignmentMatrix(
-        clusters=(family,),
+    owner_matrix = AlignmentMatrix(
+        clusters=(feature,),
         cells=(),
         sample_order=("Sample_A",),
     )
 
-    monkeypatch.setattr(
-        pipeline_module,
-        "cluster_candidates",
-        lambda candidates, *, config: (event_cluster,),
-    )
+    def fake_build_owners(candidates, **kwargs):
+        calls["candidates"] = tuple(candidate.candidate_id for candidate in candidates)
+        return SimpleNamespace(owners=(owner,), ambiguous_records=("ambiguous",))
 
-    def fake_build_families(clusters, *, event_matrix, config):
-        calls["families_clusters"] = clusters
-        calls["event_matrix"] = event_matrix
-        return (family,)
+    def fake_cluster_owners(owners, *, config):
+        calls["owners"] = owners
+        return (feature,)
 
-    def fake_integrate(families, *, sample_order, raw_sources, **kwargs):
-        calls["integrated_families"] = families
+    def fake_backfill(features, *, sample_order, raw_sources, **kwargs):
+        calls["backfill_features"] = features
         calls["sample_order"] = sample_order
         calls["raw_sources"] = raw_sources
-        return family_matrix
+        return ("rescued",)
+
+    def fake_owner_matrix(features, *, ambiguous_by_sample, rescued_cells, **kwargs):
+        calls["matrix_features"] = features
+        calls["ambiguous_by_sample"] = ambiguous_by_sample
+        calls["rescued_cells"] = rescued_cells
+        return owner_matrix
 
     monkeypatch.setattr(
         pipeline_module,
-        "build_ms1_feature_families",
-        fake_build_families,
+        "build_sample_local_owners",
+        fake_build_owners,
     )
     monkeypatch.setattr(
         pipeline_module,
-        "integrate_feature_family_matrix",
-        fake_integrate,
+        "cluster_sample_local_owners",
+        fake_cluster_owners,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        fake_backfill,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: ("ambiguous-feature",),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        fake_owner_matrix,
     )
     monkeypatch.setattr(
         pipeline_module,
@@ -286,9 +336,12 @@ def test_pipeline_builds_feature_families_before_family_integration(
         raw_opener=FakeRawOpener(),
     )
 
-    assert calls["families_clusters"] == (event_cluster,)
-    assert calls["integrated_families"] == (family,)
-    assert calls["written_matrix"] is family_matrix
+    assert calls["owners"] == (owner,)
+    assert calls["backfill_features"] == (feature, "ambiguous-feature")
+    assert calls["matrix_features"] == (feature, "ambiguous-feature")
+    assert calls["ambiguous_by_sample"] == {}
+    assert calls["rescued_cells"] == ("rescued",)
+    assert calls["written_matrix"] is owner_matrix
 
 
 def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
@@ -306,16 +359,7 @@ def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
     review.write_text("old review", encoding="utf-8")
     matrix.write_text("old matrix", encoding="utf-8")
 
-    monkeypatch.setattr(
-        pipeline_module,
-        "cluster_candidates",
-        lambda candidates, *, config: (_cluster(),),
-    )
-    monkeypatch.setattr(
-        pipeline_module,
-        "backfill_alignment_matrix",
-        lambda clusters, *, sample_order, raw_sources, **kwargs: _matrix(sample_order),
-    )
+    _patch_owner_pipeline_to_matrix(monkeypatch)
 
     def fail_matrix_writer(path, matrix):
         Path(path).write_text("partial matrix", encoding="utf-8")
@@ -359,16 +403,7 @@ def test_pipeline_rolls_back_stale_output_pair_when_replace_fails(
     review.write_text("old review", encoding="utf-8")
     matrix.write_text("old matrix", encoding="utf-8")
 
-    monkeypatch.setattr(
-        pipeline_module,
-        "cluster_candidates",
-        lambda candidates, *, config: (_cluster(),),
-    )
-    monkeypatch.setattr(
-        pipeline_module,
-        "backfill_alignment_matrix",
-        lambda clusters, *, sample_order, raw_sources, **kwargs: _matrix(sample_order),
-    )
+    _patch_owner_pipeline_to_matrix(monkeypatch)
     original_replace = Path.replace
 
     def fail_second_replace(self: Path, target: Path):
@@ -391,6 +426,34 @@ def test_pipeline_rolls_back_stale_output_pair_when_replace_fails(
 
     assert review.read_text(encoding="utf-8") == "old review"
     assert matrix.read_text(encoding="utf-8") == "old matrix"
+
+
+def _patch_owner_pipeline_to_matrix(monkeypatch) -> None:
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        lambda candidates, **kwargs: SimpleNamespace(owners=(), ambiguous_records=()),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config: (),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        lambda features, *, sample_order, raw_sources, **kwargs: (),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
 
 
 class FakeRawOpener:

@@ -220,6 +220,16 @@ def _owners_for_sample(
                     sample_stem=sample_stem,
                     candidate_ids=candidate_ids,
                     reason="owner_multiplet_ambiguity",
+                    neutral_loss_tag=_shared_neutral_loss_tag(group),
+                    precursor_mz=sum(item.event.precursor_mz for item in group)
+                    / len(group),
+                    apex_rt=sum(item.apex_rt for item in group) / len(group),
+                    product_mz=sum(item.event.product_mz for item in group)
+                    / len(group),
+                    observed_neutral_loss_da=sum(
+                        item.event.observed_neutral_loss_da for item in group
+                    )
+                    / len(group),
                 ),
             )
             assignments.extend(
@@ -413,6 +423,13 @@ def _resolved_sort_key(item: _ResolvedCandidate) -> tuple[object, ...]:
 def _identity_conflict(group: list[_ResolvedCandidate]) -> bool:
     tags = {item.event.neutral_loss_tag for item in group}
     return len(tags) > 1
+
+
+def _shared_neutral_loss_tag(group: list[_ResolvedCandidate]) -> str | None:
+    tags = {item.event.neutral_loss_tag for item in group}
+    if len(tags) == 1:
+        return next(iter(tags))
+    return None
 
 
 def _identity_event(candidate: Any, *, seed_rt: float) -> IdentityEvent:

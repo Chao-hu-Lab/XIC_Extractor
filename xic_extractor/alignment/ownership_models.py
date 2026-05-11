@@ -63,3 +63,8 @@ class AmbiguousOwnerRecord:
     sample_stem: str
     candidate_ids: tuple[str, ...]
     reason: str
+    neutral_loss_tag: str | None = None
+    precursor_mz: float | None = None
+    apex_rt: float | None = None
+    product_mz: float | None = None
+    observed_neutral_loss_da: float | None = None

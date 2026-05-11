@@ -1,0 +1,247 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.ownership_models import (
+    AmbiguousOwnerRecord,
+    SampleLocalMS1Owner,
+)
+
+
+@dataclass(frozen=True)
+class OwnerAlignedFeature:
+    feature_family_id: str
+    neutral_loss_tag: str
+    family_center_mz: float
+    family_center_rt: float
+    family_product_mz: float
+    family_observed_neutral_loss_da: float
+    has_anchor: bool
+    owners: tuple[SampleLocalMS1Owner, ...]
+    evidence: str
+    identity_conflict: bool = False
+    review_only: bool = False
+    ambiguous_sample_stem: str | None = None
+    ambiguous_candidate_ids: tuple[str, ...] = ()
+
+    @property
+    def cluster_id(self) -> str:
+        return self.feature_family_id
+
+    @property
+    def members(self) -> tuple[SampleLocalMS1Owner, ...]:
+        return self.owners
+
+    @property
+    def event_cluster_ids(self) -> tuple[str, ...]:
+        return tuple(owner.owner_id for owner in self.owners)
+
+    @property
+    def event_member_count(self) -> int:
+        return sum(len(owner.all_events) for owner in self.owners)
+
+
+def cluster_sample_local_owners(
+    owners: tuple[SampleLocalMS1Owner, ...] | list[SampleLocalMS1Owner],
+    *,
+    config: AlignmentConfig,
+) -> tuple[OwnerAlignedFeature, ...]:
+    clean = tuple(owner for owner in owners if not owner.identity_conflict)
+    conflict_features = tuple(
+        _feature_from_group(
+            (owner,),
+            feature_family_id=f"FAM{index:06d}",
+            evidence="identity_conflict_review_only",
+            identity_conflict=True,
+            review_only=True,
+        )
+        for index, owner in enumerate(
+            sorted(
+                (owner for owner in owners if owner.identity_conflict),
+                key=_owner_sort_key,
+            ),
+            start=1,
+        )
+    )
+    groups = _complete_link_groups(sorted(clean, key=_owner_sort_key), config)
+    clean_features = tuple(
+        _feature_from_group(
+            tuple(group),
+            feature_family_id=f"FAM{index + len(conflict_features):06d}",
+            evidence=_group_evidence(group),
+        )
+        for index, group in enumerate(groups, start=1)
+    )
+    return (*conflict_features, *clean_features)
+
+
+def review_only_features_from_ambiguous_records(
+    records: tuple[AmbiguousOwnerRecord, ...],
+    *,
+    start_index: int,
+) -> tuple[OwnerAlignedFeature, ...]:
+    features: list[OwnerAlignedFeature] = []
+    for offset, record in enumerate(records):
+        if (
+            record.neutral_loss_tag is None
+            or record.precursor_mz is None
+            or record.apex_rt is None
+            or record.product_mz is None
+            or record.observed_neutral_loss_da is None
+        ):
+            continue
+        features.append(
+            OwnerAlignedFeature(
+                feature_family_id=f"FAM{start_index + offset:06d}",
+                neutral_loss_tag=record.neutral_loss_tag,
+                family_center_mz=record.precursor_mz,
+                family_center_rt=record.apex_rt,
+                family_product_mz=record.product_mz,
+                family_observed_neutral_loss_da=record.observed_neutral_loss_da,
+                has_anchor=False,
+                owners=(),
+                evidence="ambiguous_ms1_owner_review_only",
+                review_only=True,
+                ambiguous_sample_stem=record.sample_stem,
+                ambiguous_candidate_ids=record.candidate_ids,
+            ),
+        )
+    return tuple(features)
+
+
+def _complete_link_groups(
+    owners: list[SampleLocalMS1Owner],
+    config: AlignmentConfig,
+) -> tuple[tuple[SampleLocalMS1Owner, ...], ...]:
+    groups: list[list[SampleLocalMS1Owner]] = []
+    for owner in owners:
+        compatible_group_indexes = [
+            index
+            for index, group in enumerate(groups)
+            if all(_compatible_owners(owner, existing, config) for existing in group)
+        ]
+        if not compatible_group_indexes:
+            groups.append([owner])
+            continue
+        best_index = min(
+            compatible_group_indexes,
+            key=lambda index: _group_match_score(owner, groups[index], config),
+        )
+        groups[best_index].append(owner)
+    return tuple(tuple(group) for group in groups)
+
+
+def _compatible_owners(
+    left: SampleLocalMS1Owner,
+    right: SampleLocalMS1Owner,
+    config: AlignmentConfig,
+) -> bool:
+    if left.sample_stem == right.sample_stem:
+        return False
+    if left.neutral_loss_tag != right.neutral_loss_tag:
+        return False
+    if _ppm(left.precursor_mz, right.precursor_mz) > config.max_ppm:
+        return False
+    if (
+        abs(left.owner_apex_rt - right.owner_apex_rt) * 60.0
+        > config.identity_rt_candidate_window_sec
+    ):
+        return False
+    left_event = left.primary_identity_event
+    right_event = right.primary_identity_event
+    if _ppm(left_event.product_mz, right_event.product_mz) > (
+        config.product_mz_tolerance_ppm
+    ):
+        return False
+    return (
+        _ppm(
+            left_event.observed_neutral_loss_da,
+            right_event.observed_neutral_loss_da,
+        )
+        <= config.observed_loss_tolerance_ppm
+    )
+
+
+def _group_match_score(
+    owner: SampleLocalMS1Owner,
+    group: list[SampleLocalMS1Owner],
+    config: AlignmentConfig,
+) -> tuple[float, float, float]:
+    return max(_owner_match_score(owner, existing, config) for existing in group)
+
+
+def _owner_match_score(
+    left: SampleLocalMS1Owner,
+    right: SampleLocalMS1Owner,
+    config: AlignmentConfig,
+) -> tuple[float, float, float]:
+    mz_score = _ppm(left.precursor_mz, right.precursor_mz) / config.max_ppm
+    rt_score = (
+        abs(left.owner_apex_rt - right.owner_apex_rt)
+        * 60.0
+        / config.identity_rt_candidate_window_sec
+    )
+    product_ppm = _ppm(
+        left.primary_identity_event.product_mz,
+        right.primary_identity_event.product_mz,
+    )
+    product_score = (
+        product_ppm / config.product_mz_tolerance_ppm
+    )
+    return (mz_score + rt_score + product_score, mz_score, rt_score)
+
+
+def _feature_from_group(
+    group: tuple[SampleLocalMS1Owner, ...],
+    *,
+    feature_family_id: str,
+    evidence: str,
+    identity_conflict: bool = False,
+    review_only: bool = False,
+) -> OwnerAlignedFeature:
+    center_mz = sum(owner.precursor_mz for owner in group) / len(group)
+    center_rt = sum(owner.owner_apex_rt for owner in group) / len(group)
+    center_product_mz = sum(
+        owner.primary_identity_event.product_mz for owner in group
+    ) / len(group)
+    center_loss = sum(
+        owner.primary_identity_event.observed_neutral_loss_da for owner in group
+    ) / len(group)
+    return OwnerAlignedFeature(
+        feature_family_id=feature_family_id,
+        neutral_loss_tag=group[0].neutral_loss_tag,
+        family_center_mz=center_mz,
+        family_center_rt=center_rt,
+        family_product_mz=center_product_mz,
+        family_observed_neutral_loss_da=center_loss,
+        has_anchor=True,
+        owners=group,
+        evidence=evidence,
+        identity_conflict=identity_conflict,
+        review_only=review_only,
+    )
+
+
+def _group_evidence(group: tuple[SampleLocalMS1Owner, ...]) -> str:
+    if len(group) == 1:
+        return "single_sample_local_owner"
+    return f"owner_complete_link;owner_count={len(group)}"
+
+
+def _owner_sort_key(owner: SampleLocalMS1Owner) -> tuple[object, ...]:
+    event = owner.primary_identity_event
+    return (
+        owner.neutral_loss_tag,
+        owner.precursor_mz,
+        owner.owner_apex_rt,
+        owner.sample_stem,
+        -event.evidence_score,
+        -event.seed_event_count,
+        owner.owner_id,
+    )
+
+
+def _ppm(left: float, right: float) -> float:
+    denominator = max(abs(left), 1e-12)
+    return abs(left - right) / denominator * 1_000_000.0
