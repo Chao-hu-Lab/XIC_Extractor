@@ -7,7 +7,7 @@ from typing import Any
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.models import AlignmentCluster
 
-_REVIEW_PRIORITY_RANK = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+_INVALID_NUMBER = object()
 
 
 def is_alignment_anchor(
@@ -19,7 +19,10 @@ def is_alignment_anchor(
     evidence_score = _int_attr(candidate, "evidence_score")
     seed_event_count = _int_attr(candidate, "seed_event_count")
     ms1_peak_found = _bool_attr(candidate, "ms1_peak_found")
+    ms1_apex_rt = _finite_number_attr(candidate, "ms1_apex_rt")
+    ms1_area = _finite_number_attr(candidate, "ms1_area")
     scan_support_score = _finite_number_attr(candidate, "ms1_scan_support_score")
+    scan_support_valid = _optional_scan_support_is_valid(candidate)
 
     return (
         priority in active_config.anchor_priorities
@@ -28,19 +31,26 @@ def is_alignment_anchor(
         and seed_event_count is not None
         and seed_event_count >= active_config.anchor_min_seed_events
         and ms1_peak_found is True
-        and scan_support_score is not None
-        and scan_support_score >= active_config.anchor_min_scan_support_score
+        and ms1_apex_rt is not None
+        and ms1_area is not None
+        and ms1_area > 0
+        and scan_support_valid
+        and (
+            scan_support_score is None
+            or scan_support_score >= active_config.anchor_min_scan_support_score
+        )
     )
 
 
 def alignment_candidate_sort_key(
     candidate: Any,
     config: AlignmentConfig | None = None,
-) -> tuple[int, int, int, int, int, float, int, float, int, float, int, str, int, str]:
+) -> tuple[object, ...]:
     active_config = config or AlignmentConfig()
     evidence_score = _int_attr(candidate, "evidence_score")
     seed_event_count = _int_attr(candidate, "seed_event_count")
-    scan_support_score = _finite_number_attr(candidate, "ms1_scan_support_score")
+    ms1_area = _finite_number_attr(candidate, "ms1_area")
+    neutral_loss_error = _finite_number_attr(candidate, "neutral_loss_mass_error_ppm")
     precursor_mz = _finite_number_attr(candidate, "precursor_mz")
     rt = _candidate_rt(candidate)
     sample_stem = _string_attr(candidate, "sample_stem")
@@ -48,19 +58,20 @@ def alignment_candidate_sort_key(
 
     return (
         0 if is_alignment_anchor(candidate, active_config) else 1,
-        _REVIEW_PRIORITY_RANK.get(_string_attr(candidate, "review_priority"), 3),
         -(evidence_score if evidence_score is not None else -1),
         -(seed_event_count if seed_event_count is not None else -1),
-        0 if scan_support_score is not None else 1,
-        -scan_support_score if scan_support_score is not None else 0.0,
+        0 if ms1_area is not None else 1,
+        -ms1_area if ms1_area is not None else 0.0,
+        0 if neutral_loss_error is not None else 1,
+        abs(neutral_loss_error) if neutral_loss_error is not None else math.inf,
+        0 if candidate_id is not None else 1,
+        candidate_id or "",
+        0 if sample_stem is not None else 1,
+        sample_stem or "",
         0 if precursor_mz is not None else 1,
         precursor_mz if precursor_mz is not None else math.inf,
         0 if rt is not None else 1,
         rt if rt is not None else math.inf,
-        0 if sample_stem is not None else 1,
-        sample_stem or "",
-        0 if candidate_id is not None else 1,
-        candidate_id or "",
     )
 
 
@@ -121,4 +132,22 @@ def _finite_number_attr(owner: Any, field: str) -> float | None:
         return None
     if not math.isfinite(value):
         return None
+    return float(value)
+
+
+def _optional_scan_support_is_valid(owner: Any) -> bool:
+    try:
+        value = getattr(owner, "ms1_scan_support_score")
+    except AttributeError:
+        return True
+    if value is None:
+        return True
+    return _finite_number_or_invalid(value) is not _INVALID_NUMBER
+
+
+def _finite_number_or_invalid(value: Any) -> float | object:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return _INVALID_NUMBER
+    if not math.isfinite(value):
+        return _INVALID_NUMBER
     return float(value)

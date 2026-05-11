@@ -19,6 +19,8 @@ class Candidate:
     seed_event_count: int = 2
     ms1_peak_found: bool = True
     ms1_scan_support_score: float | None = 0.5
+    ms1_area: float | None = 100.0
+    neutral_loss_mass_error_ppm: float = 1.0
     precursor_mz: float = 500.0
     best_seed_rt: float | None = 5.0
     ms1_apex_rt: float | None = 5.0
@@ -34,12 +36,24 @@ class Candidate:
             ms1_scan_support_score=0.9,
         ),
         replace(
-            Candidate(candidate_id="missing-scan-support"),
-            ms1_scan_support_score=None,
+            Candidate(candidate_id="missing-apex"),
+            ms1_apex_rt=None,
         ),
         replace(
-            Candidate(candidate_id="weak-scan-support"),
-            ms1_scan_support_score=0.49,
+            Candidate(candidate_id="nan-apex"),
+            ms1_apex_rt=math.nan,
+        ),
+        replace(
+            Candidate(candidate_id="missing-area"),
+            ms1_area=None,
+        ),
+        replace(
+            Candidate(candidate_id="zero-area"),
+            ms1_area=0.0,
+        ),
+        replace(
+            Candidate(candidate_id="negative-area"),
+            ms1_area=-1.0,
         ),
     ],
 )
@@ -114,6 +128,24 @@ def test_anchor_min_scan_support_score_affects_anchor_predicate():
     )
 
 
+def test_missing_scan_support_does_not_disqualify_anchor():
+    candidate = replace(
+        Candidate(candidate_id="missing-scan-support"),
+        ms1_scan_support_score=None,
+    )
+
+    assert is_alignment_anchor(candidate, AlignmentConfig()) is True
+
+
+def test_low_present_scan_support_disqualifies_anchor():
+    candidate = replace(
+        Candidate(candidate_id="low-scan-support"),
+        ms1_scan_support_score=0.49,
+    )
+
+    assert is_alignment_anchor(candidate, AlignmentConfig()) is False
+
+
 @pytest.mark.parametrize(
     "candidate",
     [
@@ -156,7 +188,7 @@ def test_candidate_ordering_prioritizes_anchors_before_non_anchors():
     ]
 
 
-def test_candidate_ordering_prefers_higher_review_priority_within_anchor_status():
+def test_candidate_ordering_prefers_evidence_before_review_priority():
     config = AlignmentConfig()
     high = replace(
         Candidate(candidate_id="high"),
@@ -173,7 +205,7 @@ def test_candidate_ordering_prefers_higher_review_priority_within_anchor_status(
     low = replace(
         Candidate(candidate_id="low"),
         review_priority="LOW",
-        evidence_score=100,
+        evidence_score=80,
         ms1_scan_support_score=0.49,
     )
 
@@ -183,9 +215,68 @@ def test_candidate_ordering_prefers_higher_review_priority_within_anchor_status(
     )
 
     assert [candidate.candidate_id for candidate in ordered] == [
-        "high",
         "medium",
         "low",
+        "high",
+    ]
+
+
+def test_candidate_ordering_uses_winner_metrics_after_anchor_status():
+    config = AlignmentConfig()
+    candidates = [
+        replace(
+            Candidate(candidate_id="a-nl-worse"),
+            review_priority="LOW",
+            evidence_score=80,
+            seed_event_count=2,
+            ms1_area=100.0,
+            neutral_loss_mass_error_ppm=-3.0,
+        ),
+        replace(
+            Candidate(candidate_id="z-area-best"),
+            review_priority="LOW",
+            evidence_score=80,
+            seed_event_count=2,
+            ms1_area=200.0,
+            neutral_loss_mass_error_ppm=3.0,
+        ),
+        replace(
+            Candidate(candidate_id="seed-best"),
+            review_priority="LOW",
+            evidence_score=80,
+            seed_event_count=3,
+            ms1_area=10.0,
+            neutral_loss_mass_error_ppm=3.0,
+        ),
+        replace(
+            Candidate(candidate_id="evidence-best"),
+            review_priority="LOW",
+            evidence_score=90,
+            seed_event_count=1,
+            ms1_area=10.0,
+            neutral_loss_mass_error_ppm=3.0,
+        ),
+        replace(
+            Candidate(candidate_id="z-nl-best"),
+            review_priority="LOW",
+            evidence_score=80,
+            seed_event_count=2,
+            ms1_area=100.0,
+            neutral_loss_mass_error_ppm=1.0,
+        ),
+    ]
+
+    ordered = sorted(
+        candidates,
+        key=lambda candidate: alignment_candidate_sort_key(candidate, config),
+    )
+
+    assert [candidate.candidate_id for candidate in ordered] == [
+        "evidence-best",
+        "seed-best",
+        "z-area-best",
+        "z-nl-best",
+        "a-nl-worse",
     ]
 
 
@@ -193,34 +284,41 @@ def test_candidate_ordering_uses_stable_tie_breakers_not_input_order():
     config = AlignmentConfig()
     candidates = [
         replace(
-            Candidate(candidate_id="sample-b"),
-            precursor_mz=500.0,
-            ms1_apex_rt=5.0,
-            sample_stem="sample-b",
-        ),
-        replace(
-            Candidate(candidate_id="sample-a-z"),
-            precursor_mz=500.0,
-            ms1_apex_rt=5.0,
-            sample_stem="sample-a",
-        ),
-        replace(
-            Candidate(candidate_id="sample-a-a"),
-            precursor_mz=500.0,
-            ms1_apex_rt=5.0,
-            sample_stem="sample-a",
-        ),
-        replace(
-            Candidate(candidate_id="lower-rt"),
+            Candidate(candidate_id="same", sample_stem="sample-z"),
             precursor_mz=500.0,
             ms1_apex_rt=4.9,
+        ),
+        replace(
+            Candidate(candidate_id="same", sample_stem="sample-z"),
+            precursor_mz=499.9,
+            ms1_apex_rt=9.0,
+        ),
+        replace(
+            Candidate(candidate_id="candidate-b"),
+            precursor_mz=499.0,
+            ms1_apex_rt=1.0,
+            sample_stem="sample-a",
+        ),
+        replace(
+            Candidate(candidate_id="same", sample_stem="sample-b"),
+            precursor_mz=500.0,
+            ms1_apex_rt=5.0,
+        ),
+        replace(
+            Candidate(candidate_id="same", sample_stem="sample-a"),
+            precursor_mz=500.0,
+            ms1_apex_rt=5.0,
+        ),
+        replace(
+            Candidate(candidate_id="candidate-a"),
+            precursor_mz=501.0,
+            ms1_apex_rt=9.0,
             sample_stem="sample-z",
         ),
         replace(
-            Candidate(candidate_id="lower-mz"),
-            precursor_mz=499.9,
-            ms1_apex_rt=9.0,
-            sample_stem="sample-z",
+            Candidate(candidate_id="same", sample_stem="sample-z"),
+            precursor_mz=500.0,
+            ms1_apex_rt=5.0,
         ),
     ]
 
@@ -234,11 +332,26 @@ def test_candidate_ordering_uses_stable_tie_breakers_not_input_order():
     )
 
     expected = [
-        "lower-mz",
-        "lower-rt",
-        "sample-a-a",
-        "sample-a-z",
-        "sample-b",
+        "candidate-a",
+        "candidate-b",
+        "same",
+        "same",
+        "same",
+        "same",
+        "same",
     ]
     assert [candidate.candidate_id for candidate in ordered] == expected
     assert [candidate.candidate_id for candidate in reverse_ordered] == expected
+    assert [candidate.sample_stem for candidate in ordered[2:]] == [
+        "sample-a",
+        "sample-b",
+        "sample-z",
+        "sample-z",
+        "sample-z",
+    ]
+    assert [candidate.precursor_mz for candidate in ordered[4:]] == [
+        499.9,
+        500.0,
+        500.0,
+    ]
+    assert [candidate.ms1_apex_rt for candidate in ordered[5:]] == [4.9, 5.0]
