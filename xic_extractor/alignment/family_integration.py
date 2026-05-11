@@ -58,6 +58,12 @@ def _integrate_family_cell(
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
 ) -> AlignedCell:
+    if not family.has_anchor and sample_stem not in _event_member_samples(family):
+        return _unchecked_cell(
+            family,
+            sample_stem,
+            reason="family integration skipped for non-anchor family",
+        )
     source = raw_sources.get(sample_stem)
     if source is None:
         return _unchecked_cell(
@@ -154,6 +160,14 @@ def _absent_cell(family: MS1FeatureFamily, sample_stem: str) -> AlignedCell:
         source_candidate_id=None,
         source_raw_file=None,
         reason="family-centered MS1 integration found no peak",
+    )
+
+
+def _event_member_samples(family: MS1FeatureFamily) -> frozenset[str]:
+    return frozenset(
+        member.sample_stem
+        for cluster in family.event_clusters
+        for member in cluster.members
     )
 
 

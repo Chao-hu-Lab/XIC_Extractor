@@ -67,6 +67,30 @@ def test_family_integration_missing_raw_source_is_unchecked():
     assert matrix.cells[0].reason == "missing raw source for family integration"
 
 
+def test_non_anchor_family_integrates_detected_samples_only():
+    family = build_ms1_feature_family(
+        family_id="FAM000001",
+        event_clusters=(_cluster("ALN000001", has_anchor=False),),
+        evidence="single_event_cluster",
+    )
+    source = FakeXICSource(
+        rt=np.array([12.50, 12.54, 12.58, 12.62, 12.66], dtype=float),
+        intensity=np.array([0.0, 10.0, 100.0, 10.0, 0.0], dtype=float),
+    )
+
+    matrix = integrate_feature_family_matrix(
+        (family,),
+        sample_order=("s1", "s2"),
+        raw_sources={"s1": source, "s2": source},
+        alignment_config=_alignment_config(),
+        peak_config=_peak_config(),
+    )
+
+    assert [cell.status for cell in matrix.cells] == ["detected", "unchecked"]
+    assert matrix.cells[1].reason == "family integration skipped for non-anchor family"
+    assert len(source.calls) == 1
+
+
 class FakeXICSource:
     def __init__(self, *, rt, intensity):
         self.rt = rt
@@ -83,6 +107,7 @@ def _cluster(
     *,
     mz: float = 242.114,
     rt: float = 12.5927,
+    has_anchor: bool = True,
 ) -> AlignmentCluster:
     member = SimpleNamespace(sample_stem="s1", candidate_id=f"{cluster_id}#s1")
     return AlignmentCluster(
@@ -92,9 +117,9 @@ def _cluster(
         cluster_center_rt=rt,
         cluster_product_mz=126.066,
         cluster_observed_neutral_loss_da=116.048,
-        has_anchor=True,
+        has_anchor=has_anchor,
         members=(member,),
-        anchor_members=(member,),
+        anchor_members=(member,) if has_anchor else (),
     )
 
 
