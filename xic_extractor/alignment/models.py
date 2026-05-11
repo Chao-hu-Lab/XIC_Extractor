@@ -29,6 +29,10 @@ class AlignmentCluster:
     has_anchor: bool
     members: tuple[CandidateLike, ...]
     anchor_members: tuple[CandidateLike, ...] = ()
+    folded_cluster_ids: tuple[str, ...] = ()
+    folded_member_count: int = 0
+    folded_sample_fill_count: int = 0
+    fold_evidence: str = ""
 
 
 def build_alignment_cluster(

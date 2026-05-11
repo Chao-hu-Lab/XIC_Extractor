@@ -106,6 +106,28 @@ def test_non_anchor_cluster_center_uses_all_members():
     assert cluster.anchor_members == ()
 
 
+def test_alignment_cluster_fold_metadata_defaults_to_empty():
+    candidate = _candidate(
+        candidate_id="sample-a",
+        precursor_mz=242.114,
+        product_mz=126.066,
+        observed_neutral_loss_da=116.048,
+        best_seed_rt=12.5927,
+        ms1_apex_rt=12.5927,
+    )
+
+    cluster = build_alignment_cluster(
+        cluster_id="ALN000001",
+        neutral_loss_tag="DNA_dR",
+        members=(candidate,),
+    )
+
+    assert cluster.folded_cluster_ids == ()
+    assert cluster.folded_member_count == 0
+    assert cluster.folded_sample_fill_count == 0
+    assert cluster.fold_evidence == ""
+
+
 def test_center_uses_best_seed_rt_when_ms1_apex_rt_is_missing():
     fallback_rt = _candidate(
         candidate_id="fallback-rt",

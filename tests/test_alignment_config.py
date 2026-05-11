@@ -109,6 +109,21 @@ def test_default_config_matches_v1_alignment_contract():
     assert config.fragmentation_model == "cid_nl"
 
 
+def test_alignment_config_duplicate_fold_defaults_are_conservative():
+    from xic_extractor.alignment import AlignmentConfig
+
+    config = AlignmentConfig()
+
+    assert config.duplicate_fold_ppm == 5.0
+    assert config.duplicate_fold_rt_sec == 2.0
+    assert config.duplicate_fold_product_ppm == 10.0
+    assert config.duplicate_fold_observed_loss_ppm == 10.0
+    assert config.duplicate_fold_min_detected_overlap == 0.80
+    assert config.duplicate_fold_min_shared_detected_count == 3
+    assert config.duplicate_fold_min_detected_jaccard == 0.60
+    assert config.duplicate_fold_min_present_overlap == 0.80
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
@@ -127,6 +142,29 @@ def test_invalid_tolerance_windows_are_rejected(kwargs):
 
     with pytest.raises(ValueError):
         AlignmentConfig(**kwargs)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("duplicate_fold_ppm", 0.0),
+        ("duplicate_fold_rt_sec", 0.0),
+        ("duplicate_fold_product_ppm", 0.0),
+        ("duplicate_fold_observed_loss_ppm", 0.0),
+        ("duplicate_fold_min_detected_overlap", -0.1),
+        ("duplicate_fold_min_detected_overlap", 1.1),
+        ("duplicate_fold_min_shared_detected_count", 0),
+        ("duplicate_fold_min_detected_jaccard", -0.1),
+        ("duplicate_fold_min_detected_jaccard", 1.1),
+        ("duplicate_fold_min_present_overlap", -0.1),
+        ("duplicate_fold_min_present_overlap", 1.1),
+    ],
+)
+def test_alignment_config_rejects_invalid_duplicate_fold_values(field, value):
+    from xic_extractor.alignment import AlignmentConfig
+
+    with pytest.raises(ValueError, match=field):
+        AlignmentConfig(**{field: value})
 
 
 @pytest.mark.parametrize(

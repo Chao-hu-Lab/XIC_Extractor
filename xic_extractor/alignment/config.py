@@ -20,6 +20,14 @@ class AlignmentConfig:
     anchor_min_evidence_score: int = 60
     anchor_min_seed_events: int = 2
     anchor_min_scan_support_score: float = 0.5
+    duplicate_fold_ppm: float = 5.0
+    duplicate_fold_rt_sec: float = 2.0
+    duplicate_fold_product_ppm: float = 10.0
+    duplicate_fold_observed_loss_ppm: float = 10.0
+    duplicate_fold_min_detected_overlap: float = 0.80
+    duplicate_fold_min_shared_detected_count: int = 3
+    duplicate_fold_min_detected_jaccard: float = 0.60
+    duplicate_fold_min_present_overlap: float = 0.80
     rt_unit: Literal["min"] = "min"
     fragmentation_model: Literal["cid_nl"] = "cid_nl"
 
@@ -56,6 +64,35 @@ class AlignmentConfig:
         _require_numeric_range(
             "anchor_min_scan_support_score",
             self.anchor_min_scan_support_score,
+            0,
+            1,
+        )
+        _require_positive("duplicate_fold_ppm", self.duplicate_fold_ppm)
+        _require_positive("duplicate_fold_rt_sec", self.duplicate_fold_rt_sec)
+        _require_positive("duplicate_fold_product_ppm", self.duplicate_fold_product_ppm)
+        _require_positive(
+            "duplicate_fold_observed_loss_ppm",
+            self.duplicate_fold_observed_loss_ppm,
+        )
+        _require_numeric_range(
+            "duplicate_fold_min_detected_overlap",
+            self.duplicate_fold_min_detected_overlap,
+            0,
+            1,
+        )
+        _require_positive_int(
+            "duplicate_fold_min_shared_detected_count",
+            self.duplicate_fold_min_shared_detected_count,
+        )
+        _require_numeric_range(
+            "duplicate_fold_min_detected_jaccard",
+            self.duplicate_fold_min_detected_jaccard,
+            0,
+            1,
+        )
+        _require_numeric_range(
+            "duplicate_fold_min_present_overlap",
+            self.duplicate_fold_min_present_overlap,
             0,
             1,
         )
