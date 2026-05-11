@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 
 from xic_extractor.alignment.models import AlignmentCluster
 
 CellStatus = Literal["detected", "rescued", "absent", "unchecked"]
+
+
+class AlignmentRowLike(Protocol):
+    neutral_loss_tag: str
+    has_anchor: bool
 
 
 @dataclass(frozen=True)
@@ -29,6 +34,6 @@ class AlignedCell:
 
 @dataclass(frozen=True)
 class AlignmentMatrix:
-    clusters: tuple[AlignmentCluster, ...]
+    clusters: tuple[AlignmentCluster | AlignmentRowLike, ...]
     cells: tuple[AlignedCell, ...]
     sample_order: tuple[str, ...]
