@@ -107,8 +107,8 @@ def test_write_alignment_review_tsv_reports_duplicate_assigned_cells(tmp_path: P
     matrix = AlignmentMatrix(
         clusters=(_cluster(has_anchor=False),),
         cells=(
-            _cell("sample-a", "absent", trace_quality="assigned_duplicate"),
-            _cell("sample-b", "absent", trace_quality="assigned_duplicate"),
+            _cell("sample-a", "duplicate_assigned"),
+            _cell("sample-b", "duplicate_assigned"),
             _cell("sample-c", "unchecked"),
         ),
         sample_order=("sample-a", "sample-b", "sample-c"),
@@ -119,6 +119,31 @@ def test_write_alignment_review_tsv_reports_duplicate_assigned_cells(tmp_path: P
     assert rows[0]["reason"] == (
         "no anchor; 0/3 present; 0 MS1 backfilled; 2 duplicate-assigned"
     )
+
+
+def test_write_alignment_review_tsv_counts_duplicate_assigned_separately(
+    tmp_path: Path,
+):
+    from xic_extractor.alignment.tsv_writer import write_alignment_review_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(has_anchor=True),),
+        cells=(
+            _cell("sample-a", "detected", area=100.0),
+            _cell("sample-b", "rescued", area=90.0),
+            _cell("sample-c", "duplicate_assigned"),
+            _cell("sample-d", "absent"),
+        ),
+        sample_order=("sample-a", "sample-b", "sample-c", "sample-d"),
+    )
+
+    rows = _read_tsv(write_alignment_review_tsv(tmp_path / "review.tsv", matrix))
+
+    assert rows[0]["detected_count"] == "1"
+    assert rows[0]["absent_count"] == "1"
+    assert rows[0]["unchecked_count"] == "0"
+    assert rows[0]["present_rate"] == "0.5"
+    assert "1 duplicate-assigned" in rows[0]["reason"]
 
 
 def test_write_alignment_review_tsv_reports_folded_clusters(tmp_path: Path):

@@ -146,7 +146,7 @@ def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
         rescued_count = _count(cells, "rescued")
         absent_count = _count(cells, "absent")
         unchecked_count = _count(cells, "unchecked")
-        duplicate_assigned_count = _trace_quality_count(cells, "assigned_duplicate")
+        duplicate_assigned_count = _count(cells, "duplicate_assigned")
         present_count = detected_count + rescued_count
         rows.append(
             {
@@ -220,10 +220,6 @@ def _cells_by_cluster(matrix: AlignmentMatrix) -> dict[str, tuple[AlignedCell, .
 
 def _count(cells: tuple[AlignedCell, ...], status: str) -> int:
     return sum(1 for cell in cells if cell.status == status)
-
-
-def _trace_quality_count(cells: tuple[AlignedCell, ...], trace_quality: str) -> int:
-    return sum(1 for cell in cells if cell.trace_quality == trace_quality)
 
 
 def _safe_rate(numerator: int, denominator: int) -> float:
