@@ -45,7 +45,9 @@ def test_family_integration_uses_family_center_not_event_cluster_area():
     assert matrix.cells[0].cluster_id == "FAM000001"
     assert matrix.cells[0].status == "detected"
     assert matrix.cells[0].area is not None
-    assert matrix.cells[0].reason == "family-centered MS1 integration"
+    assert matrix.cells[0].reason == (
+        "family-centered MS1 integration from original detection"
+    )
 
 
 def test_family_integration_missing_raw_source_is_unchecked():
@@ -89,6 +91,125 @@ def test_non_anchor_family_integrates_detected_samples_only():
     assert [cell.status for cell in matrix.cells] == ["detected", "unchecked"]
     assert matrix.cells[1].reason == "family integration skipped for non-anchor family"
     assert len(source.calls) == 1
+
+
+def test_family_integration_marks_original_member_peak_as_detected():
+    family = build_ms1_feature_family(
+        family_id="FAM000001",
+        event_clusters=(_cluster("ALN000001", has_anchor=True),),
+        evidence="single_event_cluster",
+    )
+    source = FakeXICSource(
+        rt=np.array([12.50, 12.54, 12.58, 12.62, 12.66], dtype=float),
+        intensity=np.array([0.0, 10.0, 100.0, 10.0, 0.0], dtype=float),
+    )
+
+    matrix = integrate_feature_family_matrix(
+        (family,),
+        sample_order=("s1",),
+        raw_sources={"s1": source},
+        alignment_config=_alignment_config(),
+        peak_config=_peak_config(),
+    )
+
+    assert matrix.cells[0].status == "detected"
+    assert matrix.cells[0].reason == (
+        "family-centered MS1 integration from original detection"
+    )
+
+
+def test_family_integration_marks_anchor_backfill_peak_as_rescued():
+    family = build_ms1_feature_family(
+        family_id="FAM000001",
+        event_clusters=(_cluster("ALN000001", has_anchor=True),),
+        evidence="single_event_cluster",
+    )
+    source = FakeXICSource(
+        rt=np.array([12.50, 12.54, 12.58, 12.62, 12.66], dtype=float),
+        intensity=np.array([0.0, 10.0, 100.0, 10.0, 0.0], dtype=float),
+    )
+
+    matrix = integrate_feature_family_matrix(
+        (family,),
+        sample_order=("s1", "s2"),
+        raw_sources={"s1": source, "s2": source},
+        alignment_config=_alignment_config(),
+        peak_config=_peak_config(),
+    )
+
+    cells = {cell.sample_stem: cell for cell in matrix.cells}
+    assert cells["s1"].status == "detected"
+    assert cells["s2"].status == "rescued"
+    assert cells["s2"].reason == "family-centered MS1 backfill"
+
+
+def test_family_integration_assigns_duplicate_ms1_peak_to_nearest_family():
+    left = build_ms1_feature_family(
+        family_id="FAM000001",
+        event_clusters=(_cluster("ALN000001", rt=12.0, has_anchor=False),),
+        evidence="single_event_cluster",
+    )
+    right = build_ms1_feature_family(
+        family_id="FAM000002",
+        event_clusters=(_cluster("ALN000002", rt=12.6, has_anchor=False),),
+        evidence="single_event_cluster",
+    )
+    source = FakeXICSource(
+        rt=np.array([12.50, 12.54, 12.58, 12.62, 12.66], dtype=float),
+        intensity=np.array([0.0, 10.0, 100.0, 10.0, 0.0], dtype=float),
+    )
+
+    matrix = integrate_feature_family_matrix(
+        (left, right),
+        sample_order=("s1",),
+        raw_sources={"s1": source},
+        alignment_config=_alignment_config(),
+        peak_config=_peak_config(),
+    )
+
+    cells = {cell.cluster_id: cell for cell in matrix.cells}
+    assert cells["FAM000001"].status == "duplicate_assigned"
+    assert cells["FAM000001"].area is None
+    assert cells["FAM000001"].trace_quality == "assigned_duplicate"
+    assert cells["FAM000001"].reason == (
+        "MS1 peak assigned to selected feature family FAM000002"
+    )
+    assert cells["FAM000002"].status == "detected"
+    assert cells["FAM000002"].area is not None
+
+
+def test_family_integration_protects_anchor_family_when_duplicate_peak_conflicts():
+    non_anchor = build_ms1_feature_family(
+        family_id="FAM000001",
+        event_clusters=(_cluster("ALN000001", rt=12.58, has_anchor=False),),
+        evidence="single_event_cluster",
+    )
+    anchor = build_ms1_feature_family(
+        family_id="FAM000002",
+        event_clusters=(_cluster("ALN000002", rt=12.0, has_anchor=True),),
+        evidence="single_event_cluster",
+    )
+    source = FakeXICSource(
+        rt=np.array([12.50, 12.54, 12.58, 12.62, 12.66], dtype=float),
+        intensity=np.array([0.0, 10.0, 100.0, 10.0, 0.0], dtype=float),
+    )
+
+    matrix = integrate_feature_family_matrix(
+        (non_anchor, anchor),
+        sample_order=("s1",),
+        raw_sources={"s1": source},
+        alignment_config=_alignment_config(),
+        peak_config=_peak_config(),
+    )
+
+    cells = {cell.cluster_id: cell for cell in matrix.cells}
+    assert cells["FAM000001"].status == "duplicate_assigned"
+    assert cells["FAM000001"].area is None
+    assert cells["FAM000001"].trace_quality == "assigned_duplicate"
+    assert cells["FAM000001"].reason == (
+        "MS1 peak assigned to selected feature family FAM000002"
+    )
+    assert cells["FAM000002"].status == "detected"
 
 
 class FakeXICSource:

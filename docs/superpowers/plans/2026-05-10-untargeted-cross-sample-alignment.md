@@ -4,7 +4,7 @@
 
 **Goal:** Replace the FH + mzmine + metabCombiner + combine_fix pipeline with a single-tool XIC alignment that produces a neutral-loss-compatible hypothesis × sample matrix with detected/rescued/absent/unchecked semantics, leveraging XIC's same-tool MS1 backfill at cluster centers.
 
-**Architecture:** Four sequential sub-projects: (1) cluster per-sample discovery candidates into cross-sample NL-compatible hypotheses; (2) backfill MS1 measurements at cluster centers in samples that lacked an MS2 NL trigger; (3) emit alignment TSVs and a CLI; (4) validate against the legacy FH and combine_fix outputs the user has on disk.
+**Architecture:** Four sequential sub-projects: (1) cluster per-sample discovery candidates into cross-sample NL-compatible hypotheses; (2) backfill MS1 measurements at cluster centers in samples that lacked an MS2 NL trigger; (3) emit alignment machine artifacts and a CLI; (4) validate against the legacy FH and combine_fix outputs the user has on disk.
 
 **Tech Stack:** Python, numpy, pytest, existing `xic_extractor.discovery` and `xic_extractor.signal_processing` modules, MS-data aligner algorithm core ported in (not depended on as a package).
 
@@ -32,6 +32,32 @@ backfill, or alignment output schemas.
 2. [Plan 2: Cross-Sample MS1 Backfill](2026-05-10-alignment-ms1-backfill-plan.md)
 3. [Plan 3: Alignment Output and CLI](2026-05-11-alignment-output-cli-plan.md)
 4. [Plan 4: Legacy Pipeline Validation](2026-05-11-alignment-legacy-validation-plan.md)
+
+## Production Output Contract
+
+Plans 1-4 establish the alignment engine, machine-readable exports, and legacy
+validation path. They do not define the final production delivery surface.
+
+Production delivery is governed by:
+
+- [Untargeted Alignment Output Contract](../specs/2026-05-11-untargeted-alignment-output-contract.md)
+
+Per that contract, `alignment_results.xlsx` plus `review_report.html` is the
+preferred production default. TSV outputs remain important as machine/debug and
+validation artifacts, but they should not be treated as the final user-facing
+default unless a later contract explicitly changes that decision.
+
+## Algorithm Semantics Cleanup
+
+The current alignment branch also needs a focused cleanup before its outputs are
+treated as production-ready:
+
+- [MS2-Constrained MS1 Feature Family Spec](../specs/2026-05-11-ms2-constrained-ms1-feature-family-spec.md)
+- [MS2-Constrained MS1 Feature Family Plan](2026-05-11-ms2-constrained-ms1-feature-family-plan.md)
+
+This cleanup separates chemical identity, MS1 measurement, and duplicate peak
+ownership. In particular, MS1 backfill must not create feature-family identity,
+and duplicate-assigned cells must not be silently encoded as ordinary absence.
 
 ## Design Decisions Carried Forward
 

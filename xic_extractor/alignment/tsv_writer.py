@@ -146,6 +146,7 @@ def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
         rescued_count = _count(cells, "rescued")
         absent_count = _count(cells, "absent")
         unchecked_count = _count(cells, "unchecked")
+        duplicate_assigned_count = _trace_quality_count(cells, "assigned_duplicate")
         present_count = detected_count + rescued_count
         rows.append(
             {
@@ -174,7 +175,13 @@ def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
                     rescued_count=rescued_count,
                     unchecked_count=unchecked_count,
                 ),
-                "reason": _reason(cluster, present_count, sample_count, rescued_count),
+                "reason": _reason(
+                    cluster,
+                    present_count,
+                    sample_count,
+                    rescued_count,
+                    duplicate_assigned_count,
+                ),
             }
         )
     return rows
@@ -213,6 +220,10 @@ def _cells_by_cluster(matrix: AlignmentMatrix) -> dict[str, tuple[AlignedCell, .
 
 def _count(cells: tuple[AlignedCell, ...], status: str) -> int:
     return sum(1 for cell in cells if cell.status == status)
+
+
+def _trace_quality_count(cells: tuple[AlignedCell, ...], trace_quality: str) -> int:
+    return sum(1 for cell in cells if cell.trace_quality == trace_quality)
 
 
 def _safe_rate(numerator: int, denominator: int) -> float:
@@ -266,6 +277,7 @@ def _reason(
     present_count: int,
     sample_count: int,
     rescued_count: int,
+    duplicate_assigned_count: int,
 ) -> str:
     prefix = "anchor family" if cluster.has_anchor else "no anchor"
     parts = [
@@ -276,6 +288,8 @@ def _reason(
     event_cluster_count = len(_event_cluster_ids(cluster))
     if event_cluster_count > 1:
         parts.append(f"merged {event_cluster_count} event clusters")
+    if duplicate_assigned_count:
+        parts.append(f"{duplicate_assigned_count} duplicate-assigned")
     return "; ".join(parts)
 
 

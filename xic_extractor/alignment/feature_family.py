@@ -8,7 +8,8 @@ from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
 
-_PRESENT_STATUSES = {"detected", "rescued"}
+_IDENTITY_STATUSES = {"detected"}
+_MEASURED_STATUSES = {"detected", "rescued"}
 
 
 @dataclass(frozen=True)
@@ -182,8 +183,8 @@ def _same_ms1_feature_family(
     if _ms2_signature_conflicts(left, right):
         return False
 
-    left_present = _present_samples(cells_by_cluster.get(left.cluster_id, ()))
-    right_present = _present_samples(cells_by_cluster.get(right.cluster_id, ()))
+    left_present = _identity_samples(cells_by_cluster.get(left.cluster_id, ()))
+    right_present = _identity_samples(cells_by_cluster.get(right.cluster_id, ()))
     shared = left_present & right_present
     union = left_present | right_present
     denominator = min(len(left_present), len(right_present))
@@ -205,9 +206,15 @@ def _cells_by_cluster(matrix: AlignmentMatrix) -> dict[str, tuple[AlignedCell, .
     return {cluster_id: tuple(cells) for cluster_id, cells in grouped.items()}
 
 
-def _present_samples(cells: tuple[AlignedCell, ...]) -> frozenset[str]:
+def _identity_samples(cells: tuple[AlignedCell, ...]) -> frozenset[str]:
     return frozenset(
-        cell.sample_stem for cell in cells if cell.status in _PRESENT_STATUSES
+        cell.sample_stem for cell in cells if cell.status in _IDENTITY_STATUSES
+    )
+
+
+def _measured_samples(cells: tuple[AlignedCell, ...]) -> frozenset[str]:
+    return frozenset(
+        cell.sample_stem for cell in cells if cell.status in _MEASURED_STATUSES
     )
 
 
@@ -220,7 +227,7 @@ def _sort_family_group(
             group,
             key=lambda cluster: (
                 0 if cluster.has_anchor else 1,
-                -len(_present_samples(cells_by_cluster.get(cluster.cluster_id, ()))),
+                -len(_identity_samples(cells_by_cluster.get(cluster.cluster_id, ()))),
                 cluster.cluster_center_mz,
                 cluster.cluster_center_rt,
                 cluster.cluster_id,
@@ -238,11 +245,11 @@ def _family_evidence(
     shared_counts: list[int] = []
     overlaps: list[float] = []
     primary = _sort_family_group(group, cells_by_cluster)[0]
-    primary_samples = _present_samples(cells_by_cluster.get(primary.cluster_id, ()))
+    primary_samples = _identity_samples(cells_by_cluster.get(primary.cluster_id, ()))
     for secondary in group:
         if secondary.cluster_id == primary.cluster_id:
             continue
-        secondary_samples = _present_samples(
+        secondary_samples = _identity_samples(
             cells_by_cluster.get(secondary.cluster_id, ())
         )
         shared = primary_samples & secondary_samples

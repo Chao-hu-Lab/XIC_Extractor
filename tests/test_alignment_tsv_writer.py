@@ -101,6 +101,26 @@ def test_write_alignment_review_tsv_warning_precedence(tmp_path: Path):
     ]
 
 
+def test_write_alignment_review_tsv_reports_duplicate_assigned_cells(tmp_path: Path):
+    from xic_extractor.alignment.tsv_writer import write_alignment_review_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(has_anchor=False),),
+        cells=(
+            _cell("sample-a", "absent", trace_quality="assigned_duplicate"),
+            _cell("sample-b", "absent", trace_quality="assigned_duplicate"),
+            _cell("sample-c", "unchecked"),
+        ),
+        sample_order=("sample-a", "sample-b", "sample-c"),
+    )
+
+    rows = _read_tsv(write_alignment_review_tsv(tmp_path / "review.tsv", matrix))
+
+    assert rows[0]["reason"] == (
+        "no anchor; 0/3 present; 0 MS1 backfilled; 2 duplicate-assigned"
+    )
+
+
 def test_write_alignment_review_tsv_reports_folded_clusters(tmp_path: Path):
     from xic_extractor.alignment.tsv_writer import write_alignment_review_tsv
 
@@ -188,6 +208,52 @@ def test_write_alignment_matrix_tsv_blanks_missing_and_invalid_areas(tmp_path: P
     assert rows[0]["zero"] == ""
     assert rows[0]["negative"] == ""
     assert rows[0]["nan"] == ""
+
+
+def test_write_alignment_matrix_tsv_blanks_duplicate_assigned_cells(tmp_path: Path):
+    from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(),),
+        cells=(
+            _cell(
+                "sample-a",
+                "duplicate_assigned",
+                area=100.0,
+                trace_quality="assigned_duplicate",
+            ),
+        ),
+        sample_order=("sample-a",),
+    )
+
+    rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
+
+    assert rows[0]["sample-a"] == ""
+
+
+def test_write_alignment_status_matrix_tsv_preserves_duplicate_assigned(
+    tmp_path: Path,
+):
+    from xic_extractor.alignment.tsv_writer import write_alignment_status_matrix_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(),),
+        cells=(
+            _cell(
+                "sample-a",
+                "duplicate_assigned",
+                area=None,
+                trace_quality="assigned_duplicate",
+            ),
+        ),
+        sample_order=("sample-a",),
+    )
+
+    rows = _read_tsv(
+        write_alignment_status_matrix_tsv(tmp_path / "status.tsv", matrix)
+    )
+
+    assert rows[0]["sample-a"] == "duplicate_assigned"
 
 
 def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
@@ -312,6 +378,7 @@ def _cell(
     cluster_id: str = "ALN000001",
     area: float | None = None,
     candidate_id: str | None = None,
+    trace_quality: str | None = None,
 ) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,
@@ -323,7 +390,11 @@ def _cell(
         peak_start_rt=8.4 if area is not None else None,
         peak_end_rt=8.6 if area is not None else None,
         rt_delta_sec=0.0 if area is not None else None,
-        trace_quality="clean" if area is not None else "unchecked",
+        trace_quality=(
+            trace_quality
+            if trace_quality is not None
+            else ("clean" if area is not None else "unchecked")
+        ),
         scan_support_score=0.8 if area is not None else None,
         source_candidate_id=candidate_id,
         source_raw_file=Path(f"{sample_stem}.raw") if candidate_id else None,

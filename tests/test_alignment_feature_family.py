@@ -145,6 +145,48 @@ def test_full_ms2_signature_conflict_blocks_family_consolidation_when_available(
     ]
 
 
+def test_rescued_overlap_without_shared_detected_does_not_make_one_family():
+    left = _cluster(
+        "ALN000001",
+        has_anchor=True,
+        mz=242.114,
+        rt=12.5927,
+        members=("s1",),
+    )
+    right = _cluster(
+        "ALN000002",
+        has_anchor=False,
+        mz=242.115,
+        rt=12.5916,
+        members=("s2",),
+    )
+    matrix = AlignmentMatrix(
+        clusters=(left, right),
+        sample_order=("s1", "s2"),
+        cells=(
+            _cell("s1", "ALN000001", "detected", area=100.0),
+            _cell("s2", "ALN000001", "rescued", area=80.0),
+            _cell("s1", "ALN000002", "rescued", area=90.0),
+            _cell("s2", "ALN000002", "detected", area=95.0),
+        ),
+    )
+
+    families = build_ms1_feature_families(
+        (left, right),
+        event_matrix=matrix,
+        config=AlignmentConfig(
+            duplicate_fold_min_shared_detected_count=1,
+            duplicate_fold_min_detected_overlap=0.5,
+            duplicate_fold_min_detected_jaccard=0.5,
+        ),
+    )
+
+    assert [family.event_cluster_ids for family in families] == [
+        ("ALN000001",),
+        ("ALN000002",),
+    ]
+
+
 def _cluster(
     cluster_id: str,
     *,
