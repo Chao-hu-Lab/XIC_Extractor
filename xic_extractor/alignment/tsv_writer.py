@@ -1,0 +1,303 @@
+from __future__ import annotations
+
+import csv
+import math
+from pathlib import Path
+
+from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.models import AlignmentCluster
+
+ALIGNMENT_REVIEW_COLUMNS = (
+    "cluster_id",
+    "neutral_loss_tag",
+    "cluster_center_mz",
+    "cluster_center_rt",
+    "cluster_product_mz",
+    "cluster_observed_neutral_loss_da",
+    "has_anchor",
+    "member_count",
+    "detected_count",
+    "rescued_count",
+    "absent_count",
+    "unchecked_count",
+    "present_rate",
+    "rescued_rate",
+    "representative_samples",
+    "representative_candidate_ids",
+    "warning",
+    "reason",
+)
+
+ALIGNMENT_CELLS_COLUMNS = (
+    "cluster_id",
+    "sample_stem",
+    "status",
+    "area",
+    "apex_rt",
+    "height",
+    "peak_start_rt",
+    "peak_end_rt",
+    "rt_delta_sec",
+    "trace_quality",
+    "scan_support_score",
+    "source_candidate_id",
+    "source_raw_file",
+    "neutral_loss_tag",
+    "cluster_center_mz",
+    "cluster_center_rt",
+    "reason",
+)
+
+
+def write_alignment_review_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
+    return _write_tsv(path, ALIGNMENT_REVIEW_COLUMNS, _review_rows(matrix))
+
+
+def write_alignment_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
+    columns = (
+        "cluster_id",
+        "neutral_loss_tag",
+        "cluster_center_mz",
+        "cluster_center_rt",
+        *matrix.sample_order,
+    )
+    rows = []
+    cells_by_cluster = _cells_by_cluster(matrix)
+    for cluster in matrix.clusters:
+        cells = cells_by_cluster.get(cluster.cluster_id, ())
+        cells_by_sample = {cell.sample_stem: cell for cell in cells}
+        row = {
+            "cluster_id": cluster.cluster_id,
+            "neutral_loss_tag": cluster.neutral_loss_tag,
+            "cluster_center_mz": _format_value(cluster.cluster_center_mz),
+            "cluster_center_rt": _format_value(cluster.cluster_center_rt),
+        }
+        for sample_stem in matrix.sample_order:
+            row[sample_stem] = _matrix_area(cells_by_sample.get(sample_stem))
+        rows.append(row)
+    return _write_tsv(path, columns, rows)
+
+
+def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
+    clusters_by_id = {cluster.cluster_id: cluster for cluster in matrix.clusters}
+    rows = []
+    for cell in matrix.cells:
+        cluster = clusters_by_id[cell.cluster_id]
+        rows.append(
+            {
+                "cluster_id": cell.cluster_id,
+                "sample_stem": cell.sample_stem,
+                "status": cell.status,
+                "area": _format_value(cell.area),
+                "apex_rt": _format_value(cell.apex_rt),
+                "height": _format_value(cell.height),
+                "peak_start_rt": _format_value(cell.peak_start_rt),
+                "peak_end_rt": _format_value(cell.peak_end_rt),
+                "rt_delta_sec": _format_value(cell.rt_delta_sec),
+                "trace_quality": cell.trace_quality,
+                "scan_support_score": _format_value(cell.scan_support_score),
+                "source_candidate_id": cell.source_candidate_id or "",
+                "source_raw_file": str(cell.source_raw_file or ""),
+                "neutral_loss_tag": cluster.neutral_loss_tag,
+                "cluster_center_mz": _format_value(cluster.cluster_center_mz),
+                "cluster_center_rt": _format_value(cluster.cluster_center_rt),
+                "reason": cell.reason,
+            }
+        )
+    return _write_tsv(path, ALIGNMENT_CELLS_COLUMNS, rows)
+
+
+def write_alignment_status_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
+    columns = (
+        "cluster_id",
+        "neutral_loss_tag",
+        "cluster_center_mz",
+        "cluster_center_rt",
+        *matrix.sample_order,
+    )
+    rows = []
+    cells_by_cluster = _cells_by_cluster(matrix)
+    for cluster in matrix.clusters:
+        cells = cells_by_cluster.get(cluster.cluster_id, ())
+        cells_by_sample = {cell.sample_stem: cell for cell in cells}
+        row = {
+            "cluster_id": cluster.cluster_id,
+            "neutral_loss_tag": cluster.neutral_loss_tag,
+            "cluster_center_mz": _format_value(cluster.cluster_center_mz),
+            "cluster_center_rt": _format_value(cluster.cluster_center_rt),
+        }
+        for sample_stem in matrix.sample_order:
+            cell = cells_by_sample.get(sample_stem)
+            row[sample_stem] = "" if cell is None else cell.status
+        rows.append(row)
+    return _write_tsv(path, columns, rows)
+
+
+def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    cells_by_cluster = _cells_by_cluster(matrix)
+    sample_count = len(matrix.sample_order)
+    for cluster in matrix.clusters:
+        cells = cells_by_cluster.get(cluster.cluster_id, ())
+        detected_count = _count(cells, "detected")
+        rescued_count = _count(cells, "rescued")
+        absent_count = _count(cells, "absent")
+        unchecked_count = _count(cells, "unchecked")
+        present_count = detected_count + rescued_count
+        rows.append(
+            {
+                "cluster_id": cluster.cluster_id,
+                "neutral_loss_tag": cluster.neutral_loss_tag,
+                "cluster_center_mz": cluster.cluster_center_mz,
+                "cluster_center_rt": cluster.cluster_center_rt,
+                "cluster_product_mz": cluster.cluster_product_mz,
+                "cluster_observed_neutral_loss_da": (
+                    cluster.cluster_observed_neutral_loss_da
+                ),
+                "has_anchor": cluster.has_anchor,
+                "member_count": detected_count + rescued_count,
+                "detected_count": detected_count,
+                "rescued_count": rescued_count,
+                "absent_count": absent_count,
+                "unchecked_count": unchecked_count,
+                "present_rate": _safe_rate(present_count, sample_count),
+                "rescued_rate": _safe_rate(rescued_count, sample_count),
+                "representative_samples": _representative_samples(cells),
+                "representative_candidate_ids": _representative_candidate_ids(cells),
+                "warning": _warning(
+                    cluster,
+                    sample_count=sample_count,
+                    detected_count=detected_count,
+                    rescued_count=rescued_count,
+                    unchecked_count=unchecked_count,
+                ),
+                "reason": _reason(cluster, present_count, sample_count, rescued_count),
+            }
+        )
+    return rows
+
+
+def _write_tsv(
+    path: Path,
+    fieldnames: tuple[str, ...],
+    rows: list[dict[str, object]],
+) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[_escape_excel_formula(column) for column in fieldnames],
+            delimiter="\t",
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    _escape_excel_formula(column): _format_value(row.get(column, ""))
+                    for column in fieldnames
+                }
+            )
+    return path
+
+
+def _cells_by_cluster(matrix: AlignmentMatrix) -> dict[str, tuple[AlignedCell, ...]]:
+    grouped: dict[str, list[AlignedCell]] = {}
+    for cell in matrix.cells:
+        grouped.setdefault(cell.cluster_id, []).append(cell)
+    return {cluster_id: tuple(cells) for cluster_id, cells in grouped.items()}
+
+
+def _count(cells: tuple[AlignedCell, ...], status: str) -> int:
+    return sum(1 for cell in cells if cell.status == status)
+
+
+def _safe_rate(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return numerator / denominator
+
+
+def _representative_samples(cells: tuple[AlignedCell, ...]) -> str:
+    samples = [
+        cell.sample_stem for cell in cells if cell.status in {"detected", "rescued"}
+    ]
+    return _cap_semicolon(samples)
+
+
+def _representative_candidate_ids(cells: tuple[AlignedCell, ...]) -> str:
+    candidate_ids = [
+        cell.source_candidate_id
+        for cell in cells
+        if cell.status == "detected" and cell.source_candidate_id
+    ]
+    return _cap_semicolon(candidate_ids)
+
+
+def _cap_semicolon(values: list[str]) -> str:
+    capped = values[:5]
+    if len(values) > 5:
+        capped.append("...")
+    return ";".join(capped)
+
+
+def _warning(
+    cluster: AlignmentCluster,
+    *,
+    sample_count: int,
+    detected_count: int,
+    rescued_count: int,
+    unchecked_count: int,
+) -> str:
+    if not cluster.has_anchor:
+        return "no_anchor"
+    if sample_count > 0 and unchecked_count / sample_count > 0.5:
+        return "high_unchecked"
+    if rescued_count > detected_count:
+        return "high_rescue_rate"
+    return ""
+
+
+def _reason(
+    cluster: AlignmentCluster,
+    present_count: int,
+    sample_count: int,
+    rescued_count: int,
+) -> str:
+    prefix = "anchor cluster" if cluster.has_anchor else "no anchor"
+    return f"{prefix}; {present_count}/{sample_count} present; {rescued_count} rescued"
+
+
+def _matrix_area(cell: AlignedCell | None) -> str:
+    if cell is None or cell.status not in {"detected", "rescued"}:
+        return ""
+    area = cell.area
+    if area is None or not math.isfinite(area) or area <= 0:
+        return ""
+    return _format_float(area)
+
+
+def _format_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return ""
+        return _format_float(value)
+    if isinstance(value, Path):
+        return _escape_excel_formula(str(value))
+    return _escape_excel_formula(str(value))
+
+
+def _format_float(value: float) -> str:
+    return f"{value:.6g}"
+
+
+def _escape_excel_formula(value: str) -> str:
+    if value.startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
