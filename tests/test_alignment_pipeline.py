@@ -209,6 +209,59 @@ def test_pipeline_debug_flags_write_optional_outputs(
     assert outputs.status_matrix_tsv.exists()
 
 
+def test_pipeline_folds_matrix_before_writing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_candidates",
+        lambda candidates, *, config: (_cluster(),),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "backfill_alignment_matrix",
+        lambda clusters, *, sample_order, raw_sources, **kwargs: _matrix(sample_order),
+    )
+    sentinel_matrix = AlignmentMatrix(
+        clusters=(_cluster(cluster_id="ALN999999"),),
+        cells=(),
+        sample_order=("Sample_A",),
+    )
+
+    def fake_fold(matrix, *, config):
+        calls["folded"] = True
+        calls["config"] = config
+        return sentinel_matrix
+
+    monkeypatch.setattr(pipeline_module, "fold_near_duplicate_clusters", fake_fold)
+    monkeypatch.setattr(
+        pipeline_module,
+        "_write_outputs_atomic",
+        lambda outputs, matrix: calls.setdefault("written_matrix", matrix),
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+    )
+
+    assert calls["folded"] is True
+    assert isinstance(calls["config"], AlignmentConfig)
+    assert calls["written_matrix"] is sentinel_matrix
+
+
 def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
     tmp_path: Path,
     monkeypatch,
@@ -435,9 +488,9 @@ def _candidate_row(sample_stem: str) -> dict[str, str]:
     }
 
 
-def _cluster() -> AlignmentCluster:
+def _cluster(cluster_id: str = "ALN000001") -> AlignmentCluster:
     return AlignmentCluster(
-        cluster_id="ALN000001",
+        cluster_id=cluster_id,
         neutral_loss_tag="DNA_dR",
         cluster_center_mz=500.0,
         cluster_center_rt=8.5,
