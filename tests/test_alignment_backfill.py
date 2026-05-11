@@ -309,6 +309,46 @@ def test_anchor_backfill_peak_outside_max_rt_is_absent(monkeypatch):
     assert absent.reason == "MS1 peak outside cluster RT guard"
 
 
+@pytest.mark.parametrize(
+    ("rt", "intensity"),
+    [
+        (np.array([4.9, np.nan, 5.1]), np.array([1.0, 4.0, 10.0])),
+        (np.array([4.9, 5.0, 5.1]), np.array([1.0, np.inf, 10.0])),
+    ],
+)
+def test_anchor_backfill_nonfinite_trace_is_unchecked_without_peak_picker(
+    monkeypatch,
+    rt,
+    intensity,
+):
+    source = FakeSource(rt=rt, intensity=intensity)
+    cluster = _cluster(
+        Candidate(candidate_id="sample-a#1", sample_stem="sample-a"),
+        has_anchor=True,
+    )
+    peak_picker_called = False
+
+    def fail_if_called(*args, **kwargs):
+        nonlocal peak_picker_called
+        peak_picker_called = True
+        return _no_peak_result()
+
+    monkeypatch.setattr(backfill_module, "find_peak_and_area", fail_if_called)
+
+    matrix = backfill_alignment_matrix(
+        (cluster,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+    )
+
+    unchecked = _cell(matrix, cluster_id="ALN000001", sample_stem="sample-b")
+    assert unchecked.status == "unchecked"
+    assert unchecked.reason == "MS1 backfill could not be checked"
+    assert peak_picker_called is False
+
+
 class FakeSource:
     def __init__(
         self,

@@ -254,8 +254,12 @@ def _validated_trace_arrays(
         rt_array.ndim != 1
         or intensity_array.ndim != 1
         or rt_array.shape != intensity_array.shape
+        or not np.all(np.isfinite(rt_array))
+        or not np.all(np.isfinite(intensity_array))
     ):
-        raise ValueError("MS1 backfill trace arrays must be one-dimensional pairs")
+        raise ValueError(
+            "MS1 backfill trace arrays must be finite one-dimensional pairs",
+        )
     return rt_array, intensity_array
 
 
