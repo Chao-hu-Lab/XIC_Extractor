@@ -23,9 +23,10 @@ Splitting also keeps each plan's regression risk bounded: clustering bugs, backf
 
 ## Execution Order
 
-Run these plans in order. Plans 1-4 are written. Plans 1-3 are implemented in
-the current alignment branch; Plan 4 remains the next validation step because it
-consumes the Plan 3 output artifacts.
+Run these plans in order. Plans 1-4 are written and implemented in the current
+alignment branch. Plan 4 is validation and replacement-decision support; it
+consumes the Plan 3 output artifacts and does not change discovery, clustering,
+backfill, or alignment output schemas.
 
 1. [Plan 1: Alignment Clustering Core](2026-05-10-alignment-clustering-plan.md)
 2. [Plan 2: Cross-Sample MS1 Backfill](2026-05-10-alignment-ms1-backfill-plan.md)

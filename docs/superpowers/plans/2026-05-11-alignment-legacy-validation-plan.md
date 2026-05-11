@@ -8,6 +8,10 @@
 
 **Tech Stack:** Python, csv, pathlib, argparse, openpyxl for xlsx input, pytest, existing alignment TSV contracts, no RAW reader dependency.
 
+**Implementation status:** Implemented in the current alignment branch as
+`xic-align-validate-cli`, with default outputs `alignment_validation_summary.tsv`
+and `alignment_legacy_matches.tsv`.
+
 ---
 
 ## Summary
