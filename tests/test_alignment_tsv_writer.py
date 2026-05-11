@@ -15,6 +15,11 @@ REVIEW_COLUMNS = [
     "cluster_observed_neutral_loss_da",
     "has_anchor",
     "member_count",
+    "folded_cluster_count",
+    "folded_cluster_ids",
+    "folded_member_count",
+    "folded_sample_fill_count",
+    "fold_evidence",
     "detected_count",
     "rescued_count",
     "absent_count",
@@ -55,6 +60,11 @@ def test_write_alignment_review_tsv_columns_counts_rates_and_reason(tmp_path: Pa
         "cluster_observed_neutral_loss_da": "116.047",
         "has_anchor": "TRUE",
         "member_count": "1",
+        "folded_cluster_count": "0",
+        "folded_cluster_ids": "",
+        "folded_member_count": "0",
+        "folded_sample_fill_count": "0",
+        "fold_evidence": "",
         "detected_count": "1",
         "rescued_count": "1",
         "absent_count": "1",
@@ -64,7 +74,7 @@ def test_write_alignment_review_tsv_columns_counts_rates_and_reason(tmp_path: Pa
         "representative_samples": "sample-a;sample-b",
         "representative_candidate_ids": "sample-a#1",
         "warning": "",
-        "reason": "anchor cluster; 2/4 present; 1 rescued",
+        "reason": "anchor cluster; 2/4 present; 1 MS1 backfilled",
     }
 
 
@@ -96,9 +106,46 @@ def test_write_alignment_review_tsv_warning_precedence(tmp_path: Path):
     assert [row["warning"] for row in rows] == [
         "no_anchor",
         "high_unchecked",
-        "high_rescue_rate",
+        "high_backfill_dependency",
         "",
     ]
+
+
+def test_write_alignment_review_tsv_reports_folded_clusters(tmp_path: Path):
+    from xic_extractor.alignment.tsv_writer import write_alignment_review_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(
+            _cluster(
+                has_anchor=True,
+                member_count=2,
+                folded_cluster_ids=("ALN000002", "ALN000003"),
+                folded_member_count=5,
+                folded_sample_fill_count=1,
+                fold_evidence=(
+                    "cid_nl_only;max_mz_ppm=2;max_rt_sec=1;"
+                    "min_shared_detected=4"
+                ),
+            ),
+        ),
+        cells=(
+            _cell("sample-a", "detected", area=10.0, candidate_id="sample-a#1"),
+            _cell("sample-b", "rescued", area=20.0),
+        ),
+        sample_order=("sample-a", "sample-b"),
+    )
+
+    rows = _read_tsv(write_alignment_review_tsv(tmp_path / "review.tsv", matrix))
+
+    assert rows[0]["folded_cluster_count"] == "2"
+    assert rows[0]["folded_cluster_ids"] == "ALN000002;ALN000003"
+    assert rows[0]["folded_member_count"] == "5"
+    assert rows[0]["folded_sample_fill_count"] == "1"
+    assert rows[0]["fold_evidence"].startswith("cid_nl_only;")
+    assert rows[0]["reason"] == (
+        "anchor cluster; 2/2 present; 1 MS1 backfilled; "
+        "folded 2 near-duplicate clusters"
+    )
 
 
 def test_write_alignment_matrix_tsv_blanks_missing_and_invalid_areas(tmp_path: Path):
@@ -245,6 +292,10 @@ def _cluster(
     neutral_loss_tag: str = "DNA_dR",
     has_anchor: bool = True,
     member_count: int = 0,
+    folded_cluster_ids: tuple[str, ...] = (),
+    folded_member_count: int = 0,
+    folded_sample_fill_count: int = 0,
+    fold_evidence: str = "",
 ) -> AlignmentCluster:
     return AlignmentCluster(
         cluster_id=cluster_id,
@@ -259,6 +310,10 @@ def _cluster(
             for index in range(member_count)
         ),
         anchor_members=(),
+        folded_cluster_ids=folded_cluster_ids,
+        folded_member_count=folded_member_count,
+        folded_sample_fill_count=folded_sample_fill_count,
+        fold_evidence=fold_evidence,
     )
 
 

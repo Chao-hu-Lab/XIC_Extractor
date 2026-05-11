@@ -64,6 +64,11 @@ cluster_product_mz
 cluster_observed_neutral_loss_da
 has_anchor
 member_count
+folded_cluster_count
+folded_cluster_ids
+folded_member_count
+folded_sample_fill_count
+fold_evidence
 detected_count
 rescued_count
 absent_count
@@ -82,12 +87,21 @@ Definitions:
 - `rescued_rate = rescued_count / sample_count`.
 - `representative_samples`: semicolon-separated detected/rescued sample stems, capped at 5 then suffix `;...`.
 - `representative_candidate_ids`: semicolon-separated detected candidate IDs, capped at 5 then suffix `;...`.
+- Near-duplicate folding may remove secondary cluster rows from the review and
+  matrix outputs. The retained primary row records folded secondaries in
+  `folded_cluster_count`, `folded_cluster_ids`, and `folded_member_count`.
+  `folded_sample_fill_count` records how many sample cells were filled from
+  folded secondaries. `fold_evidence` records compact CID-only audit evidence
+  such as max m/z ppm, max RT seconds, shared detected count, and detected
+  Jaccard. `member_count` remains the detected member count of the retained
+  primary cluster; it does not include MS1-backfilled cells.
 - `warning` should be short and deterministic. Emit only the first matching warning by this precedence:
   - `no_anchor`: `has_anchor` is false.
   - `high_unchecked`: `unchecked_count / sample_count > 0.5`.
-  - `high_rescue_rate`: `rescued_count > detected_count`.
+  - `high_backfill_dependency`: `rescued_count > detected_count`.
   - blank if no warning.
-- `reason` should be concise and derived from counts, e.g. `anchor cluster; 7/8 present; 2 rescued`.
+- `reason` should be concise and derived from counts, e.g.
+  `anchor cluster; 7/8 present; 2 MS1 backfilled`.
 
 ### Default File 2: `alignment_matrix.tsv`
 
@@ -327,7 +341,7 @@ git commit -m "feat(alignment): load discovery batch candidates"
   - `alignment_review.tsv` has the exact default columns in this plan.
   - review rows compute detected/rescued/absent/unchecked counts.
   - review rows compute `present_rate` and `rescued_rate`.
-  - review warning precedence is deterministic: `no_anchor`, then `high_unchecked` when `unchecked_count / sample_count > 0.5`, then `high_rescue_rate` when `rescued_count > detected_count`, otherwise blank.
+  - review warning precedence is deterministic: `no_anchor`, then `high_unchecked` when `unchecked_count / sample_count > 0.5`, then `high_backfill_dependency` when `rescued_count > detected_count`, otherwise blank.
   - matrix writer blanks `absent`, `unchecked`, `None`, `0`, negative, and non-finite areas.
   - matrix writer includes sample columns in `sample_order`.
   - optional cells TSV writes full per-cell audit columns.

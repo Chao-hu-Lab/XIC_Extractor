@@ -16,6 +16,11 @@ ALIGNMENT_REVIEW_COLUMNS = (
     "cluster_observed_neutral_loss_da",
     "has_anchor",
     "member_count",
+    "folded_cluster_count",
+    "folded_cluster_ids",
+    "folded_member_count",
+    "folded_sample_fill_count",
+    "fold_evidence",
     "detected_count",
     "rescued_count",
     "absent_count",
@@ -156,6 +161,11 @@ def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
                 ),
                 "has_anchor": cluster.has_anchor,
                 "member_count": len(cluster.members),
+                "folded_cluster_count": len(cluster.folded_cluster_ids),
+                "folded_cluster_ids": ";".join(cluster.folded_cluster_ids),
+                "folded_member_count": cluster.folded_member_count,
+                "folded_sample_fill_count": cluster.folded_sample_fill_count,
+                "fold_evidence": cluster.fold_evidence,
                 "detected_count": detected_count,
                 "rescued_count": rescued_count,
                 "absent_count": absent_count,
@@ -254,7 +264,7 @@ def _warning(
     if sample_count > 0 and unchecked_count / sample_count > 0.5:
         return "high_unchecked"
     if rescued_count > detected_count:
-        return "high_rescue_rate"
+        return "high_backfill_dependency"
     return ""
 
 
@@ -265,7 +275,16 @@ def _reason(
     rescued_count: int,
 ) -> str:
     prefix = "anchor cluster" if cluster.has_anchor else "no anchor"
-    return f"{prefix}; {present_count}/{sample_count} present; {rescued_count} rescued"
+    parts = [
+        prefix,
+        f"{present_count}/{sample_count} present",
+        f"{rescued_count} MS1 backfilled",
+    ]
+    if cluster.folded_cluster_ids:
+        parts.append(
+            f"folded {len(cluster.folded_cluster_ids)} near-duplicate clusters",
+        )
+    return "; ".join(parts)
 
 
 def _matrix_area(cell: AlignedCell | None) -> str:
