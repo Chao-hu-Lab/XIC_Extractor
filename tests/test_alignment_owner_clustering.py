@@ -24,6 +24,39 @@ def test_owner_clustering_allows_plausible_rt_drift_with_complete_link() -> None
     assert features[0].evidence == "owner_complete_link;owner_count=2"
 
 
+def test_owner_clustering_collapses_5medc_like_class_drift() -> None:
+    features = cluster_sample_local_owners(
+        (
+            _owner("tumor-a", "a", apex_rt=11.5674),
+            _owner("qc-a", "b", apex_rt=12.1813),
+            _owner("qc-b", "c", apex_rt=12.4051),
+            _owner("normal-a", "d", apex_rt=12.6515),
+            _owner("benign-a", "e", apex_rt=12.6673),
+        ),
+        config=AlignmentConfig(identity_rt_candidate_window_sec=180.0),
+    )
+
+    assert len(features) == 1
+    assert len(features[0].event_cluster_ids) == 5
+    assert features[0].evidence == "owner_complete_link;owner_count=5"
+
+
+def test_owner_clustering_rejects_product_or_observed_loss_conflict() -> None:
+    features = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "a", product_mz=126.066, observed_loss=116.048),
+            _owner("sample-b", "b", product_mz=126.066, observed_loss=116.500),
+            _owner("sample-c", "c", product_mz=127.000, observed_loss=116.048),
+        ),
+        config=AlignmentConfig(
+            product_mz_tolerance_ppm=20.0,
+            observed_loss_tolerance_ppm=20.0,
+        ),
+    )
+
+    assert len(features) == 3
+
+
 def test_owner_clustering_keeps_different_neutral_loss_tags_separate() -> None:
     features = cluster_sample_local_owners(
         (

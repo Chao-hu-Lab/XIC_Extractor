@@ -20,6 +20,7 @@ REVIEW_COLUMNS = [
     "detected_count",
     "absent_count",
     "unchecked_count",
+    "duplicate_assigned_count",
     "ambiguous_ms1_owner_count",
     "present_rate",
     "representative_samples",
@@ -61,6 +62,7 @@ def test_write_alignment_review_tsv_columns_counts_rates_and_reason(tmp_path: Pa
         "detected_count": "1",
         "absent_count": "1",
         "unchecked_count": "1",
+        "duplicate_assigned_count": "0",
         "ambiguous_ms1_owner_count": "0",
         "present_rate": "0.5",
         "representative_samples": "sample-a;sample-b",
@@ -144,6 +146,7 @@ def test_write_alignment_review_tsv_counts_duplicate_assigned_separately(
     assert rows[0]["detected_count"] == "1"
     assert rows[0]["absent_count"] == "1"
     assert rows[0]["unchecked_count"] == "0"
+    assert rows[0]["duplicate_assigned_count"] == "1"
     assert rows[0]["present_rate"] == "0.5"
     assert "1 duplicate-assigned" in rows[0]["reason"]
 

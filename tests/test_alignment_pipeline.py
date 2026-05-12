@@ -348,6 +348,57 @@ def test_pipeline_builds_owner_features_before_owner_matrix(
     assert calls["written_matrix"] is owner_matrix
 
 
+def test_pipeline_applies_claim_registry_before_writing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    owner_matrix = _matrix(("Sample_A",))
+    claimed_matrix = _matrix(("Sample_A",))
+    calls = {}
+
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: owner_matrix,
+    )
+
+    def fake_claim_registry(matrix, config):
+        calls["claim_matrix"] = matrix
+        calls["claim_config"] = config
+        return claimed_matrix
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "apply_ms1_peak_claim_registry",
+        fake_claim_registry,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "_write_outputs_atomic",
+        lambda outputs, matrix, **kwargs: calls.setdefault("written_matrix", matrix),
+    )
+
+    alignment_config = AlignmentConfig()
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=alignment_config,
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+    )
+
+    assert calls["claim_matrix"] is owner_matrix
+    assert calls["claim_config"] is alignment_config
+    assert calls["written_matrix"] is claimed_matrix
+
+
 def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
     tmp_path: Path,
     monkeypatch,

@@ -10,6 +10,7 @@ from xic_extractor.alignment.backfill import (
     MS1BackfillSource,
     backfill_alignment_matrix,
 )
+from xic_extractor.alignment.claim_registry import apply_ms1_peak_claim_registry
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.csv_io import (
     read_discovery_batch_index,
@@ -129,6 +130,7 @@ def run_alignment(
             ambiguous_by_sample={},
             rescued_cells=rescued_cells,
         )
+        matrix = apply_ms1_peak_claim_registry(matrix, alignment_config)
         outputs = _output_paths(
             output_dir,
             output_level=output_level,

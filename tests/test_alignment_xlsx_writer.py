@@ -29,6 +29,31 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
     assert workbook["Metadata"]["A1"].value == "key"
 
 
+def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
+    tmp_path: Path,
+):
+    base = sample_alignment_matrix()
+    matrix = AlignmentMatrix(
+        clusters=base.clusters,
+        sample_order=("s1", "s2"),
+        cells=(
+            sample_cell("s1", "FAM000001", "detected", 100.0),
+            sample_cell("s2", "FAM000001", "duplicate_assigned", 200.0),
+        ),
+    )
+
+    path = write_alignment_results_xlsx(
+        tmp_path / "alignment_results.xlsx",
+        matrix,
+        metadata={"schema_version": "alignment-results-v1"},
+    )
+
+    workbook = load_workbook(path, data_only=True)
+    assert workbook["Matrix"]["E2"].value == 100.0
+    assert workbook["Matrix"]["F2"].value is None
+    assert workbook["Review"]["G2"].value == 1
+
+
 def sample_alignment_matrix() -> AlignmentMatrix:
     cluster = SimpleNamespace(
         feature_family_id="FAM000001",
