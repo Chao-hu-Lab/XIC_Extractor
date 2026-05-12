@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import csv
-import math
 from pathlib import Path
 from typing import Any
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.output_rows import (
+    cells_by_cluster,
+    count_status,
+    escape_excel_formula,
+    format_value,
+    matrix_area,
+    row_id,
+    safe_rate,
+)
 
 ALIGNMENT_REVIEW_COLUMNS = (
     "feature_family_id",
@@ -21,6 +29,7 @@ ALIGNMENT_REVIEW_COLUMNS = (
     "detected_count",
     "absent_count",
     "unchecked_count",
+    "ambiguous_ms1_owner_count",
     "present_rate",
     "representative_samples",
     "family_evidence",
@@ -62,25 +71,25 @@ def write_alignment_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
         *matrix.sample_order,
     )
     rows: list[dict[str, object]] = []
-    cells_by_cluster = _cells_by_cluster(matrix)
+    grouped_cells = cells_by_cluster(matrix)
     for cluster in matrix.clusters:
-        row_id = _row_id(cluster)
-        cells = cells_by_cluster.get(row_id, ())
+        cluster_id = row_id(cluster)
+        cells = grouped_cells.get(cluster_id, ())
         cells_by_sample = {cell.sample_stem: cell for cell in cells}
         row: dict[str, object] = {
-            "feature_family_id": row_id,
+            "feature_family_id": cluster_id,
             "neutral_loss_tag": cluster.neutral_loss_tag,
-            "family_center_mz": _format_value(_family_center_mz(cluster)),
-            "family_center_rt": _format_value(_family_center_rt(cluster)),
+            "family_center_mz": format_value(_family_center_mz(cluster)),
+            "family_center_rt": format_value(_family_center_rt(cluster)),
         }
         for sample_stem in matrix.sample_order:
-            row[sample_stem] = _matrix_area(cells_by_sample.get(sample_stem))
+            row[sample_stem] = matrix_area(cells_by_sample.get(sample_stem))
         rows.append(row)
     return _write_tsv(path, columns, rows)
 
 
 def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
-    clusters_by_id = {_row_id(cluster): cluster for cluster in matrix.clusters}
+    clusters_by_id = {row_id(cluster): cluster for cluster in matrix.clusters}
     rows: list[dict[str, object]] = []
     for cell in matrix.cells:
         cluster = clusters_by_id[cell.cluster_id]
@@ -89,19 +98,19 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
                 "feature_family_id": cell.cluster_id,
                 "sample_stem": cell.sample_stem,
                 "status": cell.status,
-                "area": _format_value(cell.area),
-                "apex_rt": _format_value(cell.apex_rt),
-                "height": _format_value(cell.height),
-                "peak_start_rt": _format_value(cell.peak_start_rt),
-                "peak_end_rt": _format_value(cell.peak_end_rt),
-                "rt_delta_sec": _format_value(cell.rt_delta_sec),
+                "area": format_value(cell.area),
+                "apex_rt": format_value(cell.apex_rt),
+                "height": format_value(cell.height),
+                "peak_start_rt": format_value(cell.peak_start_rt),
+                "peak_end_rt": format_value(cell.peak_end_rt),
+                "rt_delta_sec": format_value(cell.rt_delta_sec),
                 "trace_quality": cell.trace_quality,
-                "scan_support_score": _format_value(cell.scan_support_score),
+                "scan_support_score": format_value(cell.scan_support_score),
                 "source_candidate_id": cell.source_candidate_id or "",
                 "source_raw_file": str(cell.source_raw_file or ""),
                 "neutral_loss_tag": cluster.neutral_loss_tag,
-                "family_center_mz": _format_value(_family_center_mz(cluster)),
-                "family_center_rt": _format_value(_family_center_rt(cluster)),
+                "family_center_mz": format_value(_family_center_mz(cluster)),
+                "family_center_rt": format_value(_family_center_rt(cluster)),
                 "reason": cell.reason,
             }
         )
@@ -117,16 +126,16 @@ def write_alignment_status_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Pa
         *matrix.sample_order,
     )
     rows: list[dict[str, object]] = []
-    cells_by_cluster = _cells_by_cluster(matrix)
+    grouped_cells = cells_by_cluster(matrix)
     for cluster in matrix.clusters:
-        row_id = _row_id(cluster)
-        cells = cells_by_cluster.get(row_id, ())
+        cluster_id = row_id(cluster)
+        cells = grouped_cells.get(cluster_id, ())
         cells_by_sample = {cell.sample_stem: cell for cell in cells}
         row: dict[str, object] = {
-            "feature_family_id": row_id,
+            "feature_family_id": cluster_id,
             "neutral_loss_tag": cluster.neutral_loss_tag,
-            "family_center_mz": _format_value(_family_center_mz(cluster)),
-            "family_center_rt": _format_value(_family_center_rt(cluster)),
+            "family_center_mz": format_value(_family_center_mz(cluster)),
+            "family_center_rt": format_value(_family_center_rt(cluster)),
         }
         for sample_stem in matrix.sample_order:
             cell = cells_by_sample.get(sample_stem)
@@ -137,21 +146,21 @@ def write_alignment_status_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Pa
 
 def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    cells_by_cluster = _cells_by_cluster(matrix)
+    grouped_cells = cells_by_cluster(matrix)
     sample_count = len(matrix.sample_order)
     for cluster in matrix.clusters:
-        row_id = _row_id(cluster)
-        cells = cells_by_cluster.get(row_id, ())
-        detected_count = _count(cells, "detected")
-        rescued_count = _count(cells, "rescued")
-        absent_count = _count(cells, "absent")
-        unchecked_count = _count(cells, "unchecked")
-        duplicate_assigned_count = _count(cells, "duplicate_assigned")
-        ambiguous_owner_count = _count(cells, "ambiguous_ms1_owner")
+        cluster_id = row_id(cluster)
+        cells = grouped_cells.get(cluster_id, ())
+        detected_count = count_status(cells, "detected")
+        rescued_count = count_status(cells, "rescued")
+        absent_count = count_status(cells, "absent")
+        unchecked_count = count_status(cells, "unchecked")
+        duplicate_assigned_count = count_status(cells, "duplicate_assigned")
+        ambiguous_owner_count = count_status(cells, "ambiguous_ms1_owner")
         present_count = detected_count + rescued_count
         rows.append(
             {
-                "feature_family_id": row_id,
+                "feature_family_id": cluster_id,
                 "neutral_loss_tag": cluster.neutral_loss_tag,
                 "family_center_mz": _family_center_mz(cluster),
                 "family_center_rt": _family_center_rt(cluster),
@@ -166,7 +175,8 @@ def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
                 "detected_count": detected_count,
                 "absent_count": absent_count,
                 "unchecked_count": unchecked_count,
-                "present_rate": _safe_rate(present_count, sample_count),
+                "ambiguous_ms1_owner_count": ambiguous_owner_count,
+                "present_rate": safe_rate(present_count, sample_count),
                 "representative_samples": _representative_samples(cells),
                 "family_evidence": _family_evidence(cluster),
                 "warning": _warning(
@@ -198,7 +208,7 @@ def _write_tsv(
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=[_escape_excel_formula(column) for column in fieldnames],
+            fieldnames=[escape_excel_formula(column) for column in fieldnames],
             delimiter="\t",
             lineterminator="\n",
         )
@@ -206,28 +216,11 @@ def _write_tsv(
         for row in rows:
             writer.writerow(
                 {
-                    _escape_excel_formula(column): _format_value(row.get(column, ""))
+                    escape_excel_formula(column): format_value(row.get(column, ""))
                     for column in fieldnames
                 }
             )
     return path
-
-
-def _cells_by_cluster(matrix: AlignmentMatrix) -> dict[str, tuple[AlignedCell, ...]]:
-    grouped: dict[str, list[AlignedCell]] = {}
-    for cell in matrix.cells:
-        grouped.setdefault(cell.cluster_id, []).append(cell)
-    return {cluster_id: tuple(cells) for cluster_id, cells in grouped.items()}
-
-
-def _count(cells: tuple[AlignedCell, ...], status: str) -> int:
-    return sum(1 for cell in cells if cell.status == status)
-
-
-def _safe_rate(numerator: int, denominator: int) -> float:
-    if denominator <= 0:
-        return 0.0
-    return numerator / denominator
 
 
 def _representative_samples(cells: tuple[AlignedCell, ...]) -> str:
@@ -294,12 +287,6 @@ def _reason(
     return "; ".join(parts)
 
 
-def _row_id(row: Any) -> str:
-    if hasattr(row, "feature_family_id"):
-        return str(row.feature_family_id)
-    return str(row.cluster_id)
-
-
 def _family_center_mz(row: Any) -> float:
     if hasattr(row, "family_center_mz"):
         return row.family_center_mz
@@ -340,38 +327,3 @@ def _family_evidence(row: Any) -> str:
     if hasattr(row, "evidence"):
         return str(row.evidence)
     return str(row.fold_evidence)
-
-
-def _matrix_area(cell: AlignedCell | None) -> str:
-    if cell is None or cell.status not in {"detected", "rescued"}:
-        return ""
-    area = cell.area
-    if area is None or not math.isfinite(area) or area <= 0:
-        return ""
-    return _format_float(area)
-
-
-def _format_value(value: object) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bool):
-        return "TRUE" if value else "FALSE"
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            return ""
-        return _format_float(value)
-    if isinstance(value, Path):
-        return _escape_excel_formula(str(value))
-    return _escape_excel_formula(str(value))
-
-
-def _format_float(value: float) -> str:
-    return f"{value:.6g}"
-
-
-def _escape_excel_formula(value: str) -> str:
-    if value.startswith(("=", "+", "-", "@")):
-        return f"'{value}"
-    return value
