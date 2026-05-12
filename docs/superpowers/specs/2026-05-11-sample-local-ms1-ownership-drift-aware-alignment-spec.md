@@ -78,6 +78,9 @@ XIC untargeted: MS1 peak ownership first, then MS2 events explain that peak.
 The first implementation must be conservative. These locks prevent the method
 from drifting back into mz/RT-only or event-only alignment:
 
+- V1 discovery is a single neutral-loss-profile workflow. It does not implement
+  multi-tag discovery, tag aliases, cross-tag compatibility, or a neutral-loss
+  family policy.
 - V1 uses exact `neutral_loss_tag` equality only. Do not merge across
   "compatible NL families" until a real NL-family config/table exists with
   tests.
@@ -92,6 +95,37 @@ from drifting back into mz/RT-only or event-only alignment:
 - V1 must not let rescued/backfilled cells seed, bridge, or expand alignment
   groups or RT drift relationships.
 - V1 must not require HCD/full-fragment pattern matching for CID datasets.
+- V1 must not add target-specific exceptions for `8-oxo-Guo`, R/dR behavior, or
+  any other known target to compensate for missing multi-tag discovery.
+
+## Multi-Tag Boundary
+
+R/dR and multi-tag discovery are real production-readiness issues, but they are
+not part of this owner-family checkpoint.
+
+Current implementation facts:
+
+- `scripts/run_discovery.py` accepts one `neutral_loss_tag` and one
+  `neutral_loss_da` per discovery run.
+- Cross-sample owner identity compares the existing candidate
+  `neutral_loss_tag` directly.
+- There is no current `AlignmentTagPolicy`, tag alias table, multi-profile
+  discovery CLI, or cross-tag compatibility contract.
+
+Therefore this spec must not introduce a partial multi-tag contract. Future
+multi-tag work needs its own spec covering discovery seed generation, candidate
+CSV schema compatibility, alignment identity rules, targeted GT audit behavior,
+and production-readiness gates.
+
+Known blocker:
+
+```text
+8-oxo-Guo / R-vs-dR behavior cannot be declared production-ready until a
+separate multi-tag discovery/config spec exists and is implemented.
+```
+
+Wrong-tag broad backfill is a production-readiness blocker, not a reason to add
+ad hoc exceptions in owner-family formation.
 
 ## Algorithm Contract
 
@@ -446,6 +480,9 @@ push.
 - Do not make broad RT drift alone sufficient for merging.
 - Do not remove debug outputs before the production matrix contract is stable.
 - Do not force XLSX versus TSV in this algorithm spec.
+- Do not add `AlignmentTagPolicy`, multi-tag config, multi-profile discovery
+  CLI, tag aliases, or cross-tag compatibility in this owner-family checkpoint.
+- Do not make `8-oxo-Guo` a pass/fail fixture for this owner-family checkpoint.
 
 ## Acceptance Criteria For Future Implementation
 
@@ -461,6 +498,44 @@ push.
 - Matrix missing/duplicate/ambiguous values remain blank, not zero.
 - Any remaining extra production rows must be explainable as true MS1 peak
   separation, MS2/NL conflict, or ambiguity.
+
+## Checkpoint Gates
+
+Use three separate gates so method development does not confuse a local
+owner-family fix with full production readiness.
+
+### Owner-Family Checkpoint
+
+This checkpoint is the pass/fail gate for the current work.
+
+- Targeted GT audit fixtures:
+  - `5-medC`
+  - `5-hmdC`
+- Expected outcome:
+  - `SPLIT` decreases materially for these fixtures.
+  - `MISS` does not increase for these fixtures.
+  - obvious same-MS1-peak fragmentation is reduced before writer/registry
+    cleanup.
+
+### Guardrail Checkpoint
+
+The matrix-level claim registry remains a final safety net.
+
+- `duplicate_assigned` may be nonzero.
+- The owner-family fix should not rely on `duplicate_assigned` as the main
+  success mechanism.
+- Duplicate losers must remain blank in production matrix values and preserved
+  in debug/status output.
+
+### Production Readiness
+
+Production readiness is not satisfied by this spec alone.
+
+- Multi-tag discovery/config remains a separate required spec.
+- `8-oxo-Guo` / R-vs-dR behavior is a watchlist diagnostic only in this
+  checkpoint.
+- A manual `8-oxo-Guo` audit may record `MISS`, wrong-tag, or broad-backfill
+  behavior, but it must not fail the owner-family checkpoint.
 
 ## Validation Set
 

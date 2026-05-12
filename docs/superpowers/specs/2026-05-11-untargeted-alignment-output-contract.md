@@ -148,6 +148,12 @@ change what the output means.
    - Validation and downstream docs should use `feature_family_id` and
      `family_center_*` terminology, not stale `cluster_id` wording, unless an
      explicit compatibility alias is documented.
+6. Multi-tag discovery/config must be designed before production readiness.
+   - Current discovery runs one neutral-loss profile at a time.
+   - R/dR targets such as `8-oxo-Guo` are a known production-readiness blocker,
+     not an owner-family checkpoint failure.
+   - Do not add target-specific exceptions to output or alignment logic to hide
+     missing multi-tag support.
 
 ## Output Levels
 
