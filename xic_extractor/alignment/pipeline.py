@@ -15,22 +15,35 @@ from xic_extractor.alignment.csv_io import (
     read_discovery_batch_index,
     read_discovery_candidates_csv,
 )
+from xic_extractor.alignment.debug_writer import (
+    write_ambiguous_ms1_owners_tsv,
+    write_event_to_ms1_owner_tsv,
+)
 from xic_extractor.alignment.family_integration import integrate_feature_family_matrix
 from xic_extractor.alignment.feature_family import build_ms1_feature_families
+from xic_extractor.alignment.html_report import write_alignment_review_html
 from xic_extractor.alignment.matrix import AlignmentMatrix
+from xic_extractor.alignment.output_levels import (
+    AlignmentOutputLevel,
+    artifact_names_for_output_level,
+)
 from xic_extractor.alignment.owner_backfill import build_owner_backfill_cells
 from xic_extractor.alignment.owner_clustering import (
     cluster_sample_local_owners,
     review_only_features_from_ambiguous_records,
 )
 from xic_extractor.alignment.owner_matrix import build_owner_alignment_matrix
-from xic_extractor.alignment.ownership import build_sample_local_owners
+from xic_extractor.alignment.ownership import (
+    OwnershipBuildResult,
+    build_sample_local_owners,
+)
 from xic_extractor.alignment.tsv_writer import (
     write_alignment_cells_tsv,
     write_alignment_matrix_tsv,
     write_alignment_review_tsv,
     write_alignment_status_matrix_tsv,
 )
+from xic_extractor.alignment.xlsx_writer import write_alignment_results_xlsx
 from xic_extractor.config import ExtractionConfig
 
 
@@ -44,10 +57,14 @@ TsvWriter = Callable[[Path, AlignmentMatrix], Path]
 
 @dataclass(frozen=True)
 class AlignmentRunOutputs:
-    review_tsv: Path
-    matrix_tsv: Path
+    workbook: Path | None = None
+    review_html: Path | None = None
+    review_tsv: Path | None = None
+    matrix_tsv: Path | None = None
     cells_tsv: Path | None = None
     status_matrix_tsv: Path | None = None
+    event_to_owner_tsv: Path | None = None
+    ambiguous_owners_tsv: Path | None = None
 
 
 def run_alignment(
@@ -58,6 +75,7 @@ def run_alignment(
     output_dir: Path,
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
+    output_level: AlignmentOutputLevel = "machine",
     emit_alignment_cells: bool = False,
     emit_alignment_status_matrix: bool = False,
     raw_opener: RawOpener | None = None,
@@ -113,10 +131,22 @@ def run_alignment(
         )
         outputs = _output_paths(
             output_dir,
+            output_level=output_level,
             emit_alignment_cells=emit_alignment_cells,
             emit_alignment_status_matrix=emit_alignment_status_matrix,
         )
-        _write_outputs_atomic(outputs, matrix)
+        _write_outputs_atomic(
+            outputs,
+            matrix,
+            metadata=_metadata(
+                discovery_batch_index=discovery_batch_index,
+                raw_dir=raw_dir,
+                dll_dir=dll_dir,
+                output_level=output_level,
+                peak_config=peak_config,
+            ),
+            ownership=ownership,
+        )
         return outputs
 
 
@@ -172,16 +202,54 @@ def _existing_raw_paths(
 def _output_paths(
     output_dir: Path,
     *,
+    output_level: AlignmentOutputLevel,
     emit_alignment_cells: bool,
     emit_alignment_status_matrix: bool,
 ) -> AlignmentRunOutputs:
+    artifacts = set(artifact_names_for_output_level(output_level))
+    if emit_alignment_cells:
+        artifacts.add("alignment_cells.tsv")
+    if emit_alignment_status_matrix:
+        artifacts.add("alignment_matrix_status.tsv")
     return AlignmentRunOutputs(
-        review_tsv=output_dir / "alignment_review.tsv",
-        matrix_tsv=output_dir / "alignment_matrix.tsv",
-        cells_tsv=output_dir / "alignment_cells.tsv" if emit_alignment_cells else None,
+        workbook=(
+            output_dir / "alignment_results.xlsx"
+            if "alignment_results.xlsx" in artifacts
+            else None
+        ),
+        review_html=(
+            output_dir / "review_report.html"
+            if "review_report.html" in artifacts
+            else None
+        ),
+        review_tsv=(
+            output_dir / "alignment_review.tsv"
+            if "alignment_review.tsv" in artifacts
+            else None
+        ),
+        matrix_tsv=(
+            output_dir / "alignment_matrix.tsv"
+            if "alignment_matrix.tsv" in artifacts
+            else None
+        ),
+        cells_tsv=(
+            output_dir / "alignment_cells.tsv"
+            if "alignment_cells.tsv" in artifacts
+            else None
+        ),
         status_matrix_tsv=(
             output_dir / "alignment_matrix_status.tsv"
-            if emit_alignment_status_matrix
+            if "alignment_matrix_status.tsv" in artifacts
+            else None
+        ),
+        event_to_owner_tsv=(
+            output_dir / "event_to_ms1_owner.tsv"
+            if "event_to_ms1_owner.tsv" in artifacts
+            else None
+        ),
+        ambiguous_owners_tsv=(
+            output_dir / "ambiguous_ms1_owners.tsv"
+            if "ambiguous_ms1_owners.tsv" in artifacts
             else None
         ),
     )
@@ -190,16 +258,64 @@ def _output_paths(
 def _write_outputs_atomic(
     outputs: AlignmentRunOutputs,
     matrix: AlignmentMatrix,
+    *,
+    metadata: dict[str, str],
+    ownership: OwnershipBuildResult,
 ) -> None:
-    output_paths_and_writers: list[tuple[Path, TsvWriter]] = [
-        (outputs.review_tsv, write_alignment_review_tsv),
-        (outputs.matrix_tsv, write_alignment_matrix_tsv),
-    ]
+    output_paths_and_writers: list[tuple[Path, Callable[[Path], Path]]] = []
+    if outputs.workbook is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.workbook,
+                lambda path: write_alignment_results_xlsx(
+                    path,
+                    matrix,
+                    metadata=metadata,
+                ),
+            ),
+        )
+    if outputs.review_html is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.review_html,
+                lambda path: write_alignment_review_html(path, matrix),
+            ),
+        )
+    if outputs.matrix_tsv is not None:
+        output_paths_and_writers.append(
+            (outputs.matrix_tsv, lambda path: write_alignment_matrix_tsv(path, matrix)),
+        )
+    if outputs.review_tsv is not None:
+        output_paths_and_writers.append(
+            (outputs.review_tsv, lambda path: write_alignment_review_tsv(path, matrix)),
+        )
     if outputs.cells_tsv is not None:
-        output_paths_and_writers.append((outputs.cells_tsv, write_alignment_cells_tsv))
+        output_paths_and_writers.append(
+            (outputs.cells_tsv, lambda path: write_alignment_cells_tsv(path, matrix)),
+        )
     if outputs.status_matrix_tsv is not None:
         output_paths_and_writers.append(
-            (outputs.status_matrix_tsv, write_alignment_status_matrix_tsv)
+            (
+                outputs.status_matrix_tsv,
+                lambda path: write_alignment_status_matrix_tsv(path, matrix),
+            )
+        )
+    if outputs.event_to_owner_tsv is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.event_to_owner_tsv,
+                lambda path: write_event_to_ms1_owner_tsv(path, ownership.assignments),
+            ),
+        )
+    if outputs.ambiguous_owners_tsv is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.ambiguous_owners_tsv,
+                lambda path: write_ambiguous_ms1_owners_tsv(
+                    path,
+                    ownership.ambiguous_records,
+                ),
+            ),
         )
 
     temp_paths = [
@@ -213,7 +329,7 @@ def _write_outputs_atomic(
     try:
         for final_path, writer in output_paths_and_writers:
             temp_path = _temp_path(final_path)
-            writer(temp_path, matrix)
+            writer(temp_path)
         for final_path, _writer in output_paths_and_writers:
             backup_path = _backup_path(final_path)
             backup_path.unlink(missing_ok=True)
@@ -247,6 +363,24 @@ def _temp_path(final_path: Path) -> Path:
 
 def _backup_path(final_path: Path) -> Path:
     return final_path.with_name(f"{final_path.name}.bak")
+
+
+def _metadata(
+    *,
+    discovery_batch_index: Path,
+    raw_dir: Path,
+    dll_dir: Path,
+    output_level: AlignmentOutputLevel,
+    peak_config: ExtractionConfig,
+) -> dict[str, str]:
+    return {
+        "schema_version": "alignment-results-v1",
+        "discovery_batch_index": str(discovery_batch_index),
+        "raw_dir": str(raw_dir),
+        "dll_dir": str(dll_dir),
+        "output_level": output_level,
+        "resolver_mode": peak_config.resolver_mode,
+    }
 
 
 def _default_raw_opener(

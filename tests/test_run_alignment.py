@@ -32,6 +32,8 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
         for path in (review, matrix, cells, status):
             path.write_text("x\n", encoding="utf-8")
         return AlignmentRunOutputs(
+            workbook=output_dir / "alignment_results.xlsx",
+            review_html=output_dir / "review_report.html",
             review_tsv=review,
             matrix_tsv=matrix,
             cells_tsv=cells,
@@ -69,12 +71,48 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert peak_config.output_csv == output_dir.resolve() / "xic_results.csv"
     assert peak_config.diagnostics_csv == output_dir.resolve() / "xic_diagnostics.csv"
     assert peak_config.resolver_mode == "legacy_savgol"
+    assert captured["output_level"] == "machine"
     assert captured["emit_alignment_cells"] is True
     assert captured["emit_alignment_status_matrix"] is True
     stdout = capsys.readouterr().out
     assert "Alignment review TSV:" in stdout
     assert "alignment_review.tsv" in stdout
     assert "alignment_matrix_status.tsv" in stdout
+
+
+def test_run_alignment_cli_accepts_output_level_debug(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-level",
+            "debug",
+        ],
+    )
+
+    assert code == 0
+    assert captured["output_level"] == "debug"
 
 
 def test_run_alignment_cli_rejects_missing_batch_index(

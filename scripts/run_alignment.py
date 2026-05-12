@@ -40,6 +40,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=output_dir,
             alignment_config=AlignmentConfig(),
             peak_config=_peak_config(raw_dir, dll_dir, output_dir, args.resolver_mode),
+            output_level=args.output_level,
             emit_alignment_cells=args.emit_alignment_cells,
             emit_alignment_status_matrix=args.emit_alignment_status_matrix,
         )
@@ -47,12 +48,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    print(f"Alignment review TSV: {outputs.review_tsv}")
-    print(f"Alignment matrix TSV: {outputs.matrix_tsv}")
+    if outputs.workbook is not None:
+        print(f"Alignment workbook: {outputs.workbook}")
+    if outputs.review_html is not None:
+        print(f"Alignment review HTML: {outputs.review_html}")
+    if outputs.review_tsv is not None:
+        print(f"Alignment review TSV: {outputs.review_tsv}")
+    if outputs.matrix_tsv is not None:
+        print(f"Alignment matrix TSV: {outputs.matrix_tsv}")
     if outputs.cells_tsv is not None:
         print(f"Alignment cells TSV: {outputs.cells_tsv}")
     if outputs.status_matrix_tsv is not None:
         print(f"Alignment status matrix TSV: {outputs.status_matrix_tsv}")
+    if outputs.event_to_owner_tsv is not None:
+        print(f"Event to MS1 owner TSV: {outputs.event_to_owner_tsv}")
+    if outputs.ambiguous_owners_tsv is not None:
+        print(f"Ambiguous MS1 owners TSV: {outputs.ambiguous_owners_tsv}")
     return 0
 
 
@@ -88,6 +99,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--resolver-mode",
         choices=("legacy_savgol", "local_minimum"),
         default="local_minimum",
+    )
+    parser.add_argument(
+        "--output-level",
+        choices=("production", "machine", "debug", "validation"),
+        default="machine",
+        help=(
+            "Alignment artifact level. Default remains machine until "
+            "owner-based validation acceptance."
+        ),
     )
     parser.add_argument("--emit-alignment-cells", action="store_true")
     parser.add_argument("--emit-alignment-status-matrix", action="store_true")

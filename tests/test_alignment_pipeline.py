@@ -103,8 +103,12 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
     assert calls["rescued_cells"] == ("rescued",)
     assert outputs.review_tsv == tmp_path / "out" / "alignment_review.tsv"
     assert outputs.matrix_tsv == tmp_path / "out" / "alignment_matrix.tsv"
+    assert outputs.workbook == tmp_path / "out" / "alignment_results.xlsx"
+    assert outputs.review_html == tmp_path / "out" / "review_report.html"
     assert outputs.cells_tsv is None
     assert outputs.status_matrix_tsv is None
+    assert outputs.workbook.exists()
+    assert outputs.review_html.exists()
     assert outputs.review_tsv.exists()
     assert outputs.matrix_tsv.exists()
     assert not (tmp_path / "out" / "alignment_cells.tsv").exists()
@@ -323,7 +327,7 @@ def test_pipeline_builds_owner_features_before_owner_matrix(
     monkeypatch.setattr(
         pipeline_module,
         "_write_outputs_atomic",
-        lambda outputs, matrix: calls.setdefault("written_matrix", matrix),
+        lambda outputs, matrix, **kwargs: calls.setdefault("written_matrix", matrix),
     )
 
     pipeline_module.run_alignment(
@@ -428,11 +432,109 @@ def test_pipeline_rolls_back_stale_output_pair_when_replace_fails(
     assert matrix.read_text(encoding="utf-8") == "old matrix"
 
 
+def test_run_alignment_production_level_writes_xlsx_and_html_only(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    outputs = _run_minimal_alignment(
+        tmp_path,
+        monkeypatch,
+        output_level="production",
+    )
+
+    names = sorted(path.name for path in (tmp_path / "out").iterdir())
+    assert names == ["alignment_results.xlsx", "review_report.html"]
+    assert outputs.workbook == tmp_path / "out" / "alignment_results.xlsx"
+    assert outputs.review_html == tmp_path / "out" / "review_report.html"
+    assert outputs.matrix_tsv is None
+    assert outputs.review_tsv is None
+
+
+def test_run_alignment_debug_level_writes_machine_and_debug_artifacts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    outputs = _run_minimal_alignment(tmp_path, monkeypatch, output_level="debug")
+
+    names = sorted(path.name for path in (tmp_path / "out").iterdir())
+    assert names == [
+        "alignment_cells.tsv",
+        "alignment_matrix.tsv",
+        "alignment_matrix_status.tsv",
+        "alignment_results.xlsx",
+        "alignment_review.tsv",
+        "ambiguous_ms1_owners.tsv",
+        "event_to_ms1_owner.tsv",
+        "review_report.html",
+    ]
+    assert outputs.event_to_owner_tsv is not None
+    assert outputs.ambiguous_owners_tsv is not None
+
+
+def test_run_alignment_default_stays_machine_until_owner_validation_acceptance(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _run_minimal_alignment(tmp_path, monkeypatch)
+
+    names = sorted(path.name for path in (tmp_path / "out").iterdir())
+    assert names == [
+        "alignment_matrix.tsv",
+        "alignment_results.xlsx",
+        "alignment_review.tsv",
+        "review_report.html",
+    ]
+
+
+def test_run_alignment_rolls_back_artifact_set_when_replace_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    workbook = output_dir / "alignment_results.xlsx"
+    html = output_dir / "review_report.html"
+    workbook.write_text("old workbook", encoding="utf-8")
+    html.write_text("old html", encoding="utf-8")
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+    original_replace = Path.replace
+
+    def fail_html_replace(self: Path, target: Path):
+        if self.name == "review_report.html.tmp":
+            raise PermissionError("locked by browser")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_html_replace)
+
+    with pytest.raises(PermissionError, match="locked by browser"):
+        pipeline_module.run_alignment(
+            discovery_batch_index=batch_index,
+            raw_dir=raw_dir,
+            dll_dir=tmp_path / "dll",
+            output_dir=output_dir,
+            alignment_config=AlignmentConfig(),
+            peak_config=_peak_config(),
+            output_level="production",
+            raw_opener=FakeRawOpener(),
+        )
+
+    assert workbook.read_text(encoding="utf-8") == "old workbook"
+    assert html.read_text(encoding="utf-8") == "old html"
+
+
 def _patch_owner_pipeline_to_matrix(monkeypatch) -> None:
     monkeypatch.setattr(
         pipeline_module,
         "build_sample_local_owners",
-        lambda candidates, **kwargs: SimpleNamespace(owners=(), ambiguous_records=()),
+        lambda candidates, **kwargs: SimpleNamespace(
+            owners=(),
+            assignments=(),
+            ambiguous_records=(),
+        ),
     )
     monkeypatch.setattr(
         pipeline_module,
@@ -453,6 +555,32 @@ def _patch_owner_pipeline_to_matrix(monkeypatch) -> None:
         pipeline_module,
         "build_owner_alignment_matrix",
         lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
+
+
+def _run_minimal_alignment(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    output_level: str | None = None,
+) -> pipeline_module.AlignmentRunOutputs:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+    kwargs = {}
+    if output_level is not None:
+        kwargs["output_level"] = output_level
+    return pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+        **kwargs,
     )
 
 
