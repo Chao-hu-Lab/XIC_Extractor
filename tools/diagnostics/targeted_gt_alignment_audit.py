@@ -525,9 +525,21 @@ def _format_float(value: float | None, places: int) -> str:
 
 
 def _escape_excel_formula(value: object) -> object:
-    if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+    if (
+        isinstance(value, str)
+        and value.startswith(("=", "+", "-", "@"))
+        and not _is_numeric_text(value)
+    ):
         return f"'{value}"
     return value
+
+
+def _is_numeric_text(value: str) -> bool:
+    try:
+        parsed = float(value)
+    except ValueError:
+        return False
+    return math.isfinite(parsed)
 
 
 def _unescape_excel_formula(value: object) -> str:

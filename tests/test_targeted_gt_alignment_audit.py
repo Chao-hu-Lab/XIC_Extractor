@@ -18,10 +18,10 @@ def test_targeted_gt_audit_writes_outputs_and_escapes_formula_values(
     alignment_run = _write_alignment_run(
         tmp_path / "alignment",
         review_rows=[
-            _review_row("FAM000001", mz=242.1136, rt=12.0),
+            _review_row("FAM000001", mz=242.1136, rt=11.99),
         ],
         cell_rows=[
-            _cell_row("FAM000001", "=Sample_A", "detected", rt=12.0),
+            _cell_row("FAM000001", "=Sample_A", "detected", rt=11.99),
         ],
     )
 
@@ -58,6 +58,7 @@ def test_targeted_gt_audit_writes_outputs_and_escapes_formula_values(
     comparison = _read_csv(output_dir / "comparison.csv")
     assert comparison[0]["sample_stem"] == "'=Sample_A"
     assert comparison[0]["failure_mode"] == "PASS"
+    assert comparison[0]["closest_rt_delta_sec"] == "-0.60"
     assert "FAILURE MODE" not in (
         output_dir / "failure_mode_report.md"
     ).read_text(encoding="utf-8")
