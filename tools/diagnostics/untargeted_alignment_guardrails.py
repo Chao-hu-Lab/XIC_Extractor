@@ -265,12 +265,21 @@ def _validate_args(args: argparse.Namespace) -> None:
         args.target_label,
         args.targeted_comparison_csv,
     )
-    has_alignment_group = args.alignment_dir is not None
+    alignment_group = (
+        args.alignment_dir,
+        args.output_json,
+        args.case_summary_tsv,
+    )
+    has_alignment_group = any(value is not None for value in alignment_group)
     has_baseline_group = any(value is not None for value in baseline_group)
     has_targeted_group = any(value is not None for value in targeted_group)
 
-    if has_alignment_group and args.output_json is None:
-        raise ValueError("--alignment-dir requires --output-json")
+    if has_alignment_group and (
+        args.alignment_dir is None or args.output_json is None
+    ):
+        raise ValueError(
+            "Alignment group requires --alignment-dir and --output-json",
+        )
     if has_baseline_group and not all(value is not None for value in baseline_group):
         raise ValueError(
             "Guardrail comparison requires --baseline-dir, --candidate-dir, "

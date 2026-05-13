@@ -278,7 +278,65 @@ def test_main_requires_output_json_with_alignment_dir(
     code = guardrails.main(["--alignment-dir", str(tmp_path / "alignment")])
 
     assert code == 2
-    assert "--alignment-dir requires --output-json" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "--alignment-dir" in err
+    assert "--output-json" in err
+
+
+def test_main_rejects_output_json_without_alignment_dir(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    baseline_dir = tmp_path / "baseline_alignment"
+    candidate_dir = tmp_path / "candidate_alignment"
+    _write_alignment_fixture(baseline_dir)
+    _write_alignment_fixture(candidate_dir)
+
+    code = guardrails.main(
+        [
+            "--baseline-dir",
+            str(baseline_dir),
+            "--candidate-dir",
+            str(candidate_dir),
+            "--comparison-csv",
+            str(tmp_path / "comparison.csv"),
+            "--output-json",
+            str(tmp_path / "metrics.json"),
+        ],
+    )
+
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "--alignment-dir" in err
+    assert "--output-json" in err
+
+
+def test_main_rejects_stray_case_summary_tsv_with_valid_baseline_group(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    baseline_dir = tmp_path / "baseline_alignment"
+    candidate_dir = tmp_path / "candidate_alignment"
+    _write_alignment_fixture(baseline_dir)
+    _write_alignment_fixture(candidate_dir)
+
+    code = guardrails.main(
+        [
+            "--baseline-dir",
+            str(baseline_dir),
+            "--candidate-dir",
+            str(candidate_dir),
+            "--comparison-csv",
+            str(tmp_path / "comparison.csv"),
+            "--case-summary-tsv",
+            str(tmp_path / "case_assertion_summary.tsv"),
+        ],
+    )
+
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "--alignment-dir" in err
+    assert "alignment" in err
 
 
 def test_main_reports_missing_alignment_review_tsv(
