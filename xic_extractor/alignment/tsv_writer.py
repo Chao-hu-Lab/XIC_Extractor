@@ -260,7 +260,10 @@ def _warning(
         return "no_anchor"
     if sample_count > 0 and unchecked_count / sample_count > 0.5:
         return "high_unchecked"
-    if rescued_count > detected_count and not _has_detected_owner_evidence(cluster):
+    if (
+        rescued_count > detected_count
+        and (detected_count == 0 or not _has_detected_owner_evidence(cluster))
+    ):
         return "high_backfill_dependency"
     return ""
 

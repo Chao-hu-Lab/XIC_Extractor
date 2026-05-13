@@ -59,6 +59,9 @@ If any baseline artifact is missing, stop validation and report the missing path
   - Writes edge evidence TSV when requested by output level.
 - Modify: `scripts/run_alignment.py`
   - Adds `--sample-info` and `--targeted-istd-workbook`.
+  - Adds `--drift-local-window`; CLI default is `40` injections for sparse
+    validation subsets, while the lower-level drift adapter keeps its
+    `local_window=4` default for direct callers.
   - Builds drift lookup only when both paths are provided.
   - Preserves default no-drift behavior.
 - Create: `tools/diagnostics/untargeted_alignment_guardrails.py`
@@ -1593,6 +1596,7 @@ CLI changes:
 ```python
 parser.add_argument("--sample-info", type=Path)
 parser.add_argument("--targeted-istd-workbook", type=Path)
+parser.add_argument("--drift-local-window", type=_positive_int, default=40)
 ```
 
 - Immediately after parsing args and before any filesystem path validation, validate pairwise use:

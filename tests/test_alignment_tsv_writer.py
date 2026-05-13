@@ -86,6 +86,11 @@ def test_write_alignment_review_tsv_warning_precedence(tmp_path: Path):
                 has_anchor=True,
                 fold_evidence="owner_complete_link;owner_count=2",
             ),
+            _cluster(
+                cluster_id="ALN000006",
+                has_anchor=True,
+                fold_evidence="owner_complete_link;owner_count=2",
+            ),
         ),
         cells=(
             _cell("sample-a", "detected", cluster_id="ALN000001", area=1.0),
@@ -96,8 +101,10 @@ def test_write_alignment_review_tsv_warning_precedence(tmp_path: Path):
             _cell("sample-b", "absent", cluster_id="ALN000003"),
             _cell("sample-a", "detected", cluster_id="ALN000004", area=1.0),
             _cell("sample-b", "absent", cluster_id="ALN000004"),
-            _cell("sample-a", "rescued", cluster_id="ALN000005", area=1.0),
-            _cell("sample-b", "absent", cluster_id="ALN000005"),
+            _cell("sample-a", "detected", cluster_id="ALN000005", area=1.0),
+            _cell("sample-b", "rescued", cluster_id="ALN000005", area=1.0),
+            _cell("sample-a", "rescued", cluster_id="ALN000006", area=1.0),
+            _cell("sample-b", "absent", cluster_id="ALN000006"),
         ),
         sample_order=("sample-a", "sample-b"),
     )
@@ -110,6 +117,7 @@ def test_write_alignment_review_tsv_warning_precedence(tmp_path: Path):
         "high_backfill_dependency",
         "",
         "",
+        "high_backfill_dependency",
     ]
 
 
