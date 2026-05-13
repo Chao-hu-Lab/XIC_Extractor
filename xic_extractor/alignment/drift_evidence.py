@@ -46,10 +46,20 @@ class DriftEvidenceLookup:
         return float(statistics.median(deltas))
 
     def injection_order(self, sample_stem: str) -> int | None:
-        for point in self.points:
-            if point.sample_stem == sample_stem:
-                return point.injection_order
-        return None
+        orders = {
+            point.injection_order
+            for point in self.points
+            if point.sample_stem == sample_stem
+        }
+        if not orders:
+            return None
+        if len(orders) == 1:
+            return next(iter(orders))
+        ordered_values = sorted(orders)
+        raise ValueError(
+            "conflicting injection order for "
+            f"sample {sample_stem!r}: {ordered_values}"
+        )
 
 
 def read_targeted_istd_drift_evidence(
