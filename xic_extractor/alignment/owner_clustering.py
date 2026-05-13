@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.edge_scoring import (
+    DriftLookupProtocol,
+    OwnerEdgeEvidence,
+    evaluate_owner_edge,
+)
 from xic_extractor.alignment.ownership_models import (
     AmbiguousOwnerRecord,
     SampleLocalMS1Owner,
@@ -46,6 +51,8 @@ def cluster_sample_local_owners(
     owners: tuple[SampleLocalMS1Owner, ...] | list[SampleLocalMS1Owner],
     *,
     config: AlignmentConfig,
+    drift_lookup: DriftLookupProtocol | None = None,
+    edge_evidence_sink: list[OwnerEdgeEvidence] | None = None,
 ) -> tuple[OwnerAlignedFeature, ...]:
     clean = tuple(owner for owner in owners if not owner.identity_conflict)
     conflict_features = tuple(
@@ -64,7 +71,14 @@ def cluster_sample_local_owners(
             start=1,
         )
     )
-    groups = _complete_link_groups(sorted(clean, key=_owner_sort_key), config)
+    edge_cache: dict[tuple[str, str], OwnerEdgeEvidence] = {}
+    groups = _complete_link_groups(
+        sorted(clean, key=_owner_sort_key),
+        config,
+        drift_lookup=drift_lookup,
+        edge_evidence_sink=edge_evidence_sink,
+        edge_cache=edge_cache,
+    )
     clean_features = tuple(
         _feature_from_group(
             tuple(group),
@@ -113,13 +127,28 @@ def review_only_features_from_ambiguous_records(
 def _complete_link_groups(
     owners: list[SampleLocalMS1Owner],
     config: AlignmentConfig,
+    *,
+    drift_lookup: DriftLookupProtocol | None,
+    edge_evidence_sink: list[OwnerEdgeEvidence] | None,
+    edge_cache: dict[tuple[str, str], OwnerEdgeEvidence],
 ) -> tuple[tuple[SampleLocalMS1Owner, ...], ...]:
     groups: list[list[SampleLocalMS1Owner]] = []
     for owner in owners:
         compatible_group_indexes = [
             index
             for index, group in enumerate(groups)
-            if all(_compatible_owners(owner, existing, config) for existing in group)
+            if all(
+                _edge_for_pair(
+                    owner,
+                    existing,
+                    config=config,
+                    drift_lookup=drift_lookup,
+                    edge_evidence_sink=edge_evidence_sink,
+                    edge_cache=edge_cache,
+                ).decision
+                == "strong_edge"
+                for existing in group
+            )
         ]
         if not compatible_group_indexes:
             groups.append([owner])
@@ -132,35 +161,30 @@ def _complete_link_groups(
     return tuple(tuple(group) for group in groups)
 
 
-def _compatible_owners(
+def _edge_for_pair(
     left: SampleLocalMS1Owner,
     right: SampleLocalMS1Owner,
+    *,
     config: AlignmentConfig,
-) -> bool:
-    if left.sample_stem == right.sample_stem:
-        return False
-    if left.neutral_loss_tag != right.neutral_loss_tag:
-        return False
-    if _ppm(left.precursor_mz, right.precursor_mz) > config.max_ppm:
-        return False
-    if (
-        abs(left.owner_apex_rt - right.owner_apex_rt) * 60.0
-        > config.identity_rt_candidate_window_sec
-    ):
-        return False
-    left_event = left.primary_identity_event
-    right_event = right.primary_identity_event
-    if _ppm(left_event.product_mz, right_event.product_mz) > (
-        config.product_mz_tolerance_ppm
-    ):
-        return False
-    return (
-        _ppm(
-            left_event.observed_neutral_loss_da,
-            right_event.observed_neutral_loss_da,
-        )
-        <= config.observed_loss_tolerance_ppm
+    drift_lookup: DriftLookupProtocol | None,
+    edge_evidence_sink: list[OwnerEdgeEvidence] | None,
+    edge_cache: dict[tuple[str, str], OwnerEdgeEvidence],
+) -> OwnerEdgeEvidence:
+    key = tuple(sorted((left.owner_id, right.owner_id)))
+    edge = edge_cache.get(key)
+    if edge is not None:
+        return edge
+
+    edge = evaluate_owner_edge(
+        left,
+        right,
+        config=config,
+        drift_lookup=drift_lookup,
     )
+    edge_cache[key] = edge
+    if edge_evidence_sink is not None:
+        edge_evidence_sink.append(edge)
+    return edge
 
 
 def _group_match_score(

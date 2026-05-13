@@ -34,11 +34,82 @@ def test_owner_clustering_collapses_5medc_like_class_drift() -> None:
             _owner("benign-a", "e", apex_rt=12.6673),
         ),
         config=AlignmentConfig(identity_rt_candidate_window_sec=180.0),
+        drift_lookup=_DriftLookup(
+            deltas={
+                "tumor-a": -0.35,
+                "qc-a": 0.0,
+                "qc-b": 0.10,
+                "normal-a": 0.35,
+                "benign-a": 0.36,
+            },
+            orders={
+                "tumor-a": 1,
+                "qc-a": 20,
+                "qc-b": 40,
+                "normal-a": 60,
+                "benign-a": 80,
+            },
+        ),
     )
 
     assert len(features) == 1
     assert len(features[0].event_cluster_ids) == 5
     assert features[0].evidence == "owner_complete_link;owner_count=5"
+
+
+def test_owner_clustering_uses_drift_prior_for_strong_edge_over_strict_rt() -> None:
+    edge_evidence = []
+
+    features = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "a", apex_rt=10.0),
+            _owner("sample-b", "b", apex_rt=11.2),
+        ),
+        config=AlignmentConfig(preferred_rt_sec=60.0, max_rt_sec=180.0),
+        drift_lookup=_DriftLookup(
+            deltas={"sample-a": 0.0, "sample-b": 0.25},
+            orders={},
+        ),
+        edge_evidence_sink=edge_evidence,
+    )
+
+    assert len(features) == 1
+    assert features[0].event_cluster_ids == ("OWN-sample-a-a", "OWN-sample-b-b")
+    assert [edge.decision for edge in edge_evidence] == ["strong_edge"]
+
+
+def test_owner_clustering_preserves_weak_no_drift_rt_split() -> None:
+    edge_evidence = []
+
+    features = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "a", apex_rt=10.0),
+            _owner("sample-b", "b", apex_rt=11.2),
+        ),
+        config=AlignmentConfig(preferred_rt_sec=60.0, max_rt_sec=180.0),
+        edge_evidence_sink=edge_evidence,
+    )
+
+    assert len(features) == 2
+    assert [edge.decision for edge in edge_evidence] == ["weak_edge"]
+
+
+def test_owner_clustering_records_blocked_edge_without_merging() -> None:
+    edge_evidence = []
+
+    features = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "a", neutral_loss_tag="NL116"),
+            _owner("sample-b", "b", neutral_loss_tag="NL141"),
+        ),
+        config=AlignmentConfig(),
+        edge_evidence_sink=edge_evidence,
+    )
+
+    assert len(features) == 2
+    assert [edge.failure_reason for edge in edge_evidence] == [
+        "neutral_loss_tag_mismatch",
+    ]
 
 
 def test_owner_clustering_rejects_product_or_observed_loss_conflict() -> None:
@@ -140,6 +211,25 @@ def test_ambiguous_records_become_review_only_features_without_owners() -> None:
     assert features[0].owners == ()
     assert features[0].ambiguous_sample_stem == "sample-a"
     assert features[0].ambiguous_candidate_ids == ("sample-a#1", "sample-a#2")
+
+
+class _DriftLookup:
+    source = "targeted_istd_trend"
+
+    def __init__(
+        self,
+        *,
+        deltas: dict[str, float],
+        orders: dict[str, int],
+    ) -> None:
+        self._deltas = deltas
+        self._orders = orders
+
+    def sample_delta_min(self, sample_stem: str) -> float | None:
+        return self._deltas.get(sample_stem)
+
+    def injection_order(self, sample_stem: str) -> int | None:
+        return self._orders.get(sample_stem)
 
 
 def _owner(
