@@ -12,8 +12,7 @@ uv run python scripts/xlsx_to_targets.py path/to/RT_check.xlsx --sheet RNA
 uv run python scripts/xlsx_to_targets.py path/to/RT_check.xlsx --sheet both
 
 # Custom output path and RT window
-uv run python scripts/xlsx_to_targets.py path/to/RT_check.xlsx `
-    --output config/my_targets.csv --rt-window 1.0
+uv run python scripts/xlsx_to_targets.py path/to/RT_check.xlsx --output config/my_targets.csv --rt-window 1.0
 """
 
 from __future__ import annotations
@@ -210,8 +209,7 @@ def parse_dna_sheet(
     header_idx = _find_header_row(rows, ["m/z", "Anticipated adducts"])
     if header_idx is None:
         print(
-            "Warning: DNA sheet – could not find header row with 'm/z' "
-            "and 'Anticipated adducts'",
+            "Warning: DNA sheet – could not find header row with 'm/z' and 'Anticipated adducts'",
             file=sys.stderr,
         )
         return []
@@ -279,8 +277,7 @@ def parse_rna_sheet(
     - ``Abbre.``         → compound abbreviation (label)
     - ``[M+H]+``         → precursor m/z
     - ``[M+H-R]+``       → ribose NL product (132.0423 Da) – numeric if applicable
-    - ``[M+H-R-CH2]+``   → 2′-OMe-ribose NL product (146.0579 Da)
-      – numeric if applicable
+    - ``[M+H-R-CH2]+``   → 2′-OMe-ribose NL product (146.0579 Da) – numeric if applicable
     - ``RT``             → first RT column
 
     Compounds with neither NL column populated are skipped (cannot be
@@ -498,7 +495,7 @@ def main() -> None:
     # Resolve output path:
     #   explicit --output  →  use as-is
     #   default            →  project config/ dir, named after the xlsx stem + sheet
-    #                         (next to settings.csv, never overwrites targets.csv)
+    #                         (always lands next to settings.csv, never overwrites targets.csv)
     if args.output is not None:
         output_path = args.output
     else:
