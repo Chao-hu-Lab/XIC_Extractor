@@ -190,6 +190,25 @@ def test_drift_corrected_close_edge_is_strong_even_when_raw_exceeds_strict() -> 
     assert edge.score >= 60
 
 
+def test_contradictory_drift_prior_keeps_edge_weak_and_penalizes_score() -> None:
+    edge = evaluate_owner_edge(
+        _owner("s1", owner_apex_rt=10.00),
+        _owner("s2", owner_apex_rt=10.10),
+        config=AlignmentConfig(preferred_rt_sec=60.0, max_rt_sec=120.0),
+        drift_lookup=_DriftLookup(
+            deltas={"s1": 0.00, "s2": -0.30},
+            orders={"s1": 1, "s2": 2},
+        ),
+    )
+
+    assert edge.decision == "weak_edge"
+    assert edge.drift_prior_source != "none"
+    assert edge.rt_raw_delta_sec == pytest.approx(6.0)
+    assert edge.rt_drift_corrected_delta_sec == pytest.approx(24.0)
+    assert edge.rt_drift_corrected_delta_sec > edge.rt_raw_delta_sec + 10.0
+    assert edge.score == 70
+
+
 def test_weak_seed_support_keeps_hard_pass_edge_weak() -> None:
     edge = evaluate_owner_edge(
         _owner("s1", evidence_score=35, seed_event_count=1),
@@ -214,11 +233,24 @@ def test_identity_conflict_blocks_edge() -> None:
 
 def test_edge_depending_on_backfill_is_blocked() -> None:
     edge = evaluate_owner_edge(
+        _owner("s1", identity_conflict=True),
         _owner("s1"),
-        _owner("s2"),
         config=AlignmentConfig(),
         edge_depends_on_backfill=True,
     )
 
     assert edge.decision == "blocked_edge"
     assert edge.failure_reason == "backfill_bridge"
+
+
+def test_non_detected_owner_precedes_ambiguous_and_identity_conflict() -> None:
+    edge = evaluate_owner_edge(
+        _owner("s1", identity_conflict=True),
+        _owner("s2"),
+        config=AlignmentConfig(),
+        left_detected_owner=False,
+        left_ambiguous_owner=True,
+    )
+
+    assert edge.decision == "blocked_edge"
+    assert edge.failure_reason == "non_detected_owner"
