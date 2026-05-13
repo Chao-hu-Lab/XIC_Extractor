@@ -23,6 +23,9 @@ dev = [
 [project.scripts]
 xic-extractor = "gui.main:main"
 xic-extractor-cli = "scripts.run_extraction:main"
+xic-discovery-cli = "scripts.run_discovery:main"
+xic-align-cli = "scripts.run_alignment:main"
+xic-align-validate-cli = "scripts.run_alignment_validation:main"
 
 [tool.setuptools.packages.find]
 include = ["gui*", "scripts*", "xic_extractor*"]
