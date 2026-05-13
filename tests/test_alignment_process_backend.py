@@ -297,6 +297,52 @@ def test_owner_build_jobs_wrap_executor_exceptions_as_build_errors(
     ]
 
 
+def test_owner_build_jobs_wrap_submit_exceptions_as_build_errors(
+    tmp_path: Path,
+) -> None:
+    jobs = (
+        OwnerBuildSampleJob(
+            sample_index=1,
+            sample_stem="sample-a",
+            raw_path=tmp_path / "sample-a.raw",
+            dll_dir=tmp_path / "dll",
+            candidates=(_candidate("sample-a"),),
+            alignment_config=AlignmentConfig(),
+            peak_config=_peak_config(tmp_path),
+        ),
+        OwnerBuildSampleJob(
+            sample_index=2,
+            sample_stem="sample-b",
+            raw_path=tmp_path / "sample-b.raw",
+            dll_dir=tmp_path / "dll",
+            candidates=(_candidate("sample-b"),),
+            alignment_config=AlignmentConfig(),
+            peak_config=_peak_config(tmp_path),
+        ),
+    )
+
+    results = run_owner_build_jobs(
+        jobs,
+        max_workers=2,
+        executor_factory=_SubmitFailingExecutor,
+    )
+
+    assert results == [
+        OwnerBuildWorkerError(
+            sample_index=1,
+            sample_stem="sample-a",
+            raw_name="sample-a.raw",
+            message="RuntimeError: submit boom",
+        ),
+        OwnerBuildWorkerError(
+            sample_index=2,
+            sample_stem="sample-b",
+            raw_name="sample-b.raw",
+            message="RuntimeError: submit boom",
+        ),
+    ]
+
+
 def test_timed_process_raw_source_records_batch_calls() -> None:
     import xic_extractor.alignment.process_backend as process_module
     from xic_extractor.xic_models import XICRequest, XICTrace
@@ -402,6 +448,20 @@ class _FailingExecutor:
 
     def submit(self, worker, job):
         return self._future
+
+
+class _SubmitFailingExecutor:
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def submit(self, worker, job):
+        raise RuntimeError("submit boom")
 
 
 def _peak_config(tmp_path: Path) -> ExtractionConfig:

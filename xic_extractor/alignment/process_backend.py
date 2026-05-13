@@ -430,8 +430,13 @@ def _run_process_jobs(
                 and next_job_index < len(pending_jobs)
             ):
                 job = pending_jobs[next_job_index]
-                future_to_job[executor.submit(worker, job)] = job
                 next_job_index += 1
+                try:
+                    future = executor.submit(worker, job)
+                except Exception as exc:
+                    results.append(error_factory(job, exc))
+                    continue
+                future_to_job[future] = job
 
         _submit_until_capacity()
         while future_to_job:
