@@ -182,6 +182,33 @@ drift prior evidence for owner pair comparison
 The output is not a target identity claim. It only answers whether the observed
 owner RT difference is plausible after accounting for injection-order drift.
 
+### Drift Evidence Adapter Firewall
+
+The adapter that reads targeted artifacts must not expose targeted analyte
+identity to alignment code.
+
+Allowed adapter output:
+
+| Field | Meaning |
+|---|---|
+| `sample_stem` | canonical sample name |
+| `injection_order` | injection order from `SampleInfo.xlsx` |
+| `istd_label` | ISTD label only; analyte labels are not emitted |
+| `istd_rt_min` | observed ISTD RT in that sample |
+| `local_trend_rt_min` | rolling/local ISTD trend estimate when available |
+| `rt_drift_delta_min` | `istd_rt_min - local_trend_rt_min` when available |
+| `source` | `targeted_istd_trend` or `batch_istd_trend` |
+
+Forbidden adapter output:
+
+- analyte target labels such as `5-medC`, `5-hmdC`, or `8-oxodG`;
+- targeted GT pass/fail modes;
+- targeted analyte RT windows or anchor mismatch tolerances;
+- targeted confidence labels used as merge evidence.
+
+Validation tools may read target labels after a run. Production alignment code
+must not.
+
 `Sample_Type` remains diagnostic-only in this batch because sample class is
 confounded with injection block. It may be reconsidered only when a later
 dataset has a stronger experimental design, such as interleaved sample classes
@@ -204,6 +231,27 @@ An owner pair cannot merge unless all hard gates pass:
 
 Hard gate failure means blocked edge.
 
+### Hard-Gate Failure Reasons
+
+The implementation plan must use explicit failure reasons so every blocked edge
+is testable:
+
+| Reason | Meaning |
+|---|---|
+| `same_sample` | owners are from the same sample |
+| `neutral_loss_tag_mismatch` | canonical tags differ or either tag is missing |
+| `precursor_mz_out_of_tolerance` | precursor ppm exceeds configured limit |
+| `product_mz_out_of_tolerance` | product ppm exceeds configured limit |
+| `observed_loss_out_of_tolerance` | observed neutral-loss ppm exceeds configured limit |
+| `non_detected_owner` | one side is not a detected sample-local owner |
+| `ambiguous_owner` | one side is unresolved ambiguous MS1 evidence |
+| `identity_conflict` | one owner carries incompatible primary/supporting identity evidence |
+| `backfill_bridge` | edge would depend on rescued/backfilled cells |
+
+`identity_conflict` means a sample-local owner contains supporting events whose
+canonical neutral-loss tag, product m/z, or observed neutral loss cannot be
+reconciled under the same hard gates used for cross-sample identity.
+
 ### Soft Evidence Fields
 
 The implementation plan should define a small edge evidence model with at least:
@@ -218,6 +266,30 @@ The implementation plan should define a small edge evidence model with at least:
 | `seed_support` | MS2 seed count/evidence support summary |
 | `duplicate_context` | same-owner supporting event or tail-assignment evidence |
 
+### Minimum Edge Evidence Model
+
+The implementation plan must make the edge evidence model typed and
+serializable. The minimum fields are:
+
+| Field | Type | Notes |
+|---|---|---|
+| `left_owner_id` | string | sample-local owner id |
+| `right_owner_id` | string | sample-local owner id |
+| `decision` | enum | `strong_edge`, `weak_edge`, `blocked_edge` |
+| `failure_reason` | enum or empty | populated for `blocked_edge` |
+| `rt_raw_delta_sec` | float | absolute RT difference before drift correction |
+| `rt_drift_corrected_delta_sec` | float or blank | blank when no drift prior exists |
+| `drift_prior_source` | enum | `targeted_istd_trend`, `batch_istd_trend`, or `none` |
+| `injection_order_gap` | integer or blank | blank when either sample has no order |
+| `owner_quality` | enum | `clean`, `weak`, `tail_supported`, `ambiguous_nearby` |
+| `seed_support_level` | enum | `strong`, `moderate`, or `weak` |
+| `duplicate_context` | enum | `none`, `same_owner_events`, or `tail_assignment` |
+| `score` | integer | deterministic score used only after hard gates pass |
+| `reason` | string | compact human-readable explanation |
+
+The exact score weights belong in the implementation plan, but the first plan
+must include a rule table and synthetic tests for each decision transition.
+
 ### Edge Decisions
 
 | Decision | Meaning | Production behavior |
@@ -228,15 +300,51 @@ The implementation plan should define a small edge evidence model with at least:
 
 Raw RT proximity can nominate comparisons, but it cannot be the merge reason.
 
+Minimum v1 decision rules:
+
+| Condition | Decision |
+|---|---|
+| any hard gate fails | `blocked_edge` |
+| hard gates pass and edge relies on rescued/backfilled support | `blocked_edge` |
+| hard gates pass, drift prior is absent, and raw RT exceeds existing strict owner RT tolerance | `weak_edge` |
+| hard gates pass, drift-corrected RT is close under the implementation-plan threshold, and owner/seed support are not weak | `strong_edge` |
+| hard gates pass but owner quality or seed support is weak | `weak_edge` |
+| hard gates pass but drift evidence is missing or contradictory | `weak_edge` |
+
+The implementation plan must replace "close" and "weak" with numeric
+thresholds or enum rules before implementation starts.
+
 ## Validation
+
+### Baseline Artifacts
+
+The implementation plan must bind validation to explicit baseline artifacts
+before changing behavior.
+
+Required baseline references:
+
+| Scope | Baseline artifact |
+|---|---|
+| 8 RAW alignment | `output\alignment\semantics_cleanup_8raw_20260511` |
+| 8 RAW raw trace cases | `output\alignment\semantics_cleanup_8raw_20260511\raw_trace_inspection` |
+| targeted 8 RAW workbook | `C:\Users\user\Desktop\XIC_Extractor\output\xic_results_20260512_1151.xlsx` |
+| targeted 85 RAW workbook | `C:\Users\user\Desktop\XIC_Extractor\output\xic_results_20260512_1200.xlsx` |
+| sample metadata | `C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\SampleInfo.xlsx` |
+
+If any baseline artifact is missing, validation must stop and report the missing
+path rather than silently substituting another run.
 
 ### Layer 1: 8-RAW Fast Loop
 
-Real-data validation should use 8 RAW workers when supported by the CLI:
+Real-data validation must use 8 RAW workers for alignment runs:
 
 ```text
 workers = 8
 ```
+
+The command or run metadata must prove that 8 workers were requested. If the CLI
+or local environment cannot run 8 workers, the validation result is `SKIP` with
+the exact reason, not `PASS`.
 
 The 8-RAW run must write:
 
@@ -250,11 +358,22 @@ The 8-RAW run must write:
 
 Expected outcomes:
 
-- `5-medC` and `5-hmdC` production-family split decreases;
-- `5-medC` and `5-hmdC` miss count does not increase;
-- `8-oxodG` does not produce accepted production family;
-- duplicate cleanup moves earlier than final duplicate assignment;
-- runtime is recorded with workers fixed at 8.
+| Metric | Source | Pass rule |
+|---|---|---|
+| `5-medC` SPLIT count | targeted GT audit comparison CSV | `new_split <= baseline_split` |
+| `5-medC` MISS count | targeted GT audit comparison CSV | `new_miss <= baseline_miss` |
+| `5-hmdC` SPLIT count | targeted GT audit comparison CSV | `new_split <= baseline_split` |
+| `5-hmdC` MISS count | targeted GT audit comparison CSV | `new_miss <= baseline_miss` |
+| `8-oxodG` accepted production families | post-run negative audit | `0` |
+| duplicate cleanup timing | edge/owner debug output and `alignment_cells.tsv` | same-peak/tail duplicates should be represented as owners/supporting evidence before claim-registry cleanup |
+| worker count | command log, timing JSON, or run metadata | requested worker count is `8` |
+
+For 8 RAW, a reduction in SPLIT is a success signal, but the non-regression rule
+is the hard gate. If SPLIT is unchanged and MISS does not increase, the run is
+allowed to proceed only if case1-4 diagnostics show no over-merge.
+
+`8-oxodG` is a post-run audit assertion. Production alignment code must not read
+or branch on `target_label == "8-oxodG"` or any target-label alias.
 
 ### Layer 2: Case-Based Qualitative Gate
 
@@ -265,16 +384,32 @@ Expected outcomes:
 | Case 3 | drifted clean owners should not split solely due to raw RT shift |
 | Case 4 | tail/shadow events become supporting/debug evidence, not extra rows |
 
+The implementation plan must translate each case into at least one synthetic or
+artifact-backed assertion before implementation. Visual SVG review may support
+the decision, but it cannot be the only evidence.
+
 ### Layer 3: 85-RAW Guardrail
 
 After the 8-RAW loop passes, run 85 RAW with the same worker policy.
 
 85-RAW acceptance is comparative, not perfection-based:
 
-- `5-medC` and `5-hmdC` improve or do not regress relative to baseline;
-- `8-oxodG` negative checkpoint remains negative;
-- duplicate-only, zero-present, and high-backfill-dependency families decrease;
-- timing artifacts are recorded for comparison.
+| Metric | Source | Pass rule |
+|---|---|---|
+| `5-medC` SPLIT count | targeted GT audit comparison CSV | `new_split <= baseline_split` |
+| `5-medC` MISS count | targeted GT audit comparison CSV | `new_miss <= baseline_miss` |
+| `5-hmdC` SPLIT count | targeted GT audit comparison CSV | `new_split <= baseline_split` |
+| `5-hmdC` MISS count | targeted GT audit comparison CSV | `new_miss <= baseline_miss` |
+| `8-oxodG` accepted production families | post-run negative audit | `0` |
+| duplicate-only families | alignment review/cells derived metric | `new_count <= baseline_count` |
+| zero-present families | alignment review/cells derived metric | `new_count <= baseline_count` |
+| high-backfill-dependency families | alignment review warning/derived metric | `new_count <= baseline_count` |
+| worker count | command log, timing JSON, or run metadata | requested worker count is `8` |
+| timing | timing JSON | recorded; no hard runtime pass/fail in this correctness pass |
+
+The implementation plan must define the exact derivation for duplicate-only,
+zero-present, and high-backfill-dependency counts from the available TSV fields
+before running 85 RAW.
 
 ## Stop Conditions
 
@@ -286,11 +421,31 @@ Stop and revisit the design if:
 - broad raw RT proximity becomes sufficient to merge;
 - rescued/backfilled cells bridge two detected groups;
 - 8-RAW validation improves while case2-like doublets are over-collapsed;
-- 85-RAW introduces large new false-positive families.
+- 85-RAW introduces any accepted `8-oxodG` production family;
+- 85-RAW increases any baseline guardrail metric listed above unless the user
+  explicitly accepts the tradeoff after inspecting the evidence.
 
 ## Next Step
 
 After user review of this spec, write an implementation plan.
+
+### Plan Inputs
+
+The implementation plan should assume these initial module boundaries unless
+repo exploration proves a better local fit:
+
+| Responsibility | Likely module |
+|---|---|
+| drift evidence adapter | new `xic_extractor/alignment/drift_evidence.py` |
+| edge evidence model and scoring | new `xic_extractor/alignment/edge_scoring.py` |
+| owner pair clustering integration | `xic_extractor/alignment/owner_clustering.py` |
+| sample-local duplicate ownership | `xic_extractor/alignment/ownership.py` |
+| edge/debug TSV output if needed | `xic_extractor/alignment/debug_writer.py` |
+| CLI wiring for metadata paths | `scripts/run_alignment.py` |
+| targeted GT post-run audits | `tools/diagnostics/targeted_gt_alignment_audit.py` or a new diagnostics wrapper |
+
+These are planning inputs, not pre-approved code changes. The plan must still
+read current module boundaries before editing.
 
 The implementation plan must list:
 
