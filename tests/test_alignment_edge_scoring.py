@@ -169,6 +169,25 @@ def test_missing_drift_and_raw_over_strict_window_is_weak() -> None:
     assert edge.drift_prior_source == "none"
 
 
+def test_missing_drift_and_raw_close_edge_is_strong() -> None:
+    edge = evaluate_owner_edge(
+        _owner("s1", owner_apex_rt=10.00),
+        _owner("s2", owner_apex_rt=10.25),
+        config=AlignmentConfig(preferred_rt_sec=30.0, max_rt_sec=120.0),
+        drift_lookup=None,
+    )
+
+    assert edge.decision == "strong_edge"
+    assert edge.rt_raw_delta_sec == pytest.approx(15.0)
+    assert edge.rt_raw_delta_sec <= 30.0
+    assert edge.rt_drift_corrected_delta_sec is None
+    assert edge.drift_prior_source == "none"
+    assert edge.seed_support_level == "strong"
+    assert edge.owner_quality == "clean"
+    assert edge.score >= 55
+    assert edge.failure_reason == ""
+
+
 def test_drift_corrected_close_edge_is_strong_even_when_raw_exceeds_strict() -> None:
     edge = evaluate_owner_edge(
         _owner("s1", owner_apex_rt=10.00),
