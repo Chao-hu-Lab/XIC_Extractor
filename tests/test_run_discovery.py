@@ -1,0 +1,405 @@
+import json
+from pathlib import Path
+
+import pytest
+import tomllib
+
+from scripts import run_discovery
+from xic_extractor.discovery.models import DiscoveryBatchOutputs, DiscoveryRunOutputs
+from xic_extractor.raw_reader import RawReaderError
+
+
+def test_run_discovery_cli_passes_single_raw_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "TumorBC2312_DNA.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "out"
+    captured = {}
+
+    def _fake_run_discovery(raw_path_arg, *, output_dir, settings, peak_config):
+        captured["raw_path"] = raw_path_arg
+        captured["output_dir"] = output_dir
+        captured["settings"] = settings
+        captured["peak_config"] = peak_config
+        output_dir.mkdir(parents=True, exist_ok=True)
+        candidates_csv = output_dir / "discovery_candidates.csv"
+        review_csv = output_dir / "discovery_review.csv"
+        candidates_csv.write_text("review_priority\n", encoding="utf-8")
+        review_csv.write_text("review_priority\n", encoding="utf-8")
+        return DiscoveryRunOutputs(
+            candidates_csv=candidates_csv,
+            review_csv=review_csv,
+        )
+
+    monkeypatch.setattr(run_discovery, "run_discovery", _fake_run_discovery)
+
+    code = run_discovery.main(
+        [
+            "--raw",
+            str(raw_path),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--neutral-loss-da",
+            "116.0474",
+            "--neutral-loss-tag",
+            "DNA_dR",
+            "--resolver-mode",
+            "local_minimum",
+        ]
+    )
+
+    assert code == 0
+    assert captured["raw_path"] == raw_path.resolve()
+    assert captured["output_dir"] == output_dir.resolve()
+    settings = captured["settings"]
+    assert settings.neutral_loss_profile.tag == "DNA_dR"
+    assert settings.neutral_loss_profile.neutral_loss_da == 116.0474
+    assert settings.resolver_mode == "local_minimum"
+    peak_config = captured["peak_config"]
+    assert peak_config.data_dir == raw_path.parent.resolve()
+    assert peak_config.dll_dir == dll_dir.resolve()
+    assert peak_config.output_csv == output_dir.resolve() / "xic_results.csv"
+    assert peak_config.diagnostics_csv == output_dir.resolve() / "xic_diagnostics.csv"
+    assert peak_config.resolver_mode == "local_minimum"
+    assert peak_config.nl_min_intensity_ratio == settings.nl_min_intensity_ratio
+    stdout = capsys.readouterr().out
+    assert "Discovery candidates CSV: " in stdout
+    assert "Discovery review CSV: " in stdout
+    assert "discovery_candidates.csv" in stdout
+    assert "discovery_review.csv" in stdout
+
+
+def test_run_discovery_cli_passes_raw_dir_batch_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    first = raw_dir / "B.raw"
+    second = raw_dir / "A.raw"
+    first.write_text("", encoding="utf-8")
+    second.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "out"
+    captured = {}
+
+    def _fake_run_discovery_batch(raw_paths, *, output_dir, settings, peak_config):
+        captured["raw_paths"] = raw_paths
+        captured["output_dir"] = output_dir
+        captured["settings"] = settings
+        captured["peak_config"] = peak_config
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "discovery_batch_index.csv"
+        sample_outputs = DiscoveryRunOutputs(
+            candidates_csv=output_dir / "A" / "discovery_candidates.csv",
+            review_csv=output_dir / "A" / "discovery_review.csv",
+        )
+        output_path.write_text("sample_stem\n", encoding="utf-8")
+        return DiscoveryBatchOutputs(
+            batch_index_csv=output_path,
+            per_sample=(sample_outputs,),
+        )
+
+    monkeypatch.setattr(
+        run_discovery,
+        "run_discovery_batch",
+        _fake_run_discovery_batch,
+    )
+
+    code = run_discovery.main(
+        [
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert code == 0
+    assert captured["raw_paths"] == (second.resolve(), first.resolve())
+    assert captured["output_dir"] == output_dir.resolve()
+    assert captured["peak_config"].data_dir == raw_dir.resolve()
+    assert captured["settings"].resolver_mode == "local_minimum"
+    stdout = capsys.readouterr().out
+    assert "Discovery batch index: " in stdout
+    assert "discovery_batch_index.csv" in stdout
+
+
+def test_run_discovery_cli_writes_timing_json_for_batch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    raw_path = raw_dir / "A.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "out"
+    timing_path = tmp_path / "diagnostics" / "discovery_timing.json"
+
+    def _fake_run_discovery_batch(
+        raw_paths,
+        *,
+        output_dir,
+        settings,
+        peak_config,
+        timing_recorder=None,
+    ):
+        assert timing_recorder is not None
+        with timing_recorder.stage(
+            "discover.write_batch_index",
+            metrics={"raw_count": len(raw_paths), "row_count": len(raw_paths)},
+        ):
+            pass
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "discovery_batch_index.csv"
+        output_path.write_text("sample_stem\n", encoding="utf-8")
+        return DiscoveryBatchOutputs(batch_index_csv=output_path, per_sample=())
+
+    monkeypatch.setattr(run_discovery, "run_discovery_batch", _fake_run_discovery_batch)
+
+    code = run_discovery.main(
+        [
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--timing-output",
+            str(timing_path),
+        ]
+    )
+
+    assert code == 0
+    payload = json.loads(timing_path.read_text(encoding="utf-8"))
+    assert payload["pipeline"] == "discovery"
+    assert payload["records"][0]["stage"] == "discover.write_batch_index"
+    assert payload["records"][0]["metrics"] == {"raw_count": 1, "row_count": 1}
+    assert "Timing JSON:" in capsys.readouterr().out
+
+
+def test_run_discovery_cli_rejects_missing_raw(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_discovery.main(
+        [
+            "--raw",
+            str(tmp_path / "missing.raw"),
+            "--dll-dir",
+            str(dll_dir),
+        ]
+    )
+
+    assert code == 2
+    assert "raw file does not exist" in capsys.readouterr().err
+
+
+def test_run_discovery_cli_rejects_raw_dir_without_raw_files(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_discovery.main(
+        [
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+        ]
+    )
+
+    assert code == 2
+    assert "raw directory contains no .raw files" in capsys.readouterr().err
+
+
+def test_run_discovery_cli_rejects_missing_dll_dir(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+
+    code = run_discovery.main(
+        [
+            "--raw",
+            str(raw_path),
+            "--dll-dir",
+            str(tmp_path / "missing-dll"),
+        ]
+    )
+
+    assert code == 2
+    assert "dll directory does not exist" in capsys.readouterr().err
+
+
+def test_run_discovery_cli_rejects_non_positive_float_args(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_discovery.main(
+            [
+                "--raw",
+                str(raw_path),
+                "--dll-dir",
+                str(dll_dir),
+                "--neutral-loss-da",
+                "0",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "value must be > 0" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["nan", "inf"])
+def test_run_discovery_cli_rejects_non_finite_positive_float_args(
+    value: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_discovery.main(
+            [
+                "--raw",
+                str(raw_path),
+                "--dll-dir",
+                str(dll_dir),
+                "--nl-tolerance-ppm",
+                value,
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "value must be > 0" in capsys.readouterr().err
+
+
+def test_run_discovery_cli_rejects_inverted_rt_window(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_discovery.main(
+            [
+                "--raw",
+                str(raw_path),
+                "--dll-dir",
+                str(dll_dir),
+                "--rt-min",
+                "10",
+                "--rt-max",
+                "5",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "rt-min must be <= rt-max" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--rt-min", "-1"),
+        ("--rt-max", "nan"),
+        ("--rt-max", "inf"),
+    ],
+)
+def test_run_discovery_cli_rejects_invalid_rt_bounds(
+    option: str,
+    value: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_discovery.main(
+            [
+                "--raw",
+                str(raw_path),
+                "--dll-dir",
+                str(dll_dir),
+                option,
+                value,
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "RT bounds must be finite values >= 0" in capsys.readouterr().err
+
+
+def test_run_discovery_cli_returns_2_when_raw_reader_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "sample.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    def _raise_raw_reader_error(*_args, **_kwargs):
+        raise RawReaderError("boom")
+
+    monkeypatch.setattr(run_discovery, "run_discovery", _raise_raw_reader_error)
+
+    code = run_discovery.main(
+        [
+            "--raw",
+            str(raw_path),
+            "--dll-dir",
+            str(dll_dir),
+        ]
+    )
+
+    assert code == 2
+    assert "boom" in capsys.readouterr().err
+
+
+def test_pyproject_registers_discovery_cli_script() -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    assert (
+        pyproject["project"]["scripts"]["xic-discovery-cli"]
+        == "scripts.run_discovery:main"
+    )

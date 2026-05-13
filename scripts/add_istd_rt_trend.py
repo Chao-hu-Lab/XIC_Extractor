@@ -142,7 +142,8 @@ def _read_injection_order(path: Path) -> list[dict[str, object]]:
         order_col = header.index("injection_order")
     except ValueError as exc:
         raise ValueError(
-            f"{path}: expected columns Sample_Name / Sample_Type / Injection_Order; got {rows[0]}"
+            f"{path}: expected columns Sample_Name / Sample_Type / "
+            f"Injection_Order; got {rows[0]}"
         ) from exc
     result = []
     for row in rows[1:]:
@@ -372,7 +373,8 @@ def add_istd_rt_trend(excel_path: Path, injection_order_path: Path) -> None:
 def main() -> None:
     if len(sys.argv) != 3:
         print(
-            "Usage: uv run python scripts/add_istd_rt_trend.py <xic_output.xlsx> <injection_order.xlsx>"
+            "Usage: uv run python scripts/add_istd_rt_trend.py "
+            "<xic_output.xlsx> <injection_order.xlsx>"
         )
         sys.exit(1)
     add_istd_rt_trend(Path(sys.argv[1]), Path(sys.argv[2]))

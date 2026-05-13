@@ -172,6 +172,59 @@ def test_extract_xic_returns_positions_and_intensities() -> None:
     assert intensity.tolist() == [10.0, 20.0]
 
 
+def test_extract_xic_many_batches_shared_scan_window() -> None:
+    from xic_extractor.raw_reader import RawFileHandle
+    from xic_extractor.xic_models import XICRequest
+
+    raw = _FakeRaw(
+        chromatogram=_FakeChromatogram(
+            positions=[[8.1, 8.2], [8.1, 8.2]],
+            intensities=[[10.0, 20.0], [30.0, 40.0]],
+        )
+    )
+    handle = RawFileHandle(raw, _fake_thermo(raw))
+
+    traces = handle.extract_xic_many(
+        (
+            XICRequest(mz=258.0, rt_min=8.0, rt_max=10.0, ppm_tol=20.0),
+            XICRequest(mz=259.0, rt_min=8.0, rt_max=10.0, ppm_tol=20.0),
+        )
+    )
+
+    assert len(traces) == 2
+    assert traces[0].rt.tolist() == [8.1, 8.2]
+    assert traces[0].intensity.tolist() == [10.0, 20.0]
+    assert traces[1].rt.tolist() == [8.1, 8.2]
+    assert traces[1].intensity.tolist() == [30.0, 40.0]
+    assert raw.chromatogram_calls == [((1, 2), 2)]
+    assert handle.raw_chromatogram_call_count == 1
+
+
+def test_extract_xic_many_preserves_order_for_mixed_scan_windows() -> None:
+    from xic_extractor.raw_reader import RawFileHandle
+    from xic_extractor.xic_models import XICRequest
+
+    raw = _FakeRaw(
+        chromatogram_by_window={
+            (1, 2): _FakeChromatogram([[8.1], [8.1]], [[10.0], [10.0]]),
+            (2, 2): _FakeChromatogram([[8.2]], [[20.0]]),
+        }
+    )
+    handle = RawFileHandle(raw, _fake_thermo(raw))
+
+    traces = handle.extract_xic_many(
+        (
+            XICRequest(mz=258.0, rt_min=8.0, rt_max=10.0, ppm_tol=20.0),
+            XICRequest(mz=259.0, rt_min=8.5, rt_max=10.0, ppm_tol=20.0),
+            XICRequest(mz=260.0, rt_min=8.0, rt_max=10.0, ppm_tol=20.0),
+        )
+    )
+
+    assert [trace.intensity.tolist() for trace in traces] == [[10.0], [20.0], [10.0]]
+    assert raw.chromatogram_calls == [((1, 2), 2), ((2, 2), 1)]
+    assert handle.raw_chromatogram_call_count == 2
+
+
 def test_iter_ms2_scans_yields_parsed_scans() -> None:
     from xic_extractor.raw_reader import RawFileHandle
 
@@ -308,8 +361,12 @@ def _fake_thermo(raw):
 
 class _FakeChromatogram:
     def __init__(self, positions, intensities) -> None:
-        self.PositionsArray = [positions]
-        self.IntensitiesArray = [intensities]
+        if positions and not isinstance(positions[0], list):
+            positions = [positions]
+        if intensities and not isinstance(intensities[0], list):
+            intensities = [intensities]
+        self.PositionsArray = positions
+        self.IntensitiesArray = intensities
 
 
 class _FakeRaw:
@@ -317,12 +374,15 @@ class _FakeRaw:
         self,
         *,
         chromatogram: _FakeChromatogram | None = None,
+        chromatogram_by_window: dict[tuple[int, int], _FakeChromatogram] | None = None,
         filters: dict[int, object] | None = None,
         scans: dict[int, object] | None = None,
         scan_errors: dict[int, Exception] | None = None,
     ) -> None:
         self.disposed = False
         self.chromatogram = chromatogram or _FakeChromatogram([8.1], [10.0])
+        self.chromatogram_by_window = chromatogram_by_window or {}
+        self.chromatogram_calls: list[tuple[tuple[int, int], int]] = []
         self.filters = filters or {}
         self.scans = scans or {}
         self.scan_errors = scan_errors or {}
@@ -339,8 +399,12 @@ class _FakeRaw:
     def RetentionTimeFromScanNumber(self, scan_number: int) -> float:
         return 8.0 + (scan_number - 1) * 0.1
 
-    def GetChromatogramData(self, *_args):
-        return self.chromatogram
+    def GetChromatogramData(self, settings, start_scan, end_scan):
+        self.chromatogram_calls.append(((start_scan, end_scan), len(settings)))
+        return self.chromatogram_by_window.get(
+            (start_scan, end_scan),
+            self.chromatogram,
+        )
 
     def GetFilterForScanNumber(self, scan_number: int):
         return self.filters[scan_number]
