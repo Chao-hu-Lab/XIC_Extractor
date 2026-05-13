@@ -1,3 +1,5 @@
+import json
+import json
 from pathlib import Path
 
 import pytest
@@ -133,6 +135,62 @@ def test_run_discovery_cli_passes_raw_dir_batch_settings(
     stdout = capsys.readouterr().out
     assert "Discovery batch index: " in stdout
     assert "discovery_batch_index.csv" in stdout
+
+
+def test_run_discovery_cli_writes_timing_json_for_batch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    raw_path = raw_dir / "A.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "out"
+    timing_path = tmp_path / "diagnostics" / "discovery_timing.json"
+
+    def _fake_run_discovery_batch(
+        raw_paths,
+        *,
+        output_dir,
+        settings,
+        peak_config,
+        timing_recorder=None,
+    ):
+        assert timing_recorder is not None
+        with timing_recorder.stage(
+            "discover.write_batch_index",
+            metrics={"raw_count": len(raw_paths), "row_count": len(raw_paths)},
+        ):
+            pass
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / "discovery_batch_index.csv"
+        output_path.write_text("sample_stem\n", encoding="utf-8")
+        return DiscoveryBatchOutputs(batch_index_csv=output_path, per_sample=())
+
+    monkeypatch.setattr(run_discovery, "run_discovery_batch", _fake_run_discovery_batch)
+
+    code = run_discovery.main(
+        [
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--timing-output",
+            str(timing_path),
+        ]
+    )
+
+    assert code == 0
+    payload = json.loads(timing_path.read_text(encoding="utf-8"))
+    assert payload["pipeline"] == "discovery"
+    assert payload["records"][0]["stage"] == "discover.write_batch_index"
+    assert payload["records"][0]["metrics"] == {"raw_count": 1, "row_count": 1}
+    assert "Timing JSON:" in capsys.readouterr().out
 
 
 def test_run_discovery_cli_rejects_missing_raw(

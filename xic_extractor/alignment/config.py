@@ -32,6 +32,7 @@ class AlignmentConfig:
     owner_apex_close_sec: float = 2.0
     owner_tail_seed_guard_sec: float = 30.0
     owner_tail_max_secondary_ratio: float = 0.30
+    owner_backfill_min_detected_samples: int = 1
     identity_rt_candidate_window_sec: float = 180.0
     rt_unit: Literal["min"] = "min"
     fragmentation_model: Literal["cid_nl"] = "cid_nl"
@@ -117,6 +118,10 @@ class AlignmentConfig:
             self.owner_tail_max_secondary_ratio,
             0,
             1,
+        )
+        _require_positive_int(
+            "owner_backfill_min_detected_samples",
+            self.owner_backfill_min_detected_samples,
         )
         _require_positive(
             "identity_rt_candidate_window_sec",

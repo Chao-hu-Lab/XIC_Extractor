@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -74,6 +75,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert captured["output_level"] == "machine"
     assert captured["emit_alignment_cells"] is True
     assert captured["emit_alignment_status_matrix"] is True
+    assert captured["raw_workers"] == 1
     stdout = capsys.readouterr().out
     assert "Alignment review TSV:" in stdout
     assert "alignment_review.tsv" in stdout
@@ -113,6 +115,185 @@ def test_run_alignment_cli_accepts_output_level_debug(
 
     assert code == 0
     assert captured["output_level"] == "debug"
+
+
+def test_run_alignment_cli_passes_raw_workers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--raw-workers",
+            "4",
+        ],
+    )
+
+    assert code == 0
+    assert captured["raw_workers"] == 4
+
+
+def test_run_alignment_cli_passes_raw_xic_batch_size(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--raw-xic-batch-size",
+            "64",
+        ],
+    )
+
+    assert code == 0
+    assert captured["raw_xic_batch_size"] == 64
+
+
+def test_run_alignment_cli_passes_owner_backfill_min_detected_samples(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--owner-backfill-min-detected-samples",
+            "3",
+        ],
+    )
+
+    assert code == 0
+    assert captured["alignment_config"].owner_backfill_min_detected_samples == 3
+
+
+def test_run_alignment_cli_writes_timing_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    timing_path = tmp_path / "diagnostics" / "alignment_timing.json"
+
+    def fake_run_alignment(**kwargs):
+        timing_recorder = kwargs["timing_recorder"]
+        with timing_recorder.stage(
+            "alignment.read_candidates",
+            metrics={"candidate_count": 0},
+        ):
+            pass
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--timing-output",
+            str(timing_path),
+        ],
+    )
+
+    assert code == 0
+    payload = json.loads(timing_path.read_text(encoding="utf-8"))
+    assert payload["pipeline"] == "alignment"
+    assert payload["records"][0]["stage"] == "alignment.read_candidates"
+    assert payload["records"][0]["metrics"] == {"candidate_count": 0}
+    assert "Timing JSON:" in capsys.readouterr().out
+
+
+def test_run_alignment_cli_rejects_invalid_raw_workers(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_alignment.main(
+            [
+                "--discovery-batch-index",
+                str(batch_index),
+                "--raw-dir",
+                str(raw_dir),
+                "--dll-dir",
+                str(dll_dir),
+                "--raw-workers",
+                "0",
+            ],
+        )
+
+    assert exc_info.value.code == 2
+    assert "value must be an integer >= 1" in capsys.readouterr().err
 
 
 def test_run_alignment_cli_rejects_missing_batch_index(

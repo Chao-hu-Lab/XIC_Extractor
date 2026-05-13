@@ -2,13 +2,22 @@ import csv
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 import xic_extractor.alignment.pipeline as pipeline_module
 from xic_extractor.alignment import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
+from xic_extractor.alignment.process_backend import (
+    OwnerBuildProcessOutput,
+    OwnerBuildTimingStats,
+    OwnerBackfillProcessOutput,
+    OwnerBackfillTimingStats,
+)
+from xic_extractor.alignment.ownership import OwnershipBuildResult
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.discovery.models import DISCOVERY_CANDIDATE_COLUMNS
 
 
@@ -29,11 +38,13 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
         raw_sources,
         alignment_config,
         peak_config,
+        raw_xic_batch_size,
     ):
         calls["candidates"] = tuple(candidate.sample_stem for candidate in candidates)
         calls["owner_raw_sources"] = raw_sources
         calls["alignment_config"] = alignment_config
         calls["peak_config"] = peak_config
+        calls["owner_raw_xic_batch_size"] = raw_xic_batch_size
         return SimpleNamespace(owners=("owner",), ambiguous_records=())
 
     def fake_cluster_owners(owners, *, config):
@@ -48,10 +59,12 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
         raw_sources,
         alignment_config,
         peak_config,
+        raw_xic_batch_size,
     ):
         calls["features"] = features
         calls["sample_order"] = sample_order
         calls["raw_sources"] = raw_sources
+        calls["backfill_raw_xic_batch_size"] = raw_xic_batch_size
         return ("rescued",)
 
     def fake_owner_matrix(
@@ -98,6 +111,8 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
     assert calls["features"] == ("feature",)
     assert calls["sample_order"] == ("Sample_A", "Sample_B")
     assert set(calls["raw_sources"]) == {"Sample_A", "Sample_B"}
+    assert calls["owner_raw_xic_batch_size"] == 1
+    assert calls["backfill_raw_xic_batch_size"] == 1
     assert calls["matrix_features"] == ("feature",)
     assert calls["ambiguous_by_sample"] == {}
     assert calls["rescued_cells"] == ("rescued",)
@@ -113,6 +128,250 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
     assert outputs.matrix_tsv.exists()
     assert not (tmp_path / "out" / "alignment_cells.tsv").exists()
     assert not (tmp_path / "out" / "alignment_matrix_status.tsv").exists()
+
+
+def test_pipeline_records_alignment_timing_stages(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+    recorder = TimingRecorder("alignment", run_id="test-alignment")
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+        timing_recorder=recorder,
+    )
+
+    stages = [record.stage for record in recorder.records]
+    assert stages == [
+        "alignment.read_batch_index",
+        "alignment.read_candidates",
+        "alignment.open_raw_sources",
+        "alignment.build_owners",
+        "alignment.cluster_owners",
+        "alignment.owner_backfill",
+        "alignment.build_matrix",
+        "alignment.claim_registry",
+        "alignment.write_outputs",
+    ]
+    records_by_stage = {record.stage: record for record in recorder.records}
+    assert records_by_stage["alignment.read_candidates"].metrics["candidate_count"] == 1
+    assert records_by_stage["alignment.open_raw_sources"].metrics["raw_count"] == 1
+
+
+def test_pipeline_records_alignment_extract_xic_inner_timing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    batch_index = _write_partial_batch(
+        tmp_path,
+        sample_order=("Sample_A", "Sample_B"),
+        candidate_samples=("Sample_A",),
+    )
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    (raw_dir / "Sample_B.raw").write_text("raw", encoding="utf-8")
+    monkeypatch.setattr(
+        "xic_extractor.alignment.ownership.find_peak_and_area",
+        _ok_alignment_peak,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.alignment.owner_backfill.find_peak_and_area",
+        _ok_alignment_peak,
+    )
+    monkeypatch.setattr(pipeline_module, "_write_outputs_atomic", lambda *args, **kwargs: None)
+    recorder = TimingRecorder("alignment", run_id="test-inner-timing")
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=TraceRawOpener(),
+        timing_recorder=recorder,
+    )
+
+    records_by_stage_sample = {
+        (record.stage, record.sample_stem): record for record in recorder.records
+    }
+    build_record = records_by_stage_sample[
+        ("alignment.build_owners.extract_xic", "Sample_A")
+    ]
+    backfill_record = records_by_stage_sample[
+        ("alignment.owner_backfill.extract_xic", "Sample_B")
+    ]
+    expected_metrics = {
+        "extract_xic_count": 1,
+        "extract_xic_batch_count": 1,
+        "raw_chromatogram_call_count": 0,
+        "point_count": 3,
+    }
+    assert build_record.metrics == expected_metrics
+    assert backfill_record.metrics == expected_metrics
+
+
+def test_timed_raw_source_records_batch_calls() -> None:
+    from xic_extractor.xic_models import XICRequest, XICTrace
+
+    class BatchSource:
+        def __init__(self) -> None:
+            self.raw_chromatogram_call_count = 0
+
+        def extract_xic_many(self, requests):
+            self.raw_chromatogram_call_count += 1
+            return tuple(
+                XICTrace.from_arrays([request.rt_min], [request.mz])
+                for request in requests
+            )
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            self.raw_chromatogram_call_count += 1
+            return [rt_min], [mz]
+
+    stats = pipeline_module._RawSourceTimingStats(
+        sample_stem="Sample_A",
+        stage="alignment.build_owners.extract_xic",
+    )
+    source = pipeline_module._TimedRawSource(BatchSource(), stats=stats)
+
+    traces = source.extract_xic_many(
+        (
+            XICRequest(mz=258.0, rt_min=8.0, rt_max=9.0, ppm_tol=20.0),
+            XICRequest(mz=259.0, rt_min=8.0, rt_max=9.0, ppm_tol=20.0),
+        )
+    )
+
+    assert [trace.intensity.tolist() for trace in traces] == [[258.0], [259.0]]
+    assert stats.extract_xic_count == 2
+    assert stats.extract_xic_batch_count == 1
+    assert stats.raw_chromatogram_call_count == 1
+    assert stats.point_count == 2
+
+
+def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    opener = FakeRawOpener()
+    calls = {}
+    rescued = _cell("Sample_A", cluster_id="ALN000001")
+    recorder = TimingRecorder("alignment", run_id="test-process-backfill")
+
+    def fake_process_backfill(features, **kwargs):
+        calls["features"] = features
+        calls.update(kwargs)
+        assert opener.calls == []
+        return OwnerBackfillProcessOutput(
+            cells=(rescued,),
+            timing_stats=(
+                OwnerBackfillTimingStats(
+                    sample_stem="Sample_A",
+                    elapsed_sec=1.5,
+                    extract_xic_count=4,
+                    point_count=40,
+                ),
+            ),
+        )
+
+    def fake_process_build(candidates, **kwargs):
+        calls["build_candidates"] = tuple(candidate.sample_stem for candidate in candidates)
+        calls["build_kwargs"] = kwargs
+        return OwnerBuildProcessOutput(
+            ownership=OwnershipBuildResult(owners=(), assignments=(), ambiguous_records=()),
+            timing_stats=(
+                OwnerBuildTimingStats(
+                    sample_stem="Sample_A",
+                    elapsed_sec=2.5,
+                    extract_xic_count=5,
+                    point_count=50,
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "run_owner_build_process",
+        fake_process_build,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config: (),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "run_owner_backfill_process",
+        fake_process_backfill,
+    )
+    def fake_owner_matrix(features, *, sample_order, rescued_cells, **kwargs):
+        calls["rescued_cells"] = rescued_cells
+        return _matrix(sample_order)
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        fake_owner_matrix,
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=opener,
+        raw_workers=2,
+        timing_recorder=recorder,
+    )
+
+    assert calls["max_workers"] == 2
+    assert calls["raw_paths"] == {"Sample_A": raw_dir / "Sample_A.raw"}
+    assert calls["rescued_cells"] == (rescued,)
+    assert calls["build_kwargs"]["max_workers"] == 2
+    assert calls["raw_xic_batch_size"] == 1
+    assert calls["build_kwargs"]["raw_xic_batch_size"] == 1
+    records_by_stage_sample = {
+        (record.stage, record.sample_stem): record for record in recorder.records
+    }
+    assert records_by_stage_sample[
+        ("alignment.build_owners.extract_xic", "Sample_A")
+    ].metrics == {
+        "extract_xic_count": 5,
+        "extract_xic_batch_count": 0,
+        "raw_chromatogram_call_count": 0,
+        "point_count": 50,
+    }
+    assert records_by_stage_sample[
+        ("alignment.owner_backfill.extract_xic", "Sample_A")
+    ].metrics == {
+        "extract_xic_count": 4,
+        "extract_xic_batch_count": 0,
+        "raw_chromatogram_call_count": 0,
+        "point_count": 40,
+    }
 
 
 def test_pipeline_uses_raw_dir_as_authority_and_fallbacks_to_sample_stem(
@@ -665,6 +924,36 @@ class FakeRawContext:
         raise AssertionError("fake pipeline tests monkeypatch backfill")
 
 
+class TraceRawOpener:
+    def __call__(self, raw_path: Path, dll_dir: Path):
+        return TraceRawContext(raw_path)
+
+
+class TraceRawContext:
+    def __init__(self, raw_path: Path) -> None:
+        self.raw_path = raw_path
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+        return np.asarray([7.9, 8.0, 8.1]), np.asarray([10.0, 100.0, 10.0])
+
+
+def _ok_alignment_peak(*args, **kwargs):
+    peak = SimpleNamespace(
+        rt=8.0,
+        intensity=100.0,
+        area=25.0,
+        peak_start=7.9,
+        peak_end=8.1,
+    )
+    return SimpleNamespace(status="OK", peak=peak)
+
+
 def _write_batch(
     tmp_path: Path,
     sample_order: tuple[str, ...],
@@ -688,6 +977,114 @@ def _write_batch(
             {
                 "sample_stem": sample_stem,
                 "raw_file": raw_files.get(sample_stem, f"C:/stale/{sample_stem}.raw"),
+                "candidate_csv": str(candidates_csv.relative_to(batch_dir)),
+                "review_csv": "",
+            }
+        )
+    batch_index = batch_dir / "discovery_batch_index.csv"
+    _write_csv(
+        batch_index,
+        ("sample_stem", "raw_file", "candidate_csv", "review_csv"),
+        rows,
+    )
+    return batch_index
+
+
+def _write_partial_batch(
+    tmp_path: Path,
+    *,
+    sample_order: tuple[str, ...],
+    candidate_samples: tuple[str, ...],
+) -> Path:
+    batch_dir = tmp_path / "batch"
+    batch_dir.mkdir(exist_ok=True)
+    rows = []
+    for sample_stem in sample_order:
+        sample_dir = batch_dir / sample_stem
+        sample_dir.mkdir(exist_ok=True)
+        candidates_csv = sample_dir / "discovery_candidates.csv"
+        candidate_rows = (
+            [_candidate_row(sample_stem)]
+            if sample_stem in candidate_samples
+            else []
+        )
+        _write_csv(candidates_csv, DISCOVERY_CANDIDATE_COLUMNS, candidate_rows)
+        rows.append(
+            {
+                "sample_stem": sample_stem,
+                "raw_file": f"C:/stale/{sample_stem}.raw",
+                "candidate_csv": str(candidates_csv.relative_to(batch_dir)),
+                "review_csv": "",
+            }
+        )
+    batch_index = batch_dir / "discovery_batch_index.csv"
+    _write_csv(
+        batch_index,
+        ("sample_stem", "raw_file", "candidate_csv", "review_csv"),
+        rows,
+    )
+    return batch_index
+
+
+def _write_partial_batch(
+    tmp_path: Path,
+    *,
+    sample_order: tuple[str, ...],
+    candidate_samples: tuple[str, ...],
+) -> Path:
+    batch_dir = tmp_path / "batch"
+    batch_dir.mkdir(exist_ok=True)
+    rows = []
+    for sample_stem in sample_order:
+        sample_dir = batch_dir / sample_stem
+        sample_dir.mkdir(exist_ok=True)
+        candidates_csv = sample_dir / "discovery_candidates.csv"
+        candidate_rows = (
+            [_candidate_row(sample_stem)]
+            if sample_stem in candidate_samples
+            else []
+        )
+        _write_csv(candidates_csv, DISCOVERY_CANDIDATE_COLUMNS, candidate_rows)
+        rows.append(
+            {
+                "sample_stem": sample_stem,
+                "raw_file": f"C:/stale/{sample_stem}.raw",
+                "candidate_csv": str(candidates_csv.relative_to(batch_dir)),
+                "review_csv": "",
+            }
+        )
+    batch_index = batch_dir / "discovery_batch_index.csv"
+    _write_csv(
+        batch_index,
+        ("sample_stem", "raw_file", "candidate_csv", "review_csv"),
+        rows,
+    )
+    return batch_index
+
+
+def _write_partial_batch(
+    tmp_path: Path,
+    *,
+    sample_order: tuple[str, ...],
+    candidate_samples: tuple[str, ...],
+) -> Path:
+    batch_dir = tmp_path / "batch"
+    batch_dir.mkdir(exist_ok=True)
+    rows = []
+    for sample_stem in sample_order:
+        sample_dir = batch_dir / sample_stem
+        sample_dir.mkdir(exist_ok=True)
+        candidates_csv = sample_dir / "discovery_candidates.csv"
+        candidate_rows = (
+            [_candidate_row(sample_stem)]
+            if sample_stem in candidate_samples
+            else []
+        )
+        _write_csv(candidates_csv, DISCOVERY_CANDIDATE_COLUMNS, candidate_rows)
+        rows.append(
+            {
+                "sample_stem": sample_stem,
+                "raw_file": f"C:/stale/{sample_stem}.raw",
                 "candidate_csv": str(candidates_csv.relative_to(batch_dir)),
                 "review_csv": "",
             }
@@ -759,6 +1156,17 @@ def _candidate_row(sample_stem: str) -> dict[str, str]:
     }
 
 
+def _ok_alignment_peak(*args, **kwargs):
+    peak = SimpleNamespace(
+        rt=8.0,
+        intensity=100.0,
+        area=25.0,
+        peak_start=7.9,
+        peak_end=8.1,
+    )
+    return SimpleNamespace(status="OK", peak=peak)
+
+
 def _cluster(cluster_id: str = "ALN000001") -> AlignmentCluster:
     return AlignmentCluster(
         cluster_id=cluster_id,
@@ -796,6 +1204,25 @@ def _matrix(sample_order: tuple[str, ...]) -> AlignmentMatrix:
             for sample_stem in sample_order
         ),
         sample_order=sample_order,
+    )
+
+
+def _cell(sample_stem: str, *, cluster_id: str) -> AlignedCell:
+    return AlignedCell(
+        sample_stem=sample_stem,
+        cluster_id=cluster_id,
+        status="rescued",
+        area=100.0,
+        apex_rt=8.5,
+        height=50.0,
+        peak_start_rt=8.4,
+        peak_end_rt=8.6,
+        rt_delta_sec=0.0,
+        trace_quality="owner_backfill",
+        scan_support_score=None,
+        source_candidate_id=None,
+        source_raw_file=None,
+        reason="owner-centered MS1 backfill",
     )
 
 

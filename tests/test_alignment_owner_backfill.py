@@ -50,6 +50,24 @@ def test_owner_backfill_skips_review_only_identity_conflicts() -> None:
     assert source.calls == []
 
 
+def test_owner_backfill_skips_features_below_min_detected_sample_gate() -> None:
+    source = FakeBackfillSource(
+        rt=np.array([8.4, 8.5, 8.6]),
+        intensity=np.array([0.0, 100.0, 0.0]),
+    )
+
+    cells = build_owner_backfill_cells(
+        (_feature(),),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(owner_backfill_min_detected_samples=2),
+        peak_config=_peak_config(),
+    )
+
+    assert cells == ()
+    assert source.calls == []
+
+
 def test_owner_backfill_treats_non_finite_trace_as_unchecked() -> None:
     source = FakeBackfillSource(
         rt=np.array([8.4, 8.5, np.nan]),
@@ -67,6 +85,102 @@ def test_owner_backfill_treats_non_finite_trace_as_unchecked() -> None:
     assert cells == ()
 
 
+def test_owner_backfill_uses_batch_source_and_preserves_feature_major_order() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class BatchSource:
+        def __init__(self) -> None:
+            self.batch_sizes: list[int] = []
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.batch_sizes.append(len(requests))
+            traces = []
+            for request in requests:
+                center = (request.rt_min + request.rt_max) / 2.0
+                traces.append(
+                    XICTrace.from_arrays(
+                        [center - 0.10, center - 0.01, center, center + 0.01, center + 0.10],
+                        [0.0, 50.0, 120.0, 50.0, 0.0],
+                    )
+                )
+            return tuple(traces)
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source_b = BatchSource()
+    source_c = BatchSource()
+    feature_a = _feature()
+    feature_b = _feature(feature_family_id="FAM000002", mz=510.0, rt=8.8)
+
+    cells = build_owner_backfill_cells(
+        (feature_a, feature_b),
+        sample_order=("sample-a", "sample-b", "sample-c"),
+        raw_sources={"sample-b": source_b, "sample-c": source_c},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=64,
+    )
+
+    assert source_b.batch_sizes == [2]
+    assert source_c.batch_sizes == [2]
+    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
+        ("FAM000001", "sample-b"),
+        ("FAM000001", "sample-c"),
+        ("FAM000002", "sample-b"),
+        ("FAM000002", "sample-c"),
+    ]
+
+
+def test_owner_backfill_batches_by_rt_window_without_changing_emit_order() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class BatchSource:
+        def __init__(self) -> None:
+            self.batch_centers: list[tuple[float, ...]] = []
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.batch_centers.append(
+                tuple(round((request.rt_min + request.rt_max) / 2.0, 3) for request in requests)
+            )
+            traces = []
+            for request in requests:
+                center = (request.rt_min + request.rt_max) / 2.0
+                traces.append(
+                    XICTrace.from_arrays(
+                        [center - 0.10, center - 0.01, center, center + 0.01, center + 0.10],
+                        [0.0, 50.0, 120.0, 50.0, 0.0],
+                    )
+                )
+            return tuple(traces)
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source = BatchSource()
+    feature_a = _feature(feature_family_id="FAM000001", mz=500.0, rt=8.5)
+    feature_b = _feature(feature_family_id="FAM000002", mz=510.0, rt=10.5)
+    feature_c = _feature(feature_family_id="FAM000003", mz=520.0, rt=8.5)
+
+    cells = build_owner_backfill_cells(
+        (feature_a, feature_b, feature_c),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=2,
+    )
+
+    assert source.batch_centers == [(8.5, 8.5), (10.5,)]
+    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
+        ("FAM000001", "sample-b"),
+        ("FAM000002", "sample-b"),
+        ("FAM000003", "sample-b"),
+    ]
+
+
 class FakeBackfillSource:
     def __init__(self, *, rt, intensity) -> None:
         self.rt = rt
@@ -78,12 +192,18 @@ class FakeBackfillSource:
         return self.rt, self.intensity
 
 
-def _feature(*, review_only: bool = False) -> OwnerAlignedFeature:
+def _feature(
+    *,
+    review_only: bool = False,
+    feature_family_id: str = "FAM000001",
+    mz: float = 500.0,
+    rt: float = 8.5,
+) -> OwnerAlignedFeature:
     return OwnerAlignedFeature(
-        feature_family_id="FAM000001",
+        feature_family_id=feature_family_id,
         neutral_loss_tag="NL116",
-        family_center_mz=500.0,
-        family_center_rt=8.5,
+        family_center_mz=mz,
+        family_center_rt=rt,
         family_product_mz=383.9526,
         family_observed_neutral_loss_da=116.0474,
         has_anchor=True,

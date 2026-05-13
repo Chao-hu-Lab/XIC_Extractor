@@ -6,7 +6,7 @@
 > ideas such as `.mzML` conversion and Parquet caching. This version is the
 > implementation contract for this repo.
 
-**Status:** Spec / direction decision, not yet implemented
+**Status:** Phase 0 timing implemented; alignment optimization follow-up active
 **Date:** 2026-05-12
 **Branch:** `codex/untargeted-discovery-v1-implementation`
 **Worktree:** `C:\Users\user\Desktop\XIC_Extractor\.worktrees\untargeted-discovery-v1-implementation`
@@ -288,7 +288,7 @@ Stop and revisit the plan if any of these happen:
 - Feature-family indexing cannot be made equivalent to legacy grouping.
 - Any proposed optimization requires `.raw` conversion or new heavy dependencies.
 
-## Next Step
+## Original Next Step
 
 Write an implementation plan for Phase 0 only:
 
@@ -299,3 +299,151 @@ Write an implementation plan for Phase 0 only:
 - one real-data timing report.
 
 Do not implement Phase 1 or Phase 2 until Phase 0 has produced a timing report.
+This instruction is historical; the addendum below records the measured Phase 0
+outcome and the active follow-up direction.
+
+## 2026-05-12 Timing Addendum
+
+Phase 0 timing on the 8-RAW validation subset showed alignment dominates the
+measured workflow. Discovery should not be the next optimization target unless
+a later full-batch run contradicts this result.
+
+Measured alignment results:
+
+| Mode | Top-stage total | `build_owners` | `owner_backfill` | Notes |
+|---|---:|---:|---:|---|
+| serial full backfill | 115.48s | 58.74s | 54.64s | baseline |
+| `--raw-workers 8` full backfill | 41.11s | 21.17s | 19.05s | fastest full-output setting observed on 8 RAW |
+| serial `--owner-backfill-min-detected-samples 2` | 83.94s | 55.61s | 27.12s | low-hardware fast mode; output statuses differ |
+| `--raw-workers 8 --owner-backfill-min-detected-samples 2` | 29.29s | 16.11s | 12.51s | fastest observed with explicit completeness tradeoff |
+
+Accepted follow-up direction:
+
+- Keep `--raw-workers 8` as the current fast validation setting.
+- Keep full owner backfill as the default output contract.
+- Add `--owner-backfill-min-detected-samples N` as an explicit fast-mode knob
+  for hardware-constrained users.
+- Treat `N > 1` as a completeness tradeoff: rows remain present, but some
+  previously rescued cells become absent because low-support features are not
+  backfilled across every missing sample.
+
+Rejected follow-up direction:
+
+- Do not replace owner-build RAW extraction with discovery CSV MS1 peak fields
+  by default. A prototype reduced `build_owners` RAW calls, but changed the
+  feature set on the 8-RAW subset, so it is not an equivalent optimization.
+
+## 2026-05-13 RAW XIC Throughput Addendum
+
+The RAW XIC batching plan was executed against the 8-RAW validation subset.
+Machine TSV outputs stayed equivalent, but the timing result did not justify a
+default batch-size change by itself.
+
+Measured exact-output runs:
+
+| Mode | `build_owners` calls | `owner_backfill` calls | `build_owners` elapsed | `owner_backfill` elapsed | Output hash |
+|---|---:|---:|---:|---:|---|
+| `--raw-xic-batch-size 1` | 3343 | 3466 | 64.98s | 70.15s | baseline |
+| unsorted `--raw-xic-batch-size 64` | 3343 | 3317 | 65.64s | 67.75s | match |
+| sorted `--raw-xic-batch-size 64` | 3343 | 2951 | 66.72s | 62.89s | match |
+| `--raw-xic-batch-size 100000` upper bound | 3343 | 2944 | 65.29s | 59.69s | match |
+
+Interpretation:
+
+- `build_owners` has almost no reusable scan-window locality on this subset.
+  Batching cannot reduce its true Thermo `GetChromatogramData()` call count.
+- `owner_backfill` has enough locality to benefit from sorting pending requests
+  by RT window before chunking. This is an exact scoped optimization because
+  rescued cells are still emitted in the original feature-major order.
+- The sorted `batch64` run reaches nearly the same backfill call count as the
+  per-sample upper bound, without sending unbounded settings arrays to Thermo.
+- This is still not a complete low-hardware solution because the dominant
+  `build_owners` stage remains one vendor XIC call per candidate.
+
+Rejected exact-output shortcuts:
+
+- Directly reusing discovery CSV MS1 peak fields for owner build changed the
+  feature set on the 8-RAW subset (`alignment_review.tsv` row count changed
+  from 728 to 1096), so it is not an equivalent optimization.
+- A local MS1 scan-index prototype was faster for one RAW file
+  (`377` vendor XIC calls took `6.408s`; scan index plus local extraction took
+  about `1.723s`) but did not reproduce vendor intensities exactly. Peak status
+  matched for `375/377` candidates, median area relative difference was about
+  `2.13%`, and worst-case area drift was much larger. Treat this only as a
+  future explicit approximate fast mode unless a stricter equivalence method is
+  found.
+
+Current conclusion:
+
+- Keep the exact pipeline on Thermo vendor XIC calls.
+- Keep `--raw-xic-batch-size` as an explicit tuning knob; do not raise its
+  default based on this subset alone.
+- Keep the owner-backfill RT-window sort because it is exact, localized, and
+  improves the only stage where batching has useful locality.
+- Future performance work should not spend more time on larger batch sizes or
+  discovery-field reuse. The remaining meaningful paths are either an explicit
+  approximate MS1-index mode, or a modeling-level reduction in owner-build
+  candidate count with its own equivalence/acceptance criteria.
+
+Important framing: exact equality to the current alignment output is a
+regression guard, not the final scientific acceptance criterion. The alignment
+algorithm is still in flux, and current distinctions such as `backfill` versus
+`absent` are not guaranteed to be the final product contract. Non-equivalent
+changes remain valid candidates when they are intentional model changes with
+explicit output semantics, validation artifacts, and acceptance criteria.
+
+### 2026-05-13 Locality And MS1-Index Diagnostics
+
+Two repeatable validation scripts now support the next decision:
+
+- `scripts/analyze_xic_request_locality.py`
+- `scripts/validate_ms1_scan_index_xic.py`
+
+The 8-RAW locality report was written to:
+
+- `output\diagnostics\xic_request_locality_8raw.json`
+
+Measured locality:
+
+| Stage | Requests | Original batch64 calls | Sorted batch64 calls | Per-sample upper bound |
+|---|---:|---:|---:|---:|
+| `build_owners` | 3343 | 3343 | 3343 | 3343 |
+| `owner_backfill` artifact estimate | 3333 | 3198 | 2874 | 2867 |
+
+The `owner_backfill` analyzer reconstructs requests from final alignment
+artifacts, so its absolute count is an estimate rather than a substitute for
+runtime timing. Its direction matches the measured timing run: backfill has
+usable scan-window locality after sorting, while `build_owners` has none.
+
+The single-RAW MS1-index validation report was written to:
+
+- `output\diagnostics\ms1_scan_index_validation_1raw.json`
+
+Measured against `BenignfatBC1055_DNA` with 377 requests:
+
+| Metric | Value |
+|---|---:|
+| Vendor XIC extraction | 6.449s |
+| MS1 index build | 1.611s |
+| Local index extraction | 0.284s |
+| RT grid match | 377/377 |
+| Peak status match | 375/377 |
+| Apex within 0.01 min | 352/374 peak pairs |
+| Apex within 0.05 min | 361/374 peak pairs |
+| Median area relative delta | 2.13% |
+| P95 area relative delta | 13.93% |
+| Max area relative delta | 714.79% |
+
+Conclusion:
+
+- MS1 scan indexing has real speed potential.
+- It is not equivalent to Thermo vendor XIC on the validation subset.
+- This does not reject MS1 indexing as a future direction. It only means it
+  should not be presented as the same algorithm with the same output contract.
+- If implemented before the alignment model is finalized, it should be framed
+  as a deliberate fast-mode or next-model variant with visible output semantics,
+  validation notes, and downstream acceptance criteria.
+- Exact optimization work can still keep the already-validated backfill
+  locality sort. Larger gains should be evaluated as model-level changes, such
+  as reducing owner-build candidate count or replacing vendor XIC with a local
+  MS1-indexed extraction path.

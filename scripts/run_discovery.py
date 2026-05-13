@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.discovery.models import DiscoverySettings, NeutralLossProfile
 from xic_extractor.discovery.pipeline import run_discovery, run_discovery_batch
 from xic_extractor.raw_reader import RawReaderError
@@ -51,6 +52,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     data_dir = raw_path.parent if raw_path is not None else raw_dir
     peak_config = _peak_config(data_dir, dll_dir, output_dir, settings)
+    timing_recorder = (
+        TimingRecorder("discovery") if args.timing_output is not None else None
+    )
+    timing_kwargs = (
+        {"timing_recorder": timing_recorder}
+        if timing_recorder is not None
+        else {}
+    )
     try:
         if raw_path is not None:
             outputs = run_discovery(
@@ -58,6 +67,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_dir=output_dir,
                 settings=settings,
                 peak_config=peak_config,
+                **timing_kwargs,
             )
             print(f"Discovery candidates CSV: {outputs.candidates_csv}")
             print(f"Discovery review CSV: {outputs.review_csv}")
@@ -67,11 +77,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_dir=output_dir,
                 settings=settings,
                 peak_config=peak_config,
+                **timing_kwargs,
             )
             print(f"Discovery batch index: {outputs.batch_index_csv}")
     except RawReaderError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+
+    if timing_recorder is not None:
+        timing_path = args.timing_output.resolve()
+        timing_recorder.write_json(timing_path)
+        print(f"Timing JSON: {timing_path}")
 
     return 0
 
@@ -104,6 +120,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "discovery_review.csv; RAW directory writes discovery_batch_index.csv "
             "and per-sample CSVs."
         ),
+    )
+    parser.add_argument(
+        "--timing-output",
+        type=Path,
+        help="Optional JSON path for discovery stage timing.",
     )
     parser.add_argument("--neutral-loss-tag", default="DNA_dR")
     parser.add_argument("--neutral-loss-da", type=_positive_float, default=116.0474)

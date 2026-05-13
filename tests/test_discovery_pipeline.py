@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.discovery.evidence_config import (
     DEFAULT_EVIDENCE_PROFILE,
     DiscoveryEvidenceProfile,
@@ -334,6 +335,75 @@ def test_pipeline_leaves_ms1_scan_support_blank_for_missing_ms1_peak(
     rows = _read_csv(outputs.candidates_csv)
     assert rows[0]["ms1_peak_found"] == "FALSE"
     assert rows[0]["ms1_scan_support_score"] == ""
+
+
+def test_single_raw_pipeline_records_discovery_timing_stages(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = _FakeRawHandle(
+        [_scan_event(scan_number=101, rt=7.80, product_intensity=3000.0)],
+        rt=np.array([7.70, 7.80, 8.00]),
+        intensity=np.array([10.0, 600.0, 20.0]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.discovery.ms1_backfill.find_peak_and_area",
+        lambda *args, **kwargs: _ok_peak(
+            rt=7.80,
+            intensity=600.0,
+            area=42.0,
+            start=7.70,
+            end=8.00,
+        ),
+    )
+    recorder = TimingRecorder("discovery", run_id="test-discovery")
+
+    run_discovery(
+        tmp_path / "Sample.raw",
+        output_dir=tmp_path / "out",
+        settings=_settings(),
+        peak_config=_peak_config(tmp_path),
+        raw_opener=lambda path, dll_dir: raw,
+        timing_recorder=recorder,
+    )
+
+    records_by_stage = {record.stage: record for record in recorder.records}
+    assert set(records_by_stage) == {
+        "discover.ms2_seeds",
+        "discover.group_seeds",
+        "discover.ms1_backfill",
+        "discover.feature_family",
+        "discover.write_candidates_csv",
+        "discover.write_review_csv",
+    }
+    assert records_by_stage["discover.ms2_seeds"].sample_stem == "Sample"
+    assert records_by_stage["discover.ms2_seeds"].metrics["seed_count"] == 1
+    assert records_by_stage["discover.group_seeds"].metrics["group_count"] == 1
+    assert records_by_stage["discover.ms1_backfill"].metrics["candidate_count"] == 1
+    assert records_by_stage["discover.feature_family"].metrics["candidate_count"] == 1
+    assert records_by_stage["discover.write_candidates_csv"].metrics["row_count"] == 1
+    assert records_by_stage["discover.write_review_csv"].metrics["row_count"] == 1
+
+
+def test_batch_pipeline_records_batch_index_timing(tmp_path: Path) -> None:
+    raw_path = tmp_path / "Blank.raw"
+    raw = _FakeRawHandle(events=[])
+    recorder = TimingRecorder("discovery", run_id="test-batch")
+
+    run_discovery_batch(
+        (raw_path,),
+        output_dir=tmp_path / "out",
+        settings=_settings(),
+        peak_config=_peak_config(tmp_path),
+        raw_opener=lambda path, dll_dir: raw,
+        timing_recorder=recorder,
+    )
+
+    records_by_stage = {record.stage: record for record in recorder.records}
+    assert records_by_stage["discover.write_batch_index"].metrics == {
+        "raw_count": 1,
+        "row_count": 1,
+    }
 
 
 def test_pipeline_uses_injected_raw_opener_with_dll_dir_and_closes_context(

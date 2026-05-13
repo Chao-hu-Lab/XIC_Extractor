@@ -156,6 +156,43 @@ def test_peak_not_found_records_unresolved_assignment():
     ]
 
 
+def test_build_sample_local_owners_uses_batch_source_when_available() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class BatchSource:
+        def __init__(self) -> None:
+            self.batch_sizes: list[int] = []
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.batch_sizes.append(len(requests))
+            return tuple(
+                XICTrace.from_arrays([request.rt_min, 8.0, request.rt_max], [0.0, 100.0, 0.0])
+                for request in requests
+            )
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source = BatchSource()
+    candidates = (
+        _candidate("s1#batch-1", mz=258.0, seed_rt=8.0),
+        _candidate("s1#batch-2", mz=259.0, seed_rt=8.1),
+    )
+
+    result = build_sample_local_owners(
+        candidates,
+        raw_sources={"s1": source},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        peak_resolver=_always_peak_at_seed,
+        raw_xic_batch_size=64,
+    )
+
+    assert source.batch_sizes == [2]
+    assert len(result.assignments) == 2
+
+
 class FakeXICSource:
     def __init__(self, *, rt, intensity):
         self.rt = rt
@@ -182,6 +219,18 @@ class FakePeakResolver:
             area=area,
             intensity=height,
         )
+
+
+def _always_peak_at_seed(candidate, rt_array, intensity_array, peak_config, seed_rt):
+    from xic_extractor.alignment.ownership import ResolvedPeak
+
+    return ResolvedPeak(
+        rt=seed_rt,
+        peak_start=float(rt_array[0]),
+        peak_end=float(rt_array[-1]),
+        area=100.0,
+        intensity=100.0,
+    )
 
 
 def _candidate(

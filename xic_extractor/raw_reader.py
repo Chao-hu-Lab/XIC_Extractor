@@ -1,12 +1,15 @@
 import importlib
 import math
-from collections.abc import Callable, Iterator
+from collections import defaultdict
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
+
+from xic_extractor.xic_models import XICRequest, XICTrace
 
 EXPECTED_THERMO_DLLS = (
     "ThermoFisher.CommonCore.Data.dll",
@@ -51,6 +54,7 @@ class RawFileHandle:
     def __init__(self, raw_file: Any, thermo: _ThermoApi) -> None:
         self._raw_file = raw_file
         self._thermo = thermo
+        self._raw_chromatogram_call_count = 0
 
     def __enter__(self) -> "RawFileHandle":
         return self
@@ -58,18 +62,49 @@ class RawFileHandle:
     def __exit__(self, *_args: object) -> None:
         self._raw_file.Dispose()
 
+    @property
+    def raw_chromatogram_call_count(self) -> int:
+        return self._raw_chromatogram_call_count
+
     def extract_xic(
         self, mz: float, rt_min: float, rt_max: float, ppm_tol: float
     ) -> tuple[np.ndarray, np.ndarray]:
-        start_scan = self._raw_file.ScanNumberFromRetentionTime(rt_min)
-        end_scan = self._raw_file.ScanNumberFromRetentionTime(rt_max)
-        settings = self._build_chromatogram_settings(mz, ppm_tol)
-        data = self._raw_file.GetChromatogramData([settings], start_scan, end_scan)
-        positions = _first_or_empty(data.PositionsArray)
-        intensities = _first_or_empty(data.IntensitiesArray)
-        if len(intensities) == 0:
-            return np.array([], dtype=float), np.array([], dtype=float)
-        return np.asarray(positions, dtype=float), np.asarray(intensities, dtype=float)
+        trace = self.extract_xic_many(
+            (XICRequest(mz=mz, rt_min=rt_min, rt_max=rt_max, ppm_tol=ppm_tol),)
+        )[0]
+        return trace.rt, trace.intensity
+
+    def extract_xic_many(
+        self,
+        requests: Sequence[XICRequest],
+    ) -> tuple[XICTrace, ...]:
+        if not requests:
+            return ()
+        grouped: dict[tuple[int, int], list[tuple[int, Any]]] = defaultdict(list)
+        for index, request in enumerate(requests):
+            start_scan = self._raw_file.ScanNumberFromRetentionTime(request.rt_min)
+            end_scan = self._raw_file.ScanNumberFromRetentionTime(request.rt_max)
+            settings = self._build_chromatogram_settings(request.mz, request.ppm_tol)
+            grouped[(start_scan, end_scan)].append((index, settings))
+
+        traces: list[XICTrace | None] = [None] * len(requests)
+        for (start_scan, end_scan), indexed_settings in grouped.items():
+            settings = [item[1] for item in indexed_settings]
+            self._raw_chromatogram_call_count += 1
+            data = self._raw_file.GetChromatogramData(settings, start_scan, end_scan)
+            for offset, (original_index, _settings) in enumerate(indexed_settings):
+                positions = _item_or_empty(data.PositionsArray, offset)
+                intensities = _item_or_empty(data.IntensitiesArray, offset)
+                if len(intensities) == 0:
+                    traces[original_index] = XICTrace.empty()
+                else:
+                    traces[original_index] = XICTrace.from_arrays(
+                        positions,
+                        intensities,
+                    )
+        if any(trace is None for trace in traces):
+            raise RawReaderError("Thermo RAW batch extraction returned incomplete traces")
+        return tuple(trace for trace in traces if trace is not None)
 
     def iter_ms2_scans(self, rt_min: float, rt_max: float) -> Iterator[Ms2ScanEvent]:
         start_scan = self._raw_file.ScanNumberFromRetentionTime(rt_min)
@@ -234,6 +269,12 @@ def _first_or_empty(values: Any) -> Any:
     if values is None or len(values) == 0:
         return []
     return values[0]
+
+
+def _item_or_empty(values: Any, index: int) -> Any:
+    if values is None or len(values) <= index:
+        return []
+    return values[index]
 
 
 def _extract_precursor_mz(filter_obj: Any) -> float:

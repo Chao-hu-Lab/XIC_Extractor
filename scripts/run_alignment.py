@@ -7,7 +7,9 @@ from pathlib import Path
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.pipeline import run_alignment
+from xic_extractor.alignment.process_backend import AlignmentProcessExecutionError
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
@@ -32,19 +34,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{dll_dir}: dll directory does not exist", file=sys.stderr)
         return 2
 
+    timing_recorder = (
+        TimingRecorder("alignment") if args.timing_output is not None else None
+    )
+    timing_kwargs = (
+        {"timing_recorder": timing_recorder}
+        if timing_recorder is not None
+        else {}
+    )
     try:
         outputs = run_alignment(
             discovery_batch_index=discovery_batch_index,
             raw_dir=raw_dir,
             dll_dir=dll_dir,
             output_dir=output_dir,
-            alignment_config=AlignmentConfig(),
+            alignment_config=AlignmentConfig(
+                owner_backfill_min_detected_samples=(
+                    args.owner_backfill_min_detected_samples
+                ),
+            ),
             peak_config=_peak_config(raw_dir, dll_dir, output_dir, args.resolver_mode),
             output_level=args.output_level,
             emit_alignment_cells=args.emit_alignment_cells,
             emit_alignment_status_matrix=args.emit_alignment_status_matrix,
+            raw_workers=args.raw_workers,
+            raw_xic_batch_size=args.raw_xic_batch_size,
+            **timing_kwargs,
         )
-    except (RawReaderError, ValueError) as exc:
+    except (AlignmentProcessExecutionError, RawReaderError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
@@ -64,6 +81,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Event to MS1 owner TSV: {outputs.event_to_owner_tsv}")
     if outputs.ambiguous_owners_tsv is not None:
         print(f"Ambiguous MS1 owners TSV: {outputs.ambiguous_owners_tsv}")
+    if timing_recorder is not None:
+        timing_path = args.timing_output.resolve()
+        timing_recorder.write_json(timing_path)
+        print(f"Timing JSON: {timing_path}")
     return 0
 
 
@@ -96,6 +117,35 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Output directory for alignment_review.tsv and alignment_matrix.tsv.",
     )
     parser.add_argument(
+        "--timing-output",
+        type=Path,
+        help="Optional JSON path for alignment stage timing.",
+    )
+    parser.add_argument(
+        "--raw-workers",
+        type=_positive_int,
+        default=1,
+        help="Number of RAW worker processes for sample-local alignment backfill.",
+    )
+    parser.add_argument(
+        "--raw-xic-batch-size",
+        type=_positive_int,
+        default=1,
+        help=(
+            "Maximum XIC requests per RAW API batch. Default 1 preserves the "
+            "pre-batch execution shape until real RAW equivalence is accepted."
+        ),
+    )
+    parser.add_argument(
+        "--owner-backfill-min-detected-samples",
+        type=_positive_int,
+        default=1,
+        help=(
+            "Only run owner-centered MS1 backfill for features detected in at "
+            "least this many samples. Default 1 preserves full backfill."
+        ),
+    )
+    parser.add_argument(
         "--resolver-mode",
         choices=("legacy_savgol", "local_minimum"),
         default="local_minimum",
@@ -112,6 +162,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--emit-alignment-cells", action="store_true")
     parser.add_argument("--emit-alignment-status-matrix", action="store_true")
     return parser.parse_args(argv)
+
+
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("value must be an integer >= 1") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("value must be an integer >= 1")
+    return parsed
 
 
 def _peak_config(

@@ -48,10 +48,10 @@ def test_alignment_modules_do_not_import_pipeline_or_io_boundaries():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             for imported_name in _imported_module_names(node):
-                if (
-                    imported_name.startswith("xic_extractor.raw_reader")
-                    and path.name != "pipeline.py"
-                ):
+                if imported_name.startswith("xic_extractor.raw_reader") and path.name not in {
+                    "pipeline.py",
+                    "process_backend.py",
+                }:
                     violations.append((path.name, imported_name))
                 elif imported_name.startswith(banned_roots):
                     violations.append((path.name, imported_name))
@@ -133,6 +133,7 @@ def test_alignment_config_owner_gate_defaults_are_explicit():
     assert config.owner_apex_close_sec == 2.0
     assert config.owner_tail_seed_guard_sec == 30.0
     assert config.owner_tail_max_secondary_ratio == 0.30
+    assert config.owner_backfill_min_detected_samples == 1
     assert config.identity_rt_candidate_window_sec == 180.0
 
 
@@ -145,6 +146,9 @@ def test_alignment_config_owner_gate_defaults_are_explicit():
         ("owner_tail_seed_guard_sec", 0.0),
         ("owner_tail_max_secondary_ratio", -0.01),
         ("owner_tail_max_secondary_ratio", 1.01),
+        ("owner_backfill_min_detected_samples", 0),
+        ("owner_backfill_min_detected_samples", 1.5),
+        ("owner_backfill_min_detected_samples", True),
         ("identity_rt_candidate_window_sec", 0.0),
     ],
 )

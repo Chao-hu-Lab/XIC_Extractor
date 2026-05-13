@@ -18,6 +18,7 @@ from xic_extractor.alignment.ownership_models import (
 )
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.signal_processing import find_peak_and_area
+from xic_extractor.xic_models import XICRequest, XICTrace
 
 
 class OwnershipXICSource(Protocol):
@@ -76,17 +77,18 @@ def build_sample_local_owners(
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
     peak_resolver: PeakResolver | None = None,
+    raw_xic_batch_size: int = 1,
 ) -> OwnershipBuildResult:
+    if raw_xic_batch_size < 1:
+        raise ValueError("raw_xic_batch_size must be >= 1")
     active_peak_resolver = peak_resolver or _default_peak_resolver
-    outcomes = tuple(
-        _resolve_candidate(
-            candidate,
-            raw_sources,
-            alignment_config,
-            peak_config,
-            active_peak_resolver,
-        )
-        for candidate in candidates
+    outcomes = _resolve_candidates(
+        candidates,
+        raw_sources,
+        alignment_config,
+        peak_config,
+        active_peak_resolver,
+        raw_xic_batch_size,
     )
     resolved = tuple(
         outcome.resolved for outcome in outcomes if outcome.resolved is not None
@@ -114,6 +116,60 @@ def build_sample_local_owners(
         assignments=(*unresolved_assignments, *assignments),
         ambiguous_records=tuple(ambiguous_records),
     )
+
+
+def _resolve_candidates(
+    candidates: Sequence[Any],
+    raw_sources: Mapping[str, OwnershipXICSource],
+    alignment_config: AlignmentConfig,
+    peak_config: ExtractionConfig,
+    peak_resolver: PeakResolver,
+    raw_xic_batch_size: int,
+) -> tuple[_ResolutionOutcome, ...]:
+    outcomes: list[_ResolutionOutcome | None] = [None] * len(candidates)
+    requests_by_sample: dict[
+        str,
+        list[tuple[int, Any, float, XICRequest]],
+    ] = defaultdict(list)
+    for index, candidate in enumerate(candidates):
+        sample_stem = str(candidate.sample_stem)
+        source = raw_sources.get(sample_stem)
+        if source is None:
+            outcomes[index] = _unresolved_outcome(candidate, "missing_raw_source")
+            continue
+        seed_rt = _candidate_seed_rt(candidate)
+        rt_min = seed_rt - alignment_config.max_rt_sec / 60.0
+        rt_max = seed_rt + alignment_config.max_rt_sec / 60.0
+        requests_by_sample[sample_stem].append(
+            (
+                index,
+                candidate,
+                seed_rt,
+                XICRequest(
+                    mz=float(candidate.precursor_mz),
+                    rt_min=rt_min,
+                    rt_max=rt_max,
+                    ppm_tol=alignment_config.preferred_ppm,
+                ),
+            )
+        )
+    for sample_stem, sample_requests in requests_by_sample.items():
+        source = raw_sources[sample_stem]
+        for chunk in _chunked(tuple(sample_requests), raw_xic_batch_size):
+            traces = _extract_many(source, tuple(item[3] for item in chunk))
+            for (index, candidate, seed_rt, _request), trace in zip(
+                chunk,
+                traces,
+                strict=True,
+            ):
+                outcomes[index] = _resolve_candidate_trace(
+                    candidate,
+                    seed_rt,
+                    trace,
+                    peak_config,
+                    peak_resolver,
+                )
+    return tuple(outcome for outcome in outcomes if outcome is not None)
 
 
 def _resolve_candidate(
@@ -151,6 +207,61 @@ def _resolve_candidate(
             height=peak.intensity,
         ),
         unresolved=None,
+    )
+
+
+def _resolve_candidate_trace(
+    candidate: Any,
+    seed_rt: float,
+    trace: XICTrace,
+    peak_config: ExtractionConfig,
+    peak_resolver: PeakResolver,
+) -> _ResolutionOutcome:
+    rt_array, intensity_array = _validated_trace_arrays(trace.rt, trace.intensity)
+    peak = peak_resolver(candidate, rt_array, intensity_array, peak_config, seed_rt)
+    if peak is None:
+        return _unresolved_outcome(candidate, "peak_not_found")
+    return _ResolutionOutcome(
+        resolved=_ResolvedCandidate(
+            candidate=candidate,
+            event=_identity_event(candidate, seed_rt=seed_rt),
+            apex_rt=peak.rt,
+            peak_start_rt=peak.peak_start,
+            peak_end_rt=peak.peak_end,
+            area=peak.area,
+            height=peak.intensity,
+        ),
+        unresolved=None,
+    )
+
+
+def _extract_many(
+    source: OwnershipXICSource,
+    requests: tuple[XICRequest, ...],
+) -> tuple[XICTrace, ...]:
+    if hasattr(source, "extract_xic_many"):
+        return tuple(source.extract_xic_many(requests))  # type: ignore[attr-defined]
+    traces: list[XICTrace] = []
+    for request in requests:
+        rt, intensity = source.extract_xic(
+            request.mz,
+            request.rt_min,
+            request.rt_max,
+            request.ppm_tol,
+        )
+        traces.append(XICTrace.from_arrays(rt, intensity))
+    return tuple(traces)
+
+
+def _chunked(
+    items: tuple[Any, ...],
+    chunk_size: int,
+) -> tuple[tuple[Any, ...], ...]:
+    if chunk_size < 1:
+        raise ValueError("raw_xic_batch_size must be >= 1")
+    return tuple(
+        items[index : index + chunk_size]
+        for index in range(0, len(items), chunk_size)
     )
 
 

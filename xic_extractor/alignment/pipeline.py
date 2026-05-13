@@ -4,6 +4,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack, suppress
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Protocol
 
 from xic_extractor.alignment.backfill import (
@@ -38,6 +39,10 @@ from xic_extractor.alignment.ownership import (
     OwnershipBuildResult,
     build_sample_local_owners,
 )
+from xic_extractor.alignment.process_backend import (
+    run_owner_backfill_process,
+    run_owner_build_process,
+)
 from xic_extractor.alignment.tsv_writer import (
     write_alignment_cells_tsv,
     write_alignment_matrix_tsv,
@@ -46,6 +51,8 @@ from xic_extractor.alignment.tsv_writer import (
 )
 from xic_extractor.alignment.xlsx_writer import write_alignment_results_xlsx
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.diagnostics.timing import TimingRecorder
+from xic_extractor.xic_models import XICTrace
 
 
 class AlignmentRawHandle(MS1BackfillSource, Protocol):
@@ -80,75 +87,168 @@ def run_alignment(
     emit_alignment_cells: bool = False,
     emit_alignment_status_matrix: bool = False,
     raw_opener: RawOpener | None = None,
+    raw_workers: int = 1,
+    raw_xic_batch_size: int = 1,
+    timing_recorder: TimingRecorder | None = None,
 ) -> AlignmentRunOutputs:
-    batch = read_discovery_batch_index(discovery_batch_index)
-    candidates = tuple(
-        candidate
-        for sample_stem in batch.sample_order
-        for candidate in read_discovery_candidates_csv(
-            batch.candidate_csvs[sample_stem]
+    if raw_workers < 1:
+        raise ValueError("raw_workers must be >= 1")
+    if raw_xic_batch_size < 1:
+        raise ValueError("raw_xic_batch_size must be >= 1")
+    recorder = timing_recorder or TimingRecorder.disabled("alignment")
+    with recorder.stage("alignment.read_batch_index"):
+        batch = read_discovery_batch_index(discovery_batch_index)
+    with recorder.stage("alignment.read_candidates") as stage:
+        candidates = tuple(
+            candidate
+            for sample_stem in batch.sample_order
+            for candidate in read_discovery_candidates_csv(
+                batch.candidate_csvs[sample_stem]
+            )
         )
-    )
+        stage.metrics["candidate_count"] = len(candidates)
     opener = raw_opener or _default_raw_opener
 
     with ExitStack() as stack:
-        raw_sources = {
-            sample_stem: stack.enter_context(opener(raw_path, dll_dir))
-            for sample_stem, raw_path in _existing_raw_paths(
+        raw_paths = _existing_raw_paths(
+            sample_order=batch.sample_order,
+            raw_files=batch.raw_files,
+            raw_dir=raw_dir,
+        )
+        with recorder.stage("alignment.open_raw_sources") as stage:
+            if raw_workers > 1:
+                raw_sources = {}
+                stage.metrics["raw_count"] = len(raw_paths)
+                stage.metrics["mode"] = "process_workers"
+            else:
+                raw_sources = {
+                    sample_stem: stack.enter_context(opener(raw_path, dll_dir))
+                    for sample_stem, raw_path in raw_paths.items()
+                }
+                stage.metrics["raw_count"] = len(raw_sources)
+        with recorder.stage("alignment.build_owners"):
+            if raw_workers > 1:
+                owner_output = run_owner_build_process(
+                    candidates,
+                    sample_order=batch.sample_order,
+                    raw_paths=raw_paths,
+                    dll_dir=dll_dir,
+                    alignment_config=alignment_config,
+                    peak_config=peak_config,
+                    max_workers=raw_workers,
+                    raw_xic_batch_size=raw_xic_batch_size,
+                )
+                ownership = owner_output.ownership
+                for stats in owner_output.timing_stats:
+                    recorder.record(
+                        "alignment.build_owners.extract_xic",
+                        elapsed_sec=stats.elapsed_sec,
+                        sample_stem=stats.sample_stem,
+                        metrics={
+                            "extract_xic_count": stats.extract_xic_count,
+                            "extract_xic_batch_count": stats.extract_xic_batch_count,
+                            "raw_chromatogram_call_count": (
+                                stats.raw_chromatogram_call_count
+                            ),
+                            "point_count": stats.point_count,
+                        },
+                    )
+            else:
+                timed_raw_sources = _timed_raw_sources(
+                    raw_sources,
+                    recorder=recorder,
+                    stage="alignment.build_owners.extract_xic",
+                )
+                ownership = build_sample_local_owners(
+                    candidates,
+                    raw_sources=timed_raw_sources,
+                    alignment_config=alignment_config,
+                    peak_config=peak_config,
+                    raw_xic_batch_size=raw_xic_batch_size,
+                )
+                _record_timed_raw_sources(timed_raw_sources, recorder=recorder)
+        with recorder.stage("alignment.cluster_owners"):
+            owner_features = cluster_sample_local_owners(
+                ownership.owners,
+                config=alignment_config,
+            )
+            owner_features = (
+                *owner_features,
+                *review_only_features_from_ambiguous_records(
+                    ownership.ambiguous_records,
+                    start_index=len(owner_features) + 1,
+                ),
+            )
+        with recorder.stage("alignment.owner_backfill"):
+            if raw_workers > 1:
+                process_output = run_owner_backfill_process(
+                    owner_features,
+                    sample_order=batch.sample_order,
+                    raw_paths=raw_paths,
+                    dll_dir=dll_dir,
+                    alignment_config=alignment_config,
+                    peak_config=peak_config,
+                    max_workers=raw_workers,
+                    raw_xic_batch_size=raw_xic_batch_size,
+                )
+                rescued_cells = process_output.cells
+                for stats in process_output.timing_stats:
+                    recorder.record(
+                        "alignment.owner_backfill.extract_xic",
+                        elapsed_sec=stats.elapsed_sec,
+                        sample_stem=stats.sample_stem,
+                        metrics={
+                            "extract_xic_count": stats.extract_xic_count,
+                            "extract_xic_batch_count": stats.extract_xic_batch_count,
+                            "raw_chromatogram_call_count": (
+                                stats.raw_chromatogram_call_count
+                            ),
+                            "point_count": stats.point_count,
+                        },
+                    )
+            else:
+                timed_raw_sources = _timed_raw_sources(
+                    raw_sources,
+                    recorder=recorder,
+                    stage="alignment.owner_backfill.extract_xic",
+                )
+                rescued_cells = build_owner_backfill_cells(
+                    owner_features,
+                    sample_order=batch.sample_order,
+                    raw_sources=timed_raw_sources,
+                    alignment_config=alignment_config,
+                    peak_config=peak_config,
+                    raw_xic_batch_size=raw_xic_batch_size,
+                )
+                _record_timed_raw_sources(timed_raw_sources, recorder=recorder)
+        with recorder.stage("alignment.build_matrix"):
+            matrix = build_owner_alignment_matrix(
+                owner_features,
                 sample_order=batch.sample_order,
-                raw_files=batch.raw_files,
-                raw_dir=raw_dir,
-            ).items()
-        }
-        ownership = build_sample_local_owners(
-            candidates,
-            raw_sources=raw_sources,
-            alignment_config=alignment_config,
-            peak_config=peak_config,
-        )
-        owner_features = cluster_sample_local_owners(
-            ownership.owners,
-            config=alignment_config,
-        )
-        owner_features = (
-            *owner_features,
-            *review_only_features_from_ambiguous_records(
-                ownership.ambiguous_records,
-                start_index=len(owner_features) + 1,
-            ),
-        )
-        rescued_cells = build_owner_backfill_cells(
-            owner_features,
-            sample_order=batch.sample_order,
-            raw_sources=raw_sources,
-            alignment_config=alignment_config,
-            peak_config=peak_config,
-        )
-        matrix = build_owner_alignment_matrix(
-            owner_features,
-            sample_order=batch.sample_order,
-            ambiguous_by_sample={},
-            rescued_cells=rescued_cells,
-        )
-        matrix = apply_ms1_peak_claim_registry(matrix, alignment_config)
+                ambiguous_by_sample={},
+                rescued_cells=rescued_cells,
+            )
+        with recorder.stage("alignment.claim_registry"):
+            matrix = apply_ms1_peak_claim_registry(matrix, alignment_config)
         outputs = _output_paths(
             output_dir,
             output_level=output_level,
             emit_alignment_cells=emit_alignment_cells,
             emit_alignment_status_matrix=emit_alignment_status_matrix,
         )
-        _write_outputs_atomic(
-            outputs,
-            matrix,
-            metadata=_metadata(
-                discovery_batch_index=discovery_batch_index,
-                raw_dir=raw_dir,
-                dll_dir=dll_dir,
-                output_level=output_level,
-                peak_config=peak_config,
-            ),
-            ownership=ownership,
-        )
+        with recorder.stage("alignment.write_outputs"):
+            _write_outputs_atomic(
+                outputs,
+                matrix,
+                metadata=_metadata(
+                    discovery_batch_index=discovery_batch_index,
+                    raw_dir=raw_dir,
+                    dll_dir=dll_dir,
+                    output_level=output_level,
+                    peak_config=peak_config,
+                ),
+                ownership=ownership,
+            )
         return outputs
 
 
@@ -179,6 +279,132 @@ def _build_event_first_matrix(
         alignment_config=alignment_config,
         peak_config=peak_config,
     )
+
+
+@dataclass
+class _RawSourceTimingStats:
+    sample_stem: str
+    stage: str
+    elapsed_sec: float = 0.0
+    extract_xic_count: int = 0
+    extract_xic_batch_count: int = 0
+    raw_chromatogram_call_count: int = 0
+    point_count: int = 0
+
+
+class _TimedRawSource:
+    def __init__(
+        self,
+        source: AlignmentRawHandle,
+        *,
+        stats: _RawSourceTimingStats,
+        timer: Callable[[], float] = perf_counter,
+    ) -> None:
+        self._source = source
+        self._stats = stats
+        self._timer = timer
+
+    def extract_xic(self, mz: float, rt_min: float, rt_max: float, ppm_tol: float):
+        raw_call_count_before = _raw_chromatogram_call_count(self._source)
+        start = self._timer()
+        try:
+            rt, intensity = self._source.extract_xic(mz, rt_min, rt_max, ppm_tol)
+        finally:
+            self._stats.extract_xic_count += 1
+            self._stats.extract_xic_batch_count += 1
+            self._stats.elapsed_sec += self._timer() - start
+            self._stats.raw_chromatogram_call_count += _raw_call_delta(
+                raw_call_count_before,
+                _raw_chromatogram_call_count(self._source),
+            )
+        self._stats.point_count += _trace_point_count(rt)
+        return rt, intensity
+
+    def extract_xic_many(self, requests):
+        requests = tuple(requests)
+        if hasattr(self._source, "extract_xic_many"):
+            raw_call_count_before = _raw_chromatogram_call_count(self._source)
+            start = self._timer()
+            try:
+                traces = tuple(self._source.extract_xic_many(requests))
+            finally:
+                self._stats.elapsed_sec += self._timer() - start
+            self._stats.extract_xic_count += len(requests)
+            self._stats.extract_xic_batch_count += 1 if requests else 0
+            self._stats.raw_chromatogram_call_count += _raw_call_delta(
+                raw_call_count_before,
+                _raw_chromatogram_call_count(self._source),
+            )
+            self._stats.point_count += sum(len(trace.intensity) for trace in traces)
+            return traces
+
+        traces: list[XICTrace] = []
+        for request in requests:
+            rt, intensity = self.extract_xic(
+                request.mz,
+                request.rt_min,
+                request.rt_max,
+                request.ppm_tol,
+            )
+            traces.append(XICTrace.from_arrays(rt, intensity))
+        return tuple(traces)
+
+
+def _timed_raw_sources(
+    raw_sources: dict[str, AlignmentRawHandle],
+    *,
+    recorder: TimingRecorder,
+    stage: str,
+) -> dict[str, _TimedRawSource]:
+    return {
+        sample_stem: _TimedRawSource(
+            source,
+            stats=_RawSourceTimingStats(sample_stem=sample_stem, stage=stage),
+        )
+        for sample_stem, source in raw_sources.items()
+    }
+
+
+def _record_timed_raw_sources(
+    raw_sources: dict[str, _TimedRawSource],
+    *,
+    recorder: TimingRecorder,
+) -> None:
+    for source in raw_sources.values():
+        stats = source._stats
+        if stats.extract_xic_count == 0:
+            continue
+        recorder.record(
+            stats.stage,
+            elapsed_sec=stats.elapsed_sec,
+            sample_stem=stats.sample_stem,
+            metrics={
+                "extract_xic_count": stats.extract_xic_count,
+                "extract_xic_batch_count": stats.extract_xic_batch_count,
+                "raw_chromatogram_call_count": stats.raw_chromatogram_call_count,
+                "point_count": stats.point_count,
+            },
+        )
+
+
+def _trace_point_count(trace: object) -> int:
+    try:
+        return len(trace)  # type: ignore[arg-type]
+    except TypeError:
+        return 0
+
+
+def _raw_chromatogram_call_count(source: object) -> int | None:
+    value = getattr(source, "raw_chromatogram_call_count", None)
+    if isinstance(value, int):
+        return value
+    return None
+
+
+def _raw_call_delta(before: int | None, after: int | None) -> int:
+    if before is None or after is None:
+        return 0
+    return max(0, after - before)
 
 
 def _existing_raw_paths(
