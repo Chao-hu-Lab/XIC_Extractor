@@ -231,12 +231,13 @@ def test_identity_conflict_blocks_edge() -> None:
     assert edge.failure_reason == "identity_conflict"
 
 
-def test_edge_depending_on_backfill_is_blocked() -> None:
+def test_backfill_bridge_precedes_non_detected_owner() -> None:
     edge = evaluate_owner_edge(
         _owner("s1", identity_conflict=True),
         _owner("s1"),
         config=AlignmentConfig(),
         edge_depends_on_backfill=True,
+        right_detected_owner=False,
     )
 
     assert edge.decision == "blocked_edge"
