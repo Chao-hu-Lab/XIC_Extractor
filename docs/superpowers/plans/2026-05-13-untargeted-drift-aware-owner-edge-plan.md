@@ -152,6 +152,24 @@ no drift prior, raw close, owner quality not weak or ambiguous-nearby, seed supp
 all other hard-pass cases -> weak_edge
 ```
 
+## Edge Evidence Locator Fields
+
+`owner_edge_evidence.tsv` must be usable without visual SVG inspection. The edge
+model therefore extends the spec minimum fields with locator fields:
+
+```text
+left_sample_stem
+right_sample_stem
+neutral_loss_tag
+left_precursor_mz
+right_precursor_mz
+left_rt_min
+right_rt_min
+```
+
+These fields are untargeted owner properties. They are not target labels,
+ISTD labels, class labels, or targeted confidence labels.
+
 ## Guardrail Metric Derivations
 
 All guardrail metrics are computed per `feature_family_id`.
@@ -182,7 +200,16 @@ Case assertion fields:
 - `event_count`: sum of review `event_member_count` in case window.
 - `supporting_event_count`: `max(event_count - owner_count, 0)`.
 - `preserved_split_or_ambiguous`: true when case2 candidate has either more than one family in the window or at least one `ambiguous_ms1_owner` cell.
-- `strong_edge_count`: number of `owner_edge_evidence.tsv` rows in the case window where `decision == "strong_edge"`.
+- `strong_edge_count`: number of `owner_edge_evidence.tsv` rows where `decision == "strong_edge"` and both endpoint locator fields match the case window:
+  - both `left_precursor_mz` and `right_precursor_mz` are within case m/z +/- ppm;
+  - both `left_rt_min` and `right_rt_min` are within the case RT min/max.
+- `case_assertion_summary.tsv`: tabular companion to `candidate_guardrails.json` with columns `case`, `production_family_count`, `owner_count`, `event_count`, `supporting_event_count`, `strong_edge_count`, `preserved_split_or_ambiguous`, `status`, and `reason`.
+
+The `case_assertion_summary.tsv` file is the required case1-4 raw trace
+inspection summary for this implementation pass. It replaces visual-only SVG
+inspection with machine-checkable evidence derived from the same case windows
+and edge locator fields. The baseline SVGs remain supporting visual context,
+not pass/fail evidence.
 
 ## Validation Output Paths
 
@@ -227,6 +254,58 @@ def test_blocked_edge_reports_neutral_loss_reason() -> None:
     assert edge.score == 0
 
 
+@pytest.mark.parametrize(
+    ("left_kwargs", "right_kwargs", "reason"),
+    [
+        ({"sample_stem": "sample-a"}, {"sample_stem": "sample-a"}, "same_sample"),
+        ({"precursor_mz": 242.1136}, {"precursor_mz": 242.2000}, "precursor_mz_out_of_tolerance"),
+        ({"product_mz": 126.0662}, {"product_mz": 126.1000}, "product_mz_out_of_tolerance"),
+        ({"observed_loss": 116.0474}, {"observed_loss": 116.1000}, "observed_loss_out_of_tolerance"),
+    ],
+)
+def test_blocked_edge_reports_each_numeric_and_sample_gate(
+    left_kwargs,
+    right_kwargs,
+    reason,
+) -> None:
+    left_kwargs = dict(left_kwargs)
+    right_kwargs = dict(right_kwargs)
+    left_sample = left_kwargs.pop("sample_stem", "sample-a")
+    right_sample = right_kwargs.pop("sample_stem", "sample-b")
+    edge = evaluate_owner_edge(
+        _owner(left_sample, "a", **left_kwargs),
+        _owner(right_sample, "b", **right_kwargs),
+        config=AlignmentConfig(max_ppm=50.0),
+    )
+
+    assert edge.decision == "blocked_edge"
+    assert edge.failure_reason == reason
+
+
+def test_non_detected_owner_blocks_edge() -> None:
+    edge = evaluate_owner_edge(
+        _owner("sample-a", "a"),
+        _owner("sample-b", "b"),
+        config=AlignmentConfig(),
+        left_detected_owner=False,
+    )
+
+    assert edge.decision == "blocked_edge"
+    assert edge.failure_reason == "non_detected_owner"
+
+
+def test_ambiguous_owner_blocks_edge() -> None:
+    edge = evaluate_owner_edge(
+        _owner("sample-a", "a"),
+        _owner("sample-b", "b"),
+        config=AlignmentConfig(),
+        right_ambiguous_owner=True,
+    )
+
+    assert edge.decision == "blocked_edge"
+    assert edge.failure_reason == "ambiguous_owner"
+
+
 def test_missing_drift_and_raw_over_strict_window_is_weak() -> None:
     edge = evaluate_owner_edge(
         _owner("sample-a", "a", apex_rt=10.0),
@@ -258,6 +337,14 @@ def test_drift_corrected_close_edge_is_strong_even_when_raw_exceeds_strict() -> 
     assert edge.rt_drift_corrected_delta_sec == pytest.approx(57.0)
     assert edge.injection_order_gap == 19
     assert edge.drift_prior_source == "targeted_istd_trend"
+    assert edge.left_sample_stem == "sample-a"
+    assert edge.right_sample_stem == "sample-b"
+    assert edge.neutral_loss_tag == "DNA_dR"
+    assert edge.left_precursor_mz == pytest.approx(242.1136)
+    assert edge.right_precursor_mz == pytest.approx(242.1136)
+    assert edge.left_rt_min == pytest.approx(10.0)
+    assert edge.right_rt_min == pytest.approx(11.2)
+
 
 
 def test_weak_seed_support_keeps_hard_pass_edge_weak() -> None:
@@ -405,6 +492,13 @@ class DriftLookupProtocol(Protocol):
 class OwnerEdgeEvidence:
     left_owner_id: str
     right_owner_id: str
+    left_sample_stem: str
+    right_sample_stem: str
+    neutral_loss_tag: str
+    left_precursor_mz: float
+    right_precursor_mz: float
+    left_rt_min: float
+    right_rt_min: float
     decision: EdgeDecision
     failure_reason: HardGateFailureReason | Literal[""]
     rt_raw_delta_sec: float
@@ -425,6 +519,10 @@ def evaluate_owner_edge(
     config: AlignmentConfig,
     drift_lookup: DriftLookupProtocol | None = None,
     edge_depends_on_backfill: bool = False,
+    left_detected_owner: bool = True,
+    right_detected_owner: bool = True,
+    left_ambiguous_owner: bool = False,
+    right_ambiguous_owner: bool = False,
 ) -> OwnerEdgeEvidence:
     raw_delta_sec = abs(left.owner_apex_rt - right.owner_apex_rt) * 60.0
     corrected_delta_sec, drift_source = _drift_corrected_delta(
@@ -442,11 +540,22 @@ def evaluate_owner_edge(
         right,
         config,
         edge_depends_on_backfill=edge_depends_on_backfill,
+        left_detected_owner=left_detected_owner,
+        right_detected_owner=right_detected_owner,
+        left_ambiguous_owner=left_ambiguous_owner,
+        right_ambiguous_owner=right_ambiguous_owner,
     )
     if failure:
         return OwnerEdgeEvidence(
             left_owner_id=left.owner_id,
             right_owner_id=right.owner_id,
+            left_sample_stem=left.sample_stem,
+            right_sample_stem=right.sample_stem,
+            neutral_loss_tag=left.neutral_loss_tag,
+            left_precursor_mz=left.precursor_mz,
+            right_precursor_mz=right.precursor_mz,
+            left_rt_min=left.owner_apex_rt,
+            right_rt_min=right.owner_apex_rt,
             decision="blocked_edge",
             failure_reason=failure,
             rt_raw_delta_sec=raw_delta_sec,
@@ -504,6 +613,13 @@ def evaluate_owner_edge(
     return OwnerEdgeEvidence(
         left_owner_id=left.owner_id,
         right_owner_id=right.owner_id,
+        left_sample_stem=left.sample_stem,
+        right_sample_stem=right.sample_stem,
+        neutral_loss_tag=left.neutral_loss_tag,
+        left_precursor_mz=left.precursor_mz,
+        right_precursor_mz=right.precursor_mz,
+        left_rt_min=left.owner_apex_rt,
+        right_rt_min=right.owner_apex_rt,
         decision=decision,
         failure_reason="",
         rt_raw_delta_sec=raw_delta_sec,
@@ -527,9 +643,17 @@ def _hard_gate_failure(
     config: AlignmentConfig,
     *,
     edge_depends_on_backfill: bool,
+    left_detected_owner: bool,
+    right_detected_owner: bool,
+    left_ambiguous_owner: bool,
+    right_ambiguous_owner: bool,
 ) -> HardGateFailureReason | None:
     if edge_depends_on_backfill:
         return "backfill_bridge"
+    if not left_detected_owner or not right_detected_owner:
+        return "non_detected_owner"
+    if left_ambiguous_owner or right_ambiguous_owner:
+        return "ambiguous_owner"
     if left.identity_conflict or right.identity_conflict:
         return "identity_conflict"
     if left.sample_stem == right.sample_stem:
@@ -1168,6 +1292,13 @@ def test_write_owner_edge_evidence_tsv_uses_stable_columns(tmp_path):
     edge = OwnerEdgeEvidence(
         left_owner_id="OWN-a",
         right_owner_id="OWN-b",
+        left_sample_stem="sample-a",
+        right_sample_stem="sample-b",
+        neutral_loss_tag="DNA_dR",
+        left_precursor_mz=242.1136,
+        right_precursor_mz=242.1137,
+        left_rt_min=10.0,
+        right_rt_min=11.2,
         decision="strong_edge",
         failure_reason="",
         rt_raw_delta_sec=72.0,
@@ -1184,8 +1315,8 @@ def test_write_owner_edge_evidence_tsv_uses_stable_columns(tmp_path):
     path = write_owner_edge_evidence_tsv(tmp_path / "owner_edge_evidence.tsv", [edge])
 
     assert path.read_text(encoding="utf-8").splitlines() == [
-        "left_owner_id\tright_owner_id\tdecision\tfailure_reason\trt_raw_delta_sec\trt_drift_corrected_delta_sec\tdrift_prior_source\tinjection_order_gap\towner_quality\tseed_support_level\tduplicate_context\tscore\treason",
-        "OWN-a\tOWN-b\tstrong_edge\t\t72\t57\ttargeted_istd_trend\t10\tclean\tstrong\tsame_owner_events\t95\tstrong: hard gates passed",
+        "left_owner_id\tright_owner_id\tleft_sample_stem\tright_sample_stem\tneutral_loss_tag\tleft_precursor_mz\tright_precursor_mz\tleft_rt_min\tright_rt_min\tdecision\tfailure_reason\trt_raw_delta_sec\trt_drift_corrected_delta_sec\tdrift_prior_source\tinjection_order_gap\towner_quality\tseed_support_level\tduplicate_context\tscore\treason",
+        "OWN-a\tOWN-b\tsample-a\tsample-b\tDNA_dR\t242.114\t242.114\t10\t11.2\tstrong_edge\t\t72\t57\ttargeted_istd_trend\t10\tclean\tstrong\tsame_owner_events\t95\tstrong: hard gates passed",
     ]
 ```
 
@@ -1222,6 +1353,13 @@ def write_owner_edge_evidence_tsv(
         {
             "left_owner_id": edge.left_owner_id,
             "right_owner_id": edge.right_owner_id,
+            "left_sample_stem": edge.left_sample_stem,
+            "right_sample_stem": edge.right_sample_stem,
+            "neutral_loss_tag": edge.neutral_loss_tag,
+            "left_precursor_mz": _format_optional_float(edge.left_precursor_mz),
+            "right_precursor_mz": _format_optional_float(edge.right_precursor_mz),
+            "left_rt_min": _format_optional_float(edge.left_rt_min),
+            "right_rt_min": _format_optional_float(edge.right_rt_min),
             "decision": edge.decision,
             "failure_reason": edge.failure_reason,
             "rt_raw_delta_sec": _format_optional_float(edge.rt_raw_delta_sec),
@@ -1245,6 +1383,13 @@ def write_owner_edge_evidence_tsv(
         (
             "left_owner_id",
             "right_owner_id",
+            "left_sample_stem",
+            "right_sample_stem",
+            "neutral_loss_tag",
+            "left_precursor_mz",
+            "right_precursor_mz",
+            "left_rt_min",
+            "right_rt_min",
             "decision",
             "failure_reason",
             "rt_raw_delta_sec",
@@ -1291,6 +1436,13 @@ def test_pipeline_passes_drift_lookup_and_writes_edge_evidence(monkeypatch, tmp_
     fake_edge = OwnerEdgeEvidence(
         left_owner_id="OWN-a",
         right_owner_id="OWN-b",
+        left_sample_stem="Sample_A",
+        right_sample_stem="Sample_B",
+        neutral_loss_tag="DNA_dR",
+        left_precursor_mz=242.1136,
+        right_precursor_mz=242.1137,
+        left_rt_min=10.0,
+        right_rt_min=11.2,
         decision="weak_edge",
         failure_reason="",
         rt_raw_delta_sec=72.0,
@@ -1344,14 +1496,24 @@ Update `tests/test_run_alignment.py`:
 
 ```python
 def test_cli_requires_sample_info_with_targeted_istd_workbook(tmp_path, capsys):
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text(
+        "sample_stem,raw_file,candidate_csv,review_csv\n",
+        encoding="utf-8",
+    )
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
     code = run_alignment.main(
         [
             "--discovery-batch-index",
-            str(tmp_path / "missing.csv"),
+            str(batch_index),
             "--raw-dir",
-            str(tmp_path),
+            str(raw_dir),
             "--dll-dir",
-            str(tmp_path),
+            str(dll_dir),
             "--targeted-istd-workbook",
             str(tmp_path / "targeted.xlsx"),
         ]
@@ -1433,7 +1595,7 @@ parser.add_argument("--sample-info", type=Path)
 parser.add_argument("--targeted-istd-workbook", type=Path)
 ```
 
-- Before calling `run_alignment()`, validate pairwise use:
+- Immediately after parsing args and before any filesystem path validation, validate pairwise use:
 
 ```python
 if (args.sample_info is None) != (args.targeted_istd_workbook is None):
@@ -1503,6 +1665,8 @@ from pathlib import Path
 from tools.diagnostics.untargeted_alignment_guardrails import (
     compute_guardrails,
     compare_guardrails,
+    compare_targeted_audit_counts,
+    write_case_assertion_summary_tsv,
 )
 
 
@@ -1533,8 +1697,36 @@ def test_compute_guardrails_counts_duplicate_zero_and_backfill(tmp_path: Path) -
     )
     _write_tsv(
         alignment_dir / "owner_edge_evidence.tsv",
-        ["left_owner_id", "right_owner_id", "decision", "rt_raw_delta_sec", "rt_drift_corrected_delta_sec"],
-        [["OWN-a", "OWN-b", "strong_edge", "72", "57"]],
+        [
+            "left_owner_id",
+            "right_owner_id",
+            "left_sample_stem",
+            "right_sample_stem",
+            "neutral_loss_tag",
+            "left_precursor_mz",
+            "right_precursor_mz",
+            "left_rt_min",
+            "right_rt_min",
+            "decision",
+            "rt_raw_delta_sec",
+            "rt_drift_corrected_delta_sec",
+        ],
+        [
+            [
+                "OWN-a",
+                "OWN-b",
+                "s1",
+                "s2",
+                "DNA_dR",
+                "322.143",
+                "322.1431",
+                "23.0",
+                "23.5",
+                "strong_edge",
+                "72",
+                "57",
+            ]
+        ],
     )
 
     metrics = compute_guardrails(alignment_dir)
@@ -1545,6 +1737,13 @@ def test_compute_guardrails_counts_duplicate_zero_and_backfill(tmp_path: Path) -
     assert metrics.negative_8oxodg_production_families == 0
     assert metrics.case_assertions["case1_mz242_5medC_like"].supporting_event_count == 4
     assert metrics.case_assertions["case2_mz296_dense_duplicate"].preserved_split_or_ambiguous is True
+    assert metrics.case_assertions["case3_mz322_dense_duplicate"].strong_edge_count == 1
+
+    summary_path = write_case_assertion_summary_tsv(
+        tmp_path / "case_assertion_summary.tsv",
+        metrics.case_assertions,
+    )
+    assert "case3_mz322_dense_duplicate" in summary_path.read_text(encoding="utf-8")
 
 
 def test_compare_guardrails_marks_regression_when_candidate_increases() -> None:
@@ -1558,9 +1757,54 @@ def test_compare_guardrails_marks_regression_when_candidate_increases() -> None:
     assert rows[1]["status"] == "PASS"
 
 
+def test_compare_targeted_audit_counts_marks_split_and_miss_regressions(tmp_path: Path) -> None:
+    baseline = tmp_path / "baseline_comparison.csv"
+    candidate = tmp_path / "candidate_comparison.csv"
+    _write_csv(
+        baseline,
+        ["sample_stem", "failure_mode"],
+        [["s1", "PASS"], ["s2", "SPLIT"], ["s3", "MISS"]],
+    )
+    _write_csv(
+        candidate,
+        ["sample_stem", "failure_mode"],
+        [["s1", "SPLIT"], ["s2", "SPLIT"], ["s3", "MISS"], ["s4", "MISS"]],
+    )
+
+    rows = compare_targeted_audit_counts(
+        baseline,
+        candidate,
+        target_label="5-hmdC",
+    )
+
+    assert rows == [
+        {
+            "target_label": "5-hmdC",
+            "metric": "SPLIT",
+            "baseline_count": "1",
+            "candidate_count": "2",
+            "status": "FAIL",
+        },
+        {
+            "target_label": "5-hmdC",
+            "metric": "MISS",
+            "baseline_count": "1",
+            "candidate_count": "2",
+            "status": "FAIL",
+        },
+    ]
+
+
 def _write_tsv(path: Path, fieldnames: list[str], rows: list[list[str]]) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+        writer.writerow(fieldnames)
+        writer.writerows(rows)
+
+
+def _write_csv(path: Path, fieldnames: list[str], rows: list[list[str]]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(fieldnames)
         writer.writerows(rows)
 ```
@@ -1583,6 +1827,8 @@ Create `tools/diagnostics/untargeted_alignment_guardrails.py` with:
 - `CaseAssertion` dataclass.
 - `compute_guardrails(alignment_dir: Path) -> GuardrailMetrics`.
 - `compare_guardrails(baseline: Mapping[str, int], candidate: Mapping[str, int]) -> list[dict[str, str]]`.
+- `write_case_assertion_summary_tsv(path: Path, cases: Mapping[str, CaseAssertion]) -> Path`.
+- `compare_targeted_audit_counts(baseline_csv: Path, candidate_csv: Path, *, target_label: str) -> list[dict[str, str]]`.
 - CLI arguments:
 
 ```text
@@ -1590,13 +1836,19 @@ Create `tools/diagnostics/untargeted_alignment_guardrails.py` with:
 --baseline-dir PATH
 --candidate-dir PATH
 --output-json PATH
+--case-summary-tsv PATH
 --comparison-csv PATH
+--baseline-targeted-comparison PATH
+--candidate-targeted-comparison PATH
+--target-label LABEL
+--targeted-comparison-csv PATH
 ```
 
 CLI behavior:
 
-- With `--alignment-dir`, write one metrics JSON to `--output-json`.
+- With `--alignment-dir`, write one metrics JSON to `--output-json` and write `case_assertion_summary.tsv` when `--case-summary-tsv` is provided.
 - With `--baseline-dir` and `--candidate-dir`, write comparison CSV to `--comparison-csv`.
+- With `--baseline-targeted-comparison`, `--candidate-targeted-comparison`, `--target-label`, and `--targeted-comparison-csv`, compare `SPLIT` and `MISS` counts mechanically and write a two-row CSV.
 - If any required TSV is missing, exit code `2` and print the missing path.
 - Metrics JSON must include:
   `zero_present_families`, `duplicate_only_families`, `high_backfill_dependency_families`, `negative_8oxodg_production_families`, and `case_assertions`.
@@ -1770,11 +2022,13 @@ Run:
 $env:UV_CACHE_DIR='.uv-cache'
 uv run python tools\diagnostics\untargeted_alignment_guardrails.py `
   --alignment-dir output\alignment\semantics_cleanup_8raw_20260511 `
-  --output-json output\diagnostics\drift_soft_edge_8raw_20260513\baseline_guardrails.json
+  --output-json output\diagnostics\drift_soft_edge_8raw_20260513\baseline_guardrails.json `
+  --case-summary-tsv output\diagnostics\drift_soft_edge_8raw_20260513\baseline_case_assertion_summary.tsv
 
 uv run python tools\diagnostics\untargeted_alignment_guardrails.py `
   --alignment-dir output\alignment\drift_soft_edge_8raw_20260513 `
-  --output-json output\diagnostics\drift_soft_edge_8raw_20260513\candidate_guardrails.json
+  --output-json output\diagnostics\drift_soft_edge_8raw_20260513\candidate_guardrails.json `
+  --case-summary-tsv output\diagnostics\drift_soft_edge_8raw_20260513\case_assertion_summary.tsv
 
 uv run python tools\diagnostics\untargeted_alignment_guardrails.py `
   --baseline-dir output\alignment\semantics_cleanup_8raw_20260511 `
@@ -1785,6 +2039,7 @@ uv run python tools\diagnostics\untargeted_alignment_guardrails.py `
 Expected:
 
 - `candidate_guardrails.json` has `"negative_8oxodg_production_families": 0`.
+- `case_assertion_summary.tsv` exists and has rows for case1-4.
 - `guardrail_comparison.csv` has no `FAIL` rows for duplicate-only, zero-present, or high-backfill-dependency.
 - Case1 production family count does not increase.
 - Case2 `preserved_split_or_ambiguous` is true.
@@ -1866,7 +2121,41 @@ Expected:
 - `timing.json` includes `alignment.run_config` with `raw_workers == 8`.
 - If the run cannot execute 8 workers in the local environment, record validation as `SKIP` with the exact error and do not claim PASS.
 
-- [ ] **Step 3: Run 85 RAW targeted GT audits**
+- [ ] **Step 3: Run 85 RAW baseline targeted GT audits**
+
+Run:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'
+uv run python tools\diagnostics\targeted_gt_alignment_audit.py `
+  --target-workbook C:\Users\user\Desktop\XIC_Extractor\output\xic_results_20260512_1200.xlsx `
+  --alignment-run output\alignment\gt_audit_checkpoint_85raw_validation_20260512 `
+  --target-label 5-medC `
+  --istd-label d3-5-medC `
+  --target-mz 242.1136 `
+  --ppm 20 `
+  --pass-rt-sec 30 `
+  --drift-rt-sec 180 `
+  --output-dir output\diagnostics\drift_soft_edge_85raw_20260513\baseline_gt_5medc
+
+uv run python tools\diagnostics\targeted_gt_alignment_audit.py `
+  --target-workbook C:\Users\user\Desktop\XIC_Extractor\output\xic_results_20260512_1200.xlsx `
+  --alignment-run output\alignment\gt_audit_checkpoint_85raw_validation_20260512 `
+  --target-label 5-hmdC `
+  --istd-label d3-5-hmdC `
+  --target-mz 258.1085 `
+  --ppm 20 `
+  --pass-rt-sec 30 `
+  --drift-rt-sec 180 `
+  --output-dir output\diagnostics\drift_soft_edge_85raw_20260513\baseline_gt_5hmdc
+```
+
+Expected baseline counts:
+
+- `5-medC`: SPLIT 0, MISS 0.
+- `5-hmdC`: SPLIT 2, MISS 6.
+
+- [ ] **Step 4: Run 85 RAW candidate targeted GT audits**
 
 Run:
 
@@ -1908,7 +2197,31 @@ uv run python tools\diagnostics\targeted_gt_alignment_audit.py `
 
 Expected: all commands write `comparison.csv` and `failure_mode_report.md`.
 
-- [ ] **Step 4: Compute 85 RAW guardrail comparison**
+- [ ] **Step 5: Compare 85 RAW targeted SPLIT/MISS mechanically**
+
+Run:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'
+uv run python tools\diagnostics\untargeted_alignment_guardrails.py `
+  --baseline-targeted-comparison output\diagnostics\drift_soft_edge_85raw_20260513\baseline_gt_5medc\comparison.csv `
+  --candidate-targeted-comparison output\diagnostics\drift_soft_edge_85raw_20260513\gt_5medc\comparison.csv `
+  --target-label 5-medC `
+  --targeted-comparison-csv output\diagnostics\drift_soft_edge_85raw_20260513\targeted_compare_5medc.csv
+
+uv run python tools\diagnostics\untargeted_alignment_guardrails.py `
+  --baseline-targeted-comparison output\diagnostics\drift_soft_edge_85raw_20260513\baseline_gt_5hmdc\comparison.csv `
+  --candidate-targeted-comparison output\diagnostics\drift_soft_edge_85raw_20260513\gt_5hmdc\comparison.csv `
+  --target-label 5-hmdC `
+  --targeted-comparison-csv output\diagnostics\drift_soft_edge_85raw_20260513\targeted_compare_5hmdc.csv
+```
+
+Expected:
+
+- `targeted_compare_5medc.csv` has no `FAIL` row.
+- `targeted_compare_5hmdc.csv` has no `FAIL` row.
+
+- [ ] **Step 6: Compute 85 RAW guardrail comparison**
 
 Run:
 
@@ -1916,11 +2229,13 @@ Run:
 $env:UV_CACHE_DIR='.uv-cache'
 uv run python tools\diagnostics\untargeted_alignment_guardrails.py `
   --alignment-dir output\alignment\gt_audit_checkpoint_85raw_validation_20260512 `
-  --output-json output\diagnostics\drift_soft_edge_85raw_20260513\baseline_guardrails.json
+  --output-json output\diagnostics\drift_soft_edge_85raw_20260513\baseline_guardrails.json `
+  --case-summary-tsv output\diagnostics\drift_soft_edge_85raw_20260513\baseline_case_assertion_summary.tsv
 
 uv run python tools\diagnostics\untargeted_alignment_guardrails.py `
   --alignment-dir output\alignment\drift_soft_edge_85raw_20260513 `
-  --output-json output\diagnostics\drift_soft_edge_85raw_20260513\candidate_guardrails.json
+  --output-json output\diagnostics\drift_soft_edge_85raw_20260513\candidate_guardrails.json `
+  --case-summary-tsv output\diagnostics\drift_soft_edge_85raw_20260513\case_assertion_summary.tsv
 
 uv run python tools\diagnostics\untargeted_alignment_guardrails.py `
   --baseline-dir output\alignment\gt_audit_checkpoint_85raw_validation_20260512 `
@@ -1934,11 +2249,10 @@ Expected pass rules:
 - `duplicate_only_families` candidate <= baseline.
 - `zero_present_families` candidate <= baseline.
 - `high_backfill_dependency_families` candidate <= baseline.
-- `5-medC` split and miss counts candidate <= baseline 85 RAW.
-- `5-hmdC` split and miss counts candidate <= baseline 85 RAW.
+- `targeted_compare_5medc.csv` and `targeted_compare_5hmdc.csv` have no `FAIL` rows.
 - Timing is recorded but has no correctness pass/fail in this round.
 
-- [ ] **Step 5: Stop on guardrail regression**
+- [ ] **Step 7: Stop on guardrail regression**
 
 If `guardrail_comparison.csv` contains any `FAIL`, stop and inspect:
 
@@ -1948,7 +2262,7 @@ Import-Csv output\diagnostics\drift_soft_edge_85raw_20260513\guardrail_compariso
 
 Expected for acceptance: no rows.
 
-- [ ] **Step 6: Commit validation note if a tracked note is created**
+- [ ] **Step 8: Commit validation note if a tracked note is created**
 
 If a concise tracked validation note is added, commit it:
 
@@ -1994,7 +2308,22 @@ Expected:
 - `SampleDriftEvidence`, `DriftEvidenceLookup`, `edge_scoring.py`, and `owner_clustering.py` must not expose or consume target labels or ISTD labels.
 - No implementation copies targeted `allowed +/- 0.25 min` tolerance.
 
-- [ ] **Step 3: Run final focused test shard**
+- [ ] **Step 3: Check Sample_Type remains diagnostic-only**
+
+Run:
+
+```powershell
+rg -n "Sample_Type|sample_type|Group" xic_extractor\alignment scripts\run_alignment.py
+```
+
+Expected:
+
+- No matches in `xic_extractor\alignment\edge_scoring.py`.
+- No matches in `xic_extractor\alignment\owner_clustering.py`.
+- No matches in `xic_extractor\alignment\pipeline.py` that affect scoring, clustering, or family construction.
+- Matches are allowed only in diagnostics/provenance adapters that do not feed edge scoring decisions.
+
+- [ ] **Step 4: Run final focused test shard**
 
 Run:
 
@@ -2004,7 +2333,7 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_alignment_edge_scoring.p
 
 Expected: PASS.
 
-- [ ] **Step 4: Inspect git status**
+- [ ] **Step 5: Inspect git status**
 
 Run:
 
@@ -2017,9 +2346,9 @@ Expected:
 - Only intentional source, tests, diagnostics, docs, or tracked validation note changes remain.
 - Generated untracked output directories may remain uncommitted if ignored by repo policy.
 
-- [ ] **Step 5: Commit final fixes if needed**
+- [ ] **Step 6: Commit final fixes if needed**
 
-If Step 1 through Step 4 caused source/test/doc fixes:
+If Step 1 through Step 5 caused source/test/doc fixes:
 
 ```powershell
 git add xic_extractor scripts tools tests docs
