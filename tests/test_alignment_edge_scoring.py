@@ -200,6 +200,13 @@ def test_drift_corrected_close_edge_is_strong_even_when_raw_exceeds_strict() -> 
     )
 
     assert edge.decision == "strong_edge"
+    assert edge.left_sample_stem == "s1"
+    assert edge.right_sample_stem == "s2"
+    assert edge.neutral_loss_tag == "DNA_dR"
+    assert edge.left_precursor_mz == pytest.approx(250.0)
+    assert edge.right_precursor_mz == pytest.approx(250.0)
+    assert edge.left_rt_min == pytest.approx(10.00)
+    assert edge.right_rt_min == pytest.approx(10.75)
     assert edge.rt_raw_delta_sec == pytest.approx(45.0)
     assert edge.rt_drift_corrected_delta_sec == pytest.approx(15.0)
     assert edge.drift_prior_source == "batch_istd_trend"
@@ -207,6 +214,20 @@ def test_drift_corrected_close_edge_is_strong_even_when_raw_exceeds_strict() -> 
     assert edge.seed_support_level == "strong"
     assert edge.owner_quality == "clean"
     assert edge.score >= 60
+
+
+def test_invalid_drift_prior_source_raises_before_evidence_is_produced() -> None:
+    with pytest.raises(ValueError, match="Unsupported drift prior source: typo_source"):
+        evaluate_owner_edge(
+            _owner("s1", owner_apex_rt=10.00),
+            _owner("s2", owner_apex_rt=10.75),
+            config=AlignmentConfig(preferred_rt_sec=30.0, max_rt_sec=120.0),
+            drift_lookup=_DriftLookup(
+                deltas={"s1": 0.00, "s2": 0.50},
+                orders={"s1": 10, "s2": 13},
+                source="typo_source",
+            ),
+        )
 
 
 def test_contradictory_drift_prior_keeps_edge_weak_and_penalizes_score() -> None:

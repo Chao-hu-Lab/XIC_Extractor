@@ -19,6 +19,7 @@ HardGateFailureReason = Literal[
     "backfill_bridge",
 ]
 DriftPriorSource = Literal["targeted_istd_trend", "batch_istd_trend", "none"]
+SUPPORTED_DRIFT_PRIOR_SOURCES = {"targeted_istd_trend", "batch_istd_trend", "none"}
 OwnerQuality = Literal["clean", "weak", "tail_supported", "ambiguous_nearby"]
 SeedSupportLevel = Literal["strong", "moderate", "weak"]
 DuplicateContext = Literal["none", "same_owner_events", "tail_assignment"]
@@ -202,7 +203,13 @@ def _drift_source(
 ) -> DriftPriorSource:
     if drift_lookup is None or corrected_delta_sec is None:
         return "none"
-    return drift_lookup.source
+    source = drift_lookup.source
+    if source not in SUPPORTED_DRIFT_PRIOR_SOURCES:
+        expected = ", ".join(sorted(SUPPORTED_DRIFT_PRIOR_SOURCES))
+        raise ValueError(
+            f"Unsupported drift prior source: {source}. Expected one of: {expected}"
+        )
+    return source
 
 
 def _injection_order_gap(
