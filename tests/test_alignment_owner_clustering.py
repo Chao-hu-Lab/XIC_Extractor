@@ -1,4 +1,5 @@
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.edge_scoring import evaluate_owner_edge
 from xic_extractor.alignment.owner_clustering import (
     cluster_sample_local_owners,
     review_only_features_from_ambiguous_records,
@@ -57,6 +58,56 @@ def test_owner_clustering_collapses_5medc_like_class_drift() -> None:
     assert features[0].evidence == "owner_complete_link;owner_count=5"
 
 
+def test_owner_clustering_does_not_bridge_three_owner_complete_link_group() -> None:
+    edge_evidence = []
+    owners = (
+        _owner("sample-a", "a", apex_rt=10.00),
+        _owner("sample-b", "b", apex_rt=10.75),
+        _owner("sample-c", "c", apex_rt=11.50),
+    )
+    config = AlignmentConfig(preferred_rt_sec=30.0, max_rt_sec=120.0)
+    drift_lookup = _DriftLookup(
+        deltas={
+            "sample-a": 0.00,
+            "sample-b": 0.50,
+            "sample-c": 0.90,
+        },
+        orders={
+            "sample-a": 1,
+            "sample-b": 2,
+            "sample-c": 3,
+        },
+    )
+
+    features = cluster_sample_local_owners(
+        owners,
+        config=config,
+        drift_lookup=drift_lookup,
+        edge_evidence_sink=edge_evidence,
+    )
+
+    assert evaluate_owner_edge(
+        owners[0],
+        owners[1],
+        config=config,
+        drift_lookup=drift_lookup,
+    ).decision == "strong_edge"
+    assert evaluate_owner_edge(
+        owners[1],
+        owners[2],
+        config=config,
+        drift_lookup=drift_lookup,
+    ).decision == "strong_edge"
+    grouped_owner_ids = [feature.event_cluster_ids for feature in features]
+    assert grouped_owner_ids == [
+        ("OWN-sample-a-a", "OWN-sample-b-b"),
+        ("OWN-sample-c-c",),
+    ]
+    assert _edge_decisions_by_pair(edge_evidence)[
+        ("OWN-sample-a-a", "OWN-sample-c-c")
+    ] == "weak_edge"
+
+
 def test_owner_clustering_uses_drift_prior_for_strong_edge_over_strict_rt() -> None:
     edge_evidence = []
 
@@ -92,6 +143,28 @@ def test_owner_clustering_preserves_weak_no_drift_rt_split() -> None:
 
     assert len(features) == 2
     assert [edge.decision for edge in edge_evidence] == ["weak_edge"]
+
+
+def test_owner_clustering_edge_evidence_sink_keeps_unique_sorted_pairs() -> None:
+    edge_evidence = []
+
+    cluster_sample_local_owners(
+        (
+            _owner("sample-a", "a", apex_rt=10.00),
+            _owner("sample-b", "b", apex_rt=10.20),
+            _owner("sample-c", "c", apex_rt=10.40),
+            _owner("sample-c", "c", apex_rt=10.40),
+        ),
+        config=AlignmentConfig(preferred_rt_sec=30.0, max_rt_sec=120.0),
+        edge_evidence_sink=edge_evidence,
+    )
+
+    sorted_pairs = [
+        tuple(sorted((edge.left_owner_id, edge.right_owner_id)))
+        for edge in edge_evidence
+    ]
+    assert len(sorted_pairs) == len(set(sorted_pairs))
+    assert all(left <= right for left, right in sorted_pairs)
 
 
 def test_owner_clustering_records_blocked_edge_without_merging() -> None:
@@ -270,3 +343,10 @@ def _owner(
         identity_conflict=identity_conflict,
         assignment_reason="owner_exact_apex_match",
     )
+
+
+def _edge_decisions_by_pair(edge_evidence):
+    return {
+        tuple(sorted((edge.left_owner_id, edge.right_owner_id))): edge.decision
+        for edge in edge_evidence
+    }
