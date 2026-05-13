@@ -187,21 +187,26 @@ owner RT difference is plausible after accounting for injection-order drift.
 The adapter that reads targeted artifacts must not expose targeted analyte
 identity to alignment code.
 
-Allowed adapter output:
+Allowed scoring payload:
 
 | Field | Meaning |
 |---|---|
 | `sample_stem` | canonical sample name |
 | `injection_order` | injection order from `SampleInfo.xlsx` |
-| `istd_label` | ISTD label only; analyte labels are not emitted |
+| `trend_id` | opaque ISTD trend identifier with no target-family meaning |
 | `istd_rt_min` | observed ISTD RT in that sample |
 | `local_trend_rt_min` | rolling/local ISTD trend estimate when available |
 | `rt_drift_delta_min` | `istd_rt_min - local_trend_rt_min` when available |
 | `source` | `targeted_istd_trend` or `batch_istd_trend` |
 
+Debug/provenance sidecars may include the original `istd_label`, but edge
+scoring and family construction must consume only `trend_id`. The mapping from
+`trend_id` to `istd_label` must not be used for merge decisions.
+
 Forbidden adapter output:
 
 - analyte target labels such as `5-medC`, `5-hmdC`, or `8-oxodG`;
+- ISTD labels in the scoring payload;
 - targeted GT pass/fail modes;
 - targeted analyte RT windows or anchor mismatch tolerances;
 - targeted confidence labels used as merge evidence.
@@ -327,6 +332,7 @@ Required baseline references:
 |---|---|
 | 8 RAW alignment | `output\alignment\semantics_cleanup_8raw_20260511` |
 | 8 RAW raw trace cases | `output\alignment\semantics_cleanup_8raw_20260511\raw_trace_inspection` |
+| 85 RAW alignment | `output\alignment\gt_audit_checkpoint_85raw_validation_20260512` |
 | targeted 8 RAW workbook | `C:\Users\user\Desktop\XIC_Extractor\output\xic_results_20260512_1151.xlsx` |
 | targeted 85 RAW workbook | `C:\Users\user\Desktop\XIC_Extractor\output\xic_results_20260512_1200.xlsx` |
 | sample metadata | `C:\Users\user\Desktop\NTU cancer\Processed Data\DNA\Mzmine\new_test\SampleInfo.xlsx` |
@@ -365,7 +371,7 @@ Expected outcomes:
 | `5-hmdC` SPLIT count | targeted GT audit comparison CSV | `new_split <= baseline_split` |
 | `5-hmdC` MISS count | targeted GT audit comparison CSV | `new_miss <= baseline_miss` |
 | `8-oxodG` accepted production families | post-run negative audit | `0` |
-| duplicate cleanup timing | edge/owner debug output and `alignment_cells.tsv` | same-peak/tail duplicates should be represented as owners/supporting evidence before claim-registry cleanup |
+| duplicate cleanup timing | edge/owner debug output and `alignment_cells.tsv` | case1/case4 manifest rows must show `supporting_event_count > 0` or `tail_assignment_count > 0` before claim-registry cleanup |
 | worker count | command log, timing JSON, or run metadata | requested worker count is `8` |
 
 For 8 RAW, a reduction in SPLIT is a success signal, but the non-regression rule
@@ -387,6 +393,15 @@ or branch on `target_label == "8-oxodG"` or any target-label alias.
 The implementation plan must translate each case into at least one synthetic or
 artifact-backed assertion before implementation. Visual SVG review may support
 the decision, but it cannot be the only evidence.
+
+Minimum case assertion requirements:
+
+| Case | Required assertion |
+|---|---|
+| Case 1 | production family count in the m/z/RT inspection window does not increase, and same-sample duplicate seeds map to fewer owners than seed events |
+| Case 2 | ambiguous or split state is preserved; no assertion may require a forced merge |
+| Case 3 | clean detected owners with compatible MS2/NL evidence may receive strong drift-corrected edges even when raw RT spread exceeds the strict window |
+| Case 4 | at least one tail/shadow event is represented as supporting evidence or tail assignment before claim-registry cleanup |
 
 ### Layer 3: 85-RAW Guardrail
 
