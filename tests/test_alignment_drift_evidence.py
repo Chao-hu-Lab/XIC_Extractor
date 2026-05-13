@@ -127,6 +127,71 @@ def test_read_targeted_istd_drift_evidence_uses_opaque_trends_and_no_target_cont
     assert not hasattr(point, "target_label")
 
 
+def test_read_targeted_istd_drift_evidence_treats_whitespace_sample_as_blank(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    sample_info = tmp_path / "sample_info.csv"
+    sample_info.write_text(
+        "Sample_Name,Injection_Order\nsample-a,1\nsample-b,2\nsample-c,3\n",
+        encoding="utf-8",
+    )
+    _write_targeted_workbook_with_whitespace_sample(workbook)
+
+    lookup = read_targeted_istd_drift_evidence(
+        targeted_workbook=workbook,
+        sample_info=sample_info,
+        local_window=10,
+    )
+
+    assert [point.sample_stem for point in lookup.points] == [
+        "sample-a",
+        "sample-b",
+        "sample-c",
+    ]
+    assert lookup.points[0].istd_rt_min == 2.0
+
+
+def test_read_targeted_istd_drift_evidence_maps_sorted_labels_to_opaque_trends(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    sample_info = tmp_path / "sample_info.csv"
+    sample_info.write_text(
+        "Sample_Name,Injection_Order\nsample-a,1\nsample-b,2\nsample-c,3\n",
+        encoding="utf-8",
+    )
+    _write_targeted_workbook_with_reverse_istd_labels(workbook)
+
+    lookup = read_targeted_istd_drift_evidence(
+        targeted_workbook=workbook,
+        sample_info=sample_info,
+        local_window=10,
+    )
+
+    points_by_trend = {
+        (point.trend_id, point.sample_stem): point for point in lookup.points
+    }
+    assert sorted(points_by_trend) == [
+        ("trend-001", "sample-a"),
+        ("trend-001", "sample-b"),
+        ("trend-001", "sample-c"),
+        ("trend-002", "sample-a"),
+        ("trend-002", "sample-b"),
+        ("trend-002", "sample-c"),
+    ]
+    assert points_by_trend[("trend-001", "sample-a")].istd_rt_min == 1.1
+    assert points_by_trend[("trend-001", "sample-b")].istd_rt_min == 1.2
+    assert points_by_trend[("trend-001", "sample-c")].istd_rt_min == 1.3
+    assert points_by_trend[("trend-002", "sample-a")].istd_rt_min == 2.1
+    assert points_by_trend[("trend-002", "sample-b")].istd_rt_min == 2.2
+    assert points_by_trend[("trend-002", "sample-c")].istd_rt_min == 2.3
+
+    point = lookup.points[0]
+    assert not hasattr(point, "istd_label")
+    assert not hasattr(point, "target_label")
+
+
 def _write_targeted_workbook(path: Path) -> None:
     wb = Workbook()
     ws = wb.active
@@ -139,4 +204,36 @@ def _write_targeted_workbook(path: Path) -> None:
     ws.append([None, "ISTD-B", "ISTD", 2.0, "PASS"])
     ws.append(["sample-c", "Analyte C", "Target", 4.2, "PASS"])
     ws.append([None, "ISTD-B", "ISTD", 2.1, "PASS"])
+    wb.save(path)
+
+
+def _write_targeted_workbook_with_whitespace_sample(path: Path) -> None:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "XIC Results"
+    ws.append(["SampleName", "Target", "Role", "RT"])
+    ws.append(["sample-a", "Analyte A", "Target", 4.0])
+    ws.append([None, "ISTD-B", "ISTD", 1.9])
+    ws.append(["   ", "ISTD-B", "ISTD", 2.0])
+    ws.append(["sample-b", "Analyte B", "Target", 4.1])
+    ws.append([None, "ISTD-B", "ISTD", 2.1])
+    ws.append(["sample-c", "Analyte C", "Target", 4.2])
+    ws.append([None, "ISTD-B", "ISTD", 2.2])
+    wb.save(path)
+
+
+def _write_targeted_workbook_with_reverse_istd_labels(path: Path) -> None:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "XIC Results"
+    ws.append(["SampleName", "Target", "Role", "RT"])
+    ws.append(["sample-a", "Analyte A", "Target", 4.0])
+    ws.append([None, "ISTD-Z", "ISTD", 2.1])
+    ws.append([None, "ISTD-A", "ISTD", 1.1])
+    ws.append(["sample-b", "Analyte B", "Target", 4.1])
+    ws.append([None, "ISTD-Z", "ISTD", 2.2])
+    ws.append([None, "ISTD-A", "ISTD", 1.2])
+    ws.append(["sample-c", "Analyte C", "Target", 4.2])
+    ws.append([None, "ISTD-Z", "ISTD", 2.3])
+    ws.append([None, "ISTD-A", "ISTD", 1.3])
     wb.save(path)

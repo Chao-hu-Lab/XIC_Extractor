@@ -116,8 +116,10 @@ def _read_istd_rt_by_label(targeted_workbook: Path) -> dict[str, dict[str, float
         out: dict[str, dict[str, float]] = {}
         for row in rows:
             raw_sample = row[cols["SampleName"]]
-            if raw_sample not in (None, ""):
-                sample_name = str(raw_sample).strip()
+            if raw_sample is not None:
+                candidate_sample = str(raw_sample).strip()
+                if candidate_sample:
+                    sample_name = candidate_sample
             if not sample_name:
                 continue
             role = row[cols["Role"]]
