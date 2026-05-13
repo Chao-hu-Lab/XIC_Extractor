@@ -60,7 +60,7 @@ def test_high_backfill_dependency_fallback_only_when_warning_column_absent(
             {
                 "feature_family_id": "FAM001",
                 "family_center_mz": 500.0,
-                "family_center_rt_min": 5.0,
+                "family_center_rt": 5.0,
                 "event_cluster_count": 1,
                 "event_member_count": 1,
             },
@@ -143,19 +143,18 @@ def test_compare_targeted_audit_counts_marks_split_and_miss_regressions(
     _write_csv(
         baseline_csv,
         [
-            {"target_label": "5-medC", "failure_mode": "PASS"},
-            {"target_label": "5-medC", "failure_mode": "SPLIT"},
-            {"target_label": "5-medC", "failure_mode": "MISS"},
-            {"target_label": "5-hmdC", "failure_mode": "MISS"},
+            {"sample_stem": "sample01", "failure_mode": "PASS"},
+            {"sample_stem": "sample02", "failure_mode": "SPLIT"},
+            {"sample_stem": "sample03", "failure_mode": "MISS"},
         ],
     )
     _write_csv(
         candidate_csv,
         [
-            {"target_label": "5-medC", "failure_mode": "SPLIT"},
-            {"target_label": "5-medC", "failure_mode": "SPLIT"},
-            {"target_label": "5-medC", "failure_mode": "MISS"},
-            {"target_label": "5-medC", "failure_mode": "MISS"},
+            {"sample_stem": "sample01", "failure_mode": "SPLIT"},
+            {"sample_stem": "sample02", "failure_mode": "SPLIT"},
+            {"sample_stem": "sample03", "failure_mode": "MISS"},
+            {"sample_stem": "sample04", "failure_mode": "MISS"},
         ],
     )
 
@@ -194,11 +193,11 @@ def test_main_writes_requested_outputs(tmp_path: Path) -> None:
     candidate_csv = tmp_path / "candidate.csv"
     _write_csv(
         baseline_csv,
-        [{"target_label": "5-medC", "failure_mode": "PASS"}],
+        [{"sample_stem": "sample01", "failure_mode": "PASS"}],
     )
     _write_csv(
         candidate_csv,
-        [{"target_label": "5-medC", "failure_mode": "MISS"}],
+        [{"sample_stem": "sample01", "failure_mode": "MISS"}],
     )
 
     code = guardrails.main(
@@ -272,17 +271,17 @@ def _write_alignment_fixture(path: Path) -> None:
         [
             {
                 "decision": "strong_edge",
-                "endpoint_a_mz": "322.143",
-                "endpoint_a_rt_min": "22.8",
-                "endpoint_b_mz": "322.1435",
-                "endpoint_b_rt_min": "23.5",
+                "left_precursor_mz": "322.143",
+                "left_rt_min": "22.8",
+                "right_precursor_mz": "322.1435",
+                "right_rt_min": "23.5",
             },
             {
                 "decision": "weak_edge",
-                "endpoint_a_mz": "322.143",
-                "endpoint_a_rt_min": "22.8",
-                "endpoint_b_mz": "322.143",
-                "endpoint_b_rt_min": "23.5",
+                "left_precursor_mz": "322.143",
+                "left_rt_min": "22.8",
+                "right_precursor_mz": "322.143",
+                "right_rt_min": "23.5",
             },
         ],
     )
@@ -299,7 +298,7 @@ def _review_row(
     return {
         "feature_family_id": family_id,
         "family_center_mz": mz,
-        "family_center_rt_min": rt,
+        "family_center_rt": rt,
         "event_cluster_count": event_cluster_count,
         "event_member_count": event_member_count,
         "warning": warning,

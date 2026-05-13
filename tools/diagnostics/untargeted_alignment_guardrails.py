@@ -358,7 +358,11 @@ def _review_row_in_window(row: Mapping[str, str], window: CaseWindow) -> bool:
         "family_center_mz",
         window.mz,
         window.ppm,
-    ) and _float_in_range(row.get("family_center_rt_min"), window.rt_min, window.rt_max)
+    ) and _float_in_range(
+        _first_present(row, ("family_center_rt", "family_center_rt_min")),
+        window.rt_min,
+        window.rt_max,
+    )
 
 
 def _strong_edge_count(rows: list[dict[str, str]], window: CaseWindow) -> int:
@@ -366,11 +370,37 @@ def _strong_edge_count(rows: list[dict[str, str]], window: CaseWindow) -> int:
     for row in rows:
         if row.get("decision") != "strong_edge":
             continue
-        if _edge_endpoint_in_window(row, "endpoint_a", window) and _edge_endpoint_in_window(
+        real_schema_match = _edge_endpoint_in_window(
+            row,
+            "left",
+            window,
+            mz_keys=("left_precursor_mz", "left_mz", "left_family_center_mz"),
+            rt_keys=(
+                "left_rt_min",
+                "left_family_center_rt",
+                "left_family_center_rt_min",
+            ),
+        ) and _edge_endpoint_in_window(
+            row,
+            "right",
+            window,
+            mz_keys=("right_precursor_mz", "right_mz", "right_family_center_mz"),
+            rt_keys=(
+                "right_rt_min",
+                "right_family_center_rt",
+                "right_family_center_rt_min",
+            ),
+        )
+        legacy_schema_match = _edge_endpoint_in_window(
+            row,
+            "endpoint_a",
+            window,
+        ) and _edge_endpoint_in_window(
             row,
             "endpoint_b",
             window,
-        ):
+        )
+        if real_schema_match or legacy_schema_match:
             count += 1
     return count
 
@@ -379,9 +409,18 @@ def _edge_endpoint_in_window(
     row: Mapping[str, str],
     prefix: str,
     window: CaseWindow,
+    *,
+    mz_keys: Sequence[str] | None = None,
+    rt_keys: Sequence[str] | None = None,
 ) -> bool:
-    mz_keys = (f"{prefix}_mz", f"{prefix}_family_center_mz")
-    rt_keys = (f"{prefix}_rt_min", f"{prefix}_family_center_rt_min")
+    if mz_keys is None:
+        mz_keys = (f"{prefix}_mz", f"{prefix}_family_center_mz")
+    if rt_keys is None:
+        rt_keys = (
+            f"{prefix}_rt_min",
+            f"{prefix}_family_center_rt",
+            f"{prefix}_family_center_rt_min",
+        )
     mz_value = _first_present(row, mz_keys)
     rt_value = _first_present(row, rt_keys)
     return _mz_in_ppm(mz_value, window.mz, window.ppm) and _float_in_range(
@@ -456,8 +495,10 @@ def _targeted_failure_counts(path: Path, target_label: str) -> Counter[str]:
         raise FileNotFoundError(str(path))
     counts: Counter[str] = Counter()
     with path.open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            if row.get("target_label") == target_label:
+        reader = csv.DictReader(handle)
+        has_target_label = "target_label" in (reader.fieldnames or [])
+        for row in reader:
+            if not has_target_label or row.get("target_label") == target_label:
                 counts[row.get("failure_mode", "")] += 1
     return counts
 
