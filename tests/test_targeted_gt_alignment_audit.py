@@ -97,6 +97,30 @@ def test_targeted_gt_audit_classifies_split_for_multiple_production_families(
     assert result["production_family_ids_in_gt_window"] == "FAM000001;FAM000002"
 
 
+def test_targeted_gt_audit_uses_new_schema_decision_before_raw_rescued_status(
+    tmp_path: Path,
+) -> None:
+    review_row = _review_row("FAM000001", mz=242.1136, rt=12.0)
+    review_row.update(
+        {
+            "accepted_cell_count": "0",
+            "include_in_primary_matrix": "FALSE",
+        },
+    )
+
+    result = _run_single_sample_audit(
+        tmp_path,
+        review_rows=[review_row],
+        cell_rows=[
+            _cell_row("FAM000001", "Sample_A", "rescued", rt=12.0),
+        ],
+    )
+
+    assert result["production_family_count_in_gt_window"] == "0"
+    assert result["production_family_ids"] == ""
+    assert result["failure_mode"] == "MISS"
+
+
 def test_targeted_gt_audit_does_not_count_duplicate_assigned_as_split(
     tmp_path: Path,
 ) -> None:

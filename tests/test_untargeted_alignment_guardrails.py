@@ -163,6 +163,70 @@ def test_negative_checkpoint_uses_legacy_production_status_when_acceptance_missi
     assert metrics.negative_checkpoint_production_families == 1
 
 
+def test_case_assertion_uses_new_schema_production_decision_before_raw_status(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir(parents=True)
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM001",
+                "family_center_mz": 242.114,
+                "family_center_rt": 12.0,
+                "event_cluster_count": 1,
+                "event_member_count": 2,
+                "accepted_cell_count": 0,
+                "include_in_primary_matrix": "FALSE",
+            },
+        ],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [
+            _cell_row("FAM001", "rescued"),
+            _cell_row("FAM001", "rescued"),
+        ],
+    )
+
+    metrics = guardrails.compute_guardrails(alignment_dir)
+
+    case1 = metrics.case_assertions["case1_mz242_5medC_like"]
+    assert case1.production_family_count == 0
+
+
+def test_negative_checkpoint_uses_new_schema_production_decision_before_raw_status(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir(parents=True)
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM001",
+                "family_center_mz": 284.0989,
+                "family_center_rt": 5.0,
+                "accepted_cell_count": 0,
+                "include_in_primary_matrix": "FALSE",
+            },
+        ],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [
+            _cell_row("FAM001", "detected"),
+            _cell_row("FAM001", "rescued"),
+        ],
+    )
+
+    metrics = guardrails.compute_guardrails(alignment_dir)
+
+    assert metrics.negative_8oxodg_production_families == 0
+    assert metrics.negative_checkpoint_production_families == 0
+
+
 def test_int_value_treats_non_finite_and_invalid_values_as_zero() -> None:
     assert guardrails._int_value(None) == 0
     assert guardrails._int_value("") == 0

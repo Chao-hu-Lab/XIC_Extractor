@@ -10,6 +10,7 @@ from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.output_rows import (
     cells_by_cluster,
     count_status,
+    escape_excel_formula,
     production_matrix_area,
     row_id,
 )
@@ -55,7 +56,7 @@ def _write_matrix_sheet(
         "family_center_rt",
         *matrix.sample_order,
     ]
-    sheet.append(headers)
+    _append_xlsx_row(sheet, headers)
     grouped_cells = cells_by_cluster(matrix)
     for cluster in matrix.clusters:
         cluster_id = row_id(cluster)
@@ -64,7 +65,8 @@ def _write_matrix_sheet(
         cells = {
             cell.sample_stem: cell for cell in grouped_cells.get(cluster_id, ())
         }
-        sheet.append(
+        _append_xlsx_row(
+            sheet,
             [
                 cluster_id,
                 cluster.neutral_loss_tag,
@@ -87,7 +89,8 @@ def _write_review_sheet(
     matrix: AlignmentMatrix,
     decisions: ProductionDecisionSet,
 ) -> None:
-    sheet.append(
+    _append_xlsx_row(
+        sheet,
         [
             "feature_family_id",
             "neutral_loss_tag",
@@ -109,7 +112,8 @@ def _write_review_sheet(
         cluster_id = row_id(cluster)
         cells = grouped_cells.get(cluster_id, ())
         row_decision = decisions.row(cluster_id)
-        sheet.append(
+        _append_xlsx_row(
+            sheet,
             [
                 cluster_id,
                 cluster.neutral_loss_tag,
@@ -133,7 +137,8 @@ def _write_audit_sheet(
     matrix: AlignmentMatrix,
     decisions: ProductionDecisionSet,
 ) -> None:
-    sheet.append(
+    _append_xlsx_row(
+        sheet,
         [
             "feature_family_id",
             "sample_stem",
@@ -162,7 +167,8 @@ def _write_audit_sheet(
             )
         decision = decisions.cell(cell.cluster_id, cell.sample_stem)
         row_decision = decisions.row(cell.cluster_id)
-        sheet.append(
+        _append_xlsx_row(
+            sheet,
             [
                 cell.cluster_id,
                 cell.sample_stem,
@@ -185,9 +191,19 @@ def _write_audit_sheet(
 
 
 def _write_metadata_sheet(sheet: Any, metadata: dict[str, str]) -> None:
-    sheet.append(["key", "value"])
+    _append_xlsx_row(sheet, ["key", "value"])
     for key in sorted(metadata):
-        sheet.append([key, metadata[key]])
+        _append_xlsx_row(sheet, [key, metadata[key]])
+
+
+def _append_xlsx_row(sheet: Any, values: list[object]) -> None:
+    sheet.append([_xlsx_value(value) for value in values])
+
+
+def _xlsx_value(value: object) -> object:
+    if isinstance(value, str):
+        return escape_excel_formula(value)
+    return value
 
 
 def _xlsx_area(decision: ProductionCellDecision | None) -> float | None:

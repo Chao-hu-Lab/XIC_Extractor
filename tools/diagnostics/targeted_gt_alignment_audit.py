@@ -227,9 +227,21 @@ def _cells_by_sample_in_review_range(
 ) -> dict[str, tuple[dict[str, str], ...]]:
     grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
     for cell in cell_rows:
-        if cell.get("feature_family_id") not in review_index:
+        review_row = review_index.get(cell.get("feature_family_id", ""))
+        if review_row is None:
             continue
-        grouped[cell["sample_stem"]].append(cell)
+        enriched_cell = dict(cell)
+        if "include_in_primary_matrix" in review_row:
+            enriched_cell["_review_include_in_primary_matrix"] = review_row.get(
+                "include_in_primary_matrix",
+                "",
+            )
+        if "accepted_cell_count" in review_row:
+            enriched_cell["_review_accepted_cell_count"] = review_row.get(
+                "accepted_cell_count",
+                "",
+            )
+        grouped[cell["sample_stem"]].append(enriched_cell)
     return {sample: tuple(rows) for sample, rows in grouped.items()}
 
 
@@ -238,9 +250,7 @@ def _classify_sample(
     cells: tuple[dict[str, str], ...],
     config: AuditConfig,
 ) -> dict[str, object]:
-    production = [
-        cell for cell in cells if _status(cell) in PRODUCTION_STATUSES
-    ]
+    production = [cell for cell in cells if _is_production_cell(cell)]
     duplicates = [
         cell for cell in cells if _status(cell) == "duplicate_assigned"
     ]
@@ -484,6 +494,35 @@ def _as_output_dict(row: object) -> dict[str, object]:
 
 def _status(cell: dict[str, str] | None) -> str:
     return "" if cell is None else (cell.get("status") or "").strip().lower()
+
+
+def _is_production_cell(cell: dict[str, str]) -> bool:
+    if _status(cell) not in PRODUCTION_STATUSES:
+        return False
+    if (
+        "_review_include_in_primary_matrix" in cell
+        and not _is_trueish(cell.get("_review_include_in_primary_matrix"))
+    ):
+        return False
+    if (
+        "_review_accepted_cell_count" in cell
+        and _to_int(cell.get("_review_accepted_cell_count")) <= 0
+    ):
+        return False
+    return True
+
+
+def _is_trueish(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "t", "yes", "y"}
+
+
+def _to_int(value: object) -> int:
+    parsed = _to_float(value)
+    if parsed is None:
+        return 0
+    return int(parsed)
 
 
 def _cell_rt(cell: dict[str, str] | None) -> float | None:

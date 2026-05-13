@@ -141,6 +141,49 @@ def test_alignment_results_xlsx_audit_explains_duplicate_blank(
     assert workbook["Audit"]["J2"].value == "duplicate_loser"
 
 
+def test_alignment_results_xlsx_escapes_formula_like_external_strings(
+    tmp_path: Path,
+):
+    matrix = AlignmentMatrix(
+        clusters=(
+            sample_feature(
+                "=FAM000001",
+                evidence="owner_identity",
+                neutral_loss_tag="-DNA_dR",
+            ),
+        ),
+        sample_order=("+Sample_A",),
+        cells=(
+            sample_cell(
+                "+Sample_A",
+                "=FAM000001",
+                "detected",
+                100.0,
+                reason="@audit reason",
+            ),
+        ),
+    )
+
+    path = write_alignment_results_xlsx(
+        tmp_path / "alignment_results.xlsx",
+        matrix,
+        metadata={"schema_version": "@metadata value"},
+    )
+
+    workbook = load_workbook(path, data_only=False)
+    assert workbook["Matrix"]["A2"].value == "'=FAM000001"
+    assert workbook["Matrix"]["A2"].data_type != "f"
+    assert workbook["Matrix"]["E1"].value == "'+Sample_A"
+    assert workbook["Matrix"]["E1"].data_type != "f"
+    assert workbook["Review"]["B2"].value == "'-DNA_dR"
+    assert workbook["Review"]["B2"].data_type != "f"
+    assert workbook["Audit"]["B2"].value == "'+Sample_A"
+    assert workbook["Audit"]["P2"].value == "'@audit reason"
+    assert workbook["Audit"]["I2"].value is True
+    assert workbook["Metadata"]["B2"].value == "'@metadata value"
+    assert workbook["Metadata"]["B2"].data_type != "f"
+
+
 def test_alignment_results_xlsx_rejects_orphan_audit_cell(tmp_path: Path):
     matrix = AlignmentMatrix(
         clusters=(sample_feature("FAM000001", evidence="owner_identity"),),
@@ -173,10 +216,11 @@ def sample_feature(
     *,
     evidence: str,
     has_anchor: bool = True,
+    neutral_loss_tag: str = "DNA_dR",
 ):
     return SimpleNamespace(
         feature_family_id=feature_family_id,
-        neutral_loss_tag="DNA_dR",
+        neutral_loss_tag=neutral_loss_tag,
         family_center_mz=242.114,
         family_center_rt=12.593,
         family_product_mz=126.066,
@@ -194,6 +238,8 @@ def sample_cell(
     cluster_id: str,
     status: str,
     area: float | None,
+    *,
+    reason: str | None = None,
 ) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample,
@@ -209,5 +255,5 @@ def sample_cell(
         scan_support_score=None,
         source_candidate_id="s1#6095" if area else None,
         source_raw_file=None,
-        reason=status,
+        reason=reason or status,
     )

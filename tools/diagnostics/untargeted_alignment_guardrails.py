@@ -139,19 +139,15 @@ def compute_guardrails(alignment_dir: Path) -> GuardrailMetrics:
             review_has_warning_column,
         ):
             high_backfill += 1
-        if production_present_count > 0 and _row_in_mz_window(
+        production_family = _is_production_family(review_row, counts)
+        if production_family and _row_in_mz_window(
             review_row,
             "family_center_mz",
             284.0989,
             20.0,
         ):
             negative_8oxodg += 1
-        production_evidence_count = (
-            accepted_cells
-            if "accepted_cell_count" in review_row
-            else production_present_count
-        )
-        if production_evidence_count > 0 and _row_in_mz_window(
+        if production_family and _row_in_mz_window(
             review_row,
             "family_center_mz",
             284.0989,
@@ -372,10 +368,10 @@ def _compute_case_assertions(
         production_family_count = sum(
             1
             for row in review_in_window
-            if _production_present_count(
+            if _is_production_family(
+                row,
                 status_counts[row.get("feature_family_id", "")],
             )
-            > 0
         )
         owner_count = sum(_int_value(row.get("event_cluster_count")) for row in review_in_window)
         event_count = sum(_int_value(row.get("event_member_count")) for row in review_in_window)
@@ -457,6 +453,23 @@ def _is_high_backfill_dependency(
 
 def _production_present_count(counts: Counter[str]) -> int:
     return sum(counts[status] for status in PRODUCTION_STATUSES)
+
+
+def _is_production_family(
+    review_row: Mapping[str, str],
+    counts: Counter[str],
+) -> bool:
+    if "include_in_primary_matrix" in review_row:
+        return _is_trueish(review_row.get("include_in_primary_matrix"))
+    if "accepted_cell_count" in review_row:
+        return _int_value(review_row.get("accepted_cell_count")) > 0
+    return _production_present_count(counts) > 0
+
+
+def _is_trueish(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "t", "yes", "y"}
 
 
 def _review_row_in_window(row: Mapping[str, str], window: CaseWindow) -> bool:
