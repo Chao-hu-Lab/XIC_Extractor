@@ -75,6 +75,7 @@ def compute_guardrails(alignment_dir: Path) -> GuardrailMetrics:
     edge_rows = _read_optional_tsv(alignment_dir / "owner_edge_evidence.tsv")
 
     status_counts = _status_counts_by_family(cell_rows)
+    review_has_warning_column = any("warning" in row for row in review_rows)
     review_by_family = {
         row.get("feature_family_id", ""): row
         for row in review_rows
@@ -98,7 +99,12 @@ def compute_guardrails(alignment_dir: Path) -> GuardrailMetrics:
             zero_present += 1
         if production_present_count == 0 and duplicate_assigned_count > 0:
             duplicate_only += 1
-        if _is_high_backfill_dependency(review_row, detected_count, rescued_count):
+        if _is_high_backfill_dependency(
+            review_row,
+            detected_count,
+            rescued_count,
+            review_has_warning_column,
+        ):
             high_backfill += 1
         if production_present_count > 0 and _row_in_mz_window(
             review_row,
@@ -273,7 +279,7 @@ def _compute_case_assertions(
         )
         preserved_split_or_ambiguous = (
             window.name == "case2_mz296_dense_duplicate"
-            and (production_family_count > 1 or ambiguous_count > 0)
+            and (len(review_in_window) > 1 or ambiguous_count > 0)
         )
         strong_edge_count = _strong_edge_count(edge_rows, window)
         status, reason = _case_status_reason(
@@ -335,10 +341,9 @@ def _is_high_backfill_dependency(
     review_row: Mapping[str, str],
     detected_count: int,
     rescued_count: int,
+    review_has_warning_column: bool,
 ) -> bool:
-    if review_row.get("warning") == "high_backfill_dependency":
-        return True
-    if "warning" in review_row and review_row.get("warning"):
+    if review_has_warning_column:
         return review_row.get("warning") == "high_backfill_dependency"
     return rescued_count > detected_count and rescued_count >= 2
 

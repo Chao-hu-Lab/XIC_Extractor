@@ -16,7 +16,7 @@ def test_compute_guardrails_counts_families_cases_and_writes_case_summary(
 
     assert metrics.zero_present_families == 3
     assert metrics.duplicate_only_families == 1
-    assert metrics.high_backfill_dependency_families == 2
+    assert metrics.high_backfill_dependency_families == 1
     assert metrics.negative_8oxodg_production_families == 1
 
     case1 = metrics.case_assertions["case1_mz242_5medC_like"]
@@ -47,6 +47,64 @@ def test_compute_guardrails_counts_families_cases_and_writes_case_summary(
     assert rows[0]["supporting_event_count"] == "2"
     assert rows[1]["preserved_split_or_ambiguous"] == "true"
     assert rows[2]["strong_edge_count"] == "1"
+
+
+def test_high_backfill_dependency_fallback_only_when_warning_column_absent(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir(parents=True)
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM001",
+                "family_center_mz": 500.0,
+                "family_center_rt_min": 5.0,
+                "event_cluster_count": 1,
+                "event_member_count": 1,
+            },
+        ],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [
+            _cell_row("FAM001", "rescued"),
+            _cell_row("FAM001", "rescued"),
+        ],
+    )
+
+    metrics = guardrails.compute_guardrails(alignment_dir)
+
+    assert metrics.high_backfill_dependency_families == 1
+
+
+def test_case2_preserves_split_for_multiple_non_production_review_families(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir(parents=True)
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            _review_row("FAM001", 296.074, 19.5, 1, 1),
+            _review_row("FAM002", 296.075, 19.6, 1, 1),
+        ],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [
+            _cell_row("FAM001", "duplicate_assigned"),
+            _cell_row("FAM002", "duplicate_assigned"),
+        ],
+    )
+
+    metrics = guardrails.compute_guardrails(alignment_dir)
+    case2 = metrics.case_assertions["case2_mz296_dense_duplicate"]
+
+    assert case2.production_family_count == 0
+    assert case2.preserved_split_or_ambiguous is True
+    assert case2.status == "PASS"
 
 
 def test_compare_guardrails_fails_when_candidate_metric_increases() -> None:
