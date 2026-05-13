@@ -4,16 +4,18 @@ import csv
 from pathlib import Path
 from typing import Any
 
+from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.output_rows import (
     cells_by_cluster,
     count_status,
     escape_excel_formula,
     format_value,
-    matrix_area,
+    production_matrix_area,
     row_id,
     safe_rate,
 )
+from xic_extractor.alignment.production_decisions import build_production_decisions
 
 ALIGNMENT_REVIEW_COLUMNS = (
     "feature_family_id",
@@ -32,6 +34,11 @@ ALIGNMENT_REVIEW_COLUMNS = (
     "duplicate_assigned_count",
     "ambiguous_ms1_owner_count",
     "present_rate",
+    "accepted_cell_count",
+    "accepted_rescue_count",
+    "review_rescue_count",
+    "include_in_primary_matrix",
+    "row_flags",
     "representative_samples",
     "family_evidence",
     "warning",
@@ -59,11 +66,26 @@ ALIGNMENT_CELLS_COLUMNS = (
 )
 
 
-def write_alignment_review_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
-    return _write_tsv(path, ALIGNMENT_REVIEW_COLUMNS, _review_rows(matrix))
+def write_alignment_review_tsv(
+    path: Path,
+    matrix: AlignmentMatrix,
+    *,
+    alignment_config: AlignmentConfig | None = None,
+) -> Path:
+    config = alignment_config or AlignmentConfig()
+    return _write_tsv(
+        path,
+        ALIGNMENT_REVIEW_COLUMNS,
+        _review_rows(matrix, alignment_config=config),
+    )
 
 
-def write_alignment_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
+def write_alignment_matrix_tsv(
+    path: Path,
+    matrix: AlignmentMatrix,
+    *,
+    alignment_config: AlignmentConfig | None = None,
+) -> Path:
     columns = (
         "feature_family_id",
         "neutral_loss_tag",
@@ -73,8 +95,12 @@ def write_alignment_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
     )
     rows: list[dict[str, object]] = []
     grouped_cells = cells_by_cluster(matrix)
+    decisions = build_production_decisions(matrix, alignment_config or AlignmentConfig())
     for cluster in matrix.clusters:
         cluster_id = row_id(cluster)
+        row_decision = decisions.row(cluster_id)
+        if not row_decision.include_in_primary_matrix:
+            continue
         cells = grouped_cells.get(cluster_id, ())
         cells_by_sample = {cell.sample_stem: cell for cell in cells}
         row: dict[str, object] = {
@@ -84,7 +110,11 @@ def write_alignment_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
             "family_center_rt": format_value(_family_center_rt(cluster)),
         }
         for sample_stem in matrix.sample_order:
-            row[sample_stem] = matrix_area(cells_by_sample.get(sample_stem))
+            cell = cells_by_sample.get(sample_stem)
+            decision = (
+                decisions.cell(cluster_id, sample_stem) if cell is not None else None
+            )
+            row[sample_stem] = production_matrix_area(decision)
         rows.append(row)
     return _write_tsv(path, columns, rows)
 
@@ -145,13 +175,19 @@ def write_alignment_status_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Pa
     return _write_tsv(path, columns, rows)
 
 
-def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
+def _review_rows(
+    matrix: AlignmentMatrix,
+    *,
+    alignment_config: AlignmentConfig,
+) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     grouped_cells = cells_by_cluster(matrix)
     sample_count = len(matrix.sample_order)
+    decisions = build_production_decisions(matrix, alignment_config)
     for cluster in matrix.clusters:
         cluster_id = row_id(cluster)
         cells = grouped_cells.get(cluster_id, ())
+        row_decision = decisions.row(cluster_id)
         detected_count = count_status(cells, "detected")
         rescued_count = count_status(cells, "rescued")
         absent_count = count_status(cells, "absent")
@@ -179,6 +215,11 @@ def _review_rows(matrix: AlignmentMatrix) -> list[dict[str, object]]:
                 "duplicate_assigned_count": duplicate_assigned_count,
                 "ambiguous_ms1_owner_count": ambiguous_owner_count,
                 "present_rate": safe_rate(present_count, sample_count),
+                "accepted_cell_count": row_decision.accepted_cell_count,
+                "accepted_rescue_count": row_decision.accepted_rescue_count,
+                "review_rescue_count": row_decision.review_rescue_count,
+                "include_in_primary_matrix": row_decision.include_in_primary_matrix,
+                "row_flags": ";".join(row_decision.row_flags),
                 "representative_samples": _representative_samples(cells),
                 "family_evidence": _family_evidence(cluster),
                 "warning": _warning(

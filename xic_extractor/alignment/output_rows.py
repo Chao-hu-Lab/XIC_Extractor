@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+
+if TYPE_CHECKING:
+    from xic_extractor.alignment.production_decisions import ProductionCellDecision
 
 
 def cells_by_cluster(matrix: AlignmentMatrix) -> dict[str, tuple[AlignedCell, ...]]:
@@ -31,6 +34,13 @@ def matrix_area(cell: AlignedCell | None) -> str:
     if area is None or not math.isfinite(area) or area <= 0:
         return ""
     return format_float(area)
+
+
+def production_matrix_area(decision: ProductionCellDecision | None) -> str:
+    if decision is None or not decision.write_matrix_value:
+        return ""
+    assert decision.matrix_value is not None
+    return format_float(decision.matrix_value)
 
 
 def format_value(value: object) -> str:

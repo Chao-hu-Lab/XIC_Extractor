@@ -23,6 +23,11 @@ REVIEW_COLUMNS = [
     "duplicate_assigned_count",
     "ambiguous_ms1_owner_count",
     "present_rate",
+    "accepted_cell_count",
+    "accepted_rescue_count",
+    "review_rescue_count",
+    "include_in_primary_matrix",
+    "row_flags",
     "representative_samples",
     "family_evidence",
     "warning",
@@ -65,6 +70,11 @@ def test_write_alignment_review_tsv_columns_counts_rates_and_reason(tmp_path: Pa
         "duplicate_assigned_count": "0",
         "ambiguous_ms1_owner_count": "0",
         "present_rate": "0.5",
+        "accepted_cell_count": "2",
+        "accepted_rescue_count": "1",
+        "review_rescue_count": "0",
+        "include_in_primary_matrix": "TRUE",
+        "row_flags": "",
         "representative_samples": "sample-a;sample-b",
         "family_evidence": "",
         "warning": "",
@@ -229,7 +239,7 @@ def test_write_alignment_matrix_tsv_blanks_missing_and_invalid_areas(tmp_path: P
     from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
 
     matrix = AlignmentMatrix(
-        clusters=(_cluster(),),
+        clusters=(_cluster(fold_evidence="owner_complete_link;owner_count=2"),),
         cells=(
             _cell("detected-positive", "detected", area=1234.567),
             _cell("rescued-positive", "rescued", area=25.0),
@@ -290,13 +300,15 @@ def test_write_alignment_matrix_tsv_blanks_duplicate_assigned_cells(tmp_path: Pa
                 area=100.0,
                 trace_quality="assigned_duplicate",
             ),
+            _cell("sample-b", "detected", area=200.0),
         ),
-        sample_order=("sample-a",),
+        sample_order=("sample-a", "sample-b"),
     )
 
     rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
 
     assert rows[0]["sample-a"] == ""
+    assert rows[0]["sample-b"] == "200"
 
 
 def test_write_alignment_matrix_tsv_blanks_ambiguous_ms1_owner_cells(
@@ -313,13 +325,71 @@ def test_write_alignment_matrix_tsv_blanks_ambiguous_ms1_owner_cells(
                 area=100.0,
                 trace_quality="ambiguous_ms1_owner",
             ),
+            _cell("sample-b", "detected", area=200.0),
+        ),
+        sample_order=("sample-a", "sample-b"),
+    )
+
+    rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
+
+    assert rows[0]["sample-a"] == ""
+    assert rows[0]["sample-b"] == "200"
+
+
+def test_write_alignment_matrix_tsv_excludes_rows_without_accepted_cells(
+    tmp_path: Path,
+):
+    from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(
+            _cluster(
+                cluster_id="ALN000001",
+                fold_evidence="owner_complete_link;owner_count=2",
+            ),
+            _cluster(cluster_id="ALN000002", has_anchor=False, fold_evidence=""),
+            _cluster(
+                cluster_id="ALN000003",
+                fold_evidence="owner_complete_link;owner_count=2",
+            ),
+        ),
+        cells=(
+            _cell("sample-a", "detected", cluster_id="ALN000001", area=100.0),
+            _cell("sample-a", "rescued", cluster_id="ALN000002", area=200.0),
+            _cell(
+                "sample-a",
+                "duplicate_assigned",
+                cluster_id="ALN000003",
+                area=300.0,
+            ),
         ),
         sample_order=("sample-a",),
     )
 
     rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
 
-    assert rows[0]["sample-a"] == ""
+    assert [row["feature_family_id"] for row in rows] == ["ALN000001"]
+    assert rows[0]["sample-a"] == "100"
+
+
+def test_write_alignment_review_tsv_includes_production_decision_columns(
+    tmp_path: Path,
+):
+    from xic_extractor.alignment.tsv_writer import write_alignment_review_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(has_anchor=False, fold_evidence=""),),
+        cells=(_cell("sample-a", "rescued", area=200.0),),
+        sample_order=("sample-a",),
+    )
+
+    rows = _read_tsv(write_alignment_review_tsv(tmp_path / "review.tsv", matrix))
+
+    assert rows[0]["accepted_cell_count"] == "0"
+    assert rows[0]["accepted_rescue_count"] == "0"
+    assert rows[0]["review_rescue_count"] == "1"
+    assert rows[0]["include_in_primary_matrix"] == "FALSE"
+    assert rows[0]["row_flags"] == "rescue_only_review"
 
 
 def test_write_alignment_status_matrix_tsv_preserves_duplicate_assigned(
