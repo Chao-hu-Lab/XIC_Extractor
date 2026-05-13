@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
@@ -15,8 +16,11 @@ PRODUCTION_STATUSES = {"detected", "rescued"}
 COMPARISON_METRICS = [
     "duplicate_only_families",
     "zero_present_families",
-    "high_backfill_dependency_families",
-    "negative_8oxodg_production_families",
+    "review_rescue_count",
+    "rescue_only_review_families",
+    "identity_anchor_lost_families",
+    "duplicate_claim_pressure_families",
+    "negative_checkpoint_production_families",
 ]
 CASE_SUMMARY_COLUMNS = [
     "case",
@@ -58,6 +62,15 @@ class GuardrailMetrics:
     duplicate_only_families: int
     high_backfill_dependency_families: int
     negative_8oxodg_production_families: int
+    negative_checkpoint_production_families: int
+    accepted_quantitative_cells: int
+    accepted_rescue_cells: int
+    accepted_rescue_rate: float
+    review_rescue_count: int
+    rescue_only_review_families: int
+    identity_anchor_lost_families: int
+    duplicate_claim_pressure_families: int
+    istd_false_missing_recovery: int
     case_assertions: dict[str, CaseAssertion]
 
 
@@ -87,6 +100,13 @@ def compute_guardrails(alignment_dir: Path) -> GuardrailMetrics:
     duplicate_only = 0
     high_backfill = 0
     negative_8oxodg = 0
+    negative_checkpoint = 0
+    accepted_quantitative_cells = 0
+    accepted_rescue_cells = 0
+    review_rescue_count = 0
+    rescue_only_review = 0
+    identity_anchor_lost = 0
+    duplicate_claim_pressure = 0
     for family_id in family_ids:
         counts = status_counts[family_id]
         detected_count = counts["detected"]
@@ -94,6 +114,19 @@ def compute_guardrails(alignment_dir: Path) -> GuardrailMetrics:
         production_present_count = detected_count + rescued_count
         duplicate_assigned_count = counts["duplicate_assigned"]
         review_row = review_by_family.get(family_id, {})
+        accepted_cells = _int_value(review_row.get("accepted_cell_count"))
+        accepted_rescues = _int_value(review_row.get("accepted_rescue_count"))
+        review_rescues = _int_value(review_row.get("review_rescue_count"))
+        row_flags = _row_flags(review_row)
+        accepted_quantitative_cells += accepted_cells
+        accepted_rescue_cells += accepted_rescues
+        review_rescue_count += review_rescues
+        if "rescue_only_review" in row_flags:
+            rescue_only_review += 1
+        if "identity_anchor_lost" in row_flags:
+            identity_anchor_lost += 1
+        if "duplicate_claim_pressure" in row_flags:
+            duplicate_claim_pressure += 1
 
         if production_present_count == 0:
             zero_present += 1
@@ -113,12 +146,37 @@ def compute_guardrails(alignment_dir: Path) -> GuardrailMetrics:
             20.0,
         ):
             negative_8oxodg += 1
+        production_evidence_count = (
+            accepted_cells
+            if "accepted_cell_count" in review_row
+            else production_present_count
+        )
+        if production_evidence_count > 0 and _row_in_mz_window(
+            review_row,
+            "family_center_mz",
+            284.0989,
+            20.0,
+        ):
+            negative_checkpoint += 1
 
     return GuardrailMetrics(
         zero_present_families=zero_present,
         duplicate_only_families=duplicate_only,
         high_backfill_dependency_families=high_backfill,
         negative_8oxodg_production_families=negative_8oxodg,
+        negative_checkpoint_production_families=negative_checkpoint,
+        accepted_quantitative_cells=accepted_quantitative_cells,
+        accepted_rescue_cells=accepted_rescue_cells,
+        accepted_rescue_rate=(
+            accepted_rescue_cells / accepted_quantitative_cells
+            if accepted_quantitative_cells
+            else 0.0
+        ),
+        review_rescue_count=review_rescue_count,
+        rescue_only_review_families=rescue_only_review,
+        identity_anchor_lost_families=identity_anchor_lost,
+        duplicate_claim_pressure_families=duplicate_claim_pressure,
+        istd_false_missing_recovery=0,
         case_assertions=_compute_case_assertions(
             review_rows,
             status_counts,
@@ -511,7 +569,16 @@ def _float_value(value: str | None) -> float | None:
 
 def _int_value(value: str | None) -> int:
     parsed = _float_value(value)
-    return int(parsed) if parsed is not None else 0
+    if parsed is None or not math.isfinite(parsed):
+        return 0
+    return int(parsed)
+
+
+def _row_flags(row: Mapping[str, str | None]) -> set[str]:
+    value = row.get("row_flags", "")
+    if value in (None, ""):
+        return set()
+    return {part.strip() for part in value.split(";") if part.strip()}
 
 
 def _first_present(row: Mapping[str, str], keys: Sequence[str]) -> str | None:
@@ -576,14 +643,7 @@ def _bool_text(value: bool) -> str:
 
 
 def _metrics_for_comparison(metrics: GuardrailMetrics) -> dict[str, int]:
-    return {
-        "zero_present_families": metrics.zero_present_families,
-        "duplicate_only_families": metrics.duplicate_only_families,
-        "high_backfill_dependency_families": metrics.high_backfill_dependency_families,
-        "negative_8oxodg_production_families": (
-            metrics.negative_8oxodg_production_families
-        ),
-    }
+    return {metric: int(getattr(metrics, metric)) for metric in COMPARISON_METRICS}
 
 
 def _metrics_to_json(metrics: GuardrailMetrics) -> dict[str, object]:

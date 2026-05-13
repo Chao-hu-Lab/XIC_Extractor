@@ -79,6 +79,106 @@ def test_high_backfill_dependency_fallback_only_when_warning_column_absent(
     assert metrics.high_backfill_dependency_families == 1
 
 
+def test_guardrails_report_rescue_identity_and_duplicate_metrics(tmp_path: Path):
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir(parents=True)
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM001",
+                "family_center_mz": 500.0,
+                "family_center_rt": 5.0,
+                "accepted_cell_count": 2,
+                "accepted_rescue_count": 1,
+                "review_rescue_count": 0,
+                "include_in_primary_matrix": "TRUE",
+                "row_flags": "rescue_heavy",
+            },
+            {
+                "feature_family_id": "FAM002",
+                "family_center_mz": 501.0,
+                "family_center_rt": 5.1,
+                "accepted_cell_count": 0,
+                "accepted_rescue_count": 0,
+                "review_rescue_count": 1,
+                "include_in_primary_matrix": "FALSE",
+                "row_flags": "rescue_only_review;identity_anchor_lost",
+            },
+            {
+                "feature_family_id": "FAM003",
+                "family_center_mz": 502.0,
+                "family_center_rt": 5.2,
+                "accepted_cell_count": 0,
+                "accepted_rescue_count": 0,
+                "review_rescue_count": 0,
+                "include_in_primary_matrix": "FALSE",
+                "row_flags": "duplicate_claim_pressure",
+            },
+        ],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [
+            _cell_row("FAM001", "detected"),
+            _cell_row("FAM001", "rescued"),
+            _cell_row("FAM002", "rescued"),
+            _cell_row("FAM003", "duplicate_assigned"),
+        ],
+    )
+
+    metrics = guardrails.compute_guardrails(alignment_dir)
+
+    assert metrics.accepted_rescue_cells == 1
+    assert metrics.accepted_quantitative_cells == 2
+    assert metrics.accepted_rescue_rate == 0.5
+    assert metrics.review_rescue_count == 1
+    assert metrics.rescue_only_review_families == 1
+    assert metrics.identity_anchor_lost_families == 1
+    assert metrics.duplicate_claim_pressure_families == 1
+
+
+def test_negative_checkpoint_uses_legacy_production_status_when_acceptance_missing(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir(parents=True)
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM001",
+                "family_center_mz": 284.0989,
+                "family_center_rt": 5.0,
+            },
+        ],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [_cell_row("FAM001", "detected")],
+    )
+
+    metrics = guardrails.compute_guardrails(alignment_dir)
+
+    assert metrics.negative_checkpoint_production_families == 1
+
+
+def test_int_value_treats_non_finite_and_invalid_values_as_zero() -> None:
+    assert guardrails._int_value(None) == 0
+    assert guardrails._int_value("") == 0
+    assert guardrails._int_value("not-a-number") == 0
+    assert guardrails._int_value("NaN") == 0
+    assert guardrails._int_value("inf") == 0
+    assert guardrails._int_value("-inf") == 0
+
+
+def test_row_flags_ignores_none_empty_parts_and_surrounding_whitespace() -> None:
+    assert guardrails._row_flags({"row_flags": None}) == set()
+    assert guardrails._row_flags(
+        {"row_flags": "rescue_only_review; identity_anchor_lost; "},
+    ) == {"rescue_only_review", "identity_anchor_lost"}
+
+
 def test_case2_preserves_split_for_multiple_non_production_review_families(
     tmp_path: Path,
 ) -> None:
@@ -112,27 +212,39 @@ def test_compare_guardrails_fails_when_candidate_metric_increases() -> None:
         {
             "duplicate_only_families": 1,
             "zero_present_families": 2,
-            "high_backfill_dependency_families": 3,
-            "negative_8oxodg_production_families": 4,
+            "review_rescue_count": 3,
+            "rescue_only_review_families": 4,
+            "identity_anchor_lost_families": 5,
+            "duplicate_claim_pressure_families": 6,
+            "negative_checkpoint_production_families": 7,
         },
         {
             "duplicate_only_families": 2,
             "zero_present_families": 2,
-            "high_backfill_dependency_families": 1,
-            "negative_8oxodg_production_families": 5,
+            "review_rescue_count": 4,
+            "rescue_only_review_families": 5,
+            "identity_anchor_lost_families": 5,
+            "duplicate_claim_pressure_families": 5,
+            "negative_checkpoint_production_families": 8,
         },
     )
 
     assert [row["metric"] for row in rows] == [
         "duplicate_only_families",
         "zero_present_families",
-        "high_backfill_dependency_families",
-        "negative_8oxodg_production_families",
+        "review_rescue_count",
+        "rescue_only_review_families",
+        "identity_anchor_lost_families",
+        "duplicate_claim_pressure_families",
+        "negative_checkpoint_production_families",
     ]
     assert rows[0]["status"] == "FAIL"
     assert rows[1]["status"] == "PASS"
-    assert rows[2]["status"] == "PASS"
+    assert rows[2]["status"] == "FAIL"
     assert rows[3]["status"] == "FAIL"
+    assert rows[4]["status"] == "PASS"
+    assert rows[5]["status"] == "PASS"
+    assert rows[6]["status"] == "FAIL"
 
 
 def test_compare_targeted_audit_counts_marks_split_and_miss_regressions(
