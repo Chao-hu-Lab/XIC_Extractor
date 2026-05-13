@@ -103,7 +103,9 @@ class RawFileHandle:
                         intensities,
                     )
         if any(trace is None for trace in traces):
-            raise RawReaderError("Thermo RAW batch extraction returned incomplete traces")
+            raise RawReaderError(
+                "Thermo RAW batch extraction returned incomplete traces",
+            )
         return tuple(trace for trace in traces if trace is not None)
 
     def iter_ms2_scans(self, rt_min: float, rt_max: float) -> Iterator[Ms2ScanEvent]:

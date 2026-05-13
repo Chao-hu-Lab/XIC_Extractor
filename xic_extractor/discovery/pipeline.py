@@ -230,13 +230,22 @@ def _discover_raw_file(
 ) -> tuple[DiscoveryCandidate, ...]:
     sample_stem = raw_path.stem
     with raw_opener(raw_path, peak_config.dll_dir) as raw:
-        with timing_recorder.stage("discover.ms2_seeds", sample_stem=sample_stem) as stage:
+        with timing_recorder.stage(
+            "discover.ms2_seeds",
+            sample_stem=sample_stem,
+        ) as stage:
             seeds = collect_strict_nl_seeds(raw, raw_file=raw_path, settings=settings)
             stage.metrics["seed_count"] = len(seeds)
-        with timing_recorder.stage("discover.group_seeds", sample_stem=sample_stem) as stage:
+        with timing_recorder.stage(
+            "discover.group_seeds",
+            sample_stem=sample_stem,
+        ) as stage:
             groups = group_discovery_seeds(seeds, settings=settings)
             stage.metrics["group_count"] = len(groups)
-        with timing_recorder.stage("discover.ms1_backfill", sample_stem=sample_stem) as stage:
+        with timing_recorder.stage(
+            "discover.ms1_backfill",
+            sample_stem=sample_stem,
+        ) as stage:
             candidates = backfill_ms1_candidates(
                 raw,
                 groups,

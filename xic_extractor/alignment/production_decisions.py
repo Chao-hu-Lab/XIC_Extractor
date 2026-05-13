@@ -176,7 +176,9 @@ def _row_decision(
         1 for decision in decisions if decision.production_status == "review_rescue"
     )
     duplicate_count = sum(1 for cell in cells if cell.status == "duplicate_assigned")
-    accepted_cell_count = sum(1 for decision in decisions if decision.write_matrix_value)
+    accepted_cell_count = sum(
+        1 for decision in decisions if decision.write_matrix_value
+    )
 
     flags: list[str] = []
     if accepted_rescue_count > detected_count and detected_count > 0:

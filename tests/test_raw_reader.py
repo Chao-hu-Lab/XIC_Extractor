@@ -401,7 +401,10 @@ class _FakeRaw:
 
     def GetChromatogramData(self, settings, start_scan, end_scan):
         self.chromatogram_calls.append(((start_scan, end_scan), len(settings)))
-        return self.chromatogram_by_window.get((start_scan, end_scan), self.chromatogram)
+        return self.chromatogram_by_window.get(
+            (start_scan, end_scan),
+            self.chromatogram,
+        )
 
     def GetFilterForScanNumber(self, scan_number: int):
         return self.filters[scan_number]

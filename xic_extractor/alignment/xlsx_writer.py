@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -196,7 +197,7 @@ def _write_metadata_sheet(sheet: Any, metadata: dict[str, str]) -> None:
         _append_xlsx_row(sheet, [key, metadata[key]])
 
 
-def _append_xlsx_row(sheet: Any, values: list[object]) -> None:
+def _append_xlsx_row(sheet: Any, values: Sequence[object]) -> None:
     sheet.append([_xlsx_value(value) for value in values])
 
 

@@ -122,7 +122,12 @@ def test_alignment_results_xlsx_audit_explains_duplicate_blank(
     tmp_path: Path,
 ):
     matrix = AlignmentMatrix(
-        clusters=(sample_feature("FAM000001", evidence="owner_complete_link;owner_count=2"),),
+        clusters=(
+            sample_feature(
+                "FAM000001",
+                evidence="owner_complete_link;owner_count=2",
+            ),
+        ),
         sample_order=("s1",),
         cells=(sample_cell("s1", "FAM000001", "duplicate_assigned", 200.0),),
     )

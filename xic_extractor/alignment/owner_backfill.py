@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -13,6 +13,8 @@ from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
+
+_T = TypeVar("_T")
 
 
 class OwnerBackfillSource(Protocol):
@@ -224,9 +226,9 @@ def _extract_many(
 
 
 def _chunked(
-    items: tuple[object, ...],
+    items: tuple[_T, ...],
     chunk_size: int,
-) -> tuple[tuple[object, ...], ...]:
+) -> tuple[tuple[_T, ...], ...]:
     if chunk_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
     return tuple(

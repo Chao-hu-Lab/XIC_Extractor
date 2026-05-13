@@ -8,7 +8,6 @@ from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
 from xic_extractor.alignment.xlsx_writer import write_alignment_results_xlsx
 
-
 FORBIDDEN_PRIMARY_STATUSES = {
     "detected",
     "rescued",

@@ -144,7 +144,10 @@ def run_owner_build_process(
         raise ValueError("raw_xic_batch_size must be >= 1")
     candidates_by_sample: dict[str, list[Any]] = {}
     for candidate in candidates:
-        candidates_by_sample.setdefault(str(candidate.sample_stem), []).append(candidate)
+        candidates_by_sample.setdefault(
+            str(candidate.sample_stem),
+            [],
+        ).append(candidate)
 
     jobs: list[OwnerBuildSampleJob] = []
     parent_results: list[OwnerBuildSampleResult] = []

@@ -138,7 +138,11 @@ def _read_istd_rt_by_label(targeted_workbook: Path) -> dict[str, dict[str, float
 
 
 def _header_indexes(header: tuple[object, ...]) -> dict[str, int]:
-    cols = {str(value).strip(): i for i, value in enumerate(header) if value is not None}
+    cols = {
+        str(value).strip(): i
+        for i, value in enumerate(header)
+        if value is not None
+    }
     required = ("SampleName", "Target", "Role", "RT")
     missing = [name for name in required if name not in cols]
     if missing:

@@ -230,18 +230,20 @@ def run_alignment(
                     raw_xic_batch_size=raw_xic_batch_size,
                 )
                 rescued_cells = process_output.cells
-                for stats in process_output.timing_stats:
+                for backfill_stats in process_output.timing_stats:
                     recorder.record(
                         "alignment.owner_backfill.extract_xic",
-                        elapsed_sec=stats.elapsed_sec,
-                        sample_stem=stats.sample_stem,
+                        elapsed_sec=backfill_stats.elapsed_sec,
+                        sample_stem=backfill_stats.sample_stem,
                         metrics={
-                            "extract_xic_count": stats.extract_xic_count,
-                            "extract_xic_batch_count": stats.extract_xic_batch_count,
-                            "raw_chromatogram_call_count": (
-                                stats.raw_chromatogram_call_count
+                            "extract_xic_count": backfill_stats.extract_xic_count,
+                            "extract_xic_batch_count": (
+                                backfill_stats.extract_xic_batch_count
                             ),
-                            "point_count": stats.point_count,
+                            "raw_chromatogram_call_count": (
+                                backfill_stats.raw_chromatogram_call_count
+                            ),
+                            "point_count": backfill_stats.point_count,
                         },
                     )
             else:

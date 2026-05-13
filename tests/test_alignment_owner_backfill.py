@@ -100,7 +100,13 @@ def test_owner_backfill_uses_batch_source_and_preserves_feature_major_order() ->
                 center = (request.rt_min + request.rt_max) / 2.0
                 traces.append(
                     XICTrace.from_arrays(
-                        [center - 0.10, center - 0.01, center, center + 0.01, center + 0.10],
+                        [
+                            center - 0.10,
+                            center - 0.01,
+                            center,
+                            center + 0.01,
+                            center + 0.10,
+                        ],
                         [0.0, 50.0, 120.0, 50.0, 0.0],
                     )
                 )
@@ -143,14 +149,23 @@ def test_owner_backfill_batches_by_rt_window_without_changing_emit_order() -> No
         def extract_xic_many(self, requests):
             requests = tuple(requests)
             self.batch_centers.append(
-                tuple(round((request.rt_min + request.rt_max) / 2.0, 3) for request in requests)
+                tuple(
+                    round((request.rt_min + request.rt_max) / 2.0, 3)
+                    for request in requests
+                )
             )
             traces = []
             for request in requests:
                 center = (request.rt_min + request.rt_max) / 2.0
                 traces.append(
                     XICTrace.from_arrays(
-                        [center - 0.10, center - 0.01, center, center + 0.01, center + 0.10],
+                        [
+                            center - 0.10,
+                            center - 0.01,
+                            center,
+                            center + 0.01,
+                            center + 0.10,
+                        ],
                         [0.0, 50.0, 120.0, 50.0, 0.0],
                     )
                 )

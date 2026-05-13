@@ -167,7 +167,10 @@ def test_build_sample_local_owners_uses_batch_source_when_available() -> None:
             requests = tuple(requests)
             self.batch_sizes.append(len(requests))
             return tuple(
-                XICTrace.from_arrays([request.rt_min, 8.0, request.rt_max], [0.0, 100.0, 0.0])
+                XICTrace.from_arrays(
+                    [request.rt_min, 8.0, request.rt_max],
+                    [0.0, 100.0, 0.0],
+                )
                 for request in requests
             )
 

@@ -9,23 +9,23 @@ import pytest
 from tests.test_alignment_owner_backfill import _feature
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
-from xic_extractor.alignment.process_backend import (
-    AlignmentProcessExecutionError,
-    OwnerBuildSampleJob,
-    OwnerBuildSampleResult,
-    OwnerBuildTimingStats,
-    OwnerBackfillSampleResult,
-    OwnerBackfillTimingStats,
-    OwnerBackfillWorkerError,
-    OwnerBuildWorkerError,
-    run_owner_build_process,
-    run_owner_build_jobs,
-    run_owner_backfill_process,
-)
 from xic_extractor.alignment.ownership_models import (
     IdentityEvent,
     OwnerAssignment,
     SampleLocalMS1Owner,
+)
+from xic_extractor.alignment.process_backend import (
+    AlignmentProcessExecutionError,
+    OwnerBackfillSampleResult,
+    OwnerBackfillTimingStats,
+    OwnerBackfillWorkerError,
+    OwnerBuildSampleJob,
+    OwnerBuildSampleResult,
+    OwnerBuildTimingStats,
+    OwnerBuildWorkerError,
+    run_owner_backfill_process,
+    run_owner_build_jobs,
+    run_owner_build_process,
 )
 from xic_extractor.config import ExtractionConfig
 
@@ -129,7 +129,12 @@ def test_owner_build_process_builds_pickleable_sample_jobs_and_merges_output(
 ) -> None:
     owner_a = _owner("sample-a")
     owner_b = _owner("sample-b")
-    unresolved_a = OwnerAssignment("sample-a#missing", None, "unresolved", "missing_raw")
+    unresolved_a = OwnerAssignment(
+        "sample-a#missing",
+        None,
+        "unresolved",
+        "missing_raw",
+    )
     primary_a = OwnerAssignment("sample-a#1", owner_a.owner_id, "primary", "primary")
     primary_b = OwnerAssignment("sample-b#1", owner_b.owner_id, "primary", "primary")
     captured_jobs = []

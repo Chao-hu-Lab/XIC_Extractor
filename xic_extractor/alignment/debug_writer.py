@@ -97,7 +97,9 @@ def write_owner_edge_evidence_tsv(
             ),
             "drift_prior_source": edge.drift_prior_source,
             "injection_order_gap": (
-                "" if edge.injection_order_gap is None else str(edge.injection_order_gap)
+                ""
+                if edge.injection_order_gap is None
+                else str(edge.injection_order_gap)
             ),
             "owner_quality": edge.owner_quality,
             "seed_support_level": edge.seed_support_level,

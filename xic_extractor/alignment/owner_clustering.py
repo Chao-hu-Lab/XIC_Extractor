@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.edge_scoring import (
@@ -170,7 +171,7 @@ def _edge_for_pair(
     edge_evidence_sink: list[OwnerEdgeEvidence] | None,
     edge_cache: dict[tuple[str, str], OwnerEdgeEvidence],
 ) -> OwnerEdgeEvidence:
-    key = tuple(sorted((left.owner_id, right.owner_id)))
+    key = cast(tuple[str, str], tuple(sorted((left.owner_id, right.owner_id))))
     edge = edge_cache.get(key)
     if edge is not None:
         return edge

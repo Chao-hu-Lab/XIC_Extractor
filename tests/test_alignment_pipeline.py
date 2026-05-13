@@ -10,13 +10,13 @@ from xic_extractor.alignment import AlignmentConfig
 from xic_extractor.alignment.edge_scoring import OwnerEdgeEvidence
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
+from xic_extractor.alignment.ownership import OwnershipBuildResult
 from xic_extractor.alignment.process_backend import (
-    OwnerBuildProcessOutput,
-    OwnerBuildTimingStats,
     OwnerBackfillProcessOutput,
     OwnerBackfillTimingStats,
+    OwnerBuildProcessOutput,
+    OwnerBuildTimingStats,
 )
-from xic_extractor.alignment.ownership import OwnershipBuildResult
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.discovery.models import DISCOVERY_CANDIDATE_COLUMNS
@@ -199,7 +199,11 @@ def test_pipeline_records_alignment_extract_xic_inner_timing(
         "xic_extractor.alignment.owner_backfill.find_peak_and_area",
         _ok_alignment_peak,
     )
-    monkeypatch.setattr(pipeline_module, "_write_outputs_atomic", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        pipeline_module,
+        "_write_outputs_atomic",
+        lambda *args, **kwargs: None,
+    )
     recorder = TimingRecorder("alignment", run_id="test-inner-timing")
 
     pipeline_module.run_alignment(
@@ -300,10 +304,16 @@ def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
         )
 
     def fake_process_build(candidates, **kwargs):
-        calls["build_candidates"] = tuple(candidate.sample_stem for candidate in candidates)
+        calls["build_candidates"] = tuple(
+            candidate.sample_stem for candidate in candidates
+        )
         calls["build_kwargs"] = kwargs
         return OwnerBuildProcessOutput(
-            ownership=OwnershipBuildResult(owners=(), assignments=(), ambiguous_records=()),
+            ownership=OwnershipBuildResult(
+                owners=(),
+                assignments=(),
+                ambiguous_records=(),
+            ),
             timing_stats=(
                 OwnerBuildTimingStats(
                     sample_stem="Sample_A",
@@ -1474,8 +1484,16 @@ def test_pipeline_passes_alignment_config_to_production_writers(monkeypatch, tmp
         return path
 
     monkeypatch.setattr(alignment_pipeline, "write_alignment_results_xlsx", fake_xlsx)
-    monkeypatch.setattr(alignment_pipeline, "write_alignment_matrix_tsv", fake_matrix_tsv)
-    monkeypatch.setattr(alignment_pipeline, "write_alignment_review_tsv", fake_review_tsv)
+    monkeypatch.setattr(
+        alignment_pipeline,
+        "write_alignment_matrix_tsv",
+        fake_matrix_tsv,
+    )
+    monkeypatch.setattr(
+        alignment_pipeline,
+        "write_alignment_review_tsv",
+        fake_review_tsv,
+    )
 
     alignment_pipeline._write_outputs_atomic(
         outputs,

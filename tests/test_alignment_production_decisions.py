@@ -112,7 +112,10 @@ def test_rescued_with_incomplete_peak_fields_is_review_only():
         sample_order=("s1",),
     )
 
-    decision = build_production_decisions(matrix, AlignmentConfig()).cell("FAM001", "s1")
+    decision = build_production_decisions(
+        matrix,
+        AlignmentConfig(),
+    ).cell("FAM001", "s1")
 
     assert decision.write_matrix_value is False
     assert decision.production_status == "review_rescue"

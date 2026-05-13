@@ -95,7 +95,10 @@ def write_alignment_matrix_tsv(
     )
     rows: list[dict[str, object]] = []
     grouped_cells = cells_by_cluster(matrix)
-    decisions = build_production_decisions(matrix, alignment_config or AlignmentConfig())
+    decisions = build_production_decisions(
+        matrix,
+        alignment_config or AlignmentConfig(),
+    )
     for cluster in matrix.clusters:
         cluster_id = row_id(cluster)
         row_decision = decisions.row(cluster_id)
