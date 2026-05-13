@@ -128,9 +128,10 @@ def compute_guardrails(alignment_dir: Path) -> GuardrailMetrics:
         if "duplicate_claim_pressure" in row_flags:
             duplicate_claim_pressure += 1
 
-        if production_present_count == 0:
+        production_family = _is_production_family(review_row, counts)
+        if not production_family:
             zero_present += 1
-        if production_present_count == 0 and duplicate_assigned_count > 0:
+        if not production_family and duplicate_assigned_count > 0:
             duplicate_only += 1
         if _is_high_backfill_dependency(
             review_row,
@@ -139,7 +140,6 @@ def compute_guardrails(alignment_dir: Path) -> GuardrailMetrics:
             review_has_warning_column,
         ):
             high_backfill += 1
-        production_family = _is_production_family(review_row, counts)
         if production_family and _row_in_mz_window(
             review_row,
             "family_center_mz",

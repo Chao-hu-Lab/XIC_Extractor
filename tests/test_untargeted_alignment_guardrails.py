@@ -227,6 +227,53 @@ def test_negative_checkpoint_uses_new_schema_production_decision_before_raw_stat
     assert metrics.negative_checkpoint_production_families == 0
 
 
+def test_zero_present_and_duplicate_only_use_new_schema_production_decision(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir(parents=True)
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM001",
+                "family_center_mz": 500.0,
+                "family_center_rt": 5.0,
+                "accepted_cell_count": 0,
+                "include_in_primary_matrix": "FALSE",
+            },
+            {
+                "feature_family_id": "FAM002",
+                "family_center_mz": 501.0,
+                "family_center_rt": 5.1,
+                "accepted_cell_count": 0,
+                "include_in_primary_matrix": "FALSE",
+            },
+            {
+                "feature_family_id": "FAM003",
+                "family_center_mz": 502.0,
+                "family_center_rt": 5.2,
+                "accepted_cell_count": 1,
+                "include_in_primary_matrix": "TRUE",
+            },
+        ],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [
+            _cell_row("FAM001", "rescued"),
+            _cell_row("FAM002", "rescued"),
+            _cell_row("FAM002", "duplicate_assigned"),
+            _cell_row("FAM003", "detected"),
+        ],
+    )
+
+    metrics = guardrails.compute_guardrails(alignment_dir)
+
+    assert metrics.zero_present_families == 2
+    assert metrics.duplicate_only_families == 1
+
+
 def test_int_value_treats_non_finite_and_invalid_values_as_zero() -> None:
     assert guardrails._int_value(None) == 0
     assert guardrails._int_value("") == 0
