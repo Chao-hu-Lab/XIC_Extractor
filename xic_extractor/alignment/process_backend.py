@@ -232,6 +232,23 @@ def collect_owner_build_results(
     return OwnerBuildProcessOutput(ownership=ownership, timing_stats=timing_stats)
 
 
+def _owner_build_sample_result(
+    *,
+    sample_index: int,
+    sample_stem: str,
+    ownership: OwnershipBuildResult,
+    timing_stats: tuple[OwnerBuildTimingStats, ...],
+) -> OwnerBuildSampleResult:
+    return OwnerBuildSampleResult(
+        sample_index=sample_index,
+        sample_stem=sample_stem,
+        owners=ownership.owners,
+        assignments=ownership.assignments,
+        ambiguous_records=ownership.ambiguous_records,
+        timing_stats=timing_stats,
+    )
+
+
 def run_owner_build_jobs(
     jobs: Iterable[OwnerBuildSampleJob],
     *,
@@ -244,6 +261,48 @@ def run_owner_build_jobs(
         max_workers=max_workers,
         executor_factory=executor_factory,
     )
+
+
+def extract_owner_build_sample_job(
+    job: OwnerBuildSampleJob,
+) -> OwnerBuildWorkerResult:
+    from xic_extractor.raw_reader import open_raw
+
+    try:
+        with open_raw(job.raw_path, job.dll_dir) as raw:
+            stats = _TimedProcessStats(sample_stem=job.sample_stem)
+            timed_raw = _TimedProcessRawSource(raw, stats=stats)
+            ownership = build_sample_local_owners(
+                job.candidates,
+                raw_sources={job.sample_stem: timed_raw},
+                alignment_config=job.alignment_config,
+                peak_config=job.peak_config,
+                raw_xic_batch_size=job.raw_xic_batch_size,
+            )
+        return _owner_build_sample_result(
+            sample_index=job.sample_index,
+            sample_stem=job.sample_stem,
+            ownership=ownership,
+            timing_stats=(
+                OwnerBuildTimingStats(
+                    sample_stem=job.sample_stem,
+                    elapsed_sec=stats.elapsed_sec,
+                    extract_xic_count=stats.extract_xic_count,
+                    point_count=stats.point_count,
+                    extract_xic_batch_count=stats.extract_xic_batch_count,
+                    raw_chromatogram_call_count=(
+                        stats.raw_chromatogram_call_count
+                    ),
+                ),
+            ),
+        )
+    except Exception as exc:
+        return OwnerBuildWorkerError(
+            sample_index=job.sample_index,
+            sample_stem=job.sample_stem,
+            raw_name=job.raw_path.name,
+            message=f"{type(exc).__name__}: {exc}",
+        )
 
 
 def run_owner_backfill_process(

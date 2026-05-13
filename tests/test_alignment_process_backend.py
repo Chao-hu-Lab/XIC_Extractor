@@ -17,6 +17,7 @@ from xic_extractor.alignment.process_backend import (
     OwnerBackfillWorkerError,
     OwnerBuildWorkerError,
     run_owner_build_process,
+    run_owner_build_jobs,
     run_owner_backfill_process,
 )
 from xic_extractor.alignment.ownership_models import (
@@ -218,6 +219,51 @@ def test_owner_build_process_raises_worker_errors(tmp_path: Path) -> None:
             max_workers=2,
             runner=fake_runner,
         )
+
+
+def test_owner_build_jobs_accepts_empty_job_list() -> None:
+    assert run_owner_build_jobs((), max_workers=2) == []
+
+
+def test_owner_build_process_handles_missing_raw_in_parent_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = _owner("sample-a")
+    assignment = OwnerAssignment("sample-a#1", owner.owner_id, "primary", "primary")
+    calls = {}
+
+    def fake_build_sample_local_owners(candidates, **kwargs):
+        calls["candidates"] = candidates
+        calls.update(kwargs)
+        return SimpleNamespace(
+            owners=(owner,),
+            assignments=(assignment,),
+            ambiguous_records=(),
+        )
+
+    monkeypatch.setattr(
+        "xic_extractor.alignment.process_backend.build_sample_local_owners",
+        fake_build_sample_local_owners,
+    )
+
+    output = run_owner_build_process(
+        (_candidate("sample-a"),),
+        sample_order=("sample-a",),
+        raw_paths={},
+        dll_dir=tmp_path / "dll",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(tmp_path),
+        max_workers=2,
+    )
+
+    assert tuple(candidate.sample_stem for candidate in calls["candidates"]) == (
+        "sample-a",
+    )
+    assert calls["raw_sources"] == {}
+    assert output.ownership.owners == (owner,)
+    assert output.ownership.assignments == (assignment,)
+    assert output.timing_stats == ()
 
 
 def test_timed_process_raw_source_records_batch_calls() -> None:
