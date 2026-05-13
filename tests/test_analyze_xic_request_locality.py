@@ -51,6 +51,86 @@ def test_summarize_locality_reports_original_sorted_and_upper_bound_calls(
     assert summary["unique_scan_window_count"] == 2
 
 
+def test_summarize_locality_reports_request_census_categories(
+    tmp_path: Path,
+) -> None:
+    raw_path = tmp_path / "sample-a.raw"
+    raw_path.write_text("raw", encoding="utf-8")
+    records = (
+        locality.RequestRecord(
+            stage="owner_backfill",
+            sample_stem="sample-a",
+            mz=100.0,
+            rt_min=0.0,
+            rt_max=2.0,
+            ppm_tol=20.0,
+        ),
+        locality.RequestRecord(
+            stage="owner_backfill",
+            sample_stem="sample-a",
+            mz=100.0,
+            rt_min=0.0,
+            rt_max=2.0,
+            ppm_tol=20.0,
+        ),
+        locality.RequestRecord(
+            stage="owner_backfill",
+            sample_stem="sample-a",
+            mz=101.0,
+            rt_min=0.0,
+            rt_max=2.0,
+            ppm_tol=20.0,
+        ),
+        locality.RequestRecord(
+            stage="owner_backfill",
+            sample_stem="sample-a",
+            mz=100.001,
+            rt_min=0.1,
+            rt_max=2.1,
+            ppm_tol=20.0,
+        ),
+        locality.RequestRecord(
+            stage="owner_backfill",
+            sample_stem="sample-a",
+            mz=500.0,
+            rt_min=10.0,
+            rt_max=12.0,
+            ppm_tol=20.0,
+        ),
+    )
+
+    summary = locality.summarize_locality(
+        records,
+        raw_paths={"sample-a": raw_path},
+        dll_dir=tmp_path / "dll",
+        batch_size=64,
+        open_raw_func=fake_open_raw,
+        near_mz_ppm=20.0,
+        near_rt_sec=30.0,
+    )
+
+    assert summary["request_count"] == 5
+    assert summary["unique_exact_request_key_count"] == 4
+    assert summary["exact_duplicate_group_count"] == 1
+    assert summary["exact_duplicate_excess_request_count"] == 1
+    assert summary["same_scan_window_group_count"] == 1
+    assert summary["same_scan_window_request_count"] == 3
+    assert summary["near_redundant_group_count"] == 1
+    assert summary["near_redundant_unique_key_count"] == 2
+    assert summary["samples"]["sample-a"]["top_exact_duplicate_keys"] == [
+        {
+            "count": 2,
+            "key": {
+                "mz": 100.0,
+                "ppm_tol": 20.0,
+                "rt_max": 2.0,
+                "rt_min": 0.0,
+                "sample_stem": "sample-a",
+            },
+        },
+    ]
+
+
 def test_collects_build_owner_and_backfill_requests_from_artifacts(
     tmp_path: Path,
 ) -> None:

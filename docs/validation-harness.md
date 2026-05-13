@@ -155,6 +155,22 @@ values also unchanged. The alignment command wall time reduced from about
 343 seconds to about 44 seconds; `alignment.cluster_owners` reduced from about
 19 seconds to below 1 second through hard-gate group prefiltering.
 
+To separate exact duplicate requests, batchable scan-window reuse, and
+algorithm-level near redundancy, run the request census diagnostic:
+
+```powershell
+uv run python scripts\analyze_xic_request_locality.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --alignment-review output\alignment\timing_phase0_8raw\alignment_review.tsv `
+  --alignment-cells output\alignment\timing_phase0_8raw\alignment_cells.tsv `
+  --raw-xic-batch-size 64 `
+  --near-mz-ppm 20 `
+  --near-rt-sec 30 `
+  --output-json output\diagnostics\timing_phase0_8raw\xic_request_census_batch64.json
+```
+
 ## Full 85-raw Gate
 
 The full run is intentionally opt-in:

@@ -1549,6 +1549,40 @@ optimizing by batch size alone. The remaining meaningful performance paths need
 their own plan because they either change the extraction mechanism or reduce
 the owner-build candidate set.
 
+## 2026-05-14 Request Census Follow-Up
+
+The request census diagnostic confirms that this throughput plan did not remove
+the alignment pipeline's logical repeated work; it only reduced vendor RAW calls
+where scan-window batching was possible.
+
+8-RAW census command:
+
+```powershell
+uv run python scripts\analyze_xic_request_locality.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --alignment-review output\alignment\timing_phase0_8raw\alignment_review.tsv `
+  --alignment-cells output\alignment\timing_phase0_8raw\alignment_cells.tsv `
+  --raw-xic-batch-size 64 `
+  --near-mz-ppm 20 `
+  --near-rt-sec 30 `
+  --output-json output\diagnostics\timing_phase0_8raw\xic_request_census_batch64.json
+```
+
+Stage-level result:
+
+| Stage | Requests | Exact duplicate excess | Same scan-window excess keys | Near-redundant excess keys | Interpretation |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `build_owners` | 3,343 | 0 | 0 | 1,102 | No exact cache or scan-window batching opportunity; remaining redundancy is algorithmic/candidate-level. |
+| `owner_backfill` | 11,703 | 6 | 6,879 | 6,486 | Batching is real and exact-safe here, but logical request count is still high. |
+
+Conclusion: do not continue tuning `raw_xic_batch_size` for `build_owners`.
+The next meaningful performance work should target candidate/family promotion
+or an explicit `alignment algorithm v2`; local MS1 scan-index remains a separate
+non-equivalent prototype until validated under its own scientific acceptance
+criteria.
+
 ## Self-Review
 
 - Spec coverage: this plan covers the next equivalent optimization path after Phase 0 timing, while preserving existing worker and backfill gate behavior.
