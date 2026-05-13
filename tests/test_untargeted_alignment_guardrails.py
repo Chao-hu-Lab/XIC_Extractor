@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 from tools.diagnostics import untargeted_alignment_guardrails as guardrails
@@ -405,6 +406,67 @@ def test_compare_targeted_audit_counts_marks_split_and_miss_regressions(
             "status": "FAIL",
         },
     ]
+
+
+def test_targeted_istd_benchmark_guardrail_rows_mark_failures(
+    tmp_path: Path,
+) -> None:
+    benchmark_json = tmp_path / "targeted_istd_benchmark.json"
+    benchmark_json.write_text(
+        json.dumps(
+            {
+                "overall_status": "FAIL",
+                "summaries": [
+                    {
+                        "target_label": "d3-5-medC",
+                        "active_tag": "TRUE",
+                        "status": "FAIL",
+                        "failure_modes": "MISS",
+                    },
+                    {
+                        "target_label": "[13C,15N2]-8-oxo-Guo",
+                        "active_tag": "FALSE",
+                        "status": "FAIL",
+                        "failure_modes": "FALSE_POSITIVE_TAG",
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    rows = guardrails.targeted_istd_benchmark_guardrail_rows(benchmark_json)
+
+    by_metric = {row["metric"]: row for row in rows}
+    assert by_metric["overall_status"]["status"] == "FAIL"
+    assert by_metric["active_fail_count"]["value"] == "1"
+    assert by_metric["miss_count"]["value"] == "1"
+    assert by_metric["false_positive_tag_count"]["value"] == "1"
+
+
+def test_main_writes_targeted_istd_benchmark_guardrail_csv(
+    tmp_path: Path,
+) -> None:
+    benchmark_json = tmp_path / "targeted_istd_benchmark.json"
+    output_csv = tmp_path / "targeted_istd_guardrails.csv"
+    benchmark_json.write_text(
+        json.dumps({"overall_status": "PASS", "summaries": []}),
+        encoding="utf-8",
+    )
+
+    code = guardrails.main(
+        [
+            "--targeted-istd-benchmark-json",
+            str(benchmark_json),
+            "--targeted-istd-benchmark-csv",
+            str(output_csv),
+        ],
+    )
+
+    assert code == 0
+    rows = _read_csv(output_csv)
+    assert rows[0]["metric"] == "overall_status"
+    assert rows[0]["status"] == "PASS"
 
 
 def test_main_writes_requested_outputs(tmp_path: Path) -> None:
