@@ -14,6 +14,8 @@ from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
+_DEFAULT_DRIFT_LOCAL_WINDOW = 40
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
@@ -73,6 +75,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             read_targeted_istd_drift_evidence(
                 targeted_workbook=targeted_istd_workbook,
                 sample_info=sample_info,
+                local_window=args.drift_local_window,
             )
             if sample_info is not None and targeted_istd_workbook is not None
             else None
@@ -197,6 +200,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--targeted-istd-workbook",
         type=Path,
         help="Targeted ISTD workbook used with --sample-info for drift priors.",
+    )
+    parser.add_argument(
+        "--drift-local-window",
+        type=_positive_int,
+        default=_DEFAULT_DRIFT_LOCAL_WINDOW,
+        help=(
+            "Injection-order half-window used to build targeted ISTD drift "
+            f"priors. Default {_DEFAULT_DRIFT_LOCAL_WINDOW} supports sparse "
+            "validation subsets while preserving sample-local rolling medians."
+        ),
     )
     parser.add_argument(
         "--resolver-mode",

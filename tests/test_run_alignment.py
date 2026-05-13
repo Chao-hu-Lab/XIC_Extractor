@@ -269,10 +269,63 @@ def test_run_alignment_cli_builds_and_passes_drift_lookup(
     assert captured["drift_kwargs"] == {
         "targeted_workbook": targeted_workbook.resolve(),
         "sample_info": sample_info.resolve(),
+        "local_window": 40,
     }
     assert captured["run_kwargs"]["drift_lookup"] is drift_lookup
     assert captured["run_kwargs"]["raw_workers"] == 3
     assert captured["run_kwargs"]["raw_xic_batch_size"] == 16
+
+
+def test_run_alignment_cli_passes_custom_drift_local_window(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    sample_info = tmp_path / "sample_info.csv"
+    sample_info.write_text("sample\nSample_A\n", encoding="utf-8")
+    targeted_workbook = tmp_path / "targeted.xlsx"
+    targeted_workbook.write_text("workbook", encoding="utf-8")
+    captured = {}
+
+    def fake_read_targeted_istd_drift_evidence(**kwargs):
+        captured["drift_kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(
+        run_alignment,
+        "read_targeted_istd_drift_evidence",
+        fake_read_targeted_istd_drift_evidence,
+    )
+    monkeypatch.setattr(
+        run_alignment,
+        "run_alignment",
+        lambda **kwargs: AlignmentRunOutputs(),
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--sample-info",
+            str(sample_info),
+            "--targeted-istd-workbook",
+            str(targeted_workbook),
+            "--drift-local-window",
+            "12",
+        ],
+    )
+
+    assert code == 0
+    assert captured["drift_kwargs"]["local_window"] == 12
 
 
 def test_run_alignment_cli_rejects_missing_sample_info_with_targeted_workbook(

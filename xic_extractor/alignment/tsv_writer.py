@@ -260,7 +260,7 @@ def _warning(
         return "no_anchor"
     if sample_count > 0 and unchecked_count / sample_count > 0.5:
         return "high_unchecked"
-    if rescued_count > detected_count:
+    if rescued_count > detected_count and not _has_detected_owner_evidence(cluster):
         return "high_backfill_dependency"
     return ""
 
@@ -329,3 +329,10 @@ def _family_evidence(row: Any) -> str:
     if hasattr(row, "evidence"):
         return str(row.evidence)
     return str(row.fold_evidence)
+
+
+def _has_detected_owner_evidence(row: Any) -> bool:
+    evidence = _family_evidence(row)
+    return evidence == "single_sample_local_owner" or evidence.startswith(
+        "owner_complete_link;"
+    )
