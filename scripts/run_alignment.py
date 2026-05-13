@@ -15,6 +15,14 @@ from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
 _DEFAULT_DRIFT_LOCAL_WINDOW = 40
+_DEFAULT_RAW_WORKERS = 1
+_DEFAULT_RAW_XIC_BATCH_SIZE = 1
+_PERFORMANCE_PROFILES = {
+    "validation-fast": {
+        "raw_workers": 8,
+        "raw_xic_batch_size": 64,
+    },
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -33,6 +41,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     raw_dir = args.raw_dir.resolve()
     dll_dir = args.dll_dir.resolve()
     output_dir = args.output_dir.resolve()
+    raw_workers, raw_xic_batch_size = _resolve_raw_execution_settings(args)
 
     if not discovery_batch_index.is_file():
         print(
@@ -94,8 +103,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_level=args.output_level,
             emit_alignment_cells=args.emit_alignment_cells,
             emit_alignment_status_matrix=args.emit_alignment_status_matrix,
-            raw_workers=args.raw_workers,
-            raw_xic_batch_size=args.raw_xic_batch_size,
+            raw_workers=raw_workers,
+            raw_xic_batch_size=raw_xic_batch_size,
             drift_lookup=drift_lookup,
             **timing_kwargs,
         )
@@ -170,16 +179,29 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--raw-workers",
         type=_positive_int,
-        default=1,
-        help="Number of RAW worker processes for sample-local alignment backfill.",
+        help=(
+            "Number of RAW worker processes for sample-local alignment backfill. "
+            f"Default {_DEFAULT_RAW_WORKERS}, unless --performance-profile sets "
+            "a profile value."
+        ),
     )
     parser.add_argument(
         "--raw-xic-batch-size",
         type=_positive_int,
-        default=1,
+        default=None,
         help=(
-            "Maximum XIC requests per RAW API batch. Default 1 preserves the "
-            "pre-batch execution shape until real RAW equivalence is accepted."
+            "Maximum XIC requests per RAW API batch. Default "
+            f"{_DEFAULT_RAW_XIC_BATCH_SIZE} preserves the pre-batch execution "
+            "shape unless --performance-profile sets a profile value."
+        ),
+    )
+    parser.add_argument(
+        "--performance-profile",
+        choices=tuple(_PERFORMANCE_PROFILES),
+        help=(
+            "Named alignment execution profile. 'validation-fast' uses the "
+            "8-RAW-equivalent fast path: raw-workers=8 and "
+            "raw-xic-batch-size=64. Explicit raw flags override profile values."
         ),
     )
     parser.add_argument(
@@ -228,6 +250,21 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--emit-alignment-cells", action="store_true")
     parser.add_argument("--emit-alignment-status-matrix", action="store_true")
     return parser.parse_args(argv)
+
+
+def _resolve_raw_execution_settings(args: argparse.Namespace) -> tuple[int, int]:
+    profile = _PERFORMANCE_PROFILES.get(args.performance_profile or "", {})
+    raw_workers = (
+        args.raw_workers
+        if args.raw_workers is not None
+        else profile.get("raw_workers", _DEFAULT_RAW_WORKERS)
+    )
+    raw_xic_batch_size = (
+        args.raw_xic_batch_size
+        if args.raw_xic_batch_size is not None
+        else profile.get("raw_xic_batch_size", _DEFAULT_RAW_XIC_BATCH_SIZE)
+    )
+    return raw_workers, raw_xic_batch_size
 
 
 def _positive_int(value: str) -> int:

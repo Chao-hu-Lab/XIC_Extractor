@@ -1,3 +1,4 @@
+from xic_extractor.alignment import owner_clustering as owner_clustering_module
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.edge_scoring import evaluate_owner_edge
 from xic_extractor.alignment.owner_clustering import (
@@ -165,6 +166,42 @@ def test_owner_clustering_edge_evidence_sink_keeps_unique_sorted_pairs() -> None
     ]
     assert len(sorted_pairs) == len(set(sorted_pairs))
     assert all(left <= right for left, right in sorted_pairs)
+
+
+def test_owner_clustering_skips_impossible_mz_group_without_edge_sink(
+    monkeypatch,
+) -> None:
+    real_evaluate_owner_edge = owner_clustering_module.evaluate_owner_edge
+
+    def guard_far_owner_scoring(left, right, *, config, drift_lookup=None):
+        if any(owner.owner_id.endswith("-far") for owner in (left, right)):
+            raise AssertionError("far owner should be rejected by group prefilter")
+        return real_evaluate_owner_edge(
+            left,
+            right,
+            config=config,
+            drift_lookup=drift_lookup,
+        )
+
+    monkeypatch.setattr(
+        owner_clustering_module,
+        "evaluate_owner_edge",
+        guard_far_owner_scoring,
+    )
+
+    features = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "near-a", precursor_mz=500.0000),
+            _owner("sample-b", "near-b", precursor_mz=500.0050),
+            _owner("sample-c", "far", precursor_mz=700.0000),
+        ),
+        config=AlignmentConfig(max_ppm=20.0),
+    )
+
+    assert [feature.event_cluster_ids for feature in features] == [
+        ("OWN-sample-a-near-a", "OWN-sample-b-near-b"),
+        ("OWN-sample-c-far",),
+    ]
 
 
 def test_owner_clustering_records_blocked_edge_without_merging() -> None:

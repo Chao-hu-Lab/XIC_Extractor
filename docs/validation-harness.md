@@ -127,6 +127,34 @@ Workbook comparison uses `scripts\compare_workbooks.py`, which ignores runtime
 metadata such as timestamps and output paths but compares analytical workbook
 sheets.
 
+## Untargeted Alignment 8-raw Fast Path
+
+For untargeted alignment performance work, keep the raw execution settings
+explicit by using the validation fast profile:
+
+```powershell
+uv run python scripts\run_alignment.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --output-dir output\alignment\timing_phase0_validation_fast_8raw `
+  --output-level machine `
+  --emit-alignment-cells `
+  --performance-profile validation-fast `
+  --timing-output output\diagnostics\timing_phase0_validation_fast_8raw\alignment_timing.json
+```
+
+`validation-fast` expands to `raw-workers=8` and `raw-xic-batch-size=64`.
+Explicit `--raw-workers` or `--raw-xic-batch-size` values override the profile.
+The CLI default remains the conservative `1` / `1` execution shape.
+
+The 8-raw timing run on the tissue validation subset showed byte-identical
+machine TSV outputs (`alignment_review.tsv`, `alignment_matrix.tsv`, and
+`alignment_cells.tsv`) versus the conservative baseline, with workbook sheet
+values also unchanged. The alignment command wall time reduced from about
+343 seconds to about 44 seconds; `alignment.cluster_owners` reduced from about
+19 seconds to below 1 second through hard-gate group prefiltering.
+
 ## Full 85-raw Gate
 
 The full run is intentionally opt-in:
