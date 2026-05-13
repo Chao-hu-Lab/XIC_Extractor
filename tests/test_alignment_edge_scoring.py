@@ -254,3 +254,74 @@ def test_non_detected_owner_precedes_ambiguous_and_identity_conflict() -> None:
 
     assert edge.decision == "blocked_edge"
     assert edge.failure_reason == "non_detected_owner"
+
+
+@pytest.mark.parametrize(
+    (
+        "left",
+        "right",
+        "expected_reason",
+        "call_kwargs",
+    ),
+    [
+        (
+            _owner("s1", identity_conflict=True),
+            _owner("s2"),
+            "ambiguous_owner",
+            {"left_ambiguous_owner": True},
+        ),
+        (
+            _owner("s1", identity_conflict=True),
+            _owner("s1"),
+            "identity_conflict",
+            {},
+        ),
+        (
+            _owner("s1"),
+            _owner("s1", neutral_loss_tag="DNA_base_loss"),
+            "same_sample",
+            {},
+        ),
+        (
+            _owner("s1", neutral_loss_tag="DNA_dR", precursor_mz=250.0000),
+            _owner("s2", neutral_loss_tag="DNA_base_loss", precursor_mz=250.0200),
+            "neutral_loss_tag_mismatch",
+            {},
+        ),
+        (
+            _owner("s1", precursor_mz=250.0000, product_mz=150.0000),
+            _owner("s2", precursor_mz=250.0200, product_mz=150.0100),
+            "precursor_mz_out_of_tolerance",
+            {},
+        ),
+        (
+            _owner(
+                "s1",
+                product_mz=150.0000,
+                observed_neutral_loss_da=100.0000,
+            ),
+            _owner(
+                "s2",
+                product_mz=150.0100,
+                observed_neutral_loss_da=100.0100,
+            ),
+            "product_mz_out_of_tolerance",
+            {},
+        ),
+    ],
+)
+def test_adjacent_hard_gate_precedence_edges(
+    left: SampleLocalMS1Owner,
+    right: SampleLocalMS1Owner,
+    expected_reason: str,
+    call_kwargs: dict[str, bool],
+) -> None:
+    edge = evaluate_owner_edge(
+        left,
+        right,
+        config=AlignmentConfig(),
+        **call_kwargs,
+    )
+
+    assert edge.decision == "blocked_edge"
+    assert edge.failure_reason == expected_reason
