@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from openpyxl import load_workbook
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
@@ -20,12 +21,45 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
     )
 
     workbook = load_workbook(path, data_only=True)
-    assert workbook.sheetnames == ["Matrix", "Review", "Metadata"]
+    assert workbook.sheetnames == ["Matrix", "Review", "Audit", "Metadata"]
     assert workbook["Matrix"]["A1"].value == "feature_family_id"
     assert workbook["Matrix"]["E2"].value == 100.0
     assert workbook["Matrix"]["F2"].value is None
-    assert workbook["Review"]["A1"].value == "feature_family_id"
-    assert workbook["Review"]["H2"].value == 1
+    assert [cell.value for cell in workbook["Review"][1]] == [
+        "feature_family_id",
+        "neutral_loss_tag",
+        "detected_count",
+        "rescued_count",
+        "accepted_cell_count",
+        "accepted_rescue_count",
+        "review_rescue_count",
+        "absent_count",
+        "unchecked_count",
+        "duplicate_assigned_count",
+        "ambiguous_ms1_owner_count",
+        "include_in_primary_matrix",
+        "row_flags",
+    ]
+    assert workbook["Review"]["C2"].value == 1
+    assert workbook["Review"]["K2"].value == 1
+    assert [cell.value for cell in workbook["Audit"][1]] == [
+        "feature_family_id",
+        "sample_stem",
+        "neutral_loss_tag",
+        "family_center_mz",
+        "family_center_rt",
+        "raw_status",
+        "production_status",
+        "rescue_tier",
+        "write_matrix_value",
+        "blank_reason",
+        "area",
+        "apex_rt",
+        "rt_delta_sec",
+        "claim_state",
+        "row_flags",
+        "reason",
+    ]
     assert workbook["Metadata"]["A1"].value == "key"
 
 
@@ -51,22 +85,79 @@ def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
     workbook = load_workbook(path, data_only=True)
     assert workbook["Matrix"]["E2"].value == 100.0
     assert workbook["Matrix"]["F2"].value is None
-    assert workbook["Review"]["G2"].value == 1
+    assert workbook["Review"]["J2"].value == 1
+
+
+def test_alignment_results_xlsx_excludes_review_only_rows_from_matrix(
+    tmp_path: Path,
+):
+    matrix = AlignmentMatrix(
+        clusters=(
+            sample_feature("FAM000001", evidence="owner_complete_link;owner_count=2"),
+            sample_feature("FAM000002", evidence="", has_anchor=False),
+        ),
+        sample_order=("s1",),
+        cells=(
+            sample_cell("s1", "FAM000001", "detected", 100.0),
+            sample_cell("s1", "FAM000002", "rescued", 200.0),
+        ),
+    )
+
+    path = write_alignment_results_xlsx(
+        tmp_path / "alignment_results.xlsx",
+        matrix,
+        metadata={"schema_version": "alignment-results-v1"},
+    )
+
+    workbook = load_workbook(path, data_only=True)
+    assert workbook["Matrix"]["A2"].value == "FAM000001"
+    assert workbook["Matrix"]["A3"].value is None
+    assert workbook["Audit"]["A2"].value == "FAM000001"
+    assert workbook["Audit"]["A3"].value == "FAM000002"
+    assert workbook["Audit"]["H3"].value == "review_rescue"
+    assert workbook["Audit"]["J3"].value == "missing_row_identity_support"
+
+
+def test_alignment_results_xlsx_audit_explains_duplicate_blank(
+    tmp_path: Path,
+):
+    matrix = AlignmentMatrix(
+        clusters=(sample_feature("FAM000001", evidence="owner_complete_link;owner_count=2"),),
+        sample_order=("s1",),
+        cells=(sample_cell("s1", "FAM000001", "duplicate_assigned", 200.0),),
+    )
+
+    path = write_alignment_results_xlsx(
+        tmp_path / "alignment_results.xlsx",
+        matrix,
+        metadata={"schema_version": "alignment-results-v1"},
+    )
+
+    workbook = load_workbook(path, data_only=True)
+    assert workbook["Matrix"]["A2"].value is None
+    assert workbook["Audit"]["A2"].value == "FAM000001"
+    assert workbook["Audit"]["F2"].value == "duplicate_assigned"
+    assert workbook["Audit"]["I2"].value is False
+    assert workbook["Audit"]["J2"].value == "duplicate_loser"
+
+
+def test_alignment_results_xlsx_rejects_orphan_audit_cell(tmp_path: Path):
+    matrix = AlignmentMatrix(
+        clusters=(sample_feature("FAM000001", evidence="owner_identity"),),
+        sample_order=("s1",),
+        cells=(sample_cell("s1", "FAM999999", "detected", 100.0),),
+    )
+
+    with pytest.raises(ValueError, match="unknown cluster: FAM999999"):
+        write_alignment_results_xlsx(
+            tmp_path / "alignment_results.xlsx",
+            matrix,
+            metadata={"schema_version": "alignment-results-v1"},
+        )
 
 
 def sample_alignment_matrix() -> AlignmentMatrix:
-    cluster = SimpleNamespace(
-        feature_family_id="FAM000001",
-        neutral_loss_tag="DNA_dR",
-        family_center_mz=242.114,
-        family_center_rt=12.593,
-        family_product_mz=126.066,
-        family_observed_neutral_loss_da=116.048,
-        has_anchor=True,
-        event_cluster_ids=("OWN-s1-000001",),
-        event_member_count=1,
-        evidence="owner_identity",
-    )
+    cluster = sample_feature("FAM000001", evidence="owner_identity")
     return AlignmentMatrix(
         clusters=(cluster,),
         sample_order=("s1", "s2"),
@@ -74,6 +165,27 @@ def sample_alignment_matrix() -> AlignmentMatrix:
             sample_cell("s1", "FAM000001", "detected", 100.0),
             sample_cell("s2", "FAM000001", "ambiguous_ms1_owner", None),
         ),
+    )
+
+
+def sample_feature(
+    feature_family_id: str,
+    *,
+    evidence: str,
+    has_anchor: bool = True,
+):
+    return SimpleNamespace(
+        feature_family_id=feature_family_id,
+        neutral_loss_tag="DNA_dR",
+        family_center_mz=242.114,
+        family_center_rt=12.593,
+        family_product_mz=126.066,
+        family_observed_neutral_loss_da=116.048,
+        has_anchor=has_anchor,
+        event_cluster_ids=("OWN-s1-000001",),
+        event_member_count=1,
+        evidence=evidence,
+        review_only=False,
     )
 
 
