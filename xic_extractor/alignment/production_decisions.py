@@ -81,7 +81,7 @@ def build_production_decisions(
             for cell in cluster_cells
         )
         row_decisions[cluster_id] = _row_decision(
-            cluster_id,
+            cluster,
             cluster_cells,
             decisions,
             row_anchor_lost=row_anchor_lost,
@@ -162,12 +162,13 @@ def _rescue_decision(
 
 
 def _row_decision(
-    cluster_id: str,
+    cluster: Any,
     cells: tuple[AlignedCell, ...],
     decisions: tuple[ProductionCellDecision, ...],
     *,
     row_anchor_lost: bool,
 ) -> ProductionRowDecision:
+    cluster_id = row_id(cluster)
     detected_count = sum(1 for cell in cells if cell.status == "detected")
     accepted_rescue_count = sum(
         1 for decision in decisions if decision.production_status == "accepted_rescue"
@@ -181,18 +182,32 @@ def _row_decision(
     )
 
     flags: list[str] = []
-    if accepted_rescue_count > detected_count and detected_count > 0:
+    rescue_heavy = accepted_rescue_count > detected_count and detected_count > 0
+    duplicate_pressure = duplicate_count > 0
+    if rescue_heavy:
         flags.append("rescue_heavy")
     if accepted_cell_count == 0 and review_rescue_count > 0:
         flags.append("rescue_only_review")
-    if duplicate_count > 0:
+    if duplicate_pressure:
         flags.append("duplicate_claim_pressure")
     if row_anchor_lost:
         flags.append("identity_anchor_lost")
 
+    weak_backfill_identity = rescue_heavy and detected_count < 2
+    unresolved_duplicate_pressure = (
+        duplicate_pressure
+        and duplicate_count > accepted_cell_count
+        and not _is_consolidated_primary_family(cluster)
+    )
+
     return ProductionRowDecision(
         feature_family_id=cluster_id,
-        include_in_primary_matrix=accepted_cell_count > 0 and not row_anchor_lost,
+        include_in_primary_matrix=(
+            accepted_cell_count > 0
+            and not row_anchor_lost
+            and not weak_backfill_identity
+            and not unresolved_duplicate_pressure
+        ),
         accepted_cell_count=accepted_cell_count,
         detected_count=detected_count,
         accepted_rescue_count=accepted_rescue_count,
@@ -255,15 +270,21 @@ def _has_row_identity_support(cluster: Any) -> bool:
     if bool(getattr(cluster, "review_only", False)):
         return False
     evidence = _family_evidence(cluster)
-    if evidence in {"single_sample_local_owner", "owner_identity"}:
+    if evidence == "owner_identity":
         return True
-    if evidence.startswith("owner_complete_link;"):
+    if evidence == "owner_complete_link" or evidence.startswith(
+        "owner_complete_link;",
+    ):
         return True
     if evidence.startswith("cid_nl_only;"):
         return True
-    if bool(getattr(cluster, "has_anchor", False)):
+    if evidence == "" and bool(getattr(cluster, "has_anchor", False)):
         return True
     return False
+
+
+def _is_consolidated_primary_family(cluster: Any) -> bool:
+    return "primary_family_consolidated" in _family_evidence(cluster).split(";")
 
 
 def _identity_anchor_lost(cells: tuple[AlignedCell, ...]) -> bool:

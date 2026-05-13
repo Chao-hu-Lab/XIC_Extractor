@@ -17,6 +17,7 @@ from openpyxl import load_workbook
 
 ACTIVE_NEUTRAL_LOSS_DA = 116.0474
 ACTIVE_NEUTRAL_LOSS_TOLERANCE_DA = 0.01
+ISOTOPE_SHIFT_DA = 1.003355
 TARGET_MATCH_RT_SEC = 60.0
 MEAN_RT_DELTA_MAX_MIN = 0.15
 SAMPLE_RT_MEDIAN_ABS_DELTA_MAX_MIN = 0.15
@@ -65,6 +66,8 @@ MATCH_COLUMNS = (
     "rt_delta_sec",
     "product_delta_ppm",
     "loss_delta_da",
+    "mass_shift_da",
+    "match_type",
     "distance_score",
 )
 
@@ -155,6 +158,8 @@ class CandidateMatch:
     rt_delta_sec: float
     product_delta_ppm: float
     loss_delta_da: float
+    mass_shift_da: float
+    match_type: str
     distance_score: float
 
 
@@ -527,12 +532,53 @@ def _match_target_to_alignment(
     target_mean_rt = _mean(
         point.rt for point in target_points if point.positive
     )
+    exact_matches = _match_target_to_alignment_with_shift(
+        target,
+        features,
+        target_mean_rt=target_mean_rt,
+        thresholds=thresholds,
+        mass_shift_da=0.0,
+    )
+    if (
+        any(match.include_in_primary_matrix for match in exact_matches)
+        or not _is_active_tag(target, thresholds)
+    ):
+        return tuple(sorted(exact_matches, key=_match_sort_key))
+    isotope_matches = tuple(
+        match
+        for mass_shift_da in (ISOTOPE_SHIFT_DA, -ISOTOPE_SHIFT_DA)
+        for match in _match_target_to_alignment_with_shift(
+            target,
+            features,
+            target_mean_rt=target_mean_rt,
+            thresholds=thresholds,
+            mass_shift_da=mass_shift_da,
+        )
+    )
+    isotope_matches = _best_isotope_shift_matches(isotope_matches)
+    return tuple(sorted((*exact_matches, *isotope_matches), key=_match_sort_key))
+
+
+def _match_target_to_alignment_with_shift(
+    target: TargetDefinition,
+    features: tuple[AlignmentFeature, ...],
+    *,
+    target_mean_rt: float | None,
+    thresholds: BenchmarkThresholds,
+    mass_shift_da: float,
+) -> tuple[CandidateMatch, ...]:
+    shifted_mz = target.mz + mass_shift_da
+    shifted_product_mz = target.product_mz + mass_shift_da
+    match_type = "exact" if mass_shift_da == 0.0 else "isotope_shift"
     matches: list[CandidateMatch] = []
     for feature in features:
-        mz_delta_ppm = _ppm_delta(target.mz, feature.family_center_mz)
+        mz_delta_ppm = _ppm_delta(shifted_mz, feature.family_center_mz)
         if abs(mz_delta_ppm) > target.ppm_tol:
             continue
-        product_delta_ppm = _ppm_delta(target.product_mz, feature.family_product_mz)
+        product_delta_ppm = _ppm_delta(
+            shifted_product_mz,
+            feature.family_product_mz,
+        )
         if abs(product_delta_ppm) > target.ppm_tol:
             continue
         loss_delta_da = (
@@ -562,6 +608,8 @@ def _match_target_to_alignment(
                 rt_delta_sec=rt_delta_sec,
                 product_delta_ppm=product_delta_ppm,
                 loss_delta_da=loss_delta_da,
+                mass_shift_da=mass_shift_da,
+                match_type=match_type,
                 distance_score=max(
                     abs(mz_delta_ppm) / target.ppm_tol,
                     abs(product_delta_ppm) / target.ppm_tol,
@@ -570,6 +618,28 @@ def _match_target_to_alignment(
             )
         )
     return tuple(sorted(matches, key=_match_sort_key))
+
+
+def _best_isotope_shift_matches(
+    matches: tuple[CandidateMatch, ...],
+) -> tuple[CandidateMatch, ...]:
+    primary_matches = tuple(
+        match for match in matches if match.include_in_primary_matrix
+    )
+    if not primary_matches:
+        return matches
+    best_shift = min(
+        {match.mass_shift_da for match in primary_matches},
+        key=lambda shift: (
+            min(
+                match.distance_score
+                for match in primary_matches
+                if match.mass_shift_da == shift
+            ),
+            abs(shift),
+        ),
+    )
+    return tuple(match for match in matches if match.mass_shift_da == best_shift)
 
 
 def _summarize_target(

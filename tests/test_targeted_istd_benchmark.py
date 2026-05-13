@@ -167,6 +167,64 @@ def test_sample_normalization_maps_qc_underscore_names(tmp_path: Path):
     assert summaries[0].paired_area_n == 3
 
 
+def test_active_istd_can_pass_with_primary_isotope_shift_fallback(tmp_path: Path):
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    isotope_shift = benchmark.ISOTOPE_SHIFT_DA
+    _write_targeted_workbook(
+        targeted,
+        targets=[_target("d4_istd", 300.0, 23.0, 24.0, 184.0, 116.0474)],
+        samples=("S1", "S2", "S3", "S4"),
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[
+            _review_row(
+                "FAM_M1",
+                300.0 + isotope_shift,
+                23.5,
+                184.0 + isotope_shift,
+                116.0474,
+                True,
+            ),
+            _review_row(
+                "FAM_MINUS_DECOY",
+                300.0 - isotope_shift + 0.002,
+                23.5,
+                184.0 - isotope_shift + 0.002,
+                116.0474,
+                True,
+            ),
+        ],
+        matrix_rows=[
+            _matrix_row("FAM_M1", (10.0, 100.0, 1000.0, 10000.0)),
+            _matrix_row("FAM_MINUS_DECOY", (1.0, 2.0, 3.0, 4.0)),
+        ],
+        cell_rows=[
+            _cell_row("FAM_M1", "S1", 23.51, 10.0),
+            _cell_row("FAM_M1", "S2", 23.52, 100.0),
+            _cell_row("FAM_M1", "S3", 23.53, 1000.0),
+            _cell_row("FAM_M1", "S4", 23.54, 10000.0),
+            _cell_row("FAM_MINUS_DECOY", "S1", 23.51, 1.0),
+            _cell_row("FAM_MINUS_DECOY", "S2", 23.52, 2.0),
+            _cell_row("FAM_MINUS_DECOY", "S3", 23.53, 3.0),
+            _cell_row("FAM_MINUS_DECOY", "S4", 23.54, 4.0),
+        ],
+    )
+
+    outputs, summaries = benchmark.run_targeted_istd_benchmark(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=tmp_path / "benchmark",
+    )
+
+    assert summaries[0].status == "PASS"
+    assert summaries[0].selected_feature_id == "FAM_M1"
+    matches = _read_tsv(outputs.matches_tsv)
+    assert matches[0]["match_type"] == "isotope_shift"
+    assert abs(float(matches[0]["mass_shift_da"]) - isotope_shift) < 1e-4
+
+
 def _target(
     label: str,
     mz: float,

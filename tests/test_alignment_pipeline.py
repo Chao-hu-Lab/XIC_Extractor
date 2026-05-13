@@ -164,6 +164,7 @@ def test_pipeline_records_alignment_timing_stages(
         "alignment.owner_backfill",
         "alignment.build_matrix",
         "alignment.claim_registry",
+        "alignment.primary_consolidation",
         "alignment.write_outputs",
     ]
     records_by_stage = {record.stage: record for record in recorder.records}

@@ -44,6 +44,9 @@ from xic_extractor.alignment.ownership import (
     OwnershipBuildResult,
     build_sample_local_owners,
 )
+from xic_extractor.alignment.primary_consolidation import (
+    consolidate_primary_family_rows,
+)
 from xic_extractor.alignment.process_backend import (
     run_owner_backfill_process,
     run_owner_build_process,
@@ -270,6 +273,8 @@ def run_alignment(
             )
         with recorder.stage("alignment.claim_registry"):
             matrix = apply_ms1_peak_claim_registry(matrix, alignment_config)
+        with recorder.stage("alignment.primary_consolidation"):
+            matrix = consolidate_primary_family_rows(matrix, alignment_config)
         with recorder.stage("alignment.write_outputs"):
             _write_outputs_atomic(
                 outputs,
