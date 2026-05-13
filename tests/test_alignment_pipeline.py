@@ -7,6 +7,7 @@ import pytest
 
 import xic_extractor.alignment.pipeline as pipeline_module
 from xic_extractor.alignment import AlignmentConfig
+from xic_extractor.alignment.edge_scoring import OwnerEdgeEvidence
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
 from xic_extractor.alignment.process_backend import (
@@ -47,9 +48,17 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
         calls["owner_raw_xic_batch_size"] = raw_xic_batch_size
         return SimpleNamespace(owners=("owner",), ambiguous_records=())
 
-    def fake_cluster_owners(owners, *, config):
+    def fake_cluster_owners(
+        owners,
+        *,
+        config,
+        drift_lookup=None,
+        edge_evidence_sink=None,
+    ):
         calls["owners"] = owners
         calls["cluster_config"] = config
+        calls["drift_lookup"] = drift_lookup
+        calls["edge_evidence_sink"] = edge_evidence_sink
         return ("feature",)
 
     def fake_owner_backfill(
@@ -108,6 +117,8 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
 
     assert calls["candidates"] == ("Sample_A", "Sample_B")
     assert calls["owners"] == ("owner",)
+    assert calls["drift_lookup"] is None
+    assert calls["edge_evidence_sink"] == []
     assert calls["features"] == ("feature",)
     assert calls["sample_order"] == ("Sample_A", "Sample_B")
     assert set(calls["raw_sources"]) == {"Sample_A", "Sample_B"}
@@ -154,6 +165,7 @@ def test_pipeline_records_alignment_timing_stages(
 
     stages = [record.stage for record in recorder.records]
     assert stages == [
+        "alignment.run_config",
         "alignment.read_batch_index",
         "alignment.read_candidates",
         "alignment.open_raw_sources",
@@ -165,6 +177,13 @@ def test_pipeline_records_alignment_timing_stages(
         "alignment.write_outputs",
     ]
     records_by_stage = {record.stage: record for record in recorder.records}
+    assert records_by_stage["alignment.run_config"].elapsed_sec == 0.0
+    assert records_by_stage["alignment.run_config"].metrics == {
+        "raw_workers": 1,
+        "raw_xic_batch_size": 1,
+        "output_level": "machine",
+        "drift_prior_source": "none",
+    }
     assert records_by_stage["alignment.read_candidates"].metrics["candidate_count"] == 1
     assert records_by_stage["alignment.open_raw_sources"].metrics["raw_count"] == 1
 
@@ -313,7 +332,7 @@ def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
     monkeypatch.setattr(
         pipeline_module,
         "cluster_sample_local_owners",
-        lambda owners, *, config: (),
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (),
     )
     monkeypatch.setattr(
         pipeline_module,
@@ -402,7 +421,7 @@ def test_pipeline_uses_raw_dir_as_authority_and_fallbacks_to_sample_stem(
     monkeypatch.setattr(
         pipeline_module,
         "cluster_sample_local_owners",
-        lambda owners, *, config: (),
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (),
     )
     monkeypatch.setattr(
         pipeline_module,
@@ -542,7 +561,13 @@ def test_pipeline_builds_owner_features_before_owner_matrix(
         calls["candidates"] = tuple(candidate.candidate_id for candidate in candidates)
         return SimpleNamespace(owners=(owner,), ambiguous_records=("ambiguous",))
 
-    def fake_cluster_owners(owners, *, config):
+    def fake_cluster_owners(
+        owners,
+        *,
+        config,
+        drift_lookup=None,
+        edge_evidence_sink=None,
+    ):
         calls["owners"] = owners
         return (feature,)
 
@@ -775,10 +800,99 @@ def test_run_alignment_debug_level_writes_machine_and_debug_artifacts(
         "alignment_review.tsv",
         "ambiguous_ms1_owners.tsv",
         "event_to_ms1_owner.tsv",
+        "owner_edge_evidence.tsv",
         "review_report.html",
     ]
     assert outputs.event_to_owner_tsv is not None
     assert outputs.ambiguous_owners_tsv is not None
+    assert outputs.edge_evidence_tsv is not None
+
+
+def test_run_alignment_passes_drift_lookup_to_owner_clustering(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    drift_lookup = _DriftLookup()
+    calls = {}
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    def fake_cluster_owners(
+        owners,
+        *,
+        config,
+        drift_lookup=None,
+        edge_evidence_sink=None,
+    ):
+        calls["drift_lookup"] = drift_lookup
+        calls["edge_evidence_sink"] = edge_evidence_sink
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        fake_cluster_owners,
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+        drift_lookup=drift_lookup,
+    )
+
+    assert calls["drift_lookup"] is drift_lookup
+    assert calls["edge_evidence_sink"] == []
+
+
+def test_run_alignment_validation_level_writes_owner_edge_evidence_tsv(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    def fake_cluster_owners(
+        owners,
+        *,
+        config,
+        drift_lookup=None,
+        edge_evidence_sink=None,
+    ):
+        edge_evidence_sink.append(_edge_evidence())
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        fake_cluster_owners,
+    )
+
+    outputs = pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        output_level="validation",
+        raw_opener=FakeRawOpener(),
+    )
+
+    assert outputs.edge_evidence_tsv == tmp_path / "out" / "owner_edge_evidence.tsv"
+    lines = outputs.edge_evidence_tsv.read_text(encoding="utf-8").splitlines()
+    assert lines[0].startswith("left_owner_id\tright_owner_id\t")
+    assert lines[1].startswith("OWN-Sample_A-000001\tOWN-Sample_B-000001\t")
 
 
 def test_run_alignment_default_stays_machine_until_owner_validation_acceptance(
@@ -849,7 +963,7 @@ def _patch_owner_pipeline_to_matrix(monkeypatch) -> None:
     monkeypatch.setattr(
         pipeline_module,
         "cluster_sample_local_owners",
-        lambda owners, *, config: (),
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (),
     )
     monkeypatch.setattr(
         pipeline_module,
@@ -941,6 +1055,16 @@ class TraceRawContext:
 
     def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
         return np.asarray([7.9, 8.0, 8.1]), np.asarray([10.0, 100.0, 10.0])
+
+
+class _DriftLookup:
+    source = "targeted_istd_trend"
+
+    def sample_delta_min(self, sample_stem: str) -> float | None:
+        return {"Sample_A": 0.1}.get(sample_stem)
+
+    def injection_order(self, sample_stem: str) -> int | None:
+        return {"Sample_A": 1}.get(sample_stem)
 
 
 def _ok_alignment_peak(*args, **kwargs):
@@ -1154,6 +1278,31 @@ def _candidate_row(sample_stem: str) -> dict[str, str]:
         "ms1_trace_quality": "clean",
         "ms1_scan_support_score": "0.8",
     }
+
+
+def _edge_evidence() -> OwnerEdgeEvidence:
+    return OwnerEdgeEvidence(
+        left_owner_id="OWN-Sample_A-000001",
+        right_owner_id="OWN-Sample_B-000001",
+        left_sample_stem="Sample_A",
+        right_sample_stem="Sample_B",
+        neutral_loss_tag="DNA_dR",
+        left_precursor_mz=500.0,
+        right_precursor_mz=500.1,
+        left_rt_min=8.5,
+        right_rt_min=8.6,
+        decision="strong_edge",
+        failure_reason="",
+        rt_raw_delta_sec=6.0,
+        rt_drift_corrected_delta_sec=1.0,
+        drift_prior_source="targeted_istd_trend",
+        injection_order_gap=1,
+        owner_quality="clean",
+        seed_support_level="strong",
+        duplicate_context="none",
+        score=100,
+        reason="strong_edge: score=100",
+    )
 
 
 def _ok_alignment_peak(*args, **kwargs):

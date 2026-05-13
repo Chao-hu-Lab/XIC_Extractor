@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.drift_evidence import read_targeted_istd_drift_evidence
 from xic_extractor.alignment.pipeline import run_alignment
 from xic_extractor.alignment.process_backend import AlignmentProcessExecutionError
 from xic_extractor.config import ExtractionConfig
@@ -16,6 +17,16 @@ from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
+    if (args.sample_info is None) != (args.targeted_istd_workbook is None):
+        print(
+            (
+                "--sample-info is required with --targeted-istd-workbook, "
+                "and both must be provided together"
+            ),
+            file=sys.stderr,
+        )
+        return 2
+
     discovery_batch_index = args.discovery_batch_index.resolve()
     raw_dir = args.raw_dir.resolve()
     dll_dir = args.dll_dir.resolve()
@@ -43,6 +54,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         else {}
     )
     try:
+        drift_lookup = (
+            read_targeted_istd_drift_evidence(
+                targeted_workbook=args.targeted_istd_workbook.resolve(),
+                sample_info=args.sample_info.resolve(),
+            )
+            if args.sample_info is not None
+            and args.targeted_istd_workbook is not None
+            else None
+        )
         outputs = run_alignment(
             discovery_batch_index=discovery_batch_index,
             raw_dir=raw_dir,
@@ -59,6 +79,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             emit_alignment_status_matrix=args.emit_alignment_status_matrix,
             raw_workers=args.raw_workers,
             raw_xic_batch_size=args.raw_xic_batch_size,
+            drift_lookup=drift_lookup,
             **timing_kwargs,
         )
     except (AlignmentProcessExecutionError, RawReaderError, ValueError) as exc:
@@ -81,6 +102,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Event to MS1 owner TSV: {outputs.event_to_owner_tsv}")
     if outputs.ambiguous_owners_tsv is not None:
         print(f"Ambiguous MS1 owners TSV: {outputs.ambiguous_owners_tsv}")
+    if outputs.edge_evidence_tsv is not None:
+        print(f"Owner edge evidence TSV: {outputs.edge_evidence_tsv}")
     if timing_recorder is not None:
         timing_path = args.timing_output.resolve()
         timing_recorder.write_json(timing_path)
@@ -144,6 +167,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "Only run owner-centered MS1 backfill for features detected in at "
             "least this many samples. Default 1 preserves full backfill."
         ),
+    )
+    parser.add_argument(
+        "--sample-info",
+        type=Path,
+        help="Sample metadata CSV used with --targeted-istd-workbook for drift priors.",
+    )
+    parser.add_argument(
+        "--targeted-istd-workbook",
+        type=Path,
+        help="Targeted ISTD workbook used with --sample-info for drift priors.",
     )
     parser.add_argument(
         "--resolver-mode",

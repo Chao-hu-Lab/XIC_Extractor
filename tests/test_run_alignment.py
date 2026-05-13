@@ -39,6 +39,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
             matrix_tsv=matrix,
             cells_tsv=cells,
             status_matrix_tsv=status,
+            edge_evidence_tsv=output_dir / "owner_edge_evidence.tsv",
         )
 
     monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
@@ -76,10 +77,12 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert captured["emit_alignment_cells"] is True
     assert captured["emit_alignment_status_matrix"] is True
     assert captured["raw_workers"] == 1
+    assert captured["drift_lookup"] is None
     stdout = capsys.readouterr().out
     assert "Alignment review TSV:" in stdout
     assert "alignment_review.tsv" in stdout
     assert "alignment_matrix_status.tsv" in stdout
+    assert "Owner edge evidence TSV:" in stdout
 
 
 def test_run_alignment_cli_accepts_output_level_debug(
@@ -185,6 +188,89 @@ def test_run_alignment_cli_passes_raw_xic_batch_size(
 
     assert code == 0
     assert captured["raw_xic_batch_size"] == 64
+
+
+def test_run_alignment_cli_requires_sample_info_and_targeted_istd_together(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(tmp_path / "missing.csv"),
+            "--raw-dir",
+            str(tmp_path / "missing-raws"),
+            "--dll-dir",
+            str(tmp_path / "missing-dll"),
+            "--sample-info",
+            str(tmp_path / "sample_info.csv"),
+        ],
+    )
+
+    assert code == 2
+    assert (
+        "--sample-info is required with --targeted-istd-workbook, "
+        "and both must be provided together"
+    ) in capsys.readouterr().err
+
+
+def test_run_alignment_cli_builds_and_passes_drift_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    sample_info = tmp_path / "sample_info.csv"
+    targeted_workbook = tmp_path / "targeted.xlsx"
+    drift_lookup = object()
+    captured = {}
+
+    def fake_read_targeted_istd_drift_evidence(**kwargs):
+        captured["drift_kwargs"] = kwargs
+        return drift_lookup
+
+    def fake_run_alignment(**kwargs):
+        captured["run_kwargs"] = kwargs
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(
+        run_alignment,
+        "read_targeted_istd_drift_evidence",
+        fake_read_targeted_istd_drift_evidence,
+    )
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--sample-info",
+            str(sample_info),
+            "--targeted-istd-workbook",
+            str(targeted_workbook),
+            "--raw-workers",
+            "3",
+            "--raw-xic-batch-size",
+            "16",
+        ],
+    )
+
+    assert code == 0
+    assert captured["drift_kwargs"] == {
+        "targeted_workbook": targeted_workbook.resolve(),
+        "sample_info": sample_info.resolve(),
+    }
+    assert captured["run_kwargs"]["drift_lookup"] is drift_lookup
+    assert captured["run_kwargs"]["raw_workers"] == 3
+    assert captured["run_kwargs"]["raw_xic_batch_size"] == 16
 
 
 def test_run_alignment_cli_passes_owner_backfill_min_detected_samples(

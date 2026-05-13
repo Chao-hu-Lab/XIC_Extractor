@@ -24,6 +24,7 @@ _ARTIFACTS: dict[AlignmentOutputLevel, tuple[str, ...]] = {
         "alignment_matrix_status.tsv",
         "event_to_ms1_owner.tsv",
         "ambiguous_ms1_owners.tsv",
+        "owner_edge_evidence.tsv",
     ),
     "validation": (
         "alignment_results.xlsx",
@@ -34,6 +35,7 @@ _ARTIFACTS: dict[AlignmentOutputLevel, tuple[str, ...]] = {
         "alignment_matrix_status.tsv",
         "event_to_ms1_owner.tsv",
         "ambiguous_ms1_owners.tsv",
+        "owner_edge_evidence.tsv",
     ),
 }
 

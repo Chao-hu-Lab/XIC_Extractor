@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, ExitStack, suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +20,11 @@ from xic_extractor.alignment.csv_io import (
 from xic_extractor.alignment.debug_writer import (
     write_ambiguous_ms1_owners_tsv,
     write_event_to_ms1_owner_tsv,
+    write_owner_edge_evidence_tsv,
+)
+from xic_extractor.alignment.edge_scoring import (
+    DriftLookupProtocol,
+    OwnerEdgeEvidence,
 )
 from xic_extractor.alignment.family_integration import integrate_feature_family_matrix
 from xic_extractor.alignment.feature_family import build_ms1_feature_families
@@ -73,6 +78,7 @@ class AlignmentRunOutputs:
     status_matrix_tsv: Path | None = None
     event_to_owner_tsv: Path | None = None
     ambiguous_owners_tsv: Path | None = None
+    edge_evidence_tsv: Path | None = None
 
 
 def run_alignment(
@@ -89,6 +95,7 @@ def run_alignment(
     raw_opener: RawOpener | None = None,
     raw_workers: int = 1,
     raw_xic_batch_size: int = 1,
+    drift_lookup: DriftLookupProtocol | None = None,
     timing_recorder: TimingRecorder | None = None,
 ) -> AlignmentRunOutputs:
     if raw_workers < 1:
@@ -96,6 +103,18 @@ def run_alignment(
     if raw_xic_batch_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
     recorder = timing_recorder or TimingRecorder.disabled("alignment")
+    recorder.record(
+        "alignment.run_config",
+        elapsed_sec=0.0,
+        metrics={
+            "raw_workers": raw_workers,
+            "raw_xic_batch_size": raw_xic_batch_size,
+            "output_level": output_level,
+            "drift_prior_source": (
+                drift_lookup.source if drift_lookup is not None else "none"
+            ),
+        },
+    )
     with recorder.stage("alignment.read_batch_index"):
         batch = read_discovery_batch_index(discovery_batch_index)
     with recorder.stage("alignment.read_candidates") as stage:
@@ -167,10 +186,13 @@ def run_alignment(
                     raw_xic_batch_size=raw_xic_batch_size,
                 )
                 _record_timed_raw_sources(timed_raw_sources, recorder=recorder)
+        edge_evidence: list[OwnerEdgeEvidence] = []
         with recorder.stage("alignment.cluster_owners"):
             owner_features = cluster_sample_local_owners(
                 ownership.owners,
                 config=alignment_config,
+                drift_lookup=drift_lookup,
+                edge_evidence_sink=edge_evidence,
             )
             owner_features = (
                 *owner_features,
@@ -248,6 +270,7 @@ def run_alignment(
                     peak_config=peak_config,
                 ),
                 ownership=ownership,
+                edge_evidence=edge_evidence,
             )
         return outputs
 
@@ -480,6 +503,11 @@ def _output_paths(
             if "ambiguous_ms1_owners.tsv" in artifacts
             else None
         ),
+        edge_evidence_tsv=(
+            output_dir / "owner_edge_evidence.tsv"
+            if "owner_edge_evidence.tsv" in artifacts
+            else None
+        ),
     )
 
 
@@ -489,6 +517,7 @@ def _write_outputs_atomic(
     *,
     metadata: dict[str, str],
     ownership: OwnershipBuildResult,
+    edge_evidence: Sequence[OwnerEdgeEvidence] = (),
 ) -> None:
     output_paths_and_writers: list[tuple[Path, Callable[[Path], Path]]] = []
     if outputs.workbook is not None:
@@ -543,6 +572,13 @@ def _write_outputs_atomic(
                     path,
                     ownership.ambiguous_records,
                 ),
+            ),
+        )
+    if outputs.edge_evidence_tsv is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.edge_evidence_tsv,
+                lambda path: write_owner_edge_evidence_tsv(path, edge_evidence),
             ),
         )
 
