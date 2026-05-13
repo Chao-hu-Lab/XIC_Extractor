@@ -465,7 +465,7 @@ def test_pipeline_enters_and_closes_raw_handles_on_success_and_write_failure(
     assert opener.handles[0].entered is True
     assert opener.handles[0].closed is True
 
-    def fail_matrix_writer(path, matrix):
+    def fail_matrix_writer(path, matrix, *, alignment_config=None):
         raise RuntimeError("writer failed")
 
     monkeypatch.setattr(
@@ -690,7 +690,7 @@ def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
 
     _patch_owner_pipeline_to_matrix(monkeypatch)
 
-    def fail_matrix_writer(path, matrix):
+    def fail_matrix_writer(path, matrix, *, alignment_config=None):
         Path(path).write_text("partial matrix", encoding="utf-8")
         raise RuntimeError("matrix failed")
 
@@ -1436,3 +1436,53 @@ def _peak_config() -> ExtractionConfig:
         ms2_precursor_tol_da=1.6,
         nl_min_intensity_ratio=0.01,
     )
+
+
+def _empty_ownership():
+    from xic_extractor.alignment.ownership import OwnershipBuildResult
+
+    return OwnershipBuildResult(assignments=(), ambiguous_records=(), owners=())
+
+
+def test_pipeline_passes_alignment_config_to_production_writers(monkeypatch, tmp_path):
+    from xic_extractor.alignment import pipeline as alignment_pipeline
+    from xic_extractor.alignment.config import AlignmentConfig
+    from xic_extractor.alignment.matrix import AlignmentMatrix
+
+    seen = {"xlsx": None, "matrix_tsv": None, "review_tsv": None}
+    matrix = AlignmentMatrix(clusters=(), cells=(), sample_order=())
+    config = AlignmentConfig(max_rt_sec=77.0)
+    outputs = alignment_pipeline.AlignmentRunOutputs(
+        workbook=tmp_path / "alignment_results.xlsx",
+        matrix_tsv=tmp_path / "alignment_matrix.tsv",
+        review_tsv=tmp_path / "alignment_review.tsv",
+    )
+
+    def fake_xlsx(path, matrix_arg, *, metadata, alignment_config=None):
+        seen["xlsx"] = alignment_config
+        path.write_text("xlsx", encoding="utf-8")
+        return path
+
+    def fake_matrix_tsv(path, matrix_arg, *, alignment_config=None):
+        seen["matrix_tsv"] = alignment_config
+        path.write_text("matrix", encoding="utf-8")
+        return path
+
+    def fake_review_tsv(path, matrix_arg, *, alignment_config=None):
+        seen["review_tsv"] = alignment_config
+        path.write_text("review", encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(alignment_pipeline, "write_alignment_results_xlsx", fake_xlsx)
+    monkeypatch.setattr(alignment_pipeline, "write_alignment_matrix_tsv", fake_matrix_tsv)
+    monkeypatch.setattr(alignment_pipeline, "write_alignment_review_tsv", fake_review_tsv)
+
+    alignment_pipeline._write_outputs_atomic(
+        outputs,
+        matrix,
+        metadata={"schema_version": "alignment-results-v1"},
+        ownership=_empty_ownership(),
+        alignment_config=config,
+    )
+
+    assert seen == {"xlsx": config, "matrix_tsv": config, "review_tsv": config}

@@ -280,6 +280,7 @@ def run_alignment(
                     peak_config=peak_config,
                 ),
                 ownership=ownership,
+                alignment_config=alignment_config,
                 edge_evidence=edge_evidence or (),
             )
         return outputs
@@ -527,6 +528,7 @@ def _write_outputs_atomic(
     *,
     metadata: dict[str, str],
     ownership: OwnershipBuildResult,
+    alignment_config: AlignmentConfig,
     edge_evidence: Sequence[OwnerEdgeEvidence] = (),
 ) -> None:
     output_paths_and_writers: list[tuple[Path, Callable[[Path], Path]]] = []
@@ -538,6 +540,7 @@ def _write_outputs_atomic(
                     path,
                     matrix,
                     metadata=metadata,
+                    alignment_config=alignment_config,
                 ),
             ),
         )
@@ -550,11 +553,25 @@ def _write_outputs_atomic(
         )
     if outputs.matrix_tsv is not None:
         output_paths_and_writers.append(
-            (outputs.matrix_tsv, lambda path: write_alignment_matrix_tsv(path, matrix)),
+            (
+                outputs.matrix_tsv,
+                lambda path: write_alignment_matrix_tsv(
+                    path,
+                    matrix,
+                    alignment_config=alignment_config,
+                ),
+            ),
         )
     if outputs.review_tsv is not None:
         output_paths_and_writers.append(
-            (outputs.review_tsv, lambda path: write_alignment_review_tsv(path, matrix)),
+            (
+                outputs.review_tsv,
+                lambda path: write_alignment_review_tsv(
+                    path,
+                    matrix,
+                    alignment_config=alignment_config,
+                ),
+            ),
         )
     if outputs.cells_tsv is not None:
         output_paths_and_writers.append(
