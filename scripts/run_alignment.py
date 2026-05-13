@@ -44,6 +44,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not dll_dir.is_dir():
         print(f"{dll_dir}: dll directory does not exist", file=sys.stderr)
         return 2
+    if args.sample_info is not None and args.targeted_istd_workbook is not None:
+        sample_info = args.sample_info.resolve()
+        targeted_istd_workbook = args.targeted_istd_workbook.resolve()
+        if not sample_info.is_file():
+            print(f"{sample_info}: sample info does not exist", file=sys.stderr)
+            return 2
+        if not targeted_istd_workbook.is_file():
+            print(
+                f"{targeted_istd_workbook}: targeted ISTD workbook does not exist",
+                file=sys.stderr,
+            )
+            return 2
+    else:
+        sample_info = None
+        targeted_istd_workbook = None
 
     timing_recorder = (
         TimingRecorder("alignment") if args.timing_output is not None else None
@@ -56,11 +71,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         drift_lookup = (
             read_targeted_istd_drift_evidence(
-                targeted_workbook=args.targeted_istd_workbook.resolve(),
-                sample_info=args.sample_info.resolve(),
+                targeted_workbook=targeted_istd_workbook,
+                sample_info=sample_info,
             )
-            if args.sample_info is not None
-            and args.targeted_istd_workbook is not None
+            if sample_info is not None and targeted_istd_workbook is not None
             else None
         )
         outputs = run_alignment(
@@ -82,7 +96,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             drift_lookup=drift_lookup,
             **timing_kwargs,
         )
-    except (AlignmentProcessExecutionError, RawReaderError, ValueError) as exc:
+    except (
+        AlignmentProcessExecutionError,
+        RawReaderError,
+        ValueError,
+        OSError,
+        KeyError,
+    ) as exc:
         print(str(exc), file=sys.stderr)
         return 2
 

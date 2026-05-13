@@ -127,6 +127,12 @@ def run_alignment(
         )
         stage.metrics["candidate_count"] = len(candidates)
     opener = raw_opener or _default_raw_opener
+    outputs = _output_paths(
+        output_dir,
+        output_level=output_level,
+        emit_alignment_cells=emit_alignment_cells,
+        emit_alignment_status_matrix=emit_alignment_status_matrix,
+    )
 
     with ExitStack() as stack:
         raw_paths = _existing_raw_paths(
@@ -186,14 +192,24 @@ def run_alignment(
                     raw_xic_batch_size=raw_xic_batch_size,
                 )
                 _record_timed_raw_sources(timed_raw_sources, recorder=recorder)
-        edge_evidence: list[OwnerEdgeEvidence] = []
+        edge_evidence: list[OwnerEdgeEvidence] | None = (
+            []
+            if outputs.edge_evidence_tsv is not None or drift_lookup is not None
+            else None
+        )
         with recorder.stage("alignment.cluster_owners"):
-            owner_features = cluster_sample_local_owners(
-                ownership.owners,
-                config=alignment_config,
-                drift_lookup=drift_lookup,
-                edge_evidence_sink=edge_evidence,
-            )
+            if edge_evidence is None:
+                owner_features = cluster_sample_local_owners(
+                    ownership.owners,
+                    config=alignment_config,
+                )
+            else:
+                owner_features = cluster_sample_local_owners(
+                    ownership.owners,
+                    config=alignment_config,
+                    drift_lookup=drift_lookup,
+                    edge_evidence_sink=edge_evidence,
+                )
             owner_features = (
                 *owner_features,
                 *review_only_features_from_ambiguous_records(
@@ -252,12 +268,6 @@ def run_alignment(
             )
         with recorder.stage("alignment.claim_registry"):
             matrix = apply_ms1_peak_claim_registry(matrix, alignment_config)
-        outputs = _output_paths(
-            output_dir,
-            output_level=output_level,
-            emit_alignment_cells=emit_alignment_cells,
-            emit_alignment_status_matrix=emit_alignment_status_matrix,
-        )
         with recorder.stage("alignment.write_outputs"):
             _write_outputs_atomic(
                 outputs,
@@ -270,7 +280,7 @@ def run_alignment(
                     peak_config=peak_config,
                 ),
                 ownership=ownership,
-                edge_evidence=edge_evidence,
+                edge_evidence=edge_evidence or (),
             )
         return outputs
 

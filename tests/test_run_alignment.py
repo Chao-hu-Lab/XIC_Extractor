@@ -225,7 +225,9 @@ def test_run_alignment_cli_builds_and_passes_drift_lookup(
     dll_dir = tmp_path / "dll"
     dll_dir.mkdir()
     sample_info = tmp_path / "sample_info.csv"
+    sample_info.write_text("sample\nSample_A\n", encoding="utf-8")
     targeted_workbook = tmp_path / "targeted.xlsx"
+    targeted_workbook.write_text("workbook", encoding="utf-8")
     drift_lookup = object()
     captured = {}
 
@@ -271,6 +273,116 @@ def test_run_alignment_cli_builds_and_passes_drift_lookup(
     assert captured["run_kwargs"]["drift_lookup"] is drift_lookup
     assert captured["run_kwargs"]["raw_workers"] == 3
     assert captured["run_kwargs"]["raw_xic_batch_size"] == 16
+
+
+def test_run_alignment_cli_rejects_missing_sample_info_with_targeted_workbook(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    targeted_workbook = tmp_path / "targeted.xlsx"
+    targeted_workbook.write_text("workbook", encoding="utf-8")
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--sample-info",
+            str(tmp_path / "missing_sample_info.csv"),
+            "--targeted-istd-workbook",
+            str(targeted_workbook),
+        ],
+    )
+
+    assert code == 2
+    assert "sample info does not exist" in capsys.readouterr().err
+
+
+def test_run_alignment_cli_rejects_missing_targeted_workbook_with_sample_info(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    sample_info = tmp_path / "sample_info.csv"
+    sample_info.write_text("sample\nSample_A\n", encoding="utf-8")
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--sample-info",
+            str(sample_info),
+            "--targeted-istd-workbook",
+            str(tmp_path / "missing_targeted.xlsx"),
+        ],
+    )
+
+    assert code == 2
+    assert "targeted ISTD workbook does not exist" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("exc", [OSError("cannot read workbook"), KeyError("Sample")])
+def test_run_alignment_cli_returns_2_for_drift_reader_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    exc: Exception,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    sample_info = tmp_path / "sample_info.csv"
+    sample_info.write_text("sample\nSample_A\n", encoding="utf-8")
+    targeted_workbook = tmp_path / "targeted.xlsx"
+    targeted_workbook.write_text("workbook", encoding="utf-8")
+
+    def fail_read_targeted_istd_drift_evidence(**kwargs):
+        raise exc
+
+    monkeypatch.setattr(
+        run_alignment,
+        "read_targeted_istd_drift_evidence",
+        fail_read_targeted_istd_drift_evidence,
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--sample-info",
+            str(sample_info),
+            "--targeted-istd-workbook",
+            str(targeted_workbook),
+        ],
+    )
+
+    assert code == 2
+    assert str(exc) in capsys.readouterr().err
 
 
 def test_run_alignment_cli_passes_owner_backfill_min_detected_samples(

@@ -48,17 +48,9 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
         calls["owner_raw_xic_batch_size"] = raw_xic_batch_size
         return SimpleNamespace(owners=("owner",), ambiguous_records=())
 
-    def fake_cluster_owners(
-        owners,
-        *,
-        config,
-        drift_lookup=None,
-        edge_evidence_sink=None,
-    ):
+    def fake_cluster_owners(owners, *, config):
         calls["owners"] = owners
         calls["cluster_config"] = config
-        calls["drift_lookup"] = drift_lookup
-        calls["edge_evidence_sink"] = edge_evidence_sink
         return ("feature",)
 
     def fake_owner_backfill(
@@ -117,8 +109,6 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
 
     assert calls["candidates"] == ("Sample_A", "Sample_B")
     assert calls["owners"] == ("owner",)
-    assert calls["drift_lookup"] is None
-    assert calls["edge_evidence_sink"] == []
     assert calls["features"] == ("feature",)
     assert calls["sample_order"] == ("Sample_A", "Sample_B")
     assert set(calls["raw_sources"]) == {"Sample_A", "Sample_B"}
@@ -893,6 +883,64 @@ def test_run_alignment_validation_level_writes_owner_edge_evidence_tsv(
     lines = outputs.edge_evidence_tsv.read_text(encoding="utf-8").splitlines()
     assert lines[0].startswith("left_owner_id\tright_owner_id\t")
     assert lines[1].startswith("OWN-Sample_A-000001\tOWN-Sample_B-000001\t")
+
+
+def test_run_alignment_owner_edge_evidence_replace_failure_rolls_back(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    workbook = output_dir / "alignment_results.xlsx"
+    edge_evidence = output_dir / "owner_edge_evidence.tsv"
+    workbook.write_text("old workbook", encoding="utf-8")
+    edge_evidence.write_text("old edge evidence", encoding="utf-8")
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    def fake_cluster_owners(
+        owners,
+        *,
+        config,
+        drift_lookup=None,
+        edge_evidence_sink=None,
+    ):
+        edge_evidence_sink.append(_edge_evidence())
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        fake_cluster_owners,
+    )
+    original_replace = Path.replace
+
+    def fail_edge_evidence_replace(self: Path, target: Path):
+        if self.name == "owner_edge_evidence.tsv.tmp":
+            raise PermissionError("locked owner edge evidence")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_edge_evidence_replace)
+
+    with pytest.raises(PermissionError, match="locked owner edge evidence"):
+        pipeline_module.run_alignment(
+            discovery_batch_index=batch_index,
+            raw_dir=raw_dir,
+            dll_dir=tmp_path / "dll",
+            output_dir=output_dir,
+            alignment_config=AlignmentConfig(),
+            peak_config=_peak_config(),
+            output_level="validation",
+            raw_opener=FakeRawOpener(),
+        )
+
+    assert workbook.read_text(encoding="utf-8") == "old workbook"
+    assert edge_evidence.read_text(encoding="utf-8") == "old edge evidence"
+    assert not (output_dir / "owner_edge_evidence.tsv.tmp").exists()
+    assert not (output_dir / "owner_edge_evidence.tsv.bak").exists()
 
 
 def test_run_alignment_default_stays_machine_until_owner_validation_acceptance(
