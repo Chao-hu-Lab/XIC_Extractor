@@ -194,6 +194,7 @@ def compare_targeted_audit_counts(
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
+        _validate_args(args)
         if args.alignment_dir:
             metrics = compute_guardrails(args.alignment_dir)
             if args.output_json:
@@ -250,6 +251,45 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--target-label")
     parser.add_argument("--targeted-comparison-csv", type=Path)
     return parser.parse_args(argv)
+
+
+def _validate_args(args: argparse.Namespace) -> None:
+    baseline_group = (
+        args.baseline_dir,
+        args.candidate_dir,
+        args.comparison_csv,
+    )
+    targeted_group = (
+        args.baseline_targeted_comparison,
+        args.candidate_targeted_comparison,
+        args.target_label,
+        args.targeted_comparison_csv,
+    )
+    has_alignment_group = args.alignment_dir is not None
+    has_baseline_group = any(value is not None for value in baseline_group)
+    has_targeted_group = any(value is not None for value in targeted_group)
+
+    if has_alignment_group and args.output_json is None:
+        raise ValueError("--alignment-dir requires --output-json")
+    if has_baseline_group and not all(value is not None for value in baseline_group):
+        raise ValueError(
+            "Guardrail comparison requires --baseline-dir, --candidate-dir, "
+            "and --comparison-csv",
+        )
+    if has_targeted_group and not all(value is not None for value in targeted_group):
+        raise ValueError(
+            "Targeted comparison requires --baseline-targeted-comparison, "
+            "--candidate-targeted-comparison, --target-label, and "
+            "--targeted-comparison-csv",
+        )
+    if not (has_alignment_group or has_baseline_group or has_targeted_group):
+        raise ValueError(
+            "Provide at least one actionable option group: "
+            "--alignment-dir with --output-json; --baseline-dir with "
+            "--candidate-dir and --comparison-csv; or "
+            "--baseline-targeted-comparison with --candidate-targeted-comparison, "
+            "--target-label, and --targeted-comparison-csv.",
+        )
 
 
 def _compute_case_assertions(
@@ -496,7 +536,10 @@ def _targeted_failure_counts(path: Path, target_label: str) -> Counter[str]:
     counts: Counter[str] = Counter()
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        has_target_label = "target_label" in (reader.fieldnames or [])
+        fieldnames = reader.fieldnames or []
+        if "failure_mode" not in fieldnames:
+            raise ValueError(f"{path} is missing required column: failure_mode")
+        has_target_label = "target_label" in fieldnames
         for row in reader:
             if not has_target_label or row.get("target_label") == target_label:
                 counts[row.get("failure_mode", "")] += 1

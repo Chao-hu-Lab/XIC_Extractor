@@ -234,6 +234,194 @@ def test_main_writes_requested_outputs(tmp_path: Path) -> None:
     assert _read_csv(tmp_path / "targeted_comparison.csv")[1]["status"] == "FAIL"
 
 
+def test_main_rejects_no_actionable_group(capsys) -> None:
+    code = guardrails.main([])
+
+    assert code == 2
+    assert "Provide at least one actionable option group" in capsys.readouterr().err
+
+
+def test_main_requires_complete_guardrail_comparison_group(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    code = guardrails.main(["--baseline-dir", str(tmp_path / "baseline")])
+
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "--baseline-dir, --candidate-dir, and --comparison-csv" in err
+
+
+def test_main_requires_complete_targeted_comparison_group(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    code = guardrails.main(
+        [
+            "--baseline-targeted-comparison",
+            str(tmp_path / "baseline.csv"),
+            "--target-label",
+            "5-medC",
+        ],
+    )
+
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "--baseline-targeted-comparison" in err
+    assert "--targeted-comparison-csv" in err
+
+
+def test_main_requires_output_json_with_alignment_dir(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    code = guardrails.main(["--alignment-dir", str(tmp_path / "alignment")])
+
+    assert code == 2
+    assert "--alignment-dir requires --output-json" in capsys.readouterr().err
+
+
+def test_main_reports_missing_alignment_review_tsv(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir()
+
+    code = guardrails.main(
+        [
+            "--alignment-dir",
+            str(alignment_dir),
+            "--output-json",
+            str(tmp_path / "metrics.json"),
+        ],
+    )
+
+    assert code == 2
+    assert str(alignment_dir / "alignment_review.tsv") in capsys.readouterr().err
+
+
+def test_main_reports_missing_targeted_comparison_csv(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    baseline_csv = tmp_path / "baseline.csv"
+    missing_candidate_csv = tmp_path / "missing_candidate.csv"
+    _write_csv(
+        baseline_csv,
+        [{"sample_stem": "sample01", "failure_mode": "PASS"}],
+    )
+
+    code = guardrails.main(
+        [
+            "--baseline-targeted-comparison",
+            str(baseline_csv),
+            "--candidate-targeted-comparison",
+            str(missing_candidate_csv),
+            "--target-label",
+            "5-medC",
+            "--targeted-comparison-csv",
+            str(tmp_path / "targeted_comparison.csv"),
+        ],
+    )
+
+    assert code == 2
+    assert str(missing_candidate_csv) in capsys.readouterr().err
+
+
+def test_main_rejects_targeted_comparison_without_failure_mode_column(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    baseline_csv = tmp_path / "baseline.csv"
+    candidate_csv = tmp_path / "candidate.csv"
+    _write_csv(baseline_csv, [{"sample_stem": "sample01"}])
+    _write_csv(candidate_csv, [{"sample_stem": "sample01", "failure_mode": "MISS"}])
+
+    code = guardrails.main(
+        [
+            "--baseline-targeted-comparison",
+            str(baseline_csv),
+            "--candidate-targeted-comparison",
+            str(candidate_csv),
+            "--target-label",
+            "5-medC",
+            "--targeted-comparison-csv",
+            str(tmp_path / "targeted_comparison.csv"),
+        ],
+    )
+
+    assert code == 2
+    assert "failure_mode" in capsys.readouterr().err
+
+
+ALIGNMENT_REVIEW_COLUMNS = (
+    "feature_family_id",
+    "neutral_loss_tag",
+    "family_center_mz",
+    "family_center_rt",
+    "family_product_mz",
+    "family_observed_neutral_loss_da",
+    "has_anchor",
+    "event_cluster_count",
+    "event_cluster_ids",
+    "event_member_count",
+    "detected_count",
+    "absent_count",
+    "unchecked_count",
+    "duplicate_assigned_count",
+    "ambiguous_ms1_owner_count",
+    "present_rate",
+    "representative_samples",
+    "family_evidence",
+    "warning",
+    "reason",
+)
+
+ALIGNMENT_CELLS_COLUMNS = (
+    "feature_family_id",
+    "sample_stem",
+    "status",
+    "area",
+    "apex_rt",
+    "height",
+    "peak_start_rt",
+    "peak_end_rt",
+    "rt_delta_sec",
+    "trace_quality",
+    "scan_support_score",
+    "source_candidate_id",
+    "source_raw_file",
+    "neutral_loss_tag",
+    "family_center_mz",
+    "family_center_rt",
+    "reason",
+)
+
+OWNER_EDGE_EVIDENCE_COLUMNS = (
+    "left_owner_id",
+    "right_owner_id",
+    "left_sample_stem",
+    "right_sample_stem",
+    "neutral_loss_tag",
+    "left_precursor_mz",
+    "right_precursor_mz",
+    "left_rt_min",
+    "right_rt_min",
+    "decision",
+    "failure_reason",
+    "rt_raw_delta_sec",
+    "rt_drift_corrected_delta_sec",
+    "drift_prior_source",
+    "injection_order_gap",
+    "owner_quality",
+    "seed_support_level",
+    "duplicate_context",
+    "score",
+    "reason",
+)
+
+
 def _write_alignment_fixture(path: Path) -> None:
     path.mkdir(parents=True)
     _write_tsv(
@@ -249,6 +437,7 @@ def _write_alignment_fixture(path: Path) -> None:
             _review_row("FAM008", 500.0, 5.0, 1, 1),
             _review_row("FAM009", 501.0, 5.1, 1, 1),
         ],
+        fieldnames=ALIGNMENT_REVIEW_COLUMNS,
     )
     _write_tsv(
         path / "alignment_cells.tsv",
@@ -265,6 +454,7 @@ def _write_alignment_fixture(path: Path) -> None:
             _cell_row("FAM008", "rescued"),
             _cell_row("FAM008", "rescued"),
         ],
+        fieldnames=ALIGNMENT_CELLS_COLUMNS,
     )
     _write_tsv(
         path / "owner_edge_evidence.tsv",
@@ -284,6 +474,7 @@ def _write_alignment_fixture(path: Path) -> None:
                 "right_rt_min": "23.5",
             },
         ],
+        fieldnames=OWNER_EDGE_EVIDENCE_COLUMNS,
     )
 
 
@@ -312,9 +503,18 @@ def _cell_row(family_id: str, status: str) -> dict[str, object]:
     }
 
 
-def _write_tsv(path: Path, rows: list[dict[str, object]]) -> None:
+def _write_tsv(
+    path: Path,
+    rows: list[dict[str, object]],
+    *,
+    fieldnames: tuple[str, ...] | None = None,
+) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), delimiter="\t")
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=list(fieldnames or rows[0]),
+            delimiter="\t",
+        )
         writer.writeheader()
         writer.writerows(rows)
 
