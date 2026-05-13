@@ -1,4 +1,5 @@
 import pickle
+from concurrent.futures import Future
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
 from xic_extractor.alignment.process_backend import (
     AlignmentProcessExecutionError,
+    OwnerBuildSampleJob,
     OwnerBuildSampleResult,
     OwnerBuildTimingStats,
     OwnerBackfillSampleResult,
@@ -266,6 +268,35 @@ def test_owner_build_process_handles_missing_raw_in_parent_process(
     assert output.timing_stats == ()
 
 
+def test_owner_build_jobs_wrap_executor_exceptions_as_build_errors(
+    tmp_path: Path,
+) -> None:
+    job = OwnerBuildSampleJob(
+        sample_index=1,
+        sample_stem="sample-a",
+        raw_path=tmp_path / "sample-a.raw",
+        dll_dir=tmp_path / "dll",
+        candidates=(_candidate("sample-a"),),
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(tmp_path),
+    )
+
+    results = run_owner_build_jobs(
+        (job,),
+        max_workers=1,
+        executor_factory=_FailingExecutor,
+    )
+
+    assert results == [
+        OwnerBuildWorkerError(
+            sample_index=1,
+            sample_stem="sample-a",
+            raw_name="sample-a.raw",
+            message="RuntimeError: executor boom",
+        )
+    ]
+
+
 def test_timed_process_raw_source_records_batch_calls() -> None:
     import xic_extractor.alignment.process_backend as process_module
     from xic_extractor.xic_models import XICRequest, XICTrace
@@ -356,6 +387,21 @@ def _owner(sample_stem: str) -> SampleLocalMS1Owner:
         identity_conflict=False,
         assignment_reason="owner_exact_apex_match",
     )
+
+
+class _FailingExecutor:
+    def __init__(self, *args, **kwargs) -> None:
+        self._future: Future = Future()
+        self._future.set_exception(RuntimeError("executor boom"))
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def submit(self, worker, job):
+        return self._future
 
 
 def _peak_config(tmp_path: Path) -> ExtractionConfig:

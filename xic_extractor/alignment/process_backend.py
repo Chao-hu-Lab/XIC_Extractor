@@ -258,6 +258,7 @@ def run_owner_build_jobs(
     return _run_process_jobs(
         jobs,
         worker=extract_owner_build_sample_job,
+        error_factory=_owner_build_worker_error,
         max_workers=max_workers,
         executor_factory=executor_factory,
     )
@@ -394,6 +395,7 @@ def run_owner_backfill_jobs(
     return _run_process_jobs(
         jobs,
         worker=extract_owner_backfill_sample_job,
+        error_factory=_owner_backfill_worker_error,
         max_workers=max_workers,
         executor_factory=executor_factory,
     )
@@ -403,6 +405,7 @@ def _run_process_jobs(
     jobs: Iterable[Any],
     *,
     worker: Callable[[Any], Any],
+    error_factory: Callable[[Any, Exception], Any],
     max_workers: int,
     executor_factory: Callable[..., Any] | None = None,
 ) -> list[Any]:
@@ -445,15 +448,32 @@ def _run_process_jobs(
                 try:
                     results.append(future.result())
                 except Exception as exc:
-                    results.append(
-                        OwnerBackfillWorkerError(
-                            sample_index=job.sample_index,
-                            sample_stem=job.sample_stem,
-                            raw_name=job.raw_path.name,
-                            message=f"{type(exc).__name__}: {exc}",
-                        )
-                    )
+                    results.append(error_factory(job, exc))
     return results
+
+
+def _owner_build_worker_error(
+    job: OwnerBuildSampleJob,
+    exc: Exception,
+) -> OwnerBuildWorkerError:
+    return OwnerBuildWorkerError(
+        sample_index=job.sample_index,
+        sample_stem=job.sample_stem,
+        raw_name=job.raw_path.name,
+        message=f"{type(exc).__name__}: {exc}",
+    )
+
+
+def _owner_backfill_worker_error(
+    job: OwnerBackfillSampleJob,
+    exc: Exception,
+) -> OwnerBackfillWorkerError:
+    return OwnerBackfillWorkerError(
+        sample_index=job.sample_index,
+        sample_stem=job.sample_stem,
+        raw_name=job.raw_path.name,
+        message=f"{type(exc).__name__}: {exc}",
+    )
 
 
 def extract_owner_backfill_sample_job(
