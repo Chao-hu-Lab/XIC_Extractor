@@ -606,6 +606,9 @@ class _TimedProcessRawSource:
             traces.append(XICTrace.from_arrays(rt, intensity))
         return tuple(traces)
 
+    def scan_window_for_request(self, request):
+        return self._source.scan_window_for_request(request)
+
 
 def _trace_point_count(trace: object) -> int:
     try:

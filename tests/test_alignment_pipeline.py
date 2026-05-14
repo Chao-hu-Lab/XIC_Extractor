@@ -275,6 +275,26 @@ def test_timed_raw_source_records_batch_calls() -> None:
     assert stats.point_count == 2
 
 
+def test_timed_raw_source_delegates_scan_window_lookup() -> None:
+    from xic_extractor.xic_models import XICRequest
+
+    class WindowSource:
+        def scan_window_for_request(self, request):
+            return (int(request.rt_min), int(request.rt_max))
+
+    stats = pipeline_module._RawSourceTimingStats(
+        sample_stem="Sample_A",
+        stage="alignment.build_owners.extract_xic",
+    )
+    source = pipeline_module._TimedRawSource(WindowSource(), stats=stats)
+
+    window = source.scan_window_for_request(
+        XICRequest(mz=258.0, rt_min=8.0, rt_max=9.0, ppm_tol=20.0)
+    )
+
+    assert window == (8, 9)
+
+
 def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

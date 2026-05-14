@@ -390,6 +390,9 @@ class _TimedRawSource:
             traces.append(XICTrace.from_arrays(rt, intensity))
         return tuple(traces)
 
+    def scan_window_for_request(self, request):
+        return self._source.scan_window_for_request(request)
+
 
 def _timed_raw_sources(
     raw_sources: dict[str, AlignmentRawHandle],

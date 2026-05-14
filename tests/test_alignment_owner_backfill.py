@@ -196,6 +196,117 @@ def test_owner_backfill_batches_by_rt_window_without_changing_emit_order() -> No
     ]
 
 
+def test_owner_backfill_does_not_split_source_scan_window_groups() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class BatchSource:
+        def __init__(self) -> None:
+            self.batch_centers: list[tuple[float, ...]] = []
+
+        def scan_window_for_request(self, _request):
+            return (100, 200)
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.batch_centers.append(
+                tuple(
+                    round((request.rt_min + request.rt_max) / 2.0, 3)
+                    for request in requests
+                )
+            )
+            traces = []
+            for request in requests:
+                center = (request.rt_min + request.rt_max) / 2.0
+                traces.append(
+                    XICTrace.from_arrays(
+                        [
+                            center - 0.10,
+                            center - 0.01,
+                            center,
+                            center + 0.01,
+                            center + 0.10,
+                        ],
+                        [0.0, 50.0, 120.0, 50.0, 0.0],
+                    )
+                )
+            return tuple(traces)
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source = BatchSource()
+    feature_a = _feature(feature_family_id="FAM000001", mz=500.0, rt=8.50)
+    feature_b = _feature(feature_family_id="FAM000002", mz=510.0, rt=8.51)
+    feature_c = _feature(feature_family_id="FAM000003", mz=520.0, rt=8.52)
+
+    cells = build_owner_backfill_cells(
+        (feature_a, feature_b, feature_c),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=2,
+    )
+
+    assert source.batch_centers == [(8.5, 8.51, 8.52)]
+    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
+        ("FAM000001", "sample-b"),
+        ("FAM000002", "sample-b"),
+        ("FAM000003", "sample-b"),
+    ]
+
+
+def test_owner_backfill_falls_back_when_scan_window_unavailable() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class BatchSource:
+        def __init__(self) -> None:
+            self.batch_centers: list[tuple[float, ...]] = []
+
+        def scan_window_for_request(self, _request):
+            raise AttributeError("scan window lookup is unavailable")
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.batch_centers.append(
+                tuple(
+                    round((request.rt_min + request.rt_max) / 2.0, 3)
+                    for request in requests
+                )
+            )
+            return tuple(
+                XICTrace.from_arrays(
+                    [
+                        (request.rt_min + request.rt_max) / 2.0 - 0.01,
+                        (request.rt_min + request.rt_max) / 2.0,
+                        (request.rt_min + request.rt_max) / 2.0 + 0.01,
+                    ],
+                    [0.0, 120.0, 0.0],
+                )
+                for request in requests
+            )
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source = BatchSource()
+
+    build_owner_backfill_cells(
+        (
+            _feature(feature_family_id="FAM000001", mz=500.0, rt=8.5),
+            _feature(feature_family_id="FAM000002", mz=510.0, rt=10.5),
+            _feature(feature_family_id="FAM000003", mz=520.0, rt=8.5),
+        ),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=2,
+    )
+
+    assert source.batch_centers == [(8.5, 8.5), (10.5,)]
+
+
 class FakeBackfillSource:
     def __init__(self, *, rt, intensity) -> None:
         self.rt = rt

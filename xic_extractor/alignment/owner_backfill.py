@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping
-from typing import Protocol, TypeVar
+from itertools import groupby
+from typing import Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -14,7 +15,8 @@ from xic_extractor.config import ExtractionConfig
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
 
-_T = TypeVar("_T")
+_RequestItem = tuple[OwnerAlignedFeature, str, XICRequest]
+_RequestGroupKey = tuple[str, int | float, int | float]
 
 
 class OwnerBackfillSource(Protocol):
@@ -73,8 +75,11 @@ def build_owner_backfill_cells(
         if not sample_requests:
             continue
         source = raw_sources[sample_stem]
-        ordered_requests = tuple(sorted(sample_requests, key=_request_locality_key))
-        for chunk in _chunked(ordered_requests, raw_xic_batch_size):
+        for chunk in _scan_window_aware_chunks(
+            source,
+            tuple(sample_requests),
+            raw_xic_batch_size,
+        ):
             try:
                 traces = _extract_many(source, tuple(item[2] for item in chunk))
             except OSError:
@@ -106,17 +111,67 @@ def build_owner_backfill_cells(
     return tuple(cells)
 
 
-def _request_locality_key(
-    item: tuple[OwnerAlignedFeature, str, XICRequest],
-) -> tuple[float, float, float, str, str]:
+def _scan_window_aware_chunks(
+    source: OwnerBackfillSource,
+    items: tuple[_RequestItem, ...],
+    chunk_size: int,
+) -> tuple[tuple[_RequestItem, ...], ...]:
+    if chunk_size < 1:
+        raise ValueError("raw_xic_batch_size must be >= 1")
+    keyed_items = tuple((_request_group_key(source, item), item) for item in items)
+    ordered_items = tuple(sorted(keyed_items, key=_grouped_request_sort_key))
+    chunks: list[tuple[_RequestItem, ...]] = []
+    current: list[_RequestItem] = []
+    for _group_key, group_iter in groupby(ordered_items, key=lambda pair: pair[0]):
+        group = [item for _key, item in group_iter]
+        if current and len(current) + len(group) > chunk_size:
+            chunks.append(tuple(current))
+            current = []
+        current.extend(group)
+        if len(current) >= chunk_size:
+            chunks.append(tuple(current))
+            current = []
+    if current:
+        chunks.append(tuple(current))
+    return tuple(chunks)
+
+
+def _grouped_request_sort_key(
+    keyed_item: tuple[_RequestGroupKey, _RequestItem],
+) -> tuple[str, int | float, int | float, float, str, str]:
+    group_key, item = keyed_item
     feature, sample_stem, request = item
     return (
-        request.rt_min,
-        request.rt_max,
+        *group_key,
         request.mz,
         feature.feature_family_id,
         sample_stem,
     )
+
+
+def _request_group_key(
+    source: OwnerBackfillSource,
+    item: _RequestItem,
+) -> _RequestGroupKey:
+    request = item[2]
+    scan_window = _source_scan_window_for_request(source, request)
+    if scan_window is not None:
+        return ("scan", scan_window[0], scan_window[1])
+    return ("rt", request.rt_min, request.rt_max)
+
+
+def _source_scan_window_for_request(
+    source: OwnerBackfillSource,
+    request: XICRequest,
+) -> tuple[int, int] | None:
+    resolver = getattr(source, "scan_window_for_request", None)
+    if not callable(resolver):
+        return None
+    try:
+        start_scan, end_scan = resolver(request)
+    except (AttributeError, NotImplementedError):
+        return None
+    return int(start_scan), int(end_scan)
 
 
 def _backfill_feature_sample(
@@ -223,18 +278,6 @@ def _extract_many(
         )
         traces.append(XICTrace.from_arrays(rt, intensity))
     return tuple(traces)
-
-
-def _chunked(
-    items: tuple[_T, ...],
-    chunk_size: int,
-) -> tuple[tuple[_T, ...], ...]:
-    if chunk_size < 1:
-        raise ValueError("raw_xic_batch_size must be >= 1")
-    return tuple(
-        items[index : index + chunk_size]
-        for index in range(0, len(items), chunk_size)
-    )
 
 
 def _validated_trace_arrays(

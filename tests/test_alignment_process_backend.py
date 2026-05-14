@@ -384,6 +384,24 @@ def test_timed_process_raw_source_records_batch_calls() -> None:
     assert stats.point_count == 2
 
 
+def test_timed_process_raw_source_delegates_scan_window_lookup() -> None:
+    import xic_extractor.alignment.process_backend as process_module
+    from xic_extractor.xic_models import XICRequest
+
+    class WindowSource:
+        def scan_window_for_request(self, request):
+            return (int(request.rt_min), int(request.rt_max))
+
+    stats = process_module._TimedProcessStats(sample_stem="Sample_A")
+    source = process_module._TimedProcessRawSource(WindowSource(), stats=stats)
+
+    window = source.scan_window_for_request(
+        XICRequest(mz=258.0, rt_min=8.0, rt_max=9.0, ppm_tol=20.0)
+    )
+
+    assert window == (8, 9)
+
+
 def _cell(*, cluster_id: str, sample_stem: str) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,
