@@ -147,6 +147,25 @@ uv run python scripts\run_alignment.py `
 `validation-fast` expands to `raw-workers=8` and `raw-xic-batch-size=64`.
 Explicit `--raw-workers` or `--raw-xic-batch-size` values override the profile.
 The CLI default remains the conservative `1` / `1` execution shape.
+Owner-centered backfill can also be run with the experimental MS1 scan-index
+backend:
+
+```powershell
+uv run python scripts\run_alignment.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --output-dir output\alignment\ms1_index_fast_8raw `
+  --output-level machine `
+  --emit-alignment-cells `
+  --performance-profile validation-fast `
+  --owner-backfill-xic-backend ms1-index `
+  --timing-output output\diagnostics\ms1_index_fast_8raw\alignment_timing.json
+```
+
+`ms1-index` is an explicit approximate fast mode for owner backfill only. It
+does not replace the default vendor XIC path and must be checked with the
+targeted ISTD benchmark before any production interpretation.
 
 The 8-raw timing run on the tissue validation subset showed byte-identical
 machine TSV outputs (`alignment_review.tsv`, `alignment_matrix.tsv`, and

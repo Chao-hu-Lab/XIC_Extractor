@@ -13,6 +13,10 @@ from typing import Any
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
+from xic_extractor.alignment.ms1_index_source import (
+    OwnerBackfillXicBackend,
+    source_for_owner_backfill_backend,
+)
 from xic_extractor.alignment.owner_backfill import build_owner_backfill_cells
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.alignment.ownership import (
@@ -84,6 +88,7 @@ class OwnerBackfillSampleJob:
     alignment_config: AlignmentConfig
     peak_config: ExtractionConfig
     raw_xic_batch_size: int = 1
+    owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw"
 
 
 @dataclass(frozen=True)
@@ -319,6 +324,7 @@ def run_owner_backfill_process(
     peak_config: ExtractionConfig,
     max_workers: int,
     raw_xic_batch_size: int = 1,
+    owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw",
     runner: Callable[..., list[OwnerBackfillWorkerResult]] | None = None,
 ) -> OwnerBackfillProcessOutput:
     if max_workers < 1:
@@ -335,6 +341,7 @@ def run_owner_backfill_process(
             alignment_config=alignment_config,
             peak_config=peak_config,
             raw_xic_batch_size=raw_xic_batch_size,
+            owner_backfill_xic_backend=owner_backfill_xic_backend,
         )
         for index, sample_stem in enumerate(sample_order, start=1)
         if sample_stem in raw_paths
@@ -492,7 +499,11 @@ def extract_owner_backfill_sample_job(
     try:
         with open_raw(job.raw_path, job.dll_dir) as raw:
             stats = _TimedProcessStats(sample_stem=job.sample_stem)
-            timed_raw = _TimedProcessRawSource(raw, stats=stats)
+            source = source_for_owner_backfill_backend(
+                raw,
+                job.owner_backfill_xic_backend,
+            )
+            timed_raw = _TimedProcessRawSource(source, stats=stats)
             cells = build_owner_backfill_cells(
                 job.features,
                 sample_order=(job.sample_stem,),

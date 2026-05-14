@@ -85,11 +85,13 @@ def test_owner_backfill_process_builds_pickleable_sample_jobs_and_orders_output(
         alignment_config=AlignmentConfig(),
         peak_config=_peak_config(tmp_path),
         max_workers=2,
+        owner_backfill_xic_backend="ms1_index",
         runner=fake_runner,
     )
 
     assert [job.sample_stem for job in captured_jobs] == ["sample-a", "sample-b"]
     assert [job.sample_index for job in captured_jobs] == [1, 2]
+    assert {job.owner_backfill_xic_backend for job in captured_jobs} == {"ms1_index"}
     assert [cell.sample_stem for cell in output.cells] == ["sample-b", "sample-a"]
     assert [stat.sample_stem for stat in output.timing_stats] == [
         "sample-a",

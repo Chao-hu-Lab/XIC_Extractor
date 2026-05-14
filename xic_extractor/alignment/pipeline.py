@@ -30,6 +30,10 @@ from xic_extractor.alignment.family_integration import integrate_feature_family_
 from xic_extractor.alignment.feature_family import build_ms1_feature_families
 from xic_extractor.alignment.html_report import write_alignment_review_html
 from xic_extractor.alignment.matrix import AlignmentMatrix
+from xic_extractor.alignment.ms1_index_source import (
+    OwnerBackfillXicBackend,
+    source_for_owner_backfill_backend,
+)
 from xic_extractor.alignment.output_levels import (
     AlignmentOutputLevel,
     artifact_names_for_output_level,
@@ -98,6 +102,7 @@ def run_alignment(
     raw_opener: RawOpener | None = None,
     raw_workers: int = 1,
     raw_xic_batch_size: int = 1,
+    owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw",
     drift_lookup: DriftLookupProtocol | None = None,
     timing_recorder: TimingRecorder | None = None,
 ) -> AlignmentRunOutputs:
@@ -112,6 +117,7 @@ def run_alignment(
         metrics={
             "raw_workers": raw_workers,
             "raw_xic_batch_size": raw_xic_batch_size,
+            "owner_backfill_xic_backend": owner_backfill_xic_backend,
             "output_level": output_level,
             "drift_prior_source": (
                 drift_lookup.source if drift_lookup is not None else "none"
@@ -231,6 +237,7 @@ def run_alignment(
                     peak_config=peak_config,
                     max_workers=raw_workers,
                     raw_xic_batch_size=raw_xic_batch_size,
+                    owner_backfill_xic_backend=owner_backfill_xic_backend,
                 )
                 rescued_cells = process_output.cells
                 for backfill_stats in process_output.timing_stats:
@@ -283,6 +290,7 @@ def run_alignment(
                     discovery_batch_index=discovery_batch_index,
                     raw_dir=raw_dir,
                     dll_dir=dll_dir,
+                    owner_backfill_xic_backend=owner_backfill_xic_backend,
                     output_level=output_level,
                     peak_config=peak_config,
                 ),
@@ -405,6 +413,17 @@ def _timed_raw_sources(
             source,
             stats=_RawSourceTimingStats(sample_stem=sample_stem, stage=stage),
         )
+        for sample_stem, source in raw_sources.items()
+    }
+
+
+def _owner_backfill_raw_sources(
+    raw_sources: dict[str, AlignmentRawHandle],
+    *,
+    backend: OwnerBackfillXicBackend,
+) -> dict[str, AlignmentRawHandle]:
+    return {
+        sample_stem: source_for_owner_backfill_backend(source, backend)
         for sample_stem, source in raw_sources.items()
     }
 
@@ -671,6 +690,7 @@ def _metadata(
     discovery_batch_index: Path,
     raw_dir: Path,
     dll_dir: Path,
+    owner_backfill_xic_backend: OwnerBackfillXicBackend,
     output_level: AlignmentOutputLevel,
     peak_config: ExtractionConfig,
 ) -> dict[str, str]:
@@ -679,6 +699,7 @@ def _metadata(
         "discovery_batch_index": str(discovery_batch_index),
         "raw_dir": str(raw_dir),
         "dll_dir": str(dll_dir),
+        "owner_backfill_xic_backend": owner_backfill_xic_backend,
         "output_level": output_level,
         "resolver_mode": peak_config.resolver_mode,
     }

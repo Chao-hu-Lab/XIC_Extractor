@@ -105,6 +105,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             emit_alignment_status_matrix=args.emit_alignment_status_matrix,
             raw_workers=raw_workers,
             raw_xic_batch_size=raw_xic_batch_size,
+            owner_backfill_xic_backend=_owner_backfill_xic_backend(
+                args.owner_backfill_xic_backend
+            ),
             drift_lookup=drift_lookup,
             **timing_kwargs,
         )
@@ -214,6 +217,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--owner-backfill-xic-backend",
+        choices=("raw", "ms1-index"),
+        default="raw",
+        help=(
+            "XIC backend for owner-centered MS1 backfill. Default 'raw' uses "
+            "Thermo vendor chromatograms. 'ms1-index' is an explicit "
+            "approximate fast mode and may change peak areas."
+        ),
+    )
+    parser.add_argument(
         "--sample-info",
         type=Path,
         help="Sample metadata CSV used with --targeted-istd-workbook for drift priors.",
@@ -275,6 +288,10 @@ def _positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("value must be an integer >= 1")
     return parsed
+
+
+def _owner_backfill_xic_backend(value: str) -> str:
+    return "ms1_index" if value == "ms1-index" else value
 
 
 def _peak_config(

@@ -172,6 +172,7 @@ def test_pipeline_records_alignment_timing_stages(
     assert records_by_stage["alignment.run_config"].metrics == {
         "raw_workers": 1,
         "raw_xic_batch_size": 1,
+        "owner_backfill_xic_backend": "raw",
         "output_level": "machine",
         "drift_prior_source": "none",
     }
@@ -384,6 +385,7 @@ def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
         peak_config=_peak_config(),
         raw_opener=opener,
         raw_workers=2,
+        owner_backfill_xic_backend="ms1_index",
         timing_recorder=recorder,
     )
 
@@ -392,7 +394,9 @@ def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
     assert calls["rescued_cells"] == (rescued,)
     assert calls["build_kwargs"]["max_workers"] == 2
     assert calls["raw_xic_batch_size"] == 1
+    assert calls["owner_backfill_xic_backend"] == "ms1_index"
     assert calls["build_kwargs"]["raw_xic_batch_size"] == 1
+    assert "owner_backfill_xic_backend" not in calls["build_kwargs"]
     records_by_stage_sample = {
         (record.stage, record.sample_stem): record for record in recorder.records
     }
