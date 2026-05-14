@@ -882,6 +882,8 @@ Expected: discovery outputs contain `matched_tag_names` and
 Interpretation: the 8RAW validation subset does not contain the two mixed
 DNA/RNA samples, so this run is expected to validate plumbing and no-regression
 behavior. It is not expected to show meaningful `R` / `MeR` multi-tag support.
+Exception: `[13C,15N2]-8-oxo-Guo` is a post-added ISTD, so it is valid R-tag
+evidence when `R` is selected even in the 8RAW subset.
 
 - [ ] **Step 3: Run alignment with existing final matrix identity gates**
 
@@ -918,10 +920,12 @@ Run:
 
 ```powershell
 $env:PYTHONPATH='.'
-python tools\diagnostics\targeted_istd_benchmark.py --targeted-workbook C:\Users\user\Desktop\XIC_Extractor\output\xic_results_20260512_1151.xlsx --alignment-dir output\alignment\multi_tag_8raw_union_20260515 --output-dir output\diagnostics\multi_tag_8raw_union_20260515\targeted_istd_benchmark
+python tools\diagnostics\targeted_istd_benchmark.py --targeted-workbook C:\Users\user\Desktop\XIC_Extractor\output\xic_results_20260512_1151.xlsx --alignment-dir output\alignment\multi_tag_8raw_union_20260515 --output-dir output\diagnostics\multi_tag_8raw_union_20260515\targeted_istd_benchmark --additional-active-neutral-loss-da 132.0423
 ```
 
-Expected: PASS for the six active DNA ISTDs and no inactive RNA tag primary hit.
+Expected: PASS for the six active DNA ISTDs. In this multi-tag run, the
+post-added `[13C,15N2]-8-oxo-Guo` R-tag ISTD is expected to be valid if the
+benchmark is configured with `132.0423` as an additional active neutral loss.
 
 ## Task 8: 85RAW Validation Gate
 
@@ -945,6 +949,8 @@ Accept if:
 - targeted ISTD benchmark has no new failures except known targeted-side
   `d3-N6-medA` area mismatch;
 - inactive RNA tag has no primary matrix hit in a DNA-only selected-tag run;
+  in multi-tag `dR/R/MeR` runs, `[13C,15N2]-8-oxo-Guo` is a valid post-added
+  ISTD benchmark target rather than a false positive;
 - `R` / `MeR` evidence, if present, is concentrated in the two mixed DNA/RNA
   samples rather than spread across the 83 pure DNA samples;
 - Primary Matrix row count does not inflate without production support;

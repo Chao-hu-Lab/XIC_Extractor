@@ -60,6 +60,45 @@ def test_benchmark_classifies_pass_miss_split_and_inactive_tag(tmp_path: Path):
     assert by_label["rna_istd"].failure_modes == ("FALSE_POSITIVE_TAG",)
 
 
+def test_benchmark_treats_selected_r_tag_istd_as_active_when_configured(
+    tmp_path: Path,
+) -> None:
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    _write_targeted_workbook(
+        targeted,
+        targets=[_target("rna_istd", 400.0, 40.0, 41.0, 268.0, 132.0423)],
+        samples=("S1", "S2", "S3", "S4"),
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[
+            _review_row("FAM_RNA", 400.0, 40.5, 268.0, 132.0423, True),
+        ],
+        matrix_rows=[
+            _matrix_row("FAM_RNA", (10.0, 100.0, 1000.0, 10000.0)),
+        ],
+        cell_rows=[
+            _cell_row("FAM_RNA", "S1", 40.51, 10.0),
+            _cell_row("FAM_RNA", "S2", 40.52, 100.0),
+            _cell_row("FAM_RNA", "S3", 40.53, 1000.0),
+            _cell_row("FAM_RNA", "S4", 40.54, 10000.0),
+        ],
+    )
+
+    _outputs, summaries = benchmark.run_targeted_istd_benchmark(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=tmp_path / "benchmark",
+        thresholds=benchmark.BenchmarkThresholds(
+            additional_active_neutral_loss_das=(132.0423,),
+        ),
+    )
+
+    assert summaries[0].active_tag is True
+    assert summaries[0].status == "PASS"
+
+
 def test_main_writes_outputs_and_returns_one_when_gate_fails(tmp_path: Path):
     targeted = tmp_path / "targeted.xlsx"
     alignment = tmp_path / "alignment"

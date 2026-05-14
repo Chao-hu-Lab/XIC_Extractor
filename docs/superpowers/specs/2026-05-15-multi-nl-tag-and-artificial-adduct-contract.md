@@ -19,8 +19,11 @@ DNA/RNA mixed material, and those two mixed samples are not present in the 8RAW
 validation subset. Therefore:
 
 - 8RAW validates parser, CLI, schema round-trip, no Matrix regression, and no
-  false RNA-tag promotion;
-- 8RAW is not expected to show meaningful `R` / `MeR` multi-tag support;
+  no unsupported RNA-tag promotion;
+- 8RAW is not expected to show meaningful biological `R` / `MeR` multi-tag
+  support from mixed DNA/RNA samples;
+- `[13C,15N2]-8-oxo-Guo` is a post-added ISTD, so it is allowed and expected to
+  be detected when the selected tag set includes `R`;
 - 85RAW is the first run where `R` / `MeR` evidence may be observable, and even
   then the expected signal is limited to the two mixed DNA/RNA samples.
 
@@ -283,7 +286,8 @@ A multi-tag/adduct diagnostic run must report:
 - candidate counts per tag;
 - overlap matrix between selected tags;
 - cohort-aware expectation notes: 8RAW is plumbing/regression only for `R` /
-  `MeR`, 85RAW is the first run with two mixed DNA/RNA samples;
+  `MeR` biological mixed-sample evidence, while `[13C,15N2]-8-oxo-Guo` remains
+  a valid R-tag ISTD; 85RAW is the first run with two mixed DNA/RNA samples;
 - families with multiple tag support;
 - `intersection` complete/incomplete counts;
 - artificial adduct pair count by adduct name;
@@ -321,7 +325,8 @@ Run in this order:
 2. Multi-tag 8RAW union diagnostic with the first selected NL set:
    `dR`, `R`, `MeR`.
    This run is not expected to show real multi-tag support because the 8RAW
-   subset does not contain the two mixed DNA/RNA samples.
+   subset does not contain the two mixed DNA/RNA samples. This does not apply
+   to post-added ISTD evidence such as `[13C,15N2]-8-oxo-Guo`.
 3. Multi-tag 8RAW intersection diagnostic on a deliberately narrow pair only
    after union behavior is inspectable. Treat this as a plumbing diagnostic,
    not a biological success gate.

@@ -75,6 +75,7 @@ MATCH_COLUMNS = (
 @dataclass(frozen=True)
 class BenchmarkThresholds:
     active_neutral_loss_da: float = ACTIVE_NEUTRAL_LOSS_DA
+    additional_active_neutral_loss_das: tuple[float, ...] = ()
     active_neutral_loss_tolerance_da: float = ACTIVE_NEUTRAL_LOSS_TOLERANCE_DA
     default_match_ppm: float = 20.0
     match_rt_sec: float = TARGET_MATCH_RT_SEC
@@ -258,6 +259,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     thresholds = BenchmarkThresholds(
         active_neutral_loss_da=args.active_neutral_loss_da,
+        additional_active_neutral_loss_das=tuple(
+            args.additional_active_neutral_loss_da
+        ),
         active_neutral_loss_tolerance_da=args.active_neutral_loss_tolerance_da,
         default_match_ppm=args.default_match_ppm,
         match_rt_sec=args.match_rt_sec,
@@ -294,6 +298,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--alignment-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--active-neutral-loss-da", type=float, default=116.0474)
+    parser.add_argument(
+        "--additional-active-neutral-loss-da",
+        action="append",
+        default=[],
+        type=float,
+        help=(
+            "Additional selected neutral-loss masses treated as active in a "
+            "multi-tag benchmark."
+        ),
+    )
     parser.add_argument(
         "--active-neutral-loss-tolerance-da",
         type=float,
@@ -1047,8 +1061,14 @@ def _is_active_tag(
     target: TargetDefinition,
     thresholds: BenchmarkThresholds,
 ) -> bool:
-    return abs(target.neutral_loss_da - thresholds.active_neutral_loss_da) <= (
-        thresholds.active_neutral_loss_tolerance_da
+    active_masses = (
+        thresholds.active_neutral_loss_da,
+        *thresholds.additional_active_neutral_loss_das,
+    )
+    return any(
+        abs(target.neutral_loss_da - active_mass)
+        <= thresholds.active_neutral_loss_tolerance_da
+        for active_mass in active_masses
     )
 
 

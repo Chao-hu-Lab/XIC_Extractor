@@ -100,7 +100,6 @@ def decide_matrix_identity_row(
         q_rescue=q_rescue,
         duplicate_count=duplicate_count,
         ambiguous_count=ambiguous_count,
-        single_non_primary_tag_family=_is_single_non_primary_tag_family(cluster),
     )
     include, identity_decision, confidence, reason = _promotion_decision(
         cluster,
@@ -151,13 +150,6 @@ def _promotion_decision(
         return False, "audit_family", "none", "zero_quantifiable_detected"
     if duplicate_count > q_detected:
         return False, "audit_family", "review", "duplicate_claim_pressure"
-    if _is_single_non_primary_tag_family(cluster):
-        return (
-            False,
-            "provisional_discovery",
-            "review",
-            "single_non_primary_tag_evidence",
-        )
     if primary_evidence == "single_sample_local_owner":
         return (
             False,
@@ -199,7 +191,6 @@ def _row_flags(
     q_rescue: int,
     duplicate_count: int,
     ambiguous_count: int,
-    single_non_primary_tag_family: bool,
 ) -> list[str]:
     flags: list[str] = []
     if primary_evidence == "single_sample_local_owner":
@@ -222,8 +213,6 @@ def _row_flags(
         flags.append("ambiguous_only")
     if q_detected == 0 and q_rescue == 0 and duplicate_count == 0:
         flags.append("zero_present")
-    if single_non_primary_tag_family:
-        flags.append("single_non_primary_tag_evidence")
     return flags
 
 
@@ -263,8 +252,3 @@ def _family_evidence(cluster: Any) -> str:
     if hasattr(cluster, "fold_evidence"):
         return str(cluster.fold_evidence)
     return ""
-
-
-def _is_single_non_primary_tag_family(cluster: Any) -> bool:
-    tag = str(getattr(cluster, "neutral_loss_tag", ""))
-    return tag in {"R", "MeR"}

@@ -165,27 +165,6 @@ def test_multi_tag_support_does_not_promote_single_sample_family() -> None:
     assert decision.include_in_primary_matrix is False
 
 
-def test_single_rna_tag_family_does_not_birth_primary_matrix_row() -> None:
-    matrix = _matrix(
-        _feature(
-            "FAM001",
-            evidence="owner_complete_link;owner_count=8",
-            neutral_loss_tag="R",
-        ),
-        (
-            _cell("s1", "FAM001", "detected", 100.0),
-            _cell("s2", "FAM001", "detected", 90.0),
-        ),
-    )
-
-    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
-
-    assert decision.identity_decision == "provisional_discovery"
-    assert decision.identity_reason == "single_non_primary_tag_evidence"
-    assert decision.include_in_primary_matrix is False
-    assert "single_non_primary_tag_evidence" in decision.row_flags
-
-
 def test_artificial_adduct_annotation_does_not_demote_supported_family() -> None:
     matrix = _matrix(
         _feature(
