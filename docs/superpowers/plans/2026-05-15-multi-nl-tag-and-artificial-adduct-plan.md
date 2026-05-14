@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add FH-style multi neutral-loss/product-ion tag evidence and artificial adduct annotation without letting extra evidence pollute the primary untargeted matrix.
+**Goal:** Add FH-style multi neutral-loss tag evidence and artificial adduct annotation without letting extra evidence pollute the primary untargeted matrix.
 
-**Architecture:** Add explicit parser and evidence layers before changing promotion behavior. Discovery emits per-candidate tag evidence, alignment aggregates it at family level, adduct annotation relates co-eluting families, and final matrix identity remains gated by `include_in_primary_matrix`.
+**Architecture:** Add explicit parser and evidence layers before changing promotion behavior. Phase A is NL-only and starts with `dR/R/MeR`. Discovery emits per-candidate tag evidence, alignment aggregates it at family level, adduct annotation relates co-eluting families as annotation-only evidence, and final matrix identity remains gated by `include_in_primary_matrix`.
 
 **Tech Stack:** Python dataclasses, stdlib `csv`/`json`, existing `xic_extractor.discovery` modules, existing alignment TSV/XLSX writers, diagnostics under `tools/diagnostics/`, `pytest`, 8RAW/85RAW validation scripts.
 
@@ -16,16 +16,16 @@
 
 ## File Map
 
-- Create `xic_extractor/discovery/tag_profiles.py`: parse FH feature-list rows into neutral-loss/product-ion tag profiles and resolve user-selected tags.
+- Create `xic_extractor/discovery/tag_profiles.py`: parse FH feature-list rows into selectable neutral-loss tag profiles and tolerate deferred product-ion rows.
 - Create `tests/test_discovery_tag_profiles.py`: parser, validation, and selection tests.
 - Modify `xic_extractor/discovery/models.py`: add multi-profile settings and tag evidence models while keeping single-profile compatibility.
 - Modify `xic_extractor/discovery/ms2_seeds.py`: evaluate MS2 scans against multiple selected profiles and return zero or more seeds.
 - Modify `xic_extractor/discovery/grouping.py`: merge compatible seeds while preserving all matched tag evidence.
 - Modify `xic_extractor/discovery/csv_writer.py`: add compact tag-evidence columns to candidate/full machine outputs.
 - Modify `scripts/run_discovery.py`: add `--feature-list`, `--selected-tags`, `--tag-combine-mode`, and keep legacy `--neutral-loss-*` behavior.
-- Create `xic_extractor/alignment/adduct_annotation.py`: parse artificial adduct list and annotate close RT / expected m/z-delta family pairs.
-- Create `tests/test_alignment_adduct_annotation.py`: adduct parser, matcher, and representative preference tests.
-- Modify `xic_extractor/alignment/matrix_identity.py`: consume adduct annotations only as demotion/annotation inputs when a clear representative winner exists.
+- Create `xic_extractor/alignment/adduct_annotation.py`: parse artificial adduct list and annotate close RT / expected m/z-delta family pairs without changing matrix identity.
+- Create `tests/test_alignment_adduct_annotation.py`: adduct parser, matcher, and annotation-only tests.
+- Modify `xic_extractor/alignment/matrix_identity.py`: ensure multi-tag support and adduct annotations do not bypass existing primary matrix gates.
 - Modify alignment TSV/XLSX writer tests when Review/Audit schemas gain adduct fields: ensure Matrix excludes extra evidence and Review/Audit retain annotations.
 - Create `tools/diagnostics/multi_tag_adduct_audit.py`: summarize tag overlap, adduct relationships, and matrix row deltas.
 - Create `tests/test_multi_tag_adduct_audit.py`: diagnostic summary contract tests.
@@ -38,8 +38,8 @@
 
 - [ ] **Step 1: Write parser tests**
 
-Add tests that use a small inline CSV fixture with one `NL: dR`, one `NL: dA`,
-and one `PI: dR` row:
+Add tests that use a small inline CSV fixture with `NL: dR`, `NL: R`,
+`NL: MeR`, and one deferred `PI: dR` row:
 
 ```python
 from pathlib import Path
@@ -53,7 +53,7 @@ from xic_extractor.discovery.tag_profiles import (
 )
 
 
-def test_load_feature_tag_profiles_parses_nl_and_pi(tmp_path: Path) -> None:
+def test_load_feature_tag_profiles_parses_nl_and_tolerates_deferred_pi(tmp_path: Path) -> None:
     csv_path = tmp_path / "Feature_List.csv"
     csv_path.write_text(
         "Tag No.,Tag Category,Tag Parameters (Da or m/z),Mass Tolerance (ppm),"
@@ -62,7 +62,8 @@ def test_load_feature_tag_profiles_parses_nl_and_pi(tmp_path: Path) -> None:
         "Minimum Intensity Ratio (MS1/MS1'; only for tag category 3),"
         "Maximum Intensity Ratio (MS1/MS1'; only for tag category 3),\n"
         "1,1,116.047344,20,10000,0,0,0,0,NL: dR\n"
-        "10,1,251.1024,20,10000,0,0,0,0,NL: dA\n"
+        "2,1,132.0423,20,10000,0,0,0,0,NL: R\n"
+        "3,1,146.0579,20,10000,0,0,0,0,NL: MeR\n"
         "57,2,117.0547,20,10000,0,0,0,0,PI: dR\n",
         encoding="utf-8",
     )
@@ -78,8 +79,8 @@ def test_load_feature_tag_profiles_parses_nl_and_pi(tmp_path: Path) -> None:
         mass_tolerance_ppm=20.0,
         intensity_cutoff=10000.0,
     )
-    assert profiles[2].tag_kind == "product_ion"
-    assert profiles[2].tag_name == "dR"
+    assert [profile.tag_name for profile in profiles] == ["dR", "R", "MeR"]
+    assert all(profile.tag_kind == "neutral_loss" for profile in profiles)
 
 
 def test_resolve_selected_tag_profiles_accepts_names_and_labels(tmp_path: Path) -> None:
@@ -91,14 +92,33 @@ def test_resolve_selected_tag_profiles_accepts_names_and_labels(tmp_path: Path) 
         "Minimum Intensity Ratio (MS1/MS1'; only for tag category 3),"
         "Maximum Intensity Ratio (MS1/MS1'; only for tag category 3),\n"
         "1,1,116.047344,20,10000,0,0,0,0,NL: dR\n"
-        "10,1,251.1024,20,10000,0,0,0,0,NL: dA\n",
+        "2,1,132.0423,20,10000,0,0,0,0,NL: R\n"
+        "3,1,146.0579,20,10000,0,0,0,0,NL: MeR\n",
         encoding="utf-8",
     )
     profiles = load_feature_tag_profiles(csv_path)
 
-    selected = resolve_selected_tag_profiles(profiles, ["dR", "NL: dA"])
+    selected = resolve_selected_tag_profiles(profiles, ["dR", "NL: R", "MeR"])
 
-    assert [profile.tag_name for profile in selected] == ["dR", "dA"]
+    assert [profile.tag_name for profile in selected] == ["dR", "R", "MeR"]
+
+
+def test_resolve_selected_tag_profiles_rejects_pi_labels(tmp_path: Path) -> None:
+    csv_path = tmp_path / "Feature_List.csv"
+    csv_path.write_text(
+        "Tag No.,Tag Category,Tag Parameters (Da or m/z),Mass Tolerance (ppm),"
+        "Intensity Cutoff (height),Top N Ion by Intensity (MS2; only for tag category 1-2),"
+        "Consecutive Data Points (MS1; only for tag category 3),"
+        "Minimum Intensity Ratio (MS1/MS1'; only for tag category 3),"
+        "Maximum Intensity Ratio (MS1/MS1'; only for tag category 3),\n"
+        "1,1,116.047344,20,10000,0,0,0,0,NL: dR\n"
+        "57,2,117.0547,20,10000,0,0,0,0,PI: dR\n",
+        encoding="utf-8",
+    )
+    profiles = load_feature_tag_profiles(csv_path)
+
+    with pytest.raises(ValueError, match="not a selectable neutral-loss tag"):
+        resolve_selected_tag_profiles(profiles, ["PI: dR"])
 
 
 def test_load_feature_tag_profiles_rejects_unknown_category(tmp_path: Path) -> None:
@@ -140,13 +160,13 @@ from pathlib import Path
 from typing import Iterable, Literal
 
 
-TagKind = Literal["neutral_loss", "product_ion"]
+TagKind = Literal["neutral_loss"]
 
 
 @dataclass(frozen=True)
 class FeatureTagProfile:
     tag_id: str
-    tag_kind: TagKind
+    tag_kind: Literal["neutral_loss"]
     tag_label: str
     tag_name: str
     parameter_mz_or_da: float
@@ -160,10 +180,10 @@ def load_feature_tag_profiles(path: Path) -> list[FeatureTagProfile]:
     profiles: list[FeatureTagProfile] = []
     for row_number, row in enumerate(rows, start=2):
         category = _required(row, "Tag Category", row_number)
+        if category == "2":
+            continue
         if category == "1":
-            tag_kind: TagKind = "neutral_loss"
-        elif category == "2":
-            tag_kind = "product_ion"
+            tag_kind = "neutral_loss"
         else:
             raise ValueError(f"{path}:{row_number}: unsupported Tag Category {category!r}")
         label = _extract_label(row)
@@ -195,7 +215,9 @@ def resolve_selected_tag_profiles(
             or _normalize_selector(profile.tag_label) == selector
         ]
         if not matches:
-            raise ValueError(f"selected tag {selector!r} was not found in feature list")
+            raise ValueError(
+                f"selected tag {selector!r} was not a selectable neutral-loss tag"
+            )
         resolved.extend(matches)
     return resolved
 ```
@@ -225,19 +247,25 @@ Expected: PASS.
 
 - [ ] **Step 1: Add failing tests for multiple NL profiles**
 
-Add a test showing one scan can produce tag evidence for `dR` while a different
-scan in the same RT/precursor family can add `dA` evidence:
+Add a test showing scans with the same sample, precursor, and RT/MS1 peak
+neighborhood can add `dR`, `R`, and `MeR` evidence to one family even though
+their product m/z and observed neutral-loss values differ:
 
 ```python
 def test_multi_profile_seeds_preserve_all_matched_tag_names() -> None:
     settings = DiscoverySettings(
         neutral_loss_profiles=(
             NeutralLossProfile(tag="dR", neutral_loss_da=116.047344),
-            NeutralLossProfile(tag="dA", neutral_loss_da=251.1024),
+            NeutralLossProfile(tag="R", neutral_loss_da=132.0423),
+            NeutralLossProfile(tag="MeR", neutral_loss_da=146.0579),
         )
     )
     seeds = collect_strict_nl_seeds(
-        _FakeRaw([scan_for_loss(116.047344), scan_for_loss(251.1024)]),
+        _FakeRaw([
+            scan_for_loss(116.047344),
+            scan_for_loss(132.0423),
+            scan_for_loss(146.0579),
+        ]),
         raw_file=RAW_FILE,
         settings=settings,
     )
@@ -245,7 +273,7 @@ def test_multi_profile_seeds_preserve_all_matched_tag_names() -> None:
     groups = group_discovery_seeds(seeds, settings=settings)
 
     assert len(groups) == 1
-    assert groups[0].matched_tag_names == ("dR", "dA")
+    assert groups[0].matched_tag_names == ("dR", "R", "MeR")
 ```
 
 If the current test file lacks a scan helper that can express arbitrary neutral
@@ -325,10 +353,11 @@ the existing single-profile behavior identical when only one profile exists.
 
 - [ ] **Step 5: Merge tag evidence in grouping**
 
-In `xic_extractor/discovery/grouping.py`, keep compatibility checks centered on
-precursor/product/RT proximity. Do not require identical `neutral_loss_tag` when
-multi-profile mode is active and the seeds otherwise represent the same
-precursor/RT family. Merge `matched_tag_names` into a sorted tuple.
+In `xic_extractor/discovery/grouping.py`, keep cross-tag compatibility checks
+centered on sample identity, precursor m/z, and RT/MS1 peak proximity. Do not
+require identical `neutral_loss_tag`, product m/z proximity, or observed neutral
+loss proximity across different selected tags. Product m/z and observed loss are
+per-tag evidence. Merge `matched_tag_names` in selected-profile order.
 
 - [ ] **Step 6: Run discovery tests**
 
@@ -359,12 +388,12 @@ def test_run_discovery_accepts_feature_list_selected_tags_and_union_mode() -> No
         "--dll-dir", "C:/Xcalibur/system/programs",
         "--output-dir", "out",
         "--feature-list", "Feature_List.csv",
-        "--selected-tags", "dR,dA,dT,dC,dG",
+        "--selected-tags", "dR,R,MeR",
         "--tag-combine-mode", "union",
     ])
 
     assert args.feature_list == Path("Feature_List.csv")
-    assert args.selected_tags == "dR,dA,dT,dC,dG"
+    assert args.selected_tags == "dR,R,MeR"
     assert args.tag_combine_mode == "union"
 ```
 
@@ -540,17 +569,17 @@ def test_multi_tag_support_does_not_promote_single_sample_family() -> None:
     assert decision.include_in_primary_matrix is False
 
 
-def test_artificial_adduct_loser_stays_out_of_primary_matrix() -> None:
+def test_artificial_adduct_annotation_does_not_demote_supported_family() -> None:
     row = _identity_row(
         q_detected=5,
         owner_detected_count=5,
-        artificial_adduct_role="related_loser",
+        artificial_adduct_role="related_annotation",
     )
 
     decision = decide_matrix_identity(row)
 
-    assert decision.identity_decision == "audit_family"
-    assert decision.include_in_primary_matrix is False
+    assert decision.identity_decision == "production_family"
+    assert decision.include_in_primary_matrix is True
 ```
 
 - [ ] **Step 2: Run identity tests and verify they fail**
@@ -576,7 +605,7 @@ or backfill/rescue gates.
 
 - [ ] **Step 4: Add adduct relationship fields to Review/Audit**
 
-Add Review/Audit fields:
+Add Review/Audit fields as annotation-only fields:
 
 ```text
 artificial_adduct_role
@@ -586,7 +615,8 @@ artificial_adduct_mz_delta_error_ppm
 artificial_adduct_rt_delta_min
 ```
 
-Primary Matrix TSV/XLSX must not include these fields.
+Primary Matrix TSV/XLSX must not include these fields. These fields must not
+change `identity_decision` in Phase A/B.
 
 - [ ] **Step 5: Run writer and identity tests**
 
@@ -628,7 +658,7 @@ The JSON must include:
 
 ```json
 {
-  "selected_tags": ["dR", "dA", "dT", "dC", "dG"],
+  "selected_tags": ["dR", "R", "MeR"],
   "tag_combine_mode": "union",
   "matrix_row_count": 0,
   "review_row_count": 0,
@@ -688,7 +718,7 @@ Run:
 
 ```powershell
 $env:PYTHONPATH='.'
-uv run python scripts\run_discovery.py --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" --dll-dir "C:\Xcalibur\system\programs" --output-dir output\discovery\multi_tag_8raw_union_20260515 --feature-list "C:\Users\user\Desktop\NTU cancer\FeatureHunter_v1.6c\params\Feature_List_urine_Malignancy_R.csv" --selected-tags dR,dA,dT,dC,dG --tag-combine-mode union
+uv run python scripts\run_discovery.py --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" --dll-dir "C:\Xcalibur\system\programs" --output-dir output\discovery\multi_tag_8raw_union_20260515 --feature-list "C:\Users\user\Desktop\NTU cancer\FeatureHunter_v1.6c\params\Feature_List_urine_Malignancy_R.csv" --selected-tags dR,R,MeR --tag-combine-mode union
 ```
 
 Expected: discovery outputs contain `matched_tag_names` and

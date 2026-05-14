@@ -7,11 +7,18 @@ keeping the final matrix identity clean. Multi-tag evidence should increase the
 amount and quality of discovery evidence, not create one primary matrix row per
 tag, one row per adduct, or one row per weak single-sample observation.
 
+Phase A is neutral-loss only. The first multi-tag set is:
+
+```text
+dR / R / MeR
+```
+
 The FeatureHunter parameter tables are treated as discovery configuration and
 annotation references:
 
-- `Feature_List_urine_Malignancy_R.csv` defines neutral-loss and product-ion
-  tag candidates.
+- `Feature_List_urine_Malignancy_R.csv` defines the neutral-loss tag catalog
+  used by Phase A. Product-ion rows may be parsed as deferred catalog metadata,
+  but they are not selectable discovery profiles in this phase.
 - `Artificial_Adduct_List.csv` defines expected ESI artifact m/z differences
   between related co-eluting features.
 
@@ -52,7 +59,7 @@ References:
 
 ### In Scope
 
-- Parse FH `Feature_List` as a tag-profile catalog.
+- Parse FH `Feature_List` as a neutral-loss tag-profile catalog.
 - Parse FH `Artificial_Adduct_List` as an artifact delta catalog.
 - Support user-selected tag subsets.
 - Support explicit `union` and `intersection` tag-selection modes.
@@ -67,6 +74,7 @@ References:
 
 - Do not automatically expand targeted workbook labels from FH tag names.
 - Do not use targeted labels inside production discovery or alignment logic.
+- Do not implement product-ion tag matching in Phase A.
 - Do not make `[M+H]+` mandatory for final row identity.
 - Do not add a new Discovery worksheet in this phase.
 - Do not connect iRT/LOESS into promotion gates in this phase.
@@ -81,26 +89,28 @@ The FH feature list is a CSV with these relevant columns:
 | Column | Meaning |
 |---|---|
 | `Tag No.` | Stable FH row number. |
-| `Tag Category` | Tag type. Category `1` means neutral-loss evidence; category `2` means product-ion evidence. |
-| `Tag Parameters (Da or m/z)` | Neutral-loss mass for category `1`; product-ion m/z for category `2`. |
+| `Tag Category` | Tag type. Category `1` means neutral-loss evidence. Category `2` is product-ion metadata and is deferred in Phase A. |
+| `Tag Parameters (Da or m/z)` | Neutral-loss mass for category `1`. |
 | `Mass Tolerance (ppm)` | Per-tag mass tolerance. |
 | `Intensity Cutoff (height)` | Per-tag signal floor. |
-| trailing unlabeled note column | Human tag label such as `NL: dR` or `PI: dR`. |
+| trailing unlabeled note column | Human tag label such as `NL: dR`. |
 
 Parsed tag profile fields:
 
 | Field | Example | Notes |
 |---|---|---|
 | `tag_id` | `1` | From `Tag No.`. |
-| `tag_kind` | `neutral_loss` | `1 -> neutral_loss`, `2 -> product_ion`. |
+| `tag_kind` | `neutral_loss` | Phase A selectable profiles are neutral-loss only. |
 | `tag_label` | `NL: dR` | Preserve the FH text but normalize whitespace. |
-| `tag_name` | `dR` | Text after `NL:` or `PI:`. |
-| `parameter_mz_or_da` | `116.047344` | Da for NL, m/z for PI. |
+| `tag_name` | `dR` | Text after `NL:`. |
+| `parameter_mz_or_da` | `116.047344` | Neutral-loss Da for Phase A selectable profiles. |
 | `mass_tolerance_ppm` | `20` | Per-tag matching tolerance. |
 | `intensity_cutoff` | `10000` | Minimum product intensity or ion height threshold. |
 
-Unknown categories are rejected with a clear error until a new contract defines
-their semantics.
+Category `2` rows are tolerated as deferred product-ion metadata so the full FH
+feature list can be loaded. They must not be returned by default selected-profile
+resolution, and selecting a `PI:` tag must fail clearly. Unknown categories are
+rejected until a new contract defines their semantics.
 
 ## Tag Selection Contract
 
@@ -112,9 +122,9 @@ Minimum public configuration:
 | Config | Meaning |
 |---|---|
 | `feature_list_path` | FH feature-list CSV. |
-| `selected_tags` | List of tag names or labels selected by the user. |
+| `selected_tags` | List of neutral-loss tag names or labels selected by the user. Phase A starts with `dR,R,MeR`. |
 | `tag_combine_mode` | `union` or `intersection`. |
-| `tag_kind_filter` | Optional filter: `neutral_loss`, `product_ion`, or `all`. |
+| `tag_kind_filter` | Deferred. Phase A is always `neutral_loss`. |
 
 Default compatibility behavior remains single-profile DNA `dR` discovery until
 the user supplies a feature-list path and selected tags.
@@ -131,6 +141,9 @@ Rules:
   precursor/RT has multiple tag labels.
 - If multiple tags produce near-identical candidate identities, the tag evidence
   is merged at the family level.
+- Cross-tag grouping uses sample identity, precursor m/z, and RT/MS1 peak
+  overlap. Product m/z and observed neutral loss remain per-tag evidence and are
+  not required to be equal across different selected tags.
 
 ### Intersection Mode
 
@@ -156,7 +169,7 @@ surface can carry them:
 |---|---|
 | `selected_tag_count` | Number of selected tags in the run. |
 | `matched_tag_count` | Number of selected tags observed for the candidate/family. |
-| `matched_tag_names` | Semicolon-delimited normalized tag names. |
+| `matched_tag_names` | Semicolon-delimited normalized tag names in selected-tag order. |
 | `primary_tag_name` | Best representative tag for sorting and compatibility. |
 | `tag_combine_mode` | `single`, `union`, or `intersection`. |
 | `tag_intersection_status` | `not_required`, `complete`, or `incomplete`. |
@@ -184,7 +197,7 @@ Parsed artificial adduct fields:
 | `adduct_name` | `M+Na-H` |
 
 Adduct matching is a relationship annotation between feature families, not a
-new discovery seed.
+new discovery seed and not a Phase A promotion/demotion gate.
 
 Minimum matching evidence:
 
@@ -245,7 +258,9 @@ Multi-tag support can increase confidence, but it cannot by itself override:
 - consolidation-loser demotion.
 
 Backfill still cannot create final row identity. Artificial adduct related rows
-should be annotated and demoted only when the representative winner is clear.
+are annotation-only in Phase A/B. Demotion requires a later representative-winner
+plan after real-data evidence shows it will not remove valid ISTD or stable
+biological signals.
 
 ## Diagnostics
 
@@ -257,7 +272,7 @@ A multi-tag/adduct diagnostic run must report:
 - families with multiple tag support;
 - `intersection` complete/incomplete counts;
 - artificial adduct pair count by adduct name;
-- representative/loss relationship counts;
+- representative/loss relationship counts, annotation-only in Phase A/B;
 - Primary Matrix row count delta versus single `dR` baseline;
 - Review/Audit retained evidence count;
 - targeted ISTD benchmark result when a targeted benchmark workbook is supplied.
@@ -271,9 +286,11 @@ The diagnostic should answer this question before production promotion changes:
 
 ### Unit Gates
 
-- FH feature-list parser handles category `1` and `2`.
+- FH feature-list parser handles category `1` and tolerates deferred category
+  `2` rows without selecting them.
 - FH parser rejects unknown tag categories.
-- tag selection accepts tag names and full labels.
+- tag selection accepts neutral-loss tag names and full `NL:` labels.
+- tag selection rejects `PI:` labels in Phase A.
 - union mode merges multiple matching tags into one candidate/family evidence
   record.
 - intersection mode marks incomplete evidence without deleting rows.
@@ -286,8 +303,8 @@ The diagnostic should answer this question before production promotion changes:
 Run in this order:
 
 1. Single-tag `dR` 8RAW baseline.
-2. Multi-tag 8RAW union diagnostic with a small selected set:
-   `dR`, `dA`, `dT`, `dC`, `dG`.
+2. Multi-tag 8RAW union diagnostic with the first selected NL set:
+   `dR`, `R`, `MeR`.
 3. Multi-tag 8RAW intersection diagnostic on a deliberately narrow pair only
    after union behavior is inspectable.
 4. Artificial-adduct annotation on the 8RAW alignment output.
@@ -299,5 +316,5 @@ Stop before 85RAW if:
 - targeted ISTD benchmark regresses, excluding known targeted-side
   `d3-N6-medA` area mismatch;
 - Primary Matrix row count inflates without matching production support;
-- artificial adduct annotation demotes an ISTD primary family;
+- artificial adduct annotation changes any primary matrix identity;
 - Review/Audit loses candidate evidence instead of annotating it.
