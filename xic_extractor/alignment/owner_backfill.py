@@ -34,6 +34,7 @@ def build_owner_backfill_cells(
     *,
     sample_order: tuple[str, ...],
     raw_sources: Mapping[str, OwnerBackfillSource],
+    validation_raw_sources: Mapping[str, OwnerBackfillSource] | None = None,
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
     raw_xic_batch_size: int = 1,
@@ -70,6 +71,9 @@ def build_owner_backfill_cells(
                 )
             )
     rescued_by_feature_sample: dict[tuple[str, str], AlignedCell] = {}
+    validation_pending: dict[str, list[tuple[OwnerAlignedFeature, str, XICRequest]]] = (
+        defaultdict(list)
+    )
     for sample_stem in sample_order:
         sample_requests = pending.get(sample_stem, [])
         if not sample_requests:
@@ -96,9 +100,44 @@ def build_owner_backfill_cells(
                     peak_config=peak_config,
                 )
                 if cell is not None:
-                    rescued_by_feature_sample[
-                        (feature.feature_family_id, requested_sample)
-                    ] = cell
+                    if validation_raw_sources is None:
+                        rescued_by_feature_sample[
+                            (feature.feature_family_id, requested_sample)
+                        ] = cell
+                    else:
+                        validation_pending[requested_sample].append(
+                            (feature, requested_sample, _request)
+                        )
+    if validation_raw_sources is not None:
+        for sample_stem in sample_order:
+            sample_requests = validation_pending.get(sample_stem, [])
+            if not sample_requests or sample_stem not in validation_raw_sources:
+                continue
+            source = validation_raw_sources[sample_stem]
+            for chunk in _scan_window_aware_chunks(
+                source,
+                tuple(sample_requests),
+                raw_xic_batch_size,
+            ):
+                try:
+                    traces = _extract_many(source, tuple(item[2] for item in chunk))
+                except OSError:
+                    continue
+                for (feature, requested_sample, _request), trace in zip(
+                    chunk,
+                    traces,
+                    strict=True,
+                ):
+                    cell = _backfill_feature_sample_trace(
+                        feature,
+                        requested_sample,
+                        trace,
+                        peak_config=peak_config,
+                    )
+                    if cell is not None:
+                        rescued_by_feature_sample[
+                            (feature.feature_family_id, requested_sample)
+                        ] = cell
     for feature in features:
         if feature.review_only:
             continue

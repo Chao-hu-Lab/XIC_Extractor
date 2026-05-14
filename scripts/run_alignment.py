@@ -218,12 +218,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--owner-backfill-xic-backend",
-        choices=("raw", "ms1-index"),
+        choices=("raw", "ms1-index", "ms1-index-hybrid"),
         default="raw",
         help=(
             "XIC backend for owner-centered MS1 backfill. Default 'raw' uses "
             "Thermo vendor chromatograms. 'ms1-index' is an explicit "
-            "approximate fast mode and may change peak areas."
+            "approximate fast mode and may change peak areas. "
+            "'ms1-index-hybrid' uses MS1-index prefiltering but writes "
+            "vendor-confirmed rescued cells."
         ),
     )
     parser.add_argument(
@@ -291,7 +293,11 @@ def _positive_int(value: str) -> int:
 
 
 def _owner_backfill_xic_backend(value: str) -> str:
-    return "ms1_index" if value == "ms1-index" else value
+    if value == "ms1-index":
+        return "ms1_index"
+    if value == "ms1-index-hybrid":
+        return "ms1_index_hybrid"
+    return value
 
 
 def _peak_config(

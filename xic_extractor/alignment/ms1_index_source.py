@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 
 from xic_extractor.xic_models import XICRequest, XICTrace
 
-OwnerBackfillXicBackend = Literal["raw", "ms1_index"]
+OwnerBackfillXicBackend = Literal["raw", "ms1_index", "ms1_index_hybrid"]
 MS1IndexIntensityMode = Literal["max", "sum"]
 
 
@@ -77,7 +77,7 @@ def source_for_owner_backfill_backend(
 ) -> Any:
     if backend == "raw":
         return source
-    if backend == "ms1_index":
+    if backend in {"ms1_index", "ms1_index_hybrid"}:
         return MS1IndexedRawSource(source)
     raise ValueError(f"unsupported owner backfill XIC backend: {backend}")
 

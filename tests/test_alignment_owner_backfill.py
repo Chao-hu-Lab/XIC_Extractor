@@ -139,6 +139,64 @@ def test_owner_backfill_uses_batch_source_and_preserves_feature_major_order() ->
     ]
 
 
+def test_owner_backfill_validates_prefilter_hits_with_secondary_source() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class BatchSource:
+        def __init__(self, traces) -> None:
+            self.traces = tuple(traces)
+            self.requests = []
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.requests.append(requests)
+            return self.traces[: len(requests)]
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    feature_a = _feature(feature_family_id="FAM000001", mz=500.0, rt=8.5)
+    feature_b = _feature(feature_family_id="FAM000002", mz=510.0, rt=10.5)
+    prefilter = BatchSource(
+        (
+            XICTrace.from_arrays(
+                [8.40, 8.49, 8.50, 8.51, 8.60],
+                [0.0, 50.0, 120.0, 50.0, 0.0],
+            ),
+            XICTrace.from_arrays(
+                [10.40, 10.49, 10.50, 10.51, 10.60],
+                [0.0, 0.0, 0.0, 0.0, 0.0],
+            ),
+        )
+    )
+    validator = BatchSource(
+        (
+            XICTrace.from_arrays(
+                [8.40, 8.49, 8.50, 8.51, 8.60],
+                [0.0, 100.0, 240.0, 100.0, 0.0],
+            ),
+        )
+    )
+
+    cells = build_owner_backfill_cells(
+        (feature_a, feature_b),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": prefilter},
+        validation_raw_sources={"sample-b": validator},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=64,
+    )
+
+    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
+        ("FAM000001", "sample-b"),
+    ]
+    assert cells[0].height == 240.0
+    assert len(prefilter.requests[0]) == 2
+    assert len(validator.requests[0]) == 1
+    assert validator.requests[0][0].mz == 500.0
+
+
 def test_owner_backfill_batches_by_rt_window_without_changing_emit_order() -> None:
     from xic_extractor.xic_models import XICTrace
 

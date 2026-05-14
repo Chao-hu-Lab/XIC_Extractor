@@ -131,6 +131,90 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
     assert not (tmp_path / "out" / "alignment_matrix_status.tsv").exists()
 
 
+def test_pipeline_applies_single_worker_hybrid_owner_backfill_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        lambda candidates, **kwargs: SimpleNamespace(
+            owners=("owner",),
+            assignments=(),
+            ambiguous_records=(),
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (
+            "feature",
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+
+    def fake_source_for_owner_backfill_backend(source, backend):
+        calls["backend"] = backend
+        return SimpleNamespace(kind="indexed", source=source)
+
+    def fake_owner_backfill(
+        features,
+        *,
+        sample_order,
+        raw_sources,
+        validation_raw_sources=None,
+        **kwargs,
+    ):
+        calls["backfill_raw_sources"] = raw_sources
+        calls["validation_raw_sources"] = validation_raw_sources
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "source_for_owner_backfill_backend",
+        fake_source_for_owner_backfill_backend,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        fake_owner_backfill,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+        owner_backfill_xic_backend="ms1_index_hybrid",
+    )
+
+    assert calls["backend"] == "ms1_index_hybrid"
+    assert set(calls["backfill_raw_sources"]) == {"Sample_A"}
+    assert set(calls["validation_raw_sources"]) == {"Sample_A"}
+    assert (
+        calls["backfill_raw_sources"]["Sample_A"]
+        is not calls["validation_raw_sources"]["Sample_A"]
+    )
+
+
 def test_pipeline_records_alignment_timing_stages(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -257,20 +257,31 @@ def run_alignment(
                         },
                     )
             else:
-                timed_raw_sources = _timed_raw_sources(
+                (
+                    timed_raw_sources,
+                    validation_raw_sources,
+                    timing_stats,
+                ) = _timed_owner_backfill_sources(
                     raw_sources,
+                    backend=owner_backfill_xic_backend,
                     recorder=recorder,
                     stage="alignment.owner_backfill.extract_xic",
+                )
+                validation_kwargs = (
+                    {"validation_raw_sources": validation_raw_sources}
+                    if validation_raw_sources is not None
+                    else {}
                 )
                 rescued_cells = build_owner_backfill_cells(
                     owner_features,
                     sample_order=batch.sample_order,
                     raw_sources=timed_raw_sources,
+                    **validation_kwargs,
                     alignment_config=alignment_config,
                     peak_config=peak_config,
                     raw_xic_batch_size=raw_xic_batch_size,
                 )
-                _record_timed_raw_sources(timed_raw_sources, recorder=recorder)
+                _record_raw_source_timing_stats(timing_stats, recorder=recorder)
         with recorder.stage("alignment.build_matrix"):
             matrix = build_owner_alignment_matrix(
                 owner_features,
@@ -417,15 +428,30 @@ def _timed_raw_sources(
     }
 
 
-def _owner_backfill_raw_sources(
+def _timed_owner_backfill_sources(
     raw_sources: dict[str, AlignmentRawHandle],
     *,
     backend: OwnerBackfillXicBackend,
-) -> dict[str, AlignmentRawHandle]:
-    return {
-        sample_stem: source_for_owner_backfill_backend(source, backend)
-        for sample_stem, source in raw_sources.items()
-    }
+    recorder: TimingRecorder,
+    stage: str,
+) -> tuple[
+    dict[str, _TimedRawSource],
+    dict[str, _TimedRawSource] | None,
+    tuple[_RawSourceTimingStats, ...],
+]:
+    backfill_sources: dict[str, _TimedRawSource] = {}
+    validation_sources: dict[str, _TimedRawSource] | None = (
+        {} if backend == "ms1_index_hybrid" else None
+    )
+    timing_stats: list[_RawSourceTimingStats] = []
+    for sample_stem, source in raw_sources.items():
+        stats = _RawSourceTimingStats(sample_stem=sample_stem, stage=stage)
+        timing_stats.append(stats)
+        backfill_source = source_for_owner_backfill_backend(source, backend)
+        backfill_sources[sample_stem] = _TimedRawSource(backfill_source, stats=stats)
+        if validation_sources is not None:
+            validation_sources[sample_stem] = _TimedRawSource(source, stats=stats)
+    return backfill_sources, validation_sources, tuple(timing_stats)
 
 
 def _record_timed_raw_sources(
@@ -433,8 +459,18 @@ def _record_timed_raw_sources(
     *,
     recorder: TimingRecorder,
 ) -> None:
-    for source in raw_sources.values():
-        stats = source._stats
+    _record_raw_source_timing_stats(
+        tuple(source._stats for source in raw_sources.values()),
+        recorder=recorder,
+    )
+
+
+def _record_raw_source_timing_stats(
+    timing_stats: tuple[_RawSourceTimingStats, ...],
+    *,
+    recorder: TimingRecorder,
+) -> None:
+    for stats in timing_stats:
         if stats.extract_xic_count == 0:
             continue
         recorder.record(

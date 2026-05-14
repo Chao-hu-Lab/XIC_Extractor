@@ -167,6 +167,28 @@ uv run python scripts\run_alignment.py `
 does not replace the default vendor XIC path and must be checked with the
 targeted ISTD benchmark before any production interpretation.
 
+When validating whether the scan-index prefilter is the source of a matrix
+change, run the hybrid mode:
+
+```powershell
+uv run python scripts\run_alignment.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --output-dir output\alignment\ms1_index_hybrid_8raw `
+  --output-level machine `
+  --emit-alignment-cells `
+  --performance-profile validation-fast `
+  --owner-backfill-xic-backend ms1-index-hybrid `
+  --timing-output output\diagnostics\ms1_index_hybrid_8raw\alignment_timing.json
+```
+
+`ms1-index-hybrid` uses MS1-index traces as a prefilter, but every rescued
+owner-backfill cell that enters the matrix is re-extracted from the vendor XIC
+path before its RT and area are written. It is an equivalence diagnostic and
+may be slower than the raw backend when the prefilter rejects only a small
+fraction of requests.
+
 The 8-raw timing run on the tissue validation subset showed byte-identical
 machine TSV outputs (`alignment_review.tsv`, `alignment_matrix.tsv`, and
 `alignment_cells.tsv`) versus the conservative baseline, with workbook sheet

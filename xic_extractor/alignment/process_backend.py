@@ -504,10 +504,21 @@ def extract_owner_backfill_sample_job(
                 job.owner_backfill_xic_backend,
             )
             timed_raw = _TimedProcessRawSource(source, stats=stats)
+            validation_raw_sources = (
+                {job.sample_stem: _TimedProcessRawSource(raw, stats=stats)}
+                if job.owner_backfill_xic_backend == "ms1_index_hybrid"
+                else None
+            )
+            validation_kwargs = (
+                {"validation_raw_sources": validation_raw_sources}
+                if validation_raw_sources is not None
+                else {}
+            )
             cells = build_owner_backfill_cells(
                 job.features,
                 sample_order=(job.sample_stem,),
                 raw_sources={job.sample_stem: timed_raw},
+                **validation_kwargs,
                 alignment_config=job.alignment_config,
                 peak_config=job.peak_config,
                 raw_xic_batch_size=job.raw_xic_batch_size,
