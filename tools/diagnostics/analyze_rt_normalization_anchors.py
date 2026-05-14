@@ -149,6 +149,8 @@ def run_rt_normalization_anchor_diagnostic(
     anchor_slope_max: float = 1.50,
     sample_info: Path | None = None,
     injection_window: int = 4,
+    loess_frac: float = 0.25,
+    loess_min_neighbors: int = 7,
 ) -> tuple[RtNormalizationOutputs, RtNormalizationResult]:
     anchors = _read_anchor_definitions(
         targeted_workbook,
@@ -165,6 +167,8 @@ def run_rt_normalization_anchor_diagnostic(
         reference_source,
         injection_order=injection_order,
         injection_window=injection_window,
+        loess_frac=loess_frac,
+        loess_min_neighbors=loess_min_neighbors,
     )
     models, residuals, sample_count = fit_sample_rt_models(
         points,
@@ -223,6 +227,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             anchor_slope_max=args.anchor_slope_max,
             sample_info=args.sample_info.resolve() if args.sample_info else None,
             injection_window=args.injection_window,
+            loess_frac=args.loess_frac,
+            loess_min_neighbors=args.loess_min_neighbors,
         )
     except (FileNotFoundError, KeyError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -251,7 +257,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--reference-source",
-        choices=("observed-median", "target-window", "injection-local-median"),
+        choices=(
+            "observed-median",
+            "target-window",
+            "injection-local-median",
+            "injection-loess",
+        ),
         default="observed-median",
     )
     parser.add_argument(
@@ -264,6 +275,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--anchor-slope-max", type=float, default=1.50)
     parser.add_argument("--sample-info", type=Path)
     parser.add_argument("--injection-window", type=int, default=4)
+    parser.add_argument("--loess-frac", type=float, default=0.25)
+    parser.add_argument("--loess-min-neighbors", type=int, default=7)
     return parser.parse_args(argv)
 
 
@@ -356,10 +369,10 @@ def _read_optional_injection_order(
     *,
     reference_source: str,
 ) -> dict[str, int] | None:
-    if reference_source != "injection-local-median":
+    if not reference_source.startswith("injection-"):
         return None
     if sample_info is None:
-        raise ValueError("sample_info is required for injection-local-median")
+        raise ValueError(f"sample_info is required for {reference_source}")
     return read_injection_order(sample_info)
 
 

@@ -56,6 +56,8 @@ def apply_anchor_reference_source(
     *,
     injection_order: Mapping[str, int] | None = None,
     injection_window: int = 4,
+    loess_frac: float = 0.25,
+    loess_min_neighbors: int = 7,
 ) -> tuple[AnchorPoint, ...]:
     if reference_source == "target-window":
         return points
@@ -66,6 +68,15 @@ def apply_anchor_reference_source(
             points,
             injection_order=injection_order,
             injection_window=injection_window,
+        )
+    if reference_source == "injection-loess":
+        if injection_order is None:
+            raise ValueError("sample_info is required for injection-loess")
+        return _apply_injection_loess_reference(
+            points,
+            injection_order=injection_order,
+            loess_frac=loess_frac,
+            loess_min_neighbors=loess_min_neighbors,
         )
     if reference_source != "observed-median":
         raise ValueError(f"unsupported reference source: {reference_source}")
@@ -140,6 +151,93 @@ def _local_median_rt(
     if len(values) < 3:
         return None
     return float(median(values))
+
+
+def _apply_injection_loess_reference(
+    points: tuple[AnchorPoint, ...],
+    *,
+    injection_order: Mapping[str, int],
+    loess_frac: float,
+    loess_min_neighbors: int,
+) -> tuple[AnchorPoint, ...]:
+    rt_by_label: dict[str, dict[str, float]] = {}
+    for point in points:
+        rt_by_label.setdefault(point.target_label, {})[
+            point.sample_stem
+        ] = point.observed_rt_min
+
+    normalized: list[AnchorPoint] = []
+    for point in points:
+        sample_order = injection_order.get(point.sample_stem)
+        if sample_order is None:
+            continue
+        smoothed_reference = _loess_reference_rt(
+            sample_order,
+            rt_by_label.get(point.target_label, {}),
+            injection_order,
+            frac=loess_frac,
+            min_neighbors=loess_min_neighbors,
+        )
+        if smoothed_reference is None:
+            continue
+        normalized.append(
+            AnchorPoint(
+                sample_stem=point.sample_stem,
+                target_label=point.target_label,
+                observed_rt_min=point.observed_rt_min,
+                reference_rt_min=smoothed_reference,
+            )
+        )
+    return tuple(normalized)
+
+
+def _loess_reference_rt(
+    sample_order: int,
+    rt_by_sample: Mapping[str, float],
+    injection_order: Mapping[str, int],
+    *,
+    frac: float,
+    min_neighbors: int,
+) -> float | None:
+    observations = [
+        (float(order), rt)
+        for sample, rt in rt_by_sample.items()
+        if (order := injection_order.get(sample)) is not None
+    ]
+    if len(observations) < 3:
+        return None
+    k = max(int(math.ceil(len(observations) * frac)), min_neighbors, 3)
+    k = min(k, len(observations))
+    nearest = sorted(
+        observations,
+        key=lambda item: (abs(item[0] - sample_order), item[0]),
+    )[:k]
+    bandwidth = max(abs(order - sample_order) for order, _rt in nearest)
+    if bandwidth <= 0:
+        return float(median(rt for _order, rt in nearest))
+
+    weighted = []
+    for order, rt in nearest:
+        scaled_distance = abs(order - sample_order) / bandwidth
+        weight = (1.0 - scaled_distance**3) ** 3
+        if weight > 0:
+            weighted.append((order, rt, weight))
+    if len(weighted) < 2:
+        return float(median(rt for _order, rt in nearest))
+
+    weight_sum = sum(weight for _order, _rt, weight in weighted)
+    x_mean = sum(order * weight for order, _rt, weight in weighted) / weight_sum
+    y_mean = sum(rt * weight for _order, rt, weight in weighted) / weight_sum
+    denominator = sum(
+        weight * (order - x_mean) ** 2 for order, _rt, weight in weighted
+    )
+    if denominator <= 1e-12:
+        return y_mean
+    slope = sum(
+        weight * (order - x_mean) * (rt - y_mean)
+        for order, rt, weight in weighted
+    ) / denominator
+    return y_mean + slope * (float(sample_order) - x_mean)
 
 
 def fit_sample_rt_models(

@@ -7,6 +7,10 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook
 
+from xic_extractor.alignment.rt_normalization import (
+    AnchorPoint,
+    apply_anchor_reference_source,
+)
 from tools.diagnostics import analyze_rt_normalization_anchors as rt_norm
 
 
@@ -398,7 +402,49 @@ def test_injection_local_reference_uses_ordered_rolling_anchor_medians(
     assert s2_references == {"anchor-a": 10.0, "anchor-b": 20.0}
 
 
-def test_injection_local_reference_requires_sample_info(tmp_path: Path):
+def test_injection_loess_reference_preserves_linear_ordered_anchor_drift():
+    points = tuple(
+        AnchorPoint(
+            sample_stem=f"S{order}",
+            target_label="anchor-a",
+            observed_rt_min=10.0 + (order * 0.5),
+            reference_rt_min=10.0,
+        )
+        for order in range(1, 6)
+    )
+    injection_order = {f"S{order}": order for order in range(1, 6)}
+
+    adjusted = apply_anchor_reference_source(
+        points,
+        "injection-loess",
+        injection_order=injection_order,
+        loess_frac=1.0,
+        loess_min_neighbors=5,
+    )
+
+    references = {
+        point.sample_stem: point.reference_rt_min
+        for point in adjusted
+    }
+    assert references == pytest.approx(
+        {
+            "S1": 10.5,
+            "S2": 11.0,
+            "S3": 11.5,
+            "S4": 12.0,
+            "S5": 12.5,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "reference_source",
+    ["injection-local-median", "injection-loess"],
+)
+def test_injection_reference_requires_sample_info(
+    tmp_path: Path,
+    reference_source: str,
+):
     targeted = tmp_path / "targeted.xlsx"
     alignment = tmp_path / "alignment"
     _write_targeted_workbook(
@@ -427,7 +473,7 @@ def test_injection_local_reference_requires_sample_info(tmp_path: Path):
             targeted_workbook=targeted,
             alignment_dir=alignment,
             output_dir=tmp_path / "rt_normalization",
-            reference_source="injection-local-median",
+            reference_source=reference_source,
         )
 
 
