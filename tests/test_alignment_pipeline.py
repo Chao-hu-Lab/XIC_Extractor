@@ -215,6 +215,77 @@ def test_pipeline_applies_single_worker_hybrid_owner_backfill_backend(
     )
 
 
+def test_pipeline_preconsolidates_owner_families_when_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        lambda candidates, **kwargs: SimpleNamespace(
+            owners=("owner",),
+            assignments=(),
+            ambiguous_records=(),
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (
+            "feature",
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+
+    def fake_preconsolidate(features, *, config):
+        calls["preconsolidate_features"] = features
+        return ("consolidated",)
+
+    def fake_owner_backfill(features, **kwargs):
+        calls["backfill_features"] = features
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "consolidate_pre_backfill_identity_families",
+        fake_preconsolidate,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        fake_owner_backfill,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+        preconsolidate_owner_families=True,
+    )
+
+    assert calls["preconsolidate_features"] == ("feature",)
+    assert calls["backfill_features"] == ("consolidated",)
+
+
 def test_pipeline_records_alignment_timing_stages(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -249,6 +320,7 @@ def test_pipeline_records_alignment_timing_stages(
         "alignment.build_matrix",
         "alignment.claim_registry",
         "alignment.primary_consolidation",
+        "alignment.pre_backfill_recenter",
         "alignment.write_outputs",
     ]
     records_by_stage = {record.stage: record for record in recorder.records}
@@ -257,6 +329,7 @@ def test_pipeline_records_alignment_timing_stages(
         "raw_workers": 1,
         "raw_xic_batch_size": 1,
         "owner_backfill_xic_backend": "raw",
+        "preconsolidate_owner_families": False,
         "output_level": "machine",
         "drift_prior_source": "none",
     }

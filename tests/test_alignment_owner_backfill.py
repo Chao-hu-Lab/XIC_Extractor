@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 
 from tests.test_alignment_owner_clustering import _owner
@@ -66,6 +68,86 @@ def test_owner_backfill_skips_features_below_min_detected_sample_gate() -> None:
 
     assert cells == ()
     assert source.calls == []
+
+
+def test_owner_backfill_confirms_detected_samples_for_preconsolidated_feature() -> None:
+    source_a = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 50.0, 100.0, 50.0, 0.0]),
+    )
+    source_b = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 60.0, 120.0, 60.0, 0.0]),
+    )
+    feature = replace(_feature(), confirm_local_owners_with_backfill=True)
+
+    cells = build_owner_backfill_cells(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-a": source_a, "sample-b": source_b},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+    )
+
+    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
+        ("FAM000001", "sample-a"),
+        ("FAM000001", "sample-b"),
+    ]
+    assert source_a.calls == [(500.0, 5.5, 11.5, 20.0)]
+    assert source_b.calls == [(500.0, 5.5, 11.5, 20.0)]
+
+
+def test_owner_backfill_uses_preconsolidated_seed_centers_and_keeps_best_peak() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class BatchSource:
+        def __init__(self) -> None:
+            self.centers: list[float] = []
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            traces = []
+            for request in requests:
+                center = (request.rt_min + request.rt_max) / 2.0
+                self.centers.append(center)
+                intensity = 300.0 if round(center, 1) == 8.8 else 100.0
+                traces.append(
+                    XICTrace.from_arrays(
+                        [
+                            center - 0.10,
+                            center - 0.01,
+                            center,
+                            center + 0.01,
+                            center + 0.10,
+                        ],
+                        [0.0, intensity / 2.0, intensity, intensity / 2.0, 0.0],
+                    )
+                )
+            return tuple(traces)
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source = BatchSource()
+    feature = replace(
+        _feature(),
+        backfill_seed_centers=((500.0, 8.5), (500.0, 8.8)),
+    )
+
+    cells = build_owner_backfill_cells(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=64,
+    )
+
+    assert source.centers == [8.5, 8.8]
+    assert len(cells) == 1
+    assert cells[0].sample_stem == "sample-b"
+    assert cells[0].area is not None and cells[0].area > 0
+    assert cells[0].apex_rt == 8.8
 
 
 def test_owner_backfill_treats_non_finite_trace_as_unchecked() -> None:

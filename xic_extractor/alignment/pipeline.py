@@ -48,6 +48,10 @@ from xic_extractor.alignment.ownership import (
     OwnershipBuildResult,
     build_sample_local_owners,
 )
+from xic_extractor.alignment.pre_backfill_consolidation import (
+    consolidate_pre_backfill_identity_families,
+    recenter_pre_backfill_identity_families,
+)
 from xic_extractor.alignment.primary_consolidation import (
     consolidate_primary_family_rows,
 )
@@ -103,6 +107,7 @@ def run_alignment(
     raw_workers: int = 1,
     raw_xic_batch_size: int = 1,
     owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw",
+    preconsolidate_owner_families: bool = False,
     drift_lookup: DriftLookupProtocol | None = None,
     timing_recorder: TimingRecorder | None = None,
 ) -> AlignmentRunOutputs:
@@ -118,6 +123,7 @@ def run_alignment(
             "raw_workers": raw_workers,
             "raw_xic_batch_size": raw_xic_batch_size,
             "owner_backfill_xic_backend": owner_backfill_xic_backend,
+            "preconsolidate_owner_families": preconsolidate_owner_families,
             "output_level": output_level,
             "drift_prior_source": (
                 drift_lookup.source if drift_lookup is not None else "none"
@@ -226,6 +232,12 @@ def run_alignment(
                     start_index=len(owner_features) + 1,
                 ),
             )
+        if preconsolidate_owner_families:
+            with recorder.stage("alignment.pre_backfill_consolidation"):
+                owner_features = consolidate_pre_backfill_identity_families(
+                    owner_features,
+                    config=alignment_config,
+                )
         with recorder.stage("alignment.owner_backfill"):
             if raw_workers > 1:
                 process_output = run_owner_backfill_process(
@@ -293,6 +305,8 @@ def run_alignment(
             matrix = apply_ms1_peak_claim_registry(matrix, alignment_config)
         with recorder.stage("alignment.primary_consolidation"):
             matrix = consolidate_primary_family_rows(matrix, alignment_config)
+        with recorder.stage("alignment.pre_backfill_recenter"):
+            matrix = recenter_pre_backfill_identity_families(matrix)
         with recorder.stage("alignment.write_outputs"):
             _write_outputs_atomic(
                 outputs,

@@ -28,6 +28,8 @@ class OwnerAlignedFeature:
     evidence: str
     identity_conflict: bool = False
     review_only: bool = False
+    confirm_local_owners_with_backfill: bool = False
+    backfill_seed_centers: tuple[tuple[float, float], ...] = ()
     ambiguous_sample_stem: str | None = None
     ambiguous_candidate_ids: tuple[str, ...] = ()
 

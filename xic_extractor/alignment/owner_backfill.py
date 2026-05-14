@@ -15,7 +15,7 @@ from xic_extractor.config import ExtractionConfig
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
 
-_RequestItem = tuple[OwnerAlignedFeature, str, XICRequest]
+_RequestItem = tuple[OwnerAlignedFeature, str, XICRequest, float]
 _RequestGroupKey = tuple[str, int | float, int | float]
 
 
@@ -56,24 +56,29 @@ def build_owner_backfill_cells(
         ):
             continue
         for sample_stem in sample_order:
-            if sample_stem in detected_samples or sample_stem not in raw_sources:
+            if sample_stem not in raw_sources:
                 continue
-            pending[sample_stem].append(
-                (
-                    feature,
-                    sample_stem,
-                    XICRequest(
-                        mz=feature.family_center_mz,
-                        rt_min=feature.family_center_rt - rt_window_min,
-                        rt_max=feature.family_center_rt + rt_window_min,
-                        ppm_tol=alignment_config.preferred_ppm,
-                    ),
+            if (
+                sample_stem in detected_samples
+                and not feature.confirm_local_owners_with_backfill
+            ):
+                continue
+            for seed_mz, seed_rt in _backfill_seed_centers(feature):
+                pending[sample_stem].append(
+                    (
+                        feature,
+                        sample_stem,
+                        XICRequest(
+                            mz=seed_mz,
+                            rt_min=seed_rt - rt_window_min,
+                            rt_max=seed_rt + rt_window_min,
+                            ppm_tol=alignment_config.preferred_ppm,
+                        ),
+                        seed_rt,
+                    )
                 )
-            )
     rescued_by_feature_sample: dict[tuple[str, str], AlignedCell] = {}
-    validation_pending: dict[str, list[tuple[OwnerAlignedFeature, str, XICRequest]]] = (
-        defaultdict(list)
-    )
+    validation_pending: dict[str, list[_RequestItem]] = defaultdict(list)
     for sample_stem in sample_order:
         sample_requests = pending.get(sample_stem, [])
         if not sample_requests:
@@ -88,7 +93,7 @@ def build_owner_backfill_cells(
                 traces = _extract_many(source, tuple(item[2] for item in chunk))
             except OSError:
                 continue
-            for (feature, requested_sample, _request), trace in zip(
+            for (feature, requested_sample, _request, preferred_rt), trace in zip(
                 chunk,
                 traces,
                 strict=True,
@@ -97,16 +102,18 @@ def build_owner_backfill_cells(
                     feature,
                     requested_sample,
                     trace,
+                    preferred_rt=preferred_rt,
                     peak_config=peak_config,
                 )
                 if cell is not None:
                     if validation_raw_sources is None:
-                        rescued_by_feature_sample[
-                            (feature.feature_family_id, requested_sample)
-                        ] = cell
+                        _keep_best_rescued_cell(
+                            rescued_by_feature_sample,
+                            cell,
+                        )
                     else:
                         validation_pending[requested_sample].append(
-                            (feature, requested_sample, _request)
+                            (feature, requested_sample, _request, preferred_rt)
                         )
     if validation_raw_sources is not None:
         for sample_stem in sample_order:
@@ -123,7 +130,12 @@ def build_owner_backfill_cells(
                     traces = _extract_many(source, tuple(item[2] for item in chunk))
                 except OSError:
                     continue
-                for (feature, requested_sample, _request), trace in zip(
+                for (
+                    feature,
+                    requested_sample,
+                    _request,
+                    preferred_rt,
+                ), trace in zip(
                     chunk,
                     traces,
                     strict=True,
@@ -132,12 +144,14 @@ def build_owner_backfill_cells(
                         feature,
                         requested_sample,
                         trace,
+                        preferred_rt=preferred_rt,
                         peak_config=peak_config,
                     )
                     if cell is not None:
-                        rescued_by_feature_sample[
-                            (feature.feature_family_id, requested_sample)
-                        ] = cell
+                        _keep_best_rescued_cell(
+                            rescued_by_feature_sample,
+                            cell,
+                        )
     for feature in features:
         if feature.review_only:
             continue
@@ -179,7 +193,7 @@ def _grouped_request_sort_key(
     keyed_item: tuple[_RequestGroupKey, _RequestItem],
 ) -> tuple[str, int | float, int | float, float, str, str]:
     group_key, item = keyed_item
-    feature, sample_stem, request = item
+    feature, sample_stem, request, _preferred_rt = item
     return (
         *group_key,
         request.mz,
@@ -267,6 +281,7 @@ def _backfill_feature_sample_trace(
     sample_stem: str,
     trace: XICTrace,
     *,
+    preferred_rt: float | None = None,
     peak_config: ExtractionConfig,
 ) -> AlignedCell | None:
     try:
@@ -277,7 +292,9 @@ def _backfill_feature_sample_trace(
         rt_array,
         intensity_array,
         peak_config,
-        preferred_rt=feature.family_center_rt,
+        preferred_rt=(
+            feature.family_center_rt if preferred_rt is None else preferred_rt
+        ),
         strict_preferred_rt=False,
     )
     if result.status != "OK" or result.peak is None:
@@ -299,6 +316,33 @@ def _backfill_feature_sample_trace(
         source_raw_file=None,
         reason="owner-centered MS1 backfill",
     )
+
+
+def _backfill_seed_centers(
+    feature: OwnerAlignedFeature,
+) -> tuple[tuple[float, float], ...]:
+    return feature.backfill_seed_centers or (
+        (feature.family_center_mz, feature.family_center_rt),
+    )
+
+
+def _keep_best_rescued_cell(
+    cells: dict[tuple[str, str], AlignedCell],
+    candidate: AlignedCell,
+) -> None:
+    key = (candidate.cluster_id, candidate.sample_stem)
+    current = cells.get(key)
+    if current is None or _rescued_cell_sort_key(candidate) < _rescued_cell_sort_key(
+        current,
+    ):
+        cells[key] = candidate
+
+
+def _rescued_cell_sort_key(cell: AlignedCell) -> tuple[float, float, float]:
+    area = float(cell.area or 0.0)
+    rt_delta = abs(cell.rt_delta_sec) if cell.rt_delta_sec is not None else np.inf
+    apex_rt = float(cell.apex_rt or 0.0)
+    return (-area, rt_delta, apex_rt)
 
 
 def _extract_many(

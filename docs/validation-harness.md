@@ -147,6 +147,36 @@ uv run python scripts\run_alignment.py `
 `validation-fast` expands to `raw-workers=8` and `raw-xic-batch-size=64`.
 Explicit `--raw-workers` or `--raw-xic-batch-size` values override the profile.
 The CLI default remains the conservative `1` / `1` execution shape.
+
+Experimental owner-family preconsolidation can be tested as an algorithmic
+fast path. This is not an exact-output mode: it collapses identity-compatible
+single-sample owner families before owner-centered backfill, preserves early
+and late RT seed centers for backfill confirmation, recenters consolidated
+rows from accepted present-cell RTs, and keeps loser rows in the review/audit
+surface.
+
+```powershell
+uv run python scripts\run_alignment.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --output-dir output\alignment\preconsolidate_seed2_min2_8raw `
+  --output-level machine `
+  --emit-alignment-cells `
+  --performance-profile validation-fast `
+  --preconsolidate-owner-families `
+  --owner-backfill-min-detected-samples 2 `
+  --timing-output output\diagnostics\preconsolidate_seed2_min2_8raw\alignment_timing.json
+```
+
+Always run the strict targeted ISTD benchmark before interpreting this mode as
+a production matrix candidate. On the 8-RAW tissue subset, the seed2/min2 run
+passed the strict DNA ISTD gate and reduced owner-backfill vendor calls versus
+the full-backfill validation-fast baseline, while intentionally changing row
+identity consolidation. On the 85-RAW tissue run, the same mode removed the
+false DRIFT failures after recentering; the remaining `d3-N6-medA`
+AREA_MISMATCH also exists in the full-backfill baseline targeted benchmark.
+
 Owner-centered backfill can also be run with the experimental MS1 scan-index
 backend:
 

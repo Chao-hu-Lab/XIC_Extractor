@@ -108,6 +108,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             owner_backfill_xic_backend=_owner_backfill_xic_backend(
                 args.owner_backfill_xic_backend
             ),
+            preconsolidate_owner_families=args.preconsolidate_owner_families,
             drift_lookup=drift_lookup,
             **timing_kwargs,
         )
@@ -226,6 +227,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "approximate fast mode and may change peak areas. "
             "'ms1-index-hybrid' uses MS1-index prefiltering but writes "
             "vendor-confirmed rescued cells."
+        ),
+    )
+    parser.add_argument(
+        "--preconsolidate-owner-families",
+        action="store_true",
+        help=(
+            "Experimental algorithm mode: merge identity-compatible "
+            "single-sample owner families before owner-centered backfill."
         ),
     )
     parser.add_argument(
