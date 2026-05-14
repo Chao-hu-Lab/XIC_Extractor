@@ -8,6 +8,10 @@ from xic_extractor.config import ExtractionConfig
 from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.discovery.models import DiscoverySettings, NeutralLossProfile
 from xic_extractor.discovery.pipeline import run_discovery, run_discovery_batch
+from xic_extractor.discovery.tag_profiles import (
+    load_feature_tag_profiles,
+    resolve_selected_tag_profiles,
+)
 from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
@@ -34,22 +38,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{dll_dir}: dll directory does not exist", file=sys.stderr)
         return 2
 
-    settings = DiscoverySettings(
-        neutral_loss_profile=NeutralLossProfile(
-            tag=args.neutral_loss_tag,
-            neutral_loss_da=args.neutral_loss_da,
-        ),
-        nl_tolerance_ppm=args.nl_tolerance_ppm,
-        precursor_mz_tolerance_ppm=args.precursor_mz_tolerance_ppm,
-        product_mz_tolerance_ppm=args.product_mz_tolerance_ppm,
-        product_search_ppm=args.product_search_ppm,
-        nl_min_intensity_ratio=args.nl_min_intensity_ratio,
-        seed_rt_gap_min=args.seed_rt_gap_min,
-        ms1_search_padding_min=args.ms1_search_padding_min,
-        rt_min=args.rt_min,
-        rt_max=args.rt_max,
-        resolver_mode=args.resolver_mode,
-    )
+    settings = _discovery_settings(args)
     data_dir = raw_path.parent if raw_path is not None else raw_dir
     peak_config = _peak_config(data_dir, dll_dir, output_dir, settings)
     timing_recorder = (
@@ -128,6 +117,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--neutral-loss-tag", default="DNA_dR")
     parser.add_argument("--neutral-loss-da", type=_positive_float, default=116.0474)
+    parser.add_argument("--feature-list", type=Path)
+    parser.add_argument(
+        "--selected-tags",
+        help="Comma-separated FH tag names or labels.",
+    )
+    parser.add_argument(
+        "--tag-combine-mode",
+        choices=("union", "intersection"),
+        default="union",
+    )
     parser.add_argument("--nl-tolerance-ppm", type=_positive_float, default=20.0)
     parser.add_argument(
         "--precursor-mz-tolerance-ppm",
@@ -153,7 +152,55 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.rt_min > args.rt_max:
         parser.error("rt-min must be <= rt-max")
+    if args.feature_list is not None and not args.selected_tags:
+        parser.error("--selected-tags is required when --feature-list is provided")
     return args
+
+
+def _discovery_settings(args: argparse.Namespace) -> DiscoverySettings:
+    common = {
+        "nl_tolerance_ppm": args.nl_tolerance_ppm,
+        "precursor_mz_tolerance_ppm": args.precursor_mz_tolerance_ppm,
+        "product_mz_tolerance_ppm": args.product_mz_tolerance_ppm,
+        "product_search_ppm": args.product_search_ppm,
+        "nl_min_intensity_ratio": args.nl_min_intensity_ratio,
+        "seed_rt_gap_min": args.seed_rt_gap_min,
+        "ms1_search_padding_min": args.ms1_search_padding_min,
+        "rt_min": args.rt_min,
+        "rt_max": args.rt_max,
+        "resolver_mode": args.resolver_mode,
+    }
+    if args.feature_list is None:
+        return DiscoverySettings(
+            neutral_loss_profile=NeutralLossProfile(
+                tag=args.neutral_loss_tag,
+                neutral_loss_da=args.neutral_loss_da,
+            ),
+            tag_combine_mode="single",
+            **common,
+        )
+
+    selected = [
+        value.strip()
+        for value in str(args.selected_tags).split(",")
+        if value.strip()
+    ]
+    profiles = resolve_selected_tag_profiles(
+        load_feature_tag_profiles(args.feature_list),
+        selected,
+    )
+    return DiscoverySettings(
+        neutral_loss_profiles=tuple(
+            NeutralLossProfile(
+                tag=profile.tag_name,
+                neutral_loss_da=profile.parameter_mz_or_da,
+            )
+            for profile in profiles
+        ),
+        selected_tag_names=tuple(profile.tag_name for profile in profiles),
+        tag_combine_mode=args.tag_combine_mode,
+        **common,
+    )
 
 
 def _peak_config(

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from typing import get_type_hints
 
@@ -7,11 +8,15 @@ import pytest
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.discovery.grouping import group_discovery_seeds
 from xic_extractor.discovery.models import (
+    DiscoveryCandidate,
     DiscoverySeed,
     DiscoverySettings,
     NeutralLossProfile,
 )
-from xic_extractor.discovery.ms1_backfill import backfill_ms1_candidates
+from xic_extractor.discovery.ms1_backfill import (
+    backfill_ms1_candidates,
+    merge_candidates_by_ms1_peak,
+)
 from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
 
 NEUTRAL_LOSS_DA = 116.0474
@@ -336,6 +341,33 @@ def test_backfill_merges_candidates_inside_same_ms1_peak_boundary(
     )
 
 
+def test_cross_tag_candidates_merge_only_when_ms1_peak_overlaps() -> None:
+    settings = _multi_tag_settings()
+    candidates = [
+        _candidate("dR", product_mz=283.952656, observed_loss=116.047344),
+        _candidate("R", product_mz=267.957700, observed_loss=132.042300),
+        _candidate("MeR", product_mz=253.942100, observed_loss=146.057900),
+    ]
+
+    merged = merge_candidates_by_ms1_peak(candidates, settings=settings)
+
+    assert len(merged) == 1
+    assert merged[0].matched_tag_names == ("dR", "R", "MeR")
+    assert merged[0].matched_tag_count == 3
+    assert merged[0].neutral_loss_tag == "dR"
+    assert merged[0].tag_evidence_json
+
+
+def test_cross_tag_candidates_do_not_merge_without_ms1_overlap() -> None:
+    settings = _multi_tag_settings()
+    left = _candidate("dR", peak_start=5.00, peak_end=5.05)
+    right = _candidate("R", peak_start=5.20, peak_end=5.25)
+
+    merged = merge_candidates_by_ms1_peak([left, right], settings=settings)
+
+    assert len(merged) == 2
+
+
 def test_backfill_does_not_merge_distinct_ms1_peak_boundaries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -481,6 +513,86 @@ def _settings(**overrides: float) -> DiscoverySettings:
         **overrides,
     }
     return DiscoverySettings(**values)
+
+
+def _multi_tag_settings() -> DiscoverySettings:
+    return DiscoverySettings(
+        selected_tag_names=("dR", "R", "MeR"),
+        tag_combine_mode="union",
+        neutral_loss_profiles=(
+            NeutralLossProfile("dR", 116.047344),
+            NeutralLossProfile("R", 132.0423),
+            NeutralLossProfile("MeR", 146.0579),
+        ),
+    )
+
+
+def _candidate(
+    tag: str,
+    *,
+    product_mz: float | None = None,
+    observed_loss: float | None = None,
+    peak_start: float = 5.00,
+    peak_end: float = 5.10,
+) -> DiscoveryCandidate:
+    settings = _multi_tag_settings()
+    loss_by_tag = {"dR": 116.047344, "R": 132.0423, "MeR": 146.0579}
+    configured_loss = loss_by_tag[tag]
+    product = product_mz if product_mz is not None else 400.0 - configured_loss
+    observed = observed_loss if observed_loss is not None else configured_loss
+    seed = DiscoverySeed(
+        raw_file=RAW_FILE,
+        sample_stem="TumorBC2312_DNA",
+        scan_number=int(round(configured_loss * 1000)),
+        rt=5.05,
+        precursor_mz=400.0,
+        product_mz=product,
+        product_intensity=50000.0,
+        neutral_loss_tag=tag,
+        configured_neutral_loss_da=configured_loss,
+        observed_neutral_loss_da=observed,
+        observed_loss_error_ppm=0.0,
+        matched_tag_names=(tag,),
+        tag_evidence_json=f'{{"{tag}":{{"scan_count":1}}}}',
+    )
+    return replace(
+        DiscoveryCandidate.from_values(
+            raw_file=RAW_FILE,
+            sample_stem="TumorBC2312_DNA",
+            precursor_mz=400.0,
+            product_mz=product,
+            observed_neutral_loss_da=observed,
+            best_seed=seed,
+            seed_scan_ids=(seed.scan_number,),
+            neutral_loss_tag=tag,
+            configured_neutral_loss_da=configured_loss,
+            neutral_loss_mass_error_ppm=0.0,
+            rt_seed_min=5.03,
+            rt_seed_max=5.07,
+            ms1_search_rt_min=4.80,
+            ms1_search_rt_max=5.30,
+            ms1_seed_delta_min=0.0,
+            ms1_peak_rt_start=peak_start,
+            ms1_peak_rt_end=peak_end,
+            ms1_height=1000.0,
+            ms1_trace_quality="clean",
+            ms1_scan_support_score=1.0,
+            seed_event_count=1,
+            ms1_peak_found=True,
+            ms1_apex_rt=(peak_start + peak_end) / 2.0,
+            ms1_area=10000.0,
+            ms2_product_max_intensity=50000.0,
+            review_priority="MEDIUM",
+            reason="single MS2 NL seed; MS1 peak found",
+        ),
+        selected_tag_count=len(settings.selected_tag_names),
+        matched_tag_count=1,
+        matched_tag_names=(tag,),
+        primary_tag_name=tag,
+        tag_combine_mode="union",
+        tag_intersection_status="not_required",
+        tag_evidence_json=seed.tag_evidence_json,
+    )
 
 
 def _peak_config(*, resolver_mode: str = "legacy_savgol") -> ExtractionConfig:

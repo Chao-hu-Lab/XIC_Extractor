@@ -46,6 +46,11 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
         "ambiguous_ms1_owner_count",
         "include_in_primary_matrix",
         "row_flags",
+        "artificial_adduct_role",
+        "artificial_adduct_name",
+        "artificial_adduct_related_family_id",
+        "artificial_adduct_mz_delta_error_ppm",
+        "artificial_adduct_rt_delta_min",
     ]
     assert workbook["Review"]["C2"].value == 2
     assert workbook["Review"]["G2"].value == "owner_identity"
@@ -77,6 +82,11 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
         "review_rescue_count",
         "duplicate_assigned_count",
         "ambiguous_ms1_owner_count",
+        "artificial_adduct_role",
+        "artificial_adduct_name",
+        "artificial_adduct_related_family_id",
+        "artificial_adduct_mz_delta_error_ppm",
+        "artificial_adduct_rt_delta_min",
         "reason",
     ]
     assert workbook["Metadata"]["A1"].value == "key"
@@ -212,7 +222,7 @@ def test_alignment_results_xlsx_escapes_formula_like_external_strings(
     assert workbook["Review"]["B2"].value == "'-DNA_dR"
     assert workbook["Review"]["B2"].data_type != "f"
     assert workbook["Audit"]["B2"].value == "'+Sample_A"
-    assert workbook["Audit"]["AA2"].value == "'@audit reason"
+    assert workbook["Audit"]["AF2"].value == "'@audit reason"
     assert workbook["Audit"]["I2"].value is True
     assert workbook["Metadata"]["B2"].value == "'@metadata value"
     assert workbook["Metadata"]["B2"].data_type != "f"

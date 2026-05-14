@@ -1517,6 +1517,13 @@ def _candidate_row(sample_stem: str) -> dict[str, str]:
         "ms1_height": "100.0",
         "ms1_trace_quality": "clean",
         "ms1_scan_support_score": "0.8",
+        "selected_tag_count": "1",
+        "matched_tag_count": "1",
+        "matched_tag_names": "DNA_dR",
+        "primary_tag_name": "DNA_dR",
+        "tag_combine_mode": "single",
+        "tag_intersection_status": "not_required",
+        "tag_evidence_json": '{"DNA_dR":{"scan_count":2}}',
     }
 
 

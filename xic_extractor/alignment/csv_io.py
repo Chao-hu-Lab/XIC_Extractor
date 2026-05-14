@@ -25,6 +25,8 @@ _INT_FIELDS = {
     "feature_superfamily_size",
     "seed_event_count",
     "best_ms2_scan_id",
+    "selected_tag_count",
+    "matched_tag_count",
 }
 _FLOAT_FIELDS = {
     "precursor_mz",
@@ -195,6 +197,15 @@ def _parse_candidate_row(
         ms1_scan_support_score=_parse_optional_float(
             path, row_number, row, "ms1_scan_support_score"
         ),
+        selected_tag_count=_parse_int(path, row_number, row, "selected_tag_count"),
+        matched_tag_count=_parse_int(path, row_number, row, "matched_tag_count"),
+        matched_tag_names=_parse_text_tuple(row, "matched_tag_names"),
+        primary_tag_name=_required_text(path, row_number, row, "primary_tag_name"),
+        tag_combine_mode=_required_text(path, row_number, row, "tag_combine_mode"),  # type: ignore[arg-type]
+        tag_intersection_status=_required_text(  # type: ignore[arg-type]
+            path, row_number, row, "tag_intersection_status"
+        ),
+        tag_evidence_json=_required_text(path, row_number, row, "tag_evidence_json"),
     )
 
 
@@ -291,3 +302,10 @@ def _parse_int_tuple(
         raise ValueError(
             f"{path}: row {row_number}: {column} must be semicolon-separated integers"
         ) from exc
+
+
+def _parse_text_tuple(row: dict[str, str], column: str) -> tuple[str, ...]:
+    value = row.get(column, "")
+    if value == "":
+        return ()
+    return tuple(item for item in value.split(";") if item)

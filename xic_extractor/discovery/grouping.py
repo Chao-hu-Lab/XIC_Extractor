@@ -1,3 +1,4 @@
+import json
 import math
 from collections.abc import Iterable
 from pathlib import Path
@@ -14,7 +15,10 @@ def group_discovery_seeds(
     *,
     settings: DiscoverySettings,
 ) -> tuple[DiscoverySeedGroup, ...]:
-    sorted_seeds = sorted(seeds, key=_seed_sort_key)
+    sorted_seeds = sorted(
+        seeds,
+        key=lambda seed: _seed_sort_key(seed, settings=settings),
+    )
     if not sorted_seeds:
         return ()
 
@@ -92,6 +96,8 @@ def _build_group(seeds: list[DiscoverySeed]) -> DiscoverySeedGroup:
         neutral_loss_mass_error_ppm=best_seed.observed_loss_error_ppm,
         rt_seed_min=min(seed.rt for seed in seeds),
         rt_seed_max=max(seed.rt for seed in seeds),
+        matched_tag_names=(best_seed.neutral_loss_tag,),
+        tag_evidence_json=_merge_seed_evidence(seeds),
     )
 
 
@@ -120,18 +126,57 @@ def _within_ppm(a: float, b: float, tolerance_ppm: float) -> bool:
     return abs(a - b) / abs(b) * 1_000_000.0 <= tolerance_ppm
 
 
+def _merge_seed_evidence(seeds: list[DiscoverySeed]) -> str:
+    by_tag: dict[str, dict[str, object]] = {}
+    for seed in seeds:
+        entry = by_tag.setdefault(
+            seed.neutral_loss_tag,
+            {
+                "scan_count": 0,
+                "scan_ids": [],
+                "rt_min": seed.rt,
+                "rt_max": seed.rt,
+                "product_mz": seed.product_mz,
+                "max_intensity": seed.product_intensity,
+                "neutral_loss_error_ppm": seed.observed_loss_error_ppm,
+            },
+        )
+        entry["scan_count"] = int(entry["scan_count"]) + 1
+        scan_ids = list(entry["scan_ids"])
+        scan_ids.append(seed.scan_number)
+        entry["scan_ids"] = sorted(set(scan_ids))
+        entry["rt_min"] = min(float(entry["rt_min"]), seed.rt)
+        entry["rt_max"] = max(float(entry["rt_max"]), seed.rt)
+        if seed.product_intensity > float(entry["max_intensity"]):
+            entry["product_mz"] = seed.product_mz
+            entry["max_intensity"] = seed.product_intensity
+            entry["neutral_loss_error_ppm"] = seed.observed_loss_error_ppm
+    return json.dumps(by_tag, sort_keys=True, separators=(",", ":"))
+
+
 def _seed_sort_key(
     seed: DiscoverySeed,
-) -> tuple[str, str, str, float, int, float, float]:
+    settings: DiscoverySettings | None = None,
+) -> tuple[str, str, int, str, float, int, float, float]:
     return (
         _path_sort_key(seed.raw_file),
         seed.sample_stem,
+        _tag_rank(seed.neutral_loss_tag, settings=settings),
         seed.neutral_loss_tag,
         seed.rt,
         seed.scan_number,
         seed.precursor_mz,
         seed.product_mz,
     )
+
+
+def _tag_rank(tag: str, *, settings: DiscoverySettings | None) -> int:
+    if settings is None:
+        return 0
+    try:
+        return settings.selected_tag_names.index(tag)
+    except ValueError:
+        return len(settings.selected_tag_names)
 
 
 def _path_sort_key(path: Path) -> str:

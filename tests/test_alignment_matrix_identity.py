@@ -149,6 +149,62 @@ def test_family_consolidation_loser_is_audit_only() -> None:
     assert "family_consolidation_loser" in decision.row_flags
 
 
+def test_multi_tag_support_does_not_promote_single_sample_family() -> None:
+    matrix = _matrix(
+        _feature(
+            "FAM001",
+            evidence="single_sample_local_owner",
+            matched_tag_count=3,
+        ),
+        (_cell("s1", "FAM001", "detected", 100.0),),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.identity_decision == "provisional_discovery"
+    assert decision.include_in_primary_matrix is False
+
+
+def test_single_rna_tag_family_does_not_birth_primary_matrix_row() -> None:
+    matrix = _matrix(
+        _feature(
+            "FAM001",
+            evidence="owner_complete_link;owner_count=8",
+            neutral_loss_tag="R",
+        ),
+        (
+            _cell("s1", "FAM001", "detected", 100.0),
+            _cell("s2", "FAM001", "detected", 90.0),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.identity_decision == "provisional_discovery"
+    assert decision.identity_reason == "single_non_primary_tag_evidence"
+    assert decision.include_in_primary_matrix is False
+    assert "single_non_primary_tag_evidence" in decision.row_flags
+
+
+def test_artificial_adduct_annotation_does_not_demote_supported_family() -> None:
+    matrix = _matrix(
+        _feature(
+            "FAM001",
+            evidence="owner_complete_link;owner_count=5",
+            artificial_adduct_role="related_annotation",
+        ),
+        (
+            _cell("s1", "FAM001", "detected", 100.0),
+            _cell("s2", "FAM001", "detected", 90.0),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.identity_decision == "production_family"
+    assert decision.include_in_primary_matrix is True
+
+
 def _matrix(feature: object, cells: tuple[AlignedCell, ...]) -> AlignmentMatrix:
     return AlignmentMatrix(
         clusters=(feature,),
@@ -163,10 +219,12 @@ def _feature(
     evidence: str,
     review_only: bool = False,
     has_anchor: bool = True,
+    neutral_loss_tag: str = "DNA_dR",
+    **extra: object,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         feature_family_id=feature_family_id,
-        neutral_loss_tag="DNA_dR",
+        neutral_loss_tag=neutral_loss_tag,
         family_center_mz=500.123,
         family_center_rt=8.49,
         family_product_mz=384.076,
@@ -176,6 +234,7 @@ def _feature(
         event_member_count=1,
         evidence=evidence,
         review_only=review_only,
+        **extra,
     )
 
 

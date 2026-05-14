@@ -136,6 +136,48 @@ def test_run_discovery_cli_passes_raw_dir_batch_settings(
     assert "discovery_batch_index.csv" in stdout
 
 
+def test_run_discovery_accepts_feature_list_selected_tags_and_union_mode() -> None:
+    args = run_discovery._parse_args(
+        [
+            "--raw",
+            "sample.raw",
+            "--dll-dir",
+            "C:/Xcalibur/system/programs",
+            "--output-dir",
+            "out",
+            "--feature-list",
+            "Feature_List.csv",
+            "--selected-tags",
+            "dR,R,MeR",
+            "--tag-combine-mode",
+            "union",
+        ]
+    )
+
+    assert args.feature_list == Path("Feature_List.csv")
+    assert args.selected_tags == "dR,R,MeR"
+    assert args.tag_combine_mode == "union"
+
+
+def test_run_discovery_rejects_invalid_tag_combine_mode(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        run_discovery._parse_args(
+            [
+                "--raw",
+                "sample.raw",
+                "--dll-dir",
+                "C:/Xcalibur/system/programs",
+                "--tag-combine-mode",
+                "invalid",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+
+
 def test_run_discovery_cli_writes_timing_json_for_batch(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

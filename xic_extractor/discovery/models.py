@@ -59,6 +59,13 @@ DISCOVERY_PROVENANCE_COLUMNS = (
     "ms1_height",
     "ms1_trace_quality",
     "ms1_scan_support_score",
+    "selected_tag_count",
+    "matched_tag_count",
+    "matched_tag_names",
+    "primary_tag_name",
+    "tag_combine_mode",
+    "tag_intersection_status",
+    "tag_evidence_json",
 )
 
 DISCOVERY_CANDIDATE_COLUMNS = (
@@ -79,6 +86,9 @@ DISCOVERY_BRIEF_COLUMNS = (
     "ms1_area",
     "seed_event_count",
     "neutral_loss_tag",
+    "matched_tag_names",
+    "matched_tag_count",
+    "tag_intersection_status",
     "review_note",
 )
 
@@ -91,7 +101,10 @@ class NeutralLossProfile:
 
 @dataclass(frozen=True)
 class DiscoverySettings:
-    neutral_loss_profile: NeutralLossProfile
+    neutral_loss_profile: NeutralLossProfile | None = None
+    neutral_loss_profiles: tuple[NeutralLossProfile, ...] = ()
+    selected_tag_names: tuple[str, ...] = ()
+    tag_combine_mode: Literal["single", "union", "intersection"] = "single"
     nl_tolerance_ppm: float = 20.0
     precursor_mz_tolerance_ppm: float = 20.0
     product_mz_tolerance_ppm: float = 20.0
@@ -103,6 +116,21 @@ class DiscoverySettings:
     rt_max: float = 999.0
     resolver_mode: str = "local_minimum"
     evidence_profile: DiscoveryEvidenceProfile = DEFAULT_EVIDENCE_PROFILE
+
+    def __post_init__(self) -> None:
+        profiles = self.neutral_loss_profiles
+        if self.neutral_loss_profile is not None:
+            profiles = (self.neutral_loss_profile,) + profiles
+        if not profiles:
+            raise ValueError("at least one neutral-loss profile is required")
+        object.__setattr__(self, "neutral_loss_profiles", profiles)
+        object.__setattr__(self, "neutral_loss_profile", profiles[0])
+        if not self.selected_tag_names:
+            object.__setattr__(
+                self,
+                "selected_tag_names",
+                tuple(profile.tag for profile in profiles),
+            )
 
 
 @dataclass(frozen=True)
@@ -118,6 +146,8 @@ class DiscoverySeed:
     configured_neutral_loss_da: float
     observed_neutral_loss_da: float
     observed_loss_error_ppm: float
+    matched_tag_names: tuple[str, ...] = ()
+    tag_evidence_json: str = "{}"
 
 
 @dataclass(frozen=True)
@@ -133,6 +163,8 @@ class DiscoverySeedGroup:
     neutral_loss_mass_error_ppm: float
     rt_seed_min: float
     rt_seed_max: float
+    matched_tag_names: tuple[str, ...] = ()
+    tag_evidence_json: str = "{}"
 
 
 @dataclass(frozen=True)
@@ -179,6 +211,17 @@ class DiscoveryCandidate:
     feature_superfamily_role: str = "representative"
     feature_superfamily_confidence: str = "LOW"
     feature_superfamily_evidence: str = "single_candidate"
+    selected_tag_count: int = 1
+    matched_tag_count: int = 1
+    matched_tag_names: tuple[str, ...] = ()
+    primary_tag_name: str = ""
+    tag_combine_mode: Literal["single", "union", "intersection"] = "single"
+    tag_intersection_status: Literal[
+        "not_required",
+        "complete",
+        "incomplete",
+    ] = "not_required"
+    tag_evidence_json: str = "{}"
 
     @classmethod
     def from_values(
@@ -248,6 +291,13 @@ class DiscoveryCandidate:
             ms1_height=ms1_height,
             ms1_trace_quality=ms1_trace_quality,
             ms1_scan_support_score=ms1_scan_support_score,
+            selected_tag_count=1,
+            matched_tag_count=1,
+            matched_tag_names=(neutral_loss_tag,),
+            primary_tag_name=neutral_loss_tag,
+            tag_combine_mode="single",
+            tag_intersection_status="not_required",
+            tag_evidence_json=best_seed.tag_evidence_json,
         )
 
 
