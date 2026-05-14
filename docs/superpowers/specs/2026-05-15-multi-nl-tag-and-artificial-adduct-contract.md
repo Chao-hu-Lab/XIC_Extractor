@@ -13,6 +13,17 @@ Phase A is neutral-loss only. The first multi-tag set is:
 dR / R / MeR
 ```
 
+Real-data expectation must account for the current cohort composition. Most of
+the 85RAW tissue set is pure DNA. Only two RAW files are expected to contain
+DNA/RNA mixed material, and those two mixed samples are not present in the 8RAW
+validation subset. Therefore:
+
+- 8RAW validates parser, CLI, schema round-trip, no Matrix regression, and no
+  false RNA-tag promotion;
+- 8RAW is not expected to show meaningful `R` / `MeR` multi-tag support;
+- 85RAW is the first run where `R` / `MeR` evidence may be observable, and even
+  then the expected signal is limited to the two mixed DNA/RNA samples.
+
 The FeatureHunter parameter tables are treated as discovery configuration and
 annotation references:
 
@@ -141,9 +152,11 @@ Rules:
   precursor/RT has multiple tag labels.
 - If multiple tags produce near-identical candidate identities, the tag evidence
   is merged at the family level.
-- Cross-tag grouping uses sample identity, precursor m/z, and RT/MS1 peak
-  overlap. Product m/z and observed neutral loss remain per-tag evidence and are
-  not required to be equal across different selected tags.
+- Seed grouping remains per neutral-loss tag because MS1 peak boundaries do not
+  exist yet at that stage. Cross-tag merging is allowed only after MS1 backfill,
+  where sample identity, precursor m/z, and RT/MS1 peak overlap can be checked.
+  Product m/z and observed neutral loss remain per-tag evidence and are not
+  required to be equal across different selected tags.
 
 ### Intersection Mode
 
@@ -269,6 +282,8 @@ A multi-tag/adduct diagnostic run must report:
 - selected tags and combine mode;
 - candidate counts per tag;
 - overlap matrix between selected tags;
+- cohort-aware expectation notes: 8RAW is plumbing/regression only for `R` /
+  `MeR`, 85RAW is the first run with two mixed DNA/RNA samples;
 - families with multiple tag support;
 - `intersection` complete/incomplete counts;
 - artificial adduct pair count by adduct name;
@@ -305,11 +320,16 @@ Run in this order:
 1. Single-tag `dR` 8RAW baseline.
 2. Multi-tag 8RAW union diagnostic with the first selected NL set:
    `dR`, `R`, `MeR`.
+   This run is not expected to show real multi-tag support because the 8RAW
+   subset does not contain the two mixed DNA/RNA samples.
 3. Multi-tag 8RAW intersection diagnostic on a deliberately narrow pair only
-   after union behavior is inspectable.
+   after union behavior is inspectable. Treat this as a plumbing diagnostic,
+   not a biological success gate.
 4. Artificial-adduct annotation on the 8RAW alignment output.
 5. Strict targeted ISTD benchmark comparison.
-6. 85RAW only after 8RAW shows no Primary Matrix row inflation.
+6. 85RAW only after 8RAW shows no Primary Matrix row inflation. This is the
+   first run where `R` / `MeR` evidence is expected to be meaningfully
+   observable, limited to the two mixed DNA/RNA samples.
 
 Stop before 85RAW if:
 

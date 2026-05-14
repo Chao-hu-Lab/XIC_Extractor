@@ -20,8 +20,10 @@
 - Create `tests/test_discovery_tag_profiles.py`: parser, validation, and selection tests.
 - Modify `xic_extractor/discovery/models.py`: add multi-profile settings and tag evidence models while keeping single-profile compatibility.
 - Modify `xic_extractor/discovery/ms2_seeds.py`: evaluate MS2 scans against multiple selected profiles and return zero or more seeds.
-- Modify `xic_extractor/discovery/grouping.py`: merge compatible seeds while preserving all matched tag evidence.
+- Modify `xic_extractor/discovery/grouping.py`: keep seed grouping per neutral-loss tag while preserving per-tag evidence.
+- Modify `xic_extractor/discovery/ms1_backfill.py`: merge cross-tag candidates only after MS1 peak evidence exists.
 - Modify `xic_extractor/discovery/csv_writer.py`: add compact tag-evidence columns to candidate/full machine outputs.
+- Modify `xic_extractor/alignment/csv_io.py`: parse new tag-evidence columns so alignment retains discovery evidence.
 - Modify `scripts/run_discovery.py`: add `--feature-list`, `--selected-tags`, `--tag-combine-mode`, and keep legacy `--neutral-loss-*` behavior.
 - Create `xic_extractor/alignment/adduct_annotation.py`: parse artificial adduct list and annotate close RT / expected m/z-delta family pairs without changing matrix identity.
 - Create `tests/test_alignment_adduct_annotation.py`: adduct parser, matcher, and annotation-only tests.
@@ -236,7 +238,7 @@ python -m pytest tests\test_discovery_tag_profiles.py -q
 
 Expected: PASS.
 
-## Task 2: Multi-Profile Discovery Evidence
+## Task 2: Multi-Profile Seed Evidence, Per Tag Only
 
 **Files:**
 - Modify: `xic_extractor/discovery/models.py`
@@ -247,13 +249,14 @@ Expected: PASS.
 
 - [ ] **Step 1: Add failing tests for multiple NL profiles**
 
-Add a test showing scans with the same sample, precursor, and RT/MS1 peak
-neighborhood can add `dR`, `R`, and `MeR` evidence to one family even though
-their product m/z and observed neutral-loss values differ:
+Add a test showing multi-profile seed collection emits one seed per matching
+selected NL profile, but seed grouping still keeps different tags separate:
 
 ```python
-def test_multi_profile_seeds_preserve_all_matched_tag_names() -> None:
+def test_multi_profile_seed_collection_keeps_seed_groups_per_tag() -> None:
     settings = DiscoverySettings(
+        selected_tag_names=("dR", "R", "MeR"),
+        tag_combine_mode="union",
         neutral_loss_profiles=(
             NeutralLossProfile(tag="dR", neutral_loss_da=116.047344),
             NeutralLossProfile(tag="R", neutral_loss_da=132.0423),
@@ -272,8 +275,13 @@ def test_multi_profile_seeds_preserve_all_matched_tag_names() -> None:
 
     groups = group_discovery_seeds(seeds, settings=settings)
 
-    assert len(groups) == 1
-    assert groups[0].matched_tag_names == ("dR", "R", "MeR")
+    assert [seed.neutral_loss_tag for seed in seeds] == ["dR", "R", "MeR"]
+    assert len(groups) == 3
+    assert [group.matched_tag_names for group in groups] == [
+        ("dR",),
+        ("R",),
+        ("MeR",),
+    ]
 ```
 
 If the current test file lacks a scan helper that can express arbitrary neutral
@@ -318,6 +326,8 @@ as a compatibility property and add tuple-based multi-profile storage:
 class DiscoverySettings:
     neutral_loss_profile: NeutralLossProfile | None = None
     neutral_loss_profiles: tuple[NeutralLossProfile, ...] = ()
+    selected_tag_names: tuple[str, ...] = ()
+    tag_combine_mode: Literal["single", "union", "intersection"] = "single"
     nl_tolerance_ppm: float = 20.0
     precursor_mz_tolerance_ppm: float = 20.0
     product_mz_tolerance_ppm: float = 20.0
@@ -325,6 +335,10 @@ class DiscoverySettings:
     nl_min_intensity_ratio: float = 0.01
     seed_rt_gap_min: float = 0.20
     ms1_search_padding_min: float = 0.20
+    rt_min: float = 0.0
+    rt_max: float = 999.0
+    resolver_mode: str = "local_minimum"
+    evidence_profile: DiscoveryEvidenceProfile = DEFAULT_EVIDENCE_PROFILE
 
     def __post_init__(self) -> None:
         profiles = self.neutral_loss_profiles
@@ -334,6 +348,8 @@ class DiscoverySettings:
             raise ValueError("at least one neutral-loss profile is required")
         object.__setattr__(self, "neutral_loss_profiles", profiles)
         object.__setattr__(self, "neutral_loss_profile", profiles[0])
+        if not self.selected_tag_names:
+            object.__setattr__(self, "selected_tag_names", tuple(profile.tag for profile in profiles))
 ```
 
 Add immutable tag evidence fields to seed/group/candidate models:
@@ -351,13 +367,12 @@ In `xic_extractor/discovery/ms2_seeds.py`, loop over
 `settings.neutral_loss_profiles` and append one seed per matching profile. Keep
 the existing single-profile behavior identical when only one profile exists.
 
-- [ ] **Step 5: Merge tag evidence in grouping**
+- [ ] **Step 5: Keep seed grouping per neutral-loss tag**
 
-In `xic_extractor/discovery/grouping.py`, keep cross-tag compatibility checks
-centered on sample identity, precursor m/z, and RT/MS1 peak proximity. Do not
-require identical `neutral_loss_tag`, product m/z proximity, or observed neutral
-loss proximity across different selected tags. Product m/z and observed loss are
-per-tag evidence. Merge `matched_tag_names` in selected-profile order.
+In `xic_extractor/discovery/grouping.py`, keep the existing same-tag checks for
+seed grouping. At this stage there is no MS1 peak evidence yet, so cross-tag
+merge would be guessing. Set each group's `matched_tag_names` to the single
+group tag and preserve product m/z / observed loss as per-tag evidence.
 
 - [ ] **Step 6: Run discovery tests**
 
@@ -369,13 +384,121 @@ python -m pytest tests\test_discovery_ms2_seeds.py tests\test_discovery_grouping
 
 Expected: PASS.
 
+## Task 2.5: Post-MS1 Cross-Tag Candidate Merge
+
+**Files:**
+- Modify: `xic_extractor/discovery/ms1_backfill.py`
+- Modify: `xic_extractor/discovery/models.py`
+- Test: `tests/test_discovery_ms1_backfill.py`
+
+- [ ] **Step 1: Add failing tests for cross-tag merge after MS1 backfill**
+
+Add tests proving candidates with different NL tags can merge only after MS1 peak
+evidence exists:
+
+```python
+def test_cross_tag_candidates_merge_only_when_ms1_peak_overlaps() -> None:
+    settings = DiscoverySettings(
+        selected_tag_names=("dR", "R", "MeR"),
+        tag_combine_mode="union",
+        neutral_loss_profiles=(
+            NeutralLossProfile("dR", 116.047344),
+            NeutralLossProfile("R", 132.0423),
+            NeutralLossProfile("MeR", 146.0579),
+        ),
+    )
+    candidates = [
+        _candidate("dR", product_mz=283.952656, observed_loss=116.047344),
+        _candidate("R", product_mz=267.957700, observed_loss=132.042300),
+        _candidate("MeR", product_mz=253.942100, observed_loss=146.057900),
+    ]
+
+    merged = merge_candidates_by_ms1_peak(candidates, settings=settings)
+
+    assert len(merged) == 1
+    assert merged[0].matched_tag_names == ("dR", "R", "MeR")
+    assert merged[0].matched_tag_count == 3
+    assert merged[0].neutral_loss_tag == "dR"
+    assert merged[0].tag_evidence_json
+
+
+def test_cross_tag_candidates_do_not_merge_without_ms1_overlap() -> None:
+    settings = _multi_tag_settings()
+    left = _candidate("dR", peak_start=5.00, peak_end=5.05)
+    right = _candidate("R", peak_start=5.20, peak_end=5.25)
+
+    merged = merge_candidates_by_ms1_peak([left, right], settings=settings)
+
+    assert len(merged) == 2
+```
+
+Use the existing `tests/test_discovery_ms1_backfill.py` factories where possible.
+If the merge helper is private today, promote it to
+`merge_candidates_by_ms1_peak()` so the behavior can be tested directly without
+RAW files.
+
+- [ ] **Step 2: Run tests and verify they fail**
+
+Run:
+
+```powershell
+python -m pytest tests\test_discovery_ms1_backfill.py -q
+```
+
+Expected: FAIL because cross-tag candidate merge still requires identical
+`neutral_loss_tag`, product m/z, and observed loss.
+
+- [ ] **Step 3: Implement post-MS1 merge**
+
+In `xic_extractor/discovery/ms1_backfill.py`, split merge checks:
+
+```text
+same-tag merge:
+  current behavior, including product m/z and observed-loss proximity
+
+cross-tag union merge:
+  same raw_file
+  same sample_stem
+  different selected neutral_loss_tag values
+  same precursor m/z within precursor tolerance
+  both candidates have MS1 peak bounds
+  MS1 peak intervals overlap
+  each seed range touches the shared peak
+```
+
+When merging, preserve the representative candidate's scalar `neutral_loss_tag`,
+`product_mz`, and `observed_neutral_loss_da`, and merge all per-tag evidence into:
+
+```text
+matched_tag_names
+matched_tag_count
+tag_evidence_json
+tag_intersection_status
+```
+
+The representative should be deterministic. Use selected-tag order first, then
+higher `ms2_product_max_intensity`, lower absolute NL error, earlier RT, and
+lower scan id.
+
+- [ ] **Step 4: Run post-MS1 merge tests**
+
+Run:
+
+```powershell
+python -m pytest tests\test_discovery_ms1_backfill.py tests\test_discovery_grouping.py -q
+```
+
+Expected: PASS.
+
 ## Task 3: CLI And Discovery Output Contract
 
 **Files:**
 - Modify: `scripts/run_discovery.py`
 - Modify: `xic_extractor/discovery/csv_writer.py`
+- Modify: `xic_extractor/alignment/csv_io.py`
 - Test: `tests/test_run_discovery.py`
 - Test: `tests/test_discovery_review_csv.py`
+- Test: `tests/test_alignment_csv_io.py`
 
 - [ ] **Step 1: Add CLI parsing tests**
 
@@ -440,12 +563,44 @@ Keep `discovery_review.csv` compact. If adding all tag columns makes the review
 surface noisy, include only `matched_tag_names`, `matched_tag_count`, and
 `tag_intersection_status` in review, while full candidate output carries JSON.
 
-- [ ] **Step 5: Run output contract tests**
+- [ ] **Step 5: Add alignment CSV round-trip tests**
+
+Add a test proving alignment reads the new discovery columns:
+
+```python
+def test_read_discovery_candidates_preserves_multi_tag_evidence(tmp_path: Path) -> None:
+    path = tmp_path / "discovery_candidates.csv"
+    _write_candidate_csv(
+        path,
+        extra={
+            "selected_tag_count": "3",
+            "matched_tag_count": "2",
+            "matched_tag_names": "dR;R",
+            "primary_tag_name": "dR",
+            "tag_combine_mode": "union",
+            "tag_intersection_status": "incomplete",
+            "tag_evidence_json": "{\"dR\":{\"scan_count\":1},\"R\":{\"scan_count\":1}}",
+        },
+    )
+
+    candidates = read_discovery_candidates_csv(path)
+
+    assert candidates[0].matched_tag_names == ("dR", "R")
+    assert candidates[0].matched_tag_count == 2
+    assert candidates[0].tag_combine_mode == "union"
+    assert "scan_count" in candidates[0].tag_evidence_json
+```
+
+Also add a missing-column failure test for at least one new required machine
+column, so old partial CSVs fail clearly instead of silently dropping tag
+evidence.
+
+- [ ] **Step 6: Run output contract tests**
 
 Run:
 
 ```powershell
-python -m pytest tests\test_run_discovery.py tests\test_discovery_review_csv.py -q
+python -m pytest tests\test_run_discovery.py tests\test_discovery_review_csv.py tests\test_alignment_csv_io.py -q
 ```
 
 Expected: PASS.
@@ -724,6 +879,10 @@ uv run python scripts\run_discovery.py --raw-dir "C:\Xcalibur\data\20260106_CSMU
 Expected: discovery outputs contain `matched_tag_names` and
 `tag_intersection_status`.
 
+Interpretation: the 8RAW validation subset does not contain the two mixed
+DNA/RNA samples, so this run is expected to validate plumbing and no-regression
+behavior. It is not expected to show meaningful `R` / `MeR` multi-tag support.
+
 - [ ] **Step 3: Run alignment with existing final matrix identity gates**
 
 Run validation-fast alignment using the multi-tag discovery batch index:
@@ -786,6 +945,8 @@ Accept if:
 - targeted ISTD benchmark has no new failures except known targeted-side
   `d3-N6-medA` area mismatch;
 - inactive RNA tag has no primary matrix hit in a DNA-only selected-tag run;
+- `R` / `MeR` evidence, if present, is concentrated in the two mixed DNA/RNA
+  samples rather than spread across the 83 pure DNA samples;
 - Primary Matrix row count does not inflate without production support;
 - adduct annotations explain duplicate-like families without deleting evidence;
 - Review/Audit preserve weak and related evidence.
@@ -797,10 +958,13 @@ Stop and write a failure report if any criterion fails.
 Spec coverage:
 
 - FH feature-list parser is covered by Task 1.
-- selected tags and union/intersection semantics are covered by Tasks 2 and 3.
+- selected tags and union/intersection semantics are covered by Tasks 2, 2.5,
+  and 3.
+- post-MS1 cross-tag merging is covered by Task 2.5, not seed grouping.
+- discovery-to-alignment schema round-trip is covered by Task 3.
 - artificial adduct parsing and pair annotation are covered by Task 4.
 - final matrix identity interaction is covered by Task 5.
-- diagnostics and real-data gates are covered by Tasks 6, 7, and 8.
+- diagnostics and cohort-aware real-data gates are covered by Tasks 6, 7, and 8.
 
 Placeholder scan:
 
