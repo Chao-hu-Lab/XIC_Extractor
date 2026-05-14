@@ -210,10 +210,11 @@ lesson is to map RT into a reference-normalized coordinate before using RT as
 identity evidence across changing chromatographic conditions.
 
 Implementation status correction: commit `48a5b1b` did not implement this
-normalized RT diagnostic. The current alignment code can use targeted ISTD RT
-trends and injection-order rolling medians as drift evidence for owner-edge
-scoring, but it does not fit an anchor-based iRT transform or emit normalized RT
-residual diagnostics.
+normalized RT diagnostic. A first diagnostic now exists at
+`tools/diagnostics/analyze_rt_normalization_anchors.py`. The current production
+alignment code can still only use targeted ISTD RT trends and injection-order
+rolling medians as drift evidence for owner-edge scoring; normalized RT is not
+yet a production promotion rule.
 
 For this project, that suggests a diagnostic layer before any production
 algorithm change:
@@ -242,6 +243,19 @@ should report:
 - whether family RT disagreement improves in normalized RT space;
 - families whose raw RT fails but normalized RT supports a common identity;
 - families whose normalized RT still conflicts and should remain split/audit.
+
+Current 8-RAW diagnostic output:
+
+```text
+output\diagnostics\phase_n_rt_normalization_8raw_20260514
+```
+
+The first trial is scientifically mixed rather than a production-ready win:
+active DNA ISTD anchor coverage is complete, but the affine ISTD-anchor model
+does not globally reduce family RT range. It is slightly positive on primary
+families and slightly negative across all review families. Treat normalized RT
+as review evidence until robust/piecewise fitting and anchor-quality gates prove
+clear improvement.
 
 Important boundary:
 
@@ -326,10 +340,12 @@ Use the same validation surfaces as the existing untargeted work:
    - high-backfill production families;
    - targeted ISTD benchmark deltas.
 5. RT-drift diagnostic, if implemented:
-   - anchor count by sample;
-   - RT transform fit quality;
-   - raw RT versus normalized RT residual distributions;
-   - effect on SPLIT/MISS classifications for targeted ISTDs.
+    - anchor count by sample;
+    - RT transform fit quality;
+    - raw RT versus normalized RT residual distributions;
+    - effect on SPLIT/MISS classifications for targeted ISTDs.
+   Current diagnostic also reports per-family raw vs normalized RT range and
+   range improvement.
 
 The expected direction is fewer weak production rows, not exact equality with
 the old pipeline.

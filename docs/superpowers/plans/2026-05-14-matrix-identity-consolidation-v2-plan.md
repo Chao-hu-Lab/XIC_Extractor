@@ -640,11 +640,12 @@ Winner rule priority:
 
 ## Optional Phase B: iRT-Style RT Drift Diagnostic
 
-**Status:** Deferred. This was not part of commit `48a5b1b` and should not be described as implemented.
+**Status:** First diagnostic implemented after commit `48a5b1b`; do not describe
+it as part of the matrix identity gate itself.
 
 **Files:**
-- Create: `tools/diagnostics/analyze_rt_normalization_anchors.py`
-- Test: `tests/test_rt_normalization_anchors.py`
+- Created: `tools/diagnostics/analyze_rt_normalization_anchors.py`
+- Created: `tests/test_rt_normalization_anchors.py`
 - Do not modify production alignment gates in this phase.
 
 **Scientific reference:**
@@ -664,7 +665,31 @@ Current implementation boundary:
 
 - Existing `xic_extractor/alignment/drift_evidence.py` can read targeted ISTD RTs and SampleInfo injection order, compute a local rolling-median RT drift per sample, and feed drift-corrected RT deltas into owner-edge scoring.
 - That is iRT-adjacent drift evidence, not the paper's full normalized RT / iRT score strategy.
-- A true iRT-style diagnostic should fit anchors per sample/run and report normalized RT residuals before it is allowed to influence row identity.
+- `tools/diagnostics/analyze_rt_normalization_anchors.py` now fits per-sample
+  anchor RT normalization models, emits anchor residuals, and compares raw vs
+  normalized RT ranges for alignment families.
+- This remains review evidence only. It is not yet a primary matrix promotion
+  rule.
+
+8-RAW trial output:
+
+```text
+output\diagnostics\phase_n_rt_normalization_8raw_20260514
+```
+
+Initial 8-RAW result:
+
+- 6 active DNA ISTD anchors available in all 8 samples.
+- Primary matrix families were roughly balanced: 185 improved, 183 worsened,
+  with median RT-range improvement about +0.002 min.
+- All review families were not globally improved: 244 improved, 269 worsened,
+  with median RT-range improvement about -0.014 min.
+
+Interpretation: the concept is useful as an evidence layer, especially for
+families that improve strongly in normalized RT space, but the first affine
+ISTD-anchor model is not strong enough to become a production promotion gate.
+Next refinements should test robust/piecewise anchor fitting and anchor-quality
+gating before any algorithmic integration.
 
 Diagnostic acceptance:
 
