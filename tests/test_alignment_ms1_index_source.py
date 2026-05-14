@@ -2,7 +2,11 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from xic_extractor.alignment.ms1_index_source import MS1IndexedRawSource
+from xic_extractor.alignment.ms1_index_source import (
+    MS1IndexedRawSource,
+    build_ms1_scan_index,
+    extract_index_xic,
+)
 from xic_extractor.xic_models import XICRequest
 
 
@@ -26,6 +30,20 @@ def test_ms1_indexed_raw_source_delegates_scan_window_lookup() -> None:
     assert source.scan_window_for_request(
         XICRequest(mz=100.0, rt_min=1.0, rt_max=3.0, ppm_tol=10000.0)
     ) == (1, 3)
+
+
+def test_extract_index_xic_can_sum_mass_window_intensities() -> None:
+    raw = FakeRawHandle()
+    index = build_ms1_scan_index(raw)
+
+    trace = extract_index_xic(
+        raw,
+        index,
+        XICRequest(mz=100.0, rt_min=1.0, rt_max=3.0, ppm_tol=10000.0),
+        intensity_mode="sum",
+    )
+
+    assert trace.intensity.tolist() == [35.0, 85.0]
 
 
 class FakeRawHandle:

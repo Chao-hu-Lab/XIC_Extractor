@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 from xic_extractor.xic_models import XICRequest, XICTrace
 
 OwnerBackfillXicBackend = Literal["raw", "ms1_index"]
+MS1IndexIntensityMode = Literal["max", "sum"]
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,7 @@ class MS1IndexedRawSource:
             return ()
         index = self._ms1_index()
         return tuple(
-            _extract_index_xic(self._source, index, request)
+            extract_index_xic(self._source, index, request)
             for request in requests
         )
 
@@ -107,10 +108,12 @@ def build_ms1_scan_index(source: Any) -> tuple[MS1Scan, ...]:
     return tuple(scans)
 
 
-def _extract_index_xic(
+def extract_index_xic(
     source: Any,
     index: tuple[MS1Scan, ...],
     request: XICRequest,
+    *,
+    intensity_mode: MS1IndexIntensityMode = "max",
 ) -> XICTrace:
     start_scan, end_scan = _scan_window(source, request)
     tolerance = request.mz * request.ppm_tol / 1e6
@@ -121,12 +124,27 @@ def _extract_index_xic(
             continue
         left = int(np.searchsorted(scan.masses, request.mz - tolerance, side="left"))
         right = int(np.searchsorted(scan.masses, request.mz + tolerance, side="right"))
-        intensity = (
-            float(np.max(scan.intensities[left:right])) if right > left else 0.0
+        intensity = _window_intensity(
+            scan.intensities[left:right],
+            intensity_mode=intensity_mode,
         )
         rt_values.append(scan.rt)
         intensity_values.append(intensity)
     return XICTrace.from_arrays(rt_values, intensity_values)
+
+
+def _window_intensity(
+    intensities: NDArray[np.float64],
+    *,
+    intensity_mode: MS1IndexIntensityMode,
+) -> float:
+    if len(intensities) == 0:
+        return 0.0
+    if intensity_mode == "max":
+        return float(np.max(intensities))
+    if intensity_mode == "sum":
+        return float(np.sum(intensities))
+    raise ValueError(f"unsupported MS1 index intensity mode: {intensity_mode}")
 
 
 def _scan_window(source: Any, request: XICRequest) -> tuple[int, int]:
