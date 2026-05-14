@@ -695,11 +695,35 @@ Updated 8-RAW result with auto piecewise model and anchor-quality gating:
 - Median RT-range improvement: about `-0.083 min`.
 - Diagnostic status: `WARN`.
 
+Injection-order-aware 85-RAW trial:
+
+```text
+output\diagnostics\phase_p_rt_normalization_injection_local_85raw_20260514
+```
+
+- Uses `SampleInfo.xlsx` injection order with `reference-source =
+  injection-local-median` and `--injection-window 4`.
+- This is different from the original global iRT diagnostic. It maps each
+  sample's anchor RTs to a local rolling median reference from nearby
+  injections.
+- All 85 samples were modelled after adding the missing `QC_4` / `QC4` alias.
+- 2 anchor observations were excluded: one `d3-5-medC`, one `d3-N6-medA`.
+- All review families with enough cells: 740 improved, 575 worsened.
+- Primary families: 457 improved, 304 worsened.
+- Median RT-range improvement: about `+0.013 min` overall and `+0.021 min` on
+  primary families.
+- Diagnostic status: `PASS`.
+
+This confirms the user's concern: the project already used injection order for
+targeted ISTD drift evidence, but the first normalized RT diagnostic did not.
+On 85 RAW, injection-local iRT changes the result from `WARN` to `PASS`.
+
 Interpretation: the concept is useful as an evidence layer, especially for
 families that improve strongly in normalized RT space, but it is not yet strong
-enough to become a production promotion gate across the 85-RAW run. Next
-refinements should test batch-aware reference models and require per-run
-positive evidence before any algorithmic integration.
+enough to become an unconditional production promotion gate. Next refinements
+should use injection-local improvement as a positive evidence input only when
+the family-level normalized RT range improves, not as a blanket replacement for
+raw RT.
 
 Diagnostic acceptance:
 

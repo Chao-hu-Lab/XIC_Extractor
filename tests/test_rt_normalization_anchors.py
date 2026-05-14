@@ -339,6 +339,98 @@ def test_result_warns_when_normalization_worsens_family_rt_range(tmp_path: Path)
     assert result.median_rt_range_improvement_min < 0
 
 
+def test_injection_local_reference_uses_ordered_rolling_anchor_medians(
+    tmp_path: Path,
+):
+    targeted = tmp_path / "targeted.xlsx"
+    sample_info = tmp_path / "SampleInfo.xlsx"
+    alignment = tmp_path / "alignment"
+    output_dir = tmp_path / "rt_normalization"
+    _write_targeted_workbook(
+        targeted,
+        targets=[
+            _target("anchor-a", 10.0, 116.0474),
+            _target("anchor-b", 20.0, 116.0474),
+        ],
+        sample_anchor_rts={
+            "S1": {"anchor-a": 10.0, "anchor-b": 20.0},
+            "S2": {"anchor-a": 12.0, "anchor-b": 22.0},
+            "S3": {"anchor-a": 10.0, "anchor-b": 20.0},
+        },
+    )
+    _write_sample_info(sample_info, ("S1", "S2", "S3"))
+    _write_alignment_run(
+        alignment,
+        review_rows=[
+            {
+                "feature_family_id": "FAM_LOCAL_SPIKE",
+                "include_in_primary_matrix": "TRUE",
+                "family_center_mz": 250.0,
+                "family_center_rt": 15.0,
+            },
+        ],
+        cell_rows=[
+            _cell_row("FAM_LOCAL_SPIKE", "S1", 15.0),
+            _cell_row("FAM_LOCAL_SPIKE", "S2", 17.0),
+            _cell_row("FAM_LOCAL_SPIKE", "S3", 15.0),
+        ],
+    )
+
+    outputs, result = rt_norm.run_rt_normalization_anchor_diagnostic(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=output_dir,
+        reference_source="injection-local-median",
+        sample_info=sample_info,
+        injection_window=2,
+    )
+
+    assert result.reference_source == "injection-local-median"
+    family_rows = _read_tsv(outputs.family_tsv)
+    assert float(family_rows[0]["raw_rt_range_min"]) == pytest.approx(2.0)
+    assert float(family_rows[0]["normalized_rt_range_min"]) == pytest.approx(0.0)
+    anchor_rows = _read_tsv(outputs.anchor_tsv)
+    s2_references = {
+        row["target_label"]: float(row["reference_rt_min"])
+        for row in anchor_rows
+        if row["sample_stem"] == "S2"
+    }
+    assert s2_references == {"anchor-a": 10.0, "anchor-b": 20.0}
+
+
+def test_injection_local_reference_requires_sample_info(tmp_path: Path):
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    _write_targeted_workbook(
+        targeted,
+        targets=[
+            _target("anchor-a", 10.0, 116.0474),
+            _target("anchor-b", 20.0, 116.0474),
+        ],
+        sample_anchor_rts={"S1": {"anchor-a": 10.0, "anchor-b": 20.0}},
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[
+            {
+                "feature_family_id": "FAM001",
+                "include_in_primary_matrix": "TRUE",
+                "family_center_mz": 250.0,
+                "family_center_rt": 15.0,
+            },
+        ],
+        cell_rows=[_cell_row("FAM001", "S1", 15.0)],
+    )
+
+    with pytest.raises(ValueError, match="sample_info"):
+        rt_norm.run_rt_normalization_anchor_diagnostic(
+            targeted_workbook=targeted,
+            alignment_dir=alignment,
+            output_dir=tmp_path / "rt_normalization",
+            reference_source="injection-local-median",
+        )
+
+
 def test_main_reports_missing_required_workbook_column(
     tmp_path: Path,
     capsys,
@@ -415,6 +507,15 @@ def _write_targeted_workbook(
                 ]
             )
             first = False
+    workbook.save(path)
+
+
+def _write_sample_info(path: Path, samples: tuple[str, ...]) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Sample_Name", "Injection_Order"])
+    for order, sample in enumerate(samples, start=1):
+        sheet.append([sample, order])
     workbook.save(path)
 
 

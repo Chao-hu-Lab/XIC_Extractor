@@ -249,6 +249,7 @@ Current diagnostic outputs:
 ```text
 output\diagnostics\phase_o_rt_normalization_piecewise_8raw_20260514
 output\diagnostics\phase_o_rt_normalization_piecewise_85raw_20260514
+output\diagnostics\phase_p_rt_normalization_injection_local_85raw_20260514
 ```
 
 The first robust/piecewise trial is promising but not production-ready:
@@ -258,9 +259,17 @@ The first robust/piecewise trial is promising but not production-ready:
 - 85-RAW existing preconsolidation output: `WARN`, complete active DNA ISTD
   anchor coverage, 23 excluded anchor observations, 20 of them `d3-N6-medA`,
   median RT-range improvement about `-0.083 min`.
+- 85-RAW with injection-order-aware local references: `PASS`, all 85 samples
+  modelled, 2 excluded anchor observations, median RT-range improvement about
+  `+0.013 min` overall and `+0.021 min` on primary families.
 
-Treat normalized RT as review evidence until batch-aware reference models and
-per-run positive improvement gates prove clear benefit.
+The existing project already used injection order in `drift_evidence.py` for
+targeted ISTD drift evidence. The first normalized RT diagnostic did not. The
+new `injection-local-median` reference source closes that gap for diagnostics.
+
+Treat normalized RT as review evidence until per-family positive improvement
+gates prove clear benefit. The current evidence supports injection-local iRT as
+a scoring input candidate, not as an unconditional production promotion rule.
 
 Important boundary:
 

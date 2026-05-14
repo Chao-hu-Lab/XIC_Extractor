@@ -22,6 +22,7 @@ from xic_extractor.alignment.rt_normalization import (
     apply_anchor_reference_source,
     fit_sample_rt_models,
 )
+from xic_extractor.injection_rolling import read_injection_order
 
 ACTIVE_NEUTRAL_LOSS_DA = 116.0474
 ACTIVE_NEUTRAL_LOSS_TOLERANCE_DA = 0.01
@@ -146,6 +147,8 @@ def run_rt_normalization_anchor_diagnostic(
     anchor_residual_max_min: float = 0.30,
     anchor_slope_min: float = 0.50,
     anchor_slope_max: float = 1.50,
+    sample_info: Path | None = None,
+    injection_window: int = 4,
 ) -> tuple[RtNormalizationOutputs, RtNormalizationResult]:
     anchors = _read_anchor_definitions(
         targeted_workbook,
@@ -153,7 +156,16 @@ def run_rt_normalization_anchor_diagnostic(
         active_neutral_loss_tolerance_da=active_neutral_loss_tolerance_da,
     )
     points = _read_anchor_points(targeted_workbook, anchors)
-    points = apply_anchor_reference_source(points, reference_source)
+    injection_order = _read_optional_injection_order(
+        sample_info,
+        reference_source=reference_source,
+    )
+    points = apply_anchor_reference_source(
+        points,
+        reference_source,
+        injection_order=injection_order,
+        injection_window=injection_window,
+    )
     models, residuals, sample_count = fit_sample_rt_models(
         points,
         model_type=model_type,
@@ -209,6 +221,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             anchor_residual_max_min=args.anchor_residual_max_min,
             anchor_slope_min=args.anchor_slope_min,
             anchor_slope_max=args.anchor_slope_max,
+            sample_info=args.sample_info.resolve() if args.sample_info else None,
+            injection_window=args.injection_window,
         )
     except (FileNotFoundError, KeyError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -237,7 +251,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--reference-source",
-        choices=("observed-median", "target-window"),
+        choices=("observed-median", "target-window", "injection-local-median"),
         default="observed-median",
     )
     parser.add_argument(
@@ -248,6 +262,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--anchor-residual-max-min", type=float, default=0.30)
     parser.add_argument("--anchor-slope-min", type=float, default=0.50)
     parser.add_argument("--anchor-slope-max", type=float, default=1.50)
+    parser.add_argument("--sample-info", type=Path)
+    parser.add_argument("--injection-window", type=int, default=4)
     return parser.parse_args(argv)
 
 
@@ -333,6 +349,18 @@ def _read_anchor_points(
         return tuple(points)
     finally:
         workbook.close()
+
+
+def _read_optional_injection_order(
+    sample_info: Path | None,
+    *,
+    reference_source: str,
+) -> dict[str, int] | None:
+    if reference_source != "injection-local-median":
+        return None
+    if sample_info is None:
+        raise ValueError("sample_info is required for injection-local-median")
+    return read_injection_order(sample_info)
 
 
 def _read_alignment_review(path: Path) -> dict[str, AlignmentFeature]:

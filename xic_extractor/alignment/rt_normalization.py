@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from statistics import median
 
@@ -53,9 +53,20 @@ class AnchorResidual:
 def apply_anchor_reference_source(
     points: tuple[AnchorPoint, ...],
     reference_source: str,
+    *,
+    injection_order: Mapping[str, int] | None = None,
+    injection_window: int = 4,
 ) -> tuple[AnchorPoint, ...]:
     if reference_source == "target-window":
         return points
+    if reference_source == "injection-local-median":
+        if injection_order is None:
+            raise ValueError("sample_info is required for injection-local-median")
+        return _apply_injection_local_reference(
+            points,
+            injection_order=injection_order,
+            injection_window=injection_window,
+        )
     if reference_source != "observed-median":
         raise ValueError(f"unsupported reference source: {reference_source}")
     by_label: dict[str, list[float]] = {}
@@ -74,6 +85,61 @@ def apply_anchor_reference_source(
         for point in points
         if point.target_label in references
     )
+
+
+def _apply_injection_local_reference(
+    points: tuple[AnchorPoint, ...],
+    *,
+    injection_order: Mapping[str, int],
+    injection_window: int,
+) -> tuple[AnchorPoint, ...]:
+    rt_by_label: dict[str, dict[str, float]] = {}
+    for point in points:
+        rt_by_label.setdefault(point.target_label, {})[
+            point.sample_stem
+        ] = point.observed_rt_min
+
+    normalized: list[AnchorPoint] = []
+    for point in points:
+        local_reference = _local_median_rt(
+            point.sample_stem,
+            rt_by_label.get(point.target_label, {}),
+            injection_order,
+            window=injection_window,
+        )
+        if local_reference is None:
+            continue
+        normalized.append(
+            AnchorPoint(
+                sample_stem=point.sample_stem,
+                target_label=point.target_label,
+                observed_rt_min=point.observed_rt_min,
+                reference_rt_min=local_reference,
+            )
+        )
+    return tuple(normalized)
+
+
+def _local_median_rt(
+    sample_stem: str,
+    rt_by_sample: Mapping[str, float],
+    injection_order: Mapping[str, int],
+    *,
+    window: int,
+) -> float | None:
+    sample_order = injection_order.get(sample_stem)
+    if sample_order is None:
+        return None
+    lo = sample_order - window
+    hi = sample_order + window
+    values = [
+        rt
+        for sample, rt in rt_by_sample.items()
+        if (order := injection_order.get(sample)) is not None and lo <= order <= hi
+    ]
+    if len(values) < 3:
+        return None
+    return float(median(values))
 
 
 def fit_sample_rt_models(

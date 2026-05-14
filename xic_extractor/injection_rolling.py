@@ -57,9 +57,19 @@ def _read_xlsx(path: Path) -> dict[str, int]:
 def _add_sample_order(out: dict[str, int], name: str, order: int) -> None:
     trimmed = name.strip()
     _set_sample_order(out, trimmed, order)
-    alias = _canonical_sample_name(trimmed)
-    if alias != trimmed:
+    for alias in _canonical_sample_aliases(trimmed):
         _set_sample_order(out, alias, order)
+
+
+def _canonical_sample_aliases(name: str) -> tuple[str, ...]:
+    aliases: list[str] = []
+    alias = _canonical_sample_name(name)
+    if alias != name:
+        aliases.append(alias)
+    qc4_alias = alias.replace("_QC_4", "_QC4")
+    if qc4_alias != alias:
+        aliases.append(qc4_alias)
+    return tuple(dict.fromkeys(aliases))
 
 
 def _set_sample_order(out: dict[str, int], name: str, order: int) -> None:
