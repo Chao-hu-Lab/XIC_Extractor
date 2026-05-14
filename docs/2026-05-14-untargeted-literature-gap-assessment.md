@@ -39,6 +39,38 @@ Not yet = full LC-MS QA/QC normalization + artifact deconvolution layer
 
 ## Literature Signals
 
+### DNA Adductomics-Specific Evidence Strengthens The Same Direction
+
+Vangeenderhuysen et al. 2026 is directly relevant because it focuses on
+large-scale untargeted DNA adductomics, not generic metabolomics. The paper
+builds a fit-for-purpose preprocessing and normalization workflow using xcms,
+known DNA adducts, ISTDs, QCs, technical replicates, and normalization
+performance metrics.
+
+The main implications for us are:
+
+- data-set-specific preprocessing is required; their optimized xcms parameters
+  are explicitly not gold standards for every DNA adductomics data set;
+- known adducts and ISTDs are useful benchmark anchors for peak detection, RT
+  alignment, feature grouping, and normalization evaluation;
+- DNA adducts are low-abundance and may appear in a minority of samples, so
+  overly aggressive prevalence/grouping filters can remove real features;
+- gap filling is important, but remaining high-missingness features still need
+  filtering or special handling;
+- feature-based normalization methods, especially QC-RLSC / local methods,
+  performed better than sample-based TIC / median normalization in their
+  evaluation;
+- sample-based normalization can inflate ISTD variation and create misleading
+  downstream statistics;
+- RSD* and D-ratio are useful objective metrics, but PCA/QC clustering remains
+  necessary because metrics alone can mislead.
+
+This paper strengthens our current conclusion. Our alignment/backfill/family
+consolidation layer addresses the preprocessing side: false missingness,
+RT-driven splitting, and primary matrix pollution. It does not yet address the
+normalization side that the paper treats as mandatory for large-scale
+adductomics.
+
 ### Pooled QC Samples Are Standard For Untargeted Data Quality
 
 Davis et al. 2023 reviewed LC-MS untargeted metabolomics studies and concluded that pooled QC samples are useful for monitoring and correcting analytical variance. They also noted that many studies create pooled QC samples but do not fully use them for data quality improvement, especially feature filtering, analytical drift correction, and metabolite annotation.
@@ -134,6 +166,7 @@ Implication for us:
 | Background contaminants / blanks | blank subtraction, blank/sample ratio, batch blank filtering | no blank-aware gate | not solved |
 | Artificial compounds / artifacts | credentialing, blanks, sample prep controls, isotope labeling, annotation | Audit/Review preserves evidence; no artifact credentialing | not solved |
 | Wrong targeted peak | target-vs-untargeted RT/area benchmark | strict benchmark exposes `d3-N6-medA` anomaly | diagnostic solved; correction belongs to targeted method |
+| DNA adductomics normalization | feature-based QC/local normalization, RSD*, D-ratio, PCA/QC clustering | no native normalization layer | not solved; now a high-priority next phase |
 
 ## What We Have Actually Solved
 
@@ -224,6 +257,8 @@ Required additions:
 - export `area_raw`
 - export corrected columns separately, e.g. `area_qc_rlsc`, `area_serrf`, `area_istd_norm`
 - report pre/post correction QC CV and drift slope
+- report RSD* and D-ratio in the adductomics style, while keeping PCA/QC clustering
+  as a required visual/diagnostic check
 
 ### 3. Random Missingness
 
@@ -263,6 +298,8 @@ Add or standardize sample metadata columns:
 - `injection_order`
 - `matrix_type`
 - `prep_batch`
+- `technical_replicate_group`
+- `normalization_qc_role`: `training_qc`, `evaluation_qc`, `none`
 
 Do not correct signals yet. First make the evidence available and exportable.
 
@@ -279,6 +316,9 @@ New diagnostic outputs:
 Important metrics:
 
 - QC CV before correction
+- ISTD RSD*
+- feature RSD* in technical replicates / evaluation QCs
+- D-ratio
 - blank/sample ratio
 - sample prevalence
 - QC prevalence
@@ -323,10 +363,15 @@ Candidate correction engines:
 - SERRF-like random forest correction when enough pooled QC samples exist
 - ISTD normalization for targeted families or RT-near/class-near features
 - blank subtraction or blank ratio filtering
+- local mean / local feature-based signal correction as a lower-complexity
+  baseline against QC-RLSC
 
 These should be opt-in at first and benchmarked with:
 
 - QC CV improvement
+- RSD* improvement without inflating ISTD variation
+- D-ratio improvement without artificial biological variance inflation
+- PCA clustering of QCs and technical replicates
 - biological group preservation
 - ISTD RT/area trend preservation
 - no increase in false primary matrix artifacts
@@ -348,12 +393,14 @@ strict ISTD gate
   + QC/blank-aware diagnostics
   + missingness mechanism report
   + artifact annotation flags
-  + optional correction layer
+  + adductomics-style normalization evaluation
+  + optional correction layer with raw/corrected areas kept separate
 ```
 
 ## References
 
 - Davis et al. 2023, Current practices in LC-MS untargeted metabolomics: a scoping review on the use of pooled quality control samples. Analytical Chemistry. https://doi.org/10.1021/acs.analchem.3c02924
+- Vangeenderhuysen et al. 2026, Challenges and Good Practices in Preprocessing and Normalization of Untargeted DNA Adductomics Data in Exposomics Research. Analytical Chemistry. https://doi.org/10.1021/acs.analchem.5c06549
 - Brunius et al. 2016, Large-scale untargeted LC-MS metabolomics data correction using between-batch feature alignment and cluster-based within-batch signal intensity drift correction. Metabolomics. https://doi.org/10.1007/s11306-016-1124-4
 - xcms `fillChromPeaks()` documentation. https://rdrr.io/bioc/xcms/man/fillChromPeaks.html
 - Do et al. 2018, Characterization of missing values in untargeted MS-based metabolomics data and evaluation of missing data handling strategies. Metabolomics. https://doi.org/10.1007/s11306-018-1420-2
