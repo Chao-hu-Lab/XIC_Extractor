@@ -34,6 +34,12 @@ ALIGNMENT_REVIEW_COLUMNS = (
     "duplicate_assigned_count",
     "ambiguous_ms1_owner_count",
     "present_rate",
+    "identity_decision",
+    "identity_confidence",
+    "primary_evidence",
+    "identity_reason",
+    "quantifiable_detected_count",
+    "quantifiable_rescue_count",
     "accepted_cell_count",
     "accepted_rescue_count",
     "review_rescue_count",
@@ -218,6 +224,16 @@ def _review_rows(
                 "duplicate_assigned_count": duplicate_assigned_count,
                 "ambiguous_ms1_owner_count": ambiguous_owner_count,
                 "present_rate": safe_rate(present_count, sample_count),
+                "identity_decision": row_decision.identity_decision,
+                "identity_confidence": row_decision.identity_confidence,
+                "primary_evidence": row_decision.primary_evidence,
+                "identity_reason": row_decision.identity_reason,
+                "quantifiable_detected_count": (
+                    row_decision.quantifiable_detected_count
+                ),
+                "quantifiable_rescue_count": (
+                    row_decision.quantifiable_rescue_count
+                ),
                 "accepted_cell_count": row_decision.accepted_cell_count,
                 "accepted_rescue_count": row_decision.accepted_rescue_count,
                 "review_rescue_count": row_decision.review_rescue_count,

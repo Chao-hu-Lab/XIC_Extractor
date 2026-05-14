@@ -257,9 +257,7 @@ def targeted_istd_benchmark_guardrail_rows(
     if not benchmark_json.exists():
         raise FileNotFoundError(str(benchmark_json))
     payload = json.loads(benchmark_json.read_text(encoding="utf-8"))
-    summaries = payload.get("summaries", [])
-    if not isinstance(summaries, list):
-        raise ValueError(f"{benchmark_json} is missing summaries list")
+    summaries = _benchmark_summaries(payload, benchmark_json)
     rows = [
         _targeted_istd_metric_row(
             "overall_status",
@@ -553,6 +551,9 @@ def _is_production_family(
     review_row: Mapping[str, str],
     counts: Counter[str],
 ) -> bool:
+    identity_decision = review_row.get("identity_decision")
+    if identity_decision:
+        return identity_decision == "production_family"
     if "include_in_primary_matrix" in review_row:
         return _is_trueish(review_row.get("include_in_primary_matrix"))
     if "accepted_cell_count" in review_row:
@@ -758,6 +759,29 @@ def _count_summaries(
         and summary.get("status") == status
         and (not active_only or _is_json_trueish(summary.get("active_tag")))
     )
+
+
+def _benchmark_summaries(
+    payload: Mapping[str, object],
+    benchmark_json: Path,
+) -> list[object]:
+    raw_summaries = payload.get("summaries")
+    if raw_summaries is None:
+        raw_summaries = payload.get("targets")
+    if not isinstance(raw_summaries, list):
+        raise ValueError(f"{benchmark_json} is missing summaries or targets list")
+    return [_normalize_benchmark_summary(summary) for summary in raw_summaries]
+
+
+def _normalize_benchmark_summary(summary: object) -> object:
+    if not isinstance(summary, dict):
+        return summary
+    normalized = dict(summary)
+    if "status" not in normalized and "benchmark_class" in normalized:
+        normalized["status"] = normalized.get("benchmark_class")
+    if "active_tag" not in normalized and "active_dna_istd_candidate" in normalized:
+        normalized["active_tag"] = normalized.get("active_dna_istd_candidate")
+    return normalized
 
 
 def _count_failure_mode(summaries: list[object], failure_mode: str) -> int:

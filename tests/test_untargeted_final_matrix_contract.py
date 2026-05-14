@@ -30,10 +30,11 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
             _feature("FAM002", evidence="", has_anchor=False),
             _feature("FAM003", evidence="owner_complete_link;owner_count=2"),
         ),
-        sample_order=("s1", "s2"),
+        sample_order=("s1", "s2", "s3"),
         cells=(
             _cell("s1", "FAM001", "detected", 100.0),
             _cell("s2", "FAM001", "rescued", 90.0),
+            _cell("s3", "FAM001", "detected", 110.0),
             _cell("s1", "FAM002", "rescued", 80.0),
             _cell("s2", "FAM002", "absent", None),
             _cell("s1", "FAM003", "duplicate_assigned", 70.0),
@@ -55,6 +56,7 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     assert [row["feature_family_id"] for row in tsv_rows] == ["FAM001"]
     assert tsv_rows[0]["s1"] == "100"
     assert tsv_rows[0]["s2"] == "90"
+    assert tsv_rows[0]["s3"] == "110"
     assert FORBIDDEN_PRIMARY_STATUSES.isdisjoint(
         value for row in tsv_rows for value in row.values()
     )
@@ -64,6 +66,7 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     assert [row["feature_family_id"] for row in matrix_rows] == ["FAM001"]
     assert matrix_rows[0]["s1"] == 100.0
     assert matrix_rows[0]["s2"] == 90.0
+    assert matrix_rows[0]["s3"] == 110.0
     assert FORBIDDEN_PRIMARY_STATUSES.isdisjoint(
         str(value)
         for row in matrix_rows

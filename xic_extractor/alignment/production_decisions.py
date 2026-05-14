@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
+from xic_extractor.alignment.cell_quality import (
+    CellQualityDecision,
+    build_cell_quality_decisions,
+)
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.matrix_identity import (
+    MatrixIdentityRowDecision,
+    build_matrix_identity_decisions,
+)
 from xic_extractor.alignment.output_rows import cells_by_cluster, row_id
 
 ProductionStatus = Literal[
@@ -34,11 +41,18 @@ class ProductionCellDecision:
 class ProductionRowDecision:
     feature_family_id: str
     include_in_primary_matrix: bool
+    identity_decision: str
+    identity_confidence: str
+    primary_evidence: str
+    identity_reason: str
+    quantifiable_detected_count: int
+    quantifiable_rescue_count: int
     accepted_cell_count: int
     detected_count: int
     accepted_rescue_count: int
     review_rescue_count: int
     duplicate_assigned_count: int
+    ambiguous_ms1_owner_count: int
     row_flags: tuple[str, ...]
 
 
@@ -59,20 +73,25 @@ def build_production_decisions(
     config: AlignmentConfig,
 ) -> ProductionDecisionSet:
     grouped_cells = cells_by_cluster(matrix)
+    quality_decisions = build_cell_quality_decisions(matrix.cells, config)
+    identity_decisions = build_matrix_identity_decisions(
+        matrix,
+        config,
+        cell_quality=quality_decisions,
+    )
     cell_decisions: dict[tuple[str, str], ProductionCellDecision] = {}
     row_decisions: dict[str, ProductionRowDecision] = {}
 
     for cluster in matrix.clusters:
         cluster_id = row_id(cluster)
         cluster_cells = grouped_cells.get(cluster_id, ())
-        row_anchor_lost = _identity_anchor_lost(cluster_cells)
-        row_has_identity = _has_row_identity_support(cluster) and not row_anchor_lost
+        identity_row = identity_decisions.row(cluster_id)
 
         for cell in cluster_cells:
             decision = _cell_decision(
                 cell,
-                config=config,
-                row_has_identity=row_has_identity,
+                quality_decisions[(cell.cluster_id, cell.sample_stem)],
+                identity_row=identity_row,
             )
             cell_decisions[(cell.cluster_id, cell.sample_stem)] = decision
 
@@ -81,10 +100,10 @@ def build_production_decisions(
             for cell in cluster_cells
         )
         row_decisions[cluster_id] = _row_decision(
-            cluster,
+            cluster_id,
             cluster_cells,
             decisions,
-            row_anchor_lost=row_anchor_lost,
+            identity_row=identity_row,
         )
 
     return ProductionDecisionSet(cells=cell_decisions, rows=row_decisions)
@@ -92,15 +111,12 @@ def build_production_decisions(
 
 def _cell_decision(
     cell: AlignedCell,
+    quality: CellQualityDecision,
     *,
-    config: AlignmentConfig,
-    row_has_identity: bool,
+    identity_row: MatrixIdentityRowDecision,
 ) -> ProductionCellDecision:
-    if cell.status == "detected":
-        area = _valid_area(cell.area)
-        if area is None:
-            return _blank(cell, "blank", "", "invalid_area")
-        if not row_has_identity:
+    if quality.quality_status == "detected_quantifiable":
+        if not identity_row.include_in_primary_matrix:
             return _blank(cell, "blank", "", "missing_row_identity_support")
         return ProductionCellDecision(
             feature_family_id=cell.cluster_id,
@@ -109,66 +125,59 @@ def _cell_decision(
             production_status="detected",
             rescue_tier="",
             write_matrix_value=True,
-            matrix_value=area,
+            matrix_value=quality.matrix_area,
             blank_reason="",
         )
-    if cell.status == "rescued":
-        return _rescue_decision(
-            cell,
-            config=config,
-            row_has_identity=row_has_identity,
+    if quality.quality_status == "rescue_quantifiable":
+        if not identity_row.include_in_primary_matrix:
+            return _blank(
+                cell,
+                "review_rescue",
+                "review_rescue",
+                "missing_row_identity_support",
+            )
+        return ProductionCellDecision(
+            feature_family_id=cell.cluster_id,
+            sample_stem=cell.sample_stem,
+            raw_status=cell.status,
+            production_status="accepted_rescue",
+            rescue_tier="accepted_rescue",
+            write_matrix_value=True,
+            matrix_value=quality.matrix_area,
+            blank_reason="",
         )
-    if cell.status == "duplicate_assigned":
-        return _blank(cell, "blank", "", "duplicate_loser")
-    if cell.status == "ambiguous_ms1_owner":
-        return _blank(cell, "blank", "", "ambiguous_ms1_owner")
-    if cell.status == "absent":
-        return _blank(cell, "blank", "", "absent")
-    if cell.status == "unchecked":
-        return _blank(cell, "blank", "", "unchecked")
-    return _blank(cell, "blank", "", f"unsupported_status:{cell.status}")
-
-
-def _rescue_decision(
-    cell: AlignedCell,
-    *,
-    config: AlignmentConfig,
-    row_has_identity: bool,
-) -> ProductionCellDecision:
-    area = _valid_area(cell.area)
-    if area is None:
-        return _blank(cell, "rejected_rescue", "rejected_rescue", "invalid_area")
-    if not row_has_identity:
+    if quality.quality_status == "review_rescue":
         return _blank(
             cell,
             "review_rescue",
             "review_rescue",
-            "missing_row_identity_support",
+            quality.quality_reason,
         )
-    if not _has_complete_peak(cell):
-        return _blank(cell, "review_rescue", "review_rescue", "incomplete_peak")
-    if cell.rt_delta_sec is None or abs(cell.rt_delta_sec) > config.max_rt_sec:
-        return _blank(cell, "review_rescue", "review_rescue", "rt_outside_max")
-    return ProductionCellDecision(
-        feature_family_id=cell.cluster_id,
-        sample_stem=cell.sample_stem,
-        raw_status=cell.status,
-        production_status="accepted_rescue",
-        rescue_tier="accepted_rescue",
-        write_matrix_value=True,
-        matrix_value=area,
-        blank_reason="",
-    )
+    if quality.quality_status == "duplicate_loser":
+        return _blank(cell, "blank", "", "duplicate_loser")
+    if quality.quality_status == "ambiguous_owner":
+        return _blank(cell, "blank", "", "ambiguous_ms1_owner")
+    if quality.quality_status == "blank" and cell.status == "absent":
+        return _blank(cell, "blank", "", "absent")
+    if quality.quality_status == "blank" and cell.status == "unchecked":
+        return _blank(cell, "blank", "", "unchecked")
+    if quality.quality_status == "invalid" and cell.status == "rescued":
+        return _blank(
+            cell,
+            "rejected_rescue",
+            "rejected_rescue",
+            quality.quality_reason,
+        )
+    return _blank(cell, "blank", "", quality.quality_reason)
 
 
 def _row_decision(
-    cluster: Any,
+    cluster_id: str,
     cells: tuple[AlignedCell, ...],
     decisions: tuple[ProductionCellDecision, ...],
     *,
-    row_anchor_lost: bool,
+    identity_row: MatrixIdentityRowDecision,
 ) -> ProductionRowDecision:
-    cluster_id = row_id(cluster)
     detected_count = sum(1 for cell in cells if cell.status == "detected")
     accepted_rescue_count = sum(
         1 for decision in decisions if decision.production_status == "accepted_rescue"
@@ -176,44 +185,34 @@ def _row_decision(
     review_rescue_count = sum(
         1 for decision in decisions if decision.production_status == "review_rescue"
     )
-    duplicate_count = sum(1 for cell in cells if cell.status == "duplicate_assigned")
+    duplicate_count = identity_row.duplicate_assigned_count
+    ambiguous_count = identity_row.ambiguous_ms1_owner_count
     accepted_cell_count = sum(
         1 for decision in decisions if decision.write_matrix_value
     )
 
-    flags: list[str] = []
-    rescue_heavy = accepted_rescue_count > detected_count and detected_count > 0
-    duplicate_pressure = duplicate_count > 0
-    if rescue_heavy:
-        flags.append("rescue_heavy")
+    flags: list[str] = list(identity_row.row_flags)
     if accepted_cell_count == 0 and review_rescue_count > 0:
         flags.append("rescue_only_review")
-    if duplicate_pressure:
-        flags.append("duplicate_claim_pressure")
-    if row_anchor_lost:
-        flags.append("identity_anchor_lost")
-
-    weak_backfill_identity = rescue_heavy and detected_count < 2
-    unresolved_duplicate_pressure = (
-        duplicate_pressure
-        and duplicate_count > accepted_cell_count
-        and not _is_consolidated_primary_family(cluster)
-    )
 
     return ProductionRowDecision(
         feature_family_id=cluster_id,
         include_in_primary_matrix=(
-            accepted_cell_count > 0
-            and not row_anchor_lost
-            and not weak_backfill_identity
-            and not unresolved_duplicate_pressure
+            identity_row.include_in_primary_matrix and accepted_cell_count > 0
         ),
+        identity_decision=identity_row.identity_decision,
+        identity_confidence=identity_row.identity_confidence,
+        primary_evidence=identity_row.primary_evidence,
+        identity_reason=identity_row.identity_reason,
+        quantifiable_detected_count=identity_row.quantifiable_detected_count,
+        quantifiable_rescue_count=identity_row.quantifiable_rescue_count,
         accepted_cell_count=accepted_cell_count,
         detected_count=detected_count,
         accepted_rescue_count=accepted_rescue_count,
         review_rescue_count=review_rescue_count,
         duplicate_assigned_count=duplicate_count,
-        row_flags=tuple(flags),
+        ambiguous_ms1_owner_count=ambiguous_count,
+        row_flags=tuple(dict.fromkeys(flags)),
     )
 
 
@@ -233,75 +232,3 @@ def _blank(
         matrix_value=None,
         blank_reason=blank_reason,
     )
-
-
-def _valid_area(value: float | None) -> float | None:
-    if (
-        value is None
-        or isinstance(value, bool)
-        or not math.isfinite(value)
-        or value <= 0
-    ):
-        return None
-    return float(value)
-
-
-def _has_complete_peak(cell: AlignedCell) -> bool:
-    return all(
-        _finite(value)
-        for value in (
-            cell.apex_rt,
-            cell.height,
-            cell.peak_start_rt,
-            cell.peak_end_rt,
-        )
-    )
-
-
-def _finite(value: object) -> bool:
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
-
-
-def _has_row_identity_support(cluster: Any) -> bool:
-    if bool(getattr(cluster, "review_only", False)):
-        return False
-    evidence = _family_evidence(cluster)
-    if evidence == "owner_identity":
-        return True
-    if evidence == "owner_complete_link" or evidence.startswith(
-        "owner_complete_link;",
-    ):
-        return True
-    if evidence.startswith("cid_nl_only;"):
-        return True
-    if evidence == "" and bool(getattr(cluster, "has_anchor", False)):
-        return True
-    return False
-
-
-def _is_consolidated_primary_family(cluster: Any) -> bool:
-    return "primary_family_consolidated" in _family_evidence(cluster).split(";")
-
-
-def _identity_anchor_lost(cells: tuple[AlignedCell, ...]) -> bool:
-    if any(cell.status == "detected" for cell in cells):
-        return False
-    has_duplicate_detected = any(
-        cell.status == "duplicate_assigned"
-        and "original_status=detected" in cell.reason
-        for cell in cells
-    )
-    has_rescue = any(cell.status == "rescued" for cell in cells)
-    return has_duplicate_detected and has_rescue
-
-
-def _family_evidence(cluster: Any) -> str:
-    if hasattr(cluster, "evidence"):
-        return str(cluster.evidence)
-    if hasattr(cluster, "fold_evidence"):
-        return str(cluster.fold_evidence)
-    return ""

@@ -32,6 +32,9 @@ def test_detected_and_supported_rescue_write_numeric_values():
     assert decisions.cell("FAM001", "s3").write_matrix_value is True
     assert decisions.cell("FAM001", "s3").production_status == "accepted_rescue"
     assert decisions.row("FAM001").include_in_primary_matrix is True
+    assert decisions.row("FAM001").identity_decision == "production_family"
+    assert decisions.row("FAM001").primary_evidence == "owner_complete_link"
+    assert decisions.row("FAM001").quantifiable_detected_count == 2
     assert decisions.row("FAM001").row_flags == ()
 
 
@@ -52,6 +55,9 @@ def test_single_sample_local_owner_does_not_create_primary_identity():
     assert decisions.cell("FAM001", "s2").write_matrix_value is False
     assert decisions.cell("FAM001", "s2").production_status == "review_rescue"
     assert decisions.row("FAM001").include_in_primary_matrix is False
+    assert decisions.row("FAM001").identity_decision == "audit_family"
+    assert decisions.row("FAM001").identity_reason == "single_sample_local_owner"
+    assert "single_sample_local_owner" in decisions.row("FAM001").row_flags
 
 
 def test_rescue_heavy_row_needs_multiple_detected_owners_for_primary_promotion():
@@ -67,8 +73,13 @@ def test_rescue_heavy_row_needs_multiple_detected_owners_for_primary_promotion()
 
     decisions = build_production_decisions(matrix, AlignmentConfig())
 
-    assert decisions.row("FAM001").row_flags == ("rescue_heavy",)
-    assert decisions.row("FAM001").accepted_cell_count == 3
+    assert set(decisions.row("FAM001").row_flags) == {
+        "rescue_heavy",
+        "rescue_only_review",
+    }
+    assert decisions.row("FAM001").accepted_cell_count == 0
+    assert decisions.row("FAM001").quantifiable_detected_count == 1
+    assert decisions.row("FAM001").quantifiable_rescue_count == 2
     assert decisions.row("FAM001").include_in_primary_matrix is False
 
 
@@ -105,7 +116,10 @@ def test_rescue_without_identity_support_is_review_only_and_row_is_excluded():
     assert decisions.cell("FAM001", "s1").production_status == "review_rescue"
     assert decisions.cell("FAM001", "s1").blank_reason == "missing_row_identity_support"
     assert decisions.row("FAM001").include_in_primary_matrix is False
-    assert decisions.row("FAM001").row_flags == ("rescue_only_review",)
+    assert set(decisions.row("FAM001").row_flags) == {
+        "rescue_only",
+        "rescue_only_review",
+    }
 
 
 def test_duplicate_ambiguous_absent_unchecked_and_invalid_areas_are_blank():
@@ -147,11 +161,12 @@ def test_identity_anchor_lost_row_is_excluded_until_review_passes():
 
     assert decisions.cell("FAM001", "s2").production_status == "review_rescue"
     assert decisions.row("FAM001").include_in_primary_matrix is False
-    assert decisions.row("FAM001").row_flags == (
-        "rescue_only_review",
+    assert set(decisions.row("FAM001").row_flags) == {
+        "single_sample_local_owner",
+        "rescue_only",
         "duplicate_claim_pressure",
-        "identity_anchor_lost",
-    )
+        "rescue_only_review",
+    }
 
 
 def test_rescued_with_incomplete_peak_fields_is_review_only():

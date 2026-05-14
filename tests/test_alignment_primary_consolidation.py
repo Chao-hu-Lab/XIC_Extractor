@@ -153,14 +153,7 @@ def test_consolidation_prefers_stronger_sample_peak_over_weak_detected_peak():
     )
 
     consolidated = consolidate_primary_family_rows(matrix, AlignmentConfig())
-    winner_id = next(
-        row.feature_family_id
-        for row in build_production_decisions(
-            consolidated,
-            AlignmentConfig(),
-        ).rows.values()
-        if row.include_in_primary_matrix
-    )
+    winner_id = "FAM001"
     winner_cells = {
         cell.sample_stem: cell
         for cell in consolidated.cells
@@ -171,6 +164,55 @@ def test_consolidation_prefers_stronger_sample_peak_over_weak_detected_peak():
     assert winner_cells["s1"].status == "rescued"
 
 
+def test_near_duplicate_rescue_heavy_primary_family_is_demoted_to_audit():
+    matrix = AlignmentMatrix(
+        clusters=(
+            _feature(
+                "FAM_STRONG",
+                mz=301.165,
+                rt=23.35,
+                product_mz=185.116,
+                evidence="owner_complete_link;owner_count=4",
+            ),
+            _feature(
+                "FAM_RESCUE",
+                mz=301.171,
+                rt=24.08,
+                product_mz=185.123,
+                evidence="owner_complete_link;owner_count=4",
+            ),
+        ),
+        sample_order=("s1", "s2", "s3", "s4"),
+        cells=(
+            _cell("s1", "FAM_STRONG", "detected", 1000.0, apex=23.35),
+            _cell("s2", "FAM_STRONG", "detected", 950.0, apex=23.36),
+            _cell("s3", "FAM_STRONG", "detected", 900.0, apex=23.37),
+            _cell("s4", "FAM_STRONG", "rescued", 850.0, apex=23.38),
+            _cell("s1", "FAM_RESCUE", "detected", 100.0, apex=24.08),
+            _cell("s2", "FAM_RESCUE", "rescued", 110.0, apex=24.09),
+            _cell("s3", "FAM_RESCUE", "rescued", 120.0, apex=24.10),
+            _cell("s4", "FAM_RESCUE", "rescued", 130.0, apex=24.11),
+        ),
+    )
+
+    consolidated = consolidate_primary_family_rows(matrix, AlignmentConfig())
+    decisions = build_production_decisions(consolidated, AlignmentConfig())
+
+    assert decisions.row("FAM_STRONG").include_in_primary_matrix is True
+    assert decisions.row("FAM_RESCUE").include_in_primary_matrix is False
+    loser = _feature_by_id(consolidated, "FAM_RESCUE")
+    assert loser.review_only is True
+    assert (
+        "primary_family_consolidation_loser;winner=FAM_STRONG"
+        in loser.evidence
+    )
+    assert [
+        cell.sample_stem
+        for cell in consolidated.cells
+        if cell.cluster_id == "FAM_RESCUE"
+    ] == ["s1", "s2", "s3", "s4"]
+
+
 def _feature(
     feature_family_id: str,
     *,
@@ -178,6 +220,7 @@ def _feature(
     rt: float = 8.5,
     product_mz: float = 384.0,
     observed_loss: float = 116.0,
+    evidence: str = "single_sample_local_owner",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         feature_family_id=feature_family_id,
@@ -189,7 +232,7 @@ def _feature(
         has_anchor=True,
         event_cluster_ids=(f"OWN-{feature_family_id}",),
         event_member_count=1,
-        evidence="single_sample_local_owner",
+        evidence=evidence,
         review_only=False,
     )
 

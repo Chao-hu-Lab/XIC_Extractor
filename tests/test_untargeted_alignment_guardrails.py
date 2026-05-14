@@ -228,6 +228,35 @@ def test_negative_checkpoint_uses_new_schema_production_decision_before_raw_stat
     assert metrics.negative_checkpoint_production_families == 0
 
 
+def test_production_family_prefers_identity_decision_before_include_flag(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir(parents=True)
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM001",
+                "family_center_mz": 284.0989,
+                "family_center_rt": 5.0,
+                "accepted_cell_count": 2,
+                "include_in_primary_matrix": "TRUE",
+                "identity_decision": "audit_family",
+            },
+        ],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [_cell_row("FAM001", "detected")],
+    )
+
+    metrics = guardrails.compute_guardrails(alignment_dir)
+
+    assert metrics.zero_present_families == 1
+    assert metrics.negative_checkpoint_production_families == 0
+
+
 def test_zero_present_and_duplicate_only_use_new_schema_production_decision(
     tmp_path: Path,
 ) -> None:
@@ -439,6 +468,41 @@ def test_targeted_istd_benchmark_guardrail_rows_mark_failures(
 
     by_metric = {row["metric"]: row for row in rows}
     assert by_metric["overall_status"]["status"] == "FAIL"
+    assert by_metric["active_fail_count"]["value"] == "1"
+    assert by_metric["miss_count"]["value"] == "1"
+    assert by_metric["false_positive_tag_count"]["value"] == "1"
+
+
+def test_targeted_istd_benchmark_guardrail_rows_accept_targets_schema(
+    tmp_path: Path,
+) -> None:
+    benchmark_json = tmp_path / "targeted_istd_benchmark.json"
+    benchmark_json.write_text(
+        json.dumps(
+            {
+                "overall_status": "FAIL",
+                "targets": [
+                    {
+                        "target_name": "d3-5-medC",
+                        "active_dna_istd_candidate": True,
+                        "benchmark_class": "FAIL",
+                        "failure_modes": ["MISS"],
+                    },
+                    {
+                        "target_name": "[13C,15N2]-8-oxo-Guo",
+                        "active_dna_istd_candidate": False,
+                        "benchmark_class": "FAIL",
+                        "failure_modes": ["FALSE_POSITIVE_TAG"],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    rows = guardrails.targeted_istd_benchmark_guardrail_rows(benchmark_json)
+
+    by_metric = {row["metric"]: row for row in rows}
     assert by_metric["active_fail_count"]["value"] == "1"
     assert by_metric["miss_count"]["value"] == "1"
     assert by_metric["false_positive_tag_count"]["value"] == "1"

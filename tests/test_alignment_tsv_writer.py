@@ -23,6 +23,12 @@ REVIEW_COLUMNS = [
     "duplicate_assigned_count",
     "ambiguous_ms1_owner_count",
     "present_rate",
+    "identity_decision",
+    "identity_confidence",
+    "primary_evidence",
+    "identity_reason",
+    "quantifiable_detected_count",
+    "quantifiable_rescue_count",
     "accepted_cell_count",
     "accepted_rescue_count",
     "review_rescue_count",
@@ -44,7 +50,7 @@ def test_write_alignment_review_tsv_columns_counts_rates_and_reason(tmp_path: Pa
             _cell("sample-a", "detected", area=10.0, candidate_id="sample-a#1"),
             _cell("sample-b", "rescued", area=20.0),
             _cell("sample-c", "absent"),
-            _cell("sample-d", "unchecked"),
+            _cell("sample-d", "detected", area=30.0, candidate_id="sample-d#1"),
         ),
         sample_order=("sample-a", "sample-b", "sample-c", "sample-d"),
     )
@@ -64,21 +70,27 @@ def test_write_alignment_review_tsv_columns_counts_rates_and_reason(tmp_path: Pa
         "event_cluster_count": "1",
         "event_cluster_ids": "ALN000001",
         "event_member_count": "1",
-        "detected_count": "1",
+        "detected_count": "2",
         "absent_count": "1",
-        "unchecked_count": "1",
+        "unchecked_count": "0",
         "duplicate_assigned_count": "0",
         "ambiguous_ms1_owner_count": "0",
-        "present_rate": "0.5",
-        "accepted_cell_count": "2",
+        "present_rate": "0.75",
+        "identity_decision": "production_family",
+        "identity_confidence": "medium",
+        "primary_evidence": "multi_sample_detected",
+        "identity_reason": "multi_sample_detected",
+        "quantifiable_detected_count": "2",
+        "quantifiable_rescue_count": "1",
+        "accepted_cell_count": "3",
         "accepted_rescue_count": "1",
         "review_rescue_count": "0",
         "include_in_primary_matrix": "TRUE",
         "row_flags": "",
-        "representative_samples": "sample-a;sample-b",
+        "representative_samples": "sample-a;sample-b;sample-d",
         "family_evidence": "",
         "warning": "",
-        "reason": "anchor family; 2/4 present; 1 MS1 backfilled",
+        "reason": "anchor family; 3/4 present; 1 MS1 backfilled",
     }
 
 
@@ -242,6 +254,7 @@ def test_write_alignment_matrix_tsv_blanks_missing_and_invalid_areas(tmp_path: P
         clusters=(_cluster(fold_evidence="owner_complete_link;owner_count=2"),),
         cells=(
             _cell("detected-positive", "detected", area=1234.567),
+            _cell("detected-positive-2", "detected", area=2345.0),
             _cell("rescued-positive", "rescued", area=25.0),
             _cell("absent-positive", "absent", area=30.0),
             _cell("unchecked-positive", "unchecked", area=40.0),
@@ -252,6 +265,7 @@ def test_write_alignment_matrix_tsv_blanks_missing_and_invalid_areas(tmp_path: P
         ),
         sample_order=(
             "detected-positive",
+            "detected-positive-2",
             "rescued-positive",
             "absent-positive",
             "unchecked-positive",
@@ -270,6 +284,7 @@ def test_write_alignment_matrix_tsv_blanks_missing_and_invalid_areas(tmp_path: P
         "family_center_mz",
         "family_center_rt",
         "detected-positive",
+        "detected-positive-2",
         "rescued-positive",
         "absent-positive",
         "unchecked-positive",
@@ -279,6 +294,7 @@ def test_write_alignment_matrix_tsv_blanks_missing_and_invalid_areas(tmp_path: P
         "nan",
     ]
     assert rows[0]["detected-positive"] == "1234.57"
+    assert rows[0]["detected-positive-2"] == "2345"
     assert rows[0]["rescued-positive"] == "25"
     assert rows[0]["absent-positive"] == ""
     assert rows[0]["unchecked-positive"] == ""
@@ -301,14 +317,16 @@ def test_write_alignment_matrix_tsv_blanks_duplicate_assigned_cells(tmp_path: Pa
                 trace_quality="assigned_duplicate",
             ),
             _cell("sample-b", "detected", area=200.0),
+            _cell("sample-c", "detected", area=300.0),
         ),
-        sample_order=("sample-a", "sample-b"),
+        sample_order=("sample-a", "sample-b", "sample-c"),
     )
 
     rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
 
     assert rows[0]["sample-a"] == ""
     assert rows[0]["sample-b"] == "200"
+    assert rows[0]["sample-c"] == "300"
 
 
 def test_write_alignment_matrix_tsv_blanks_ambiguous_ms1_owner_cells(
@@ -326,14 +344,16 @@ def test_write_alignment_matrix_tsv_blanks_ambiguous_ms1_owner_cells(
                 trace_quality="ambiguous_ms1_owner",
             ),
             _cell("sample-b", "detected", area=200.0),
+            _cell("sample-c", "detected", area=300.0),
         ),
-        sample_order=("sample-a", "sample-b"),
+        sample_order=("sample-a", "sample-b", "sample-c"),
     )
 
     rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
 
     assert rows[0]["sample-a"] == ""
     assert rows[0]["sample-b"] == "200"
+    assert rows[0]["sample-c"] == "300"
 
 
 def test_write_alignment_matrix_tsv_excludes_rows_without_accepted_cells(
@@ -355,6 +375,7 @@ def test_write_alignment_matrix_tsv_excludes_rows_without_accepted_cells(
         ),
         cells=(
             _cell("sample-a", "detected", cluster_id="ALN000001", area=100.0),
+            _cell("sample-b", "detected", cluster_id="ALN000001", area=110.0),
             _cell("sample-a", "rescued", cluster_id="ALN000002", area=200.0),
             _cell(
                 "sample-a",
@@ -363,13 +384,14 @@ def test_write_alignment_matrix_tsv_excludes_rows_without_accepted_cells(
                 area=300.0,
             ),
         ),
-        sample_order=("sample-a",),
+        sample_order=("sample-a", "sample-b"),
     )
 
     rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
 
     assert [row["feature_family_id"] for row in rows] == ["ALN000001"]
     assert rows[0]["sample-a"] == "100"
+    assert rows[0]["sample-b"] == "110"
 
 
 def test_write_alignment_review_tsv_includes_production_decision_columns(
@@ -385,11 +407,17 @@ def test_write_alignment_review_tsv_includes_production_decision_columns(
 
     rows = _read_tsv(write_alignment_review_tsv(tmp_path / "review.tsv", matrix))
 
+    assert rows[0]["identity_decision"] == "audit_family"
+    assert rows[0]["identity_confidence"] == "review"
+    assert rows[0]["primary_evidence"] == "none"
+    assert rows[0]["identity_reason"] == "rescue_only"
+    assert rows[0]["quantifiable_detected_count"] == "0"
+    assert rows[0]["quantifiable_rescue_count"] == "1"
     assert rows[0]["accepted_cell_count"] == "0"
     assert rows[0]["accepted_rescue_count"] == "0"
     assert rows[0]["review_rescue_count"] == "1"
     assert rows[0]["include_in_primary_matrix"] == "FALSE"
-    assert rows[0]["row_flags"] == "rescue_only_review"
+    assert rows[0]["row_flags"] == "rescue_only;rescue_only_review"
 
 
 def test_write_alignment_status_matrix_tsv_preserves_duplicate_assigned(
@@ -483,8 +511,15 @@ def test_tsv_writers_escape_formula_like_text(tmp_path: Path):
                 area=10.0,
                 candidate_id="@candidate",
             ),
+            _cell(
+                "+sample-2",
+                "detected",
+                cluster_id="=cluster",
+                area=20.0,
+                candidate_id="@candidate-2",
+            ),
         ),
-        sample_order=("=sample",),
+        sample_order=("=sample", "+sample-2"),
     )
 
     review = _read_tsv(write_alignment_review_tsv(tmp_path / "review.tsv", matrix))
@@ -492,7 +527,7 @@ def test_tsv_writers_escape_formula_like_text(tmp_path: Path):
 
     assert review[0]["feature_family_id"] == "'=cluster"
     assert review[0]["neutral_loss_tag"] == "'+NL"
-    assert review[0]["representative_samples"] == "'=sample"
+    assert review[0]["representative_samples"] == "'=sample;+sample-2"
     assert "'=sample" in matrix_rows[0]
 
 

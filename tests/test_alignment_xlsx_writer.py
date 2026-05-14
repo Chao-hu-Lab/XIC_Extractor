@@ -25,11 +25,18 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
     assert workbook["Matrix"]["A1"].value == "feature_family_id"
     assert workbook["Matrix"]["E2"].value == 100.0
     assert workbook["Matrix"]["F2"].value is None
+    assert workbook["Matrix"]["G2"].value == 150.0
     assert [cell.value for cell in workbook["Review"][1]] == [
         "feature_family_id",
         "neutral_loss_tag",
         "detected_count",
         "rescued_count",
+        "identity_decision",
+        "identity_confidence",
+        "primary_evidence",
+        "identity_reason",
+        "quantifiable_detected_count",
+        "quantifiable_rescue_count",
         "accepted_cell_count",
         "accepted_rescue_count",
         "review_rescue_count",
@@ -40,8 +47,9 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
         "include_in_primary_matrix",
         "row_flags",
     ]
-    assert workbook["Review"]["C2"].value == 1
-    assert workbook["Review"]["K2"].value == 1
+    assert workbook["Review"]["C2"].value == 2
+    assert workbook["Review"]["G2"].value == "owner_identity"
+    assert workbook["Review"]["Q2"].value == 1
     assert [cell.value for cell in workbook["Audit"][1]] == [
         "feature_family_id",
         "sample_stem",
@@ -58,6 +66,17 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
         "rt_delta_sec",
         "claim_state",
         "row_flags",
+        "identity_decision",
+        "identity_confidence",
+        "primary_evidence",
+        "identity_reason",
+        "quantifiable_detected_count",
+        "quantifiable_rescue_count",
+        "accepted_cell_count",
+        "accepted_rescue_count",
+        "review_rescue_count",
+        "duplicate_assigned_count",
+        "ambiguous_ms1_owner_count",
         "reason",
     ]
     assert workbook["Metadata"]["A1"].value == "key"
@@ -69,10 +88,11 @@ def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
     base = sample_alignment_matrix()
     matrix = AlignmentMatrix(
         clusters=base.clusters,
-        sample_order=("s1", "s2"),
+        sample_order=("s1", "s2", "s3"),
         cells=(
             sample_cell("s1", "FAM000001", "detected", 100.0),
             sample_cell("s2", "FAM000001", "duplicate_assigned", 200.0),
+            sample_cell("s3", "FAM000001", "detected", 300.0),
         ),
     )
 
@@ -85,7 +105,8 @@ def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
     workbook = load_workbook(path, data_only=True)
     assert workbook["Matrix"]["E2"].value == 100.0
     assert workbook["Matrix"]["F2"].value is None
-    assert workbook["Review"]["J2"].value == 1
+    assert workbook["Matrix"]["G2"].value == 300.0
+    assert workbook["Review"]["P2"].value == 1
 
 
 def test_alignment_results_xlsx_excludes_review_only_rows_from_matrix(
@@ -96,9 +117,10 @@ def test_alignment_results_xlsx_excludes_review_only_rows_from_matrix(
             sample_feature("FAM000001", evidence="owner_complete_link;owner_count=2"),
             sample_feature("FAM000002", evidence="", has_anchor=False),
         ),
-        sample_order=("s1",),
+        sample_order=("s1", "s2"),
         cells=(
             sample_cell("s1", "FAM000001", "detected", 100.0),
+            sample_cell("s2", "FAM000001", "detected", 110.0),
             sample_cell("s1", "FAM000002", "rescued", 200.0),
         ),
     )
@@ -113,9 +135,10 @@ def test_alignment_results_xlsx_excludes_review_only_rows_from_matrix(
     assert workbook["Matrix"]["A2"].value == "FAM000001"
     assert workbook["Matrix"]["A3"].value is None
     assert workbook["Audit"]["A2"].value == "FAM000001"
-    assert workbook["Audit"]["A3"].value == "FAM000002"
-    assert workbook["Audit"]["H3"].value == "review_rescue"
-    assert workbook["Audit"]["J3"].value == "missing_row_identity_support"
+    assert workbook["Audit"]["A3"].value == "FAM000001"
+    assert workbook["Audit"]["A4"].value == "FAM000002"
+    assert workbook["Audit"]["H4"].value == "review_rescue"
+    assert workbook["Audit"]["J4"].value == "missing_row_identity_support"
 
 
 def test_alignment_results_xlsx_audit_explains_duplicate_blank(
@@ -157,7 +180,7 @@ def test_alignment_results_xlsx_escapes_formula_like_external_strings(
                 neutral_loss_tag="-DNA_dR",
             ),
         ),
-        sample_order=("+Sample_A",),
+        sample_order=("+Sample_A", "Sample_B"),
         cells=(
             sample_cell(
                 "+Sample_A",
@@ -165,6 +188,12 @@ def test_alignment_results_xlsx_escapes_formula_like_external_strings(
                 "detected",
                 100.0,
                 reason="@audit reason",
+            ),
+            sample_cell(
+                "Sample_B",
+                "=FAM000001",
+                "detected",
+                120.0,
             ),
         ),
     )
@@ -183,7 +212,7 @@ def test_alignment_results_xlsx_escapes_formula_like_external_strings(
     assert workbook["Review"]["B2"].value == "'-DNA_dR"
     assert workbook["Review"]["B2"].data_type != "f"
     assert workbook["Audit"]["B2"].value == "'+Sample_A"
-    assert workbook["Audit"]["P2"].value == "'@audit reason"
+    assert workbook["Audit"]["AA2"].value == "'@audit reason"
     assert workbook["Audit"]["I2"].value is True
     assert workbook["Metadata"]["B2"].value == "'@metadata value"
     assert workbook["Metadata"]["B2"].data_type != "f"
@@ -208,10 +237,11 @@ def sample_alignment_matrix() -> AlignmentMatrix:
     cluster = sample_feature("FAM000001", evidence="owner_identity")
     return AlignmentMatrix(
         clusters=(cluster,),
-        sample_order=("s1", "s2"),
+        sample_order=("s1", "s2", "s3"),
         cells=(
             sample_cell("s1", "FAM000001", "detected", 100.0),
             sample_cell("s2", "FAM000001", "ambiguous_ms1_owner", None),
+            sample_cell("s3", "FAM000001", "detected", 150.0),
         ),
     )
 
