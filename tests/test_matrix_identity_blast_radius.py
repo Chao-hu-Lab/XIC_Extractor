@@ -42,7 +42,7 @@ def test_blast_radius_reports_complete_identity_changes_and_benchmark_join(
     by_id = {row["feature_family_id"]: row for row in rows}
     assert by_id["FAM001"]["evidence_status"] == "complete"
     assert by_id["FAM001"]["would_change_to_audit"] == "TRUE"
-    assert by_id["FAM001"]["identity_decision"] == "audit_family"
+    assert by_id["FAM001"]["identity_decision"] == "provisional_discovery"
     assert by_id["FAM002"]["targeted_target_name"] == "d3-5-medC"
     assert by_id["FAM002"]["active_dna_istd_candidate"] == "TRUE"
     payload = json.loads(

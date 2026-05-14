@@ -21,7 +21,7 @@ def test_owner_complete_link_requires_two_detected_identity_cells() -> None:
     decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
 
     assert decision.include_in_primary_matrix is False
-    assert decision.identity_decision == "audit_family"
+    assert decision.identity_decision == "provisional_discovery"
     assert decision.identity_reason == "insufficient_detected_identity_support"
     assert decision.quantifiable_detected_count == 1
     assert decision.quantifiable_rescue_count == 2
@@ -59,9 +59,71 @@ def test_single_sample_local_owner_is_audit_even_with_rescue() -> None:
     decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
 
     assert decision.include_in_primary_matrix is False
-    assert decision.identity_decision == "audit_family"
+    assert decision.identity_decision == "provisional_discovery"
     assert decision.identity_reason == "single_sample_local_owner"
     assert "single_sample_local_owner" in decision.row_flags
+
+
+def test_anchored_single_detected_family_is_provisional_discovery() -> None:
+    matrix = _matrix(
+        _feature("FAM001", evidence="", has_anchor=True),
+        (_cell("s1", "FAM001", "detected", 100.0),),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is False
+    assert decision.identity_decision == "provisional_discovery"
+    assert decision.identity_reason == "anchored_single_detected_phase_a"
+    assert "anchored_single_detected" in decision.row_flags
+
+
+def test_weak_nonzero_detected_support_is_provisional_discovery() -> None:
+    matrix = _matrix(
+        _feature("FAM001", evidence="", has_anchor=False),
+        (_cell("s1", "FAM001", "detected", 100.0),),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is False
+    assert decision.identity_decision == "provisional_discovery"
+    assert decision.identity_reason == "insufficient_detected_identity_support"
+
+
+def test_rescue_only_backfill_only_family_is_audit() -> None:
+    matrix = _matrix(
+        _feature("FAM001", evidence="owner_complete_link;owner_count=2"),
+        (
+            _cell("s1", "FAM001", "rescued", 100.0),
+            _cell("s2", "FAM001", "rescued", 90.0),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is False
+    assert decision.identity_decision == "audit_family"
+    assert decision.identity_reason == "rescue_only"
+    assert "rescue_only" in decision.row_flags
+
+
+def test_duplicate_pressure_above_detected_support_is_audit() -> None:
+    matrix = _matrix(
+        _feature("FAM001", evidence="owner_complete_link;owner_count=2"),
+        (
+            _cell("s1", "FAM001", "detected", 100.0),
+            _cell("s2", "FAM001", "duplicate_assigned", 90.0),
+            _cell("s3", "FAM001", "duplicate_assigned", 80.0),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is False
+    assert decision.identity_decision == "audit_family"
+    assert decision.identity_reason == "duplicate_claim_pressure"
+    assert "duplicate_claim_pressure" in decision.row_flags
 
 
 def test_family_consolidation_loser_is_audit_only() -> None:
@@ -100,6 +162,7 @@ def _feature(
     *,
     evidence: str,
     review_only: bool = False,
+    has_anchor: bool = True,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         feature_family_id=feature_family_id,
@@ -108,7 +171,7 @@ def _feature(
         family_center_rt=8.49,
         family_product_mz=384.076,
         family_observed_neutral_loss_da=116.047,
-        has_anchor=True,
+        has_anchor=has_anchor,
         event_cluster_ids=("OWN-s1-000001",),
         event_member_count=1,
         evidence=evidence,

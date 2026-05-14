@@ -462,9 +462,7 @@ def _read_alignment_review(path: Path) -> tuple[AlignmentFeature, ...]:
                 "family_observed_neutral_loss_da",
                 row["feature_family_id"],
             ),
-            include_in_primary_matrix=_is_trueish(
-                row.get("include_in_primary_matrix"),
-            ),
+            include_in_primary_matrix=_is_primary_review_row(row),
         )
         for row in rows
     )
@@ -499,6 +497,15 @@ def _read_alignment_matrix(path: Path) -> AlignmentMatrixData:
         areas_by_family=matrix,
         sample_stems=normalized_samples,
     )
+
+
+def _is_primary_review_row(row: Mapping[str, str]) -> bool:
+    if not _is_trueish(row.get("include_in_primary_matrix")):
+        return False
+    identity_decision = (row.get("identity_decision") or "").strip()
+    if identity_decision and identity_decision != "production_family":
+        return False
+    return True
 
 
 def _read_alignment_cells(path: Path) -> dict[tuple[str, str], AlignmentCell]:

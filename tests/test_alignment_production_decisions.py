@@ -55,7 +55,7 @@ def test_single_sample_local_owner_does_not_create_primary_identity():
     assert decisions.cell("FAM001", "s2").write_matrix_value is False
     assert decisions.cell("FAM001", "s2").production_status == "review_rescue"
     assert decisions.row("FAM001").include_in_primary_matrix is False
-    assert decisions.row("FAM001").identity_decision == "audit_family"
+    assert decisions.row("FAM001").identity_decision == "provisional_discovery"
     assert decisions.row("FAM001").identity_reason == "single_sample_local_owner"
     assert "single_sample_local_owner" in decisions.row("FAM001").row_flags
 

@@ -289,7 +289,8 @@ current production counts.
 Required fields:
 
 - `include_in_primary_matrix`;
-- `identity_decision` (`production_family` or `audit_family`);
+- `identity_decision` (`production_family`, `provisional_discovery`, or
+  `audit_family`);
 - `identity_confidence` (`high`, `medium`, `review`, `none`);
 - `primary_evidence`;
 - `identity_reason`;

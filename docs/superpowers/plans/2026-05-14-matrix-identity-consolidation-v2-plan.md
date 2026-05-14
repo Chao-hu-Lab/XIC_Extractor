@@ -207,7 +207,11 @@ Create a row decision model, for example:
 class MatrixIdentityRowDecision:
     feature_family_id: str
     include_in_primary_matrix: bool
-    identity_decision: Literal["production_family", "audit_family"]
+    identity_decision: Literal[
+        "production_family",
+        "provisional_discovery",
+        "audit_family",
+    ]
     identity_confidence: Literal["high", "medium", "review", "none"]
     primary_evidence: str
     identity_reason: str

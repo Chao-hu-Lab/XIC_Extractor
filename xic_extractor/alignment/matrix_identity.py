@@ -13,7 +13,11 @@ from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignmentMatrix
 from xic_extractor.alignment.output_rows import row_id
 
-IdentityDecision = Literal["production_family", "audit_family"]
+IdentityDecision = Literal[
+    "production_family",
+    "provisional_discovery",
+    "audit_family",
+]
 IdentityConfidence = Literal["high", "medium", "review", "none"]
 
 
@@ -97,7 +101,7 @@ def decide_matrix_identity_row(
         duplicate_count=duplicate_count,
         ambiguous_count=ambiguous_count,
     )
-    include, confidence, reason = _promotion_decision(
+    include, identity_decision, confidence, reason = _promotion_decision(
         cluster,
         evidence=evidence,
         primary_evidence=primary_evidence,
@@ -109,7 +113,7 @@ def decide_matrix_identity_row(
     return MatrixIdentityRowDecision(
         feature_family_id=family_id,
         include_in_primary_matrix=include,
-        identity_decision="production_family" if include else "audit_family",
+        identity_decision=identity_decision,
         identity_confidence=confidence,
         primary_evidence=primary_evidence,
         identity_reason=reason,
@@ -131,32 +135,52 @@ def _promotion_decision(
     q_rescue: int,
     duplicate_count: int,
     ambiguous_count: int,
-) -> tuple[bool, IdentityConfidence, str]:
+) -> tuple[bool, IdentityDecision, IdentityConfidence, str]:
     if bool(getattr(cluster, "review_only", False)):
-        return False, "review", "review_only"
+        return False, "audit_family", "review", "review_only"
     if _is_consolidation_loser(evidence):
-        return False, "review", "family_consolidation_loser"
+        return False, "audit_family", "review", "family_consolidation_loser"
     if q_detected == 0 and q_rescue > 0:
-        return False, "review", "rescue_only"
+        return False, "audit_family", "review", "rescue_only"
     if q_detected == 0 and duplicate_count > 0 and ambiguous_count == 0:
-        return False, "review", "duplicate_only"
+        return False, "audit_family", "review", "duplicate_only"
     if q_detected == 0 and ambiguous_count > 0 and duplicate_count == 0:
-        return False, "review", "ambiguous_only"
+        return False, "audit_family", "review", "ambiguous_only"
     if q_detected == 0:
-        return False, "none", "zero_quantifiable_detected"
+        return False, "audit_family", "none", "zero_quantifiable_detected"
     if duplicate_count > q_detected:
-        return False, "review", "duplicate_claim_pressure"
+        return False, "audit_family", "review", "duplicate_claim_pressure"
     if primary_evidence == "single_sample_local_owner":
-        return False, "review", "single_sample_local_owner"
+        return (
+            False,
+            "provisional_discovery",
+            "review",
+            "single_sample_local_owner",
+        )
     if primary_evidence in {"owner_complete_link", "cid_nl_only", "owner_identity"}:
         if q_detected >= 2:
-            return True, "high", primary_evidence
-        return False, "review", "insufficient_detected_identity_support"
+            return True, "production_family", "high", primary_evidence
+        return (
+            False,
+            "provisional_discovery",
+            "review",
+            "insufficient_detected_identity_support",
+        )
     if primary_evidence == "multi_sample_detected":
-        return True, "medium", "multi_sample_detected"
+        return True, "production_family", "medium", "multi_sample_detected"
     if primary_evidence == "anchored_family":
-        return False, "review", "anchored_single_detected_phase_a"
-    return False, "review", "insufficient_detected_identity_support"
+        return (
+            False,
+            "provisional_discovery",
+            "review",
+            "anchored_single_detected_phase_a",
+        )
+    return (
+        False,
+        "provisional_discovery",
+        "review",
+        "insufficient_detected_identity_support",
+    )
 
 
 def _row_flags(

@@ -257,6 +257,35 @@ def test_production_family_prefers_identity_decision_before_include_flag(
     assert metrics.negative_checkpoint_production_families == 0
 
 
+def test_provisional_discovery_is_not_counted_as_production_family(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir(parents=True)
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM001",
+                "family_center_mz": 284.0989,
+                "family_center_rt": 5.0,
+                "accepted_cell_count": 1,
+                "include_in_primary_matrix": "TRUE",
+                "identity_decision": "provisional_discovery",
+            },
+        ],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [_cell_row("FAM001", "detected")],
+    )
+
+    metrics = guardrails.compute_guardrails(alignment_dir)
+
+    assert metrics.zero_present_families == 1
+    assert metrics.negative_checkpoint_production_families == 0
+
+
 def test_zero_present_and_duplicate_only_use_new_schema_production_decision(
     tmp_path: Path,
 ) -> None:

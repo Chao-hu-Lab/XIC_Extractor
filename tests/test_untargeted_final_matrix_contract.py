@@ -27,6 +27,7 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     matrix = AlignmentMatrix(
         clusters=(
             _feature("FAM001", evidence="owner_complete_link;owner_count=2"),
+            _feature("FAM_PROVISIONAL", evidence="single_sample_local_owner"),
             _feature("FAM002", evidence="", has_anchor=False),
             _feature("FAM003", evidence="owner_complete_link;owner_count=2"),
         ),
@@ -35,6 +36,8 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
             _cell("s1", "FAM001", "detected", 100.0),
             _cell("s2", "FAM001", "rescued", 90.0),
             _cell("s3", "FAM001", "detected", 110.0),
+            _cell("s1", "FAM_PROVISIONAL", "detected", 85.0),
+            _cell("s2", "FAM_PROVISIONAL", "rescued", 75.0),
             _cell("s1", "FAM002", "rescued", 80.0),
             _cell("s2", "FAM002", "absent", None),
             _cell("s1", "FAM003", "duplicate_assigned", 70.0),
@@ -75,6 +78,15 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     )
 
     audit_rows = _worksheet_records(workbook["Audit"])
+    review_rows = _worksheet_records(workbook["Review"])
+    review_decisions = {
+        row["feature_family_id"]: row["identity_decision"] for row in review_rows
+    }
+    assert review_decisions["FAM_PROVISIONAL"] == "provisional_discovery"
+    audit_decisions = {
+        row["feature_family_id"]: row["identity_decision"] for row in audit_rows
+    }
+    assert audit_decisions["FAM_PROVISIONAL"] == "provisional_discovery"
     audit_blank_reasons = {row["blank_reason"] for row in audit_rows}
     assert "missing_row_identity_support" in audit_blank_reasons
     assert "duplicate_loser" in audit_blank_reasons
