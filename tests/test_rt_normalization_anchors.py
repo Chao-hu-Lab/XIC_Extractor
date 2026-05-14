@@ -179,6 +179,166 @@ def test_default_reference_uses_observed_anchor_medians(tmp_path: Path):
     assert references_by_label["anchor-b"] == pytest.approx(30.0)
 
 
+def test_auto_model_uses_piecewise_transform_for_nonlinear_anchor_drift(
+    tmp_path: Path,
+):
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    output_dir = tmp_path / "rt_normalization"
+    _write_targeted_workbook(
+        targeted,
+        targets=[
+            _target("anchor-a", 10.0, 116.0474),
+            _target("anchor-b", 20.0, 116.0474),
+            _target("anchor-c", 30.0, 116.0474),
+        ],
+        sample_anchor_rts={
+            "S1": {"anchor-a": 10.0, "anchor-b": 20.0, "anchor-c": 30.0},
+            "S2": {"anchor-a": 12.0, "anchor-b": 25.0, "anchor-c": 36.0},
+        },
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[
+            {
+                "feature_family_id": "FAM_NONLINEAR",
+                "include_in_primary_matrix": "TRUE",
+                "family_center_mz": 250.0,
+                "family_center_rt": 15.0,
+            },
+        ],
+        cell_rows=[
+            _cell_row("FAM_NONLINEAR", "S1", 15.0),
+            _cell_row("FAM_NONLINEAR", "S2", 18.5),
+        ],
+    )
+
+    outputs, result = rt_norm.run_rt_normalization_anchor_diagnostic(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=output_dir,
+    )
+
+    assert {sample.model_type for sample in result.samples} == {"piecewise"}
+    family_rows = _read_tsv(outputs.family_tsv)
+    assert float(family_rows[0]["normalized_rt_range_min"]) == pytest.approx(0.0)
+
+
+def test_anchor_quality_gate_excludes_outlier_before_family_summary(
+    tmp_path: Path,
+):
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    output_dir = tmp_path / "rt_normalization"
+    _write_targeted_workbook(
+        targeted,
+        targets=[
+            _target("anchor-a", 10.0, 116.0474),
+            _target("anchor-b", 20.0, 116.0474),
+            _target("anchor-c", 30.0, 116.0474),
+            _target("anchor-d", 40.0, 116.0474),
+        ],
+        sample_anchor_rts={
+            "S1": {
+                "anchor-a": 10.0,
+                "anchor-b": 20.0,
+                "anchor-c": 30.0,
+                "anchor-d": 40.0,
+            },
+            "S2": {
+                "anchor-a": 12.0,
+                "anchor-b": 31.0,
+                "anchor-c": 32.0,
+                "anchor-d": 42.0,
+            },
+            "S3": {
+                "anchor-a": 10.0,
+                "anchor-b": 20.0,
+                "anchor-c": 30.0,
+                "anchor-d": 40.0,
+            },
+        },
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[
+            {
+                "feature_family_id": "FAM_OUTLIER",
+                "include_in_primary_matrix": "TRUE",
+                "family_center_mz": 250.0,
+                "family_center_rt": 25.0,
+            },
+        ],
+        cell_rows=[
+            _cell_row("FAM_OUTLIER", "S1", 25.0),
+            _cell_row("FAM_OUTLIER", "S2", 27.0),
+            _cell_row("FAM_OUTLIER", "S3", 25.0),
+        ],
+    )
+
+    outputs, result = rt_norm.run_rt_normalization_anchor_diagnostic(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=output_dir,
+        anchor_residual_max_min=0.5,
+    )
+
+    sample_by_name = {sample.sample_stem: sample for sample in result.samples}
+    assert sample_by_name["S2"].excluded_anchor_count == 1
+    anchor_rows = _read_tsv(outputs.anchor_tsv)
+    excluded = [
+        row
+        for row in anchor_rows
+        if row["sample_stem"] == "S2" and row["anchor_status"] == "excluded"
+    ]
+    assert [row["target_label"] for row in excluded] == ["anchor-b"]
+    family_rows = _read_tsv(outputs.family_tsv)
+    assert float(family_rows[0]["normalized_rt_range_min"]) == pytest.approx(0.0)
+
+
+def test_result_warns_when_normalization_worsens_family_rt_range(tmp_path: Path):
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    output_dir = tmp_path / "rt_normalization"
+    _write_targeted_workbook(
+        targeted,
+        targets=[
+            _target("anchor-a", 10.0, 116.0474),
+            _target("anchor-b", 20.0, 116.0474),
+        ],
+        sample_anchor_rts={
+            "S1": {"anchor-a": 10.0, "anchor-b": 20.0},
+            "S2": {"anchor-a": 20.0, "anchor-b": 30.0},
+        },
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[
+            {
+                "feature_family_id": "FAM_WORSE",
+                "include_in_primary_matrix": "TRUE",
+                "family_center_mz": 250.0,
+                "family_center_rt": 15.0,
+            },
+        ],
+        cell_rows=[
+            _cell_row("FAM_WORSE", "S1", 15.0),
+            _cell_row("FAM_WORSE", "S2", 15.1),
+        ],
+    )
+
+    _outputs, result = rt_norm.run_rt_normalization_anchor_diagnostic(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=output_dir,
+        reference_source="target-window",
+    )
+
+    assert result.overall_status == "WARN"
+    assert result.median_rt_range_improvement_min is not None
+    assert result.median_rt_range_improvement_min < 0
+
+
 def test_main_reports_missing_required_workbook_column(
     tmp_path: Path,
     capsys,

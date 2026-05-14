@@ -677,19 +677,29 @@ Current implementation boundary:
 output\diagnostics\phase_n_rt_normalization_8raw_20260514
 ```
 
-Initial 8-RAW result:
+Updated 8-RAW result with auto piecewise model and anchor-quality gating:
 
 - 6 active DNA ISTD anchors available in all 8 samples.
-- Primary matrix families were roughly balanced: 185 improved, 183 worsened,
-  with median RT-range improvement about +0.002 min.
-- All review families were not globally improved: 244 improved, 269 worsened,
-  with median RT-range improvement about -0.014 min.
+- 2 anchor observations excluded by the `0.30 min` residual gate.
+- All review families with enough cells: 293 improved, 220 worsened.
+- Median RT-range improvement: about `+0.062 min`.
+- Diagnostic status: `PASS`.
+
+85-RAW trial against the existing
+`phase_l_preconsolidate_seed2_recenter_min2_85raw` output:
+
+- 6 active DNA ISTD anchors available in all 85 samples.
+- 23 anchor observations excluded; 20 were `d3-N6-medA`, matching the
+  suspected targeted peak issue.
+- All review families with enough cells: 545 improved, 772 worsened.
+- Median RT-range improvement: about `-0.083 min`.
+- Diagnostic status: `WARN`.
 
 Interpretation: the concept is useful as an evidence layer, especially for
-families that improve strongly in normalized RT space, but the first affine
-ISTD-anchor model is not strong enough to become a production promotion gate.
-Next refinements should test robust/piecewise anchor fitting and anchor-quality
-gating before any algorithmic integration.
+families that improve strongly in normalized RT space, but it is not yet strong
+enough to become a production promotion gate across the 85-RAW run. Next
+refinements should test batch-aware reference models and require per-run
+positive evidence before any algorithmic integration.
 
 Diagnostic acceptance:
 

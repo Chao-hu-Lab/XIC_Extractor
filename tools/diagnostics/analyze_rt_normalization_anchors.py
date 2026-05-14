@@ -15,6 +15,14 @@ from statistics import median
 
 from openpyxl import load_workbook
 
+from xic_extractor.alignment.rt_normalization import (
+    AnchorPoint,
+    AnchorResidual,
+    SampleRtModel,
+    apply_anchor_reference_source,
+    fit_sample_rt_models,
+)
+
 ACTIVE_NEUTRAL_LOSS_DA = 116.0474
 ACTIVE_NEUTRAL_LOSS_TOLERANCE_DA = 0.01
 
@@ -23,6 +31,7 @@ SAMPLE_COLUMNS = (
     "sample_stem",
     "model_type",
     "anchor_count",
+    "excluded_anchor_count",
     "slope",
     "intercept",
     "anchor_median_abs_residual_min",
@@ -35,6 +44,8 @@ ANCHOR_COLUMNS = (
     "observed_rt_min",
     "normalized_rt_min",
     "normalized_residual_min",
+    "used_in_model",
+    "anchor_status",
 )
 FAMILY_COLUMNS = (
     "feature_family_id",
@@ -68,38 +79,6 @@ class AnchorDefinition:
     role: str
     neutral_loss_da: float
     reference_rt_min: float
-
-
-@dataclass(frozen=True)
-class AnchorPoint:
-    sample_stem: str
-    target_label: str
-    observed_rt_min: float
-    reference_rt_min: float
-
-
-@dataclass(frozen=True)
-class SampleRtModel:
-    sample_stem: str
-    model_type: str
-    anchor_count: int
-    slope: float
-    intercept: float
-    anchor_median_abs_residual_min: float | None
-    anchor_max_abs_residual_min: float | None
-
-    def normalize_rt(self, raw_rt_min: float) -> float:
-        return (raw_rt_min - self.intercept) / self.slope
-
-
-@dataclass(frozen=True)
-class AnchorResidual:
-    sample_stem: str
-    target_label: str
-    reference_rt_min: float
-    observed_rt_min: float
-    normalized_rt_min: float
-    normalized_residual_min: float
 
 
 @dataclass(frozen=True)
@@ -137,10 +116,13 @@ class FamilyRtSummary:
 class RtNormalizationResult:
     overall_status: str
     reference_source: str
+    model_type: str
+    anchor_residual_max_min: float
     anchor_label_count: int
     sample_count: int
     modelled_sample_count: int
     unmodelled_sample_count: int
+    excluded_anchor_count: int
     family_count: int
     families_improved_count: int
     families_worsened_count: int
@@ -160,6 +142,10 @@ def run_rt_normalization_anchor_diagnostic(
     active_neutral_loss_da: float = ACTIVE_NEUTRAL_LOSS_DA,
     active_neutral_loss_tolerance_da: float = ACTIVE_NEUTRAL_LOSS_TOLERANCE_DA,
     reference_source: str = "observed-median",
+    model_type: str = "auto",
+    anchor_residual_max_min: float = 0.30,
+    anchor_slope_min: float = 0.50,
+    anchor_slope_max: float = 1.50,
 ) -> tuple[RtNormalizationOutputs, RtNormalizationResult]:
     anchors = _read_anchor_definitions(
         targeted_workbook,
@@ -167,13 +153,21 @@ def run_rt_normalization_anchor_diagnostic(
         active_neutral_loss_tolerance_da=active_neutral_loss_tolerance_da,
     )
     points = _read_anchor_points(targeted_workbook, anchors)
-    points = _apply_reference_source(points, reference_source)
-    models, residuals, sample_count = _fit_sample_models(points)
+    points = apply_anchor_reference_source(points, reference_source)
+    models, residuals, sample_count = fit_sample_rt_models(
+        points,
+        model_type=model_type,
+        anchor_residual_max_min=anchor_residual_max_min,
+        anchor_slope_min=anchor_slope_min,
+        anchor_slope_max=anchor_slope_max,
+    )
     features = _read_alignment_review(alignment_dir / "alignment_review.tsv")
     cells = _read_alignment_cells(alignment_dir / "alignment_cells.tsv")
     families = _summarize_families(features, cells, models)
     result = _build_result(
         reference_source=reference_source,
+        model_type=model_type,
+        anchor_residual_max_min=anchor_residual_max_min,
         anchor_label_count=len(anchors),
         sample_count=sample_count,
         models=models,
@@ -211,6 +205,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.active_neutral_loss_tolerance_da
             ),
             reference_source=args.reference_source,
+            model_type=args.model_type,
+            anchor_residual_max_min=args.anchor_residual_max_min,
+            anchor_slope_min=args.anchor_slope_min,
+            anchor_slope_max=args.anchor_slope_max,
         )
     except (FileNotFoundError, KeyError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -242,6 +240,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         choices=("observed-median", "target-window"),
         default="observed-median",
     )
+    parser.add_argument(
+        "--model-type",
+        choices=("auto", "affine", "piecewise"),
+        default="auto",
+    )
+    parser.add_argument("--anchor-residual-max-min", type=float, default=0.30)
+    parser.add_argument("--anchor-slope-min", type=float, default=0.50)
+    parser.add_argument("--anchor-slope-max", type=float, default=1.50)
     return parser.parse_args(argv)
 
 
@@ -327,122 +333,6 @@ def _read_anchor_points(
         return tuple(points)
     finally:
         workbook.close()
-
-
-def _fit_sample_models(
-    points: Sequence[AnchorPoint],
-) -> tuple[dict[str, SampleRtModel], tuple[AnchorResidual, ...], int]:
-    points_by_sample: dict[str, list[AnchorPoint]] = {}
-    for point in points:
-        points_by_sample.setdefault(point.sample_stem, []).append(point)
-
-    models: dict[str, SampleRtModel] = {}
-    residuals: list[AnchorResidual] = []
-    for sample, sample_points in sorted(points_by_sample.items()):
-        deduped = _dedupe_anchor_points(sample_points)
-        model = _fit_sample_model(sample, deduped)
-        if model is None:
-            continue
-        sample_residuals: list[float] = []
-        for point in deduped:
-            normalized_rt = model.normalize_rt(point.observed_rt_min)
-            residual = normalized_rt - point.reference_rt_min
-            sample_residuals.append(residual)
-            residuals.append(
-                AnchorResidual(
-                    sample_stem=sample,
-                    target_label=point.target_label,
-                    reference_rt_min=point.reference_rt_min,
-                    observed_rt_min=point.observed_rt_min,
-                    normalized_rt_min=normalized_rt,
-                    normalized_residual_min=residual,
-                )
-            )
-        models[sample] = SampleRtModel(
-            sample_stem=model.sample_stem,
-            model_type=model.model_type,
-            anchor_count=model.anchor_count,
-            slope=model.slope,
-            intercept=model.intercept,
-            anchor_median_abs_residual_min=_median_abs(sample_residuals),
-            anchor_max_abs_residual_min=_max_abs(sample_residuals),
-        )
-    return models, tuple(residuals), len(points_by_sample)
-
-
-def _apply_reference_source(
-    points: tuple[AnchorPoint, ...],
-    reference_source: str,
-) -> tuple[AnchorPoint, ...]:
-    if reference_source == "target-window":
-        return points
-    if reference_source != "observed-median":
-        raise ValueError(f"unsupported reference source: {reference_source}")
-    by_label: dict[str, list[float]] = {}
-    for point in points:
-        by_label.setdefault(point.target_label, []).append(point.observed_rt_min)
-    references = {
-        label: float(median(values)) for label, values in by_label.items() if values
-    }
-    return tuple(
-        AnchorPoint(
-            sample_stem=point.sample_stem,
-            target_label=point.target_label,
-            observed_rt_min=point.observed_rt_min,
-            reference_rt_min=references[point.target_label],
-        )
-        for point in points
-        if point.target_label in references
-    )
-
-
-def _dedupe_anchor_points(points: Sequence[AnchorPoint]) -> tuple[AnchorPoint, ...]:
-    latest: dict[str, AnchorPoint] = {}
-    for point in points:
-        latest[point.target_label] = point
-    return tuple(latest[label] for label in sorted(latest))
-
-
-def _fit_sample_model(
-    sample_stem: str,
-    points: Sequence[AnchorPoint],
-) -> SampleRtModel | None:
-    if not points:
-        return None
-    if len(points) == 1:
-        point = points[0]
-        return SampleRtModel(
-            sample_stem=sample_stem,
-            model_type="shift",
-            anchor_count=1,
-            slope=1.0,
-            intercept=point.observed_rt_min - point.reference_rt_min,
-            anchor_median_abs_residual_min=None,
-            anchor_max_abs_residual_min=None,
-        )
-    references = [point.reference_rt_min for point in points]
-    observed = [point.observed_rt_min for point in points]
-    ref_mean = sum(references) / len(references)
-    obs_mean = sum(observed) / len(observed)
-    denominator = sum((value - ref_mean) ** 2 for value in references)
-    if denominator <= 0:
-        return None
-    slope = sum(
-        (reference - ref_mean) * (rt - obs_mean)
-        for reference, rt in zip(references, observed, strict=True)
-    ) / denominator
-    if not math.isfinite(slope) or abs(slope) < 1e-9:
-        return None
-    intercept = obs_mean - slope * ref_mean
-    return SampleRtModel(
-        sample_stem=sample_stem,
-        model_type="affine",
-        anchor_count=len(points),
-        slope=slope,
-        intercept=intercept,
-        anchor_median_abs_residual_min=None,
-        anchor_max_abs_residual_min=None,
-    )
 
 
 def _read_alignment_review(path: Path) -> dict[str, AlignmentFeature]:
@@ -537,6 +427,8 @@ def _summarize_families(
 def _build_result(
     *,
     reference_source: str,
+    model_type: str,
+    anchor_residual_max_min: float,
     anchor_label_count: int,
     sample_count: int,
     models: Mapping[str, SampleRtModel],
@@ -558,14 +450,23 @@ def _build_result(
         for family in families
         if family.normalized_rt_range_min is not None
     ]
-    overall_status = "PASS" if anchor_label_count >= 2 and models else "FAIL"
+    overall_status = _overall_status(
+        anchor_label_count=anchor_label_count,
+        has_models=bool(models),
+        median_rt_range_improvement_min=_median(improvements),
+    )
     return RtNormalizationResult(
         overall_status=overall_status,
         reference_source=reference_source,
+        model_type=model_type,
+        anchor_residual_max_min=anchor_residual_max_min,
         anchor_label_count=anchor_label_count,
         sample_count=sample_count,
         modelled_sample_count=len(models),
         unmodelled_sample_count=max(sample_count - len(models), 0),
+        excluded_anchor_count=sum(
+            model.excluded_anchor_count for model in models.values()
+        ),
         family_count=len(families),
         families_improved_count=sum(
             1 for value in improvements if value is not None and value > 0
@@ -580,6 +481,22 @@ def _build_result(
         anchors=residuals,
         families=families,
     )
+
+
+def _overall_status(
+    *,
+    anchor_label_count: int,
+    has_models: bool,
+    median_rt_range_improvement_min: float | None,
+) -> str:
+    if anchor_label_count < 2 or not has_models:
+        return "FAIL"
+    if (
+        median_rt_range_improvement_min is not None
+        and median_rt_range_improvement_min < 0
+    ):
+        return "WARN"
+    return "PASS"
 
 
 def _summary_rows(result: RtNormalizationResult) -> list[dict[str, object]]:
@@ -603,10 +520,13 @@ def _json_payload(result: RtNormalizationResult) -> dict[str, object]:
     return {
         "overall_status": result.overall_status,
         "reference_source": result.reference_source,
+        "model_type": result.model_type,
+        "anchor_residual_max_min": result.anchor_residual_max_min,
         "anchor_label_count": result.anchor_label_count,
         "sample_count": result.sample_count,
         "modelled_sample_count": result.modelled_sample_count,
         "unmodelled_sample_count": result.unmodelled_sample_count,
+        "excluded_anchor_count": result.excluded_anchor_count,
         "family_count": result.family_count,
         "families_improved_count": result.families_improved_count,
         "families_worsened_count": result.families_worsened_count,
@@ -731,20 +651,6 @@ def _median(values: Iterable[float | None]) -> float | None:
     if not finite:
         return None
     return float(median(finite))
-
-
-def _median_abs(values: Iterable[float]) -> float | None:
-    finite = [abs(value) for value in values if math.isfinite(value)]
-    if not finite:
-        return None
-    return float(median(finite))
-
-
-def _max_abs(values: Iterable[float]) -> float | None:
-    finite = [abs(value) for value in values if math.isfinite(value)]
-    if not finite:
-        return None
-    return max(finite)
 
 
 def _range(values: Sequence[float]) -> float | None:
