@@ -63,17 +63,21 @@ class TimedRawSource:
         if hasattr(self._source, "extract_xic_many"):
             raw_call_count_before = _raw_chromatogram_call_count(self._source)
             start = self._timer()
+            traces: tuple[XICTrace, ...] = ()
             try:
                 traces = tuple(self._source.extract_xic_many(requests))
             finally:
+                raw_call_delta = _raw_call_delta(
+                    raw_call_count_before,
+                    _raw_chromatogram_call_count(self._source),
+                )
                 self._stats.elapsed_sec += self._timer() - start
-            self._stats.extract_xic_count += len(requests)
-            self._stats.extract_xic_batch_count += 1 if requests else 0
-            self._stats.raw_chromatogram_call_count += _raw_call_delta(
-                raw_call_count_before,
-                _raw_chromatogram_call_count(self._source),
-            )
-            self._stats.point_count += sum(len(trace.intensity) for trace in traces)
+                self._stats.extract_xic_count += len(requests)
+                self._stats.extract_xic_batch_count += 1 if requests else 0
+                self._stats.raw_chromatogram_call_count += raw_call_delta
+                self._stats.point_count += sum(
+                    len(trace.intensity) for trace in traces
+                )
             return traces
 
         traces: list[XICTrace] = []
@@ -114,7 +118,6 @@ def existing_raw_paths(
 def timed_raw_sources(
     raw_sources: dict[str, AlignmentRawHandle],
     *,
-    recorder: TimingRecorder,
     stage: str,
 ) -> dict[str, TimedRawSource]:
     return {
@@ -130,7 +133,6 @@ def timed_owner_backfill_sources(
     raw_sources: dict[str, AlignmentRawHandle],
     *,
     backend: OwnerBackfillXicBackend,
-    recorder: TimingRecorder,
     stage: str,
 ) -> tuple[
     dict[str, TimedRawSource],

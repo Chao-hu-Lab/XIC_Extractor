@@ -171,7 +171,6 @@ def run_alignment(
             else:
                 timed_raw_sources_ = timed_raw_sources(
                     raw_sources,
-                    recorder=recorder,
                     stage="alignment.build_owners.extract_xic",
                 )
                 ownership = build_sample_local_owners(
@@ -251,7 +250,6 @@ def run_alignment(
                 ) = timed_owner_backfill_sources(
                     raw_sources,
                     backend=owner_backfill_xic_backend,
-                    recorder=recorder,
                     stage="alignment.owner_backfill.extract_xic",
                 )
                 validation_kwargs = (
