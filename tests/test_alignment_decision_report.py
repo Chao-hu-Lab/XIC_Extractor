@@ -53,6 +53,44 @@ def test_alignment_decision_report_renders_four_sections_and_known_exception(
     assert '<details class="data-table">' in html
 
 
+def test_alignment_decision_report_renders_optional_rt_warping_evidence(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _alignment_dir(tmp_path, clean=True)
+    _write_json(
+        tmp_path / "targeted_istd_benchmark.json",
+        _benchmark_payload(status="PASS", failure_modes=()),
+    )
+    _write_json(tmp_path / "economics.json", _economics_payload())
+    _write_json(tmp_path / "timing.json", _timing_payload())
+    _write_json(tmp_path / "rt_normalization.json", _rt_normalization_payload())
+    output_html = tmp_path / "report.html"
+
+    assert report.main(
+        [
+            "--alignment-dir",
+            str(alignment_dir),
+            "--targeted-istd-benchmark-json",
+            str(tmp_path / "targeted_istd_benchmark.json"),
+            "--owner-backfill-economics-json",
+            str(tmp_path / "economics.json"),
+            "--timing-json",
+            str(tmp_path / "timing.json"),
+            "--rt-normalization-json",
+            str(tmp_path / "rt_normalization.json"),
+            "--output-html",
+            str(output_html),
+        ]
+    ) == 0
+
+    html = output_html.read_text(encoding="utf-8")
+    assert "RT Warping Evidence" in html
+    assert "Leave-one-anchor-out p95 error" in html
+    assert "RT Band Outcome" in html
+    assert "anchor-a" in html
+    assert "20-30 / improved" in html
+
+
 def test_alignment_decision_report_fails_on_unhandled_istd_failure(
     tmp_path: Path,
 ) -> None:
@@ -391,6 +429,44 @@ def _timing_payload() -> dict[str, object]:
                 "stage": "alignment.write_outputs",
                 "elapsed_sec": 2.5,
                 "metrics": {},
+            },
+        ],
+    }
+
+
+def _rt_normalization_payload() -> dict[str, object]:
+    return {
+        "overall_status": "PASS",
+        "reference_source": "injection-local-median",
+        "model_type": "auto",
+        "anchor_label_count": 3,
+        "sample_count": 3,
+        "modelled_sample_count": 3,
+        "unmodelled_sample_count": 0,
+        "excluded_anchor_count": 1,
+        "families_improved_count": 4,
+        "families_worsened_count": 2,
+        "median_rt_range_improvement_min": 0.04,
+        "rt_band_summary": {
+            "20-30": {"improved": 3, "worsened": 1, "stable": 0},
+            ">=30": {"improved": 1, "worsened": 1, "stable": 0},
+        },
+        "leave_one_anchor_out": [
+            {
+                "target_label": "anchor-a",
+                "evaluated_count": 3,
+                "median_abs_error_min": 0.01,
+                "p95_abs_error_min": 0.04,
+                "max_abs_error_min": 0.05,
+                "status": "PASS",
+            },
+            {
+                "target_label": "anchor-b",
+                "evaluated_count": 3,
+                "median_abs_error_min": 0.02,
+                "p95_abs_error_min": 0.12,
+                "max_abs_error_min": 0.15,
+                "status": "PASS",
             },
         ],
     }

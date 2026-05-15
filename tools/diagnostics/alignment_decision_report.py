@@ -51,6 +51,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             targeted_istd_benchmark_json=args.targeted_istd_benchmark_json,
             owner_backfill_economics_json=args.owner_backfill_economics_json,
             timing_json=args.timing_json,
+            rt_normalization_json=args.rt_normalization_json,
             known_istd_exceptions=tuple(args.known_istd_exception),
         )
         write_report(args.output_html, report)
@@ -68,6 +69,7 @@ def build_report(
     targeted_istd_benchmark_json: Path | None = None,
     owner_backfill_economics_json: Path | None = None,
     timing_json: Path | None = None,
+    rt_normalization_json: Path | None = None,
     known_istd_exceptions: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     review = _read_tsv(
@@ -83,6 +85,7 @@ def build_report(
     istd = _istd_benchmark(targeted_istd_benchmark_json, known)
     economics = _backfill_economics(owner_backfill_economics_json)
     timing = _timing_summary(timing_json)
+    rt_normalization = _rt_normalization(rt_normalization_json)
     verdict = _verdict(
         istd=istd,
         cleanliness=cleanliness,
@@ -105,6 +108,7 @@ def build_report(
         "cleanliness": cleanliness,
         "economics": economics,
         "timing": timing,
+        "rt_normalization": rt_normalization,
     }
 
 
@@ -303,6 +307,44 @@ def _timing_summary(path: Path | None) -> dict[str, Any]:
     }
 
 
+def _rt_normalization(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {"provided": False}
+    payload = _read_json(path)
+    leave_one = payload.get("leave_one_anchor_out", ())
+    rt_bands = payload.get("rt_band_summary", {})
+    if not isinstance(leave_one, Sequence) or isinstance(leave_one, (str, bytes)):
+        raise ValueError(f"{path}: leave_one_anchor_out must be a list")
+    if not isinstance(rt_bands, Mapping):
+        raise ValueError(f"{path}: rt_band_summary must be an object")
+    return {
+        "provided": True,
+        "source": str(path),
+        "overall_status": payload.get("overall_status", ""),
+        "reference_source": payload.get("reference_source", ""),
+        "model_type": payload.get("model_type", ""),
+        "anchor_label_count": payload.get("anchor_label_count", ""),
+        "sample_count": payload.get("sample_count", ""),
+        "modelled_sample_count": payload.get("modelled_sample_count", ""),
+        "unmodelled_sample_count": payload.get("unmodelled_sample_count", ""),
+        "excluded_anchor_count": payload.get("excluded_anchor_count", ""),
+        "families_improved_count": payload.get("families_improved_count", ""),
+        "families_worsened_count": payload.get("families_worsened_count", ""),
+        "median_rt_range_improvement_min": payload.get(
+            "median_rt_range_improvement_min",
+            "",
+        ),
+        "rt_band_summary": {
+            str(band): dict(value)
+            for band, value in rt_bands.items()
+            if isinstance(value, Mapping)
+        },
+        "leave_one_anchor_out": [
+            dict(row) for row in leave_one if isinstance(row, Mapping)
+        ],
+    }
+
+
 def _render_html(report: Mapping[str, Any]) -> str:
     verdict = str(report["verdict"])
     title = "Alignment Decision Report"
@@ -328,6 +370,7 @@ def _render_html(report: Mapping[str, Any]) -> str:
             _istd_section(report["istd"]),
             _cleanliness_section(report["cleanliness"]),
             _economics_section(report["economics"]),
+            _rt_normalization_section(report["rt_normalization"]),
             "</main>",
             "</body>",
             "</html>",
@@ -683,6 +726,79 @@ def _economics_section(economics: Mapping[str, Any]) -> str:
             feature_rows,
             empty="No feature-level economics rows.",
             label="Top expensive families table",
+        ),
+    )
+
+
+def _rt_normalization_section(rt_norm: Mapping[str, Any]) -> str:
+    if not rt_norm.get("provided"):
+        return ""
+    loo_rows = [
+        (
+            str(row.get("target_label", "")),
+            _float_value(row.get("p95_abs_error_min", 0), default=0.0),
+            "pass" if str(row.get("status", "")).upper() == "PASS" else "warn",
+        )
+        for row in rt_norm["leave_one_anchor_out"]
+    ]
+    band_rows: list[tuple[str, float, str]] = []
+    for band, counts in rt_norm["rt_band_summary"].items():
+        for outcome, tone in (
+            ("improved", "production"),
+            ("worsened", "fail"),
+            ("stable", "neutral"),
+            ("unmodelled", "audit"),
+        ):
+            value = _float_value(counts.get(outcome, 0), default=0.0)
+            if value > 0:
+                band_rows.append((f"{band} / {outcome}", value, tone))
+    metrics = _metric_grid(
+        (
+            ("Status", rt_norm.get("overall_status", "")),
+            ("Reference Source", rt_norm.get("reference_source", "")),
+            ("Model Type", rt_norm.get("model_type", "")),
+            ("Anchor Labels", rt_norm.get("anchor_label_count", "")),
+            ("Modelled Samples", rt_norm.get("modelled_sample_count", "")),
+            ("Unmodelled Samples", rt_norm.get("unmodelled_sample_count", "")),
+            ("Excluded Anchors", rt_norm.get("excluded_anchor_count", "")),
+            (
+                "Median RT Range Improvement",
+                rt_norm.get("median_rt_range_improvement_min", ""),
+            ),
+        )
+    )
+    loo_table_rows = [
+        (
+            row.get("target_label", ""),
+            row.get("status", ""),
+            row.get("evaluated_count", ""),
+            _fmt(row.get("median_abs_error_min", "")),
+            _fmt(row.get("p95_abs_error_min", "")),
+            _fmt(row.get("max_abs_error_min", "")),
+        )
+        for row in rt_norm["leave_one_anchor_out"]
+    ]
+    return _section(
+        "RT Warping Evidence",
+        '<div class="visual-panel">'
+        + "<h3>RT Band Outcome</h3>"
+        + _bar_list(band_rows, empty="No RT band outcome rows.")
+        + "<h3>Leave-one-anchor-out p95 error</h3>"
+        + _bar_list(loo_rows, empty="No leave-one-anchor-out rows.")
+        + "</div>"
+        + metrics
+        + _details_table(
+            (
+                "Anchor",
+                "Status",
+                "Evaluated",
+                "Median Abs Error",
+                "p95 Abs Error",
+                "Max Abs Error",
+            ),
+            loo_table_rows,
+            label="Leave-one-anchor-out table",
+            empty="No leave-one-anchor-out rows.",
         ),
     )
 
@@ -1319,6 +1435,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--targeted-istd-benchmark-json", type=Path)
     parser.add_argument("--owner-backfill-economics-json", type=Path)
     parser.add_argument("--timing-json", type=Path)
+    parser.add_argument("--rt-normalization-json", type=Path)
     parser.add_argument(
         "--known-istd-exception",
         action="append",

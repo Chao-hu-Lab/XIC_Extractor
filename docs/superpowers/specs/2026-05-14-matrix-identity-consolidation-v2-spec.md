@@ -271,6 +271,20 @@ Treat normalized RT as review evidence until per-family positive improvement
 gates prove clear benefit. The current evidence supports injection-local iRT as
 a scoring input candidate, not as an unconditional production promotion rule.
 
+2026-05-15 diagnostic v2 update:
+
+- `tools/diagnostics/analyze_rt_normalization_anchors.py` now also emits
+  `rt_normalization_leave_one_anchor_out.tsv`.
+- The JSON payload includes `leave_one_anchor_out` and `rt_band_summary` for
+  anchor prediction quality and RT-band-specific improvement/worsening review.
+- `rt_normalization_families.tsv` includes diagnostic-only fields:
+  `rt_band`, `normalized_rt_support`, `anchor_scope`, `anchor_support_level`,
+  and `local_residual_window_min`.
+- `tools/diagnostics/alignment_decision_report.py` can render this artifact via
+  `--rt-normalization-json` as an optional `RT Warping Evidence` section.
+- These fields are review/annotation evidence only. They are not primary matrix
+  promotion gates and do not change fixed alignment tolerances by themselves.
+
 Important boundary:
 
 - The paper's multi-minute prediction window is for scheduled acquisition across
