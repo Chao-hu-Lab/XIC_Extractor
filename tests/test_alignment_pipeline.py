@@ -135,6 +135,8 @@ def test_pipeline_applies_single_worker_hybrid_owner_backfill_backend(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from xic_extractor.alignment import raw_sources as raw_sources_module
+
     batch_index = _write_batch(tmp_path, ("Sample_A",))
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
@@ -180,7 +182,7 @@ def test_pipeline_applies_single_worker_hybrid_owner_backfill_backend(
         return ()
 
     monkeypatch.setattr(
-        pipeline_module,
+        raw_sources_module,
         "source_for_owner_backfill_backend",
         fake_source_for_owner_backfill_backend,
     )
@@ -637,6 +639,8 @@ def test_pipeline_enters_and_closes_raw_handles_on_success_and_write_failure(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    from xic_extractor.alignment import pipeline_outputs
+
     batch_index = _write_batch(tmp_path, ("Sample_A",))
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
@@ -661,7 +665,7 @@ def test_pipeline_enters_and_closes_raw_handles_on_success_and_write_failure(
         raise RuntimeError("writer failed")
 
     monkeypatch.setattr(
-        pipeline_module,
+        pipeline_outputs,
         "write_alignment_matrix_tsv",
         fail_matrix_writer,
     )
@@ -869,6 +873,8 @@ def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    from xic_extractor.alignment import pipeline_outputs
+
     batch_index = _write_batch(tmp_path, ("Sample_A",))
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
@@ -887,7 +893,7 @@ def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
         raise RuntimeError("matrix failed")
 
     monkeypatch.setattr(
-        pipeline_module,
+        pipeline_outputs,
         "write_alignment_matrix_tsv",
         fail_matrix_writer,
     )
@@ -1645,6 +1651,7 @@ def _empty_ownership():
 
 def test_pipeline_passes_alignment_config_to_production_writers(monkeypatch, tmp_path):
     from xic_extractor.alignment import pipeline as alignment_pipeline
+    from xic_extractor.alignment import pipeline_outputs
     from xic_extractor.alignment.config import AlignmentConfig
     from xic_extractor.alignment.matrix import AlignmentMatrix
 
@@ -1672,19 +1679,19 @@ def test_pipeline_passes_alignment_config_to_production_writers(monkeypatch, tmp
         path.write_text("review", encoding="utf-8")
         return path
 
-    monkeypatch.setattr(alignment_pipeline, "write_alignment_results_xlsx", fake_xlsx)
+    monkeypatch.setattr(pipeline_outputs, "write_alignment_results_xlsx", fake_xlsx)
     monkeypatch.setattr(
-        alignment_pipeline,
+        pipeline_outputs,
         "write_alignment_matrix_tsv",
         fake_matrix_tsv,
     )
     monkeypatch.setattr(
-        alignment_pipeline,
+        pipeline_outputs,
         "write_alignment_review_tsv",
         fake_review_tsv,
     )
 
-    alignment_pipeline._write_outputs_atomic(
+    pipeline_outputs.write_outputs_atomic(
         outputs,
         matrix,
         metadata={"schema_version": "alignment-results-v1"},
