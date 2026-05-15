@@ -26,13 +26,16 @@ EXPECTED_BRIEF_COLUMNS = (
     "ms1_area",
     "seed_event_count",
     "neutral_loss_tag",
+    "matched_tag_names",
+    "matched_tag_count",
+    "tag_intersection_status",
     "review_note",
 )
 
 
 def test_discovery_brief_columns_are_stable_csv_contract() -> None:
     assert DISCOVERY_BRIEF_COLUMNS == EXPECTED_BRIEF_COLUMNS
-    assert len(DISCOVERY_BRIEF_COLUMNS) == 14
+    assert len(DISCOVERY_BRIEF_COLUMNS) == 17
 
 
 def test_discovery_run_outputs_carries_two_csv_paths() -> None:

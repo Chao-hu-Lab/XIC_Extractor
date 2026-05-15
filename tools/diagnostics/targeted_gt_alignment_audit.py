@@ -241,6 +241,11 @@ def _cells_by_sample_in_review_range(
                 "accepted_cell_count",
                 "",
             )
+        if "identity_decision" in review_row:
+            enriched_cell["_review_identity_decision"] = review_row.get(
+                "identity_decision",
+                "",
+            )
         grouped[cell["sample_stem"]].append(enriched_cell)
     return {sample: tuple(rows) for sample, rows in grouped.items()}
 
@@ -498,6 +503,9 @@ def _status(cell: dict[str, str] | None) -> str:
 
 def _is_production_cell(cell: dict[str, str]) -> bool:
     if _status(cell) not in PRODUCTION_STATUSES:
+        return False
+    identity_decision = (cell.get("_review_identity_decision") or "").strip()
+    if identity_decision and identity_decision != "production_family":
         return False
     if (
         "_review_include_in_primary_matrix" in cell

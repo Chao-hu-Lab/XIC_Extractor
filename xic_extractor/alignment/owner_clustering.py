@@ -28,6 +28,8 @@ class OwnerAlignedFeature:
     evidence: str
     identity_conflict: bool = False
     review_only: bool = False
+    confirm_local_owners_with_backfill: bool = False
+    backfill_seed_centers: tuple[tuple[float, float], ...] = ()
     ambiguous_sample_stem: str | None = None
     ambiguous_candidate_ids: tuple[str, ...] = ()
 
@@ -46,6 +48,18 @@ class OwnerAlignedFeature:
     @property
     def event_member_count(self) -> int:
         return sum(len(owner.all_events) for owner in self.owners)
+
+
+@dataclass(frozen=True)
+class _GroupHardGateEnvelope:
+    neutral_loss_tag: str
+    sample_stems: frozenset[str]
+    precursor_mz_min: float
+    precursor_mz_max: float
+    product_mz_min: float
+    product_mz_max: float
+    observed_loss_min: float
+    observed_loss_max: float
 
 
 def cluster_sample_local_owners(
@@ -134,11 +148,13 @@ def _complete_link_groups(
     edge_cache: dict[tuple[str, str], OwnerEdgeEvidence],
 ) -> tuple[tuple[SampleLocalMS1Owner, ...], ...]:
     groups: list[list[SampleLocalMS1Owner]] = []
+    envelopes: list[_GroupHardGateEnvelope] = []
     for owner in owners:
         compatible_group_indexes = [
             index
             for index, group in enumerate(groups)
-            if all(
+            if _group_can_pass_hard_gates(owner, envelopes[index], config)
+            and all(
                 _edge_for_pair(
                     owner,
                     existing,
@@ -153,13 +169,99 @@ def _complete_link_groups(
         ]
         if not compatible_group_indexes:
             groups.append([owner])
+            envelopes.append(_group_envelope_for_owner(owner))
             continue
         best_index = min(
             compatible_group_indexes,
             key=lambda index: _group_match_score(owner, groups[index], config),
         )
         groups[best_index].append(owner)
+        envelopes[best_index] = _extend_group_envelope(envelopes[best_index], owner)
     return tuple(tuple(group) for group in groups)
+
+
+def _group_can_pass_hard_gates(
+    owner: SampleLocalMS1Owner,
+    envelope: _GroupHardGateEnvelope,
+    config: AlignmentConfig,
+) -> bool:
+    if owner.sample_stem in envelope.sample_stems:
+        return False
+    if (
+        not owner.neutral_loss_tag
+        or owner.neutral_loss_tag != envelope.neutral_loss_tag
+    ):
+        return False
+    if _range_exceeds_ppm(
+        owner.precursor_mz,
+        envelope.precursor_mz_min,
+        envelope.precursor_mz_max,
+        config.max_ppm,
+    ):
+        return False
+
+    event = owner.primary_identity_event
+    if _range_exceeds_ppm(
+        event.product_mz,
+        envelope.product_mz_min,
+        envelope.product_mz_max,
+        config.product_mz_tolerance_ppm,
+    ):
+        return False
+    return not _range_exceeds_ppm(
+        event.observed_neutral_loss_da,
+        envelope.observed_loss_min,
+        envelope.observed_loss_max,
+        config.observed_loss_tolerance_ppm,
+    )
+
+
+def _range_exceeds_ppm(
+    reference: float,
+    lower: float,
+    upper: float,
+    max_ppm: float,
+) -> bool:
+    return _ppm(reference, lower) > max_ppm or _ppm(reference, upper) > max_ppm
+
+
+def _group_envelope_for_owner(
+    owner: SampleLocalMS1Owner,
+) -> _GroupHardGateEnvelope:
+    event = owner.primary_identity_event
+    return _GroupHardGateEnvelope(
+        neutral_loss_tag=owner.neutral_loss_tag,
+        sample_stems=frozenset((owner.sample_stem,)),
+        precursor_mz_min=owner.precursor_mz,
+        precursor_mz_max=owner.precursor_mz,
+        product_mz_min=event.product_mz,
+        product_mz_max=event.product_mz,
+        observed_loss_min=event.observed_neutral_loss_da,
+        observed_loss_max=event.observed_neutral_loss_da,
+    )
+
+
+def _extend_group_envelope(
+    envelope: _GroupHardGateEnvelope,
+    owner: SampleLocalMS1Owner,
+) -> _GroupHardGateEnvelope:
+    event = owner.primary_identity_event
+    return _GroupHardGateEnvelope(
+        neutral_loss_tag=envelope.neutral_loss_tag,
+        sample_stems=envelope.sample_stems | frozenset((owner.sample_stem,)),
+        precursor_mz_min=min(envelope.precursor_mz_min, owner.precursor_mz),
+        precursor_mz_max=max(envelope.precursor_mz_max, owner.precursor_mz),
+        product_mz_min=min(envelope.product_mz_min, event.product_mz),
+        product_mz_max=max(envelope.product_mz_max, event.product_mz),
+        observed_loss_min=min(
+            envelope.observed_loss_min,
+            event.observed_neutral_loss_da,
+        ),
+        observed_loss_max=max(
+            envelope.observed_loss_max,
+            event.observed_neutral_loss_da,
+        ),
+    )
 
 
 def _edge_for_pair(

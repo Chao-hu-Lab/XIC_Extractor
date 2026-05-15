@@ -15,6 +15,14 @@ from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
 _DEFAULT_DRIFT_LOCAL_WINDOW = 40
+_DEFAULT_RAW_WORKERS = 1
+_DEFAULT_RAW_XIC_BATCH_SIZE = 1
+_PERFORMANCE_PROFILES = {
+    "validation-fast": {
+        "raw_workers": 8,
+        "raw_xic_batch_size": 64,
+    },
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -33,6 +41,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     raw_dir = args.raw_dir.resolve()
     dll_dir = args.dll_dir.resolve()
     output_dir = args.output_dir.resolve()
+    raw_workers, raw_xic_batch_size = _resolve_raw_execution_settings(args)
 
     if not discovery_batch_index.is_file():
         print(
@@ -94,8 +103,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_level=args.output_level,
             emit_alignment_cells=args.emit_alignment_cells,
             emit_alignment_status_matrix=args.emit_alignment_status_matrix,
-            raw_workers=args.raw_workers,
-            raw_xic_batch_size=args.raw_xic_batch_size,
+            raw_workers=raw_workers,
+            raw_xic_batch_size=raw_xic_batch_size,
+            owner_backfill_xic_backend=_owner_backfill_xic_backend(
+                args.owner_backfill_xic_backend
+            ),
+            preconsolidate_owner_families=args.preconsolidate_owner_families,
             drift_lookup=drift_lookup,
             **timing_kwargs,
         )
@@ -170,16 +183,29 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--raw-workers",
         type=_positive_int,
-        default=1,
-        help="Number of RAW worker processes for sample-local alignment backfill.",
+        help=(
+            "Number of RAW worker processes for sample-local alignment backfill. "
+            f"Default {_DEFAULT_RAW_WORKERS}, unless --performance-profile sets "
+            "a profile value."
+        ),
     )
     parser.add_argument(
         "--raw-xic-batch-size",
         type=_positive_int,
-        default=1,
+        default=None,
         help=(
-            "Maximum XIC requests per RAW API batch. Default 1 preserves the "
-            "pre-batch execution shape until real RAW equivalence is accepted."
+            "Maximum XIC requests per RAW API batch. Default "
+            f"{_DEFAULT_RAW_XIC_BATCH_SIZE} preserves the pre-batch execution "
+            "shape unless --performance-profile sets a profile value."
+        ),
+    )
+    parser.add_argument(
+        "--performance-profile",
+        choices=tuple(_PERFORMANCE_PROFILES),
+        help=(
+            "Named alignment execution profile. 'validation-fast' uses the "
+            "8-RAW-equivalent fast path: raw-workers=8 and "
+            "raw-xic-batch-size=64. Explicit raw flags override profile values."
         ),
     )
     parser.add_argument(
@@ -189,6 +215,26 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help=(
             "Only run owner-centered MS1 backfill for features detected in at "
             "least this many samples. Default 1 preserves full backfill."
+        ),
+    )
+    parser.add_argument(
+        "--owner-backfill-xic-backend",
+        choices=("raw", "ms1-index", "ms1-index-hybrid"),
+        default="raw",
+        help=(
+            "XIC backend for owner-centered MS1 backfill. Default 'raw' uses "
+            "Thermo vendor chromatograms. 'ms1-index' is an explicit "
+            "approximate fast mode and may change peak areas. "
+            "'ms1-index-hybrid' uses MS1-index prefiltering but writes "
+            "vendor-confirmed rescued cells."
+        ),
+    )
+    parser.add_argument(
+        "--preconsolidate-owner-families",
+        action="store_true",
+        help=(
+            "Experimental algorithm mode: merge identity-compatible "
+            "single-sample owner families before owner-centered backfill."
         ),
     )
     parser.add_argument(
@@ -230,6 +276,21 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _resolve_raw_execution_settings(args: argparse.Namespace) -> tuple[int, int]:
+    profile = _PERFORMANCE_PROFILES.get(args.performance_profile or "", {})
+    raw_workers = (
+        args.raw_workers
+        if args.raw_workers is not None
+        else profile.get("raw_workers", _DEFAULT_RAW_WORKERS)
+    )
+    raw_xic_batch_size = (
+        args.raw_xic_batch_size
+        if args.raw_xic_batch_size is not None
+        else profile.get("raw_xic_batch_size", _DEFAULT_RAW_XIC_BATCH_SIZE)
+    )
+    return raw_workers, raw_xic_batch_size
+
+
 def _positive_int(value: str) -> int:
     try:
         parsed = int(value)
@@ -238,6 +299,14 @@ def _positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("value must be an integer >= 1")
     return parsed
+
+
+def _owner_backfill_xic_backend(value: str) -> str:
+    if value == "ms1-index":
+        return "ms1_index"
+    if value == "ms1-index-hybrid":
+        return "ms1_index_hybrid"
+    return value
 
 
 def _peak_config(

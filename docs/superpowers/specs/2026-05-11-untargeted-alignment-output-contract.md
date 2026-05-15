@@ -103,6 +103,14 @@ If TSV export is enabled:
   counts.
 - `alignment_cells.tsv` and `alignment_matrix_status.tsv` remain deeper debug
   outputs.
+- `owner_edge_evidence.tsv` (debug/validation only) contains owner-pair edge
+  evidence for pairs that survive the hard-gate envelope prefilter. Owner pairs
+  the envelope rejects (same sample, neutral-loss-tag mismatch, or precursor m/z
+  outside `max_ppm`) are trivially blocked and are not written. This is the
+  post-2026-05-15 contract: earlier runs with drift priors emitted every
+  O(n^2) pair because the prefilter was incorrectly disabled whenever the
+  evidence sink was active. See
+  `2026-05-15-alignment-clustering-performance-spec.md` (Tier 0).
 
 ## Status Semantics
 

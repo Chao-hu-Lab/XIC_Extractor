@@ -82,8 +82,7 @@ class RawFileHandle:
             return ()
         grouped: dict[tuple[int, int], list[tuple[int, Any]]] = defaultdict(list)
         for index, request in enumerate(requests):
-            start_scan = self._raw_file.ScanNumberFromRetentionTime(request.rt_min)
-            end_scan = self._raw_file.ScanNumberFromRetentionTime(request.rt_max)
+            start_scan, end_scan = self.scan_window_for_request(request)
             settings = self._build_chromatogram_settings(request.mz, request.ppm_tol)
             grouped[(start_scan, end_scan)].append((index, settings))
 
@@ -107,6 +106,12 @@ class RawFileHandle:
                 "Thermo RAW batch extraction returned incomplete traces",
             )
         return tuple(trace for trace in traces if trace is not None)
+
+    def scan_window_for_request(self, request: XICRequest) -> tuple[int, int]:
+        return (
+            int(self._raw_file.ScanNumberFromRetentionTime(request.rt_min)),
+            int(self._raw_file.ScanNumberFromRetentionTime(request.rt_max)),
+        )
 
     def iter_ms2_scans(self, rt_min: float, rt_max: float) -> Iterator[Ms2ScanEvent]:
         start_scan = self._raw_file.ScanNumberFromRetentionTime(rt_min)

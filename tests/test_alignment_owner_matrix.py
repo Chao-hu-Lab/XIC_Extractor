@@ -2,7 +2,9 @@ from dataclasses import replace
 from pathlib import Path
 
 from tests.test_alignment_owner_backfill import _feature
+from tests.test_alignment_owner_clustering import _owner
 from xic_extractor.alignment.matrix import AlignedCell
+from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.alignment.owner_matrix import (
     ambiguous_records_by_sample,
     build_owner_alignment_matrix,
@@ -66,6 +68,83 @@ def test_owner_matrix_detected_cell_does_not_invent_raw_path() -> None:
 
     assert matrix.cells[0].source_raw_file is None
     assert isinstance(Path("sample-a.raw"), Path)
+
+
+def test_owner_matrix_uses_backfill_confirmation_for_severe_low_local_owner() -> None:
+    low_owner = replace(_owner("sample-a", "low"), owner_area=10.0)
+    feature = OwnerAlignedFeature(
+        feature_family_id="FAM000001",
+        neutral_loss_tag="NL116",
+        family_center_mz=500.0,
+        family_center_rt=8.5,
+        family_product_mz=383.9526,
+        family_observed_neutral_loss_da=116.0474,
+        has_anchor=True,
+        owners=(
+            low_owner,
+            _owner("sample-b", "normal"),
+            _owner("sample-c", "normal"),
+        ),
+        evidence="owner_complete_link;owner_count=3",
+        confirm_local_owners_with_backfill=True,
+    )
+    rescued = AlignedCell(
+        sample_stem="sample-a",
+        cluster_id=feature.feature_family_id,
+        status="rescued",
+        area=900.0,
+        apex_rt=8.55,
+        height=90.0,
+        peak_start_rt=8.50,
+        peak_end_rt=8.60,
+        rt_delta_sec=3.0,
+        trace_quality="owner_backfill",
+        scan_support_score=None,
+        source_candidate_id=None,
+        source_raw_file=None,
+        reason="owner-centered MS1 backfill",
+    )
+
+    matrix = build_owner_alignment_matrix(
+        (feature,),
+        sample_order=("sample-a",),
+        ambiguous_by_sample={},
+        rescued_cells=(rescued,),
+    )
+
+    assert matrix.cells[0].status == "rescued"
+    assert matrix.cells[0].area == 900.0
+    assert "superseded low local owner" in matrix.cells[0].reason
+
+
+def test_owner_matrix_keeps_detected_cell_when_local_owner_is_not_low_outlier() -> None:
+    feature = replace(_feature(), confirm_local_owners_with_backfill=True)
+    rescued = AlignedCell(
+        sample_stem="sample-a",
+        cluster_id=feature.feature_family_id,
+        status="rescued",
+        area=4000.0,
+        apex_rt=8.55,
+        height=400.0,
+        peak_start_rt=8.50,
+        peak_end_rt=8.60,
+        rt_delta_sec=3.0,
+        trace_quality="owner_backfill",
+        scan_support_score=None,
+        source_candidate_id=None,
+        source_raw_file=None,
+        reason="owner-centered MS1 backfill",
+    )
+
+    matrix = build_owner_alignment_matrix(
+        (feature,),
+        sample_order=("sample-a",),
+        ambiguous_by_sample={},
+        rescued_cells=(rescued,),
+    )
+
+    assert matrix.cells[0].status == "detected"
+    assert matrix.cells[0].area == 1000.0
 
 
 def test_owner_matrix_ambiguous_review_feature_does_not_contaminate_other_features():

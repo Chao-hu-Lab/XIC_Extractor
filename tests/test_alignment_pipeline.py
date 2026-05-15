@@ -131,6 +131,161 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
     assert not (tmp_path / "out" / "alignment_matrix_status.tsv").exists()
 
 
+def test_pipeline_applies_single_worker_hybrid_owner_backfill_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        lambda candidates, **kwargs: SimpleNamespace(
+            owners=("owner",),
+            assignments=(),
+            ambiguous_records=(),
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (
+            "feature",
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+
+    def fake_source_for_owner_backfill_backend(source, backend):
+        calls["backend"] = backend
+        return SimpleNamespace(kind="indexed", source=source)
+
+    def fake_owner_backfill(
+        features,
+        *,
+        sample_order,
+        raw_sources,
+        validation_raw_sources=None,
+        **kwargs,
+    ):
+        calls["backfill_raw_sources"] = raw_sources
+        calls["validation_raw_sources"] = validation_raw_sources
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "source_for_owner_backfill_backend",
+        fake_source_for_owner_backfill_backend,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        fake_owner_backfill,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+        owner_backfill_xic_backend="ms1_index_hybrid",
+    )
+
+    assert calls["backend"] == "ms1_index_hybrid"
+    assert set(calls["backfill_raw_sources"]) == {"Sample_A"}
+    assert set(calls["validation_raw_sources"]) == {"Sample_A"}
+    assert (
+        calls["backfill_raw_sources"]["Sample_A"]
+        is not calls["validation_raw_sources"]["Sample_A"]
+    )
+
+
+def test_pipeline_preconsolidates_owner_families_when_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        lambda candidates, **kwargs: SimpleNamespace(
+            owners=("owner",),
+            assignments=(),
+            ambiguous_records=(),
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (
+            "feature",
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+
+    def fake_preconsolidate(features, *, config):
+        calls["preconsolidate_features"] = features
+        return ("consolidated",)
+
+    def fake_owner_backfill(features, **kwargs):
+        calls["backfill_features"] = features
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "consolidate_pre_backfill_identity_families",
+        fake_preconsolidate,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        fake_owner_backfill,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+        preconsolidate_owner_families=True,
+    )
+
+    assert calls["preconsolidate_features"] == ("feature",)
+    assert calls["backfill_features"] == ("consolidated",)
+
+
 def test_pipeline_records_alignment_timing_stages(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -164,6 +319,8 @@ def test_pipeline_records_alignment_timing_stages(
         "alignment.owner_backfill",
         "alignment.build_matrix",
         "alignment.claim_registry",
+        "alignment.primary_consolidation",
+        "alignment.pre_backfill_recenter",
         "alignment.write_outputs",
     ]
     records_by_stage = {record.stage: record for record in recorder.records}
@@ -171,6 +328,8 @@ def test_pipeline_records_alignment_timing_stages(
     assert records_by_stage["alignment.run_config"].metrics == {
         "raw_workers": 1,
         "raw_xic_batch_size": 1,
+        "owner_backfill_xic_backend": "raw",
+        "preconsolidate_owner_families": False,
         "output_level": "machine",
         "drift_prior_source": "none",
     }
@@ -274,6 +433,26 @@ def test_timed_raw_source_records_batch_calls() -> None:
     assert stats.point_count == 2
 
 
+def test_timed_raw_source_delegates_scan_window_lookup() -> None:
+    from xic_extractor.xic_models import XICRequest
+
+    class WindowSource:
+        def scan_window_for_request(self, request):
+            return (int(request.rt_min), int(request.rt_max))
+
+    stats = pipeline_module._RawSourceTimingStats(
+        sample_stem="Sample_A",
+        stage="alignment.build_owners.extract_xic",
+    )
+    source = pipeline_module._TimedRawSource(WindowSource(), stats=stats)
+
+    window = source.scan_window_for_request(
+        XICRequest(mz=258.0, rt_min=8.0, rt_max=9.0, ppm_tol=20.0)
+    )
+
+    assert window == (8, 9)
+
+
 def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -363,6 +542,7 @@ def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
         peak_config=_peak_config(),
         raw_opener=opener,
         raw_workers=2,
+        owner_backfill_xic_backend="ms1_index",
         timing_recorder=recorder,
     )
 
@@ -371,7 +551,9 @@ def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
     assert calls["rescued_cells"] == (rescued,)
     assert calls["build_kwargs"]["max_workers"] == 2
     assert calls["raw_xic_batch_size"] == 1
+    assert calls["owner_backfill_xic_backend"] == "ms1_index"
     assert calls["build_kwargs"]["raw_xic_batch_size"] == 1
+    assert "owner_backfill_xic_backend" not in calls["build_kwargs"]
     records_by_stage_sample = {
         (record.stage, record.sample_stem): record for record in recorder.records
     }
@@ -1335,6 +1517,13 @@ def _candidate_row(sample_stem: str) -> dict[str, str]:
         "ms1_height": "100.0",
         "ms1_trace_quality": "clean",
         "ms1_scan_support_score": "0.8",
+        "selected_tag_count": "1",
+        "matched_tag_count": "1",
+        "matched_tag_names": "DNA_dR",
+        "primary_tag_name": "DNA_dR",
+        "tag_combine_mode": "single",
+        "tag_intersection_status": "not_required",
+        "tag_evidence_json": '{"DNA_dR":{"scan_count":2}}',
     }
 
 

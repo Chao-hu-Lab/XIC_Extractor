@@ -22,6 +22,13 @@ COMPARISON_METRICS = [
     "duplicate_claim_pressure_families",
     "negative_checkpoint_production_families",
 ]
+TARGETED_ISTD_BENCHMARK_COLUMNS = [
+    "metric",
+    "value",
+    "threshold",
+    "status",
+    "note",
+]
 CASE_SUMMARY_COLUMNS = [
     "case",
     "production_family_count",
@@ -111,7 +118,6 @@ def compute_guardrails(alignment_dir: Path) -> GuardrailMetrics:
         counts = status_counts[family_id]
         detected_count = counts["detected"]
         rescued_count = counts["rescued"]
-        production_present_count = detected_count + rescued_count
         duplicate_assigned_count = counts["duplicate_assigned"]
         review_row = review_by_family.get(family_id, {})
         accepted_cells = _int_value(review_row.get("accepted_cell_count"))
@@ -245,6 +251,57 @@ def compare_targeted_audit_counts(
     return rows
 
 
+def targeted_istd_benchmark_guardrail_rows(
+    benchmark_json: Path,
+) -> list[dict[str, str]]:
+    if not benchmark_json.exists():
+        raise FileNotFoundError(str(benchmark_json))
+    payload = json.loads(benchmark_json.read_text(encoding="utf-8"))
+    summaries = _benchmark_summaries(payload, benchmark_json)
+    rows = [
+        _targeted_istd_metric_row(
+            "overall_status",
+            str(payload.get("overall_status", "")),
+            "PASS",
+            "FAIL" if payload.get("overall_status") != "PASS" else "PASS",
+            "strict targeted ISTD benchmark status",
+        ),
+        _targeted_istd_metric_row(
+            "active_fail_count",
+            _count_summaries(summaries, active_only=True, status="FAIL"),
+            "0",
+            "FAIL"
+            if _count_summaries(summaries, active_only=True, status="FAIL") > 0
+            else "PASS",
+            "active DNA ISTD failures",
+        ),
+        _targeted_istd_metric_row(
+            "miss_count",
+            _count_failure_mode(summaries, "MISS"),
+            "0",
+            "FAIL" if _count_failure_mode(summaries, "MISS") > 0 else "PASS",
+            "active DNA ISTDs without primary hit",
+        ),
+        _targeted_istd_metric_row(
+            "split_count",
+            _count_failure_mode(summaries, "SPLIT"),
+            "0",
+            "FAIL" if _count_failure_mode(summaries, "SPLIT") > 0 else "PASS",
+            "active DNA ISTDs with multiple primary hits",
+        ),
+        _targeted_istd_metric_row(
+            "false_positive_tag_count",
+            _count_failure_mode(summaries, "FALSE_POSITIVE_TAG"),
+            "0",
+            "FAIL"
+            if _count_failure_mode(summaries, "FALSE_POSITIVE_TAG") > 0
+            else "PASS",
+            "inactive tag primary hits",
+        ),
+    ]
+    return rows
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
@@ -281,6 +338,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     target_label=args.target_label,
                 ),
             )
+
+        if args.targeted_istd_benchmark_json:
+            _write_dict_csv(
+                args.targeted_istd_benchmark_csv,
+                targeted_istd_benchmark_guardrail_rows(
+                    args.targeted_istd_benchmark_json,
+                ),
+            )
     except FileNotFoundError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -304,6 +369,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--candidate-targeted-comparison", type=Path)
     parser.add_argument("--target-label")
     parser.add_argument("--targeted-comparison-csv", type=Path)
+    parser.add_argument("--targeted-istd-benchmark-json", type=Path)
+    parser.add_argument("--targeted-istd-benchmark-csv", type=Path)
     return parser.parse_args(argv)
 
 
@@ -319,6 +386,10 @@ def _validate_args(args: argparse.Namespace) -> None:
         args.target_label,
         args.targeted_comparison_csv,
     )
+    targeted_istd_group = (
+        args.targeted_istd_benchmark_json,
+        args.targeted_istd_benchmark_csv,
+    )
     alignment_group = (
         args.alignment_dir,
         args.output_json,
@@ -327,6 +398,7 @@ def _validate_args(args: argparse.Namespace) -> None:
     has_alignment_group = any(value is not None for value in alignment_group)
     has_baseline_group = any(value is not None for value in baseline_group)
     has_targeted_group = any(value is not None for value in targeted_group)
+    has_targeted_istd_group = any(value is not None for value in targeted_istd_group)
 
     if has_alignment_group and (
         args.alignment_dir is None or args.output_json is None
@@ -345,13 +417,27 @@ def _validate_args(args: argparse.Namespace) -> None:
             "--candidate-targeted-comparison, --target-label, and "
             "--targeted-comparison-csv",
         )
-    if not (has_alignment_group or has_baseline_group or has_targeted_group):
+    if has_targeted_istd_group and not all(
+        value is not None for value in targeted_istd_group
+    ):
+        raise ValueError(
+            "Targeted ISTD benchmark requires --targeted-istd-benchmark-json "
+            "and --targeted-istd-benchmark-csv",
+        )
+    if not (
+        has_alignment_group
+        or has_baseline_group
+        or has_targeted_group
+        or has_targeted_istd_group
+    ):
         raise ValueError(
             "Provide at least one actionable option group: "
             "--alignment-dir with --output-json; --baseline-dir with "
             "--candidate-dir and --comparison-csv; or "
             "--baseline-targeted-comparison with --candidate-targeted-comparison, "
-            "--target-label, and --targeted-comparison-csv.",
+            "--target-label, and --targeted-comparison-csv; or "
+            "--targeted-istd-benchmark-json with "
+            "--targeted-istd-benchmark-csv.",
         )
 
 
@@ -373,8 +459,14 @@ def _compute_case_assertions(
                 status_counts[row.get("feature_family_id", "")],
             )
         )
-        owner_count = sum(_int_value(row.get("event_cluster_count")) for row in review_in_window)
-        event_count = sum(_int_value(row.get("event_member_count")) for row in review_in_window)
+        owner_count = sum(
+            _int_value(row.get("event_cluster_count"))
+            for row in review_in_window
+        )
+        event_count = sum(
+            _int_value(row.get("event_member_count"))
+            for row in review_in_window
+        )
         supporting_event_count = max(event_count - owner_count, 0)
         ambiguous_count = sum(
             status_counts[row.get("feature_family_id", "")]["ambiguous_ms1_owner"]
@@ -459,6 +551,9 @@ def _is_production_family(
     review_row: Mapping[str, str],
     counts: Counter[str],
 ) -> bool:
+    identity_decision = review_row.get("identity_decision")
+    if identity_decision:
+        return identity_decision == "production_family"
     if "include_in_primary_matrix" in review_row:
         return _is_trueish(review_row.get("include_in_primary_matrix"))
     if "accepted_cell_count" in review_row:
@@ -633,6 +728,83 @@ def _targeted_failure_counts(path: Path, target_label: str) -> Counter[str]:
             if not has_target_label or row.get("target_label") == target_label:
                 counts[row.get("failure_mode", "")] += 1
     return counts
+
+
+def _targeted_istd_metric_row(
+    metric: str,
+    value: object,
+    threshold: str,
+    status: str,
+    note: str,
+) -> dict[str, str]:
+    return {
+        "metric": metric,
+        "value": str(value),
+        "threshold": threshold,
+        "status": status,
+        "note": note,
+    }
+
+
+def _count_summaries(
+    summaries: list[object],
+    *,
+    active_only: bool,
+    status: str,
+) -> int:
+    return sum(
+        1
+        for summary in summaries
+        if isinstance(summary, dict)
+        and summary.get("status") == status
+        and (not active_only or _is_json_trueish(summary.get("active_tag")))
+    )
+
+
+def _benchmark_summaries(
+    payload: Mapping[str, object],
+    benchmark_json: Path,
+) -> list[object]:
+    raw_summaries = payload.get("summaries")
+    if raw_summaries is None:
+        raw_summaries = payload.get("targets")
+    if not isinstance(raw_summaries, list):
+        raise ValueError(f"{benchmark_json} is missing summaries or targets list")
+    return [_normalize_benchmark_summary(summary) for summary in raw_summaries]
+
+
+def _normalize_benchmark_summary(summary: object) -> object:
+    if not isinstance(summary, dict):
+        return summary
+    normalized = dict(summary)
+    if "status" not in normalized and "benchmark_class" in normalized:
+        normalized["status"] = normalized.get("benchmark_class")
+    if "active_tag" not in normalized and "active_dna_istd_candidate" in normalized:
+        normalized["active_tag"] = normalized.get("active_dna_istd_candidate")
+    return normalized
+
+
+def _count_failure_mode(summaries: list[object], failure_mode: str) -> int:
+    count = 0
+    for summary in summaries:
+        if not isinstance(summary, dict):
+            continue
+        modes = summary.get("failure_modes", "")
+        if isinstance(modes, list):
+            has_mode = failure_mode in modes
+        else:
+            has_mode = failure_mode in str(modes).split(";")
+        if has_mode:
+            count += 1
+    return count
+
+
+def _is_json_trueish(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return _is_trueish(value)
+    return False
 
 
 def _case_summary_row(case_name: str, assertion: CaseAssertion) -> dict[str, str]:

@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from xic_extractor.discovery.grouping import group_discovery_seeds
 from xic_extractor.discovery.models import DiscoverySettings, NeutralLossProfile
 from xic_extractor.discovery.ms2_seeds import collect_strict_nl_seeds
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
@@ -222,6 +223,39 @@ def test_iter_ms2_scans_uses_settings_rt_window() -> None:
     assert raw.requested_window == (1.25, 9.75)
 
 
+def test_multi_profile_seed_collection_keeps_seed_groups_per_tag() -> None:
+    settings = DiscoverySettings(
+        selected_tag_names=("dR", "R", "MeR"),
+        tag_combine_mode="union",
+        neutral_loss_profiles=(
+            NeutralLossProfile(tag="dR", neutral_loss_da=116.047344),
+            NeutralLossProfile(tag="R", neutral_loss_da=132.0423),
+            NeutralLossProfile(tag="MeR", neutral_loss_da=146.0579),
+        ),
+    )
+    seeds = collect_strict_nl_seeds(
+        _FakeRaw(
+            [
+                scan_for_loss(116.047344),
+                scan_for_loss(132.0423),
+                scan_for_loss(146.0579),
+            ]
+        ),
+        raw_file=RAW_FILE,
+        settings=settings,
+    )
+
+    groups = group_discovery_seeds(seeds, settings=settings)
+
+    assert [seed.neutral_loss_tag for seed in seeds] == ["dR", "R", "MeR"]
+    assert len(groups) == 3
+    assert [group.matched_tag_names for group in groups] == [
+        ("dR",),
+        ("R",),
+        ("MeR",),
+    ]
+
+
 def _settings(**overrides: float) -> DiscoverySettings:
     values = {
         "neutral_loss_profile": NeutralLossProfile("DNA_dR", NEUTRAL_LOSS_DA),
@@ -251,6 +285,28 @@ def _scan_event(
             masses=np.asarray(masses, dtype=float),
             intensities=np.asarray(intensities, dtype=float),
             base_peak=max(intensities) if intensities else 0.0,
+        ),
+        parse_error=None,
+        scan_number=scan_number,
+    )
+
+
+def scan_for_loss(
+    loss_da: float,
+    *,
+    precursor_mz: float = 400.0,
+    rt: float = 5.0,
+) -> Ms2ScanEvent:
+    product_mz = precursor_mz - loss_da
+    scan_number = int(round(loss_da * 1000))
+    return Ms2ScanEvent(
+        scan=Ms2Scan(
+            scan_number=scan_number,
+            rt=rt,
+            precursor_mz=precursor_mz,
+            masses=np.asarray([product_mz], dtype=float),
+            intensities=np.asarray([50000.0], dtype=float),
+            base_peak=50000.0,
         ),
         parse_error=None,
         scan_number=scan_number,

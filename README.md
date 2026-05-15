@@ -262,6 +262,26 @@ QC 8-oxodG 換峰與面積大變，因此 shipped preset 收斂到 `0.02`。
 
 詳細命令、baseline compare 路徑與各層用途見 `docs/validation-harness.md`。
 
+Untargeted alignment 的 8-raw 開發 smoke 可用顯式 fast profile，不改 CLI
+預設：
+
+```powershell
+uv run python scripts\run_alignment.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --output-dir output\alignment\timing_phase0_validation_fast_8raw `
+  --output-level machine `
+  --emit-alignment-cells `
+  --performance-profile validation-fast `
+  --timing-output output\diagnostics\timing_phase0_validation_fast_8raw\alignment_timing.json
+```
+
+`validation-fast` 會套用 `raw-workers=8` 與 `raw-xic-batch-size=64`。
+若命令同時顯式提供 `--raw-workers` 或 `--raw-xic-batch-size`，顯式值優先。
+目前 8-raw tissue subset 實測與 conservative baseline 的 machine TSV 與
+workbook sheet values 一致，alignment wall time 約從 343 秒降到 44 秒。
+
 ---
 
 ## 常見錯誤

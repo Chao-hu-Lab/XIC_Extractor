@@ -96,6 +96,7 @@ def test_read_xlsx_adds_canonical_aliases_for_tissue_sampleinfo(
     assert order["TumorBC2304_DNAandRNA"] == 31
     assert order["Breast_Cancer_Tissue_pooled_QC1"] == 1
     assert order["Breast_Cancer_Tissue_pooled_QC_4"] == 49
+    assert order["Breast_Cancer_Tissue_pooled_QC4"] == 49
 
 
 def test_read_xlsx_adds_aliases_for_all_tissue_qc_injections(tmp_path: Path) -> None:
@@ -118,6 +119,7 @@ def test_read_xlsx_adds_aliases_for_all_tissue_qc_injections(tmp_path: Path) -> 
     assert order["Breast_Cancer_Tissue_pooled_QC2"] == 17
     assert order["Breast_Cancer_Tissue_pooled_QC3"] == 33
     assert order["Breast_Cancer_Tissue_pooled_QC_4"] == 49
+    assert order["Breast_Cancer_Tissue_pooled_QC4"] == 49
     assert order["Breast_Cancer_Tissue_pooled_QC5"] == 65
     assert order["Breast_Cancer_Tissue_pooled_QC6"] == 81
     assert order["Breast_Cancer_Tissue_pooled_QC7"] == 91

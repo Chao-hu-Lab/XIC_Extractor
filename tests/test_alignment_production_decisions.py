@@ -9,7 +9,60 @@ from xic_extractor.alignment.production_decisions import build_production_decisi
 
 def test_detected_and_supported_rescue_write_numeric_values():
     matrix = _matrix(
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
+        cells=(
+            _cell("s1", "FAM001", "detected", 100.0),
+            _cell("s4", "FAM001", "detected", 95.0),
+            _cell("s2", "FAM001", "rescued", 90.0),
+            _cell("s3", "FAM001", "rescued", 80.0),
+        ),
+        sample_order=("s1", "s4", "s2", "s3"),
+    )
+
+    decisions = build_production_decisions(matrix, AlignmentConfig())
+
+    assert decisions.cell("FAM001", "s1").write_matrix_value is True
+    assert decisions.cell("FAM001", "s1").production_status == "detected"
+    assert decisions.cell("FAM001", "s1").matrix_value == 100.0
+    assert decisions.cell("FAM001", "s4").write_matrix_value is True
+    assert decisions.cell("FAM001", "s4").production_status == "detected"
+    assert decisions.cell("FAM001", "s2").write_matrix_value is True
+    assert decisions.cell("FAM001", "s2").production_status == "accepted_rescue"
+    assert decisions.cell("FAM001", "s2").rescue_tier == "accepted_rescue"
+    assert decisions.cell("FAM001", "s3").write_matrix_value is True
+    assert decisions.cell("FAM001", "s3").production_status == "accepted_rescue"
+    assert decisions.row("FAM001").include_in_primary_matrix is True
+    assert decisions.row("FAM001").identity_decision == "production_family"
+    assert decisions.row("FAM001").primary_evidence == "owner_complete_link"
+    assert decisions.row("FAM001").quantifiable_detected_count == 2
+    assert decisions.row("FAM001").row_flags == ()
+
+
+def test_single_sample_local_owner_does_not_create_primary_identity():
+    matrix = _matrix(
         clusters=(_feature("FAM001", evidence="single_sample_local_owner"),),
+        cells=(
+            _cell("s1", "FAM001", "detected", 100.0),
+            _cell("s2", "FAM001", "rescued", 90.0),
+        ),
+        sample_order=("s1", "s2"),
+    )
+
+    decisions = build_production_decisions(matrix, AlignmentConfig())
+
+    assert decisions.cell("FAM001", "s1").write_matrix_value is False
+    assert decisions.cell("FAM001", "s1").blank_reason == "missing_row_identity_support"
+    assert decisions.cell("FAM001", "s2").write_matrix_value is False
+    assert decisions.cell("FAM001", "s2").production_status == "review_rescue"
+    assert decisions.row("FAM001").include_in_primary_matrix is False
+    assert decisions.row("FAM001").identity_decision == "provisional_discovery"
+    assert decisions.row("FAM001").identity_reason == "single_sample_local_owner"
+    assert "single_sample_local_owner" in decisions.row("FAM001").row_flags
+
+
+def test_rescue_heavy_row_needs_multiple_detected_owners_for_primary_promotion():
+    matrix = _matrix(
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
         cells=(
             _cell("s1", "FAM001", "detected", 100.0),
             _cell("s2", "FAM001", "rescued", 90.0),
@@ -20,16 +73,31 @@ def test_detected_and_supported_rescue_write_numeric_values():
 
     decisions = build_production_decisions(matrix, AlignmentConfig())
 
-    assert decisions.cell("FAM001", "s1").write_matrix_value is True
-    assert decisions.cell("FAM001", "s1").production_status == "detected"
-    assert decisions.cell("FAM001", "s1").matrix_value == 100.0
-    assert decisions.cell("FAM001", "s2").write_matrix_value is True
-    assert decisions.cell("FAM001", "s2").production_status == "accepted_rescue"
-    assert decisions.cell("FAM001", "s2").rescue_tier == "accepted_rescue"
-    assert decisions.cell("FAM001", "s3").write_matrix_value is True
-    assert decisions.cell("FAM001", "s3").production_status == "accepted_rescue"
-    assert decisions.row("FAM001").include_in_primary_matrix is True
-    assert decisions.row("FAM001").row_flags == ("rescue_heavy",)
+    assert set(decisions.row("FAM001").row_flags) == {
+        "rescue_heavy",
+        "rescue_only_review",
+    }
+    assert decisions.row("FAM001").accepted_cell_count == 0
+    assert decisions.row("FAM001").quantifiable_detected_count == 1
+    assert decisions.row("FAM001").quantifiable_rescue_count == 2
+    assert decisions.row("FAM001").include_in_primary_matrix is False
+
+
+def test_duplicate_claim_pressure_blocks_unconsolidated_primary_promotion():
+    matrix = _matrix(
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
+        cells=(
+            _cell("s1", "FAM001", "detected", 100.0),
+            _cell("s2", "FAM001", "duplicate_assigned", 95.0),
+            _cell("s3", "FAM001", "duplicate_assigned", 90.0),
+        ),
+        sample_order=("s1", "s2", "s3"),
+    )
+
+    decisions = build_production_decisions(matrix, AlignmentConfig())
+
+    assert decisions.row("FAM001").row_flags == ("duplicate_claim_pressure",)
+    assert decisions.row("FAM001").include_in_primary_matrix is False
 
 
 def test_rescue_without_identity_support_is_review_only_and_row_is_excluded():
@@ -48,7 +116,10 @@ def test_rescue_without_identity_support_is_review_only_and_row_is_excluded():
     assert decisions.cell("FAM001", "s1").production_status == "review_rescue"
     assert decisions.cell("FAM001", "s1").blank_reason == "missing_row_identity_support"
     assert decisions.row("FAM001").include_in_primary_matrix is False
-    assert decisions.row("FAM001").row_flags == ("rescue_only_review",)
+    assert set(decisions.row("FAM001").row_flags) == {
+        "rescue_only",
+        "rescue_only_review",
+    }
 
 
 def test_duplicate_ambiguous_absent_unchecked_and_invalid_areas_are_blank():
@@ -90,16 +161,17 @@ def test_identity_anchor_lost_row_is_excluded_until_review_passes():
 
     assert decisions.cell("FAM001", "s2").production_status == "review_rescue"
     assert decisions.row("FAM001").include_in_primary_matrix is False
-    assert decisions.row("FAM001").row_flags == (
-        "rescue_only_review",
+    assert set(decisions.row("FAM001").row_flags) == {
+        "single_sample_local_owner",
+        "rescue_only",
         "duplicate_claim_pressure",
-        "identity_anchor_lost",
-    )
+        "rescue_only_review",
+    }
 
 
 def test_rescued_with_incomplete_peak_fields_is_review_only():
     matrix = _matrix(
-        clusters=(_feature("FAM001", evidence="single_sample_local_owner"),),
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
         cells=(
             _cell(
                 "s1",
@@ -126,7 +198,7 @@ def test_rescued_with_incomplete_peak_fields_is_review_only():
 def test_rescued_outside_max_rt_is_review_only():
     config = AlignmentConfig()
     matrix = _matrix(
-        clusters=(_feature("FAM001", evidence="single_sample_local_owner"),),
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
         cells=(
             _cell(
                 "s1",

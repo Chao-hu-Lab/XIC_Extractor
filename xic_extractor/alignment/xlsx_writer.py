@@ -97,6 +97,12 @@ def _write_review_sheet(
             "neutral_loss_tag",
             "detected_count",
             "rescued_count",
+            "identity_decision",
+            "identity_confidence",
+            "primary_evidence",
+            "identity_reason",
+            "quantifiable_detected_count",
+            "quantifiable_rescue_count",
             "accepted_cell_count",
             "accepted_rescue_count",
             "review_rescue_count",
@@ -106,6 +112,11 @@ def _write_review_sheet(
             "ambiguous_ms1_owner_count",
             "include_in_primary_matrix",
             "row_flags",
+            "artificial_adduct_role",
+            "artificial_adduct_name",
+            "artificial_adduct_related_family_id",
+            "artificial_adduct_mz_delta_error_ppm",
+            "artificial_adduct_rt_delta_min",
         ],
     )
     grouped_cells = cells_by_cluster(matrix)
@@ -120,6 +131,12 @@ def _write_review_sheet(
                 cluster.neutral_loss_tag,
                 count_status(cells, "detected"),
                 count_status(cells, "rescued"),
+                row_decision.identity_decision,
+                row_decision.identity_confidence,
+                row_decision.primary_evidence,
+                row_decision.identity_reason,
+                row_decision.quantifiable_detected_count,
+                row_decision.quantifiable_rescue_count,
                 row_decision.accepted_cell_count,
                 row_decision.accepted_rescue_count,
                 row_decision.review_rescue_count,
@@ -129,6 +146,11 @@ def _write_review_sheet(
                 count_status(cells, "ambiguous_ms1_owner"),
                 row_decision.include_in_primary_matrix,
                 ";".join(row_decision.row_flags),
+                _optional_attr(cluster, "artificial_adduct_role"),
+                _optional_attr(cluster, "artificial_adduct_name"),
+                _optional_attr(cluster, "artificial_adduct_related_family_id"),
+                _optional_attr(cluster, "artificial_adduct_mz_delta_error_ppm"),
+                _optional_attr(cluster, "artificial_adduct_rt_delta_min"),
             ],
         )
 
@@ -156,6 +178,22 @@ def _write_audit_sheet(
             "rt_delta_sec",
             "claim_state",
             "row_flags",
+            "identity_decision",
+            "identity_confidence",
+            "primary_evidence",
+            "identity_reason",
+            "quantifiable_detected_count",
+            "quantifiable_rescue_count",
+            "accepted_cell_count",
+            "accepted_rescue_count",
+            "review_rescue_count",
+            "duplicate_assigned_count",
+            "ambiguous_ms1_owner_count",
+            "artificial_adduct_role",
+            "artificial_adduct_name",
+            "artificial_adduct_related_family_id",
+            "artificial_adduct_mz_delta_error_ppm",
+            "artificial_adduct_rt_delta_min",
             "reason",
         ],
     )
@@ -186,6 +224,22 @@ def _write_audit_sheet(
                 cell.rt_delta_sec,
                 _claim_state(cell),
                 ";".join(row_decision.row_flags),
+                row_decision.identity_decision,
+                row_decision.identity_confidence,
+                row_decision.primary_evidence,
+                row_decision.identity_reason,
+                row_decision.quantifiable_detected_count,
+                row_decision.quantifiable_rescue_count,
+                row_decision.accepted_cell_count,
+                row_decision.accepted_rescue_count,
+                row_decision.review_rescue_count,
+                row_decision.duplicate_assigned_count,
+                row_decision.ambiguous_ms1_owner_count,
+                _optional_attr(cluster, "artificial_adduct_role"),
+                _optional_attr(cluster, "artificial_adduct_name"),
+                _optional_attr(cluster, "artificial_adduct_related_family_id"),
+                _optional_attr(cluster, "artificial_adduct_mz_delta_error_ppm"),
+                _optional_attr(cluster, "artificial_adduct_rt_delta_min"),
                 cell.reason,
             ],
         )
@@ -230,3 +284,7 @@ def _family_center_rt(row: Any) -> float:
     if hasattr(row, "family_center_rt"):
         return row.family_center_rt
     return row.cluster_center_rt
+
+
+def _optional_attr(row: Any, name: str) -> object:
+    return getattr(row, name, "")

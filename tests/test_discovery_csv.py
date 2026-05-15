@@ -65,6 +65,13 @@ EXPECTED_PROVENANCE_COLUMNS = (
     "ms1_height",
     "ms1_trace_quality",
     "ms1_scan_support_score",
+    "selected_tag_count",
+    "matched_tag_count",
+    "matched_tag_names",
+    "primary_tag_name",
+    "tag_combine_mode",
+    "tag_intersection_status",
+    "tag_evidence_json",
 )
 
 
@@ -172,9 +179,10 @@ def test_discovery_candidate_has_optional_scan_support_score() -> None:
     assert _candidate().ms1_scan_support_score is None
 
 
-def test_scan_support_score_is_last_provenance_column() -> None:
+def test_tag_evidence_json_is_last_provenance_column() -> None:
     assert DISCOVERY_CANDIDATE_COLUMNS[:25] == DISCOVERY_REVIEW_COLUMNS
-    assert DISCOVERY_PROVENANCE_COLUMNS[-1] == "ms1_scan_support_score"
+    assert DISCOVERY_PROVENANCE_COLUMNS[-1] == "tag_evidence_json"
+    assert DISCOVERY_PROVENANCE_COLUMNS[-8] == "ms1_scan_support_score"
 
 
 def test_write_discovery_candidates_csv_creates_parent_and_writes_header(
@@ -576,6 +584,8 @@ def test_discovery_seed_group_preserves_group_contract_without_best_seed() -> No
         "neutral_loss_mass_error_ppm",
         "rt_seed_min",
         "rt_seed_max",
+        "matched_tag_names",
+        "tag_evidence_json",
     )
     assert group.raw_file == raw_file
     assert group.sample_stem == "TumorBC2312_DNA"
@@ -588,6 +598,8 @@ def test_discovery_seed_group_preserves_group_contract_without_best_seed() -> No
     assert group.neutral_loss_mass_error_ppm == 2.58
     assert group.rt_seed_min == 7.80
     assert group.rt_seed_max == 7.86
+    assert group.matched_tag_names == ()
+    assert group.tag_evidence_json == "{}"
 
 
 def test_discovery_candidate_from_values_uses_sample_and_best_seed_scan_id() -> None:

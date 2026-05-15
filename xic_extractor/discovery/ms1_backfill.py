@@ -1,7 +1,8 @@
+import json
 import math
 from collections.abc import Iterable
 from dataclasses import replace
-from typing import Protocol
+from typing import Any, Literal, Protocol, cast
 
 import numpy as np
 
@@ -17,6 +18,8 @@ from xic_extractor.discovery.priority import (
     build_candidate_reason,
 )
 from xic_extractor.signal_processing import PeakResult, find_peak_and_area
+
+_TagIntersectionStatus = Literal["not_required", "complete", "incomplete"]
 
 
 class MS1XicSource(Protocol):
@@ -69,40 +72,39 @@ def backfill_ms1_candidates(
             ms1_seed_delta_min=ms1_fields.seed_delta_min,
             settings=settings,
         )
-        candidates.append(
-            DiscoveryCandidate.from_values(
-                raw_file=group.raw_file,
-                sample_stem=group.sample_stem,
-                precursor_mz=group.precursor_mz,
-                product_mz=group.product_mz,
-                observed_neutral_loss_da=group.observed_neutral_loss_da,
-                best_seed=best_seed,
-                seed_scan_ids=tuple(seed.scan_number for seed in group.seeds),
-                neutral_loss_tag=group.neutral_loss_tag,
-                configured_neutral_loss_da=group.configured_neutral_loss_da,
-                neutral_loss_mass_error_ppm=group.neutral_loss_mass_error_ppm,
-                rt_seed_min=group.rt_seed_min,
-                rt_seed_max=group.rt_seed_max,
-                ms1_search_rt_min=rt_min,
-                ms1_search_rt_max=rt_max,
-                ms1_seed_delta_min=ms1_fields.seed_delta_min,
-                ms1_peak_rt_start=ms1_fields.peak_rt_start,
-                ms1_peak_rt_end=ms1_fields.peak_rt_end,
-                ms1_height=ms1_fields.height,
-                ms1_trace_quality=ms1_fields.trace_quality,
-                ms1_scan_support_score=ms1_fields.scan_support_score,
-                seed_event_count=len(group.seeds),
-                ms1_peak_found=ms1_fields.peak_found,
-                ms1_apex_rt=ms1_fields.apex_rt,
-                ms1_area=ms1_fields.area,
-                ms2_product_max_intensity=max(
-                    seed.product_intensity for seed in group.seeds
-                ),
-                review_priority=priority,
-                reason=reason,
-            )
+        candidate = DiscoveryCandidate.from_values(
+            raw_file=group.raw_file,
+            sample_stem=group.sample_stem,
+            precursor_mz=group.precursor_mz,
+            product_mz=group.product_mz,
+            observed_neutral_loss_da=group.observed_neutral_loss_da,
+            best_seed=best_seed,
+            seed_scan_ids=tuple(seed.scan_number for seed in group.seeds),
+            neutral_loss_tag=group.neutral_loss_tag,
+            configured_neutral_loss_da=group.configured_neutral_loss_da,
+            neutral_loss_mass_error_ppm=group.neutral_loss_mass_error_ppm,
+            rt_seed_min=group.rt_seed_min,
+            rt_seed_max=group.rt_seed_max,
+            ms1_search_rt_min=rt_min,
+            ms1_search_rt_max=rt_max,
+            ms1_seed_delta_min=ms1_fields.seed_delta_min,
+            ms1_peak_rt_start=ms1_fields.peak_rt_start,
+            ms1_peak_rt_end=ms1_fields.peak_rt_end,
+            ms1_height=ms1_fields.height,
+            ms1_trace_quality=ms1_fields.trace_quality,
+            ms1_scan_support_score=ms1_fields.scan_support_score,
+            seed_event_count=len(group.seeds),
+            ms1_peak_found=ms1_fields.peak_found,
+            ms1_apex_rt=ms1_fields.apex_rt,
+            ms1_area=ms1_fields.area,
+            ms2_product_max_intensity=max(
+                seed.product_intensity for seed in group.seeds
+            ),
+            review_priority=priority,
+            reason=reason,
         )
-    return _merge_candidates_by_ms1_peak(candidates, settings=settings)
+        candidates.append(_with_tag_fields(candidate, group=group, settings=settings))
+    return merge_candidates_by_ms1_peak(candidates, settings=settings)
 
 
 def compute_ms1_scan_support_score(
@@ -119,8 +121,8 @@ def compute_ms1_scan_support_score(
     return min(1.0, float(np.count_nonzero(mask)) / float(scans_target))
 
 
-def _merge_candidates_by_ms1_peak(
-    candidates: list[DiscoveryCandidate],
+def merge_candidates_by_ms1_peak(
+    candidates: Iterable[DiscoveryCandidate],
     *,
     settings: DiscoverySettings,
 ) -> tuple[DiscoveryCandidate, ...]:
@@ -138,6 +140,9 @@ def _merge_candidates_by_ms1_peak(
             settings=settings,
         )
     return tuple(merged)
+
+
+_merge_candidates_by_ms1_peak = merge_candidates_by_ms1_peak
 
 
 def _matching_ms1_peak_candidate_index(
@@ -158,10 +163,9 @@ def _can_merge_by_ms1_peak(
     *,
     settings: DiscoverySettings,
 ) -> bool:
-    return (
+    if not (
         first.raw_file == second.raw_file
         and first.sample_stem == second.sample_stem
-        and first.neutral_loss_tag == second.neutral_loss_tag
         and first.ms1_peak_found
         and second.ms1_peak_found
         and _candidate_peak_bounds_present(first)
@@ -171,19 +175,21 @@ def _can_merge_by_ms1_peak(
             second.precursor_mz,
             settings.precursor_mz_tolerance_ppm,
         )
-        and _within_ppm(
+        and _peak_intervals_overlap(first, second)
+        and _seed_ranges_touch_shared_peak(first, second)
+    ):
+        return False
+    if first.neutral_loss_tag == second.neutral_loss_tag:
+        return _within_ppm(
             first.product_mz,
             second.product_mz,
             settings.product_mz_tolerance_ppm,
-        )
-        and _within_ppm(
+        ) and _within_ppm(
             first.observed_neutral_loss_da,
             second.observed_neutral_loss_da,
             settings.nl_tolerance_ppm,
         )
-        and _peak_intervals_overlap(first, second)
-        and _seed_ranges_touch_shared_peak(first, second)
-    )
+    return settings.tag_combine_mode == "union"
 
 
 def _merge_candidate_pair(
@@ -192,7 +198,7 @@ def _merge_candidate_pair(
     *,
     settings: DiscoverySettings,
 ) -> DiscoveryCandidate:
-    representative = _representative_candidate(first, second)
+    representative = _representative_candidate(first, second, settings=settings)
     seed_scan_ids = tuple(sorted(set(first.seed_scan_ids + second.seed_scan_ids)))
     seed_event_count = first.seed_event_count + second.seed_event_count
     rt_seed_min = min(first.rt_seed_min, second.rt_seed_min)
@@ -209,6 +215,10 @@ def _merge_candidate_pair(
         settings=settings,
     )
     reason = "MS2 NL seeds merged by shared MS1 peak; MS1 peak found near seed RT"
+    matched_tag_names = _ordered_tag_names(
+        first.matched_tag_names + second.matched_tag_names,
+        settings=settings,
+    )
     return replace(
         representative,
         seed_event_count=seed_event_count,
@@ -224,16 +234,29 @@ def _merge_candidate_pair(
         ),
         review_priority=priority,
         reason=reason,
+        selected_tag_count=len(settings.selected_tag_names),
+        matched_tag_count=len(matched_tag_names),
+        matched_tag_names=matched_tag_names,
+        primary_tag_name=representative.neutral_loss_tag,
+        tag_combine_mode=settings.tag_combine_mode,
+        tag_intersection_status=_tag_intersection_status(
+            matched_tag_names,
+            settings=settings,
+        ),
+        tag_evidence_json=_merge_tag_evidence_json(first, second),
     )
 
 
 def _representative_candidate(
     first: DiscoveryCandidate,
     second: DiscoveryCandidate,
+    *,
+    settings: DiscoverySettings,
 ) -> DiscoveryCandidate:
     return min(
         (first, second),
         key=lambda candidate: (
+            _tag_rank(candidate.neutral_loss_tag, settings=settings),
             -candidate.ms2_product_max_intensity,
             abs(candidate.neutral_loss_mass_error_ppm),
             candidate.best_seed_rt,
@@ -289,6 +312,196 @@ def _seed_range_touches_peak(
         seed_candidate.rt_seed_min <= peak_end
         and seed_candidate.rt_seed_max >= peak_start
     )
+
+
+def _with_tag_fields(
+    candidate: DiscoveryCandidate,
+    *,
+    group: DiscoverySeedGroup,
+    settings: DiscoverySettings,
+) -> DiscoveryCandidate:
+    matched_tag_names = _ordered_tag_names(group.matched_tag_names, settings=settings)
+    return replace(
+        candidate,
+        selected_tag_count=len(settings.selected_tag_names),
+        matched_tag_count=len(matched_tag_names),
+        matched_tag_names=matched_tag_names,
+        primary_tag_name=group.neutral_loss_tag,
+        tag_combine_mode=settings.tag_combine_mode,
+        tag_intersection_status=_tag_intersection_status(
+            matched_tag_names,
+            settings=settings,
+        ),
+        tag_evidence_json=group.tag_evidence_json,
+    )
+
+
+def _ordered_tag_names(
+    values: Iterable[str],
+    *,
+    settings: DiscoverySettings,
+) -> tuple[str, ...]:
+    unique = {value for value in values if value}
+    return tuple(
+        sorted(unique, key=lambda tag: (_tag_rank(tag, settings=settings), tag))
+    )
+
+
+def _tag_rank(tag: str, *, settings: DiscoverySettings) -> int:
+    try:
+        return settings.selected_tag_names.index(tag)
+    except ValueError:
+        return len(settings.selected_tag_names)
+
+
+def _tag_intersection_status(
+    matched_tag_names: tuple[str, ...],
+    *,
+    settings: DiscoverySettings,
+) -> _TagIntersectionStatus:
+    if settings.tag_combine_mode != "intersection":
+        return "not_required"
+    return (
+        "complete"
+        if set(settings.selected_tag_names).issubset(set(matched_tag_names))
+        else "incomplete"
+    )
+
+
+def _merge_tag_evidence_json(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> str:
+    payload: dict[str, Any] = {}
+    for candidate in (first, second):
+        try:
+            parsed = json.loads(candidate.tag_evidence_json or "{}")
+        except json.JSONDecodeError:
+            parsed = {}
+        if isinstance(parsed, dict):
+            for tag_name, evidence in parsed.items():
+                tag_key = str(tag_name)
+                if not isinstance(evidence, dict):
+                    payload.setdefault(tag_key, evidence)
+                    continue
+                if isinstance(payload.get(tag_key), dict):
+                    payload[tag_key] = _merge_tag_evidence_entry(
+                        cast(dict[str, Any], payload[tag_key]),
+                        cast(dict[str, Any], evidence),
+                    )
+                else:
+                    payload[tag_key] = dict(evidence)
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _merge_tag_evidence_entry(
+    first: dict[str, Any],
+    second: dict[str, Any],
+) -> dict[str, Any]:
+    merged = dict(first)
+    for key, value in second.items():
+        merged.setdefault(key, value)
+
+    scan_ids = sorted(
+        set(_int_values(first.get("scan_ids")))
+        | set(_int_values(second.get("scan_ids")))
+    )
+    if scan_ids:
+        merged["scan_ids"] = scan_ids
+
+    scan_count = _optional_int(first.get("scan_count")) + _optional_int(
+        second.get("scan_count")
+    )
+    if scan_count:
+        merged["scan_count"] = scan_count
+    elif scan_ids:
+        merged["scan_count"] = len(scan_ids)
+
+    _merge_float_min(merged, first, second, "rt_min")
+    _merge_float_max(merged, first, second, "rt_max")
+    _merge_max_intensity_fields(merged, first, second)
+    return merged
+
+
+def _merge_float_min(
+    merged: dict[str, Any],
+    first: dict[str, Any],
+    second: dict[str, Any],
+    key: str,
+) -> None:
+    values = [
+        value
+        for value in (_optional_float(first.get(key)), _optional_float(second.get(key)))
+        if value is not None
+    ]
+    if values:
+        merged[key] = min(values)
+
+
+def _merge_float_max(
+    merged: dict[str, Any],
+    first: dict[str, Any],
+    second: dict[str, Any],
+    key: str,
+) -> None:
+    values = [
+        value
+        for value in (_optional_float(first.get(key)), _optional_float(second.get(key)))
+        if value is not None
+    ]
+    if values:
+        merged[key] = max(values)
+
+
+def _merge_max_intensity_fields(
+    merged: dict[str, Any],
+    first: dict[str, Any],
+    second: dict[str, Any],
+) -> None:
+    first_intensity = _optional_float(first.get("max_intensity"))
+    second_intensity = _optional_float(second.get("max_intensity"))
+    if first_intensity is None and second_intensity is None:
+        return
+    winner = (
+        second
+        if first_intensity is None
+        or (second_intensity is not None and second_intensity > first_intensity)
+        else first
+    )
+    merged["max_intensity"] = _optional_float(winner.get("max_intensity"))
+    for key in ("product_mz", "neutral_loss_error_ppm"):
+        if key in winner:
+            merged[key] = winner[key]
+
+
+def _int_values(value: object) -> tuple[int, ...]:
+    if not isinstance(value, list | tuple):
+        return ()
+    parsed: list[int] = []
+    for item in value:
+        integer = _optional_int(item)
+        if integer:
+            parsed.append(integer)
+    return tuple(parsed)
+
+
+def _optional_int(value: Any) -> int:
+    if value in (None, ""):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _optional_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _within_ppm(a: float, b: float, tolerance_ppm: float) -> bool:

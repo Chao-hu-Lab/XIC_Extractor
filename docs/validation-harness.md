@@ -127,6 +127,121 @@ Workbook comparison uses `scripts\compare_workbooks.py`, which ignores runtime
 metadata such as timestamps and output paths but compares analytical workbook
 sheets.
 
+## Untargeted Alignment 8-raw Fast Path
+
+For untargeted alignment performance work, keep the raw execution settings
+explicit by using the validation fast profile:
+
+```powershell
+uv run python scripts\run_alignment.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --output-dir output\alignment\timing_phase0_validation_fast_8raw `
+  --output-level machine `
+  --emit-alignment-cells `
+  --performance-profile validation-fast `
+  --timing-output output\diagnostics\timing_phase0_validation_fast_8raw\alignment_timing.json
+```
+
+`validation-fast` expands to `raw-workers=8` and `raw-xic-batch-size=64`.
+Explicit `--raw-workers` or `--raw-xic-batch-size` values override the profile.
+The CLI default remains the conservative `1` / `1` execution shape.
+
+Experimental owner-family preconsolidation can be tested as an algorithmic
+fast path. This is not an exact-output mode: it collapses identity-compatible
+single-sample owner families before owner-centered backfill, preserves early
+and late RT seed centers for backfill confirmation, recenters consolidated
+rows from accepted present-cell RTs, and keeps loser rows in the review/audit
+surface.
+
+```powershell
+uv run python scripts\run_alignment.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --output-dir output\alignment\preconsolidate_seed2_min2_8raw `
+  --output-level machine `
+  --emit-alignment-cells `
+  --performance-profile validation-fast `
+  --preconsolidate-owner-families `
+  --owner-backfill-min-detected-samples 2 `
+  --timing-output output\diagnostics\preconsolidate_seed2_min2_8raw\alignment_timing.json
+```
+
+Always run the strict targeted ISTD benchmark before interpreting this mode as
+a production matrix candidate. On the 8-RAW tissue subset, the seed2/min2 run
+passed the strict DNA ISTD gate and reduced owner-backfill vendor calls versus
+the full-backfill validation-fast baseline, while intentionally changing row
+identity consolidation. On the 85-RAW tissue run, the same mode removed the
+false DRIFT failures after recentering; the remaining `d3-N6-medA`
+AREA_MISMATCH also exists in the full-backfill baseline targeted benchmark.
+
+Owner-centered backfill can also be run with the experimental MS1 scan-index
+backend:
+
+```powershell
+uv run python scripts\run_alignment.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --output-dir output\alignment\ms1_index_fast_8raw `
+  --output-level machine `
+  --emit-alignment-cells `
+  --performance-profile validation-fast `
+  --owner-backfill-xic-backend ms1-index `
+  --timing-output output\diagnostics\ms1_index_fast_8raw\alignment_timing.json
+```
+
+`ms1-index` is an explicit approximate fast mode for owner backfill only. It
+does not replace the default vendor XIC path and must be checked with the
+targeted ISTD benchmark before any production interpretation.
+
+When validating whether the scan-index prefilter is the source of a matrix
+change, run the hybrid mode:
+
+```powershell
+uv run python scripts\run_alignment.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --output-dir output\alignment\ms1_index_hybrid_8raw `
+  --output-level machine `
+  --emit-alignment-cells `
+  --performance-profile validation-fast `
+  --owner-backfill-xic-backend ms1-index-hybrid `
+  --timing-output output\diagnostics\ms1_index_hybrid_8raw\alignment_timing.json
+```
+
+`ms1-index-hybrid` uses MS1-index traces as a prefilter, but every rescued
+owner-backfill cell that enters the matrix is re-extracted from the vendor XIC
+path before its RT and area are written. It is an equivalence diagnostic and
+may be slower than the raw backend when the prefilter rejects only a small
+fraction of requests.
+
+The 8-raw timing run on the tissue validation subset showed byte-identical
+machine TSV outputs (`alignment_review.tsv`, `alignment_matrix.tsv`, and
+`alignment_cells.tsv`) versus the conservative baseline, with workbook sheet
+values also unchanged. The alignment command wall time reduced from about
+343 seconds to about 44 seconds; `alignment.cluster_owners` reduced from about
+19 seconds to below 1 second through hard-gate group prefiltering.
+
+To separate exact duplicate requests, batchable scan-window reuse, and
+algorithm-level near redundancy, run the request census diagnostic:
+
+```powershell
+uv run python scripts\analyze_xic_request_locality.py `
+  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
+  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
+  --dll-dir "C:\Xcalibur\system\programs" `
+  --alignment-review output\alignment\timing_phase0_8raw\alignment_review.tsv `
+  --alignment-cells output\alignment\timing_phase0_8raw\alignment_cells.tsv `
+  --raw-xic-batch-size 64 `
+  --near-mz-ppm 20 `
+  --near-rt-sec 30 `
+  --output-json output\diagnostics\timing_phase0_8raw\xic_request_census_batch64.json
+```
+
 ## Full 85-raw Gate
 
 The full run is intentionally opt-in:

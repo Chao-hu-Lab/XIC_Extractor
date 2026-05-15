@@ -225,6 +225,20 @@ def test_extract_xic_many_preserves_order_for_mixed_scan_windows() -> None:
     assert handle.raw_chromatogram_call_count == 2
 
 
+def test_scan_window_for_request_uses_raw_scan_numbers() -> None:
+    from xic_extractor.raw_reader import RawFileHandle
+    from xic_extractor.xic_models import XICRequest
+
+    raw = _FakeRaw()
+    handle = RawFileHandle(raw, _fake_thermo(raw))
+
+    window = handle.scan_window_for_request(
+        XICRequest(mz=258.0, rt_min=8.0, rt_max=10.0, ppm_tol=20.0)
+    )
+
+    assert window == (1, 2)
+
+
 def test_iter_ms2_scans_yields_parsed_scans() -> None:
     from xic_extractor.raw_reader import RawFileHandle
 

@@ -111,6 +111,34 @@ def test_read_discovery_candidates_csv_parses_full_candidate_row(
     assert candidate.seed_scan_ids == (6095, 6098, 6102)
     assert candidate.ms1_seed_delta_min is None
     assert candidate.ms1_scan_support_score == pytest.approx(0.8)
+    assert candidate.matched_tag_names == ("DNA_dR",)
+    assert candidate.matched_tag_count == 1
+    assert candidate.tag_combine_mode == "single"
+
+
+def test_read_discovery_candidates_preserves_multi_tag_evidence(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    row = _candidate_row(
+        selected_tag_count="3",
+        matched_tag_count="2",
+        matched_tag_names="dR;R",
+        primary_tag_name="dR",
+        tag_combine_mode="union",
+        tag_intersection_status="incomplete",
+        tag_evidence_json='{"dR":{"scan_count":1},"R":{"scan_count":1}}',
+    )
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(csv_path, DISCOVERY_CANDIDATE_COLUMNS, [row])
+
+    candidates = read_discovery_candidates_csv(csv_path)
+
+    assert candidates[0].matched_tag_names == ("dR", "R")
+    assert candidates[0].matched_tag_count == 2
+    assert candidates[0].tag_combine_mode == "union"
+    assert "scan_count" in candidates[0].tag_evidence_json
 
 
 def test_read_discovery_candidates_csv_unescapes_known_formula_fields(
@@ -234,6 +262,13 @@ def _candidate_row(**overrides: str) -> dict[str, str]:
         "ms1_height": "2222.2",
         "ms1_trace_quality": "clean",
         "ms1_scan_support_score": "0.8",
+        "selected_tag_count": "1",
+        "matched_tag_count": "1",
+        "matched_tag_names": "DNA_dR",
+        "primary_tag_name": "DNA_dR",
+        "tag_combine_mode": "single",
+        "tag_intersection_status": "not_required",
+        "tag_evidence_json": '{"DNA_dR":{"scan_count":3}}',
     }
     row.update(overrides)
     return row

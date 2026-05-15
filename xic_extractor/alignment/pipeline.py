@@ -30,6 +30,10 @@ from xic_extractor.alignment.family_integration import integrate_feature_family_
 from xic_extractor.alignment.feature_family import build_ms1_feature_families
 from xic_extractor.alignment.html_report import write_alignment_review_html
 from xic_extractor.alignment.matrix import AlignmentMatrix
+from xic_extractor.alignment.ms1_index_source import (
+    OwnerBackfillXicBackend,
+    source_for_owner_backfill_backend,
+)
 from xic_extractor.alignment.output_levels import (
     AlignmentOutputLevel,
     artifact_names_for_output_level,
@@ -43,6 +47,13 @@ from xic_extractor.alignment.owner_matrix import build_owner_alignment_matrix
 from xic_extractor.alignment.ownership import (
     OwnershipBuildResult,
     build_sample_local_owners,
+)
+from xic_extractor.alignment.pre_backfill_consolidation import (
+    consolidate_pre_backfill_identity_families,
+    recenter_pre_backfill_identity_families,
+)
+from xic_extractor.alignment.primary_consolidation import (
+    consolidate_primary_family_rows,
 )
 from xic_extractor.alignment.process_backend import (
     run_owner_backfill_process,
@@ -95,6 +106,8 @@ def run_alignment(
     raw_opener: RawOpener | None = None,
     raw_workers: int = 1,
     raw_xic_batch_size: int = 1,
+    owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw",
+    preconsolidate_owner_families: bool = False,
     drift_lookup: DriftLookupProtocol | None = None,
     timing_recorder: TimingRecorder | None = None,
 ) -> AlignmentRunOutputs:
@@ -109,6 +122,8 @@ def run_alignment(
         metrics={
             "raw_workers": raw_workers,
             "raw_xic_batch_size": raw_xic_batch_size,
+            "owner_backfill_xic_backend": owner_backfill_xic_backend,
+            "preconsolidate_owner_families": preconsolidate_owner_families,
             "output_level": output_level,
             "drift_prior_source": (
                 drift_lookup.source if drift_lookup is not None else "none"
@@ -217,6 +232,12 @@ def run_alignment(
                     start_index=len(owner_features) + 1,
                 ),
             )
+        if preconsolidate_owner_families:
+            with recorder.stage("alignment.pre_backfill_consolidation"):
+                owner_features = consolidate_pre_backfill_identity_families(
+                    owner_features,
+                    config=alignment_config,
+                )
         with recorder.stage("alignment.owner_backfill"):
             if raw_workers > 1:
                 process_output = run_owner_backfill_process(
@@ -228,6 +249,7 @@ def run_alignment(
                     peak_config=peak_config,
                     max_workers=raw_workers,
                     raw_xic_batch_size=raw_xic_batch_size,
+                    owner_backfill_xic_backend=owner_backfill_xic_backend,
                 )
                 rescued_cells = process_output.cells
                 for backfill_stats in process_output.timing_stats:
@@ -247,20 +269,31 @@ def run_alignment(
                         },
                     )
             else:
-                timed_raw_sources = _timed_raw_sources(
+                (
+                    timed_raw_sources,
+                    validation_raw_sources,
+                    timing_stats,
+                ) = _timed_owner_backfill_sources(
                     raw_sources,
+                    backend=owner_backfill_xic_backend,
                     recorder=recorder,
                     stage="alignment.owner_backfill.extract_xic",
+                )
+                validation_kwargs = (
+                    {"validation_raw_sources": validation_raw_sources}
+                    if validation_raw_sources is not None
+                    else {}
                 )
                 rescued_cells = build_owner_backfill_cells(
                     owner_features,
                     sample_order=batch.sample_order,
                     raw_sources=timed_raw_sources,
+                    **validation_kwargs,
                     alignment_config=alignment_config,
                     peak_config=peak_config,
                     raw_xic_batch_size=raw_xic_batch_size,
                 )
-                _record_timed_raw_sources(timed_raw_sources, recorder=recorder)
+                _record_raw_source_timing_stats(timing_stats, recorder=recorder)
         with recorder.stage("alignment.build_matrix"):
             matrix = build_owner_alignment_matrix(
                 owner_features,
@@ -270,6 +303,10 @@ def run_alignment(
             )
         with recorder.stage("alignment.claim_registry"):
             matrix = apply_ms1_peak_claim_registry(matrix, alignment_config)
+        with recorder.stage("alignment.primary_consolidation"):
+            matrix = consolidate_primary_family_rows(matrix, alignment_config)
+        with recorder.stage("alignment.pre_backfill_recenter"):
+            matrix = recenter_pre_backfill_identity_families(matrix)
         with recorder.stage("alignment.write_outputs"):
             _write_outputs_atomic(
                 outputs,
@@ -278,6 +315,7 @@ def run_alignment(
                     discovery_batch_index=discovery_batch_index,
                     raw_dir=raw_dir,
                     dll_dir=dll_dir,
+                    owner_backfill_xic_backend=owner_backfill_xic_backend,
                     output_level=output_level,
                     peak_config=peak_config,
                 ),
@@ -385,6 +423,9 @@ class _TimedRawSource:
             traces.append(XICTrace.from_arrays(rt, intensity))
         return tuple(traces)
 
+    def scan_window_for_request(self, request):
+        return self._source.scan_window_for_request(request)
+
 
 def _timed_raw_sources(
     raw_sources: dict[str, AlignmentRawHandle],
@@ -401,13 +442,49 @@ def _timed_raw_sources(
     }
 
 
+def _timed_owner_backfill_sources(
+    raw_sources: dict[str, AlignmentRawHandle],
+    *,
+    backend: OwnerBackfillXicBackend,
+    recorder: TimingRecorder,
+    stage: str,
+) -> tuple[
+    dict[str, _TimedRawSource],
+    dict[str, _TimedRawSource] | None,
+    tuple[_RawSourceTimingStats, ...],
+]:
+    backfill_sources: dict[str, _TimedRawSource] = {}
+    validation_sources: dict[str, _TimedRawSource] | None = (
+        {} if backend == "ms1_index_hybrid" else None
+    )
+    timing_stats: list[_RawSourceTimingStats] = []
+    for sample_stem, source in raw_sources.items():
+        stats = _RawSourceTimingStats(sample_stem=sample_stem, stage=stage)
+        timing_stats.append(stats)
+        backfill_source = source_for_owner_backfill_backend(source, backend)
+        backfill_sources[sample_stem] = _TimedRawSource(backfill_source, stats=stats)
+        if validation_sources is not None:
+            validation_sources[sample_stem] = _TimedRawSource(source, stats=stats)
+    return backfill_sources, validation_sources, tuple(timing_stats)
+
+
 def _record_timed_raw_sources(
     raw_sources: dict[str, _TimedRawSource],
     *,
     recorder: TimingRecorder,
 ) -> None:
-    for source in raw_sources.values():
-        stats = source._stats
+    _record_raw_source_timing_stats(
+        tuple(source._stats for source in raw_sources.values()),
+        recorder=recorder,
+    )
+
+
+def _record_raw_source_timing_stats(
+    timing_stats: tuple[_RawSourceTimingStats, ...],
+    *,
+    recorder: TimingRecorder,
+) -> None:
+    for stats in timing_stats:
         if stats.extract_xic_count == 0:
             continue
         recorder.record(
@@ -663,6 +740,7 @@ def _metadata(
     discovery_batch_index: Path,
     raw_dir: Path,
     dll_dir: Path,
+    owner_backfill_xic_backend: OwnerBackfillXicBackend,
     output_level: AlignmentOutputLevel,
     peak_config: ExtractionConfig,
 ) -> dict[str, str]:
@@ -671,6 +749,7 @@ def _metadata(
         "discovery_batch_index": str(discovery_batch_index),
         "raw_dir": str(raw_dir),
         "dll_dir": str(dll_dir),
+        "owner_backfill_xic_backend": owner_backfill_xic_backend,
         "output_level": output_level,
         "resolver_mode": peak_config.resolver_mode,
     }

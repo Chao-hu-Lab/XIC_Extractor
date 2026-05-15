@@ -98,11 +98,11 @@ def format_discovery_csv_value(column: str, value: object) -> str:
         return ""
     if isinstance(value, bool):
         return "TRUE" if value else "FALSE"
-    if column == "seed_scan_ids":
+    if column in {"seed_scan_ids", "matched_tag_names"}:
         if isinstance(value, str):
             return value
         if isinstance(value, tuple):
-            return ";".join(str(scan_id) for scan_id in value)
+            return ";".join(str(item) for item in value)
         return str(value)
     if isinstance(value, Path):
         return _escape_excel_formula(str(value))
