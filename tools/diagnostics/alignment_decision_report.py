@@ -349,13 +349,50 @@ def _run_verdict_section(report: Mapping[str, Any]) -> str:
     ]
     runtime_table = ""
     if top_stage_rows:
-        runtime_table = "<h3>Runtime Stages</h3>" + _table(
+        runtime_table = "<h3>Runtime Stages</h3>" + _bar_list(
+            (
+                (str(row[0]), _float_value(row[1], default=0.0), "runtime")
+                for row in top_stage_rows
+            ),
+            empty="Runtime stages not provided.",
+        ) + _details_table(
             ("Stage", "Elapsed Sec"),
             top_stage_rows,
+            label="Runtime stage table",
         )
+    visual = (
+        '<div class="visual-panel">'
+        + _status_cards(
+            (
+                ("Matrix Rows", run["matrix_row_count"], "neutral"),
+                ("Samples", run["sample_count"], "neutral"),
+                ("ISTD Pass", run["istd_pass_count"], "pass"),
+                ("ISTD Known", run["istd_known_count"], "warn"),
+                ("ISTD Fail", run["istd_fail_count"], "fail"),
+            )
+        )
+        + "<h3>Identity Mix</h3>"
+        + _stacked_bar(
+            (
+                (
+                    "production_family",
+                    identity.get("production_family", 0),
+                    "production",
+                ),
+                (
+                    "provisional_discovery",
+                    identity.get("provisional_discovery", 0),
+                    "provisional",
+                ),
+                ("audit_family", identity.get("audit_family", 0), "audit"),
+            )
+        )
+        + "</div>"
+    )
     return _section(
         "Run Verdict",
-        _metric_grid(
+        visual
+        + _metric_grid(
             (
                 ("Verdict", report["verdict"]),
                 ("Alignment Dir", report["alignment_dir"]),
@@ -377,6 +414,7 @@ def _run_verdict_section(report: Mapping[str, Any]) -> str:
 def _istd_section(istd: Mapping[str, Any]) -> str:
     if not istd["provided"]:
         return _section("ISTD Benchmark", _not_provided_html(istd["reason"]))
+    tiles = "".join(_istd_tile(row) for row in istd["rows"])
     headers = (
         "Target",
         "Status",
@@ -406,11 +444,58 @@ def _istd_section(istd: Mapping[str, Any]) -> str:
         )
         for row in istd["rows"]
     ]
-    return _section("ISTD Benchmark", _table(headers, rows))
+    return _section(
+        "ISTD Benchmark",
+        f'<div class="istd-board">{tiles}</div>'
+        + _details_table(headers, rows, label="ISTD benchmark table"),
+    )
 
 
 def _cleanliness_section(cleanliness: Mapping[str, Any]) -> str:
     flags = cleanliness["flag_counts"]
+    identity = cleanliness["identity_counts"]
+    visual = (
+        '<div class="visual-panel">'
+        + "<h3>Primary Matrix Warning Load</h3>"
+        + _bar_list(
+            (
+                (
+                    "Zero-present rows",
+                    cleanliness["zero_present_row_count"],
+                    "fail",
+                ),
+                (
+                    "duplicate_claim_pressure",
+                    flags["duplicate_claim_pressure"],
+                    "warn",
+                ),
+                (
+                    "high_backfill_dependency",
+                    flags["high_backfill_dependency"],
+                    "warn",
+                ),
+                ("rescue_heavy", flags["rescue_heavy"], "rescue"),
+            ),
+            empty="No matrix cleanliness warnings.",
+        )
+        + "<h3>All Review Row Identity Mix</h3>"
+        + _stacked_bar(
+            (
+                (
+                    "production_family",
+                    identity.get("production_family", 0),
+                    "production",
+                ),
+                (
+                    "provisional_discovery",
+                    identity.get("provisional_discovery", 0),
+                    "provisional",
+                ),
+                ("audit_family", identity.get("audit_family", 0), "audit"),
+            )
+        )
+        + "</div>"
+    )
     metrics = _metric_grid(
         (
             ("Primary Rows", cleanliness["primary_row_count"]),
@@ -433,7 +518,7 @@ def _cleanliness_section(cleanliness: Mapping[str, Any]) -> str:
         )
         for row in cleanliness["top_warning_rows"]
     ]
-    table = _table(
+    table = _details_table(
         (
             "Feature",
             "Identity",
@@ -445,14 +530,66 @@ def _cleanliness_section(cleanliness: Mapping[str, Any]) -> str:
         ),
         rows,
         empty="No primary cleanliness warnings.",
+        label="Top warning rows table",
     )
-    return _section("Matrix Cleanliness", metrics + table)
+    return _section("Matrix Cleanliness", visual + metrics + table)
 
 
 def _economics_section(economics: Mapping[str, Any]) -> str:
     if not economics["provided"]:
         return _section("Backfill Economics", _not_provided_html(economics["reason"]))
     totals = economics["totals"]
+    request_total = _float_value(totals.get("request_target_count", 0), default=0.0)
+    production = _float_value(
+        totals.get("production_request_target_count", 0),
+        default=0.0,
+    )
+    non_primary = _float_value(
+        totals.get("non_primary_request_target_count", 0),
+        default=0.0,
+    )
+    rescued = _float_value(totals.get("rescued_target_count", 0), default=0.0)
+    absent = _float_value(totals.get("absent_target_count", 0), default=0.0)
+    duplicate = _float_value(
+        totals.get("duplicate_assigned_target_count", 0),
+        default=0.0,
+    )
+    outcome_other = max(request_total - rescued - absent - duplicate, 0.0)
+    visual = (
+        '<div class="visual-panel">'
+        + "<h3>Request Ownership</h3>"
+        + _stacked_bar(
+            (
+                ("Production", production, "production"),
+                ("Non-primary", non_primary, "audit"),
+            )
+        )
+        + "<h3>Request Outcomes</h3>"
+        + _stacked_bar(
+            (
+                ("Rescued", rescued, "production"),
+                ("Absent", absent, "fail"),
+                ("Duplicate", duplicate, "warn"),
+                ("Other", outcome_other, "neutral"),
+            )
+        )
+        + "<h3>Largest Feature Costs</h3>"
+        + _bar_list(
+            (
+                (
+                    str(row.get("feature_family_id", "")),
+                    _float_value(
+                        row.get("request_extract_count_estimate", 0),
+                        default=0.0,
+                    ),
+                    _identity_color(str(row.get("identity_decision", ""))),
+                )
+                for row in economics["top_expensive_families"][:12]
+            ),
+            empty="No feature-level economics rows.",
+        )
+        + "</div>"
+    )
     metrics = _metric_grid(
         (
             ("Request Targets", totals.get("request_target_count", 0)),
@@ -498,9 +635,22 @@ def _economics_section(economics: Mapping[str, Any]) -> str:
     ]
     return _section(
         "Backfill Economics",
-        metrics
+        visual
+        + metrics
         + "<h3>By Identity / Tag</h3>"
-        + _table(
+        + _bar_list(
+            (
+                (
+                    f"{row.get('identity_decision', '')} / "
+                    f"{row.get('neutral_loss_tag', '')}",
+                    _float_value(row.get("request_target_count", 0), default=0.0),
+                    _identity_color(str(row.get("identity_decision", ""))),
+                )
+                for row in economics["summary"]
+            ),
+            empty="No eligible backfill requests.",
+        )
+        + _details_table(
             (
                 "Identity",
                 "Tag",
@@ -514,9 +664,10 @@ def _economics_section(economics: Mapping[str, Any]) -> str:
             ),
             summary_rows,
             empty="No eligible backfill requests.",
+            label="Backfill identity and tag table",
         )
         + "<h3>Top Expensive Families</h3>"
-        + _table(
+        + _details_table(
             (
                 "Feature",
                 "Tag",
@@ -531,6 +682,7 @@ def _economics_section(economics: Mapping[str, Any]) -> str:
             ),
             feature_rows,
             empty="No feature-level economics rows.",
+            label="Top expensive families table",
         ),
     )
 
@@ -561,6 +713,136 @@ def _table(
         for row in rows
     )
     return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+
+
+def _details_table(
+    headers: Sequence[str],
+    rows: Sequence[Sequence[Any]],
+    *,
+    label: str,
+    empty: str = "No rows.",
+) -> str:
+    return (
+        f'<details class="data-table"><summary>{_h(label)}</summary>'
+        + _table(headers, rows, empty=empty)
+        + "</details>"
+    )
+
+
+def _status_cards(items: Sequence[tuple[str, Any, str]]) -> str:
+    cards = "".join(
+        f'<div class="status-card tone-{_h(tone)}">'
+        f"<span>{_h(label)}</span><strong>{_h(_fmt(value))}</strong></div>"
+        for label, value, tone in items
+    )
+    return f'<div class="status-cards">{cards}</div>'
+
+
+def _stacked_bar(segments: Sequence[tuple[str, Any, str]]) -> str:
+    values = [
+        (label, max(_float_value(value, default=0.0), 0.0), tone)
+        for label, value, tone in segments
+    ]
+    total = sum(value for _label, value, _tone in values)
+    if total <= 0:
+        return '<p class="muted">No values to chart.</p>'
+    bars = "".join(
+        f'<span class="stack-segment tone-{_h(tone)}" '
+        f'style="width:{_percent(value, total):.3f}%"></span>'
+        for _label, value, tone in values
+        if value > 0
+    )
+    legend = "".join(
+        f'<span><i class="legend-dot tone-{_h(tone)}"></i>'
+        f"{_h(label)} {_h(_fmt(value))}</span>"
+        for label, value, tone in values
+        if value > 0
+    )
+    return f'<div class="stacked-bar">{bars}</div><div class="legend">{legend}</div>'
+
+
+def _bar_list(
+    rows: Sequence[tuple[str, Any, str]] | Any,
+    *,
+    empty: str,
+) -> str:
+    values = [
+        (label, max(_float_value(value, default=0.0), 0.0), tone)
+        for label, value, tone in rows
+    ]
+    if not values:
+        return f'<p class="muted">{_h(empty)}</p>'
+    max_value = max((value for _label, value, _tone in values), default=0.0)
+    if max_value <= 0:
+        return f'<p class="muted">{_h(empty)}</p>'
+    body = "".join(
+        '<div class="bar-row">'
+        f'<span class="bar-label">{_h(label)}</span>'
+        '<span class="bar-track">'
+        f'<span class="bar-fill tone-{_h(tone)}" '
+        f'style="width:{_percent(value, max_value):.3f}%"></span>'
+        "</span>"
+        f'<strong>{_h(_fmt(value))}</strong>'
+        "</div>"
+        for label, value, tone in values
+    )
+    return f'<div class="bar-list">{body}</div>'
+
+
+def _istd_tile(row: Mapping[str, Any]) -> str:
+    status = str(row.get("status", "UNKNOWN")).lower()
+    if row.get("known"):
+        tone = "warn"
+    elif status == "pass":
+        tone = "pass"
+    else:
+        tone = "fail"
+    known = '<span class="known-chip">KNOWN</span>' if row.get("known") else ""
+    spearman = _float_value(row.get("spearman", ""), default=0.0)
+    pearson = _float_value(row.get("pearson", ""), default=0.0)
+    rt_p95 = _float_value(row.get("rt_p95", ""), default=0.0)
+    rt_score = max(0.0, 1.0 - min(rt_p95 / 0.30, 1.0))
+    return (
+        f'<article class="istd-tile tone-{_h(tone)}">'
+        f"<header><strong>{_h(row.get('target_label', ''))}</strong>{known}</header>"
+        f'<div class="tile-meta">{_h(row.get("status", ""))} · '
+        f'{_h(row.get("selected_family", ""))}</div>'
+        + _mini_meter("Spearman", spearman)
+        + _mini_meter("Pearson", pearson)
+        + _mini_meter("RT p95 score", rt_score)
+        + f'<div class="tile-foot">{_h(row.get("coverage", ""))}</div>'
+        + f'<div class="tile-foot">{_h(row.get("failure_modes", ""))}</div>'
+        "</article>"
+    )
+
+
+def _mini_meter(label: str, value: float) -> str:
+    clamped = max(0.0, min(value, 1.0))
+    return (
+        '<div class="mini-meter">'
+        f"<span>{_h(label)}</span>"
+        '<span class="mini-track">'
+        f'<span style="width:{clamped * 100:.3f}%"></span>'
+        "</span>"
+        f"<b>{_h(_fmt(value))}</b>"
+        "</div>"
+    )
+
+
+def _identity_color(identity_decision: str) -> str:
+    if identity_decision == "production_family":
+        return "production"
+    if identity_decision == "provisional_discovery":
+        return "provisional"
+    if identity_decision == "audit_family":
+        return "audit"
+    return "neutral"
+
+
+def _percent(value: float, total: float) -> float:
+    if total <= 0:
+        return 0.0
+    return max(0.0, min((value / total) * 100.0, 100.0))
 
 
 def _not_provided_html(reason: str) -> str:
@@ -714,13 +996,19 @@ def _fmt(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, float):
+        if abs(value) >= 1000 and value.is_integer():
+            return f"{value:,.0f}"
         return f"{value:.4g}"
     text = str(value)
     try:
         number = float(text)
     except ValueError:
         return text
-    if math.isfinite(number) and any(ch in text for ch in ".eE"):
+    if not math.isfinite(number):
+        return text
+    if abs(number) >= 1000 and number.is_integer():
+        return f"{number:,.0f}"
+    if any(ch in text for ch in ".eE"):
         return f"{number:.4g}"
     return text
 
@@ -733,36 +1021,37 @@ def _css() -> str:
     return """
 :root {
   color-scheme: light;
-  font-family: "Segoe UI", Arial, sans-serif;
-  color: #1f2933;
-  background: #f7f8fa;
+  font-family: "Aptos", "Segoe UI", sans-serif;
+  color: #17202a;
+  background: #f3f4f1;
 }
 body {
   margin: 0;
 }
 main {
-  max-width: 1180px;
+  max-width: 1240px;
   margin: 0 auto;
-  padding: 28px 28px 48px;
+  padding: 30px 28px 52px;
 }
 h1 {
   margin: 0 0 16px;
-  font-size: 28px;
+  font-size: 30px;
 }
 h2 {
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   font-size: 20px;
 }
 h3 {
-  margin: 20px 0 8px;
+  margin: 20px 0 10px;
   font-size: 15px;
 }
 section {
   background: #fff;
-  border: 1px solid #d9dee7;
+  border: 1px solid #d8ddd7;
   border-radius: 8px;
   margin-top: 18px;
   padding: 18px;
+  box-shadow: 0 12px 24px rgba(24, 35, 43, 0.05);
 }
 .verdict {
   display: inline-block;
@@ -774,14 +1063,208 @@ section {
 .verdict-pass { background: #dcfce7; color: #14532d; }
 .verdict-warn { background: #fef3c7; color: #78350f; }
 .verdict-fail { background: #fee2e2; color: #7f1d1d; }
+.visual-panel {
+  border: 1px solid #d9ded8;
+  border-radius: 8px;
+  background: #fbfcf9;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.status-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
+  gap: 10px;
+}
+.status-card {
+  border-left: 6px solid #87929a;
+  border-radius: 7px;
+  background: #fff;
+  padding: 10px 12px;
+}
+.status-card span {
+  display: block;
+  color: #59636f;
+  font-size: 12px;
+}
+.status-card strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 24px;
+}
+.stacked-bar {
+  display: flex;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e7e9e4;
+  border: 1px solid #d5d9d1;
+}
+.stack-segment {
+  min-width: 2px;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 9px;
+  color: #4b5563;
+  font-size: 12px;
+}
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+.bar-list {
+  display: grid;
+  gap: 8px;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 230px) 1fr minmax(54px, auto);
+  gap: 10px;
+  align-items: center;
+}
+.bar-label {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: #334155;
+}
+.bar-track {
+  display: block;
+  height: 14px;
+  border-radius: 999px;
+  background: #e8ece7;
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+.bar-row strong {
+  text-align: right;
+  font-size: 12px;
+}
+.istd-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.istd-tile {
+  border: 1px solid #dce1db;
+  border-top: 5px solid #87929a;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+.istd-tile header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.known-chip {
+  background: #fef3c7;
+  border-radius: 999px;
+  color: #78350f;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 7px;
+}
+.tile-meta, .tile-foot {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.mini-meter {
+  display: grid;
+  grid-template-columns: 80px 1fr 44px;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.mini-track {
+  display: block;
+  height: 7px;
+  border-radius: 999px;
+  background: #e9ece7;
+  overflow: hidden;
+}
+.mini-track span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #2f855a;
+}
+.tone-pass,
+.tone-production { border-color: #2f855a; }
+.tone-pass.stack-segment,
+.tone-production.stack-segment,
+.tone-pass.bar-fill,
+.tone-production.bar-fill,
+.tone-pass.legend-dot,
+.tone-production.legend-dot {
+  background: #2f855a;
+}
+.tone-warn { border-color: #d97706; }
+.tone-warn.stack-segment,
+.tone-warn.bar-fill,
+.tone-warn.legend-dot {
+  background: #d97706;
+}
+.tone-fail { border-color: #dc2626; }
+.tone-fail.stack-segment,
+.tone-fail.bar-fill,
+.tone-fail.legend-dot {
+  background: #dc2626;
+}
+.tone-provisional { border-color: #2563eb; }
+.tone-provisional.stack-segment,
+.tone-provisional.bar-fill,
+.tone-provisional.legend-dot {
+  background: #2563eb;
+}
+.tone-audit { border-color: #6b7280; }
+.tone-audit.stack-segment,
+.tone-audit.bar-fill,
+.tone-audit.legend-dot {
+  background: #6b7280;
+}
+.tone-rescue { border-color: #7c3aed; }
+.tone-rescue.stack-segment,
+.tone-rescue.bar-fill,
+.tone-rescue.legend-dot {
+  background: #7c3aed;
+}
+.tone-neutral { border-color: #64748b; }
+.tone-neutral.stack-segment,
+.tone-neutral.bar-fill,
+.tone-neutral.legend-dot {
+  background: #64748b;
+}
+.tone-runtime { border-color: #0f766e; }
+.tone-runtime.stack-segment,
+.tone-runtime.bar-fill,
+.tone-runtime.legend-dot {
+  background: #0f766e;
+}
 .metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
-  margin: 0;
+  margin: 14px 0 0;
 }
 .metrics div {
-  border: 1px solid #e5e9f0;
+  border: 1px solid #e5e8e2;
   border-radius: 6px;
   padding: 10px;
   min-width: 0;
@@ -800,9 +1283,10 @@ table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  margin-top: 10px;
 }
 th, td {
-  border-bottom: 1px solid #e5e9f0;
+  border-bottom: 1px solid #e5e8e2;
   padding: 7px 8px;
   text-align: left;
   vertical-align: top;
@@ -814,6 +1298,14 @@ th {
 }
 .muted, .not-provided {
   color: #64748b;
+}
+details.data-table {
+  margin-top: 14px;
+}
+details.data-table summary {
+  cursor: pointer;
+  color: #334155;
+  font-weight: 700;
 }
 """.strip()
 

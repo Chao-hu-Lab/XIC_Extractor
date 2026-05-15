@@ -46,6 +46,11 @@ def test_alignment_decision_report_renders_four_sections_and_known_exception(
     assert "d3-N6-medA" in html
     assert "KNOWN" in html
     assert "alignment.write_outputs" in html
+    assert 'class="visual-panel"' in html
+    assert 'class="stacked-bar"' in html
+    assert 'class="bar-list"' in html
+    assert 'class="istd-board"' in html
+    assert '<details class="data-table">' in html
 
 
 def test_alignment_decision_report_fails_on_unhandled_istd_failure(
