@@ -1,6 +1,8 @@
 # Alignment Clustering Performance Spec
 
-**Status:** Tier 0 implemented and verified; Tier 1 and Tier 2 not yet implemented
+**Status:** Tier 0 implemented and verified. Tier 1 and Tier 2 deprioritized —
+post-Tier-0 85-RAW timing triggered Stop Condition 4 (`cluster_owners` is no
+longer the dominant stage; `owner_backfill` now dominates).
 **Date:** 2026-05-15
 **Branch:** `codex/algorithm-performance-optimization`
 **Worktree:** `C:\Users\user\Desktop\XIC_Extractor\.worktrees\algorithm-performance-optimization`
@@ -49,6 +51,7 @@ time and are excluded from this table.
 | 8-RAW, multi-tag, drift, **Tier 0 fix** (prefilter **ON**) | 4,031 | **0.4 s** | 23.4 s | 18.3 s | 3.8 s |
 | 85-RAW, single-tag, no drift (prefilter **ON**) | 30,289 | **106 s** | 1,574 s | 90 s | 316 s |
 | 85-RAW, single-tag, drift (prefilter **OFF**) | 30,289 | **2,118 s** | 672 s | 103 s | 108 s |
+| 85-RAW, multi-tag, drift, **Tier 0 fix** (prefilter **ON**) | 39,287 | **68.9 s** | 1,157 s | 146 s | 176 s |
 
 Sources:
 `output/diagnostics/final_identity_contract_8raw_20260514/alignment_timing.json`,
@@ -206,7 +209,17 @@ because skipping `_edge_for_pair` also skips appending that pair's
 
 ### Tier 1: (neutral_loss_tag, m/z) bucketing index
 
-**Prerequisite:** Tier 0 landed and verified.
+**Deprioritized 2026-05-15 — Stop Condition 4 triggered.** The post-Tier-0
+85-RAW multi-tag drift run measured `cluster_owners` at 68.9 s, ~4.4% of the
+~26-minute wall time. `owner_backfill` (1,157 s, I/O-bound) now dominates.
+Bucketing would, optimistically, take `cluster_owners` from ~69 s toward ~10 s
+— roughly a 1-minute saving on a 26-minute run. That is not worth the
+implementation and equivalence-proof cost while `owner_backfill` is the bottleneck.
+Tier 1 should only be revisited if a future change makes `cluster_owners`
+dominant again (much larger batches, or after `owner_backfill` is optimized on
+its own axis — see the prior performance spec).
+
+**Prerequisite (if revisited):** Tier 0 landed and verified.
 
 **Goal:** Replace the "owner vs every existing group" scan with a bucketed
 candidate lookup, turning O(n^2.3) into approximately O(n * k) where k is the
@@ -243,7 +256,10 @@ majority of structurally-impossible pairs without evaluating them.
 
 ### Tier 2: Vectorize the numeric edge core within buckets
 
-**Prerequisite:** Tier 1 landed and verified.
+**Deprioritized 2026-05-15** — cascades from Tier 1 (Stop Condition 4). Vectorizing
+a 68.9 s stage that is ~4.4% of wall time is not worth the equivalence-proof cost.
+
+**Prerequisite (if revisited):** Tier 1 landed and verified.
 
 **Goal:** Within a bucket's k owners, replace the k^2 Python `evaluate_owner_edge`
 calls and dataclass allocations with NumPy array operations for the numeric
