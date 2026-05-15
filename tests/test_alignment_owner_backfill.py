@@ -252,6 +252,53 @@ def test_owner_backfill_uses_batch_source_and_preserves_feature_major_order() ->
     ]
 
 
+def test_owner_backfill_deduplicates_identical_xic_requests() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class BatchSource:
+        def __init__(self) -> None:
+            self.batch_sizes: list[int] = []
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.batch_sizes.append(len(requests))
+            return tuple(
+                XICTrace.from_arrays(
+                    [
+                        (request.rt_min + request.rt_max) / 2.0 - 0.10,
+                        (request.rt_min + request.rt_max) / 2.0 - 0.01,
+                        (request.rt_min + request.rt_max) / 2.0,
+                        (request.rt_min + request.rt_max) / 2.0 + 0.01,
+                        (request.rt_min + request.rt_max) / 2.0 + 0.10,
+                    ],
+                    [0.0, 50.0, 120.0, 50.0, 0.0],
+                )
+                for request in requests
+            )
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source = BatchSource()
+    feature_a = _feature(feature_family_id="FAM000001", mz=500.0, rt=8.5)
+    feature_b = _feature(feature_family_id="FAM000002", mz=500.0, rt=8.5)
+
+    cells = build_owner_backfill_cells(
+        (feature_a, feature_b),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=64,
+    )
+
+    assert source.batch_sizes == [1]
+    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
+        ("FAM000001", "sample-b"),
+        ("FAM000002", "sample-b"),
+    ]
+
+
 def test_owner_backfill_validates_prefilter_hits_with_secondary_source() -> None:
     from xic_extractor.xic_models import XICTrace
 

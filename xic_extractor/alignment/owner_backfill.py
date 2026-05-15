@@ -392,6 +392,18 @@ def _extract_many(
     source: OwnerBackfillSource,
     requests: tuple[XICRequest, ...],
 ) -> tuple[XICTrace, ...]:
+    unique_requests = tuple(dict.fromkeys(requests))
+    if len(unique_requests) != len(requests):
+        unique_traces = _extract_unique_many(source, unique_requests)
+        traces_by_request = dict(zip(unique_requests, unique_traces, strict=True))
+        return tuple(traces_by_request[request] for request in requests)
+    return _extract_unique_many(source, requests)
+
+
+def _extract_unique_many(
+    source: OwnerBackfillSource,
+    requests: tuple[XICRequest, ...],
+) -> tuple[XICTrace, ...]:
     if hasattr(source, "extract_xic_many"):
         return tuple(source.extract_xic_many(requests))  # type: ignore[attr-defined]
     traces: list[XICTrace] = []

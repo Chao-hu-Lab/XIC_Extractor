@@ -92,3 +92,27 @@ Validation evidence:
 
 The gate removes most detected-owner confirmation requests while preserving
 primary-matrix output equivalence on the real 8RAW and 85RAW validations.
+
+## Phase C: Exact Duplicate Request De-Duplication
+
+Within a single sample, identical `XICRequest` objects can safely share one RAW
+trace. The runtime now de-duplicates exact request objects before calling
+`extract_xic_many`, then fans the trace back out to the original feature/sample
+request order.
+
+This is intentionally narrow:
+
+- only exact same `mz`, `rt_min`, `rt_max`, and `ppm_tol` are shared;
+- output order and feature/sample assignment are preserved;
+- no approximate m/z or RT merging is introduced.
+
+Validation evidence:
+
+- 8RAW multi-tag Matrix/Review/Cells TSV hashes match the previous output.
+- 85RAW multi-tag Matrix/Review/Cells TSV hashes match the previous output.
+- 85RAW strict ISTD benchmark remains unchanged: only the known targeted-side
+  `d3-N6-medA` `AREA_MISMATCH` fails.
+- 85RAW owner_backfill time changed from `550.03s` to `545.36s`.
+
+Conclusion: this is worth keeping as an exact-safe cleanup, but it is not the
+main performance lever.
