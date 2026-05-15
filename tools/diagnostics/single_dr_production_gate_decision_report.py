@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
-import math
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from tools.diagnostics.single_dr_gate_decision_loaders import (
+    load_discovery_candidates,
+    load_rt_context,
+    load_targeted_istd_context,
+    read_tsv,
+)
+from tools.diagnostics.single_dr_gate_decision_writers import write_outputs
 from xic_extractor.alignment.identity_gates import (
     EXTREME_BACKFILL_REASON,
     WEAK_SEED_BACKFILL_REASON,
@@ -30,57 +35,6 @@ _REVIEW_REQUIRED_COLUMNS = (
     "include_in_primary_matrix",
 )
 _CELLS_REQUIRED_COLUMNS = ("feature_family_id", "sample_stem", "status")
-
-_SUMMARY_COLUMNS = ("metric", "value")
-_FAMILY_COLUMNS = (
-    "feature_family_id",
-    "neutral_loss_tag",
-    "risk_classification",
-    "rt_context",
-    "include_in_primary_matrix",
-    "q_detected",
-    "q_rescue",
-    "sample_count",
-    "rescue_fraction",
-    "duplicate_assigned_count",
-    "row_flags",
-    "seed_quality_status",
-    "min_evidence_score",
-    "min_seed_event_count",
-    "max_abs_nl_ppm",
-    "min_scan_support_score",
-    "missing_detected_candidate_count",
-    "targeted_istd_labels",
-    "targeted_istd_statuses",
-    "family_center_mz",
-    "family_center_rt",
-    "family_product_mz",
-    "family_observed_neutral_loss_da",
-)
-_DETECTED_CELL_COLUMNS = (
-    "feature_family_id",
-    "sample_stem",
-    "status",
-    "source_candidate_id",
-    "area",
-    "apex_rt",
-    "seed_candidate_joined",
-    "evidence_score",
-    "seed_event_count",
-    "neutral_loss_mass_error_ppm",
-    "ms1_scan_support_score",
-)
-_GATE_CANDIDATE_COLUMNS = (
-    "gate_candidate_id",
-    "rule_description",
-    "affected_primary_rows",
-    "affected_istd_rows",
-    "affected_known_target_rows",
-    "affected_rows_by_reason",
-    "false_positive_risk_reason",
-    "recommended_action",
-    "recommendation_reason",
-)
 
 _EXTREME_GATE_ID = "dr_extreme_backfill_dependency"
 _WEAK_SEED_GATE_ID = "dr_weak_seed_backfill_dependency"
@@ -111,19 +65,19 @@ def build_decision_report(
     rt_normalization_families_tsv: Path | None = None,
     targeted_istd_benchmark_json: Path | None = None,
 ) -> dict[str, Any]:
-    review_rows = _read_tsv(
+    review_rows = read_tsv(
         alignment_dir / "alignment_review.tsv",
         required_columns=_REVIEW_REQUIRED_COLUMNS,
     )
-    cell_rows = _read_tsv(
+    cell_rows = read_tsv(
         alignment_dir / "alignment_cells.tsv",
         required_columns=_CELLS_REQUIRED_COLUMNS,
     )
     cells_by_family = _cells_by_family(cell_rows)
     sample_order = _sample_order(cell_rows)
-    discovery = _load_discovery_candidates(discovery_batch_index)
-    rt_context = _load_rt_context(rt_normalization_families_tsv)
-    benchmark = _load_targeted_istd_context(targeted_istd_benchmark_json)
+    discovery = load_discovery_candidates(discovery_batch_index)
+    rt_context = load_rt_context(rt_normalization_families_tsv)
+    benchmark = load_targeted_istd_context(targeted_istd_benchmark_json)
 
     families: list[dict[str, Any]] = []
     detected_cells: list[dict[str, Any]] = []
@@ -199,38 +153,6 @@ def build_decision_report(
         "detected_cells": detected_cells,
         "gate_candidates": gate_candidates,
     }
-
-
-def write_outputs(output_dir: Path, result: Mapping[str, Any]) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    _write_tsv(
-        output_dir / "single_dr_gate_decision_summary.tsv",
-        result["summary"],
-        fieldnames=_SUMMARY_COLUMNS,
-    )
-    _write_tsv(
-        output_dir / "single_dr_gate_decision_families.tsv",
-        result["families"],
-        fieldnames=_FAMILY_COLUMNS,
-    )
-    _write_tsv(
-        output_dir / "single_dr_gate_decision_detected_cells.tsv",
-        result["detected_cells"],
-        fieldnames=_DETECTED_CELL_COLUMNS,
-    )
-    _write_tsv(
-        output_dir / "single_dr_gate_candidates.tsv",
-        result["gate_candidates"],
-        fieldnames=_GATE_CANDIDATE_COLUMNS,
-    )
-    (output_dir / "single_dr_gate_decision.json").write_text(
-        json.dumps(result, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    (output_dir / "single_dr_gate_decision.md").write_text(
-        _markdown(result),
-        encoding="utf-8",
-    )
 
 
 def _classify_family(
@@ -550,113 +472,6 @@ def _summary_rows(
     return rows
 
 
-def _load_discovery_candidates(path: Path | None) -> dict[str, Any]:
-    if path is None:
-        return {"status": "not_provided", "candidates": {}}
-    rows, fieldnames = _read_delimited_rows(path)
-    missing = [
-        column
-        for column in ("sample_stem", "candidate_csv")
-        if column not in fieldnames
-    ]
-    if missing:
-        raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
-    candidates: dict[tuple[str, str], dict[str, float | str]] = {}
-    for _, row in rows:
-        sample = _machine_text(row.get("sample_stem", ""))
-        candidate_csv = _machine_text(row.get("candidate_csv", ""))
-        if not sample or not candidate_csv:
-            continue
-        candidate_path = _resolve_artifact_path(path.parent, candidate_csv)
-        candidate_rows, candidate_fieldnames = _read_delimited_rows(candidate_path)
-        if "candidate_id" not in candidate_fieldnames:
-            raise ValueError(
-                f"{candidate_path}: missing required columns: candidate_id"
-            )
-        for _, candidate_row in candidate_rows:
-            candidate_id = _machine_text(candidate_row.get("candidate_id", ""))
-            if not candidate_id:
-                continue
-            quality = {
-                "sample_stem": _machine_text(
-                    candidate_row.get("sample_stem", sample),
-                )
-                or sample,
-                "candidate_id": candidate_id,
-                "evidence_score": _float_or_none(
-                    candidate_row.get("evidence_score", ""),
-                ),
-                "seed_event_count": _float_or_none(
-                    candidate_row.get("seed_event_count", ""),
-                ),
-                "neutral_loss_mass_error_ppm": _float_or_none(
-                    candidate_row.get("neutral_loss_mass_error_ppm", ""),
-                ),
-                "ms1_scan_support_score": _float_or_none(
-                    candidate_row.get("ms1_scan_support_score", ""),
-                ),
-            }
-            candidate_sample = str(quality["sample_stem"])
-            candidates[(candidate_sample, candidate_id)] = quality
-            candidates[("", candidate_id)] = quality
-    return {"status": "provided", "candidates": candidates}
-
-
-def _load_rt_context(path: Path | None) -> dict[str, str]:
-    if path is None:
-        return {"status": "not_provided"}
-    rows = _read_tsv(path, required_columns=("feature_family_id",))
-    contexts: dict[str, str] = {"status": "provided"}
-    for row in rows:
-        family_id = row.get("feature_family_id", "")
-        if not family_id:
-            continue
-        text = ";".join(
-            (
-                row.get("rt_context", ""),
-                row.get("normalized_rt_support", ""),
-                row.get("irt_support", ""),
-                row.get("rt_warping_effect", ""),
-            ),
-        ).lower()
-        if "worsen" in text or "context_rt_worsened" in text:
-            contexts[family_id] = "context_rt_worsened"
-    return contexts
-
-
-def _load_targeted_istd_context(path: Path | None) -> dict[str, Any]:
-    if path is None:
-        return {"status": "not_provided", "families": {}}
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    summaries = payload.get("summaries", ())
-    if not isinstance(summaries, Sequence) or isinstance(summaries, (str, bytes)):
-        raise ValueError(f"{path}: summaries must be a list")
-    by_family: dict[str, dict[str, set[str]]] = defaultdict(
-        lambda: {"target_labels": set(), "statuses": set()},
-    )
-    for item in summaries:
-        if not isinstance(item, Mapping):
-            continue
-        target = str(item.get("target_label", ""))
-        status = str(item.get("status", "UNKNOWN") or "UNKNOWN")
-        family_ids = set(_string_list(item.get("primary_feature_ids", ())))
-        selected = str(item.get("selected_feature_id", "") or "")
-        if selected:
-            family_ids.add(selected)
-        for family_id in family_ids:
-            by_family[family_id]["target_labels"].add(target)
-            by_family[family_id]["statuses"].add(status)
-    return {
-        "status": "provided",
-        "families": {
-            family_id: {
-                "target_labels": tuple(sorted(data["target_labels"])),
-                "statuses": tuple(sorted(data["statuses"])),
-            }
-            for family_id, data in by_family.items()
-        },
-    }
-
 
 def _lookup_candidate_quality(
     cell: Mapping[str, str],
@@ -697,106 +512,6 @@ def _sample_order(rows: tuple[dict[str, str], ...]) -> tuple[str, ...]:
     return tuple(ordered)
 
 
-def _read_tsv(
-    path: Path,
-    *,
-    required_columns: tuple[str, ...],
-) -> tuple[dict[str, str], ...]:
-    try:
-        with path.open(newline="", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle, delimiter="\t")
-            fieldnames = tuple(reader.fieldnames or ())
-            missing = [
-                column for column in required_columns if column not in fieldnames
-            ]
-            if missing:
-                raise ValueError(
-                    f"{path}: missing required columns: {', '.join(missing)}"
-                )
-            return tuple(dict(row) for row in reader)
-    except OSError as exc:
-        raise ValueError(f"{path}: could not read TSV: {exc}") from exc
-
-
-def _read_delimited_rows(
-    path: Path,
-) -> tuple[list[tuple[int, dict[str, str]]], tuple[str, ...]]:
-    delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
-    try:
-        with path.open(newline="", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle, delimiter=delimiter)
-            return (
-                [(index, dict(row)) for index, row in enumerate(reader, start=2)],
-                tuple(reader.fieldnames or ()),
-            )
-    except OSError as exc:
-        raise ValueError(f"{path}: could not read table: {exc}") from exc
-
-
-def _write_tsv(
-    path: Path,
-    rows: Sequence[Mapping[str, Any]],
-    *,
-    fieldnames: tuple[str, ...],
-) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=fieldnames,
-            delimiter="\t",
-            extrasaction="ignore",
-        )
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def _markdown(result: Mapping[str, Any]) -> str:
-    summary = {row["metric"]: row["value"] for row in result["summary"]}
-    lines = [
-        "# Single-dR Production Gate Decision Report",
-        "",
-        f"- alignment_dir: `{result['alignment_dir']}`",
-        f"- sample_count: {result['sample_count']}",
-        f"- single_dr_primary_rows: {summary.get('single_dr_primary_rows', '0')}",
-        "",
-        "## Gate Candidates",
-        "",
-        (
-            "| Candidate | Affected primary rows | ISTD rows | "
-            "Recommended action |"
-        ),
-        "|---|---:|---:|---|",
-    ]
-    for candidate in result["gate_candidates"]:
-        lines.append(
-            "| "
-            f"{candidate['gate_candidate_id']} | "
-            f"{candidate['affected_primary_rows']} | "
-            f"{candidate['affected_istd_rows']} | "
-            f"{candidate['recommended_action']} |"
-        )
-    lines.extend(
-        [
-            "",
-            "## Top Families",
-            "",
-            "| Family | Class | q_detected | q_rescue | rescue_fraction | ISTD |",
-            "|---|---|---:|---:|---:|---|",
-        ],
-    )
-    for family in result["families"][:30]:
-        lines.append(
-            "| "
-            f"{family['feature_family_id']} | "
-            f"{family['risk_classification']} | "
-            f"{family['q_detected']} | "
-            f"{family['q_rescue']} | "
-            f"{family['rescue_fraction']} | "
-            f"{family['targeted_istd_labels']} |"
-        )
-    lines.append("")
-    return "\n".join(lines)
-
 
 def _risk_sort_key(classification: str) -> int:
     order = {
@@ -827,22 +542,6 @@ def _split_list(value: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in value.split(";") if part.strip())
 
 
-def _string_list(value: Any) -> tuple[str, ...]:
-    if isinstance(value, str):
-        return tuple(part for part in _split_list(value) if part)
-    if isinstance(value, Sequence):
-        return tuple(str(part) for part in value if str(part))
-    return ()
-
-
-def _float_or_none(value: str) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(number):
-        return None
-    return number
 
 
 def _int_value(value: str) -> int:
@@ -856,15 +555,6 @@ def _is_true(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "t", "yes", "y"}
 
 
-def _resolve_artifact_path(parent: Path, value: str) -> Path:
-    path = Path(value)
-    return path if path.is_absolute() else parent / path
-
-
-def _machine_text(value: str) -> str:
-    if len(value) >= 2 and value[0] == "'" and value[1] in ("=", "+", "-", "@"):
-        return value[1:]
-    return value
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
