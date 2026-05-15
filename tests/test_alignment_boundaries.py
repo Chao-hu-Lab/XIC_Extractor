@@ -90,6 +90,26 @@ def test_alignment_pipeline_raw_reader_import_is_lazy_default_opener_only():
         assert _enclosing_function_name(node, parents) == "_default_raw_opener"
 
 
+def test_alignment_raw_sources_do_not_import_raw_reader():
+    path = (
+        Path(__file__).parents[1]
+        / "xic_extractor"
+        / "alignment"
+        / "raw_sources.py"
+    )
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    raw_reader_imports = [
+        node
+        for node in ast.walk(tree)
+        if any(
+            imported_name.startswith("xic_extractor.raw_reader")
+            for imported_name in _imported_module_names(node)
+        )
+    ]
+
+    assert raw_reader_imports == []
+
+
 def test_alignment_ownership_module_stays_domain_focused():
     source = (
         Path(__file__).parents[1]

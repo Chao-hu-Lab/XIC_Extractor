@@ -135,6 +135,8 @@ def test_pipeline_applies_single_worker_hybrid_owner_backfill_backend(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from xic_extractor.alignment import raw_sources as raw_sources_module
+
     batch_index = _write_batch(tmp_path, ("Sample_A",))
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
@@ -180,7 +182,7 @@ def test_pipeline_applies_single_worker_hybrid_owner_backfill_backend(
         return ()
 
     monkeypatch.setattr(
-        pipeline_module,
+        raw_sources_module,
         "source_for_owner_backfill_backend",
         fake_source_for_owner_backfill_backend,
     )
@@ -433,6 +435,41 @@ def test_timed_raw_source_records_batch_calls() -> None:
     assert stats.point_count == 2
 
 
+def test_timed_raw_source_records_batch_failure_metrics() -> None:
+    from xic_extractor.xic_models import XICRequest
+
+    class FailingBatchSource:
+        def __init__(self) -> None:
+            self.raw_chromatogram_call_count = 0
+
+        def extract_xic_many(self, requests):
+            self.raw_chromatogram_call_count += 1
+            raise RuntimeError("batch failed")
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("fallback should not be used")
+
+    stats = pipeline_module._RawSourceTimingStats(
+        sample_stem="Sample_A",
+        stage="alignment.build_owners.extract_xic",
+    )
+    source = pipeline_module._TimedRawSource(FailingBatchSource(), stats=stats)
+
+    with pytest.raises(RuntimeError, match="batch failed"):
+        source.extract_xic_many(
+            (
+                XICRequest(mz=258.0, rt_min=8.0, rt_max=9.0, ppm_tol=20.0),
+                XICRequest(mz=259.0, rt_min=8.0, rt_max=9.0, ppm_tol=20.0),
+            )
+        )
+
+    assert stats.extract_xic_count == 2
+    assert stats.extract_xic_batch_count == 1
+    assert stats.raw_chromatogram_call_count == 1
+    assert stats.point_count == 0
+    assert stats.elapsed_sec >= 0
+
+
 def test_timed_raw_source_delegates_scan_window_lookup() -> None:
     from xic_extractor.xic_models import XICRequest
 
@@ -637,6 +674,8 @@ def test_pipeline_enters_and_closes_raw_handles_on_success_and_write_failure(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    from xic_extractor.alignment import pipeline_outputs
+
     batch_index = _write_batch(tmp_path, ("Sample_A",))
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
@@ -661,7 +700,7 @@ def test_pipeline_enters_and_closes_raw_handles_on_success_and_write_failure(
         raise RuntimeError("writer failed")
 
     monkeypatch.setattr(
-        pipeline_module,
+        pipeline_outputs,
         "write_alignment_matrix_tsv",
         fail_matrix_writer,
     )
@@ -869,6 +908,8 @@ def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    from xic_extractor.alignment import pipeline_outputs
+
     batch_index = _write_batch(tmp_path, ("Sample_A",))
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
@@ -887,7 +928,7 @@ def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
         raise RuntimeError("matrix failed")
 
     monkeypatch.setattr(
-        pipeline_module,
+        pipeline_outputs,
         "write_alignment_matrix_tsv",
         fail_matrix_writer,
     )
@@ -1645,6 +1686,7 @@ def _empty_ownership():
 
 def test_pipeline_passes_alignment_config_to_production_writers(monkeypatch, tmp_path):
     from xic_extractor.alignment import pipeline as alignment_pipeline
+    from xic_extractor.alignment import pipeline_outputs
     from xic_extractor.alignment.config import AlignmentConfig
     from xic_extractor.alignment.matrix import AlignmentMatrix
 
@@ -1672,19 +1714,19 @@ def test_pipeline_passes_alignment_config_to_production_writers(monkeypatch, tmp
         path.write_text("review", encoding="utf-8")
         return path
 
-    monkeypatch.setattr(alignment_pipeline, "write_alignment_results_xlsx", fake_xlsx)
+    monkeypatch.setattr(pipeline_outputs, "write_alignment_results_xlsx", fake_xlsx)
     monkeypatch.setattr(
-        alignment_pipeline,
+        pipeline_outputs,
         "write_alignment_matrix_tsv",
         fake_matrix_tsv,
     )
     monkeypatch.setattr(
-        alignment_pipeline,
+        pipeline_outputs,
         "write_alignment_review_tsv",
         fake_review_tsv,
     )
 
-    alignment_pipeline._write_outputs_atomic(
+    pipeline_outputs.write_outputs_atomic(
         outputs,
         matrix,
         metadata={"schema_version": "alignment-results-v1"},
