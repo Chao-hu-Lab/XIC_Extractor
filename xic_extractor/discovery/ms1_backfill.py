@@ -2,7 +2,7 @@ import json
 import math
 from collections.abc import Iterable
 from dataclasses import replace
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 import numpy as np
 
@@ -372,15 +372,136 @@ def _merge_tag_evidence_json(
     first: DiscoveryCandidate,
     second: DiscoveryCandidate,
 ) -> str:
-    payload: dict[str, object] = {}
+    payload: dict[str, Any] = {}
     for candidate in (first, second):
         try:
             parsed = json.loads(candidate.tag_evidence_json or "{}")
         except json.JSONDecodeError:
             parsed = {}
         if isinstance(parsed, dict):
-            payload.update(parsed)
+            for tag_name, evidence in parsed.items():
+                tag_key = str(tag_name)
+                if not isinstance(evidence, dict):
+                    payload.setdefault(tag_key, evidence)
+                    continue
+                if isinstance(payload.get(tag_key), dict):
+                    payload[tag_key] = _merge_tag_evidence_entry(
+                        cast(dict[str, Any], payload[tag_key]),
+                        cast(dict[str, Any], evidence),
+                    )
+                else:
+                    payload[tag_key] = dict(evidence)
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _merge_tag_evidence_entry(
+    first: dict[str, Any],
+    second: dict[str, Any],
+) -> dict[str, Any]:
+    merged = dict(first)
+    for key, value in second.items():
+        merged.setdefault(key, value)
+
+    scan_ids = sorted(
+        set(_int_values(first.get("scan_ids")))
+        | set(_int_values(second.get("scan_ids")))
+    )
+    if scan_ids:
+        merged["scan_ids"] = scan_ids
+
+    scan_count = _optional_int(first.get("scan_count")) + _optional_int(
+        second.get("scan_count")
+    )
+    if scan_count:
+        merged["scan_count"] = scan_count
+    elif scan_ids:
+        merged["scan_count"] = len(scan_ids)
+
+    _merge_float_min(merged, first, second, "rt_min")
+    _merge_float_max(merged, first, second, "rt_max")
+    _merge_max_intensity_fields(merged, first, second)
+    return merged
+
+
+def _merge_float_min(
+    merged: dict[str, Any],
+    first: dict[str, Any],
+    second: dict[str, Any],
+    key: str,
+) -> None:
+    values = [
+        value
+        for value in (_optional_float(first.get(key)), _optional_float(second.get(key)))
+        if value is not None
+    ]
+    if values:
+        merged[key] = min(values)
+
+
+def _merge_float_max(
+    merged: dict[str, Any],
+    first: dict[str, Any],
+    second: dict[str, Any],
+    key: str,
+) -> None:
+    values = [
+        value
+        for value in (_optional_float(first.get(key)), _optional_float(second.get(key)))
+        if value is not None
+    ]
+    if values:
+        merged[key] = max(values)
+
+
+def _merge_max_intensity_fields(
+    merged: dict[str, Any],
+    first: dict[str, Any],
+    second: dict[str, Any],
+) -> None:
+    first_intensity = _optional_float(first.get("max_intensity"))
+    second_intensity = _optional_float(second.get("max_intensity"))
+    if first_intensity is None and second_intensity is None:
+        return
+    winner = (
+        second
+        if first_intensity is None
+        or (second_intensity is not None and second_intensity > first_intensity)
+        else first
+    )
+    merged["max_intensity"] = _optional_float(winner.get("max_intensity"))
+    for key in ("product_mz", "neutral_loss_error_ppm"):
+        if key in winner:
+            merged[key] = winner[key]
+
+
+def _int_values(value: object) -> tuple[int, ...]:
+    if not isinstance(value, list | tuple):
+        return ()
+    parsed: list[int] = []
+    for item in value:
+        integer = _optional_int(item)
+        if integer:
+            parsed.append(integer)
+    return tuple(parsed)
+
+
+def _optional_int(value: Any) -> int:
+    if value in (None, ""):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _optional_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _within_ppm(a: float, b: float, tolerance_ppm: float) -> bool:

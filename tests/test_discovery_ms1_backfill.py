@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from pathlib import Path
 from typing import get_type_hints
@@ -356,6 +357,58 @@ def test_cross_tag_candidates_merge_only_when_ms1_peak_overlaps() -> None:
     assert merged[0].matched_tag_count == 3
     assert merged[0].neutral_loss_tag == "dR"
     assert merged[0].tag_evidence_json
+
+
+def test_merge_candidates_preserves_same_tag_evidence_details() -> None:
+    settings = _multi_tag_settings()
+    first = replace(
+        _candidate("dR"),
+        seed_scan_ids=(101,),
+        seed_event_count=1,
+        tag_evidence_json=json.dumps(
+            {
+                "dR": {
+                    "scan_count": 1,
+                    "scan_ids": [101],
+                    "rt_min": 5.01,
+                    "rt_max": 5.04,
+                    "product_mz": 283.90,
+                    "max_intensity": 1000.0,
+                    "neutral_loss_error_ppm": 3.0,
+                }
+            }
+        ),
+    )
+    second = replace(
+        _candidate("dR", product_mz=first.product_mz),
+        seed_scan_ids=(102, 103),
+        seed_event_count=2,
+        tag_evidence_json=json.dumps(
+            {
+                "dR": {
+                    "scan_count": 2,
+                    "scan_ids": [102, 103],
+                    "rt_min": 5.02,
+                    "rt_max": 5.08,
+                    "product_mz": 283.95,
+                    "max_intensity": 3000.0,
+                    "neutral_loss_error_ppm": 1.0,
+                }
+            }
+        ),
+    )
+
+    merged = merge_candidates_by_ms1_peak([first, second], settings=settings)
+
+    assert len(merged) == 1
+    evidence = json.loads(merged[0].tag_evidence_json)
+    assert evidence["dR"]["scan_count"] == 3
+    assert evidence["dR"]["scan_ids"] == [101, 102, 103]
+    assert evidence["dR"]["rt_min"] == 5.01
+    assert evidence["dR"]["rt_max"] == 5.08
+    assert evidence["dR"]["max_intensity"] == 3000.0
+    assert evidence["dR"]["product_mz"] == 283.95
+    assert evidence["dR"]["neutral_loss_error_ppm"] == 1.0
 
 
 def test_cross_tag_candidates_do_not_merge_without_ms1_overlap() -> None:
