@@ -116,3 +116,21 @@ Validation evidence:
 
 Conclusion: this is worth keeping as an exact-safe cleanup, but it is not the
 main performance lever.
+
+## Phase D: Local Execution Profile Evidence
+
+On this 12-core Windows machine, `--raw-workers 11 --raw-xic-batch-size 64`
+preserved 85RAW Matrix/Review/Cells TSV hashes versus the 8-worker run.
+
+Timing comparison after Phase B/C:
+
+| Stage | 8 workers | 11 workers | Delta |
+|---|---:|---:|---:|
+| `alignment.build_owners` | 116.77s | 107.02s | -9.76s |
+| `alignment.cluster_owners` | 58.38s | 58.72s | +0.35s |
+| `alignment.owner_backfill` | 545.36s | 507.79s | -37.57s |
+| `alignment.write_outputs` | 165.46s | 164.59s | -0.87s |
+
+Do not silently change `validation-fast` yet. Treat 11 workers as a local
+high-throughput command/profile candidate because worker count is hardware
+dependent.
