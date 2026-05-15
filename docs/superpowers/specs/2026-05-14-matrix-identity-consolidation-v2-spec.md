@@ -37,6 +37,10 @@ survive too long:
 - zero-present families;
 - duplicate-only families;
 - families dominated by backfilled/rescued cells;
+- single-`dR` families where one or two detected seeds are amplified into a
+  mostly backfilled production row;
+- single-`dR` families where weak detected seed quality plus dominant backfill
+  creates too much false-positive room;
 - single-sample local owners that are treated as final matrix identities;
 - families with high duplicate claim pressure but no durable winner decision.
 
@@ -159,6 +163,16 @@ A family must fail primary matrix promotion when any hard gate applies:
 7. duplicate or ambiguous ownership removes the only durable identity support.
 8. Phase A only: fewer than two quantifiable detected cells remain, unless a
    later phase implements a tested explicit exception.
+9. Single-`dR` extreme backfill dependency: one or two quantifiable detected
+   identity-support cells and quantifiable rescue cells in at least 70% of
+   samples. These rows remain `provisional_discovery` because manual EIC review
+   showed plausible MS1 peaks but weak NL/MS2 support and a large false-positive
+   gap.
+10. Single-`dR` weak-seed backfill dependency: no more than three quantifiable
+    detected identity-support cells, quantifiable rescue cells in at least 60%
+    of samples, and weak detected seed quality. Weak seed quality means
+    `evidence_score < 60`, `seed_event_count < 2`,
+    `abs(neutral_loss_mass_error_ppm) > 10`, or detected candidate join missing.
 
 Backfill/rescue may improve matrix completeness only after a family has already
 passed identity eligibility.
@@ -170,6 +184,8 @@ A production family may still appear in the primary matrix with review flags:
 | Flag | Meaning |
 |---|---|
 | `rescue_heavy` | Quantifiable rescue count exceeds quantifiable detected count, but durable detected support remains. |
+| `high_backfill_dependency` | Low detected support plus dominant backfill; in the single-`dR` extreme case this blocks primary promotion. |
+| `weak_seed_backfill_dependency` | Dominant single-`dR` backfill whose detected seeds fail the production seed-quality floor; this blocks primary promotion. |
 | `duplicate_claim_pressure` | Some cells lost area ownership, but the winning row still has durable support. |
 | `anchored_single_detected` | Anchor exists but quantifiable detected support is narrow. |
 | `low_present_rate` | Present rate is low but row identity is still supported. |
