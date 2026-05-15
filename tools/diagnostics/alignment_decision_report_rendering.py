@@ -961,4 +961,3 @@ details.data-table summary {
   font-weight: 700;
 }
 """.strip()
-
