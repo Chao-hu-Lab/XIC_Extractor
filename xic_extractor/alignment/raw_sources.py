@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -18,9 +17,6 @@ from xic_extractor.xic_models import XICTrace
 
 class AlignmentRawHandle(MS1BackfillSource, Protocol):
     pass
-
-
-RawOpener = Callable[[Path, Path], AbstractContextManager[AlignmentRawHandle]]
 
 
 @dataclass
@@ -186,15 +182,6 @@ def record_raw_source_timing_stats(
                 "point_count": stats.point_count,
             },
         )
-
-
-def default_raw_opener(
-    raw_path: Path,
-    dll_dir: Path,
-) -> AbstractContextManager[AlignmentRawHandle]:
-    from xic_extractor.raw_reader import open_raw
-
-    return open_raw(raw_path, dll_dir)
 
 
 def _trace_point_count(trace: object) -> int:

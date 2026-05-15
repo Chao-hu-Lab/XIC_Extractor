@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from contextlib import ExitStack
+from collections.abc import Callable
+from contextlib import AbstractContextManager, ExitStack
 from pathlib import Path
 
 from xic_extractor.alignment.backfill import (
@@ -49,10 +50,8 @@ from xic_extractor.alignment.raw_sources import (
     AlignmentRawHandle as _AlignmentRawHandle,
 )
 from xic_extractor.alignment.raw_sources import (
-    RawOpener,
     RawSourceTimingStats,
     TimedRawSource,
-    default_raw_opener,
     existing_raw_paths,
     record_raw_source_timing_stats,
     record_timed_raw_sources,
@@ -65,6 +64,7 @@ from xic_extractor.diagnostics.timing import TimingRecorder
 _RawSourceTimingStats = RawSourceTimingStats
 _TimedRawSource = TimedRawSource
 AlignmentRawHandle = _AlignmentRawHandle
+RawOpener = Callable[[Path, Path], AbstractContextManager[AlignmentRawHandle]]
 
 
 def run_alignment(
@@ -334,4 +334,10 @@ _existing_raw_paths = existing_raw_paths
 _output_paths = output_paths
 _write_outputs_atomic = write_outputs_atomic
 _metadata = alignment_metadata
-_default_raw_opener = default_raw_opener
+def _default_raw_opener(
+    raw_path: Path,
+    dll_dir: Path,
+) -> AbstractContextManager[AlignmentRawHandle]:
+    from xic_extractor.raw_reader import open_raw
+
+    return open_raw(raw_path, dll_dir)
