@@ -204,7 +204,45 @@ def test_owner_clustering_skips_impossible_mz_group_without_edge_sink(
     ]
 
 
-def test_owner_clustering_records_blocked_edge_without_merging() -> None:
+def test_owner_clustering_skips_impossible_mz_group_with_edge_sink(
+    monkeypatch,
+) -> None:
+    real_evaluate_owner_edge = owner_clustering_module.evaluate_owner_edge
+
+    def guard_far_owner_scoring(left, right, *, config, drift_lookup=None):
+        if any(owner.owner_id.endswith("-far") for owner in (left, right)):
+            raise AssertionError("far owner should be rejected by group prefilter")
+        return real_evaluate_owner_edge(
+            left,
+            right,
+            config=config,
+            drift_lookup=drift_lookup,
+        )
+
+    monkeypatch.setattr(
+        owner_clustering_module,
+        "evaluate_owner_edge",
+        guard_far_owner_scoring,
+    )
+
+    edge_evidence = []
+    features = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "near-a", precursor_mz=500.0000),
+            _owner("sample-b", "near-b", precursor_mz=500.0050),
+            _owner("sample-c", "far", precursor_mz=700.0000),
+        ),
+        config=AlignmentConfig(max_ppm=20.0),
+        edge_evidence_sink=edge_evidence,
+    )
+
+    assert [feature.event_cluster_ids for feature in features] == [
+        ("OWN-sample-a-near-a", "OWN-sample-b-near-b"),
+        ("OWN-sample-c-far",),
+    ]
+
+
+def test_owner_clustering_does_not_record_envelope_rejected_edge() -> None:
     edge_evidence = []
 
     features = cluster_sample_local_owners(
@@ -217,9 +255,7 @@ def test_owner_clustering_records_blocked_edge_without_merging() -> None:
     )
 
     assert len(features) == 2
-    assert [edge.failure_reason for edge in edge_evidence] == [
-        "neutral_loss_tag_mismatch",
-    ]
+    assert edge_evidence == []
 
 
 def test_owner_clustering_rejects_product_or_observed_loss_conflict() -> None:

@@ -149,15 +149,11 @@ def _complete_link_groups(
 ) -> tuple[tuple[SampleLocalMS1Owner, ...], ...]:
     groups: list[list[SampleLocalMS1Owner]] = []
     envelopes: list[_GroupHardGateEnvelope] = []
-    use_group_prefilter = edge_evidence_sink is None
     for owner in owners:
         compatible_group_indexes = [
             index
             for index, group in enumerate(groups)
-            if (
-                not use_group_prefilter
-                or _group_can_pass_hard_gates(owner, envelopes[index], config)
-            )
+            if _group_can_pass_hard_gates(owner, envelopes[index], config)
             and all(
                 _edge_for_pair(
                     owner,
