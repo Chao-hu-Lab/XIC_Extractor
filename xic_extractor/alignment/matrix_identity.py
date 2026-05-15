@@ -102,6 +102,13 @@ def decide_matrix_identity_row(
         1 for decision in cell_quality if decision.quality_status == "ambiguous_owner"
     )
     cell_count = len(cell_quality)
+    backfill_dependency = _single_dr_backfill_dependency(
+        cluster,
+        q_detected=q_detected,
+        q_rescue=q_rescue,
+        cell_count=cell_count,
+        cells=cells,
+    )
 
     flags = _row_flags(
         cluster=cluster,
@@ -111,8 +118,7 @@ def decide_matrix_identity_row(
         q_rescue=q_rescue,
         duplicate_count=duplicate_count,
         ambiguous_count=ambiguous_count,
-        cell_count=cell_count,
-        cells=cells,
+        backfill_dependency=backfill_dependency,
     )
     include, identity_decision, confidence, reason = _promotion_decision(
         cluster,
@@ -122,8 +128,7 @@ def decide_matrix_identity_row(
         q_rescue=q_rescue,
         duplicate_count=duplicate_count,
         ambiguous_count=ambiguous_count,
-        cell_count=cell_count,
-        cells=cells,
+        backfill_dependency=backfill_dependency,
     )
     return MatrixIdentityRowDecision(
         feature_family_id=family_id,
@@ -150,8 +155,7 @@ def _promotion_decision(
     q_rescue: int,
     duplicate_count: int,
     ambiguous_count: int,
-    cell_count: int,
-    cells: Sequence[AlignedCell],
+    backfill_dependency: str | None,
 ) -> tuple[bool, IdentityDecision, IdentityConfidence, str]:
     if bool(getattr(cluster, "review_only", False)):
         return False, "audit_family", "review", "review_only"
@@ -167,13 +171,6 @@ def _promotion_decision(
         return False, "audit_family", "none", "zero_quantifiable_detected"
     if duplicate_count > q_detected:
         return False, "audit_family", "review", "duplicate_claim_pressure"
-    backfill_dependency = _single_dr_backfill_dependency(
-        cluster,
-        q_detected=q_detected,
-        q_rescue=q_rescue,
-        cell_count=cell_count,
-        cells=cells,
-    )
     if backfill_dependency == EXTREME_BACKFILL_REASON:
         return (
             False,
@@ -230,8 +227,7 @@ def _row_flags(
     q_rescue: int,
     duplicate_count: int,
     ambiguous_count: int,
-    cell_count: int,
-    cells: Sequence[AlignedCell],
+    backfill_dependency: str | None,
 ) -> list[str]:
     flags: list[str] = []
     if primary_evidence == "single_sample_local_owner":
@@ -242,13 +238,6 @@ def _row_flags(
         flags.append("anchored_single_detected")
     if q_rescue > q_detected and q_detected > 0:
         flags.append("rescue_heavy")
-    backfill_dependency = _single_dr_backfill_dependency(
-        cluster,
-        q_detected=q_detected,
-        q_rescue=q_rescue,
-        cell_count=cell_count,
-        cells=cells,
-    )
     if backfill_dependency == EXTREME_BACKFILL_REASON:
         flags.append("high_backfill_dependency")
     if backfill_dependency == WEAK_SEED_BACKFILL_REASON:

@@ -128,6 +128,39 @@ def test_owner_backfill_confirms_low_detected_preconsolidated_owner() -> None:
     assert source_b.calls == []
 
 
+def test_owner_backfill_confirms_any_low_owner_for_duplicate_sample() -> None:
+    source_a = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 500.0, 1200.0, 500.0, 0.0]),
+    )
+    source_b = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 60.0, 120.0, 60.0, 0.0]),
+    )
+    low_owner = replace(_owner("sample-a", "low"), owner_area=100.0)
+    typical_owner = replace(_owner("sample-b", "b"), owner_area=1000.0)
+    high_owner = replace(_owner("sample-a", "high"), owner_area=1000.0)
+    feature = replace(
+        _feature(),
+        owners=(low_owner, typical_owner, high_owner),
+        confirm_local_owners_with_backfill=True,
+    )
+
+    cells = build_owner_backfill_cells(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-a": source_a, "sample-b": source_b},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+    )
+
+    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
+        ("FAM000001", "sample-a"),
+    ]
+    assert source_a.calls == [(500.0, 5.5, 11.5, 20.0)]
+    assert source_b.calls == []
+
+
 def test_owner_backfill_uses_preconsolidated_seed_centers_and_keeps_best_peak() -> None:
     from xic_extractor.xic_models import XICTrace
 

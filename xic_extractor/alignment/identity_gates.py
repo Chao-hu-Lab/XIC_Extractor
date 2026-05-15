@@ -8,7 +8,7 @@ from typing import Any, Literal
 EXTREME_BACKFILL_REASON = "extreme_backfill_dependency"
 WEAK_SEED_BACKFILL_REASON = "weak_seed_backfill_dependency"
 
-SeedQualityStatus = Literal["unavailable", "adequate", "weak"]
+SeedQualityStatus = Literal["unavailable", "missing_lookup", "adequate", "weak"]
 
 _EXTREME_BACKFILL_MIN_RESCUE_FRACTION = 0.70
 _EXTREME_BACKFILL_MAX_DETECTED_SUPPORT = 2
@@ -32,7 +32,16 @@ class SeedQualitySummary:
     min_seed_event_count: float | None = None
     max_abs_nl_ppm: float | None = None
     min_scan_support_score: float | None = None
+    looked_up_candidate_count: int = 0
     missing_detected_candidate_count: int = 0
+
+    @property
+    def missing_lookup_only(self) -> bool:
+        return (
+            self.available
+            and self.looked_up_candidate_count == 0
+            and self.missing_detected_candidate_count > 0
+        )
 
     @property
     def weak(self) -> bool:
@@ -56,13 +65,13 @@ class SeedQualitySummary:
     def status(self) -> SeedQualityStatus:
         if not self.available:
             return "unavailable"
+        if self.missing_lookup_only:
+            return "missing_lookup"
         return "weak" if self.weak else "adequate"
 
 
 SeedCandidateLookup = (
-    Mapping[str, Any]
-    | Mapping[tuple[str, str], Any]
-    | Callable[[DetectedSeedRef], Any | None]
+    Mapping[Any, Any] | Callable[[DetectedSeedRef], Any | None]
 )
 
 
@@ -124,6 +133,7 @@ def summarize_detected_seed_quality(
             "neutral_loss_mass_error_ppm",
         ),
         min_scan_support_score=_min_metric(candidates, "ms1_scan_support_score"),
+        looked_up_candidate_count=len(candidates),
         missing_detected_candidate_count=missing_count,
     )
 
@@ -134,15 +144,23 @@ def lookup_seed_candidate(
 ) -> Any | None:
     if callable(candidate_lookup):
         return candidate_lookup(seed)
-    for key in candidate_lookup_keys(seed.source_candidate_id):
-        tuple_key = (seed.sample_stem, key)
-        if tuple_key in candidate_lookup:
-            return candidate_lookup[tuple_key]  # type: ignore[index]
-        fallback_tuple_key = ("", key)
-        if fallback_tuple_key in candidate_lookup:
-            return candidate_lookup[fallback_tuple_key]  # type: ignore[index]
-        if key in candidate_lookup:
-            return candidate_lookup[key]  # type: ignore[index]
+
+    keys = candidate_lookup_keys(seed.source_candidate_id)
+    if not keys:
+        return None
+    source_key = keys[0]
+
+    # Candidate ids are globally emitted as exact ids such as "sample#scan".
+    # Avoid head/tail fallbacks here; bare suffix matches can collide across
+    # samples and would attach the wrong seed evidence to a row gate.
+    tuple_key = (seed.sample_stem, source_key)
+    if tuple_key in candidate_lookup:
+        return candidate_lookup[tuple_key]
+    fallback_tuple_key = ("", source_key)
+    if fallback_tuple_key in candidate_lookup:
+        return candidate_lookup[fallback_tuple_key]
+    if source_key in candidate_lookup:
+        return candidate_lookup[source_key]
     return None
 
 
@@ -150,10 +168,7 @@ def candidate_lookup_keys(source_candidate_id: str) -> tuple[str, ...]:
     source = source_candidate_id.strip()
     if not source:
         return ()
-    if "#" not in source:
-        return (source,)
-    head, tail = source.split("#", 1)
-    return (source, head, tail)
+    return (source,)
 
 
 def is_dr_neutral_loss_tag(tag: str) -> bool:

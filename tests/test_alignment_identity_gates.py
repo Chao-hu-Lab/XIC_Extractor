@@ -91,14 +91,16 @@ def test_non_dr_backfill_is_out_of_scope_even_when_extreme() -> None:
     assert reason is None
 
 
-def test_missing_detected_seed_join_is_weak_when_enrichment_is_available() -> None:
+def test_missing_detected_seed_join_is_reported_separately_but_still_weak() -> None:
     summary = summarize_detected_seed_quality(
         (DetectedSeedRef(sample_stem="S1", source_candidate_id="S1#missing"),),
         {},
         enrichment_available=True,
     )
 
-    assert summary.status == "weak"
+    assert summary.status == "missing_lookup"
+    assert summary.weak is True
+    assert summary.looked_up_candidate_count == 0
     assert summary.missing_detected_candidate_count == 1
 
 
@@ -116,7 +118,7 @@ def test_missing_enrichment_is_unavailable_not_weak() -> None:
 def test_lookup_seed_candidate_uses_sample_specific_and_fallback_keys() -> None:
     candidates = {
         ("S1", "S1#C1"): _candidate(evidence_score=61),
-        ("", "C2"): _candidate(evidence_score=62),
+        ("", "S9#C2"): _candidate(evidence_score=62),
     }
 
     exact = lookup_seed_candidate(
@@ -129,7 +131,20 @@ def test_lookup_seed_candidate_uses_sample_specific_and_fallback_keys() -> None:
     )
 
     assert exact is candidates[("S1", "S1#C1")]
-    assert fallback is candidates[("", "C2")]
+    assert fallback is candidates[("", "S9#C2")]
+
+
+def test_lookup_seed_candidate_does_not_match_bare_suffix_keys() -> None:
+    candidates = {
+        "C2": _candidate(evidence_score=10),
+    }
+
+    result = lookup_seed_candidate(
+        DetectedSeedRef(sample_stem="S9", source_candidate_id="S9#C2"),
+        candidates,
+    )
+
+    assert result is None
 
 
 def _candidate(

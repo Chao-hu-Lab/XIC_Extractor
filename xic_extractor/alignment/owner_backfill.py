@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import math
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from itertools import groupby
-from statistics import median
 from typing import Protocol
 
 import numpy as np
@@ -12,7 +10,9 @@ from numpy.typing import NDArray
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
+from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
+from xic_extractor.alignment.ownership_models import SampleLocalMS1Owner
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
@@ -50,7 +50,9 @@ def build_owner_backfill_cells(
         if feature.review_only:
             continue
         detected_samples = {owner.sample_stem for owner in feature.owners}
-        owners_by_sample = {owner.sample_stem: owner for owner in feature.owners}
+        owners_by_sample: dict[str, list[SampleLocalMS1Owner]] = defaultdict(list)
+        for owner in feature.owners:
+            owners_by_sample[owner.sample_stem].append(owner)
         if (
             len(detected_samples)
             < alignment_config.owner_backfill_min_detected_samples
@@ -66,7 +68,7 @@ def build_owner_backfill_cells(
                 continue
             if (
                 sample_stem in detected_samples
-                and not _detected_owner_can_be_superseded(
+                and not _any_detected_owner_can_be_superseded(
                     feature,
                     owners_by_sample.get(sample_stem),
                 )
@@ -335,38 +337,27 @@ def _backfill_seed_centers(
     )
 
 
+def _any_detected_owner_can_be_superseded(
+    feature: OwnerAlignedFeature,
+    owners: Sequence[SampleLocalMS1Owner] | None,
+) -> bool:
+    return any(
+        _detected_owner_can_be_superseded(feature, owner)
+        for owner in owners or ()
+    )
+
+
 def _detected_owner_can_be_superseded(
     feature: OwnerAlignedFeature,
-    owner: object | None,
+    owner: SampleLocalMS1Owner,
 ) -> bool:
-    detected_area = _positive_finite(getattr(owner, "owner_area", None))
+    detected_area = positive_finite(owner.owner_area)
     if detected_area is None:
         return False
-    family_area = _median_owner_area(feature)
+    family_area = median_owner_area(feature)
     if family_area is None:
         return False
     return detected_area <= family_area * 0.25
-
-
-def _median_owner_area(feature: OwnerAlignedFeature) -> float | None:
-    areas = [
-        area
-        for owner in feature.owners
-        for area in (_positive_finite(getattr(owner, "owner_area", None)),)
-        if area is not None
-    ]
-    return float(median(areas)) if areas else None
-
-
-def _positive_finite(value: object) -> float | None:
-    if (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-        and value > 0
-    ):
-        return float(value)
-    return None
 
 
 def _keep_best_rescued_cell(
