@@ -182,6 +182,8 @@ def _max_abs_metric(candidates: Sequence[Any], key: str) -> float | None:
 
 def _number_field(item: Any, key: str) -> float | None:
     value = item.get(key) if isinstance(item, Mapping) else getattr(item, key, None)
+    if value is None:
+        return None
     if isinstance(value, bool):
         return None
     try:
