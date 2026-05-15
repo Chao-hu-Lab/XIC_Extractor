@@ -199,11 +199,11 @@ def _loess_reference_rt(
     frac: float,
     min_neighbors: int,
 ) -> float | None:
-    observations = [
-        (float(order), rt)
-        for sample, rt in rt_by_sample.items()
-        if (order := injection_order.get(sample)) is not None
-    ]
+    observations: list[tuple[float, float]] = []
+    for sample, rt in rt_by_sample.items():
+        injection_index = injection_order.get(sample)
+        if injection_index is not None:
+            observations.append((float(injection_index), rt))
     if len(observations) < 3:
         return None
     k = max(int(math.ceil(len(observations) * frac)), min_neighbors, 3)
@@ -212,16 +212,16 @@ def _loess_reference_rt(
         observations,
         key=lambda item: (abs(item[0] - sample_order), item[0]),
     )[:k]
-    bandwidth = max(abs(order - sample_order) for order, _rt in nearest)
+    bandwidth = max(abs(obs_order - sample_order) for obs_order, _rt in nearest)
     if bandwidth <= 0:
         return float(median(rt for _order, rt in nearest))
 
     weighted = []
-    for order, rt in nearest:
-        scaled_distance = abs(order - sample_order) / bandwidth
+    for obs_order, rt in nearest:
+        scaled_distance = abs(obs_order - sample_order) / bandwidth
         weight = (1.0 - scaled_distance**3) ** 3
         if weight > 0:
-            weighted.append((order, rt, weight))
+            weighted.append((obs_order, rt, weight))
     if len(weighted) < 2:
         return float(median(rt for _order, rt in nearest))
 

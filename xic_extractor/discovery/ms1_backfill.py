@@ -2,7 +2,7 @@ import json
 import math
 from collections.abc import Iterable
 from dataclasses import replace
-from typing import Protocol
+from typing import Literal, Protocol
 
 import numpy as np
 
@@ -18,6 +18,8 @@ from xic_extractor.discovery.priority import (
     build_candidate_reason,
 )
 from xic_extractor.signal_processing import PeakResult, find_peak_and_area
+
+_TagIntersectionStatus = Literal["not_required", "complete", "incomplete"]
 
 
 class MS1XicSource(Protocol):
@@ -356,7 +358,7 @@ def _tag_intersection_status(
     matched_tag_names: tuple[str, ...],
     *,
     settings: DiscoverySettings,
-) -> str:
+) -> _TagIntersectionStatus:
     if settings.tag_combine_mode != "intersection":
         return "not_required"
     return (

@@ -2,6 +2,7 @@ import json
 import math
 from collections.abc import Iterable
 from pathlib import Path
+from typing import cast
 
 from xic_extractor.discovery.models import (
     DiscoverySeed,
@@ -141,13 +142,13 @@ def _merge_seed_evidence(seeds: list[DiscoverySeed]) -> str:
                 "neutral_loss_error_ppm": seed.observed_loss_error_ppm,
             },
         )
-        entry["scan_count"] = int(entry["scan_count"]) + 1
-        scan_ids = list(entry["scan_ids"])
+        entry["scan_count"] = cast(int, entry["scan_count"]) + 1
+        scan_ids = list(cast(list[int], entry["scan_ids"]))
         scan_ids.append(seed.scan_number)
         entry["scan_ids"] = sorted(set(scan_ids))
-        entry["rt_min"] = min(float(entry["rt_min"]), seed.rt)
-        entry["rt_max"] = max(float(entry["rt_max"]), seed.rt)
-        if seed.product_intensity > float(entry["max_intensity"]):
+        entry["rt_min"] = min(cast(float, entry["rt_min"]), seed.rt)
+        entry["rt_max"] = max(cast(float, entry["rt_max"]), seed.rt)
+        if seed.product_intensity > cast(float, entry["max_intensity"]):
             entry["product_mz"] = seed.product_mz
             entry["max_intensity"] = seed.product_intensity
             entry["neutral_loss_error_ppm"] = seed.observed_loss_error_ppm

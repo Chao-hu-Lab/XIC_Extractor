@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook
 
+from tools.diagnostics import analyze_rt_normalization_anchors as rt_norm
 from xic_extractor.alignment.rt_normalization import (
     AnchorPoint,
     apply_anchor_reference_source,
 )
-from tools.diagnostics import analyze_rt_normalization_anchors as rt_norm
 
 
 def test_anchor_normalization_fits_models_and_reduces_family_rt_spread(

@@ -42,9 +42,7 @@ def build_owner_backfill_cells(
     if raw_xic_batch_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
     cells: list[AlignedCell] = []
-    pending: dict[str, list[tuple[OwnerAlignedFeature, str, XICRequest]]] = (
-        defaultdict(list)
-    )
+    pending: dict[str, list[_RequestItem]] = defaultdict(list)
     rt_window_min = alignment_config.max_rt_sec / 60.0
     for feature in features:
         if feature.review_only:

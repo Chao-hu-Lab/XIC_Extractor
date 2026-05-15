@@ -5,7 +5,12 @@ from dataclasses import replace
 from statistics import mean, median
 
 from xic_extractor.alignment.config import AlignmentConfig
-from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.matrix import (
+    AlignedCell,
+    AlignmentMatrix,
+    AlignmentRowLike,
+)
+from xic_extractor.alignment.models import AlignmentCluster
 from xic_extractor.alignment.output_rows import cells_by_cluster, row_id
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 
@@ -45,10 +50,13 @@ def recenter_pre_backfill_identity_families(
 ) -> AlignmentMatrix:
     grouped_cells = cells_by_cluster(matrix)
     centers_by_id: dict[str, float] = {}
-    clusters: list[OwnerAlignedFeature] = []
+    clusters: list[AlignmentCluster | AlignmentRowLike] = []
     for cluster in matrix.clusters:
         cluster_id = row_id(cluster)
-        if not _is_pre_backfill_consolidated(cluster):
+        if (
+            not isinstance(cluster, OwnerAlignedFeature)
+            or not _is_pre_backfill_consolidated(cluster)
+        ):
             clusters.append(cluster)
             continue
         present_rts = [

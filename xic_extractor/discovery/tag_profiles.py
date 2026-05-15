@@ -4,9 +4,10 @@ import csv
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 TagKind = Literal["neutral_loss"]
+_CsvRow = dict[str | None, object]
 
 
 @dataclass(frozen=True)
@@ -22,7 +23,7 @@ class FeatureTagProfile:
 
 def load_feature_tag_profiles(path: Path) -> list[FeatureTagProfile]:
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+        rows = [cast(_CsvRow, row) for row in csv.DictReader(handle)]
 
     profiles: list[FeatureTagProfile] = []
     for row_number, row in enumerate(rows, start=2):
@@ -77,14 +78,14 @@ def resolve_selected_tag_profiles(
     return resolved
 
 
-def _required(row: dict[str, object], column: str, row_number: int) -> str:
+def _required(row: _CsvRow, column: str, row_number: int) -> str:
     value = str(row.get(column, "")).strip()
     if value == "":
         raise ValueError(f"row {row_number}: {column} is required")
     return value
 
 
-def _parse_float(row: dict[str, object], column: str, row_number: int) -> float:
+def _parse_float(row: _CsvRow, column: str, row_number: int) -> float:
     value = _required(row, column, row_number)
     try:
         return float(value)
@@ -94,11 +95,11 @@ def _parse_float(row: dict[str, object], column: str, row_number: int) -> float:
         ) from exc
 
 
-def _extract_label(row: dict[str, object]) -> str:
+def _extract_label(row: _CsvRow) -> str:
     value = row.get("")
     if isinstance(value, str) and value.strip():
         return _normalize_label(value)
-    overflow = row.get(None)  # type: ignore[arg-type]
+    overflow = row.get(None)
     if isinstance(overflow, list) and overflow:
         return _normalize_label(str(overflow[-1]))
     raise ValueError("FH feature-list row is missing trailing tag label")
