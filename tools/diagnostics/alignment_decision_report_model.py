@@ -414,4 +414,3 @@ def _float_value(value: Any, *, default: float) -> float:
     except ValueError:
         return default
     return number if math.isfinite(number) else default
-
