@@ -87,7 +87,9 @@ def validate_sample(
         index_sec = time.perf_counter() - index_started
 
         local_started = time.perf_counter()
-        local_traces = tuple(extract_index_xic(raw, index, request) for request in requests)
+        local_traces = tuple(
+            extract_index_xic(raw, index, request) for request in requests
+        )
         local_sec = time.perf_counter() - local_started
 
     trace_metrics = tuple(
@@ -268,9 +270,21 @@ def _candidate_requests(
 
 
 def _summarize_trace_metrics(metrics: tuple[dict[str, Any], ...]) -> dict[str, Any]:
-    ratios = [item["intensity_sum_ratio"] for item in metrics if item["intensity_sum_ratio"] is not None]
-    correlations = [item["correlation"] for item in metrics if item["correlation"] is not None]
-    max_deltas = [item["max_abs_intensity_delta"] for item in metrics if item["max_abs_intensity_delta"] is not None]
+    ratios = [
+        item["intensity_sum_ratio"]
+        for item in metrics
+        if item["intensity_sum_ratio"] is not None
+    ]
+    correlations = [
+        item["correlation"]
+        for item in metrics
+        if item["correlation"] is not None
+    ]
+    max_deltas = [
+        item["max_abs_intensity_delta"]
+        for item in metrics
+        if item["max_abs_intensity_delta"] is not None
+    ]
     return {
         "trace_length_match_count": sum(1 for item in metrics if item["length_match"]),
         "rt_grid_equal_count": sum(1 for item in metrics if item["rt_grid_equal"]),
@@ -281,8 +295,16 @@ def _summarize_trace_metrics(metrics: tuple[dict[str, Any], ...]) -> dict[str, A
 
 
 def _summarize_peak_metrics(metrics: tuple[dict[str, Any], ...]) -> dict[str, Any]:
-    apex_deltas = [item["apex_delta_min"] for item in metrics if item["apex_delta_min"] is not None]
-    area_deltas = [item["area_relative_delta"] for item in metrics if item["area_relative_delta"] is not None]
+    apex_deltas = [
+        item["apex_delta_min"]
+        for item in metrics
+        if item["apex_delta_min"] is not None
+    ]
+    area_deltas = [
+        item["area_relative_delta"]
+        for item in metrics
+        if item["area_relative_delta"] is not None
+    ]
     return {
         "peak_status_match_count": sum(1 for item in metrics if item["status_match"]),
         "peak_both_ok_count": sum(1 for item in metrics if item["both_ok"]),
