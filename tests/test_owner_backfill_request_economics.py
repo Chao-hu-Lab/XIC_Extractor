@@ -116,8 +116,8 @@ def test_owner_backfill_economics_accounts_for_preconsolidated_confirm_requests(
     _write_tsv(
         alignment_dir / "alignment_cells.tsv",
         (
-            _cell_row("FAM001", "S1", "detected"),
-            _cell_row("FAM001", "S2", "rescued"),
+            _cell_row("FAM001", "S1", "detected", area="100"),
+            _cell_row("FAM001", "S2", "detected", area="1000"),
             _cell_row("FAM001", "S3", "absent"),
         ),
     )
@@ -130,8 +130,8 @@ def test_owner_backfill_economics_accounts_for_preconsolidated_confirm_requests(
     feature = result["features"][0]
     assert feature["is_pre_backfill_consolidated"] is True
     assert feature["seed_center_count_estimate"] == 2
-    assert feature["request_target_count"] == 3
-    assert feature["request_extract_count_estimate"] == 6
+    assert feature["request_target_count"] == 2
+    assert feature["request_extract_count_estimate"] == 4
     assert feature["confirmation_target_count"] == 1
 
 
@@ -163,12 +163,18 @@ def _review_row(
     }
 
 
-def _cell_row(feature_id: str, sample: str, status: str) -> dict[str, str]:
+def _cell_row(
+    feature_id: str,
+    sample: str,
+    status: str,
+    *,
+    area: str = "10",
+) -> dict[str, str]:
     return {
         "feature_family_id": feature_id,
         "sample_stem": sample,
         "status": status,
-        "area": "10" if status in {"detected", "rescued"} else "",
+        "area": area if status in {"detected", "rescued"} else "",
         "apex_rt": "8.0" if status in {"detected", "rescued"} else "",
         "neutral_loss_tag": "dR",
         "family_center_mz": "300.0",

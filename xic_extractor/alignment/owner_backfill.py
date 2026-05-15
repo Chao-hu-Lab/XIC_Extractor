@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from collections.abc import Mapping
 from itertools import groupby
+from statistics import median
 from typing import Protocol
 
 import numpy as np
@@ -48,6 +50,7 @@ def build_owner_backfill_cells(
         if feature.review_only:
             continue
         detected_samples = {owner.sample_stem for owner in feature.owners}
+        owners_by_sample = {owner.sample_stem: owner for owner in feature.owners}
         if (
             len(detected_samples)
             < alignment_config.owner_backfill_min_detected_samples
@@ -59,6 +62,14 @@ def build_owner_backfill_cells(
             if (
                 sample_stem in detected_samples
                 and not feature.confirm_local_owners_with_backfill
+            ):
+                continue
+            if (
+                sample_stem in detected_samples
+                and not _detected_owner_can_be_superseded(
+                    feature,
+                    owners_by_sample.get(sample_stem),
+                )
             ):
                 continue
             for seed_mz, seed_rt in _backfill_seed_centers(feature):
@@ -322,6 +333,40 @@ def _backfill_seed_centers(
     return feature.backfill_seed_centers or (
         (feature.family_center_mz, feature.family_center_rt),
     )
+
+
+def _detected_owner_can_be_superseded(
+    feature: OwnerAlignedFeature,
+    owner: object | None,
+) -> bool:
+    detected_area = _positive_finite(getattr(owner, "owner_area", None))
+    if detected_area is None:
+        return False
+    family_area = _median_owner_area(feature)
+    if family_area is None:
+        return False
+    return detected_area <= family_area * 0.25
+
+
+def _median_owner_area(feature: OwnerAlignedFeature) -> float | None:
+    areas = [
+        area
+        for owner in feature.owners
+        for area in (_positive_finite(getattr(owner, "owner_area", None)),)
+        if area is not None
+    ]
+    return float(median(areas)) if areas else None
+
+
+def _positive_finite(value: object) -> float | None:
+    if (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
+    ):
+        return float(value)
+    return None
 
 
 def _keep_best_rescued_cell(

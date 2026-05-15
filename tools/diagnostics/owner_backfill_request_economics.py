@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 _REVIEW_REQUIRED_COLUMNS = (
@@ -112,11 +114,14 @@ def _feature_economics(
         and len(detected_samples) >= owner_backfill_min_detected_samples
     )
     preconsolidated = _is_pre_backfill_consolidated(review_row)
+    confirmable_detected_samples = (
+        _confirmable_detected_samples(cells) if preconsolidated else set()
+    )
     requested_samples = _requested_samples(
         sample_order,
         detected_samples=detected_samples,
         eligible=eligible,
-        confirm_detected=preconsolidated,
+        confirmable_detected_samples=confirmable_detected_samples,
     )
     status_counts = Counter(
         cells_by_sample.get(sample, {}).get("status", "missing_cell")
@@ -170,15 +175,35 @@ def _requested_samples(
     *,
     detected_samples: set[str],
     eligible: bool,
-    confirm_detected: bool,
+    confirmable_detected_samples: set[str],
 ) -> tuple[str, ...]:
     if not eligible:
         return ()
     return tuple(
         sample
         for sample in sample_order
-        if sample not in detected_samples or confirm_detected
+        if sample not in detected_samples or sample in confirmable_detected_samples
     )
+
+
+def _confirmable_detected_samples(
+    cells: tuple[dict[str, str], ...],
+) -> set[str]:
+    detected_cells = [cell for cell in cells if cell.get("status") == "detected"]
+    areas_by_sample = {
+        cell["sample_stem"]: area
+        for cell in detected_cells
+        for area in (_positive_finite(cell.get("area", "")),)
+        if area is not None
+    }
+    if not areas_by_sample:
+        return set()
+    family_area = float(median(areas_by_sample.values()))
+    return {
+        sample
+        for sample, area in areas_by_sample.items()
+        if area <= family_area * 0.25
+    }
 
 
 def _summary_rows(features: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -393,6 +418,16 @@ def _int_value(value: str) -> int:
         return int(float(value))
     except ValueError:
         return 0
+
+
+def _positive_finite(value: str) -> float | None:
+    try:
+        number = float(value)
+    except ValueError:
+        return None
+    if math.isfinite(number) and number > 0:
+        return number
+    return None
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
