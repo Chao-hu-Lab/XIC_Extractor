@@ -12,6 +12,17 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from xic_extractor.alignment.identity_gates import (
+    EXTREME_BACKFILL_REASON,
+    WEAK_SEED_BACKFILL_REASON,
+    DetectedSeedRef,
+    SeedQualitySummary,
+    classify_single_dr_backfill_dependency,
+    is_dr_neutral_loss_tag,
+    lookup_seed_candidate,
+    summarize_detected_seed_quality,
+)
+
 _REVIEW_REQUIRED_COLUMNS = (
     "feature_family_id",
     "neutral_loss_tag",
@@ -243,11 +254,17 @@ def _classify_family(
     rescue_fraction = q_rescue / denominator
     duplicate_count = _int_value(review_row.get("duplicate_assigned_count", ""))
     row_flags = review_row.get("row_flags", "")
-    weak_seed = seed_quality["status"] == "weak"
+    dependency = classify_single_dr_backfill_dependency(
+        neutral_loss_tag=review_row.get("neutral_loss_tag", ""),
+        q_detected=q_detected,
+        q_rescue=q_rescue,
+        cell_count=denominator,
+        seed_quality=seed_quality,
+    )
 
-    if q_detected <= 2 and rescue_fraction >= 0.70:
+    if dependency == EXTREME_BACKFILL_REASON:
         classification = "risky_extreme_backfill"
-    elif q_detected <= 3 and rescue_fraction >= 0.60 and weak_seed:
+    elif dependency == WEAK_SEED_BACKFILL_REASON:
         classification = "risky_weak_seed_backfill"
     elif _is_duplicate_rescue_watch(
         q_detected=q_detected,
@@ -276,13 +293,17 @@ def _classify_family(
         "rescue_fraction": f"{rescue_fraction:.4f}",
         "duplicate_assigned_count": duplicate_count,
         "row_flags": row_flags,
-        "seed_quality_status": seed_quality["status"],
-        "min_evidence_score": seed_quality["min_evidence_score"],
-        "min_seed_event_count": seed_quality["min_seed_event_count"],
-        "max_abs_nl_ppm": seed_quality["max_abs_nl_ppm"],
-        "min_scan_support_score": seed_quality["min_scan_support_score"],
+        "seed_quality_status": seed_quality.status,
+        "min_evidence_score": _optional_metric(seed_quality.min_evidence_score),
+        "min_seed_event_count": _optional_metric(seed_quality.min_seed_event_count),
+        "max_abs_nl_ppm": _optional_metric(seed_quality.max_abs_nl_ppm),
+        "min_scan_support_score": _optional_metric(
+            seed_quality.min_scan_support_score,
+        ),
         "missing_detected_candidate_count": (
-            seed_quality["missing_detected_candidate_count"]
+            seed_quality.missing_detected_candidate_count
+            if seed_quality.available
+            else ""
         ),
         "targeted_istd_labels": ";".join(labels),
         "targeted_istd_statuses": ";".join(statuses),
@@ -320,47 +341,26 @@ def _seed_quality(
     cells: tuple[dict[str, str], ...],
     *,
     discovery: Mapping[str, Any],
-) -> dict[str, Any]:
+) -> SeedQualitySummary:
     detected_cells = [cell for cell in cells if cell.get("status") == "detected"]
     if discovery["status"] == "not_provided":
-        return {
-            "status": "unavailable",
-            "min_evidence_score": "",
-            "min_seed_event_count": "",
-            "max_abs_nl_ppm": "",
-            "min_scan_support_score": "",
-            "missing_detected_candidate_count": "",
-        }
+        return summarize_detected_seed_quality(
+            (),
+            None,
+            enrichment_available=False,
+        )
 
-    qualities = []
-    missing_count = 0
-    for cell in detected_cells:
-        quality = _lookup_candidate_quality(cell, discovery["candidates"])
-        if quality is None:
-            missing_count += 1
-            continue
-        qualities.append(quality)
-
-    min_evidence = _min_metric(qualities, "evidence_score")
-    min_events = _min_metric(qualities, "seed_event_count")
-    max_nl_ppm = _max_abs_metric(qualities, "neutral_loss_mass_error_ppm")
-    min_scan_support = _min_metric(qualities, "ms1_scan_support_score")
-    weak = (
-        missing_count > 0
-        or (min_evidence is not None and min_evidence < 60)
-        or (min_events is not None and min_events < 2)
-        or (max_nl_ppm is not None and max_nl_ppm > 10)
-    )
-    return {
-        "status": "weak" if weak else "adequate",
-        "min_evidence_score": min_evidence if min_evidence is not None else "",
-        "min_seed_event_count": min_events if min_events is not None else "",
-        "max_abs_nl_ppm": max_nl_ppm if max_nl_ppm is not None else "",
-        "min_scan_support_score": (
-            min_scan_support if min_scan_support is not None else ""
+    return summarize_detected_seed_quality(
+        tuple(
+            DetectedSeedRef(
+                sample_stem=cell.get("sample_stem", ""),
+                source_candidate_id=cell.get("source_candidate_id", ""),
+            )
+            for cell in detected_cells
         ),
-        "missing_detected_candidate_count": missing_count,
-    }
+        discovery["candidates"],
+        enrichment_available=True,
+    )
 
 
 def _detected_cell_rows(
@@ -662,36 +662,19 @@ def _lookup_candidate_quality(
     cell: Mapping[str, str],
     candidates: Mapping[tuple[str, str], Mapping[str, Any]],
 ) -> Mapping[str, Any] | None:
-    sample = cell.get("sample_stem", "")
-    source = cell.get("source_candidate_id", "")
-    for key in _candidate_lookup_keys(sample, source):
-        quality = candidates.get(key)
-        if quality is not None:
-            return quality
-    return None
-
-
-def _candidate_lookup_keys(
-    sample: str,
-    source_candidate_id: str,
-) -> tuple[tuple[str, str], ...]:
-    source = source_candidate_id.strip()
-    if not source:
-        return ()
-    candidates = [source]
-    if "#" in source:
-        head, tail = source.split("#", 1)
-        candidates.extend([head, tail])
-    return tuple((sample, candidate) for candidate in candidates) + tuple(
-        ("", candidate) for candidate in candidates
+    return lookup_seed_candidate(
+        DetectedSeedRef(
+            sample_stem=cell.get("sample_stem", ""),
+            source_candidate_id=cell.get("source_candidate_id", ""),
+        ),
+        candidates,
     )
 
 
 def _is_single_dr_primary(row: Mapping[str, str]) -> bool:
     if not _is_true(row.get("include_in_primary_matrix", "")):
         return False
-    tag = row.get("neutral_loss_tag", "")
-    return tag == "dR" or tag.endswith("_dR")
+    return is_dr_neutral_loss_tag(row.get("neutral_loss_tag", ""))
 
 
 def _cells_by_family(
@@ -836,30 +819,8 @@ def _quality_value(
     return "" if value is None else value
 
 
-def _min_metric(
-    qualities: Sequence[Mapping[str, Any]],
-    key: str,
-) -> float | None:
-    values = [
-        float(value)
-        for quality in qualities
-        for value in (quality.get(key),)
-        if isinstance(value, int | float) and math.isfinite(float(value))
-    ]
-    return min(values) if values else None
-
-
-def _max_abs_metric(
-    qualities: Sequence[Mapping[str, Any]],
-    key: str,
-) -> float | None:
-    values = [
-        abs(float(value))
-        for quality in qualities
-        for value in (quality.get(key),)
-        if isinstance(value, int | float) and math.isfinite(float(value))
-    ]
-    return max(values) if values else None
+def _optional_metric(value: float | None) -> float | str:
+    return value if value is not None else ""
 
 
 def _split_list(value: str) -> tuple[str, ...]:

@@ -20,8 +20,9 @@ audit/review cells   = statuses, rescue tiers, duplicate ownership, reasons
 This spec adds the missing row-level contract:
 
 ```text
-primary matrix rows = feature families with durable identity support
-audit rows          = local-only, duplicate-only, rescue-only, and ambiguous families
+primary matrix rows     = feature families with durable identity support
+provisional/review rows = low-support detected discovery evidence
+audit rows              = rescue-only, duplicate-only, ambiguous-only, and losers
 ```
 
 The goal is to keep the old pipeline's clean matrix shape while preserving the
@@ -41,11 +42,13 @@ survive too long:
   mostly backfilled production row;
 - single-`dR` families where weak detected seed quality plus dominant backfill
   creates too much false-positive room;
-- single-sample local owners that are treated as final matrix identities;
+- single-sample local owners that are treated as final matrix identities instead
+  of retained provisional discovery evidence;
 - families with high duplicate claim pressure but no durable winner decision.
 
-These rows are useful diagnostics. They should remain in Audit/Review. They
-should not automatically become user-facing matrix rows.
+These rows are useful diagnostics or provisional discoveries. They should remain
+in Review/Audit surfaces. They should not automatically become user-facing
+matrix rows.
 
 ## Product Contract
 
@@ -87,7 +90,8 @@ of the primary matrix.
 | `candidate` | A detected or extracted LC-MS event before row-level production promotion. |
 | `feature family` | A group of compatible events/backfill measurements that could represent one final matrix row. |
 | `production family` | A feature family allowed to appear in the primary matrix. |
-| `audit family` | A feature family kept only in diagnostics/review. |
+| `provisional discovery` | A detected feature family kept in Review/Audit because it may be real but has not earned primary matrix identity. |
+| `audit family` | A feature family kept only in diagnostics/review because it lacks detected discovery support or lost the family-winner decision. |
 | `durable identity support` | Evidence that the row identity is supported before or independently of backfill. |
 | `local-only owner` | A row whose identity support comes from one sample-local owner only. |
 | `rescue/backfill` | MS1 measurement for an already established family, not identity evidence by itself. |
@@ -143,8 +147,8 @@ The row decision should expose a `primary_evidence` field.
 |---|---|---|
 | `multi_sample_owner` | Multiple quantifiable detected cells support the row after claim registry. | Eligible |
 | `owner_complete_link` | Existing owner/family evidence links compatible events with durable support. | Eligible in Phase A when at least two quantifiable detected cells remain |
-| `anchored_family` | Anchor evidence exists and at least one quantifiable detected cell remains. | Audit by default in Phase A when fewer than two quantifiable detected cells remain |
-| `single_sample_local_owner` | One local owner only, with no durable cross-sample support. | Audit by default |
+| `anchored_family` | Anchor evidence exists and at least one quantifiable detected cell remains. | Provisional by default in Phase A when fewer than two quantifiable detected cells remain |
+| `single_sample_local_owner` | One local owner only, with no durable cross-sample support. | Provisional by default |
 | `rescue_only` | Row has rescue/backfill candidates but no quantifiable detected identity support. | Audit |
 | `duplicate_only` | Row only contains duplicate losers or duplicate-dominated evidence. | Audit |
 | `zero_present` | Row has no quantifiable cell evidence. | Audit |
@@ -158,7 +162,8 @@ A family must fail primary matrix promotion when any hard gate applies:
 2. `quantifiable_detected_count == 0`.
 3. all quantifiable cells are rescued/backfilled.
 4. all original detected support was lost to duplicate assignment.
-5. `single_sample_local_owner` is the only identity evidence.
+5. `single_sample_local_owner` is the only identity evidence. It fails primary
+   promotion but remains `provisional_discovery`, not `audit_family`.
 6. `review_only` is set on the cluster/family.
 7. duplicate or ambiguous ownership removes the only durable identity support.
 8. Phase A only: fewer than two quantifiable detected cells remain, unless a
@@ -346,7 +351,7 @@ Required behavior tests:
 1. row identity and production cell output consume the same shared cell-quality
    decisions.
 2. `single_sample_local_owner` with one detected cell and multiple rescues is
-   audit-only by default.
+   `provisional_discovery` by default and excluded from the primary matrix.
 3. `owner_complete_link`, `cid_nl_only`, or multi-sample detected support with
    at least two quantifiable detected cells remains production.
 4. rescue-only rows remain audit-only even when rescued areas are high quality.
@@ -355,7 +360,7 @@ Required behavior tests:
    audit-only.
 7. rows with quantifiable detected support plus many quantifiable rescues remain
    production with `rescue_heavy`.
-8. anchored single-detected families are audit-only in Phase A.
+8. anchored single-detected families are `provisional_discovery` in Phase A.
 9. `alignment_matrix.tsv` and workbook `Matrix` use the identity decision layer.
 10. `alignment_review.tsv` reports identity decision fields.
 11. guardrails count production families from identity decisions, not raw status
@@ -414,7 +419,8 @@ An implementation satisfies this spec when:
 4. duplicate-only and zero-present families cannot become primary matrix rows.
 5. rescue-heavy but identity-supported rows can remain production with flags.
 6. primary matrix output and workbook Matrix both use the same identity decision.
-7. Audit/Review keeps every candidate and explains every audit-only row.
+7. Audit/Review keeps every candidate and explains every provisional or
+   audit-only row.
 8. guardrails consume identity decision fields when available.
 9. 8-RAW targeted ISTD gate does not regress.
 10. 85-RAW weak-row counts move in the intended direction without hiding
