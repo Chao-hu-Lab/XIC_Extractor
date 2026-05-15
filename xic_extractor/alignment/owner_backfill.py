@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from itertools import groupby
 from typing import Protocol
 
@@ -10,7 +10,9 @@ from numpy.typing import NDArray
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
+from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
+from xic_extractor.alignment.ownership_models import SampleLocalMS1Owner
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
@@ -48,6 +50,9 @@ def build_owner_backfill_cells(
         if feature.review_only:
             continue
         detected_samples = {owner.sample_stem for owner in feature.owners}
+        owners_by_sample: dict[str, list[SampleLocalMS1Owner]] = defaultdict(list)
+        for owner in feature.owners:
+            owners_by_sample[owner.sample_stem].append(owner)
         if (
             len(detected_samples)
             < alignment_config.owner_backfill_min_detected_samples
@@ -59,6 +64,14 @@ def build_owner_backfill_cells(
             if (
                 sample_stem in detected_samples
                 and not feature.confirm_local_owners_with_backfill
+            ):
+                continue
+            if (
+                sample_stem in detected_samples
+                and not _any_detected_owner_can_be_superseded(
+                    feature,
+                    owners_by_sample.get(sample_stem),
+                )
             ):
                 continue
             for seed_mz, seed_rt in _backfill_seed_centers(feature):
@@ -324,6 +337,29 @@ def _backfill_seed_centers(
     )
 
 
+def _any_detected_owner_can_be_superseded(
+    feature: OwnerAlignedFeature,
+    owners: Sequence[SampleLocalMS1Owner] | None,
+) -> bool:
+    return any(
+        _detected_owner_can_be_superseded(feature, owner)
+        for owner in owners or ()
+    )
+
+
+def _detected_owner_can_be_superseded(
+    feature: OwnerAlignedFeature,
+    owner: SampleLocalMS1Owner,
+) -> bool:
+    detected_area = positive_finite(owner.owner_area)
+    if detected_area is None:
+        return False
+    family_area = median_owner_area(feature)
+    if family_area is None:
+        return False
+    return detected_area <= family_area * 0.25
+
+
 def _keep_best_rescued_cell(
     cells: dict[tuple[str, str], AlignedCell],
     candidate: AlignedCell,
@@ -344,6 +380,18 @@ def _rescued_cell_sort_key(cell: AlignedCell) -> tuple[float, float, float]:
 
 
 def _extract_many(
+    source: OwnerBackfillSource,
+    requests: tuple[XICRequest, ...],
+) -> tuple[XICTrace, ...]:
+    unique_requests = tuple(dict.fromkeys(requests))
+    if len(unique_requests) != len(requests):
+        unique_traces = _extract_unique_many(source, unique_requests)
+        traces_by_request = dict(zip(unique_requests, unique_traces, strict=True))
+        return tuple(traces_by_request[request] for request in requests)
+    return _extract_unique_many(source, requests)
+
+
+def _extract_unique_many(
     source: OwnerBackfillSource,
     requests: tuple[XICRequest, ...],
 ) -> tuple[XICTrace, ...]:

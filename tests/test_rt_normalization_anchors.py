@@ -437,6 +437,126 @@ def test_injection_loess_reference_preserves_linear_ordered_anchor_drift():
     )
 
 
+def test_leave_one_anchor_out_reports_prediction_error_by_anchor(
+    tmp_path: Path,
+):
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    output_dir = tmp_path / "rt_normalization"
+    _write_targeted_workbook(
+        targeted,
+        targets=[
+            _target("anchor-a", 10.0, 116.0474),
+            _target("anchor-b", 20.0, 116.0474),
+            _target("anchor-c", 30.0, 116.0474),
+        ],
+        sample_anchor_rts={
+            "S1": {"anchor-a": 10.0, "anchor-b": 20.0, "anchor-c": 30.0},
+            "S2": {"anchor-a": 12.0, "anchor-b": 24.0, "anchor-c": 36.0},
+            "S3": {"anchor-a": 9.0, "anchor-b": 18.0, "anchor-c": 27.0},
+        },
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[
+            {
+                "feature_family_id": "FAM001",
+                "include_in_primary_matrix": "TRUE",
+                "family_center_mz": 250.0,
+                "family_center_rt": 20.0,
+            },
+        ],
+        cell_rows=[
+            _cell_row("FAM001", "S1", 20.0),
+            _cell_row("FAM001", "S2", 24.0),
+            _cell_row("FAM001", "S3", 18.0),
+        ],
+    )
+
+    outputs, result = rt_norm.run_rt_normalization_anchor_diagnostic(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=output_dir,
+    )
+
+    assert outputs.leave_one_out_tsv.exists()
+    rows = _read_tsv(outputs.leave_one_out_tsv)
+    assert {row["target_label"] for row in rows} == {
+        "anchor-a",
+        "anchor-b",
+        "anchor-c",
+    }
+    assert all(row["status"] == "PASS" for row in rows)
+    assert all(float(row["p95_abs_error_min"]) <= 0.30 for row in rows)
+    payload = json.loads(outputs.json_path.read_text(encoding="utf-8"))
+    assert len(payload["leave_one_anchor_out"]) == 3
+    assert result.leave_one_anchor_out[0].target_label == "anchor-a"
+
+
+def test_family_rows_include_rt_band_anchor_scope_and_residual_window(
+    tmp_path: Path,
+):
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    output_dir = tmp_path / "rt_normalization"
+    _write_targeted_workbook(
+        targeted,
+        targets=[
+            _target("anchor-low", 10.0, 116.0474),
+            _target("anchor-mid", 20.0, 116.0474),
+            _target("anchor-high", 30.0, 116.0474),
+        ],
+        sample_anchor_rts={
+            "S1": {"anchor-low": 10.0, "anchor-mid": 20.0, "anchor-high": 30.0},
+            "S2": {"anchor-low": 12.0, "anchor-mid": 24.0, "anchor-high": 36.0},
+            "S3": {"anchor-low": 9.0, "anchor-mid": 18.0, "anchor-high": 27.0},
+        },
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[
+            {
+                "feature_family_id": "FAM_INSIDE",
+                "include_in_primary_matrix": "TRUE",
+                "family_center_mz": 250.0,
+                "family_center_rt": 20.0,
+            },
+            {
+                "feature_family_id": "FAM_LATE",
+                "include_in_primary_matrix": "TRUE",
+                "family_center_mz": 300.0,
+                "family_center_rt": 35.0,
+            },
+        ],
+        cell_rows=[
+            _cell_row("FAM_INSIDE", "S1", 20.0),
+            _cell_row("FAM_INSIDE", "S2", 24.0),
+            _cell_row("FAM_INSIDE", "S3", 18.0),
+            _cell_row("FAM_LATE", "S1", 35.0),
+            _cell_row("FAM_LATE", "S2", 42.0),
+            _cell_row("FAM_LATE", "S3", 31.5),
+        ],
+    )
+
+    outputs, result = rt_norm.run_rt_normalization_anchor_diagnostic(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=output_dir,
+    )
+
+    rows = {row["feature_family_id"]: row for row in _read_tsv(outputs.family_tsv)}
+    inside = rows["FAM_INSIDE"]
+    assert inside["rt_band"] == "20-30"
+    assert inside["anchor_support_level"] == "inside_anchor_range"
+    assert inside["normalized_rt_support"] == "improved"
+    assert float(inside["local_residual_window_min"]) >= 0.05
+
+    late = rows["FAM_LATE"]
+    assert late["anchor_support_level"] == "after_anchor_range"
+    assert late["anchor_scope"] == "after_anchor_range"
+    assert result.rt_band_summary["20-30"]["improved"] >= 1
+
+
 @pytest.mark.parametrize(
     "reference_source",
     ["injection-local-median", "injection-loess"],

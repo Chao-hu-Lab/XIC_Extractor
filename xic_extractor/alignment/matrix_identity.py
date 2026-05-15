@@ -10,7 +10,14 @@ from xic_extractor.alignment.cell_quality import (
     decision_map_by_family,
 )
 from xic_extractor.alignment.config import AlignmentConfig
-from xic_extractor.alignment.matrix import AlignmentMatrix
+from xic_extractor.alignment.identity_gates import (
+    EXTREME_BACKFILL_REASON,
+    WEAK_SEED_BACKFILL_REASON,
+    DetectedSeedRef,
+    classify_single_dr_backfill_dependency,
+    summarize_detected_seed_quality,
+)
+from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.output_rows import row_id
 
 IdentityDecision = Literal[
@@ -19,7 +26,6 @@ IdentityDecision = Literal[
     "audit_family",
 ]
 IdentityConfidence = Literal["high", "medium", "review", "none"]
-
 
 @dataclass(frozen=True)
 class MatrixIdentityRowDecision:
@@ -58,12 +64,14 @@ def build_matrix_identity_decisions(
         else build_cell_quality_decisions(matrix.cells, config)
     )
     quality_by_family = decision_map_by_family(quality)
+    cells_by_family = _cells_by_family(matrix.cells)
     rows: dict[str, MatrixIdentityRowDecision] = {}
     for cluster in matrix.clusters:
         family_id = row_id(cluster)
         rows[family_id] = decide_matrix_identity_row(
             cluster,
             quality_by_family.get(family_id, ()),
+            cells_by_family.get(family_id, ()),
         )
     return MatrixIdentityDecisionSet(rows=rows, cell_quality=quality)
 
@@ -71,6 +79,7 @@ def build_matrix_identity_decisions(
 def decide_matrix_identity_row(
     cluster: Any,
     cell_quality: Sequence[CellQualityDecision],
+    cells: Sequence[AlignedCell] = (),
 ) -> MatrixIdentityRowDecision:
     family_id = row_id(cluster)
     evidence = _family_evidence(cluster)
@@ -92,14 +101,24 @@ def decide_matrix_identity_row(
     ambiguous_count = sum(
         1 for decision in cell_quality if decision.quality_status == "ambiguous_owner"
     )
+    cell_count = len(cell_quality)
+    backfill_dependency = _single_dr_backfill_dependency(
+        cluster,
+        q_detected=q_detected,
+        q_rescue=q_rescue,
+        cell_count=cell_count,
+        cells=cells,
+    )
 
     flags = _row_flags(
+        cluster=cluster,
         evidence=evidence,
         primary_evidence=primary_evidence,
         q_detected=q_detected,
         q_rescue=q_rescue,
         duplicate_count=duplicate_count,
         ambiguous_count=ambiguous_count,
+        backfill_dependency=backfill_dependency,
     )
     include, identity_decision, confidence, reason = _promotion_decision(
         cluster,
@@ -109,6 +128,7 @@ def decide_matrix_identity_row(
         q_rescue=q_rescue,
         duplicate_count=duplicate_count,
         ambiguous_count=ambiguous_count,
+        backfill_dependency=backfill_dependency,
     )
     return MatrixIdentityRowDecision(
         feature_family_id=family_id,
@@ -135,6 +155,7 @@ def _promotion_decision(
     q_rescue: int,
     duplicate_count: int,
     ambiguous_count: int,
+    backfill_dependency: str | None,
 ) -> tuple[bool, IdentityDecision, IdentityConfidence, str]:
     if bool(getattr(cluster, "review_only", False)):
         return False, "audit_family", "review", "review_only"
@@ -150,6 +171,20 @@ def _promotion_decision(
         return False, "audit_family", "none", "zero_quantifiable_detected"
     if duplicate_count > q_detected:
         return False, "audit_family", "review", "duplicate_claim_pressure"
+    if backfill_dependency == EXTREME_BACKFILL_REASON:
+        return (
+            False,
+            "provisional_discovery",
+            "review",
+            "extreme_backfill_dependency",
+        )
+    if backfill_dependency == WEAK_SEED_BACKFILL_REASON:
+        return (
+            False,
+            "provisional_discovery",
+            "review",
+            "weak_seed_backfill_dependency",
+        )
     if primary_evidence == "single_sample_local_owner":
         return (
             False,
@@ -185,12 +220,14 @@ def _promotion_decision(
 
 def _row_flags(
     *,
+    cluster: Any,
     evidence: str,
     primary_evidence: str,
     q_detected: int,
     q_rescue: int,
     duplicate_count: int,
     ambiguous_count: int,
+    backfill_dependency: str | None,
 ) -> list[str]:
     flags: list[str] = []
     if primary_evidence == "single_sample_local_owner":
@@ -201,6 +238,10 @@ def _row_flags(
         flags.append("anchored_single_detected")
     if q_rescue > q_detected and q_detected > 0:
         flags.append("rescue_heavy")
+    if backfill_dependency == EXTREME_BACKFILL_REASON:
+        flags.append("high_backfill_dependency")
+    if backfill_dependency == WEAK_SEED_BACKFILL_REASON:
+        flags.append("weak_seed_backfill_dependency")
     if q_detected == 0 and q_rescue > 0:
         flags.append("rescue_only")
     if duplicate_count > 0:
@@ -244,6 +285,85 @@ def _is_consolidation_loser(evidence: str) -> bool:
         "primary_family_consolidation_loser" in evidence
         or "pre_backfill_identity_consolidation_loser" in evidence
     )
+
+
+def _single_dr_backfill_dependency(
+    cluster: Any,
+    *,
+    q_detected: int,
+    q_rescue: int,
+    cell_count: int,
+    cells: Sequence[AlignedCell],
+) -> str | None:
+    candidates = _seed_candidates_by_id(cluster)
+    seed_quality = summarize_detected_seed_quality(
+        tuple(
+            DetectedSeedRef(
+                sample_stem=cell.sample_stem,
+                source_candidate_id=cell.source_candidate_id or "",
+            )
+            for cell in cells
+            if cell.status == "detected"
+        ),
+        candidates,
+        enrichment_available=bool(candidates),
+    )
+    return classify_single_dr_backfill_dependency(
+        neutral_loss_tag=str(getattr(cluster, "neutral_loss_tag", "")),
+        q_detected=q_detected,
+        q_rescue=q_rescue,
+        cell_count=cell_count,
+        seed_quality=seed_quality,
+    )
+
+
+def _seed_candidates_by_id(cluster: Any) -> dict[str, Any]:
+    candidates: dict[str, Any] = {}
+    for candidate in _cluster_seed_candidates(cluster):
+        candidate_id = str(getattr(candidate, "candidate_id", "") or "")
+        if candidate_id:
+            candidates[candidate_id] = candidate
+    return candidates
+
+
+def _cluster_seed_candidates(cluster: Any) -> tuple[Any, ...]:
+    members = getattr(cluster, "members", ())
+    if members:
+        return tuple(
+            candidate
+            for member in members
+            for candidate in _seed_candidates_from_member(member)
+        )
+    event_clusters = getattr(cluster, "event_clusters", ())
+    return tuple(
+        candidate
+        for event_cluster in event_clusters
+        for member in getattr(event_cluster, "members", ())
+        for candidate in _seed_candidates_from_member(member)
+    )
+
+
+def _seed_candidates_from_member(member: Any) -> tuple[Any, ...]:
+    events = getattr(member, "all_events", None)
+    if events is not None:
+        return tuple(events)
+    primary = getattr(member, "primary_identity_event", None)
+    supporting = getattr(member, "supporting_events", ())
+    if primary is not None:
+        return (primary, *tuple(supporting))
+    return (member,)
+
+
+def _cells_by_family(
+    cells: Sequence[AlignedCell],
+) -> dict[str, tuple[AlignedCell, ...]]:
+    grouped: dict[str, list[AlignedCell]] = {}
+    for cell in cells:
+        grouped.setdefault(cell.cluster_id, []).append(cell)
+    return {
+        family_id: tuple(sorted(items, key=lambda item: item.sample_stem))
+        for family_id, items in grouped.items()
+    }
 
 
 def _family_evidence(cluster: Any) -> str:

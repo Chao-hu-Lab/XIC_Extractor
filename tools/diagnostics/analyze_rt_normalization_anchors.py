@@ -48,6 +48,14 @@ ANCHOR_COLUMNS = (
     "used_in_model",
     "anchor_status",
 )
+LEAVE_ONE_OUT_COLUMNS = (
+    "target_label",
+    "evaluated_count",
+    "median_abs_error_min",
+    "p95_abs_error_min",
+    "max_abs_error_min",
+    "status",
+)
 FAMILY_COLUMNS = (
     "feature_family_id",
     "include_in_primary_matrix",
@@ -61,6 +69,11 @@ FAMILY_COLUMNS = (
     "rt_range_improvement_min",
     "raw_rt_median_min",
     "normalized_rt_median_min",
+    "rt_band",
+    "normalized_rt_support",
+    "anchor_scope",
+    "anchor_support_level",
+    "local_residual_window_min",
 )
 
 
@@ -69,6 +82,7 @@ class RtNormalizationOutputs:
     summary_tsv: Path
     sample_tsv: Path
     anchor_tsv: Path
+    leave_one_out_tsv: Path
     family_tsv: Path
     json_path: Path
     markdown_path: Path
@@ -111,6 +125,28 @@ class FamilyRtSummary:
     rt_range_improvement_min: float | None
     raw_rt_median_min: float | None
     normalized_rt_median_min: float | None
+    rt_band: str
+    normalized_rt_support: str
+    anchor_scope: str
+    anchor_support_level: str
+    local_residual_window_min: float | None
+
+
+@dataclass(frozen=True)
+class LeaveOneAnchorOutSummary:
+    target_label: str
+    evaluated_count: int
+    median_abs_error_min: float | None
+    p95_abs_error_min: float | None
+    max_abs_error_min: float | None
+    status: str
+
+
+@dataclass(frozen=True)
+class SampleAnchorContext:
+    observed_min_rt: float
+    observed_max_rt: float
+    abs_residuals: tuple[float, ...]
 
 
 @dataclass(frozen=True)
@@ -130,6 +166,8 @@ class RtNormalizationResult:
     median_raw_rt_range_min: float | None
     median_normalized_rt_range_min: float | None
     median_rt_range_improvement_min: float | None
+    rt_band_summary: dict[str, dict[str, int]]
+    leave_one_anchor_out: tuple[LeaveOneAnchorOutSummary, ...]
     samples: tuple[SampleRtModel, ...]
     anchors: tuple[AnchorResidual, ...]
     families: tuple[FamilyRtSummary, ...]
@@ -177,9 +215,22 @@ def run_rt_normalization_anchor_diagnostic(
         anchor_slope_min=anchor_slope_min,
         anchor_slope_max=anchor_slope_max,
     )
+    leave_one_out = _leave_one_anchor_out(
+        points,
+        model_type=model_type,
+        anchor_residual_max_min=anchor_residual_max_min,
+        anchor_slope_min=anchor_slope_min,
+        anchor_slope_max=anchor_slope_max,
+    )
     features = _read_alignment_review(alignment_dir / "alignment_review.tsv")
     cells = _read_alignment_cells(alignment_dir / "alignment_cells.tsv")
-    families = _summarize_families(features, cells, models)
+    families = _summarize_families(
+        features,
+        cells,
+        models,
+        residuals,
+        anchor_residual_max_min=anchor_residual_max_min,
+    )
     result = _build_result(
         reference_source=reference_source,
         model_type=model_type,
@@ -189,6 +240,7 @@ def run_rt_normalization_anchor_diagnostic(
         models=models,
         residuals=residuals,
         families=families,
+        leave_one_out=leave_one_out,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -196,6 +248,9 @@ def run_rt_normalization_anchor_diagnostic(
         summary_tsv=output_dir / "rt_normalization_summary.tsv",
         sample_tsv=output_dir / "rt_normalization_samples.tsv",
         anchor_tsv=output_dir / "rt_normalization_anchors.tsv",
+        leave_one_out_tsv=(
+            output_dir / "rt_normalization_leave_one_anchor_out.tsv"
+        ),
         family_tsv=output_dir / "rt_normalization_families.tsv",
         json_path=output_dir / "rt_normalization.json",
         markdown_path=output_dir / "rt_normalization.md",
@@ -203,6 +258,11 @@ def run_rt_normalization_anchor_diagnostic(
     _write_tsv(outputs.summary_tsv, SUMMARY_COLUMNS, _summary_rows(result))
     _write_tsv(outputs.sample_tsv, SAMPLE_COLUMNS, _sample_rows(result.samples))
     _write_tsv(outputs.anchor_tsv, ANCHOR_COLUMNS, _anchor_rows(result.anchors))
+    _write_tsv(
+        outputs.leave_one_out_tsv,
+        LEAVE_ONE_OUT_COLUMNS,
+        _leave_one_out_rows(result.leave_one_anchor_out),
+    )
     _write_tsv(outputs.family_tsv, FAMILY_COLUMNS, _family_rows(result.families))
     _write_json(outputs.json_path, _json_payload(result))
     _write_markdown(outputs.markdown_path, result)
@@ -419,6 +479,9 @@ def _summarize_families(
     features: Mapping[str, AlignmentFeature],
     cells: Sequence[AlignmentCell],
     models: Mapping[str, SampleRtModel],
+    residuals: Sequence[AnchorResidual],
+    *,
+    anchor_residual_max_min: float,
 ) -> tuple[FamilyRtSummary, ...]:
     cells_by_family: dict[str, list[AlignmentCell]] = {
         family_id: [] for family_id in features
@@ -426,6 +489,7 @@ def _summarize_families(
     for cell in cells:
         cells_by_family.setdefault(cell.feature_family_id, []).append(cell)
 
+    anchor_context = _sample_anchor_context(residuals)
     rows: list[FamilyRtSummary] = []
     for family_id in sorted(cells_by_family):
         family_cells = cells_by_family[family_id]
@@ -446,6 +510,12 @@ def _summarize_families(
             if raw_range is not None and normalized_range is not None
             else None
         )
+        normalized_median = _median(normalized_rts)
+        scopes = [
+            _cell_anchor_scope(cell, anchor_context)
+            for cell in family_cells
+            if cell.sample_stem in models
+        ]
         rows.append(
             FamilyRtSummary(
                 feature_family_id=family_id,
@@ -459,7 +529,60 @@ def _summarize_families(
                 normalized_rt_range_min=normalized_range,
                 rt_range_improvement_min=improvement,
                 raw_rt_median_min=_median(raw_rts),
-                normalized_rt_median_min=_median(normalized_rts),
+                normalized_rt_median_min=normalized_median,
+                rt_band=_rt_band(normalized_median or _median(raw_rts)),
+                normalized_rt_support=_normalized_rt_support(improvement),
+                anchor_scope=_combined_anchor_scope(scopes),
+                anchor_support_level=_combined_anchor_scope(scopes),
+                local_residual_window_min=_local_residual_window(
+                    family_cells,
+                    anchor_context,
+                    fallback=anchor_residual_max_min,
+                ),
+            )
+        )
+    return tuple(rows)
+
+
+def _leave_one_anchor_out(
+    points: tuple[AnchorPoint, ...],
+    *,
+    model_type: str,
+    anchor_residual_max_min: float,
+    anchor_slope_min: float,
+    anchor_slope_max: float,
+) -> tuple[LeaveOneAnchorOutSummary, ...]:
+    labels = sorted({point.target_label for point in points})
+    rows: list[LeaveOneAnchorOutSummary] = []
+    for label in labels:
+        train_points = tuple(point for point in points if point.target_label != label)
+        held_points = tuple(point for point in points if point.target_label == label)
+        models, _residuals, _sample_count = fit_sample_rt_models(
+            train_points,
+            model_type=model_type,
+            anchor_residual_max_min=anchor_residual_max_min,
+            anchor_slope_min=anchor_slope_min,
+            anchor_slope_max=anchor_slope_max,
+        )
+        errors = [
+            models[point.sample_stem].normalize_rt(point.observed_rt_min)
+            - point.reference_rt_min
+            for point in held_points
+            if point.sample_stem in models
+        ]
+        abs_errors = [abs(error) for error in errors]
+        p95 = _percentile(abs_errors, 0.95)
+        status = "FAIL"
+        if p95 is not None:
+            status = "PASS" if p95 <= anchor_residual_max_min else "WARN"
+        rows.append(
+            LeaveOneAnchorOutSummary(
+                target_label=label,
+                evaluated_count=len(abs_errors),
+                median_abs_error_min=_median(abs_errors),
+                p95_abs_error_min=p95,
+                max_abs_error_min=_max_value(abs_errors),
+                status=status,
             )
         )
     return tuple(rows)
@@ -475,6 +598,7 @@ def _build_result(
     models: Mapping[str, SampleRtModel],
     residuals: tuple[AnchorResidual, ...],
     families: tuple[FamilyRtSummary, ...],
+    leave_one_out: tuple[LeaveOneAnchorOutSummary, ...],
 ) -> RtNormalizationResult:
     improvements = [
         family.rt_range_improvement_min
@@ -518,6 +642,8 @@ def _build_result(
         median_raw_rt_range_min=_median(raw_ranges),
         median_normalized_rt_range_min=_median(normalized_ranges),
         median_rt_range_improvement_min=_median(improvements),
+        rt_band_summary=_rt_band_summary(families),
+        leave_one_anchor_out=leave_one_out,
         samples=tuple(models[sample] for sample in sorted(models)),
         anchors=residuals,
         families=families,
@@ -553,6 +679,12 @@ def _anchor_rows(anchors: Sequence[AnchorResidual]) -> list[dict[str, object]]:
     return [asdict(anchor) for anchor in anchors]
 
 
+def _leave_one_out_rows(
+    rows: Sequence[LeaveOneAnchorOutSummary],
+) -> list[dict[str, object]]:
+    return [asdict(row) for row in rows]
+
+
 def _family_rows(families: Sequence[FamilyRtSummary]) -> list[dict[str, object]]:
     return [asdict(family) for family in families]
 
@@ -574,6 +706,10 @@ def _json_payload(result: RtNormalizationResult) -> dict[str, object]:
         "median_raw_rt_range_min": result.median_raw_rt_range_min,
         "median_normalized_rt_range_min": result.median_normalized_rt_range_min,
         "median_rt_range_improvement_min": result.median_rt_range_improvement_min,
+        "rt_band_summary": result.rt_band_summary,
+        "leave_one_anchor_out": [
+            asdict(row) for row in result.leave_one_anchor_out
+        ],
     }
 
 
@@ -627,6 +763,133 @@ def _require_fields(
     missing = [field for field in required if field not in fieldnames]
     if missing:
         raise ValueError(f"{path} is missing required columns: {missing}")
+
+
+def _sample_anchor_context(
+    residuals: Sequence[AnchorResidual],
+) -> dict[str, SampleAnchorContext]:
+    grouped: dict[str, list[AnchorResidual]] = {}
+    for residual in residuals:
+        if residual.used_in_model:
+            grouped.setdefault(residual.sample_stem, []).append(residual)
+    contexts: dict[str, SampleAnchorContext] = {}
+    for sample, sample_residuals in grouped.items():
+        observed = [row.observed_rt_min for row in sample_residuals]
+        abs_residuals = tuple(
+            abs(row.normalized_residual_min)
+            for row in sample_residuals
+            if math.isfinite(row.normalized_residual_min)
+        )
+        if observed:
+            contexts[sample] = SampleAnchorContext(
+                observed_min_rt=min(observed),
+                observed_max_rt=max(observed),
+                abs_residuals=abs_residuals,
+            )
+    return contexts
+
+
+def _cell_anchor_scope(
+    cell: AlignmentCell,
+    anchor_context: Mapping[str, SampleAnchorContext],
+) -> str:
+    context = anchor_context.get(cell.sample_stem)
+    if context is None:
+        return "no_model"
+    if cell.apex_rt < context.observed_min_rt:
+        return "before_anchor_range"
+    if cell.apex_rt > context.observed_max_rt:
+        return "after_anchor_range"
+    return "inside_anchor_range"
+
+
+def _combined_anchor_scope(scopes: Sequence[str]) -> str:
+    if not scopes:
+        return "unmodelled"
+    unique = set(scopes)
+    if len(unique) == 1:
+        return next(iter(unique))
+    if unique <= {"before_anchor_range", "after_anchor_range"}:
+        return "outside_anchor_range"
+    return "mixed_anchor_range"
+
+
+def _rt_band(rt_min: float | None) -> str:
+    if rt_min is None:
+        return "unmodelled"
+    if rt_min < 10.0:
+        return "<10"
+    if rt_min < 20.0:
+        return "10-20"
+    if rt_min < 30.0:
+        return "20-30"
+    return ">=30"
+
+
+def _normalized_rt_support(improvement: float | None) -> str:
+    if improvement is None:
+        return "unmodelled"
+    if improvement > 0.01:
+        return "improved"
+    if improvement < -0.01:
+        return "worsened"
+    return "stable"
+
+
+def _local_residual_window(
+    family_cells: Sequence[AlignmentCell],
+    anchor_context: Mapping[str, SampleAnchorContext],
+    *,
+    fallback: float,
+) -> float | None:
+    residuals: list[float] = []
+    for cell in family_cells:
+        context = anchor_context.get(cell.sample_stem)
+        if context is not None:
+            residuals.extend(context.abs_residuals)
+    if not family_cells:
+        return None
+    p95 = _percentile(residuals, 0.95)
+    if p95 is None:
+        p95 = fallback
+    return max(0.05, p95)
+
+
+def _rt_band_summary(
+    families: Sequence[FamilyRtSummary],
+) -> dict[str, dict[str, int]]:
+    summary: dict[str, dict[str, int]] = {}
+    for family in families:
+        bucket = summary.setdefault(
+            family.rt_band,
+            {"improved": 0, "worsened": 0, "stable": 0, "unmodelled": 0},
+        )
+        bucket[family.normalized_rt_support] = (
+            bucket.get(family.normalized_rt_support, 0) + 1
+        )
+    return summary
+
+
+def _percentile(values: Sequence[float], quantile: float) -> float | None:
+    finite = sorted(value for value in values if math.isfinite(value))
+    if not finite:
+        return None
+    if len(finite) == 1:
+        return finite[0]
+    index = (len(finite) - 1) * quantile
+    lower = math.floor(index)
+    upper = math.ceil(index)
+    if lower == upper:
+        return finite[int(index)]
+    fraction = index - lower
+    return finite[lower] + (finite[upper] - finite[lower]) * fraction
+
+
+def _max_value(values: Sequence[float]) -> float | None:
+    finite = [value for value in values if math.isfinite(value)]
+    if not finite:
+        return None
+    return max(finite)
 
 
 def _required_indexes(

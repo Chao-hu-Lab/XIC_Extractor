@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from dataclasses import replace
-from statistics import median
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.alignment.ownership_models import AmbiguousOwnerRecord
 
@@ -113,41 +112,20 @@ def _rescued_supersedes_detected(
     detected: AlignedCell,
     rescued: AlignedCell,
 ) -> bool:
-    detected_area = _positive_finite(detected.area)
-    rescued_area = _positive_finite(rescued.area)
+    detected_area = positive_finite(detected.area)
+    rescued_area = positive_finite(rescued.area)
     if detected_area is None or rescued_area is None:
         return False
     if rescued_area < detected_area * _BACKFILL_SUPERSEDES_LOCAL_AREA_RATIO:
         return False
 
-    family_area = _median_owner_area(feature)
+    family_area = median_owner_area(feature)
     if family_area is None:
         return True
     return (
         detected_area <= family_area * _LOCAL_OWNER_LOW_FAMILY_FRACTION
         and rescued_area >= family_area * _BACKFILL_FAMILY_SUPPORT_FRACTION
     )
-
-
-def _median_owner_area(feature: OwnerAlignedFeature) -> float | None:
-    areas = [
-        area
-        for owner in feature.owners
-        for area in (_positive_finite(getattr(owner, "owner_area", None)),)
-        if area is not None
-    ]
-    return float(median(areas)) if areas else None
-
-
-def _positive_finite(value: object) -> float | None:
-    if (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-        and value > 0
-    ):
-        return float(value)
-    return None
 
 
 def _ambiguous_cell(

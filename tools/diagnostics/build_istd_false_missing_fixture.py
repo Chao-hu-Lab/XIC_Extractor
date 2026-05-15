@@ -123,7 +123,9 @@ def _old_missing_samples(path: Path, sheet_name: str) -> dict[str, list[str]]:
         workbook.close()
 
 
-def _targeted_rows(path: Path, sheet_name: str) -> dict[tuple[str, str], dict[str, object]]:
+def _targeted_rows(
+    path: Path, sheet_name: str
+) -> dict[tuple[str, str], dict[str, object]]:
     workbook = load_workbook(path, read_only=True, data_only=True)
     try:
         sheet = workbook[sheet_name]

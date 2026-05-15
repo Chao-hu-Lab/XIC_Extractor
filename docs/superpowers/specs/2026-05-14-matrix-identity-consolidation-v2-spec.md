@@ -20,8 +20,9 @@ audit/review cells   = statuses, rescue tiers, duplicate ownership, reasons
 This spec adds the missing row-level contract:
 
 ```text
-primary matrix rows = feature families with durable identity support
-audit rows          = local-only, duplicate-only, rescue-only, and ambiguous families
+primary matrix rows     = feature families with durable identity support
+provisional/review rows = low-support detected discovery evidence
+audit rows              = rescue-only, duplicate-only, ambiguous-only, and losers
 ```
 
 The goal is to keep the old pipeline's clean matrix shape while preserving the
@@ -37,11 +38,17 @@ survive too long:
 - zero-present families;
 - duplicate-only families;
 - families dominated by backfilled/rescued cells;
-- single-sample local owners that are treated as final matrix identities;
+- single-`dR` families where one or two detected seeds are amplified into a
+  mostly backfilled production row;
+- single-`dR` families where weak detected seed quality plus dominant backfill
+  creates too much false-positive room;
+- single-sample local owners that are treated as final matrix identities instead
+  of retained provisional discovery evidence;
 - families with high duplicate claim pressure but no durable winner decision.
 
-These rows are useful diagnostics. They should remain in Audit/Review. They
-should not automatically become user-facing matrix rows.
+These rows are useful diagnostics or provisional discoveries. They should remain
+in Review/Audit surfaces. They should not automatically become user-facing
+matrix rows.
 
 ## Product Contract
 
@@ -83,7 +90,8 @@ of the primary matrix.
 | `candidate` | A detected or extracted LC-MS event before row-level production promotion. |
 | `feature family` | A group of compatible events/backfill measurements that could represent one final matrix row. |
 | `production family` | A feature family allowed to appear in the primary matrix. |
-| `audit family` | A feature family kept only in diagnostics/review. |
+| `provisional discovery` | A detected feature family kept in Review/Audit because it may be real but has not earned primary matrix identity. |
+| `audit family` | A feature family kept only in diagnostics/review because it lacks detected discovery support or lost the family-winner decision. |
 | `durable identity support` | Evidence that the row identity is supported before or independently of backfill. |
 | `local-only owner` | A row whose identity support comes from one sample-local owner only. |
 | `rescue/backfill` | MS1 measurement for an already established family, not identity evidence by itself. |
@@ -139,8 +147,8 @@ The row decision should expose a `primary_evidence` field.
 |---|---|---|
 | `multi_sample_owner` | Multiple quantifiable detected cells support the row after claim registry. | Eligible |
 | `owner_complete_link` | Existing owner/family evidence links compatible events with durable support. | Eligible in Phase A when at least two quantifiable detected cells remain |
-| `anchored_family` | Anchor evidence exists and at least one quantifiable detected cell remains. | Audit by default in Phase A when fewer than two quantifiable detected cells remain |
-| `single_sample_local_owner` | One local owner only, with no durable cross-sample support. | Audit by default |
+| `anchored_family` | Anchor evidence exists and at least one quantifiable detected cell remains. | Provisional by default in Phase A when fewer than two quantifiable detected cells remain |
+| `single_sample_local_owner` | One local owner only, with no durable cross-sample support. | Provisional by default |
 | `rescue_only` | Row has rescue/backfill candidates but no quantifiable detected identity support. | Audit |
 | `duplicate_only` | Row only contains duplicate losers or duplicate-dominated evidence. | Audit |
 | `zero_present` | Row has no quantifiable cell evidence. | Audit |
@@ -154,11 +162,22 @@ A family must fail primary matrix promotion when any hard gate applies:
 2. `quantifiable_detected_count == 0`.
 3. all quantifiable cells are rescued/backfilled.
 4. all original detected support was lost to duplicate assignment.
-5. `single_sample_local_owner` is the only identity evidence.
+5. `single_sample_local_owner` is the only identity evidence. It fails primary
+   promotion but remains `provisional_discovery`, not `audit_family`.
 6. `review_only` is set on the cluster/family.
 7. duplicate or ambiguous ownership removes the only durable identity support.
 8. Phase A only: fewer than two quantifiable detected cells remain, unless a
    later phase implements a tested explicit exception.
+9. Single-`dR` extreme backfill dependency: one or two quantifiable detected
+   identity-support cells and quantifiable rescue cells in at least 70% of
+   samples. These rows remain `provisional_discovery` because manual EIC review
+   showed plausible MS1 peaks but weak NL/MS2 support and a large false-positive
+   gap.
+10. Single-`dR` weak-seed backfill dependency: no more than three quantifiable
+    detected identity-support cells, quantifiable rescue cells in at least 60%
+    of samples, and weak detected seed quality. Weak seed quality means
+    `evidence_score < 60`, `seed_event_count < 2`,
+    `abs(neutral_loss_mass_error_ppm) > 10`, or detected candidate join missing.
 
 Backfill/rescue may improve matrix completeness only after a family has already
 passed identity eligibility.
@@ -170,6 +189,8 @@ A production family may still appear in the primary matrix with review flags:
 | Flag | Meaning |
 |---|---|
 | `rescue_heavy` | Quantifiable rescue count exceeds quantifiable detected count, but durable detected support remains. |
+| `high_backfill_dependency` | Low detected support plus dominant backfill; in the single-`dR` extreme case this blocks primary promotion. |
+| `weak_seed_backfill_dependency` | Dominant single-`dR` backfill whose detected seeds fail the production seed-quality floor; this blocks primary promotion. |
 | `duplicate_claim_pressure` | Some cells lost area ownership, but the winning row still has durable support. |
 | `anchored_single_detected` | Anchor exists but quantifiable detected support is narrow. |
 | `low_present_rate` | Present rate is low but row identity is still supported. |
@@ -271,6 +292,20 @@ Treat normalized RT as review evidence until per-family positive improvement
 gates prove clear benefit. The current evidence supports injection-local iRT as
 a scoring input candidate, not as an unconditional production promotion rule.
 
+2026-05-15 diagnostic v2 update:
+
+- `tools/diagnostics/analyze_rt_normalization_anchors.py` now also emits
+  `rt_normalization_leave_one_anchor_out.tsv`.
+- The JSON payload includes `leave_one_anchor_out` and `rt_band_summary` for
+  anchor prediction quality and RT-band-specific improvement/worsening review.
+- `rt_normalization_families.tsv` includes diagnostic-only fields:
+  `rt_band`, `normalized_rt_support`, `anchor_scope`, `anchor_support_level`,
+  and `local_residual_window_min`.
+- `tools/diagnostics/alignment_decision_report.py` can render this artifact via
+  `--rt-normalization-json` as an optional `RT Warping Evidence` section.
+- These fields are review/annotation evidence only. They are not primary matrix
+  promotion gates and do not change fixed alignment tolerances by themselves.
+
 Important boundary:
 
 - The paper's multi-minute prediction window is for scheduled acquisition across
@@ -316,7 +351,7 @@ Required behavior tests:
 1. row identity and production cell output consume the same shared cell-quality
    decisions.
 2. `single_sample_local_owner` with one detected cell and multiple rescues is
-   audit-only by default.
+   `provisional_discovery` by default and excluded from the primary matrix.
 3. `owner_complete_link`, `cid_nl_only`, or multi-sample detected support with
    at least two quantifiable detected cells remains production.
 4. rescue-only rows remain audit-only even when rescued areas are high quality.
@@ -325,7 +360,7 @@ Required behavior tests:
    audit-only.
 7. rows with quantifiable detected support plus many quantifiable rescues remain
    production with `rescue_heavy`.
-8. anchored single-detected families are audit-only in Phase A.
+8. anchored single-detected families are `provisional_discovery` in Phase A.
 9. `alignment_matrix.tsv` and workbook `Matrix` use the identity decision layer.
 10. `alignment_review.tsv` reports identity decision fields.
 11. guardrails count production families from identity decisions, not raw status
@@ -384,7 +419,8 @@ An implementation satisfies this spec when:
 4. duplicate-only and zero-present families cannot become primary matrix rows.
 5. rescue-heavy but identity-supported rows can remain production with flags.
 6. primary matrix output and workbook Matrix both use the same identity decision.
-7. Audit/Review keeps every candidate and explains every audit-only row.
+7. Audit/Review keeps every candidate and explains every provisional or
+   audit-only row.
 8. guardrails consume identity decision fields when available.
 9. 8-RAW targeted ISTD gate does not regress.
 10. 85-RAW weak-row counts move in the intended direction without hiding

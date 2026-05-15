@@ -13,7 +13,8 @@ primary row identity.
 `production_family` is the only tier allowed into `alignment_matrix.tsv` and the
 workbook `Matrix` sheet. It requires primary identity support, not just a
 backfilled value. In v1 this means owner/multi-sample evidence with at least two
-quantifiable detected identity-support cells.
+quantifiable detected identity-support cells, and not a high-risk single-`dR`
+backfill dependency pattern.
 
 `provisional_discovery` is retained discovery evidence. It is not a failed or
 discarded feature. It is a row with non-zero detected support that is not yet
@@ -34,6 +35,17 @@ least one accepted production cell.
 
 Backfill and rescue can fill cells for an existing family, but they cannot create
 primary row identity. Rescued cells do not count as detected identity support.
+Backfill is expected to restore missing cells for highly detected features. A
+single-`dR` family with only one or two quantifiable detected identity-support
+cells and at least 70% quantifiable rescue cells is treated as
+`provisional_discovery`, not `production_family`.
+
+A single-`dR` family with no more than three quantifiable detected
+identity-support cells, at least 60% quantifiable rescue cells, and weak detected
+seed quality is also treated as `provisional_discovery`. Weak seed quality means
+at least one detected seed has `evidence_score < 60`, `seed_event_count < 2`,
+`abs(neutral_loss_mass_error_ppm) > 10`, or cannot be joined back to its detected
+source candidate.
 
 Duplicate pressure is a promotion input, not just a warning. If duplicate
 assigned cells outnumber detected identity-support cells, the row remains

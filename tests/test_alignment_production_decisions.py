@@ -83,6 +83,104 @@ def test_rescue_heavy_row_needs_multiple_detected_owners_for_primary_promotion()
     assert decisions.row("FAM001").include_in_primary_matrix is False
 
 
+def test_extreme_backfill_dependency_row_is_excluded_from_primary_matrix():
+    matrix = _matrix(
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
+        cells=(
+            _cell("seed1", "FAM001", "detected", 100.0),
+            _cell("seed2", "FAM001", "detected", 95.0),
+            *tuple(
+                _cell(f"rescue{i:02d}", "FAM001", "rescued", 80.0 + i)
+                for i in range(1, 84)
+            ),
+        ),
+        sample_order=(
+            "seed1",
+            "seed2",
+            *(f"rescue{i:02d}" for i in range(1, 84)),
+        ),
+    )
+
+    decisions = build_production_decisions(matrix, AlignmentConfig())
+
+    assert decisions.row("FAM001").include_in_primary_matrix is False
+    assert decisions.row("FAM001").identity_decision == "provisional_discovery"
+    assert decisions.row("FAM001").identity_reason == "extreme_backfill_dependency"
+    assert "high_backfill_dependency" in decisions.row("FAM001").row_flags
+    assert decisions.cell("FAM001", "seed1").write_matrix_value is False
+    assert (
+        decisions.cell("FAM001", "seed1").blank_reason
+        == "missing_row_identity_support"
+    )
+    assert decisions.cell("FAM001", "rescue01").production_status == "review_rescue"
+    assert decisions.cell("FAM001", "rescue01").write_matrix_value is False
+
+
+def test_weak_seed_backfill_dependency_row_is_excluded_from_primary_matrix():
+    matrix = _matrix(
+        clusters=(
+            _feature(
+                "FAM001",
+                evidence="owner_complete_link;owner_count=3",
+                members=(
+                    _candidate("seed1#candidate", evidence_score=55),
+                    _candidate("seed2#candidate", seed_event_count=1),
+                    _candidate("seed3#candidate", nl_ppm=12.0),
+                ),
+            ),
+        ),
+        cells=(
+            _cell(
+                "seed1",
+                "FAM001",
+                "detected",
+                100.0,
+                source_candidate_id="seed1#candidate",
+            ),
+            _cell(
+                "seed2",
+                "FAM001",
+                "detected",
+                95.0,
+                source_candidate_id="seed2#candidate",
+            ),
+            _cell(
+                "seed3",
+                "FAM001",
+                "detected",
+                90.0,
+                source_candidate_id="seed3#candidate",
+            ),
+            *tuple(
+                _cell(f"rescue{i}", "FAM001", "rescued", 70.0 + i)
+                for i in range(1, 7)
+            ),
+            _cell("absent", "FAM001", "absent", None),
+        ),
+        sample_order=(
+            "seed1",
+            "seed2",
+            "seed3",
+            *(f"rescue{i}" for i in range(1, 7)),
+            "absent",
+        ),
+    )
+
+    decisions = build_production_decisions(matrix, AlignmentConfig())
+
+    assert decisions.row("FAM001").include_in_primary_matrix is False
+    assert decisions.row("FAM001").identity_decision == "provisional_discovery"
+    assert decisions.row("FAM001").identity_reason == "weak_seed_backfill_dependency"
+    assert "weak_seed_backfill_dependency" in decisions.row("FAM001").row_flags
+    assert decisions.cell("FAM001", "seed1").write_matrix_value is False
+    assert (
+        decisions.cell("FAM001", "seed1").blank_reason
+        == "missing_row_identity_support"
+    )
+    assert decisions.cell("FAM001", "rescue1").production_status == "review_rescue"
+    assert decisions.cell("FAM001", "rescue1").write_matrix_value is False
+
+
 def test_duplicate_claim_pressure_blocks_unconsolidated_primary_promotion():
     matrix = _matrix(
         clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
@@ -256,6 +354,7 @@ def _feature(
     *,
     evidence: str,
     has_anchor: bool = True,
+    **extra: object,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         feature_family_id=feature_family_id,
@@ -269,6 +368,7 @@ def _feature(
         event_member_count=1,
         evidence=evidence,
         review_only=False,
+        **extra,
     )
 
 
@@ -283,6 +383,7 @@ def _cell(
     peak_start_rt: float | None = 8.4,
     peak_end_rt: float | None = 8.6,
     rt_delta_sec: float | None = 0.0,
+    source_candidate_id: str | None = None,
 ) -> AlignedCell:
     has_area = area is not None
     return AlignedCell(
@@ -297,11 +398,32 @@ def _cell(
         rt_delta_sec=rt_delta_sec if has_area else None,
         trace_quality="clean" if has_area else status,
         scan_support_score=0.8 if has_area else None,
-        source_candidate_id=f"{sample_stem}#1" if status == "detected" else None,
+        source_candidate_id=(
+            source_candidate_id
+            if source_candidate_id is not None
+            else f"{sample_stem}#1" if status == "detected" else None
+        ),
         source_raw_file=Path(f"{sample_stem}.raw") if status == "detected" else None,
         reason=(
             "duplicate MS1 peak claim; winner=FAM000000; original_status=detected"
             if status == "duplicate_assigned"
             else status
         ),
+    )
+
+
+def _candidate(
+    candidate_id: str,
+    *,
+    evidence_score: int = 80,
+    seed_event_count: int = 3,
+    nl_ppm: float = 3.0,
+    scan_support: float = 0.8,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        candidate_id=candidate_id,
+        evidence_score=evidence_score,
+        seed_event_count=seed_event_count,
+        neutral_loss_mass_error_ppm=nl_ppm,
+        ms1_scan_support_score=scan_support,
     )

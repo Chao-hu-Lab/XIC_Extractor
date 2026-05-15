@@ -70,7 +70,7 @@ def test_owner_backfill_skips_features_below_min_detected_sample_gate() -> None:
     assert source.calls == []
 
 
-def test_owner_backfill_confirms_detected_samples_for_preconsolidated_feature() -> None:
+def test_owner_backfill_skips_detected_confirmation_when_owner_cannot_change() -> None:
     source_a = FakeBackfillSource(
         rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
         intensity=np.array([0.0, 50.0, 100.0, 50.0, 0.0]),
@@ -90,11 +90,75 @@ def test_owner_backfill_confirms_detected_samples_for_preconsolidated_feature() 
     )
 
     assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
-        ("FAM000001", "sample-a"),
         ("FAM000001", "sample-b"),
     ]
-    assert source_a.calls == [(500.0, 5.5, 11.5, 20.0)]
+    assert source_a.calls == []
     assert source_b.calls == [(500.0, 5.5, 11.5, 20.0)]
+
+
+def test_owner_backfill_confirms_low_detected_preconsolidated_owner() -> None:
+    source_a = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 500.0, 1200.0, 500.0, 0.0]),
+    )
+    source_b = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 60.0, 120.0, 60.0, 0.0]),
+    )
+    low_owner = replace(_owner("sample-a", "a"), owner_area=100.0)
+    typical_owner = replace(_owner("sample-b", "b"), owner_area=1000.0)
+    feature = replace(
+        _feature(),
+        owners=(low_owner, typical_owner),
+        confirm_local_owners_with_backfill=True,
+    )
+
+    cells = build_owner_backfill_cells(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-a": source_a, "sample-b": source_b},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+    )
+
+    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
+        ("FAM000001", "sample-a"),
+    ]
+    assert source_a.calls == [(500.0, 5.5, 11.5, 20.0)]
+    assert source_b.calls == []
+
+
+def test_owner_backfill_confirms_any_low_owner_for_duplicate_sample() -> None:
+    source_a = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 500.0, 1200.0, 500.0, 0.0]),
+    )
+    source_b = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 60.0, 120.0, 60.0, 0.0]),
+    )
+    low_owner = replace(_owner("sample-a", "low"), owner_area=100.0)
+    typical_owner = replace(_owner("sample-b", "b"), owner_area=1000.0)
+    high_owner = replace(_owner("sample-a", "high"), owner_area=1000.0)
+    feature = replace(
+        _feature(),
+        owners=(low_owner, typical_owner, high_owner),
+        confirm_local_owners_with_backfill=True,
+    )
+
+    cells = build_owner_backfill_cells(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-a": source_a, "sample-b": source_b},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+    )
+
+    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
+        ("FAM000001", "sample-a"),
+    ]
+    assert source_a.calls == [(500.0, 5.5, 11.5, 20.0)]
+    assert source_b.calls == []
 
 
 def test_owner_backfill_uses_preconsolidated_seed_centers_and_keeps_best_peak() -> None:
@@ -218,6 +282,53 @@ def test_owner_backfill_uses_batch_source_and_preserves_feature_major_order() ->
         ("FAM000001", "sample-c"),
         ("FAM000002", "sample-b"),
         ("FAM000002", "sample-c"),
+    ]
+
+
+def test_owner_backfill_deduplicates_identical_xic_requests() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class BatchSource:
+        def __init__(self) -> None:
+            self.batch_sizes: list[int] = []
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.batch_sizes.append(len(requests))
+            return tuple(
+                XICTrace.from_arrays(
+                    [
+                        (request.rt_min + request.rt_max) / 2.0 - 0.10,
+                        (request.rt_min + request.rt_max) / 2.0 - 0.01,
+                        (request.rt_min + request.rt_max) / 2.0,
+                        (request.rt_min + request.rt_max) / 2.0 + 0.01,
+                        (request.rt_min + request.rt_max) / 2.0 + 0.10,
+                    ],
+                    [0.0, 50.0, 120.0, 50.0, 0.0],
+                )
+                for request in requests
+            )
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source = BatchSource()
+    feature_a = _feature(feature_family_id="FAM000001", mz=500.0, rt=8.5)
+    feature_b = _feature(feature_family_id="FAM000002", mz=500.0, rt=8.5)
+
+    cells = build_owner_backfill_cells(
+        (feature_a, feature_b),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=64,
+    )
+
+    assert source.batch_sizes == [1]
+    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
+        ("FAM000001", "sample-b"),
+        ("FAM000002", "sample-b"),
     ]
 
 
