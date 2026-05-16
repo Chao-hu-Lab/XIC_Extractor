@@ -1,0 +1,239 @@
+# Targeted Benchmark Reliability Spec
+
+**Date:** 2026-05-16
+**Status:** Draft spec for targeted-side benchmark reliability work
+**Branch:** `codex/targeted-benchmark-reliability`
+**Worktree:** `C:\Users\user\Desktop\XIC_Extractor\.worktrees\targeted-benchmark-reliability`
+
+## Summary
+
+The targeted workflow is now the main validation benchmark for untargeted
+alignment. That means targeted output must expose when a detected peak is strong
+enough to be used as benchmark evidence and when it is only a weak targeted
+candidate that needs review.
+
+This spec does not change untargeted matrix identity rules. It adds a targeted
+reliability layer so cases like suspected low-area or wrong-peak `d3-N6-medA`
+results are visible before they are used to judge untargeted ISTD behavior.
+
+## Problem
+
+Targeted extraction currently has useful scoring fields:
+
+- `Confidence`;
+- `Reason`;
+- `NL`;
+- `Score Breakdown`;
+- RT prior and prior source;
+- quality flags and severity labels.
+
+However, the downstream benchmark question is stricter than the extraction
+question.
+
+Extraction question:
+
+```text
+Did targeted extraction find a plausible peak for this target in this sample?
+```
+
+Benchmark question:
+
+```text
+Is this targeted result reliable enough to act as ground-truth-like evidence
+when validating untargeted alignment?
+```
+
+Those are not the same. A low-area, low-confidence, RT-inconsistent, or weak
+MS2/NL targeted result can be useful for manual review, but it should not silently
+become the standard that untargeted alignment is punished against.
+
+## Product Contract
+
+Targeted output must support three distinct states:
+
+| State | Meaning | Benchmark behavior |
+|---|---|---|
+| `benchmark_eligible` | Strong targeted evidence suitable for targeted-vs-untargeted validation. | Can count as benchmark positive evidence. |
+| `targeted_review` | Targeted found a plausible but weak or suspicious peak. | Keep in targeted output; annotate benchmark as targeted-side review risk. |
+| `targeted_negative` | No usable targeted peak evidence. | Do not count as positive benchmark evidence. |
+
+This contract is diagnostic-first. It does not require changing the primary
+`XIC Results` workbook schema in the first implementation phase. A diagnostic
+TSV/JSON report may provide the reliability state until a future plan explicitly
+changes workbook columns.
+
+## Non-Goals
+
+This work must not:
+
+- change untargeted alignment production gates;
+- change final matrix identity decisions;
+- read targeted labels from production untargeted code;
+- retune peak picking thresholds without a failing characterization case;
+- make iRT, LOESS, or RT warping a hard targeted exclusion rule;
+- remove weak targeted evidence from review outputs;
+- change workbook schemas without a separate schema-change step.
+
+## Reliability Inputs
+
+The reliability layer may consume existing targeted extraction outputs:
+
+- `XIC Results`;
+- `Score Breakdown` when emitted;
+- `Targets`;
+- `Diagnostics`;
+- target role and ISTD pairing;
+- neutral-loss status;
+- confidence and reason text;
+- RT, peak boundaries, width, intensity, and area;
+- prior RT and prior source;
+- quality flags and total severity.
+
+It may also consume optional validation context:
+
+- strict targeted ISTD benchmark JSON;
+- sample metadata and injection order;
+- known targeted-side exceptions.
+
+Optional context can annotate reports. It must not become hidden production
+targeted extraction logic.
+
+## Reliability Signals
+
+The first reliability implementation should classify rows using visible,
+explainable signals rather than a single opaque score.
+
+### Strong Evidence Signals
+
+- `Confidence == HIGH` or `MEDIUM`;
+- `NL == OK` or acceptable warning token;
+- RT prior severity is close or absent for targets without priors;
+- no hard trace-quality flags;
+- positive finite area and RT;
+- peak width and local signal quality are plausible;
+- Score Breakdown support dominates concerns.
+
+### Review Risk Signals
+
+- `Confidence == LOW` or `VERY_LOW`;
+- `NL == NO_MS2` or weak MS2 trace when NL evidence is expected;
+- `NL == NL_FAIL`;
+- RT prior is far from observed peak;
+- selected peak is outside the target RT window unless a strong anchor explains
+  it;
+- peak shape, edge, scan-support, or continuity flags are present;
+- area is extreme-low relative to the target's own detected distribution or
+  paired ISTD trend;
+- the targeted result is already a known benchmark exception.
+
+### Special Case: Suspected `d3-N6-medA` Targeted Peak Issue
+
+`d3-N6-medA` has been observed as a likely targeted-side issue when area is far
+too low and the selected peak is inconsistent with expected behavior. The system
+should not hard-code this target as invalid. Instead, it should expose the
+generic signals that explain why the row is a targeted review risk:
+
+- weak area rank;
+- weak or conflicting MS2/NL evidence;
+- RT or anchor inconsistency;
+- low final confidence or confidence caps.
+
+Known exceptions may be passed to diagnostics to explain report verdicts, but
+the reliability logic should remain target-agnostic.
+
+## Detection Versus Benchmark Eligibility
+
+Existing detection acceptance currently allows some `LOW` confidence rows when
+MS2/NL status is acceptable. That can remain true for targeted extraction.
+
+Benchmark eligibility should be stricter:
+
+```text
+targeted detected/review output != benchmark eligible positive evidence
+```
+
+This separation is the main contract. It allows targeted extraction to remain
+sensitive while preventing weak targeted evidence from becoming a misleading
+untargeted benchmark.
+
+## Output Contract
+
+Phase A should produce a diagnostic report under `tools/diagnostics/`:
+
+```text
+targeted_peak_reliability_summary.tsv
+targeted_peak_reliability_rows.tsv
+targeted_peak_reliability.json
+targeted_peak_reliability.md
+```
+
+Required row fields:
+
+| Field | Meaning |
+|---|---|
+| `sample_name` | Sample identifier from targeted output. |
+| `target_label` | Target label from workbook output. |
+| `role` | `ISTD` or `Analyte`. |
+| `rt` | Targeted selected RT, if present. |
+| `area` | Targeted area, if present. |
+| `confidence` | Existing targeted confidence. |
+| `nl` | Existing targeted NL token. |
+| `prior_rt` | Prior RT from Score Breakdown, if available. |
+| `prior_source` | Prior source from Score Breakdown, if available. |
+| `total_severity` | Existing total severity, if available. |
+| `quality_flags` | Existing quality flags, if available. |
+| `reliability_state` | `benchmark_eligible`, `targeted_review`, or `targeted_negative`. |
+| `risk_reasons` | Semicolon-separated explainable risk labels. |
+
+Required summary fields:
+
+| Field | Meaning |
+|---|---|
+| `target_label` | Target label. |
+| `role` | Target role. |
+| `benchmark_eligible_count` | Rows suitable for benchmark positives. |
+| `targeted_review_count` | Rows with targeted evidence but review risk. |
+| `targeted_negative_count` | Rows without usable targeted evidence. |
+| `top_risk_reasons` | Most common risk labels. |
+| `known_exception` | Optional annotation only. |
+
+## Integration With Existing Benchmark
+
+`tools/diagnostics/targeted_istd_benchmark.py` should continue to produce the
+strict untargeted benchmark. A later implementation step may add an optional
+input:
+
+```powershell
+--targeted-reliability-json <path>
+```
+
+When provided, the benchmark can annotate targeted-side review risk and avoid
+treating weak targeted rows as clean positive evidence. This must remain a
+diagnostic behavior and must not feed production untargeted identity logic.
+
+## Acceptance Criteria
+
+This work is accepted when:
+
+- targeted reliability diagnostics can identify weak targeted positives without
+  deleting them from targeted output;
+- suspected `d3-N6-medA`-style low-area or wrong-peak cases are explained by
+  generic risk reasons;
+- high-confidence ISTD rows remain benchmark eligible;
+- `targeted_istd_benchmark.py` can optionally annotate targeted-side review
+  risk without changing production alignment;
+- tests cover loader behavior, reliability state decisions, and benchmark
+  compatibility;
+- no untargeted matrix rows change unless a later plan explicitly scopes that
+  change.
+
+## Stop Conditions
+
+Stop and review before implementation continues if:
+
+- the required reliability signal is not present in existing targeted outputs
+  and would require raw trace reprocessing;
+- proposed rules would demote many high-confidence ISTD rows;
+- a rule needs a target name hard-code rather than generic evidence;
+- workbook schema changes become necessary;
+- untargeted production code would need targeted workbook labels.
