@@ -1,6 +1,8 @@
 import csv
 from pathlib import Path
 
+import numpy as np
+
 from xic_extractor.extraction.peak_candidate_table import (
     build_peak_candidate_rows,
     candidate_audit_id,
@@ -84,6 +86,32 @@ def test_build_rows_marks_selected_and_rejected_candidates() -> None:
     assert rows[1]["rejection_reason"] == "lower_confidence"
     assert rows[1]["nl_match"] == "FALSE"
     assert rows[1]["concern_labels"] == "nl_fail"
+
+
+def test_build_rows_can_emit_baseline_corrected_audit_area() -> None:
+    selected = _candidate(8.2, left=8.0, right=8.4, proposal_sources=("legacy_savgol",))
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=5,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+    )
+
+    rows = build_peak_candidate_rows(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="",
+        resolver_mode="legacy_savgol",
+        peak_result=result,
+        rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4]),
+        intensity=np.asarray([10.0, 25.0, 50.0, 35.0, 20.0]),
+    )
+
+    assert rows[0]["area_baseline_corrected"] == "390.00000"
+    assert rows[0]["area_uncertainty"] != ""
 
 
 def test_write_peak_candidates_tsv_serializes_rows_safely(tmp_path: Path) -> None:

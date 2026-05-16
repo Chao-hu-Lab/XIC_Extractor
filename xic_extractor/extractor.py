@@ -84,6 +84,7 @@ class FileResult:
     group: str | None = None
     error: str | None = None
     peak_candidate_rows: list[dict[str, str]] = field(default_factory=list)
+    peak_candidate_boundary_rows: list[dict[str, str]] = field(default_factory=list)
 
     @property
     def extraction_results(self) -> list[ExtractionResult]:

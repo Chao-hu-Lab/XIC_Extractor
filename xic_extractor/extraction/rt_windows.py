@@ -18,6 +18,7 @@ from xic_extractor.signal_processing import (
 @dataclass(frozen=True)
 class RecoveredPeak:
     peak_result: PeakDetectionResult
+    rt: np.ndarray
     intensity: np.ndarray
 
 
@@ -114,4 +115,4 @@ def recover_istd_peak_with_wider_anchor_window(
         )
     if peak_result.peak is None:
         return None
-    return RecoveredPeak(peak_result=peak_result, intensity=intensity)
+    return RecoveredPeak(peak_result=peak_result, rt=rt, intensity=intensity)

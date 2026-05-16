@@ -89,6 +89,8 @@ def build_peak_candidate_rows(
     peak_result: PeakDetectionResult,
     group: str | None = None,
     candidate_ms2_evidence: Mapping[PeakCandidate, CandidateMS2Evidence] | None = None,
+    rt: object | None = None,
+    intensity: object | None = None,
 ) -> list[PeakCandidateTableRow]:
     sample_group = group or classify_sample_group(sample_name)
     hypotheses = build_peak_hypotheses(
@@ -99,6 +101,8 @@ def build_peak_candidate_rows(
         resolver_mode=resolver_mode,
         peak_result=peak_result,
         candidate_ms2_evidence=candidate_ms2_evidence,
+        rt=rt,
+        intensity=intensity,
     )
     return [
         _row_from_hypothesis(
@@ -194,14 +198,17 @@ def append_peak_candidate_rows(
     *,
     rt: object | None = None,
     intensity: object | None = None,
+    audit_peak_result: PeakDetectionResult | None = None,
 ) -> None:
     if not config.emit_peak_candidates or rows is None:
         return
-    audit_peak_result = (
-        add_cwt_proposals_for_audit(peak_result, rt, intensity, config)
-        if rt is not None and intensity is not None
-        else peak_result
-    )
+    audited = audit_peak_result
+    if audited is None:
+        audited = (
+            add_cwt_proposals_for_audit(peak_result, rt, intensity, config)
+            if rt is not None and intensity is not None
+            else peak_result
+        )
     rows.extend(
         build_peak_candidate_rows(
             sample_name=sample_name,
@@ -209,11 +216,13 @@ def append_peak_candidate_rows(
             role="ISTD" if target.is_istd else "Analyte",
             istd_pair=target.istd_pair,
             resolver_mode=config.resolver_mode,
-            peak_result=audit_peak_result,
+            peak_result=audited,
             candidate_ms2_evidence=_candidate_table_ms2_evidence(
-                audit_peak_result,
+                audited,
                 candidate_ms2_builder,
             ),
+            rt=rt,
+            intensity=intensity,
         )
     )
 

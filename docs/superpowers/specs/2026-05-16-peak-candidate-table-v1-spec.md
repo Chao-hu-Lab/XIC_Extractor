@@ -189,8 +189,8 @@ only as an audit proposal. The other names remain reserved.
 | `raw_apex_intensity` | Raw apex intensity. |
 | `prominence` | Source-derived prominence. |
 | `area_raw_counts_seconds` | Raw trapezoid area in counts-seconds. |
-| `area_baseline_corrected` | Empty in v1 unless a later implementation computes it. |
-| `area_uncertainty` | Empty in v1 unless a later implementation computes it. |
+| `area_baseline_corrected` | Debug-only `linear_edge` baseline-corrected area when trace data is available. Empty otherwise. |
+| `area_uncertainty` | Debug-only local baseline uncertainty estimate when trace data is available. Empty otherwise. |
 
 ### Trace Quality
 
@@ -463,12 +463,17 @@ that support belongs in the implementation plan.
 
 After v1 candidate persistence is stable:
 
-1. Add boundary hypothesis enumeration for the same apex.
-2. Add baseline-corrected area and baseline uncertainty fields.
-3. Add weighted interval scheduling or local mixture model selection.
-4. Extend the same candidate-table schema to untargeted alignment backfill.
-5. Use candidate table rows as training data for a future ML peak-quality
+1. Add weighted interval scheduling or local mixture model selection.
+2. Extend the same candidate-table schema to untargeted alignment backfill.
+3. Use candidate table rows as training data for a future ML peak-quality
    classifier.
+
+Boundary hypothesis enumeration for the same apex now exists as the separate
+debug-only `peak_candidate_boundaries.tsv` artifact. It intentionally does not
+change `peak_candidates.tsv` headers. Candidate and boundary audit outputs can
+now populate `area_baseline_corrected` and `area_uncertainty` from a
+deterministic `linear_edge` baseline model, but these fields remain audit
+evidence and do not alter selected peak behavior.
 
 ## Reviewed Verdict
 

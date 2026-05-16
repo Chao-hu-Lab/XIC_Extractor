@@ -10,15 +10,14 @@ from xic_extractor.extraction.anchors import (
     paired_anchor_mismatch_diagnostic,
 )
 from xic_extractor.extraction.diagnostics import (
-    anchor_rt_mismatch_diagnostic,
+    append_anchor_window_diagnostics,
     candidate_ms2_evidence_builder,
     check_target_nl,
     istd_anchor_missing_diagnostic,
-    nl_anchor_fallback_diagnostic,
 )
 from xic_extractor.extraction.drift import estimate_sample_drift
 from xic_extractor.extraction.istd_recovery import recover_istd_anchor_peak_if_needed
-from xic_extractor.extraction.peak_candidate_table import append_peak_candidate_rows
+from xic_extractor.extraction.peak_candidate_audit import append_peak_audit_rows
 from xic_extractor.extraction.rt_windows import get_rt_window
 from xic_extractor.extraction.scoring_factory import (
     paired_istd_fwhm,
@@ -84,6 +83,7 @@ def process_file(
         with extractor.open_raw(raw_path, config.dll_dir) as raw:
             results: dict[str, ExtractionResult] = dict(precomputed_istd_results or {})
             peak_candidate_rows: list[dict[str, str]] = []
+            peak_candidate_boundary_rows: list[dict[str, str]] = []
             diagnostics: list[DiagnosticRecord] = list(
                 precomputed_istd_diagnostics or []
             )
@@ -111,6 +111,7 @@ def process_file(
                         results=results,
                         diagnostics=diagnostics,
                         peak_candidate_rows=peak_candidate_rows,
+                        peak_candidate_boundary_rows=peak_candidate_boundary_rows,
                         scoring_context_factory=scoring_context_factory,
                         shape_metrics_by_label=istd_shape_metrics_by_label,
                     )
@@ -146,6 +147,7 @@ def process_file(
                     results=results,
                     diagnostics=diagnostics,
                     peak_candidate_rows=peak_candidate_rows,
+                    peak_candidate_boundary_rows=peak_candidate_boundary_rows,
                     scoring_context_factory=scoring_context_factory,
                     istd_confidence_note=istd_confidence_note(
                         istd_confidence_by_label.get(target.istd_pair)
@@ -161,6 +163,7 @@ def process_file(
                 sample_name=sample_name,
                 results=results,
                 peak_candidate_rows=peak_candidate_rows,
+                peak_candidate_boundary_rows=peak_candidate_boundary_rows,
             ), diagnostics
     except Exception as exc:
         reason = f"Failed to open .raw: {type(exc).__name__}: {exc}"
@@ -189,6 +192,7 @@ def extract_one_target(
     results: dict[str, ExtractionResult],
     diagnostics: list[DiagnosticRecord],
     peak_candidate_rows: list[dict[str, str]] | None = None,
+    peak_candidate_boundary_rows: list[dict[str, str]] | None = None,
     scoring_context_factory: Callable[..., Any] | None = None,
     istd_confidence_note: str | None = None,
     istd_rt_in_this_sample: float | None = None,
@@ -276,9 +280,13 @@ def extract_one_target(
             peak_result,
             paired_rejection.reason,
         )
-    shape_intensity = recovery_decision.intensity
-    if shape_intensity is None:
-        shape_intensity = intensity
+    audit_rt = recovery_decision.rt if recovery_decision.rt is not None else rt
+    audit_intensity = (
+        recovery_decision.intensity
+        if recovery_decision.intensity is not None
+        else intensity
+    )
+    shape_intensity = audit_intensity
     shape_metrics = selected_shape_metrics(shape_intensity, peak_result)
     candidate = selected_candidate(peak_result)
     candidate_ms2_evidence = (
@@ -319,30 +327,24 @@ def extract_one_target(
     if paired_rejection is not None:
         diagnostics.append(paired_rejection)
 
-    anchor_diagnostic = anchor_rt_mismatch_diagnostic(
-        sample_name,
-        target,
-        peak_result,
-        anchor_rt=anchor_rt,
-        paired_rejection=paired_rejection,
-    )
-    if anchor_diagnostic is not None:
-        diagnostics.append(anchor_diagnostic)
-    fallback_diagnostic = nl_anchor_fallback_diagnostic(
-        sample_name,
-        target,
-        config,
+    append_anchor_window_diagnostics(
+        diagnostics, sample_name, target, config, peak_result,
         anchor_used=anchor_used,
+        anchor_rt=anchor_rt,
         rt_min=rt_min,
         rt_max=rt_max,
         nl_result=result.nl,
+        paired_rejection=paired_rejection,
     )
-    if fallback_diagnostic is not None:
-        diagnostics.append(fallback_diagnostic)
-    append_peak_candidate_rows(
-        peak_candidate_rows, config, sample_name, target, peak_result,
-        _cached_candidate_ms2_builder,
-        rt=rt,
-        intensity=intensity,
+    append_peak_audit_rows(
+        peak_candidate_rows=peak_candidate_rows,
+        peak_candidate_boundary_rows=peak_candidate_boundary_rows,
+        config=config,
+        sample_name=sample_name,
+        target=target,
+        peak_result=peak_result,
+        candidate_ms2_builder=_cached_candidate_ms2_builder,
+        rt=audit_rt,
+        intensity=audit_intensity,
     )
     return anchor_rt

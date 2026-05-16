@@ -54,8 +54,9 @@ Required v1 fields:
 - `height_raw`
 - `height_smoothed`
 - `integration_method`
-- optional future fields: `area_baseline_corrected`,
-  `area_uncertainty`, `baseline_type`, `baseline_score`, `raw_scan_indices`.
+- optional debug fields populated when raw trace arrays are available:
+  `area_baseline_corrected`, `area_uncertainty`, `baseline_type`,
+  `baseline_score`, `raw_scan_indices`.
 
 ### EvidenceVector
 

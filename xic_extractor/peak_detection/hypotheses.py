@@ -3,11 +3,17 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+import numpy as np
+
 from xic_extractor.evidence_semantics import (
     CommonEvidence,
     common_evidence_from_targeted_candidate,
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
+from xic_extractor.peak_detection.baseline import (
+    bounded_trace_interval,
+    integrate_linear_edge_baseline,
+)
 from xic_extractor.peak_detection.models import (
     PeakCandidate,
     PeakCandidateScore,
@@ -121,6 +127,8 @@ def build_peak_hypotheses(
     resolver_mode: str,
     peak_result: PeakDetectionResult,
     candidate_ms2_evidence: Mapping[PeakCandidate, CandidateMS2Evidence] | None = None,
+    rt: object | None = None,
+    intensity: object | None = None,
 ) -> tuple[PeakHypothesis, ...]:
     selected = _selected_candidate(peak_result)
     score_by_candidate = {
@@ -153,7 +161,11 @@ def build_peak_hypotheses(
                 istd_pair=istd_pair,
                 analysis_mode="targeted",
                 resolver_mode=resolver_mode,
-                integration=_integration_from_candidate(candidate),
+                integration=_integration_from_candidate(
+                    candidate,
+                    rt=rt,
+                    intensity=intensity,
+                ),
                 evidence=_evidence_from_candidate(
                     candidate,
                     score,
@@ -193,7 +205,31 @@ def _trace_group_id(
     return "|".join((sample_name, target_label, resolver_mode))
 
 
-def _integration_from_candidate(candidate: PeakCandidate) -> IntegrationResult:
+def _integration_from_candidate(
+    candidate: PeakCandidate,
+    *,
+    rt: object | None = None,
+    intensity: object | None = None,
+) -> IntegrationResult:
+    baseline = None
+    raw_scan_indices: tuple[int, ...] = ()
+    if rt is not None and intensity is not None:
+        rt_values = np.asarray(rt, dtype=float)
+        intensity_values = np.asarray(intensity, dtype=float)
+        left_index = _nearest_index(rt_values, candidate.peak.peak_start)
+        right_index = _nearest_index(rt_values, candidate.peak.peak_end) + 1
+        bounded_left, bounded_right = bounded_trace_interval(
+            left_index,
+            right_index,
+            len(rt_values),
+        )
+        raw_scan_indices = tuple(range(bounded_left, bounded_right))
+        baseline = integrate_linear_edge_baseline(
+            intensity_values,
+            rt_values,
+            left_index,
+            right_index,
+        )
     return IntegrationResult(
         rt_left_min=candidate.peak.peak_start,
         rt_apex_min=candidate.selection_apex_rt,
@@ -203,6 +239,13 @@ def _integration_from_candidate(candidate: PeakCandidate) -> IntegrationResult:
         height_raw=candidate.raw_apex_intensity,
         height_smoothed=candidate.selection_apex_intensity,
         area_raw_counts_seconds=candidate.peak.area,
+        area_baseline_corrected=(
+            baseline.area_baseline_corrected if baseline is not None else None
+        ),
+        area_uncertainty=baseline.area_uncertainty if baseline is not None else None,
+        baseline_type=baseline.baseline_type if baseline is not None else "",
+        baseline_score=baseline.baseline_score if baseline is not None else None,
+        raw_scan_indices=raw_scan_indices,
     )
 
 
@@ -305,3 +348,7 @@ def _format_float(value: float, *, digits: int = 5) -> str:
 
 def _join(values: tuple[str, ...]) -> str:
     return ";".join(values)
+
+
+def _nearest_index(rt: np.ndarray, value: float) -> int:
+    return int(np.argmin(np.abs(rt - value)))

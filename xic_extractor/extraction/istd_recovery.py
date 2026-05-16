@@ -25,6 +25,7 @@ _ISTD_WIDER_RECOVERY_MIN_INTENSITY_RATIO = 2.0
 @dataclass(frozen=True)
 class IstdAnchorRecoveryDecision:
     peak_result: PeakDetectionResult
+    rt: np.ndarray | None = None
     intensity: np.ndarray | None = None
 
 
@@ -69,6 +70,7 @@ def recover_istd_anchor_peak_if_needed(
             return IstdAnchorRecoveryDecision(peak_result)
         return IstdAnchorRecoveryDecision(
             recovered.peak_result,
+            rt=recovered.rt,
             intensity=recovered.intensity,
         )
 
@@ -93,6 +95,7 @@ def recover_istd_anchor_peak_if_needed(
     ):
         return IstdAnchorRecoveryDecision(
             recovered.peak_result,
+            rt=recovered.rt,
             intensity=recovered.intensity,
         )
     return IstdAnchorRecoveryDecision(peak_result)

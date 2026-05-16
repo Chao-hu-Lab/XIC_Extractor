@@ -234,6 +234,7 @@ def test_run_does_not_write_intermediate_csv_by_default(
     assert not config.output_csv.with_name("xic_results_long.csv").exists()
     assert not config.diagnostics_csv.exists()
     assert not config.output_csv.with_name("peak_candidates.tsv").exists()
+    assert not config.output_csv.with_name("peak_candidate_boundaries.tsv").exists()
 
 
 def test_run_writes_peak_candidate_table_when_enabled(
@@ -273,6 +274,15 @@ def test_run_writes_peak_candidate_table_when_enabled(
     assert candidate_rows[0]["proposal_sources"] == "legacy_savgol"
     assert candidate_rows[1]["proposal_sources"] == "local_minimum"
     assert candidate_rows[1]["rejection_reason"] == "lower_confidence"
+
+    boundary_rows = _read_tsv(
+        config.output_csv.with_name("peak_candidate_boundaries.tsv")
+    )
+    assert boundary_rows
+    assert {row["target_label"] for row in boundary_rows} == {"NoNL"}
+    assert "candidate_interval" in {
+        row["boundary_sources"] for row in boundary_rows
+    }
 
 
 def test_peak_candidate_table_includes_cwt_audit_proposals_when_enabled(
@@ -1266,6 +1276,63 @@ def test_istd_wider_recovery_shape_metrics_use_recovered_trace(
     assert paired_fwhm_values[0] is not None
 
 
+def test_istd_wider_recovery_candidate_audit_uses_recovered_trace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = replace(
+        _config(tmp_path, keep_intermediate_csv=False),
+        emit_peak_candidates=True,
+    )
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("ISTD", is_istd=True)]
+
+    monkeypatch.setattr(
+        "xic_extractor.extractor.open_raw",
+        lambda *_args, **_kwargs: _RecoveryAuditRaw(),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_nl_anchor_rt",
+        _anchor_sequence([9.0]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence(
+            [
+                _ok_peak(
+                    9.05,
+                    100.0,
+                    200.0,
+                    quality_flags=("low_trace_continuity",),
+                ),
+                _ok_peak(8.35, 2500.0, 6000.0),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.check_nl",
+        _nl_sequence([NLResult("OK", 1.0, 9.0, 1, 0, 1)]),
+    )
+
+    _run(config, targets)
+
+    boundary_rows = _read_tsv(
+        config.output_csv.with_name("peak_candidate_boundaries.tsv")
+    )
+    selected_candidate_intervals = [
+        row
+        for row in boundary_rows
+        if row["selected_candidate"] == "TRUE"
+        and "candidate_interval" in row["boundary_sources"]
+    ]
+    assert selected_candidate_intervals
+    assert selected_candidate_intervals[0]["rt_left_min"] == "7.85000"
+    assert selected_candidate_intervals[0]["rt_right_min"] == "8.85000"
+
+
 def test_paired_analyte_keeps_mismatched_target_anchor_peak_as_very_low(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1720,6 +1787,22 @@ class _ShapeMetricRecoveryRaw(_FakeRaw):
         rt = np.linspace(rt_min, rt_max, 41)
         intensity = 1000.0 * np.exp(-((np.arange(41) - 20) / 4.0) ** 2) + 10.0
         return rt, intensity
+
+
+class _RecoveryAuditRaw(_FakeRaw):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def extract_xic(
+        self, mz: float, rt_min: float, rt_max: float, ppm_tol: float
+    ) -> tuple[np.ndarray, np.ndarray]:
+        self.calls += 1
+        if self.calls == 1:
+            return np.asarray([8.0, 9.0, 10.0]), np.asarray([5.0, 10.0, 5.0])
+        return (
+            np.asarray([7.0, 7.85, 8.35, 8.85, 11.0]),
+            np.asarray([5.0, 25.0, 2500.0, 25.0, 5.0]),
+        )
 
 
 class _CwtAuditRaw(_FakeRaw):

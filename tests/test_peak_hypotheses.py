@@ -1,3 +1,5 @@
+import numpy as np
+
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.hypotheses import (
     build_peak_hypotheses,
@@ -105,6 +107,32 @@ def test_hypothesis_selection_reference_comes_from_detection_result() -> None:
     )[0]
 
     assert hypothesis.audit.selection_reference_rt_min is None
+
+
+def test_build_peak_hypotheses_scan_indices_match_bounded_baseline_interval() -> None:
+    selected = _candidate(9.8, left=9.8, right=10.2)
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=3,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+    )
+
+    hypothesis = build_peak_hypotheses(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="",
+        resolver_mode="legacy_savgol",
+        peak_result=result,
+        rt=np.asarray([8.0, 8.5, 9.0]),
+        intensity=np.asarray([10.0, 80.0, 20.0]),
+    )[0]
+
+    assert hypothesis.integration.raw_scan_indices == (1, 2)
+    assert hypothesis.integration.baseline_type == "linear_edge"
 
 
 def test_build_peak_hypotheses_returns_empty_without_candidate_intervals() -> None:
