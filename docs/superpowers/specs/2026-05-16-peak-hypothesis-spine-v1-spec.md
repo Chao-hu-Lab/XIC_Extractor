@@ -79,6 +79,12 @@ Required v1 fields:
 - `nl_match`
 - `ms2_trace_strength`
 - `rt_prior_min`
+- `common`
+
+`common` stores the normalized bottom-layer evidence projection from
+`xic_extractor.evidence_semantics.CommonEvidence`. It is shared semantics, not a
+shared decision policy: targeted confidence, discovery priority, and alignment
+matrix identity must still make their own final decisions.
 
 Reserved future fields include CWT ridge, baseline, shape, mz stability, blank,
 QC, isotope, adduct, coelution, ion ratio, GC spectral similarity, and retention

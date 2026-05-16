@@ -3,6 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from xic_extractor.evidence_semantics import (
+    CommonEvidence,
+    common_evidence_from_targeted_candidate,
+)
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.models import (
     PeakCandidate,
@@ -60,6 +64,7 @@ class EvidenceVector:
     cwt_ridge_persistence: float | None = None
     boundary_score: float | None = None
     baseline_score: float | None = None
+    common: CommonEvidence | None = None
 
 
 @dataclass(frozen=True)
@@ -149,7 +154,12 @@ def build_peak_hypotheses(
                 analysis_mode="targeted",
                 resolver_mode=resolver_mode,
                 integration=_integration_from_candidate(candidate),
-                evidence=_evidence_from_candidate(candidate, score, evidence),
+                evidence=_evidence_from_candidate(
+                    candidate,
+                    score,
+                    evidence,
+                    target_label=target_label,
+                ),
                 audit=AuditTrail(
                     proposal_sources=candidate.proposal_sources,
                     source_apex_rank=candidate.source_apex_rank,
@@ -200,7 +210,15 @@ def _evidence_from_candidate(
     candidate: PeakCandidate,
     score: PeakCandidateScore | None,
     evidence: CandidateMS2Evidence | None,
+    *,
+    target_label: str,
 ) -> EvidenceVector:
+    common = common_evidence_from_targeted_candidate(
+        candidate,
+        score=score,
+        candidate_ms2_evidence=evidence,
+        target_label=target_label,
+    )
     return EvidenceVector(
         confidence=score.confidence if score is not None else "",
         raw_score=score.raw_score if score is not None else None,
@@ -214,10 +232,11 @@ def _evidence_from_candidate(
         region_duration_min=candidate.region_duration_min,
         region_edge_ratio=candidate.region_edge_ratio,
         region_trace_continuity=candidate.region_trace_continuity,
-        ms2_present=evidence.ms2_present if evidence is not None else None,
-        nl_match=evidence.nl_match if evidence is not None else None,
-        ms2_trace_strength=evidence.trace.strength if evidence is not None else "",
+        ms2_present=common.ms2_present,
+        nl_match=common.nl_match,
+        ms2_trace_strength=common.ms2_trace_strength,
         rt_prior_min=score.prior_rt if score is not None else None,
+        common=common,
     )
 
 

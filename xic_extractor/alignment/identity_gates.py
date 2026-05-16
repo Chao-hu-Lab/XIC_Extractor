@@ -5,6 +5,11 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from xic_extractor.evidence_semantics import (
+    CommonEvidence,
+    common_evidence_from_discovery_candidate,
+)
+
 EXTREME_BACKFILL_REASON = "extreme_backfill_dependency"
 WEAK_SEED_BACKFILL_REASON = "weak_seed_backfill_dependency"
 
@@ -115,25 +120,28 @@ def summarize_detected_seed_quality(
     if candidate_lookup is None:
         return SeedQualitySummary(available=False)
 
-    candidates: list[Any] = []
+    evidence_vectors: list[CommonEvidence] = []
     missing_count = 0
     for seed in detected_seeds:
         candidate = lookup_seed_candidate(seed, candidate_lookup)
         if candidate is None:
             missing_count += 1
             continue
-        candidates.append(candidate)
+        evidence_vectors.append(common_evidence_from_discovery_candidate(candidate))
 
     return SeedQualitySummary(
         available=True,
-        min_evidence_score=_min_metric(candidates, "evidence_score"),
-        min_seed_event_count=_min_metric(candidates, "seed_event_count"),
-        max_abs_nl_ppm=_max_abs_metric(
-            candidates,
-            "neutral_loss_mass_error_ppm",
+        min_evidence_score=_min_common_metric(evidence_vectors, "evidence_score"),
+        min_seed_event_count=_min_common_metric(evidence_vectors, "seed_event_count"),
+        max_abs_nl_ppm=_max_abs_common_metric(
+            evidence_vectors,
+            "neutral_loss_error_ppm",
         ),
-        min_scan_support_score=_min_metric(candidates, "ms1_scan_support_score"),
-        looked_up_candidate_count=len(candidates),
+        min_scan_support_score=_min_common_metric(
+            evidence_vectors,
+            "scan_support_score",
+        ),
+        looked_up_candidate_count=len(evidence_vectors),
         missing_detected_candidate_count=missing_count,
     )
 
@@ -175,21 +183,27 @@ def is_dr_neutral_loss_tag(tag: str) -> bool:
     return tag == "dR" or tag.endswith("_dR")
 
 
-def _min_metric(candidates: Sequence[Any], key: str) -> float | None:
+def _min_common_metric(
+    evidence_vectors: Sequence[CommonEvidence],
+    key: str,
+) -> float | None:
     values = tuple(
         value
-        for candidate in candidates
-        for value in (_number_field(candidate, key),)
+        for evidence in evidence_vectors
+        for value in (_number_field(evidence, key),)
         if value is not None
     )
     return min(values) if values else None
 
 
-def _max_abs_metric(candidates: Sequence[Any], key: str) -> float | None:
+def _max_abs_common_metric(
+    evidence_vectors: Sequence[CommonEvidence],
+    key: str,
+) -> float | None:
     values = tuple(
         abs(value)
-        for candidate in candidates
-        for value in (_number_field(candidate, key),)
+        for evidence in evidence_vectors
+        for value in (_number_field(evidence, key),)
         if value is not None
     )
     return max(values) if values else None
