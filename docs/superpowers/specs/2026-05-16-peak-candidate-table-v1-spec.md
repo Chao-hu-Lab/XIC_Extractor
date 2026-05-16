@@ -327,6 +327,20 @@ to `proposal_sources` and keep the production interval. If CWT finds an
 additional apex, that row must be `selected=FALSE` and available for review or
 future model-selection experiments only.
 
+`tools/diagnostics/cwt_peak_candidate_audit.py` summarizes candidate-table CWT
+evidence after extraction. It classifies each sample/target/resolver group as:
+
+- `selected_cwt_agreed`: the selected row itself includes `centwave_cwt`;
+- `selected_cwt_nearby`: the selected row does not include CWT provenance, but
+  the nearest CWT proposal is within the audit RT window;
+- `selected_cwt_disagreed`: CWT proposes a farther apex than the selected row;
+- `selected_without_cwt`: no CWT proposal exists for the group.
+
+`selected_cwt_nearby` prevents the report from overcalling disagreements when
+CWT support merged into a neighboring non-selected candidate inside the same
+peak region. The default nearby window is an audit parameter, not a production
+selection rule.
+
 ### Process Mode
 
 The candidate table accumulator must not pass non-pickleable closures or open
@@ -354,6 +368,8 @@ Candidate table v1 is ready when all of these are true:
 11. An 8RAW smoke run with `emit_peak_candidates=true` completes and writes a
     candidate table without changing `XIC Results` selected rows compared with
     the same run with candidate output disabled.
+12. The CWT audit report can summarize 8RAW `peak_candidates.tsv` and separate
+    direct agreement, nearby support, true disagreement, and no-CWT groups.
 
 ## Suggested Test Plan
 
