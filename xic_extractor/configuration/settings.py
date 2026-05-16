@@ -50,6 +50,7 @@ class _ParsedSettings:
     rt_prior_library_path: Path | None
     emit_score_breakdown: bool
     emit_review_report: bool
+    emit_peak_candidates: bool
     keep_intermediate_csv: bool
     parallel_mode: str
     parallel_workers: int
@@ -245,6 +246,12 @@ def _parse_settings_values(
             None,
             "emit_review_report",
             _setting_value(settings, settings_path, "emit_review_report"),
+        ),
+        emit_peak_candidates=_parse_bool(
+            settings_path,
+            None,
+            "emit_peak_candidates",
+            _setting_value(settings, settings_path, "emit_peak_candidates"),
         ),
         keep_intermediate_csv=_parse_bool(
             settings_path,
@@ -474,6 +481,7 @@ def _build_config(
         rt_prior_library_path=parsed.rt_prior_library_path,
         emit_score_breakdown=parsed.emit_score_breakdown,
         emit_review_report=parsed.emit_review_report,
+        emit_peak_candidates=parsed.emit_peak_candidates,
         keep_intermediate_csv=parsed.keep_intermediate_csv,
         parallel_mode=parsed.parallel_mode,
         parallel_workers=parsed.parallel_workers,

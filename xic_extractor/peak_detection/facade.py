@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import replace
 
 import numpy as np
 
@@ -11,6 +12,7 @@ from xic_extractor.peak_detection.local_minimum import (
 )
 from xic_extractor.peak_detection.models import (
     PeakCandidate,
+    PeakCandidateScore,
     PeakCandidatesResult,
     PeakDetectionResult,
 )
@@ -25,6 +27,8 @@ from xic_extractor.peak_scoring import (
     score_candidate,
     select_candidate_with_confidence,
 )
+
+_BOUNDARY_MERGE_TOLERANCE_MIN = 0.02
 
 
 def find_peak_and_area(
@@ -42,6 +46,7 @@ def find_peak_and_area(
     chosen_reason: str | None = None
     chosen_severities: tuple[tuple[int, str], ...] = ()
     chosen_score_breakdown: tuple[tuple[str, str], ...] = ()
+    candidate_scores: tuple[PeakCandidateScore, ...] = ()
     if candidates_result.status == "OK":
         preliminary_candidate = select_candidate(
             candidates_result.candidates,
@@ -60,8 +65,20 @@ def find_peak_and_area(
         all_candidates = candidates_result.candidates
         result_for_output = candidates_result
         if recovery_candidate is not None and recovery_result is not None:
+            recovery_candidate, recovery_result = _mark_recovery_candidate(
+                recovery_candidate,
+                recovery_result,
+            )
             all_candidates = _append_candidate_once(all_candidates, recovery_candidate)
             result_for_output = _with_candidates(candidates_result, all_candidates)
+
+        selection_rt = selection_rt_for_scored_candidates(
+            candidates_result.candidates,
+            preferred_rt=preferred_rt,
+            strict_preferred_rt=strict_preferred_rt,
+        )
+        if recovery_candidate is not None and recovery_result is not None:
+            selection_rt = preferred_rt
 
         if scoring_context_builder is not None:
             scored_candidates = [
@@ -72,13 +89,10 @@ def find_peak_and_area(
                 )
                 for candidate in all_candidates
             ]
-            selection_rt = selection_rt_for_scored_candidates(
-                candidates_result.candidates,
-                preferred_rt=preferred_rt,
-                strict_preferred_rt=strict_preferred_rt,
+            candidate_scores = tuple(
+                _candidate_score_summary(scored_candidate)
+                for scored_candidate in scored_candidates
             )
-            if recovery_candidate is not None and recovery_result is not None:
-                selection_rt = preferred_rt
             chosen = select_candidate_with_confidence(
                 scored_candidates,
                 selection_rt=selection_rt,
@@ -94,6 +108,7 @@ def find_peak_and_area(
                 return _detection_success(
                     result_for_output,
                     recovery_candidate,
+                    selection_reference_rt=selection_rt,
                 )
             best_candidate = select_candidate(
                 all_candidates,
@@ -107,6 +122,8 @@ def find_peak_and_area(
             reason=chosen_reason,
             severities=chosen_severities,
             score_breakdown=chosen_score_breakdown,
+            candidate_scores=candidate_scores,
+            selection_reference_rt=selection_rt,
         )
 
     recovery_candidate, recovery_result = preferred_rt_recovery(
@@ -119,12 +136,17 @@ def find_peak_and_area(
         candidate_finder=find_peak_candidates,
     )
     if recovery_candidate is not None and recovery_result is not None:
+        recovery_candidate, recovery_result = _mark_recovery_candidate(
+            recovery_candidate,
+            recovery_result,
+        )
         if scoring_context_builder is not None:
             scored_recovery = _score_with_context(
                 recovery_candidate,
                 scoring_context_builder(recovery_candidate),
                 istd_confidence_note=istd_confidence_note,
             )
+            candidate_scores = (_candidate_score_summary(scored_recovery),)
             return _detection_success(
                 recovery_result,
                 recovery_candidate,
@@ -132,8 +154,14 @@ def find_peak_and_area(
                 reason=scored_recovery.reason,
                 severities=scored_recovery.severities,
                 score_breakdown=score_breakdown_fields(scored_recovery.evidence_score),
+                candidate_scores=candidate_scores,
+                selection_reference_rt=preferred_rt,
             )
-        return _detection_success(recovery_result, recovery_candidate)
+        return _detection_success(
+            recovery_result,
+            recovery_candidate,
+            selection_reference_rt=preferred_rt,
+        )
     return _detection_failure(candidates_result)
 
 
@@ -197,25 +225,52 @@ def _merge_resolver_candidates(
 ) -> tuple[PeakCandidate, ...]:
     merged = list(legacy_candidates)
     for local_candidate in local_candidates:
-        match_index = _matching_apex_index(merged, local_candidate)
+        match_index = _matching_merge_index(merged, local_candidate)
         if match_index is None:
             merged.append(local_candidate)
             continue
-        if _candidate_detail_score(local_candidate) > _candidate_detail_score(
-            merged[match_index]
-        ):
-            merged[match_index] = local_candidate
+        merged[match_index] = _merged_candidate(merged[match_index], local_candidate)
     return tuple(merged)
 
 
-def _matching_apex_index(
+def _matching_merge_index(
     candidates: list[PeakCandidate],
     candidate: PeakCandidate,
 ) -> int | None:
     for index, existing in enumerate(candidates):
-        if existing.selection_apex_index == candidate.selection_apex_index:
-            return index
+        if existing.selection_apex_index != candidate.selection_apex_index:
+            continue
+        if _material_boundary_disagreement(existing, candidate):
+            continue
+        return index
     return None
+
+
+def _merged_candidate(
+    first: PeakCandidate,
+    second: PeakCandidate,
+) -> PeakCandidate:
+    richer = first
+    if _candidate_detail_score(second) > _candidate_detail_score(first):
+        richer = second
+    return replace(
+        richer,
+        proposal_sources=_combine_proposal_sources(first, second),
+        source_apex_rank=_source_apex_rank(first, second, richer),
+        merge_note="same_apex_merged",
+    )
+
+
+def _material_boundary_disagreement(
+    first: PeakCandidate,
+    second: PeakCandidate,
+) -> bool:
+    return (
+        abs(first.peak.peak_start - second.peak.peak_start)
+        > _BOUNDARY_MERGE_TOLERANCE_MIN
+        or abs(first.peak.peak_end - second.peak.peak_end)
+        > _BOUNDARY_MERGE_TOLERANCE_MIN
+    )
 
 
 def _candidate_detail_score(candidate: PeakCandidate) -> int:
@@ -228,6 +283,29 @@ def _candidate_detail_score(candidate: PeakCandidate) -> int:
             candidate.region_trace_continuity,
         )
     )
+
+
+def _combine_proposal_sources(
+    first: PeakCandidate,
+    second: PeakCandidate,
+) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(
+            source
+            for source in (*first.proposal_sources, *second.proposal_sources)
+            if source
+        )
+    )
+
+
+def _source_apex_rank(
+    first: PeakCandidate,
+    second: PeakCandidate,
+    richer: PeakCandidate,
+) -> int | None:
+    if richer.source_apex_rank is not None:
+        return richer.source_apex_rank
+    return first.source_apex_rank or second.source_apex_rank
 
 
 def _max_result_smoothed(
@@ -278,6 +356,27 @@ def _score_with_context(
     )
 
 
+def _candidate_score_summary(scored_candidate) -> PeakCandidateScore:
+    evidence_score = scored_candidate.evidence_score
+    return PeakCandidateScore(
+        candidate=scored_candidate.candidate,
+        confidence=scored_candidate.confidence.value,
+        reason=scored_candidate.reason,
+        raw_score=evidence_score.raw_score if evidence_score is not None else None,
+        support_labels=(
+            evidence_score.support_labels if evidence_score is not None else ()
+        ),
+        concern_labels=(
+            evidence_score.concern_labels if evidence_score is not None else ()
+        ),
+        cap_labels=evidence_score.cap_labels if evidence_score is not None else (),
+        prior_rt=scored_candidate.prior_rt,
+        quality_penalty=scored_candidate.quality_penalty,
+        selection_quality_penalty=scored_candidate.selection_quality_penalty,
+        severities=scored_candidate.severities,
+    )
+
+
 def _detection_success(
     candidates_result: PeakCandidatesResult,
     candidate: PeakCandidate,
@@ -286,6 +385,8 @@ def _detection_success(
     reason: str | None = None,
     severities: tuple[tuple[int, str], ...] = (),
     score_breakdown: tuple[tuple[str, str], ...] = (),
+    candidate_scores: tuple[PeakCandidateScore, ...] = (),
+    selection_reference_rt: float | None = None,
 ) -> PeakDetectionResult:
     return PeakDetectionResult(
         status="OK",
@@ -298,6 +399,8 @@ def _detection_success(
         reason=reason,
         severities=severities,
         score_breakdown=score_breakdown,
+        candidate_scores=candidate_scores,
+        selection_reference_rt=selection_reference_rt,
     )
 
 
@@ -319,6 +422,35 @@ def _append_candidate_once(
     if any(existing is candidate for existing in candidates):
         return candidates
     return (*candidates, candidate)
+
+
+def _mark_recovery_candidate(
+    recovery_candidate: PeakCandidate,
+    recovery_result: PeakCandidatesResult,
+) -> tuple[PeakCandidate, PeakCandidatesResult]:
+    marked_candidate = _with_added_proposal_source(
+        recovery_candidate,
+        "preferred_rt_recovery",
+    )
+    marked_candidates = tuple(
+        marked_candidate
+        if candidate is recovery_candidate or candidate == recovery_candidate
+        else candidate
+        for candidate in recovery_result.candidates
+    )
+    return marked_candidate, _with_candidates(recovery_result, marked_candidates)
+
+
+def _with_added_proposal_source(
+    candidate: PeakCandidate,
+    source: str,
+) -> PeakCandidate:
+    return replace(
+        candidate,
+        proposal_sources=tuple(
+            dict.fromkeys((*candidate.proposal_sources, source))
+        ),
+    )
 
 
 def _with_candidates(

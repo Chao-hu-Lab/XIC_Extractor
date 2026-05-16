@@ -33,6 +33,7 @@ class ExtractionConfig:
     rt_prior_library_path: Path | None = None
     emit_score_breakdown: bool = False
     emit_review_report: bool = False
+    emit_peak_candidates: bool = False
     keep_intermediate_csv: bool = False
     parallel_mode: str = "serial"
     parallel_workers: int = 1

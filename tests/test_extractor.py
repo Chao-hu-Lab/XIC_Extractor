@@ -1,4 +1,5 @@
 import csv
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,7 @@ from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.signal_processing import (
     PeakCandidate,
+    PeakCandidateScore,
     PeakDetectionResult,
     PeakResult,
 )
@@ -231,6 +233,95 @@ def test_run_does_not_write_intermediate_csv_by_default(
     assert not config.output_csv.exists()
     assert not config.output_csv.with_name("xic_results_long.csv").exists()
     assert not config.diagnostics_csv.exists()
+    assert not config.output_csv.with_name("peak_candidates.tsv").exists()
+
+
+def test_run_writes_peak_candidate_table_when_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = replace(
+        _config(tmp_path, keep_intermediate_csv=False),
+        emit_peak_candidates=True,
+    )
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    selected = _candidate(8.5, area=3400.25, proposal_sources=("legacy_savgol",))
+    rejected = _candidate(9.1, area=400.0, proposal_sources=("local_minimum",))
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=15,
+        max_smoothed=1200.0,
+        n_prominent_peaks=2,
+        candidates=(selected, rejected),
+        candidate_scores=(
+            _candidate_score(selected, confidence="HIGH", raw_score=90),
+            _candidate_score(rejected, confidence="LOW", raw_score=45),
+        ),
+    )
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence([peak_result]),
+    )
+
+    _run(config, [_target("NoNL", neutral_loss_da=None)])
+
+    candidate_rows = _read_tsv(config.output_csv.with_name("peak_candidates.tsv"))
+    assert not config.output_csv.exists()
+    assert [row["selected"] for row in candidate_rows] == ["TRUE", "FALSE"]
+    assert candidate_rows[0]["target_label"] == "NoNL"
+    assert candidate_rows[0]["proposal_sources"] == "legacy_savgol"
+    assert candidate_rows[1]["proposal_sources"] == "local_minimum"
+    assert candidate_rows[1]["rejection_reason"] == "lower_confidence"
+
+
+def test_peak_candidate_table_does_not_echo_unused_anchor_as_selection_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = replace(
+        _config(tmp_path, keep_intermediate_csv=False),
+        emit_peak_candidates=True,
+    )
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    peak_result = _ok_peak(8.5, 1200.0, 3400.25)
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_nl_anchor_rt",
+        _anchor_sequence([8.45]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence([peak_result]),
+    )
+
+    _run(config, [_target("Anchored")])
+
+    candidate_rows = _read_tsv(config.output_csv.with_name("peak_candidates.tsv"))
+    assert candidate_rows[0]["selection_reference_rt_min"] == ""
+
+
+def test_run_selected_output_is_unchanged_when_peak_candidate_table_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    disabled_root = tmp_path / "disabled"
+    enabled_root = tmp_path / "enabled"
+    disabled_root.mkdir()
+    enabled_root.mkdir()
+    disabled_config = _config(disabled_root)
+    enabled_config = replace(_config(enabled_root), emit_peak_candidates=True)
+    (disabled_config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    (enabled_config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    peak_result = _ok_peak_with_rejected_candidate(8.5, 1200.0, 3400.25)
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence([peak_result, peak_result]),
+    )
+
+    _run(disabled_config, [_target("NoNL", neutral_loss_da=None)])
+    _run(enabled_config, [_target("NoNL", neutral_loss_da=None)])
+
+    assert _read_csv(enabled_config.output_csv) == _read_csv(disabled_config.output_csv)
 
 
 def test_run_loads_scoring_inputs_from_config_paths(
@@ -1386,6 +1477,81 @@ def _ok_peak(
     )
 
 
+def _ok_peak_with_rejected_candidate(
+    rt: float,
+    intensity: float,
+    area: float,
+) -> PeakDetectionResult:
+    selected = _candidate(rt, intensity=intensity, area=area)
+    rejected = _candidate(
+        rt + 0.4,
+        intensity=intensity * 0.4,
+        area=area * 0.25,
+        proposal_sources=("local_minimum",),
+    )
+    return PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=15,
+        max_smoothed=intensity,
+        n_prominent_peaks=2,
+        candidates=(selected, rejected),
+        candidate_scores=(
+            _candidate_score(selected, confidence="HIGH", raw_score=90),
+            _candidate_score(rejected, confidence="LOW", raw_score=45),
+        ),
+    )
+
+
+def _candidate(
+    rt: float,
+    *,
+    intensity: float = 1200.0,
+    area: float = 3400.25,
+    proposal_sources: tuple[str, ...] = ("legacy_savgol",),
+) -> PeakCandidate:
+    peak = PeakResult(
+        rt=rt,
+        intensity=intensity,
+        intensity_smoothed=intensity,
+        area=area,
+        peak_start=rt - 0.5,
+        peak_end=rt + 0.5,
+    )
+    return PeakCandidate(
+        peak=peak,
+        selection_apex_rt=rt,
+        selection_apex_intensity=intensity,
+        selection_apex_index=7,
+        raw_apex_rt=rt,
+        raw_apex_intensity=intensity,
+        raw_apex_index=7,
+        prominence=intensity * 0.5,
+        proposal_sources=proposal_sources,
+        source_apex_rank=1,
+        region_scan_count=15,
+        region_duration_min=1.0,
+        region_edge_ratio=1.5,
+    )
+
+
+def _candidate_score(
+    candidate: PeakCandidate,
+    *,
+    confidence: str,
+    raw_score: int,
+) -> PeakCandidateScore:
+    return PeakCandidateScore(
+        candidate=candidate,
+        confidence=confidence,
+        reason=f"decision: {confidence.lower()}",
+        raw_score=raw_score,
+        support_labels=("strict_nl_ok",),
+        concern_labels=() if confidence == "HIGH" else ("nl_fail",),
+        cap_labels=() if confidence == "HIGH" else ("nl_fail_cap",),
+    )
+
+
 def _failed_peak(
     status: str, *, n_points: int, max_smoothed: float | None
 ) -> PeakDetectionResult:
@@ -1514,3 +1680,8 @@ class _ShapeMetricRecoveryRaw(_FakeRaw):
 def _read_csv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8-sig") as handle:
         return list(csv.DictReader(handle))
+
+
+def _read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))

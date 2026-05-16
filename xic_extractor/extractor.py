@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from xic_extractor import neutral_loss, raw_reader, signal_processing
 from xic_extractor.config import ExtractionConfig, Target
@@ -83,6 +83,7 @@ class FileResult:
     results: dict[str, ExtractionResult]
     group: str | None = None
     error: str | None = None
+    peak_candidate_rows: list[dict[str, str]] = field(default_factory=list)
 
     @property
     def extraction_results(self) -> list[ExtractionResult]:

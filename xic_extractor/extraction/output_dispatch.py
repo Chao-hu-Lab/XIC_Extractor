@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.output import csv_writers
+from xic_extractor.output.peak_candidates import write_peak_candidates_for_file_results
 
 if TYPE_CHECKING:
     from xic_extractor.extractor import RunOutput
@@ -14,6 +15,11 @@ def write_outputs(
     targets: list[Target],
     output: RunOutput,
 ) -> None:
+    if config.emit_peak_candidates:
+        write_peak_candidates_for_file_results(
+            config.output_csv.with_name("peak_candidates.tsv"),
+            output.file_results,
+        )
     if not config.keep_intermediate_csv:
         return
     csv_writers.write_all(

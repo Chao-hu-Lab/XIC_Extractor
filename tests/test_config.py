@@ -121,6 +121,7 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.resolver_min_scans == 5
     assert config.parallel_mode == "process"
     assert config.parallel_workers == default_parallel_workers()
+    assert config.emit_peak_candidates is False
     assert targets[0].label == "Analyte"
     assert targets[0].neutral_loss_da == pytest.approx(116.0474)
 
@@ -328,6 +329,16 @@ def test_load_config_accepts_process_parallel_settings(tmp_path: Path) -> None:
     assert config.parallel_workers == 4
 
 
+def test_load_config_accepts_emit_peak_candidates_setting(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"emit_peak_candidates": "true"})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.emit_peak_candidates is True
+
+
 def test_canonical_settings_defaults_include_parallel_settings() -> None:
     assert CANONICAL_SETTINGS_DEFAULTS["parallel_mode"] == "process"
     assert CANONICAL_SETTINGS_DEFAULTS["parallel_workers"] == str(
@@ -363,6 +374,15 @@ def test_settings_example_includes_review_report_setting() -> None:
         rows = {row["key"]: row["value"] for row in csv.DictReader(handle)}
 
     assert rows["emit_review_report"] == "false"
+
+
+def test_settings_example_includes_peak_candidates_setting() -> None:
+    example_path = Path("config/settings.example.csv")
+
+    with example_path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = {row["key"]: row["value"] for row in csv.DictReader(handle)}
+
+    assert rows["emit_peak_candidates"] == "false"
 
 
 def test_settings_example_includes_local_minimum_preset() -> None:

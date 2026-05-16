@@ -122,3 +122,18 @@ def nl_anchor_fallback_diagnostic(
             f"fallback window [{rt_min:.2f}, {rt_max:.2f}]{nl_note}"
         ),
     )
+
+
+def istd_anchor_missing_diagnostic(
+    sample_name: str, target: Target
+) -> DiagnosticRecord:
+    return DiagnosticRecord(
+        sample_name=sample_name,
+        target_label=target.label,
+        issue="ISTD_ANCHOR_MISSING",
+        reason=(
+            f"ISTD '{target.istd_pair}' yielded no NL-confirmed anchor in this "
+            "sample; falling back to highest base_peak — isobar discrimination "
+            "disabled"
+        ),
+    )

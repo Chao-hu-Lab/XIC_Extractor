@@ -13,10 +13,12 @@ from xic_extractor.extraction.diagnostics import (
     anchor_rt_mismatch_diagnostic,
     candidate_ms2_evidence_builder,
     check_target_nl,
+    istd_anchor_missing_diagnostic,
     nl_anchor_fallback_diagnostic,
 )
 from xic_extractor.extraction.drift import estimate_sample_drift
 from xic_extractor.extraction.istd_recovery import recover_istd_anchor_peak_if_needed
+from xic_extractor.extraction.peak_candidate_table import append_peak_candidate_rows
 from xic_extractor.extraction.rt_windows import get_rt_window
 from xic_extractor.extraction.scoring_factory import (
     paired_istd_fwhm,
@@ -81,6 +83,7 @@ def process_file(
     try:
         with extractor.open_raw(raw_path, config.dll_dir) as raw:
             results: dict[str, ExtractionResult] = dict(precomputed_istd_results or {})
+            peak_candidate_rows: list[dict[str, str]] = []
             diagnostics: list[DiagnosticRecord] = list(
                 precomputed_istd_diagnostics or []
             )
@@ -107,6 +110,7 @@ def process_file(
                         strict_preferred_rt=False,
                         results=results,
                         diagnostics=diagnostics,
+                        peak_candidate_rows=peak_candidate_rows,
                         scoring_context_factory=scoring_context_factory,
                         shape_metrics_by_label=istd_shape_metrics_by_label,
                     )
@@ -128,17 +132,7 @@ def process_file(
                 else:
                     if target.istd_pair:
                         diagnostics.append(
-                            DiagnosticRecord(
-                                sample_name=sample_name,
-                                target_label=target.label,
-                                issue="ISTD_ANCHOR_MISSING",
-                                reason=(
-                                    f"ISTD '{target.istd_pair}' yielded no "
-                                    f"NL-confirmed anchor in this sample; "
-                                    f"falling back to highest base_peak — isobar "
-                                    f"discrimination disabled"
-                                ),
-                            )
+                            istd_anchor_missing_diagnostic(sample_name, target)
                         )
                     reference_rt = None
                 extract_one_target(
@@ -151,6 +145,7 @@ def process_file(
                     strict_preferred_rt=reference_rt is not None,
                     results=results,
                     diagnostics=diagnostics,
+                    peak_candidate_rows=peak_candidate_rows,
                     scoring_context_factory=scoring_context_factory,
                     istd_confidence_note=istd_confidence_note(
                         istd_confidence_by_label.get(target.istd_pair)
@@ -165,6 +160,7 @@ def process_file(
             return extractor.FileResult(
                 sample_name=sample_name,
                 results=results,
+                peak_candidate_rows=peak_candidate_rows,
             ), diagnostics
     except Exception as exc:
         reason = f"Failed to open .raw: {type(exc).__name__}: {exc}"
@@ -192,6 +188,7 @@ def extract_one_target(
     strict_preferred_rt: bool = False,
     results: dict[str, ExtractionResult],
     diagnostics: list[DiagnosticRecord],
+    peak_candidate_rows: list[dict[str, str]] | None = None,
     scoring_context_factory: Callable[..., Any] | None = None,
     istd_confidence_note: str | None = None,
     istd_rt_in_this_sample: float | None = None,
@@ -342,4 +339,8 @@ def extract_one_target(
     )
     if fallback_diagnostic is not None:
         diagnostics.append(fallback_diagnostic)
+    append_peak_candidate_rows(
+        peak_candidate_rows, config, sample_name, target, peak_result,
+        _cached_candidate_ms2_builder,
+    )
     return anchor_rt
