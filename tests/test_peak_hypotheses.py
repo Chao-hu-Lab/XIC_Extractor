@@ -1,12 +1,8 @@
-import csv
-from pathlib import Path
-
-from xic_extractor.extraction.peak_candidate_table import (
-    build_peak_candidate_rows,
-    candidate_audit_id,
-)
 from xic_extractor.neutral_loss import CandidateMS2Evidence
-from xic_extractor.output.peak_candidates import write_peak_candidates_tsv
+from xic_extractor.peak_detection.hypotheses import (
+    build_peak_hypotheses,
+    hypothesis_audit_id,
+)
 from xic_extractor.signal_processing import (
     PeakCandidate,
     PeakCandidateScore,
@@ -15,7 +11,7 @@ from xic_extractor.signal_processing import (
 )
 
 
-def test_candidate_id_is_deterministic() -> None:
+def test_hypothesis_id_is_deterministic() -> None:
     candidate = _candidate(
         8.1234567,
         left=8.001234,
@@ -23,13 +19,13 @@ def test_candidate_id_is_deterministic() -> None:
         proposal_sources=("legacy_savgol",),
     )
 
-    first = candidate_audit_id(
+    first = hypothesis_audit_id(
         sample_name="SampleA",
         target_label="Analyte",
         resolver_mode="legacy_savgol",
         candidate=candidate,
     )
-    second = candidate_audit_id(
+    second = hypothesis_audit_id(
         sample_name="SampleA",
         target_label="Analyte",
         resolver_mode="legacy_savgol",
@@ -43,7 +39,7 @@ def test_candidate_id_is_deterministic() -> None:
     )
 
 
-def test_build_rows_marks_selected_and_rejected_candidates() -> None:
+def test_build_peak_hypotheses_marks_selected_and_rejected_candidates() -> None:
     selected = _candidate(8.5, area=5000.0, proposal_sources=("legacy_savgol",))
     rejected = _candidate(8.9, area=900.0, proposal_sources=("local_minimum",))
     result = PeakDetectionResult(
@@ -60,7 +56,7 @@ def test_build_rows_marks_selected_and_rejected_candidates() -> None:
         selection_reference_rt=8.45,
     )
 
-    rows = build_peak_candidate_rows(
+    hypotheses = build_peak_hypotheses(
         sample_name="SampleA",
         target_label="Analyte",
         role="Analyte",
@@ -73,53 +69,65 @@ def test_build_rows_marks_selected_and_rejected_candidates() -> None:
         },
     )
 
-    assert [row["selected"] for row in rows] == ["TRUE", "FALSE"]
-    assert rows[0]["selection_rank"] == "1"
-    assert rows[0]["proposal_sources"] == "legacy_savgol"
-    assert rows[0]["ms2_present"] == "TRUE"
-    assert rows[0]["nl_match"] == "TRUE"
-    assert rows[0]["raw_score"] == "92"
-    assert rows[0]["support_labels"] == "strict_nl_ok;shape_clean"
-    assert rows[1]["proposal_sources"] == "local_minimum"
-    assert rows[1]["rejection_reason"] == "lower_confidence"
-    assert rows[1]["nl_match"] == "FALSE"
-    assert rows[1]["concern_labels"] == "nl_fail"
+    assert [hypothesis.audit.selected for hypothesis in hypotheses] == [True, False]
+    assert hypotheses[0].audit.selection_rank == 1
+    assert hypotheses[0].audit.proposal_sources == ("legacy_savgol",)
+    assert hypotheses[0].evidence.ms2_present is True
+    assert hypotheses[0].evidence.nl_match is True
+    assert hypotheses[0].evidence.raw_score == 92
+    assert hypotheses[0].evidence.support_labels == ("strict_nl_ok", "shape_clean")
+    assert hypotheses[0].integration.boundary_sources == ("candidate_interval",)
+    assert hypotheses[1].audit.proposal_sources == ("local_minimum",)
+    assert hypotheses[1].audit.rejection_reason == "lower_confidence"
+    assert hypotheses[1].evidence.nl_match is False
+    assert hypotheses[1].evidence.concern_labels == ("nl_fail",)
 
 
-def test_write_peak_candidates_tsv_serializes_rows_safely(tmp_path: Path) -> None:
-    path = tmp_path / "peak_candidates.tsv"
-    row = build_peak_candidate_rows(
+def test_hypothesis_selection_reference_comes_from_detection_result() -> None:
+    selected = _candidate(8.5)
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=20,
+        max_smoothed=3000.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+        selection_reference_rt=None,
+    )
+
+    hypothesis = build_peak_hypotheses(
         sample_name="SampleA",
         target_label="Analyte",
         role="Analyte",
         istd_pair="",
         resolver_mode="legacy_savgol",
-        peak_result=PeakDetectionResult(
-            status="OK",
-            peak=_candidate(8.5).peak,
-            n_points=20,
-            max_smoothed=3000.0,
-            n_prominent_peaks=1,
-            candidates=(_candidate(8.5),),
-        ),
+        peak_result=result,
     )[0]
-    row["reason"] = "line1\nline2\twith tab"
 
-    write_peak_candidates_tsv(path, [row])
-
-    text = path.read_text(encoding="utf-8-sig")
-    assert "line1 line2 with tab" in text
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        rows = list(csv.DictReader(handle, delimiter="\t"))
-    assert rows[0]["reason"] == "line1 line2 with tab"
+    assert hypothesis.audit.selection_reference_rt_min is None
 
 
-def test_disabled_writer_is_noop(tmp_path: Path) -> None:
-    path = tmp_path / "peak_candidates.tsv"
+def test_build_peak_hypotheses_returns_empty_without_candidate_intervals() -> None:
+    result = PeakDetectionResult(
+        status="PEAK_NOT_FOUND",
+        peak=None,
+        n_points=20,
+        max_smoothed=3000.0,
+        n_prominent_peaks=0,
+        candidates=(),
+    )
 
-    write_peak_candidates_tsv(path, [{"sample_name": "SampleA"}], enabled=False)
-
-    assert not path.exists()
+    assert (
+        build_peak_hypotheses(
+            sample_name="SampleA",
+            target_label="Analyte",
+            role="Analyte",
+            istd_pair="",
+            resolver_mode="legacy_savgol",
+            peak_result=result,
+        )
+        == ()
+    )
 
 
 def _candidate(
