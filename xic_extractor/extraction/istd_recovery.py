@@ -50,7 +50,7 @@ def recover_istd_anchor_peak_if_needed(
     if not target.is_istd or not anchor_used or anchor_rt is None:
         return IstdAnchorRecoveryDecision(peak_result)
 
-    if peak_result.status == "PEAK_NOT_FOUND" and peak_result.peak is None:
+    if peak_result.peak is None:
         recovered = _recover(
             raw=raw,
             config=config,
@@ -136,6 +136,8 @@ def _should_try_wider_istd_anchor_recovery(
 ) -> bool:
     if peak_result.peak is None:
         return False
+    if peak_result.confidence in {"LOW", "VERY_LOW"}:
+        return True
     candidate = selected_candidate(peak_result)
     if candidate is None:
         return False
