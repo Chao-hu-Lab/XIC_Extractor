@@ -33,7 +33,7 @@ This phase must:
 
 This phase must not:
 
-- implement CWT;
+- make CWT a selected-peak authority;
 - implement new baseline correction;
 - alter `local_minimum` or `legacy_savgol` decision behavior;
 - change targeted reliability states;
@@ -80,14 +80,19 @@ Required v1 fields:
 - `ms2_trace_strength`
 - `rt_prior_min`
 - `common`
+- `cwt_best_scale`
+- `cwt_ridge_persistence`
 
 `common` stores the normalized bottom-layer evidence projection from
 `xic_extractor.evidence_semantics.CommonEvidence`. It is shared semantics, not a
 shared decision policy: targeted confidence, discovery priority, and alignment
 matrix identity must still make their own final decisions.
 
-Reserved future fields include CWT ridge, baseline, shape, mz stability, blank,
-QC, isotope, adduct, coelution, ion ratio, GC spectral similarity, and retention
+`cwt_best_scale` and `cwt_ridge_persistence` are audit-only CWT proposal
+evidence. They must not promote, demote, or select a peak by themselves.
+
+Reserved future fields include baseline, shape, mz stability, blank, QC,
+isotope, adduct, coelution, ion ratio, GC spectral similarity, and retention
 index evidence.
 
 ### AuditTrail
@@ -142,15 +147,16 @@ hidden selector in this phase.
    merely the NL anchor found during windowing.
 4. Candidate table output remains byte-schema compatible with v1 headers.
 5. Existing targeted output remains unchanged when candidate output is disabled.
-6. Narrow tests, `ruff`, and `mypy` pass.
+6. CWT proposals may appear in the candidate/hypothesis audit surface when
+   candidate output is enabled, but they must not change selected peak behavior.
+7. Narrow tests, `ruff`, and `mypy` pass.
 
 ## Future Work
 
 After this spine is stable:
 
 1. Add baseline model output into `IntegrationResult`.
-2. Add CWT as another proposal/evidence source.
-3. Add boundary hypothesis enumeration that yields multiple `PeakHypothesis`
+2. Add boundary hypothesis enumeration that yields multiple `PeakHypothesis`
    objects for one apex.
-4. Add model selection over non-overlapping hypotheses.
-5. Extend the same hypothesis model to untargeted alignment backfill.
+3. Add model selection over non-overlapping hypotheses.
+4. Extend the same hypothesis model to untargeted alignment backfill.

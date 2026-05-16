@@ -39,6 +39,8 @@ class PeakCandidate:
     region_duration_min: float | None = None
     region_edge_ratio: float | None = None
     region_trace_continuity: float | None = None
+    cwt_best_scale: float | None = None
+    cwt_ridge_persistence: float | None = None
     proposal_sources: tuple[str, ...] = ()
     source_apex_rank: int | None = None
     merge_note: str = ""

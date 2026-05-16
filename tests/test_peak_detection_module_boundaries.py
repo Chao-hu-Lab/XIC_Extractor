@@ -163,6 +163,29 @@ def test_peak_detection_local_minimum_owns_region_candidate_formation() -> None:
     assert "peak_scoring" not in local_source
 
 
+def test_peak_detection_cwt_owns_centwave_inspired_audit_proposals() -> None:
+    assert importlib.util.find_spec("xic_extractor.peak_detection.cwt")
+
+    signal_processing_path = ROOT / "xic_extractor" / "signal_processing.py"
+    cwt_path = ROOT / "xic_extractor" / "peak_detection" / "cwt.py"
+
+    signal_functions = _function_names(signal_processing_path)
+    cwt_functions = _function_names(cwt_path)
+
+    assert {
+        "find_peak_candidates_centwave_cwt",
+        "add_cwt_proposals_for_audit",
+    } <= cwt_functions
+    assert {
+        "_find_peak_candidates_centwave_cwt",
+        "_add_cwt_proposals_for_audit",
+    }.isdisjoint(signal_functions)
+
+    cwt_source = cwt_path.read_text(encoding="utf-8")
+    assert "find_peaks_cwt" in cwt_source
+    assert "peak_scoring" not in cwt_source
+
+
 def test_peak_detection_recovery_owns_preferred_rt_recovery_policy() -> None:
     assert importlib.util.find_spec("xic_extractor.peak_detection.recovery")
 

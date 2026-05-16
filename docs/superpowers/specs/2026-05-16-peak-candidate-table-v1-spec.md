@@ -89,7 +89,7 @@ It must not:
 - change `XIC Results` default columns;
 - change the workbook `Matrix`, untargeted final matrix, or alignment contract;
 - make `arbitrated` the default resolver;
-- introduce CWT, ML, or deep learning in v1;
+- introduce CWT as a final resolver authority, ML, or deep learning in v1;
 - make local minimum a final boundary authority;
 - treat candidate table output as a production quantitative matrix.
 
@@ -160,20 +160,21 @@ This id is an audit key, not a cross-run scientific feature id.
 
 | Column | Meaning |
 |---|---|
-| `proposal_sources` | Semicolon-separated proposal sources, such as `legacy_savgol`, `local_minimum`, `preferred_rt_recovery`. |
+| `proposal_sources` | Semicolon-separated proposal sources, such as `legacy_savgol`, `local_minimum`, `preferred_rt_recovery`, `centwave_cwt`. |
 | `proposal_count` | Number of proposal sources represented by this row. |
 | `source_apex_rank` | Rank within the source by source-native order or intensity. |
 | `merge_note` | Empty, `same_apex_merged`, `source_only`, or another explicit merge note. |
 
-Future reserved proposal sources:
+Proposal sources:
 
-- `cwt_ridge`;
+- `centwave_cwt`;
 - `derivative_zero_crossing`;
 - `baseline_return`;
 - `rt_prior`;
 - `aligned_gapfill`.
 
-These are reserved names only. v1 does not implement them.
+Only `centwave_cwt` is implemented after the candidate-table v1 baseline, and
+only as an audit proposal. The other names remain reserved.
 
 ### RT And Integration
 
@@ -263,7 +264,7 @@ not become a new hidden decision engine.
 
 ### Not Allowed In v1
 
-- No CWT implementation.
+- No CWT selected-peak behavior change.
 - No baseline correction method change.
 - No ML classifier.
 - No selected-peak behavior change.
@@ -314,6 +315,18 @@ or abs(right_a - right_b) > 0.02 min
 
 This threshold is an audit merge threshold, not a scientific acceptance rule.
 
+### CWT Audit Proposals
+
+After candidate table v1, `centwave_cwt` is allowed as an audit proposal source
+when `emit_peak_candidates=true`. It is inspired by XCMS centWave's multi-scale
+chromatographic peak proposal concept, but in this project it is not a resolver
+mode and does not select the final peak.
+
+If CWT agrees with the selected apex, the selected row may add `centwave_cwt`
+to `proposal_sources` and keep the production interval. If CWT finds an
+additional apex, that row must be `selected=FALSE` and available for review or
+future model-selection experiments only.
+
 ### Process Mode
 
 The candidate table accumulator must not pass non-pickleable closures or open
@@ -336,7 +349,9 @@ Candidate table v1 is ready when all of these are true:
 7. `uv run pytest` targeted candidate-table tests pass.
 8. `uv run ruff check .` passes.
 9. `uv run mypy xic_extractor` passes.
-10. An 8RAW smoke run with `emit_peak_candidates=true` completes and writes a
+10. `centwave_cwt` audit proposals can be emitted without changing selected
+    peak behavior.
+11. An 8RAW smoke run with `emit_peak_candidates=true` completes and writes a
     candidate table without changing `XIC Results` selected rows compared with
     the same run with candidate output disabled.
 
@@ -360,6 +375,12 @@ Unit tests:
   - targeted extraction selected result is unchanged when candidate table is
     enabled;
   - preferred-RT recovery candidate is emitted.
+
+- `tests/test_cwt_proposals.py`
+  - CWT creates audit candidates on synthetic traces;
+  - CWT agreement merges proposal provenance without changing the selected
+    peak;
+  - CWT-only rows remain unselected.
 
 Integration validation:
 
@@ -392,12 +413,11 @@ that support belongs in the implementation plan.
 
 After v1 candidate persistence is stable:
 
-1. Add CWT ridge as a proposal source, not as final integration.
-2. Add boundary hypothesis enumeration for the same apex.
-3. Add baseline-corrected area and baseline uncertainty fields.
-4. Add weighted interval scheduling or local mixture model selection.
-5. Extend the same candidate-table schema to untargeted alignment backfill.
-6. Use candidate table rows as training data for a future ML peak-quality
+1. Add boundary hypothesis enumeration for the same apex.
+2. Add baseline-corrected area and baseline uncertainty fields.
+3. Add weighted interval scheduling or local mixture model selection.
+4. Extend the same candidate-table schema to untargeted alignment backfill.
+5. Use candidate table rows as training data for a future ML peak-quality
    classifier.
 
 ## Reviewed Verdict
@@ -434,4 +454,3 @@ The first implementation should be narrow:
 4. tests proving no selected-output drift.
 
 Do not refactor the full peak detection model during this step.
-

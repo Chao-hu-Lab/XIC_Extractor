@@ -342,5 +342,7 @@ def extract_one_target(
     append_peak_candidate_rows(
         peak_candidate_rows, config, sample_name, target, peak_result,
         _cached_candidate_ms2_builder,
+        rt=rt,
+        intensity=intensity,
     )
     return anchor_rt

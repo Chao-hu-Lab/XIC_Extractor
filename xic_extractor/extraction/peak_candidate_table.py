@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import CandidateMS2Evidence
+from xic_extractor.peak_detection.cwt import add_cwt_proposals_for_audit
 from xic_extractor.peak_detection.hypotheses import (
     PeakHypothesis,
     build_peak_hypotheses,
@@ -190,9 +191,17 @@ def append_peak_candidate_rows(
     target: Target,
     peak_result: PeakDetectionResult,
     candidate_ms2_builder: Callable[[PeakCandidate], CandidateMS2Evidence | None],
+    *,
+    rt: object | None = None,
+    intensity: object | None = None,
 ) -> None:
     if not config.emit_peak_candidates or rows is None:
         return
+    audit_peak_result = (
+        add_cwt_proposals_for_audit(peak_result, rt, intensity, config)
+        if rt is not None and intensity is not None
+        else peak_result
+    )
     rows.extend(
         build_peak_candidate_rows(
             sample_name=sample_name,
@@ -200,9 +209,9 @@ def append_peak_candidate_rows(
             role="ISTD" if target.is_istd else "Analyte",
             istd_pair=target.istd_pair,
             resolver_mode=config.resolver_mode,
-            peak_result=peak_result,
+            peak_result=audit_peak_result,
             candidate_ms2_evidence=_candidate_table_ms2_evidence(
-                peak_result,
+                audit_peak_result,
                 candidate_ms2_builder,
             ),
         )

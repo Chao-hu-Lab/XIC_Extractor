@@ -236,6 +236,8 @@ def _evidence_from_candidate(
         nl_match=common.nl_match,
         ms2_trace_strength=common.ms2_trace_strength,
         rt_prior_min=score.prior_rt if score is not None else None,
+        cwt_best_scale=candidate.cwt_best_scale,
+        cwt_ridge_persistence=candidate.cwt_ridge_persistence,
         common=common,
     )
 

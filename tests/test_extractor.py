@@ -275,6 +275,51 @@ def test_run_writes_peak_candidate_table_when_enabled(
     assert candidate_rows[1]["rejection_reason"] == "lower_confidence"
 
 
+def test_peak_candidate_table_includes_cwt_audit_proposals_when_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = replace(
+        _config(tmp_path, keep_intermediate_csv=False),
+        emit_peak_candidates=True,
+        resolver_min_scans=3,
+        resolver_min_absolute_height=10.0,
+        resolver_min_relative_height=0.01,
+        resolver_peak_duration_max=1.5,
+    )
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    selected = _candidate(4.0, proposal_sources=("legacy_savgol",))
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=201,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+        selection_reference_rt=4.0,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.open_raw",
+        lambda *_args, **_kwargs: _CwtAuditRaw(),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence([peak_result]),
+    )
+
+    _run(config, [_target("NoNL", neutral_loss_da=None)])
+
+    candidate_rows = _read_tsv(config.output_csv.with_name("peak_candidates.tsv"))
+    selected_rows = [row for row in candidate_rows if row["selected"] == "TRUE"]
+    cwt_rows = [
+        row for row in candidate_rows if "centwave_cwt" in row["proposal_sources"]
+    ]
+    assert len(selected_rows) == 1
+    assert selected_rows[0]["rt_apex_min"] == "4.00000"
+    assert "centwave_cwt" in selected_rows[0]["proposal_sources"]
+    assert any(row["selected"] == "FALSE" for row in cwt_rows)
+
+
 def test_peak_candidate_table_does_not_echo_unused_anchor_as_selection_reference(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1675,6 +1720,17 @@ class _ShapeMetricRecoveryRaw(_FakeRaw):
         rt = np.linspace(rt_min, rt_max, 41)
         intensity = 1000.0 * np.exp(-((np.arange(41) - 20) / 4.0) ** 2) + 10.0
         return rt, intensity
+
+
+class _CwtAuditRaw(_FakeRaw):
+    def extract_xic(
+        self, mz: float, rt_min: float, rt_max: float, ppm_tol: float
+    ) -> tuple[np.ndarray, np.ndarray]:
+        rt = np.linspace(0.0, 10.0, 201)
+        first = np.exp(-0.5 * ((rt - 4.0) / 0.10) ** 2) * 1200.0
+        second = np.exp(-0.5 * ((rt - 7.0) / 0.14) ** 2) * 900.0
+        baseline = np.full_like(rt, 20.0)
+        return rt, first + second + baseline
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
