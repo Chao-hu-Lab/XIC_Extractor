@@ -41,7 +41,10 @@ def test_find_peak_and_area_without_scoring_context_unchanged() -> None:
     assert abs(result.peak.rt - 5.0) < 0.05
 
 
-@pytest.mark.parametrize("resolver_mode", ["legacy_savgol", "local_minimum"])
+@pytest.mark.parametrize(
+    "resolver_mode",
+    ["legacy_savgol", "local_minimum", "arbitrated"],
+)
 def test_find_peak_and_area_with_scoring_returns_same_best_for_clean_peak(
     resolver_mode: str,
 ) -> None:
@@ -109,6 +112,48 @@ def test_local_minimum_preferred_rt_selects_nearest_region() -> None:
     assert result.status == "OK"
     assert result.peak is not None
     assert result.peak.rt == pytest.approx(9.08, abs=0.02)
+
+
+def test_arbitrated_resolver_scores_local_candidate_when_legacy_misses() -> None:
+    rt = np.linspace(8.0, 8.30, 31)
+    y = 1500 * np.exp(-0.5 * ((rt - 7.96) / 0.06) ** 2) + 5.0
+
+    def ctx_builder(candidate) -> ScoringContext:
+        return ScoringContext(
+            rt_array=rt,
+            intensity_array=y,
+            apex_index=candidate.selection_apex_index,
+            half_width_ratio=1.0,
+            fwhm_ratio=1.0,
+            ms2_present=True,
+            nl_match=True,
+            rt_prior=8.0,
+            rt_prior_sigma=0.05,
+            rt_min=8.0,
+            rt_max=8.30,
+            dirty_matrix=False,
+        )
+
+    config = _cfg()
+    config = config.__class__(
+        **{
+            **config.__dict__,
+            "resolver_mode": "arbitrated",
+            "resolver_peak_duration_max": 0.50,
+        }
+    )
+
+    result = find_peak_and_area(
+        rt,
+        y,
+        config,
+        scoring_context_builder=ctx_builder,
+    )
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(8.0, abs=0.01)
+    assert result.confidence is not None
 
 
 def test_local_minimum_recovery_relaxes_region_filters_for_preferred_rt() -> None:

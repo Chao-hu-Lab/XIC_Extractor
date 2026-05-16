@@ -146,7 +146,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--rt-max", type=_rt_bound, default=999.0)
     parser.add_argument(
         "--resolver-mode",
-        choices=("legacy_savgol", "local_minimum"),
+        choices=("legacy_savgol", "local_minimum", "arbitrated"),
         default="local_minimum",
     )
     args = parser.parse_args(argv)

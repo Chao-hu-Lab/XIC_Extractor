@@ -126,7 +126,7 @@ def load_advanced_values(
         settings_values.get("injection_order_source", "")
     )
     resolver_mode = settings_values.get("resolver_mode", "legacy_savgol")
-    if resolver_mode not in {"legacy_savgol", "local_minimum"}:
+    if resolver_mode not in {"legacy_savgol", "local_minimum", "arbitrated"}:
         resolver_mode = "legacy_savgol"
     resolver_controls.mode_combo.setCurrentText(resolver_mode)
     resolver_controls.chrom_threshold_spin.setValue(

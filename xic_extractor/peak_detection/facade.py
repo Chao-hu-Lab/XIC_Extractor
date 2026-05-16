@@ -147,11 +147,120 @@ def find_peak_candidates(
     resolver_mode = getattr(config, "resolver_mode", "legacy_savgol")
     if resolver_mode == "local_minimum":
         return find_peak_candidates_local_minimum(rt, intensity, config)
+    if resolver_mode == "arbitrated":
+        return _find_peak_candidates_arbitrated(
+            rt,
+            intensity,
+            config,
+            peak_min_prominence_ratio=peak_min_prominence_ratio,
+        )
     return find_peak_candidates_legacy_savgol(
         rt,
         intensity,
         config,
         peak_min_prominence_ratio=peak_min_prominence_ratio,
+    )
+
+
+def _find_peak_candidates_arbitrated(
+    rt: np.ndarray,
+    intensity: np.ndarray,
+    config: ExtractionConfig,
+    *,
+    peak_min_prominence_ratio: float | None,
+) -> PeakCandidatesResult:
+    legacy_result = find_peak_candidates_legacy_savgol(
+        rt,
+        intensity,
+        config,
+        peak_min_prominence_ratio=peak_min_prominence_ratio,
+    )
+    local_result = find_peak_candidates_local_minimum(rt, intensity, config)
+    candidates = _merge_resolver_candidates(
+        legacy_result.candidates,
+        local_result.candidates,
+    )
+    if candidates:
+        return PeakCandidatesResult(
+            status="OK",
+            candidates=candidates,
+            n_points=max(legacy_result.n_points, local_result.n_points),
+            max_smoothed=_max_result_smoothed(legacy_result, local_result),
+            n_prominent_peaks=len(candidates),
+        )
+    return _strongest_failure_result(legacy_result, local_result)
+
+
+def _merge_resolver_candidates(
+    legacy_candidates: tuple[PeakCandidate, ...],
+    local_candidates: tuple[PeakCandidate, ...],
+) -> tuple[PeakCandidate, ...]:
+    merged = list(legacy_candidates)
+    for local_candidate in local_candidates:
+        match_index = _matching_apex_index(merged, local_candidate)
+        if match_index is None:
+            merged.append(local_candidate)
+            continue
+        if _candidate_detail_score(local_candidate) > _candidate_detail_score(
+            merged[match_index]
+        ):
+            merged[match_index] = local_candidate
+    return tuple(merged)
+
+
+def _matching_apex_index(
+    candidates: list[PeakCandidate],
+    candidate: PeakCandidate,
+) -> int | None:
+    for index, existing in enumerate(candidates):
+        if existing.selection_apex_index == candidate.selection_apex_index:
+            return index
+    return None
+
+
+def _candidate_detail_score(candidate: PeakCandidate) -> int:
+    return len(candidate.quality_flags) + sum(
+        value is not None
+        for value in (
+            candidate.region_scan_count,
+            candidate.region_duration_min,
+            candidate.region_edge_ratio,
+            candidate.region_trace_continuity,
+        )
+    )
+
+
+def _max_result_smoothed(
+    first: PeakCandidatesResult,
+    second: PeakCandidatesResult,
+) -> float | None:
+    values = [
+        value
+        for value in (first.max_smoothed, second.max_smoothed)
+        if value is not None
+    ]
+    if not values:
+        return None
+    return max(values)
+
+
+def _strongest_failure_result(
+    legacy_result: PeakCandidatesResult,
+    local_result: PeakCandidatesResult,
+) -> PeakCandidatesResult:
+    status_rank = {
+        "WINDOW_TOO_SHORT": 3,
+        "NO_SIGNAL": 2,
+        "PEAK_NOT_FOUND": 1,
+        "OK": 0,
+    }
+    return max(
+        (legacy_result, local_result),
+        key=lambda result: (
+            status_rank[result.status],
+            result.n_points,
+            result.max_smoothed if result.max_smoothed is not None else 0.0,
+        ),
     )
 
 

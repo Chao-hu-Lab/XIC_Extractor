@@ -297,13 +297,13 @@ def _validate_settings_ranges(
         0.01,
         0.50,
     )
-    if parsed.resolver_mode not in {"legacy_savgol", "local_minimum"}:
+    if parsed.resolver_mode not in {"legacy_savgol", "local_minimum", "arbitrated"}:
         raise _config_error(
             settings_path,
             None,
             "resolver_mode",
             settings["resolver_mode"],
-            "must be legacy_savgol or local_minimum",
+            "must be legacy_savgol, local_minimum, or arbitrated",
         )
     if not 0 <= parsed.resolver_chrom_threshold <= 1:
         raise _config_error(

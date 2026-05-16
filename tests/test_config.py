@@ -281,6 +281,16 @@ def test_load_config_accepts_local_minimum_resolver_settings(tmp_path: Path) -> 
     assert config.resolver_min_scans == 9
 
 
+def test_load_config_accepts_arbitrated_resolver_mode(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"resolver_mode": "arbitrated"})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.resolver_mode == "arbitrated"
+
+
 def test_load_config_accepts_zero_local_minimum_floor_values(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     _write_settings(

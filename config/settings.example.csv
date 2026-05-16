@@ -5,7 +5,7 @@ smooth_window,15,Savitzky-Golay 平滑視窗長度（必須為奇數，建議 9-
 smooth_polyorder,3,Savitzky-Golay 多項式階數（通常 2-4）
 peak_rel_height,0.95,Peak 邊界的相對高度（0.95 = 積分到 apex 的 5%，範圍 0.5-0.99）
 peak_min_prominence_ratio,0.1,Peak prominence 至少為 apex 的比例（越低越寬容，0.05-0.20）
-resolver_mode,legacy_savgol,峰切割演算法（legacy_savgol 或 local_minimum）
+resolver_mode,legacy_savgol,峰切割演算法（legacy_savgol、local_minimum 或 arbitrated）
 resolver_chrom_threshold,0.05,Local minimum resolver 低強度剪枝百分位（0-1）
 resolver_min_search_range_min,0.08,Local minimum 搜尋 valley 的 RT 視窗（分鐘）
 resolver_min_relative_height,0.02,Local minimum 最低相對 apex 高度（相對全 trace 最大值）

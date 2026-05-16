@@ -167,6 +167,21 @@ def test_resolver_profiles_show_local_controls_for_local_minimum_mode(qtbot) -> 
     assert section._apply_local_minimum_preset_button.isVisible()
 
 
+def test_resolver_profiles_show_both_controls_for_arbitrated_mode(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load({**_canonical_settings(), "resolver_mode": "arbitrated"})
+
+    assert section._legacy_resolver_panel.isVisible()
+    assert section._local_minimum_resolver_panel.isVisible()
+    assert section._smooth_window_spin.isVisible()
+    assert section._peak_min_prominence_ratio_spin.isVisible()
+    assert section._resolver_chrom_threshold_spin.isVisible()
+    assert section._resolver_min_ratio_top_edge_spin.isVisible()
+    assert section._apply_local_minimum_preset_button.isVisible()
+
+
 def test_switching_to_local_minimum_preserves_inactive_custom_values(qtbot) -> None:
     section = SettingsSection()
     qtbot.addWidget(section)
