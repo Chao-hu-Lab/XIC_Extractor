@@ -341,6 +341,10 @@ CWT support merged into a neighboring non-selected candidate inside the same
 peak region. The default nearby window is an audit parameter, not a production
 selection rule.
 
+Manual review outputs must include `target_mz` whenever a targeted workbook is
+provided. A target label without m/z is not sufficient for EIC review because it
+forces reviewers to look up the precursor again.
+
 ### Process Mode
 
 The candidate table accumulator must not pass non-pickleable closures or open
@@ -370,6 +374,8 @@ Candidate table v1 is ready when all of these are true:
     the same run with candidate output disabled.
 12. The CWT audit report can summarize 8RAW `peak_candidates.tsv` and separate
     direct agreement, nearby support, true disagreement, and no-CWT groups.
+13. CWT manual-review rows include `target_mz` when `--targeted-workbook` is
+    provided.
 
 ## Suggested Test Plan
 

@@ -8,6 +8,8 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from openpyxl import load_workbook
+
 _CWT_SOURCE = "centwave_cwt"
 _DEFAULT_NEAR_RT_WINDOW_MIN = 0.08
 
@@ -39,6 +41,7 @@ _GROUP_COLUMNS = (
     "group_id",
     "sample_name",
     "target_label",
+    "target_mz",
     "resolver_mode",
     "cwt_agreement_class",
     "candidate_count",
@@ -59,6 +62,7 @@ _CWT_ONLY_COLUMNS = (
     "group_id",
     "sample_name",
     "target_label",
+    "target_mz",
     "resolver_mode",
     "candidate_id",
     "rt_apex_min",
@@ -107,6 +111,7 @@ class CwtGroupAuditRow:
     group_id: str
     sample_name: str
     target_label: str
+    target_mz: float | None
     resolver_mode: str
     cwt_agreement_class: str
     candidate_count: int
@@ -128,6 +133,7 @@ class CwtOnlyAuditRow:
     group_id: str
     sample_name: str
     target_label: str
+    target_mz: float | None
     resolver_mode: str
     candidate_id: str
     rt_apex_min: float
@@ -140,8 +146,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
         rows = _read_peak_candidates(args.peak_candidates_tsv)
-        groups = _audit_groups(rows, near_rt_window_min=args.near_rt_window_min)
-        cwt_only_rows = _cwt_only_rows(rows)
+        target_mz_by_label = (
+            _read_target_mz(args.targeted_workbook)
+            if args.targeted_workbook is not None
+            else {}
+        )
+        groups = _audit_groups(
+            rows,
+            target_mz_by_label=target_mz_by_label,
+            near_rt_window_min=args.near_rt_window_min,
+        )
+        cwt_only_rows = _cwt_only_rows(rows, target_mz_by_label=target_mz_by_label)
         payload = {
             "summary": _summary(rows, groups, cwt_only_rows),
             "groups": [asdict(row) for row in groups],
@@ -160,6 +175,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         description="Audit CWT peak candidate agreement from peak_candidates.tsv.",
     )
     parser.add_argument("--peak-candidates-tsv", type=Path, required=True)
+    parser.add_argument(
+        "--targeted-workbook",
+        type=Path,
+        help="Optional XIC workbook with Targets sheet used to enrich target_mz.",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--near-rt-window-min",
@@ -186,6 +206,48 @@ def _read_peak_candidates(path: Path) -> tuple[CwtCandidateRow, ...]:
         )
 
 
+def _read_target_mz(path: Path) -> dict[str, float]:
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    try:
+        if "Targets" not in workbook.sheetnames:
+            raise ValueError(f"{path}: missing required sheet: Targets")
+        rows = workbook["Targets"].iter_rows(values_only=True)
+        header = next(rows, None)
+        if header is None:
+            raise ValueError(f"{path}: Targets sheet is empty")
+        indexes = _required_indexes(header, ("Label", "m/z"), "Targets")
+        target_mz: dict[str, float] = {}
+        for row_number, row in enumerate(rows, 2):
+            label = _text(row[indexes["Label"]])
+            if not label:
+                continue
+            target_mz[label] = _float_value(
+                path,
+                row_number,
+                "m/z",
+                _text(row[indexes["m/z"]]),
+            )
+        return target_mz
+    finally:
+        workbook.close()
+
+
+def _required_indexes(
+    header: object,
+    required: tuple[str, ...],
+    sheet_name: str,
+) -> dict[str, int]:
+    if not isinstance(header, tuple):
+        raise ValueError(f"{sheet_name}: header row is invalid")
+    indexes = {_text(value): index for index, value in enumerate(header)}
+    missing = [column for column in required if column not in indexes]
+    if missing:
+        raise ValueError(
+            f"{sheet_name}: missing required columns: {', '.join(missing)}"
+        )
+    return {column: indexes[column] for column in required}
+
+
 def _row_from_dict(
     path: Path,
     row_number: int,
@@ -208,13 +270,18 @@ def _row_from_dict(
 def _audit_groups(
     rows: tuple[CwtCandidateRow, ...],
     *,
+    target_mz_by_label: dict[str, float],
     near_rt_window_min: float,
 ) -> tuple[CwtGroupAuditRow, ...]:
     grouped: dict[str, list[CwtCandidateRow]] = {}
     for row in rows:
         grouped.setdefault(row.group_id, []).append(row)
     return tuple(
-        _audit_group(group_rows, near_rt_window_min=near_rt_window_min)
+        _audit_group(
+            group_rows,
+            target_mz_by_label=target_mz_by_label,
+            near_rt_window_min=near_rt_window_min,
+        )
         for _, group_rows in sorted(grouped.items(), key=lambda item: item[0])
     )
 
@@ -222,6 +289,7 @@ def _audit_groups(
 def _audit_group(
     rows: list[CwtCandidateRow],
     *,
+    target_mz_by_label: dict[str, float],
     near_rt_window_min: float,
 ) -> CwtGroupAuditRow:
     first = rows[0]
@@ -238,6 +306,7 @@ def _audit_group(
         group_id=first.group_id,
         sample_name=first.sample_name,
         target_label=first.target_label,
+        target_mz=target_mz_by_label.get(first.target_label),
         resolver_mode=first.resolver_mode,
         cwt_agreement_class=_agreement_class(
             selected,
@@ -287,12 +356,17 @@ def _nearest_cwt(
     return min(cwt_rows, key=lambda row: abs(selected.rt_apex_min - row.rt_apex_min))
 
 
-def _cwt_only_rows(rows: tuple[CwtCandidateRow, ...]) -> tuple[CwtOnlyAuditRow, ...]:
+def _cwt_only_rows(
+    rows: tuple[CwtCandidateRow, ...],
+    *,
+    target_mz_by_label: dict[str, float],
+) -> tuple[CwtOnlyAuditRow, ...]:
     return tuple(
         CwtOnlyAuditRow(
             group_id=row.group_id,
             sample_name=row.sample_name,
             target_label=row.target_label,
+            target_mz=target_mz_by_label.get(row.target_label),
             resolver_mode=row.resolver_mode,
             candidate_id=row.candidate_id,
             rt_apex_min=row.rt_apex_min,
@@ -386,6 +460,7 @@ def _format_group_row(row: CwtGroupAuditRow) -> dict[str, str]:
         "group_id": row.group_id,
         "sample_name": row.sample_name,
         "target_label": row.target_label,
+        "target_mz": _format_optional_float(row.target_mz),
         "resolver_mode": row.resolver_mode,
         "cwt_agreement_class": row.cwt_agreement_class,
         "candidate_count": str(row.candidate_count),
@@ -408,6 +483,7 @@ def _format_cwt_only_row(row: CwtOnlyAuditRow) -> dict[str, str]:
         "group_id": row.group_id,
         "sample_name": row.sample_name,
         "target_label": row.target_label,
+        "target_mz": _format_optional_float(row.target_mz),
         "resolver_mode": row.resolver_mode,
         "candidate_id": row.candidate_id,
         "rt_apex_min": _format_optional_float(row.rt_apex_min),
@@ -448,6 +524,12 @@ def _float_value(path: Path, row_number: int, column: str, value: str) -> float:
     except ValueError as exc:
         message = f"{path}: row {row_number} invalid {column}: {value!r}"
         raise ValueError(message) from exc
+
+
+def _text(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
 
 
 def _format_optional_float(value: float | None) -> str:

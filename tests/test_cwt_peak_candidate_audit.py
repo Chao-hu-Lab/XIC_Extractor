@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from openpyxl import Workbook
+
 from tools.diagnostics.cwt_peak_candidate_audit import main
 
 
@@ -99,6 +101,39 @@ def test_cwt_peak_candidate_audit_accepts_utf8_sig_tsv(tmp_path: Path) -> None:
 
     assert code == 0
     assert (output_dir / "cwt_peak_candidate_audit.json").is_file()
+
+
+def test_cwt_peak_candidate_audit_enriches_target_mz_from_workbook(
+    tmp_path: Path,
+) -> None:
+    candidate_tsv = tmp_path / "peak_candidates.tsv"
+    workbook = tmp_path / "xic_results.xlsx"
+    output_dir = tmp_path / "diagnostics"
+    _write_peak_candidates(candidate_tsv)
+    _write_target_workbook(workbook)
+
+    code = main(
+        [
+            "--peak-candidates-tsv",
+            str(candidate_tsv),
+            "--targeted-workbook",
+            str(workbook),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert code == 0
+    group_rows = _read_tsv(output_dir / "cwt_peak_candidate_groups.tsv")
+    agreed = next(
+        row
+        for row in group_rows
+        if row["group_id"] == "SampleA|TargetAgreed|arbitrated"
+    )
+    assert agreed["target_mz"] == "269.12345"
+
+    cwt_only_rows = _read_tsv(output_dir / "cwt_peak_candidate_cwt_only.tsv")
+    assert cwt_only_rows[0]["target_mz"] == "300.11111"
 
 
 def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
@@ -219,6 +254,19 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         + "\n",
         encoding=encoding,
     )
+
+
+def _write_target_workbook(path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Targets"
+    sheet.append(["Label", "m/z"])
+    sheet.append(["TargetAgreed", 269.12345])
+    sheet.append(["TargetDisagreed", 300.11111])
+    sheet.append(["TargetNearby", 301.22222])
+    sheet.append(["TargetNoCwt", 302.33333])
+    workbook.save(path)
+    workbook.close()
 
 
 def _read_tsv(path: Path) -> list[dict[str, str]]:
