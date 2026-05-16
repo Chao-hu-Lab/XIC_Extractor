@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from tools.diagnostics.cwt_peak_candidate_audit import main
 
 
-def test_cwt_peak_candidate_audit_classifies_agreement_and_disagreement(
+def test_cwt_peak_candidate_audit_classifies_agreement_and_far_alternatives(
     tmp_path: Path,
 ) -> None:
     candidate_tsv = tmp_path / "peak_candidates.tsv"
@@ -33,7 +33,7 @@ def test_cwt_peak_candidate_audit_classifies_agreement_and_disagreement(
         "cwt_only_row_count": 1,
         "selected_cwt_agreed_group_count": 1,
         "selected_cwt_nearby_group_count": 1,
-        "selected_cwt_disagreed_group_count": 1,
+        "selected_cwt_far_alternative_group_count": 1,
         "selected_without_cwt_group_count": 1,
     }
 
@@ -42,22 +42,22 @@ def test_cwt_peak_candidate_audit_classifies_agreement_and_disagreement(
         row["group_id"]: row["cwt_agreement_class"] for row in group_rows
     } == {
         "SampleA|TargetAgreed|arbitrated": "selected_cwt_agreed",
-        "SampleA|TargetDisagreed|arbitrated": "selected_cwt_disagreed",
+        "SampleA|TargetFarAlternative|arbitrated": "selected_cwt_far_alternative",
         "SampleA|TargetNearby|arbitrated": "selected_cwt_nearby",
         "SampleB|TargetNoCwt|arbitrated": "selected_without_cwt",
     }
-    disagreed = next(
+    far_alternative = next(
         row
         for row in group_rows
-        if row["group_id"] == "SampleA|TargetDisagreed|arbitrated"
+        if row["group_id"] == "SampleA|TargetFarAlternative|arbitrated"
     )
-    assert disagreed["selected_rt_apex_min"] == "7.00000"
-    assert disagreed["nearest_cwt_rt_apex_min"] == "7.30000"
-    assert disagreed["nearest_cwt_delta_min"] == "0.30000"
+    assert far_alternative["selected_rt_apex_min"] == "7.00000"
+    assert far_alternative["nearest_cwt_rt_apex_min"] == "7.30000"
+    assert far_alternative["nearest_cwt_delta_min"] == "0.30000"
 
     cwt_only_rows = _read_tsv(output_dir / "cwt_peak_candidate_cwt_only.tsv")
     assert len(cwt_only_rows) == 1
-    assert cwt_only_rows[0]["target_label"] == "TargetDisagreed"
+    assert cwt_only_rows[0]["target_label"] == "TargetFarAlternative"
     assert (output_dir / "cwt_peak_candidate_audit_summary.tsv").is_file()
     assert (output_dir / "cwt_peak_candidate_audit.md").is_file()
 
@@ -176,7 +176,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         ),
         (
             "SampleA",
-            "TargetDisagreed",
+            "TargetFarAlternative",
             "arbitrated",
             "D1",
             "local_minimum",
@@ -188,7 +188,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         ),
         (
             "SampleA",
-            "TargetDisagreed",
+            "TargetFarAlternative",
             "arbitrated",
             "D2",
             "centwave_cwt",
@@ -262,7 +262,7 @@ def _write_target_workbook(path: Path) -> None:
     sheet.title = "Targets"
     sheet.append(["Label", "m/z"])
     sheet.append(["TargetAgreed", 269.12345])
-    sheet.append(["TargetDisagreed", 300.11111])
+    sheet.append(["TargetFarAlternative", 300.11111])
     sheet.append(["TargetNearby", 301.22222])
     sheet.append(["TargetNoCwt", 302.33333])
     workbook.save(path)

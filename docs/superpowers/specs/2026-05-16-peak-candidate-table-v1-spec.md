@@ -333,13 +333,19 @@ evidence after extraction. It classifies each sample/target/resolver group as:
 - `selected_cwt_agreed`: the selected row itself includes `centwave_cwt`;
 - `selected_cwt_nearby`: the selected row does not include CWT provenance, but
   the nearest CWT proposal is within the audit RT window;
-- `selected_cwt_disagreed`: CWT proposes a farther apex than the selected row;
+- `selected_cwt_far_alternative`: CWT proposes a farther apex than the selected
+  row, but this is not evidence that the selected peak is wrong;
 - `selected_without_cwt`: no CWT proposal exists for the group.
 
 `selected_cwt_nearby` prevents the report from overcalling disagreements when
 CWT support merged into a neighboring non-selected candidate inside the same
 peak region. The default nearby window is an audit parameter, not a production
 selection rule.
+
+Manual review of the 8RAW far-alternative cases found that the selected peaks
+were acceptable. Therefore CWT far alternatives are a diagnostic context signal
+only; they must not be treated as a hard selection error, demotion reason, or
+benchmark failure.
 
 Manual review outputs must include `target_mz` whenever a targeted workbook is
 provided. A target label without m/z is not sufficient for EIC review because it
@@ -373,7 +379,7 @@ Candidate table v1 is ready when all of these are true:
     candidate table without changing `XIC Results` selected rows compared with
     the same run with candidate output disabled.
 12. The CWT audit report can summarize 8RAW `peak_candidates.tsv` and separate
-    direct agreement, nearby support, true disagreement, and no-CWT groups.
+    direct agreement, nearby support, far CWT alternatives, and no-CWT groups.
 13. CWT manual-review rows include `target_mz` when `--targeted-workbook` is
     provided.
 

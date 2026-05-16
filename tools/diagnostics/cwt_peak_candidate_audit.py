@@ -33,7 +33,7 @@ _SUMMARY_COLUMNS = (
     "cwt_only_row_count",
     "selected_cwt_agreed_group_count",
     "selected_cwt_nearby_group_count",
-    "selected_cwt_disagreed_group_count",
+    "selected_cwt_far_alternative_group_count",
     "selected_without_cwt_group_count",
 )
 
@@ -343,7 +343,7 @@ def _agreement_class(
     if cwt_rows:
         if nearest_delta_min is not None and nearest_delta_min <= near_rt_window_min:
             return "selected_cwt_nearby"
-        return "selected_cwt_disagreed"
+        return "selected_cwt_far_alternative"
     return "selected_without_cwt"
 
 
@@ -395,8 +395,8 @@ def _summary(
         "selected_cwt_nearby_group_count": _group_class_count(
             groups, "selected_cwt_nearby"
         ),
-        "selected_cwt_disagreed_group_count": _group_class_count(
-            groups, "selected_cwt_disagreed"
+        "selected_cwt_far_alternative_group_count": _group_class_count(
+            groups, "selected_cwt_far_alternative"
         ),
         "selected_without_cwt_group_count": _group_class_count(
             groups, "selected_without_cwt"
@@ -509,8 +509,8 @@ def _markdown(payload: dict[str, object]) -> str:
             f"{summary['selected_cwt_agreed_group_count']}",
             "- selected_cwt_nearby_group_count: "
             f"{summary['selected_cwt_nearby_group_count']}",
-            "- selected_cwt_disagreed_group_count: "
-            f"{summary['selected_cwt_disagreed_group_count']}",
+            "- selected_cwt_far_alternative_group_count: "
+            f"{summary['selected_cwt_far_alternative_group_count']}",
             "- selected_without_cwt_group_count: "
             f"{summary['selected_without_cwt_group_count']}",
             "",
