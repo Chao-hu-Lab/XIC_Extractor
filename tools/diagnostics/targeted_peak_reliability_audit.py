@@ -307,9 +307,9 @@ def _classify_row(
     risk_reasons: list[str] = []
     if row.confidence in {"LOW", "VERY_LOW"}:
         risk_reasons.append("low_confidence")
-    if row.nl == "NL_FAIL":
+    if _is_nl_fail(row.nl):
         risk_reasons.append("nl_fail")
-    elif row.nl == "NO_MS2":
+    elif _is_no_ms2(row.nl):
         risk_reasons.append("no_ms2")
     if score is None:
         risk_reasons.append("score_breakdown_unavailable")
@@ -517,6 +517,16 @@ def _parse_known_exceptions(values: Sequence[str]) -> dict[str, str]:
             )
         known[target] = mode
     return known
+
+
+def _is_nl_fail(value: str) -> bool:
+    token = value.strip().upper()
+    return token == "NL_FAIL" or "NL_FAIL" in token or token.startswith("✗")
+
+
+def _is_no_ms2(value: str) -> bool:
+    token = value.strip().upper().replace(" ", "_")
+    return token == "NO_MS2" or "NO_MS2" in token
 
 
 def _required_indexes(

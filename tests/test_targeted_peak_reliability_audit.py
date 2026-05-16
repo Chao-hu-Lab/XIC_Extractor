@@ -17,6 +17,7 @@ def test_audit_classifies_strong_review_and_negative_rows(tmp_path: Path) -> Non
             _target("clean"),
             _target("low_conf"),
             _target("nl_fail"),
+            _target("unicode_nl_fail"),
             _target("no_peak"),
         ],
         result_rows=[
@@ -37,12 +38,21 @@ def test_audit_classifies_strong_review_and_negative_rows(tmp_path: Path) -> Non
                 nl="NL_FAIL",
                 confidence="HIGH",
             ),
+            _result(
+                "S1",
+                "unicode_nl_fail",
+                rt=10.3,
+                area=130.0,
+                nl="✗ NL",
+                confidence="HIGH",
+            ),
             _result("S1", "no_peak", rt="ND", area="ND", nl="OK", confidence="HIGH"),
         ],
         score_rows=[
             _score("S1", "clean", confidence="HIGH"),
             _score("S1", "low_conf", confidence="VERY_LOW"),
             _score("S1", "nl_fail", confidence="HIGH", concerns="nl_fail"),
+            _score("S1", "unicode_nl_fail", confidence="HIGH", concerns="nl_fail"),
             _score("S1", "no_peak", confidence="HIGH"),
         ],
     )
@@ -58,6 +68,8 @@ def test_audit_classifies_strong_review_and_negative_rows(tmp_path: Path) -> Non
     assert by_target["low_conf"].risk_reasons == ("low_confidence",)
     assert by_target["nl_fail"].reliability_state == "targeted_review"
     assert by_target["nl_fail"].risk_reasons == ("nl_fail",)
+    assert by_target["unicode_nl_fail"].reliability_state == "targeted_review"
+    assert by_target["unicode_nl_fail"].risk_reasons == ("nl_fail",)
     assert by_target["no_peak"].reliability_state == "targeted_negative"
     assert by_target["no_peak"].risk_reasons == ("no_usable_peak",)
 
@@ -66,6 +78,7 @@ def test_audit_classifies_strong_review_and_negative_rows(tmp_path: Path) -> Non
         "clean": "benchmark_eligible",
         "low_conf": "targeted_review",
         "nl_fail": "targeted_review",
+        "unicode_nl_fail": "targeted_review",
         "no_peak": "targeted_negative",
     }
 
