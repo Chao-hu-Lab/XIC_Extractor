@@ -114,6 +114,7 @@ class _TargetedInputRow:
     area: float | None
     confidence: str
     nl: str
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -224,6 +225,10 @@ def _read_xic_results(sheet: object) -> tuple[_TargetedInputRow, ...]:
         ),
         "XIC Results",
     )
+    header_indexes = {
+        str(value).strip(): index for index, value in enumerate(header) if value
+    }
+    reason_index = header_indexes.get("Reason")
     current_sample = ""
     rows: list[_TargetedInputRow] = []
     for row in iterator:
@@ -244,6 +249,7 @@ def _read_xic_results(sheet: object) -> tuple[_TargetedInputRow, ...]:
                 area=_float_value(row[cols["Area"]]),
                 confidence=_text(row[cols["Confidence"]]).upper(),
                 nl=_text(row[cols["NL"]]).upper(),
+                reason=_text(row[reason_index]) if reason_index is not None else "",
             )
         )
     return tuple(rows)
@@ -305,7 +311,9 @@ def _classify_row(
         )
 
     risk_reasons: list[str] = []
-    if row.confidence in {"LOW", "VERY_LOW"}:
+    if row.confidence == "VERY_LOW" or (
+        row.confidence == "LOW" and not _is_accepted_low_istd(row)
+    ):
         risk_reasons.append("low_confidence")
     if _is_nl_fail(row.nl):
         risk_reasons.append("nl_fail")
@@ -527,6 +535,22 @@ def _is_nl_fail(value: str) -> bool:
 def _is_no_ms2(value: str) -> bool:
     token = value.strip().upper().replace(" ", "_")
     return token == "NO_MS2" or "NO_MS2" in token
+
+
+def _is_accepted_low_istd(row: _TargetedInputRow) -> bool:
+    reason = row.reason.upper()
+    if any(
+        token in reason
+        for token in ("HARD QUALITY FLAG", "WEAK CANDIDATE", "NL FAIL", "NO MS2")
+    ):
+        return False
+    return (
+        row.role.strip().upper() == "ISTD"
+        and row.confidence == "LOW"
+        and not _is_nl_fail(row.nl)
+        and not _is_no_ms2(row.nl)
+        and "DECISION: ACCEPTED" in reason
+    )
 
 
 def _required_indexes(

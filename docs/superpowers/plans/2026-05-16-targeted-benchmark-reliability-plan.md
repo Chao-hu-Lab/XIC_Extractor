@@ -49,8 +49,10 @@ Cover:
 - missing `Score Breakdown` still reports `score_breakdown_unavailable`;
 - `HIGH`/`MEDIUM` confidence with acceptable NL and finite area becomes
   `benchmark_eligible`;
-- `LOW` or `VERY_LOW` confidence with finite RT and positive area becomes
-  `targeted_review`;
+- accepted ISTD `LOW` confidence with strict NL support and finite positive
+  area/RT remains `benchmark_eligible`;
+- non-ISTD `LOW` or any `VERY_LOW` confidence with finite RT and positive area
+  becomes `targeted_review`;
 - `NL_FAIL` or `NO_MS2` with finite RT and positive area becomes
   `targeted_review`;
 - missing/invalid RT, missing/non-positive area, or no selected peak becomes

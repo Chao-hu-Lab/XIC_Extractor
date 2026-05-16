@@ -107,6 +107,75 @@ def test_missing_score_breakdown_is_reported_without_demoting_strong_row(
     assert result.summaries[0].benchmark_eligible_count == 1
 
 
+def test_accepted_low_istd_with_strict_nl_remains_benchmark_eligible(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("ISTD-A")],
+        result_rows=[
+            _result(
+                "S1",
+                "ISTD-A",
+                rt=10.0,
+                area=1000.0,
+                nl="OK",
+                confidence="LOW",
+                reason=(
+                    "decision: accepted; support: strict NL OK; "
+                    "concerns: MS2 trace weak"
+                ),
+            ),
+        ],
+        score_rows=None,
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "benchmark_eligible"
+    assert row.risk_reasons == ("score_breakdown_unavailable",)
+    assert result.summaries[0].benchmark_eligible_count == 1
+
+
+def test_accepted_low_istd_with_hard_quality_stays_targeted_review(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("ISTD-A")],
+        result_rows=[
+            _result(
+                "S1",
+                "ISTD-A",
+                rt=10.0,
+                area=1000.0,
+                nl="OK",
+                confidence="LOW",
+                reason=(
+                    "decision: accepted; support: strict NL OK; "
+                    "concerns: hard quality flag; weak candidate: edge_clipped"
+                ),
+            ),
+        ],
+        score_rows=None,
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "targeted_review"
+    assert "low_confidence" in row.risk_reasons
+
+
 def test_weak_area_outlier_and_known_exception_are_reported(tmp_path: Path) -> None:
     workbook = tmp_path / "targeted.xlsx"
     _write_targeted_workbook(
@@ -240,6 +309,7 @@ def _result(
     area: object,
     nl: str,
     confidence: str,
+    reason: str = "",
 ) -> dict[str, object]:
     return {
         "SampleName": sample,
@@ -255,7 +325,7 @@ def _result(
         "PeakEnd": 10.1,
         "PeakWidth": 0.2,
         "Confidence": confidence,
-        "Reason": "",
+        "Reason": reason,
     }
 
 

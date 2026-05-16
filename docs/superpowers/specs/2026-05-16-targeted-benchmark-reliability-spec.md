@@ -119,6 +119,8 @@ explainable signals rather than a single opaque score.
 ### Strong Evidence Signals
 
 - `Confidence == HIGH` or `MEDIUM`;
+- accepted ISTD rows with `Confidence == LOW`, finite positive area/RT, and
+  strict NL support;
 - `NL == OK` or acceptable warning token;
 - RT prior severity is close or absent for targets without priors;
 - no hard trace-quality flags;
@@ -128,7 +130,9 @@ explainable signals rather than a single opaque score.
 
 ### Review Risk Signals
 
-- `Confidence == LOW` or `VERY_LOW`;
+- `Confidence == LOW` for non-ISTD rows, or for ISTD rows that were not
+  accepted with strict NL support;
+- `Confidence == VERY_LOW`;
 - `NL == NO_MS2` or weak MS2 trace when NL evidence is expected;
 - `NL == NL_FAIL`;
 - RT prior is far from observed peak;
@@ -159,7 +163,8 @@ the reliability logic should remain target-agnostic.
 Existing detection acceptance currently allows some `LOW` confidence rows when
 MS2/NL status is acceptable. That can remain true for targeted extraction.
 
-Benchmark eligibility should be stricter:
+Benchmark eligibility should be stricter, but not stricter than the physical
+ISTD evidence:
 
 ```text
 targeted detected/review output != benchmark eligible positive evidence
