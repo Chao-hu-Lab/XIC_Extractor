@@ -49,11 +49,15 @@ Cover:
 - missing `Score Breakdown` still reports `score_breakdown_unavailable`;
 - `HIGH`/`MEDIUM` confidence with acceptable NL and finite area becomes
   `benchmark_eligible`;
-- `LOW` confidence with finite area becomes `targeted_review`;
-- `VERY_LOW`, `NL_FAIL`, invalid RT, or invalid area becomes
-  `targeted_negative` unless the row still needs manual review context;
-- `NO_MS2` with NL-required target becomes `targeted_review`;
+- `LOW` or `VERY_LOW` confidence with finite RT and positive area becomes
+  `targeted_review`;
+- `NL_FAIL` or `NO_MS2` with finite RT and positive area becomes
+  `targeted_review`;
+- missing/invalid RT, missing/non-positive area, or no selected peak becomes
+  `targeted_negative`;
 - weak area outlier produces `weak_area_rank`;
+- `targeted_negative` means no usable peak evidence, not merely weak detected
+  evidence;
 - known exception annotation does not hard-code reliability state.
 
 - [ ] **Step 2: Implement minimal diagnostic CLI**
@@ -101,8 +105,15 @@ Cover:
 
 - benchmark behavior is unchanged when no reliability JSON is provided;
 - `targeted_review` rows are annotated in matches and summary;
-- weak targeted rows do not count as clean targeted positives when strict
-  benchmark reliability mode is enabled;
+- strict mode keeps `targeted_positive_count` as the raw finite RT/area count
+  and adds `clean_targeted_positive_count`, `targeted_review_count`,
+  `targeted_negative_count`, and `coverage_denominator_count`;
+- strict mode calculates coverage and RT/area correlation using only
+  `benchmark_eligible` samples;
+- `targeted_review` samples do not count as clean targeted positives and do not
+  create `MISS`, `DRIFT`, or `AREA_MISMATCH` failures by themselves;
+- active targets with too few clean benchmark samples after review exclusion are
+  reported as inconclusive or warning, not clean `PASS`;
 - known targeted exception remains a warning, not a production pass;
 - production alignment code does not import the reliability diagnostic.
 
