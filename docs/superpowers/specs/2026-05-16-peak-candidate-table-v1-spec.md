@@ -347,6 +347,25 @@ were acceptable. Therefore CWT far alternatives are a diagnostic context signal
 only; they must not be treated as a hard selection error, demotion reason, or
 benchmark failure.
 
+The report also emits `cwt_conditioned_class` to bind CWT shape proposals to
+chemical evidence:
+
+- `cwt_selected_support`: CWT agrees with the selected peak or is within the
+  nearby audit RT window.
+- `cwt_far_unconfirmed`: CWT proposes a farther apex without matching
+  `NL=TRUE` and `ms2_trace_strength in {moderate, strong}`.
+- `cwt_far_chemically_plausible`: CWT proposes a farther apex that also has
+  matching NL and moderate/strong MS2 trace support.
+- `no_cwt_proposal`: no CWT proposal exists for the group.
+
+Only `cwt_far_chemically_plausible` should be prioritized as a possible future
+selection challenger. `cwt_far_unconfirmed` is shape-only context and should not
+increase confidence or trigger demotion.
+
+The tool writes `cwt_peak_candidate_far_alternatives.tsv` as the focused manual
+review surface for far alternatives, including m/z, selected RT, nearest CWT RT,
+RT delta, and selected/CWT NL/MS2 evidence.
+
 Manual review outputs must include `target_mz` whenever a targeted workbook is
 provided. A target label without m/z is not sufficient for EIC review because it
 forces reviewers to look up the precursor again.
@@ -382,6 +401,9 @@ Candidate table v1 is ready when all of these are true:
     direct agreement, nearby support, far CWT alternatives, and no-CWT groups.
 13. CWT manual-review rows include `target_mz` when `--targeted-workbook` is
     provided.
+14. CWT far alternatives are split into `cwt_far_unconfirmed` and
+    `cwt_far_chemically_plausible` using NL/MS2 evidence, and the focused
+    far-alternative TSV is written.
 
 ## Suggested Test Plan
 

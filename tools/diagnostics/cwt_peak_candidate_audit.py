@@ -35,6 +35,9 @@ _SUMMARY_COLUMNS = (
     "selected_cwt_nearby_group_count",
     "selected_cwt_far_alternative_group_count",
     "selected_without_cwt_group_count",
+    "cwt_selected_support_group_count",
+    "cwt_far_unconfirmed_group_count",
+    "cwt_far_chemically_plausible_group_count",
 )
 
 _GROUP_COLUMNS = (
@@ -44,15 +47,22 @@ _GROUP_COLUMNS = (
     "target_mz",
     "resolver_mode",
     "cwt_agreement_class",
+    "cwt_conditioned_class",
     "candidate_count",
     "cwt_row_count",
     "cwt_only_row_count",
     "selected_candidate_id",
     "selected_rt_apex_min",
     "selected_proposal_sources",
+    "selected_ms2_present",
+    "selected_nl_match",
+    "selected_ms2_trace_strength",
     "nearest_cwt_candidate_id",
     "nearest_cwt_rt_apex_min",
     "nearest_cwt_delta_min",
+    "nearest_cwt_ms2_present",
+    "nearest_cwt_nl_match",
+    "nearest_cwt_ms2_trace_strength",
     "selected_confidence",
     "selected_raw_score",
     "selected_reason",
@@ -84,6 +94,9 @@ class CwtCandidateRow:
     confidence: str
     raw_score: str
     reason: str
+    ms2_present: str
+    nl_match: str
+    ms2_trace_strength: str
 
     @property
     def group_id(self) -> str:
@@ -114,15 +127,22 @@ class CwtGroupAuditRow:
     target_mz: float | None
     resolver_mode: str
     cwt_agreement_class: str
+    cwt_conditioned_class: str
     candidate_count: int
     cwt_row_count: int
     cwt_only_row_count: int
     selected_candidate_id: str
     selected_rt_apex_min: float | None
     selected_proposal_sources: str
+    selected_ms2_present: str
+    selected_nl_match: str
+    selected_ms2_trace_strength: str
     nearest_cwt_candidate_id: str
     nearest_cwt_rt_apex_min: float | None
     nearest_cwt_delta_min: float | None
+    nearest_cwt_ms2_present: str
+    nearest_cwt_nl_match: str
+    nearest_cwt_ms2_trace_strength: str
     selected_confidence: str
     selected_raw_score: str
     selected_reason: str
@@ -264,6 +284,9 @@ def _row_from_dict(
         confidence=row["confidence"],
         raw_score=row["raw_score"],
         reason=row["reason"],
+        ms2_present=row.get("ms2_present", ""),
+        nl_match=row.get("nl_match", ""),
+        ms2_trace_strength=row.get("ms2_trace_strength", ""),
     )
 
 
@@ -302,27 +325,35 @@ def _audit_group(
         if selected is not None and nearest is not None
         else None
     )
+    agreement_class = _agreement_class(
+        selected,
+        cwt_rows,
+        nearest_delta_min=nearest_delta,
+        near_rt_window_min=near_rt_window_min,
+    )
     return CwtGroupAuditRow(
         group_id=first.group_id,
         sample_name=first.sample_name,
         target_label=first.target_label,
         target_mz=target_mz_by_label.get(first.target_label),
         resolver_mode=first.resolver_mode,
-        cwt_agreement_class=_agreement_class(
-            selected,
-            cwt_rows,
-            nearest_delta_min=nearest_delta,
-            near_rt_window_min=near_rt_window_min,
-        ),
+        cwt_agreement_class=agreement_class,
+        cwt_conditioned_class=_conditioned_class(agreement_class, nearest),
         candidate_count=len(rows),
         cwt_row_count=len(cwt_rows),
         cwt_only_row_count=cwt_only_count,
         selected_candidate_id=selected.candidate_id if selected else "",
         selected_rt_apex_min=selected.rt_apex_min if selected else None,
         selected_proposal_sources=selected.proposal_sources if selected else "",
+        selected_ms2_present=selected.ms2_present if selected else "",
+        selected_nl_match=selected.nl_match if selected else "",
+        selected_ms2_trace_strength=selected.ms2_trace_strength if selected else "",
         nearest_cwt_candidate_id=nearest.candidate_id if nearest else "",
         nearest_cwt_rt_apex_min=nearest.rt_apex_min if nearest else None,
         nearest_cwt_delta_min=nearest_delta,
+        nearest_cwt_ms2_present=nearest.ms2_present if nearest else "",
+        nearest_cwt_nl_match=nearest.nl_match if nearest else "",
+        nearest_cwt_ms2_trace_strength=nearest.ms2_trace_strength if nearest else "",
         selected_confidence=selected.confidence if selected else "",
         selected_raw_score=selected.raw_score if selected else "",
         selected_reason=selected.reason if selected else "",
@@ -345,6 +376,28 @@ def _agreement_class(
             return "selected_cwt_nearby"
         return "selected_cwt_far_alternative"
     return "selected_without_cwt"
+
+
+def _conditioned_class(
+    agreement_class: str,
+    nearest_cwt: CwtCandidateRow | None,
+) -> str:
+    if agreement_class in {"selected_cwt_agreed", "selected_cwt_nearby"}:
+        return "cwt_selected_support"
+    if agreement_class == "selected_cwt_far_alternative":
+        if nearest_cwt is not None and _chemically_plausible(nearest_cwt):
+            return "cwt_far_chemically_plausible"
+        return "cwt_far_unconfirmed"
+    if agreement_class == "selected_without_cwt":
+        return "no_cwt_proposal"
+    return agreement_class
+
+
+def _chemically_plausible(row: CwtCandidateRow) -> bool:
+    return (
+        row.nl_match.strip().upper() == "TRUE"
+        and row.ms2_trace_strength.strip().lower() in {"moderate", "strong"}
+    )
 
 
 def _nearest_cwt(
@@ -401,6 +454,15 @@ def _summary(
         "selected_without_cwt_group_count": _group_class_count(
             groups, "selected_without_cwt"
         ),
+        "cwt_selected_support_group_count": _conditioned_class_count(
+            groups, "cwt_selected_support"
+        ),
+        "cwt_far_unconfirmed_group_count": _conditioned_class_count(
+            groups, "cwt_far_unconfirmed"
+        ),
+        "cwt_far_chemically_plausible_group_count": _conditioned_class_count(
+            groups, "cwt_far_chemically_plausible"
+        ),
     }
 
 
@@ -409,6 +471,13 @@ def _group_class_count(
     cwt_agreement_class: str,
 ) -> int:
     return sum(row.cwt_agreement_class == cwt_agreement_class for row in groups)
+
+
+def _conditioned_class_count(
+    groups: tuple[CwtGroupAuditRow, ...],
+    cwt_conditioned_class: str,
+) -> int:
+    return sum(row.cwt_conditioned_class == cwt_conditioned_class for row in groups)
 
 
 def _write_outputs(
@@ -420,6 +489,14 @@ def _write_outputs(
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_summary(output_dir / "cwt_peak_candidate_audit_summary.tsv", payload)
     _write_groups(output_dir / "cwt_peak_candidate_groups.tsv", groups)
+    _write_groups(
+        output_dir / "cwt_peak_candidate_far_alternatives.tsv",
+        tuple(
+            row
+            for row in groups
+            if row.cwt_agreement_class == "selected_cwt_far_alternative"
+        ),
+    )
     _write_cwt_only(output_dir / "cwt_peak_candidate_cwt_only.tsv", cwt_only_rows)
     (output_dir / "cwt_peak_candidate_audit.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True),
@@ -463,15 +540,22 @@ def _format_group_row(row: CwtGroupAuditRow) -> dict[str, str]:
         "target_mz": _format_optional_float(row.target_mz),
         "resolver_mode": row.resolver_mode,
         "cwt_agreement_class": row.cwt_agreement_class,
+        "cwt_conditioned_class": row.cwt_conditioned_class,
         "candidate_count": str(row.candidate_count),
         "cwt_row_count": str(row.cwt_row_count),
         "cwt_only_row_count": str(row.cwt_only_row_count),
         "selected_candidate_id": row.selected_candidate_id,
         "selected_rt_apex_min": _format_optional_float(row.selected_rt_apex_min),
         "selected_proposal_sources": row.selected_proposal_sources,
+        "selected_ms2_present": row.selected_ms2_present,
+        "selected_nl_match": row.selected_nl_match,
+        "selected_ms2_trace_strength": row.selected_ms2_trace_strength,
         "nearest_cwt_candidate_id": row.nearest_cwt_candidate_id,
         "nearest_cwt_rt_apex_min": _format_optional_float(row.nearest_cwt_rt_apex_min),
         "nearest_cwt_delta_min": _format_optional_float(row.nearest_cwt_delta_min),
+        "nearest_cwt_ms2_present": row.nearest_cwt_ms2_present,
+        "nearest_cwt_nl_match": row.nearest_cwt_nl_match,
+        "nearest_cwt_ms2_trace_strength": row.nearest_cwt_ms2_trace_strength,
         "selected_confidence": row.selected_confidence,
         "selected_raw_score": row.selected_raw_score,
         "selected_reason": row.selected_reason,
@@ -513,6 +597,12 @@ def _markdown(payload: dict[str, object]) -> str:
             f"{summary['selected_cwt_far_alternative_group_count']}",
             "- selected_without_cwt_group_count: "
             f"{summary['selected_without_cwt_group_count']}",
+            "- cwt_selected_support_group_count: "
+            f"{summary['cwt_selected_support_group_count']}",
+            "- cwt_far_unconfirmed_group_count: "
+            f"{summary['cwt_far_unconfirmed_group_count']}",
+            "- cwt_far_chemically_plausible_group_count: "
+            f"{summary['cwt_far_chemically_plausible_group_count']}",
             "",
         ]
     )
