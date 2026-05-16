@@ -13,11 +13,30 @@ def test_audit_classifies_strong_review_and_negative_rows(tmp_path: Path) -> Non
     workbook = tmp_path / "targeted.xlsx"
     _write_targeted_workbook(
         workbook,
-        targets=[_target("clean"), _target("low_conf"), _target("nl_fail"), _target("no_peak")],
+        targets=[
+            _target("clean"),
+            _target("low_conf"),
+            _target("nl_fail"),
+            _target("no_peak"),
+        ],
         result_rows=[
             _result("S1", "clean", rt=10.0, area=1000.0, nl="OK", confidence="HIGH"),
-            _result("S1", "low_conf", rt=10.1, area=100.0, nl="OK", confidence="VERY_LOW"),
-            _result("S1", "nl_fail", rt=10.2, area=120.0, nl="NL_FAIL", confidence="HIGH"),
+            _result(
+                "S1",
+                "low_conf",
+                rt=10.1,
+                area=100.0,
+                nl="OK",
+                confidence="VERY_LOW",
+            ),
+            _result(
+                "S1",
+                "nl_fail",
+                rt=10.2,
+                area=120.0,
+                nl="NL_FAIL",
+                confidence="HIGH",
+            ),
             _result("S1", "no_peak", rt="ND", area="ND", nl="OK", confidence="HIGH"),
         ],
         score_rows=[
@@ -81,8 +100,22 @@ def test_weak_area_outlier_and_known_exception_are_reported(tmp_path: Path) -> N
         workbook,
         targets=[_target("d3-N6-medA")],
         result_rows=[
-            _result("S1", "d3-N6-medA", rt=10.0, area=1000.0, nl="OK", confidence="HIGH"),
-            _result("S2", "d3-N6-medA", rt=10.1, area=900.0, nl="OK", confidence="HIGH"),
+            _result(
+                "S1",
+                "d3-N6-medA",
+                rt=10.0,
+                area=1000.0,
+                nl="OK",
+                confidence="HIGH",
+            ),
+            _result(
+                "S2",
+                "d3-N6-medA",
+                rt=10.1,
+                area=900.0,
+                nl="OK",
+                confidence="HIGH",
+            ),
             _result("S3", "d3-N6-medA", rt=10.2, area=5.0, nl="OK", confidence="HIGH"),
         ],
         score_rows=[

@@ -468,7 +468,10 @@ def _write_markdown(path: Path, result: TargetedReliabilityResult) -> None:
         "",
         f"Overall status: {'WARN' if result.targeted_review_count else 'PASS'}",
         "",
-        "| Target | Eligible | Review | Negative | Known exception | Top risk reasons |",
+        (
+            "| Target | Eligible | Review | Negative | Known exception | "
+            "Top risk reasons |"
+        ),
         "|---|---:|---:|---:|---|---|",
     ]
     for summary in result.summaries:
