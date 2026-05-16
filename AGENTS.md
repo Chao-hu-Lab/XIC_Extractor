@@ -3,6 +3,9 @@
 Repo-local rules for code design and maintenance. Global Codex rules still
 apply. This file should stay short enough to influence implementation choices.
 
+For directory layout, file placement rules, and scratch directory hygiene, see
+[`docs/project-layout.md`](docs/project-layout.md).
+
 ## Design Principles
 
 - Make logic, dependencies, and data flow obvious.
@@ -131,14 +134,9 @@ These modules are known maintainability targets:
 - `xic_extractor/signal_processing.py`: keep as compatibility facade; move
   models, resolver implementations, selection, recovery, integration, and trace
   quality into focused peak-detection modules.
-- `tools/diagnostics/alignment_decision_report.py`,
-  `tools/diagnostics/single_dr_production_gate_decision_report.py`, and
-  `tools/diagnostics/targeted_istd_benchmark.py`: split diagnostics by loading,
-  report model, and rendering/writing before touching domain-heavy alignment
-  algorithms.
-- `xic_extractor/alignment/pipeline.py`: keep as orchestration facade; move
-  output paths, atomic writes, metadata assembly, and timed RAW-source adapters
-  into focused helper modules.
+- `xic_extractor/peak_scoring.py`: split scoring models, score component
+  calculations, and selection helpers only after characterization tests pin
+  current confidence/reason outputs.
 - `xic_extractor/alignment/primary_consolidation.py`: add characterization tests
   before splitting graph construction, winner selection, cell merge, or loser
   audit helpers.
