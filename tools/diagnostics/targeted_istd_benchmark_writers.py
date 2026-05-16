@@ -18,6 +18,10 @@ SUMMARY_COLUMNS = (
     "target_rt_min",
     "target_rt_max",
     "targeted_positive_count",
+    "clean_targeted_positive_count",
+    "targeted_review_count",
+    "targeted_negative_count",
+    "coverage_denominator_count",
     "targeted_total_count",
     "targeted_mean_rt",
     "candidate_match_count",
@@ -35,6 +39,8 @@ SUMMARY_COLUMNS = (
     "sample_rt_p95_abs_delta_min",
     "status",
     "failure_modes",
+    "targeted_reliability_mode",
+    "targeted_reliability_warning_modes",
     "note",
 )
 
@@ -76,6 +82,9 @@ def _summary_rows(summaries: Sequence[Any]) -> list[dict[str, object]]:
             "active_tag": _bool_text(summary.active_tag),
             "primary_feature_ids": ";".join(summary.primary_feature_ids),
             "failure_modes": ";".join(summary.failure_modes),
+            "targeted_reliability_warning_modes": ";".join(
+                summary.targeted_reliability_warning_modes
+            ),
         }
         for summary in summaries
     ]
@@ -90,8 +99,20 @@ def _json_payload(
     thresholds: Any,
 ) -> dict[str, object]:
     fail_count = sum(summary.status == "FAIL" for summary in summaries)
+    warn_count = sum(
+        summary.status == "WARN" or bool(summary.targeted_reliability_warning_modes)
+        for summary in summaries
+    )
     active_fail_count = sum(
         summary.status == "FAIL" and summary.active_tag
+        for summary in summaries
+    )
+    active_warn_count = sum(
+        (
+            summary.status == "WARN"
+            or bool(summary.targeted_reliability_warning_modes)
+        )
+        and summary.active_tag
         for summary in summaries
     )
     false_positive_tag_count = sum(
@@ -99,9 +120,11 @@ def _json_payload(
         for summary in summaries
     )
     return {
-        "overall_status": "FAIL" if fail_count else "PASS",
+        "overall_status": "FAIL" if fail_count else "WARN" if warn_count else "PASS",
         "fail_count": fail_count,
+        "warn_count": warn_count,
         "active_fail_count": active_fail_count,
+        "active_warn_count": active_warn_count,
         "false_positive_tag_count": false_positive_tag_count,
         "thresholds": asdict(thresholds),
         "summaries": _summary_rows(summaries),
@@ -110,13 +133,21 @@ def _json_payload(
 
 def _write_markdown(path: Any, summaries: Sequence[Any]) -> None:
     fail_count = sum(summary.status == "FAIL" for summary in summaries)
+    warn_count = sum(
+        summary.status == "WARN" or bool(summary.targeted_reliability_warning_modes)
+        for summary in summaries
+    )
+    overall = "FAIL" if fail_count else "WARN" if warn_count else "PASS"
     lines = [
         "# Targeted ISTD Benchmark",
         "",
-        f"Overall status: {'FAIL' if fail_count else 'PASS'}",
+        f"Overall status: {overall}",
         "",
-        "| Target | Active | Primary hits | Selected | Status | Failure modes |",
-        "|---|---:|---:|---|---|---|",
+        (
+            "| Target | Active | Primary hits | Selected | Status | "
+            "Failure modes | Warning modes |"
+        ),
+        "|---|---:|---:|---|---|---|---|",
     ]
     for summary in summaries:
         lines.append(
@@ -126,7 +157,8 @@ def _write_markdown(path: Any, summaries: Sequence[Any]) -> None:
             f"{summary.primary_match_count} | "
             f"{summary.selected_feature_id} | "
             f"{summary.status} | "
-            f"{';'.join(summary.failure_modes)} |"
+            f"{';'.join(summary.failure_modes)} | "
+            f"{';'.join(summary.targeted_reliability_warning_modes)} |"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

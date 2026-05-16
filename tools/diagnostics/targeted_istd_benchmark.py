@@ -6,6 +6,7 @@ import argparse
 import math
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
 
@@ -15,6 +16,7 @@ from tools.diagnostics.targeted_istd_benchmark_loaders import (
     read_alignment_review,
     read_target_definitions,
     read_targeted_points,
+    read_targeted_reliability_points,
 )
 from tools.diagnostics.targeted_istd_benchmark_models import (
     ISOTOPE_SHIFT_DA,
@@ -26,6 +28,7 @@ from tools.diagnostics.targeted_istd_benchmark_models import (
     CandidateMatch,
     TargetDefinition,
     TargetedPoint,
+    TargetedReliabilityPoint,
 )
 from tools.diagnostics.targeted_istd_benchmark_writers import write_benchmark_outputs
 
@@ -36,9 +39,20 @@ def run_targeted_istd_benchmark(
     alignment_dir: Path,
     output_dir: Path,
     thresholds: BenchmarkThresholds = BenchmarkThresholds(),
+    targeted_reliability_json: Path | None = None,
+    strict_targeted_reliability: bool = False,
 ) -> tuple[BenchmarkOutputs, tuple[BenchmarkSummary, ...]]:
+    if strict_targeted_reliability and targeted_reliability_json is None:
+        raise ValueError(
+            "--strict-targeted-reliability requires --targeted-reliability-json"
+        )
     targets = read_target_definitions(targeted_workbook)
     targeted_points = read_targeted_points(targeted_workbook)
+    targeted_reliability = (
+        read_targeted_reliability_points(targeted_reliability_json)
+        if targeted_reliability_json is not None
+        else {}
+    )
     review_rows = read_alignment_review(alignment_dir / "alignment_review.tsv")
     matrix = read_alignment_matrix(alignment_dir / "alignment_matrix.tsv")
     cells = read_alignment_cells(alignment_dir / "alignment_cells.tsv")
@@ -51,10 +65,15 @@ def run_targeted_istd_benchmark(
             for point in targeted_points.get(target.label, ())
             if point.sample_stem in matrix.sample_stems
         )
+        matching_points = _benchmark_points(
+            target_points,
+            reliability=targeted_reliability,
+            strict_targeted_reliability=strict_targeted_reliability,
+        )
         target_matches = _match_target_to_alignment(
             target,
             review_rows,
-            target_points=target_points,
+            target_points=matching_points,
             thresholds=thresholds,
         )
         matches.extend(target_matches)
@@ -66,6 +85,8 @@ def run_targeted_istd_benchmark(
                 matrix=matrix.areas_by_family,
                 cells=cells,
                 thresholds=thresholds,
+                reliability=targeted_reliability,
+                strict_targeted_reliability=strict_targeted_reliability,
             ),
         )
 
@@ -109,6 +130,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             alignment_dir=args.alignment_dir.resolve(),
             output_dir=args.output_dir.resolve(),
             thresholds=thresholds,
+            targeted_reliability_json=(
+                args.targeted_reliability_json.resolve()
+                if args.targeted_reliability_json is not None
+                else None
+            ),
+            strict_targeted_reliability=args.strict_targeted_reliability,
         )
     except (FileNotFoundError, KeyError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -158,6 +185,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--log-area-spearman-min", type=float, default=0.90)
     parser.add_argument("--log-area-pearson-min", type=float, default=0.80)
+    parser.add_argument("--targeted-reliability-json", type=Path)
+    parser.add_argument(
+        "--strict-targeted-reliability",
+        action="store_true",
+        help=(
+            "Use only benchmark_eligible targeted samples for coverage and "
+            "RT/area calculations."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -290,9 +326,21 @@ def _summarize_target(
     matrix: Mapping[str, Mapping[str, float]],
     cells: Mapping[tuple[str, str], AlignmentCell],
     thresholds: BenchmarkThresholds,
+    reliability: Mapping[tuple[str, str], TargetedReliabilityPoint],
+    strict_targeted_reliability: bool,
 ) -> BenchmarkSummary:
     positives = tuple(point for point in points if point.positive)
-    targeted_mean_rt = _mean(point.rt for point in positives)
+    reliability_summary = _reliability_summary(
+        points,
+        reliability=reliability,
+        strict_targeted_reliability=strict_targeted_reliability,
+    )
+    benchmark_points = (
+        reliability_summary.clean_points
+        if strict_targeted_reliability
+        else positives
+    )
+    targeted_mean_rt = _mean(point.rt for point in benchmark_points)
     primary_matches = tuple(
         match for match in matches if match.include_in_primary_matrix
     )
@@ -302,7 +350,7 @@ def _summarize_target(
     active_tag = _is_active_tag(target, thresholds)
     paired_logs: list[tuple[float, float]] = []
     rt_deltas: list[float] = []
-    for point in positives:
+    for point in benchmark_points:
         area = selected_matrix.get(point.sample_stem)
         if area is not None and area > 0 and point.area is not None:
             paired_logs.append((math.log10(point.area), math.log10(area)))
@@ -310,7 +358,12 @@ def _summarize_target(
             if cell is not None and cell.apex_rt is not None and point.rt is not None:
                 rt_deltas.append(cell.apex_rt - point.rt)
 
-    coverage_minimum = max(0, len(positives) - max(1, math.ceil(len(positives) * 0.02)))
+    coverage_denominator_count = len(benchmark_points)
+    coverage_minimum = max(
+        0,
+        coverage_denominator_count
+        - max(1, math.ceil(coverage_denominator_count * 0.02)),
+    )
     family_mean_rt_delta = (
         selected.family_center_rt - targeted_mean_rt
         if selected is not None and targeted_mean_rt is not None
@@ -320,19 +373,28 @@ def _summarize_target(
     spearman = _spearman(paired_logs)
     median_rt_delta = _median_abs(rt_deltas)
     p95_rt_delta = _percentile_abs(rt_deltas, 0.95)
-    failure_modes = _failure_modes(
+    warnings = _targeted_reliability_warnings(
         active_tag=active_tag,
-        primary_matches=primary_matches,
-        untargeted_positive_count=len(selected_matrix),
-        coverage_minimum=coverage_minimum,
-        family_mean_rt_delta=family_mean_rt_delta,
-        sample_rt_median_abs_delta=median_rt_delta,
-        sample_rt_p95_abs_delta=p95_rt_delta,
-        paired_area_n=len(paired_logs),
-        pearson=pearson,
-        spearman=spearman,
-        thresholds=thresholds,
+        strict_targeted_reliability=strict_targeted_reliability,
+        reliability_summary=reliability_summary,
     )
+    if "TARGETED_RELIABILITY_INCONCLUSIVE" in warnings:
+        failure_modes = ()
+    else:
+        failure_modes = _failure_modes(
+            active_tag=active_tag,
+            primary_matches=primary_matches,
+            untargeted_positive_count=len(selected_matrix),
+            coverage_minimum=coverage_minimum,
+            family_mean_rt_delta=family_mean_rt_delta,
+            sample_rt_median_abs_delta=median_rt_delta,
+            sample_rt_p95_abs_delta=p95_rt_delta,
+            paired_area_n=len(paired_logs),
+            pearson=pearson,
+            spearman=spearman,
+            thresholds=thresholds,
+        )
+    status = "FAIL" if failure_modes else "WARN" if warnings else "PASS"
     return BenchmarkSummary(
         target_label=target.label,
         role=target.role,
@@ -357,10 +419,111 @@ def _summarize_target(
         sample_rt_pair_n=len(rt_deltas),
         sample_rt_median_abs_delta_min=median_rt_delta,
         sample_rt_p95_abs_delta_min=p95_rt_delta,
-        status="FAIL" if failure_modes else "PASS",
+        status=status,
         failure_modes=failure_modes,
-        note=_note(active_tag, failure_modes),
+        note=_note(active_tag, failure_modes, warnings),
+        targeted_reliability_mode=(
+            "strict"
+            if strict_targeted_reliability
+            else "annotate"
+            if reliability
+            else "not_provided"
+        ),
+        clean_targeted_positive_count=len(reliability_summary.clean_points),
+        targeted_review_count=reliability_summary.review_count,
+        targeted_negative_count=reliability_summary.negative_count,
+        coverage_denominator_count=coverage_denominator_count,
+        targeted_reliability_warning_modes=warnings,
     )
+
+
+@dataclass(frozen=True)
+class _ReliabilitySummary:
+    clean_points: tuple[TargetedPoint, ...]
+    review_count: int
+    negative_count: int
+    missing_count: int
+
+
+def _benchmark_points(
+    points: tuple[TargetedPoint, ...],
+    *,
+    reliability: Mapping[tuple[str, str], TargetedReliabilityPoint],
+    strict_targeted_reliability: bool,
+) -> tuple[TargetedPoint, ...]:
+    if not strict_targeted_reliability:
+        return points
+    return _reliability_summary(
+        points,
+        reliability=reliability,
+        strict_targeted_reliability=True,
+    ).clean_points
+
+
+def _reliability_summary(
+    points: tuple[TargetedPoint, ...],
+    *,
+    reliability: Mapping[tuple[str, str], TargetedReliabilityPoint],
+    strict_targeted_reliability: bool,
+) -> _ReliabilitySummary:
+    if not reliability:
+        positives = tuple(point for point in points if point.positive)
+        return _ReliabilitySummary(
+            clean_points=positives,
+            review_count=0,
+            negative_count=0,
+            missing_count=0,
+        )
+
+    clean: list[TargetedPoint] = []
+    review_count = 0
+    negative_count = 0
+    missing_count = 0
+    for point in points:
+        record = reliability.get((point.sample_stem, point.target_label))
+        if record is None:
+            if point.positive:
+                if strict_targeted_reliability:
+                    missing_count += 1
+                else:
+                    clean.append(point)
+            continue
+        if record.reliability_state == "benchmark_eligible":
+            if point.positive:
+                clean.append(point)
+        elif record.reliability_state == "targeted_review":
+            if point.positive:
+                review_count += 1
+                if not strict_targeted_reliability:
+                    clean.append(point)
+        elif record.reliability_state == "targeted_negative":
+            negative_count += 1
+    return _ReliabilitySummary(
+        clean_points=tuple(clean),
+        review_count=review_count,
+        negative_count=negative_count,
+        missing_count=missing_count,
+    )
+
+
+def _targeted_reliability_warnings(
+    *,
+    active_tag: bool,
+    strict_targeted_reliability: bool,
+    reliability_summary: _ReliabilitySummary,
+) -> tuple[str, ...]:
+    warnings: list[str] = []
+    if reliability_summary.review_count:
+        warnings.append("TARGETED_REVIEW_EVIDENCE")
+    if reliability_summary.missing_count:
+        warnings.append("TARGETED_RELIABILITY_MISSING")
+    if (
+        active_tag
+        and strict_targeted_reliability
+        and len(reliability_summary.clean_points) < 3
+    ):
+        warnings.append("TARGETED_RELIABILITY_INCONCLUSIVE")
+    return tuple(warnings)
 
 
 def _failure_modes(
@@ -525,9 +688,15 @@ def _is_active_tag(
     )
 
 
-def _note(active_tag: bool, failure_modes: tuple[str, ...]) -> str:
+def _note(
+    active_tag: bool,
+    failure_modes: tuple[str, ...],
+    warning_modes: tuple[str, ...],
+) -> str:
     if not active_tag and not failure_modes:
         return "inactive tag excluded"
+    if warning_modes and not failure_modes:
+        return "strict gate warning"
     if not failure_modes:
         return "strict gate passed"
     return "strict gate failed"

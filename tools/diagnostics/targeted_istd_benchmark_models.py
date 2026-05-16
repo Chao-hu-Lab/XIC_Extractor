@@ -65,6 +65,13 @@ class TargetedPoint:
 
 
 @dataclass(frozen=True)
+class TargetedReliabilityPoint:
+    sample_stem: str
+    target_label: str
+    reliability_state: str
+
+
+@dataclass(frozen=True)
 class AlignmentFeature:
     feature_family_id: str
     neutral_loss_tag: str
@@ -136,6 +143,12 @@ class BenchmarkSummary:
     status: str
     failure_modes: tuple[str, ...]
     note: str
+    targeted_reliability_mode: str = "not_provided"
+    clean_targeted_positive_count: int = 0
+    targeted_review_count: int = 0
+    targeted_negative_count: int = 0
+    coverage_denominator_count: int = 0
+    targeted_reliability_warning_modes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

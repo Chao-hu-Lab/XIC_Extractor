@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import math
 import re
 from collections.abc import Mapping, Sequence
@@ -16,6 +17,7 @@ from tools.diagnostics.targeted_istd_benchmark_models import (
     AlignmentMatrixData,
     TargetDefinition,
     TargetedPoint,
+    TargetedReliabilityPoint,
 )
 
 
@@ -123,6 +125,32 @@ def read_targeted_points(path: Path) -> dict[str, tuple[TargetedPoint, ...]]:
         return {label: tuple(points) for label, points in grouped.items()}
     finally:
         workbook.close()
+
+
+def read_targeted_reliability_points(
+    path: Path,
+) -> dict[tuple[str, str], TargetedReliabilityPoint]:
+    if not path.exists():
+        raise FileNotFoundError(str(path))
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        raise ValueError(f"{path} is missing rows list")
+    points: dict[tuple[str, str], TargetedReliabilityPoint] = {}
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            raise ValueError(f"{path} rows[{index}] must be an object")
+        sample = _normalize_sample_id(
+            _required_text_value(path, index, row, "sample_name")
+        )
+        target = _required_text_value(path, index, row, "target_label")
+        state = _required_text_value(path, index, row, "reliability_state")
+        points[(sample, target)] = TargetedReliabilityPoint(
+            sample_stem=sample,
+            target_label=target,
+            reliability_state=state,
+        )
+    return points
 
 
 def read_alignment_review(path: Path) -> tuple[AlignmentFeature, ...]:
@@ -248,6 +276,18 @@ def _require_fields(
     missing = [field for field in required if field not in fieldnames]
     if missing:
         raise ValueError(f"{path} is missing required columns: {missing}")
+
+
+def _required_text_value(
+    path: Path,
+    row_number: int,
+    row: Mapping[str, object],
+    field: str,
+) -> str:
+    value = _text(row.get(field))
+    if not value:
+        raise ValueError(f"{path} rows[{row_number}] is missing {field}")
+    return value
 
 
 def _required_indexes(
