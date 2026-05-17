@@ -69,7 +69,10 @@ def find_peak_and_area(
                 recovery_candidate,
                 recovery_result,
             )
-            all_candidates = _append_candidate_once(all_candidates, recovery_candidate)
+            all_candidates, recovery_candidate = _append_or_merge_recovery_candidate(
+                all_candidates,
+                recovery_candidate,
+            )
             result_for_output = _with_candidates(candidates_result, all_candidates)
 
         selection_rt = selection_rt_for_scored_candidates(
@@ -415,13 +418,31 @@ def _detection_failure(candidates_result: PeakCandidatesResult) -> PeakDetection
     )
 
 
-def _append_candidate_once(
+def _append_or_merge_recovery_candidate(
     candidates: tuple[PeakCandidate, ...],
     candidate: PeakCandidate,
-) -> tuple[PeakCandidate, ...]:
-    if any(existing is candidate for existing in candidates):
-        return candidates
-    return (*candidates, candidate)
+) -> tuple[tuple[PeakCandidate, ...], PeakCandidate]:
+    merged_candidates = list(candidates)
+    for index, existing in enumerate(merged_candidates):
+        if not _same_peak_candidate_identity(existing, candidate):
+            continue
+        merged_candidate = replace(
+            existing,
+            proposal_sources=_combine_proposal_sources(existing, candidate),
+        )
+        merged_candidates[index] = merged_candidate
+        return tuple(merged_candidates), merged_candidate
+    return (*candidates, candidate), candidate
+
+
+def _same_peak_candidate_identity(
+    first: PeakCandidate,
+    second: PeakCandidate,
+) -> bool:
+    return (
+        first.selection_apex_rt == second.selection_apex_rt
+        and first.peak == second.peak
+    )
 
 
 def _mark_recovery_candidate(

@@ -791,6 +791,66 @@ def test_preferred_rt_recovery_candidate_preserves_provenance(
     )
 
 
+def test_preferred_rt_recovery_merges_existing_peak_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from xic_extractor.peak_detection import facade
+
+    near_candidate = _candidate_for_provenance(
+        8.95,
+        proposal_sources=("legacy_savgol",),
+        selection_apex_intensity=20.0,
+    )
+    strong_far_candidate = _candidate_for_provenance(
+        9.50,
+        proposal_sources=("legacy_savgol",),
+        selection_apex_intensity=2000.0,
+    )
+    recovered_duplicate = _candidate_for_provenance(
+        8.95,
+        proposal_sources=("legacy_savgol",),
+        selection_apex_intensity=20.0,
+    )
+    calls = 0
+
+    def _fake_candidates(*_args, **_kwargs) -> PeakCandidatesResult:
+        nonlocal calls
+        calls += 1
+        candidates = (
+            (near_candidate, strong_far_candidate)
+            if calls == 1
+            else (recovered_duplicate,)
+        )
+        return PeakCandidatesResult(
+            status="OK",
+            candidates=candidates,
+            n_points=20,
+            max_smoothed=2000.0,
+            n_prominent_peaks=len(candidates),
+        )
+
+    monkeypatch.setattr(facade, "find_peak_candidates", _fake_candidates)
+
+    result = facade.find_peak_and_area(
+        np.asarray([8.0, 8.5, 9.0, 9.5], dtype=float),
+        np.asarray([1.0, 10.0, 4.0, 2000.0], dtype=float),
+        _config(),
+        preferred_rt=8.95,
+    )
+
+    assert len(result.candidates) == 2
+    recovered_rows = [
+        candidate
+        for candidate in result.candidates
+        if candidate.selection_apex_rt == pytest.approx(8.95)
+    ]
+    assert len(recovered_rows) == 1
+    assert recovered_rows[0].proposal_sources == (
+        "legacy_savgol",
+        "preferred_rt_recovery",
+    )
+
+
 def test_selection_reference_rt_is_empty_when_preferred_rt_is_not_used(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -226,7 +226,7 @@ def test_peak_detection_facade_owns_public_peak_flow() -> None:
         "_score_with_context",
         "_detection_success",
         "_detection_failure",
-        "_append_candidate_once",
+        "_append_or_merge_recovery_candidate",
         "_with_candidates",
     }.isdisjoint(signal_functions)
 
