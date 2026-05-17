@@ -8,6 +8,14 @@ from typing import Any, Literal
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.models import PeakCandidate, PeakCandidateScore
 
+_SOFT_TRACE_QUALITY_FLAGS = {"low_trace_continuity", "poor_edge_recovery"}
+_HARD_LOCAL_CONCERN_LABELS = {
+    "hard_quality_flag",
+    "low_scan_support",
+    "rt_centrality_poor",
+    "shape_poor",
+}
+
 EvidenceSource = Literal[
     "targeted_peak",
     "discovery_candidate",
@@ -206,21 +214,15 @@ def classify_evidence_consistency(signals: EvidenceSignalSet) -> tuple[str, ...]
         or "centwave_cwt" in sources
         or "cwt_same_apex_support" in support
     )
+    hard_quality_flags = quality_flags - _SOFT_TRACE_QUALITY_FLAGS
+    trace_context_ok = "trace_clean" in support or not hard_quality_flags
     ms1_coherent = (
         "local_sn_strong" in support
-        and "trace_clean" in support
+        and trace_context_ok
         and has_shape_context
     )
-    hard_local_conflict = bool(quality_flags) or bool(
-        concerns
-        & {
-            "hard_quality_flag",
-            "low_scan_support",
-            "low_trace_continuity",
-            "poor_edge_recovery",
-            "rt_centrality_poor",
-            "shape_poor",
-        }
+    hard_local_conflict = bool(hard_quality_flags) or bool(
+        concerns & _HARD_LOCAL_CONCERN_LABELS
     )
     if hard_local_conflict:
         labels.append("hard_local_quality_conflict")

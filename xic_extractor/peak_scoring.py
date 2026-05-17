@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, cast
+from typing import Any, Sequence, cast
 
 import numpy as np
 
@@ -43,6 +43,7 @@ _ADAP_LIKE_FLAG_LABELS = {
     "low_trace_continuity": "low trace continuity",
     "poor_edge_recovery": "poor edge recovery",
 }
+_TRACE_CAP_BLOCKING_FLAGS = {"low_scan_support"}
 _ADAP_LIKE_SELECTION_WEIGHT = 0.25
 _ADAP_LIKE_SELECTION_MAX = 0.5
 _SELECTION_QUALITY_DISTANCE_WEIGHT_MIN = 0.05
@@ -694,7 +695,10 @@ def _evidence_from_context(
     if not flags.intersection(_ADAP_LIKE_FLAG_LABELS):
         positive.append(EvidenceSignal("trace_clean", 10))
 
-    if _has_same_apex_cwt_support(candidate) and _has_cwt_chemical_support(ctx):
+    has_cwt_same_apex_support = (
+        _has_same_apex_cwt_support(candidate) and _has_cwt_chemical_support(ctx)
+    )
+    if has_cwt_same_apex_support:
         positive.append(
             EvidenceSignal(
                 "cwt_same_apex_support",
@@ -707,14 +711,17 @@ def _evidence_from_context(
         "low trace continuity": ("low_trace_continuity", 10),
         "poor edge recovery": ("poor_edge_recovery", 10),
     }
-    trace_quality_flagged = False
+    active_trace_flags: list[str] = []
     for severity, label in severities:
         if severity == 0 or label not in trace_evidence:
             continue
         evidence_label, points = trace_evidence[label]
         negative.append(EvidenceSignal(evidence_label, points))
-        trace_quality_flagged = True
-    if trace_quality_flagged:
+        active_trace_flags.append(evidence_label)
+    if _trace_quality_cap_required(
+        active_trace_flags,
+        has_cwt_same_apex_support=has_cwt_same_apex_support,
+    ):
         caps.append(ConfidenceCap("trace_quality_cap", "MEDIUM"))
 
     if quality_penalty > 0:
@@ -722,6 +729,17 @@ def _evidence_from_context(
         caps.append(ConfidenceCap("hard_quality_flag_cap", "MEDIUM"))
 
     return positive, negative, caps
+
+
+def _trace_quality_cap_required(
+    active_trace_flags: Sequence[str],
+    *,
+    has_cwt_same_apex_support: bool,
+) -> bool:
+    flags = set(active_trace_flags)
+    if flags & _TRACE_CAP_BLOCKING_FLAGS:
+        return True
+    return len(flags) >= 2 and not has_cwt_same_apex_support
 
 
 def _has_cwt_chemical_support(ctx: ScoringContext) -> bool:

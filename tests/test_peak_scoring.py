@@ -821,6 +821,78 @@ def test_score_candidate_formats_adap_like_quality_flags_as_minor_concerns() -> 
     assert "concerns: low trace continuity; poor edge recovery" in scored.reason
 
 
+def test_single_trace_continuity_warning_does_not_cap_supported_peak() -> None:
+    cand = _make_flagged_candidate(
+        apex_rt=10.0,
+        apex_intensity=1000.0,
+        quality_flags=("low_trace_continuity",),
+    )
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        prefer_rt_prior_tiebreak=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.HIGH
+    assert "low_trace_continuity" in scored.evidence_score.concern_labels
+    assert "trace_quality_cap" not in scored.evidence_score.cap_labels
+    assert "low trace continuity" in scored.reason
+    assert "cap: MEDIUM due to trace quality" not in scored.reason
+
+
+def test_cwt_same_apex_support_prevents_trace_boundary_double_cap() -> None:
+    cand = replace(
+        _make_flagged_candidate(
+            apex_rt=10.0,
+            apex_intensity=1000.0,
+            quality_flags=("low_trace_continuity", "poor_edge_recovery"),
+        ),
+        proposal_sources=("local_minimum", "centwave_cwt"),
+        cwt_best_scale=4.0,
+        cwt_ridge_persistence=0.5,
+    )
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        prefer_rt_prior_tiebreak=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert scored.confidence == Confidence.HIGH
+    assert "cwt_same_apex_support" in scored.evidence_score.support_labels
+    assert "low_trace_continuity" in scored.evidence_score.concern_labels
+    assert "poor_edge_recovery" in scored.evidence_score.concern_labels
+    assert "trace_quality_cap" not in scored.evidence_score.cap_labels
+    assert "cap: MEDIUM due to trace quality" not in scored.reason
+
+
 def test_score_candidate_does_not_double_penalize_adap_equivalent_legacy_flags(
 ) -> None:
     cand = _make_flagged_candidate(

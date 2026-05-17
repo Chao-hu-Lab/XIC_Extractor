@@ -455,6 +455,131 @@ def test_accepted_low_istd_with_hard_quality_stays_targeted_review(
     assert "low_confidence" in row.risk_reasons
 
 
+def test_soft_trace_flags_with_cwt_support_remain_benchmark_eligible(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("5-hmdC")],
+        result_rows=[
+            _result(
+                "S1",
+                "5-hmdC",
+                rt=9.05,
+                area=950_000.0,
+                nl="OK",
+                confidence="HIGH",
+                reason=(
+                    "decision: accepted; support: strict NL OK; "
+                    "CWT same-apex support; local S/N strong; shape clean; "
+                    "concerns: low trace continuity"
+                ),
+            ),
+        ],
+        score_rows=[
+            _score(
+                "S1",
+                "5-hmdC",
+                confidence="HIGH",
+                quality_flags="low_trace_continuity",
+            ),
+        ],
+    )
+    _write_peak_candidates(
+        candidates,
+        [
+            _peak_candidate(
+                "S1",
+                "5-hmdC",
+                selected="TRUE",
+                raw_score="95",
+                support_labels=(
+                    "strict_nl_ok;local_sn_strong;shape_clean;"
+                    "cwt_same_apex_support"
+                ),
+                concern_labels="low_trace_continuity",
+                proposal_sources="local_minimum;centwave_cwt",
+                quality_flags="low_trace_continuity",
+                ms2_present="TRUE",
+                nl_match="TRUE",
+            )
+        ],
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        peak_candidates_tsv=candidates,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "benchmark_eligible"
+    assert "quality_flags" not in row.risk_reasons
+    assert result.summaries[0].benchmark_eligible_count == 1
+
+
+def test_low_scan_support_stays_blocking_quality_flag(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("5-hmdC")],
+        result_rows=[
+            _result(
+                "S1",
+                "5-hmdC",
+                rt=9.05,
+                area=950_000.0,
+                nl="OK",
+                confidence="HIGH",
+                reason=(
+                    "decision: accepted; support: strict NL OK; "
+                    "local S/N strong; shape clean; concerns: low scan support"
+                ),
+            ),
+        ],
+        score_rows=[
+            _score(
+                "S1",
+                "5-hmdC",
+                confidence="HIGH",
+                quality_flags="low_scan_support",
+            ),
+        ],
+    )
+    _write_peak_candidates(
+        candidates,
+        [
+            _peak_candidate(
+                "S1",
+                "5-hmdC",
+                selected="TRUE",
+                raw_score="95",
+                support_labels="strict_nl_ok;local_sn_strong;shape_clean",
+                concern_labels="low_scan_support",
+                proposal_sources="local_minimum;centwave_cwt",
+                quality_flags="low_scan_support",
+                ms2_present="TRUE",
+                nl_match="TRUE",
+            )
+        ],
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        peak_candidates_tsv=candidates,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "targeted_review"
+    assert "quality_flags" in row.risk_reasons
+
+
 def test_weak_area_outlier_and_known_exception_are_reported(tmp_path: Path) -> None:
     workbook = tmp_path / "targeted.xlsx"
     _write_targeted_workbook(
@@ -627,6 +752,7 @@ def _score(
     *,
     confidence: str,
     concerns: str = "",
+    quality_flags: str = "",
 ) -> dict[str, object]:
     return {
         "SampleName": sample,
@@ -648,7 +774,7 @@ def _score(
         "noise_shape": "0",
         "peak_width": "0",
         "Quality Penalty": "0",
-        "Quality Flags": "",
+        "Quality Flags": quality_flags,
         "Total Severity": "0",
         "Confidence": confidence,
         "Prior RT": "10",
@@ -667,6 +793,7 @@ def _peak_candidate(
     proposal_sources: str,
     ms2_present: str,
     nl_match: str,
+    quality_flags: str = "",
 ) -> dict[str, object]:
     return {
         "sample_name": sample,
@@ -680,7 +807,7 @@ def _peak_candidate(
         "raw_score": raw_score,
         "support_labels": support_labels,
         "concern_labels": concern_labels,
-        "quality_flags": "",
+        "quality_flags": quality_flags,
         "ms2_present": ms2_present,
         "nl_match": nl_match,
     }

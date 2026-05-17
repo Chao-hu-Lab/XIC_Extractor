@@ -73,6 +73,8 @@ _PEAK_CANDIDATE_COLUMNS = (
 )
 
 _WEAK_AREA_THRESHOLD_RATIO = 0.05
+_SOFT_TRACE_QUALITY_FLAGS = {"low_trace_continuity", "poor_edge_recovery"}
+_BLOCKING_TRACE_QUALITY_FLAGS = {"low_scan_support"}
 
 
 @dataclass(frozen=True)
@@ -426,7 +428,10 @@ def _classify_row(
         risk_reasons.append("no_ms2")
     if score is None:
         risk_reasons.append("score_breakdown_unavailable")
-    elif score.quality_flags:
+    elif _has_blocking_quality_flags(
+        score.quality_flags,
+        candidate_evidence=candidate_evidence,
+    ):
         risk_reasons.append("quality_flags")
     if area_context is not None and area_context.weak_area:
         risk_reasons.append("weak_area_rank")
@@ -729,6 +734,42 @@ def _candidate_product_context_reasons(
     if not evidence.diagnostic_product_absence_reason:
         return ()
     return (evidence.diagnostic_product_absence_reason,)
+
+
+def _has_blocking_quality_flags(
+    quality_flags: str,
+    *,
+    candidate_evidence: _CandidateEvidence | None,
+) -> bool:
+    flags = set(_split_semicolon_labels(quality_flags))
+    if not flags:
+        return False
+    if flags & _BLOCKING_TRACE_QUALITY_FLAGS:
+        return True
+    hard_flags = flags - _SOFT_TRACE_QUALITY_FLAGS
+    if hard_flags:
+        return True
+    if candidate_evidence is None:
+        return True
+    return not _has_soft_trace_support_context(candidate_evidence)
+
+
+def _has_soft_trace_support_context(evidence: _CandidateEvidence) -> bool:
+    support = set(evidence.support_labels)
+    sources = set(evidence.proposal_sources)
+    concerns = set(evidence.concern_labels)
+    has_shape_context = bool(
+        {"shape_clean", "cwt_same_apex_support"} & support
+    ) or "centwave_cwt" in sources
+    return (
+        evidence.ms2_present is True
+        and evidence.nl_match is True
+        and "strict_nl_ok" in support
+        and "local_sn_strong" in support
+        and has_shape_context
+        and "shape_poor" not in concerns
+        and "local_sn_poor" not in concerns
+    )
 
 
 def _evidence_signal_set(
