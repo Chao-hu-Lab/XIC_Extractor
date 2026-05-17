@@ -28,6 +28,15 @@ When the optional TSV is provided:
   `benchmark_eligible`;
 - hard candidate conflicts such as `shape_poor`, quality flags, missing MS2,
   or other hard local quality labels must keep the row as `targeted_review`;
+- targeted-side blockers such as `weak_area_rank`, `quality_flags`, `no_ms2`,
+  or `hard_nl_conflict` remain valid reasons to keep a candidate-supported
+  dropout row as `targeted_review`;
+- `weak_area_rank` must be explainable from exported numeric context, not only
+  a label. Reliability rows append `target_area_median`,
+  `area_to_target_median_ratio`, and `weak_area_threshold_ratio`;
+- diagnostic messages for candidate-aligned `NL_FAIL` rows should expose the
+  product-probe subcause and nearest product context when available, so review
+  does not stop at a generic "NL not detected" message;
 - missing or malformed optional candidate TSV fails clearly.
 
 When the optional TSV is absent, workbook-only behavior remains unchanged.
@@ -60,5 +69,16 @@ Real-data smoke:
 - expected improvement: previous
   `targeted_review_candidate_suggests_dropout` rows should collapse if their
   selected candidate evidence is `plausible_nl_dropout`;
+- candidate-supported dropout rows with targeted-side blockers such as
+  `weak_area_rank` should be treated as consistent `targeted_review`, not as
+  upgrade mismatches;
+- cross-report consistency rows should pass through
+  `targeted_area_to_median_ratio` when the reliability rows provide it, so weak
+  area blockers can be reviewed without reopening the workbook;
 - any remaining mismatch should be reviewed as evidence disagreement, not
   silently forced into review-positive.
+
+Observed smoke on the 2026-05-17 product-probe rerun:
+
+- 8RAW cross-report consistency: `384 / 384` consistent, `0` mismatch.
+- 85RAW cross-report consistency: `4080 / 4080` consistent, `0` mismatch.

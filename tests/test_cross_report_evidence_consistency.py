@@ -27,6 +27,13 @@ def test_cross_report_consistency_flags_mismatched_evidence(
             _reliability("S6", "missing_candidate", "targeted_review"),
             _reliability("S8", "negative_missing_candidate", "targeted_negative"),
             _reliability("S9", "clean_shape_review", "benchmark_eligible"),
+            _reliability(
+                "S10",
+                "dropout_weak_area",
+                "targeted_review",
+                risk="plausible_nl_dropout;weak_area_rank",
+                area_ratio="0.004",
+            ),
         ],
     )
     _write_peak_candidates(
@@ -82,6 +89,13 @@ def test_cross_report_consistency_flags_mismatched_evidence(
                 concern="",
                 nl_match="TRUE",
             ),
+            _candidate(
+                "S10",
+                "dropout_weak_area",
+                support="local_sn_strong;shape_clean;trace_clean",
+                concern="nl_fail",
+                nl_match="FALSE",
+            ),
         ],
     )
     _write_targeted_workbook(
@@ -96,6 +110,7 @@ def test_cross_report_consistency_flags_mismatched_evidence(
             "missing_reliability": 307.7,
             "negative_missing_candidate": 308.8,
             "clean_shape_review": 309.9,
+            "dropout_weak_area": 310.1,
         },
     )
 
@@ -116,6 +131,10 @@ def test_cross_report_consistency_flags_mismatched_evidence(
     )
     assert by_key[("S1", "clean_conflict")].target_mz == 301.1
     assert by_key[("S9", "clean_shape_review")].consistency_status == "consistent"
+    assert by_key[("S10", "dropout_weak_area")].consistency_status == "consistent"
+    assert by_key[("S10", "dropout_weak_area")].targeted_area_to_median_ratio == (
+        0.004
+    )
     assert by_key[("S3", "dropout_missing")].issue_type == (
         "review_positive_not_supported_by_candidate"
     )
@@ -135,8 +154,8 @@ def test_cross_report_consistency_flags_mismatched_evidence(
         "missing_targeted_reliability"
     )
 
-    assert result.summary.rows_checked == 9
-    assert result.summary.consistent_count == 3
+    assert result.summary.rows_checked == 10
+    assert result.summary.consistent_count == 4
     assert result.summary.mismatch_count == 6
 
     rows = _read_tsv(outputs.rows_tsv)
@@ -176,6 +195,7 @@ def _reliability(
     state: str,
     *,
     risk: str = "",
+    area_ratio: str = "",
 ) -> dict[str, str]:
     return {
         "sample_name": sample,
@@ -192,6 +212,7 @@ def _reliability(
         "reliability_state": state,
         "risk_reasons": risk,
         "known_exception": "",
+        "area_to_target_median_ratio": area_ratio,
     }
 
 

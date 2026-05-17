@@ -4,6 +4,7 @@ import csv
 import json
 from pathlib import Path
 
+import pytest
 from openpyxl import Workbook
 
 from tools.diagnostics import targeted_peak_reliability_audit as audit
@@ -200,7 +201,7 @@ def test_selected_candidate_evidence_can_mark_nl_fail_as_review_positive(
         ],
     )
 
-    _outputs, result = audit.run_targeted_peak_reliability_audit(
+    outputs, result = audit.run_targeted_peak_reliability_audit(
         targeted_workbook=workbook,
         peak_candidates_tsv=candidates,
         output_dir=tmp_path / "audit",
@@ -261,7 +262,7 @@ def test_selected_candidate_product_probe_reason_stays_review_positive_context(
     )
     _write_peak_candidates(candidates, [candidate])
 
-    _outputs, result = audit.run_targeted_peak_reliability_audit(
+    outputs, result = audit.run_targeted_peak_reliability_audit(
         targeted_workbook=workbook,
         peak_candidates_tsv=candidates,
         output_dir=tmp_path / "audit",
@@ -485,7 +486,7 @@ def test_weak_area_outlier_and_known_exception_are_reported(tmp_path: Path) -> N
         ],
     )
 
-    _outputs, result = audit.run_targeted_peak_reliability_audit(
+    outputs, result = audit.run_targeted_peak_reliability_audit(
         targeted_workbook=workbook,
         output_dir=tmp_path / "audit",
         known_target_exceptions=("d3-N6-medA:AREA_MISMATCH",),
@@ -493,14 +494,27 @@ def test_weak_area_outlier_and_known_exception_are_reported(tmp_path: Path) -> N
 
     by_sample = {row.sample_name: row for row in result.rows}
     assert by_sample["S1"].reliability_state == "benchmark_eligible"
+    assert by_sample["S1"].target_area_median == 900.0
+    assert by_sample["S1"].area_to_target_median_ratio == pytest.approx(
+        1000.0 / 900.0
+    )
+    assert by_sample["S1"].weak_area_threshold_ratio == 0.05
     assert by_sample["S3"].reliability_state == "targeted_review"
     assert "weak_area_rank" in by_sample["S3"].risk_reasons
+    assert by_sample["S3"].target_area_median == 900.0
+    assert by_sample["S3"].area_to_target_median_ratio == pytest.approx(5.0 / 900.0)
+    assert by_sample["S3"].weak_area_threshold_ratio == 0.05
     assert by_sample["S3"].known_exception == "AREA_MISMATCH"
     summary = result.summaries[0]
     assert summary.benchmark_eligible_count == 2
     assert summary.targeted_review_count == 1
     assert summary.known_exception == "AREA_MISMATCH"
     assert "weak_area_rank" in summary.top_risk_reasons
+    rows = _read_tsv(outputs.rows_tsv)
+    by_sample_tsv = {row["sample_name"]: row for row in rows}
+    assert by_sample_tsv["S3"]["target_area_median"] == "900"
+    assert by_sample_tsv["S3"]["area_to_target_median_ratio"]
+    assert by_sample_tsv["S3"]["weak_area_threshold_ratio"] == "0.05"
 
 
 def test_main_writes_outputs_and_reports_missing_required_column(

@@ -43,6 +43,9 @@ ROWS_COLUMNS = (
     "reliability_state",
     "risk_reasons",
     "known_exception",
+    "target_area_median",
+    "area_to_target_median_ratio",
+    "weak_area_threshold_ratio",
 )
 
 SUMMARY_COLUMNS = (
@@ -69,6 +72,8 @@ _PEAK_CANDIDATE_COLUMNS = (
     "nl_match",
 )
 
+_WEAK_AREA_THRESHOLD_RATIO = 0.05
+
 
 @dataclass(frozen=True)
 class TargetedReliabilityOutputs:
@@ -94,6 +99,9 @@ class TargetedReliabilityRow:
     reliability_state: ReliabilityState
     risk_reasons: tuple[str, ...]
     known_exception: str
+    target_area_median: float | None = None
+    area_to_target_median_ratio: float | None = None
+    weak_area_threshold_ratio: float | None = None
 
 
 @dataclass(frozen=True)
@@ -165,6 +173,17 @@ class _CandidateEvidence:
     diagnostic_product_absence_reason: str = ""
 
 
+@dataclass(frozen=True)
+class _AreaContext:
+    target_area_median: float
+    area_to_target_median_ratio: float
+    weak_area_threshold_ratio: float = _WEAK_AREA_THRESHOLD_RATIO
+
+    @property
+    def weak_area(self) -> bool:
+        return self.area_to_target_median_ratio < self.weak_area_threshold_ratio
+
+
 class _WorksheetLike(Protocol):
     def iter_rows(
         self,
@@ -183,7 +202,7 @@ def run_targeted_peak_reliability_audit(
     rows, score_by_key = _load_targeted_workbook(targeted_workbook)
     candidate_by_key = _load_selected_candidate_evidence(peak_candidates_tsv)
     known = _parse_known_exceptions(known_target_exceptions)
-    weak_area_keys = _weak_area_keys(rows)
+    area_context = _area_context_by_key(rows)
     reliability_rows = tuple(
         _classify_row(
             row,
@@ -192,7 +211,7 @@ def run_targeted_peak_reliability_audit(
                 (row.sample_name, row.target_label)
             ),
             known_exception=known.get(row.target_label, ""),
-            weak_area=(row.sample_name, row.target_label) in weak_area_keys,
+            area_context=area_context.get((row.sample_name, row.target_label)),
         )
         for row in rows
     )
@@ -360,7 +379,7 @@ def _classify_row(
     score: _ScoreBreakdown | None,
     candidate_evidence: _CandidateEvidence | None,
     known_exception: str,
-    weak_area: bool,
+    area_context: _AreaContext | None,
 ) -> TargetedReliabilityRow:
     if row.rt is None or row.area is None or row.area <= 0:
         return TargetedReliabilityRow(
@@ -378,6 +397,19 @@ def _classify_row(
             reliability_state="targeted_negative",
             risk_reasons=("no_usable_peak",),
             known_exception=known_exception,
+            target_area_median=(
+                area_context.target_area_median if area_context is not None else None
+            ),
+            area_to_target_median_ratio=(
+                area_context.area_to_target_median_ratio
+                if area_context is not None
+                else None
+            ),
+            weak_area_threshold_ratio=(
+                area_context.weak_area_threshold_ratio
+                if area_context is not None
+                else None
+            ),
         )
 
     risk_reasons: list[str] = []
@@ -396,7 +428,7 @@ def _classify_row(
         risk_reasons.append("score_breakdown_unavailable")
     elif score.quality_flags:
         risk_reasons.append("quality_flags")
-    if weak_area:
+    if area_context is not None and area_context.weak_area:
         risk_reasons.append("weak_area_rank")
     if _is_nl_fail(row.nl) and candidate_evidence is not None:
         risk_reasons.extend(_candidate_product_context_reasons(candidate_evidence))
@@ -425,26 +457,44 @@ def _classify_row(
         reliability_state=state,
         risk_reasons=tuple(dict.fromkeys(risk_reasons)),
         known_exception=known_exception,
+        target_area_median=(
+            area_context.target_area_median if area_context is not None else None
+        ),
+        area_to_target_median_ratio=(
+            area_context.area_to_target_median_ratio
+            if area_context is not None
+            else None
+        ),
+        weak_area_threshold_ratio=(
+            area_context.weak_area_threshold_ratio
+            if area_context is not None
+            else None
+        ),
     )
 
 
-def _weak_area_keys(rows: Sequence[_TargetedInputRow]) -> frozenset[tuple[str, str]]:
+def _area_context_by_key(
+    rows: Sequence[_TargetedInputRow],
+) -> dict[tuple[str, str], _AreaContext]:
     by_target: dict[str, list[_TargetedInputRow]] = defaultdict(list)
     for row in rows:
         if row.area is not None and row.area > 0:
             by_target[row.target_label].append(row)
-    weak: set[tuple[str, str]] = set()
+    context: dict[tuple[str, str], _AreaContext] = {}
     for target_rows in by_target.values():
         if len(target_rows) < 3:
             continue
         target_median = median(float(row.area) for row in target_rows if row.area)
         if target_median <= 0:
             continue
-        threshold = target_median * 0.05
         for row in target_rows:
-            if row.area is not None and row.area < threshold:
-                weak.add((row.sample_name, row.target_label))
-    return frozenset(weak)
+            if row.area is None:
+                continue
+            context[(row.sample_name, row.target_label)] = _AreaContext(
+                target_area_median=float(target_median),
+                area_to_target_median_ratio=float(row.area) / float(target_median),
+            )
+    return context
 
 
 def _summarize_rows(
