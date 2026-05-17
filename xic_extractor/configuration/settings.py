@@ -50,6 +50,7 @@ class _ParsedSettings:
     rt_prior_library_path: Path | None
     emit_score_breakdown: bool
     emit_review_report: bool
+    emit_peak_candidates: bool
     keep_intermediate_csv: bool
     parallel_mode: str
     parallel_workers: int
@@ -246,6 +247,12 @@ def _parse_settings_values(
             "emit_review_report",
             _setting_value(settings, settings_path, "emit_review_report"),
         ),
+        emit_peak_candidates=_parse_bool(
+            settings_path,
+            None,
+            "emit_peak_candidates",
+            _setting_value(settings, settings_path, "emit_peak_candidates"),
+        ),
         keep_intermediate_csv=_parse_bool(
             settings_path,
             None,
@@ -297,13 +304,13 @@ def _validate_settings_ranges(
         0.01,
         0.50,
     )
-    if parsed.resolver_mode not in {"legacy_savgol", "local_minimum"}:
+    if parsed.resolver_mode not in {"legacy_savgol", "local_minimum", "arbitrated"}:
         raise _config_error(
             settings_path,
             None,
             "resolver_mode",
             settings["resolver_mode"],
-            "must be legacy_savgol or local_minimum",
+            "must be legacy_savgol, local_minimum, or arbitrated",
         )
     if not 0 <= parsed.resolver_chrom_threshold <= 1:
         raise _config_error(
@@ -474,6 +481,7 @@ def _build_config(
         rt_prior_library_path=parsed.rt_prior_library_path,
         emit_score_breakdown=parsed.emit_score_breakdown,
         emit_review_report=parsed.emit_review_report,
+        emit_peak_candidates=parsed.emit_peak_candidates,
         keep_intermediate_csv=parsed.keep_intermediate_csv,
         parallel_mode=parsed.parallel_mode,
         parallel_workers=parsed.parallel_workers,

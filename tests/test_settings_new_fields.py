@@ -30,6 +30,7 @@ def test_new_keys_present() -> None:
         "rt_prior_library_path": "",
         "emit_score_breakdown": "false",
         "emit_review_report": "false",
+        "emit_peak_candidates": "false",
         "keep_intermediate_csv": "false",
     }.items():
         assert CANONICAL_SETTINGS_DEFAULTS[key] == default
@@ -43,6 +44,7 @@ def test_new_settings_are_in_canonical_defaults_and_descriptions() -> None:
         "rt_prior_library_path",
         "emit_score_breakdown",
         "emit_review_report",
+        "emit_peak_candidates",
         "keep_intermediate_csv",
     ):
         assert CANONICAL_SETTINGS_DESCRIPTIONS[key]
@@ -76,6 +78,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
         "rt_prior_library_path": str(rt_library),
         "emit_score_breakdown": "true",
         "emit_review_report": "true",
+        "emit_peak_candidates": "true",
         "keep_intermediate_csv": "true",
     }
 
@@ -114,6 +117,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
     assert config.rt_prior_library_path == rt_library
     assert config.emit_score_breakdown is True
     assert config.emit_review_report is True
+    assert config.emit_peak_candidates is True
     assert config.keep_intermediate_csv is True
     assert config.config_hash == compute_config_hash(targets_path, settings_path)
 
@@ -175,4 +179,5 @@ def test_load_config_defaults_scoring_settings_for_legacy_settings_csv(
     assert config.rt_prior_library_path is None
     assert config.emit_score_breakdown is False
     assert config.emit_review_report is False
+    assert config.emit_peak_candidates is False
     assert config.keep_intermediate_csv is False

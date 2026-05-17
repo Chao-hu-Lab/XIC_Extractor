@@ -25,6 +25,7 @@ _ISTD_WIDER_RECOVERY_MIN_INTENSITY_RATIO = 2.0
 @dataclass(frozen=True)
 class IstdAnchorRecoveryDecision:
     peak_result: PeakDetectionResult
+    rt: np.ndarray | None = None
     intensity: np.ndarray | None = None
 
 
@@ -50,7 +51,7 @@ def recover_istd_anchor_peak_if_needed(
     if not target.is_istd or not anchor_used or anchor_rt is None:
         return IstdAnchorRecoveryDecision(peak_result)
 
-    if peak_result.status == "PEAK_NOT_FOUND" and peak_result.peak is None:
+    if peak_result.peak is None:
         recovered = _recover(
             raw=raw,
             config=config,
@@ -69,6 +70,7 @@ def recover_istd_anchor_peak_if_needed(
             return IstdAnchorRecoveryDecision(peak_result)
         return IstdAnchorRecoveryDecision(
             recovered.peak_result,
+            rt=recovered.rt,
             intensity=recovered.intensity,
         )
 
@@ -93,6 +95,7 @@ def recover_istd_anchor_peak_if_needed(
     ):
         return IstdAnchorRecoveryDecision(
             recovered.peak_result,
+            rt=recovered.rt,
             intensity=recovered.intensity,
         )
     return IstdAnchorRecoveryDecision(peak_result)
@@ -136,6 +139,8 @@ def _should_try_wider_istd_anchor_recovery(
 ) -> bool:
     if peak_result.peak is None:
         return False
+    if peak_result.confidence in {"LOW", "VERY_LOW"}:
+        return True
     candidate = selected_candidate(peak_result)
     if candidate is None:
         return False

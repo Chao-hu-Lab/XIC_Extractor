@@ -1,3 +1,11 @@
+import os
+
+
+def default_parallel_workers() -> int:
+    cpu_count = os.cpu_count() or 2
+    return max(1, cpu_count - 1)
+
+
 CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "data_dir": "C:/your/data/folder",
     "dll_dir": "C:\\Xcalibur\\system\\programs",
@@ -23,12 +31,13 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "rt_prior_library_path": "",
     "emit_score_breakdown": "false",
     "emit_review_report": "false",
+    "emit_peak_candidates": "false",
     "keep_intermediate_csv": "false",
     "nl_rt_anchor_search_margin_min": "2.0",
     "nl_rt_anchor_half_window_min": "1.0",
     "nl_fallback_half_window_min": "2.0",
-    "parallel_mode": "serial",
-    "parallel_workers": "1",
+    "parallel_mode": "process",
+    "parallel_workers": str(default_parallel_workers()),
 }
 
 CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
@@ -42,7 +51,7 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "peak_min_prominence_ratio": (
         "Peak prominence 至少為 apex 的比例（越低越寬容，0.05-0.20）"
     ),
-    "resolver_mode": "峰切割演算法（legacy_savgol 或 local_minimum）",
+    "resolver_mode": "峰切割演算法（legacy_savgol、local_minimum 或 arbitrated）",
     "resolver_chrom_threshold": "Local minimum resolver 低強度剪枝百分位（0-1）",
     "resolver_min_search_range_min": "Local minimum 搜尋 valley 的 RT 視窗（分鐘）",
     "resolver_min_relative_height": (
@@ -76,6 +85,7 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     ),
     "emit_score_breakdown": "是否輸出 Score Breakdown sheet（預設關閉）",
     "emit_review_report": "是否輸出 Review Report HTML（預設關閉）",
+    "emit_peak_candidates": "是否輸出 Peak Candidate TSV（除錯/審計用，預設關閉）",
     "keep_intermediate_csv": "是否保留中間 CSV 檔（除錯用，預設關閉）",
     "nl_rt_anchor_search_margin_min": (
         "NL 錨定搜尋半徑（min）：以 rt_center ±此值搜尋 NL 確認的 MS2 作為 RT anchor"
@@ -86,6 +96,6 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "nl_fallback_half_window_min": (
         "NL 錨定失敗時的 fallback XIC 半寬（min）：窗口 = [rt_center ± 此值]"
     ),
-    "parallel_mode": "執行後端（serial 或 process；預設 serial）",
-    "parallel_workers": "Process mode worker 數量（>= 1；預設 1）",
+    "parallel_mode": "執行後端（serial 或 process；預設 process）",
+    "parallel_workers": "Process mode worker 數量（>= 1；預設 CPU 核心數 - 1）",
 }

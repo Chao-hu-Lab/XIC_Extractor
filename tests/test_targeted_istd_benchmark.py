@@ -302,6 +302,242 @@ def test_active_istd_can_pass_with_primary_isotope_shift_fallback(tmp_path: Path
     assert abs(float(matches[0]["mass_shift_da"]) - isotope_shift) < 1e-4
 
 
+def test_strict_reliability_excludes_targeted_review_rows_from_area_gate(
+    tmp_path: Path,
+) -> None:
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    reliability_json = tmp_path / "targeted_peak_reliability.json"
+    _write_targeted_workbook(
+        targeted,
+        targets=[_target("d3-N6-medA", 300.0, 10.0, 11.0, 184.0, 116.0474)],
+        samples=("S1", "S2", "S3", "S4"),
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[_review_row("FAM_MEDA", 300.0, 10.5, 184.0, 116.0474, True)],
+        matrix_rows=[
+            _matrix_row("FAM_MEDA", (10.0, 100.0, 1000.0, 1.0)),
+        ],
+        cell_rows=[
+            _cell_row("FAM_MEDA", "S1", 10.51, 10.0),
+            _cell_row("FAM_MEDA", "S2", 10.52, 100.0),
+            _cell_row("FAM_MEDA", "S3", 10.53, 1000.0),
+            _cell_row("FAM_MEDA", "S4", 10.54, 1.0),
+        ],
+    )
+    _write_reliability_json(
+        reliability_json,
+        [
+            _reliability_row("S1", "d3-N6-medA", "benchmark_eligible"),
+            _reliability_row("S2", "d3-N6-medA", "benchmark_eligible"),
+            _reliability_row("S3", "d3-N6-medA", "benchmark_eligible"),
+            _reliability_row("S4", "d3-N6-medA", "targeted_review"),
+        ],
+    )
+
+    outputs, summaries = benchmark.run_targeted_istd_benchmark(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=tmp_path / "benchmark",
+        targeted_reliability_json=reliability_json,
+        strict_targeted_reliability=True,
+    )
+
+    summary = summaries[0]
+    assert summary.targeted_positive_count == 4
+    assert summary.clean_targeted_positive_count == 3
+    assert summary.targeted_review_count == 1
+    assert summary.coverage_denominator_count == 3
+    assert summary.paired_area_n == 3
+    assert summary.failure_modes == ()
+    assert summary.targeted_reliability_warning_modes == (
+        "TARGETED_REVIEW_EVIDENCE",
+    )
+    payload = json.loads(outputs.json_path.read_text(encoding="utf-8"))
+    assert payload["overall_status"] == "WARN"
+    rows = _read_tsv(outputs.summary_tsv)
+    assert rows[0]["clean_targeted_positive_count"] == "3"
+    assert rows[0]["targeted_reliability_warning_modes"] == (
+        "TARGETED_REVIEW_EVIDENCE"
+    )
+
+
+def test_strict_reliability_tracks_review_positive_rows_separately(
+    tmp_path: Path,
+) -> None:
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    reliability_json = tmp_path / "targeted_peak_reliability.json"
+    samples = ("S1", "S2", "S3", "S4", "S5")
+    _write_targeted_workbook(
+        targeted,
+        targets=[_target("8-oxodG", 300.0, 10.0, 11.0, 184.0, 116.0474)],
+        samples=samples,
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[_review_row("FAM_8OXO", 300.0, 10.5, 184.0, 116.0474, True)],
+        matrix_rows=[
+            _matrix_row(
+                "FAM_8OXO",
+                (10.0, 100.0, 1000.0, 1.0, 10000.0),
+                samples=samples,
+            ),
+        ],
+        cell_rows=[
+            _cell_row("FAM_8OXO", "S1", 10.51, 10.0),
+            _cell_row("FAM_8OXO", "S2", 10.52, 100.0),
+            _cell_row("FAM_8OXO", "S3", 10.53, 1000.0),
+            _cell_row("FAM_8OXO", "S4", 10.54, 1.0),
+            _cell_row("FAM_8OXO", "S5", 10.55, 10000.0),
+        ],
+        samples=samples,
+    )
+    _write_reliability_json(
+        reliability_json,
+        [
+            _reliability_row("S1", "8-oxodG", "benchmark_eligible"),
+            _reliability_row("S2", "8-oxodG", "benchmark_eligible"),
+            _reliability_row("S3", "8-oxodG", "benchmark_eligible"),
+            _reliability_row("S4", "8-oxodG", "targeted_review_positive"),
+            _reliability_row("S5", "8-oxodG", "targeted_review"),
+        ],
+    )
+
+    outputs, summaries = benchmark.run_targeted_istd_benchmark(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=tmp_path / "benchmark",
+        targeted_reliability_json=reliability_json,
+        strict_targeted_reliability=True,
+    )
+
+    summary = summaries[0]
+    assert summary.targeted_positive_count == 5
+    assert summary.clean_targeted_positive_count == 3
+    assert summary.targeted_review_positive_count == 1
+    assert summary.targeted_review_count == 1
+    assert summary.coverage_denominator_count == 3
+    assert summary.paired_area_n == 3
+    assert summary.failure_modes == ()
+    assert summary.targeted_reliability_warning_modes == (
+        "TARGETED_REVIEW_POSITIVE_EVIDENCE",
+        "TARGETED_REVIEW_EVIDENCE",
+    )
+
+    payload = json.loads(outputs.json_path.read_text(encoding="utf-8"))
+    rows = payload["summaries"]
+    assert rows[0]["targeted_review_positive_count"] == 1
+    tsv_rows = _read_tsv(outputs.summary_tsv)
+    assert tsv_rows[0]["targeted_review_positive_count"] == "1"
+
+
+def test_strict_reliability_reports_inconclusive_when_clean_samples_are_too_few(
+    tmp_path: Path,
+) -> None:
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    reliability_json = tmp_path / "targeted_peak_reliability.json"
+    _write_targeted_workbook(
+        targeted,
+        targets=[_target("d3-N6-medA", 300.0, 10.0, 11.0, 184.0, 116.0474)],
+        samples=("S1", "S2", "S3", "S4"),
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[_review_row("FAM_MEDA", 300.0, 10.5, 184.0, 116.0474, True)],
+        matrix_rows=[
+            _matrix_row("FAM_MEDA", (10.0, 100.0, 1000.0, 10000.0)),
+        ],
+        cell_rows=[
+            _cell_row("FAM_MEDA", "S1", 10.51, 10.0),
+            _cell_row("FAM_MEDA", "S2", 10.52, 100.0),
+            _cell_row("FAM_MEDA", "S3", 10.53, 1000.0),
+            _cell_row("FAM_MEDA", "S4", 10.54, 10000.0),
+        ],
+    )
+    _write_reliability_json(
+        reliability_json,
+        [
+            _reliability_row("S1", "d3-N6-medA", "benchmark_eligible"),
+            _reliability_row("S2", "d3-N6-medA", "targeted_review"),
+            _reliability_row("S3", "d3-N6-medA", "targeted_review"),
+            _reliability_row("S4", "d3-N6-medA", "targeted_review"),
+        ],
+    )
+
+    _outputs, summaries = benchmark.run_targeted_istd_benchmark(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=tmp_path / "benchmark",
+        targeted_reliability_json=reliability_json,
+        strict_targeted_reliability=True,
+    )
+
+    summary = summaries[0]
+    assert summary.status == "WARN"
+    assert summary.failure_modes == ()
+    assert "TARGETED_RELIABILITY_INCONCLUSIVE" in (
+        summary.targeted_reliability_warning_modes
+    )
+    assert summary.paired_area_n == 1
+
+
+def test_main_accepts_strict_reliability_json(tmp_path: Path) -> None:
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    output_dir = tmp_path / "benchmark"
+    reliability_json = tmp_path / "targeted_peak_reliability.json"
+    _write_targeted_workbook(
+        targeted,
+        targets=[_target("d3-N6-medA", 300.0, 10.0, 11.0, 184.0, 116.0474)],
+        samples=("S1", "S2", "S3", "S4"),
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[_review_row("FAM_MEDA", 300.0, 10.5, 184.0, 116.0474, True)],
+        matrix_rows=[
+            _matrix_row("FAM_MEDA", (10.0, 100.0, 1000.0, 1.0)),
+        ],
+        cell_rows=[
+            _cell_row("FAM_MEDA", "S1", 10.51, 10.0),
+            _cell_row("FAM_MEDA", "S2", 10.52, 100.0),
+            _cell_row("FAM_MEDA", "S3", 10.53, 1000.0),
+            _cell_row("FAM_MEDA", "S4", 10.54, 1.0),
+        ],
+    )
+    _write_reliability_json(
+        reliability_json,
+        [
+            _reliability_row("S1", "d3-N6-medA", "benchmark_eligible"),
+            _reliability_row("S2", "d3-N6-medA", "benchmark_eligible"),
+            _reliability_row("S3", "d3-N6-medA", "benchmark_eligible"),
+            _reliability_row("S4", "d3-N6-medA", "targeted_review"),
+        ],
+    )
+
+    code = benchmark.main(
+        [
+            "--targeted-workbook",
+            str(targeted),
+            "--alignment-dir",
+            str(alignment),
+            "--output-dir",
+            str(output_dir),
+            "--targeted-reliability-json",
+            str(reliability_json),
+            "--strict-targeted-reliability",
+        ],
+    )
+
+    assert code == 0
+    payload = json.loads(
+        (output_dir / "targeted_istd_benchmark.json").read_text(encoding="utf-8"),
+    )
+    assert payload["overall_status"] == "WARN"
+
+
 def _target(
     label: str,
     mz: float,
@@ -495,6 +731,31 @@ def _cell_row(
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle, delimiter="\t"))
+
+
+def _reliability_row(
+    sample: str,
+    target: str,
+    state: str,
+) -> dict[str, object]:
+    return {
+        "sample_name": sample,
+        "target_label": target,
+        "reliability_state": state,
+    }
+
+
+def _write_reliability_json(path: Path, rows: list[dict[str, object]]) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "overall_status": "WARN",
+                "rows": rows,
+                "summaries": [],
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def _write_tsv(

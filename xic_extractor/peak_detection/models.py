@@ -39,6 +39,11 @@ class PeakCandidate:
     region_duration_min: float | None = None
     region_edge_ratio: float | None = None
     region_trace_continuity: float | None = None
+    cwt_best_scale: float | None = None
+    cwt_ridge_persistence: float | None = None
+    proposal_sources: tuple[str, ...] = ()
+    source_apex_rank: int | None = None
+    merge_note: str = ""
 
 
 @dataclass(frozen=True)
@@ -60,6 +65,21 @@ class PeakCandidatesResult:
 
 
 @dataclass(frozen=True)
+class PeakCandidateScore:
+    candidate: PeakCandidate
+    confidence: str
+    reason: str
+    raw_score: int | None = None
+    support_labels: tuple[str, ...] = ()
+    concern_labels: tuple[str, ...] = ()
+    cap_labels: tuple[str, ...] = ()
+    prior_rt: float | None = None
+    quality_penalty: int = 0
+    selection_quality_penalty: float | None = None
+    severities: tuple[tuple[int, str], ...] = ()
+
+
+@dataclass(frozen=True)
 class PeakDetectionResult:
     status: PeakStatus
     peak: PeakResult | None
@@ -71,3 +91,5 @@ class PeakDetectionResult:
     reason: str | None = None
     severities: tuple[tuple[int, str], ...] = ()
     score_breakdown: tuple[tuple[str, str], ...] = ()
+    candidate_scores: tuple[PeakCandidateScore, ...] = ()
+    selection_reference_rt: float | None = None

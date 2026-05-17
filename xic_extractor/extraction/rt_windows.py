@@ -18,6 +18,7 @@ from xic_extractor.signal_processing import (
 @dataclass(frozen=True)
 class RecoveredPeak:
     peak_result: PeakDetectionResult
+    rt: np.ndarray
     intensity: np.ndarray
 
 
@@ -47,29 +48,6 @@ def get_rt_window(
         nl_min_intensity_ratio=config.nl_min_intensity_ratio,
         reference_rt=reference_rt,
     )
-    if (
-        target.is_istd
-        and reference_rt is None
-        and anchor_rt is not None
-        and abs(anchor_rt - rt_center) > config.nl_rt_anchor_half_window_min
-    ):
-        centered_anchor_rt = extractor.find_nl_anchor_rt(
-            raw,
-            precursor_mz=target.mz,
-            rt_center=rt_center,
-            search_margin_min=config.nl_rt_anchor_search_margin_min,
-            neutral_loss_da=target.neutral_loss_da,
-            nl_ppm_max=target.nl_ppm_max,
-            ms2_precursor_tol_da=config.ms2_precursor_tol_da,
-            nl_min_intensity_ratio=config.nl_min_intensity_ratio,
-            reference_rt=rt_center,
-        )
-        if (
-            centered_anchor_rt is not None
-            and abs(centered_anchor_rt - rt_center) < abs(anchor_rt - rt_center)
-        ):
-            anchor_rt = centered_anchor_rt
-
     if anchor_rt is not None:
         half = config.nl_rt_anchor_half_window_min
         return max(0.0, anchor_rt - half), anchor_rt + half, True, anchor_rt
@@ -137,4 +115,4 @@ def recover_istd_peak_with_wider_anchor_window(
         )
     if peak_result.peak is None:
         return None
-    return RecoveredPeak(peak_result=peak_result, intensity=intensity)
+    return RecoveredPeak(peak_result=peak_result, rt=rt, intensity=intensity)

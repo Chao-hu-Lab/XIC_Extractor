@@ -4,7 +4,10 @@ from pathlib import Path
 import pytest
 
 from xic_extractor.config import ConfigError, load_config, migrate_settings_dict
-from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
+from xic_extractor.settings_schema import (
+    CANONICAL_SETTINGS_DEFAULTS,
+    default_parallel_workers,
+)
 
 SETTINGS_FIELDS = ["key", "value", "description"]
 TARGET_FIELDS = [
@@ -116,8 +119,9 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.resolver_peak_duration_min == pytest.approx(0.0)
     assert config.resolver_peak_duration_max == pytest.approx(2.0)
     assert config.resolver_min_scans == 5
-    assert config.parallel_mode == "serial"
-    assert config.parallel_workers == 1
+    assert config.parallel_mode == "process"
+    assert config.parallel_workers == default_parallel_workers()
+    assert config.emit_peak_candidates is False
     assert targets[0].label == "Analyte"
     assert targets[0].neutral_loss_da == pytest.approx(116.0474)
 
@@ -231,8 +235,8 @@ def test_migrate_settings_dict_renames_legacy_key_and_backfills_defaults() -> No
     assert "smooth_points" not in migrated
     assert migrated["smooth_polyorder"] == "3"
     assert migrated["peak_rel_height"] == "0.95"
-    assert migrated["parallel_mode"] == "serial"
-    assert migrated["parallel_workers"] == "1"
+    assert migrated["parallel_mode"] == "process"
+    assert migrated["parallel_workers"] == str(default_parallel_workers())
     assert any(
         "smooth_points" in warning and "smooth_window" in warning
         for warning in warnings
@@ -278,6 +282,16 @@ def test_load_config_accepts_local_minimum_resolver_settings(tmp_path: Path) -> 
     assert config.resolver_min_scans == 9
 
 
+def test_load_config_accepts_arbitrated_resolver_mode(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"resolver_mode": "arbitrated"})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.resolver_mode == "arbitrated"
+
+
 def test_load_config_accepts_zero_local_minimum_floor_values(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     _write_settings(
@@ -315,9 +329,21 @@ def test_load_config_accepts_process_parallel_settings(tmp_path: Path) -> None:
     assert config.parallel_workers == 4
 
 
+def test_load_config_accepts_emit_peak_candidates_setting(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"emit_peak_candidates": "true"})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.emit_peak_candidates is True
+
+
 def test_canonical_settings_defaults_include_parallel_settings() -> None:
-    assert CANONICAL_SETTINGS_DEFAULTS["parallel_mode"] == "serial"
-    assert CANONICAL_SETTINGS_DEFAULTS["parallel_workers"] == "1"
+    assert CANONICAL_SETTINGS_DEFAULTS["parallel_mode"] == "process"
+    assert CANONICAL_SETTINGS_DEFAULTS["parallel_workers"] == str(
+        default_parallel_workers()
+    )
 
 
 def test_canonical_settings_defaults_include_local_minimum_preset() -> None:
@@ -337,8 +363,8 @@ def test_settings_example_includes_parallel_settings() -> None:
     with example_path.open(newline="", encoding="utf-8-sig") as handle:
         rows = {row["key"]: row["value"] for row in csv.DictReader(handle)}
 
-    assert rows["parallel_mode"] == "serial"
-    assert rows["parallel_workers"] == "1"
+    assert rows["parallel_mode"] == "process"
+    assert int(rows["parallel_workers"]) >= 1
 
 
 def test_settings_example_includes_review_report_setting() -> None:
@@ -348,6 +374,15 @@ def test_settings_example_includes_review_report_setting() -> None:
         rows = {row["key"]: row["value"] for row in csv.DictReader(handle)}
 
     assert rows["emit_review_report"] == "false"
+
+
+def test_settings_example_includes_peak_candidates_setting() -> None:
+    example_path = Path("config/settings.example.csv")
+
+    with example_path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = {row["key"]: row["value"] for row in csv.DictReader(handle)}
+
+    assert rows["emit_peak_candidates"] == "false"
 
 
 def test_settings_example_includes_local_minimum_preset() -> None:

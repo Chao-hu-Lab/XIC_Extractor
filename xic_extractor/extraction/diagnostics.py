@@ -122,3 +122,54 @@ def nl_anchor_fallback_diagnostic(
             f"fallback window [{rt_min:.2f}, {rt_max:.2f}]{nl_note}"
         ),
     )
+
+
+def append_anchor_window_diagnostics(
+    diagnostics: list[DiagnosticRecord],
+    sample_name: str,
+    target: Target,
+    config: ExtractionConfig,
+    peak_result: PeakDetectionResult,
+    *,
+    anchor_used: bool,
+    anchor_rt: float | None,
+    rt_min: float,
+    rt_max: float,
+    nl_result: NLResult | None,
+    paired_rejection: DiagnosticRecord | None,
+) -> None:
+    anchor_diagnostic = anchor_rt_mismatch_diagnostic(
+        sample_name,
+        target,
+        peak_result,
+        anchor_rt=anchor_rt,
+        paired_rejection=paired_rejection,
+    )
+    if anchor_diagnostic is not None:
+        diagnostics.append(anchor_diagnostic)
+    fallback_diagnostic = nl_anchor_fallback_diagnostic(
+        sample_name,
+        target,
+        config,
+        anchor_used=anchor_used,
+        rt_min=rt_min,
+        rt_max=rt_max,
+        nl_result=nl_result,
+    )
+    if fallback_diagnostic is not None:
+        diagnostics.append(fallback_diagnostic)
+
+
+def istd_anchor_missing_diagnostic(
+    sample_name: str, target: Target
+) -> DiagnosticRecord:
+    return DiagnosticRecord(
+        sample_name=sample_name,
+        target_label=target.label,
+        issue="ISTD_ANCHOR_MISSING",
+        reason=(
+            f"ISTD '{target.istd_pair}' yielded no NL-confirmed anchor in this "
+            "sample; falling back to highest base_peak — isobar discrimination "
+            "disabled"
+        ),
+    )

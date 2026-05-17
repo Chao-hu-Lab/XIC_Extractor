@@ -79,6 +79,7 @@ def find_peak_candidates_local_minimum(
                 left=left,
                 right=right,
                 quality=quality,
+                source_apex_rank=len(candidates) + 1,
             )
         )
     candidates_result = tuple(candidates)
@@ -125,6 +126,7 @@ def _build_local_minimum_candidate(
     left: int,
     right: int,
     quality: LocalMinimumRegionQuality,
+    source_apex_rank: int,
 ) -> PeakCandidate:
     raw_apex_idx = raw_apex_index(intensity_values, left, right)
     apex_intensity = float(intensity_values[raw_apex_idx])
@@ -153,6 +155,8 @@ def _build_local_minimum_candidate(
         region_duration_min=quality.duration_min,
         region_edge_ratio=quality.edge_ratio,
         region_trace_continuity=quality.trace_continuity,
+        proposal_sources=("local_minimum",),
+        source_apex_rank=source_apex_rank,
     )
 
 

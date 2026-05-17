@@ -22,14 +22,16 @@
 2. 保留既有 serial 行為作為 default，早期階段不改變一般使用者與 CI 的預設路徑。
 3. 讓 8 `.raw` validation subset 成為日常性能與等價性驗證基準。
 4. 對 parallel mode 建立可重現的 workbook compare，確認結果與 serial baseline 等價。
-5. 為日後將 parallel mode 改成 default 預留明確 gate，但本階段不啟用。
+5. 為日後將 parallel mode 改成 default 預留明確 gate。2026-05-16 起，
+   targeted extraction default 已改為 process mode + CPU 核心數 - 1 workers。
 
 ## 3. 非目標
 
 - 不做 target-level parallelism。
 - 不改 peak detection、integration、NL anchor、RT prior、confidence 或 reason 規則。
 - 不新增 XIC cache / MS2 cache / raw handle pool。
-- 不把 process mode 設成 default。
+- 初始實作階段不把 process mode 設成 default；2026-05-16 targeted
+  extraction reliability work 已將 default 切到 process mode。
 - 不要求每個 PR 都跑完整 85 `.raw`。
 - 不在本階段調整 Excel sheet schema 或欄位定義。
 
@@ -125,8 +127,8 @@ Cancellation contract:
 
 | Key | Type | Default | Allowed | 說明 |
 |---|---|---:|---|---|
-| `parallel_mode` | string | `serial` | `serial`, `process` | execution backend |
-| `parallel_workers` | int | `1` | `>= 1` | process mode worker count |
+| `parallel_mode` | string | `process` | `serial`, `process` | execution backend |
+| `parallel_workers` | int | `CPU count - 1` | `>= 1` | process mode worker count |
 
 Validation rules：
 
@@ -232,7 +234,7 @@ PR description 應包含至少一次 validation subset timing：
 | process worker exception 被吞掉 | worker result 必須回傳 structured error；fatal worker exception 讓 run fail loudly |
 | nested scoring_context_factory 無法 pickle | worker payload 不含 callable；worker 內重建 factory |
 | GUI Stop 在 process mode 失效 | process collector polling `should_stop()`，取消 pending futures，取消後不寫 workbook |
-| memory / IO contention 讓 workers 過多反而變慢 | default workers=1；PR report 比 2/4 workers；不自動切 default |
+| memory / IO contention 讓 workers 過多反而變慢 | default workers=`CPU count - 1`；仍可用 settings/CLI 降回 serial 或較少 workers |
 | serial 與 process path 行為分叉 | serial path 保留為 baseline；process path 走同一個 per-file extraction primitive |
 | full dataset validation 太慢導致日常驗證被跳過 | 8 raw subset 寫入 plan 作為日常 gate，full dataset 只作 final gate |
 
@@ -279,4 +281,5 @@ PR description 應包含至少一次 validation subset timing：
 8. Merge decision gate:
    - If process mode is equivalent but slower on the 8 raw subset, it may merge only as experimental with serial default retained.
    - If process mode is faster on the 8 raw subset but not validated on the full dataset, it may merge as opt-in only.
-   - Changing the default away from `serial` requires both validation subset and full dataset to show stable speedup with workbook-equivalent output.
+   - Changing the default away from `serial` requires validation subset evidence
+     and no workbook-regression evidence on the targeted benchmark path.

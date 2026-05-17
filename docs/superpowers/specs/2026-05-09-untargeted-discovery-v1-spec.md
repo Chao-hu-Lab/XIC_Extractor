@@ -448,6 +448,14 @@ Recommended boundaries:
 
 Targeted modules may be reused for low-level utilities such as neutral-loss validation, XIC extraction, resolver calls, and area integration, but discovery workflow state should stay separate from targeted result models.
 
+Shared evidence semantics are allowed and encouraged at the bottom layer.
+Discovery candidates, targeted peak candidates, and alignment cells may all be
+projected into `CommonEvidence` so MS1 area, apex RT, scan support, NL support,
+MS2 presence, seed count, and backfill provenance have one vocabulary. This does
+not mean the final decision policy is shared: targeted confidence, discovery
+review priority, and alignment production matrix identity answer different
+questions.
+
 ## 9. Validation Strategy
 
 ### 9.1 Unit-level validation

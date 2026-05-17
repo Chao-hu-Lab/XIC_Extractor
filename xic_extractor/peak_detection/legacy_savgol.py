@@ -60,6 +60,7 @@ def find_peak_candidates_legacy_savgol(
             selection_apex_idx=int(peak_idx),
             prominence=float(prominences[index]),
             peak_rel_height=config.peak_rel_height,
+            source_apex_rank=index + 1,
         )
         for index, peak_idx in enumerate(peaks)
     )
@@ -105,6 +106,7 @@ def _build_candidate(
     selection_apex_idx: int,
     prominence: float,
     peak_rel_height: float,
+    source_apex_rank: int,
 ) -> PeakCandidate:
     n_points = len(intensity_values)
     left, right = peak_bounds(smoothed, selection_apex_idx, peak_rel_height, n_points)
@@ -128,6 +130,8 @@ def _build_candidate(
         raw_apex_intensity=peak.intensity,
         raw_apex_index=raw_apex_idx,
         prominence=prominence,
+        proposal_sources=("legacy_savgol",),
+        source_apex_rank=source_apex_rank,
     )
 
 

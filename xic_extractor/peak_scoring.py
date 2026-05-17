@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -25,6 +25,8 @@ _LABEL_RT_PRIOR = "rt_prior"
 _LABEL_RT_CENTRALITY = "rt_centrality"
 _LABEL_NOISE_SHAPE = "noise_shape"
 _LABEL_PEAK_WIDTH = "peak_width"
+_CWT_PROPOSAL_SOURCE = "centwave_cwt"
+_CWT_SAME_APEX_SUPPORT_POINTS = 5
 
 _SYMMETRY_SOFT_LOW, _SYMMETRY_SOFT_HIGH = 0.5, 2.0
 _SYMMETRY_HARD_LOW, _SYMMETRY_HARD_HIGH = 0.3, 3.0
@@ -163,6 +165,7 @@ _EVIDENCE_REASON_LABELS = {
     "paired_istd_aligned": "paired ISTD aligned",
     "ms2_trace_strong": "MS2 trace strong",
     "ms2_trace_moderate": "MS2 trace moderate",
+    "cwt_same_apex_support": "CWT same-apex support",
     "local_sn_strong": "local S/N strong",
     "shape_clean": "shape clean",
     "trace_clean": "trace clean",
@@ -691,6 +694,14 @@ def _evidence_from_context(
     if not flags.intersection(_ADAP_LIKE_FLAG_LABELS):
         positive.append(EvidenceSignal("trace_clean", 10))
 
+    if _has_same_apex_cwt_support(candidate) and _has_cwt_chemical_support(ctx):
+        positive.append(
+            EvidenceSignal(
+                "cwt_same_apex_support",
+                _CWT_SAME_APEX_SUPPORT_POINTS,
+            )
+        )
+
     trace_evidence = {
         "low scan support": ("low_scan_support", 15),
         "low trace continuity": ("low_trace_continuity", 10),
@@ -711,6 +722,31 @@ def _evidence_from_context(
         caps.append(ConfidenceCap("hard_quality_flag_cap", "MEDIUM"))
 
     return positive, negative, caps
+
+
+def _has_cwt_chemical_support(ctx: ScoringContext) -> bool:
+    if not ctx.neutral_loss_required:
+        return True
+    return ctx.ms2_present and ctx.nl_match
+
+
+def _has_same_apex_cwt_support(candidate: Any) -> bool:
+    sources = {str(source) for source in getattr(candidate, "proposal_sources", ())}
+    if _CWT_PROPOSAL_SOURCE not in sources:
+        return False
+    if not sources.difference({_CWT_PROPOSAL_SOURCE}):
+        return False
+    return _positive_finite_metric(
+        getattr(candidate, "cwt_best_scale", None)
+    ) or _positive_finite_metric(getattr(candidate, "cwt_ridge_persistence", None))
+
+
+def _positive_finite_metric(value: object) -> bool:
+    try:
+        metric = float(cast(Any, value))
+    except (TypeError, ValueError):
+        return False
+    return _is_finite(metric) and metric > 0
 
 
 def _outside_rt_window(observed: float, rt_min: float, rt_max: float) -> bool:

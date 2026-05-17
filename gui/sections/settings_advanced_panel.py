@@ -48,6 +48,7 @@ def build_advanced_section(
     debug_flags_layout.addWidget(controls.keep_intermediate_csv_checkbox)
     debug_flags_layout.addWidget(controls.emit_score_breakdown_checkbox)
     debug_flags_layout.addWidget(controls.emit_review_report_checkbox)
+    debug_flags_layout.addWidget(controls.emit_peak_candidates_checkbox)
     debug_flags_layout.addWidget(controls.dirty_matrix_mode_checkbox)
     debug_flags_layout.addWidget(controls.count_no_ms2_checkbox)
     debug_flags_layout.addStretch()
@@ -113,6 +114,9 @@ def load_advanced_values(
     advanced_controls.emit_review_report_checkbox.setChecked(
         _bool_value(settings_values, "emit_review_report")
     )
+    advanced_controls.emit_peak_candidates_checkbox.setChecked(
+        _bool_value(settings_values, "emit_peak_candidates")
+    )
     advanced_controls.dirty_matrix_mode_checkbox.setChecked(
         _bool_value(settings_values, "dirty_matrix_mode")
     )
@@ -126,7 +130,7 @@ def load_advanced_values(
         settings_values.get("injection_order_source", "")
     )
     resolver_mode = settings_values.get("resolver_mode", "legacy_savgol")
-    if resolver_mode not in {"legacy_savgol", "local_minimum"}:
+    if resolver_mode not in {"legacy_savgol", "local_minimum", "arbitrated"}:
         resolver_mode = "legacy_savgol"
     resolver_controls.mode_combo.setCurrentText(resolver_mode)
     resolver_controls.chrom_threshold_spin.setValue(
