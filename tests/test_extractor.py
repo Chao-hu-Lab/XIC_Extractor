@@ -235,6 +235,9 @@ def test_run_does_not_write_intermediate_csv_by_default(
     assert not config.diagnostics_csv.exists()
     assert not config.output_csv.with_name("peak_candidates.tsv").exists()
     assert not config.output_csv.with_name("peak_candidate_boundaries.tsv").exists()
+    assert not config.output_csv.with_name(
+        "peak_candidate_boundary_summary.tsv"
+    ).exists()
 
 
 def test_run_writes_peak_candidate_table_when_enabled(
@@ -280,9 +283,20 @@ def test_run_writes_peak_candidate_table_when_enabled(
     )
     assert boundary_rows
     assert {row["target_label"] for row in boundary_rows} == {"NoNL"}
-    assert "candidate_interval" in {
-        row["boundary_sources"] for row in boundary_rows
-    }
+    assert {row["target_mz"] for row in boundary_rows} == {"258.10850"}
+    assert any(
+        "candidate_interval" in row["boundary_sources"]
+        for row in boundary_rows
+    )
+
+    boundary_summary_rows = _read_tsv(
+        config.output_csv.with_name("peak_candidate_boundary_summary.tsv")
+    )
+    assert boundary_summary_rows
+    assert {row["target_label"] for row in boundary_summary_rows} == {"NoNL"}
+    assert {row["target_mz"] for row in boundary_summary_rows} == {"258.10850"}
+    assert all(row["top_boundary_id"] for row in boundary_summary_rows)
+    assert all(row["nonoverlap_selected"] for row in boundary_summary_rows)
 
 
 def test_peak_candidate_table_includes_cwt_audit_proposals_when_enabled(

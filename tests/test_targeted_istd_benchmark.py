@@ -363,6 +363,76 @@ def test_strict_reliability_excludes_targeted_review_rows_from_area_gate(
     )
 
 
+def test_strict_reliability_tracks_review_positive_rows_separately(
+    tmp_path: Path,
+) -> None:
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    reliability_json = tmp_path / "targeted_peak_reliability.json"
+    samples = ("S1", "S2", "S3", "S4", "S5")
+    _write_targeted_workbook(
+        targeted,
+        targets=[_target("8-oxodG", 300.0, 10.0, 11.0, 184.0, 116.0474)],
+        samples=samples,
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[_review_row("FAM_8OXO", 300.0, 10.5, 184.0, 116.0474, True)],
+        matrix_rows=[
+            _matrix_row(
+                "FAM_8OXO",
+                (10.0, 100.0, 1000.0, 1.0, 10000.0),
+                samples=samples,
+            ),
+        ],
+        cell_rows=[
+            _cell_row("FAM_8OXO", "S1", 10.51, 10.0),
+            _cell_row("FAM_8OXO", "S2", 10.52, 100.0),
+            _cell_row("FAM_8OXO", "S3", 10.53, 1000.0),
+            _cell_row("FAM_8OXO", "S4", 10.54, 1.0),
+            _cell_row("FAM_8OXO", "S5", 10.55, 10000.0),
+        ],
+        samples=samples,
+    )
+    _write_reliability_json(
+        reliability_json,
+        [
+            _reliability_row("S1", "8-oxodG", "benchmark_eligible"),
+            _reliability_row("S2", "8-oxodG", "benchmark_eligible"),
+            _reliability_row("S3", "8-oxodG", "benchmark_eligible"),
+            _reliability_row("S4", "8-oxodG", "targeted_review_positive"),
+            _reliability_row("S5", "8-oxodG", "targeted_review"),
+        ],
+    )
+
+    outputs, summaries = benchmark.run_targeted_istd_benchmark(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=tmp_path / "benchmark",
+        targeted_reliability_json=reliability_json,
+        strict_targeted_reliability=True,
+    )
+
+    summary = summaries[0]
+    assert summary.targeted_positive_count == 5
+    assert summary.clean_targeted_positive_count == 3
+    assert summary.targeted_review_positive_count == 1
+    assert summary.targeted_review_count == 1
+    assert summary.coverage_denominator_count == 3
+    assert summary.paired_area_n == 3
+    assert summary.failure_modes == ()
+    assert summary.targeted_reliability_warning_modes == (
+        "TARGETED_REVIEW_POSITIVE_EVIDENCE",
+        "TARGETED_REVIEW_EVIDENCE",
+    )
+
+    payload = json.loads(outputs.json_path.read_text(encoding="utf-8"))
+    rows = payload["summaries"]
+    assert rows[0]["targeted_review_positive_count"] == 1
+    tsv_rows = _read_tsv(outputs.summary_tsv)
+    assert tsv_rows[0]["targeted_review_positive_count"] == "1"
+
+
 def test_strict_reliability_reports_inconclusive_when_clean_samples_are_too_few(
     tmp_path: Path,
 ) -> None:

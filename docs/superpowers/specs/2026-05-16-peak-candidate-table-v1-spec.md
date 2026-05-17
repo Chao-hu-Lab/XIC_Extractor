@@ -37,7 +37,7 @@ The current codebase already has several pieces of the larger
 - `ScoringContext`, `score_candidate`, and `EvidenceScore` are already an
   evidence-vector-like layer;
 - targeted reliability audit already separates `benchmark_eligible`,
-  `targeted_review`, and `targeted_negative`;
+  `targeted_review_positive`, `targeted_review`, and `targeted_negative`;
 - raw area is integrated from raw intensity arrays in counts-seconds, not from a
   smoothed trace.
 
@@ -80,6 +80,8 @@ It must:
 - include rejected candidates with an explicit reason when scoring is available;
 - include proposal provenance, especially `legacy_savgol`, `local_minimum`, and
   `preferred_rt_recovery`;
+- rescore audit candidate rows after same-apex CWT provenance is merged so
+  `cwt_same_apex_support` is visible as bounded positive evidence;
 - include enough RT, boundary, integration, quality, and evidence fields to
   reproduce a selection decision without reopening raw files;
 - be TSV-first so downstream diagnostics can consume it without Excel.
@@ -90,6 +92,8 @@ It must not:
 - change the workbook `Matrix`, untargeted final matrix, or alignment contract;
 - make `arbitrated` the default resolver;
 - introduce CWT as a final resolver authority, ML, or deep learning in v1;
+- give CWT-only or far CWT alternatives an automatic confidence bonus or
+  demotion authority;
 - make local minimum a final boundary authority;
 - treat candidate table output as a production quantitative matrix.
 
@@ -168,13 +172,14 @@ This id is an audit key, not a cross-run scientific feature id.
 Proposal sources:
 
 - `centwave_cwt`;
-- `derivative_zero_crossing`;
-- `baseline_return`;
 - `rt_prior`;
 - `aligned_gapfill`.
 
 Only `centwave_cwt` is implemented after the candidate-table v1 baseline, and
-only as an audit proposal. The other names remain reserved.
+only as an audit proposal. The other names remain reserved candidate proposal
+sources. Boundary-only sources such as `derivative_zero_crossing`,
+`baseline_return`, and `cwt_width` live in `peak_candidate_boundaries.tsv`, not
+in candidate proposal provenance.
 
 ### RT And Integration
 
@@ -327,6 +332,21 @@ to `proposal_sources` and keep the production interval. If CWT finds an
 additional apex, that row must be `selected=FALSE` and available for review or
 future model-selection experiments only.
 
+When more than one existing candidate is inside the CWT apex merge window, CWT
+provenance must prefer the production-selected candidate. This prevents a
+near-apex legacy/local shadow row from carrying CWT support while the selected
+row appears unsupported. The merge changes audit provenance only; it must not
+change the selected peak, RT, area, or workbook result.
+
+Same-apex CWT support now participates in the candidate-table evidence layer as
+the bounded positive label `cwt_same_apex_support`. The support applies only
+when `centwave_cwt` is merged with at least one non-CWT proposal source and CWT
+scale or ridge-persistence evidence is present. If neutral loss is required,
+the candidate must also have matching NL/MS2 evidence before CWT can add
+positive support. CWT-only rows and chemically unconfirmed far CWT alternatives
+remain audit/challenger context; they do not receive this support bonus and do
+not demote the selected peak.
+
 `tools/diagnostics/cwt_peak_candidate_audit.py` summarizes candidate-table CWT
 evidence after extraction. It classifies each sample/target/resolver group as:
 
@@ -361,6 +381,48 @@ chemical evidence:
 Only `cwt_far_chemically_plausible` should be prioritized as a possible future
 selection challenger. `cwt_far_unconfirmed` is shape-only context and should not
 increase confidence or trigger demotion.
+
+Weighted interval scheduling (WIS) belongs to the boundary/model-selection audit
+layer, not to `EvidenceScore`. WIS can explain which non-overlapping boundary
+set is more coherent, but it must not add or subtract candidate evidence points
+in this slice.
+
+`tools/diagnostics/peak_candidate_score_calibration_report.py` audits whether
+newer evidence labels are exposing stale or overly conservative scoring choices.
+It consumes `peak_candidates.tsv` and writes JSON, TSV, and Markdown summaries
+without changing production selection. The report separates:
+
+- selected-row risks such as `selected_review_only`, `selected_nl_fail`, and
+  `selected_no_ms2`;
+- `plausible_nl_dropout_selected`, where the selected row lacks the expected NL
+  but still has strong MS1/shape/trace support and no hard local-quality
+  concern;
+- `apex_evidence_shadow`, where a rejected near-apex row has additional support
+  labels and should be treated as provenance/boundary context before it is
+  considered a true alternative peak;
+- true alternative challengers, including `high_score_rejected_challenger`,
+  `strict_nl_rejected_challenger`, and `cwt_supported_rejected_challenger`.
+
+This diagnostic is the preferred gate before changing scoring weights. A high
+`apex_evidence_shadow` count means the candidate table is preserving useful
+evidence, not that production selected the wrong peak. Only far alternatives
+with stronger chemical and shape evidence should become scoring-rule candidates.
+Likewise, `plausible_nl_dropout_selected` is not a clean strict-NL positive and
+must not be silently promoted to benchmark truth. It is a separate review state
+for targets such as `8-oxodG`, where RT/shape can be consistent but MS2/NL
+evidence can fail because the expected fragment is not observed.
+The split is owned by the shared evidence consistency classifier in
+`xic_extractor.evidence_semantics`; targeted reliability diagnostics and
+candidate-score calibration must both consume that classifier so the same
+MS1/shape/trace/MS2/NL evidence means the same thing across reports.
+
+`tools/diagnostics/cross_report_evidence_consistency.py` is the cross-report
+bridge for this contract. It compares `targeted_peak_reliability_rows.tsv` with
+selected `peak_candidates.tsv` rows and flags evidence disagreements such as a
+clean targeted reliability state paired with hard candidate conflicts, or a
+review-positive state whose selected candidate lacks plausible dropout labels.
+The report is diagnostic-only and must include target m/z when a targeted
+workbook is provided.
 
 The tool writes `cwt_peak_candidate_far_alternatives.tsv` as the focused manual
 review surface for far alternatives, including m/z, selected RT, nearest CWT RT,
@@ -404,6 +466,20 @@ Candidate table v1 is ready when all of these are true:
 14. CWT far alternatives are split into `cwt_far_unconfirmed` and
     `cwt_far_chemically_plausible` using NL/MS2 evidence, and the focused
     far-alternative TSV is written.
+15. Same-apex CWT provenance adds `cwt_same_apex_support` to candidate-table
+    scoring, while CWT-only rows and NL-failed rows do not receive the
+    same-apex bonus.
+16. CWT support is bounded and cannot override a clearly closer RT prior by
+    score alone.
+17. Score calibration diagnostics can separate selected-row risk, near-apex
+    evidence shadows, and true rejected alternative challengers without changing
+    production peak selection.
+18. CWT audit merge prefers the selected near-apex candidate when multiple
+    candidates match the same CWT apex, and workbook comparison remains
+    unchanged.
+19. Score calibration diagnostics can split plausible NL-dropout selected rows
+    from generic `selected_nl_fail` rows, so missing NL does not collapse every
+    strong MS1/RT/shape case into the same failure bucket.
 
 ## Suggested Test Plan
 
@@ -431,6 +507,12 @@ Unit tests:
   - CWT agreement merges proposal provenance without changing the selected
     peak;
   - CWT-only rows remain unselected.
+
+- `tests/test_peak_scoring.py`
+  - same-apex CWT provenance adds bounded support;
+  - CWT-only provenance does not add the same-apex support bonus;
+  - the CWT support bonus cannot override a clearly closer RT prior by score
+    alone.
 
 Integration validation:
 
@@ -463,17 +545,23 @@ that support belongs in the implementation plan.
 
 After v1 candidate persistence is stable:
 
-1. Add weighted interval scheduling or local mixture model selection.
+1. Validate weighted interval scheduling boundary audit output on real targeted
+   traces, then decide whether local mixture model selection is still needed.
 2. Extend the same candidate-table schema to untargeted alignment backfill.
 3. Use candidate table rows as training data for a future ML peak-quality
    classifier.
 
 Boundary hypothesis enumeration for the same apex now exists as the separate
-debug-only `peak_candidate_boundaries.tsv` artifact. It intentionally does not
-change `peak_candidates.tsv` headers. Candidate and boundary audit outputs can
-now populate `area_baseline_corrected` and `area_uncertainty` from a
-deterministic `linear_edge` baseline model, but these fields remain audit
-evidence and do not alter selected peak behavior.
+debug-only `peak_candidate_boundaries.tsv` artifact, with
+`peak_candidate_boundary_summary.tsv` as the smaller manual-review entry point.
+It intentionally does not change `peak_candidates.tsv` headers. Boundary review
+artifacts include `target_mz` so manual EIC checks do not require a separate
+target lookup. Candidate and boundary audit outputs can now populate
+`area_baseline_corrected` and `area_uncertainty` from a deterministic
+`linear_edge` baseline model, but these fields remain audit evidence and do not
+alter selected peak behavior. Boundary non-overlap audit markers now use
+weighted interval scheduling over each candidate's top boundary; this is still
+review-only and does not become model selection for production outputs.
 
 ## Reviewed Verdict
 

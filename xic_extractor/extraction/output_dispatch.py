@@ -7,6 +7,9 @@ from xic_extractor.output import csv_writers
 from xic_extractor.output.peak_candidate_boundaries import (
     write_peak_candidate_boundaries_for_file_results,
 )
+from xic_extractor.output.peak_candidate_boundary_summary import (
+    write_peak_candidate_boundary_summary_for_file_results,
+)
 from xic_extractor.output.peak_candidates import write_peak_candidates_for_file_results
 
 if TYPE_CHECKING:
@@ -25,6 +28,10 @@ def write_outputs(
         )
         write_peak_candidate_boundaries_for_file_results(
             config.output_csv.with_name("peak_candidate_boundaries.tsv"),
+            output.file_results,
+        )
+        write_peak_candidate_boundary_summary_for_file_results(
+            config.output_csv.with_name("peak_candidate_boundary_summary.tsv"),
             output.file_results,
         )
     if not config.keep_intermediate_csv:

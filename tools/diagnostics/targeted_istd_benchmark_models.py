@@ -145,6 +145,7 @@ class BenchmarkSummary:
     note: str
     targeted_reliability_mode: str = "not_provided"
     clean_targeted_positive_count: int = 0
+    targeted_review_positive_count: int = 0
     targeted_review_count: int = 0
     targeted_negative_count: int = 0
     coverage_denominator_count: int = 0

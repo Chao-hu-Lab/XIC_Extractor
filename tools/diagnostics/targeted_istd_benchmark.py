@@ -430,6 +430,9 @@ def _summarize_target(
             else "not_provided"
         ),
         clean_targeted_positive_count=len(reliability_summary.clean_points),
+        targeted_review_positive_count=(
+            reliability_summary.review_positive_count
+        ),
         targeted_review_count=reliability_summary.review_count,
         targeted_negative_count=reliability_summary.negative_count,
         coverage_denominator_count=coverage_denominator_count,
@@ -440,6 +443,7 @@ def _summarize_target(
 @dataclass(frozen=True)
 class _ReliabilitySummary:
     clean_points: tuple[TargetedPoint, ...]
+    review_positive_count: int
     review_count: int
     negative_count: int
     missing_count: int
@@ -470,12 +474,14 @@ def _reliability_summary(
         positives = tuple(point for point in points if point.positive)
         return _ReliabilitySummary(
             clean_points=positives,
+            review_positive_count=0,
             review_count=0,
             negative_count=0,
             missing_count=0,
         )
 
     clean: list[TargetedPoint] = []
+    review_positive_count = 0
     review_count = 0
     negative_count = 0
     missing_count = 0
@@ -491,6 +497,11 @@ def _reliability_summary(
         if record.reliability_state == "benchmark_eligible":
             if point.positive:
                 clean.append(point)
+        elif record.reliability_state == "targeted_review_positive":
+            if point.positive:
+                review_positive_count += 1
+                if not strict_targeted_reliability:
+                    clean.append(point)
         elif record.reliability_state == "targeted_review":
             if point.positive:
                 review_count += 1
@@ -500,6 +511,7 @@ def _reliability_summary(
             negative_count += 1
     return _ReliabilitySummary(
         clean_points=tuple(clean),
+        review_positive_count=review_positive_count,
         review_count=review_count,
         negative_count=negative_count,
         missing_count=missing_count,
@@ -513,6 +525,8 @@ def _targeted_reliability_warnings(
     reliability_summary: _ReliabilitySummary,
 ) -> tuple[str, ...]:
     warnings: list[str] = []
+    if reliability_summary.review_positive_count:
+        warnings.append("TARGETED_REVIEW_POSITIVE_EVIDENCE")
     if reliability_summary.review_count:
         warnings.append("TARGETED_REVIEW_EVIDENCE")
     if reliability_summary.missing_count:

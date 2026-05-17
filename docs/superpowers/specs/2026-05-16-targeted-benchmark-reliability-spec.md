@@ -49,11 +49,12 @@ become the standard that untargeted alignment is punished against.
 
 ## Product Contract
 
-Targeted output must support three distinct states:
+Targeted output must support four distinct states:
 
 | State | Meaning | Benchmark behavior |
 |---|---|---|
 | `benchmark_eligible` | Strong targeted evidence suitable for targeted-vs-untargeted validation. | Can count as benchmark positive evidence. |
+| `targeted_review_positive` | Targeted found a finite positive-area peak with strong RT/MS1/shape/trace support, but one expected benchmark signal failed, such as plausible NL dropout. | Keep as targeted-side positive review evidence; strict benchmark excludes it from clean denominator and reports a warning. |
 | `targeted_review` | Targeted found a finite positive-area peak, but the evidence is weak or suspicious. | Keep in targeted output; annotate benchmark as targeted-side review risk. |
 | `targeted_negative` | No usable targeted peak evidence, such as missing/invalid RT, missing/non-positive area, or no selected peak. | Do not count as positive benchmark evidence. |
 
@@ -65,15 +66,27 @@ changes workbook columns.
 State precedence must be explicit:
 
 1. No usable peak evidence becomes `targeted_negative`.
-2. A finite RT and positive area with any weak or suspicious evidence becomes
+2. A finite RT and positive area with strong peak evidence but a plausible
+   isolated benchmark-signal dropout becomes `targeted_review_positive`.
+3. A finite RT and positive area with weak or suspicious evidence becomes
    `targeted_review`, even when the concern is severe.
-3. A finite RT and positive area with strong evidence and no blocking review
+4. A finite RT and positive area with strong evidence and no blocking review
    risk becomes `benchmark_eligible`.
 
 In particular, `VERY_LOW`, `NL_FAIL`, and `NO_MS2` rows with finite RT and
 positive area are targeted-side review evidence by default, not true negatives.
 They are not clean benchmark positives, but they should remain visible because
 they may explain targeted-side failures such as a wrong peak.
+
+`NL_FAIL` must not remain a single undifferentiated reason. A selected peak with
+strong local S/N, clean shape, clean trace, and no hard local-quality concern is
+`targeted_review_positive` with `plausible_nl_dropout`. NL failure without that
+support remains `targeted_review` with `hard_nl_conflict`.
+
+The dropout split must use the shared evidence consistency classifier in
+`xic_extractor.evidence_semantics`, not a targeted-only rule. The same semantic
+labels are consumed by candidate-score calibration so targeted workbook review
+and candidate-table diagnostics supervise each other instead of drifting.
 
 ## Non-Goals
 
@@ -200,7 +213,7 @@ Required row fields:
 | `prior_source` | Prior source from Score Breakdown, if available. |
 | `total_severity` | Existing total severity, if available. |
 | `quality_flags` | Existing quality flags, if available. |
-| `reliability_state` | `benchmark_eligible`, `targeted_review`, or `targeted_negative`. |
+| `reliability_state` | `benchmark_eligible`, `targeted_review_positive`, `targeted_review`, or `targeted_negative`. |
 | `risk_reasons` | Semicolon-separated explainable risk labels. |
 
 Required summary fields:
@@ -210,6 +223,7 @@ Required summary fields:
 | `target_label` | Target label. |
 | `role` | Target role. |
 | `benchmark_eligible_count` | Rows suitable for benchmark positives. |
+| `targeted_review_positive_count` | Rows with strong selected peak evidence but non-clean benchmark evidence such as plausible NL dropout. |
 | `targeted_review_count` | Rows with targeted evidence but review risk. |
 | `targeted_negative_count` | Rows without usable targeted evidence. |
 | `top_risk_reasons` | Most common risk labels. |
@@ -229,6 +243,43 @@ When provided, the benchmark can annotate targeted-side review risk and avoid
 treating weak targeted rows as clean positive evidence. This must remain a
 diagnostic behavior and must not feed production untargeted identity logic.
 
+### Cross-report Evidence Consistency
+
+`tools/diagnostics/cross_report_evidence_consistency.py` compares
+`targeted_peak_reliability_rows.tsv` with selected rows from `peak_candidates.tsv`.
+It is a diagnostic bridge between targeted workbook reliability and candidate
+evidence. It must not change targeted extraction, candidate scoring, or
+benchmark gate behavior.
+
+Required inputs:
+
+```powershell
+--targeted-reliability-rows-tsv <path>
+--peak-candidates-tsv <path>
+--output-dir <path>
+```
+
+Optional input:
+
+```powershell
+--targeted-workbook <path>
+```
+
+When the targeted workbook is provided, report rows must include `target_mz` so
+manual EIC review does not require a separate label lookup.
+
+The report should classify mismatches including:
+
+- `targeted_clean_candidate_conflict`;
+- `review_positive_not_supported_by_candidate`;
+- `targeted_review_candidate_suggests_dropout`;
+- `targeted_negative_candidate_has_peak`;
+- `missing_selected_candidate`;
+- `missing_targeted_reliability`;
+- `multiple_selected_candidates`.
+
+These mismatches are review prompts, not production decisions.
+
 ### Strict Reliability Denominator Semantics
 
 Default benchmark behavior must remain backward compatible when no reliability
@@ -242,6 +293,7 @@ separately:
 |---|---|
 | `targeted_positive_count` | Existing raw targeted positive count: finite RT, positive area. |
 | `clean_targeted_positive_count` | Count of `benchmark_eligible` rows. |
+| `targeted_review_positive_count` | Count of finite positive-area rows classified as `targeted_review_positive`. |
 | `targeted_review_count` | Count of finite positive-area rows classified as `targeted_review`. |
 | `targeted_negative_count` | Count of rows classified as `targeted_negative`. |
 | `coverage_denominator_count` | Count used to compute `coverage_minimum`; equals `clean_targeted_positive_count` in strict reliability mode. |
@@ -249,12 +301,17 @@ separately:
 Coverage and RT/area correlation calculations in strict reliability mode must
 use only `benchmark_eligible` samples:
 
+- `targeted_review_positive` samples are excluded from coverage denominator and
+  correlation pairs in strict mode, but are counted separately from weaker
+  review evidence;
 - `targeted_review` samples are excluded from coverage denominator and
   correlation pairs;
-- `targeted_review` samples must not create `MISS`, `DRIFT`, or
-  `AREA_MISMATCH` failures by themselves;
+- `targeted_review_positive` and `targeted_review` samples must not create
+  `MISS`, `DRIFT`, or `AREA_MISMATCH` failures by themselves;
 - `targeted_review` samples must be reported as targeted-side review risk, for
   example with `TARGETED_REVIEW_EVIDENCE`;
+- `targeted_review_positive` samples must be reported with
+  `TARGETED_REVIEW_POSITIVE_EVIDENCE`;
 - if an active target has too few clean samples after review exclusion, the
   benchmark is inconclusive for that target and must not be reported as a clean
   `PASS`.

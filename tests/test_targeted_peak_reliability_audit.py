@@ -67,9 +67,9 @@ def test_audit_classifies_strong_review_and_negative_rows(tmp_path: Path) -> Non
     assert by_target["low_conf"].reliability_state == "targeted_review"
     assert by_target["low_conf"].risk_reasons == ("low_confidence",)
     assert by_target["nl_fail"].reliability_state == "targeted_review"
-    assert by_target["nl_fail"].risk_reasons == ("nl_fail",)
+    assert by_target["nl_fail"].risk_reasons == ("hard_nl_conflict",)
     assert by_target["unicode_nl_fail"].reliability_state == "targeted_review"
-    assert by_target["unicode_nl_fail"].risk_reasons == ("nl_fail",)
+    assert by_target["unicode_nl_fail"].risk_reasons == ("hard_nl_conflict",)
     assert by_target["no_peak"].reliability_state == "targeted_negative"
     assert by_target["no_peak"].risk_reasons == ("no_usable_peak",)
 
@@ -81,6 +81,86 @@ def test_audit_classifies_strong_review_and_negative_rows(tmp_path: Path) -> Non
         "unicode_nl_fail": "targeted_review",
         "no_peak": "targeted_negative",
     }
+
+
+def test_plausible_nl_dropout_is_review_positive_not_targeted_negative(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    _write_targeted_workbook(
+        workbook,
+        targets=[
+            _target("8-oxodG"),
+            _target("hard_nl_conflict"),
+        ],
+        result_rows=[
+            _result(
+                "S1",
+                "8-oxodG",
+                rt=17.18,
+                area=1_850_000.0,
+                nl="✗ NL",
+                confidence="VERY_LOW",
+                reason=(
+                    "decision: review only, not counted; "
+                    "cap: VERY_LOW due to nl fail; "
+                    "support: local S/N strong; shape clean; trace clean; "
+                    "concerns: nl fail"
+                ),
+            ),
+            _result(
+                "S1",
+                "hard_nl_conflict",
+                rt=17.18,
+                area=120_000.0,
+                nl="NL_FAIL",
+                confidence="VERY_LOW",
+                reason=(
+                    "decision: review only, not counted; "
+                    "cap: VERY_LOW due to nl fail; "
+                    "support: local S/N strong; "
+                    "concerns: nl fail; shape poor"
+                ),
+            ),
+        ],
+        score_rows=[
+            _score("S1", "8-oxodG", confidence="VERY_LOW", concerns="nl_fail"),
+            _score(
+                "S1",
+                "hard_nl_conflict",
+                confidence="VERY_LOW",
+                concerns="nl_fail",
+            ),
+        ],
+    )
+
+    outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        output_dir=tmp_path / "audit",
+    )
+
+    by_target = {row.target_label: row for row in result.rows}
+    assert by_target["8-oxodG"].reliability_state == "targeted_review_positive"
+    assert by_target["8-oxodG"].risk_reasons == (
+        "low_confidence",
+        "plausible_nl_dropout",
+    )
+    assert by_target["hard_nl_conflict"].reliability_state == "targeted_review"
+    assert by_target["hard_nl_conflict"].risk_reasons == (
+        "low_confidence",
+        "hard_nl_conflict",
+    )
+    summary = {row.target_label: row for row in result.summaries}
+    assert summary["8-oxodG"].targeted_review_positive_count == 1
+    assert summary["hard_nl_conflict"].targeted_review_count == 1
+
+    rows = _read_tsv(outputs.rows_tsv)
+    assert {row["target_label"]: row["reliability_state"] for row in rows} == {
+        "8-oxodG": "targeted_review_positive",
+        "hard_nl_conflict": "targeted_review",
+    }
+    payload = json.loads(outputs.json_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["targeted_review_positive_count"] == 1
 
 
 def test_missing_score_breakdown_is_reported_without_demoting_strong_row(

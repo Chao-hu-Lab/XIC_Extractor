@@ -114,7 +114,11 @@ def add_cwt_proposals_for_audit(
 
     merged = list(peak_result.candidates)
     for proposal in cwt_result.candidates:
-        match_index = _matching_apex_index(merged, proposal)
+        match_index = _matching_apex_index(
+            merged,
+            proposal,
+            selected_peak=peak_result.peak,
+        )
         if match_index is None:
             merged.append(proposal)
             continue
@@ -242,14 +246,23 @@ def _best_scale_for_width(widths: np.ndarray, width_scans: int) -> float | None:
 def _matching_apex_index(
     candidates: list[PeakCandidate],
     proposal: PeakCandidate,
+    *,
+    selected_peak: PeakResult | None,
 ) -> int | None:
+    matches: list[int] = []
     for index, candidate in enumerate(candidates):
         if (
             abs(candidate.selection_apex_rt - proposal.selection_apex_rt)
             <= _APEX_MERGE_TOLERANCE_MIN
         ):
-            return index
-    return None
+            matches.append(index)
+    if not matches:
+        return None
+    if selected_peak is not None:
+        for index in matches:
+            if candidates[index].peak == selected_peak:
+                return index
+    return matches[0]
 
 
 def _merge_cwt_proposal(

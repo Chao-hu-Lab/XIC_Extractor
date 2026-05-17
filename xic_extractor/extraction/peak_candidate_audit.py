@@ -28,6 +28,8 @@ def append_peak_audit_rows(
     candidate_ms2_builder: Callable[[PeakCandidate], CandidateMS2Evidence | None],
     rt: Any,
     intensity: Any,
+    scoring_context_builder: Callable[[PeakCandidate], Any] | None = None,
+    istd_confidence_note: str | None = None,
 ) -> None:
     if not config.emit_peak_candidates:
         return
@@ -47,6 +49,8 @@ def append_peak_audit_rows(
         audit_peak_result=audit_peak_result,
         rt=rt,
         intensity=intensity,
+        scoring_context_builder=scoring_context_builder,
+        istd_confidence_note=istd_confidence_note,
     )
     append_peak_candidate_boundary_rows(
         peak_candidate_boundary_rows,

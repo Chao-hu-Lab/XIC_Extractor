@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 from typing import Literal
 
@@ -8,7 +9,13 @@ import numpy as np
 from xic_extractor.peak_detection.integration import integrate_area_counts_seconds
 from xic_extractor.peak_detection.models import PeakCandidate
 
-BoundarySource = Literal["candidate_interval", "half_height", "baseline_return"]
+BoundarySource = Literal[
+    "candidate_interval",
+    "half_height",
+    "baseline_return",
+    "derivative_zero_crossing",
+    "cwt_width",
+]
 
 
 @dataclass(frozen=True)
@@ -35,6 +42,8 @@ def enumerate_boundary_hypotheses(
         "candidate_interval",
         "half_height",
         "baseline_return",
+        "derivative_zero_crossing",
+        "cwt_width",
     ),
 ) -> tuple[BoundaryHypothesis, ...]:
     rt = np.asarray(rt_values, dtype=float)
@@ -96,6 +105,10 @@ def _interval_for_source(
         return _threshold_interval(rt, intensity, candidate, apex_index, fraction=0.5)
     if source == "baseline_return":
         return _threshold_interval(rt, intensity, candidate, apex_index, fraction=0.05)
+    if source == "derivative_zero_crossing":
+        return _derivative_zero_crossing_interval(rt, intensity, apex_index)
+    if source == "cwt_width":
+        return _cwt_width_interval(rt, candidate, apex_index)
     raise ValueError(f"Unsupported boundary source: {source}")
 
 
@@ -137,6 +150,44 @@ def _threshold_interval(
     ):
         right_index += 1
     return _valid_interval(left_index, right_index + 1, len(rt))
+
+
+def _derivative_zero_crossing_interval(
+    rt: np.ndarray,
+    intensity: np.ndarray,
+    apex_index: int,
+) -> tuple[int, int]:
+    left_index = apex_index
+    while (
+        left_index > 0
+        and float(intensity[left_index]) > float(intensity[left_index - 1])
+    ):
+        left_index -= 1
+
+    right_inclusive = apex_index
+    while (
+        right_inclusive < len(intensity) - 1
+        and float(intensity[right_inclusive]) > float(intensity[right_inclusive + 1])
+    ):
+        right_inclusive += 1
+    return _valid_interval(left_index, right_inclusive + 1, len(rt))
+
+
+def _cwt_width_interval(
+    rt: np.ndarray,
+    candidate: PeakCandidate,
+    apex_index: int,
+) -> tuple[int, int] | None:
+    if (
+        candidate.cwt_best_scale is None
+        or not math.isfinite(candidate.cwt_best_scale)
+        or candidate.cwt_best_scale <= 0
+    ):
+        return None
+    width_scans = max(2, int(round(candidate.cwt_best_scale)))
+    left_index = apex_index - width_scans // 2
+    right_index = left_index + width_scans
+    return _valid_interval(left_index, right_index, len(rt))
 
 
 def _valid_interval(

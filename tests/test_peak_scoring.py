@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -245,6 +247,96 @@ def test_score_candidate_records_moderate_ms2_trace_support() -> None:
     assert "MS2 trace moderate" in scored.reason
 
 
+def test_score_candidate_records_same_apex_cwt_support() -> None:
+    cand = replace(
+        _make_candidate(apex_rt=10.0, apex_intensity=1000),
+        proposal_sources=("legacy_savgol", "centwave_cwt"),
+        cwt_best_scale=4.0,
+        cwt_ridge_persistence=0.5,
+    )
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert "cwt_same_apex_support" in scored.evidence_score.support_labels
+    assert scored.evidence_score.positive_points >= 5
+
+
+def test_cwt_only_candidate_does_not_receive_same_apex_support_bonus() -> None:
+    cand = replace(
+        _make_candidate(apex_rt=10.0, apex_intensity=1000),
+        proposal_sources=("centwave_cwt",),
+        cwt_best_scale=4.0,
+        cwt_ridge_persistence=0.5,
+    )
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert "cwt_same_apex_support" not in scored.evidence_score.support_labels
+    assert "cwt_same_apex_support" not in scored.evidence_score.concern_labels
+
+
+def test_cwt_support_requires_chemical_evidence_when_nl_is_required() -> None:
+    cand = replace(
+        _make_candidate(apex_rt=10.0, apex_intensity=1000),
+        proposal_sources=("legacy_savgol", "centwave_cwt"),
+        cwt_best_scale=4.0,
+        cwt_ridge_persistence=0.5,
+    )
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=False,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert "cwt_same_apex_support" not in scored.evidence_score.support_labels
+    assert "cwt_same_apex_support" not in scored.evidence_score.concern_labels
+
+
 def test_weak_ms2_trace_concern_keeps_strict_nl_support() -> None:
     cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
     x = np.linspace(9, 11, 201)
@@ -336,6 +428,40 @@ def test_ms2_trace_bonus_does_not_override_selection_rt_distance() -> None:
 
     selected = select_candidate_with_confidence(
         [near_prior, farther_ms2_trace],
+        selection_rt=9.0,
+    )
+
+    assert selected is near_prior
+
+
+def test_cwt_support_does_not_override_selection_rt_distance() -> None:
+    near_prior = ScoredCandidate(
+        candidate=_make_candidate(apex_rt=9.0, apex_intensity=1000),
+        severities=(),
+        confidence=Confidence.HIGH,
+        reason="",
+        prior_rt=9.0,
+        evidence_score=score_evidence(
+            positive=[],
+            negative=[],
+            base_score=100,
+        ),
+    )
+    farther_cwt = ScoredCandidate(
+        candidate=_make_candidate(apex_rt=9.1, apex_intensity=500),
+        severities=(),
+        confidence=Confidence.HIGH,
+        reason="",
+        prior_rt=9.0,
+        evidence_score=score_evidence(
+            positive=[EvidenceSignal("cwt_same_apex_support", 5)],
+            negative=[],
+            base_score=100,
+        ),
+    )
+
+    selected = select_candidate_with_confidence(
+        [near_prior, farther_cwt],
         selection_rt=9.0,
     )
 

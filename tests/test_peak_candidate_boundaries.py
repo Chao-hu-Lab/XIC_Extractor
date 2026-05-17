@@ -4,10 +4,17 @@ from pathlib import Path
 import numpy as np
 
 from xic_extractor.extraction.peak_candidate_boundaries import (
+    _apply_boundary_nonoverlap_selection,
     build_peak_candidate_boundary_rows,
+)
+from xic_extractor.extraction.peak_candidate_boundary_summary import (
+    build_peak_candidate_boundary_summary_rows,
 )
 from xic_extractor.output.peak_candidate_boundaries import (
     write_peak_candidate_boundaries_tsv,
+)
+from xic_extractor.output.peak_candidate_boundary_summary import (
+    write_peak_candidate_boundary_summary_tsv,
 )
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -35,6 +42,7 @@ def test_build_boundary_rows_emits_alternatives_for_each_candidate() -> None:
     rows = build_peak_candidate_boundary_rows(
         sample_name="SampleA",
         target_label="Analyte",
+        target_mz=258.1085,
         role="Analyte",
         istd_pair="ISTD",
         resolver_mode="arbitrated",
@@ -45,6 +53,7 @@ def test_build_boundary_rows_emits_alternatives_for_each_candidate() -> None:
     )
 
     assert {row["target_label"] for row in rows} == {"Analyte"}
+    assert {row["target_mz"] for row in rows} == {"258.10850"}
     assert {row["resolver_mode"] for row in rows} == {"arbitrated"}
     assert {row["analysis_mode"] for row in rows} == {"targeted"}
     assert {row["selected_candidate"] for row in rows} == {"TRUE", "FALSE"}
@@ -54,13 +63,38 @@ def test_build_boundary_rows_emits_alternatives_for_each_candidate() -> None:
     }
     selected_rows = [row for row in rows if row["selected_candidate"] == "TRUE"]
     assert any("candidate_interval" in row["boundary_sources"] for row in selected_rows)
-    assert "half_height" in {row["boundary_sources"] for row in selected_rows}
+    assert any("half_height" in row["boundary_sources"] for row in selected_rows)
+    assert any(
+        "derivative_zero_crossing" in row["boundary_sources"]
+        for row in selected_rows
+    )
     assert all(row["boundary_id"].startswith(row["candidate_id"]) for row in rows)
     assert all(row["area_delta_vs_candidate_interval"] != "" for row in rows)
     assert all(row["area_baseline_corrected"] != "" for row in rows)
     assert all(row["area_uncertainty"] != "" for row in rows)
     assert {row["baseline_type"] for row in rows} == {"linear_edge"}
     assert all(row["baseline_score"] != "" for row in rows)
+    assert all(row["boundary_audit_score"] != "" for row in rows)
+    assert all(row["boundary_audit_rank"] != "" for row in rows)
+    top_by_candidate = {
+        row["candidate_id"]: 0
+        for row in rows
+    }
+    for row in rows:
+        if row["boundary_audit_top"] == "TRUE":
+            top_by_candidate[row["candidate_id"]] += 1
+    assert set(top_by_candidate.values()) == {1}
+    assert all(row["boundary_nonoverlap_selected"] != "" for row in rows)
+    assert any(
+        row["boundary_nonoverlap_selected"] == "TRUE"
+        and row["boundary_nonoverlap_note"] == "selected_nonoverlap"
+        for row in rows
+    )
+    assert any(
+        "trace_continuity_ok" in row["boundary_support_labels"]
+        for row in rows
+    )
+    assert any(row["boundary_concern_labels"] != "" for row in rows)
 
 
 def test_write_peak_candidate_boundaries_tsv_serializes_rows_safely(
@@ -94,6 +128,124 @@ def test_write_peak_candidate_boundaries_tsv_serializes_rows_safely(
         rows = list(csv.DictReader(handle, delimiter="\t"))
     assert rows[0]["sample_name"] == "SampleA"
     assert rows[0]["boundary_sources"] == "line1 line2 with tab"
+
+
+def test_build_boundary_summary_keeps_only_top_rows_with_review_context() -> None:
+    first = _candidate(8.30, left=8.00, right=8.60)
+    second = _candidate(8.80, left=8.50, right=9.00, sources=("local_minimum",))
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=first.peak,
+        n_points=11,
+        max_smoothed=100.0,
+        n_prominent_peaks=2,
+        candidates=(first, second),
+    )
+    rows = build_peak_candidate_boundary_rows(
+        sample_name="SampleA",
+        target_label="Analyte",
+        target_mz=258.1085,
+        role="Analyte",
+        istd_pair="ISTD",
+        resolver_mode="arbitrated",
+        peak_result=peak_result,
+        rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 9.0]),
+        intensity=np.asarray(
+            [10.0, 18.0, 70.0, 100.0, 70.0, 18.0, 10.0, 20.0, 80.0, 20.0, 10.0]
+        ),
+    )
+
+    summary = build_peak_candidate_boundary_summary_rows(rows)
+
+    assert len(summary) == 2
+    assert {row["target_mz"] for row in summary} == {"258.10850"}
+    assert {row["top_boundary_audit_rank"] for row in summary} == {"1"}
+    assert all(row["top_boundary_id"] for row in summary)
+    assert all(row["nonoverlap_selected"] for row in summary)
+    assert all(row["top_boundary_support_labels"] for row in summary)
+
+
+def test_write_peak_candidate_boundary_summary_tsv_serializes_rows_safely(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "peak_candidate_boundary_summary.tsv"
+    row = {
+        "sample_name": "SampleA",
+        "target_label": "line1\nline2\twith tab",
+        "target_mz": "258.10850",
+        "top_boundary_id": "boundary-1",
+    }
+
+    write_peak_candidate_boundary_summary_tsv(path, [row])
+
+    text = path.read_text(encoding="utf-8-sig")
+    assert "line1 line2 with tab" in text
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert rows[0]["target_label"] == "line1 line2 with tab"
+    assert rows[0]["target_mz"] == "258.10850"
+
+
+def test_nonoverlap_audit_selects_higher_score_top_boundary_on_overlap() -> None:
+    first = _candidate(8.30, left=8.00, right=8.60)
+    second = _candidate(8.45, left=8.20, right=8.70, sources=("local_minimum",))
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=first.peak,
+        n_points=8,
+        max_smoothed=100.0,
+        n_prominent_peaks=2,
+        candidates=(first, second),
+    )
+
+    rows = build_peak_candidate_boundary_rows(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="",
+        resolver_mode="arbitrated",
+        peak_result=peak_result,
+        rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7]),
+        intensity=np.asarray([5.0, 20.0, 80.0, 100.0, 90.0, 60.0, 20.0, 5.0]),
+    )
+
+    top_rows = [row for row in rows if row["boundary_audit_top"] == "TRUE"]
+    selected = [
+        row
+        for row in top_rows
+        if row["boundary_nonoverlap_selected"] == "TRUE"
+    ]
+    rejected = [
+        row
+        for row in top_rows
+        if row["boundary_nonoverlap_selected"] == "FALSE"
+    ]
+
+    assert len(selected) == 1
+    assert len(rejected) == 1
+    assert rejected[0]["boundary_nonoverlap_note"] == "overlaps_higher_score"
+    assert rejected[0]["boundary_nonoverlap_blocker_id"] == selected[0]["boundary_id"]
+
+
+def test_nonoverlap_audit_uses_weighted_interval_selection() -> None:
+    rows = [
+        _boundary_row("wide", left=8.0, right=8.4, score=60),
+        _boundary_row("left", left=8.0, right=8.2, score=40),
+        _boundary_row("right", left=8.2, right=8.4, score=40),
+    ]
+
+    _apply_boundary_nonoverlap_selection(rows)
+
+    selected_ids = {
+        row["boundary_id"]
+        for row in rows
+        if row["boundary_nonoverlap_selected"] == "TRUE"
+    }
+    wide = next(row for row in rows if row["boundary_id"] == "wide")
+
+    assert selected_ids == {"left", "right"}
+    assert wide["boundary_nonoverlap_note"] == "overlaps_weighted_selection"
+    assert wide["boundary_nonoverlap_blocker_id"] == "left;right"
 
 
 def test_disabled_boundary_writer_is_noop(tmp_path: Path) -> None:
@@ -135,3 +287,21 @@ def _candidate(
         proposal_sources=sources,
         source_apex_rank=1,
     )
+
+
+def _boundary_row(
+    boundary_id: str,
+    *,
+    left: float,
+    right: float,
+    score: int,
+) -> dict[str, str]:
+    return {
+        "boundary_id": boundary_id,
+        "boundary_audit_score": str(score),
+        "boundary_audit_top": "TRUE",
+        "selected_candidate": "FALSE",
+        "is_candidate_interval": "TRUE",
+        "rt_left_min": f"{left:.5f}",
+        "rt_right_min": f"{right:.5f}",
+    }

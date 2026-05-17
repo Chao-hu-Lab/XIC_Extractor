@@ -43,6 +43,17 @@ class CommonEvidence:
     reason: str = ""
 
 
+@dataclass(frozen=True)
+class EvidenceSignalSet:
+    support_labels: tuple[str, ...] = ()
+    concern_labels: tuple[str, ...] = ()
+    proposal_sources: tuple[str, ...] = ()
+    quality_flags: tuple[str, ...] = ()
+    ms2_present: bool | None = None
+    nl_match: bool | None = None
+    raw_score: float | None = None
+
+
 def common_evidence_from_targeted_candidate(
     candidate: PeakCandidate,
     *,
@@ -183,6 +194,59 @@ def canonical_concern_labels(evidence: CommonEvidence) -> tuple[str, ...]:
     return tuple(labels)
 
 
+def classify_evidence_consistency(signals: EvidenceSignalSet) -> tuple[str, ...]:
+    support = _label_set(signals.support_labels)
+    concerns = _label_set(signals.concern_labels)
+    sources = _label_set(signals.proposal_sources)
+    quality_flags = _label_set(signals.quality_flags)
+
+    labels: list[str] = []
+    has_shape_context = (
+        "shape_clean" in support
+        or "centwave_cwt" in sources
+        or "cwt_same_apex_support" in support
+    )
+    ms1_coherent = (
+        "local_sn_strong" in support
+        and "trace_clean" in support
+        and has_shape_context
+    )
+    hard_local_conflict = bool(quality_flags) or bool(
+        concerns
+        & {
+            "hard_quality_flag",
+            "low_scan_support",
+            "low_trace_continuity",
+            "poor_edge_recovery",
+            "rt_centrality_poor",
+            "shape_poor",
+        }
+    )
+    if hard_local_conflict:
+        labels.append("hard_local_quality_conflict")
+    elif ms1_coherent:
+        labels.append("ms1_coherent")
+
+    missing_ms2 = signals.ms2_present is False or "no_ms2" in concerns
+    if missing_ms2:
+        labels.append("missing_ms2")
+
+    nl_failed = signals.nl_match is False or "nl_fail" in concerns
+    score_not_negative = signals.raw_score is None or signals.raw_score >= 0
+    if nl_failed:
+        if (
+            ms1_coherent
+            and not hard_local_conflict
+            and not missing_ms2
+            and score_not_negative
+        ):
+            labels.append("plausible_nl_dropout")
+        else:
+            labels.append("hard_nl_conflict")
+
+    return tuple(labels)
+
+
 def _targeted_trace_quality(candidate: PeakCandidate) -> str:
     return "review" if candidate.quality_flags else "clean"
 
@@ -240,3 +304,17 @@ def _delta_sec_to_min(value: float | None) -> float | None:
 
 def _positive(value: float | None) -> bool:
     return value is not None and value > 0.0
+
+
+def _label_set(values: tuple[str, ...]) -> frozenset[str]:
+    return frozenset(_normalize_label(value) for value in values if value)
+
+
+def _normalize_label(value: str) -> str:
+    return (
+        value.strip()
+        .lower()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace("/", "_")
+    )

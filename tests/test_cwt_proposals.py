@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -75,6 +76,71 @@ def test_cwt_audit_proposals_do_not_change_selected_peak() -> None:
         and candidate.proposal_sources == ("centwave_cwt",)
         for candidate in audited.candidates
     )
+
+
+def test_cwt_audit_merge_prefers_selected_near_apex_candidate(monkeypatch) -> None:
+    rt, intensity = _two_peak_trace()
+    shadow = _candidate(
+        4.0,
+        left=3.80,
+        right=4.20,
+        proposal_sources=("legacy_savgol",),
+    )
+    selected = _candidate(
+        4.0,
+        left=3.86,
+        right=4.14,
+        proposal_sources=("local_minimum",),
+    )
+    cwt_proposal = replace(
+        _candidate(
+            4.0,
+            left=3.82,
+            right=4.18,
+            proposal_sources=("centwave_cwt",),
+        ),
+        cwt_best_scale=5.0,
+        cwt_ridge_persistence=0.6,
+    )
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=len(rt),
+        max_smoothed=float(np.max(intensity)),
+        n_prominent_peaks=2,
+        candidates=(shadow, selected),
+        selection_reference_rt=4.0,
+    )
+
+    def _fake_cwt(
+        *_args: object,
+        **_kwargs: object,
+    ) -> PeakDetectionResult:
+        return PeakDetectionResult(
+            status="OK",
+            peak=cwt_proposal.peak,
+            candidates=(cwt_proposal,),
+            n_points=len(rt),
+            max_smoothed=float(np.max(intensity)),
+            n_prominent_peaks=1,
+        )
+
+    monkeypatch.setattr(
+        "xic_extractor.peak_detection.cwt.find_peak_candidates_centwave_cwt",
+        _fake_cwt,
+    )
+
+    audited = add_cwt_proposals_for_audit(peak_result, rt, intensity, _config())
+
+    shadow_row = next(
+        candidate for candidate in audited.candidates if candidate.peak == shadow.peak
+    )
+    selected_row = next(
+        candidate for candidate in audited.candidates if candidate.peak == selected.peak
+    )
+    assert shadow_row.proposal_sources == ("legacy_savgol",)
+    assert selected_row.proposal_sources == ("local_minimum", "centwave_cwt")
+    assert audited.peak == selected.peak
 
 
 def test_cwt_evidence_reaches_peak_hypothesis_without_selection_authority() -> None:

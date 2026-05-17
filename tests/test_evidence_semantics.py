@@ -5,8 +5,10 @@ from types import SimpleNamespace
 
 from xic_extractor.alignment.matrix import AlignedCell
 from xic_extractor.evidence_semantics import (
+    EvidenceSignalSet,
     canonical_concern_labels,
     canonical_support_labels,
+    classify_evidence_consistency,
     common_evidence_from_aligned_cell,
     common_evidence_from_discovery_candidate,
     common_evidence_from_targeted_candidate,
@@ -126,6 +128,72 @@ def test_alignment_cell_projects_backfill_provenance_without_identity_policy() -
     assert evidence.neutral_loss_tag == "dR"
     assert evidence.provenance == "rescued"
     assert "backfill_provenance" in canonical_concern_labels(evidence)
+
+
+def test_consistency_classifier_splits_nl_dropout_from_conflict() -> None:
+    plausible = classify_evidence_consistency(
+        EvidenceSignalSet(
+            support_labels=("local_sn_strong", "shape_clean", "trace_clean"),
+            concern_labels=("nl_fail",),
+            ms2_present=True,
+            nl_match=False,
+            raw_score=35,
+        )
+    )
+    hard = classify_evidence_consistency(
+        EvidenceSignalSet(
+            support_labels=("local_sn_strong", "trace_clean"),
+            concern_labels=("nl_fail", "shape_poor"),
+            ms2_present=True,
+            nl_match=False,
+            raw_score=35,
+        )
+    )
+
+    assert plausible == (
+        "ms1_coherent",
+        "plausible_nl_dropout",
+    )
+    assert hard == (
+        "hard_local_quality_conflict",
+        "hard_nl_conflict",
+    )
+
+
+def test_consistency_classifier_allows_cwt_as_shape_context_but_not_chemistry() -> None:
+    labels = classify_evidence_consistency(
+        EvidenceSignalSet(
+            support_labels=("local_sn_strong", "trace_clean"),
+            concern_labels=("nl_fail",),
+            proposal_sources=("centwave_cwt", "local_minimum"),
+            ms2_present=True,
+            nl_match=False,
+            raw_score=20,
+        )
+    )
+
+    assert labels == (
+        "ms1_coherent",
+        "plausible_nl_dropout",
+    )
+
+
+def test_consistency_classifier_keeps_no_ms2_distinct_from_nl_dropout() -> None:
+    labels = classify_evidence_consistency(
+        EvidenceSignalSet(
+            support_labels=("local_sn_strong", "shape_clean", "trace_clean"),
+            concern_labels=("nl_fail", "no_ms2"),
+            ms2_present=False,
+            nl_match=False,
+            raw_score=35,
+        )
+    )
+
+    assert labels == (
+        "ms1_coherent",
+        "missing_ms2",
+        "hard_nl_conflict",
+    )
 
 
 def _candidate(

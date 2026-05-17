@@ -326,7 +326,6 @@ def extract_one_target(
     diagnostics.extend(build_diagnostic_records(sample_name, target, result, config))
     if paired_rejection is not None:
         diagnostics.append(paired_rejection)
-
     append_anchor_window_diagnostics(
         diagnostics, sample_name, target, config, peak_result,
         anchor_used=anchor_used,
@@ -344,7 +343,8 @@ def extract_one_target(
         target=target,
         peak_result=peak_result,
         candidate_ms2_builder=_cached_candidate_ms2_builder,
-        rt=audit_rt,
-        intensity=audit_intensity,
+        rt=audit_rt, intensity=audit_intensity,
+        scoring_context_builder=scoring_context_builder,
+        istd_confidence_note=istd_confidence_note,
     )
     return anchor_rt

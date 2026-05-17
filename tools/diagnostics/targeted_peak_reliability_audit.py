@@ -16,8 +16,14 @@ from typing import Literal
 
 from openpyxl import load_workbook
 
+from xic_extractor.evidence_semantics import (
+    EvidenceSignalSet,
+    classify_evidence_consistency,
+)
+
 ReliabilityState = Literal[
     "benchmark_eligible",
+    "targeted_review_positive",
     "targeted_review",
     "targeted_negative",
 ]
@@ -43,6 +49,7 @@ SUMMARY_COLUMNS = (
     "target_label",
     "role",
     "benchmark_eligible_count",
+    "targeted_review_positive_count",
     "targeted_review_count",
     "targeted_negative_count",
     "top_risk_reasons",
@@ -81,6 +88,7 @@ class TargetedReliabilitySummary:
     target_label: str
     role: str
     benchmark_eligible_count: int
+    targeted_review_positive_count: int
     targeted_review_count: int
     targeted_negative_count: int
     top_risk_reasons: str
@@ -99,6 +107,13 @@ class TargetedReliabilityResult:
     @property
     def targeted_review_count(self) -> int:
         return sum(row.reliability_state == "targeted_review" for row in self.rows)
+
+    @property
+    def targeted_review_positive_count(self) -> int:
+        return sum(
+            row.reliability_state == "targeted_review_positive"
+            for row in self.rows
+        )
 
     @property
     def targeted_negative_count(self) -> int:
@@ -316,7 +331,10 @@ def _classify_row(
     ):
         risk_reasons.append("low_confidence")
     if _is_nl_fail(row.nl):
-        risk_reasons.append("nl_fail")
+        if _is_plausible_nl_dropout(row, score):
+            risk_reasons.append("plausible_nl_dropout")
+        else:
+            risk_reasons.append("hard_nl_conflict")
     elif _is_no_ms2(row.nl):
         risk_reasons.append("no_ms2")
     if score is None:
@@ -329,9 +347,12 @@ def _classify_row(
     blocking_reasons = tuple(
         reason for reason in risk_reasons if reason != "score_breakdown_unavailable"
     )
-    state: ReliabilityState = (
-        "targeted_review" if blocking_reasons else "benchmark_eligible"
-    )
+    if not blocking_reasons:
+        state: ReliabilityState = "benchmark_eligible"
+    elif _is_review_positive(blocking_reasons):
+        state = "targeted_review_positive"
+    else:
+        state = "targeted_review"
     return TargetedReliabilityRow(
         sample_name=row.sample_name,
         target_label=row.target_label,
@@ -396,6 +417,10 @@ def _summarize_rows(
                     row.reliability_state == "benchmark_eligible"
                     for row in target_rows
                 ),
+                targeted_review_positive_count=sum(
+                    row.reliability_state == "targeted_review_positive"
+                    for row in target_rows
+                ),
                 targeted_review_count=sum(
                     row.reliability_state == "targeted_review"
                     for row in target_rows
@@ -458,9 +483,17 @@ def _json_payload(
     known_target_exceptions: Mapping[str, str],
 ) -> dict[str, object]:
     return {
-        "overall_status": "WARN" if result.targeted_review_count else "PASS",
+        "overall_status": (
+            "WARN"
+            if result.targeted_review_count
+            or result.targeted_review_positive_count
+            else "PASS"
+        ),
         "summary": {
             "benchmark_eligible_count": result.benchmark_eligible_count,
+            "targeted_review_positive_count": (
+                result.targeted_review_positive_count
+            ),
             "targeted_review_count": result.targeted_review_count,
             "targeted_negative_count": result.targeted_negative_count,
         },
@@ -471,22 +504,28 @@ def _json_payload(
 
 
 def _write_markdown(path: Path, result: TargetedReliabilityResult) -> None:
+    overall_status = (
+        "WARN"
+        if result.targeted_review_count or result.targeted_review_positive_count
+        else "PASS"
+    )
     lines = [
         "# Targeted Peak Reliability Audit",
         "",
-        f"Overall status: {'WARN' if result.targeted_review_count else 'PASS'}",
+        f"Overall status: {overall_status}",
         "",
         (
-            "| Target | Eligible | Review | Negative | Known exception | "
-            "Top risk reasons |"
+            "| Target | Eligible | Review-positive | Review | Negative | "
+            "Known exception | Top risk reasons |"
         ),
-        "|---|---:|---:|---:|---|---|",
+        "|---|---:|---:|---:|---:|---|---|",
     ]
     for summary in result.summaries:
         lines.append(
             "| "
             f"{summary.target_label} | "
             f"{summary.benchmark_eligible_count} | "
+            f"{summary.targeted_review_positive_count} | "
             f"{summary.targeted_review_count} | "
             f"{summary.targeted_negative_count} | "
             f"{summary.known_exception} | "
@@ -535,6 +574,90 @@ def _is_nl_fail(value: str) -> bool:
 def _is_no_ms2(value: str) -> bool:
     token = value.strip().upper().replace(" ", "_")
     return token == "NO_MS2" or "NO_MS2" in token
+
+
+def _is_review_positive(blocking_reasons: Sequence[str]) -> bool:
+    if "plausible_nl_dropout" not in blocking_reasons:
+        return False
+    hard_reasons = {
+        "hard_nl_conflict",
+        "no_ms2",
+        "quality_flags",
+        "weak_area_rank",
+    }
+    return not any(reason in hard_reasons for reason in blocking_reasons)
+
+
+def _is_plausible_nl_dropout(
+    row: _TargetedInputRow,
+    score: _ScoreBreakdown | None,
+) -> bool:
+    return "plausible_nl_dropout" in classify_evidence_consistency(
+        _evidence_signal_set(row, score)
+    )
+
+
+def _evidence_signal_set(
+    row: _TargetedInputRow,
+    score: _ScoreBreakdown | None,
+) -> EvidenceSignalSet:
+    reason = row.reason.upper()
+    support_labels: list[str] = []
+    concern_labels: list[str] = []
+    proposal_sources: list[str] = []
+    if "LOCAL S/N STRONG" in reason:
+        support_labels.append("local_sn_strong")
+    if "TRACE CLEAN" in reason:
+        support_labels.append("trace_clean")
+    if "SHAPE CLEAN" in reason:
+        support_labels.append("shape_clean")
+    if "CENTWAVE_CWT" in reason:
+        proposal_sources.append("centwave_cwt")
+    if _is_nl_fail(row.nl):
+        concern_labels.append("nl_fail")
+    if _is_no_ms2(row.nl) or "NO MS2" in reason or "NO_MS2" in reason:
+        concern_labels.append("no_ms2")
+    concern_labels.extend(_reason_hard_concern_labels(reason))
+    return EvidenceSignalSet(
+        support_labels=tuple(dict.fromkeys(support_labels)),
+        concern_labels=tuple(dict.fromkeys(concern_labels)),
+        proposal_sources=tuple(dict.fromkeys(proposal_sources)),
+        quality_flags=(
+            tuple(_split_semicolon_labels(score.quality_flags))
+            if score is not None
+            else ()
+        ),
+        ms2_present=False
+        if "no_ms2" in concern_labels
+        else True
+        if _is_nl_fail(row.nl)
+        else None,
+        nl_match=False if _is_nl_fail(row.nl) else None,
+    )
+
+
+def _reason_hard_concern_labels(reason: str) -> list[str]:
+    labels: list[str] = []
+    for token, label in (
+        ("HARD QUALITY FLAG", "hard_quality_flag"),
+        ("WEAK CANDIDATE", "hard_quality_flag"),
+        ("LOW SCAN SUPPORT", "low_scan_support"),
+        ("LOW_TRACE_CONTINUITY", "low_trace_continuity"),
+        ("LOW TRACE CONTINUITY", "low_trace_continuity"),
+        ("POOR EDGE RECOVERY", "poor_edge_recovery"),
+        ("EDGE CLIPPED", "poor_edge_recovery"),
+        ("RT CENTRALITY POOR", "rt_centrality_poor"),
+        ("RT_CENTRALITY_POOR", "rt_centrality_poor"),
+        ("SHAPE POOR", "shape_poor"),
+        ("SHAPE_POOR", "shape_poor"),
+    ):
+        if token in reason:
+            labels.append(label)
+    return labels
+
+
+def _split_semicolon_labels(value: str) -> list[str]:
+    return [part.strip() for part in value.split(";") if part.strip()]
 
 
 def _is_accepted_low_istd(row: _TargetedInputRow) -> bool:

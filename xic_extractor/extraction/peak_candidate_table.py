@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import CandidateMS2Evidence
@@ -12,8 +13,10 @@ from xic_extractor.peak_detection.hypotheses import (
 )
 from xic_extractor.peak_detection.models import (
     PeakCandidate,
+    PeakCandidateScore,
     PeakDetectionResult,
 )
+from xic_extractor.peak_scoring import ScoredCandidate, ScoringContext, score_candidate
 from xic_extractor.sample_groups import classify_sample_group
 
 PeakCandidateTableRow = dict[str, str]
@@ -199,6 +202,8 @@ def append_peak_candidate_rows(
     rt: object | None = None,
     intensity: object | None = None,
     audit_peak_result: PeakDetectionResult | None = None,
+    scoring_context_builder: Callable[[PeakCandidate], ScoringContext] | None = None,
+    istd_confidence_note: str | None = None,
 ) -> None:
     if not config.emit_peak_candidates or rows is None:
         return
@@ -208,6 +213,13 @@ def append_peak_candidate_rows(
             add_cwt_proposals_for_audit(peak_result, rt, intensity, config)
             if rt is not None and intensity is not None
             else peak_result
+        )
+    if scoring_context_builder is not None:
+        audited = _with_rescored_audit_candidates(
+            audited,
+            peak_result,
+            scoring_context_builder,
+            istd_confidence_note=istd_confidence_note,
         )
     rows.extend(
         build_peak_candidate_rows(
@@ -224,6 +236,74 @@ def append_peak_candidate_rows(
             rt=rt,
             intensity=intensity,
         )
+    )
+
+
+def _with_rescored_audit_candidates(
+    audit_peak_result: PeakDetectionResult,
+    original_peak_result: PeakDetectionResult,
+    scoring_context_builder: Callable[[PeakCandidate], ScoringContext],
+    *,
+    istd_confidence_note: str | None,
+) -> PeakDetectionResult:
+    original_scores = {
+        _candidate_score_key(score.candidate): score
+        for score in original_peak_result.candidate_scores
+    }
+    candidate_scores: list[PeakCandidateScore] = []
+    for candidate in audit_peak_result.candidates:
+        original_score = original_scores.get(_candidate_score_key(candidate))
+        if original_score is not None and not _needs_audit_rescore(candidate):
+            candidate_scores.append(replace(original_score, candidate=candidate))
+            continue
+        context = scoring_context_builder(candidate)
+        candidate_scores.append(
+            _candidate_score_summary(
+                score_candidate(
+                    candidate,
+                    context,
+                    prior_rt=context.rt_prior,
+                    istd_confidence_note=istd_confidence_note,
+                )
+            )
+        )
+    return replace(
+        audit_peak_result,
+        candidate_scores=tuple(candidate_scores),
+    )
+
+
+def _candidate_score_key(candidate: PeakCandidate) -> tuple[float, float, float]:
+    return (
+        candidate.selection_apex_rt,
+        candidate.peak.peak_start,
+        candidate.peak.peak_end,
+    )
+
+
+def _needs_audit_rescore(candidate: PeakCandidate) -> bool:
+    sources = {str(source) for source in candidate.proposal_sources}
+    return "centwave_cwt" in sources and bool(sources.difference({"centwave_cwt"}))
+
+
+def _candidate_score_summary(scored_candidate: ScoredCandidate) -> PeakCandidateScore:
+    evidence_score = scored_candidate.evidence_score
+    return PeakCandidateScore(
+        candidate=scored_candidate.candidate,
+        confidence=scored_candidate.confidence.value,
+        reason=scored_candidate.reason,
+        raw_score=evidence_score.raw_score if evidence_score is not None else None,
+        support_labels=(
+            evidence_score.support_labels if evidence_score is not None else ()
+        ),
+        concern_labels=(
+            evidence_score.concern_labels if evidence_score is not None else ()
+        ),
+        cap_labels=evidence_score.cap_labels if evidence_score is not None else (),
+        prior_rt=scored_candidate.prior_rt,
+        quality_penalty=scored_candidate.quality_penalty,
+        selection_quality_penalty=scored_candidate.selection_quality_penalty,
+        severities=scored_candidate.severities,
     )
 
 

@@ -19,6 +19,7 @@ SUMMARY_COLUMNS = (
     "target_rt_max",
     "targeted_positive_count",
     "clean_targeted_positive_count",
+    "targeted_review_positive_count",
     "targeted_review_count",
     "targeted_negative_count",
     "coverage_denominator_count",

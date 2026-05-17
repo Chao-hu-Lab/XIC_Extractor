@@ -61,6 +61,77 @@ def test_boundary_enumerator_can_emit_distinct_audit_intervals() -> None:
     assert by_source["baseline_return"].right_index == 7
 
 
+def test_derivative_zero_crossing_boundary_stops_at_neighboring_valleys() -> None:
+    rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6], dtype=float)
+    intensity = np.asarray([8.0, 3.0, 7.0, 10.0, 6.0, 2.0, 5.0], dtype=float)
+    candidate = _candidate(rt=0.3, left=0.0, right=0.6)
+
+    boundaries = enumerate_boundary_hypotheses(
+        rt,
+        intensity,
+        candidate,
+        sources=("derivative_zero_crossing",),
+    )
+
+    assert len(boundaries) == 1
+    assert boundaries[0].sources == ("derivative_zero_crossing",)
+    assert boundaries[0].left_index == 1
+    assert boundaries[0].right_index == 6
+
+
+def test_cwt_width_boundary_uses_candidate_cwt_scale_when_available() -> None:
+    rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6], dtype=float)
+    intensity = np.asarray([1.0, 2.0, 7.0, 10.0, 7.0, 2.0, 1.0], dtype=float)
+    candidate = _candidate(rt=0.3, left=0.0, right=0.6, cwt_best_scale=3.0)
+
+    boundaries = enumerate_boundary_hypotheses(
+        rt,
+        intensity,
+        candidate,
+        sources=("cwt_width",),
+    )
+
+    assert len(boundaries) == 1
+    assert boundaries[0].sources == ("cwt_width",)
+    assert boundaries[0].left_index == 2
+    assert boundaries[0].right_index == 5
+
+
+def test_cwt_width_boundary_is_absent_without_cwt_scale() -> None:
+    rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4], dtype=float)
+    intensity = np.asarray([1.0, 2.0, 10.0, 2.0, 1.0], dtype=float)
+    candidate = _candidate(rt=0.2, left=0.0, right=0.4)
+
+    assert (
+        enumerate_boundary_hypotheses(
+            rt,
+            intensity,
+            candidate,
+            sources=("cwt_width",),
+        )
+        == ()
+    )
+
+
+@pytest.mark.parametrize("bad_scale", [0.0, -1.0, float("nan"), float("inf")])
+def test_cwt_width_boundary_is_absent_with_invalid_cwt_scale(
+    bad_scale: float,
+) -> None:
+    rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4], dtype=float)
+    intensity = np.asarray([1.0, 2.0, 10.0, 2.0, 1.0], dtype=float)
+    candidate = _candidate(rt=0.2, left=0.0, right=0.4, cwt_best_scale=bad_scale)
+
+    assert (
+        enumerate_boundary_hypotheses(
+            rt,
+            intensity,
+            candidate,
+            sources=("cwt_width",),
+        )
+        == ()
+    )
+
+
 def test_duplicate_boundary_intervals_merge_sources() -> None:
     rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4], dtype=float)
     intensity = np.asarray([1.0, 2.0, 10.0, 2.0, 1.0], dtype=float)
@@ -115,7 +186,13 @@ def test_boundary_enumerator_rejects_mismatched_arrays() -> None:
         )
 
 
-def _candidate(rt: float, *, left: float, right: float) -> PeakCandidate:
+def _candidate(
+    rt: float,
+    *,
+    left: float,
+    right: float,
+    cwt_best_scale: float | None = None,
+) -> PeakCandidate:
     peak = PeakResult(
         rt=rt,
         intensity=10.0,
@@ -135,4 +212,5 @@ def _candidate(rt: float, *, left: float, right: float) -> PeakCandidate:
         prominence=8.0,
         proposal_sources=("legacy_savgol",),
         source_apex_rank=1,
+        cwt_best_scale=cwt_best_scale,
     )
