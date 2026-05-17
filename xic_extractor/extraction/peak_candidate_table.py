@@ -65,6 +65,18 @@ PEAK_CANDIDATE_HEADERS = (
     "selection_rank",
     "selection_reference_rt_min",
     "rejection_reason",
+    "nl_status",
+    "best_loss_ppm",
+    "best_ms2_scan_rt_min",
+    "apex_ms2_delta_min",
+    "best_product_base_ratio",
+    "trigger_scan_count",
+    "strict_nl_scan_count",
+    "ms2_alignment_source",
+    "diagnostic_product_absence_reason",
+    "nearest_product_loss_ppm",
+    "nearest_product_base_ratio",
+    "nearest_product_mz",
 )
 
 def candidate_audit_id(
@@ -188,6 +200,36 @@ def _row_from_hypothesis(
             hypothesis.audit.selection_reference_rt_min
         ),
         "rejection_reason": hypothesis.audit.rejection_reason,
+        "nl_status": hypothesis.evidence.nl_status,
+        "best_loss_ppm": _format_optional_float(hypothesis.evidence.best_loss_ppm),
+        "best_ms2_scan_rt_min": _format_optional_float(
+            hypothesis.evidence.best_ms2_scan_rt_min
+        ),
+        "apex_ms2_delta_min": _format_optional_float(
+            hypothesis.evidence.apex_ms2_delta_min
+        ),
+        "best_product_base_ratio": _format_optional_float(
+            hypothesis.evidence.best_product_base_ratio
+        ),
+        "trigger_scan_count": _format_optional_int(
+            hypothesis.evidence.trigger_scan_count
+        ),
+        "strict_nl_scan_count": _format_optional_int(
+            hypothesis.evidence.strict_nl_scan_count
+        ),
+        "ms2_alignment_source": hypothesis.evidence.ms2_alignment_source,
+        "diagnostic_product_absence_reason": (
+            hypothesis.evidence.diagnostic_product_absence_reason
+        ),
+        "nearest_product_loss_ppm": _format_optional_float(
+            hypothesis.evidence.nearest_product_loss_ppm
+        ),
+        "nearest_product_base_ratio": _format_optional_float(
+            hypothesis.evidence.nearest_product_base_ratio
+        ),
+        "nearest_product_mz": _format_optional_float(
+            hypothesis.evidence.nearest_product_mz
+        ),
     }
 
 

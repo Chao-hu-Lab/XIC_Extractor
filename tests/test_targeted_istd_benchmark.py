@@ -400,7 +400,16 @@ def test_strict_reliability_tracks_review_positive_rows_separately(
             _reliability_row("S1", "8-oxodG", "benchmark_eligible"),
             _reliability_row("S2", "8-oxodG", "benchmark_eligible"),
             _reliability_row("S3", "8-oxodG", "benchmark_eligible"),
-            _reliability_row("S4", "8-oxodG", "targeted_review_positive"),
+            _reliability_row(
+                "S4",
+                "8-oxodG",
+                "targeted_review_positive",
+                risk_reasons=[
+                    "low_confidence",
+                    "plausible_nl_dropout",
+                    "product_outside_diagnostic_window",
+                ],
+            ),
             _reliability_row("S5", "8-oxodG", "targeted_review"),
         ],
     )
@@ -423,6 +432,7 @@ def test_strict_reliability_tracks_review_positive_rows_separately(
     assert summary.failure_modes == ()
     assert summary.targeted_reliability_warning_modes == (
         "TARGETED_REVIEW_POSITIVE_EVIDENCE",
+        "TARGETED_REVIEW_POSITIVE_REASON:product_outside_diagnostic_window",
         "TARGETED_REVIEW_EVIDENCE",
     )
 
@@ -737,12 +747,17 @@ def _reliability_row(
     sample: str,
     target: str,
     state: str,
+    *,
+    risk_reasons: list[str] | None = None,
 ) -> dict[str, object]:
-    return {
+    row: dict[str, object] = {
         "sample_name": sample,
         "target_label": target,
         "reliability_state": state,
     }
+    if risk_reasons is not None:
+        row["risk_reasons"] = risk_reasons
+    return row
 
 
 def _write_reliability_json(path: Path, rows: list[dict[str, object]]) -> None:

@@ -178,6 +178,26 @@ def test_consistency_classifier_allows_cwt_as_shape_context_but_not_chemistry() 
     )
 
 
+def test_consistency_classifier_treats_soft_trace_flags_as_context_warning_with_cwt(
+) -> None:
+    labels = classify_evidence_consistency(
+        EvidenceSignalSet(
+            support_labels=("local_sn_strong", "cwt_same_apex_support"),
+            concern_labels=("nl_fail", "low_trace_continuity"),
+            proposal_sources=("centwave_cwt", "local_minimum"),
+            quality_flags=("low_trace_continuity",),
+            ms2_present=True,
+            nl_match=False,
+            raw_score=35,
+        )
+    )
+
+    assert labels == (
+        "ms1_coherent",
+        "plausible_nl_dropout",
+    )
+
+
 def test_consistency_classifier_keeps_no_ms2_distinct_from_nl_dropout() -> None:
     labels = classify_evidence_consistency(
         EvidenceSignalSet(

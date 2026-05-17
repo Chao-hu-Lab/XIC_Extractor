@@ -62,6 +62,7 @@ _ROW_COLUMNS = (
     "selected_rt_apex_min",
     "selected_raw_score",
     "selected_confidence",
+    "targeted_area_to_median_ratio",
     "candidate_support_labels",
     "candidate_concern_labels",
     "candidate_consistency_labels",
@@ -85,6 +86,7 @@ class ReliabilityRow:
     target_label: str
     reliability_state: str
     risk_reasons: tuple[str, ...]
+    area_to_target_median_ratio: float | None = None
 
 
 @dataclass(frozen=True)
@@ -117,6 +119,7 @@ class ConsistencyRow:
     selected_rt_apex_min: float | None
     selected_raw_score: float | None
     selected_confidence: str
+    targeted_area_to_median_ratio: float | None
     candidate_support_labels: str
     candidate_concern_labels: str
     candidate_consistency_labels: str
@@ -206,6 +209,9 @@ def _read_reliability_rows(path: Path) -> tuple[ReliabilityRow, ...]:
             target_label=row["target_label"],
             reliability_state=row["reliability_state"],
             risk_reasons=tuple(_split_labels(row["risk_reasons"])),
+            area_to_target_median_ratio=_optional_float(
+                row.get("area_to_target_median_ratio", "")
+            ),
         )
         for row in rows
     )
@@ -369,6 +375,11 @@ def _consistency_row(
         selected_rt_apex_min=selected.rt_apex_min if selected is not None else None,
         selected_raw_score=selected.raw_score if selected is not None else None,
         selected_confidence=selected.confidence if selected is not None else "",
+        targeted_area_to_median_ratio=(
+            reliability.area_to_target_median_ratio
+            if reliability is not None
+            else None
+        ),
         candidate_support_labels=(
             ";".join(selected.support_labels) if selected is not None else ""
         ),
@@ -453,6 +464,8 @@ def _classify_consistency(
         and "plausible_nl_dropout" in labels
         and "hard_nl_conflict" not in labels
     ):
+        if _has_review_positive_blocker(reliability.risk_reasons):
+            return ("consistent", "", "")
         return (
             "mismatch",
             "targeted_review_candidate_suggests_dropout",
@@ -465,6 +478,16 @@ def _classify_consistency(
             "Targeted negative row has a coherent selected candidate peak.",
         )
     return ("consistent", "", "")
+
+
+def _has_review_positive_blocker(risk_reasons: Sequence[str]) -> bool:
+    blockers = {
+        "hard_nl_conflict",
+        "no_ms2",
+        "quality_flags",
+        "weak_area_rank",
+    }
+    return any(reason in blockers for reason in risk_reasons)
 
 
 def _summary(rows: tuple[ConsistencyRow, ...]) -> ConsistencySummary:

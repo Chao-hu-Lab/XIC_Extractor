@@ -78,6 +78,50 @@ def test_build_diagnostic_records_reports_selected_candidate_observed_loss() -> 
     assert "expected product m/z" not in records[0].reason
 
 
+def test_build_diagnostic_records_reports_product_probe_subcause() -> None:
+    result = ExtractionResult(
+        peak_result=PeakDetectionResult(
+            status="OK",
+            peak=PeakResult(
+                rt=9.0,
+                intensity=500.0,
+                intensity_smoothed=450.0,
+                area=100.0,
+                peak_start=8.9,
+                peak_end=9.2,
+            ),
+            n_points=12,
+            max_smoothed=450.0,
+            n_prominent_peaks=1,
+        ),
+        nl=NLResult("OK", 1.0, 9.1, 2, 0, 2),
+        candidate_ms2_evidence=CandidateMS2Evidence(
+            ms2_present=True,
+            nl_match=False,
+            nl_status="NL_FAIL",
+            trigger_scan_count=1,
+            strict_nl_scan_count=0,
+            best_loss_ppm=None,
+            best_scan_rt=9.0,
+            best_product_base_ratio=None,
+            alignment_source="region",
+            diagnostic_product_absence_reason="product_outside_diagnostic_window",
+            nearest_product_loss_ppm=82.3,
+            nearest_product_base_ratio=0.004,
+            nearest_product_mz=179.1234,
+        ),
+        target_label="WithNL",
+    )
+
+    records = build_diagnostic_records("SampleA", _target("WithNL"), result, _config())
+
+    assert [record.issue for record in records] == ["NL_FAIL"]
+    assert "subcause=product_outside_diagnostic_window" in records[0].reason
+    assert "nearest product m/z 179.1234" in records[0].reason
+    assert "nearest observed-loss error 82.3 ppm" in records[0].reason
+    assert "nearest product/base ratio 0.004" in records[0].reason
+
+
 def test_build_diagnostic_records_reports_istd_confidence() -> None:
     result = ExtractionResult(
         peak_result=PeakDetectionResult(

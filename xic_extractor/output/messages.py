@@ -205,12 +205,32 @@ def _candidate_ms2_reason(target: Target, evidence: CandidateMS2Evidence) -> str
             f"{evidence.best_loss_ppm:.1f} ppm (limit {limit:g} ppm){rt_info}; "
             f"alignment={evidence.alignment_source}"
         )
+    probe_info = _candidate_product_probe_info(evidence)
     return (
         f"selected candidate has {evidence.trigger_scan_count} "
         f"candidate-aligned MS2 trigger scans; strict observed neutral loss "
         f"{nl_da:g} Da not detected in any aligned scan; "
-        f"alignment={evidence.alignment_source}"
+        f"alignment={evidence.alignment_source}{probe_info}"
     )
+
+
+def _candidate_product_probe_info(evidence: CandidateMS2Evidence) -> str:
+    parts: list[str] = []
+    if evidence.diagnostic_product_absence_reason:
+        parts.append(f"subcause={evidence.diagnostic_product_absence_reason}")
+    if evidence.nearest_product_mz is not None:
+        parts.append(f"nearest product m/z {evidence.nearest_product_mz:.4f}")
+    if evidence.nearest_product_loss_ppm is not None:
+        parts.append(
+            f"nearest observed-loss error {evidence.nearest_product_loss_ppm:.1f} ppm"
+        )
+    if evidence.nearest_product_base_ratio is not None:
+        parts.append(
+            f"nearest product/base ratio {evidence.nearest_product_base_ratio:.3g}"
+        )
+    if not parts:
+        return ""
+    return "; " + "; ".join(parts)
 
 
 def _multi_peak_reason(

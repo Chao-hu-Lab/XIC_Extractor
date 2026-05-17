@@ -65,6 +65,18 @@ class EvidenceVector:
     ms2_present: bool | None = None
     nl_match: bool | None = None
     ms2_trace_strength: str = ""
+    nl_status: str = ""
+    best_loss_ppm: float | None = None
+    best_ms2_scan_rt_min: float | None = None
+    apex_ms2_delta_min: float | None = None
+    best_product_base_ratio: float | None = None
+    trigger_scan_count: int | None = None
+    strict_nl_scan_count: int | None = None
+    ms2_alignment_source: str = ""
+    diagnostic_product_absence_reason: str = ""
+    nearest_product_loss_ppm: float | None = None
+    nearest_product_base_ratio: float | None = None
+    nearest_product_mz: float | None = None
     rt_prior_min: float | None = None
     cwt_best_scale: float | None = None
     cwt_ridge_persistence: float | None = None
@@ -262,6 +274,7 @@ def _evidence_from_candidate(
         candidate_ms2_evidence=evidence,
         target_label=target_label,
     )
+    best_ms2_scan_rt_min = evidence.best_scan_rt if evidence is not None else None
     return EvidenceVector(
         confidence=score.confidence if score is not None else "",
         raw_score=score.raw_score if score is not None else None,
@@ -278,6 +291,36 @@ def _evidence_from_candidate(
         ms2_present=common.ms2_present,
         nl_match=common.nl_match,
         ms2_trace_strength=common.ms2_trace_strength,
+        nl_status=evidence.nl_status if evidence is not None else "",
+        best_loss_ppm=evidence.best_loss_ppm if evidence is not None else None,
+        best_ms2_scan_rt_min=best_ms2_scan_rt_min,
+        apex_ms2_delta_min=(
+            abs(candidate.selection_apex_rt - best_ms2_scan_rt_min)
+            if best_ms2_scan_rt_min is not None
+            else None
+        ),
+        best_product_base_ratio=(
+            evidence.best_product_base_ratio if evidence is not None else None
+        ),
+        trigger_scan_count=(
+            evidence.trigger_scan_count if evidence is not None else None
+        ),
+        strict_nl_scan_count=(
+            evidence.strict_nl_scan_count if evidence is not None else None
+        ),
+        ms2_alignment_source=evidence.alignment_source if evidence is not None else "",
+        diagnostic_product_absence_reason=(
+            evidence.diagnostic_product_absence_reason if evidence is not None else ""
+        ),
+        nearest_product_loss_ppm=(
+            evidence.nearest_product_loss_ppm if evidence is not None else None
+        ),
+        nearest_product_base_ratio=(
+            evidence.nearest_product_base_ratio if evidence is not None else None
+        ),
+        nearest_product_mz=(
+            evidence.nearest_product_mz if evidence is not None else None
+        ),
         rt_prior_min=score.prior_rt if score is not None else None,
         cwt_best_scale=candidate.cwt_best_scale,
         cwt_ridge_persistence=candidate.cwt_ridge_persistence,

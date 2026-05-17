@@ -6,6 +6,7 @@ import numpy as np
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.peak_candidate_table import (
+    PEAK_CANDIDATE_HEADERS,
     append_peak_candidate_rows,
     build_peak_candidate_rows,
     candidate_audit_id,
@@ -19,6 +20,76 @@ from xic_extractor.signal_processing import (
     PeakDetectionResult,
     PeakResult,
 )
+
+_PRE_NL_DIAGNOSTIC_HEADERS = (
+    "sample_name",
+    "group",
+    "target_label",
+    "role",
+    "istd_pair",
+    "analysis_mode",
+    "resolver_mode",
+    "candidate_id",
+    "proposal_sources",
+    "proposal_count",
+    "source_apex_rank",
+    "merge_note",
+    "rt_left_min",
+    "rt_apex_min",
+    "rt_right_min",
+    "raw_apex_rt_min",
+    "rt_width_min",
+    "selection_apex_intensity",
+    "raw_apex_intensity",
+    "prominence",
+    "area_raw_counts_seconds",
+    "area_baseline_corrected",
+    "area_uncertainty",
+    "quality_flags",
+    "region_scan_count",
+    "region_duration_min",
+    "region_edge_ratio",
+    "region_trace_continuity",
+    "ms2_present",
+    "nl_match",
+    "ms2_trace_strength",
+    "rt_prior_min",
+    "rt_prior_sigma",
+    "confidence",
+    "raw_score",
+    "support_labels",
+    "concern_labels",
+    "cap_labels",
+    "reason",
+    "selected",
+    "selection_rank",
+    "selection_reference_rt_min",
+    "rejection_reason",
+)
+
+_NL_DIAGNOSTIC_HEADERS = (
+    "nl_status",
+    "best_loss_ppm",
+    "best_ms2_scan_rt_min",
+    "apex_ms2_delta_min",
+    "best_product_base_ratio",
+    "trigger_scan_count",
+    "strict_nl_scan_count",
+    "ms2_alignment_source",
+    "diagnostic_product_absence_reason",
+    "nearest_product_loss_ppm",
+    "nearest_product_base_ratio",
+    "nearest_product_mz",
+)
+
+
+def test_peak_candidate_headers_append_nl_diagnostics_without_reordering() -> None:
+    assert PEAK_CANDIDATE_HEADERS[: len(_PRE_NL_DIAGNOSTIC_HEADERS)] == (
+        _PRE_NL_DIAGNOSTIC_HEADERS
+    )
+    assert PEAK_CANDIDATE_HEADERS[len(_PRE_NL_DIAGNOSTIC_HEADERS) :] == (
+        _NL_DIAGNOSTIC_HEADERS
+    )
 
 
 def test_candidate_id_is_deterministic() -> None:
@@ -84,12 +155,51 @@ def test_build_rows_marks_selected_and_rejected_candidates() -> None:
     assert rows[0]["proposal_sources"] == "legacy_savgol"
     assert rows[0]["ms2_present"] == "TRUE"
     assert rows[0]["nl_match"] == "TRUE"
+    assert rows[0]["nl_status"] == "OK"
+    assert rows[0]["best_loss_ppm"] == "1.00000"
+    assert rows[0]["best_ms2_scan_rt_min"] == "8.50000"
+    assert rows[0]["apex_ms2_delta_min"] == "0.00000"
+    assert rows[0]["best_product_base_ratio"] == "0.30000"
+    assert rows[0]["trigger_scan_count"] == "1"
+    assert rows[0]["strict_nl_scan_count"] == "1"
+    assert rows[0]["ms2_alignment_source"] == "region"
+    assert rows[0]["diagnostic_product_absence_reason"] == ""
+    assert rows[0]["nearest_product_loss_ppm"] == "1.00000"
+    assert rows[0]["nearest_product_base_ratio"] == "0.30000"
     assert rows[0]["raw_score"] == "92"
     assert rows[0]["support_labels"] == "strict_nl_ok;shape_clean"
     assert rows[1]["proposal_sources"] == "local_minimum"
     assert rows[1]["rejection_reason"] == "lower_confidence"
     assert rows[1]["nl_match"] == "FALSE"
+    assert rows[1]["nl_status"] == "NL_FAIL"
+    assert rows[1]["strict_nl_scan_count"] == "0"
+    assert rows[1]["diagnostic_product_absence_reason"] == "no_product_peak"
     assert rows[1]["concern_labels"] == "nl_fail"
+
+
+def test_build_rows_formats_missing_candidate_ms2_diagnostics_as_blank() -> None:
+    selected = _candidate(8.5, proposal_sources=("legacy_savgol",))
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=20,
+        max_smoothed=3000.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+    )
+
+    row = build_peak_candidate_rows(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="",
+        resolver_mode="legacy_savgol",
+        peak_result=result,
+    )[0]
+
+    assert {header: row[header] for header in _NL_DIAGNOSTIC_HEADERS} == {
+        header: "" for header in _NL_DIAGNOSTIC_HEADERS
+    }
 
 
 def test_build_rows_can_emit_baseline_corrected_audit_area() -> None:
@@ -372,4 +482,8 @@ def _ms2_evidence(*, nl_match: bool) -> CandidateMS2Evidence:
         best_scan_rt=8.5,
         best_product_base_ratio=0.3,
         alignment_source="region",
+        diagnostic_product_absence_reason="" if nl_match else "no_product_peak",
+        nearest_product_loss_ppm=1.0 if nl_match else None,
+        nearest_product_base_ratio=0.3 if nl_match else None,
+        nearest_product_mz=151.0 if nl_match else None,
     )
