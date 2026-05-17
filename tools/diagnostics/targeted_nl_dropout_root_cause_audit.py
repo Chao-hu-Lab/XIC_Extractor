@@ -102,13 +102,15 @@ _HARD_CONFLICT_LABELS = frozenset(
         "hard_quality_flag",
         "hard_nl_conflict",
         "low_scan_support",
-        "low_trace_continuity",
-        "poor_edge_recovery",
         "rt_centrality_poor",
         "shape_poor",
         "edge_clipped",
     }
 )
+_SOFT_TRACE_QUALITY_FLAGS = frozenset(
+    {"low_trace_continuity", "poor_edge_recovery"}
+)
+_BLOCKING_TRACE_QUALITY_FLAGS = frozenset({"low_scan_support"})
 
 
 @dataclass(frozen=True)
@@ -496,11 +498,15 @@ def _classify_root_cause(
         )
     selected = selected_rows[0]
     hard_labels = set(selected.concern_labels) & _HARD_CONFLICT_LABELS
-    if hard_labels or selected.quality_flags:
+    blocking_quality_flags = _blocking_quality_flags(selected)
+    if hard_labels or blocking_quality_flags:
         reason = (
             f"Hard conflict labels: {','.join(sorted(hard_labels))}"
             if hard_labels
-            else "Candidate has quality flags."
+            else (
+                "Candidate has blocking quality flags: "
+                f"{','.join(blocking_quality_flags)}."
+            )
         )
         return ("hard_candidate_conflict", reason)
     if selected.ms2_present is not True or selected.trigger_scan_count == 0:
@@ -567,6 +573,36 @@ def _classify_root_cause(
     return (
         "coherent_ms1_nl_dropout",
         "Selected candidate has coherent MS1 evidence and near-threshold NL dropout.",
+    )
+
+
+def _blocking_quality_flags(selected: CandidateRow) -> tuple[str, ...]:
+    flags = set(selected.quality_flags)
+    if not flags:
+        return ()
+    blocking = flags & _BLOCKING_TRACE_QUALITY_FLAGS
+    hard = flags - _SOFT_TRACE_QUALITY_FLAGS
+    if hard:
+        blocking |= hard
+    if blocking:
+        return tuple(sorted(blocking))
+    if _has_soft_trace_context(selected):
+        return ()
+    return tuple(sorted(flags))
+
+
+def _has_soft_trace_context(selected: CandidateRow) -> bool:
+    support = set(selected.support_labels)
+    sources = set(selected.proposal_sources)
+    concerns = set(selected.concern_labels)
+    has_shape_context = bool(
+        {"shape_clean", "cwt_same_apex_support"} & support
+    ) or "centwave_cwt" in sources
+    return (
+        "local_sn_strong" in support
+        and has_shape_context
+        and "shape_poor" not in concerns
+        and "local_sn_poor" not in concerns
     )
 
 

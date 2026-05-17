@@ -194,6 +194,71 @@ def test_hard_candidate_conflict_precedes_ppm_off_apex_and_weak_product(
     assert result.rows[0].root_cause_bucket == "hard_candidate_conflict"
 
 
+def test_soft_trace_flags_with_cwt_context_do_not_mask_nl_dropout(
+    tmp_path: Path,
+) -> None:
+    reliability_rows = tmp_path / "targeted_peak_reliability_rows.tsv"
+    peak_candidates = tmp_path / "peak_candidates.tsv"
+    _write_reliability_rows(
+        reliability_rows,
+        [_reliability("S1", "soft_trace_dropout", "targeted_review_positive")],
+    )
+    _write_peak_candidates(
+        peak_candidates,
+        [
+            _candidate(
+                "S1",
+                "soft_trace_dropout",
+                support="local_sn_strong;cwt_same_apex_support",
+                quality_flags="low_trace_continuity;poor_edge_recovery",
+                best_loss_ppm="",
+                product_absence_reason="product_outside_diagnostic_window",
+                nearest_product_loss_ppm="25",
+            )
+        ],
+    )
+
+    _outputs, result = audit.run_targeted_nl_dropout_root_cause_audit(
+        targeted_reliability_rows_tsv=reliability_rows,
+        peak_candidates_tsv=peak_candidates,
+        output_dir=tmp_path / "dropout_audit",
+    )
+
+    assert result.rows[0].root_cause_bucket == "no_diagnostic_product"
+
+
+def test_low_scan_support_stays_hard_candidate_conflict(
+    tmp_path: Path,
+) -> None:
+    reliability_rows = tmp_path / "targeted_peak_reliability_rows.tsv"
+    peak_candidates = tmp_path / "peak_candidates.tsv"
+    _write_reliability_rows(
+        reliability_rows,
+        [_reliability("S1", "low_scan", "targeted_review_positive")],
+    )
+    _write_peak_candidates(
+        peak_candidates,
+        [
+            _candidate(
+                "S1",
+                "low_scan",
+                support="local_sn_strong;cwt_same_apex_support",
+                quality_flags="low_scan_support",
+                best_loss_ppm="",
+                product_absence_reason="product_outside_diagnostic_window",
+            )
+        ],
+    )
+
+    _outputs, result = audit.run_targeted_nl_dropout_root_cause_audit(
+        targeted_reliability_rows_tsv=reliability_rows,
+        peak_candidates_tsv=peak_candidates,
+        output_dir=tmp_path / "dropout_audit",
+    )
+
+    assert result.rows[0].root_cause_bucket == "hard_candidate_conflict"
+
+
 def test_root_cause_cli_reports_missing_required_columns(
     tmp_path: Path,
     capsys,
