@@ -111,6 +111,17 @@ def build_scoring_context_factory(
             ms2_trace_strength = (
                 candidate_ms2.trace.strength if candidate_ms2 is not None else None
             )
+            ms2_alignment_source = (
+                candidate_ms2.alignment_source if candidate_ms2 is not None else None
+            )
+            trigger_scan_count = (
+                candidate_ms2.trigger_scan_count if candidate_ms2 is not None else None
+            )
+            strict_nl_scan_count = (
+                candidate_ms2.strict_nl_scan_count
+                if candidate_ms2 is not None
+                else None
+            )
             half_width_ratio, fwhm = compute_shape_metrics(
                 intensity_values,
                 candidate.selection_apex_index,
@@ -139,6 +150,9 @@ def build_scoring_context_factory(
                 neutral_loss_required=target.neutral_loss_da is not None,
                 count_no_ms2_as_detected=config.count_no_ms2_as_detected,
                 ms2_trace_strength=ms2_trace_strength,
+                ms2_alignment_source=ms2_alignment_source,
+                trigger_scan_count=trigger_scan_count,
+                strict_nl_scan_count=strict_nl_scan_count,
                 baseline_array=baseline_array,
                 residual_mad=residual_mad,
                 prefer_rt_prior_tiebreak=prefer_rt_prior_tiebreak,

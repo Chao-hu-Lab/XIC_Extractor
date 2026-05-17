@@ -177,6 +177,41 @@ def test_build_rows_marks_selected_and_rejected_candidates() -> None:
     assert rows[1]["concern_labels"] == "nl_fail"
 
 
+def test_build_rows_ranks_selected_candidate_first_after_selection_demotes_higher_score(
+) -> None:
+    selected = _candidate(8.7, area=50_000.0, proposal_sources=("local_minimum",))
+    rejected = _candidate(8.5, area=2_000.0, proposal_sources=("local_minimum",))
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=20,
+        max_smoothed=3000.0,
+        n_prominent_peaks=2,
+        candidates=(rejected, selected),
+        candidate_scores=(
+            _score(rejected, raw_score=110, confidence="MEDIUM"),
+            _score(selected, raw_score=37, confidence="VERY_LOW"),
+        ),
+        selection_reference_rt=8.5,
+    )
+
+    rows = build_peak_candidate_rows(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="ISTD",
+        resolver_mode="local_minimum",
+        peak_result=result,
+    )
+
+    rejected_row = next(row for row in rows if row["rt_apex_min"] == "8.50000")
+    selected_row = next(row for row in rows if row["rt_apex_min"] == "8.70000")
+    assert rejected_row["selected"] == "FALSE"
+    assert rejected_row["selection_rank"] == "2"
+    assert selected_row["selected"] == "TRUE"
+    assert selected_row["selection_rank"] == "1"
+
+
 def test_build_rows_formats_missing_candidate_ms2_diagnostics_as_blank() -> None:
     selected = _candidate(8.5, proposal_sources=("legacy_savgol",))
     result = PeakDetectionResult(
