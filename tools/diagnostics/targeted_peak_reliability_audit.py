@@ -162,6 +162,7 @@ class _CandidateEvidence:
     ms2_present: bool | None
     nl_match: bool | None
     raw_score: float | None
+    diagnostic_product_absence_reason: str = ""
 
 
 class _WorksheetLike(Protocol):
@@ -397,6 +398,8 @@ def _classify_row(
         risk_reasons.append("quality_flags")
     if weak_area:
         risk_reasons.append("weak_area_rank")
+    if _is_nl_fail(row.nl) and candidate_evidence is not None:
+        risk_reasons.extend(_candidate_product_context_reasons(candidate_evidence))
 
     blocking_reasons = tuple(
         reason for reason in risk_reasons if reason != "score_breakdown_unavailable"
@@ -670,6 +673,14 @@ def _candidate_evidence_signal_set(
     )
 
 
+def _candidate_product_context_reasons(
+    evidence: _CandidateEvidence,
+) -> tuple[str, ...]:
+    if not evidence.diagnostic_product_absence_reason:
+        return ()
+    return (evidence.diagnostic_product_absence_reason,)
+
+
 def _evidence_signal_set(
     row: _TargetedInputRow,
     score: _ScoreBreakdown | None,
@@ -757,6 +768,10 @@ def _load_selected_candidate_evidence(
                 ms2_present=_bool_value(row["ms2_present"]),
                 nl_match=_bool_value(row["nl_match"]),
                 raw_score=_float_value(row["raw_score"]),
+                diagnostic_product_absence_reason=row.get(
+                    "diagnostic_product_absence_reason",
+                    "",
+                ).strip(),
             )
         )
     return {

@@ -69,6 +69,7 @@ class TargetedReliabilityPoint:
     sample_stem: str
     target_label: str
     reliability_state: str
+    risk_reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

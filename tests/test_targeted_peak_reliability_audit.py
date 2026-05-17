@@ -217,6 +217,68 @@ def test_selected_candidate_evidence_can_mark_nl_fail_as_review_positive(
     assert result.targeted_review_positive_count == 1
 
 
+def test_selected_candidate_product_probe_reason_stays_review_positive_context(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("8-oxo-Guo")],
+        result_rows=[
+            _result(
+                "TumorBC2275_DNA",
+                "8-oxo-Guo",
+                rt=13.9143,
+                area=250_000.0,
+                nl="NL_FAIL",
+                confidence="VERY_LOW",
+            ),
+        ],
+        score_rows=None,
+    )
+    candidate = _peak_candidate(
+        "TumorBC2275_DNA",
+        "8-oxo-Guo",
+        selected="TRUE",
+        raw_score="15",
+        support_labels="local_sn_strong;trace_clean",
+        concern_labels="nl_fail;shape_borderline",
+        proposal_sources="local_minimum;centwave_cwt",
+        ms2_present="TRUE",
+        nl_match="FALSE",
+    )
+    candidate.update(
+        {
+            "diagnostic_product_absence_reason": (
+                "product_outside_diagnostic_window"
+            ),
+            "apex_ms2_delta_min": "0.02",
+            "nearest_product_loss_ppm": "352.1",
+            "nearest_product_base_ratio": "0.35",
+            "nearest_product_mz": "171.0",
+        }
+    )
+    _write_peak_candidates(candidates, [candidate])
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        peak_candidates_tsv=candidates,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "targeted_review_positive"
+    assert row.risk_reasons == (
+        "low_confidence",
+        "plausible_nl_dropout",
+        "score_breakdown_unavailable",
+        "product_outside_diagnostic_window",
+    )
+    summary = result.summaries[0]
+    assert "product_outside_diagnostic_window" in summary.top_risk_reasons
+
+
 def test_selected_candidate_hard_conflict_does_not_mark_dropout_positive(
     tmp_path: Path,
 ) -> None:

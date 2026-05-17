@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import math
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
@@ -378,6 +378,7 @@ def _summarize_target(
         strict_targeted_reliability=strict_targeted_reliability,
         reliability_summary=reliability_summary,
     )
+    failure_modes: tuple[str, ...]
     if "TARGETED_RELIABILITY_INCONCLUSIVE" in warnings:
         failure_modes = ()
     else:
@@ -447,6 +448,7 @@ class _ReliabilitySummary:
     review_count: int
     negative_count: int
     missing_count: int
+    review_positive_detail_reasons: tuple[str, ...]
 
 
 def _benchmark_points(
@@ -478,6 +480,7 @@ def _reliability_summary(
             review_count=0,
             negative_count=0,
             missing_count=0,
+            review_positive_detail_reasons=(),
         )
 
     clean: list[TargetedPoint] = []
@@ -485,6 +488,7 @@ def _reliability_summary(
     review_count = 0
     negative_count = 0
     missing_count = 0
+    review_positive_detail_reasons: list[str] = []
     for point in points:
         record = reliability.get((point.sample_stem, point.target_label))
         if record is None:
@@ -500,6 +504,9 @@ def _reliability_summary(
         elif record.reliability_state == "targeted_review_positive":
             if point.positive:
                 review_positive_count += 1
+                review_positive_detail_reasons.extend(
+                    _review_positive_detail_reasons(record)
+                )
                 if not strict_targeted_reliability:
                     clean.append(point)
         elif record.reliability_state == "targeted_review":
@@ -515,6 +522,9 @@ def _reliability_summary(
         review_count=review_count,
         negative_count=negative_count,
         missing_count=missing_count,
+        review_positive_detail_reasons=tuple(
+            dict.fromkeys(review_positive_detail_reasons)
+        ),
     )
 
 
@@ -527,6 +537,10 @@ def _targeted_reliability_warnings(
     warnings: list[str] = []
     if reliability_summary.review_positive_count:
         warnings.append("TARGETED_REVIEW_POSITIVE_EVIDENCE")
+        warnings.extend(
+            f"TARGETED_REVIEW_POSITIVE_REASON:{reason}"
+            for reason in reliability_summary.review_positive_detail_reasons
+        )
     if reliability_summary.review_count:
         warnings.append("TARGETED_REVIEW_EVIDENCE")
     if reliability_summary.missing_count:
@@ -538,6 +552,19 @@ def _targeted_reliability_warnings(
     ):
         warnings.append("TARGETED_RELIABILITY_INCONCLUSIVE")
     return tuple(warnings)
+
+
+def _review_positive_detail_reasons(
+    record: TargetedReliabilityPoint,
+) -> tuple[str, ...]:
+    generic_reasons = {
+        "low_confidence",
+        "plausible_nl_dropout",
+        "score_breakdown_unavailable",
+    }
+    return tuple(
+        reason for reason in record.risk_reasons if reason not in generic_reasons
+    )
 
 
 def _failure_modes(
@@ -620,7 +647,7 @@ def _match_sort_key(match: CandidateMatch) -> tuple[object, ...]:
     )
 
 
-def _mean(values: Sequence[float | None] | object) -> float | None:
+def _mean(values: Iterable[float | None]) -> float | None:
     finite = [
         float(value)
         for value in values

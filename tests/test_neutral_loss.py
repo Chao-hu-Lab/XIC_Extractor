@@ -565,6 +565,57 @@ def test_trigger_only_candidate_has_no_product_trace_support() -> None:
     assert evidence.trace.strength == "none"
 
 
+def test_candidate_evidence_reports_product_below_intensity_floor() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.1,
+                masses=[
+                    _product_for_loss_ppm(PRECURSOR_MZ, 5.0),
+                    _product_for_loss_ppm(PRECURSOR_MZ, 900.0),
+                ],
+                intensities=[1.0, 100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.nl_status == "NL_FAIL"
+    assert evidence.best_loss_ppm is None
+    assert evidence.diagnostic_product_absence_reason == (
+        "product_below_intensity_floor"
+    )
+    assert evidence.nearest_product_loss_ppm == pytest.approx(5.0)
+    assert evidence.nearest_product_base_ratio == pytest.approx(0.01)
+
+
+def test_candidate_evidence_reports_nearest_product_outside_diagnostic_window() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.1,
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 900.0)],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.nl_status == "NL_FAIL"
+    assert evidence.best_loss_ppm is None
+    assert evidence.diagnostic_product_absence_reason == (
+        "product_outside_diagnostic_window"
+    )
+    assert evidence.nearest_product_loss_ppm == pytest.approx(900.0)
+    assert evidence.nearest_product_base_ratio == pytest.approx(1.0)
+
+
 def test_boundary_strict_nl_overrides_region_trigger_failure() -> None:
     candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
     raw = _FakeRaw(

@@ -57,6 +57,15 @@ class MS2ProductEvidence:
 
 
 @dataclass(frozen=True)
+class MS2ProductProbe:
+    evidence: MS2ProductEvidence | None
+    absence_reason: str
+    nearest_product_mz: float | None
+    nearest_product_loss_ppm: float | None
+    nearest_product_base_ratio: float | None
+
+
+@dataclass(frozen=True)
 class CandidateMS2Evidence:
     ms2_present: bool
     nl_match: bool
@@ -67,6 +76,10 @@ class CandidateMS2Evidence:
     best_scan_rt: float | None
     best_product_base_ratio: float | None
     alignment_source: CandidateMS2AlignmentSource
+    diagnostic_product_absence_reason: str = ""
+    nearest_product_loss_ppm: float | None = None
+    nearest_product_base_ratio: float | None = None
+    nearest_product_mz: float | None = None
     trace: MS2TraceEvidence = field(default_factory=empty_ms2_trace_evidence)
 
     def to_token(self) -> str:
@@ -225,6 +238,7 @@ def collect_candidate_ms2_evidence(
     strict_nl_scan_count = 0
     best_evidence: MS2ProductEvidence | None = None
     best_evidence_source: CandidateMS2AlignmentSource | None = None
+    best_probe: MS2ProductProbe | None = None
     product_trace_points: list[MS2TracePoint] = []
     region_trigger_seen = False
     fallback_trigger_seen = False
@@ -262,7 +276,7 @@ def collect_candidate_ms2_evidence(
                 not inside_region and near_apex
             )
 
-        evidence = _best_product_evidence(
+        probe = _best_product_probe(
             scan,
             target_precursor_mz=precursor_mz,
             neutral_loss_da=neutral_loss_da,
@@ -270,6 +284,9 @@ def collect_candidate_ms2_evidence(
             min_intensity_ratio=nl_min_intensity_ratio,
             diagnostic_ppm=diagnostic_ppm,
         )
+        if _is_better_product_probe(probe, best_probe):
+            best_probe = probe
+        evidence = probe.evidence
         if evidence is None:
             continue
         strict_nl_match = evidence.observed_loss_error_ppm <= nl_ppm_max
@@ -297,6 +314,11 @@ def collect_candidate_ms2_evidence(
 
     best_loss_ppm = (
         best_evidence.observed_loss_error_ppm if best_evidence is not None else None
+    )
+    absence_reason = (
+        "" if best_evidence is not None else best_probe.absence_reason
+        if best_probe is not None
+        else ""
     )
     nl_status = _classify_nl_result(
         matched_scan_count=trigger_scan_count,
@@ -326,6 +348,28 @@ def collect_candidate_ms2_evidence(
             best_evidence.product_base_ratio if best_evidence is not None else None
         ),
         alignment_source=alignment_source,
+        diagnostic_product_absence_reason=absence_reason,
+        nearest_product_loss_ppm=(
+            best_evidence.observed_loss_error_ppm
+            if best_evidence is not None
+            else best_probe.nearest_product_loss_ppm
+            if best_probe is not None
+            else None
+        ),
+        nearest_product_base_ratio=(
+            best_evidence.product_base_ratio
+            if best_evidence is not None
+            else best_probe.nearest_product_base_ratio
+            if best_probe is not None
+            else None
+        ),
+        nearest_product_mz=(
+            best_evidence.product_mz
+            if best_evidence is not None
+            else best_probe.nearest_product_mz
+            if best_probe is not None
+            else None
+        ),
         trace=summarize_ms2_trace(
             product_trace_points,
             candidate_apex_rt=apex_rt,
@@ -354,24 +398,87 @@ def _best_product_evidence(
     min_intensity_ratio: float,
     diagnostic_ppm: float,
 ) -> MS2ProductEvidence | None:
+    return _best_product_probe(
+        scan,
+        target_precursor_mz=target_precursor_mz,
+        neutral_loss_da=neutral_loss_da,
+        nl_ppm_max=nl_ppm_max,
+        min_intensity_ratio=min_intensity_ratio,
+        diagnostic_ppm=diagnostic_ppm,
+    ).evidence
+
+
+def _best_product_probe(
+    scan: Ms2Scan,
+    *,
+    target_precursor_mz: float,
+    neutral_loss_da: float,
+    nl_ppm_max: float,
+    min_intensity_ratio: float,
+    diagnostic_ppm: float,
+) -> MS2ProductProbe:
     expected_product = scan.precursor_mz - neutral_loss_da
     if expected_product <= 0.0 or target_precursor_mz <= 0.0 or scan.base_peak <= 0.0:
-        return None
+        return MS2ProductProbe(
+            evidence=None,
+            absence_reason="invalid_product_context",
+            nearest_product_mz=None,
+            nearest_product_loss_ppm=None,
+            nearest_product_base_ratio=None,
+        )
 
     masses = np.asarray(scan.masses, dtype=float)
     intensities = np.asarray(scan.intensities, dtype=float)
+    usable_count = min(len(masses), len(intensities))
+    if usable_count == 0:
+        return MS2ProductProbe(
+            evidence=None,
+            absence_reason="no_product_peak",
+            nearest_product_mz=None,
+            nearest_product_loss_ppm=None,
+            nearest_product_base_ratio=None,
+        )
+    masses = masses[:usable_count]
+    intensities = intensities[:usable_count]
     intensity_floor = scan.base_peak * min_intensity_ratio
 
     scan_product_ppm = (
         np.abs(masses - expected_product) / expected_product * 1_000_000.0
     )
+    nearest_index = int(np.argmin(scan_product_ppm))
+    nearest_product_mz = float(masses[nearest_index])
+    nearest_observed_loss_da = scan.precursor_mz - nearest_product_mz
+    nearest_product_loss_ppm = (
+        abs(nearest_observed_loss_da - neutral_loss_da)
+        / neutral_loss_da
+        * 1_000_000.0
+    )
+    nearest_product_base_ratio = float(intensities[nearest_index] / scan.base_peak)
     mask = (intensities >= intensity_floor) & (scan_product_ppm <= diagnostic_ppm)
     if not mask.any():
-        return None
+        if float(scan_product_ppm[nearest_index]) > diagnostic_ppm:
+            absence_reason = "product_outside_diagnostic_window"
+        elif intensities[nearest_index] < intensity_floor:
+            absence_reason = "product_below_intensity_floor"
+        else:
+            absence_reason = "no_product_peak"
+        return MS2ProductProbe(
+            evidence=None,
+            absence_reason=absence_reason,
+            nearest_product_mz=nearest_product_mz,
+            nearest_product_loss_ppm=nearest_product_loss_ppm,
+            nearest_product_base_ratio=nearest_product_base_ratio,
+        )
 
     target_product = target_precursor_mz - neutral_loss_da
     if target_product <= 0.0:
-        return None
+        return MS2ProductProbe(
+            evidence=None,
+            absence_reason="invalid_product_context",
+            nearest_product_mz=nearest_product_mz,
+            nearest_product_loss_ppm=nearest_product_loss_ppm,
+            nearest_product_base_ratio=nearest_product_base_ratio,
+        )
 
     candidates: list[MS2ProductEvidence] = []
     for index in np.flatnonzero(mask):
@@ -398,8 +505,52 @@ def _best_product_evidence(
         )
 
     if not candidates:
-        return None
-    return min(candidates, key=lambda evidence: evidence.observed_loss_error_ppm)
+        return MS2ProductProbe(
+            evidence=None,
+            absence_reason="loss_outside_diagnostic_window",
+            nearest_product_mz=nearest_product_mz,
+            nearest_product_loss_ppm=nearest_product_loss_ppm,
+            nearest_product_base_ratio=nearest_product_base_ratio,
+        )
+    evidence = min(candidates, key=lambda item: item.observed_loss_error_ppm)
+    return MS2ProductProbe(
+        evidence=evidence,
+        absence_reason="",
+        nearest_product_mz=evidence.product_mz,
+        nearest_product_loss_ppm=evidence.observed_loss_error_ppm,
+        nearest_product_base_ratio=evidence.product_base_ratio,
+    )
+
+
+def _is_better_product_probe(
+    candidate: MS2ProductProbe,
+    current: MS2ProductProbe | None,
+) -> bool:
+    if current is None:
+        return True
+    if candidate.evidence is not None and current.evidence is None:
+        return True
+    if candidate.evidence is None and current.evidence is not None:
+        return False
+    candidate_ppm = (
+        candidate.evidence.observed_loss_error_ppm
+        if candidate.evidence is not None
+        else candidate.nearest_product_loss_ppm
+    )
+    current_ppm = (
+        current.evidence.observed_loss_error_ppm
+        if current.evidence is not None
+        else current.nearest_product_loss_ppm
+    )
+    if candidate_ppm is None:
+        return False
+    if current_ppm is None:
+        return True
+    if not np.isclose(candidate_ppm, current_ppm, rtol=0.0, atol=1e-12):
+        return candidate_ppm < current_ppm
+    candidate_ratio = candidate.nearest_product_base_ratio or 0.0
+    current_ratio = current.nearest_product_base_ratio or 0.0
+    return candidate_ratio > current_ratio
 
 
 def _classify_nl_result(

@@ -149,6 +149,7 @@ def read_targeted_reliability_points(
             sample_stem=sample,
             target_label=target,
             reliability_state=state,
+            risk_reasons=_risk_reasons_value(row.get("risk_reasons")),
         )
     return points
 
@@ -327,6 +328,12 @@ def _text(value: object) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _risk_reasons_value(value: object) -> tuple[str, ...]:
+    if isinstance(value, list):
+        return tuple(_text(item) for item in value if _text(item))
+    return tuple(part for part in _text(value).split(";") if part)
 
 
 
