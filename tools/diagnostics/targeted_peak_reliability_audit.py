@@ -8,11 +8,11 @@ import json
 import math
 import sys
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from statistics import median
-from typing import Literal
+from typing import Any, Literal, Protocol, cast
 
 from openpyxl import load_workbook
 
@@ -54,6 +54,19 @@ SUMMARY_COLUMNS = (
     "targeted_negative_count",
     "top_risk_reasons",
     "known_exception",
+)
+
+_PEAK_CANDIDATE_COLUMNS = (
+    "sample_name",
+    "target_label",
+    "proposal_sources",
+    "selected",
+    "raw_score",
+    "support_labels",
+    "concern_labels",
+    "quality_flags",
+    "ms2_present",
+    "nl_match",
 )
 
 
@@ -140,19 +153,43 @@ class _ScoreBreakdown:
     quality_flags: str
 
 
+@dataclass(frozen=True)
+class _CandidateEvidence:
+    support_labels: tuple[str, ...]
+    concern_labels: tuple[str, ...]
+    proposal_sources: tuple[str, ...]
+    quality_flags: tuple[str, ...]
+    ms2_present: bool | None
+    nl_match: bool | None
+    raw_score: float | None
+
+
+class _WorksheetLike(Protocol):
+    def iter_rows(
+        self,
+        *,
+        values_only: bool = False,
+    ) -> Iterator[tuple[object, ...]]: ...
+
+
 def run_targeted_peak_reliability_audit(
     *,
     targeted_workbook: Path,
     output_dir: Path,
     known_target_exceptions: Sequence[str] = (),
+    peak_candidates_tsv: Path | None = None,
 ) -> tuple[TargetedReliabilityOutputs, TargetedReliabilityResult]:
     rows, score_by_key = _load_targeted_workbook(targeted_workbook)
+    candidate_by_key = _load_selected_candidate_evidence(peak_candidates_tsv)
     known = _parse_known_exceptions(known_target_exceptions)
     weak_area_keys = _weak_area_keys(rows)
     reliability_rows = tuple(
         _classify_row(
             row,
             score=score_by_key.get((row.sample_name, row.target_label)),
+            candidate_evidence=candidate_by_key.get(
+                (row.sample_name, row.target_label)
+            ),
             known_exception=known.get(row.target_label, ""),
             weak_area=(row.sample_name, row.target_label) in weak_area_keys,
         )
@@ -180,6 +217,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             targeted_workbook=args.targeted_workbook.resolve(),
             output_dir=args.output_dir.resolve(),
             known_target_exceptions=tuple(args.known_target_exception),
+            peak_candidates_tsv=(
+                args.peak_candidates_tsv.resolve()
+                if args.peak_candidates_tsv is not None
+                else None
+            ),
         )
     except (FileNotFoundError, KeyError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -197,6 +239,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--targeted-workbook", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--peak-candidates-tsv",
+        type=Path,
+        help=(
+            "Optional selected peak candidate evidence TSV. When provided, "
+            "selected candidate consistency can mark NL_FAIL rows as "
+            "targeted_review_positive without making them benchmark eligible."
+        ),
+    )
     parser.add_argument(
         "--known-target-exception",
         action="append",
@@ -224,7 +275,7 @@ def _load_targeted_workbook(
         workbook.close()
 
 
-def _read_xic_results(sheet: object) -> tuple[_TargetedInputRow, ...]:
+def _read_xic_results(sheet: _WorksheetLike) -> tuple[_TargetedInputRow, ...]:
     iterator = sheet.iter_rows(values_only=True)
     header = next(iterator)
     cols = _required_indexes(
@@ -270,7 +321,9 @@ def _read_xic_results(sheet: object) -> tuple[_TargetedInputRow, ...]:
     return tuple(rows)
 
 
-def _read_score_breakdown(sheet: object) -> dict[tuple[str, str], _ScoreBreakdown]:
+def _read_score_breakdown(
+    sheet: _WorksheetLike,
+) -> dict[tuple[str, str], _ScoreBreakdown]:
     iterator = sheet.iter_rows(values_only=True)
     header = next(iterator)
     cols = _required_indexes(
@@ -304,6 +357,7 @@ def _classify_row(
     row: _TargetedInputRow,
     *,
     score: _ScoreBreakdown | None,
+    candidate_evidence: _CandidateEvidence | None,
     known_exception: str,
     weak_area: bool,
 ) -> TargetedReliabilityRow:
@@ -331,7 +385,7 @@ def _classify_row(
     ):
         risk_reasons.append("low_confidence")
     if _is_nl_fail(row.nl):
-        if _is_plausible_nl_dropout(row, score):
+        if _is_plausible_nl_dropout(row, score, candidate_evidence):
             risk_reasons.append("plausible_nl_dropout")
         else:
             risk_reasons.append("hard_nl_conflict")
@@ -591,9 +645,28 @@ def _is_review_positive(blocking_reasons: Sequence[str]) -> bool:
 def _is_plausible_nl_dropout(
     row: _TargetedInputRow,
     score: _ScoreBreakdown | None,
+    candidate_evidence: _CandidateEvidence | None,
 ) -> bool:
+    if candidate_evidence is not None:
+        return "plausible_nl_dropout" in classify_evidence_consistency(
+            _candidate_evidence_signal_set(candidate_evidence)
+        )
     return "plausible_nl_dropout" in classify_evidence_consistency(
         _evidence_signal_set(row, score)
+    )
+
+
+def _candidate_evidence_signal_set(
+    evidence: _CandidateEvidence,
+) -> EvidenceSignalSet:
+    return EvidenceSignalSet(
+        support_labels=evidence.support_labels,
+        concern_labels=evidence.concern_labels,
+        proposal_sources=evidence.proposal_sources,
+        quality_flags=evidence.quality_flags,
+        ms2_present=evidence.ms2_present,
+        nl_match=evidence.nl_match,
+        raw_score=evidence.raw_score,
     )
 
 
@@ -660,6 +733,65 @@ def _split_semicolon_labels(value: str) -> list[str]:
     return [part.strip() for part in value.split(";") if part.strip()]
 
 
+def _load_selected_candidate_evidence(
+    path: Path | None,
+) -> dict[tuple[str, str], _CandidateEvidence]:
+    if path is None:
+        return {}
+    rows = _read_required_tsv(path, _PEAK_CANDIDATE_COLUMNS)
+    selected_by_key: dict[tuple[str, str], list[_CandidateEvidence]] = defaultdict(
+        list
+    )
+    for row in rows:
+        if _bool_value(row["selected"]) is not True:
+            continue
+        key = (row["sample_name"], row["target_label"])
+        selected_by_key[key].append(
+            _CandidateEvidence(
+                support_labels=tuple(_split_semicolon_labels(row["support_labels"])),
+                concern_labels=tuple(_split_semicolon_labels(row["concern_labels"])),
+                proposal_sources=tuple(
+                    _split_semicolon_labels(row["proposal_sources"])
+                ),
+                quality_flags=tuple(_split_semicolon_labels(row["quality_flags"])),
+                ms2_present=_bool_value(row["ms2_present"]),
+                nl_match=_bool_value(row["nl_match"]),
+                raw_score=_float_value(row["raw_score"]),
+            )
+        )
+    return {
+        key: values[0]
+        for key, values in selected_by_key.items()
+        if len(values) == 1
+    }
+
+
+def _read_required_tsv(
+    path: Path,
+    required: Sequence[str],
+) -> tuple[dict[str, str], ...]:
+    if not path.exists():
+        raise FileNotFoundError(str(path))
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        fieldnames = tuple(reader.fieldnames or ())
+        missing = [column for column in required if column not in fieldnames]
+        if missing:
+            raise ValueError(
+                f"{path}: missing required columns: {', '.join(missing)}"
+            )
+        return tuple(dict(row) for row in reader)
+
+
+def _bool_value(value: object) -> bool | None:
+    token = _text(value).strip().upper()
+    if token in {"TRUE", "T", "YES", "Y", "1"}:
+        return True
+    if token in {"FALSE", "F", "NO", "N", "0"}:
+        return False
+    return None
+
+
 def _is_accepted_low_istd(row: _TargetedInputRow) -> bool:
     reason = row.reason.upper()
     if any(
@@ -690,7 +822,7 @@ def _required_indexes(
 
 def _float_value(value: object) -> float | None:
     try:
-        numeric = float(value)
+        numeric = float(cast(Any, value))
     except (TypeError, ValueError):
         return None
     return numeric if math.isfinite(numeric) else None

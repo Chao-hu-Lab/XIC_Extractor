@@ -163,6 +163,142 @@ def test_plausible_nl_dropout_is_review_positive_not_targeted_negative(
     assert payload["summary"]["targeted_review_positive_count"] == 1
 
 
+def test_selected_candidate_evidence_can_mark_nl_fail_as_review_positive(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("8-oxo-Guo")],
+        result_rows=[
+            _result(
+                "TumorBC2275_DNA",
+                "8-oxo-Guo",
+                rt=13.9143,
+                area=250_000.0,
+                nl="✗ NL",
+                confidence="VERY_LOW",
+            ),
+        ],
+        score_rows=None,
+    )
+    _write_peak_candidates(
+        candidates,
+        [
+            _peak_candidate(
+                "TumorBC2275_DNA",
+                "8-oxo-Guo",
+                selected="TRUE",
+                raw_score="15",
+                support_labels="local_sn_strong;trace_clean",
+                concern_labels="nl_fail;shape_borderline",
+                proposal_sources="local_minimum;centwave_cwt",
+                ms2_present="TRUE",
+                nl_match="FALSE",
+            )
+        ],
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        peak_candidates_tsv=candidates,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "targeted_review_positive"
+    assert row.risk_reasons == (
+        "low_confidence",
+        "plausible_nl_dropout",
+        "score_breakdown_unavailable",
+    )
+    assert result.benchmark_eligible_count == 0
+    assert result.targeted_review_positive_count == 1
+
+
+def test_selected_candidate_hard_conflict_does_not_mark_dropout_positive(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("hard_nl_conflict")],
+        result_rows=[
+            _result(
+                "S1",
+                "hard_nl_conflict",
+                rt=10.0,
+                area=1000.0,
+                nl="NL_FAIL",
+                confidence="VERY_LOW",
+            ),
+        ],
+        score_rows=None,
+    )
+    _write_peak_candidates(
+        candidates,
+        [
+            _peak_candidate(
+                "S1",
+                "hard_nl_conflict",
+                selected="TRUE",
+                raw_score="15",
+                support_labels="local_sn_strong;trace_clean",
+                concern_labels="nl_fail;shape_poor",
+                proposal_sources="legacy_savgol;centwave_cwt",
+                ms2_present="TRUE",
+                nl_match="FALSE",
+            )
+        ],
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        peak_candidates_tsv=candidates,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "targeted_review"
+    assert row.risk_reasons == (
+        "low_confidence",
+        "hard_nl_conflict",
+        "score_breakdown_unavailable",
+    )
+
+
+def test_peak_candidate_input_requires_expected_columns(tmp_path: Path) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("clean")],
+        result_rows=[
+            _result("S1", "clean", rt=10.0, area=1000.0, nl="OK", confidence="HIGH"),
+        ],
+        score_rows=None,
+    )
+    with candidates.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["sample_name"], delimiter="\t")
+        writer.writeheader()
+        writer.writerow({"sample_name": "S1"})
+
+    code = audit.main(
+        [
+            "--targeted-workbook",
+            str(workbook),
+            "--peak-candidates-tsv",
+            str(candidates),
+            "--output-dir",
+            str(tmp_path / "audit"),
+        ],
+    )
+
+    assert code == 2
+
+
 def test_missing_score_breakdown_is_reported_without_demoting_strong_row(
     tmp_path: Path,
 ) -> None:
@@ -442,6 +578,47 @@ def _score(
         "Prior RT": "10",
         "Prior Source": "test",
     }
+
+
+def _peak_candidate(
+    sample: str,
+    target: str,
+    *,
+    selected: str,
+    raw_score: str,
+    support_labels: str,
+    concern_labels: str,
+    proposal_sources: str,
+    ms2_present: str,
+    nl_match: str,
+) -> dict[str, object]:
+    return {
+        "sample_name": sample,
+        "target_label": target,
+        "resolver_mode": "arbitrated",
+        "candidate_id": f"{sample}:{target}",
+        "proposal_sources": proposal_sources,
+        "rt_apex_min": "10.0",
+        "selected": selected,
+        "confidence": "VERY_LOW",
+        "raw_score": raw_score,
+        "support_labels": support_labels,
+        "concern_labels": concern_labels,
+        "quality_flags": "",
+        "ms2_present": ms2_present,
+        "nl_match": nl_match,
+    }
+
+
+def _write_peak_candidates(
+    path: Path,
+    rows: list[dict[str, object]],
+) -> None:
+    columns = tuple(rows[0])
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def _write_targeted_workbook(
