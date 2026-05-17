@@ -580,6 +580,77 @@ def test_low_scan_support_stays_blocking_quality_flag(
     assert "quality_flags" in row.risk_reasons
 
 
+def test_missing_trailing_candidate_optional_field_is_blank(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("5-hmdC")],
+        result_rows=[
+            _result(
+                "S1",
+                "5-hmdC",
+                rt=9.05,
+                area=950_000.0,
+                nl="OK",
+                confidence="HIGH",
+                reason="decision: accepted; support: strict NL OK; local S/N strong",
+            ),
+        ],
+        score_rows=[
+            _score(
+                "S1",
+                "5-hmdC",
+                confidence="HIGH",
+            ),
+        ],
+    )
+    candidates.write_text(
+        "\t".join(
+            (
+                "sample_name",
+                "target_label",
+                "proposal_sources",
+                "selected",
+                "raw_score",
+                "support_labels",
+                "concern_labels",
+                "quality_flags",
+                "ms2_present",
+                "nl_match",
+                "diagnostic_product_absence_reason",
+            )
+        )
+        + "\n"
+        + "\t".join(
+            (
+                "S1",
+                "5-hmdC",
+                "local_minimum",
+                "TRUE",
+                "95",
+                "strict_nl_ok;local_sn_strong",
+                "",
+                "",
+                "TRUE",
+                "TRUE",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        peak_candidates_tsv=candidates,
+        output_dir=tmp_path / "audit",
+    )
+
+    assert result.rows[0].reliability_state == "benchmark_eligible"
+
+
 def test_weak_area_outlier_and_known_exception_are_reported(tmp_path: Path) -> None:
     workbook = tmp_path / "targeted.xlsx"
     _write_targeted_workbook(

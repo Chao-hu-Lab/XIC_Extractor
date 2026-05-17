@@ -315,11 +315,9 @@ def collect_candidate_ms2_evidence(
     best_loss_ppm = (
         best_evidence.observed_loss_error_ppm if best_evidence is not None else None
     )
-    absence_reason = (
-        "" if best_evidence is not None else best_probe.absence_reason
-        if best_probe is not None
-        else ""
-    )
+    absence_reason = ""
+    if best_evidence is None and best_probe is not None:
+        absence_reason = best_probe.absence_reason
     nl_status = _classify_nl_result(
         matched_scan_count=trigger_scan_count,
         best_ppm=best_loss_ppm,

@@ -859,10 +859,10 @@ def _load_selected_candidate_evidence(
                 ms2_present=_bool_value(row["ms2_present"]),
                 nl_match=_bool_value(row["nl_match"]),
                 raw_score=_float_value(row["raw_score"]),
-                diagnostic_product_absence_reason=row.get(
+                diagnostic_product_absence_reason=(row.get(
                     "diagnostic_product_absence_reason",
                     "",
-                ).strip(),
+                ) or "").strip(),
             )
         )
     return {
