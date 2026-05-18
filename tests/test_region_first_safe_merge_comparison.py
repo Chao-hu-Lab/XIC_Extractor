@@ -142,6 +142,59 @@ def test_comparison_fails_clearly_for_missing_required_columns(
         )
 
 
+def test_comparison_counts_only_rows_present_in_both_runs(tmp_path: Path) -> None:
+    default_dir = tmp_path / "default"
+    safe_dir = tmp_path / "safe"
+    output_dir = tmp_path / "comparison"
+    targets_csv = tmp_path / "targets.csv"
+    _write_targets(targets_csv)
+    _write_results(
+        default_dir / "xic_results.csv",
+        [
+            {
+                "SampleName": "S1",
+                "d3-N6-medA_RT": "25.74",
+                "d3-N6-medA_Area": "1000.00",
+                "d3-N6-medA_PeakStart": "25.70",
+                "d3-N6-medA_PeakEnd": "25.80",
+                "d3-N6-medA_NL": "OK",
+            }
+        ],
+    )
+    _write_results(
+        safe_dir / "xic_results.csv",
+        [
+            {
+                "SampleName": "S1",
+                "d3-N6-medA_RT": "25.74",
+                "d3-N6-medA_Area": "1000.00",
+                "d3-N6-medA_PeakStart": "25.70",
+                "d3-N6-medA_PeakEnd": "25.80",
+                "d3-N6-medA_NL": "OK",
+            },
+            {
+                "SampleName": "S2",
+                "d3-N6-medA_RT": "25.75",
+                "d3-N6-medA_Area": "1100.00",
+                "d3-N6-medA_PeakStart": "25.70",
+                "d3-N6-medA_PeakEnd": "25.82",
+                "d3-N6-medA_NL": "OK",
+            },
+        ],
+    )
+
+    outputs = comparison.run_region_first_safe_merge_comparison(
+        default_dir=default_dir,
+        safe_merge_dir=safe_dir,
+        targets_csv=targets_csv,
+        output_dir=output_dir,
+    )
+
+    summary = _read_tsv(outputs.summary_tsv)[0]
+    assert summary["compared_rows"] == "1"
+    assert summary["changed_rows"] == "0"
+
+
 def _write_targets(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:

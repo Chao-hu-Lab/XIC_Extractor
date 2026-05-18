@@ -210,7 +210,8 @@ def test_adjacent_wis_intervals_with_small_area_gain_suggest_merge() -> None:
 
     assert decision.shadow_verdict == "merge_suggested"
     assert decision.merge_suggestion_source == "adjacent_wis_local_minimum_merge"
-    assert decision.area_ratio == 1.1
+    assert decision.area_ratio is None
+    assert decision.shadow_area_raw_counts_seconds is None
     assert decision.selected_interval_count == 2
     assert decision.selected_interval_gap_max_min == 0.02
     assert decision.selected_interval_total_score == 125
@@ -255,6 +256,42 @@ def test_multi_interval_merge_uses_dominant_area_apex_as_shadow_rt() -> None:
     assert decision.merge_suggestion_source == "adjacent_wis_local_minimum_merge"
     assert decision.shadow_rt_apex_min == 26.15
     assert decision.selected_interval_gap_max_min == 0.03
+
+
+def test_adjacent_wis_merge_rejects_zero_area_current_boundary() -> None:
+    decision = decide_region_selection(
+        (
+            _boundary(
+                "left|candidate",
+                candidate_id="left",
+                selected=True,
+                source="candidate_interval",
+                proposal_sources=("local_minimum",),
+                area=0.0,
+                score=70,
+                apex=10.0,
+                left=9.9,
+                right=10.2,
+                nonoverlap_selected=True,
+            ),
+            _boundary(
+                "right|candidate",
+                candidate_id="right",
+                selected=False,
+                source="candidate_interval",
+                proposal_sources=("local_minimum",),
+                area=10.0,
+                score=55,
+                apex=10.25,
+                left=10.22,
+                right=10.35,
+                nonoverlap_selected=True,
+            ),
+        )
+    )
+
+    assert decision.shadow_verdict != "merge_suggested"
+    assert decision.merge_suggestion_source == ""
 
 
 def test_same_apex_wider_boundary_merge_is_not_adjacent_wis_source() -> None:

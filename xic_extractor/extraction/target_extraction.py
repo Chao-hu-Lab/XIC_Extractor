@@ -26,7 +26,11 @@ from xic_extractor.extraction.scoring_factory import (
     selected_shape_metrics,
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
-from xic_extractor.output.messages import build_diagnostic_records, istd_confidence_note
+from xic_extractor.output.messages import (
+    DiagnosticRecord,
+    build_diagnostic_records,
+    istd_confidence_note,
+)
 from xic_extractor.peak_scoring import candidate_quality_penalty
 from xic_extractor.signal_processing import PeakCandidate
 
@@ -36,7 +40,6 @@ if TYPE_CHECKING:
         FileResult,
         RawFileExtractionResult,
     )
-    from xic_extractor.output.messages import DiagnosticRecord
 
 
 def extract_raw_file_result(
@@ -93,7 +96,6 @@ def process_file(
                 for label, result in results.items()
                 if result.peak_result.confidence is not None
             }
-
             if precomputed_istd_anchor_rts is None:
                 istd_anchor_rts: dict[str, float] = {}
                 for target in targets:
@@ -120,7 +122,6 @@ def process_file(
                         istd_anchor_rts[target.label] = anchor_rt
             else:
                 istd_anchor_rts = dict(precomputed_istd_anchor_rts)
-
             sample_drift = estimate_sample_drift(targets, istd_anchor_rts)
 
             for target in targets:
@@ -156,7 +157,6 @@ def process_file(
                         istd_shape_metrics_by_label,
                     ),
                 )
-
             return extractor.FileResult(
                 sample_name=sample_name,
                 results=results,

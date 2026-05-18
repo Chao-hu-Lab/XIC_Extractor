@@ -91,7 +91,7 @@ def run_region_first_safe_merge_comparison(
     )
 
     rows: list[dict[str, str]] = []
-    compared_keys = sorted(set(default_cells) | set(safe_cells))
+    compared_keys = sorted(set(default_cells) & set(safe_cells))
     for key in compared_keys:
         default = default_cells.get(key)
         safe = safe_cells.get(key)

@@ -168,9 +168,13 @@ def is_region_first_safe_merge_eligible(
         return False
     if (decision.selected_interval_count or 0) < 2:
         return False
-    if (decision.selected_interval_gap_max_min or math.inf) > SAFE_MERGE_GAP_MAX_MIN:
+    gap_max = decision.selected_interval_gap_max_min
+    if gap_max is None or gap_max > SAFE_MERGE_GAP_MAX_MIN:
         return False
-    if (decision.area_ratio or math.inf) > SAFE_MERGE_AREA_RATIO_MAX:
+    if (
+        decision.area_ratio is not None
+        and decision.area_ratio > SAFE_MERGE_AREA_RATIO_MAX
+    ):
         return False
     if decision.current_rt_apex_min is None or decision.shadow_rt_apex_min is None:
         return False

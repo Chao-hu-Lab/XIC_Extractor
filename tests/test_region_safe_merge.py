@@ -63,6 +63,34 @@ def test_adjacent_wis_safe_merge_updates_selected_boundary_and_area() -> None:
     assert outcome.candidate_scores[0].candidate == outcome.selected_candidate
 
 
+def test_adjacent_wis_safe_merge_accepts_touching_intervals() -> None:
+    rt = np.asarray([10.0, 10.1, 10.2, 10.3], dtype=float)
+    intensity = np.asarray([100.0, 100.0, 100.0, 100.0], dtype=float)
+    selected = _candidate(area=1700.0)
+    result = _result(selected)
+    decision = _decision(
+        shadow_boundary_id="left;right",
+        source="adjacent_wis_local_minimum_merge",
+        area_ratio=None,
+        selected_interval_gap_max_min=0.0,
+    )
+
+    outcome = apply_region_first_safe_merge_decision(
+        rt,
+        intensity,
+        result,
+        selected,
+        decision,
+        {
+            "left": _boundary("left", 0, 2),
+            "right": _boundary("right", 2, 4),
+        },
+    )
+
+    assert outcome.promoted is True
+    assert outcome.selected_candidate.peak.area == pytest.approx(1800.0)
+
+
 @pytest.mark.parametrize(
     ("verdict", "source"),
     [
@@ -237,6 +265,8 @@ def _decision(
     shadow_boundary_id: str,
     verdict: str = "merge_suggested",
     source: str,
+    area_ratio: float | None = 1.1,
+    selected_interval_gap_max_min: float | None = 0.02,
 ) -> RegionSelectionDecision:
     return RegionSelectionDecision(
         shadow_status="evaluated",
@@ -253,11 +283,11 @@ def _decision(
         shadow_rt_right_min=10.3,
         shadow_area_raw_counts_seconds=1800.0,
         score_delta=20,
-        area_ratio=1.1,
+        area_ratio=area_ratio,
         current_scan_count=3,
         shadow_scan_count=4,
         selected_interval_count=2,
-        selected_interval_gap_max_min=0.02,
+        selected_interval_gap_max_min=selected_interval_gap_max_min,
         selected_interval_total_score=120,
         best_single_boundary_score=70,
         review_reason="test",

@@ -211,9 +211,12 @@ def _adjacent_selected_intervals_merge_suggested(
         return None
     if _max_interval_gap(selected) > MERGE_SELECTED_INTERVAL_GAP_MAX_MIN:
         return None
-    shadow_area = sum(boundary.area_raw_counts_seconds for boundary in selected)
-    area_ratio = _safe_ratio(shadow_area, current.area_raw_counts_seconds)
-    if area_ratio > MERGE_SELECTED_INTERVAL_AREA_RATIO_MAX:
+    selected_area_sum = sum(boundary.area_raw_counts_seconds for boundary in selected)
+    area_ratio_lower_bound = _safe_ratio(
+        selected_area_sum,
+        current.area_raw_counts_seconds,
+    )
+    if area_ratio_lower_bound > MERGE_SELECTED_INTERVAL_AREA_RATIO_MAX:
         return None
     total_score = sum(boundary.boundary_score for boundary in selected)
     dominant = _dominant_interval(selected)
@@ -230,9 +233,9 @@ def _adjacent_selected_intervals_merge_suggested(
         shadow_rt_left_min=min(boundary.rt_left_min for boundary in selected),
         shadow_rt_apex_min=dominant.rt_apex_min,
         shadow_rt_right_min=max(boundary.rt_right_min for boundary in selected),
-        shadow_area_raw_counts_seconds=shadow_area,
+        shadow_area_raw_counts_seconds=None,
         score_delta=total_score - current.boundary_score,
-        area_ratio=area_ratio,
+        area_ratio=None,
         current_scan_count=current.scan_count,
         shadow_scan_count=sum(boundary.scan_count for boundary in selected),
         selected_interval_count=len(selected),
@@ -249,7 +252,8 @@ def _adjacent_selected_intervals_merge_suggested(
         ),
         review_reason=(
             "adjacent WIS-selected local-minimum intervals have only small "
-            "area gain, suggesting one continuous envelope"
+            "selected-interval area gain; production must validate the "
+            "continuous envelope area"
         ),
         merge_suggestion_source="adjacent_wis_local_minimum_merge",
     )
@@ -462,7 +466,7 @@ def _boundary_rank_key(boundary: RegionBoundaryEvidence) -> tuple[int, float, in
 
 def _safe_ratio(value: float, reference: float) -> float:
     if reference <= 0:
-        return 0.0
+        return math.inf
     return round(value / reference, 5)
 
 
