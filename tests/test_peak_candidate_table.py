@@ -13,6 +13,7 @@ from xic_extractor.extraction.peak_candidate_table import (
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.output.peak_candidates import write_peak_candidates_tsv
+from xic_extractor.peak_detection.traces import Trace, targeted_trace_group
 from xic_extractor.peak_scoring import ScoringContext
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -261,6 +262,45 @@ def test_build_rows_can_emit_baseline_corrected_audit_area() -> None:
 
     assert rows[0]["area_baseline_corrected"] == "390.00000"
     assert rows[0]["area_uncertainty"] != ""
+
+
+def test_build_rows_prefers_shared_trace_group_arrays() -> None:
+    selected = _candidate(8.2, left=8.0, right=8.4, proposal_sources=("legacy_savgol",))
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=5,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+    )
+    trace = Trace.from_arrays(
+        sample_name="SampleA",
+        mz=258.1085,
+        rt=[8.0, 8.1, 8.2, 8.3, 8.4],
+        intensity=[10.0, 25.0, 50.0, 35.0, 20.0],
+        rt_min=8.0,
+        rt_max=8.4,
+        ppm_tol=20.0,
+    )
+
+    rows = build_peak_candidate_rows(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="",
+        resolver_mode="legacy_savgol",
+        peak_result=result,
+        rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4]),
+        intensity=np.zeros(5),
+        trace_group=targeted_trace_group(
+            trace,
+            target_label="Analyte",
+            resolver_mode="legacy_savgol",
+        ),
+    )
+
+    assert rows[0]["area_baseline_corrected"] == "390.00000"
 
 
 def test_append_rows_rescores_same_apex_cwt_audit_support(

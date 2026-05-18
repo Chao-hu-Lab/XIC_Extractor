@@ -16,6 +16,7 @@ from xic_extractor.peak_detection.models import (
     PeakCandidateScore,
     PeakDetectionResult,
 )
+from xic_extractor.peak_detection.traces import TraceGroup
 from xic_extractor.peak_scoring import ScoredCandidate, ScoringContext, score_candidate
 from xic_extractor.sample_groups import classify_sample_group
 
@@ -106,6 +107,7 @@ def build_peak_candidate_rows(
     candidate_ms2_evidence: Mapping[PeakCandidate, CandidateMS2Evidence] | None = None,
     rt: object | None = None,
     intensity: object | None = None,
+    trace_group: TraceGroup | None = None,
 ) -> list[PeakCandidateTableRow]:
     sample_group = group or classify_sample_group(sample_name)
     hypotheses = build_peak_hypotheses(
@@ -118,6 +120,7 @@ def build_peak_candidate_rows(
         candidate_ms2_evidence=candidate_ms2_evidence,
         rt=rt,
         intensity=intensity,
+        trace_group=trace_group,
     )
     return [
         _row_from_hypothesis(
@@ -243,6 +246,7 @@ def append_peak_candidate_rows(
     *,
     rt: object | None = None,
     intensity: object | None = None,
+    trace_group: TraceGroup | None = None,
     audit_peak_result: PeakDetectionResult | None = None,
     scoring_context_builder: Callable[[PeakCandidate], ScoringContext] | None = None,
     istd_confidence_note: str | None = None,
@@ -277,6 +281,7 @@ def append_peak_candidate_rows(
             ),
             rt=rt,
             intensity=intensity,
+            trace_group=trace_group,
         )
     )
 

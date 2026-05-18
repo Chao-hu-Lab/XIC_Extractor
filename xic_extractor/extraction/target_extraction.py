@@ -31,6 +31,7 @@ from xic_extractor.output.messages import (
     build_diagnostic_records,
     istd_confidence_note,
 )
+from xic_extractor.peak_detection.traces import Trace, TraceGroup, targeted_trace_group
 from xic_extractor.peak_scoring import candidate_quality_penalty
 from xic_extractor.signal_processing import PeakCandidate
 
@@ -284,6 +285,20 @@ def extract_one_target(
         if recovery_decision.intensity is not None
         else intensity
     )
+    trace_group = (
+        _targeted_trace_group(
+            sample_name=sample_name,
+            target=target,
+            config=config,
+            rt=audit_rt,
+            intensity=audit_intensity,
+            rt_min=rt_min,
+            rt_max=rt_max,
+            expected_rt_min=anchor_rt,
+        )
+        if config.emit_peak_candidates
+        else None
+    )
     shape_intensity = audit_intensity
     shape_metrics = selected_shape_metrics(shape_intensity, peak_result)
     candidate = selected_candidate(peak_result)
@@ -344,7 +359,48 @@ def extract_one_target(
         peak_result=peak_result,
         candidate_ms2_builder=_cached_candidate_ms2_builder,
         rt=audit_rt, intensity=audit_intensity,
+        trace_group=trace_group,
         scoring_context_builder=scoring_context_builder,
         istd_confidence_note=istd_confidence_note,
     )
     return anchor_rt
+
+
+def _targeted_trace_group(
+    *,
+    sample_name: str,
+    target: Target,
+    config: ExtractionConfig,
+    rt: object,
+    intensity: object,
+    rt_min: float,
+    rt_max: float,
+    expected_rt_min: float | None,
+) -> TraceGroup:
+    trace = Trace.from_arrays(
+        sample_name=sample_name,
+        mz=target.mz,
+        rt=rt,
+        intensity=intensity,
+        rt_min=rt_min,
+        rt_max=rt_max,
+        ppm_tol=target.ppm_tol,
+        source="targeted_extraction",
+    )
+    return targeted_trace_group(
+        trace,
+        target_label=target.label,
+        resolver_mode=config.resolver_mode,
+        expected_rt_min=expected_rt_min,
+        neutral_loss_tag=_neutral_loss_tag(target),
+        precursor_mz=target.mz,
+        observed_neutral_loss_da=target.neutral_loss_da,
+        role="ISTD" if target.is_istd else "Analyte",
+        istd_pair=target.istd_pair,
+    )
+
+
+def _neutral_loss_tag(target: Target) -> str:
+    if target.neutral_loss_da is None:
+        return ""
+    return f"NL:{target.neutral_loss_da:.4f}"

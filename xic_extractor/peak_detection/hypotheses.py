@@ -156,7 +156,7 @@ def build_peak_hypotheses(
     evidence_by_candidate = candidate_ms2_evidence or {}
     trace_rt = rt
     trace_intensity = intensity
-    if trace_group is not None and trace_rt is None and trace_intensity is None:
+    if trace_group is not None:
         trace_rt = trace_group.primary_trace.rt
         trace_intensity = trace_group.primary_trace.intensity
 
