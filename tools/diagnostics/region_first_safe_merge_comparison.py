@@ -103,6 +103,7 @@ def run_region_first_safe_merge_comparison(
         target = target_info.get(target_label, TargetInfo(target_label, "", ""))
         candidate = safe_candidates.get(key, {})
         shadow = shadow_rows.get(key, {})
+        merge_suggestion_source = _merge_suggestion_source(candidate, shadow)
         rows.append(
             {
                 "sample_name": sample_name,
@@ -125,7 +126,7 @@ def run_region_first_safe_merge_comparison(
                 "promotion_reason": _promotion_reason(candidate),
                 "safe_merge_note": candidate.get("merge_note", ""),
                 "shadow_verdict": shadow.get("shadow_verdict", ""),
-                "merge_suggestion_source": shadow.get("merge_suggestion_source", ""),
+                "merge_suggestion_source": merge_suggestion_source,
                 "selected_interval_count": shadow.get("selected_interval_count", ""),
                 "selected_interval_gap_max_min": shadow.get(
                     "selected_interval_gap_max_min", ""
@@ -258,6 +259,22 @@ def _promotion_reason(candidate: dict[str, str]) -> str:
     if merge_note:
         return "changed_with_other_merge_note"
     return "changed_without_selected_candidate_note"
+
+
+def _merge_suggestion_source(
+    candidate: dict[str, str],
+    shadow: dict[str, str],
+) -> str:
+    merge_notes = {
+        value
+        for value in candidate.get("merge_note", "").split(";")
+        if value
+    }
+    if "adjacent_wis_local_minimum_merge" in merge_notes:
+        return "adjacent_wis_local_minimum_merge"
+    if "same_apex_wider_boundary_merge" in merge_notes:
+        return "same_apex_wider_boundary_merge"
+    return shadow.get("merge_suggestion_source", "")
 
 
 def _summary_row(

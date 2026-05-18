@@ -59,7 +59,10 @@ def test_comparison_reports_changed_safe_merge_rows(tmp_path: Path) -> None:
                 "target_mz": "269.13390",
                 "role": "ISTD",
                 "selected": "TRUE",
-                "merge_note": "region_first_safe_merge",
+                "merge_note": (
+                    "region_first_safe_merge;"
+                    "adjacent_wis_local_minimum_merge"
+                ),
             }
         ],
     )
@@ -104,7 +107,10 @@ def test_comparison_reports_changed_safe_merge_rows(tmp_path: Path) -> None:
             "default_nl": "OK",
             "safe_merge_nl": "OK",
             "promotion_reason": "region_first_safe_merge",
-            "safe_merge_note": "region_first_safe_merge",
+            "safe_merge_note": (
+                "region_first_safe_merge;"
+                "adjacent_wis_local_minimum_merge"
+            ),
             "shadow_verdict": "merge_suggested",
             "merge_suggestion_source": "adjacent_wis_local_minimum_merge",
             "selected_interval_count": "2",
@@ -119,6 +125,82 @@ def test_comparison_reports_changed_safe_merge_rows(tmp_path: Path) -> None:
     assert summary["affected_target_labels"] == "d3-N6-medA"
     assert summary["area_ratio_median"] == "1.12000"
     assert "d3-N6-medA" in outputs.markdown.read_text(encoding="utf-8")
+
+
+def test_comparison_prefers_persisted_promotion_source_over_post_merge_shadow(
+    tmp_path: Path,
+) -> None:
+    default_dir = tmp_path / "default"
+    safe_dir = tmp_path / "safe"
+    output_dir = tmp_path / "comparison"
+    targets_csv = tmp_path / "targets.csv"
+    _write_targets(targets_csv)
+    _write_results(
+        default_dir / "xic_results.csv",
+        [
+            {
+                "SampleName": "S1",
+                "d3-N6-medA_RT": "25.74",
+                "d3-N6-medA_Area": "1000.00",
+                "d3-N6-medA_PeakStart": "25.70",
+                "d3-N6-medA_PeakEnd": "25.80",
+                "d3-N6-medA_NL": "OK",
+            }
+        ],
+    )
+    _write_results(
+        safe_dir / "xic_results.csv",
+        [
+            {
+                "SampleName": "S1",
+                "d3-N6-medA_RT": "25.74",
+                "d3-N6-medA_Area": "1120.00",
+                "d3-N6-medA_PeakStart": "25.65",
+                "d3-N6-medA_PeakEnd": "26.10",
+                "d3-N6-medA_NL": "OK",
+            }
+        ],
+    )
+    _write_candidates(
+        safe_dir / "peak_candidates.tsv",
+        [
+            {
+                "sample_name": "S1",
+                "target_label": "d3-N6-medA",
+                "target_mz": "269.13390",
+                "role": "ISTD",
+                "selected": "TRUE",
+                "merge_note": (
+                    "region_first_safe_merge;"
+                    "adjacent_wis_local_minimum_merge"
+                ),
+            }
+        ],
+    )
+    _write_shadow_summary(
+        safe_dir / "peak_region_selection_shadow_summary.tsv",
+        [
+            {
+                "sample_name": "S1",
+                "target_label": "d3-N6-medA",
+                "shadow_verdict": "split_supported",
+                "merge_suggestion_source": "",
+                "selected_interval_count": "3",
+                "selected_interval_gap_max_min": "0.090",
+            }
+        ],
+    )
+
+    outputs = comparison.run_region_first_safe_merge_comparison(
+        default_dir=default_dir,
+        safe_merge_dir=safe_dir,
+        targets_csv=targets_csv,
+        output_dir=output_dir,
+    )
+
+    row = _read_tsv(outputs.comparison_tsv)[0]
+    assert row["shadow_verdict"] == "split_supported"
+    assert row["merge_suggestion_source"] == "adjacent_wis_local_minimum_merge"
 
 
 def test_comparison_fails_clearly_for_missing_required_columns(
