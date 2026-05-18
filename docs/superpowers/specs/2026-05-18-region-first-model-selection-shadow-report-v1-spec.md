@@ -65,6 +65,10 @@ Verdicts:
 - `merge_suggested`: multiple local-minimum candidates either sit inside the
   selected apex's wider envelope, or are adjacent WIS-selected intervals with
   only small area gain. This is the explicit shallow-valley guardrail.
+  `merge_suggestion_source` distinguishes the two sources:
+  `adjacent_wis_local_minimum_merge` is the only source eligible for a later
+  safe-merge production experiment; `same_apex_wider_boundary_merge` remains
+  shadow-only unless a later spec promotes it explicitly.
 - `split_supported`: WIS-selected non-overlapping intervals have at least two
   supported segments and total score at least `20` above the best single
   interval.
@@ -94,11 +98,11 @@ The first two files are derived from existing
 
 Each shadow row includes sample, group, target label, target m/z, role,
 resolver mode, current/shadow RT and area, `shadow_status`,
-`shadow_verdict`, score delta, area ratio, scan support, WIS selected
-interval count, selected interval max gap, selected interval total score,
-best single-boundary score, support labels, concern labels, and review
-reason. These numeric model-selection fields are audit evidence only; they do
-not change the selected peak or production integration.
+`shadow_verdict`, `merge_suggestion_source`, score delta, area ratio, scan
+support, WIS selected interval count, selected interval max gap, selected
+interval total score, best single-boundary score, support labels, concern
+labels, and review reason. These numeric model-selection fields are audit
+evidence only; they do not change the selected peak or production integration.
 
 For multi-interval `merge_suggested` or `split_supported` rows,
 `shadow_rt_apex_min` is the dominant-area selected interval apex. The full
