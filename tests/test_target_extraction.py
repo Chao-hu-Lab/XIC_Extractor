@@ -1,6 +1,4 @@
-from xic_extractor.extraction.target_extraction import (
-    _selected_candidate_ms2_evidence,
-)
+from xic_extractor.extraction.ms2_selection import selected_candidate_ms2_evidence
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.models import PeakCandidate, PeakResult
 
@@ -14,7 +12,7 @@ def test_safe_merge_selected_candidate_builds_missing_ms2_evidence() -> None:
         calls.append(value)
         return evidence
 
-    selected = _selected_candidate_ms2_evidence(candidate, {}, _builder)
+    selected = selected_candidate_ms2_evidence(candidate, {}, _builder)
 
     assert selected is evidence
     assert calls == [candidate]
@@ -28,7 +26,7 @@ def test_non_safe_merge_selected_candidate_uses_existing_cache_only() -> None:
         calls.append(value)
         return _evidence("NL_FAIL")
 
-    selected = _selected_candidate_ms2_evidence(candidate, {}, _builder)
+    selected = selected_candidate_ms2_evidence(candidate, {}, _builder)
 
     assert selected is None
     assert calls == []

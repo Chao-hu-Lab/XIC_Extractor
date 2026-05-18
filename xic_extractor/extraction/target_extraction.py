@@ -17,6 +17,7 @@ from xic_extractor.extraction.diagnostics import (
 )
 from xic_extractor.extraction.drift import estimate_sample_drift
 from xic_extractor.extraction.istd_recovery import recover_istd_anchor_peak_if_needed
+from xic_extractor.extraction.ms2_selection import selected_candidate_ms2_evidence
 from xic_extractor.extraction.peak_candidate_audit import append_peak_audit_rows
 from xic_extractor.extraction.rt_windows import get_rt_window
 from xic_extractor.extraction.scoring_factory import (
@@ -25,11 +26,7 @@ from xic_extractor.extraction.scoring_factory import (
     selected_shape_metrics,
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
-from xic_extractor.output.messages import (
-    DiagnosticRecord,
-    build_diagnostic_records,
-    istd_confidence_note,
-)
+from xic_extractor.output.messages import build_diagnostic_records, istd_confidence_note
 from xic_extractor.peak_scoring import candidate_quality_penalty
 from xic_extractor.signal_processing import PeakCandidate
 
@@ -39,21 +36,7 @@ if TYPE_CHECKING:
         FileResult,
         RawFileExtractionResult,
     )
-
-
-def _selected_candidate_ms2_evidence(
-    candidate: PeakCandidate | None,
-    candidate_ms2_cache: dict[PeakCandidate, CandidateMS2Evidence],
-    candidate_ms2_builder: Callable[[PeakCandidate], CandidateMS2Evidence | None],
-) -> CandidateMS2Evidence | None:
-    if candidate is None:
-        return None
-    evidence = candidate_ms2_cache.get(candidate)
-    if evidence is not None:
-        return evidence
-    if "region_first_safe_merge" not in candidate.merge_note.split(";"):
-        return None
-    return candidate_ms2_builder(candidate)
+    from xic_extractor.output.messages import DiagnosticRecord
 
 
 def extract_raw_file_result(
@@ -313,7 +296,7 @@ def extract_one_target(
         )
     if shape_metrics_by_label is not None and shape_metrics is not None:
         shape_metrics_by_label[target.label] = shape_metrics
-    candidate_ms2_evidence = _selected_candidate_ms2_evidence(
+    candidate_ms2_evidence = selected_candidate_ms2_evidence(
         candidate,
         candidate_ms2_cache,
         _cached_candidate_ms2_builder,
