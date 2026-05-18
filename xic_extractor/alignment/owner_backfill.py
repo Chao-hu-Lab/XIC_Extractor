@@ -8,12 +8,14 @@ from typing import Protocol
 import numpy as np
 from numpy.typing import NDArray
 
+from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
 from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.alignment.ownership_models import SampleLocalMS1Owner
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.region_audit import build_peak_region_audit_summary
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
 
@@ -40,6 +42,7 @@ def build_owner_backfill_cells(
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
     raw_xic_batch_size: int = 1,
+    emit_region_audit: bool = False,
 ) -> tuple[AlignedCell, ...]:
     if raw_xic_batch_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
@@ -115,6 +118,7 @@ def build_owner_backfill_cells(
                     trace,
                     preferred_rt=preferred_rt,
                     peak_config=peak_config,
+                    emit_region_audit=emit_region_audit,
                 )
                 if cell is not None:
                     if validation_raw_sources is None:
@@ -157,6 +161,7 @@ def build_owner_backfill_cells(
                         trace,
                         preferred_rt=preferred_rt,
                         peak_config=peak_config,
+                        emit_region_audit=emit_region_audit,
                     )
                     if cell is not None:
                         _keep_best_rescued_cell(
@@ -245,6 +250,7 @@ def _backfill_feature_sample(
     *,
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
+    emit_region_audit: bool = False,
 ) -> AlignedCell | None:
     rt_window_min = alignment_config.max_rt_sec / 60.0
     rt_min = feature.family_center_rt - rt_window_min
@@ -268,8 +274,18 @@ def _backfill_feature_sample(
     )
     if result.status != "OK" or result.peak is None:
         return None
+    region_audit = (
+        build_peak_region_audit_summary(
+            rt_array,
+            intensity_array,
+            result,
+            peak_config,
+        )
+        if emit_region_audit
+        else None
+    )
     peak = result.peak
-    return AlignedCell(
+    cell = AlignedCell(
         sample_stem=sample_stem,
         cluster_id=feature.feature_family_id,
         status="rescued",
@@ -285,6 +301,7 @@ def _backfill_feature_sample(
         source_raw_file=None,
         reason="owner-centered MS1 backfill",
     )
+    return with_region_audit(cell, region_audit)
 
 
 def _backfill_feature_sample_trace(
@@ -294,6 +311,7 @@ def _backfill_feature_sample_trace(
     *,
     preferred_rt: float | None = None,
     peak_config: ExtractionConfig,
+    emit_region_audit: bool = False,
 ) -> AlignedCell | None:
     try:
         rt_array, intensity_array = _validated_trace_arrays(trace.rt, trace.intensity)
@@ -310,8 +328,18 @@ def _backfill_feature_sample_trace(
     )
     if result.status != "OK" or result.peak is None:
         return None
+    region_audit = (
+        build_peak_region_audit_summary(
+            rt_array,
+            intensity_array,
+            result,
+            peak_config,
+        )
+        if emit_region_audit
+        else None
+    )
     peak = result.peak
-    return AlignedCell(
+    cell = AlignedCell(
         sample_stem=sample_stem,
         cluster_id=feature.feature_family_id,
         status="rescued",
@@ -327,6 +355,7 @@ def _backfill_feature_sample_trace(
         source_raw_file=None,
         reason="owner-centered MS1 backfill",
     )
+    return with_region_audit(cell, region_audit)
 
 
 def _backfill_seed_centers(

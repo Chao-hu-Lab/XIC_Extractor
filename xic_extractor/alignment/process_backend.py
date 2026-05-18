@@ -89,6 +89,7 @@ class OwnerBackfillSampleJob:
     peak_config: ExtractionConfig
     raw_xic_batch_size: int = 1
     owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw"
+    emit_region_audit: bool = False
 
 
 @dataclass(frozen=True)
@@ -325,6 +326,7 @@ def run_owner_backfill_process(
     max_workers: int,
     raw_xic_batch_size: int = 1,
     owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw",
+    emit_region_audit: bool = False,
     runner: Callable[..., list[OwnerBackfillWorkerResult]] | None = None,
 ) -> OwnerBackfillProcessOutput:
     if max_workers < 1:
@@ -342,6 +344,7 @@ def run_owner_backfill_process(
             peak_config=peak_config,
             raw_xic_batch_size=raw_xic_batch_size,
             owner_backfill_xic_backend=owner_backfill_xic_backend,
+            emit_region_audit=emit_region_audit,
         )
         for index, sample_stem in enumerate(sample_order, start=1)
         if sample_stem in raw_paths
@@ -522,6 +525,7 @@ def extract_owner_backfill_sample_job(
                 alignment_config=job.alignment_config,
                 peak_config=job.peak_config,
                 raw_xic_batch_size=job.raw_xic_batch_size,
+                emit_region_audit=job.emit_region_audit,
             )
         return OwnerBackfillSampleResult(
             sample_index=job.sample_index,

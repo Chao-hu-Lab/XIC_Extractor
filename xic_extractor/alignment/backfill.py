@@ -6,10 +6,15 @@ from typing import Any, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
+from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.region_audit import (
+    PeakRegionAuditSummary,
+    build_peak_region_audit_summary,
+)
 from xic_extractor.signal_processing import find_peak_and_area
 
 
@@ -30,6 +35,7 @@ def backfill_alignment_matrix(
     raw_sources: Mapping[str, MS1BackfillSource],
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
+    emit_region_audit: bool = False,
 ) -> AlignmentMatrix:
     _validate_sample_order(sample_order)
     _validate_cluster_members(clusters, sample_order)
@@ -51,6 +57,7 @@ def backfill_alignment_matrix(
                         raw_sources=raw_sources,
                         alignment_config=alignment_config,
                         peak_config=peak_config,
+                        emit_region_audit=emit_region_audit,
                     ),
                 )
             else:
@@ -116,6 +123,7 @@ def _backfill_anchor_cell(
     raw_sources: Mapping[str, MS1BackfillSource],
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
+    emit_region_audit: bool,
 ) -> AlignedCell:
     source = raw_sources.get(sample_stem)
     if source is None:
@@ -142,6 +150,16 @@ def _backfill_anchor_cell(
             preferred_rt=cluster.cluster_center_rt,
             strict_preferred_rt=False,
         )
+        region_audit = (
+            build_peak_region_audit_summary(
+                rt_array,
+                intensity_array,
+                result,
+                peak_config,
+            )
+            if emit_region_audit
+            else None
+        )
     except Exception:
         return _unchecked_cell(
             cluster,
@@ -154,6 +172,7 @@ def _backfill_anchor_cell(
             cluster,
             sample_stem,
             reason="MS1 backfill checked and no peak found",
+            region_audit=region_audit,
         )
 
     peak = result.peak
@@ -164,9 +183,10 @@ def _backfill_anchor_cell(
             sample_stem,
             apex_rt=peak.rt,
             reason="MS1 peak outside cluster RT guard",
+            region_audit=region_audit,
         )
 
-    return AlignedCell(
+    cell = AlignedCell(
         sample_stem=sample_stem,
         cluster_id=cluster.cluster_id,
         status="rescued",
@@ -187,6 +207,7 @@ def _backfill_anchor_cell(
         source_raw_file=None,
         reason="MS1 peak rescued at cluster center",
     )
+    return with_region_audit(cell, region_audit)
 
 
 def _absent_cell(
@@ -195,8 +216,9 @@ def _absent_cell(
     *,
     apex_rt: float | None = None,
     reason: str,
+    region_audit: PeakRegionAuditSummary | None = None,
 ) -> AlignedCell:
-    return AlignedCell(
+    cell = AlignedCell(
         sample_stem=sample_stem,
         cluster_id=cluster.cluster_id,
         status="absent",
@@ -212,6 +234,7 @@ def _absent_cell(
         source_raw_file=None,
         reason=reason,
     )
+    return with_region_audit(cell, region_audit)
 
 
 def _unchecked_cell(

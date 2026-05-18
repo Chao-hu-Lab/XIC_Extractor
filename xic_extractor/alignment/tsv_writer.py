@@ -74,6 +74,18 @@ ALIGNMENT_CELLS_COLUMNS = (
     "family_center_mz",
     "family_center_rt",
     "reason",
+    "region_candidate_count",
+    "region_selected_proposal_sources",
+    "region_selected_merge_note",
+    "region_shadow_status",
+    "region_shadow_verdict",
+    "region_merge_suggestion_source",
+    "region_area_ratio",
+    "region_selected_interval_count",
+    "region_selected_interval_gap_max_min",
+    "region_local_mixture_diagnostic",
+    "region_local_mixture_reason",
+    "region_review_reason",
 )
 
 
@@ -157,6 +169,26 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
                 "family_center_mz": format_value(_family_center_mz(cluster)),
                 "family_center_rt": format_value(_family_center_rt(cluster)),
                 "reason": cell.reason,
+                "region_candidate_count": format_value(cell.region_candidate_count),
+                "region_selected_proposal_sources": ";".join(
+                    cell.region_selected_proposal_sources
+                ),
+                "region_selected_merge_note": cell.region_selected_merge_note,
+                "region_shadow_status": cell.region_shadow_status,
+                "region_shadow_verdict": cell.region_shadow_verdict,
+                "region_merge_suggestion_source": cell.region_merge_suggestion_source,
+                "region_area_ratio": format_value(cell.region_area_ratio),
+                "region_selected_interval_count": format_value(
+                    cell.region_selected_interval_count
+                ),
+                "region_selected_interval_gap_max_min": format_value(
+                    cell.region_selected_interval_gap_max_min
+                ),
+                "region_local_mixture_diagnostic": (
+                    cell.region_local_mixture_diagnostic
+                ),
+                "region_local_mixture_reason": cell.region_local_mixture_reason,
+                "region_review_reason": cell.region_review_reason,
             }
         )
     return _write_tsv(path, ALIGNMENT_CELLS_COLUMNS, rows)

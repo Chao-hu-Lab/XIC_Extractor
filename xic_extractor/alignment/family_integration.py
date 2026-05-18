@@ -8,10 +8,12 @@ from typing import Protocol
 import numpy as np
 from numpy.typing import NDArray
 
+from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.feature_family import MS1FeatureFamily
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix, CellStatus
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.region_audit import build_peak_region_audit_summary
 from xic_extractor.signal_processing import find_peak_and_area
 
 
@@ -32,6 +34,7 @@ def integrate_feature_family_matrix(
     raw_sources: Mapping[str, FamilyIntegrationSource],
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
+    emit_region_audit: bool = False,
 ) -> AlignmentMatrix:
     cells: list[AlignedCell] = []
     for family in families:
@@ -43,6 +46,7 @@ def integrate_feature_family_matrix(
                     raw_sources=raw_sources,
                     alignment_config=alignment_config,
                     peak_config=peak_config,
+                    emit_region_audit=emit_region_audit,
                 ),
             )
     resolved_cells = _resolve_peak_ownership(tuple(cells), families, alignment_config)
@@ -60,6 +64,7 @@ def _integrate_family_cell(
     raw_sources: Mapping[str, FamilyIntegrationSource],
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
+    emit_region_audit: bool,
 ) -> AlignedCell:
     if not family.has_anchor and sample_stem not in _event_member_samples(family):
         return _unchecked_cell(
@@ -99,6 +104,16 @@ def _integrate_family_cell(
         )
     if result.status != "OK" or result.peak is None:
         return _absent_cell(family, sample_stem)
+    region_audit = (
+        build_peak_region_audit_summary(
+            rt_array,
+            intensity_array,
+            result,
+            peak_config,
+        )
+        if emit_region_audit
+        else None
+    )
     peak = result.peak
     has_original_detection = _has_original_detection(family, sample_stem)
     status: CellStatus = "detected" if has_original_detection else "rescued"
@@ -107,7 +122,7 @@ def _integrate_family_cell(
         if has_original_detection
         else "family-centered MS1 backfill"
     )
-    return AlignedCell(
+    cell = AlignedCell(
         sample_stem=sample_stem,
         cluster_id=family.feature_family_id,
         status=status,
@@ -128,6 +143,7 @@ def _integrate_family_cell(
         source_raw_file=None,
         reason=reason,
     )
+    return with_region_audit(cell, region_audit)
 
 
 def _unchecked_cell(

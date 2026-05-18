@@ -10,6 +10,7 @@ from xic_extractor.alignment.backfill import backfill_alignment_matrix
 from xic_extractor.alignment.models import build_alignment_cluster
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_detection.models import PeakDetectionResult, PeakResult
+from xic_extractor.peak_detection.region_audit import PeakRegionAuditSummary
 
 
 @dataclass(frozen=True)
@@ -241,6 +242,89 @@ def test_anchor_missing_sample_rescues_peak(monkeypatch):
     assert rescued.source_candidate_id is None
     assert rescued.source_raw_file is None
     assert rescued.reason == "MS1 peak rescued at cluster center"
+
+
+def test_anchor_backfill_cell_preserves_region_audit_context(monkeypatch):
+    source = FakeSource()
+    cluster = _cluster(
+        Candidate(candidate_id="sample-a#1", sample_stem="sample-a"),
+        has_anchor=True,
+    )
+    _patch_peak_result(monkeypatch, _ok_peak_result())
+
+    def fake_region_audit(*args, **kwargs):
+        return PeakRegionAuditSummary(
+            candidate_count=3,
+            selected_proposal_sources=("local_minimum", "centwave_cwt"),
+            selected_merge_note="",
+            shadow_status="evaluated",
+            shadow_verdict="merge_suggested",
+            merge_suggestion_source="adjacent_wis_local_minimum_merge",
+            area_ratio=1.04,
+            selected_interval_count=2,
+            selected_interval_gap_max_min=0.04,
+            local_mixture_diagnostic="one_envelope_supported",
+            local_mixture_reason="adjacent intervals support one envelope",
+            review_reason="same envelope",
+        )
+
+    monkeypatch.setattr(
+        backfill_module,
+        "build_peak_region_audit_summary",
+        fake_region_audit,
+    )
+
+    matrix = backfill_alignment_matrix(
+        (cluster,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=180.0),
+        peak_config=_peak_config(),
+        emit_region_audit=True,
+    )
+
+    rescued = _cell(matrix, cluster_id="ALN000001", sample_stem="sample-b")
+    assert rescued.region_candidate_count == 3
+    assert rescued.region_selected_proposal_sources == (
+        "local_minimum",
+        "centwave_cwt",
+    )
+    assert rescued.region_shadow_verdict == "merge_suggested"
+    assert rescued.region_merge_suggestion_source == (
+        "adjacent_wis_local_minimum_merge"
+    )
+    assert rescued.region_local_mixture_diagnostic == "one_envelope_supported"
+
+
+def test_anchor_backfill_region_audit_is_opt_in(monkeypatch):
+    source = FakeSource()
+    cluster = _cluster(
+        Candidate(candidate_id="sample-a#1", sample_stem="sample-a"),
+        has_anchor=True,
+    )
+    _patch_peak_result(monkeypatch, _ok_peak_result())
+
+    def fail_region_audit(*args, **kwargs):
+        raise AssertionError("region audit should be debug/validation opt-in")
+
+    monkeypatch.setattr(
+        backfill_module,
+        "build_peak_region_audit_summary",
+        fail_region_audit,
+    )
+
+    matrix = backfill_alignment_matrix(
+        (cluster,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=180.0),
+        peak_config=_peak_config(),
+    )
+
+    rescued = _cell(matrix, cluster_id="ALN000001", sample_stem="sample-b")
+    assert rescued.status == "rescued"
+    assert rescued.region_candidate_count is None
+    assert rescued.region_shadow_status == ""
 
 
 def test_anchor_missing_sample_no_peak_is_absent(monkeypatch):
