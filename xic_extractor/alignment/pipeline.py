@@ -153,6 +153,7 @@ def run_alignment(
                     peak_config=peak_config,
                     max_workers=raw_workers,
                     raw_xic_batch_size=raw_xic_batch_size,
+                    emit_region_audit=emit_cell_region_audit,
                 )
                 ownership = owner_output.ownership
                 for stats in owner_output.timing_stats:
@@ -180,6 +181,7 @@ def run_alignment(
                     alignment_config=alignment_config,
                     peak_config=peak_config,
                     raw_xic_batch_size=raw_xic_batch_size,
+                    emit_region_audit=emit_cell_region_audit,
                 )
                 record_timed_raw_sources(timed_raw_sources_, recorder=recorder)
         edge_evidence: list[OwnerEdgeEvidence] | None = (

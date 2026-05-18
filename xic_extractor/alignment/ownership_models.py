@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from xic_extractor.peak_detection.region_audit import PeakRegionAuditSummary
+
 OwnerAssignmentStatus = Literal["primary", "supporting", "ambiguous", "unresolved"]
 
 
@@ -35,6 +37,7 @@ class SampleLocalMS1Owner:
     supporting_events: tuple[IdentityEvent, ...]
     identity_conflict: bool
     assignment_reason: str
+    region_audit: PeakRegionAuditSummary | None = None
 
     @property
     def all_events(self) -> tuple[IdentityEvent, ...]:

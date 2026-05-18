@@ -40,12 +40,14 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
         alignment_config,
         peak_config,
         raw_xic_batch_size,
+        emit_region_audit,
     ):
         calls["candidates"] = tuple(candidate.sample_stem for candidate in candidates)
         calls["owner_raw_sources"] = raw_sources
         calls["alignment_config"] = alignment_config
         calls["peak_config"] = peak_config
         calls["owner_raw_xic_batch_size"] = raw_xic_batch_size
+        calls["owner_emit_region_audit"] = emit_region_audit
         return SimpleNamespace(owners=("owner",), ambiguous_records=())
 
     def fake_cluster_owners(owners, *, config):
@@ -115,6 +117,7 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
     assert calls["sample_order"] == ("Sample_A", "Sample_B")
     assert set(calls["raw_sources"]) == {"Sample_A", "Sample_B"}
     assert calls["owner_raw_xic_batch_size"] == 1
+    assert calls["owner_emit_region_audit"] is False
     assert calls["backfill_raw_xic_batch_size"] == 1
     assert calls["emit_region_audit"] is False
     assert calls["matrix_features"] == ("feature",)

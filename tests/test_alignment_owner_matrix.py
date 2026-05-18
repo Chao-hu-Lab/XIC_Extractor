@@ -10,6 +10,7 @@ from xic_extractor.alignment.owner_matrix import (
     build_owner_alignment_matrix,
 )
 from xic_extractor.alignment.ownership_models import AmbiguousOwnerRecord
+from xic_extractor.peak_detection.region_audit import PeakRegionAuditSummary
 
 
 def test_owner_matrix_writes_detected_rescued_ambiguous_and_absent_cells() -> None:
@@ -68,6 +69,42 @@ def test_owner_matrix_detected_cell_does_not_invent_raw_path() -> None:
 
     assert matrix.cells[0].source_raw_file is None
     assert isinstance(Path("sample-a.raw"), Path)
+
+
+def test_owner_matrix_carries_detected_owner_region_audit() -> None:
+    owner = replace(
+        _owner("sample-a", "a"),
+        region_audit=PeakRegionAuditSummary(
+            candidate_count=3,
+            selected_proposal_sources=("local_minimum", "cwt_ridge"),
+            selected_merge_note="region_first_safe_merge",
+            shadow_status="evaluated",
+            shadow_verdict="merge_suggested",
+            merge_suggestion_source="adjacent_wis_local_minimum_merge",
+            area_ratio=1.08,
+            selected_interval_count=2,
+            selected_interval_gap_max_min=0.03,
+            local_mixture_diagnostic="one_envelope_supported",
+            local_mixture_reason="adjacent WIS intervals support one envelope",
+            review_reason="same envelope",
+        ),
+    )
+    feature = replace(_feature(), owners=(owner,))
+
+    matrix = build_owner_alignment_matrix(
+        (feature,),
+        sample_order=("sample-a",),
+        ambiguous_by_sample={},
+        rescued_cells=(),
+    )
+
+    cell = matrix.cells[0]
+    assert cell.status == "detected"
+    assert cell.region_candidate_count == 3
+    assert cell.region_selected_proposal_sources == ("local_minimum", "cwt_ridge")
+    assert cell.region_shadow_status == "evaluated"
+    assert cell.region_shadow_verdict == "merge_suggested"
+    assert cell.region_local_mixture_diagnostic == "one_envelope_supported"
 
 
 def test_owner_matrix_uses_backfill_confirmation_for_severe_low_local_owner() -> None:

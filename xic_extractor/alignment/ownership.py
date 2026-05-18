@@ -17,6 +17,10 @@ from xic_extractor.alignment.ownership_models import (
     SampleLocalMS1Owner,
 )
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.region_audit import (
+    PeakRegionAuditSummary,
+    build_peak_region_audit_summary,
+)
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
 
@@ -38,6 +42,7 @@ class ResolvedPeak:
     peak_end: float
     area: float
     intensity: float
+    region_audit: PeakRegionAuditSummary | None = None
 
 
 PeakResolver = Callable[
@@ -62,6 +67,7 @@ class _ResolvedCandidate:
     peak_end_rt: float
     area: float
     height: float
+    region_audit: PeakRegionAuditSummary | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +84,7 @@ def build_sample_local_owners(
     peak_config: ExtractionConfig,
     peak_resolver: PeakResolver | None = None,
     raw_xic_batch_size: int = 1,
+    emit_region_audit: bool = False,
 ) -> OwnershipBuildResult:
     if raw_xic_batch_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
@@ -89,6 +96,7 @@ def build_sample_local_owners(
         peak_config,
         active_peak_resolver,
         raw_xic_batch_size,
+        emit_region_audit,
     )
     resolved = tuple(
         outcome.resolved for outcome in outcomes if outcome.resolved is not None
@@ -125,6 +133,7 @@ def _resolve_candidates(
     peak_config: ExtractionConfig,
     peak_resolver: PeakResolver,
     raw_xic_batch_size: int,
+    emit_region_audit: bool,
 ) -> tuple[_ResolutionOutcome, ...]:
     outcomes: list[_ResolutionOutcome | None] = [None] * len(candidates)
     requests_by_sample: dict[
@@ -168,6 +177,7 @@ def _resolve_candidates(
                     trace,
                     peak_config,
                     peak_resolver,
+                    emit_region_audit=emit_region_audit,
                 )
     return tuple(outcome for outcome in outcomes if outcome is not None)
 
@@ -178,6 +188,7 @@ def _resolve_candidate(
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
     peak_resolver: PeakResolver,
+    emit_region_audit: bool = False,
 ) -> _ResolutionOutcome:
     sample_stem = str(candidate.sample_stem)
     source = raw_sources.get(sample_stem)
@@ -193,7 +204,15 @@ def _resolve_candidate(
         alignment_config.preferred_ppm,
     )
     rt_array, intensity_array = _validated_trace_arrays(rt, intensity)
-    peak = peak_resolver(candidate, rt_array, intensity_array, peak_config, seed_rt)
+    peak = _resolve_peak(
+        candidate,
+        rt_array,
+        intensity_array,
+        peak_config,
+        seed_rt,
+        peak_resolver,
+        emit_region_audit=emit_region_audit,
+    )
     if peak is None:
         return _unresolved_outcome(candidate, "peak_not_found")
     return _ResolutionOutcome(
@@ -205,6 +224,7 @@ def _resolve_candidate(
             peak_end_rt=peak.peak_end,
             area=peak.area,
             height=peak.intensity,
+            region_audit=peak.region_audit,
         ),
         unresolved=None,
     )
@@ -216,9 +236,19 @@ def _resolve_candidate_trace(
     trace: XICTrace,
     peak_config: ExtractionConfig,
     peak_resolver: PeakResolver,
+    *,
+    emit_region_audit: bool = False,
 ) -> _ResolutionOutcome:
     rt_array, intensity_array = _validated_trace_arrays(trace.rt, trace.intensity)
-    peak = peak_resolver(candidate, rt_array, intensity_array, peak_config, seed_rt)
+    peak = _resolve_peak(
+        candidate,
+        rt_array,
+        intensity_array,
+        peak_config,
+        seed_rt,
+        peak_resolver,
+        emit_region_audit=emit_region_audit,
+    )
     if peak is None:
         return _unresolved_outcome(candidate, "peak_not_found")
     return _ResolutionOutcome(
@@ -230,9 +260,32 @@ def _resolve_candidate_trace(
             peak_end_rt=peak.peak_end,
             area=peak.area,
             height=peak.intensity,
+            region_audit=peak.region_audit,
         ),
         unresolved=None,
     )
+
+
+def _resolve_peak(
+    candidate: Any,
+    rt_array: NDArray[np.float64],
+    intensity_array: NDArray[np.float64],
+    peak_config: ExtractionConfig,
+    seed_rt: float,
+    peak_resolver: PeakResolver,
+    *,
+    emit_region_audit: bool,
+) -> ResolvedPeak | None:
+    if peak_resolver is _default_peak_resolver:
+        return _default_peak_resolver(
+            candidate,
+            rt_array,
+            intensity_array,
+            peak_config,
+            seed_rt,
+            emit_region_audit=emit_region_audit,
+        )
+    return peak_resolver(candidate, rt_array, intensity_array, peak_config, seed_rt)
 
 
 def _extract_many(
@@ -283,6 +336,8 @@ def _default_peak_resolver(
     intensity_array: NDArray[np.float64],
     peak_config: ExtractionConfig,
     seed_rt: float,
+    *,
+    emit_region_audit: bool = False,
 ) -> ResolvedPeak | None:
     result = find_peak_and_area(
         rt_array,
@@ -294,12 +349,23 @@ def _default_peak_resolver(
     if result.status != "OK" or result.peak is None:
         return None
     peak = result.peak
+    region_audit = (
+        build_peak_region_audit_summary(
+            rt_array,
+            intensity_array,
+            result,
+            peak_config,
+        )
+        if emit_region_audit
+        else None
+    )
     return ResolvedPeak(
         rt=peak.rt,
         peak_start=peak.peak_start,
         peak_end=peak.peak_end,
         area=peak.area,
         intensity=peak.intensity,
+        region_audit=region_audit,
     )
 
 
@@ -370,6 +436,7 @@ def _owners_for_sample(
                 supporting_events=tuple(item.event for item in supporting),
                 identity_conflict=_identity_conflict(group),
                 assignment_reason="owner_exact_apex_match",
+                region_audit=primary.region_audit,
             ),
         )
         assignments.append(
