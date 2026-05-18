@@ -99,7 +99,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.owner_backfill_min_detected_samples
                 ),
             ),
-            peak_config=_peak_config(raw_dir, dll_dir, output_dir, args.resolver_mode),
+            peak_config=_peak_config(
+                raw_dir,
+                dll_dir,
+                output_dir,
+                _alignment_production_resolver_mode(args.resolver_mode),
+            ),
             output_level=args.output_level,
             emit_alignment_cells=args.emit_alignment_cells,
             emit_alignment_status_matrix=args.emit_alignment_status_matrix,
@@ -307,6 +312,12 @@ def _owner_backfill_xic_backend(value: str) -> str:
     if value == "ms1-index-hybrid":
         return "ms1_index_hybrid"
     return value
+
+
+def _alignment_production_resolver_mode(resolver_mode: str) -> str:
+    if resolver_mode == "region_first_safe_merge":
+        return "local_minimum"
+    return resolver_mode
 
 
 def _peak_config(

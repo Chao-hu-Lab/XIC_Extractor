@@ -87,7 +87,7 @@ Observed:
 
 ## Untargeted Audit Bridge Verdict
 
-Verdict: fail for production alignment use.
+Verdict: pass after enforcing audit-only alignment behavior.
 
 Artifacts:
 
@@ -108,33 +108,37 @@ Observed:
   selected proposal sources, selected merge note, shadow status, shadow verdict,
   merge suggestion source, area ratio, selected interval count, local mixture
   diagnostic, and review reason.
-- Default matrix row count: 272.
-- Safe-merge matrix row count: 270.
-- Default identity summary:
+- Before the audit-only fix, using `region_first_safe_merge` as an alignment
+  production resolver changed final matrix identity and caused an ISTD
+  benchmark regression.
+- The root cause was that alignment owner backfill used safe merge to mutate
+  production area/status. In `15N5-8-oxodG`, `TumorBC2263_DNA` changed from a
+  detected cell to a rescued safe-merge cell, which altered sample-level area
+  rank and caused `AREA_MISMATCH`.
+- Alignment now coerces `region_first_safe_merge` to `local_minimum` for
+  production peak picking. Region-first evidence remains available through
+  `alignment_cells.tsv` audit columns when cell emission is enabled.
+- Default matrix row count after the fix: 272.
+- Safe-merge alignment matrix row count after the fix: 272.
+- Default and safe-merge `alignment_matrix.tsv` are identical.
+- Default and safe-merge `alignment_review.tsv` are identical.
+- Identity summary after the fix:
   - `production_family, TRUE`: 272
   - `provisional_discovery, FALSE`: 289
   - `audit_family, FALSE`: 1739
-- Safe identity summary:
-  - `production_family, TRUE`: 270
-  - `provisional_discovery, FALSE`: 291
-  - `audit_family, FALSE`: 1736
-- Strict ISTD benchmark changed from default `WARN` overall to safe `FAIL`
-  overall.
-- Safe alignment introduced `15N5-8-oxodG` `AREA_MISMATCH` in the strict ISTD
-  benchmark.
+- Strict ISTD benchmark returns to overall `WARN`, matching the default run.
+- `15N5-8-oxodG` returns to `PASS`.
 
-This means the audit bridge did not preserve final matrix identity/gate. The
-resolver mode cannot be applied directly to untargeted alignment production
-logic in this form.
+This means region-first evidence can be exposed as untargeted audit context,
+but it must not be allowed to change alignment production quantification.
 
 ## Final Decision
 
 `region_first_safe_merge` should stay as an opt-in targeted resolver.
 
-It is not a default candidate yet, and it should not be used as an untargeted
-alignment production resolver. The next safe direction is to keep untargeted
-integration on the current production resolver and attach region/candidate/
-boundary evidence as audit-only context, or to add a stricter alignment-specific
-gate that proves matrix identity and ISTD benchmark stability before promotion.
+It is not a default candidate yet. In untargeted alignment it is audit-only:
+production quantification stays on `local_minimum`, while region/candidate/
+boundary evidence can be attached for review. Any future alignment promotion
+must first prove matrix identity and ISTD benchmark stability.
 
 Real-data outputs were generated for validation only and are not committed.

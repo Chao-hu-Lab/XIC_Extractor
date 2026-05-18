@@ -121,7 +121,7 @@ def test_run_alignment_cli_accepts_output_level_debug(
     assert captured["output_level"] == "debug"
 
 
-def test_run_alignment_cli_accepts_region_first_safe_merge_mode(
+def test_run_alignment_cli_keeps_region_first_safe_merge_out_of_production_mode(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -153,7 +153,7 @@ def test_run_alignment_cli_accepts_region_first_safe_merge_mode(
     )
 
     assert code == 0
-    assert captured["peak_config"].resolver_mode == "region_first_safe_merge"
+    assert captured["peak_config"].resolver_mode == "local_minimum"
 
 
 def test_run_alignment_cli_passes_raw_workers(

@@ -1,7 +1,7 @@
 # Region-first Safe Merge Validation Gate
 
 **Date:** 2026-05-18
-**Status:** Planned validation
+**Status:** Completed validation
 **Branch:** `codex/region-first-safe-merge-validation`
 **Depends on:** `2026-05-18-region-first-safe-merge-promotion-v1-spec.md`
 
@@ -54,6 +54,9 @@ under-integration without creating apparent low-confidence rescues.
      this branch output before alignment.
    - Run default and safe-merge alignment with `--emit-alignment-cells` and the
      `validation-fast` profile.
+   - Alignment production peak picking must coerce
+     `region_first_safe_merge` to `local_minimum`; region-first evidence is
+     audit-only in alignment.
    - Region audit context may explain local-minimum split/merge behavior, but it
      must not change final matrix identity or production gates in this phase.
 
