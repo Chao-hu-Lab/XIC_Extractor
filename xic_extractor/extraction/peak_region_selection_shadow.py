@@ -3,6 +3,9 @@ from __future__ import annotations
 import statistics
 from collections.abc import Mapping, Sequence
 
+from xic_extractor.peak_detection.region_mixture_diagnostic import (
+    classify_local_mixture,
+)
 from xic_extractor.peak_detection.region_model_selection import (
     RegionBoundaryEvidence,
     RegionSelectionDecision,
@@ -33,6 +36,7 @@ PEAK_REGION_SELECTION_SHADOW_HEADERS = (
     "shadow_area_raw_counts_seconds",
     "shadow_status",
     "shadow_verdict",
+    "merge_suggestion_source",
     "score_delta",
     "area_ratio",
     "current_scan_count",
@@ -43,6 +47,8 @@ PEAK_REGION_SELECTION_SHADOW_HEADERS = (
     "best_single_boundary_score",
     "support_labels",
     "concern_labels",
+    "local_mixture_diagnostic",
+    "local_mixture_reason",
     "review_reason",
 )
 
@@ -58,6 +64,7 @@ PEAK_REGION_SELECTION_SHADOW_SUMMARY_HEADERS = (
     "shadow_area_raw_counts_seconds",
     "shadow_status",
     "shadow_verdict",
+    "merge_suggestion_source",
     "score_delta",
     "area_ratio",
     "current_scan_count",
@@ -66,6 +73,8 @@ PEAK_REGION_SELECTION_SHADOW_SUMMARY_HEADERS = (
     "selected_interval_gap_max_min",
     "selected_interval_total_score",
     "best_single_boundary_score",
+    "local_mixture_diagnostic",
+    "local_mixture_reason",
     "review_reason",
 )
 
@@ -192,6 +201,7 @@ def _row_from_decision(
     context: Mapping[str, str],
     decision: RegionSelectionDecision,
 ) -> PeakRegionSelectionShadowRow:
+    local_mixture = classify_local_mixture(decision)
     return {
         "sample_name": str(context.get("sample_name", "")),
         "group": str(context.get("group", "")),
@@ -220,6 +230,7 @@ def _row_from_decision(
         ),
         "shadow_status": decision.shadow_status,
         "shadow_verdict": decision.shadow_verdict,
+        "merge_suggestion_source": decision.merge_suggestion_source,
         "score_delta": (
             ""
             if decision.score_delta is None
@@ -242,6 +253,8 @@ def _row_from_decision(
         ),
         "support_labels": _join(decision.support_labels),
         "concern_labels": _join(decision.concern_labels),
+        "local_mixture_diagnostic": local_mixture.label,
+        "local_mixture_reason": local_mixture.reason,
         "review_reason": decision.review_reason,
     }
 

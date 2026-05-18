@@ -53,6 +53,7 @@ def test_shadow_rows_group_boundary_rows_by_target_and_include_review_context() 
     assert row["shadow_area_raw_counts_seconds"] == "180.00"
     assert row["shadow_status"] == "evaluated"
     assert row["shadow_verdict"] == "wider_boundary_preferred"
+    assert row["merge_suggestion_source"] == ""
     assert row["area_ratio"] == "1.80000"
     assert row["current_scan_count"] == "5"
     assert row["shadow_scan_count"] == "5"
@@ -89,6 +90,7 @@ def test_shadow_summary_keeps_human_review_columns() -> None:
         "shadow_area_raw_counts_seconds",
         "shadow_status",
         "shadow_verdict",
+        "merge_suggestion_source",
         "score_delta",
         "area_ratio",
         "current_scan_count",
@@ -97,8 +99,42 @@ def test_shadow_summary_keeps_human_review_columns() -> None:
         "selected_interval_gap_max_min",
         "selected_interval_total_score",
         "best_single_boundary_score",
+        "local_mixture_diagnostic",
+        "local_mixture_reason",
         "review_reason",
     ]
+
+
+def test_shadow_row_exposes_adjacent_wis_merge_source() -> None:
+    rows = build_peak_region_selection_shadow_rows(
+        [
+            _boundary_row(
+                candidate_id="left",
+                boundary_id="left|candidate",
+                selected_candidate="TRUE",
+                area="100.00",
+                score="70",
+                right="10.20000",
+                nonoverlap_selected="TRUE",
+            ),
+            _boundary_row(
+                candidate_id="right",
+                boundary_id="right|candidate",
+                selected_candidate="FALSE",
+                area="10.00",
+                score="55",
+                left="10.22000",
+                apex="10.25000",
+                right="10.35000",
+                nonoverlap_selected="TRUE",
+            ),
+        ]
+    )
+
+    assert rows[0]["shadow_verdict"] == "merge_suggested"
+    assert rows[0]["merge_suggestion_source"] == (
+        "adjacent_wis_local_minimum_merge"
+    )
 
 
 def test_malformed_boundary_row_emits_visible_skipped_shadow_row() -> None:
