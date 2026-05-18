@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-18
 **Status:** Implementation slice
-**Branch:** `codex/targeted-nl-dropout-convergence`
+**Branch:** `codex/region-first-safe-merge-validation`
 **Source memo:** `C:\Users\user\Downloads\lcms_gcms_peak_pipeline_handoff.md`
 
 ## Summary
