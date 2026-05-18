@@ -57,6 +57,9 @@ def test_peak_region_audit_summarizes_current_envelope() -> None:
     assert summary.selected_proposal_sources == ("local_minimum",)
     assert summary.shadow_status == "evaluated"
     assert summary.local_mixture_diagnostic == "current_single_envelope"
+    assert summary.integration_audit is not None
+    assert summary.integration_audit.area_baseline_corrected is not None
+    assert summary.integration_audit.integration_scan_count == 3
 
 
 def test_peak_region_audit_returns_empty_for_no_peak() -> None:
@@ -75,6 +78,7 @@ def test_peak_region_audit_returns_empty_for_no_peak() -> None:
 
     assert summary.candidate_count is None
     assert summary.shadow_status == ""
+    assert summary.integration_audit is None
 
 
 def test_peak_region_audit_prefers_trace_group_arrays() -> None:

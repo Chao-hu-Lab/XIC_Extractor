@@ -7,6 +7,10 @@ import numpy as np
 
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_detection.cwt import add_cwt_proposals_for_audit
+from xic_extractor.peak_detection.integration_audit import (
+    CellIntegrationAuditSummary,
+    build_cell_integration_audit_summary,
+)
 from xic_extractor.peak_detection.models import (
     PeakCandidate,
     PeakCandidatesResult,
@@ -40,6 +44,7 @@ class PeakRegionAuditSummary:
     local_mixture_diagnostic: str = ""
     local_mixture_reason: str = ""
     review_reason: str = ""
+    integration_audit: CellIntegrationAuditSummary | None = None
 
 
 EMPTY_REGION_AUDIT = PeakRegionAuditSummary()
@@ -105,6 +110,13 @@ def build_peak_region_audit_summary(
         decision,
         selected=selected,
         candidate_count=len(candidates_result.candidates),
+        integration_audit=build_cell_integration_audit_summary(
+            rt_values,
+            intensity_values,
+            peak_start_rt=selected.peak.peak_start,
+            peak_end_rt=selected.peak.peak_end,
+            raw_area=selected.peak.area,
+        ),
     )
 
 
@@ -113,6 +125,7 @@ def _summary_from_decision(
     *,
     selected: PeakCandidate,
     candidate_count: int,
+    integration_audit: CellIntegrationAuditSummary | None = None,
 ) -> PeakRegionAuditSummary:
     local_mixture = classify_local_mixture(decision)
     return PeakRegionAuditSummary(
@@ -128,6 +141,7 @@ def _summary_from_decision(
         local_mixture_diagnostic=local_mixture.label,
         local_mixture_reason=local_mixture.reason,
         review_reason=decision.review_reason,
+        integration_audit=integration_audit,
     )
 
 
