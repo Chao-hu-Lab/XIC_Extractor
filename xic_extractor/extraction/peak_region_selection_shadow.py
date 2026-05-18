@@ -140,7 +140,11 @@ def build_peak_region_selection_blast_radius_rows(
         if row.get("shadow_status", "evaluated") == "evaluated"
         and row.get("shadow_verdict") in _PROMOTING_VERDICTS
     ]
-    ratios = sorted(_parse_float(row.get("area_ratio", "")) for row in affected)
+    ratios = sorted(
+        ratio
+        for row in affected
+        if (ratio := _parse_optional_float(row.get("area_ratio", ""))) is not None
+    )
     labels = sorted(
         {
             row.get("target_label", "")
@@ -272,6 +276,13 @@ def _parse_bool(value: str) -> bool:
 
 def _parse_float(value: object) -> float:
     return float(str(value))
+
+
+def _parse_optional_float(value: object) -> float | None:
+    text = str(value).strip()
+    if text == "":
+        return None
+    return float(text)
 
 
 def _parse_int(value: object) -> int:
