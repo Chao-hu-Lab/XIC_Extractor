@@ -88,6 +88,26 @@ ALIGNMENT_CELLS_COLUMNS = (
     "region_review_reason",
 )
 
+ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
+    "feature_family_id",
+    "sample_stem",
+    "status",
+    "area",
+    "apex_rt",
+    "peak_start_rt",
+    "peak_end_rt",
+    "neutral_loss_tag",
+    "family_center_mz",
+    "family_center_rt",
+    "area_baseline_corrected",
+    "area_uncertainty",
+    "baseline_type",
+    "baseline_score",
+    "uncertainty_fraction",
+    "baseline_fraction",
+    "integration_scan_count",
+)
+
 
 def write_alignment_review_tsv(
     path: Path,
@@ -192,6 +212,45 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
             }
         )
     return _write_tsv(path, ALIGNMENT_CELLS_COLUMNS, rows)
+
+
+def write_alignment_cell_integration_audit_tsv(
+    path: Path,
+    matrix: AlignmentMatrix,
+) -> Path:
+    clusters_by_id = {row_id(cluster): cluster for cluster in matrix.clusters}
+    rows: list[dict[str, object]] = []
+    for cell in matrix.cells:
+        audit = cell.integration_audit
+        if audit is None or audit.is_empty:
+            continue
+        cluster = clusters_by_id[cell.cluster_id]
+        rows.append(
+            {
+                "feature_family_id": cell.cluster_id,
+                "sample_stem": cell.sample_stem,
+                "status": cell.status,
+                "area": format_value(cell.area),
+                "apex_rt": format_value(cell.apex_rt),
+                "peak_start_rt": format_value(cell.peak_start_rt),
+                "peak_end_rt": format_value(cell.peak_end_rt),
+                "neutral_loss_tag": cluster.neutral_loss_tag,
+                "family_center_mz": format_value(_family_center_mz(cluster)),
+                "family_center_rt": format_value(_family_center_rt(cluster)),
+                "area_baseline_corrected": format_value(
+                    audit.area_baseline_corrected
+                ),
+                "area_uncertainty": format_value(audit.area_uncertainty),
+                "baseline_type": audit.baseline_type,
+                "baseline_score": format_value(audit.baseline_score),
+                "uncertainty_fraction": format_value(audit.uncertainty_fraction),
+                "baseline_fraction": format_value(audit.baseline_fraction),
+                "integration_scan_count": format_value(
+                    audit.integration_scan_count
+                ),
+            }
+        )
+    return _write_tsv(path, ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS, rows)
 
 
 def write_alignment_status_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:

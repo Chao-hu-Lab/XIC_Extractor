@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
+from xic_extractor.peak_detection.integration_audit import CellIntegrationAuditSummary
 
 REVIEW_COLUMNS = [
     "feature_family_id",
@@ -523,6 +524,52 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
     assert status[0]["sample-b"] == "unchecked"
 
 
+def test_write_alignment_cell_integration_audit_tsv_is_sidecar(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import (
+        ALIGNMENT_CELLS_COLUMNS,
+        write_alignment_cell_integration_audit_tsv,
+        write_alignment_cells_tsv,
+    )
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(),),
+        cells=(
+            _cell(
+                "sample-a",
+                "detected",
+                area=10.0,
+                candidate_id="sample-a#1",
+                integration=True,
+            ),
+            _cell("sample-b", "absent"),
+        ),
+        sample_order=("sample-a", "sample-b"),
+    )
+
+    cells = _read_tsv(write_alignment_cells_tsv(tmp_path / "cells.tsv", matrix))
+    audit = _read_tsv(
+        write_alignment_cell_integration_audit_tsv(
+            tmp_path / "alignment_cell_integration_audit.tsv",
+            matrix,
+        )
+    )
+
+    assert list(cells[0]) == list(ALIGNMENT_CELLS_COLUMNS)
+    assert len(audit) == 1
+    assert audit[0]["feature_family_id"] == "ALN000001"
+    assert audit[0]["sample_stem"] == "sample-a"
+    assert audit[0]["status"] == "detected"
+    assert audit[0]["neutral_loss_tag"] == "DNA_dR"
+    assert audit[0]["area_baseline_corrected"] == "7.5"
+    assert audit[0]["area_uncertainty"] == "2"
+    assert audit[0]["baseline_type"] == "linear_edge"
+    assert audit[0]["uncertainty_fraction"] == "0.2"
+    assert audit[0]["baseline_fraction"] == "0.75"
+    assert audit[0]["integration_scan_count"] == "5"
+
+
 def test_tsv_writers_escape_formula_like_text(tmp_path: Path):
     from xic_extractor.alignment.tsv_writer import (
         write_alignment_matrix_tsv,
@@ -609,6 +656,7 @@ def _cell(
     candidate_id: str | None = None,
     trace_quality: str | None = None,
     region: bool = False,
+    integration: bool = False,
 ) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,
@@ -648,4 +696,18 @@ def _cell(
             "adjacent intervals support one envelope" if region else ""
         ),
         region_review_reason="same envelope" if region else "",
+        integration_audit=(
+            CellIntegrationAuditSummary(
+                raw_area=area,
+                area_baseline_corrected=7.5,
+                area_uncertainty=2.0,
+                baseline_type="linear_edge",
+                baseline_score=0.75,
+                uncertainty_fraction=0.2,
+                baseline_fraction=0.75,
+                integration_scan_count=5,
+            )
+            if integration
+            else None
+        ),
     )

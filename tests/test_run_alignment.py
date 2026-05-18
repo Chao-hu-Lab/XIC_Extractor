@@ -29,8 +29,9 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
         review = output_dir / "alignment_review.tsv"
         matrix = output_dir / "alignment_matrix.tsv"
         cells = output_dir / "alignment_cells.tsv"
+        integration = output_dir / "alignment_cell_integration_audit.tsv"
         status = output_dir / "alignment_matrix_status.tsv"
-        for path in (review, matrix, cells, status):
+        for path in (review, matrix, cells, integration, status):
             path.write_text("x\n", encoding="utf-8")
         return AlignmentRunOutputs(
             workbook=output_dir / "alignment_results.xlsx",
@@ -38,6 +39,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
             review_tsv=review,
             matrix_tsv=matrix,
             cells_tsv=cells,
+            integration_audit_tsv=integration,
             status_matrix_tsv=status,
             edge_evidence_tsv=output_dir / "owner_edge_evidence.tsv",
         )
@@ -57,6 +59,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
             "--resolver-mode",
             "legacy_savgol",
             "--emit-alignment-cells",
+            "--emit-alignment-integration-audit",
             "--emit-alignment-status-matrix",
         ]
     )
@@ -75,6 +78,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert peak_config.resolver_mode == "legacy_savgol"
     assert captured["output_level"] == "machine"
     assert captured["emit_alignment_cells"] is True
+    assert captured["emit_alignment_integration_audit"] is True
     assert captured["emit_alignment_status_matrix"] is True
     assert captured["raw_workers"] == 1
     assert captured["raw_xic_batch_size"] == 1
@@ -82,6 +86,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     stdout = capsys.readouterr().out
     assert "Alignment review TSV:" in stdout
     assert "alignment_review.tsv" in stdout
+    assert "alignment_cell_integration_audit.tsv" in stdout
     assert "alignment_matrix_status.tsv" in stdout
     assert "Owner edge evidence TSV:" in stdout
 

@@ -10,6 +10,7 @@ from xic_extractor.alignment.owner_matrix import (
     build_owner_alignment_matrix,
 )
 from xic_extractor.alignment.ownership_models import AmbiguousOwnerRecord
+from xic_extractor.peak_detection.integration_audit import CellIntegrationAuditSummary
 from xic_extractor.peak_detection.region_audit import PeakRegionAuditSummary
 
 
@@ -87,6 +88,16 @@ def test_owner_matrix_carries_detected_owner_region_audit() -> None:
             local_mixture_diagnostic="one_envelope_supported",
             local_mixture_reason="adjacent WIS intervals support one envelope",
             review_reason="same envelope",
+            integration_audit=CellIntegrationAuditSummary(
+                raw_area=1000.0,
+                area_baseline_corrected=800.0,
+                area_uncertainty=50.0,
+                baseline_type="linear_edge",
+                baseline_score=0.8,
+                uncertainty_fraction=0.05,
+                baseline_fraction=0.8,
+                integration_scan_count=7,
+            ),
         ),
     )
     feature = replace(_feature(), owners=(owner,))
@@ -105,6 +116,8 @@ def test_owner_matrix_carries_detected_owner_region_audit() -> None:
     assert cell.region_shadow_status == "evaluated"
     assert cell.region_shadow_verdict == "merge_suggested"
     assert cell.region_local_mixture_diagnostic == "one_envelope_supported"
+    assert cell.integration_audit is not None
+    assert cell.integration_audit.baseline_fraction == 0.8
 
 
 def test_owner_matrix_uses_backfill_confirmation_for_severe_low_local_owner() -> None:

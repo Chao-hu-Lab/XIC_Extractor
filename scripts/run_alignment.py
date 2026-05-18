@@ -108,6 +108,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_level=args.output_level,
             emit_alignment_cells=args.emit_alignment_cells,
             emit_alignment_status_matrix=args.emit_alignment_status_matrix,
+            emit_alignment_integration_audit=args.emit_alignment_integration_audit,
             raw_workers=raw_workers,
             raw_xic_batch_size=raw_xic_batch_size,
             owner_backfill_xic_backend=_owner_backfill_xic_backend(
@@ -137,6 +138,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Alignment matrix TSV: {outputs.matrix_tsv}")
     if outputs.cells_tsv is not None:
         print(f"Alignment cells TSV: {outputs.cells_tsv}")
+    if outputs.integration_audit_tsv is not None:
+        print(f"Alignment integration audit TSV: {outputs.integration_audit_tsv}")
     if outputs.status_matrix_tsv is not None:
         print(f"Alignment status matrix TSV: {outputs.status_matrix_tsv}")
     if outputs.event_to_owner_tsv is not None:
@@ -277,6 +280,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--emit-alignment-cells", action="store_true")
+    parser.add_argument("--emit-alignment-integration-audit", action="store_true")
     parser.add_argument("--emit-alignment-status-matrix", action="store_true")
     return parser.parse_args(argv)
 
