@@ -464,7 +464,13 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
     matrix = AlignmentMatrix(
         clusters=(_cluster(),),
         cells=(
-            _cell("sample-a", "detected", area=10.0, candidate_id="sample-a#1"),
+            _cell(
+                "sample-a",
+                "detected",
+                area=10.0,
+                candidate_id="sample-a#1",
+                region=True,
+            ),
             _cell("sample-b", "unchecked"),
         ),
         sample_order=("sample-a", "sample-b"),
@@ -493,9 +499,26 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
         "family_center_mz",
         "family_center_rt",
         "reason",
+        "region_candidate_count",
+        "region_selected_proposal_sources",
+        "region_selected_merge_note",
+        "region_shadow_status",
+        "region_shadow_verdict",
+        "region_merge_suggestion_source",
+        "region_area_ratio",
+        "region_selected_interval_count",
+        "region_selected_interval_gap_max_min",
+        "region_local_mixture_diagnostic",
+        "region_local_mixture_reason",
+        "region_review_reason",
     ]
     assert cells[0]["status"] == "detected"
     assert cells[0]["source_candidate_id"] == "sample-a#1"
+    assert cells[0]["region_candidate_count"] == "2"
+    assert cells[0]["region_selected_proposal_sources"] == (
+        "local_minimum;centwave_cwt"
+    )
+    assert cells[0]["region_local_mixture_diagnostic"] == "one_envelope_supported"
     assert status[0]["sample-a"] == "detected"
     assert status[0]["sample-b"] == "unchecked"
 
@@ -585,6 +608,7 @@ def _cell(
     area: float | None = None,
     candidate_id: str | None = None,
     trace_quality: str | None = None,
+    region: bool = False,
 ) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,
@@ -605,4 +629,23 @@ def _cell(
         source_candidate_id=candidate_id,
         source_raw_file=Path(f"{sample_stem}.raw") if candidate_id else None,
         reason="cell reason",
+        region_candidate_count=2 if region else None,
+        region_selected_proposal_sources=(
+            ("local_minimum", "centwave_cwt") if region else ()
+        ),
+        region_shadow_status="evaluated" if region else "",
+        region_shadow_verdict="merge_suggested" if region else "",
+        region_merge_suggestion_source=(
+            "adjacent_wis_local_minimum_merge" if region else ""
+        ),
+        region_area_ratio=1.04 if region else None,
+        region_selected_interval_count=2 if region else None,
+        region_selected_interval_gap_max_min=0.04 if region else None,
+        region_local_mixture_diagnostic=(
+            "one_envelope_supported" if region else ""
+        ),
+        region_local_mixture_reason=(
+            "adjacent intervals support one envelope" if region else ""
+        ),
+        region_review_reason="same envelope" if region else "",
     )

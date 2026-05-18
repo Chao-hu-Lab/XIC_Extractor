@@ -271,6 +271,50 @@ def test_selector_low_scan_demotion_applies_to_evidence_score_candidates() -> No
     )
 
 
+def test_selector_demotes_low_scan_strict_nl_shoulder_for_area_supported_candidate(
+) -> None:
+    shoulder = _sc(
+        Confidence.MEDIUM,
+        25.896,
+        12_000_000.0,
+        None,
+        selection_quality_penalty=0.25,
+        quality_flags=("low_scan_support",),
+        area=17_000_000.0,
+    )
+    broader_peak = _sc(
+        Confidence.VERY_LOW,
+        26.149,
+        31_000_000.0,
+        None,
+        selection_quality_penalty=0.25,
+        quality_flags=("low_trace_continuity",),
+        area=335_000_000.0,
+    )
+    shoulder = replace(
+        shoulder,
+        evidence_score=_score_for_selector(
+            110,
+            support_labels=("strict_nl_ok", "ms2_trace_strong", "rt_prior_close"),
+        ),
+    )
+    broader_peak = replace(
+        broader_peak,
+        evidence_score=_score_for_selector(
+            37,
+            support_labels=("strict_nl_ok", "local_sn_strong"),
+        ),
+    )
+
+    assert (
+        select_candidate_with_confidence(
+            [shoulder, broader_peak],
+            selection_rt=25.942,
+        )
+        is broader_peak
+    )
+
+
 def test_selector_keeps_low_scan_anchor_when_alternative_is_too_far() -> None:
     spike = _sc(
         Confidence.MEDIUM,

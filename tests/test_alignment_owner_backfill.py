@@ -2,6 +2,7 @@ from dataclasses import replace
 
 import numpy as np
 
+import xic_extractor.alignment.owner_backfill as owner_backfill_module
 from tests.test_alignment_owner_clustering import _owner
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.owner_backfill import build_owner_backfill_cells
@@ -22,6 +23,7 @@ def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
         raw_sources={"sample-b": source},
         alignment_config=AlignmentConfig(max_rt_sec=60.0),
         peak_config=_peak_config(),
+        emit_region_audit=True,
     )
 
     assert len(cells) == 1
@@ -31,7 +33,38 @@ def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
     assert cell.status == "rescued"
     assert cell.area is not None and cell.area > 0
     assert cell.reason == "owner-centered MS1 backfill"
+    assert cell.region_candidate_count is not None
+    assert cell.region_shadow_status == "evaluated"
+    assert cell.region_local_mixture_diagnostic
     assert source.calls == [(500.0, 7.5, 9.5, 20.0)]
+
+
+def test_owner_backfill_region_audit_is_opt_in(monkeypatch) -> None:
+    source = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 50.0, 120.0, 50.0, 0.0]),
+    )
+
+    def fail_region_audit(*args, **kwargs):
+        raise AssertionError("region audit should be debug/validation opt-in")
+
+    monkeypatch.setattr(
+        owner_backfill_module,
+        "build_peak_region_audit_summary",
+        fail_region_audit,
+    )
+
+    cells = build_owner_backfill_cells(
+        (_feature(),),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=_peak_config(),
+    )
+
+    assert len(cells) == 1
+    assert cells[0].region_candidate_count is None
+    assert cells[0].region_shadow_status == ""
 
 
 def test_owner_backfill_skips_review_only_identity_conflicts() -> None:

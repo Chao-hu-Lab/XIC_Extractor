@@ -292,6 +292,18 @@ def test_load_config_accepts_arbitrated_resolver_mode(tmp_path: Path) -> None:
     assert config.resolver_mode == "arbitrated"
 
 
+def test_load_config_accepts_region_first_safe_merge_resolver_mode(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"resolver_mode": "region_first_safe_merge"})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.resolver_mode == "region_first_safe_merge"
+
+
 def test_load_config_accepts_zero_local_minimum_floor_values(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     _write_settings(
@@ -399,6 +411,17 @@ def test_settings_example_includes_local_minimum_preset() -> None:
     assert rows["resolver_peak_duration_min"] == "0.0"
     assert rows["resolver_peak_duration_max"] == "2.0"
     assert rows["resolver_min_scans"] == "5"
+
+
+def test_settings_example_documents_region_first_safe_merge_mode() -> None:
+    example_path = Path("config/settings.example.csv")
+
+    with example_path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = {row["key"]: row for row in csv.DictReader(handle)}
+
+    resolver_row = rows["resolver_mode"]
+    assert resolver_row["value"] == "legacy_savgol"
+    assert "region_first_safe_merge" in resolver_row["description"]
 
 
 @pytest.mark.parametrize(

@@ -38,7 +38,7 @@ def preferred_rt_recovery(
         return None, None
 
     resolver_mode = getattr(config, "resolver_mode", "legacy_savgol")
-    if resolver_mode in {"local_minimum", "arbitrated"}:
+    if resolver_mode in {"local_minimum", "arbitrated", "region_first_safe_merge"}:
         relaxed_config = relaxed_local_minimum_recovery_config(config)
         if relaxed_config == config:
             return None, None

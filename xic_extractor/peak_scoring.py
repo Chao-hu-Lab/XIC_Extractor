@@ -108,6 +108,9 @@ class ScoringContext:
     neutral_loss_required: bool = True
     count_no_ms2_as_detected: bool = False
     ms2_trace_strength: MS2TraceStrength | None = None
+    ms2_alignment_source: str | None = None
+    trigger_scan_count: int | None = None
+    strict_nl_scan_count: int | None = None
     baseline_array: np.ndarray | None = None
     residual_mad: float | None = None
     prefer_rt_prior_tiebreak: bool = False
@@ -184,6 +187,7 @@ _EVIDENCE_REASON_LABELS = {
     "noise_shape_poor": "noise shape poor",
     "anchor_mismatch": "anchor mismatch",
     "ms2_trace_weak": "MS2 trace weak",
+    "sparse_apex_ms2": "sparse apex MS2",
     "low_scan_support": "low scan support",
     "low_trace_continuity": "low trace continuity",
     "poor_edge_recovery": "poor edge recovery",
@@ -454,10 +458,6 @@ def _has_much_stronger_supported_alternative(
             continue
         if _has_candidate_flag(candidate, "low_scan_support"):
             continue
-        if _CONFIDENCE_RANK[candidate.confidence] > (
-            chosen_rank + _LOW_SCAN_MAX_CONFIDENCE_RANK_GAP
-        ):
-            continue
         if _selection_penalty_value(candidate) > chosen_penalty:
             continue
         candidate_distance = (
@@ -480,6 +480,13 @@ def _has_much_stronger_supported_alternative(
             chosen_abundance * _LOW_SCAN_STRONGER_CANDIDATE_AREA_RATIO
         )
         if not close_intensity_support and not extended_area_support:
+            continue
+        confidence_gap_too_large = _CONFIDENCE_RANK[candidate.confidence] > (
+            chosen_rank + _LOW_SCAN_MAX_CONFIDENCE_RANK_GAP
+        )
+        if confidence_gap_too_large and not (
+            extended_area_support and _has_evidence_support(candidate, "strict_nl_ok")
+        ):
             continue
         return True
     return False
@@ -629,7 +636,10 @@ def _evidence_from_context(
     elif ctx.ms2_present and ctx.nl_match:
         positive.append(EvidenceSignal("strict_nl_ok", 30))
         if ctx.ms2_trace_strength == "strong":
-            positive.append(EvidenceSignal("ms2_trace_strong", 10))
+            if _is_sparse_apex_fallback_ms2(candidate, ctx):
+                negative.append(EvidenceSignal("sparse_apex_ms2", 8))
+            else:
+                positive.append(EvidenceSignal("ms2_trace_strong", 10))
         elif ctx.ms2_trace_strength == "moderate":
             positive.append(EvidenceSignal("ms2_trace_moderate", 5))
         elif ctx.ms2_trace_strength == "weak":
@@ -740,6 +750,21 @@ def _trace_quality_cap_required(
     if flags & _TRACE_CAP_BLOCKING_FLAGS:
         return True
     return len(flags) >= 2 and not has_cwt_same_apex_support
+
+
+def _is_sparse_apex_fallback_ms2(candidate: Any, ctx: ScoringContext) -> bool:
+    if ctx.ms2_alignment_source != "apex_fallback":
+        return False
+    flags = {str(flag) for flag in getattr(candidate, "quality_flags", ())}
+    if "low_scan_support" not in flags:
+        return False
+    trigger_count = ctx.trigger_scan_count
+    strict_count = ctx.strict_nl_scan_count
+    if trigger_count is None and strict_count is None:
+        return False
+    return (trigger_count is not None and trigger_count <= 2) or (
+        strict_count is not None and strict_count <= 2
+    )
 
 
 def _has_cwt_chemical_support(ctx: ScoringContext) -> bool:

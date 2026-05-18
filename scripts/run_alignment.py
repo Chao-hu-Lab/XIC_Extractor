@@ -12,7 +12,7 @@ from xic_extractor.alignment.process_backend import AlignmentProcessExecutionErr
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.raw_reader import RawReaderError
-from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS, RESOLVER_MODES
 
 _DEFAULT_DRIFT_LOCAL_WINDOW = 40
 _DEFAULT_RAW_WORKERS = 1
@@ -259,7 +259,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--resolver-mode",
-        choices=("legacy_savgol", "local_minimum", "arbitrated"),
+        choices=RESOLVER_MODES,
         default="local_minimum",
     )
     parser.add_argument(

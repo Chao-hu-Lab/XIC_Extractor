@@ -17,6 +17,7 @@ from xic_extractor.extraction.diagnostics import (
 )
 from xic_extractor.extraction.drift import estimate_sample_drift
 from xic_extractor.extraction.istd_recovery import recover_istd_anchor_peak_if_needed
+from xic_extractor.extraction.ms2_selection import selected_candidate_ms2_evidence
 from xic_extractor.extraction.peak_candidate_audit import append_peak_audit_rows
 from xic_extractor.extraction.rt_windows import get_rt_window
 from xic_extractor.extraction.scoring_factory import (
@@ -95,7 +96,6 @@ def process_file(
                 for label, result in results.items()
                 if result.peak_result.confidence is not None
             }
-
             if precomputed_istd_anchor_rts is None:
                 istd_anchor_rts: dict[str, float] = {}
                 for target in targets:
@@ -122,7 +122,6 @@ def process_file(
                         istd_anchor_rts[target.label] = anchor_rt
             else:
                 istd_anchor_rts = dict(precomputed_istd_anchor_rts)
-
             sample_drift = estimate_sample_drift(targets, istd_anchor_rts)
 
             for target in targets:
@@ -158,7 +157,6 @@ def process_file(
                         istd_shape_metrics_by_label,
                     ),
                 )
-
             return extractor.FileResult(
                 sample_name=sample_name,
                 results=results,
@@ -289,9 +287,6 @@ def extract_one_target(
     shape_intensity = audit_intensity
     shape_metrics = selected_shape_metrics(shape_intensity, peak_result)
     candidate = selected_candidate(peak_result)
-    candidate_ms2_evidence = (
-        candidate_ms2_cache.get(candidate) if candidate is not None else None
-    )
     quality_penalty = 0
     quality_flags: tuple[str, ...] = ()
     if candidate is not None:
@@ -301,6 +296,11 @@ def extract_one_target(
         )
     if shape_metrics_by_label is not None and shape_metrics is not None:
         shape_metrics_by_label[target.label] = shape_metrics
+    candidate_ms2_evidence = selected_candidate_ms2_evidence(
+        candidate,
+        candidate_ms2_cache,
+        _cached_candidate_ms2_builder,
+    )
 
     result = extractor.ExtractionResult(
         peak_result=peak_result,

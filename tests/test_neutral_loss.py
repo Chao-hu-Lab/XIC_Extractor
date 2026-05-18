@@ -400,6 +400,33 @@ def test_candidate_evidence_does_not_borrow_other_region_trigger() -> None:
     assert evidence.alignment_source == "none"
 
 
+def test_candidate_evidence_uses_original_ms2_window_for_promoted_candidate() -> None:
+    candidate = _candidate(
+        peak_start=8.0,
+        peak_end=9.0,
+        apex_rt=8.1,
+        ms2_evidence_peak_start=8.0,
+        ms2_evidence_peak_end=8.2,
+    )
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.9,
+                masses=[150.0],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(raw, candidate)
+
+    assert evidence.ms2_present is False
+    assert evidence.nl_status == "NO_MS2"
+    assert evidence.trigger_scan_count == 0
+    assert evidence.alignment_source == "none"
+
+
 def test_candidate_evidence_uses_apex_fallback_for_sparse_ms2() -> None:
     candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.18)
     raw = _FakeRaw(
@@ -768,10 +795,14 @@ def _candidate(
     peak_start: float,
     peak_end: float,
     apex_rt: float,
+    ms2_evidence_peak_start: float | None = None,
+    ms2_evidence_peak_end: float | None = None,
 ) -> "_FakeCandidate":
     return _FakeCandidate(
         peak=_FakePeak(peak_start=peak_start, peak_end=peak_end),
         selection_apex_rt=apex_rt,
+        ms2_evidence_peak_start=ms2_evidence_peak_start,
+        ms2_evidence_peak_end=ms2_evidence_peak_end,
     )
 
 
@@ -782,6 +813,15 @@ class _FakePeak:
 
 
 class _FakeCandidate:
-    def __init__(self, *, peak: _FakePeak, selection_apex_rt: float) -> None:
+    def __init__(
+        self,
+        *,
+        peak: _FakePeak,
+        selection_apex_rt: float,
+        ms2_evidence_peak_start: float | None = None,
+        ms2_evidence_peak_end: float | None = None,
+    ) -> None:
         self.peak = peak
         self.selection_apex_rt = selection_apex_rt
+        self.ms2_evidence_peak_start = ms2_evidence_peak_start
+        self.ms2_evidence_peak_end = ms2_evidence_peak_end

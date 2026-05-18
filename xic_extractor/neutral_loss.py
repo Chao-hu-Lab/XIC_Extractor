@@ -224,8 +224,18 @@ def collect_candidate_ms2_evidence(
     nl_min_intensity_ratio: float,
 ) -> CandidateMS2Evidence:
     peak = getattr(candidate, "peak")
-    peak_start = float(getattr(peak, "peak_start"))
-    peak_end = float(getattr(peak, "peak_end"))
+    evidence_peak_start = getattr(candidate, "ms2_evidence_peak_start", None)
+    evidence_peak_end = getattr(candidate, "ms2_evidence_peak_end", None)
+    peak_start = float(
+        evidence_peak_start
+        if evidence_peak_start is not None
+        else getattr(peak, "peak_start")
+    )
+    peak_end = float(
+        evidence_peak_end
+        if evidence_peak_end is not None
+        else getattr(peak, "peak_end")
+    )
     apex_rt = float(getattr(candidate, "selection_apex_rt"))
     boundary_rescue_margin = _candidate_ms2_boundary_rescue_margin(
         peak_start, peak_end

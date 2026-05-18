@@ -221,6 +221,41 @@ def test_score_candidate_records_strong_ms2_trace_support() -> None:
     assert "MS2 trace strong" in scored.reason
 
 
+def test_sparse_apex_fallback_ms2_does_not_count_as_strong_trace_support() -> None:
+    cand = _make_flagged_candidate(
+        apex_rt=10.0,
+        apex_intensity=1000,
+        quality_flags=("low_scan_support",),
+    )
+    x = np.linspace(9, 11, 201)
+    y = 1000 * np.exp(-((x - 10) / 0.1) ** 2) + 5
+    ctx = ScoringContext(
+        rt_array=x,
+        intensity_array=y,
+        apex_index=100,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=10.0,
+        rt_prior_sigma=0.1,
+        rt_min=9.0,
+        rt_max=11.0,
+        dirty_matrix=False,
+        ms2_trace_strength="strong",
+        ms2_alignment_source="apex_fallback",
+        trigger_scan_count=2,
+        strict_nl_scan_count=2,
+    )
+
+    scored = score_candidate(cand, ctx, prior_rt=10.0)
+
+    assert "strict_nl_ok" in scored.evidence_score.support_labels
+    assert "ms2_trace_strong" not in scored.evidence_score.support_labels
+    assert "sparse_apex_ms2" in scored.evidence_score.concern_labels
+    assert "sparse apex MS2" in scored.reason
+
+
 def test_score_candidate_records_moderate_ms2_trace_support() -> None:
     cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
     x = np.linspace(9, 11, 201)

@@ -17,6 +17,9 @@ from xic_extractor.peak_detection.models import (
     PeakDetectionResult,
 )
 from xic_extractor.peak_detection.recovery import preferred_rt_recovery
+from xic_extractor.peak_detection.region_safe_merge import (
+    apply_region_first_safe_merge,
+)
 from xic_extractor.peak_detection.selection import (
     select_candidate,
     selection_rt_for_scored_candidates,
@@ -108,16 +111,23 @@ def find_peak_and_area(
             chosen_score_breakdown = score_breakdown_fields(chosen.evidence_score)
         else:
             if recovery_candidate is not None and recovery_result is not None:
-                return _detection_success(
-                    result_for_output,
-                    recovery_candidate,
-                    selection_reference_rt=selection_rt,
+                best_candidate = recovery_candidate
+            else:
+                best_candidate = select_candidate(
+                    all_candidates,
+                    preferred_rt=preferred_rt,
+                    strict_preferred_rt=strict_preferred_rt,
                 )
-            best_candidate = select_candidate(
-                all_candidates,
-                preferred_rt=preferred_rt,
-                strict_preferred_rt=strict_preferred_rt,
+        result_for_output, best_candidate, candidate_scores = (
+            _apply_region_first_safe_merge_if_enabled(
+                rt,
+                intensity,
+                config,
+                result_for_output,
+                best_candidate,
+                candidate_scores,
             )
+        )
         return _detection_success(
             result_for_output,
             best_candidate,
@@ -150,6 +160,16 @@ def find_peak_and_area(
                 istd_confidence_note=istd_confidence_note,
             )
             candidate_scores = (_candidate_score_summary(scored_recovery),)
+            recovery_result, recovery_candidate, candidate_scores = (
+                _apply_region_first_safe_merge_if_enabled(
+                    rt,
+                    intensity,
+                    config,
+                    recovery_result,
+                    recovery_candidate,
+                    candidate_scores,
+                )
+            )
             return _detection_success(
                 recovery_result,
                 recovery_candidate,
@@ -160,6 +180,16 @@ def find_peak_and_area(
                 candidate_scores=candidate_scores,
                 selection_reference_rt=preferred_rt,
             )
+        recovery_result, recovery_candidate, candidate_scores = (
+            _apply_region_first_safe_merge_if_enabled(
+                rt,
+                intensity,
+                config,
+                recovery_result,
+                recovery_candidate,
+                candidate_scores,
+            )
+        )
         return _detection_success(
             recovery_result,
             recovery_candidate,
@@ -176,7 +206,7 @@ def find_peak_candidates(
     peak_min_prominence_ratio: float | None = None,
 ) -> PeakCandidatesResult:
     resolver_mode = getattr(config, "resolver_mode", "legacy_savgol")
-    if resolver_mode == "local_minimum":
+    if resolver_mode in {"local_minimum", "region_first_safe_merge"}:
         return find_peak_candidates_local_minimum(rt, intensity, config)
     if resolver_mode == "arbitrated":
         return _find_peak_candidates_arbitrated(
@@ -190,6 +220,30 @@ def find_peak_candidates(
         intensity,
         config,
         peak_min_prominence_ratio=peak_min_prominence_ratio,
+    )
+
+
+def _apply_region_first_safe_merge_if_enabled(
+    rt: np.ndarray,
+    intensity: np.ndarray,
+    config: ExtractionConfig,
+    candidates_result: PeakCandidatesResult,
+    selected_candidate: PeakCandidate,
+    candidate_scores: tuple[PeakCandidateScore, ...],
+) -> tuple[PeakCandidatesResult, PeakCandidate, tuple[PeakCandidateScore, ...]]:
+    if getattr(config, "resolver_mode", "legacy_savgol") != "region_first_safe_merge":
+        return candidates_result, selected_candidate, candidate_scores
+    outcome = apply_region_first_safe_merge(
+        rt,
+        intensity,
+        candidates_result,
+        selected_candidate,
+        candidate_scores=candidate_scores,
+    )
+    return (
+        outcome.candidates_result,
+        outcome.selected_candidate,
+        outcome.candidate_scores,
     )
 
 

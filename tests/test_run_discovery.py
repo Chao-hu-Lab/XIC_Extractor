@@ -76,6 +76,46 @@ def test_run_discovery_cli_passes_single_raw_settings(
     assert "discovery_review.csv" in stdout
 
 
+def test_run_discovery_cli_accepts_region_first_safe_merge_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    raw_path = tmp_path / "TumorBC2312_DNA.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "out"
+    captured = {}
+
+    def _fake_run_discovery(raw_path_arg, *, output_dir, settings, peak_config):
+        captured["settings"] = settings
+        captured["peak_config"] = peak_config
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return DiscoveryRunOutputs(
+            candidates_csv=output_dir / "discovery_candidates.csv",
+            review_csv=output_dir / "discovery_review.csv",
+        )
+
+    monkeypatch.setattr(run_discovery, "run_discovery", _fake_run_discovery)
+
+    code = run_discovery.main(
+        [
+            "--raw",
+            str(raw_path),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--resolver-mode",
+            "region_first_safe_merge",
+        ],
+    )
+
+    assert code == 0
+    assert captured["settings"].resolver_mode == "region_first_safe_merge"
+    assert captured["peak_config"].resolver_mode == "region_first_safe_merge"
+
+
 def test_run_discovery_cli_passes_raw_dir_batch_settings(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

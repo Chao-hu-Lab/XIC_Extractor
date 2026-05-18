@@ -61,11 +61,13 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
         alignment_config,
         peak_config,
         raw_xic_batch_size,
+        emit_region_audit,
     ):
         calls["features"] = features
         calls["sample_order"] = sample_order
         calls["raw_sources"] = raw_sources
         calls["backfill_raw_xic_batch_size"] = raw_xic_batch_size
+        calls["emit_region_audit"] = emit_region_audit
         return ("rescued",)
 
     def fake_owner_matrix(
@@ -114,6 +116,7 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
     assert set(calls["raw_sources"]) == {"Sample_A", "Sample_B"}
     assert calls["owner_raw_xic_batch_size"] == 1
     assert calls["backfill_raw_xic_batch_size"] == 1
+    assert calls["emit_region_audit"] is False
     assert calls["matrix_features"] == ("feature",)
     assert calls["ambiguous_by_sample"] == {}
     assert calls["rescued_cells"] == ("rescued",)
@@ -589,6 +592,7 @@ def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
     assert calls["build_kwargs"]["max_workers"] == 2
     assert calls["raw_xic_batch_size"] == 1
     assert calls["owner_backfill_xic_backend"] == "ms1_index"
+    assert calls["emit_region_audit"] is False
     assert calls["build_kwargs"]["raw_xic_batch_size"] == 1
     assert "owner_backfill_xic_backend" not in calls["build_kwargs"]
     records_by_stage_sample = {
@@ -744,6 +748,67 @@ def test_pipeline_debug_flags_write_optional_outputs(
     assert outputs.status_matrix_tsv == tmp_path / "out" / "alignment_matrix_status.tsv"
     assert outputs.cells_tsv.exists()
     assert outputs.status_matrix_tsv.exists()
+
+
+def test_pipeline_enables_region_audit_only_when_alignment_cells_are_emitted(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    calls = {}
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        lambda candidates, **kwargs: SimpleNamespace(
+            owners=("owner",),
+            assignments=(),
+            ambiguous_records=(),
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (
+            "feature",
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+
+    def fake_owner_backfill(features, **kwargs):
+        calls["emit_region_audit"] = kwargs["emit_region_audit"]
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        fake_owner_backfill,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        emit_alignment_cells=True,
+        raw_opener=FakeRawOpener(),
+    )
+
+    assert calls["emit_region_audit"] is True
 
 
 def test_pipeline_default_path_no_longer_uses_legacy_near_duplicate_folding() -> None:

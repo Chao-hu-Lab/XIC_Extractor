@@ -40,6 +40,18 @@ class AlignedCell:
     source_candidate_id: str | None
     source_raw_file: Path | None
     reason: str
+    region_candidate_count: int | None = None
+    region_selected_proposal_sources: tuple[str, ...] = ()
+    region_selected_merge_note: str = ""
+    region_shadow_status: str = ""
+    region_shadow_verdict: str = ""
+    region_merge_suggestion_source: str = ""
+    region_area_ratio: float | None = None
+    region_selected_interval_count: int | None = None
+    region_selected_interval_gap_max_min: float | None = None
+    region_local_mixture_diagnostic: str = ""
+    region_local_mixture_reason: str = ""
+    region_review_reason: str = ""
 
 
 @dataclass(frozen=True)

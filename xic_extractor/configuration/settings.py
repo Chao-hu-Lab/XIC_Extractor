@@ -12,7 +12,7 @@ from xic_extractor.configuration.parsing import (
     _parse_optional_path,
     _require_range,
 )
-from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS, RESOLVER_MODES
 
 LOGGER = logging.getLogger(__name__)
 
@@ -304,13 +304,13 @@ def _validate_settings_ranges(
         0.01,
         0.50,
     )
-    if parsed.resolver_mode not in {"legacy_savgol", "local_minimum", "arbitrated"}:
+    if parsed.resolver_mode not in RESOLVER_MODES:
         raise _config_error(
             settings_path,
             None,
             "resolver_mode",
             settings["resolver_mode"],
-            "must be legacy_savgol, local_minimum, or arbitrated",
+            f"must be {', '.join(RESOLVER_MODES[:-1])}, or {RESOLVER_MODES[-1]}",
         )
     if not 0 <= parsed.resolver_chrom_threshold <= 1:
         raise _config_error(

@@ -242,6 +242,9 @@ def test_scoring_context_copies_candidate_ms2_trace_strength() -> None:
     ctx = builder(SimpleNamespace(selection_apex_index=3))
 
     assert ctx.ms2_trace_strength == "strong"
+    assert ctx.ms2_alignment_source == "region"
+    assert ctx.trigger_scan_count == 2
+    assert ctx.strict_nl_scan_count == 2
 
 
 def test_strict_nl_candidate_beats_candidate_with_trigger_but_failed_nl() -> None:

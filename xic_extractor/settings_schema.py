@@ -6,6 +6,14 @@ def default_parallel_workers() -> int:
     return max(1, cpu_count - 1)
 
 
+RESOLVER_MODES: tuple[str, ...] = (
+    "legacy_savgol",
+    "local_minimum",
+    "arbitrated",
+    "region_first_safe_merge",
+)
+
+
 CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "data_dir": "C:/your/data/folder",
     "dll_dir": "C:\\Xcalibur\\system\\programs",
@@ -51,7 +59,10 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "peak_min_prominence_ratio": (
         "Peak prominence 至少為 apex 的比例（越低越寬容，0.05-0.20）"
     ),
-    "resolver_mode": "峰切割演算法（legacy_savgol、local_minimum 或 arbitrated）",
+    "resolver_mode": (
+        "峰切割演算法（legacy_savgol、local_minimum、arbitrated "
+        "或 region_first_safe_merge）"
+    ),
     "resolver_chrom_threshold": "Local minimum resolver 低強度剪枝百分位（0-1）",
     "resolver_min_search_range_min": "Local minimum 搜尋 valley 的 RT 視窗（分鐘）",
     "resolver_min_relative_height": (

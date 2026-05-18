@@ -123,6 +123,7 @@ def run_alignment(
         emit_alignment_cells=emit_alignment_cells,
         emit_alignment_status_matrix=emit_alignment_status_matrix,
     )
+    emit_cell_region_audit = outputs.cells_tsv is not None
 
     with ExitStack() as stack:
         raw_paths = _existing_raw_paths(
@@ -224,6 +225,7 @@ def run_alignment(
                     max_workers=raw_workers,
                     raw_xic_batch_size=raw_xic_batch_size,
                     owner_backfill_xic_backend=owner_backfill_xic_backend,
+                    emit_region_audit=emit_cell_region_audit,
                 )
                 rescued_cells = process_output.cells
                 for backfill_stats in process_output.timing_stats:
@@ -265,6 +267,7 @@ def run_alignment(
                     alignment_config=alignment_config,
                     peak_config=peak_config,
                     raw_xic_batch_size=raw_xic_batch_size,
+                    emit_region_audit=emit_cell_region_audit,
                 )
                 record_raw_source_timing_stats(timing_stats, recorder=recorder)
         with recorder.stage("alignment.build_matrix"):
@@ -306,6 +309,7 @@ def _build_event_first_matrix(
     raw_sources,
     alignment_config: AlignmentConfig,
     peak_config: ExtractionConfig,
+    emit_region_audit: bool = False,
 ) -> AlignmentMatrix:
     event_matrix = backfill_alignment_matrix(
         clusters,
@@ -313,6 +317,7 @@ def _build_event_first_matrix(
         raw_sources=raw_sources,
         alignment_config=alignment_config,
         peak_config=peak_config,
+        emit_region_audit=emit_region_audit,
     )
     families = build_ms1_feature_families(
         clusters,
@@ -325,6 +330,7 @@ def _build_event_first_matrix(
         raw_sources=raw_sources,
         alignment_config=alignment_config,
         peak_config=peak_config,
+        emit_region_audit=emit_region_audit,
     )
 
 

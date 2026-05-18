@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
+import xic_extractor.alignment.family_integration as family_integration_module
 from xic_extractor.alignment.family_integration import integrate_feature_family_matrix
 from xic_extractor.alignment.feature_family import build_ms1_feature_family
 from xic_extractor.alignment.models import AlignmentCluster
@@ -48,6 +49,62 @@ def test_family_integration_uses_family_center_not_event_cluster_area():
     assert matrix.cells[0].reason == (
         "family-centered MS1 integration from original detection"
     )
+
+
+def test_family_integration_region_audit_is_opt_in(monkeypatch):
+    family = build_ms1_feature_family(
+        family_id="FAM000001",
+        event_clusters=(_cluster("ALN000001"),),
+        evidence="cid_nl_only",
+    )
+    source = FakeXICSource(
+        rt=np.array([12.50, 12.54, 12.58, 12.62, 12.66], dtype=float),
+        intensity=np.array([0.0, 10.0, 100.0, 10.0, 0.0], dtype=float),
+    )
+
+    def fail_region_audit(*args, **kwargs):
+        raise AssertionError("region audit should be debug/validation opt-in")
+
+    monkeypatch.setattr(
+        family_integration_module,
+        "build_peak_region_audit_summary",
+        fail_region_audit,
+    )
+
+    matrix = integrate_feature_family_matrix(
+        (family,),
+        sample_order=("s1",),
+        raw_sources={"s1": source},
+        alignment_config=_alignment_config(),
+        peak_config=_peak_config(),
+    )
+
+    assert matrix.cells[0].region_candidate_count is None
+    assert matrix.cells[0].region_shadow_status == ""
+
+
+def test_family_integration_emits_region_audit_when_requested():
+    family = build_ms1_feature_family(
+        family_id="FAM000001",
+        event_clusters=(_cluster("ALN000001"),),
+        evidence="cid_nl_only",
+    )
+    source = FakeXICSource(
+        rt=np.array([12.50, 12.54, 12.58, 12.62, 12.66], dtype=float),
+        intensity=np.array([0.0, 10.0, 100.0, 10.0, 0.0], dtype=float),
+    )
+
+    matrix = integrate_feature_family_matrix(
+        (family,),
+        sample_order=("s1",),
+        raw_sources={"s1": source},
+        alignment_config=_alignment_config(),
+        peak_config=_peak_config(),
+        emit_region_audit=True,
+    )
+
+    assert matrix.cells[0].region_candidate_count is not None
+    assert matrix.cells[0].region_shadow_status == "evaluated"
 
 
 def test_family_integration_missing_raw_source_is_unchecked():
