@@ -16,6 +16,7 @@ from gui.sections.settings_widgets import (
     _LabeledSpin,
     _set_float_range,
 )
+from xic_extractor.settings_schema import RESOLVER_MODES
 
 
 def configure_advanced_controls(controls: AdvancedControls) -> None:
@@ -130,7 +131,7 @@ def load_advanced_values(
         settings_values.get("injection_order_source", "")
     )
     resolver_mode = settings_values.get("resolver_mode", "legacy_savgol")
-    if resolver_mode not in {"legacy_savgol", "local_minimum", "arbitrated"}:
+    if resolver_mode not in RESOLVER_MODES:
         resolver_mode = "legacy_savgol"
     resolver_controls.mode_combo.setCurrentText(resolver_mode)
     resolver_controls.chrom_threshold_spin.setValue(

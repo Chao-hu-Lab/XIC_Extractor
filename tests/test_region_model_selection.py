@@ -173,6 +173,7 @@ def test_shallow_local_minimum_split_inside_wide_envelope_suggests_merge() -> No
 
     assert decision.shadow_verdict == "merge_suggested"
     assert decision.shadow_boundary_id == "left|wide"
+    assert decision.merge_suggestion_source == "same_apex_wider_boundary_merge"
 
 
 def test_adjacent_wis_intervals_with_small_area_gain_suggest_merge() -> None:
@@ -208,6 +209,7 @@ def test_adjacent_wis_intervals_with_small_area_gain_suggest_merge() -> None:
     )
 
     assert decision.shadow_verdict == "merge_suggested"
+    assert decision.merge_suggestion_source == "adjacent_wis_local_minimum_merge"
     assert decision.area_ratio == 1.1
     assert decision.selected_interval_count == 2
     assert decision.selected_interval_gap_max_min == 0.02
@@ -250,8 +252,156 @@ def test_multi_interval_merge_uses_dominant_area_apex_as_shadow_rt() -> None:
     )
 
     assert decision.shadow_verdict == "merge_suggested"
+    assert decision.merge_suggestion_source == "adjacent_wis_local_minimum_merge"
     assert decision.shadow_rt_apex_min == 26.15
     assert decision.selected_interval_gap_max_min == 0.03
+
+
+def test_same_apex_wider_boundary_merge_is_not_adjacent_wis_source() -> None:
+    decision = decide_region_selection(
+        (
+            _boundary(
+                "current|candidate",
+                candidate_id="current",
+                selected=True,
+                source="candidate_interval",
+                proposal_sources=("local_minimum",),
+                area=100.0,
+                score=60,
+                apex=10.0,
+                left=9.95,
+                right=10.15,
+            ),
+            _boundary(
+                "current|wide",
+                candidate_id="current",
+                selected=True,
+                source="baseline_return",
+                proposal_sources=("local_minimum",),
+                area=190.0,
+                score=61,
+                apex=10.0,
+                left=9.9,
+                right=10.6,
+            ),
+            _boundary(
+                "neighbor|candidate",
+                candidate_id="neighbor",
+                selected=False,
+                source="candidate_interval",
+                proposal_sources=("local_minimum",),
+                area=80.0,
+                score=58,
+                apex=10.35,
+                left=10.25,
+                right=10.5,
+            ),
+        )
+    )
+
+    assert decision.shadow_verdict == "merge_suggested"
+    assert decision.merge_suggestion_source == "same_apex_wider_boundary_merge"
+    assert decision.merge_suggestion_source != "adjacent_wis_local_minimum_merge"
+
+
+def test_split_supported_has_no_merge_suggestion_source() -> None:
+    decision = decide_region_selection(
+        (
+            _boundary(
+                "wide|candidate",
+                candidate_id="wide",
+                selected=True,
+                source="candidate_interval",
+                area=220.0,
+                score=70,
+                left=9.8,
+                right=10.8,
+            ),
+            _boundary(
+                "left|candidate",
+                candidate_id="left",
+                selected=False,
+                nonoverlap_selected=True,
+                source="candidate_interval",
+                area=110.0,
+                score=55,
+                apex=10.0,
+                left=9.85,
+                right=10.2,
+            ),
+            _boundary(
+                "right|candidate",
+                candidate_id="right",
+                selected=False,
+                nonoverlap_selected=True,
+                source="candidate_interval",
+                area=120.0,
+                score=55,
+                apex=10.55,
+                left=10.35,
+                right=10.75,
+            ),
+        )
+    )
+
+    assert decision.shadow_verdict == "split_supported"
+    assert decision.merge_suggestion_source == ""
+
+
+def test_neighbor_apex_preferred_has_no_merge_suggestion_source() -> None:
+    decision = decide_region_selection(
+        (
+            _boundary(
+                "current|candidate",
+                candidate_id="current",
+                selected=True,
+                score=60,
+                area=100.0,
+            ),
+            _boundary(
+                "neighbor|candidate",
+                candidate_id="neighbor",
+                selected=False,
+                proposal_sources=("local_minimum",),
+                score=78,
+                area=120.0,
+                apex=10.5,
+                left=10.4,
+                right=10.7,
+            ),
+        )
+    )
+
+    assert decision.shadow_verdict == "neighbor_apex_preferred"
+    assert decision.merge_suggestion_source == ""
+
+
+def test_cwt_only_far_alternative_has_no_merge_suggestion_source() -> None:
+    decision = decide_region_selection(
+        (
+            _boundary(
+                "current|candidate",
+                candidate_id="current",
+                selected=True,
+                score=60,
+                area=100.0,
+            ),
+            _boundary(
+                "cwt-neighbor|candidate",
+                candidate_id="cwt-neighbor",
+                selected=False,
+                proposal_sources=("centwave_cwt",),
+                score=95,
+                area=180.0,
+                apex=10.8,
+                left=10.7,
+                right=10.9,
+            ),
+        )
+    )
+
+    assert decision.shadow_verdict == "current_supported"
+    assert decision.merge_suggestion_source == ""
 
 
 def test_supported_nonoverlap_intervals_can_support_split() -> None:

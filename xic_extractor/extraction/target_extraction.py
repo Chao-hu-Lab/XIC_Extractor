@@ -41,6 +41,21 @@ if TYPE_CHECKING:
     )
 
 
+def _selected_candidate_ms2_evidence(
+    candidate: PeakCandidate | None,
+    candidate_ms2_cache: dict[PeakCandidate, CandidateMS2Evidence],
+    candidate_ms2_builder: Callable[[PeakCandidate], CandidateMS2Evidence | None],
+) -> CandidateMS2Evidence | None:
+    if candidate is None:
+        return None
+    evidence = candidate_ms2_cache.get(candidate)
+    if evidence is not None:
+        return evidence
+    if "region_first_safe_merge" not in candidate.merge_note.split(";"):
+        return None
+    return candidate_ms2_builder(candidate)
+
+
 def extract_raw_file_result(
     raw_index: int,
     config: ExtractionConfig,
@@ -289,9 +304,6 @@ def extract_one_target(
     shape_intensity = audit_intensity
     shape_metrics = selected_shape_metrics(shape_intensity, peak_result)
     candidate = selected_candidate(peak_result)
-    candidate_ms2_evidence = (
-        candidate_ms2_cache.get(candidate) if candidate is not None else None
-    )
     quality_penalty = 0
     quality_flags: tuple[str, ...] = ()
     if candidate is not None:
@@ -301,6 +313,11 @@ def extract_one_target(
         )
     if shape_metrics_by_label is not None and shape_metrics is not None:
         shape_metrics_by_label[target.label] = shape_metrics
+    candidate_ms2_evidence = _selected_candidate_ms2_evidence(
+        candidate,
+        candidate_ms2_cache,
+        _cached_candidate_ms2_builder,
+    )
 
     result = extractor.ExtractionResult(
         peak_result=peak_result,

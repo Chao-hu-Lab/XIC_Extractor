@@ -20,6 +20,11 @@ ShadowVerdict = Literal[
     "merge_suggested",
     "split_supported",
 ]
+MergeSuggestionSource = Literal[
+    "",
+    "adjacent_wis_local_minimum_merge",
+    "same_apex_wider_boundary_merge",
+]
 
 MIN_SCAN_SUPPORT = 3
 WIDER_AREA_RATIO_CUTOFF = 1.50
@@ -75,6 +80,7 @@ class RegionSelectionDecision:
     support_labels: tuple[str, ...] = ()
     concern_labels: tuple[str, ...] = ()
     review_reason: str = ""
+    merge_suggestion_source: MergeSuggestionSource = ""
 
 
 def decide_region_selection(
@@ -245,6 +251,7 @@ def _adjacent_selected_intervals_merge_suggested(
             "adjacent WIS-selected local-minimum intervals have only small "
             "area gain, suggesting one continuous envelope"
         ),
+        merge_suggestion_source="adjacent_wis_local_minimum_merge",
     )
 
 
@@ -271,6 +278,7 @@ def _merge_suggested(
         review_reason=(
             "wider same-apex boundary covers neighboring local-minimum candidates"
         ),
+        merge_suggestion_source="same_apex_wider_boundary_merge",
     )
 
 
@@ -387,6 +395,7 @@ def _decision(
     status: ShadowStatus = "evaluated",
     verdict: ShadowVerdict,
     review_reason: str,
+    merge_suggestion_source: MergeSuggestionSource = "",
 ) -> RegionSelectionDecision:
     score_delta = shadow.boundary_score - current.boundary_score
     return RegionSelectionDecision(
@@ -413,6 +422,7 @@ def _decision(
         support_labels=shadow.support_labels,
         concern_labels=shadow.concern_labels,
         review_reason=review_reason,
+        merge_suggestion_source=merge_suggestion_source,
     )
 
 

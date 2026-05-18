@@ -20,6 +20,7 @@ from scripts.validation_harness_core import (
     command_to_powershell,
     run_validation_specs,
 )
+from xic_extractor.settings_schema import RESOLVER_MODES
 
 __all__ = [
     "DEFAULT_FULL_TISSUE_DIR",
@@ -113,7 +114,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--resolver-mode",
-        choices=("legacy_savgol", "local_minimum", "arbitrated"),
+        choices=RESOLVER_MODES,
         default="local_minimum",
     )
     parser.add_argument(

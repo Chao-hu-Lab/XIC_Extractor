@@ -13,7 +13,7 @@ from xic_extractor.discovery.tag_profiles import (
     resolve_selected_tag_profiles,
 )
 from xic_extractor.raw_reader import RawReaderError
-from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS, RESOLVER_MODES
 
 _RT_BOUND_ERROR = "RT bounds must be finite values >= 0"
 
@@ -146,7 +146,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--rt-max", type=_rt_bound, default=999.0)
     parser.add_argument(
         "--resolver-mode",
-        choices=("legacy_savgol", "local_minimum", "arbitrated"),
+        choices=RESOLVER_MODES,
         default="local_minimum",
     )
     args = parser.parse_args(argv)

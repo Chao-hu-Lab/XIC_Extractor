@@ -6,10 +6,11 @@ from gui.sections.settings_constants import (
 )
 from gui.sections.settings_controls import ResolverControls
 from gui.sections.settings_widgets import _LabeledSpin, _set_float_range
+from xic_extractor.settings_schema import RESOLVER_MODES
 
 
 def configure_resolver_controls(controls: ResolverControls) -> None:
-    controls.mode_combo.addItems(["legacy_savgol", "local_minimum", "arbitrated"])
+    controls.mode_combo.addItems(list(RESOLVER_MODES))
     controls.smooth_window_spin.setRange(3, 999)
     controls.smooth_window_spin.setSingleStep(2)
     controls.smooth_polyorder_spin.setRange(1, 10)
@@ -119,9 +120,13 @@ def build_peak_resolver_panel(controls: ResolverControls) -> QWidget:
 
 def update_resolver_profile_visibility(controls: ResolverControls) -> None:
     resolver_mode = controls.mode_combo.currentText()
-    controls.legacy_panel.setVisible(resolver_mode in {"legacy_savgol", "arbitrated"})
+    controls.legacy_panel.setVisible(
+        resolver_mode
+        in {"legacy_savgol", "arbitrated", "region_first_safe_merge"}
+    )
     controls.local_minimum_panel.setVisible(
-        resolver_mode in {"local_minimum", "arbitrated"}
+        resolver_mode
+        in {"local_minimum", "arbitrated", "region_first_safe_merge"}
     )
 
 

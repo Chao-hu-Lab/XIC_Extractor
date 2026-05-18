@@ -87,6 +87,31 @@ def test_build_validation_specs_includes_candidate_settings_in_commands(
     assert "--setting resolver_min_relative_height=0.03" in command
 
 
+def test_build_validation_specs_accepts_region_first_safe_merge_mode(
+    tmp_path: Path,
+) -> None:
+    specs = build_validation_specs(
+        suite_names=("tissue-8raw",),
+        base_dir=Path("C:/repo/XIC_Extractor"),
+        output_root=tmp_path / "validation_harness",
+        run_id="safe_merge",
+        workers=4,
+        resolver_mode="region_first_safe_merge",
+        grid="quick",
+    )
+
+    assert specs[0].output_path == (
+        tmp_path
+        / "validation_harness"
+        / "safe_merge"
+        / "tissue_8raw_region_first_safe_merge"
+        / "xic_results_process_w4.xlsx"
+    )
+    assert "--resolver-mode region_first_safe_merge" in command_to_powershell(
+        specs[0].command
+    )
+
+
 def test_build_validation_specs_rejects_resolver_mode_setting(
     tmp_path: Path,
 ) -> None:

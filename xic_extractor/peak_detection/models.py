@@ -44,6 +44,8 @@ class PeakCandidate:
     proposal_sources: tuple[str, ...] = ()
     source_apex_rank: int | None = None
     merge_note: str = ""
+    ms2_evidence_peak_start: float | None = None
+    ms2_evidence_peak_end: float | None = None
 
 
 @dataclass(frozen=True)
