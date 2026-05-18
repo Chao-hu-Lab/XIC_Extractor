@@ -23,6 +23,7 @@ from xic_extractor.peak_detection.region_model_selection import (
 from xic_extractor.peak_detection.region_safe_merge import (
     scored_region_boundaries_for_candidates,
 )
+from xic_extractor.peak_detection.traces import TraceGroup
 
 
 @dataclass(frozen=True)
@@ -51,9 +52,14 @@ def build_peak_region_audit_summary(
     config: ExtractionConfig,
     *,
     include_cwt: bool = True,
+    trace_group: TraceGroup | None = None,
 ) -> PeakRegionAuditSummary:
     if result.status != "OK" or result.peak is None:
         return EMPTY_REGION_AUDIT
+    if trace_group is not None:
+        trace = trace_group.primary_trace
+        rt_values = trace.rt
+        intensity_values = trace.intensity
 
     if include_cwt:
         with warnings.catch_warnings():

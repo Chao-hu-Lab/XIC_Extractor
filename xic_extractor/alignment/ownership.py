@@ -16,6 +16,7 @@ from xic_extractor.alignment.ownership_models import (
     OwnerAssignment,
     SampleLocalMS1Owner,
 )
+from xic_extractor.alignment.trace_context import alignment_trace_group
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_detection.region_audit import (
     PeakRegionAuditSummary,
@@ -177,6 +178,7 @@ def _resolve_candidates(
                     trace,
                     peak_config,
                     peak_resolver,
+                    ppm_tol=_request.ppm_tol,
                     emit_region_audit=emit_region_audit,
                 )
     return tuple(outcome for outcome in outcomes if outcome is not None)
@@ -211,6 +213,7 @@ def _resolve_candidate(
         peak_config,
         seed_rt,
         peak_resolver,
+        ppm_tol=alignment_config.preferred_ppm,
         emit_region_audit=emit_region_audit,
     )
     if peak is None:
@@ -237,6 +240,7 @@ def _resolve_candidate_trace(
     peak_config: ExtractionConfig,
     peak_resolver: PeakResolver,
     *,
+    ppm_tol: float,
     emit_region_audit: bool = False,
 ) -> _ResolutionOutcome:
     rt_array, intensity_array = _validated_trace_arrays(trace.rt, trace.intensity)
@@ -247,6 +251,7 @@ def _resolve_candidate_trace(
         peak_config,
         seed_rt,
         peak_resolver,
+        ppm_tol=ppm_tol,
         emit_region_audit=emit_region_audit,
     )
     if peak is None:
@@ -274,6 +279,7 @@ def _resolve_peak(
     seed_rt: float,
     peak_resolver: PeakResolver,
     *,
+    ppm_tol: float,
     emit_region_audit: bool,
 ) -> ResolvedPeak | None:
     if peak_resolver is _default_peak_resolver:
@@ -283,6 +289,7 @@ def _resolve_peak(
             intensity_array,
             peak_config,
             seed_rt,
+            ppm_tol=ppm_tol,
             emit_region_audit=emit_region_audit,
         )
     return peak_resolver(candidate, rt_array, intensity_array, peak_config, seed_rt)
@@ -337,6 +344,7 @@ def _default_peak_resolver(
     peak_config: ExtractionConfig,
     seed_rt: float,
     *,
+    ppm_tol: float = 20.0,
     emit_region_audit: bool = False,
 ) -> ResolvedPeak | None:
     result = find_peak_and_area(
@@ -349,12 +357,34 @@ def _default_peak_resolver(
     if result.status != "OK" or result.peak is None:
         return None
     peak = result.peak
+    rt_min = float(rt_array[0]) if rt_array.size else seed_rt
+    rt_max = float(rt_array[-1]) if rt_array.size else seed_rt
+    trace_group = (
+        alignment_trace_group(
+            sample_stem=str(candidate.sample_stem),
+            family_id=str(candidate.candidate_id),
+            mz=float(candidate.precursor_mz),
+            rt_values=rt_array,
+            intensity_values=intensity_array,
+            rt_min=rt_min,
+            rt_max=rt_max,
+            ppm_tol=ppm_tol,
+            expected_rt_min=seed_rt,
+            neutral_loss_tag=str(candidate.neutral_loss_tag),
+            product_mz=float(candidate.product_mz),
+            observed_neutral_loss_da=float(candidate.observed_neutral_loss_da),
+            source="alignment_detected_owner",
+        )
+        if emit_region_audit
+        else None
+    )
     region_audit = (
         build_peak_region_audit_summary(
             rt_array,
             intensity_array,
             result,
             peak_config,
+            trace_group=trace_group,
         )
         if emit_region_audit
         else None

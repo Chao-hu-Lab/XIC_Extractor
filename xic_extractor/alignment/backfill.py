@@ -10,6 +10,7 @@ from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
+from xic_extractor.alignment.trace_context import alignment_trace_group
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_detection.region_audit import (
     PeakRegionAuditSummary,
@@ -150,12 +151,32 @@ def _backfill_anchor_cell(
             preferred_rt=cluster.cluster_center_rt,
             strict_preferred_rt=False,
         )
+        trace_group = (
+            alignment_trace_group(
+                sample_stem=sample_stem,
+                family_id=cluster.cluster_id,
+                mz=cluster.cluster_center_mz,
+                rt_values=rt_array,
+                intensity_values=intensity_array,
+                rt_min=rt_min,
+                rt_max=rt_max,
+                ppm_tol=alignment_config.preferred_ppm,
+                expected_rt_min=cluster.cluster_center_rt,
+                neutral_loss_tag=cluster.neutral_loss_tag,
+                product_mz=cluster.cluster_product_mz,
+                observed_neutral_loss_da=cluster.cluster_observed_neutral_loss_da,
+                source="alignment_backfill",
+            )
+            if emit_region_audit
+            else None
+        )
         region_audit = (
             build_peak_region_audit_summary(
                 rt_array,
                 intensity_array,
                 result,
                 peak_config,
+                trace_group=trace_group,
             )
             if emit_region_audit
             else None

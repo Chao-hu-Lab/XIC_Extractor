@@ -296,6 +296,40 @@ def test_anchor_backfill_cell_preserves_region_audit_context(monkeypatch):
     assert rescued.region_local_mixture_diagnostic == "one_envelope_supported"
 
 
+def test_anchor_backfill_region_audit_receives_trace_group(monkeypatch):
+    source = FakeSource()
+    cluster = _cluster(
+        Candidate(candidate_id="sample-a#1", sample_stem="sample-a"),
+        has_anchor=True,
+    )
+    _patch_peak_result(monkeypatch, _ok_peak_result())
+    captured = {}
+
+    def fake_region_audit(*args, **kwargs):
+        captured["trace_group"] = kwargs["trace_group"]
+        return PeakRegionAuditSummary(candidate_count=1, shadow_status="evaluated")
+
+    monkeypatch.setattr(
+        backfill_module,
+        "build_peak_region_audit_summary",
+        fake_region_audit,
+    )
+
+    backfill_alignment_matrix(
+        (cluster,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=180.0),
+        peak_config=_peak_config(),
+        emit_region_audit=True,
+    )
+
+    trace_group = captured["trace_group"]
+    assert trace_group.analysis_mode == "untargeted"
+    assert trace_group.context_id == "ALN000001"
+    assert trace_group.primary_trace.sample_name == "sample-b"
+
+
 def test_anchor_backfill_region_audit_is_opt_in(monkeypatch):
     source = FakeSource()
     cluster = _cluster(

@@ -8,6 +8,7 @@ from xic_extractor.alignment.family_integration import integrate_feature_family_
 from xic_extractor.alignment.feature_family import build_ms1_feature_family
 from xic_extractor.alignment.models import AlignmentCluster
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.region_audit import PeakRegionAuditSummary
 
 
 def test_family_integration_uses_family_center_not_event_cluster_area():
@@ -105,6 +106,46 @@ def test_family_integration_emits_region_audit_when_requested():
 
     assert matrix.cells[0].region_candidate_count is not None
     assert matrix.cells[0].region_shadow_status == "evaluated"
+
+
+def test_family_integration_region_audit_receives_trace_group(monkeypatch):
+    family = build_ms1_feature_family(
+        family_id="FAM000001",
+        event_clusters=(_cluster("ALN000001"),),
+        evidence="cid_nl_only",
+    )
+    source = FakeXICSource(
+        rt=np.array([12.50, 12.54, 12.58, 12.62, 12.66], dtype=float),
+        intensity=np.array([0.0, 10.0, 100.0, 10.0, 0.0], dtype=float),
+    )
+    captured = {}
+
+    def fake_region_audit(*args, **kwargs):
+        captured["trace_group"] = kwargs["trace_group"]
+        return PeakRegionAuditSummary(
+            candidate_count=1,
+            shadow_status="evaluated",
+        )
+
+    monkeypatch.setattr(
+        family_integration_module,
+        "build_peak_region_audit_summary",
+        fake_region_audit,
+    )
+
+    integrate_feature_family_matrix(
+        (family,),
+        sample_order=("s1",),
+        raw_sources={"s1": source},
+        alignment_config=_alignment_config(),
+        peak_config=_peak_config(),
+        emit_region_audit=True,
+    )
+
+    trace_group = captured["trace_group"]
+    assert trace_group.analysis_mode == "untargeted"
+    assert trace_group.context_id == "FAM000001"
+    assert trace_group.neutral_loss_tag == "DNA_dR"
 
 
 def test_family_integration_missing_raw_source_is_unchecked():
