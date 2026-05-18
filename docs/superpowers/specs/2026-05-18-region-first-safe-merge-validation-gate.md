@@ -23,7 +23,11 @@ under-integration without creating apparent low-confidence rescues.
 1. **8RAW targeted extraction gate**
    - Run `tissue-8raw` with `resolver_mode=local_minimum`.
    - Run `tissue-8raw` with `resolver_mode=region_first_safe_merge`.
-   - Use `parallel_workers=11` and `emit_peak_candidates=true`.
+   - Use `parallel_workers=11`, `emit_peak_candidates=true`, and
+     `keep_intermediate_csv=true`.
+   - `keep_intermediate_csv=true` is required because the comparison diagnostic
+     reads `xic_results.csv`; the workbook alone is not sufficient input for
+     this gate.
    - Required artifacts: both `xic_results.csv` files, both workbooks, the safe
      `peak_candidates.tsv`, and the safe
      `peak_region_selection_shadow_summary.tsv`.
