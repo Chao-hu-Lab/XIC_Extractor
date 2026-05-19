@@ -24,6 +24,7 @@ from xic_extractor.alignment.tsv_writer import (
     write_alignment_cell_integration_audit_tsv,
     write_alignment_cells_tsv,
     write_alignment_matrix_tsv,
+    write_alignment_owner_backfill_seed_audit_tsv,
     write_alignment_review_tsv,
     write_alignment_status_matrix_tsv,
 )
@@ -39,6 +40,7 @@ class AlignmentRunOutputs:
     matrix_tsv: Path | None = None
     cells_tsv: Path | None = None
     integration_audit_tsv: Path | None = None
+    backfill_seed_audit_tsv: Path | None = None
     status_matrix_tsv: Path | None = None
     event_to_owner_tsv: Path | None = None
     ambiguous_owners_tsv: Path | None = None
@@ -52,6 +54,7 @@ def output_paths(
     emit_alignment_cells: bool,
     emit_alignment_status_matrix: bool,
     emit_alignment_integration_audit: bool = False,
+    emit_alignment_backfill_seed_audit: bool = False,
 ) -> AlignmentRunOutputs:
     artifacts = set(artifact_names_for_output_level(output_level))
     if emit_alignment_cells:
@@ -87,6 +90,11 @@ def output_paths(
         integration_audit_tsv=(
             output_dir / "alignment_cell_integration_audit.tsv"
             if emit_alignment_integration_audit
+            else None
+        ),
+        backfill_seed_audit_tsv=(
+            output_dir / "alignment_owner_backfill_seed_audit.tsv"
+            if emit_alignment_backfill_seed_audit
             else None
         ),
         status_matrix_tsv=(
@@ -192,6 +200,16 @@ def write_outputs_atomic(
             (
                 outputs.integration_audit_tsv,
                 lambda path: write_alignment_cell_integration_audit_tsv(path, matrix),
+            ),
+        )
+    if outputs.backfill_seed_audit_tsv is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.backfill_seed_audit_tsv,
+                lambda path: write_alignment_owner_backfill_seed_audit_tsv(
+                    path,
+                    matrix,
+                ),
             ),
         )
     if outputs.status_matrix_tsv is not None:

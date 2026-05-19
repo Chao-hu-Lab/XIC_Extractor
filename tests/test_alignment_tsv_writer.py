@@ -570,6 +570,55 @@ def test_write_alignment_cell_integration_audit_tsv_is_sidecar(
     assert audit[0]["integration_scan_count"] == "5"
 
 
+def test_write_alignment_owner_backfill_seed_audit_tsv_is_sidecar(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import (
+        ALIGNMENT_CELLS_COLUMNS,
+        ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS,
+        write_alignment_cells_tsv,
+        write_alignment_owner_backfill_seed_audit_tsv,
+    )
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(),),
+        cells=(
+            _cell(
+                "sample-a",
+                "rescued",
+                area=10.0,
+                backfill_seed=True,
+            ),
+            _cell("sample-b", "rescued", area=8.0),
+            _cell("sample-c", "detected", area=9.0, backfill_seed=True),
+        ),
+        sample_order=("sample-a", "sample-b", "sample-c"),
+    )
+
+    cells = _read_tsv(write_alignment_cells_tsv(tmp_path / "cells.tsv", matrix))
+    audit = _read_tsv(
+        write_alignment_owner_backfill_seed_audit_tsv(
+            tmp_path / "alignment_owner_backfill_seed_audit.tsv",
+            matrix,
+        )
+    )
+
+    assert list(cells[0]) == list(ALIGNMENT_CELLS_COLUMNS)
+    assert list(audit[0]) == list(ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS)
+    assert len(audit) == 1
+    assert audit[0]["feature_family_id"] == "ALN000001"
+    assert audit[0]["sample_stem"] == "sample-a"
+    assert audit[0]["status"] == "rescued"
+    assert audit[0]["neutral_loss_tag"] == "DNA_dR"
+    assert audit[0]["backfill_seed_mz"] == "500.222"
+    assert audit[0]["backfill_seed_rt"] == "8.55"
+    assert audit[0]["backfill_request_rt_min"] == "5.55"
+    assert audit[0]["backfill_request_rt_max"] == "11.55"
+    assert audit[0]["backfill_request_ppm"] == "20"
+    assert audit[0]["backfill_apex_delta_sec"] == "-3.6"
+    assert audit[0]["family_center_apex_delta_sec"] == "0"
+
+
 def test_tsv_writers_escape_formula_like_text(tmp_path: Path):
     from xic_extractor.alignment.tsv_writer import (
         write_alignment_matrix_tsv,
@@ -657,6 +706,7 @@ def _cell(
     trace_quality: str | None = None,
     region: bool = False,
     integration: bool = False,
+    backfill_seed: bool = False,
 ) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,
@@ -710,4 +760,9 @@ def _cell(
             if integration
             else None
         ),
+        backfill_seed_mz=500.222 if backfill_seed else None,
+        backfill_seed_rt=8.55 if backfill_seed else None,
+        backfill_request_rt_min=5.55 if backfill_seed else None,
+        backfill_request_rt_max=11.55 if backfill_seed else None,
+        backfill_request_ppm=20.0 if backfill_seed else None,
     )
