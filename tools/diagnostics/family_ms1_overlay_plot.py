@@ -428,12 +428,16 @@ def _plot_normalized_overlay(
         linestyle="--",
     )
     _draw_center_rt(ax, family_center_rt)
-    ax.set_title("RT overlay context (normalized XIC)")
+    ax.set_title("Absolute RT context: each trace scaled to its own max")
     ax.set_xlabel("RT (min)")
-    ax.set_ylabel("Normalized intensity")
+    ax.set_ylabel("Per-trace scaled intensity (0-1; not abundance)")
     ax.set_xlim(rt_min, rt_max)
     ax.set_ylim(-0.03, 1.08)
     ax.grid(True, alpha=0.2)
+    _add_panel_note(
+        ax,
+        "RT/shape context only; compare abundance in raw intensity panel.",
+    )
 
 
 def _plot_raw_highlights(
@@ -477,11 +481,15 @@ def _plot_raw_highlights(
         )
         labels_seen.add(label)
     _draw_center_rt(ax, family_center_rt)
-    ax.set_title("Raw MS1 intensity (DDA trigger context, smoothed)")
+    ax.set_title("Raw intensity context: DDA trigger / signal height")
     ax.set_xlabel("RT (min)")
-    ax.set_ylabel("Intensity")
+    ax.set_ylabel("Raw MS1 intensity (smoothed)")
     ax.set_xlim(rt_min, rt_max)
     ax.grid(True, alpha=0.2)
+    _add_panel_note(
+        ax,
+        "Use this panel for height differences; strong traces can hide weak peaks.",
+    )
 
 
 def _plot_apex_aligned_overlay(
@@ -526,12 +534,31 @@ def _plot_apex_aligned_overlay(
         align_to_apex=True,
     )
     ax.axvline(0.0, color="black", lw=1, ls="--", alpha=0.6)
-    ax.set_title("Primary view: apex-aligned MS1 shape (smoothed)")
+    ax.set_title("Main decision: apex-aligned MS1 shape")
     ax.set_xlabel("RT relative to selected apex (min)")
-    ax.set_ylabel("Normalized intensity")
+    ax.set_ylabel("Per-trace scaled intensity (0-1)")
     ax.set_xlim(-APEX_ALIGN_HALF_WINDOW_MIN, APEX_ALIGN_HALF_WINDOW_MIN)
     ax.set_ylim(-0.03, 1.08)
     ax.grid(True, alpha=0.2)
+
+
+def _add_panel_note(ax: Any, text: str) -> None:
+    ax.text(
+        0.01,
+        0.02,
+        text,
+        transform=ax.transAxes,
+        ha="left",
+        va="bottom",
+        fontsize=7.5,
+        color="0.25",
+        bbox={
+            "boxstyle": "round,pad=0.22",
+            "facecolor": "white",
+            "edgecolor": "0.82",
+            "alpha": 0.86,
+        },
+    )
 
 
 def _plot_unified_legend(ax: Any) -> None:

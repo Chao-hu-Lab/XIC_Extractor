@@ -57,6 +57,16 @@ Shadow blast radius:
 | `FAM004459` | 283.154 | `neighbor_interference_review` | high neighboring MS1 interference | `output\diagnostics\untargeted_revalidation_after_targeted_fix_85raw\family_ms1_overlay_top10_seed_audit_cp_smoothed15\fam004459_ms1_overlay_review.png` |
 | `FAM006664` | 295.106 | `neighbor_interference_review` | high neighboring MS1 interference | `output\diagnostics\untargeted_revalidation_after_targeted_fix_85raw\family_ms1_overlay_top10_seed_audit_cp_smoothed15\fam006664_ms1_overlay_review.png` |
 
+## Overlay Reading Guide
+
+- Top-left is the main human decision panel. It aligns every trace to its
+  selected apex and scales each trace to 0-1, so it asks whether detected and
+  rescued cells have similar MS1 peak shape.
+- Bottom-left is absolute-RT context, not abundance. Each trace is scaled to
+  its own maximum, so it asks whether the traces land in the same RT region.
+- Bottom-middle is raw-intensity context. It keeps the original MS1 intensity
+  scale, so it is the panel for DDA trigger / signal-height interpretation.
+
 ## Rerun Command
 
 ```powershell
