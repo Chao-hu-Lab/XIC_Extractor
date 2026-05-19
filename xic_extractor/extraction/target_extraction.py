@@ -19,20 +19,20 @@ from xic_extractor.extraction.drift import estimate_sample_drift
 from xic_extractor.extraction.istd_recovery import recover_istd_anchor_peak_if_needed
 from xic_extractor.extraction.ms2_selection import selected_candidate_ms2_evidence
 from xic_extractor.extraction.peak_candidate_audit import append_peak_audit_rows
+from xic_extractor.extraction.result_assembly import build_extraction_result
 from xic_extractor.extraction.rt_windows import get_rt_window
 from xic_extractor.extraction.scoring_factory import (
     paired_istd_fwhm,
     selected_candidate,
     selected_shape_metrics,
 )
+from xic_extractor.extraction.trace_context import targeted_extraction_trace_group
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.output.messages import (
     DiagnosticRecord,
     build_diagnostic_records,
     istd_confidence_note,
 )
-from xic_extractor.peak_detection.traces import Trace, TraceGroup, targeted_trace_group
-from xic_extractor.peak_scoring import candidate_quality_penalty
 from xic_extractor.signal_processing import PeakCandidate
 
 if TYPE_CHECKING:
@@ -286,7 +286,7 @@ def extract_one_target(
         else intensity
     )
     trace_group = (
-        _targeted_trace_group(
+        targeted_extraction_trace_group(
             sample_name=sample_name,
             target=target,
             config=config,
@@ -302,13 +302,6 @@ def extract_one_target(
     shape_intensity = audit_intensity
     shape_metrics = selected_shape_metrics(shape_intensity, peak_result)
     candidate = selected_candidate(peak_result)
-    quality_penalty = 0
-    quality_flags: tuple[str, ...] = ()
-    if candidate is not None:
-        quality_penalty, _ = candidate_quality_penalty(candidate)
-        quality_flags = tuple(
-            str(flag) for flag in getattr(candidate, "quality_flags", ())
-        )
     if shape_metrics_by_label is not None and shape_metrics is not None:
         shape_metrics_by_label[target.label] = shape_metrics
     candidate_ms2_evidence = selected_candidate_ms2_evidence(
@@ -317,25 +310,13 @@ def extract_one_target(
         _cached_candidate_ms2_builder,
     )
 
-    result = extractor.ExtractionResult(
+    result = build_extraction_result(
         peak_result=peak_result,
-        nl=nl_result,
+        nl_result=nl_result,
         candidate_ms2_evidence=candidate_ms2_evidence,
-        target_label=target.label,
-        role="ISTD" if target.is_istd else "Analyte",
-        istd_pair=target.istd_pair,
-        confidence=(
-            peak_result.confidence or "HIGH"
-            if peak_result.peak is not None
-            else ""
-        ),
-        reason=peak_result.reason or "",
-        severities=peak_result.severities,
-        prior_rt=getattr(scoring_context_builder, "rt_prior", None),
-        prior_source=getattr(scoring_context_builder, "prior_source", ""),
-        quality_penalty=quality_penalty,
-        quality_flags=quality_flags,
-        score_breakdown=peak_result.score_breakdown,
+        target=target,
+        candidate=candidate,
+        scoring_context_builder=scoring_context_builder,
     )
     results[target.label] = result
     diagnostics.extend(build_diagnostic_records(sample_name, target, result, config))
@@ -364,43 +345,3 @@ def extract_one_target(
         istd_confidence_note=istd_confidence_note,
     )
     return anchor_rt
-
-
-def _targeted_trace_group(
-    *,
-    sample_name: str,
-    target: Target,
-    config: ExtractionConfig,
-    rt: object,
-    intensity: object,
-    rt_min: float,
-    rt_max: float,
-    expected_rt_min: float | None,
-) -> TraceGroup:
-    trace = Trace.from_arrays(
-        sample_name=sample_name,
-        mz=target.mz,
-        rt=rt,
-        intensity=intensity,
-        rt_min=rt_min,
-        rt_max=rt_max,
-        ppm_tol=target.ppm_tol,
-        source="targeted_extraction",
-    )
-    return targeted_trace_group(
-        trace,
-        target_label=target.label,
-        resolver_mode=config.resolver_mode,
-        expected_rt_min=expected_rt_min,
-        neutral_loss_tag=_neutral_loss_tag(target),
-        precursor_mz=target.mz,
-        observed_neutral_loss_da=target.neutral_loss_da,
-        role="ISTD" if target.is_istd else "Analyte",
-        istd_pair=target.istd_pair,
-    )
-
-
-def _neutral_loss_tag(target: Target) -> str:
-    if target.neutral_loss_da is None:
-        return ""
-    return f"NL:{target.neutral_loss_da:.4f}"
