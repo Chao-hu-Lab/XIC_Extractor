@@ -14,6 +14,7 @@ from xic_extractor.alignment.matrix import AlignedCell
 from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.alignment.ownership_models import SampleLocalMS1Owner
+from xic_extractor.alignment.trace_context import alignment_trace_group
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_detection.region_audit import build_peak_region_audit_summary
 from xic_extractor.signal_processing import find_peak_and_area
@@ -107,7 +108,7 @@ def build_owner_backfill_cells(
                 traces = _extract_many(source, tuple(item[2] for item in chunk))
             except OSError:
                 continue
-            for (feature, requested_sample, _request, preferred_rt), trace in zip(
+            for (feature, requested_sample, request, preferred_rt), trace in zip(
                 chunk,
                 traces,
                 strict=True,
@@ -116,6 +117,7 @@ def build_owner_backfill_cells(
                     feature,
                     requested_sample,
                     trace,
+                    request=request,
                     preferred_rt=preferred_rt,
                     peak_config=peak_config,
                     emit_region_audit=emit_region_audit,
@@ -128,7 +130,7 @@ def build_owner_backfill_cells(
                         )
                     else:
                         validation_pending[requested_sample].append(
-                            (feature, requested_sample, _request, preferred_rt)
+                            (feature, requested_sample, request, preferred_rt)
                         )
     if validation_raw_sources is not None:
         for sample_stem in sample_order:
@@ -159,6 +161,7 @@ def build_owner_backfill_cells(
                         feature,
                         requested_sample,
                         trace,
+                        request=_request,
                         preferred_rt=preferred_rt,
                         peak_config=peak_config,
                         emit_region_audit=emit_region_audit,
@@ -274,12 +277,32 @@ def _backfill_feature_sample(
     )
     if result.status != "OK" or result.peak is None:
         return None
+    trace_group = (
+        alignment_trace_group(
+            sample_stem=sample_stem,
+            family_id=feature.feature_family_id,
+            mz=feature.family_center_mz,
+            rt_values=rt_array,
+            intensity_values=intensity_array,
+            rt_min=rt_min,
+            rt_max=rt_max,
+            ppm_tol=alignment_config.preferred_ppm,
+            expected_rt_min=feature.family_center_rt,
+            neutral_loss_tag=feature.neutral_loss_tag,
+            product_mz=feature.family_product_mz,
+            observed_neutral_loss_da=feature.family_observed_neutral_loss_da,
+            source="owner_backfill",
+        )
+        if emit_region_audit
+        else None
+    )
     region_audit = (
         build_peak_region_audit_summary(
             rt_array,
             intensity_array,
             result,
             peak_config,
+            trace_group=trace_group,
         )
         if emit_region_audit
         else None
@@ -309,6 +332,7 @@ def _backfill_feature_sample_trace(
     sample_stem: str,
     trace: XICTrace,
     *,
+    request: XICRequest,
     preferred_rt: float | None = None,
     peak_config: ExtractionConfig,
     emit_region_audit: bool = False,
@@ -328,12 +352,32 @@ def _backfill_feature_sample_trace(
     )
     if result.status != "OK" or result.peak is None:
         return None
+    trace_group = (
+        alignment_trace_group(
+            sample_stem=sample_stem,
+            family_id=feature.feature_family_id,
+            mz=request.mz,
+            rt_values=rt_array,
+            intensity_values=intensity_array,
+            rt_min=request.rt_min,
+            rt_max=request.rt_max,
+            ppm_tol=request.ppm_tol,
+            expected_rt_min=feature.family_center_rt,
+            neutral_loss_tag=feature.neutral_loss_tag,
+            product_mz=feature.family_product_mz,
+            observed_neutral_loss_da=feature.family_observed_neutral_loss_da,
+            source="owner_backfill_batch",
+        )
+        if emit_region_audit
+        else None
+    )
     region_audit = (
         build_peak_region_audit_summary(
             rt_array,
             intensity_array,
             result,
             peak_config,
+            trace_group=trace_group,
         )
         if emit_region_audit
         else None

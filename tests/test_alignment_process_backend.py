@@ -192,11 +192,13 @@ def test_owner_build_process_builds_pickleable_sample_jobs_and_merges_output(
         alignment_config=AlignmentConfig(),
         peak_config=_peak_config(tmp_path),
         max_workers=2,
+        emit_region_audit=True,
         runner=fake_runner,
     )
 
     assert [job.sample_stem for job in captured_jobs] == ["sample-a", "sample-b"]
     assert [len(job.candidates) for job in captured_jobs] == [1, 1]
+    assert {job.emit_region_audit for job in captured_jobs} == {True}
     assert output.ownership.owners == (owner_a, owner_b)
     assert output.ownership.assignments == (unresolved_a, primary_a, primary_b)
     assert [stat.sample_stem for stat in output.timing_stats] == [

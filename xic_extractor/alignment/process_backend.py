@@ -42,6 +42,7 @@ class OwnerBuildSampleJob:
     alignment_config: AlignmentConfig
     peak_config: ExtractionConfig
     raw_xic_batch_size: int = 1
+    emit_region_audit: bool = False
 
 
 @dataclass(frozen=True)
@@ -142,6 +143,7 @@ def run_owner_build_process(
     peak_config: ExtractionConfig,
     max_workers: int,
     raw_xic_batch_size: int = 1,
+    emit_region_audit: bool = False,
     runner: Callable[..., list[OwnerBuildWorkerResult]] | None = None,
 ) -> OwnerBuildProcessOutput:
     if max_workers < 1:
@@ -169,6 +171,7 @@ def run_owner_build_process(
                 alignment_config=alignment_config,
                 peak_config=peak_config,
                 raw_xic_batch_size=raw_xic_batch_size,
+                emit_region_audit=emit_region_audit,
             )
             parent_results.append(
                 _owner_build_sample_result(
@@ -189,6 +192,7 @@ def run_owner_build_process(
                 alignment_config=alignment_config,
                 peak_config=peak_config,
                 raw_xic_batch_size=raw_xic_batch_size,
+                emit_region_audit=emit_region_audit,
             )
         )
     active_runner = runner or run_owner_build_jobs
@@ -288,6 +292,7 @@ def extract_owner_build_sample_job(
                 alignment_config=job.alignment_config,
                 peak_config=job.peak_config,
                 raw_xic_batch_size=job.raw_xic_batch_size,
+                emit_region_audit=job.emit_region_audit,
             )
         return _owner_build_sample_result(
             sample_index=job.sample_index,

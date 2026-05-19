@@ -1,8 +1,8 @@
 # Region-first Safe Merge Promotion v1 Spec
 
 **Date:** 2026-05-18
-**Status:** Planned implementation slice
-**Branch:** `codex/targeted-nl-dropout-convergence`
+**Status:** Implemented as opt-in mode; validation gate pending
+**Branch:** `codex/region-first-safe-merge-validation`
 **Depends on:** `2026-05-18-region-first-model-selection-shadow-report-v1-spec.md`
 
 ## Summary
@@ -90,3 +90,13 @@ It does not depend on generated TSV files.
    area ratio, and promotion reason.
 8. 85RAW opt-in validation shows no ISTD benchmark regression before default
    promotion is considered.
+
+## Validation Gate
+
+Promotion beyond opt-in requires the validation gate in
+`2026-05-18-region-first-safe-merge-validation-gate.md`.
+
+The validation gate is allowed to conclude `keep_opt_in`, `tighten_gate`,
+`candidate_for_default_later`, or `inconclusive`. It must not treat low-detection
+target rescue as a success criterion, and it must mark the d3-N6-medA check as
+inconclusive if the default 8RAW run does not reproduce the area mismatch.

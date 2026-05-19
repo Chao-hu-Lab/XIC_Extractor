@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 
+from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
@@ -67,7 +68,7 @@ def ambiguous_records_by_sample(
 
 def _detected_cell(feature: OwnerAlignedFeature, owner) -> AlignedCell:
     event = owner.primary_identity_event
-    return AlignedCell(
+    cell = AlignedCell(
         sample_stem=owner.sample_stem,
         cluster_id=feature.feature_family_id,
         status="detected",
@@ -83,6 +84,7 @@ def _detected_cell(feature: OwnerAlignedFeature, owner) -> AlignedCell:
         source_raw_file=None,
         reason="sample-local MS1 owner with original MS2 evidence",
     )
+    return with_region_audit(cell, owner.region_audit)
 
 
 def _detected_or_confirmed_cell(

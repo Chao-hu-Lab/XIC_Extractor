@@ -1,0 +1,118 @@
+import numpy as np
+import pytest
+
+from xic_extractor.peak_detection.traces import (
+    Trace,
+    TraceGroup,
+    targeted_trace_group,
+    trace_from_xic_request,
+    untargeted_trace_group,
+)
+from xic_extractor.xic_models import XICRequest, XICTrace
+
+
+def test_trace_from_xic_request_preserves_xic_metadata() -> None:
+    request = XICRequest(mz=269.1388, rt_min=24.0, rt_max=26.0, ppm_tol=10.0)
+    xic = XICTrace.from_arrays([24.0, 25.0, 26.0], [0.0, 100.0, 0.0])
+
+    trace = trace_from_xic_request(
+        sample_name="TumorBC2312_DNA",
+        request=request,
+        xic_trace=xic,
+        source="alignment_owner",
+    )
+
+    assert trace.sample_name == "TumorBC2312_DNA"
+    assert trace.mz == 269.1388
+    assert trace.rt_min == 24.0
+    assert trace.rt_max == 26.0
+    assert trace.ppm_tol == 10.0
+    assert trace.scan_count == 3
+    assert trace.source == "alignment_owner"
+
+
+def test_trace_rejects_mismatched_arrays() -> None:
+    with pytest.raises(ValueError, match="matching 1D arrays"):
+        Trace(
+            sample_name="s1",
+            mz=250.0,
+            rt=np.asarray([1.0, 2.0]),
+            intensity=np.asarray([10.0]),
+            rt_min=1.0,
+            rt_max=2.0,
+            ppm_tol=10.0,
+        )
+
+
+def test_trace_group_requires_non_empty_same_sample_traces() -> None:
+    first = Trace.from_arrays(
+        sample_name="s1",
+        mz=250.0,
+        rt=[1.0, 2.0],
+        intensity=[0.0, 10.0],
+        rt_min=1.0,
+        rt_max=2.0,
+        ppm_tol=10.0,
+    )
+    second = Trace.from_arrays(
+        sample_name="s2",
+        mz=251.0,
+        rt=[1.0, 2.0],
+        intensity=[0.0, 10.0],
+        rt_min=1.0,
+        rt_max=2.0,
+        ppm_tol=10.0,
+    )
+
+    with pytest.raises(ValueError, match="at least one trace"):
+        TraceGroup(
+            trace_group_id="empty",
+            sample_name="s1",
+            analysis_mode="targeted",
+            context_id="target",
+            traces=(),
+        )
+    with pytest.raises(ValueError, match="same sample"):
+        TraceGroup(
+            trace_group_id="mixed",
+            sample_name="s1",
+            analysis_mode="targeted",
+            context_id="target",
+            traces=(first, second),
+        )
+
+
+def test_targeted_and_untargeted_trace_group_adapters_set_context() -> None:
+    trace = Trace.from_arrays(
+        sample_name="s1",
+        mz=269.1388,
+        rt=[24.0, 25.0, 26.0],
+        intensity=[0.0, 100.0, 0.0],
+        rt_min=24.0,
+        rt_max=26.0,
+        ppm_tol=10.0,
+    )
+
+    targeted = targeted_trace_group(
+        trace,
+        target_label="15N5-8-oxodG",
+        resolver_mode="local_minimum",
+        expected_rt_min=25.0,
+        neutral_loss_tag="DNA_dR",
+        product_mz=153.048,
+        role="ISTD",
+    )
+    untargeted = untargeted_trace_group(
+        trace,
+        family_id="FAM000123",
+        expected_rt_min=25.0,
+        neutral_loss_tag="DNA_dR",
+        product_mz=153.048,
+    )
+
+    assert targeted.trace_group_id == "s1|15N5-8-oxodG|local_minimum"
+    assert targeted.analysis_mode == "targeted"
+    assert targeted.role == "ISTD"
+    assert untargeted.trace_group_id == "s1|FAM000123|untargeted"
+    assert untargeted.analysis_mode == "untargeted"
+    assert untargeted.neutral_loss_tag == "DNA_dR"

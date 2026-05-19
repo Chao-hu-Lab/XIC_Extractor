@@ -8,6 +8,7 @@ from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.owner_backfill import build_owner_backfill_cells
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.region_audit import PeakRegionAuditSummary
 
 
 def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
@@ -65,6 +66,44 @@ def test_owner_backfill_region_audit_is_opt_in(monkeypatch) -> None:
     assert len(cells) == 1
     assert cells[0].region_candidate_count is None
     assert cells[0].region_shadow_status == ""
+
+
+def test_owner_backfill_region_audit_receives_untargeted_trace_group(
+    monkeypatch,
+) -> None:
+    source = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 50.0, 120.0, 50.0, 0.0]),
+    )
+    captured = {}
+
+    def fake_region_audit(*args, **kwargs):
+        captured["trace_group"] = kwargs["trace_group"]
+        return PeakRegionAuditSummary(
+            candidate_count=1,
+            shadow_status="evaluated",
+        )
+
+    monkeypatch.setattr(
+        owner_backfill_module,
+        "build_peak_region_audit_summary",
+        fake_region_audit,
+    )
+
+    build_owner_backfill_cells(
+        (_feature(),),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=_peak_config(),
+        emit_region_audit=True,
+    )
+
+    trace_group = captured["trace_group"]
+    assert trace_group.analysis_mode == "untargeted"
+    assert trace_group.context_id == "FAM000001"
+    assert trace_group.primary_trace.sample_name == "sample-b"
+    assert trace_group.primary_trace.ppm_tol == 20.0
 
 
 def test_owner_backfill_skips_review_only_identity_conflicts() -> None:

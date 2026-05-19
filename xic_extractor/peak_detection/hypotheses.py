@@ -19,6 +19,7 @@ from xic_extractor.peak_detection.models import (
     PeakCandidateScore,
     PeakDetectionResult,
 )
+from xic_extractor.peak_detection.traces import TraceGroup
 
 _CONFIDENCE_RANK = {
     "HIGH": 0,
@@ -141,6 +142,7 @@ def build_peak_hypotheses(
     candidate_ms2_evidence: Mapping[PeakCandidate, CandidateMS2Evidence] | None = None,
     rt: object | None = None,
     intensity: object | None = None,
+    trace_group: TraceGroup | None = None,
 ) -> tuple[PeakHypothesis, ...]:
     selected = _selected_candidate(peak_result)
     score_by_candidate = {
@@ -152,6 +154,11 @@ def build_peak_hypotheses(
     )
     selected_score = score_by_candidate.get(selected) if selected is not None else None
     evidence_by_candidate = candidate_ms2_evidence or {}
+    trace_rt = rt
+    trace_intensity = intensity
+    if trace_group is not None:
+        trace_rt = trace_group.primary_trace.rt
+        trace_intensity = trace_group.primary_trace.intensity
 
     hypotheses: list[PeakHypothesis] = []
     for candidate in peak_result.candidates:
@@ -166,7 +173,9 @@ def build_peak_hypotheses(
                     resolver_mode=resolver_mode,
                     candidate=candidate,
                 ),
-                trace_group_id=_trace_group_id(
+                trace_group_id=trace_group.trace_group_id
+                if trace_group is not None
+                else _trace_group_id(
                     sample_name=sample_name,
                     target_label=target_label,
                     resolver_mode=resolver_mode,
@@ -178,8 +187,8 @@ def build_peak_hypotheses(
                 resolver_mode=resolver_mode,
                 integration=_integration_from_candidate(
                     candidate,
-                    rt=rt,
-                    intensity=intensity,
+                    rt=trace_rt,
+                    intensity=trace_intensity,
                 ),
                 evidence=_evidence_from_candidate(
                     candidate,

@@ -299,6 +299,38 @@ def test_run_writes_peak_candidate_table_when_enabled(
     assert all(row["nonoverlap_selected"] for row in boundary_summary_rows)
 
 
+def test_targeted_extraction_passes_trace_group_to_peak_audit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = replace(
+        _config(tmp_path, keep_intermediate_csv=False),
+        emit_peak_candidates=True,
+    )
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def _fake_append_peak_audit_rows(**kwargs: object) -> None:
+        captured["trace_group"] = kwargs["trace_group"]
+
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence([_ok_peak(8.5, 1200.0, 3400.25)]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extraction.target_extraction.append_peak_audit_rows",
+        _fake_append_peak_audit_rows,
+    )
+
+    _run(config, [_target("NoNL", neutral_loss_da=None)])
+
+    trace_group = captured["trace_group"]
+    assert trace_group.analysis_mode == "targeted"
+    assert trace_group.context_id == "NoNL"
+    assert trace_group.primary_trace.sample_name == "SampleA"
+    assert trace_group.primary_trace.mz == 258.1085
+
+
 def test_peak_candidate_table_includes_cwt_audit_proposals_when_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

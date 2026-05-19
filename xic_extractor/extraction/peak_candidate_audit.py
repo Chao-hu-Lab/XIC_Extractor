@@ -15,6 +15,7 @@ from xic_extractor.extraction.peak_candidate_table import (
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.cwt import add_cwt_proposals_for_audit
 from xic_extractor.peak_detection.models import PeakCandidate, PeakDetectionResult
+from xic_extractor.peak_detection.traces import TraceGroup
 
 
 def append_peak_audit_rows(
@@ -28,6 +29,7 @@ def append_peak_audit_rows(
     candidate_ms2_builder: Callable[[PeakCandidate], CandidateMS2Evidence | None],
     rt: Any,
     intensity: Any,
+    trace_group: TraceGroup | None = None,
     scoring_context_builder: Callable[[PeakCandidate], Any] | None = None,
     istd_confidence_note: str | None = None,
 ) -> None:
@@ -49,6 +51,7 @@ def append_peak_audit_rows(
         audit_peak_result=audit_peak_result,
         rt=rt,
         intensity=intensity,
+        trace_group=trace_group,
         scoring_context_builder=scoring_context_builder,
         istd_confidence_note=istd_confidence_note,
     )
@@ -60,5 +63,6 @@ def append_peak_audit_rows(
         peak_result,
         rt=rt,
         intensity=intensity,
+        trace_group=trace_group,
         audit_peak_result=audit_peak_result,
     )

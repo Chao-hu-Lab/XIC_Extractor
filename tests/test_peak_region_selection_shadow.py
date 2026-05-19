@@ -184,6 +184,39 @@ def test_blast_radius_summary_counts_rows_that_would_change() -> None:
     ]
 
 
+def test_blast_radius_summary_ignores_blank_area_ratios() -> None:
+    rows = [
+        {
+            "target_label": "Target-A",
+            "role": "Analyte",
+            "shadow_status": "evaluated",
+            "shadow_verdict": "split_supported",
+            "area_ratio": "",
+        },
+        {
+            "target_label": "Target-B",
+            "role": "Analyte",
+            "shadow_status": "evaluated",
+            "shadow_verdict": "merge_suggested",
+            "area_ratio": "1.20000",
+        },
+    ]
+
+    summary = build_peak_region_selection_blast_radius_rows(rows)
+
+    assert summary == [
+        {
+            "total_rows": "2",
+            "rows_that_would_change": "2",
+            "istd_rows_that_would_change": "0",
+            "affected_target_labels": "Target-A;Target-B",
+            "area_ratio_min": "1.20000",
+            "area_ratio_median": "1.20000",
+            "area_ratio_max": "1.20000",
+        }
+    ]
+
+
 def test_shadow_writer_serializes_rows_safely(tmp_path: Path) -> None:
     path = tmp_path / "peak_region_selection_shadow.tsv"
     row = {header: "" for header in PEAK_REGION_SELECTION_SHADOW_HEADERS}

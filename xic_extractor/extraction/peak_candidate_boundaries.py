@@ -18,6 +18,7 @@ from xic_extractor.peak_detection.interval_selection import (
 )
 from xic_extractor.peak_detection.models import PeakCandidate, PeakDetectionResult
 from xic_extractor.peak_detection.trace_quality import trace_continuity_score
+from xic_extractor.peak_detection.traces import TraceGroup
 from xic_extractor.sample_groups import classify_sample_group
 
 PeakCandidateBoundaryRow = dict[str, str]
@@ -71,10 +72,15 @@ def build_peak_candidate_boundary_rows(
     peak_result: PeakDetectionResult,
     rt: Any,
     intensity: Any,
+    trace_group: TraceGroup | None = None,
     target_mz: float | None = None,
     group: str | None = None,
 ) -> list[PeakCandidateBoundaryRow]:
     sample_group = group or classify_sample_group(sample_name)
+    trace_rt = trace_group.primary_trace.rt if trace_group is not None else rt
+    trace_intensity = (
+        trace_group.primary_trace.intensity if trace_group is not None else intensity
+    )
     selected = _selected_candidate(peak_result)
     rows: list[PeakCandidateBoundaryRow] = []
     for candidate in peak_result.candidates:
@@ -85,8 +91,8 @@ def build_peak_candidate_boundary_rows(
             candidate=candidate,
         )
         boundaries = enumerate_boundary_hypotheses(
-            rt,
-            intensity,
+            trace_rt,
+            trace_intensity,
             candidate,
             candidate_id=candidate_id,
         )
@@ -105,8 +111,8 @@ def build_peak_candidate_boundary_rows(
                 selected_candidate=selected is not None and candidate == selected,
                 boundary=boundary,
                 reference=reference,
-                rt=rt,
-                intensity=intensity,
+                rt=trace_rt,
+                intensity=trace_intensity,
             )
             for boundary in boundaries
         ]
@@ -125,6 +131,7 @@ def append_peak_candidate_boundary_rows(
     *,
     rt: Any,
     intensity: Any,
+    trace_group: TraceGroup | None = None,
     audit_peak_result: PeakDetectionResult | None = None,
 ) -> None:
     if not config.emit_peak_candidates or rows is None:
@@ -148,6 +155,7 @@ def append_peak_candidate_boundary_rows(
             peak_result=audited,
             rt=rt,
             intensity=intensity,
+            trace_group=trace_group,
         )
     )
 

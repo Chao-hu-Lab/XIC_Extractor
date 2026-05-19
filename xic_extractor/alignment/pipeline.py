@@ -78,6 +78,7 @@ def run_alignment(
     output_level: AlignmentOutputLevel = "machine",
     emit_alignment_cells: bool = False,
     emit_alignment_status_matrix: bool = False,
+    emit_alignment_integration_audit: bool = False,
     raw_opener: RawOpener | None = None,
     raw_workers: int = 1,
     raw_xic_batch_size: int = 1,
@@ -122,8 +123,11 @@ def run_alignment(
         output_level=output_level,
         emit_alignment_cells=emit_alignment_cells,
         emit_alignment_status_matrix=emit_alignment_status_matrix,
+        emit_alignment_integration_audit=emit_alignment_integration_audit,
     )
-    emit_cell_region_audit = outputs.cells_tsv is not None
+    emit_cell_region_audit = (
+        outputs.cells_tsv is not None or outputs.integration_audit_tsv is not None
+    )
 
     with ExitStack() as stack:
         raw_paths = _existing_raw_paths(
@@ -153,6 +157,7 @@ def run_alignment(
                     peak_config=peak_config,
                     max_workers=raw_workers,
                     raw_xic_batch_size=raw_xic_batch_size,
+                    emit_region_audit=emit_cell_region_audit,
                 )
                 ownership = owner_output.ownership
                 for stats in owner_output.timing_stats:
@@ -180,6 +185,7 @@ def run_alignment(
                     alignment_config=alignment_config,
                     peak_config=peak_config,
                     raw_xic_batch_size=raw_xic_batch_size,
+                    emit_region_audit=emit_cell_region_audit,
                 )
                 record_timed_raw_sources(timed_raw_sources_, recorder=recorder)
         edge_evidence: list[OwnerEdgeEvidence] | None = (

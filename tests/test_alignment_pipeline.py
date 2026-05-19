@@ -40,12 +40,14 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
         alignment_config,
         peak_config,
         raw_xic_batch_size,
+        emit_region_audit,
     ):
         calls["candidates"] = tuple(candidate.sample_stem for candidate in candidates)
         calls["owner_raw_sources"] = raw_sources
         calls["alignment_config"] = alignment_config
         calls["peak_config"] = peak_config
         calls["owner_raw_xic_batch_size"] = raw_xic_batch_size
+        calls["owner_emit_region_audit"] = emit_region_audit
         return SimpleNamespace(owners=("owner",), ambiguous_records=())
 
     def fake_cluster_owners(owners, *, config):
@@ -115,6 +117,7 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
     assert calls["sample_order"] == ("Sample_A", "Sample_B")
     assert set(calls["raw_sources"]) == {"Sample_A", "Sample_B"}
     assert calls["owner_raw_xic_batch_size"] == 1
+    assert calls["owner_emit_region_audit"] is False
     assert calls["backfill_raw_xic_batch_size"] == 1
     assert calls["emit_region_audit"] is False
     assert calls["matrix_features"] == ("feature",)
@@ -740,13 +743,19 @@ def test_pipeline_debug_flags_write_optional_outputs(
         alignment_config=AlignmentConfig(),
         peak_config=_peak_config(),
         emit_alignment_cells=True,
+        emit_alignment_integration_audit=True,
         emit_alignment_status_matrix=True,
         raw_opener=FakeRawOpener(),
     )
 
     assert outputs.cells_tsv == tmp_path / "out" / "alignment_cells.tsv"
+    assert (
+        outputs.integration_audit_tsv
+        == tmp_path / "out" / "alignment_cell_integration_audit.tsv"
+    )
     assert outputs.status_matrix_tsv == tmp_path / "out" / "alignment_matrix_status.tsv"
     assert outputs.cells_tsv.exists()
+    assert outputs.integration_audit_tsv.exists()
     assert outputs.status_matrix_tsv.exists()
 
 
@@ -808,6 +817,69 @@ def test_pipeline_enables_region_audit_only_when_alignment_cells_are_emitted(
         raw_opener=FakeRawOpener(),
     )
 
+    assert calls["emit_region_audit"] is True
+
+
+def test_pipeline_enables_region_audit_when_integration_sidecar_is_emitted(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    calls = {}
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        lambda candidates, **kwargs: SimpleNamespace(
+            owners=("owner",),
+            assignments=(),
+            ambiguous_records=(),
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (
+            "feature",
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+
+    def fake_owner_backfill(features, **kwargs):
+        calls["emit_region_audit"] = kwargs["emit_region_audit"]
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        fake_owner_backfill,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
+
+    outputs = pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        emit_alignment_integration_audit=True,
+        raw_opener=FakeRawOpener(),
+    )
+
+    assert outputs.cells_tsv is None
+    assert outputs.integration_audit_tsv is not None
     assert calls["emit_region_audit"] is True
 
 
@@ -1094,6 +1166,17 @@ def test_run_alignment_debug_level_writes_machine_and_debug_artifacts(
     assert outputs.event_to_owner_tsv is not None
     assert outputs.ambiguous_owners_tsv is not None
     assert outputs.edge_evidence_tsv is not None
+
+
+def test_run_alignment_output_level_does_not_emit_integration_audit_by_default(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    outputs = _run_minimal_alignment(tmp_path, monkeypatch, output_level="validation")
+
+    names = sorted(path.name for path in (tmp_path / "out").iterdir())
+    assert "alignment_cell_integration_audit.tsv" not in names
+    assert outputs.integration_audit_tsv is None
 
 
 def test_run_alignment_passes_drift_lookup_to_owner_clustering(

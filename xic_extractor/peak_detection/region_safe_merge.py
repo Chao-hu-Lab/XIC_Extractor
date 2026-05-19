@@ -134,6 +134,7 @@ def apply_region_first_safe_merge_decision(
         right_rt=float(rt[right_index - 1]),
         area=promoted_area,
         scan_count=right_index - left_index,
+        promotion_source=decision.merge_suggestion_source,
     )
     promoted_result = replace(
         candidates_result,
@@ -313,6 +314,7 @@ def _promoted_candidate(
     right_rt: float,
     area: float,
     scan_count: int,
+    promotion_source: str,
 ) -> PeakCandidate:
     peak = replace(
         candidate.peak,
@@ -320,12 +322,14 @@ def _promoted_candidate(
         peak_start=left_rt,
         peak_end=right_rt,
     )
+    merge_note = _combine_merge_note(candidate.merge_note, "region_first_safe_merge")
+    merge_note = _combine_merge_note(merge_note, promotion_source)
     return replace(
         candidate,
         peak=peak,
         region_scan_count=scan_count,
         region_duration_min=right_rt - left_rt,
-        merge_note=_combine_merge_note(candidate.merge_note, "region_first_safe_merge"),
+        merge_note=merge_note,
         ms2_evidence_peak_start=(
             candidate.ms2_evidence_peak_start
             if candidate.ms2_evidence_peak_start is not None

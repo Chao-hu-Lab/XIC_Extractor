@@ -10,6 +10,8 @@ from xic_extractor.alignment.owner_matrix import (
     build_owner_alignment_matrix,
 )
 from xic_extractor.alignment.ownership_models import AmbiguousOwnerRecord
+from xic_extractor.peak_detection.integration_audit import CellIntegrationAuditSummary
+from xic_extractor.peak_detection.region_audit import PeakRegionAuditSummary
 
 
 def test_owner_matrix_writes_detected_rescued_ambiguous_and_absent_cells() -> None:
@@ -68,6 +70,54 @@ def test_owner_matrix_detected_cell_does_not_invent_raw_path() -> None:
 
     assert matrix.cells[0].source_raw_file is None
     assert isinstance(Path("sample-a.raw"), Path)
+
+
+def test_owner_matrix_carries_detected_owner_region_audit() -> None:
+    owner = replace(
+        _owner("sample-a", "a"),
+        region_audit=PeakRegionAuditSummary(
+            candidate_count=3,
+            selected_proposal_sources=("local_minimum", "cwt_ridge"),
+            selected_merge_note="region_first_safe_merge",
+            shadow_status="evaluated",
+            shadow_verdict="merge_suggested",
+            merge_suggestion_source="adjacent_wis_local_minimum_merge",
+            area_ratio=1.08,
+            selected_interval_count=2,
+            selected_interval_gap_max_min=0.03,
+            local_mixture_diagnostic="one_envelope_supported",
+            local_mixture_reason="adjacent WIS intervals support one envelope",
+            review_reason="same envelope",
+            integration_audit=CellIntegrationAuditSummary(
+                raw_area=1000.0,
+                area_baseline_corrected=800.0,
+                area_uncertainty=50.0,
+                baseline_type="linear_edge",
+                baseline_score=0.8,
+                uncertainty_fraction=0.05,
+                baseline_fraction=0.8,
+                integration_scan_count=7,
+            ),
+        ),
+    )
+    feature = replace(_feature(), owners=(owner,))
+
+    matrix = build_owner_alignment_matrix(
+        (feature,),
+        sample_order=("sample-a",),
+        ambiguous_by_sample={},
+        rescued_cells=(),
+    )
+
+    cell = matrix.cells[0]
+    assert cell.status == "detected"
+    assert cell.region_candidate_count == 3
+    assert cell.region_selected_proposal_sources == ("local_minimum", "cwt_ridge")
+    assert cell.region_shadow_status == "evaluated"
+    assert cell.region_shadow_verdict == "merge_suggested"
+    assert cell.region_local_mixture_diagnostic == "one_envelope_supported"
+    assert cell.integration_audit is not None
+    assert cell.integration_audit.baseline_fraction == 0.8
 
 
 def test_owner_matrix_uses_backfill_confirmation_for_severe_low_local_owner() -> None:

@@ -16,6 +16,7 @@ from xic_extractor.output.peak_candidate_boundaries import (
 from xic_extractor.output.peak_candidate_boundary_summary import (
     write_peak_candidate_boundary_summary_tsv,
 )
+from xic_extractor.peak_detection.traces import Trace, targeted_trace_group
 from xic_extractor.signal_processing import (
     PeakCandidate,
     PeakDetectionResult,
@@ -95,6 +96,50 @@ def test_build_boundary_rows_emits_alternatives_for_each_candidate() -> None:
         for row in rows
     )
     assert any(row["boundary_concern_labels"] != "" for row in rows)
+
+
+def test_build_boundary_rows_prefers_shared_trace_group_arrays() -> None:
+    selected = _candidate(8.30, left=8.00, right=8.60)
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=7,
+        max_smoothed=100.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+    )
+    trace = Trace.from_arrays(
+        sample_name="SampleA",
+        mz=258.1085,
+        rt=[8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6],
+        intensity=[10.0, 18.0, 70.0, 100.0, 70.0, 18.0, 10.0],
+        rt_min=8.0,
+        rt_max=8.6,
+        ppm_tol=20.0,
+    )
+
+    rows = build_peak_candidate_boundary_rows(
+        sample_name="SampleA",
+        target_label="Analyte",
+        target_mz=258.1085,
+        role="Analyte",
+        istd_pair="ISTD",
+        resolver_mode="arbitrated",
+        peak_result=peak_result,
+        rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6]),
+        intensity=np.zeros(7),
+        trace_group=targeted_trace_group(
+            trace,
+            target_label="Analyte",
+            resolver_mode="arbitrated",
+        ),
+    )
+
+    candidate_row = next(
+        row for row in rows if row["is_candidate_interval"] == "TRUE"
+    )
+    assert candidate_row["area_raw_counts_seconds"] != "0.00"
+    assert candidate_row["baseline_score"] != "0.00000"
 
 
 def test_write_peak_candidate_boundaries_tsv_serializes_rows_safely(

@@ -12,6 +12,7 @@ from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.feature_family import MS1FeatureFamily
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix, CellStatus
+from xic_extractor.alignment.trace_context import alignment_trace_group
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_detection.region_audit import build_peak_region_audit_summary
 from xic_extractor.signal_processing import find_peak_and_area
@@ -104,12 +105,32 @@ def _integrate_family_cell(
         )
     if result.status != "OK" or result.peak is None:
         return _absent_cell(family, sample_stem)
+    trace_group = (
+        alignment_trace_group(
+            sample_stem=sample_stem,
+            family_id=family.feature_family_id,
+            mz=family.family_center_mz,
+            rt_values=rt_array,
+            intensity_values=intensity_array,
+            rt_min=rt_min,
+            rt_max=rt_max,
+            ppm_tol=alignment_config.preferred_ppm,
+            expected_rt_min=family.family_center_rt,
+            neutral_loss_tag=family.neutral_loss_tag,
+            product_mz=family.family_product_mz,
+            observed_neutral_loss_da=family.family_observed_neutral_loss_da,
+            source="family_integration",
+        )
+        if emit_region_audit
+        else None
+    )
     region_audit = (
         build_peak_region_audit_summary(
             rt_array,
             intensity_array,
             result,
             peak_config,
+            trace_group=trace_group,
         )
         if emit_region_audit
         else None

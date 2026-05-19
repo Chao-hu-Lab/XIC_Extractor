@@ -58,7 +58,10 @@ def test_adjacent_wis_safe_merge_updates_selected_boundary_and_area() -> None:
     assert outcome.selected_candidate.ms2_evidence_peak_end == pytest.approx(
         selected.peak.peak_end
     )
-    assert outcome.selected_candidate.merge_note == "region_first_safe_merge"
+    assert (
+        outcome.selected_candidate.merge_note
+        == "region_first_safe_merge;adjacent_wis_local_minimum_merge"
+    )
     assert outcome.candidates_result.candidates[0] == outcome.selected_candidate
     assert outcome.candidate_scores[0].candidate == outcome.selected_candidate
 

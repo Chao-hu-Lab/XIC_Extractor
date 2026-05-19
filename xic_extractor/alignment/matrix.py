@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal, Protocol
 
 from xic_extractor.alignment.models import AlignmentCluster
+from xic_extractor.peak_detection.integration_audit import CellIntegrationAuditSummary
 
 CellStatus = Literal[
     "detected",
@@ -52,6 +53,7 @@ class AlignedCell:
     region_local_mixture_diagnostic: str = ""
     region_local_mixture_reason: str = ""
     region_review_reason: str = ""
+    integration_audit: CellIntegrationAuditSummary | None = None
 
 
 @dataclass(frozen=True)
