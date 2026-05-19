@@ -63,6 +63,11 @@ def test_comparison_reports_changed_safe_merge_rows(tmp_path: Path) -> None:
                     "region_first_safe_merge;"
                     "adjacent_wis_local_minimum_merge"
                 ),
+                "safe_merge_promotion_source": (
+                    "adjacent_wis_local_minimum_merge"
+                ),
+                "safe_merge_promotion_selected_interval_count": "2",
+                "safe_merge_promotion_selected_interval_gap_max_min": "0.041",
             }
         ],
     )
@@ -174,6 +179,11 @@ def test_comparison_prefers_persisted_promotion_source_over_post_merge_shadow(
                     "region_first_safe_merge;"
                     "adjacent_wis_local_minimum_merge"
                 ),
+                "safe_merge_promotion_source": (
+                    "adjacent_wis_local_minimum_merge"
+                ),
+                "safe_merge_promotion_selected_interval_count": "2",
+                "safe_merge_promotion_selected_interval_gap_max_min": "0.041",
             }
         ],
     )
@@ -201,6 +211,8 @@ def test_comparison_prefers_persisted_promotion_source_over_post_merge_shadow(
     row = _read_tsv(outputs.comparison_tsv)[0]
     assert row["shadow_verdict"] == "split_supported"
     assert row["merge_suggestion_source"] == "adjacent_wis_local_minimum_merge"
+    assert row["selected_interval_count"] == "2"
+    assert row["selected_interval_gap_max_min"] == "0.041"
 
 
 def test_comparison_fails_clearly_for_missing_required_columns(
@@ -305,6 +317,9 @@ def _write_candidates(path: Path, rows: list[dict[str, str]]) -> None:
         "role",
         "selected",
         "merge_note",
+        "safe_merge_promotion_source",
+        "safe_merge_promotion_selected_interval_count",
+        "safe_merge_promotion_selected_interval_gap_max_min",
     ]
     _write_tsv(path, fieldnames, rows)
 

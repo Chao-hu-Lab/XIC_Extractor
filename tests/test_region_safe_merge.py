@@ -62,6 +62,18 @@ def test_adjacent_wis_safe_merge_updates_selected_boundary_and_area() -> None:
         outcome.selected_candidate.merge_note
         == "region_first_safe_merge;adjacent_wis_local_minimum_merge"
     )
+    assert (
+        outcome.selected_candidate.safe_merge_promotion_source
+        == "adjacent_wis_local_minimum_merge"
+    )
+    assert outcome.selected_candidate.safe_merge_promotion_area_ratio == pytest.approx(
+        1800.0 / 1700.0
+    )
+    assert outcome.selected_candidate.safe_merge_promotion_selected_interval_count == 2
+    assert (
+        outcome.selected_candidate.safe_merge_promotion_selected_interval_gap_max_min
+        == pytest.approx(0.02)
+    )
     assert outcome.candidates_result.candidates[0] == outcome.selected_candidate
     assert outcome.candidate_scores[0].candidate == outcome.selected_candidate
 
@@ -92,6 +104,33 @@ def test_adjacent_wis_safe_merge_accepts_touching_intervals() -> None:
 
     assert outcome.promoted is True
     assert outcome.selected_candidate.peak.area == pytest.approx(1800.0)
+
+
+def test_adjacent_wis_safe_merge_refuses_large_interval_gap() -> None:
+    rt = np.asarray([10.0, 10.1, 10.2, 10.3], dtype=float)
+    intensity = np.asarray([100.0, 100.0, 100.0, 100.0], dtype=float)
+    selected = _candidate(area=1700.0)
+    result = _result(selected)
+    decision = _decision(
+        shadow_boundary_id="left;right",
+        source="adjacent_wis_local_minimum_merge",
+        selected_interval_gap_max_min=0.09,
+    )
+
+    outcome = apply_region_first_safe_merge_decision(
+        rt,
+        intensity,
+        result,
+        selected,
+        decision,
+        {
+            "left": _boundary("left", 0, 2),
+            "right": _boundary("right", 2, 4),
+        },
+    )
+
+    assert outcome.promoted is False
+    assert outcome.selected_candidate == selected
 
 
 @pytest.mark.parametrize(

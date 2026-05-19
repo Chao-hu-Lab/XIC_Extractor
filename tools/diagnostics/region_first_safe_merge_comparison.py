@@ -127,9 +127,21 @@ def run_region_first_safe_merge_comparison(
                 "safe_merge_note": candidate.get("merge_note", ""),
                 "shadow_verdict": shadow.get("shadow_verdict", ""),
                 "merge_suggestion_source": merge_suggestion_source,
-                "selected_interval_count": shadow.get("selected_interval_count", ""),
-                "selected_interval_gap_max_min": shadow.get(
-                    "selected_interval_gap_max_min", ""
+                "selected_interval_count": _candidate_or_shadow(
+                    candidate,
+                    shadow,
+                    candidate_field=(
+                        "safe_merge_promotion_selected_interval_count"
+                    ),
+                    shadow_field="selected_interval_count",
+                ),
+                "selected_interval_gap_max_min": _candidate_or_shadow(
+                    candidate,
+                    shadow,
+                    candidate_field=(
+                        "safe_merge_promotion_selected_interval_gap_max_min"
+                    ),
+                    shadow_field="selected_interval_gap_max_min",
                 ),
             }
         )
@@ -265,6 +277,9 @@ def _merge_suggestion_source(
     candidate: dict[str, str],
     shadow: dict[str, str],
 ) -> str:
+    promotion_source = candidate.get("safe_merge_promotion_source", "")
+    if promotion_source:
+        return promotion_source
     merge_notes = {
         value
         for value in candidate.get("merge_note", "").split(";")
@@ -277,13 +292,28 @@ def _merge_suggestion_source(
     return shadow.get("merge_suggestion_source", "")
 
 
+def _candidate_or_shadow(
+    candidate: dict[str, str],
+    shadow: dict[str, str],
+    *,
+    candidate_field: str,
+    shadow_field: str,
+) -> str:
+    return candidate.get(candidate_field, "") or shadow.get(shadow_field, "")
+
+
 def _summary_row(
     rows: Sequence[dict[str, str]], *, compared_count: int
 ) -> dict[str, str]:
-    ratios = [_as_float(row["area_ratio"]) for row in rows]
-    ratios = [value for value in ratios if value is not None]
-    rt_deltas = [_as_float(row["rt_delta_min"]) for row in rows]
-    rt_deltas = [abs(value) for value in rt_deltas if value is not None]
+    ratios: list[float] = []
+    rt_deltas: list[float] = []
+    for row in rows:
+        ratio = _as_float(row["area_ratio"])
+        if ratio is not None:
+            ratios.append(ratio)
+        rt_delta = _as_float(row["rt_delta_min"])
+        if rt_delta is not None:
+            rt_deltas.append(abs(rt_delta))
     promoted_rows = [
         row for row in rows if row["promotion_reason"] == "region_first_safe_merge"
     ]
