@@ -520,6 +520,214 @@ def test_soft_trace_flags_with_cwt_support_remain_benchmark_eligible(
     assert result.summaries[0].benchmark_eligible_count == 1
 
 
+def test_coherent_istd_soft_trace_flags_remain_benchmark_eligible(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("d3-N6-medA")],
+        result_rows=[
+            _result(
+                "S1",
+                "d3-N6-medA",
+                rt=26.15,
+                area=350_000_000.0,
+                nl="OK",
+                confidence="VERY_LOW",
+                reason=(
+                    "decision: review only, not counted; support: strict NL OK; "
+                    "local S/N strong; concerns: MS2 trace weak; "
+                    "shape poor; low trace continuity"
+                ),
+            ),
+            _result(
+                "S2",
+                "d3-N6-medA",
+                rt=26.20,
+                area=400_000_000.0,
+                nl="OK",
+                confidence="HIGH",
+            ),
+            _result(
+                "S3",
+                "d3-N6-medA",
+                rt=26.22,
+                area=410_000_000.0,
+                nl="OK",
+                confidence="HIGH",
+            ),
+        ],
+        score_rows=[
+            _score(
+                "S1",
+                "d3-N6-medA",
+                confidence="VERY_LOW",
+                concerns="ms2_trace_weak;shape_poor;low_trace_continuity",
+                quality_flags="low_trace_continuity",
+            ),
+            _score("S2", "d3-N6-medA", confidence="HIGH"),
+            _score("S3", "d3-N6-medA", confidence="HIGH"),
+        ],
+    )
+    _write_peak_candidates(
+        candidates,
+        [
+            _peak_candidate(
+                "S1",
+                "d3-N6-medA",
+                selected="TRUE",
+                raw_score="37",
+                support_labels="strict_nl_ok;local_sn_strong",
+                concern_labels="ms2_trace_weak;shape_poor;low_trace_continuity",
+                proposal_sources="local_minimum",
+                quality_flags="low_trace_continuity",
+                ms2_present="TRUE",
+                nl_match="TRUE",
+            )
+        ],
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        peak_candidates_tsv=candidates,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "benchmark_eligible"
+    assert "low_confidence" not in row.risk_reasons
+    assert "quality_flags" not in row.risk_reasons
+
+
+@pytest.mark.parametrize("raw_score", ["", "34"])
+def test_coherent_istd_soft_trace_requires_raw_score_floor(
+    tmp_path: Path,
+    raw_score: str,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("d3-N6-medA")],
+        result_rows=[
+            _result(
+                "S1",
+                "d3-N6-medA",
+                rt=26.15,
+                area=350_000_000.0,
+                nl="OK",
+                confidence="VERY_LOW",
+                reason=(
+                    "decision: review only, not counted; support: strict NL OK; "
+                    "local S/N strong; concerns: shape poor; low trace continuity"
+                ),
+            ),
+        ],
+        score_rows=[
+            _score(
+                "S1",
+                "d3-N6-medA",
+                confidence="VERY_LOW",
+                concerns="shape_poor;low_trace_continuity",
+                quality_flags="low_trace_continuity",
+            )
+        ],
+    )
+    _write_peak_candidates(
+        candidates,
+        [
+            _peak_candidate(
+                "S1",
+                "d3-N6-medA",
+                selected="TRUE",
+                raw_score=raw_score,
+                support_labels="strict_nl_ok;local_sn_strong",
+                concern_labels="shape_poor;low_trace_continuity",
+                proposal_sources="local_minimum",
+                quality_flags="low_trace_continuity",
+                ms2_present="TRUE",
+                nl_match="TRUE",
+            )
+        ],
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        peak_candidates_tsv=candidates,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "targeted_review"
+    assert "low_confidence" in row.risk_reasons
+    assert "quality_flags" in row.risk_reasons
+
+
+def test_coherent_soft_trace_relaxation_does_not_apply_to_analytes(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    target = _target("N6-medA")
+    target["Role"] = "Analyte"
+    result_row = _result(
+        "S1",
+        "N6-medA",
+        rt=26.15,
+        area=350_000_000.0,
+        nl="OK",
+        confidence="VERY_LOW",
+        reason=(
+            "decision: review only, not counted; support: strict NL OK; "
+            "local S/N strong; concerns: shape poor; low trace continuity"
+        ),
+    )
+    result_row["Role"] = "Analyte"
+    _write_targeted_workbook(
+        workbook,
+        targets=[target],
+        result_rows=[result_row],
+        score_rows=[
+            _score(
+                "S1",
+                "N6-medA",
+                confidence="VERY_LOW",
+                concerns="shape_poor;low_trace_continuity",
+                quality_flags="low_trace_continuity",
+            )
+        ],
+    )
+    _write_peak_candidates(
+        candidates,
+        [
+            _peak_candidate(
+                "S1",
+                "N6-medA",
+                selected="TRUE",
+                raw_score="37",
+                support_labels="strict_nl_ok;local_sn_strong",
+                concern_labels="shape_poor;low_trace_continuity",
+                proposal_sources="local_minimum",
+                quality_flags="low_trace_continuity",
+                ms2_present="TRUE",
+                nl_match="TRUE",
+            )
+        ],
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        peak_candidates_tsv=candidates,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "targeted_review"
+    assert "low_confidence" in row.risk_reasons
+
+
 def test_low_scan_support_stays_blocking_quality_flag(
     tmp_path: Path,
 ) -> None:

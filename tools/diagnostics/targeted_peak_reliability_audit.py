@@ -75,6 +75,7 @@ _PEAK_CANDIDATE_COLUMNS = (
 _WEAK_AREA_THRESHOLD_RATIO = 0.05
 _SOFT_TRACE_QUALITY_FLAGS = {"low_trace_continuity", "poor_edge_recovery"}
 _BLOCKING_TRACE_QUALITY_FLAGS = {"low_scan_support"}
+_COHERENT_ISTD_SOFT_TRACE_MIN_RAW_SCORE = 35.0
 
 
 @dataclass(frozen=True)
@@ -414,11 +415,19 @@ def _classify_row(
             ),
         )
 
+    coherent_istd_soft_trace = _is_coherent_istd_soft_trace_candidate(
+        row,
+        score,
+        candidate_evidence,
+        area_context,
+    )
+
     risk_reasons: list[str] = []
     if row.confidence == "VERY_LOW" or (
         row.confidence == "LOW" and not _is_accepted_low_istd(row)
     ):
-        risk_reasons.append("low_confidence")
+        if not coherent_istd_soft_trace:
+            risk_reasons.append("low_confidence")
     if _is_nl_fail(row.nl):
         if _is_plausible_nl_dropout(row, score, candidate_evidence):
             risk_reasons.append("plausible_nl_dropout")
@@ -432,7 +441,8 @@ def _classify_row(
         score.quality_flags,
         candidate_evidence=candidate_evidence,
     ):
-        risk_reasons.append("quality_flags")
+        if not coherent_istd_soft_trace:
+            risk_reasons.append("quality_flags")
     if area_context is not None and area_context.weak_area:
         risk_reasons.append("weak_area_rank")
     if _is_nl_fail(row.nl) and candidate_evidence is not None:
@@ -770,6 +780,55 @@ def _has_soft_trace_support_context(evidence: _CandidateEvidence) -> bool:
         and "shape_poor" not in concerns
         and "local_sn_poor" not in concerns
     )
+
+
+def _is_coherent_istd_soft_trace_candidate(
+    row: _TargetedInputRow,
+    score: _ScoreBreakdown | None,
+    candidate_evidence: _CandidateEvidence | None,
+    area_context: _AreaContext | None,
+) -> bool:
+    if row.role.strip().upper() != "ISTD":
+        return False
+    if row.rt is None or row.area is None or row.area <= 0:
+        return False
+    if _is_nl_fail(row.nl) or _is_no_ms2(row.nl):
+        return False
+    if area_context is not None and area_context.weak_area:
+        return False
+    if candidate_evidence is None:
+        return False
+    if candidate_evidence.ms2_present is not True:
+        return False
+    if candidate_evidence.nl_match is not True:
+        return False
+    if candidate_evidence.raw_score is None:
+        return False
+    if candidate_evidence.raw_score < _COHERENT_ISTD_SOFT_TRACE_MIN_RAW_SCORE:
+        return False
+
+    support = set(candidate_evidence.support_labels)
+    if not {"strict_nl_ok", "local_sn_strong"} <= support:
+        return False
+
+    flags = set(candidate_evidence.quality_flags)
+    if score is not None:
+        flags.update(_split_semicolon_labels(score.quality_flags))
+    if flags & _BLOCKING_TRACE_QUALITY_FLAGS:
+        return False
+    if flags - _SOFT_TRACE_QUALITY_FLAGS:
+        return False
+
+    concerns = set(candidate_evidence.concern_labels)
+    hard_concerns = {
+        "hard_quality_flag",
+        "low_scan_support",
+        "nl_fail",
+        "no_ms2",
+        "local_sn_poor",
+        "rt_centrality_poor",
+    }
+    return not bool(concerns & hard_concerns)
 
 
 def _evidence_signal_set(
