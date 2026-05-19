@@ -141,7 +141,9 @@ Before moving code, add or identify tests that pin:
 - summary aggregation,
 - missing required columns,
 - optional inputs / empty inputs,
-- output filenames and required columns.
+- output filenames and required columns,
+- representative output equivalence for TSV rows, queue ordering, JSON keys, and
+  Markdown sections.
 
 Expected test files:
 
@@ -149,7 +151,9 @@ Expected test files:
 - possibly a new focused test file if the review interface becomes public
   within diagnostics.
 
-Review gate: tests should fail only if current behavior is not preserved.
+Review gate: tests should fail only if current behavior is not preserved. If no
+pre-refactor golden fixture exists, add characterization assertions that pin the
+current output artifacts before moving code.
 
 ### Checkpoint 2: Extract Loaders And Models
 
@@ -196,7 +200,7 @@ Final checks:
 
 ```powershell
 uv --cache-dir .uv-cache run ruff check tools\diagnostics tests\test_low_ms1_assessable_coverage_audit.py
-uv --cache-dir .uv-cache run mypy tools\diagnostics\low_ms1_assessable_coverage_audit.py
+uv --cache-dir .uv-cache run mypy --explicit-package-bases tools\diagnostics\low_ms1_assessable_coverage_audit.py tools\diagnostics\low_ms1_coverage_review_models.py tools\diagnostics\low_ms1_coverage_review_loaders.py tools\diagnostics\low_ms1_coverage_review_classifier.py tools\diagnostics\low_ms1_coverage_review_writers.py
 ```
 
 If the split changes imports under `xic_extractor`, also run:

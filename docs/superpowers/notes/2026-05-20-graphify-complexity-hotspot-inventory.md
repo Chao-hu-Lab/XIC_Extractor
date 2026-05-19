@@ -18,6 +18,9 @@ workflow and diagnostics/reporting scripts.
 
 Recommended next step: create a fresh worktree from current `master` for the
 first implementation PR. Keep this graph branch as an analysis artifact branch.
+If this note has been copied into the implementation worktree, treat it as
+context only; do not create another worktree from inside
+`codex/diagnostics-structure-optimization`.
 
 ## Scope Analyzed
 
