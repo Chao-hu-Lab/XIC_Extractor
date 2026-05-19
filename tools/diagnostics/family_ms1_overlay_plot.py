@@ -31,12 +31,21 @@ REQUIRED_ALIGNMENT_COLUMNS = (
 
 APEX_ALIGN_HALF_WINDOW_MIN = 0.35
 APEX_ALIGN_GRID_SIZE = 175
+PLOT_GAUSSIAN_SMOOTH_POINTS = 15
 GLOBAL_APEX_CONFLICT_DELTA_MIN = 0.20
+GLOBAL_APEX_REVIEW_FRACTION_MIN = 0.25
 LOCAL_APEX_SUPPORT_DELTA_MIN = 0.05
 SHAPE_SUPPORT_MIN = 0.50
+MS1_ASSESSABLE_COVERAGE_MIN = 0.70
 LOW_LOCAL_TO_GLOBAL_RATIO = 0.50
 DDA_TRIGGER_HEIGHT_RATIO_MIN = 1.25
 DDA_TRIGGER_SHAPE_SUPPORT_FRACTION_MIN = 0.50
+DETECTED_COLOR = "#D55E00"
+RESCUED_COLOR = "#0072B2"
+QC_COLOR = "#009E73"
+OTHER_TRACE_COLOR = "0.65"
+DETECTED_MEDIAN_COLOR = "#A04000"
+RESCUED_MEDIAN_COLOR = "#005A8D"
 
 
 @dataclass(frozen=True)
@@ -325,9 +334,14 @@ def render_family_ms1_overlay(
         }
     )
     fig, axes = plt.subplot_mosaic(
-        [["norm", "aligned", "raw"], ["area", "rt", "shape"]],
-        figsize=(18, 9),
+        [
+            ["aligned", "rt", "area"],
+            ["norm", "raw", "shape"],
+            ["legend", "legend", "legend"],
+        ],
+        figsize=(18, 10),
         constrained_layout=True,
+        gridspec_kw={"height_ratios": [1.0, 1.0, 0.12]},
     )
     _plot_normalized_overlay(
         axes["norm"],
@@ -352,6 +366,7 @@ def render_family_ms1_overlay(
         rescued,
     )
     _plot_shape_similarity(axes["shape"], rows, shape_similarity)
+    _plot_unified_legend(axes["legend"])
 
     fig.suptitle(
         (
@@ -375,13 +390,19 @@ def _plot_normalized_overlay(
 ) -> None:
     for row in rows:
         rt = np.asarray(row.rt, dtype=float)
-        intensity = np.asarray(row.intensity, dtype=float)
+        intensity = _gaussian_smooth(
+            np.asarray(row.intensity, dtype=float),
+            points=PLOT_GAUSSIAN_SMOOTH_POINTS,
+        )
         if rt.size == 0 or row.trace_max_intensity <= 0:
+            continue
+        max_intensity = float(np.max(intensity)) if intensity.size else 0.0
+        if max_intensity <= 0:
             continue
         color, alpha, line_width, zorder = _line_style(row.group)
         ax.plot(
             rt,
-            intensity / row.trace_max_intensity,
+            intensity / max_intensity,
             color=color,
             alpha=alpha,
             lw=line_width,
@@ -391,7 +412,7 @@ def _plot_normalized_overlay(
         ax,
         rows,
         group="detected_seed",
-        color="#b2182b",
+        color=DETECTED_MEDIAN_COLOR,
         label="detected median",
         rt_min=rt_min,
         rt_max=rt_max,
@@ -400,30 +421,19 @@ def _plot_normalized_overlay(
         ax,
         rows,
         group="rescued",
-        color="#2166ac",
+        color=RESCUED_MEDIAN_COLOR,
         label="rescued median",
         rt_min=rt_min,
         rt_max=rt_max,
         linestyle="--",
     )
     _draw_center_rt(ax, family_center_rt)
-    ax.set_title("Normalized MS1 XIC overlay")
+    ax.set_title("RT overlay context (normalized XIC)")
     ax.set_xlabel("RT (min)")
     ax.set_ylabel("Normalized intensity")
     ax.set_xlim(rt_min, rt_max)
     ax.set_ylim(-0.03, 1.08)
     ax.grid(True, alpha=0.2)
-    ax.text(
-        0.01,
-        0.98,
-        "red=NL detected seeds\nblue=top rescued MS1 area\ngrey=other rescued",
-        transform=ax.transAxes,
-        va="top",
-        ha="left",
-        fontsize=8,
-        bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"},
-    )
-    ax.legend(frameon=False, loc="lower left")
 
 
 def _plot_raw_highlights(
@@ -437,16 +447,24 @@ def _plot_raw_highlights(
     labels_seen: set[str] = set()
     for row in rows:
         rt = np.asarray(row.rt, dtype=float)
-        intensity = np.asarray(row.intensity, dtype=float)
+        intensity = _gaussian_smooth(
+            np.asarray(row.intensity, dtype=float),
+            points=PLOT_GAUSSIAN_SMOOTH_POINTS,
+        )
         if rt.size == 0:
             continue
         if row.group == "detected_seed":
-            color, line_width, alpha, label = "#d62728", 1.9, 0.95, "detected NL seed"
+            color, line_width, alpha, label = (
+                DETECTED_COLOR,
+                1.65,
+                0.88,
+                "detected NL seed",
+            )
         else:
             color, line_width, alpha, label = (
-                "#1f77b4",
-                1.15,
-                0.70,
+                RESCUED_COLOR,
+                1.05,
+                0.65,
                 "top rescued MS1 area",
             )
         ax.plot(
@@ -459,12 +477,11 @@ def _plot_raw_highlights(
         )
         labels_seen.add(label)
     _draw_center_rt(ax, family_center_rt)
-    ax.set_title("Raw intensity overlay: detected seeds vs high-MS1 rescued")
+    ax.set_title("Raw MS1 intensity (DDA trigger context, smoothed)")
     ax.set_xlabel("RT (min)")
     ax.set_ylabel("Intensity")
     ax.set_xlim(rt_min, rt_max)
     ax.grid(True, alpha=0.2)
-    ax.legend(frameon=False, loc="upper right")
 
 
 def _plot_apex_aligned_overlay(
@@ -472,7 +489,10 @@ def _plot_apex_aligned_overlay(
     rows: Sequence[TraceOverlayRow],
 ) -> None:
     for row in rows:
-        rt, normalized = _apex_aligned_normalized_trace(row)
+        rt, normalized = _apex_aligned_normalized_trace(
+            row,
+            smooth_points=PLOT_GAUSSIAN_SMOOTH_POINTS,
+        )
         if rt.size == 0:
             continue
         color, alpha, line_width, zorder = _line_style(row.group)
@@ -488,7 +508,7 @@ def _plot_apex_aligned_overlay(
         ax,
         rows,
         group="detected_seed",
-        color="#b2182b",
+        color=DETECTED_MEDIAN_COLOR,
         label="detected median",
         rt_min=-APEX_ALIGN_HALF_WINDOW_MIN,
         rt_max=APEX_ALIGN_HALF_WINDOW_MIN,
@@ -498,7 +518,7 @@ def _plot_apex_aligned_overlay(
         ax,
         rows,
         group="rescued",
-        color="#2166ac",
+        color=RESCUED_MEDIAN_COLOR,
         label="rescued median",
         rt_min=-APEX_ALIGN_HALF_WINDOW_MIN,
         rt_max=APEX_ALIGN_HALF_WINDOW_MIN,
@@ -506,13 +526,71 @@ def _plot_apex_aligned_overlay(
         align_to_apex=True,
     )
     ax.axvline(0.0, color="black", lw=1, ls="--", alpha=0.6)
-    ax.set_title("Selected-peak shape after apex alignment")
+    ax.set_title("Primary view: apex-aligned MS1 shape (smoothed)")
     ax.set_xlabel("RT relative to selected apex (min)")
     ax.set_ylabel("Normalized intensity")
     ax.set_xlim(-APEX_ALIGN_HALF_WINDOW_MIN, APEX_ALIGN_HALF_WINDOW_MIN)
     ax.set_ylim(-0.03, 1.08)
     ax.grid(True, alpha=0.2)
-    ax.legend(frameon=False, loc="lower left")
+
+
+def _plot_unified_legend(ax: Any) -> None:
+    from matplotlib.lines import Line2D
+
+    ax.axis("off")
+    handles = [
+        Line2D([0], [0], color=DETECTED_COLOR, lw=1.9, label="detected NL seed"),
+        Line2D(
+            [0],
+            [0],
+            color=RESCUED_COLOR,
+            lw=1.25,
+            label="top rescued MS1 area",
+        ),
+        Line2D([0], [0], color=QC_COLOR, lw=0.9, label="pooled QC"),
+        Line2D([0], [0], color=OTHER_TRACE_COLOR, lw=0.7, label="other rescued"),
+        Line2D(
+            [0],
+            [0],
+            color=DETECTED_MEDIAN_COLOR,
+            lw=2.6,
+            label="detected median",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=RESCUED_MEDIAN_COLOR,
+            lw=2.6,
+            ls="--",
+            label="rescued median",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color="black",
+            lw=1,
+            ls="--",
+            alpha=0.6,
+            label="family center / aligned apex",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color="0.35",
+            lw=1,
+            ls=":",
+            alpha=0.7,
+            label="review threshold",
+        ),
+    ]
+    ax.legend(
+        handles=handles,
+        loc="center",
+        ncol=4,
+        frameon=False,
+        handlelength=3.0,
+        columnspacing=1.8,
+    )
 
 
 def _plot_group_median_trace(
@@ -526,6 +604,7 @@ def _plot_group_median_trace(
     rt_max: float,
     linestyle: str = "-",
     align_to_apex: bool = False,
+    smooth_points: int = PLOT_GAUSSIAN_SMOOTH_POINTS,
 ) -> None:
     grid = np.linspace(rt_min, rt_max, 250)
     normalized_traces: list[np.ndarray] = []
@@ -537,11 +616,20 @@ def _plot_group_median_trace(
         if not include or row.trace_max_intensity <= 0:
             continue
         if align_to_apex:
-            rt, normalized = _apex_aligned_normalized_trace(row)
+            rt, normalized = _apex_aligned_normalized_trace(
+                row,
+                smooth_points=smooth_points,
+            )
         else:
             rt = np.asarray(row.rt, dtype=float)
-            intensity = np.asarray(row.intensity, dtype=float)
-            normalized = intensity / row.trace_max_intensity
+            intensity = _gaussian_smooth(
+                np.asarray(row.intensity, dtype=float),
+                points=smooth_points,
+            )
+            max_intensity = float(np.max(intensity)) if intensity.size else 0.0
+            if max_intensity <= 0:
+                continue
+            normalized = intensity / max_intensity
         if rt.size < 2:
             continue
         interp = np.interp(grid, rt, normalized, left=np.nan, right=np.nan)
@@ -597,7 +685,7 @@ def _plot_area_distribution(ax: Any, rows: Sequence[TraceOverlayRow]) -> None:
     if min_detected_area is not None and min_detected_area > 0:
         ax.axhline(
             min_detected_area,
-            color="#d62728",
+            color=DETECTED_COLOR,
             lw=1,
             ls=":",
             alpha=0.65,
@@ -609,7 +697,7 @@ def _plot_area_distribution(ax: Any, rows: Sequence[TraceOverlayRow]) -> None:
             va="bottom",
             ha="left",
             fontsize=8,
-            color="#7f1d1d",
+            color=DETECTED_MEDIAN_COLOR,
         )
     ax.set_yscale("log")
     ax.set_xticks([0, 1])
@@ -728,6 +816,8 @@ def _apex_aligned_shape_similarity(
 
 def _apex_aligned_normalized_trace(
     row: TraceOverlayRow,
+    *,
+    smooth_points: int = 0,
 ) -> tuple[np.ndarray, np.ndarray]:
     apex_rt = row.cell_apex_rt if row.cell_apex_rt is not None else row.trace_apex_rt
     if apex_rt is None or not math.isfinite(apex_rt):
@@ -742,11 +832,28 @@ def _apex_aligned_normalized_trace(
     )
     if not np.any(mask):
         return np.array([], dtype=float), np.array([], dtype=float)
-    local_intensity = intensity[mask]
+    local_intensity = _gaussian_smooth(intensity[mask], points=smooth_points)
     local_max = float(np.max(local_intensity)) if local_intensity.size else 0.0
     if local_max <= 0:
         return np.array([], dtype=float), np.array([], dtype=float)
     return rt[mask], local_intensity / local_max
+
+
+def _gaussian_smooth(values: np.ndarray, *, points: int) -> np.ndarray:
+    if points < 3 or values.size < 3:
+        return values.copy()
+    window = min(points, values.size)
+    if window % 2 == 0:
+        window -= 1
+    if window < 3:
+        return values.copy()
+    sigma = window / 6.0
+    offsets = np.arange(window, dtype=float) - (window - 1) / 2.0
+    kernel = np.exp(-0.5 * (offsets / sigma) ** 2)
+    kernel = kernel / float(np.sum(kernel))
+    pad = window // 2
+    padded = np.pad(values, pad_width=pad, mode="edge")
+    return np.convolve(padded, kernel, mode="valid")
 
 
 def _pearson_similarity(
@@ -893,27 +1000,36 @@ def build_family_ms1_evidence_summary(
     shape_similarity = _apex_aligned_shape_similarity(rows)
     detected = [row for row in rows if row.status == "detected"]
     rescued = [row for row in rows if row.status == "rescued"]
+    status_rows = [row for row in rows if row.status in {"detected", "rescued"}]
     evaluable = [
         row
-        for row in rows
+        for row in status_rows
         if shape_similarity.get(row.sample_stem) is not None
-        and row.status in {"detected", "rescued"}
     ]
     shape_supported = [
         row
         for row in evaluable
         if (shape_similarity.get(row.sample_stem) or 0.0) >= SHAPE_SUPPORT_MIN
     ]
+    global_apex_assessable = [
+        row for row in status_rows if _global_trace_apex_delta(row) is not None
+    ]
+    selected_apex_in_trace_window = [
+        row for row in status_rows if _selected_apex_in_trace_window(row)
+    ]
     global_apex_interference = [
         row
-        for row in evaluable
+        for row in global_apex_assessable
         if _abs_or_none(_global_trace_apex_delta(row)) is not None
         and (_abs_or_none(_global_trace_apex_delta(row)) or 0.0)
         > GLOBAL_APEX_CONFLICT_DELTA_MIN
     ]
+    local_apex_assessable = [
+        row for row in status_rows if _local_window_peak(row)[0] is not None
+    ]
     local_apex_supported = [
         row
-        for row in evaluable
+        for row in local_apex_assessable
         if _abs_or_none(_local_window_peak(row)[0]) is not None
         and (_abs_or_none(_local_window_peak(row)[0]) or 0.0)
         <= LOCAL_APEX_SUPPORT_DELTA_MIN
@@ -925,11 +1041,22 @@ def build_family_ms1_evidence_summary(
         and (_local_to_global_max_ratio(row) or 0.0) < LOW_LOCAL_TO_GLOBAL_RATIO
     ]
     shape_fraction = _safe_fraction(len(shape_supported), len(evaluable))
+    global_apex_assessable_fraction = _safe_fraction(
+        len(global_apex_assessable),
+        len(status_rows),
+    )
+    selected_apex_in_trace_window_fraction = _safe_fraction(
+        len(selected_apex_in_trace_window),
+        len(status_rows),
+    )
     global_interference_fraction = _safe_fraction(
         len(global_apex_interference),
-        len(evaluable),
+        len(global_apex_assessable),
     )
-    local_support_fraction = _safe_fraction(len(local_apex_supported), len(evaluable))
+    local_support_fraction = _safe_fraction(
+        len(local_apex_supported),
+        len(local_apex_assessable),
+    )
     local_global_low_fraction = _safe_fraction(len(low_local_to_global), len(evaluable))
     detected_height_median = _median_value(row.cell_height for row in detected)
     rescued_height_median = _median_value(row.cell_height for row in rescued)
@@ -962,9 +1089,16 @@ def build_family_ms1_evidence_summary(
         family_verdict = "insufficient_nl_seed_support"
     elif (
         global_interference_fraction is not None
-        and global_interference_fraction >= 0.50
+        and global_interference_fraction >= GLOBAL_APEX_REVIEW_FRACTION_MIN
     ):
         family_verdict = "review_required_neighboring_ms1_interference"
+    elif (
+        global_apex_assessable_fraction is None
+        or global_apex_assessable_fraction < MS1_ASSESSABLE_COVERAGE_MIN
+        or selected_apex_in_trace_window_fraction is None
+        or selected_apex_in_trace_window_fraction < MS1_ASSESSABLE_COVERAGE_MIN
+    ):
+        family_verdict = "review_required_low_ms1_assessable_coverage"
     elif (
         shape_fraction is not None
         and shape_fraction >= 0.70
@@ -982,7 +1116,15 @@ def build_family_ms1_evidence_summary(
         "trace_count": len(rows),
         "detected_count": len(detected),
         "rescued_count": len(rescued),
+        "detected_rescued_count": len(status_rows),
         "evaluable_trace_count": len(evaluable),
+        "global_apex_assessable_trace_count": len(global_apex_assessable),
+        "global_apex_assessable_fraction": global_apex_assessable_fraction,
+        "selected_apex_in_trace_window_count": len(selected_apex_in_trace_window),
+        "selected_apex_in_trace_window_fraction": (
+            selected_apex_in_trace_window_fraction
+        ),
+        "local_apex_assessable_trace_count": len(local_apex_assessable),
         "shape_supported_count": len(shape_supported),
         "shape_supported_fraction": shape_fraction,
         "global_apex_interference_count": len(global_apex_interference),
@@ -1035,19 +1177,19 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 
 def _line_style(group: str) -> tuple[str, float, float, int]:
     if group == "detected_seed":
-        return "#d62728", 0.95, 1.9, 4
+        return DETECTED_COLOR, 0.92, 1.7, 4
     if group == "top_rescued_ms1_area":
-        return "#1f77b4", 0.75, 1.25, 3
+        return RESCUED_COLOR, 0.72, 1.15, 3
     if group == "pooled_qc":
-        return "#2ca02c", 0.40, 0.9, 2
-    return "0.65", 0.17, 0.7, 1
+        return QC_COLOR, 0.38, 0.85, 2
+    return OTHER_TRACE_COLOR, 0.15, 0.65, 1
 
 
 def _point_style(row: TraceOverlayRow) -> tuple[str, float, int]:
     if row.status == "detected":
-        return "#d62728", 0.95, 42
+        return DETECTED_COLOR, 0.92, 42
     if row.group == "top_rescued_ms1_area":
-        return "#1f77b4", 0.80, 34
+        return RESCUED_COLOR, 0.78, 34
     return "0.55", 0.45, 24
 
 
@@ -1138,6 +1280,16 @@ def _local_to_global_max_ratio(row: TraceOverlayRow) -> float | None:
     if local_max is None:
         return None
     return local_max / row.trace_max_intensity
+
+
+def _selected_apex_in_trace_window(row: TraceOverlayRow) -> bool:
+    if row.cell_apex_rt is None or not math.isfinite(row.cell_apex_rt):
+        return False
+    rt = _finite_values(row.rt)
+    if not rt:
+        return False
+    tolerance = 1e-9
+    return min(rt) - tolerance <= row.cell_apex_rt <= max(rt) + tolerance
 
 
 def _abs_or_none(value: float | None) -> float | None:

@@ -218,9 +218,38 @@ def _candidate_row(
             "dda_trigger_limited_ms2_support",
             "",
         ),
+        "detected_rescued_count": overlay_summary.get("detected_rescued_count", ""),
+        "global_apex_assessable_trace_count": overlay_summary.get(
+            "global_apex_assessable_trace_count",
+            "",
+        ),
+        "global_apex_assessable_fraction": overlay_summary.get(
+            "global_apex_assessable_fraction",
+            "",
+        ),
+        "selected_apex_in_trace_window_count": overlay_summary.get(
+            "selected_apex_in_trace_window_count",
+            "",
+        ),
+        "selected_apex_in_trace_window_fraction": overlay_summary.get(
+            "selected_apex_in_trace_window_fraction",
+            "",
+        ),
+        "local_apex_assessable_trace_count": overlay_summary.get(
+            "local_apex_assessable_trace_count",
+            "",
+        ),
+        "global_apex_interference_count": overlay_summary.get(
+            "global_apex_interference_count",
+            "",
+        ),
         "shape_supported_fraction": overlay_summary.get("shape_supported_fraction", ""),
         "global_apex_interference_fraction": overlay_summary.get(
             "global_apex_interference_fraction",
+            "",
+        ),
+        "local_apex_supported_count": overlay_summary.get(
+            "local_apex_supported_count",
             "",
         ),
         "local_apex_supported_fraction": overlay_summary.get(
@@ -249,6 +278,8 @@ def _review_classification(
         return "ms1_supported_backfill"
     if verdict == "review_required_neighboring_ms1_interference":
         return "neighboring_interference_review"
+    if verdict == "review_required_low_ms1_assessable_coverage":
+        return "low_ms1_assessable_coverage_review"
     if verdict == "review_required_uncertain_ms1_shape":
         return "uncertain_shape_review"
     if verdict:
@@ -263,6 +294,7 @@ def _recommended_next_action(classification: str) -> str:
         return "keep_primary_candidate_with_ms1_support_note"
     if classification in {
         "neighboring_interference_review",
+        "low_ms1_assessable_coverage_review",
         "uncertain_shape_review",
         "overlay_review_required",
     }:
@@ -522,8 +554,16 @@ def _candidate_fields() -> tuple[str, ...]:
         "overlay_status",
         "overlay_family_verdict",
         "dda_trigger_limited_ms2_support",
+        "detected_rescued_count",
+        "global_apex_assessable_trace_count",
+        "global_apex_assessable_fraction",
+        "selected_apex_in_trace_window_count",
+        "selected_apex_in_trace_window_fraction",
+        "local_apex_assessable_trace_count",
+        "global_apex_interference_count",
         "shape_supported_fraction",
         "global_apex_interference_fraction",
+        "local_apex_supported_count",
         "local_apex_supported_fraction",
         "review_classification",
         "recommended_next_action",
@@ -558,12 +598,13 @@ def _read_tsv(path: Path, *, required_columns: Sequence[str]) -> list[dict[str, 
 def _classification_sort_key(classification: str) -> int:
     order = {
         "neighboring_interference_review": 0,
-        "uncertain_shape_review": 1,
-        "overlay_review_required": 2,
-        "needs_ms1_overlay_high_priority": 3,
-        "needs_ms1_overlay": 4,
-        "ms1_supported_dda_limited_backfill": 5,
-        "ms1_supported_backfill": 6,
+        "low_ms1_assessable_coverage_review": 1,
+        "uncertain_shape_review": 2,
+        "overlay_review_required": 3,
+        "needs_ms1_overlay_high_priority": 4,
+        "needs_ms1_overlay": 5,
+        "ms1_supported_dda_limited_backfill": 6,
+        "ms1_supported_backfill": 7,
     }
     return order.get(classification, 99)
 

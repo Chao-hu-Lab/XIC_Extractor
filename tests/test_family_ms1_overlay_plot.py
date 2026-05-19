@@ -167,6 +167,18 @@ def test_apex_aligned_trace_uses_local_peak_normalization() -> None:
     assert report._local_to_global_max_ratio(row) == 0.01
 
 
+def test_gaussian_smooth_is_plot_only_and_preserves_trace_shape() -> None:
+    values = report.np.asarray([0.0, 0.0, 100.0, 0.0, 0.0], dtype=float)
+
+    smoothed = report._gaussian_smooth(values, points=5)
+
+    assert smoothed.shape == values.shape
+    assert smoothed[2] < 100.0
+    assert smoothed[2] == max(smoothed)
+    assert smoothed[1] > 0.0
+    assert smoothed[3] > 0.0
+
+
 def test_family_evidence_summary_flags_global_apex_interference() -> None:
     rows = [
         report.trace_row_from_arrays(
@@ -193,6 +205,46 @@ def test_family_evidence_summary_flags_global_apex_interference() -> None:
 
     assert summary["family_verdict"] == "review_required_neighboring_ms1_interference"
     assert summary["global_apex_interference_count"] == 3
+
+
+def test_global_apex_interference_counts_shape_unevaluable_traces() -> None:
+    rows = [
+        report.trace_row_from_arrays(
+            _family_cell(
+                "detected-a",
+                status="detected",
+                apex_rt=1.0,
+                height=200.0,
+            ),
+            "detected_seed",
+            [0.9, 1.0, 1.1],
+            [0.0, 200.0, 0.0],
+        ),
+        report.trace_row_from_arrays(
+            _family_cell(
+                "detected-b",
+                status="detected",
+                apex_rt=1.0,
+                height=180.0,
+            ),
+            "detected_seed",
+            [0.9, 1.0, 1.1],
+            [0.0, 180.0, 0.0],
+        ),
+        report.trace_row_from_arrays(
+            _family_cell("far-rescued", apex_rt=1.0, height=100.0),
+            "rescued_other",
+            [2.0, 2.1, 2.2],
+            [0.0, 100.0, 0.0],
+        ),
+    ]
+
+    summary = report.build_family_ms1_evidence_summary(rows)
+
+    assert summary["family_verdict"] == "review_required_neighboring_ms1_interference"
+    assert summary["evaluable_trace_count"] == 2
+    assert summary["global_apex_assessable_trace_count"] == 3
+    assert summary["global_apex_interference_fraction"] == 1 / 3
 
 
 def test_family_evidence_summary_marks_dda_trigger_limited_support() -> None:
@@ -238,6 +290,51 @@ def test_family_evidence_summary_marks_dda_trigger_limited_support() -> None:
     assert summary["dda_trigger_limited_ms2_support"] is True
     assert summary["detected_to_rescued_height_median_ratio"] == 2.0
     assert summary["detected_to_rescued_local_window_max_median_ratio"] == 2.0
+
+
+def test_family_evidence_summary_requires_assessable_ms1_coverage() -> None:
+    rows = [
+        report.trace_row_from_arrays(
+            _family_cell(
+                "detected-a",
+                status="detected",
+                apex_rt=1.0,
+                height=200.0,
+            ),
+            "detected_seed",
+            [0.9, 1.0, 1.1],
+            [0.0, 200.0, 0.0],
+        ),
+        report.trace_row_from_arrays(
+            _family_cell(
+                "detected-b",
+                status="detected",
+                apex_rt=1.0,
+                height=180.0,
+            ),
+            "detected_seed",
+            [0.9, 1.0, 1.1],
+            [0.0, 180.0, 0.0],
+        ),
+        report.trace_row_from_arrays(
+            _family_cell("rescued-empty-xic", apex_rt=1.0, height=90.0),
+            "rescued_other",
+            [0.9, 1.0, 1.1],
+            [0.0, 0.0, 0.0],
+        ),
+        report.trace_row_from_arrays(
+            _family_cell("rescued-second-empty-xic", apex_rt=1.0, height=80.0),
+            "rescued_other",
+            [0.9, 1.0, 1.1],
+            [0.0, 0.0, 0.0],
+        ),
+    ]
+
+    summary = report.build_family_ms1_evidence_summary(rows)
+
+    assert summary["family_verdict"] == "review_required_low_ms1_assessable_coverage"
+    assert summary["selected_apex_in_trace_window_fraction"] == 1.0
+    assert summary["global_apex_assessable_fraction"] == 0.5
 
 
 def test_missing_required_alignment_columns_fail_clearly(tmp_path: Path) -> None:

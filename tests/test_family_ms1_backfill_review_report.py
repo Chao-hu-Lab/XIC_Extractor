@@ -36,8 +36,16 @@ def test_report_builds_overlay_limited_review_queue(tmp_path: Path) -> None:
         {
             "family_verdict": "ms1_shape_supports_family_backfill",
             "dda_trigger_limited_ms2_support": True,
+            "detected_rescued_count": 84,
+            "global_apex_assessable_trace_count": 82,
+            "global_apex_assessable_fraction": 0.976,
+            "selected_apex_in_trace_window_count": 81,
+            "selected_apex_in_trace_window_fraction": 0.964,
+            "local_apex_assessable_trace_count": 80,
+            "global_apex_interference_count": 1,
             "shape_supported_fraction": 0.9,
             "global_apex_interference_fraction": 0.1,
+            "local_apex_supported_count": 79,
             "local_apex_supported_fraction": 0.8,
         },
     )
@@ -61,6 +69,9 @@ def test_report_builds_overlay_limited_review_queue(tmp_path: Path) -> None:
         by_family["FAM_SUPPORT"]["review_classification"]
         == "ms1_supported_dda_limited_backfill"
     )
+    assert by_family["FAM_SUPPORT"]["global_apex_assessable_trace_count"] == "82"
+    assert by_family["FAM_SUPPORT"]["selected_apex_in_trace_window_fraction"] == "0.964"
+    assert by_family["FAM_SUPPORT"]["global_apex_interference_count"] == "1"
     assert by_family["FAM_QUEUE"]["review_classification"] == (
         "needs_ms1_overlay_high_priority"
     )
@@ -117,6 +128,46 @@ def test_neighboring_interference_overlay_requires_manual_review(
     assert family["review_classification"] == "neighboring_interference_review"
     assert family["recommended_next_action"] == "manual_review_before_gate_change"
     assert family["dda_trigger_limited_ms2_support"] is True
+
+
+def test_low_assessable_coverage_overlay_requires_manual_review(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    overlay_file = tmp_path / "fam_trace_data.json"
+    _write_alignment(
+        alignment_dir,
+        review_rows=[
+            _review_row("FAM_LOW_COVERAGE", detected=5, rescued=80, accepted=85),
+        ],
+        cell_rows=[
+            *_cells(
+                "FAM_LOW_COVERAGE",
+                detected_heights=(120, 110),
+                rescued_heights=(90, 80),
+            ),
+        ],
+    )
+    _write_overlay_json(
+        overlay_file,
+        "FAM_LOW_COVERAGE",
+        {
+            "family_verdict": "review_required_low_ms1_assessable_coverage",
+            "dda_trigger_limited_ms2_support": True,
+            "global_apex_assessable_fraction": 0.6,
+            "selected_apex_in_trace_window_fraction": 0.56,
+        },
+    )
+
+    result = report.build_review_report(
+        alignment_dir=alignment_dir,
+        overlay_trace_data_files=(overlay_file,),
+    )
+
+    family = result["candidates"][0]
+    assert family["review_classification"] == "low_ms1_assessable_coverage_review"
+    assert family["recommended_next_action"] == "manual_review_before_gate_change"
+    assert family["global_apex_assessable_fraction"] == 0.6
 
 
 def test_missing_required_columns_fail_clearly(tmp_path: Path) -> None:
