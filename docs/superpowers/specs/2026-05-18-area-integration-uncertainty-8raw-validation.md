@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-18
 **Branch:** `codex/region-first-safe-merge-validation`
-**Decision status:** `D3_AREA_CHECK_INCONCLUSIVE`
+**Decision status:** `inconclusive` (`D3_AREA_CHECK_INCONCLUSIVE`)
 
 ## Scope
 
@@ -89,4 +89,3 @@ therefore `D3_AREA_CHECK_INCONCLUSIVE`.
 Do not recommend production area, resolver, scoring, reliability, or matrix
 identity changes from this checkpoint. Keep the diagnostic sidecar and
 uncertainty report as audit tooling only.
-

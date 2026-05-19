@@ -1,9 +1,29 @@
 # Area Integration Uncertainty Audit Gate
 
 **Date:** 2026-05-18
-**Status:** Planned
+**Status:** Completed, `inconclusive`
 **Branch:** `codex/region-first-safe-merge-validation`
 **Depends on:** `2026-05-18-region-first-safe-merge-validation-decision.md`
+
+## Completion Summary
+
+Phase 4 completed as an audit-only validation gate. The 8RAW rerun passed the
+audit plumbing checks:
+
+- `alignment_matrix.tsv` hash unchanged.
+- `alignment_review.tsv` hash unchanged.
+- `alignment_cells.tsv` header unchanged.
+- `alignment_cell_integration_audit.tsv` was emitted only when
+  `--emit-alignment-integration-audit` was explicitly passed.
+
+The representative `d3-N6-medA` area mismatch did not reproduce. All eight
+`d3-N6-medA` raw area ratios were near 1.0, so this phase cannot claim that the
+area mismatch was fixed and cannot justify production area, resolver, scoring,
+targeted reliability, or matrix identity changes.
+
+Final decision: `inconclusive`. Keep the sidecar and diagnostic tooling as
+audit surfaces only. The next production-oriented change needs a reproduced
+representative mismatch with this audit context enabled.
 
 ## Summary
 
@@ -200,4 +220,3 @@ Decision rules:
 
 Each checkpoint must be reviewed before the next checkpoint starts. If a
 checkpoint fails, write the failure reason and stop instead of broadening scope.
-
