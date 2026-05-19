@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-import csv
 import json
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+
+from tools.diagnostics.diagnostic_io import (
+    format_diagnostic_value,
+)
+from tools.diagnostics.diagnostic_io import (
+    write_tsv as write_diagnostic_tsv,
+)
 
 
 def write_outputs(output_dir: Path, result: Mapping[str, Any]) -> None:
@@ -48,18 +54,7 @@ def _write_tsv(
     rows: Sequence[Mapping[str, Any]],
     fieldnames: Sequence[str],
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            delimiter="\t",
-            fieldnames=fieldnames,
-            extrasaction="ignore",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {key: _format_value(row.get(key, "")) for key in fieldnames},
-            )
+    write_diagnostic_tsv(path, rows, fieldnames, formatter=_format_value)
 
 
 def _write_markdown(path: Path, result: Mapping[str, Any]) -> None:
@@ -225,10 +220,4 @@ def _format_counts(counter: Counter[str]) -> str:
 
 
 def _format_value(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bool):
-        return "TRUE" if value else "FALSE"
-    if isinstance(value, float):
-        return f"{value:.6g}"
-    return str(value)
+    return format_diagnostic_value(value)

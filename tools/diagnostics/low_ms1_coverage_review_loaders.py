@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import csv
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from tools.diagnostics.diagnostic_io import read_delimited_rows
 from tools.diagnostics.low_ms1_coverage_review_models import (
     BACKFILL_SEED_AUDIT_REQUIRED_COLUMNS,
     DISCOVERY_REQUIRED_COLUMNS,
@@ -27,13 +27,7 @@ def _read_tsv(
     *,
     required_columns: Sequence[str],
 ) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle, delimiter="\t")
-        fieldnames = tuple(reader.fieldnames or ())
-        missing = [column for column in required_columns if column not in fieldnames]
-        if missing:
-            raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
-        return [dict(row) for row in reader]
+    return read_delimited_rows(path, required_columns=required_columns)
 
 
 def _read_csv(
@@ -41,13 +35,7 @@ def _read_csv(
     *,
     required_columns: Sequence[str],
 ) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        fieldnames = tuple(reader.fieldnames or ())
-        missing = [column for column in required_columns if column not in fieldnames]
-        if missing:
-            raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
-        return [dict(row) for row in reader]
+    return read_delimited_rows(path, required_columns=required_columns, delimiter=",")
 
 
 def _load_discovery_candidate(
