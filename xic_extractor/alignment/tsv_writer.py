@@ -126,7 +126,6 @@ ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS = (
     "backfill_request_rt_max",
     "backfill_request_ppm",
     "backfill_apex_delta_sec",
-    "family_center_apex_delta_sec",
     "reason",
 )
 
@@ -306,10 +305,6 @@ def write_alignment_owner_backfill_seed_audit_tsv(
                 "backfill_apex_delta_sec": _rt_delta_sec(
                     cell.apex_rt,
                     cell.backfill_seed_rt,
-                ),
-                "family_center_apex_delta_sec": _rt_delta_sec(
-                    cell.apex_rt,
-                    _family_center_rt(cluster),
                 ),
                 "reason": cell.reason,
             }

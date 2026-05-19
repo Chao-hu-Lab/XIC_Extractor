@@ -98,7 +98,6 @@ def run_overlay_batch(
                     raw_dir=raw_dir,
                     dll_dir=dll_dir,
                     output_dir=output_dir,
-                    ppm=ppm,
                     max_highlight_rescued=max_highlight_rescued,
                 )
             )
@@ -114,7 +113,6 @@ def _render_family(
     raw_dir: Path,
     dll_dir: Path,
     output_dir: Path,
-    ppm: float,
     max_highlight_rescued: int,
 ) -> dict[str, Any]:
     cells = overlay_plot.load_family_cells(alignment_cells, request.family_id)

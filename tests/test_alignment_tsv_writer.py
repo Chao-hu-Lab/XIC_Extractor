@@ -616,7 +616,6 @@ def test_write_alignment_owner_backfill_seed_audit_tsv_is_sidecar(
     assert audit[0]["backfill_request_rt_max"] == "11.55"
     assert audit[0]["backfill_request_ppm"] == "20"
     assert audit[0]["backfill_apex_delta_sec"] == "-3.6"
-    assert audit[0]["family_center_apex_delta_sec"] == "0"
 
 
 def test_tsv_writers_escape_formula_like_text(tmp_path: Path):
