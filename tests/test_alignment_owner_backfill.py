@@ -284,6 +284,11 @@ def test_owner_backfill_uses_preconsolidated_seed_centers_and_keeps_best_peak() 
     assert cells[0].sample_stem == "sample-b"
     assert cells[0].area is not None and cells[0].area > 0
     assert cells[0].apex_rt == 8.8
+    assert cells[0].backfill_seed_mz == 500.0
+    assert cells[0].backfill_seed_rt == 8.8
+    assert np.isclose(cells[0].backfill_request_rt_min, 5.8)
+    assert np.isclose(cells[0].backfill_request_rt_max, 11.8)
+    assert cells[0].backfill_request_ppm == 20.0
 
 
 def test_owner_backfill_treats_non_finite_trace_as_unchecked() -> None:

@@ -78,6 +78,11 @@ PEAK_CANDIDATE_HEADERS = (
     "nearest_product_loss_ppm",
     "nearest_product_base_ratio",
     "nearest_product_mz",
+    "safe_merge_promotion_source",
+    "safe_merge_promotion_shadow_boundary_id",
+    "safe_merge_promotion_area_ratio",
+    "safe_merge_promotion_selected_interval_count",
+    "safe_merge_promotion_selected_interval_gap_max_min",
 )
 
 def candidate_audit_id(
@@ -232,6 +237,21 @@ def _row_from_hypothesis(
         ),
         "nearest_product_mz": _format_optional_float(
             hypothesis.evidence.nearest_product_mz
+        ),
+        "safe_merge_promotion_source": (
+            hypothesis.audit.safe_merge_promotion_source
+        ),
+        "safe_merge_promotion_shadow_boundary_id": (
+            hypothesis.audit.safe_merge_promotion_shadow_boundary_id
+        ),
+        "safe_merge_promotion_area_ratio": _format_optional_float(
+            hypothesis.audit.safe_merge_promotion_area_ratio
+        ),
+        "safe_merge_promotion_selected_interval_count": _format_optional_int(
+            hypothesis.audit.safe_merge_promotion_selected_interval_count
+        ),
+        "safe_merge_promotion_selected_interval_gap_max_min": _format_optional_float(
+            hypothesis.audit.safe_merge_promotion_selected_interval_gap_max_min
         ),
     }
 

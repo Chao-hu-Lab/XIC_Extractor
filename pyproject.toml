@@ -8,6 +8,7 @@ version = "0.2.0"
 requires-python = ">=3.10,<3.14"
 dependencies = [
     "PyQt6>=6.6",
+    "matplotlib>=3.10.9",
     "numpy>=1.26",
     "openpyxl>=3.1",
     "pythonnet>=3.0",

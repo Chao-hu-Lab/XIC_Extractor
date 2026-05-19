@@ -323,6 +323,11 @@ def _backfill_feature_sample(
         source_candidate_id=None,
         source_raw_file=None,
         reason="owner-centered MS1 backfill",
+        backfill_seed_mz=feature.family_center_mz,
+        backfill_seed_rt=feature.family_center_rt,
+        backfill_request_rt_min=rt_min,
+        backfill_request_rt_max=rt_max,
+        backfill_request_ppm=alignment_config.preferred_ppm,
     )
     return with_region_audit(cell, region_audit)
 
@@ -398,6 +403,11 @@ def _backfill_feature_sample_trace(
         source_candidate_id=None,
         source_raw_file=None,
         reason="owner-centered MS1 backfill",
+        backfill_seed_mz=request.mz,
+        backfill_seed_rt=preferred_rt,
+        backfill_request_rt_min=request.rt_min,
+        backfill_request_rt_max=request.rt_max,
+        backfill_request_ppm=request.ppm_tol,
     )
     return with_region_audit(cell, region_audit)
 

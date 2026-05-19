@@ -83,13 +83,24 @@ _NL_DIAGNOSTIC_HEADERS = (
     "nearest_product_mz",
 )
 
+_SAFE_MERGE_PROVENANCE_HEADERS = (
+    "safe_merge_promotion_source",
+    "safe_merge_promotion_shadow_boundary_id",
+    "safe_merge_promotion_area_ratio",
+    "safe_merge_promotion_selected_interval_count",
+    "safe_merge_promotion_selected_interval_gap_max_min",
+)
+
 
 def test_peak_candidate_headers_append_nl_diagnostics_without_reordering() -> None:
     assert PEAK_CANDIDATE_HEADERS[: len(_PRE_NL_DIAGNOSTIC_HEADERS)] == (
         _PRE_NL_DIAGNOSTIC_HEADERS
     )
-    assert PEAK_CANDIDATE_HEADERS[len(_PRE_NL_DIAGNOSTIC_HEADERS) :] == (
-        _NL_DIAGNOSTIC_HEADERS
+    nl_start = len(_PRE_NL_DIAGNOSTIC_HEADERS)
+    nl_end = nl_start + len(_NL_DIAGNOSTIC_HEADERS)
+    assert PEAK_CANDIDATE_HEADERS[nl_start:nl_end] == _NL_DIAGNOSTIC_HEADERS
+    assert PEAK_CANDIDATE_HEADERS[nl_end:] == (
+        _SAFE_MERGE_PROVENANCE_HEADERS
     )
 
 
@@ -236,6 +247,46 @@ def test_build_rows_formats_missing_candidate_ms2_diagnostics_as_blank() -> None
     assert {header: row[header] for header in _NL_DIAGNOSTIC_HEADERS} == {
         header: "" for header in _NL_DIAGNOSTIC_HEADERS
     }
+    assert {header: row[header] for header in _SAFE_MERGE_PROVENANCE_HEADERS} == {
+        header: "" for header in _SAFE_MERGE_PROVENANCE_HEADERS
+    }
+
+
+def test_build_rows_exposes_safe_merge_promotion_provenance() -> None:
+    selected = _candidate(
+        8.5,
+        proposal_sources=("local_minimum",),
+        safe_merge_promotion_source="adjacent_wis_local_minimum_merge",
+        safe_merge_promotion_shadow_boundary_id="left;right",
+        safe_merge_promotion_area_ratio=1.07008,
+        safe_merge_promotion_selected_interval_count=2,
+        safe_merge_promotion_selected_interval_gap_max_min=0.04144,
+    )
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=20,
+        max_smoothed=3000.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+    )
+
+    row = build_peak_candidate_rows(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="",
+        resolver_mode="region_first_safe_merge",
+        peak_result=result,
+    )[0]
+
+    assert row["safe_merge_promotion_source"] == (
+        "adjacent_wis_local_minimum_merge"
+    )
+    assert row["safe_merge_promotion_shadow_boundary_id"] == "left;right"
+    assert row["safe_merge_promotion_area_ratio"] == "1.07008"
+    assert row["safe_merge_promotion_selected_interval_count"] == "2"
+    assert row["safe_merge_promotion_selected_interval_gap_max_min"] == "0.04144"
 
 
 def test_build_rows_can_emit_baseline_corrected_audit_area() -> None:
@@ -504,6 +555,11 @@ def _candidate(
     right: float | None = None,
     area: float = 1000.0,
     proposal_sources: tuple[str, ...] = ("legacy_savgol",),
+    safe_merge_promotion_source: str = "",
+    safe_merge_promotion_shadow_boundary_id: str = "",
+    safe_merge_promotion_area_ratio: float | None = None,
+    safe_merge_promotion_selected_interval_count: int | None = None,
+    safe_merge_promotion_selected_interval_gap_max_min: float | None = None,
 ) -> PeakCandidate:
     peak_start = rt - 0.2 if left is None else left
     peak_end = rt + 0.2 if right is None else right
@@ -526,6 +582,17 @@ def _candidate(
         prominence=700.0,
         proposal_sources=proposal_sources,
         source_apex_rank=1,
+        safe_merge_promotion_source=safe_merge_promotion_source,
+        safe_merge_promotion_shadow_boundary_id=(
+            safe_merge_promotion_shadow_boundary_id
+        ),
+        safe_merge_promotion_area_ratio=safe_merge_promotion_area_ratio,
+        safe_merge_promotion_selected_interval_count=(
+            safe_merge_promotion_selected_interval_count
+        ),
+        safe_merge_promotion_selected_interval_gap_max_min=(
+            safe_merge_promotion_selected_interval_gap_max_min
+        ),
     )
 
 

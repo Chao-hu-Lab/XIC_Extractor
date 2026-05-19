@@ -108,6 +108,27 @@ ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
     "integration_scan_count",
 )
 
+ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS = (
+    "feature_family_id",
+    "sample_stem",
+    "status",
+    "area",
+    "apex_rt",
+    "peak_start_rt",
+    "peak_end_rt",
+    "rt_delta_sec",
+    "neutral_loss_tag",
+    "family_center_mz",
+    "family_center_rt",
+    "backfill_seed_mz",
+    "backfill_seed_rt",
+    "backfill_request_rt_min",
+    "backfill_request_rt_max",
+    "backfill_request_ppm",
+    "backfill_apex_delta_sec",
+    "reason",
+)
+
 
 def write_alignment_review_tsv(
     path: Path,
@@ -251,6 +272,44 @@ def write_alignment_cell_integration_audit_tsv(
             }
         )
     return _write_tsv(path, ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS, rows)
+
+
+def write_alignment_owner_backfill_seed_audit_tsv(
+    path: Path,
+    matrix: AlignmentMatrix,
+) -> Path:
+    clusters_by_id = {row_id(cluster): cluster for cluster in matrix.clusters}
+    rows: list[dict[str, object]] = []
+    for cell in matrix.cells:
+        if cell.status != "rescued" or cell.backfill_seed_mz is None:
+            continue
+        cluster = clusters_by_id[cell.cluster_id]
+        rows.append(
+            {
+                "feature_family_id": cell.cluster_id,
+                "sample_stem": cell.sample_stem,
+                "status": cell.status,
+                "area": cell.area,
+                "apex_rt": cell.apex_rt,
+                "peak_start_rt": cell.peak_start_rt,
+                "peak_end_rt": cell.peak_end_rt,
+                "rt_delta_sec": cell.rt_delta_sec,
+                "neutral_loss_tag": cluster.neutral_loss_tag,
+                "family_center_mz": _family_center_mz(cluster),
+                "family_center_rt": _family_center_rt(cluster),
+                "backfill_seed_mz": cell.backfill_seed_mz,
+                "backfill_seed_rt": cell.backfill_seed_rt,
+                "backfill_request_rt_min": cell.backfill_request_rt_min,
+                "backfill_request_rt_max": cell.backfill_request_rt_max,
+                "backfill_request_ppm": cell.backfill_request_ppm,
+                "backfill_apex_delta_sec": _rt_delta_sec(
+                    cell.apex_rt,
+                    cell.backfill_seed_rt,
+                ),
+                "reason": cell.reason,
+            }
+        )
+    return _write_tsv(path, ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS, rows)
 
 
 def write_alignment_status_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
@@ -473,6 +532,12 @@ def _family_center_rt(row: Any) -> float:
     if hasattr(row, "family_center_rt"):
         return row.family_center_rt
     return row.cluster_center_rt
+
+
+def _rt_delta_sec(left_rt: float | None, right_rt: float | None) -> float | None:
+    if left_rt is None or right_rt is None:
+        return None
+    return (left_rt - right_rt) * 60.0
 
 
 def _family_product_mz(row: Any) -> float:

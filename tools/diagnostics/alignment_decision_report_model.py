@@ -171,7 +171,7 @@ def _istd_benchmark(
         target = str(item.get("target_label", ""))
         status = str(item.get("status", "")).upper()
         active = _is_active(item)
-        modes = _failure_modes(item.get("failure_modes", ()))
+        modes = _issue_modes(item)
         known = active and status != "PASS" and _is_known_exception(
             target,
             modes,
@@ -247,15 +247,22 @@ def _timing_summary(path: Path | None) -> dict[str, Any]:
     records = payload.get("records", ())
     if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
         raise ValueError(f"{path}: records must be a list")
-    by_stage: Counter[str] = Counter()
+    by_stage: dict[str, float] = {}
     for item in records:
         if not isinstance(item, Mapping):
             continue
         stage = str(item.get("stage", "unknown"))
-        by_stage[stage] += _float_value(item.get("elapsed_sec", ""), default=0.0)
+        by_stage[stage] = by_stage.get(stage, 0.0) + _float_value(
+            item.get("elapsed_sec", ""),
+            default=0.0,
+        )
     top_stages = [
         {"stage": stage, "elapsed_sec": elapsed}
-        for stage, elapsed in by_stage.most_common(10)
+        for stage, elapsed in sorted(
+            by_stage.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )[:10]
     ]
     total = sum(by_stage.values())
     return {
@@ -387,6 +394,13 @@ def _failure_modes(value: Any) -> tuple[str, ...]:
     if isinstance(value, Sequence):
         return tuple(str(part).strip() for part in value if str(part).strip())
     return ()
+
+
+def _issue_modes(row: Mapping[str, Any]) -> tuple[str, ...]:
+    modes = _failure_modes(row.get("failure_modes", ()))
+    if modes:
+        return modes
+    return _failure_modes(row.get("targeted_reliability_warning_modes", ()))
 
 
 def _split_list(value: str) -> tuple[str, ...]:

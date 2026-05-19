@@ -54,6 +54,11 @@ class AlignedCell:
     region_local_mixture_reason: str = ""
     region_review_reason: str = ""
     integration_audit: CellIntegrationAuditSummary | None = None
+    backfill_seed_mz: float | None = None
+    backfill_seed_rt: float | None = None
+    backfill_request_rt_min: float | None = None
+    backfill_request_rt_max: float | None = None
+    backfill_request_ppm: float | None = None
 
 
 @dataclass(frozen=True)

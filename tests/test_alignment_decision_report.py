@@ -115,6 +115,44 @@ def test_alignment_decision_report_fails_on_unhandled_istd_failure(
     ]
 
 
+def test_alignment_decision_report_treats_known_reliability_warning_as_known(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _alignment_dir(tmp_path, clean=True)
+    benchmark = tmp_path / "targeted_istd_benchmark.json"
+    _write_json(
+        benchmark,
+        _benchmark_payload(
+            status="WARN",
+            failure_modes=(),
+            warning_modes=(
+                "TARGETED_REVIEW_POSITIVE_EVIDENCE",
+                "TARGETED_REVIEW_POSITIVE_REASON:product_outside_diagnostic_window",
+            ),
+        ),
+    )
+
+    payload = report.build_report(
+        alignment_dir=alignment_dir,
+        targeted_istd_benchmark_json=benchmark,
+        owner_backfill_economics_json=tmp_path / "economics.json",
+        timing_json=tmp_path / "timing.json",
+        known_istd_exceptions=(
+            "d3-N6-medA:TARGETED_REVIEW_POSITIVE_EVIDENCE",
+            "d3-N6-medA:TARGETED_REVIEW_POSITIVE_REASON:product_outside_diagnostic_window",
+        ),
+    )
+
+    assert payload["verdict"] == "WARN"
+    assert payload["istd"]["known_count"] == 1
+    assert payload["istd"]["fail_count"] == 0
+    assert payload["istd"]["rows"][1]["known"] is True
+    assert payload["istd"]["rows"][1]["failure_modes"] == (
+        "TARGETED_REVIEW_POSITIVE_EVIDENCE;"
+        "TARGETED_REVIEW_POSITIVE_REASON:product_outside_diagnostic_window"
+    )
+
+
 def test_alignment_decision_report_warns_when_optional_inputs_are_missing(
     tmp_path: Path,
 ) -> None:
@@ -336,6 +374,7 @@ def _benchmark_payload(
     *,
     status: str,
     failure_modes: tuple[str, ...],
+    warning_modes: tuple[str, ...] = (),
 ) -> dict[str, object]:
     return {
         "overall_status": status,
@@ -360,6 +399,7 @@ def _benchmark_payload(
                 "active_tag": "TRUE",
                 "status": status,
                 "failure_modes": ";".join(failure_modes),
+                "targeted_reliability_warning_modes": ";".join(warning_modes),
                 "selected_feature_id": "FAM004",
                 "primary_match_count": 1,
                 "family_mean_rt_delta_min": 0.01,
