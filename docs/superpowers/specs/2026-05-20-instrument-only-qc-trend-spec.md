@@ -170,6 +170,34 @@ peak_end_rt - peak_start_rt
 This is not Gaussian FWHM. FWHM can be added later if SOP or external literature
 comparison requires it.
 
+### SDOLEK MS1 Identity / Trend Semantics
+
+Phase 1 is an MS1-channel trend report, not a full chemical identity
+confirmation report.
+
+The output may label rows as `SDO` / `LEK`, but every Phase 1 row must carry:
+
+```text
+identity_evidence = MS1_ONLY
+```
+
+and must not claim `identity_confirmed`.
+
+Use the user's NoSplit SDOLEK reference record as the first RT/width prior,
+because it is the preferred reference over the Split method record:
+
+| Compound | Reference m/z | NoSplit reference RT | NoSplit peak height | NoSplit base width |
+|---|---:|---:|---:|---:|
+| SDO | 311.0814 | 6.26 min | 1.07e7 | 0.83 min |
+| LEK | 556.2772 | 6.40 min | 2.03e6 | 0.85 min |
+
+The reference is a prior, not the sole ground truth. It should guide review and
+outlier labeling, while batch-level medians from current SDOLEK injections should
+also be reported once enough injections are available.
+
+The Split reference record is secondary context only. It can explain why weak or
+split peaks are risky, but it must not override NoSplit as the initial prior.
+
 ### Phase 1 Output Contract
 
 Phase 1 emits machine-readable outputs only:
@@ -189,11 +217,18 @@ instrument_qc_sdolek_diagnostics.tsv
 | `injection_order` | integer if available, blank otherwise |
 | `compound` | `SDO` or `LEK` |
 | `precursor_mz` | target precursor m/z |
+| `identity_evidence` | `MS1_ONLY` in Phase 1 |
+| `reference_rt_min` | NoSplit prior RT if known |
+| `rt_delta_to_reference_min` | apex RT minus NoSplit prior RT |
 | `apex_rt_min` | selected MS1 peak apex RT |
 | `area` | selected MS1 peak area |
 | `base_width_min` | `peak_end_rt_min - peak_start_rt_min` |
+| `reference_base_width_min` | NoSplit prior base width if known |
+| `base_width_ratio_to_reference` | selected base width divided by NoSplit prior width |
 | `peak_start_rt_min` | selected boundary start |
 | `peak_end_rt_min` | selected boundary end |
+| `trend_confidence` | `clean`, `warning`, or `low` |
+| `trend_flags` | semicolon-separated labels such as `RT_OUTLIER`, `WIDTH_OUTLIER`, `LOW_PEAK_CONFIDENCE` |
 | `status` | `detected`, `not_detected`, or `error` |
 | `reason` | concise diagnostic reason |
 
