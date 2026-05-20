@@ -189,6 +189,67 @@ def test_claim_registry_complete_link_prevents_chain_claiming() -> None:
     assert cells["FAM000003"].status == "detected"
 
 
+def test_claim_registry_ignores_incomplete_peak_claims() -> None:
+    matrix = _matrix(
+        clusters=(
+            _feature("FAM000001", detected_count=10),
+            _feature("FAM000002", detected_count=9),
+        ),
+        cells=(
+            _cell("sample-a", "FAM000001", "detected"),
+            _cell("sample-a", "FAM000002", "detected", area=None),
+        ),
+    )
+
+    result = apply_ms1_peak_claim_registry(matrix, AlignmentConfig())
+
+    assert result is matrix
+    assert [cell.status for cell in result.cells] == ["detected", "detected"]
+
+
+def test_claim_registry_claims_are_sample_local() -> None:
+    matrix = _matrix(
+        clusters=(
+            _feature("FAM000001", detected_count=10),
+            _feature("FAM000002", detected_count=1),
+        ),
+        cells=(
+            _cell("sample-a", "FAM000001", "detected"),
+            _cell("sample-b", "FAM000002", "detected"),
+        ),
+    )
+
+    result = apply_ms1_peak_claim_registry(matrix, AlignmentConfig())
+
+    assert result is matrix
+    assert {cell.status for cell in result.cells} == {"detected"}
+
+
+def test_claim_registry_all_review_only_conflicts_have_no_winner() -> None:
+    matrix = _matrix(
+        clusters=(
+            _feature("FAM000001", detected_count=10, review_only=True),
+            _feature("FAM000002", detected_count=9, review_only=True),
+        ),
+        cells=(
+            _cell("sample-a", "FAM000001", "detected"),
+            _cell("sample-a", "FAM000002", "rescued"),
+        ),
+    )
+
+    result = apply_ms1_peak_claim_registry(matrix, AlignmentConfig())
+    cells = _cells_by_feature(result)
+
+    assert cells["FAM000001"].status == "duplicate_assigned"
+    assert cells["FAM000001"].reason == (
+        "review-only MS1 peak claim; winner=none; original_status=detected"
+    )
+    assert cells["FAM000002"].status == "duplicate_assigned"
+    assert cells["FAM000002"].reason == (
+        "review-only MS1 peak claim; winner=none; original_status=rescued"
+    )
+
+
 def _matrix(*, clusters, cells) -> AlignmentMatrix:
     return AlignmentMatrix(
         clusters=clusters,
@@ -234,6 +295,7 @@ def _cell(
     feature_id: str,
     status: str,
     *,
+    area: float | None = 1000.0,
     apex: float = 8.5,
     start: float = 8.4,
     end: float = 8.6,
@@ -242,7 +304,7 @@ def _cell(
         sample_stem=sample,
         cluster_id=feature_id,
         status=status,  # type: ignore[arg-type]
-        area=1000.0,
+        area=area,
         apex_rt=apex,
         height=100.0,
         peak_start_rt=start,

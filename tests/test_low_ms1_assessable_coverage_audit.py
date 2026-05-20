@@ -1,4 +1,5 @@
 import csv
+import json
 from pathlib import Path
 
 from tools.diagnostics import low_ms1_assessable_coverage_audit as audit
@@ -95,9 +96,10 @@ def test_classifies_single_center_xic_not_supported(tmp_path: Path) -> None:
     assert summary["assessable_fraction"] == 0.25
     assert summary["trace_recomputed_assessable_fraction"] == 0.25
     assert summary["assessable_fraction_delta"] == 0.0
-    assert "primary backfill support is not established" in summary[
-        "production_interpretation"
-    ]
+    assert (
+        "primary backfill support is not established"
+        in summary["production_interpretation"]
+    )
 
 
 def test_outputs_rows_and_markdown(tmp_path: Path) -> None:
@@ -151,6 +153,111 @@ def test_outputs_rows_and_markdown(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert "`FAM_ZERO`" in markdown
+
+
+def test_output_artifacts_pin_schema_order_and_key_values(tmp_path: Path) -> None:
+    review_tsv, alignment_dir, overlay_dir = _fixture_paths(tmp_path)
+    output_dir = tmp_path / "out"
+    _write_candidates(
+        review_tsv,
+        [
+            _candidate_row(
+                "FAM_SHIFT",
+                prefix="fam_shift",
+                rt_min="10.0",
+                rt_max="11.0",
+                global_assessable_fraction="1.0",
+                selected_in_window_fraction="0.333333",
+            ),
+            _candidate_row(
+                "FAM_SEEDCTX",
+                prefix="fam_seedctx",
+                rt_min="14.0",
+                rt_max="15.0",
+                global_assessable_fraction="0.5",
+                selected_in_window_fraction="1.0",
+            ),
+        ],
+    )
+    _write_alignment_review(
+        alignment_dir,
+        [
+            _alignment_row("FAM_SHIFT", event_cluster_count="5"),
+            _alignment_row("FAM_SEEDCTX", event_cluster_count="5"),
+        ],
+    )
+    _write_trace_summary(
+        overlay_dir / "fam_shift_trace_summary.tsv",
+        [
+            _trace_row("S1", apex_rt="10.2", trace_max="200"),
+            _trace_row("S2", apex_rt="11.4", trace_max="180"),
+        ],
+    )
+    _write_trace_summary(
+        overlay_dir / "fam_seedctx_trace_summary.tsv",
+        [
+            _trace_row("S1", apex_rt="14.1", trace_max="0"),
+            _trace_row("S2", apex_rt="14.4", trace_max="100"),
+        ],
+    )
+    seed_audit_tsv = tmp_path / "alignment_owner_backfill_seed_audit.tsv"
+    _write_backfill_seed_audit(
+        seed_audit_tsv,
+        [
+            _seed_audit_row("FAM_SEEDCTX", "S1", seed_rt="14.1", delta_sec="0"),
+            _seed_audit_row("FAM_SEEDCTX", "S2", seed_rt="14.45", delta_sec="90"),
+        ],
+    )
+
+    result = audit.build_audit(
+        review_candidates_tsv=review_tsv,
+        alignment_dir=alignment_dir,
+        overlay_dir=overlay_dir,
+        backfill_seed_audit_tsv=seed_audit_tsv,
+    )
+    audit.write_outputs(output_dir, result)
+
+    summary_rows = _read_tsv(output_dir / "low_ms1_assessable_coverage_summary.tsv")
+    assert summary_rows[0]["feature_family_id"] == "FAM_SHIFT"
+    assert summary_rows[0]["root_cause_bucket"] == "rt_window_or_multiseed_shift"
+    assert summary_rows[1]["feature_family_id"] == "FAM_SEEDCTX"
+    assert summary_rows[1]["root_cause_bucket"] == "seed_aware_overlay_required"
+
+    rows_path = output_dir / "low_ms1_assessable_coverage_rows.tsv"
+    assert _read_header(rows_path) == list(audit._detail_fields())
+
+    selected_queue = _read_tsv(
+        output_dir / "low_ms1_assessable_coverage_selected_apex_overlay_queue.tsv",
+    )
+    assert _read_header(
+        output_dir / "low_ms1_assessable_coverage_selected_apex_overlay_queue.tsv",
+    ) == list(audit._apex_aware_queue_fields())
+    assert [row["feature_family_id"] for row in selected_queue] == ["FAM_SHIFT"]
+    assert selected_queue[0]["suggested_rt_min"] == "9.85"
+    assert selected_queue[0]["suggested_rt_max"] == "11.75"
+
+    seed_queue_path = output_dir / "low_ms1_assessable_coverage_seed_overlay_queue.tsv"
+    seed_queue = _read_tsv(seed_queue_path)
+    assert _read_header(seed_queue_path) == list(audit._seed_aware_queue_fields())
+    assert [row["backfill_seed_rt"] for row in seed_queue] == ["14.1", "14.45"]
+    assert seed_queue[1]["suggested_output_prefix"] == "fam_seedctx_seed2_overlay"
+
+    payload = json.loads(
+        (output_dir / "low_ms1_assessable_coverage.json").read_text(
+            encoding="utf-8",
+        ),
+    )
+    assert payload["thresholds"]["assessable_fraction_min"] == 0.7
+    assert [row["feature_family_id"] for row in payload["summary"]] == [
+        "FAM_SHIFT",
+        "FAM_SEEDCTX",
+    ]
+
+    markdown = (output_dir / "low_ms1_assessable_coverage.md").read_text(
+        encoding="utf-8",
+    )
+    assert "Selected-apex overlay queue: `1`" in markdown
+    assert "Seed-aware overlay queue: `2`" in markdown
 
 
 def test_joins_detected_seed_evidence_from_discovery_dir(tmp_path: Path) -> None:
@@ -511,3 +618,13 @@ def _write_tsv(
         writer = csv.DictWriter(handle, delimiter=delimiter, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _read_header(path: Path) -> list[str]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return next(csv.reader(handle, delimiter="\t"))
+
+
+def _read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
