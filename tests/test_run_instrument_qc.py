@@ -12,7 +12,8 @@ def _fake_output(output_dir: Path) -> InstrumentQCRunOutput:
     trend_tsv.write_text("sample_name\n", encoding="utf-8")
     trend_json.write_text("{}\n", encoding="utf-8")
     diagnostics_tsv.write_text(
-        "sample_name\traw_path\tissue\tdetail\n", encoding="utf-8"
+        "sample_name\traw_path\tissue\tdetail\n",
+        encoding="utf-8",
     )
     return InstrumentQCRunOutput(
         trend_rows=(),

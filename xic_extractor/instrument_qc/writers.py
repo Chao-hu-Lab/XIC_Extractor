@@ -70,6 +70,7 @@ def write_sdolek_json(
     path: Path,
     rows: Iterable[SDOLEKTrendRow],
     diagnostics: Iterable[InstrumentQCDiagnostic],
+    metadata_source_status: dict[str, str] | None = None,
 ) -> None:
     row_list = list(rows)
     diagnostic_list = list(diagnostics)
@@ -82,6 +83,7 @@ def write_sdolek_json(
         },
         "rows": [_trend_row_to_dict(row) for row in row_list],
         "diagnostics": [_diagnostic_to_dict(diag) for diag in diagnostic_list],
+        "metadata_source_status": metadata_source_status or {},
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")

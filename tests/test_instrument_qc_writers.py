@@ -82,9 +82,17 @@ def test_write_sdolek_json_contains_summary_and_rows(tmp_path: Path) -> None:
                 detail="No injection-order file supplied.",
             )
         ],
+        metadata_source_status={
+            "injection_order_source": "",
+            "injection_order_status": "missing",
+        },
     )
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["summary"]["total_rows"] == 1
     assert payload["summary"]["status_counts"] == {"detected": 1}
     assert payload["rows"][0]["compound"] == "SDO"
+    assert payload["metadata_source_status"] == {
+        "injection_order_source": "",
+        "injection_order_status": "missing",
+    }

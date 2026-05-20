@@ -1,8 +1,9 @@
+import json
 from pathlib import Path
 
 import numpy as np
 
-from xic_extractor.instrument_qc.pipeline import run_sdolek_pipeline
+from xic_extractor.instrument_qc.pipeline import DEFAULT_DLL_DIR, run_sdolek_pipeline
 
 
 class FakeRaw:
@@ -72,6 +73,8 @@ def test_sdolek_pipeline_extracts_two_compounds_and_writes_outputs(
     assert output.trend_tsv.exists()
     assert output.trend_json.exists()
     assert output.diagnostics_tsv.exists()
+    payload = json.loads(output.trend_json.read_text(encoding="utf-8"))
+    assert payload["metadata_source_status"]["injection_order_status"] == "provided"
 
 
 def test_sdolek_pipeline_reports_missing_injection_order_without_failing(
@@ -94,6 +97,11 @@ def test_sdolek_pipeline_reports_missing_injection_order_without_failing(
 
     assert all(row.injection_order is None for row in output.trend_rows)
     assert any(diag.issue == "INJECTION_ORDER_MISSING" for diag in output.diagnostics)
+    payload = json.loads(output.trend_json.read_text(encoding="utf-8"))
+    assert payload["metadata_source_status"] == {
+        "injection_order_source": "",
+        "injection_order_status": "missing",
+    }
 
 
 def test_sdolek_pipeline_ignores_biological_root_raws(tmp_path: Path) -> None:
@@ -113,6 +121,35 @@ def test_sdolek_pipeline_ignores_biological_root_raws(tmp_path: Path) -> None:
     )
 
     assert {row.sample_name for row in output.trend_rows} == {"SDO-posttest"}
+
+
+def test_sdolek_pipeline_uses_xcalibur_default_dll_dir(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    raw_root = tmp_path / "raw"
+    _write_raw(raw_root / "SDOLEK" / "SDO-posttest.raw")
+    calls: dict[str, Path] = {}
+
+    def fake_open_raw(raw_path: Path, dll_dir: Path) -> FakeRaw:
+        calls["raw_path"] = raw_path
+        calls["dll_dir"] = dll_dir
+        return FakeRaw(
+            {
+                311.0814: _trace(6.26),
+                556.2771: _trace(6.40),
+            }
+        )
+
+    monkeypatch.setattr("xic_extractor.instrument_qc.pipeline.open_raw", fake_open_raw)
+
+    output = run_sdolek_pipeline(
+        raw_dir=raw_root,
+        output_dir=tmp_path / "out",
+    )
+
+    assert len(output.trend_rows) == 2
+    assert calls["dll_dir"] == DEFAULT_DLL_DIR
 
 
 def test_sdolek_pipeline_fails_clearly_when_sdolek_folder_missing(

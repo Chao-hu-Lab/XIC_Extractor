@@ -25,6 +25,9 @@ from xic_extractor.instrument_qc.writers import (
 )
 from xic_extractor.peak_detection.facade import find_peak_and_area
 from xic_extractor.raw_reader import open_raw
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
+
+DEFAULT_DLL_DIR = Path(CANONICAL_SETTINGS_DEFAULTS["dll_dir"])
 
 
 class XICSource(Protocol):
@@ -56,7 +59,8 @@ def run_sdolek_pipeline(
         raw_paths,
         diagnostics,
     )
-    opener = raw_opener or (lambda path: open_raw(path, dll_dir or Path("lib")))
+    effective_dll_dir = dll_dir or DEFAULT_DLL_DIR
+    opener = raw_opener or (lambda path: open_raw(path, effective_dll_dir))
     rows: list[SDOLEKTrendRow] = []
 
     for raw_path in raw_paths:
@@ -72,6 +76,7 @@ def run_sdolek_pipeline(
                                 sample_name=sample_name,
                                 injection_order=injection_order.get(sample_name),
                                 target=target,
+                                dll_dir=effective_dll_dir,
                             )
                         )
                     except Exception as exc:
@@ -116,7 +121,12 @@ def run_sdolek_pipeline(
     trend_json = output_dir / "instrument_qc_sdolek_trend.json"
     diagnostics_tsv = output_dir / "instrument_qc_sdolek_diagnostics.tsv"
     write_trend_tsv(trend_tsv, rows)
-    write_sdolek_json(trend_json, rows, diagnostics)
+    write_sdolek_json(
+        trend_json,
+        rows,
+        diagnostics,
+        metadata_source_status=_metadata_source_status(injection_order_source),
+    )
     write_diagnostics_tsv(diagnostics_tsv, diagnostics)
     return InstrumentQCRunOutput(
         trend_rows=tuple(rows),
@@ -175,6 +185,18 @@ def _read_optional_injection_order(
     return read_injection_order(path)
 
 
+def _metadata_source_status(path: Path | None) -> dict[str, str]:
+    if path is None:
+        return {
+            "injection_order_source": "",
+            "injection_order_status": "missing",
+        }
+    return {
+        "injection_order_source": str(path),
+        "injection_order_status": "provided",
+    }
+
+
 def _extract_target_row(
     *,
     raw: XICSource,
@@ -182,6 +204,7 @@ def _extract_target_row(
     sample_name: str,
     injection_order: int | None,
     target: InstrumentQCTarget,
+    dll_dir: Path,
 ) -> SDOLEKTrendRow:
     rt, intensity = raw.extract_xic(
         mz=target.precursor_mz,
@@ -189,7 +212,7 @@ def _extract_target_row(
         rt_max=target.rt_max,
         ppm_tol=target.ppm_tol,
     )
-    result = find_peak_and_area(rt, intensity, _peak_config(raw_path.parent))
+    result = find_peak_and_area(rt, intensity, _peak_config(raw_path.parent, dll_dir))
     if result.peak is None or result.status != "OK":
         return _error_row(
             raw_path=raw_path,
@@ -276,10 +299,10 @@ def _trend_flags(
     return tuple(flags)
 
 
-def _peak_config(data_dir: Path) -> ExtractionConfig:
+def _peak_config(data_dir: Path, dll_dir: Path) -> ExtractionConfig:
     return ExtractionConfig(
         data_dir=data_dir,
-        dll_dir=Path("lib"),
+        dll_dir=dll_dir,
         output_csv=Path("instrument_qc.csv"),
         diagnostics_csv=Path("instrument_qc_diagnostics.csv"),
         smooth_window=7,
