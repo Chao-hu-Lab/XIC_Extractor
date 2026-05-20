@@ -156,6 +156,11 @@ Add `xic_extractor.instrument_qc.targets` with fixed Phase 1 target constants:
 Phase 1 uses existing MS1 XIC extraction and `find_peak_and_area`. It does not
 compute ddMS2 fragment ratios yet.
 
+The original Method-3 `20260105 SDOLEK` method includes `ddMS2 OT (wHCD)` and
+the method document lists CID/wHCD product ions for SDO/LEK. That information is
+recorded as future evidence only. Phase 1 must not read MS2 scans, compute
+HCD/wHCD product ratios, or add HCD-driven pass/fail labels.
+
 Base width is defined as:
 
 ```text
@@ -361,6 +366,14 @@ Do not commit real-data output.
 - Add Mix STDs target extraction.
 - Add Blank TIC support only after raw_reader capability is characterized.
 - Add dedup for `/STDs` vs `/Pairs` when Mix STDs enters scope.
+
+### Phase 3b: SDOLEK MS2 Fragment Evidence
+
+- Add SDO/LEK CID or wHCD product-ion ratio extraction only after Phase 1 MS1
+  trend output is stable.
+- Keep this audit-only unless a separate production-quality gate is approved.
+- Do not use HCD evidence to change SDO/LEK MS1 peak selection in the first MS2
+  implementation.
 
 ### Phase 4: Method/Sequence Metadata Normalization
 
