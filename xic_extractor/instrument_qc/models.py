@@ -45,3 +45,7 @@ class InstrumentQCRunOutput:
     trend_json: Path
     diagnostics_tsv: Path
     workbook: Path
+    mixstds_rows: tuple[SDOLEKTrendRow, ...] = ()
+    mixstds_trend_tsv: Path | None = None
+    mixstds_trend_json: Path | None = None
+    mixstds_diagnostics_tsv: Path | None = None

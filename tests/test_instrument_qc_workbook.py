@@ -40,6 +40,27 @@ def test_write_sdolek_workbook_has_overview_trend_and_diagnostics(
     assert workbook["Diagnostics"]["C2"].value == "INJECTION_ORDER_MISSING"
 
 
+def test_write_workbook_adds_mixstds_sheet_before_diagnostics(
+    tmp_path: Path,
+) -> None:
+    path = write_sdolek_workbook(
+        tmp_path / "instrument_qc_trend_sdolek.xlsx",
+        [_row(tmp_path / "SDOLEK-pretest.raw")],
+        [],
+        mixstds_rows=[_row(tmp_path / "Mix_STDs_01.raw", sample_name="Mix_STDs_01")],
+    )
+
+    workbook = load_workbook(path, data_only=False)
+
+    assert workbook.sheetnames == [
+        "Overview",
+        "SDOLEK Trend",
+        "Mix STDs Trend",
+        "Diagnostics",
+    ]
+    assert workbook["Mix STDs Trend"]["A1"].value == "sample_name"
+
+
 def test_write_sdolek_workbook_escapes_formula_like_values(tmp_path: Path) -> None:
     path = write_sdolek_workbook(
         tmp_path / "instrument_qc_trend_sdolek.xlsx",

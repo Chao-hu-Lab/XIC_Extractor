@@ -23,8 +23,10 @@ def write_sdolek_workbook(
     diagnostics: Iterable[InstrumentQCDiagnostic],
     *,
     metadata_source_status: dict[str, str] | None = None,
+    mixstds_rows: Iterable[SDOLEKTrendRow] | None = None,
 ) -> Path:
     row_list = list(rows)
+    mixstds_row_list = list(mixstds_rows) if mixstds_rows is not None else None
     diagnostic_list = list(diagnostics)
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -38,6 +40,8 @@ def write_sdolek_workbook(
         metadata_source_status or {},
     )
     _write_trend_sheet(workbook.create_sheet("SDOLEK Trend"), row_list)
+    if mixstds_row_list is not None:
+        _write_trend_sheet(workbook.create_sheet("Mix STDs Trend"), mixstds_row_list)
     _write_diagnostics_sheet(workbook.create_sheet("Diagnostics"), diagnostic_list)
     workbook.save(path)
     return path

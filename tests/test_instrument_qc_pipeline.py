@@ -1,3 +1,4 @@
+import csv
 import json
 from pathlib import Path
 
@@ -169,3 +170,67 @@ def test_sdolek_pipeline_fails_clearly_when_sdolek_folder_missing(
         assert "SDOLEK" in str(exc)
     else:
         raise AssertionError("Expected missing SDOLEK folder to fail clearly")
+
+
+def test_pipeline_can_emit_mixstds_outputs_from_explicit_registry(
+    tmp_path: Path,
+) -> None:
+    raw_root = tmp_path / "raw"
+    _write_raw(raw_root / "SDOLEK" / "SDOLEK-pretest.raw")
+    _write_raw(raw_root / "STDs" / "Mix_STDs_01.raw")
+    registry = tmp_path / "mixstds.csv"
+    registry.write_text(
+        "compound,precursor_mz,rt_min,rt_max,ppm_tol\n"
+        "STD-A,123.4567,1.0,2.0,10\n",
+        encoding="utf-8",
+    )
+
+    output = run_sdolek_pipeline(
+        raw_dir=raw_root,
+        output_dir=tmp_path / "out",
+        raw_opener=lambda _path: FakeRaw(
+            {
+                311.0814: _trace(6.26),
+                556.2771: _trace(6.40),
+                123.4567: _trace(1.50),
+            }
+        ),
+        emit_mixstds=True,
+        mixstds_target_registry=registry,
+    )
+
+    assert output.mixstds_trend_tsv is not None
+    assert output.mixstds_trend_json is not None
+    assert output.mixstds_diagnostics_tsv is not None
+    with output.mixstds_trend_tsv.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert rows[0]["sample_name"] == "Mix_STDs_01"
+    assert rows[0]["compound"] == "STD-A"
+    assert rows[0]["identity_evidence"] == "MS1_ONLY"
+
+
+def test_pipeline_reports_mixstds_missing_registry_without_extraction(
+    tmp_path: Path,
+) -> None:
+    raw_root = tmp_path / "raw"
+    _write_raw(raw_root / "SDOLEK" / "SDOLEK-pretest.raw")
+    _write_raw(raw_root / "STDs" / "Mix_STDs_01.raw")
+
+    output = run_sdolek_pipeline(
+        raw_dir=raw_root,
+        output_dir=tmp_path / "out",
+        raw_opener=lambda _path: FakeRaw(
+            {
+                311.0814: _trace(6.26),
+                556.2771: _trace(6.40),
+            }
+        ),
+        emit_mixstds=True,
+    )
+
+    assert output.mixstds_trend_tsv is not None
+    assert output.mixstds_trend_tsv.exists()
+    assert any(
+        diag.issue == "MIXSTDS_TARGET_REGISTRY_MISSING"
+        for diag in output.diagnostics
+    )

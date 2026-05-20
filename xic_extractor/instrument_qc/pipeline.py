@@ -11,6 +11,10 @@ from xic_extractor.instrument_qc.classification import (
     InstrumentQCClass,
     classify_instrument_qc_raw,
 )
+from xic_extractor.instrument_qc.mixstds import (
+    discover_mixstds_raws,
+    load_mixstds_target_registry,
+)
 from xic_extractor.instrument_qc.models import (
     InstrumentQCDiagnostic,
     InstrumentQCRunOutput,
@@ -52,6 +56,8 @@ def run_sdolek_pipeline(
     injection_order_source: Path | None = None,
     dll_dir: Path | None = None,
     raw_opener: RawOpener | None = None,
+    emit_mixstds: bool = False,
+    mixstds_target_registry: Path | None = None,
 ) -> InstrumentQCRunOutput:
     diagnostics: list[InstrumentQCDiagnostic] = []
     raw_paths = _discover_sdolek_raws(raw_dir, diagnostics)
@@ -118,10 +124,33 @@ def run_sdolek_pipeline(
                 for target in SDOLEK_TARGETS
             )
 
+    mixstds_rows: tuple[SDOLEKTrendRow, ...] = ()
+    mixstds_diagnostics: list[InstrumentQCDiagnostic] = []
+    if emit_mixstds:
+        mixstds_rows = _run_mixstds_extraction(
+            raw_dir=raw_dir,
+            injection_order=injection_order,
+            opener=opener,
+            dll_dir=effective_dll_dir,
+            target_registry=mixstds_target_registry,
+            diagnostics=mixstds_diagnostics,
+        )
+
     trend_tsv = output_dir / "instrument_qc_sdolek_trend.tsv"
     trend_json = output_dir / "instrument_qc_sdolek_trend.json"
     diagnostics_tsv = output_dir / "instrument_qc_sdolek_diagnostics.tsv"
     workbook = output_dir / "instrument_qc_trend_sdolek.xlsx"
+    mixstds_trend_tsv = (
+        output_dir / "instrument_qc_mixstds_trend.tsv" if emit_mixstds else None
+    )
+    mixstds_trend_json = (
+        output_dir / "instrument_qc_mixstds_trend.json" if emit_mixstds else None
+    )
+    mixstds_diagnostics_tsv = (
+        output_dir / "instrument_qc_mixstds_diagnostics.tsv"
+        if emit_mixstds
+        else None
+    )
     write_trend_tsv(trend_tsv, rows)
     metadata_source_status = _metadata_source_status(injection_order_source)
     write_sdolek_json(
@@ -131,20 +160,131 @@ def run_sdolek_pipeline(
         metadata_source_status=metadata_source_status,
     )
     write_diagnostics_tsv(diagnostics_tsv, diagnostics)
+    if mixstds_trend_tsv is not None:
+        write_trend_tsv(mixstds_trend_tsv, mixstds_rows)
+    if mixstds_trend_json is not None:
+        write_sdolek_json(
+            mixstds_trend_json,
+            mixstds_rows,
+            mixstds_diagnostics,
+            metadata_source_status={
+                "target_registry_source": str(mixstds_target_registry or ""),
+                "target_registry_status": (
+                    "provided" if mixstds_target_registry else "missing"
+                ),
+            },
+        )
+    if mixstds_diagnostics_tsv is not None:
+        write_diagnostics_tsv(mixstds_diagnostics_tsv, mixstds_diagnostics)
     write_sdolek_workbook(
         workbook,
         rows,
         diagnostics,
         metadata_source_status=metadata_source_status,
+        mixstds_rows=mixstds_rows if emit_mixstds else None,
     )
     return InstrumentQCRunOutput(
         trend_rows=tuple(rows),
-        diagnostics=tuple(diagnostics),
+        diagnostics=tuple(diagnostics + mixstds_diagnostics),
         trend_tsv=trend_tsv,
         trend_json=trend_json,
         diagnostics_tsv=diagnostics_tsv,
         workbook=workbook,
+        mixstds_rows=mixstds_rows,
+        mixstds_trend_tsv=mixstds_trend_tsv,
+        mixstds_trend_json=mixstds_trend_json,
+        mixstds_diagnostics_tsv=mixstds_diagnostics_tsv,
     )
+
+
+def _run_mixstds_extraction(
+    *,
+    raw_dir: Path,
+    injection_order: dict[str, int],
+    opener: RawOpener,
+    dll_dir: Path,
+    target_registry: Path | None,
+    diagnostics: list[InstrumentQCDiagnostic],
+) -> tuple[SDOLEKTrendRow, ...]:
+    registry = load_mixstds_target_registry(target_registry)
+    if registry.status != "loaded":
+        diagnostics.append(
+            InstrumentQCDiagnostic(
+                sample_name="",
+                raw_path=target_registry or raw_dir,
+                issue=f"MIXSTDS_TARGET_REGISTRY_{registry.status.upper()}",
+                detail=registry.reason,
+            )
+        )
+        return ()
+
+    rows: list[SDOLEKTrendRow] = []
+    raw_paths = discover_mixstds_raws(raw_dir, diagnostics)
+    if not raw_paths:
+        diagnostics.append(
+            InstrumentQCDiagnostic(
+                sample_name="",
+                raw_path=raw_dir,
+                issue="MIXSTDS_RAW_MISSING",
+                detail="No Mix STDs RAW files found under STDs or Pairs.",
+            )
+        )
+        return ()
+
+    for raw_path in raw_paths:
+        sample_name = raw_path.stem
+        try:
+            with opener(raw_path) as raw:
+                for target in registry.targets:
+                    try:
+                        rows.append(
+                            _extract_target_row(
+                                raw=raw,
+                                raw_path=raw_path,
+                                sample_name=sample_name,
+                                injection_order=injection_order.get(sample_name),
+                                target=target,
+                                dll_dir=dll_dir,
+                            )
+                        )
+                    except Exception as exc:
+                        diagnostics.append(
+                            InstrumentQCDiagnostic(
+                                sample_name=sample_name,
+                                raw_path=raw_path,
+                                issue="MIXSTDS_TARGET_EXTRACTION_ERROR",
+                                detail=f"{target.compound}: {exc}",
+                            )
+                        )
+                        rows.append(
+                            _error_row(
+                                raw_path=raw_path,
+                                sample_name=sample_name,
+                                injection_order=injection_order.get(sample_name),
+                                target=target,
+                                reason=str(exc),
+                            )
+                        )
+        except Exception as exc:
+            diagnostics.append(
+                InstrumentQCDiagnostic(
+                    sample_name=sample_name,
+                    raw_path=raw_path,
+                    issue="MIXSTDS_RAW_EXTRACTION_ERROR",
+                    detail=str(exc),
+                )
+            )
+            rows.extend(
+                _error_row(
+                    raw_path=raw_path,
+                    sample_name=sample_name,
+                    injection_order=injection_order.get(sample_name),
+                    target=target,
+                    reason=str(exc),
+                )
+                for target in registry.targets
+            )
+    return tuple(rows)
 
 
 def _discover_sdolek_raws(

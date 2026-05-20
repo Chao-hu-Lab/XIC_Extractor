@@ -401,35 +401,11 @@ Do not commit real-data output.
 - Do not change Phase 1 peak selection, target constants, TSV schema, JSON
   schema, or main extraction pipeline behavior.
 
-### Phase 3: Mix STDs And Blank
+### Phases 3-6
 
-- Add Mix STDs target extraction.
-- Add Blank TIC support only after raw_reader capability is characterized.
-- Add dedup for `/STDs` vs `/Pairs` when Mix STDs enters scope.
+Detailed future work for Phases 3-6 lives in one consolidated document:
 
-### Phase 3b: SDOLEK MS2 Fragment Evidence
-
-- Add SDO/LEK CID or wHCD product-ion ratio extraction only after Phase 1 MS1
-  trend output is stable.
-- Keep this audit-only unless a separate production-quality gate is approved.
-- Do not use HCD evidence to change SDO/LEK MS1 peak selection in the first MS2
-  implementation.
-
-### Phase 4: Method/Sequence Metadata Normalization
-
-- Add method-doc or sequence-doc parser / converter.
-- Output the existing `Sample_Name,Injection_Order` schema.
-- Do not treat downstream `SampleInfo` as authoritative source.
-
-### Phase 5: Cross-Batch Lifecycle Dataset
-
-- Add explicit opt-in lifecycle append:
-
-```powershell
---append-lifecycle --instrument-id <id> --lifecycle-root <path>
-```
-
-- No hidden writes to user home by default.
+- `docs/superpowers/specs/2026-05-20-instrument-qc-phases-3-6-consolidated-spec-plan.md`
 
 ## Test Plan
 
