@@ -1,8 +1,8 @@
 # Claim Registry Hot Path Optimization Spec
 
-**Date:** 2026-05-20  
-**Branch:** `codex/claim-registry-hot-path`  
-**Worktree:** `.worktrees/claim-registry-hot-path`  
+**Date:** 2026-05-20
+**Branch:** `codex/claim-registry-hot-path`
+**Worktree:** `.worktrees/claim-registry-hot-path`
 **Status:** Draft for implementation
 
 ## Summary

@@ -1,7 +1,7 @@
 # Claim Registry Hot Path Decision
 
-**Date:** 2026-05-20  
-**Branch:** `codex/claim-registry-hot-path`  
+**Date:** 2026-05-20
+**Branch:** `codex/claim-registry-hot-path`
 **Decision:** `optimized_equivalent`
 
 ## Summary
