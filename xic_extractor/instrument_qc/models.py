@@ -44,3 +44,4 @@ class InstrumentQCRunOutput:
     trend_tsv: Path
     trend_json: Path
     diagnostics_tsv: Path
+    workbook: Path

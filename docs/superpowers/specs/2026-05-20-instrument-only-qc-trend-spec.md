@@ -393,8 +393,13 @@ Do not commit real-data output.
 
 ### Phase 2: Workbook And Human Report
 
-- Add `instrument_qc_trend_*.xlsx` only after TSV/JSON is stable.
+- Status: implemented after Phase 1 TSV/JSON stabilized.
+- Add `instrument_qc_trend_sdolek.xlsx` alongside the TSV/JSON outputs.
 - Include `Overview`, `SDOLEK Trend`, and `Diagnostics`.
+- Treat the workbook as a human review artifact. TSV/JSON remain the stable
+  machine-readable contract.
+- Do not change Phase 1 peak selection, target constants, TSV schema, JSON
+  schema, or main extraction pipeline behavior.
 
 ### Phase 3: Mix STDs And Blank
 

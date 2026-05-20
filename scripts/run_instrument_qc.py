@@ -12,12 +12,44 @@ from xic_extractor.raw_reader import RawReaderError
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run opt-in instrument-only QC trend extraction.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Outputs:\n"
+            "  instrument_qc_sdolek_trend.tsv\n"
+            "  instrument_qc_sdolek_trend.json\n"
+            "  instrument_qc_sdolek_diagnostics.tsv\n"
+            "  instrument_qc_trend_sdolek.xlsx\n\n"
+            "Input note:\n"
+            "  --raw-dir must contain the expected SDOLEK subfolder."
+        ),
     )
-    parser.add_argument("--raw-dir", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--mode", default="sdolek")
-    parser.add_argument("--injection-order-source", type=Path)
-    parser.add_argument("--dll-dir", type=Path)
+    parser.add_argument(
+        "--raw-dir",
+        type=Path,
+        required=True,
+        help="Batch RAW root containing the SDOLEK subfolder.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Directory where TSV, JSON, diagnostics TSV, and XLSX are written.",
+    )
+    parser.add_argument(
+        "--mode",
+        default="sdolek",
+        help="Instrument QC mode. Phase 2 supports only 'sdolek'.",
+    )
+    parser.add_argument(
+        "--injection-order-source",
+        type=Path,
+        help="Optional docs-derived Sample_Name,Injection_Order CSV.",
+    )
+    parser.add_argument(
+        "--dll-dir",
+        type=Path,
+        help="Optional Thermo DLL directory override.",
+    )
     return parser
 
 
@@ -47,6 +79,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"Wrote {output.trend_tsv}")
     print(f"Wrote {output.trend_json}")
     print(f"Wrote {output.diagnostics_tsv}")
+    print(f"Wrote {output.workbook}")
     return 0
 
 

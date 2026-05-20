@@ -1478,6 +1478,53 @@ Implementation should stop and report instead of expanding scope if any of these
 
 Those cases require a new reviewed decision, not silent scope expansion.
 
+## Phase 2: Workbook And Human Report
+
+Status: implemented.
+
+Files:
+
+- `xic_extractor/instrument_qc/workbook.py`
+- `tests/test_instrument_qc_workbook.py`
+
+Implemented contract:
+
+- writes `instrument_qc_trend_sdolek.xlsx`;
+- workbook sheets are `Overview`, `SDOLEK Trend`, and `Diagnostics`;
+- workbook is a human review artifact, not the machine-readable contract;
+- TSV/JSON schemas remain unchanged;
+- instrument QC remains opt-in and independent from the main extraction CLI.
+
+Validation:
+
+```powershell
+uv --cache-dir .uv-cache run pytest tests\test_instrument_qc_workbook.py tests\test_instrument_qc_pipeline.py tests\test_run_instrument_qc.py -q
+```
+
+Real-data smoke:
+
+```powershell
+uv --cache-dir .uv-cache run python scripts\run_instrument_qc.py `
+  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
+  --output-dir output\instrument_qc\20260105_sdo_lek_phase2_workbook `
+  --mode sdolek `
+  --injection-order-source output\instrument_qc\20260105_sequence_manifest_cp1\instrument_qc_injection_order.csv
+```
+
+Observed artifacts:
+
+- `instrument_qc_sdolek_trend.tsv`
+- `instrument_qc_sdolek_trend.json`
+- `instrument_qc_sdolek_diagnostics.tsv`
+- `instrument_qc_trend_sdolek.xlsx`
+
+Workbook smoke result:
+
+- sheets: `Overview`, `SDOLEK Trend`, `Diagnostics`;
+- `SDOLEK Trend`: 22 data rows plus header;
+- `Overview` total rows: 22;
+- real-data outputs remain uncommitted.
+
 ## Self-Review
 
 Spec coverage:
@@ -1489,7 +1536,8 @@ Spec coverage:
 - Optional injection order: Checkpoint 2.
 - Opt-in CLI: Checkpoint 3.
 - Regression and real-data smoke: Checkpoint 4.
-- No HCD/MixSTDs/Blank/workbook/main-pipeline changes: enforced in scope and review gates.
+- Phase 2 workbook human report: implemented as `instrument_qc_trend_sdolek.xlsx`.
+- No HCD/MixSTDs/Blank/main-pipeline changes: enforced in scope and review gates.
 
 Placeholder scan:
 

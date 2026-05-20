@@ -18,6 +18,7 @@ from xic_extractor.instrument_qc.models import (
     SDOLEKTrendRow,
 )
 from xic_extractor.instrument_qc.targets import SDOLEK_TARGETS, InstrumentQCTarget
+from xic_extractor.instrument_qc.workbook import write_sdolek_workbook
 from xic_extractor.instrument_qc.writers import (
     write_diagnostics_tsv,
     write_sdolek_json,
@@ -120,20 +121,29 @@ def run_sdolek_pipeline(
     trend_tsv = output_dir / "instrument_qc_sdolek_trend.tsv"
     trend_json = output_dir / "instrument_qc_sdolek_trend.json"
     diagnostics_tsv = output_dir / "instrument_qc_sdolek_diagnostics.tsv"
+    workbook = output_dir / "instrument_qc_trend_sdolek.xlsx"
     write_trend_tsv(trend_tsv, rows)
+    metadata_source_status = _metadata_source_status(injection_order_source)
     write_sdolek_json(
         trend_json,
         rows,
         diagnostics,
-        metadata_source_status=_metadata_source_status(injection_order_source),
+        metadata_source_status=metadata_source_status,
     )
     write_diagnostics_tsv(diagnostics_tsv, diagnostics)
+    write_sdolek_workbook(
+        workbook,
+        rows,
+        diagnostics,
+        metadata_source_status=metadata_source_status,
+    )
     return InstrumentQCRunOutput(
         trend_rows=tuple(rows),
         diagnostics=tuple(diagnostics),
         trend_tsv=trend_tsv,
         trend_json=trend_json,
         diagnostics_tsv=diagnostics_tsv,
+        workbook=workbook,
     )
 
 

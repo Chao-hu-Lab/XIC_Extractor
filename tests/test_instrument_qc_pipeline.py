@@ -73,6 +73,7 @@ def test_sdolek_pipeline_extracts_two_compounds_and_writes_outputs(
     assert output.trend_tsv.exists()
     assert output.trend_json.exists()
     assert output.diagnostics_tsv.exists()
+    assert output.workbook.exists()
     payload = json.loads(output.trend_json.read_text(encoding="utf-8"))
     assert payload["metadata_source_status"]["injection_order_status"] == "provided"
 

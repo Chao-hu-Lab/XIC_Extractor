@@ -8,6 +8,7 @@ def _fake_output(output_dir: Path) -> InstrumentQCRunOutput:
     trend_tsv = output_dir / "instrument_qc_sdolek_trend.tsv"
     trend_json = output_dir / "instrument_qc_sdolek_trend.json"
     diagnostics_tsv = output_dir / "instrument_qc_sdolek_diagnostics.tsv"
+    workbook = output_dir / "instrument_qc_trend_sdolek.xlsx"
     output_dir.mkdir(parents=True, exist_ok=True)
     trend_tsv.write_text("sample_name\n", encoding="utf-8")
     trend_json.write_text("{}\n", encoding="utf-8")
@@ -15,12 +16,14 @@ def _fake_output(output_dir: Path) -> InstrumentQCRunOutput:
         "sample_name\traw_path\tissue\tdetail\n",
         encoding="utf-8",
     )
+    workbook.write_text("xlsx\n", encoding="utf-8")
     return InstrumentQCRunOutput(
         trend_rows=(),
         diagnostics=(),
         trend_tsv=trend_tsv,
         trend_json=trend_json,
         diagnostics_tsv=diagnostics_tsv,
+        workbook=workbook,
     )
 
 
@@ -53,7 +56,9 @@ def test_run_instrument_qc_cli_calls_sdolek_pipeline(
     assert rc == 0
     assert calls["raw_dir"] == tmp_path / "raw"
     assert calls["output_dir"] == tmp_path / "out"
-    assert "instrument_qc_sdolek_trend.tsv" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "instrument_qc_sdolek_trend.tsv" in output
+    assert "instrument_qc_trend_sdolek.xlsx" in output
 
 
 def test_run_instrument_qc_cli_rejects_unknown_mode(capsys) -> None:
@@ -70,3 +75,10 @@ def test_run_instrument_qc_cli_rejects_unknown_mode(capsys) -> None:
 
     assert rc == 2
     assert "unsupported mode" in capsys.readouterr().err
+
+
+def test_run_instrument_qc_help_lists_phase2_outputs() -> None:
+    help_text = run_instrument_qc.build_parser().format_help()
+
+    assert "instrument_qc_trend_sdolek.xlsx" in help_text
+    assert "SDOLEK subfolder" in help_text
