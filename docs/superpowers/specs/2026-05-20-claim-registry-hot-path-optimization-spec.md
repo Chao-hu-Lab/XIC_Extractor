@@ -3,7 +3,7 @@
 **Date:** 2026-05-20
 **Branch:** `codex/claim-registry-hot-path`
 **Worktree:** `.worktrees/claim-registry-hot-path`
-**Status:** Draft for implementation
+**Status:** Implemented and validated; retained as historical plan
 
 ## Summary
 
