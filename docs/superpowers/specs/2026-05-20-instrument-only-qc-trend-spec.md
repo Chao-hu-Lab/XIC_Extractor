@@ -459,3 +459,31 @@ Real-data smoke is explicit and not part of default CI.
 - Instrument QC can be run independently and produces SDOLEK TSV/JSON evidence.
 - Missing injection order or method-doc metadata is visible in diagnostics.
 - No workbook/lifecycle/user-home side effects are introduced in Phase 1.
+
+## Phase 1 Real-Data Smoke Observations (2026-05-20)
+
+Neutral observations from the first opt-in SDOLEK smoke against
+`C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\SDOLEK` (11 RAW files). These
+record what the data showed; they do not change Phase 1 reference values or
+trend-flag thresholds.
+
+- The pipeline produced 22 trend rows (SDO and LEK for each of the 11 RAW
+  files), all with `status = detected` and `identity_evidence = MS1_ONLY`. No
+  biological RAW stems entered the SDOLEK report.
+- No injection-order file was supplied, so all 11 RAW files reported
+  `INJECTION_ORDER_MISSING`. That is expected in Phase 1 and does not fail the
+  run.
+- `WIDTH_OUTLIER` fired on 20 of 22 rows. Measured base width
+  (`peak_end_rt - peak_start_rt`) was about 0.10-0.18 min, while the NoSplit
+  prior base width is 0.83-0.85 min. The comparability of the NoSplit prior
+  base width to the Phase 1 base-width definition is unresolved and is left as
+  a method-level review item, not a code change.
+- `RT_OUTLIER` fired on 9 of 11 LEK rows. LEK apex RT was systematically about
+  0.4-0.96 min earlier than the 6.40 min prior, while SDO apex RT stayed close
+  to its 6.26 min prior. Because Phase 1 is MS1-only, it cannot by itself
+  confirm whether the selected LEK MS1 peak is the intended compound. This is
+  an expected limitation of MS1-only evidence, not a Phase 1 defect; MS2
+  fragment evidence (deferred Phase 3b) is the appropriate follow-up for LEK
+  identity.
+- Per the Shared Constants section, trend flags are review flags, not pass/fail
+  identity gates, so a `warning`-heavy smoke is still a successful Phase 1 run.
