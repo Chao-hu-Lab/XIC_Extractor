@@ -102,6 +102,38 @@ def test_run_instrument_qc_cli_passes_mixstds_options(
     assert calls["mixstds_target_registry"] == registry
 
 
+def test_run_instrument_qc_cli_passes_hcd_options(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: dict[str, object] = {}
+
+    def fake_run_sdolek_pipeline(**kwargs):
+        calls.update(kwargs)
+        return _fake_output(kwargs["output_dir"])
+
+    monkeypatch.setattr(
+        run_instrument_qc, "run_sdolek_pipeline", fake_run_sdolek_pipeline
+    )
+
+    registry = tmp_path / "hcd.csv"
+    rc = run_instrument_qc.main(
+        [
+            "--raw-dir",
+            str(tmp_path / "raw"),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--emit-hcd-audit",
+            "--hcd-product-registry",
+            str(registry),
+        ]
+    )
+
+    assert rc == 0
+    assert calls["emit_hcd_audit"] is True
+    assert calls["hcd_product_registry"] == registry
+
+
 def test_run_instrument_qc_cli_generates_manifest_from_method_doc(
     tmp_path: Path,
     monkeypatch,
@@ -160,6 +192,9 @@ def test_run_instrument_qc_cli_generates_manifest_from_method_doc(
     assert rc == 0
     assert calls["injection_order_source"] == (
         tmp_path / "out" / "instrument_qc_injection_order.csv"
+    )
+    assert calls["sequence_manifest_source"] == (
+        tmp_path / "out" / "instrument_qc_sequence_manifest.tsv"
     )
     assert (tmp_path / "out" / "instrument_qc_sequence_manifest.tsv").exists()
     assert (tmp_path / "out" / "instrument_qc_sequence_manifest.json").exists()
@@ -286,3 +321,4 @@ def test_run_instrument_qc_help_lists_phase2_outputs() -> None:
     assert "--method-doc" in help_text
     assert "--injection-order-source" in help_text
     assert "--append-lifecycle" in help_text
+    assert "--emit-hcd-audit" in help_text

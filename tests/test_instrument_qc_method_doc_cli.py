@@ -31,6 +31,8 @@ def test_method_doc_cli_helper_writes_manifest_outputs(
                 match_status=ManifestMatchStatus.MATCHED,
                 match_confidence=ManifestMatchConfidence.HIGH,
                 match_reason="matched",
+                instrument_method="20260105 STDs_ddMS2_CIDwHCD_EASY-IC",
+                activation_method="CIDwHCD",
             ),
         )
 
@@ -51,6 +53,10 @@ def test_method_doc_cli_helper_writes_manifest_outputs(
     assert (output_dir / "instrument_qc_injection_order.csv").exists()
     assert (output_dir / "instrument_qc_sequence_manifest.json").exists()
     assert (output_dir / "instrument_qc_sequence_manifest.md").exists()
+    header = (
+        output_dir / "instrument_qc_sequence_manifest.tsv"
+    ).read_text(encoding="utf-8").splitlines()[0]
+    assert header.endswith("instrument_method\tactivation_method")
 
 
 def test_method_doc_cli_helper_rejects_sampleinfo(tmp_path: Path) -> None:

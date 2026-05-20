@@ -11,6 +11,7 @@ class InstrumentQCTarget:
     rt_min: float = 0.0
     rt_max: float = 12.0
     ppm_tol: float = 10.0
+    neutral_loss_da: float | None = None
 
 
 SDOLEK_TARGETS: tuple[InstrumentQCTarget, ...] = (

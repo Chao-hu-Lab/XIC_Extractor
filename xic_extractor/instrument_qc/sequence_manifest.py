@@ -8,6 +8,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 from xic_extractor.instrument_qc.classification import InstrumentQCClass
+from xic_extractor.instrument_qc.models import ActivationMethod
 
 
 class ManifestMatchStatus(StrEnum):
@@ -32,6 +33,7 @@ class SequenceDocEntry:
     instrument_method: str
     sample_description: str
     injection_volume: str
+    activation_method: ActivationMethod = "unknown"
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,8 @@ class SequenceManifestRow:
     match_status: ManifestMatchStatus
     match_confidence: ManifestMatchConfidence
     match_reason: str
+    instrument_method: str = ""
+    activation_method: ActivationMethod = "unknown"
 
 
 def build_sequence_manifest(
@@ -74,6 +78,7 @@ def parse_sequence_tables(
     *,
     source_doc: str,
 ) -> tuple[SequenceDocEntry, ...]:
+    method_activation_map = _method_activation_map(tables)
     entries: list[SequenceDocEntry] = []
     for table_index, table in enumerate(tables, start=1):
         if not table:
@@ -91,13 +96,18 @@ def parse_sequence_tables(
             file_name = _clean_cell(cells[1])
             if not file_name:
                 continue
+            instrument_method = _clean_cell(cells[2])
             entries.append(
                 SequenceDocEntry(
                     source_doc=source_doc,
                     source_section=f"{source_section}:row:{row_index}",
                     doc_display_name=file_name,
                     injection_order=int(row_id),
-                    instrument_method=_clean_cell(cells[2]),
+                    instrument_method=instrument_method,
+                    activation_method=method_activation_map.get(
+                        _method_key(instrument_method),
+                        activation_method_from_instrument_method(instrument_method),
+                    ),
                     sample_description=_clean_cell(cells[3]),
                     injection_volume=_clean_cell(cells[4]),
                 )
@@ -113,6 +123,7 @@ def build_sequence_manifest_from_entries(
     raw_index = _raw_stem_index(raw_stems)
     repeated_index = _repeated_raw_stem_index(raw_stems)
     duplicate_doc_counts = _duplicate_doc_counts(entries)
+    class_method_defaults = _class_method_defaults(entries)
     duplicate_doc_seen: dict[str, int] = {}
     rows: list[SequenceManifestRow] = []
     matched_raw_stems: set[str] = set()
@@ -185,6 +196,11 @@ def build_sequence_manifest_from_entries(
         instrument_qc_class = _classify_name(raw_stem, "", "")
         if instrument_qc_class == InstrumentQCClass.UNKNOWN:
             continue
+        default_method = class_method_defaults.get(instrument_qc_class)
+        instrument_method = default_method[0] if default_method is not None else ""
+        activation_method = (
+            default_method[1] if default_method is not None else "unknown"
+        )
         rows.append(
             SequenceManifestRow(
                 source_doc="",
@@ -196,6 +212,8 @@ def build_sequence_manifest_from_entries(
                 match_status=ManifestMatchStatus.UNMATCHED,
                 match_confidence=ManifestMatchConfidence.LOW,
                 match_reason="RAW stem has no matching method-doc sequence entry.",
+                instrument_method=instrument_method,
+                activation_method=activation_method,
             )
         )
     return tuple(rows)
@@ -211,6 +229,35 @@ def classify_sequence_entry(entry: SequenceDocEntry) -> InstrumentQCClass:
         entry.instrument_method,
         entry.sample_description,
     )
+
+
+def activation_method_from_instrument_method(method: str) -> ActivationMethod:
+    """Parse acquisition activation from method-doc text only."""
+    return _activation_method_from_text(method)
+
+
+def activation_method_from_method_detail(
+    method: str,
+    detail_text: str,
+) -> ActivationMethod:
+    """Prefer method detail tables when the short method name lacks activation."""
+    detail_activation = _activation_method_from_text(detail_text)
+    if detail_activation != "unknown":
+        return detail_activation
+    return activation_method_from_instrument_method(method)
+
+
+def _activation_method_from_text(text: str) -> ActivationMethod:
+    normalized = re.sub(r"[^a-z0-9]+", "", text.casefold())
+    if "cidwhcd" in normalized or ("cid" in normalized and "whcd" in normalized):
+        return "CIDwHCD"
+    if "whcd" in normalized:
+        return "wHCD"
+    if "hcd" in normalized:
+        return "HCD"
+    if "cid" in normalized:
+        return "CID"
+    return "unknown"
 
 
 def normalize_doc_display_name(name: str) -> str:
@@ -260,6 +307,8 @@ def _manifest_row(
         doc_display_name=entry.doc_display_name,
         raw_stem=raw_stem,
         injection_order=entry.injection_order,
+        instrument_method=entry.instrument_method,
+        activation_method=entry.activation_method,
         instrument_qc_class=instrument_qc_class,
         match_status=status,
         match_confidence=confidence,
@@ -300,6 +349,35 @@ def _normalize_header(value: str) -> str:
     return _clean_cell(value).casefold()
 
 
+def _method_activation_map(
+    tables: list[list[list[str]]],
+) -> dict[str, ActivationMethod]:
+    values: dict[str, ActivationMethod] = {}
+    for table in tables:
+        if not table or not table[0] or len(table[0]) < 2:
+            continue
+        method_slot = _clean_cell(table[0][0]).casefold()
+        if not method_slot.startswith("method-"):
+            continue
+        method_name = _clean_cell(table[0][1])
+        if not method_name:
+            continue
+        detail_text = " ".join(
+            _clean_cell(cell)
+            for row in table
+            for cell in row
+            if _clean_cell(cell)
+        )
+        activation = activation_method_from_method_detail(method_name, detail_text)
+        if activation != "unknown":
+            values[_method_key(method_name)] = activation
+    return values
+
+
+def _method_key(value: str) -> str:
+    return _match_key(value)
+
+
 def _raw_stem_index(raw_stems: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
     values: dict[str, list[str]] = {}
     for raw_stem in raw_stems:
@@ -323,6 +401,26 @@ def _duplicate_doc_counts(entries: tuple[SequenceDocEntry, ...]) -> dict[str, in
         key = _match_key(normalize_doc_display_name(entry.doc_display_name))
         counts[key] = counts.get(key, 0) + 1
     return counts
+
+
+def _class_method_defaults(
+    entries: tuple[SequenceDocEntry, ...],
+) -> dict[InstrumentQCClass, tuple[str, ActivationMethod]]:
+    values: dict[InstrumentQCClass, set[tuple[str, ActivationMethod]]] = {}
+    for entry in entries:
+        instrument_qc_class = classify_sequence_entry(entry)
+        if instrument_qc_class == InstrumentQCClass.UNKNOWN:
+            continue
+        if not entry.instrument_method:
+            continue
+        values.setdefault(instrument_qc_class, set()).add(
+            (entry.instrument_method, entry.activation_method)
+        )
+    return {
+        instrument_qc_class: next(iter(methods))
+        for instrument_qc_class, methods in values.items()
+        if len(methods) == 1
+    }
 
 
 def _match_key(value: str) -> str:

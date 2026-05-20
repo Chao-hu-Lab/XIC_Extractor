@@ -31,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  instrument_qc_sdolek_diagnostics.tsv\n"
             "  instrument_qc_trend_sdolek.xlsx\n"
             "  instrument_qc_mixstds_* when --emit-mixstds is supplied\n\n"
+            "  instrument_qc_hcd_audit.* when --emit-hcd-audit is supplied\n\n"
             "Input note:\n"
             "  --raw-dir must contain the expected SDOLEK subfolder."
         ),
@@ -82,6 +83,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--mixstds-target-registry",
         type=Path,
         help="Reviewed instrument-QC Mix STDs target registry CSV.",
+    )
+    parser.add_argument(
+        "--emit-hcd-audit",
+        action="store_true",
+        help="Emit audit-only MS2/HCD product-ion review outputs.",
+    )
+    parser.add_argument(
+        "--hcd-product-registry",
+        type=Path,
+        help="Optional HCD product-ion registry CSV overriding built-ins.",
     )
     parser.add_argument(
         "--append-lifecycle",
@@ -147,6 +158,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             dll_dir=args.dll_dir,
             emit_mixstds=args.emit_mixstds,
             mixstds_target_registry=args.mixstds_target_registry,
+            emit_hcd_audit=args.emit_hcd_audit,
+            hcd_product_registry=args.hcd_product_registry,
+            sequence_manifest_source=manifest_paths[0] if manifest_paths else None,
         )
     except RawReaderError as exc:
         print(f"RAW reader error: {exc}", file=sys.stderr)
@@ -179,6 +193,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         output.mixstds_trend_tsv,
         output.mixstds_trend_json,
         output.mixstds_diagnostics_tsv,
+        output.hcd_audit_tsv,
+        output.hcd_audit_json,
     ):
         if optional_path is not None:
             print(f"Wrote {optional_path}")

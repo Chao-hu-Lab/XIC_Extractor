@@ -20,6 +20,8 @@ MANIFEST_TSV_COLUMNS = [
     "match_status",
     "match_confidence",
     "match_reason",
+    "instrument_method",
+    "activation_method",
 ]
 
 INJECTION_ORDER_COLUMNS = ["Sample_Name", "Injection_Order"]
@@ -132,6 +134,8 @@ def _manifest_row_to_dict(row: SequenceManifestRow) -> dict[str, object]:
         "match_status": row.match_status.value,
         "match_confidence": row.match_confidence.value,
         "match_reason": row.match_reason,
+        "instrument_method": row.instrument_method,
+        "activation_method": row.activation_method,
     }
 
 

@@ -4,6 +4,15 @@ from typing import Literal
 
 TrendConfidence = Literal["clean", "warning", "low"]
 InstrumentQCStatus = Literal["detected", "not_detected", "error"]
+ActivationMethod = Literal["CID", "wHCD", "HCD", "CIDwHCD", "unknown"]
+HCDAuditStatus = Literal[
+    "hcd_supported",
+    "hcd_partial",
+    "no_ms2_trigger",
+    "no_product_match",
+    "hcd_group_unmapped",
+    "ms2_parse_error",
+]
 
 
 @dataclass(frozen=True)
@@ -38,6 +47,42 @@ class SDOLEKTrendRow:
 
 
 @dataclass(frozen=True)
+class HCDProductIon:
+    compound_or_group: str
+    precursor_mz: float | None
+    activation: ActivationMethod
+    product_label: str
+    product_mz: float
+    product_role: str
+
+
+@dataclass(frozen=True)
+class HCDAuditRow:
+    sample_name: str
+    raw_path: Path
+    injection_order: int | None
+    compound: str
+    precursor_mz: float
+    ms1_apex_rt_min: float | None
+    ms1_status: InstrumentQCStatus
+    instrument_method: str
+    activation_method: ActivationMethod
+    hcd_mapping_source: str
+    hcd_product_group: str
+    hcd_status: HCDAuditStatus
+    best_ms2_scan_rt_min: float | None
+    apex_ms2_delta_min: float | None
+    trigger_scan_count: int
+    expected_product_count: int
+    matched_product_count: int
+    best_product_ppm: float | None
+    best_product_base_ratio: float | None
+    matched_products: tuple[str, ...]
+    review_flags: tuple[str, ...]
+    review_reason: str
+
+
+@dataclass(frozen=True)
 class InstrumentQCRunOutput:
     trend_rows: tuple[SDOLEKTrendRow, ...]
     diagnostics: tuple[InstrumentQCDiagnostic, ...]
@@ -49,3 +94,6 @@ class InstrumentQCRunOutput:
     mixstds_trend_tsv: Path | None = None
     mixstds_trend_json: Path | None = None
     mixstds_diagnostics_tsv: Path | None = None
+    hcd_audit_rows: tuple[HCDAuditRow, ...] = ()
+    hcd_audit_tsv: Path | None = None
+    hcd_audit_json: Path | None = None

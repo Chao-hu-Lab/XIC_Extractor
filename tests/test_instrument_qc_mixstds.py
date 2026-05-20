@@ -78,6 +78,21 @@ def test_mixstds_target_registry_loads_reviewed_csv(tmp_path: Path) -> None:
     assert result.targets[0].ppm_tol == 8.0
 
 
+def test_mixstds_target_registry_loads_optional_hcd_groups(tmp_path: Path) -> None:
+    registry = tmp_path / "mixstds.csv"
+    registry.write_text(
+        "compound,precursor_mz,rt_min,rt_max,ppm_tol,hcd_base_group,"
+        "hcd_product_group\n"
+        "STD-A,123.4567,1.0,2.0,8,G,G_custom\n",
+        encoding="utf-8",
+    )
+
+    result = load_mixstds_target_registry(registry)
+
+    assert result.hcd_base_groups == {"STD-A": "G"}
+    assert result.hcd_product_groups == {"STD-A": "G_custom"}
+
+
 def test_mixstds_target_registry_loads_existing_targets_csv_schema(
     tmp_path: Path,
 ) -> None:
@@ -97,6 +112,7 @@ def test_mixstds_target_registry_loads_existing_targets_csv_schema(
     assert result.targets[0].rt_min == 8.05
     assert result.targets[0].rt_max == 10.05
     assert result.targets[0].ppm_tol == 20.0
+    assert result.targets[0].neutral_loss_da == 116.0474
 
 
 def test_mixstds_target_registry_accepts_utf8_sig_targets_csv(

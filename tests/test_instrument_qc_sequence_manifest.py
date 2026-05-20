@@ -62,6 +62,73 @@ def test_sequence_table_produces_manifest_rows_with_classes_and_matches() -> Non
     assert rows[0].source_section == "table:1:row:2"
 
 
+def test_method_detail_table_sets_sdolek_whcd_activation() -> None:
+    entries = parse_sequence_tables(
+        [
+            [
+                ["ID", "File Name", "Instrument Method", "Sample", "Inj"],
+                [
+                    "4",
+                    "SDOLEK-pretest",
+                    "20260105 SDOLEK",
+                    "50 ppb SDO/LEK; untargeted",
+                    "2",
+                ],
+            ],
+            [
+                ["Method-3", "20260105 SDOLEK", "1-6(source)"],
+                [
+                    "MS1 m/z 200 - 700",
+                    "ddMS2 OT (wHCD) R=15,000",
+                    "wHCD: 40,50,60 (stepped)",
+                ],
+            ],
+        ],
+        source_doc="method.docx",
+    )
+
+    rows = build_sequence_manifest_from_entries(
+        entries,
+        raw_stems=("SDOLEK-pretest",),
+    )
+
+    assert rows[0].instrument_method == "20260105 SDOLEK"
+    assert rows[0].activation_method == "wHCD"
+
+
+def test_method_detail_table_sets_mixed_std_activation() -> None:
+    entries = parse_sequence_tables(
+        [
+            [
+                ["ID", "File Name", "Instrument Method", "Sample", "Inj"],
+                [
+                    "5",
+                    "250ppb_Mix_STDs",
+                    "20260105 STD_ddMS2_CIDwHCD_EASY-IC",
+                    "Mix STDs",
+                    "10",
+                ],
+            ],
+            [
+                ["Method-4", "20260105 STD_ddMS2_CIDwHCD_EASY-IC"],
+                [
+                    "分析方法同時包含CID與wHCD碎裂模式",
+                    "ddMS2 OT (CID)",
+                    "ddMS2 OT (wHCD)",
+                ],
+            ],
+        ],
+        source_doc="method.docx",
+    )
+
+    rows = build_sequence_manifest_from_entries(
+        entries,
+        raw_stems=("250ppb_Mix_STDs",),
+    )
+
+    assert rows[0].activation_method == "CIDwHCD"
+
+
 def test_sequence_manifest_keeps_unmatched_docs_rows() -> None:
     entry = SequenceDocEntry(
         source_doc="method.docx",
@@ -121,6 +188,32 @@ def test_sequence_manifest_keeps_raw_only_instrument_qc_rows() -> None:
     assert rows[0].doc_display_name == ""
     assert rows[0].match_status == ManifestMatchStatus.UNMATCHED
     assert rows[0].instrument_qc_class == InstrumentQCClass.SDOLEK
+
+
+def test_raw_only_sdolek_rows_use_unique_doc_method_default() -> None:
+    entries = parse_sequence_tables(
+        [
+            [
+                ["ID", "File Name", "Instrument Method", "Sample", "Inj"],
+                ["4", "SDOLEK-pretest", "20260105 SDOLEK", "50 ppb", "2"],
+            ],
+            [
+                ["Method-3", "20260105 SDOLEK"],
+                ["ddMS2 OT (wHCD)", "wHCD: 40,50,60 (stepped)"],
+            ],
+        ],
+        source_doc="method.docx",
+    )
+
+    rows = build_sequence_manifest_from_entries(
+        entries,
+        raw_stems=("SDOLEK-pretest", "SDOLEK-pretest-1"),
+    )
+
+    raw_only = [row for row in rows if row.raw_stem == "SDOLEK-pretest-1"][0]
+    assert raw_only.match_status == ManifestMatchStatus.UNMATCHED
+    assert raw_only.instrument_method == "20260105 SDOLEK"
+    assert raw_only.activation_method == "wHCD"
 
 
 def test_istd_sample_description_does_not_become_mix_stds() -> None:

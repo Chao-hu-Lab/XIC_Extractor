@@ -1,7 +1,8 @@
+import csv
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 import numpy as np
 
@@ -11,11 +12,20 @@ from xic_extractor.instrument_qc.classification import (
     InstrumentQCClass,
     classify_instrument_qc_raw,
 )
+from xic_extractor.instrument_qc.hcd_evidence import MS2Source, build_hcd_audit_row
+from xic_extractor.instrument_qc.hcd_registry import (
+    load_hcd_product_registry,
+    resolve_hcd_product_group,
+)
 from xic_extractor.instrument_qc.mixstds import (
+    MixSTDSTargetRegistry,
     discover_mixstds_raws,
     load_mixstds_target_registry,
 )
 from xic_extractor.instrument_qc.models import (
+    ActivationMethod,
+    HCDAuditRow,
+    HCDProductIon,
     InstrumentQCDiagnostic,
     InstrumentQCRunOutput,
     InstrumentQCStatus,
@@ -25,6 +35,8 @@ from xic_extractor.instrument_qc.targets import SDOLEK_TARGETS, InstrumentQCTarg
 from xic_extractor.instrument_qc.workbook import write_sdolek_workbook
 from xic_extractor.instrument_qc.writers import (
     write_diagnostics_tsv,
+    write_hcd_audit_json,
+    write_hcd_audit_tsv,
     write_sdolek_json,
     write_trend_tsv,
 )
@@ -58,6 +70,9 @@ def run_sdolek_pipeline(
     raw_opener: RawOpener | None = None,
     emit_mixstds: bool = False,
     mixstds_target_registry: Path | None = None,
+    emit_hcd_audit: bool = False,
+    hcd_product_registry: Path | None = None,
+    sequence_manifest_source: Path | None = None,
 ) -> InstrumentQCRunOutput:
     diagnostics: list[InstrumentQCDiagnostic] = []
     raw_paths = _discover_sdolek_raws(raw_dir, diagnostics)
@@ -69,6 +84,15 @@ def run_sdolek_pipeline(
     effective_dll_dir = dll_dir or DEFAULT_DLL_DIR
     opener = raw_opener or (lambda path: open_raw(path, effective_dll_dir))
     rows: list[SDOLEKTrendRow] = []
+    hcd_rows: list[HCDAuditRow] = []
+    hcd_products = (
+        load_hcd_product_registry(hcd_product_registry) if emit_hcd_audit else ()
+    )
+    manifest_context = (
+        _read_sequence_manifest_context(sequence_manifest_source)
+        if emit_hcd_audit
+        else {}
+    )
 
     for raw_path in raw_paths:
         sample_name = raw_path.stem
@@ -76,16 +100,26 @@ def run_sdolek_pipeline(
             with opener(raw_path) as raw:
                 for target in SDOLEK_TARGETS:
                     try:
-                        rows.append(
-                            _extract_target_row(
-                                raw=raw,
-                                raw_path=raw_path,
-                                sample_name=sample_name,
-                                injection_order=injection_order.get(sample_name),
-                                target=target,
-                                dll_dir=effective_dll_dir,
-                            )
+                        row = _extract_target_row(
+                            raw=raw,
+                            raw_path=raw_path,
+                            sample_name=sample_name,
+                            injection_order=injection_order.get(sample_name),
+                            target=target,
+                            dll_dir=effective_dll_dir,
                         )
+                        rows.append(row)
+                        if emit_hcd_audit:
+                            _append_hcd_audit_row(
+                                hcd_rows,
+                                trend_row=row,
+                                raw=raw,
+                                products=hcd_products,
+                                manifest_context=manifest_context,
+                                hcd_product_group=target.compound,
+                                hcd_mapping_source="sdolek_builtin",
+                                cid_neutral_loss_da=target.neutral_loss_da,
+                            )
                     except Exception as exc:
                         diagnostics.append(
                             InstrumentQCDiagnostic(
@@ -126,14 +160,20 @@ def run_sdolek_pipeline(
 
     mixstds_rows: tuple[SDOLEKTrendRow, ...] = ()
     mixstds_diagnostics: list[InstrumentQCDiagnostic] = []
+    mixstds_registry: MixSTDSTargetRegistry | None = None
     if emit_mixstds:
+        mixstds_registry = load_mixstds_target_registry(mixstds_target_registry)
         mixstds_rows = _run_mixstds_extraction(
             raw_dir=raw_dir,
             injection_order=injection_order,
             opener=opener,
             dll_dir=effective_dll_dir,
-            target_registry=mixstds_target_registry,
+            registry=mixstds_registry,
             diagnostics=mixstds_diagnostics,
+            emit_hcd_audit=emit_hcd_audit,
+            hcd_rows=hcd_rows,
+            hcd_products=hcd_products,
+            manifest_context=manifest_context,
         )
 
     trend_tsv = output_dir / "instrument_qc_sdolek_trend.tsv"
@@ -150,6 +190,12 @@ def run_sdolek_pipeline(
         output_dir / "instrument_qc_mixstds_diagnostics.tsv"
         if emit_mixstds
         else None
+    )
+    hcd_audit_tsv = (
+        output_dir / "instrument_qc_hcd_audit.tsv" if emit_hcd_audit else None
+    )
+    hcd_audit_json = (
+        output_dir / "instrument_qc_hcd_audit.json" if emit_hcd_audit else None
     )
     write_trend_tsv(trend_tsv, rows)
     metadata_source_status = _metadata_source_status(injection_order_source)
@@ -176,12 +222,17 @@ def run_sdolek_pipeline(
         )
     if mixstds_diagnostics_tsv is not None:
         write_diagnostics_tsv(mixstds_diagnostics_tsv, mixstds_diagnostics)
+    if hcd_audit_tsv is not None:
+        write_hcd_audit_tsv(hcd_audit_tsv, hcd_rows)
+    if hcd_audit_json is not None:
+        write_hcd_audit_json(hcd_audit_json, hcd_rows)
     write_sdolek_workbook(
         workbook,
         rows,
         diagnostics,
         metadata_source_status=metadata_source_status,
         mixstds_rows=mixstds_rows if emit_mixstds else None,
+        hcd_rows=hcd_rows if emit_hcd_audit else None,
     )
     return InstrumentQCRunOutput(
         trend_rows=tuple(rows),
@@ -194,6 +245,9 @@ def run_sdolek_pipeline(
         mixstds_trend_tsv=mixstds_trend_tsv,
         mixstds_trend_json=mixstds_trend_json,
         mixstds_diagnostics_tsv=mixstds_diagnostics_tsv,
+        hcd_audit_rows=tuple(hcd_rows),
+        hcd_audit_tsv=hcd_audit_tsv,
+        hcd_audit_json=hcd_audit_json,
     )
 
 
@@ -203,15 +257,18 @@ def _run_mixstds_extraction(
     injection_order: dict[str, int],
     opener: RawOpener,
     dll_dir: Path,
-    target_registry: Path | None,
+    registry: MixSTDSTargetRegistry,
     diagnostics: list[InstrumentQCDiagnostic],
+    emit_hcd_audit: bool,
+    hcd_rows: list[HCDAuditRow],
+    hcd_products: tuple[HCDProductIon, ...],
+    manifest_context: dict[str, tuple[str, ActivationMethod]],
 ) -> tuple[SDOLEKTrendRow, ...]:
-    registry = load_mixstds_target_registry(target_registry)
     if registry.status != "loaded":
         diagnostics.append(
             InstrumentQCDiagnostic(
                 sample_name="",
-                raw_path=target_registry or raw_dir,
+                raw_path=registry.source or raw_dir,
                 issue=f"MIXSTDS_TARGET_REGISTRY_{registry.status.upper()}",
                 detail=registry.reason,
             )
@@ -237,16 +294,35 @@ def _run_mixstds_extraction(
             with opener(raw_path) as raw:
                 for target in registry.targets:
                     try:
-                        rows.append(
-                            _extract_target_row(
-                                raw=raw,
-                                raw_path=raw_path,
-                                sample_name=sample_name,
-                                injection_order=injection_order.get(sample_name),
-                                target=target,
-                                dll_dir=dll_dir,
-                            )
+                        row = _extract_target_row(
+                            raw=raw,
+                            raw_path=raw_path,
+                            sample_name=sample_name,
+                            injection_order=injection_order.get(sample_name),
+                            target=target,
+                            dll_dir=dll_dir,
                         )
+                        rows.append(row)
+                        if emit_hcd_audit:
+                            group, source = resolve_hcd_product_group(
+                                target.compound,
+                                explicit_base_group=registry.hcd_base_groups.get(
+                                    target.compound
+                                ),
+                                explicit_product_group=registry.hcd_product_groups.get(
+                                    target.compound
+                                ),
+                            )
+                            _append_hcd_audit_row(
+                                hcd_rows,
+                                trend_row=row,
+                                raw=raw,
+                                products=hcd_products,
+                                manifest_context=manifest_context,
+                                hcd_product_group=group,
+                                hcd_mapping_source=source,
+                                cid_neutral_loss_da=target.neutral_loss_da,
+                            )
                     except Exception as exc:
                         diagnostics.append(
                             InstrumentQCDiagnostic(
@@ -285,6 +361,59 @@ def _run_mixstds_extraction(
                 for target in registry.targets
             )
     return tuple(rows)
+
+
+def _append_hcd_audit_row(
+    hcd_rows: list[HCDAuditRow],
+    *,
+    trend_row: SDOLEKTrendRow,
+    raw: XICSource,
+    products: tuple[HCDProductIon, ...],
+    manifest_context: dict[str, tuple[str, ActivationMethod]],
+    hcd_product_group: str | None,
+    hcd_mapping_source: str,
+    cid_neutral_loss_da: float | None,
+) -> None:
+    if not hasattr(raw, "iter_ms2_scans"):
+        return
+    instrument_method, activation_method = manifest_context.get(
+        trend_row.sample_name,
+        ("", "unknown"),
+    )
+    row = build_hcd_audit_row(
+        trend_row=trend_row,
+        raw=cast(MS2Source, raw),
+        products=products,
+        instrument_method=instrument_method,
+        activation_method=activation_method,
+        hcd_product_group=hcd_product_group,
+        hcd_mapping_source=hcd_mapping_source,
+        cid_neutral_loss_da=cid_neutral_loss_da,
+    )
+    if row is not None:
+        hcd_rows.append(row)
+
+
+def _read_sequence_manifest_context(
+    path: Path | None,
+) -> dict[str, tuple[str, ActivationMethod]]:
+    if path is None or not path.exists():
+        return {}
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        context: dict[str, tuple[str, ActivationMethod]] = {}
+        for row in reader:
+            raw_stem = row.get("raw_stem", "").strip()
+            if not raw_stem:
+                continue
+            activation = row.get("activation_method", "unknown").strip()
+            if activation not in {"CID", "wHCD", "HCD", "CIDwHCD", "unknown"}:
+                activation = "unknown"
+            context[raw_stem] = (
+                row.get("instrument_method", "").strip(),
+                cast(ActivationMethod, activation),
+            )
+        return context
 
 
 def _discover_sdolek_raws(

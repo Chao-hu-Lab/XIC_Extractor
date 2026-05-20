@@ -28,6 +28,8 @@ class MixSTDSTargetRegistry:
     status: str
     reason: str
     targets: tuple[InstrumentQCTarget, ...]
+    hcd_base_groups: dict[str, str]
+    hcd_product_groups: dict[str, str]
 
 
 def load_mixstds_target_registry(path: Path | None) -> MixSTDSTargetRegistry:
@@ -38,6 +40,8 @@ def load_mixstds_target_registry(path: Path | None) -> MixSTDSTargetRegistry:
             status="missing",
             reason="Mix STDs target registry was not supplied.",
             targets=(),
+            hcd_base_groups={},
+            hcd_product_groups={},
         )
     if not path.exists():
         return MixSTDSTargetRegistry(
@@ -45,6 +49,8 @@ def load_mixstds_target_registry(path: Path | None) -> MixSTDSTargetRegistry:
             status="missing",
             reason=f"Mix STDs target registry does not exist: {path}",
             targets=(),
+            hcd_base_groups={},
+            hcd_product_groups={},
         )
 
     with path.open(encoding="utf-8-sig", newline="") as handle:
@@ -65,11 +71,20 @@ def load_mixstds_target_registry(path: Path | None) -> MixSTDSTargetRegistry:
                     + ", ".join(missing)
                 ),
                 targets=(),
+                hcd_base_groups={},
+                hcd_product_groups={},
             )
-        targets = tuple(
-            _target_from_row(row, schema=schema)
-            for row in reader
-            if _target_label(row, schema).strip()
+        rows = [row for row in reader if _target_label(row, schema).strip()]
+        targets = tuple(_target_from_row(row, schema=schema) for row in rows)
+        hcd_base_groups = _hcd_group_mapping(
+            rows,
+            schema=schema,
+            column="hcd_base_group",
+        )
+        hcd_product_groups = _hcd_group_mapping(
+            rows,
+            schema=schema,
+            column="hcd_product_group",
         )
     reason = (
         "Loaded Mix STDs target registry."
@@ -81,6 +96,8 @@ def load_mixstds_target_registry(path: Path | None) -> MixSTDSTargetRegistry:
         status="loaded" if targets else "empty",
         reason=reason,
         targets=targets,
+        hcd_base_groups=hcd_base_groups,
+        hcd_product_groups=hcd_product_groups,
     )
 
 
@@ -148,7 +165,29 @@ def _target_from_row(row: dict[str, str], *, schema: str) -> InstrumentQCTarget:
         rt_min=rt_min,
         rt_max=rt_max,
         ppm_tol=float(row["ppm_tol"]),
+        neutral_loss_da=_target_neutral_loss_da(row),
     )
+
+
+def _target_neutral_loss_da(row: dict[str, str]) -> float | None:
+    value = row.get("neutral_loss_da", "").strip()
+    if not value:
+        return None
+    return float(value)
+
+
+def _hcd_group_mapping(
+    rows: Sequence[dict[str, str]],
+    *,
+    schema: str,
+    column: str,
+) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for row in rows:
+        value = row.get(column, "").strip()
+        if value:
+            values[_target_label(row, schema)] = value
+    return values
 
 
 def _mixstds_sort_key(path: Path) -> tuple[int, str]:
