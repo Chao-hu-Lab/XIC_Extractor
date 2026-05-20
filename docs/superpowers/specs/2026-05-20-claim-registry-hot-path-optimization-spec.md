@@ -14,8 +14,9 @@ semantics, winner selection, output schemas, and alignment pipeline order must
 remain unchanged.
 
 The current implementation is already well covered for core duplicate-claim
-behavior. This phase adds a small benchmark/timing fixture, then optimizes only
-the measured claim grouping path if the benchmark shows a meaningful target.
+behavior. This phase adds a deterministic operation-count fixture, then
+optimizes only the measured claim grouping path if the fixture shows a
+meaningful target.
 
 ## Goals
 
