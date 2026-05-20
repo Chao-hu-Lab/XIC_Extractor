@@ -69,7 +69,7 @@ the measured claim grouping path if the benchmark shows a meaningful target.
 uv --cache-dir .uv-cache run pytest tests\test_alignment_claim_registry.py -q
 ```
 
-### Checkpoint 1: Benchmark / Timing Fixture
+### Checkpoint 1: Benchmark / Operation-Count Fixture
 
 - Add a small deterministic benchmark-style test or diagnostic helper for
   sample-local claim grouping.
@@ -79,9 +79,13 @@ uv --cache-dir .uv-cache run pytest tests\test_alignment_claim_registry.py -q
   - one sample with many compatible claims,
   - one sample with many sparse m/z groups,
   - exact duplicate claims outside fuzzy m/z gate.
-- The fixture must assert output equivalence and expose elapsed timing or
-  operation counts in a deterministic way suitable for local comparison.
-- Do not require timing thresholds in CI.
+- The CI fixture must assert output equivalence and expose deterministic
+  operation counts, such as compatibility checks and group winner evaluations.
+- Optional elapsed timing may be printed by a manual diagnostic helper, but no
+  wall-clock threshold may be required in CI.
+- The fixture must keep using the public
+  `apply_ms1_peak_claim_registry()` entry point; instrumentation may wrap private
+  helpers only inside tests or diagnostics.
 
 Review gate: verify benchmark fixture does not make CI flaky and does not
 encode a new behavior contract beyond existing claim semantics.
@@ -134,7 +138,8 @@ Record one of:
 The decision note must include:
 
 - benchmark fixture shape,
-- before/after timing or operation-count evidence,
+- before/after deterministic operation-count evidence,
+- optional local elapsed timing if collected outside CI,
 - validation commands,
 - explicit statement that matrix/review/cell schemas are unchanged.
 
