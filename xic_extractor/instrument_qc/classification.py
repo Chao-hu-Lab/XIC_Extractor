@@ -4,6 +4,10 @@ from pathlib import Path
 
 class InstrumentQCClass(StrEnum):
     SDOLEK = "SDOLEK"
+    MIX_STDS = "MIX_STDS"
+    BLANK = "BLANK"
+    POOLED_QC = "POOLED_QC"
+    UNKNOWN = "UNKNOWN"
 
 
 def classify_instrument_qc_raw(

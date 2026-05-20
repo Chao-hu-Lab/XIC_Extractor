@@ -1,0 +1,213 @@
+import csv
+import json
+from pathlib import Path
+
+from xic_extractor.instrument_qc.classification import InstrumentQCClass
+from xic_extractor.instrument_qc.sequence_manifest import (
+    ManifestMatchStatus,
+    SequenceDocEntry,
+    build_sequence_manifest_from_entries,
+    parse_sequence_tables,
+)
+from xic_extractor.instrument_qc.sequence_manifest_writers import (
+    write_injection_order_csv,
+    write_sequence_manifest_json,
+    write_sequence_manifest_markdown,
+    write_sequence_manifest_tsv,
+)
+
+
+def test_sequence_table_produces_manifest_rows_with_classes_and_matches() -> None:
+    entries = parse_sequence_tables(
+        [
+            [
+                ["ID", "File Name", "Instrument Method", "Sample", "Inj"],
+                [
+                    "4",
+                    "SDOLEK-pretest",
+                    "20260105 SDOLEK",
+                    "50 ppb SDO/LEK; untargeted",
+                    "2",
+                ],
+                [
+                    "5",
+                    "250ppb_Mix_STDs",
+                    "20260105 STDs_ddMS2_CIDwHCD_EASY-IC",
+                    "Mix 73 STDs",
+                    "10",
+                ],
+                ["6", "Blank_3", "20260105 SB Check", "DIW", "20"],
+            ],
+        ],
+        source_doc="method.docx",
+    )
+
+    rows = build_sequence_manifest_from_entries(
+        entries,
+        raw_stems=("SDOLEK-pretest", "250ppb_Mix_STDs", "Blank_3"),
+    )
+
+    assert [(row.raw_stem, row.injection_order) for row in rows] == [
+        ("SDOLEK-pretest", 4),
+        ("250ppb_Mix_STDs", 5),
+        ("Blank_3", 6),
+    ]
+    assert [row.instrument_qc_class for row in rows] == [
+        InstrumentQCClass.SDOLEK,
+        InstrumentQCClass.MIX_STDS,
+        InstrumentQCClass.BLANK,
+    ]
+    assert all(row.match_status == ManifestMatchStatus.MATCHED for row in rows)
+    assert rows[0].doc_display_name == "SDOLEK-pretest"
+    assert rows[0].source_section == "table:1:row:2"
+
+
+def test_sequence_manifest_keeps_unmatched_docs_rows() -> None:
+    entry = SequenceDocEntry(
+        source_doc="method.docx",
+        source_section="table:1:row:2",
+        doc_display_name="SDOLEK-7",
+        injection_order=120,
+        instrument_method="20260105 SDOLEK",
+        sample_description="50 ppb SDO/LEK",
+        injection_volume="2",
+    )
+
+    rows = build_sequence_manifest_from_entries(
+        (entry,),
+        raw_stems=("SDOLEK-1",),
+    )
+
+    assert rows[0].raw_stem == "SDOLEK-7"
+    assert rows[0].match_status == ManifestMatchStatus.UNMATCHED
+    assert "No RAW stem" in rows[0].match_reason
+
+
+def test_repeated_doc_display_names_match_suffix_raws_by_order() -> None:
+    entries = parse_sequence_tables(
+        [
+            [
+                ["ID", "File Name", "Instrument Method", "Sample", "Inj"],
+                ["5", "250ppb_Mix_STDs", "20260105 STDs", "Mix STDs", "10"],
+                ["44", "250ppb_Mix_STDs", "20260105 STDs", "Mix STDs", "10"],
+                ["78", "250ppb_Mix_STDs", "20260105 STDs", "Mix STDs", "10"],
+            ],
+        ],
+        source_doc="method.docx",
+    )
+
+    rows = build_sequence_manifest_from_entries(
+        entries,
+        raw_stems=("250ppb_Mix_STDs", "250ppb_Mix_STDs_1", "250ppb_Mix_STDs_2"),
+    )
+
+    assert [(row.raw_stem, row.injection_order) for row in rows] == [
+        ("250ppb_Mix_STDs", 5),
+        ("250ppb_Mix_STDs_1", 44),
+        ("250ppb_Mix_STDs_2", 78),
+    ]
+    assert all(row.match_status == ManifestMatchStatus.MATCHED for row in rows)
+    assert "sequence order" in rows[1].match_reason
+
+
+def test_sequence_manifest_keeps_raw_only_instrument_qc_rows() -> None:
+    rows = build_sequence_manifest_from_entries(
+        (),
+        raw_stems=("SDOLEK-pretest-1", "TumorBC2257_DNA"),
+    )
+
+    assert len(rows) == 1
+    assert rows[0].raw_stem == "SDOLEK-pretest-1"
+    assert rows[0].doc_display_name == ""
+    assert rows[0].match_status == ManifestMatchStatus.UNMATCHED
+    assert rows[0].instrument_qc_class == InstrumentQCClass.SDOLEK
+
+
+def test_istd_sample_description_does_not_become_mix_stds() -> None:
+    entries = parse_sequence_tables(
+        [
+            [
+                ["ID", "File Name", "Instrument Method", "Sample", "Inj"],
+                [
+                    "8",
+                    "Tumor tissue BC2257_DNA",
+                    "20260105 Breast Cancer_ddMS2-CID_Tissue",
+                    "20260103 Tumor tissue BC2257_DNA +ISTDs",
+                    "20",
+                ],
+            ],
+        ],
+        source_doc="method.docx",
+    )
+
+    rows = build_sequence_manifest_from_entries(
+        entries,
+        raw_stems=("TumorBC2257_DNA",),
+    )
+
+    assert rows[0].instrument_qc_class == InstrumentQCClass.UNKNOWN
+
+
+def test_sequence_manifest_marks_ambiguous_matches() -> None:
+    entry = SequenceDocEntry(
+        source_doc="method.docx",
+        source_section="table:1:row:2",
+        doc_display_name="SDOLEK-1",
+        injection_order=24,
+        instrument_method="20260105 SDOLEK",
+        sample_description="50 ppb SDO/LEK",
+        injection_volume="2",
+    )
+
+    rows = build_sequence_manifest_from_entries(
+        (entry,),
+        raw_stems=("SDOLEK-1", "SDOLEK_1"),
+    )
+
+    assert rows[0].match_status == ManifestMatchStatus.AMBIGUOUS
+    assert "multiple RAW stems" in rows[0].match_reason
+
+
+def test_sequence_manifest_writers_emit_audit_and_injection_order(
+    tmp_path: Path,
+) -> None:
+    entries = parse_sequence_tables(
+        [
+            [
+                ["ID", "File Name", "Instrument Method", "Sample", "Inj"],
+                ["4", "SDOLEK-pretest", "20260105 SDOLEK", "50 ppb", "2"],
+                ["5", "SDOLEK-missing", "20260105 SDOLEK", "50 ppb", "2"],
+            ],
+        ],
+        source_doc="method.docx",
+    )
+    rows = build_sequence_manifest_from_entries(
+        entries,
+        raw_stems=("SDOLEK-pretest",),
+    )
+
+    manifest_tsv = tmp_path / "manifest.tsv"
+    order_csv = tmp_path / "order.csv"
+    manifest_json = tmp_path / "manifest.json"
+    manifest_md = tmp_path / "manifest.md"
+    write_sequence_manifest_tsv(manifest_tsv, rows)
+    write_injection_order_csv(order_csv, rows)
+    write_sequence_manifest_json(manifest_json, rows)
+    write_sequence_manifest_markdown(manifest_md, rows)
+
+    with manifest_tsv.open(encoding="utf-8") as handle:
+        manifest_rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert manifest_rows[0]["doc_display_name"] == "SDOLEK-pretest"
+    assert manifest_rows[1]["match_status"] == "unmatched"
+
+    with order_csv.open(encoding="utf-8") as handle:
+        order_rows = list(csv.DictReader(handle))
+    assert order_rows == [{"Sample_Name": "SDOLEK-pretest", "Injection_Order": "4"}]
+
+    payload = json.loads(manifest_json.read_text(encoding="utf-8"))
+    assert payload["source_contract"] == "method_docs_only"
+    assert payload["summary"]["match_status_counts"] == {
+        "matched": 1,
+        "unmatched": 1,
+    }
+    assert "SDOLEK-missing" in manifest_md.read_text(encoding="utf-8")
