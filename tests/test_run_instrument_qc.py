@@ -11,7 +11,9 @@ def _fake_output(output_dir: Path) -> InstrumentQCRunOutput:
     output_dir.mkdir(parents=True, exist_ok=True)
     trend_tsv.write_text("sample_name\n", encoding="utf-8")
     trend_json.write_text("{}\n", encoding="utf-8")
-    diagnostics_tsv.write_text("sample_name\traw_path\tissue\tdetail\n", encoding="utf-8")
+    diagnostics_tsv.write_text(
+        "sample_name\traw_path\tissue\tdetail\n", encoding="utf-8"
+    )
     return InstrumentQCRunOutput(
         trend_rows=(),
         diagnostics=(),
@@ -32,7 +34,9 @@ def test_run_instrument_qc_cli_calls_sdolek_pipeline(
         calls.update(kwargs)
         return _fake_output(kwargs["output_dir"])
 
-    monkeypatch.setattr(run_instrument_qc, "run_sdolek_pipeline", fake_run_sdolek_pipeline)
+    monkeypatch.setattr(
+        run_instrument_qc, "run_sdolek_pipeline", fake_run_sdolek_pipeline
+    )
 
     rc = run_instrument_qc.main(
         [

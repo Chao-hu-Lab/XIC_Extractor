@@ -17,7 +17,7 @@ from xic_extractor.instrument_qc.models import (
     InstrumentQCStatus,
     SDOLEKTrendRow,
 )
-from xic_extractor.instrument_qc.targets import InstrumentQCTarget, SDOLEK_TARGETS
+from xic_extractor.instrument_qc.targets import SDOLEK_TARGETS, InstrumentQCTarget
 from xic_extractor.instrument_qc.writers import (
     write_diagnostics_tsv,
     write_sdolek_json,
