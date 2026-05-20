@@ -170,17 +170,22 @@ Bucket precedence:
 2. `identity_evidence_insufficient`
    - sparse detections or internally inconsistent MS1 evidence prevent useful
      trend interpretation.
-3. `prior_reference_mismatch`
-   - NoSplit prior disagrees, but batch-relative trend is internally consistent.
-4. `rt_drift_review`
+3. `rt_drift_review`
    - ordered rows show monotonic or local RT movement worth review.
-5. `sensitivity_trend_review`
+4. `sensitivity_trend_review`
    - area ratio shows ordered response drop/rise worth review.
-6. `width_definition_review`
-   - prior width and Phase 1 integration width disagree, but batch width is
-     internally stable.
+5. `width_definition_review`
+   - batch-relative width outlier exists, or prior width and Phase 1 integration
+     width disagree while batch width is internally stable.
+6. `prior_reference_mismatch`
+   - NoSplit prior RT disagrees, but batch-relative trend is internally
+     consistent.
 7. `stable_ms1_trend`
    - detected, batch-relative RT/area/width are internally stable.
+
+When both batch-relative and NoSplit-prior flags exist, batch-relative flags
+take precedence because they describe the current acquisition. Prior-only flags
+remain in `prior_conflict_flags` and are still visible in the row.
 
 The bucket is a review classification, not a production pass/fail gate.
 Missing method-doc-derived injection order is not a row-level failure bucket. It

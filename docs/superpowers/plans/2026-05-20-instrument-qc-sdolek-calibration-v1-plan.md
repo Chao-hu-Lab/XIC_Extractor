@@ -28,7 +28,7 @@ evidence, not a valid pipeline input or fallback source.
   - `tests/test_instrument_qc_writers.py`
   - `tests/test_run_instrument_qc.py`
 
-- [ ] Confirm Phase 1 still passes:
+- [x] Confirm Phase 1 still passes:
 
 ```powershell
 uv --cache-dir .uv-cache run pytest tests\test_instrument_qc_classification.py tests\test_instrument_qc_pipeline.py tests\test_instrument_qc_writers.py tests\test_run_instrument_qc.py -q
@@ -36,7 +36,7 @@ uv --cache-dir .uv-cache run ruff check .
 uv --cache-dir .uv-cache run mypy xic_extractor
 ```
 
-- [ ] Commit review fixes before Phase 2 implementation:
+- [x] Commit review fixes before Phase 2 implementation:
 
 ```powershell
 git add xic_extractor/instrument_qc/pipeline.py xic_extractor/instrument_qc/writers.py tests/test_instrument_qc_pipeline.py tests/test_instrument_qc_writers.py tests/test_run_instrument_qc.py
@@ -62,17 +62,17 @@ Review gate:
 
 Tasks:
 
-- [ ] Parse method / sequence doc text into candidate injection entries.
-- [ ] Classify entries into instrument QC classes where possible:
+- [x] Parse method / sequence doc text into candidate injection entries.
+- [x] Classify entries into instrument QC classes where possible:
   `SDOLEK`, `MIX_STDS`, `BLANK`, `POOLED_QC`, `UNKNOWN`.
-- [ ] Normalize docs display names to candidate RAW stems using explicit,
+- [x] Normalize docs display names to candidate RAW stems using explicit,
   auditable rules.
-- [ ] Match normalized stems against RAW stems under the supplied raw root.
-- [ ] Write `instrument_qc_sequence_manifest.tsv`.
-- [ ] Write compatibility `instrument_qc_injection_order.csv` with
+- [x] Match normalized stems against RAW stems under the supplied raw root.
+- [x] Write `instrument_qc_sequence_manifest.tsv`.
+- [x] Write compatibility `instrument_qc_injection_order.csv` with
   `Sample_Name,Injection_Order`.
-- [ ] Write JSON/Markdown summary with matched / unmatched / ambiguous counts.
-- [ ] State that `SampleInfo.xlsx` can only be used as downstream comparison
+- [x] Write JSON/Markdown summary with matched / unmatched / ambiguous counts.
+- [x] State that `SampleInfo.xlsx` can only be used as downstream comparison
   evidence, not as a pipeline input or fallback.
 
 Focused tests:
@@ -102,24 +102,26 @@ Review gate:
 
 Tasks:
 
-- [ ] Add dataclasses for calibrated rows and summary.
-- [ ] Parse Phase 1 trend rows from TSV.
-- [ ] Compute compound-level medians for RT, area, and width.
-- [ ] Compute batch-relative deltas and ratios.
-- [ ] Preserve NoSplit reference fields, including
+- [x] Add dataclasses for calibrated rows and summary.
+- [x] Parse Phase 1 trend rows from TSV.
+- [x] Compute compound-level medians for RT, area, and width.
+- [x] Compute batch-relative deltas and ratios.
+- [x] Preserve NoSplit reference fields, including
   `reference_base_width_min` and `base_width_ratio_to_reference`.
-- [ ] Assign `prior_conflict_flags`, `batch_trend_flags`, and `review_bucket`.
-- [ ] Carry Phase 1 metadata source status into the calibration summary.
-- [ ] Report Phase 2 injection-order join status without making missing
+- [x] Assign `prior_conflict_flags`, `batch_trend_flags`, and `review_bucket`.
+- [x] Carry Phase 1 metadata source status into the calibration summary.
+- [x] Report Phase 2 injection-order join status without making missing
   injection order a row-level failure.
-- [ ] Mark the metadata source contract as `method_docs_only`.
-- [ ] Reject or clearly classify non-doc-derived order files as invalid by
+- [x] Mark the metadata source contract as `method_docs_only`.
+- [x] Reject or clearly classify non-doc-derived order files as invalid by
   documented provenance; do not silently accept `SampleInfo.xlsx` as equivalent.
 
 Focused tests:
 
 - detected SDO/LEK rows with stable batch metrics become `stable_ms1_trend`;
 - strong NoSplit RT mismatch with stable batch metrics becomes `prior_reference_mismatch`;
+- batch-relative area / RT / width outlier takes precedence over prior-only
+  mismatch while preserving prior flags;
 - `MS1_ONLY` alone does not become `identity_evidence_insufficient`;
 - missing injection order does not block batch-relative medians;
 - missing injection order suppresses only order-dependent drift flags;
@@ -144,9 +146,9 @@ Review gate:
 
 Tasks:
 
-- [ ] Write `instrument_qc_sdolek_calibrated_trend.tsv`.
-- [ ] Write `instrument_qc_sdolek_calibration_summary.json`.
-- [ ] Write concise `instrument_qc_sdolek_review.md`.
+- [x] Write `instrument_qc_sdolek_calibrated_trend.tsv`.
+- [x] Write `instrument_qc_sdolek_calibration_summary.json`.
+- [x] Write concise `instrument_qc_sdolek_review.md`.
 
 Focused tests:
 
@@ -170,11 +172,11 @@ Review gate:
 
 Tasks:
 
-- [ ] Add required args: `--trend-tsv`, `--trend-json`, `--output-dir`.
-- [ ] Add optional arg: `--injection-order-source`.
-- [ ] Validate missing required columns with clear errors.
-- [ ] Return exit code `0` on success and `2` on user-correctable input errors.
-- [ ] Do not reread RAW and do not import RAW reader modules.
+- [x] Add required args: `--trend-tsv`, `--trend-json`, `--output-dir`.
+- [x] Add optional arg: `--injection-order-source`.
+- [x] Validate missing required columns with clear errors.
+- [x] Return exit code `0` on success and `2` on user-correctable input errors.
+- [x] Do not reread RAW and do not import RAW reader modules.
 
 Focused tests:
 
@@ -201,7 +203,7 @@ First generate docs-derived manifest:
 uv --cache-dir .uv-cache run python tools\diagnostics\instrument_qc_sequence_manifest.py `
   --method-doc "C:\Users\user\Desktop\NTU cancer\2025台大乳癌組織數據for Jia\20260105中研院台大Breast cancer tissue\20260105 中研院分析.docx" `
   --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
-  --output-dir output\instrument_qc\20260105_sequence_manifest
+  --output-dir output\instrument_qc\20260105_sequence_manifest_cp1
 ```
 
 Inputs:
@@ -209,7 +211,7 @@ Inputs:
 ```text
 output\instrument_qc\20260105_sdo_lek_review_fix\instrument_qc_sdolek_trend.tsv
 output\instrument_qc\20260105_sdo_lek_review_fix\instrument_qc_sdolek_trend.json
-output\instrument_qc\20260105_sequence_manifest\instrument_qc_injection_order.csv
+output\instrument_qc\20260105_sequence_manifest_cp1\instrument_qc_injection_order.csv
 ```
 
 Run:
@@ -218,8 +220,8 @@ Run:
 uv --cache-dir .uv-cache run python tools\diagnostics\instrument_qc_sdolek_calibration.py `
   --trend-tsv output\instrument_qc\20260105_sdo_lek_review_fix\instrument_qc_sdolek_trend.tsv `
   --trend-json output\instrument_qc\20260105_sdo_lek_review_fix\instrument_qc_sdolek_trend.json `
-  --injection-order-source output\instrument_qc\20260105_sequence_manifest\instrument_qc_injection_order.csv `
-  --output-dir output\instrument_qc\20260105_sdo_lek_calibration_v1
+  --injection-order-source output\instrument_qc\20260105_sequence_manifest_cp1\instrument_qc_injection_order.csv `
+  --output-dir output\instrument_qc\20260105_sdo_lek_calibration_cp4
 ```
 
 Acceptance:
@@ -234,6 +236,16 @@ Acceptance:
 - Width mismatch is described as prior-width comparability issue if batch widths are internally stable.
 - No real-data output is committed.
 
+Actual CP4 smoke result:
+
+- output directory:
+  `output\instrument_qc\20260105_sdo_lek_calibration_cp4`
+- report verdict: `review_ready`
+- calibrated rows: 22
+- injection-order status: `partial_match`
+- matched injection-order rows: 16
+- unmatched injection-order rows: 6
+
 ## Checkpoint 6: Final Validation
 
 Run:
@@ -244,7 +256,15 @@ uv --cache-dir .uv-cache run pytest tests\test_instrument_qc_calibration.py test
 uv --cache-dir .uv-cache run pytest tests\test_instrument_qc_classification.py tests\test_instrument_qc_pipeline.py tests\test_instrument_qc_writers.py tests\test_run_instrument_qc.py -q
 uv --cache-dir .uv-cache run ruff check .
 uv --cache-dir .uv-cache run mypy xic_extractor
+uv --cache-dir .uv-cache run mypy tools\diagnostics\instrument_qc_sdolek_calibration.py
 ```
+
+Actual final validation:
+
+- instrument QC focused suite: 49 passed.
+- `ruff check .`: passed.
+- `mypy xic_extractor`: passed.
+- `mypy tools\diagnostics\instrument_qc_sdolek_calibration.py`: passed.
 
 Final decision:
 
