@@ -16,6 +16,7 @@ class ClaimRegistryOperationCounts:
     exact_peak_key_calls: int
     compatible_claim_calls: int
     group_sort_key_calls: int
+    winner_sort_key_calls: int
     duplicate_replacement_calls: int
 
 
@@ -41,6 +42,7 @@ def test_claim_registry_hot_path_many_samples_single_claim(
         exact_peak_key_calls=12,
         compatible_claim_calls=0,
         group_sort_key_calls=0,
+        winner_sort_key_calls=0,
         duplicate_replacement_calls=0,
     )
 
@@ -82,6 +84,7 @@ def test_claim_registry_hot_path_one_sample_many_compatible_claims(
         exact_peak_key_calls=6,
         compatible_claim_calls=15,
         group_sort_key_calls=5,
+        winner_sort_key_calls=12,
         duplicate_replacement_calls=1,
     )
 
@@ -114,6 +117,7 @@ def test_claim_registry_hot_path_sparse_mz_groups(
         exact_peak_key_calls=10,
         compatible_claim_calls=0,
         group_sort_key_calls=0,
+        winner_sort_key_calls=0,
         duplicate_replacement_calls=0,
     )
 
@@ -146,6 +150,7 @@ def test_claim_registry_hot_path_exact_duplicate_outside_fuzzy_mz_gate(
         exact_peak_key_calls=2,
         compatible_claim_calls=0,
         group_sort_key_calls=0,
+        winner_sort_key_calls=2,
         duplicate_replacement_calls=1,
     )
 
@@ -160,11 +165,13 @@ def _apply_with_operation_counts(
         "exact_peak_key": 0,
         "compatible_claim": 0,
         "group_sort_key": 0,
+        "winner_sort_key": 0,
         "duplicate_replacements": 0,
     }
     original_exact_peak_key = claim_registry_module._exact_peak_key
     original_compatible_claim = claim_registry_module._compatible_claim
     original_group_sort_key = claim_registry_module._group_sort_key
+    original_winner_sort_key = claim_registry_module._winner_sort_key
     original_duplicate_replacements = claim_registry_module._duplicate_replacements
 
     def exact_peak_key(cell: AlignedCell) -> tuple[float, float, float, float]:
@@ -183,6 +190,10 @@ def _apply_with_operation_counts(
         counts["group_sort_key"] += 1
         return original_group_sort_key(group)
 
+    def winner_sort_key(candidate: Any) -> tuple[object, ...]:
+        counts["winner_sort_key"] += 1
+        return original_winner_sort_key(candidate)
+
     def duplicate_replacements(candidates: list[Any]) -> dict[int, AlignedCell]:
         counts["duplicate_replacements"] += 1
         return original_duplicate_replacements(candidates)
@@ -190,6 +201,7 @@ def _apply_with_operation_counts(
     monkeypatch.setattr(claim_registry_module, "_exact_peak_key", exact_peak_key)
     monkeypatch.setattr(claim_registry_module, "_compatible_claim", compatible_claim)
     monkeypatch.setattr(claim_registry_module, "_group_sort_key", group_sort_key)
+    monkeypatch.setattr(claim_registry_module, "_winner_sort_key", winner_sort_key)
     monkeypatch.setattr(
         claim_registry_module,
         "_duplicate_replacements",
@@ -204,6 +216,7 @@ def _apply_with_operation_counts(
         exact_peak_key_calls=counts["exact_peak_key"],
         compatible_claim_calls=counts["compatible_claim"],
         group_sort_key_calls=counts["group_sort_key"],
+        winner_sort_key_calls=counts["winner_sort_key"],
         duplicate_replacement_calls=counts["duplicate_replacements"],
     )
 
