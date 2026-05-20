@@ -28,6 +28,7 @@ class _ClaimGroup:
     candidates: list[_ClaimCandidate]
     min_mz: float
     max_mz: float
+    winner_sort_key: tuple[object, ...] | None = None
 
 
 def apply_ms1_peak_claim_registry(
@@ -141,9 +142,7 @@ def _claim_groups(
         ]
         if compatible_groups:
             group = min(compatible_groups, key=_group_sort_key)
-            group.candidates.append(candidate)
-            group.min_mz = min(group.min_mz, candidate.family_mz)
-            group.max_mz = max(group.max_mz, candidate.family_mz)
+            _add_candidate_to_group(group, candidate)
             continue
         group = _ClaimGroup(
             candidates=[candidate],
@@ -203,8 +202,25 @@ def _winner_sort_key(candidate: _ClaimCandidate) -> tuple[object, ...]:
 
 
 def _group_sort_key(group: _ClaimGroup) -> tuple[object, ...]:
-    winner = min(group.candidates, key=_winner_sort_key)
-    return (*_winner_sort_key(winner), group.min_mz, group.max_mz)
+    if group.winner_sort_key is None:
+        group.winner_sort_key = min(
+            (_winner_sort_key(candidate) for candidate in group.candidates),
+        )
+    return (*group.winner_sort_key, group.min_mz, group.max_mz)
+
+
+def _add_candidate_to_group(
+    group: _ClaimGroup,
+    candidate: _ClaimCandidate,
+) -> None:
+    group.candidates.append(candidate)
+    group.min_mz = min(group.min_mz, candidate.family_mz)
+    group.max_mz = max(group.max_mz, candidate.family_mz)
+    if group.winner_sort_key is not None:
+        group.winner_sort_key = min(
+            group.winner_sort_key,
+            _winner_sort_key(candidate),
+        )
 
 
 def _duplicate_cell(cell: AlignedCell, winner_id: str) -> AlignedCell:
