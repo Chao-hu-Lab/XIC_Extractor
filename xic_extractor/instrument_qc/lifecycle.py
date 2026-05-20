@@ -164,6 +164,8 @@ def _run_fingerprint(
             output.mixstds_trend_tsv,
             output.mixstds_trend_json,
             output.mixstds_diagnostics_tsv,
+            output.hcd_audit_tsv,
+            output.hcd_audit_json,
         )
         if path is not None
     }

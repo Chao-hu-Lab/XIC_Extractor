@@ -46,10 +46,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"raw dir not found: {args.raw_dir}", file=sys.stderr)
         return 2
 
-    rows = build_sequence_manifest(
-        method_doc=args.method_doc,
-        raw_dir=args.raw_dir,
-    )
+    try:
+        rows = build_sequence_manifest(
+            method_doc=args.method_doc,
+            raw_dir=args.raw_dir,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     output_dir = args.output_dir
     manifest_tsv = output_dir / "instrument_qc_sequence_manifest.tsv"
     injection_order_csv = output_dir / "instrument_qc_injection_order.csv"

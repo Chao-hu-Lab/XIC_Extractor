@@ -71,3 +71,31 @@ def test_method_doc_cli_helper_rejects_sampleinfo(tmp_path: Path) -> None:
 
     assert isinstance(result, str)
     assert "SampleInfo" in result
+
+
+def test_method_doc_cli_helper_reports_parse_failures(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    method_doc = tmp_path / "method.docx"
+    method_doc.write_bytes(b"fake docx")
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+
+    def fake_build_sequence_manifest(**_kwargs):
+        raise ValueError("unable to parse method DOCX: method.docx")
+
+    monkeypatch.setattr(
+        run_instrument_qc,
+        "build_sequence_manifest",
+        fake_build_sequence_manifest,
+    )
+
+    result = run_instrument_qc._build_method_doc_manifest(
+        method_doc=method_doc,
+        raw_dir=raw_dir,
+        output_dir=tmp_path / "out",
+    )
+
+    assert isinstance(result, str)
+    assert "unable to parse method DOCX" in result

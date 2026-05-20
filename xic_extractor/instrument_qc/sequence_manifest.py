@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 from xic_extractor.instrument_qc.classification import InstrumentQCClass
 from xic_extractor.instrument_qc.models import ActivationMethod
@@ -67,10 +67,11 @@ def build_sequence_manifest(
 
 def parse_sequence_docx(path: Path) -> tuple[SequenceDocEntry, ...]:
     """Parse sequence table rows from a Word method / sequence document."""
-    return parse_sequence_tables(
-        _docx_tables(path),
-        source_doc=str(path),
-    )
+    try:
+        tables = _docx_tables(path)
+    except (BadZipFile, KeyError, ET.ParseError) as exc:
+        raise ValueError(f"unable to parse method DOCX: {path}") from exc
+    return parse_sequence_tables(tables, source_doc=str(path))
 
 
 def parse_sequence_tables(

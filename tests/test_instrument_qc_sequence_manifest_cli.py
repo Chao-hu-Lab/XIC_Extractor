@@ -101,3 +101,37 @@ def test_sequence_manifest_cli_rejects_sampleinfo_as_input(
 
     assert rc == 2
     assert "SampleInfo" in capsys.readouterr().err
+
+
+def test_sequence_manifest_cli_reports_parse_failures(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    method_doc = tmp_path / "method.docx"
+    method_doc.write_bytes(b"fake")
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+
+    def fake_build_sequence_manifest(**_kwargs):
+        raise ValueError("unable to parse method DOCX: method.docx")
+
+    monkeypatch.setattr(
+        instrument_qc_sequence_manifest,
+        "build_sequence_manifest",
+        fake_build_sequence_manifest,
+    )
+
+    rc = instrument_qc_sequence_manifest.main(
+        [
+            "--method-doc",
+            str(method_doc),
+            "--raw-dir",
+            str(raw_dir),
+            "--output-dir",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert rc == 2
+    assert "unable to parse method DOCX" in capsys.readouterr().err

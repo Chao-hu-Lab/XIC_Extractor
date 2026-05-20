@@ -7,6 +7,7 @@ from xic_extractor.instrument_qc.sequence_manifest import (
     ManifestMatchStatus,
     SequenceDocEntry,
     build_sequence_manifest_from_entries,
+    parse_sequence_docx,
     parse_sequence_tables,
 )
 from xic_extractor.instrument_qc.sequence_manifest_writers import (
@@ -94,6 +95,20 @@ def test_method_detail_table_sets_sdolek_whcd_activation() -> None:
 
     assert rows[0].instrument_method == "20260105 SDOLEK"
     assert rows[0].activation_method == "wHCD"
+
+
+def test_parse_sequence_docx_reports_corrupt_docx_as_value_error(
+    tmp_path: Path,
+) -> None:
+    method_doc = tmp_path / "not-really.docx"
+    method_doc.write_text("not a zip", encoding="utf-8")
+
+    try:
+        parse_sequence_docx(method_doc)
+    except ValueError as exc:
+        assert "unable to parse method DOCX" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
 
 
 def test_method_detail_table_sets_mixed_std_activation() -> None:

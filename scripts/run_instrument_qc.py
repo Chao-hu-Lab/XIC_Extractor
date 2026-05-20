@@ -121,7 +121,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.mode != "sdolek":
         print(
-            f"unsupported mode: {args.mode}. Phase 1 supports only 'sdolek'.",
+            f"unsupported mode: {args.mode}. Phase 2 supports only 'sdolek'.",
             file=sys.stderr,
         )
         return 2
@@ -227,7 +227,10 @@ def _build_method_doc_manifest(
     if not raw_dir.exists():
         return f"raw dir not found: {raw_dir}"
 
-    rows = build_sequence_manifest(method_doc=method_doc, raw_dir=raw_dir)
+    try:
+        rows = build_sequence_manifest(method_doc=method_doc, raw_dir=raw_dir)
+    except ValueError as exc:
+        return str(exc)
     manifest_tsv = output_dir / "instrument_qc_sequence_manifest.tsv"
     injection_order_csv = output_dir / "instrument_qc_injection_order.csv"
     manifest_json = output_dir / "instrument_qc_sequence_manifest.json"
