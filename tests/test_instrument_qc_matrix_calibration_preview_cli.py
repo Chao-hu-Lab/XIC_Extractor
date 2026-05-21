@@ -141,6 +141,8 @@ def test_cli_writes_level1_rt_preview_with_matrix_input(tmp_path: Path) -> None:
     assert rc == 0
     assert (output_dir / "matrix_rt_calibration_preview.tsv").exists()
     assert (output_dir / "matrix_rt_calibration_preview_summary.json").exists()
+    assert (output_dir / "instrument_qc_rt_drift_model.tsv").exists()
+    assert (output_dir / "instrument_qc_rt_leave_one_anchor_out.tsv").exists()
 
 
 def test_cli_writes_blocked_response_preview_with_matrix_input(tmp_path: Path) -> None:

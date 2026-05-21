@@ -433,6 +433,9 @@ preview when sample order and matrix columns are unambiguous.
 Required Level 1 preview artifacts when RT preview is requested:
 
 ```text
+instrument_qc_rt_drift_model.tsv
+instrument_qc_rt_drift_model_summary.json
+instrument_qc_rt_leave_one_anchor_out.tsv
 matrix_rt_calibration_preview.tsv
 matrix_rt_calibration_summary.json
 ```
@@ -458,13 +461,22 @@ Required preview columns:
 | `injection_order` | docs-derived order |
 | `model_id` | RT model row used |
 | `predicted_rt_delta_min` | model correction |
-| `corrected_rt_min` | corrected RT |
+| `rt_if_standard_corrected_min` | shadow corrected RT preview |
 | `rt_uncertainty_min` | model uncertainty |
 | `coverage_status` | RT model coverage |
+| `rt_alignment_support_status` | review label for local RT support |
+| `local_anchor_count` | number of local anchors used |
+| `local_clean_anchor_count` | clean-standard anchors used |
+| `local_biological_istd_anchor_count` | biological QC ISTD anchors used |
+| `local_residual_p95_min` | local residual p95 estimate |
+| `irt_anchor_scope` | iRT-like position label relative to anchors |
+| `irt_position` | 0-100 anchor-axis position when assessable |
 | `correction_status` | correction status taxonomy value |
 | `review_reason` | concise reason |
 
-Production RT use can be considered only at Level 3 or later.
+At Level 1 / midterm, RT preview is `shadow_only`: it supports alignment review
+and does not mutate exported matrices. Production RT use can be considered only
+at Level 3 or later.
 
 ## Response Drift Model Contract
 

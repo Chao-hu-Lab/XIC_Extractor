@@ -422,20 +422,25 @@ Acceptance:
 - Source matrix/cell input hash remains unchanged.
 - No production matrix, workbook, scoring, reliability, or resolver behavior changes.
 
-## Deferred Mid-Term Outline: Biological ISTD RT Transfer
+## Mid-Term Scope: RT-Aware Audit / Alignment-Support
 
-Do not implement until Level 0 and Level 1 are reviewed.
+Allowed now, but only as audit/preview.
 
-Future goals:
+Goals:
 
-- build current-code biological QC ISTD evidence from targeted outputs.
-- validate clean-standard RT observations against biological QC ISTD drift.
-- model RT drift by injection order, RT region, compound/group, and support status.
-- report when clean standards do not transfer to biological matrix.
+- build local RT models from eligible calibration anchors.
+- expose RT residual and leave-one-anchor-out validation.
+- label matrix cells by coverage: `covered`, `sparse`, `extrapolated`,
+  `incomplete`, or `unsupported`.
+- expose iRT-like anchor scope / position as interpretation evidence.
+- use the preview only for alignment support and review prioritization.
 
 Hard rule:
 
-- no RT correction may become production behavior until biological ISTD validation passes on current-code artifacts.
+- no RT model may alter `alignment_matrix.tsv`, `alignment_review.tsv`,
+  targeted reliability, scoring, resolver behavior, or matrix identity.
+- biological ISTD transfer can raise confidence later, but clean-only support is
+  still review/preview evidence.
 
 ## Deferred Long-Term Outline: Response Drift Shadow
 

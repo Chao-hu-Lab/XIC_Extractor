@@ -129,13 +129,21 @@ def test_matrix_preview_rows_carry_stable_rejoin_keys() -> None:
         predicted_rt_delta_min=0.05,
         rt_uncertainty_min=0.02,
         rt_if_standard_corrected_min=11.95,
-        correction_status=CorrectionStatus.APPLIED_PREVIEW,
+        coverage_status=CoverageStatus.COVERED,
+        rt_alignment_support_status="local_rt_supported",
+        local_anchor_count=3,
+        local_clean_anchor_count=3,
+        local_biological_istd_anchor_count=0,
+        local_residual_p95_min=0.02,
+        irt_anchor_scope="inside_anchor_range",
+        irt_position=50.0,
+        correction_status=CorrectionStatus.SHADOW_ONLY,
         correction_block_reason="",
         review_reason="Preview only.",
     )
 
     assert rt_row.source_cell_key == "FAM001|SampleA"
-    assert rt_row.correction_status == "applied_preview"
+    assert rt_row.correction_status == "shadow_only"
 
 
 def test_response_preview_blocks_missing_values_without_imputation() -> None:
@@ -178,5 +186,7 @@ def test_response_preview_blocks_missing_values_without_imputation() -> None:
 
 def test_status_literals_are_string_compatible() -> None:
     assert CoverageStatus.COVERED == "covered"
+    assert CoverageStatus.EXTRAPOLATED == "extrapolated"
     assert ProductSupportStatus.NOT_TRIGGERED == "not_triggered"
     assert CorrectionStatus.APPLIED_PREVIEW == "applied_preview"
+    assert CorrectionStatus.SHADOW_ONLY == "shadow_only"

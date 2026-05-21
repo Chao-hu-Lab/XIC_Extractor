@@ -23,6 +23,8 @@ NeutralLossSupportStatus = ProductSupportStatus
 class CoverageStatus(StrEnum):
     COVERED = "covered"
     SPARSE = "sparse"
+    EXTRAPOLATED = "extrapolated"
+    UNSUPPORTED = "unsupported"
     NOT_COVERED = "not_covered"
     INCOMPLETE = "incomplete"
     NOT_ASSESSABLE = "not_assessable"
@@ -30,6 +32,8 @@ class CoverageStatus(StrEnum):
 
 class CorrectionStatus(StrEnum):
     APPLIED_PREVIEW = "applied_preview"
+    SHADOW_ONLY = "shadow_only"
+    REVIEW = "review"
     BLOCKED_NOT_COVERED = "blocked_not_covered"
     BLOCKED_MISSING_VALUE = "blocked_missing_value"
     BLOCKED_NONPOSITIVE_VALUE = "blocked_nonpositive_value"
@@ -142,6 +146,14 @@ class MatrixRTPreviewRow:
     predicted_rt_delta_min: float | None
     rt_uncertainty_min: float | None
     rt_if_standard_corrected_min: float | None
+    coverage_status: CoverageStatus
+    rt_alignment_support_status: str
+    local_anchor_count: int
+    local_clean_anchor_count: int
+    local_biological_istd_anchor_count: int
+    local_residual_p95_min: float | None
+    irt_anchor_scope: str
+    irt_position: float | None
     correction_status: CorrectionStatus
     correction_block_reason: str
     review_reason: str
@@ -178,4 +190,49 @@ class MatrixResponsePreviewRow:
     transfer_status: ResponseTransferStatus
     correction_status: CorrectionStatus
     correction_block_reason: str
+    review_reason: str
+
+
+@dataclass(frozen=True)
+class RtDriftModelRow:
+    schema_version: str
+    bundle_id: str
+    model_id: str
+    model_scope: str
+    compound: str
+    compound_group: str
+    source_type: str
+    matrix_context: str
+    injection_order: int | None
+    rt_region: str
+    source_mix: str
+    anchor_ids: str
+    anchor_count: int
+    clean_anchor_count: int
+    biological_istd_anchor_count: int
+    predicted_rt_delta_min: float | None
+    rt_uncertainty_min: float | None
+    coverage_status: CoverageStatus
+    conflict_status: str
+    model_status: str
+    review_reason: str
+
+
+@dataclass(frozen=True)
+class RtLeaveOneAnchorOutRow:
+    schema_version: str
+    bundle_id: str
+    evidence_row_id: str
+    compound: str
+    source_type: str
+    matrix_context: str
+    injection_order: int | None
+    reference_rt_min: float | None
+    observed_rt_delta_min: float | None
+    predicted_rt_delta_min: float | None
+    prediction_error_min: float | None
+    abs_prediction_error_min: float | None
+    local_anchor_count: int
+    coverage_status: CoverageStatus
+    status: str
     review_reason: str

@@ -13,6 +13,8 @@ from xic_extractor.instrument_qc.calibration_product_models import (
     CalibrationEvidenceSummary,
     MatrixResponsePreviewRow,
     MatrixRTPreviewRow,
+    RtDriftModelRow,
+    RtLeaveOneAnchorOutRow,
 )
 
 CALIBRATION_EVIDENCE_COLUMNS = [
@@ -71,8 +73,59 @@ MATRIX_RT_PREVIEW_COLUMNS = [
     "predicted_rt_delta_min",
     "rt_uncertainty_min",
     "rt_if_standard_corrected_min",
+    "coverage_status",
+    "rt_alignment_support_status",
+    "local_anchor_count",
+    "local_clean_anchor_count",
+    "local_biological_istd_anchor_count",
+    "local_residual_p95_min",
+    "irt_anchor_scope",
+    "irt_position",
     "correction_status",
     "correction_block_reason",
+    "review_reason",
+]
+
+RT_DRIFT_MODEL_COLUMNS = [
+    "schema_version",
+    "bundle_id",
+    "model_id",
+    "model_scope",
+    "compound",
+    "compound_group",
+    "source_type",
+    "matrix_context",
+    "injection_order",
+    "rt_region",
+    "source_mix",
+    "anchor_ids",
+    "anchor_count",
+    "clean_anchor_count",
+    "biological_istd_anchor_count",
+    "predicted_rt_delta_min",
+    "rt_uncertainty_min",
+    "coverage_status",
+    "conflict_status",
+    "model_status",
+    "review_reason",
+]
+
+RT_LEAVE_ONE_ANCHOR_OUT_COLUMNS = [
+    "schema_version",
+    "bundle_id",
+    "evidence_row_id",
+    "compound",
+    "source_type",
+    "matrix_context",
+    "injection_order",
+    "reference_rt_min",
+    "observed_rt_delta_min",
+    "predicted_rt_delta_min",
+    "prediction_error_min",
+    "abs_prediction_error_min",
+    "local_anchor_count",
+    "coverage_status",
+    "status",
     "review_reason",
 ]
 
@@ -154,6 +207,38 @@ def write_matrix_rt_preview_tsv(
         writer.writeheader()
         for row in rows:
             writer.writerow(_row_to_dict(row, MATRIX_RT_PREVIEW_COLUMNS))
+
+
+def write_rt_drift_model_tsv(
+    path: Path,
+    rows: Iterable[RtDriftModelRow],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=RT_DRIFT_MODEL_COLUMNS,
+            delimiter="\t",
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(_row_to_dict(row, RT_DRIFT_MODEL_COLUMNS))
+
+
+def write_rt_leave_one_anchor_out_tsv(
+    path: Path,
+    rows: Iterable[RtLeaveOneAnchorOutRow],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=RT_LEAVE_ONE_ANCHOR_OUT_COLUMNS,
+            delimiter="\t",
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(_row_to_dict(row, RT_LEAVE_ONE_ANCHOR_OUT_COLUMNS))
 
 
 def write_matrix_response_preview_tsv(

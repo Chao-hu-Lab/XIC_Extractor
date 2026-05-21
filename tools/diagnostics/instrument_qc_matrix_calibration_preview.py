@@ -89,6 +89,9 @@ def _print_outputs(result: object) -> None:
         "evidence_summary_json",
         "rt_preview_tsv",
         "rt_preview_summary_json",
+        "rt_model_tsv",
+        "rt_model_summary_json",
+        "rt_leave_one_anchor_out_tsv",
         "response_preview_tsv",
         "response_preview_summary_json",
     ):

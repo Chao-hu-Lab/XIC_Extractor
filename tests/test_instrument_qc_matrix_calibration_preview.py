@@ -239,6 +239,131 @@ def test_build_level1_rt_preview_writes_rejoinable_sidecar(tmp_path: Path) -> No
     _write_tsv(
         instrument_qc_dir / "instrument_qc_sdolek_trend.tsv",
         TREND_COLUMNS,
+        [
+            _trend_row(
+                sample_name="Anchor_1",
+                raw_path="Anchor_1.raw",
+                injection_order="1",
+                compound="SDO",
+                reference_rt_min="10.0",
+                apex_rt_min="10.05",
+                rt_delta_to_reference_min="0.05",
+            ),
+            _trend_row(
+                sample_name="Anchor_2",
+                raw_path="Anchor_2.raw",
+                injection_order="10",
+                compound="LEK",
+                reference_rt_min="12.0",
+                apex_rt_min="12.10",
+                rt_delta_to_reference_min="0.10",
+            ),
+            _trend_row(
+                sample_name="Anchor_3",
+                raw_path="Anchor_3.raw",
+                injection_order="20",
+                compound="SDO",
+                reference_rt_min="14.0",
+                apex_rt_min="14.15",
+                rt_delta_to_reference_min="0.15",
+            ),
+        ],
+    )
+    (instrument_qc_dir / "instrument_qc_injection_order.csv").write_text(
+        "Sample_Name,Injection_Order\nSampleA,10\n",
+        encoding="utf-8",
+    )
+    matrix_input = tmp_path / "alignment_cells.tsv"
+    matrix_input.write_text(
+        "\t".join(
+            [
+                "feature_family_id",
+                "sample_stem",
+                "status",
+                "area",
+                "apex_rt",
+                "source_raw_file",
+                "family_center_mz",
+                "family_center_rt",
+            ]
+        )
+        + "\n"
+        + "\t".join(
+            [
+                "FAM001",
+                "SampleA",
+                "detected",
+                "1000",
+                "12.10",
+                "SampleA.raw",
+                "300.0",
+                "12.0",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    before = matrix_input.read_bytes()
+
+    result = build_level1_rt_calibration_preview(
+        instrument_qc_dir=instrument_qc_dir,
+        matrix_input=matrix_input,
+        matrix_input_role="untargeted_cell_table",
+        output_dir=tmp_path / "bundle",
+        generation_command="test command",
+    )
+
+    assert matrix_input.read_bytes() == before
+    assert result.rt_preview_tsv is not None
+    assert result.rt_preview_summary_json is not None
+    assert result.rt_model_tsv is not None
+    assert result.rt_model_summary_json is not None
+    assert result.rt_leave_one_anchor_out_tsv is not None
+
+    manifest = json.loads(result.manifest_json.read_text(encoding="utf-8"))
+    assert manifest["product_maturity_level"] == "level_1"
+    assert manifest["overall_verdict"] == "preview_ready"
+    assert {item["artifact_id"] for item in manifest["artifact_inventory"]} == {
+        "manifest",
+        "evidence",
+        "evidence_summary",
+        "rt_model",
+        "rt_model_summary",
+        "rt_leave_one_anchor_out",
+        "rt_preview",
+        "rt_preview_summary",
+    }
+
+    with result.rt_preview_tsv.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert rows[0]["source_row_id"] == "2"
+    assert rows[0]["source_cell_key"] == "FAM001|SampleA"
+    assert rows[0]["injection_order"] == "10"
+    assert rows[0]["rt_if_standard_corrected_min"]
+    assert rows[0]["coverage_status"] == "covered"
+    assert rows[0]["rt_alignment_support_status"] == "local_rt_supported"
+    assert rows[0]["local_anchor_count"] == "3"
+    assert rows[0]["irt_anchor_scope"] == "inside_anchor_range"
+
+    with result.rt_leave_one_anchor_out_tsv.open(
+        encoding="utf-8",
+        newline="",
+    ) as handle:
+        loo_rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert {row["status"] for row in loo_rows} <= {"PASS", "WARN", "FAIL"}
+    assert {row["compound"] for row in loo_rows} == {"SDO", "LEK"}
+
+    summary = json.loads(result.rt_preview_summary_json.read_text(encoding="utf-8"))
+    assert summary["counts_by_correction_status"] == {"shadow_only": 1}
+
+
+def test_build_level1_rt_preview_blocks_without_injection_order(
+    tmp_path: Path,
+) -> None:
+    instrument_qc_dir = tmp_path / "instrument_qc"
+    _write_tsv(
+        instrument_qc_dir / "instrument_qc_sdolek_trend.tsv",
+        TREND_COLUMNS,
         [_trend_row(rt_delta_to_reference_min="0.05")],
     )
     matrix_input = tmp_path / "alignment_cells.tsv"
@@ -271,7 +396,6 @@ def test_build_level1_rt_preview_writes_rejoinable_sidecar(tmp_path: Path) -> No
         + "\n",
         encoding="utf-8",
     )
-    before = matrix_input.read_bytes()
 
     result = build_level1_rt_calibration_preview(
         instrument_qc_dir=instrument_qc_dir,
@@ -281,30 +405,14 @@ def test_build_level1_rt_preview_writes_rejoinable_sidecar(tmp_path: Path) -> No
         generation_command="test command",
     )
 
-    assert matrix_input.read_bytes() == before
     assert result.rt_preview_tsv is not None
-    assert result.rt_preview_summary_json is not None
-
-    manifest = json.loads(result.manifest_json.read_text(encoding="utf-8"))
-    assert manifest["product_maturity_level"] == "level_1"
-    assert manifest["overall_verdict"] == "preview_ready"
-    assert {item["artifact_id"] for item in manifest["artifact_inventory"]} == {
-        "manifest",
-        "evidence",
-        "evidence_summary",
-        "rt_preview",
-        "rt_preview_summary",
-    }
-
     with result.rt_preview_tsv.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle, delimiter="\t"))
-    assert rows[0]["source_row_id"] == "2"
-    assert rows[0]["source_cell_key"] == "FAM001|SampleA"
-    assert rows[0]["rt_if_standard_corrected_min"] == "12.0"
-    assert rows[0]["correction_status"] == "applied_preview"
-
-    summary = json.loads(result.rt_preview_summary_json.read_text(encoding="utf-8"))
-    assert summary["counts_by_correction_status"] == {"applied_preview": 1}
+    assert rows[0]["coverage_status"] == "incomplete"
+    assert rows[0]["rt_alignment_support_status"] == (
+        "incomplete_missing_injection_order"
+    )
+    assert rows[0]["correction_status"] == "blocked_not_covered"
 
 
 def test_build_level1_rt_preview_rejects_unsupported_matrix_role(

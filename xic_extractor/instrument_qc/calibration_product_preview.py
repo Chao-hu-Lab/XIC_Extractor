@@ -6,8 +6,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from statistics import median
 
+from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.instrument_qc.calibration_product_loaders import (
     parse_optional_float,
     parse_optional_int,
@@ -33,6 +33,12 @@ from xic_extractor.instrument_qc.calibration_product_writers import (
     write_matrix_response_preview_tsv,
     write_matrix_rt_preview_tsv,
     write_preview_summary_json,
+    write_rt_drift_model_tsv,
+    write_rt_leave_one_anchor_out_tsv,
+)
+from xic_extractor.instrument_qc.calibration_rt_model import (
+    RtModelBundle,
+    build_rt_model_bundle,
 )
 
 TREND_REQUIRED_COLUMNS = {
@@ -90,6 +96,9 @@ class CalibrationBundleResult:
     evidence_summary_json: Path
     rt_preview_tsv: Path | None = None
     rt_preview_summary_json: Path | None = None
+    rt_model_tsv: Path | None = None
+    rt_model_summary_json: Path | None = None
+    rt_leave_one_anchor_out_tsv: Path | None = None
     response_preview_tsv: Path | None = None
     response_preview_summary_json: Path | None = None
 
@@ -212,6 +221,9 @@ def build_level1_calibration_preview(
 
     rt_preview_tsv: Path | None = None
     rt_preview_summary_json: Path | None = None
+    rt_model_tsv: Path | None = None
+    rt_model_summary_json: Path | None = None
+    rt_leave_one_anchor_out_tsv: Path | None = None
     response_preview_tsv: Path | None = None
     response_preview_summary_json: Path | None = None
     rt_preview_counts: dict[str, int] = {}
@@ -220,6 +232,24 @@ def build_level1_calibration_preview(
     first_machine_file = evidence_tsv.name
 
     if preview_kind in {"rt", "both"}:
+        rt_model = build_rt_model_bundle(
+            bundle_id=bundle_id,
+            evidence_rows=collected.rows,
+        )
+        rt_model_tsv = output_dir / "instrument_qc_rt_drift_model.tsv"
+        rt_model_summary_json = (
+            output_dir / "instrument_qc_rt_drift_model_summary.json"
+        )
+        rt_leave_one_anchor_out_tsv = (
+            output_dir / "instrument_qc_rt_leave_one_anchor_out.tsv"
+        )
+        write_rt_drift_model_tsv(rt_model_tsv, rt_model.model_rows)
+        write_rt_leave_one_anchor_out_tsv(
+            rt_leave_one_anchor_out_tsv,
+            rt_model.leave_one_anchor_out_rows,
+        )
+        write_preview_summary_json(rt_model_summary_json, rt_model.summary)
+
         rt_preview_tsv = output_dir / "matrix_rt_calibration_preview.tsv"
         rt_preview_summary_json = (
             output_dir / "matrix_rt_calibration_preview_summary.json"
@@ -228,7 +258,8 @@ def build_level1_calibration_preview(
             bundle_id=bundle_id,
             matrix_input=matrix_input,
             matrix_hash=matrix_hash_before,
-            evidence_rows=collected.rows,
+            rt_model=rt_model,
+            injection_order=_read_optional_injection_order(instrument_qc_dir),
         )
         rt_preview_counts = _counts(str(row.correction_status) for row in rt_rows)
         rt_summary = _preview_summary(
@@ -242,6 +273,30 @@ def build_level1_calibration_preview(
         write_preview_summary_json(rt_preview_summary_json, rt_summary)
         inventory_extra.extend(
             (
+                ArtifactInventoryItem(
+                    artifact_id="rt_model",
+                    path=Path(rt_model_tsv.name),
+                    role="rt_alignment_support_model",
+                    required=True,
+                    schema_version=ARTIFACT_SCHEMA_VERSION,
+                    status="present",
+                ),
+                ArtifactInventoryItem(
+                    artifact_id="rt_model_summary",
+                    path=Path(rt_model_summary_json.name),
+                    role="summary",
+                    required=True,
+                    schema_version=ARTIFACT_SCHEMA_VERSION,
+                    status="present",
+                ),
+                ArtifactInventoryItem(
+                    artifact_id="rt_leave_one_anchor_out",
+                    path=Path(rt_leave_one_anchor_out_tsv.name),
+                    role="rt_model_validation",
+                    required=True,
+                    schema_version=ARTIFACT_SCHEMA_VERSION,
+                    status="present",
+                ),
                 ArtifactInventoryItem(
                     artifact_id="rt_preview",
                     path=Path(rt_preview_tsv.name),
@@ -370,6 +425,9 @@ def build_level1_calibration_preview(
         rt_preview_summary_json=rt_preview_summary_json,
         response_preview_tsv=response_preview_tsv,
         response_preview_summary_json=response_preview_summary_json,
+        rt_model_tsv=rt_model_tsv,
+        rt_model_summary_json=rt_model_summary_json,
+        rt_leave_one_anchor_out_tsv=rt_leave_one_anchor_out_tsv,
     )
 
 
@@ -572,9 +630,9 @@ def _build_rt_preview_rows(
     bundle_id: str,
     matrix_input: Path,
     matrix_hash: str,
-    evidence_rows: tuple[CalibrationEvidenceRow, ...],
+    rt_model: RtModelBundle,
+    injection_order: dict[str, int],
 ) -> tuple[MatrixRTPreviewRow, ...]:
-    predicted_delta, uncertainty, model_id = _rt_preview_model(evidence_rows)
     rows: list[MatrixRTPreviewRow] = []
     for row_number, row in enumerate(
         read_tsv_rows(matrix_input, required_columns=ALIGNMENT_CELLS_REQUIRED_COLUMNS),
@@ -595,15 +653,22 @@ def _build_rt_preview_rows(
         )
         feature_id = (row.get("feature_family_id") or "").strip()
         sample_stem = (row.get("sample_stem") or "").strip()
+        raw_file_stem = _raw_file_stem(row.get("source_raw_file"), sample_stem)
+        sample_order = injection_order.get(raw_file_stem) or injection_order.get(
+            sample_stem
+        )
         status = (row.get("status") or "").strip()
-        correction_status = CorrectionStatus.APPLIED_PREVIEW
+        prediction = rt_model.predict(
+            feature_rt_min=raw_rt or family_center_rt,
+            injection_order=sample_order,
+        )
+        correction_status = CorrectionStatus.SHADOW_ONLY
         corrected_rt = None
         block_reason = ""
-        review_reason = "RT preview subtracts clean-standard median RT delta."
-        if predicted_delta is None:
+        review_reason = prediction.review_reason
+        if prediction.predicted_rt_delta_min is None:
             correction_status = CorrectionStatus.BLOCKED_NOT_COVERED
-            block_reason = "no eligible standard RT evidence"
-            review_reason = "No eligible clean-standard RT evidence is available."
+            block_reason = prediction.rt_alignment_support_status
         elif raw_rt is None:
             correction_status = CorrectionStatus.BLOCKED_MISSING_VALUE
             block_reason = "raw feature RT is missing"
@@ -613,7 +678,7 @@ def _build_rt_preview_rows(
             block_reason = f"cell status is {status or 'blank'}"
             review_reason = "RT preview is only informative for measured cells."
         else:
-            corrected_rt = raw_rt - predicted_delta
+            corrected_rt = raw_rt - prediction.predicted_rt_delta_min
         rows.append(
             MatrixRTPreviewRow(
                 schema_version=ARTIFACT_SCHEMA_VERSION,
@@ -627,7 +692,7 @@ def _build_rt_preview_rows(
                 matrix_column_name=sample_stem,
                 sample_name=sample_stem,
                 sample_stem=sample_stem,
-                raw_file_stem=_raw_file_stem(row.get("source_raw_file"), sample_stem),
+                raw_file_stem=raw_file_stem,
                 feature_mz=parse_optional_float(
                     row,
                     "family_center_mz",
@@ -635,11 +700,21 @@ def _build_rt_preview_rows(
                     row_number=tsv_row_number,
                 ),
                 raw_feature_rt_min=raw_rt or family_center_rt,
-                injection_order=None,
-                model_id=model_id,
-                predicted_rt_delta_min=predicted_delta,
-                rt_uncertainty_min=uncertainty,
+                injection_order=sample_order,
+                model_id=prediction.model_id,
+                predicted_rt_delta_min=prediction.predicted_rt_delta_min,
+                rt_uncertainty_min=prediction.rt_uncertainty_min,
                 rt_if_standard_corrected_min=corrected_rt,
+                coverage_status=prediction.coverage_status,
+                rt_alignment_support_status=prediction.rt_alignment_support_status,
+                local_anchor_count=prediction.local_anchor_count,
+                local_clean_anchor_count=prediction.local_clean_anchor_count,
+                local_biological_istd_anchor_count=(
+                    prediction.local_biological_istd_anchor_count
+                ),
+                local_residual_p95_min=prediction.local_residual_p95_min,
+                irt_anchor_scope=prediction.irt_anchor_scope,
+                irt_position=prediction.irt_position,
                 correction_status=correction_status,
                 correction_block_reason=block_reason,
                 review_reason=review_reason,
@@ -726,23 +801,6 @@ def _build_response_preview_rows(
     return tuple(rows)
 
 
-def _rt_preview_model(
-    evidence_rows: tuple[CalibrationEvidenceRow, ...],
-) -> tuple[float | None, float | None, str]:
-    deltas = [
-        row.rt_delta_min
-        for row in evidence_rows
-        if row.calibration_eligible
-        and row.matrix_context == "clean"
-        and row.rt_delta_min is not None
-    ]
-    if not deltas:
-        return None, None, "clean-standard-median-unavailable"
-    prediction = median(deltas)
-    uncertainty = median(abs(delta - prediction) for delta in deltas)
-    return prediction, uncertainty, "clean-standard-median-rt"
-
-
 def _preview_summary(
     *,
     bundle_id: str,
@@ -766,6 +824,13 @@ def _raw_file_stem(raw_file: str | None, sample_stem: str) -> str:
     if not value:
         return sample_stem
     return Path(value).stem or sample_stem
+
+
+def _read_optional_injection_order(instrument_qc_dir: Path) -> dict[str, int]:
+    path = instrument_qc_dir / "instrument_qc_injection_order.csv"
+    if not path.exists():
+        return {}
+    return read_injection_order(path)
 
 
 def _append_hcd_rows(
