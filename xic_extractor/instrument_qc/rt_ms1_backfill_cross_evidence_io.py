@@ -8,6 +8,7 @@ from typing import Any, Mapping, Sequence
 
 from xic_extractor.instrument_qc.calibration_product_loaders import read_tsv_rows
 from xic_extractor.instrument_qc.rt_ms1_backfill_cross_evidence import (
+    FinalMatrixFamilyRow,
     RtMs1CrossEvidenceResult,
     RtShadowCellRow,
     SeedAwareFamilyRow,
@@ -38,6 +39,16 @@ SEED_AWARE_REQUIRED_COLUMNS = {
     "png_paths",
 }
 
+ALIGNMENT_REVIEW_REQUIRED_COLUMNS = {
+    "feature_family_id",
+    "include_in_primary_matrix",
+    "identity_decision",
+    "accepted_cell_count",
+    "detected_count",
+    "accepted_rescue_count",
+    "review_rescue_count",
+}
+
 FAMILY_COLUMNS = [
     "feature_family_id",
     "family_center_mz",
@@ -54,6 +65,11 @@ FAMILY_COLUMNS = [
     "supporting_istd_labels",
     "combined_classification",
     "evidence_grade",
+    "final_matrix_status",
+    "final_matrix_identity_decision",
+    "final_matrix_detected_count",
+    "final_matrix_accepted_rescue_count",
+    "final_matrix_accepted_cell_count",
     "blocking_evidence",
     "missing_evidence",
     "recommended_next_action",
@@ -62,16 +78,26 @@ FAMILY_COLUMNS = [
 ]
 
 SUMMARY_COLUMNS = ["metric", "value"]
+FINAL_MATRIX_GRADE_COLUMNS = [
+    "evidence_grade",
+    "final_matrix_status",
+    "family_count",
+    "detected_count",
+    "accepted_rescue_count",
+    "accepted_cell_count",
+]
 
 
 def build_rt_ms1_cross_evidence_from_files(
     *,
     rt_shadow_rows_tsv: Path,
     seed_aware_families_tsv: Path,
+    alignment_review_tsv: Path | None = None,
 ) -> RtMs1CrossEvidenceResult:
     return build_rt_ms1_backfill_cross_evidence(
         rt_rows=_load_rt_shadow_rows(rt_shadow_rows_tsv),
         seed_families=_load_seed_aware_families(seed_aware_families_tsv),
+        final_matrix_rows=_load_alignment_review_rows(alignment_review_tsv),
     )
 
 
@@ -83,6 +109,9 @@ def write_rt_ms1_cross_evidence_outputs(
     output_dir.mkdir(parents=True, exist_ok=True)
     families_tsv = output_dir / "rt_ms1_backfill_cross_evidence_families.tsv"
     summary_tsv = output_dir / "rt_ms1_backfill_cross_evidence_summary.tsv"
+    final_matrix_grade_tsv = (
+        output_dir / "rt_ms1_backfill_final_matrix_grade_summary.tsv"
+    )
     summary_json = output_dir / "rt_ms1_backfill_cross_evidence.json"
     review_md = output_dir / "rt_ms1_backfill_cross_evidence.md"
     _write_tsv(
@@ -91,6 +120,11 @@ def write_rt_ms1_cross_evidence_outputs(
         FAMILY_COLUMNS,
     )
     _write_tsv(summary_tsv, _summary_rows(result), SUMMARY_COLUMNS)
+    _write_tsv(
+        final_matrix_grade_tsv,
+        [asdict(row) for row in result.matrix_status_by_grade],
+        FINAL_MATRIX_GRADE_COLUMNS,
+    )
     summary_json.write_text(
         json.dumps(_summary_payload(result), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -102,6 +136,7 @@ def write_rt_ms1_cross_evidence_outputs(
     return {
         "families_tsv": families_tsv,
         "summary_tsv": summary_tsv,
+        "final_matrix_grade_tsv": final_matrix_grade_tsv,
         "summary_json": summary_json,
         "review_md": review_md,
     }
@@ -153,6 +188,34 @@ def _load_seed_aware_families(path: Path) -> tuple[SeedAwareFamilyRow, ...]:
     )
 
 
+def _load_alignment_review_rows(
+    path: Path | None,
+) -> tuple[FinalMatrixFamilyRow, ...]:
+    if path is None:
+        return ()
+    rows = read_tsv_rows(path, required_columns=ALIGNMENT_REVIEW_REQUIRED_COLUMNS)
+    return tuple(
+        FinalMatrixFamilyRow(
+            feature_family_id=(row.get("feature_family_id") or "").strip(),
+            include_in_primary_matrix=_parse_bool(
+                row,
+                "include_in_primary_matrix",
+                path=path,
+            ),
+            identity_decision=(row.get("identity_decision") or "").strip(),
+            accepted_cell_count=_parse_int(row, "accepted_cell_count", path=path),
+            detected_count=_parse_int(row, "detected_count", path=path),
+            accepted_rescue_count=_parse_int(
+                row,
+                "accepted_rescue_count",
+                path=path,
+            ),
+            review_rescue_count=_parse_int(row, "review_rescue_count", path=path),
+        )
+        for row in rows
+    )
+
+
 def _summary_rows(result: RtMs1CrossEvidenceResult) -> list[dict[str, str]]:
     rows = [
         {"metric": "family_count", "value": str(result.total_families)},
@@ -167,6 +230,10 @@ def _summary_rows(result: RtMs1CrossEvidenceResult) -> list[dict[str, str]]:
         {"metric": f"evidence_grade:{label}", "value": str(count)}
         for label, count in result.counts_by_evidence_grade.items()
     )
+    rows.extend(
+        {"metric": f"final_matrix_status:{label}", "value": str(count)}
+        for label, count in result.counts_by_final_matrix_status.items()
+    )
     return rows
 
 
@@ -177,6 +244,10 @@ def _summary_payload(result: RtMs1CrossEvidenceResult) -> dict[str, Any]:
         "matched_family_count": result.matched_family_count,
         "counts_by_classification": result.counts_by_classification,
         "counts_by_evidence_grade": result.counts_by_evidence_grade,
+        "counts_by_final_matrix_status": result.counts_by_final_matrix_status,
+        "matrix_status_by_grade": [
+            asdict(row) for row in result.matrix_status_by_grade
+        ],
     }
 
 
@@ -198,6 +269,8 @@ def _render_markdown(
         f"- seed-aware families evaluated: `{result.total_families}`",
         f"- RT families available: `{result.rt_family_count}`",
         f"- families with both inputs: `{result.matched_family_count}`",
+        "- final-matrix grade summary: "
+        "`rt_ms1_backfill_final_matrix_grade_summary.tsv`",
         "",
         "## Classification Counts",
         "",
@@ -222,11 +295,36 @@ def _render_markdown(
     lines.extend(
         [
             "",
+            "## Final Matrix Status x Evidence Grade",
+            "",
+            "| grade | final matrix status | families | detected | "
+            "accepted rescue | accepted cells |",
+            "| --- | --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for grade_row in result.matrix_status_by_grade:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    f"`{grade_row.evidence_grade}`",
+                    f"`{grade_row.final_matrix_status}`",
+                    str(grade_row.family_count),
+                    str(grade_row.detected_count),
+                    str(grade_row.accepted_rescue_count),
+                    str(grade_row.accepted_cell_count),
+                ]
+            )
+            + " |"
+        )
+    lines.extend(
+        [
+            "",
             "## Top Families",
             "",
             "| grade | class | family | m/z | RT | rescued | RT supported cells | "
-            "blockers | missing | reason |",
-            "| --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |",
+            "matrix | blockers | missing | reason |",
+            "| --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- | --- |",
         ]
     )
     for row in result.rows[:20]:
@@ -241,6 +339,7 @@ def _render_markdown(
                     row.family_center_rt,
                     str(row.accepted_rescue_count),
                     str(row.rt_supported_cell_count),
+                    row.final_matrix_status,
                     row.blocking_evidence,
                     row.missing_evidence,
                     row.review_reason,
@@ -299,3 +398,14 @@ def _format_value(value: object) -> str:
     if value is None:
         return ""
     return str(value)
+
+
+def _parse_bool(row: Mapping[str, str], column: str, *, path: Path) -> bool:
+    value = (row.get(column) or "").strip().lower()
+    if value in {"true", "1", "yes"}:
+        return True
+    if value in {"false", "0", "no", ""}:
+        return False
+    raise ValueError(
+        f"{path.name} column {column} has invalid boolean value: {value!r}"
+    )

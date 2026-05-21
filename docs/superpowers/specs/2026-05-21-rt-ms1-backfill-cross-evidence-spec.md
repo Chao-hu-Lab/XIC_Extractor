@@ -26,6 +26,12 @@ Required:
 - `instrument_qc_rt_supported_shadow_gate_rows.tsv`
 - `seed_aware_backfill_review_families.tsv`
 
+Optional:
+
+- `alignment_review.tsv`
+  - When provided, the report must add current final-matrix status and a
+    grade-by-status summary.
+
 The join key is:
 
 - RT rows: `feature_id`
@@ -41,6 +47,7 @@ The diagnostic writes:
 
 - `rt_ms1_backfill_cross_evidence_families.tsv`
 - `rt_ms1_backfill_cross_evidence_summary.tsv`
+- `rt_ms1_backfill_final_matrix_grade_summary.tsv`
 - `rt_ms1_backfill_cross_evidence.json`
 - `rt_ms1_backfill_cross_evidence.md`
 
@@ -51,6 +58,22 @@ The summary must include:
 - matched family count;
 - counts by combined classification.
 - counts by evidence grade.
+- counts by current final-matrix status when `alignment_review.tsv` is
+  provided.
+
+The final-matrix status values are:
+
+- `in_final_matrix_with_accepted_rescue`
+  - The row is currently in primary matrix and at least one accepted MS1 rescue
+    value is written.
+- `in_final_matrix_detected_only`
+  - The row is currently in primary matrix, but no accepted rescue values are
+    written.
+- `not_in_final_matrix`
+  - The family appears in review/audit context but is not currently written to
+    the primary matrix.
+- `final_matrix_context_missing`
+  - `alignment_review.tsv` was not provided or the family was not found in it.
 
 ## Combined Classifications
 
@@ -98,6 +121,9 @@ The summary must include:
 
 The human review surface must include `evidence_grade`, `blocking_evidence`, and
 `missing_evidence` so that missing RT context is not confused with conflict.
+When `alignment_review.tsv` is provided, it must also include
+`final_matrix_status` so we can separate new evidence from existing production
+backfill behavior.
 
 - `A_dual_axis_supported`
   - Seed-aware MS1 shape support exists and local biological-ISTD RT support

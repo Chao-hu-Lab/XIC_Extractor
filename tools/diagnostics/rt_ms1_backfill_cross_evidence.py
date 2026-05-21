@@ -31,6 +31,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="seed_aware_backfill_review_families.tsv.",
     )
     parser.add_argument(
+        "--alignment-review-tsv",
+        type=Path,
+        help=(
+            "Optional alignment_review.tsv. When provided, the report adds "
+            "current final-matrix status by evidence grade."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         required=True,
@@ -46,6 +54,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = build_rt_ms1_cross_evidence_from_files(
             rt_shadow_rows_tsv=args.rt_shadow_rows_tsv,
             seed_aware_families_tsv=args.seed_aware_families_tsv,
+            alignment_review_tsv=args.alignment_review_tsv,
         )
         outputs = write_rt_ms1_cross_evidence_outputs(
             output_dir=args.output_dir,

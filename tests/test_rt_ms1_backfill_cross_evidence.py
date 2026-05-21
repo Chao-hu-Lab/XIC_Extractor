@@ -33,6 +33,16 @@ SEED_COLUMNS = [
     "png_paths",
 ]
 
+ALIGNMENT_REVIEW_COLUMNS = [
+    "feature_family_id",
+    "include_in_primary_matrix",
+    "identity_decision",
+    "accepted_cell_count",
+    "detected_count",
+    "accepted_rescue_count",
+    "review_rescue_count",
+]
+
 
 def test_cross_evidence_requires_rt_and_ms1_support(tmp_path: Path) -> None:
     rt_tsv, seed_tsv = _write_inputs(
@@ -58,6 +68,7 @@ def test_cross_evidence_requires_rt_and_ms1_support(tmp_path: Path) -> None:
         == "rt_ms1_supported_review_candidate"
     )
     assert rows["FAM001"].evidence_grade == "A_dual_axis_supported"
+    assert rows["FAM001"].final_matrix_status == "final_matrix_context_missing"
     assert rows["FAM001"].blocking_evidence == ""
     assert rows["FAM001"].missing_evidence == ""
     assert (
@@ -69,6 +80,54 @@ def test_cross_evidence_requires_rt_and_ms1_support(tmp_path: Path) -> None:
     assert rows["FAM002"].recommended_next_action == "manual_review_required"
     assert result.rt_family_count == 2
     assert result.matched_family_count == 2
+
+
+def test_final_matrix_status_by_evidence_grade(tmp_path: Path) -> None:
+    rt_tsv, seed_tsv = _write_inputs(
+        tmp_path,
+        rt_rows=[
+            _rt_row("FAM001", "rt_supported_shadow_candidate"),
+            _rt_row("FAM002", "rt_model_uncertain"),
+        ],
+        seed_rows=[
+            _seed_row("FAM001", "seed_shape_supported_review_candidate"),
+            _seed_row("FAM002", "seed_shape_supported_review_candidate"),
+        ],
+    )
+    review_tsv = tmp_path / "alignment_review.tsv"
+    _write_tsv(
+        review_tsv,
+        ALIGNMENT_REVIEW_COLUMNS,
+        [
+            _review_row("FAM001", include=True, detected=4, rescued=78),
+            _review_row("FAM002", include=False, detected=3, rescued=0),
+        ],
+    )
+
+    result = build_rt_ms1_cross_evidence_from_files(
+        rt_shadow_rows_tsv=rt_tsv,
+        seed_aware_families_tsv=seed_tsv,
+        alignment_review_tsv=review_tsv,
+    )
+
+    rows = {row.feature_family_id: row for row in result.rows}
+    assert rows["FAM001"].final_matrix_status == (
+        "in_final_matrix_with_accepted_rescue"
+    )
+    assert rows["FAM002"].final_matrix_status == "not_in_final_matrix"
+    summary = {
+        (row.evidence_grade, row.final_matrix_status): row
+        for row in result.matrix_status_by_grade
+    }
+    grade_a = summary[
+        ("A_dual_axis_supported", "in_final_matrix_with_accepted_rescue")
+    ]
+    assert grade_a.family_count == 1
+    assert grade_a.accepted_rescue_count == 78
+    assert result.counts_by_final_matrix_status == {
+        "in_final_matrix_with_accepted_rescue": 1,
+        "not_in_final_matrix": 1,
+    }
 
 
 def test_ms1_supported_rt_uncertain_and_missing_context(tmp_path: Path) -> None:
@@ -172,6 +231,9 @@ def test_cli_writes_outputs(tmp_path: Path) -> None:
     assert payload["counts_by_evidence_grade"] == {
         "A_dual_axis_supported": 1
     }
+    assert (
+        output_dir / "rt_ms1_backfill_final_matrix_grade_summary.tsv"
+    ).exists()
     assert payload["matched_family_count"] == 1
     markdown = (output_dir / "rt_ms1_backfill_cross_evidence.md").read_text(
         encoding="utf-8"
@@ -237,6 +299,25 @@ def _seed_row(family_id: str, classification: str) -> dict[str, str]:
         "recommended_next_action": "fixture",
         "review_reason": "fixture",
         "png_paths": "overlay.png",
+    }
+
+
+def _review_row(
+    family_id: str,
+    *,
+    include: bool,
+    detected: int,
+    rescued: int,
+) -> dict[str, str]:
+    accepted = detected + rescued
+    return {
+        "feature_family_id": family_id,
+        "include_in_primary_matrix": "TRUE" if include else "FALSE",
+        "identity_decision": "production_family" if include else "audit_family",
+        "accepted_cell_count": str(accepted if include else 0),
+        "detected_count": str(detected),
+        "accepted_rescue_count": str(rescued if include else 0),
+        "review_rescue_count": "0",
     }
 
 

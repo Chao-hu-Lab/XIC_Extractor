@@ -42,6 +42,17 @@ class SeedAwareFamilyRow:
 
 
 @dataclass(frozen=True)
+class FinalMatrixFamilyRow:
+    feature_family_id: str
+    include_in_primary_matrix: bool
+    identity_decision: str
+    accepted_cell_count: int
+    detected_count: int
+    accepted_rescue_count: int
+    review_rescue_count: int
+
+
+@dataclass(frozen=True)
 class RtMs1CrossEvidenceRow:
     feature_family_id: str
     family_center_mz: str
@@ -58,6 +69,11 @@ class RtMs1CrossEvidenceRow:
     supporting_istd_labels: str
     combined_classification: str
     evidence_grade: str
+    final_matrix_status: str
+    final_matrix_identity_decision: str
+    final_matrix_detected_count: int
+    final_matrix_accepted_rescue_count: int
+    final_matrix_accepted_cell_count: int
     blocking_evidence: str
     missing_evidence: str
     recommended_next_action: str
@@ -70,22 +86,41 @@ class RtMs1CrossEvidenceResult:
     rows: tuple[RtMs1CrossEvidenceRow, ...]
     counts_by_classification: dict[str, int]
     counts_by_evidence_grade: dict[str, int]
+    counts_by_final_matrix_status: dict[str, int]
+    matrix_status_by_grade: tuple["FinalMatrixGradeSummaryRow", ...]
     total_families: int
     rt_family_count: int
     matched_family_count: int
+
+
+@dataclass(frozen=True)
+class FinalMatrixGradeSummaryRow:
+    evidence_grade: str
+    final_matrix_status: str
+    family_count: int
+    detected_count: int
+    accepted_rescue_count: int
+    accepted_cell_count: int
 
 
 def build_rt_ms1_backfill_cross_evidence(
     *,
     rt_rows: Sequence[RtShadowCellRow],
     seed_families: Sequence[SeedAwareFamilyRow],
+    final_matrix_rows: Sequence[FinalMatrixFamilyRow] = (),
 ) -> RtMs1CrossEvidenceResult:
     rt_by_family = _group_rt_rows(rt_rows)
+    final_matrix_by_family = {
+        row.feature_family_id: row for row in final_matrix_rows if row.feature_family_id
+    }
     seed_family_ids = {row.feature_family_id for row in seed_families}
     rows = tuple(
         _build_family_row(
             seed_family,
             rt_rows=rt_by_family.get(seed_family.feature_family_id, ()),
+            final_matrix_row=final_matrix_by_family.get(
+                seed_family.feature_family_id
+            ),
         )
         for seed_family in seed_families
     )
@@ -101,6 +136,8 @@ def build_rt_ms1_backfill_cross_evidence(
         ),
         counts_by_classification=_counts(row.combined_classification for row in rows),
         counts_by_evidence_grade=_counts(row.evidence_grade for row in rows),
+        counts_by_final_matrix_status=_counts(row.final_matrix_status for row in rows),
+        matrix_status_by_grade=_matrix_status_by_grade(rows),
         total_families=len(rows),
         rt_family_count=len(rt_by_family),
         matched_family_count=len(seed_family_ids & set(rt_by_family)),
@@ -121,6 +158,7 @@ def _build_family_row(
     seed_family: SeedAwareFamilyRow,
     *,
     rt_rows: Sequence[RtShadowCellRow],
+    final_matrix_row: FinalMatrixFamilyRow | None,
 ) -> RtMs1CrossEvidenceRow:
     rt_counts = Counter(row.row_classification for row in rt_rows)
     rt_supported = rt_counts.get(RT_SUPPORTED, 0)
@@ -157,6 +195,23 @@ def _build_family_row(
         supporting_istd_labels=_supporting_labels(rt_rows),
         combined_classification=classification,
         evidence_grade=evidence_grade,
+        final_matrix_status=_final_matrix_status(final_matrix_row),
+        final_matrix_identity_decision=(
+            final_matrix_row.identity_decision if final_matrix_row is not None else ""
+        ),
+        final_matrix_detected_count=(
+            final_matrix_row.detected_count if final_matrix_row is not None else 0
+        ),
+        final_matrix_accepted_rescue_count=(
+            final_matrix_row.accepted_rescue_count
+            if final_matrix_row is not None
+            else 0
+        ),
+        final_matrix_accepted_cell_count=(
+            final_matrix_row.accepted_cell_count
+            if final_matrix_row is not None
+            else 0
+        ),
         blocking_evidence=_blocking_evidence(
             ms1_classification=seed_family.review_classification,
             rt_conflict_cell_count=rt_conflict,
@@ -213,6 +268,18 @@ def _classify_cross_evidence(
     if ms1_classification in {MS1_SHAPE_INSUFFICIENT, MS1_NOT_ASSESSABLE}:
         return "ms1_not_ready_review"
     return "not_supported"
+
+
+def _final_matrix_status(row: FinalMatrixFamilyRow | None) -> str:
+    if row is None:
+        return "final_matrix_context_missing"
+    if not row.include_in_primary_matrix:
+        return "not_in_final_matrix"
+    if row.accepted_rescue_count > 0:
+        return "in_final_matrix_with_accepted_rescue"
+    if row.detected_count > 0 or row.accepted_cell_count > 0:
+        return "in_final_matrix_detected_only"
+    return "not_in_final_matrix"
 
 
 def _evidence_grade(
@@ -351,6 +418,29 @@ def _supporting_labels(rows: Sequence[RtShadowCellRow]) -> str:
         }
     )
     return ";".join(labels)
+
+
+def _matrix_status_by_grade(
+    rows: Sequence[RtMs1CrossEvidenceRow],
+) -> tuple[FinalMatrixGradeSummaryRow, ...]:
+    grouped: dict[tuple[str, str], list[RtMs1CrossEvidenceRow]] = defaultdict(list)
+    for row in rows:
+        grouped[(row.evidence_grade, row.final_matrix_status)].append(row)
+    return tuple(
+        FinalMatrixGradeSummaryRow(
+            evidence_grade=grade,
+            final_matrix_status=status,
+            family_count=len(group_rows),
+            detected_count=sum(row.final_matrix_detected_count for row in group_rows),
+            accepted_rescue_count=sum(
+                row.final_matrix_accepted_rescue_count for row in group_rows
+            ),
+            accepted_cell_count=sum(
+                row.final_matrix_accepted_cell_count for row in group_rows
+            ),
+        )
+        for (grade, status), group_rows in sorted(grouped.items())
+    )
 
 
 def _classification_sort_key(classification: str) -> int:

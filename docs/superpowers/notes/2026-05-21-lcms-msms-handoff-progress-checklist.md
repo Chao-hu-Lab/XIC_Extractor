@@ -199,6 +199,9 @@ Relationship to Level 2.5 RT shadow gate:
 - [x] Cross-evidence now reports `evidence_grade`, `blocking_evidence`, and
   `missing_evidence` so RT uncertainty is treated as missing confirmation, not
   as negative evidence.
+- [x] Cross-evidence now reports `current final matrix status x evidence grade`.
+  In the 85RAW seed-aware scope, all 101 reviewed families are already in the
+  current FinalMatrix with accepted rescue values.
 - [~] Level 3 RT production correction is `no_go`.
 - [ ] Level 4 response shadow model is not implemented.
 - [ ] Level 5 response production correction is not implemented.
@@ -275,6 +278,11 @@ Current result:
   - `B_ms1_shape_supported_rt_unconfirmed`: 3 families;
   - `C_manual_review_interference`: 5 families;
   - `D_single_axis_or_not_ready`: 91 families.
+- Current FinalMatrix overlap:
+  - Grade A: 2 families already in matrix, 159 accepted rescue cells.
+  - Grade B: 3 families already in matrix, 239 accepted rescue cells.
+  - Grade C: 5 families already in matrix, 387 accepted rescue cells.
+  - Grade D: 91 families already in matrix, 6519 accepted rescue cells.
 - Output remains audit-only: no RT, area, reliability, scoring, resolver, DNP,
   or matrix mutation.
 
@@ -288,6 +296,11 @@ Key family interpretation from the scope-matched run:
   supported; RT support is unconfirmed/uncertain, not contradictory.
 - `FAM004459`, `FAM006664`, and `FAM014256`: Grade C. These remain review-only
   because neighboring MS1 interference is a blocker; RT uncertainty is secondary.
+
+This means the current production backfill is broader than the new evidence
+grades. The new work is not adding missing matrix values; it is measuring which
+existing FinalMatrix backfills have enough evidence, which are MS1-supported but
+RT-unconfirmed, and which have interference or single-axis risk.
 
 Useful follow-up:
 
@@ -367,9 +380,11 @@ Recommended order:
    - Grade B: MS1-backed evidence with neutral/missing RT confirmation.
 5. Keep FAM004459-like Grade C cases out of automatic rescue unless neighboring
    MS1 interference is resolved by stronger evidence.
-6. Add response shadow evidence only after the RT/MS1 combined evidence table is
+6. Decide whether Grade D current FinalMatrix backfills should stay as-is,
+   move to review/provisional, or require additional MS1 overlay evidence.
+7. Add response shadow evidence only after the RT/MS1 combined evidence table is
    accepted as interpretable.
-7. In parallel or between scientific PRs, split oversized diagnostic tools.
+8. In parallel or between scientific PRs, split oversized diagnostic tools.
 
 This preserves the useful evidence accumulated so far while avoiding a premature
 production matrix mutation.
