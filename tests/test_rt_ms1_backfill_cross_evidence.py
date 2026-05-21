@@ -43,13 +43,22 @@ ALIGNMENT_REVIEW_COLUMNS = [
     "review_rescue_count",
 ]
 
+ENVELOPE_COLUMNS = [
+    "target_label",
+    "anchor_status",
+    "rt_range_min",
+    "normal_abs_residual_min",
+    "warning_abs_residual_min",
+    "high_raw_drift",
+]
+
 
 def test_cross_evidence_requires_rt_and_ms1_support(tmp_path: Path) -> None:
     rt_tsv, seed_tsv = _write_inputs(
         tmp_path,
         rt_rows=[
-            _rt_row("FAM001", "rt_supported_shadow_candidate"),
-            _rt_row("FAM002", "rt_supported_shadow_candidate"),
+            *_rt_rows("FAM001", "rt_supported_shadow_candidate", 3),
+            *_rt_rows("FAM002", "rt_supported_shadow_candidate", 3),
         ],
         seed_rows=[
             _seed_row("FAM001", "seed_shape_supported_review_candidate"),
@@ -86,7 +95,7 @@ def test_final_matrix_status_by_evidence_grade(tmp_path: Path) -> None:
     rt_tsv, seed_tsv = _write_inputs(
         tmp_path,
         rt_rows=[
-            _rt_row("FAM001", "rt_supported_shadow_candidate"),
+            *_rt_rows("FAM001", "rt_supported_shadow_candidate", 3),
             _rt_row("FAM002", "rt_model_uncertain"),
         ],
         seed_rows=[
@@ -160,10 +169,55 @@ def test_ms1_supported_rt_uncertain_and_missing_context(tmp_path: Path) -> None:
     assert rows["FAM003"].missing_evidence == "rt_context"
 
 
+def test_weak_rt_support_does_not_become_grade_a(tmp_path: Path) -> None:
+    rt_tsv, seed_tsv = _write_inputs(
+        tmp_path,
+        rt_rows=[
+            _rt_row("FAM001", "rt_supported_shadow_candidate"),
+            *_rt_rows("FAM001", "rt_model_uncertain", 9),
+        ],
+        seed_rows=[_seed_row("FAM001", "seed_shape_supported_review_candidate")],
+    )
+
+    result = build_rt_ms1_cross_evidence_from_files(
+        rt_shadow_rows_tsv=rt_tsv,
+        seed_aware_families_tsv=seed_tsv,
+    )
+
+    row = result.rows[0]
+    assert row.combined_classification == "ms1_supported_rt_uncertain_review"
+    assert row.evidence_grade == "B_ms1_shape_supported_rt_unconfirmed"
+    assert row.rt_supported_fraction == "0.1"
+    assert row.rt_support_level == "weak_support"
+    assert row.missing_evidence == "dominant_rt_support"
+
+
+def test_rt_conflict_takes_precedence_over_support(tmp_path: Path) -> None:
+    rt_tsv, seed_tsv = _write_inputs(
+        tmp_path,
+        rt_rows=[
+            *_rt_rows("FAM001", "rt_supported_shadow_candidate", 3),
+            _rt_row("FAM001", "biological_transfer_conflict"),
+        ],
+        seed_rows=[_seed_row("FAM001", "seed_shape_supported_review_candidate")],
+    )
+
+    result = build_rt_ms1_cross_evidence_from_files(
+        rt_shadow_rows_tsv=rt_tsv,
+        seed_aware_families_tsv=seed_tsv,
+    )
+
+    row = result.rows[0]
+    assert row.combined_classification == "ms1_supported_rt_conflict_review"
+    assert row.evidence_grade == "E_conflict_or_not_supported"
+    assert row.rt_support_level == "conflicted"
+    assert row.blocking_evidence == "rt_transfer_conflict"
+
+
 def test_rt_only_does_not_override_shape_insufficient_ms1(tmp_path: Path) -> None:
     rt_tsv, seed_tsv = _write_inputs(
         tmp_path,
-        rt_rows=[_rt_row("FAM001", "rt_supported_shadow_candidate")],
+        rt_rows=_rt_rows("FAM001", "rt_supported_shadow_candidate", 3),
         seed_rows=[_seed_row("FAM001", "shape_insufficient_review")],
     )
 
@@ -200,10 +254,53 @@ def test_rt_uncertain_neighboring_interference_is_grade_c(tmp_path: Path) -> Non
     assert "neighboring interference" in row.review_reason
 
 
+def test_neighboring_interference_with_rt_envelope_becomes_c1_review(
+    tmp_path: Path,
+) -> None:
+    rt_tsv, seed_tsv = _write_inputs(
+        tmp_path,
+        rt_rows=_rt_rows("FAM001", "rt_supported_shadow_candidate", 3),
+        seed_rows=[_seed_row("FAM001", "neighbor_interference_review")],
+    )
+    envelope_tsv = tmp_path / "biological_istd_rt_envelope_targets.tsv"
+    _write_tsv(
+        envelope_tsv,
+        ENVELOPE_COLUMNS,
+        [
+            {
+                "target_label": "15N5-8-oxodG",
+                "anchor_status": "stable_istd_anchor",
+                "rt_range_min": "0.61",
+                "normal_abs_residual_min": "0.12",
+                "warning_abs_residual_min": "0.18",
+                "high_raw_drift": "FALSE",
+            }
+        ],
+    )
+
+    result = build_rt_ms1_cross_evidence_from_files(
+        rt_shadow_rows_tsv=rt_tsv,
+        seed_aware_families_tsv=seed_tsv,
+        biological_istd_rt_envelope_targets_tsv=envelope_tsv,
+    )
+
+    row = result.rows[0]
+    assert row.combined_classification == (
+        "rt_supported_ms1_interference_drift_explainable_review"
+    )
+    assert row.evidence_grade == "C1_drift_explainable_interference_review"
+    assert row.blocking_evidence == (
+        "possible_neighboring_ms1_interference_under_rt_drift"
+    )
+    assert row.rt_drift_context == "biological_istd_residual_envelope_available"
+    assert row.supporting_istd_high_raw_drift == "FALSE"
+    assert row.recommended_next_action == "review_interference_with_rt_envelope_context"
+
+
 def test_cli_writes_outputs(tmp_path: Path) -> None:
     rt_tsv, seed_tsv = _write_inputs(
         tmp_path,
-        rt_rows=[_rt_row("FAM001", "rt_supported_shadow_candidate")],
+        rt_rows=_rt_rows("FAM001", "rt_supported_shadow_candidate", 3),
         seed_rows=[_seed_row("FAM001", "seed_shape_supported_review_candidate")],
     )
     output_dir = tmp_path / "out"
@@ -285,6 +382,20 @@ def _rt_row(family_id: str, classification: str) -> dict[str, str]:
         "supporting_biological_istd_label": "15N5-8-oxodG",
         "review_reason": "fixture",
     }
+
+
+def _rt_rows(
+    family_id: str,
+    classification: str,
+    count: int,
+) -> list[dict[str, str]]:
+    rows = []
+    for index in range(count):
+        row = _rt_row(family_id, classification)
+        row["source_cell_key"] = f"{family_id}|QC{index + 1}"
+        row["sample_stem"] = f"QC{index + 1}"
+        rows.append(row)
+    return rows
 
 
 def _seed_row(family_id: str, classification: str) -> dict[str, str]:

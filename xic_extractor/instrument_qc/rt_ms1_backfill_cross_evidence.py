@@ -14,6 +14,9 @@ MS1_NEIGHBOR = "neighbor_interference_review"
 MS1_SHAPE_INSUFFICIENT = "shape_insufficient_review"
 MS1_NOT_ASSESSABLE = "not_assessable"
 
+MIN_RT_SUPPORT_CELL_COUNT = 3
+MIN_RT_SUPPORT_FRACTION = 0.10
+
 
 @dataclass(frozen=True)
 class RtShadowCellRow:
@@ -53,6 +56,16 @@ class FinalMatrixFamilyRow:
 
 
 @dataclass(frozen=True)
+class IstdRtEnvelopeTargetRow:
+    target_label: str
+    anchor_status: str
+    rt_range_min: float | None
+    normal_abs_residual_min: float | None
+    warning_abs_residual_min: float | None
+    high_raw_drift: bool
+
+
+@dataclass(frozen=True)
 class RtMs1CrossEvidenceRow:
     feature_family_id: str
     family_center_mz: str
@@ -66,7 +79,13 @@ class RtMs1CrossEvidenceRow:
     rt_conflict_cell_count: int
     rt_clean_only_cell_count: int
     rt_total_cell_count: int
+    rt_supported_fraction: str
+    rt_support_level: str
     supporting_istd_labels: str
+    supporting_istd_normal_envelope_min: str
+    supporting_istd_warning_envelope_min: str
+    supporting_istd_high_raw_drift: str
+    rt_drift_context: str
     combined_classification: str
     evidence_grade: str
     final_matrix_status: str
@@ -108,10 +127,14 @@ def build_rt_ms1_backfill_cross_evidence(
     rt_rows: Sequence[RtShadowCellRow],
     seed_families: Sequence[SeedAwareFamilyRow],
     final_matrix_rows: Sequence[FinalMatrixFamilyRow] = (),
+    istd_rt_envelopes: Sequence[IstdRtEnvelopeTargetRow] = (),
 ) -> RtMs1CrossEvidenceResult:
     rt_by_family = _group_rt_rows(rt_rows)
     final_matrix_by_family = {
         row.feature_family_id: row for row in final_matrix_rows if row.feature_family_id
+    }
+    envelope_by_target = {
+        row.target_label: row for row in istd_rt_envelopes if row.target_label
     }
     seed_family_ids = {row.feature_family_id for row in seed_families}
     rows = tuple(
@@ -121,6 +144,7 @@ def build_rt_ms1_backfill_cross_evidence(
             final_matrix_row=final_matrix_by_family.get(
                 seed_family.feature_family_id
             ),
+            envelope_by_target=envelope_by_target,
         )
         for seed_family in seed_families
     )
@@ -159,18 +183,27 @@ def _build_family_row(
     *,
     rt_rows: Sequence[RtShadowCellRow],
     final_matrix_row: FinalMatrixFamilyRow | None,
+    envelope_by_target: dict[str, IstdRtEnvelopeTargetRow],
 ) -> RtMs1CrossEvidenceRow:
     rt_counts = Counter(row.row_classification for row in rt_rows)
     rt_supported = rt_counts.get(RT_SUPPORTED, 0)
     rt_uncertain = rt_counts.get(RT_UNCERTAIN, 0)
     rt_conflict = rt_counts.get(RT_CONFLICT, 0)
     rt_clean_only = rt_counts.get(RT_CLEAN_ONLY, 0)
+    drift_context = _rt_drift_context(rt_rows, envelope_by_target)
+    rt_support_level = _rt_support_level(
+        rt_supported=rt_supported,
+        rt_conflict=rt_conflict,
+        rt_total=len(rt_rows),
+    )
     classification = _classify_cross_evidence(
         ms1_classification=seed_family.review_classification,
         rt_supported_cell_count=rt_supported,
         rt_uncertain_cell_count=rt_uncertain,
         rt_conflict_cell_count=rt_conflict,
         rt_total_cell_count=len(rt_rows),
+        rt_drift_context=drift_context,
+        rt_support_level=rt_support_level,
     )
     evidence_grade = _evidence_grade(
         ms1_classification=seed_family.review_classification,
@@ -178,7 +211,10 @@ def _build_family_row(
         rt_uncertain_cell_count=rt_uncertain,
         rt_conflict_cell_count=rt_conflict,
         rt_total_cell_count=len(rt_rows),
+        rt_drift_context=drift_context,
+        rt_support_level=rt_support_level,
     )
+    supporting_envelopes = _supporting_envelopes(rt_rows, envelope_by_target)
     return RtMs1CrossEvidenceRow(
         feature_family_id=seed_family.feature_family_id,
         family_center_mz=seed_family.family_center_mz,
@@ -192,7 +228,19 @@ def _build_family_row(
         rt_conflict_cell_count=rt_conflict,
         rt_clean_only_cell_count=rt_clean_only,
         rt_total_cell_count=len(rt_rows),
+        rt_supported_fraction=_format_fraction(rt_supported, len(rt_rows)),
+        rt_support_level=rt_support_level,
         supporting_istd_labels=_supporting_labels(rt_rows),
+        supporting_istd_normal_envelope_min=_format_envelope_values(
+            envelope.normal_abs_residual_min for envelope in supporting_envelopes
+        ),
+        supporting_istd_warning_envelope_min=_format_envelope_values(
+            envelope.warning_abs_residual_min for envelope in supporting_envelopes
+        ),
+        supporting_istd_high_raw_drift="TRUE"
+        if any(envelope.high_raw_drift for envelope in supporting_envelopes)
+        else "FALSE",
+        rt_drift_context=drift_context,
         combined_classification=classification,
         evidence_grade=evidence_grade,
         final_matrix_status=_final_matrix_status(final_matrix_row),
@@ -215,6 +263,7 @@ def _build_family_row(
         blocking_evidence=_blocking_evidence(
             ms1_classification=seed_family.review_classification,
             rt_conflict_cell_count=rt_conflict,
+            rt_drift_context=drift_context,
         ),
         missing_evidence=_missing_evidence(
             ms1_classification=seed_family.review_classification,
@@ -222,6 +271,8 @@ def _build_family_row(
             rt_uncertain_cell_count=rt_uncertain,
             rt_conflict_cell_count=rt_conflict,
             rt_total_cell_count=len(rt_rows),
+            rt_drift_context=drift_context,
+            rt_support_level=rt_support_level,
         ),
         recommended_next_action=_recommended_action(classification),
         review_reason=_review_reason(
@@ -231,6 +282,7 @@ def _build_family_row(
             rt_uncertain_cell_count=rt_uncertain,
             rt_conflict_cell_count=rt_conflict,
             rt_total_cell_count=len(rt_rows),
+            rt_drift_context=drift_context,
         ),
         overlay_png_paths=seed_family.png_paths,
     )
@@ -243,16 +295,24 @@ def _classify_cross_evidence(
     rt_uncertain_cell_count: int,
     rt_conflict_cell_count: int,
     rt_total_cell_count: int,
+    rt_drift_context: str,
+    rt_support_level: str,
 ) -> str:
-    has_rt_support = rt_supported_cell_count > 0
+    has_rt_support = rt_support_level == "dominant_support"
     has_rt_conflict = rt_conflict_cell_count > 0
     has_rt_uncertainty = rt_uncertain_cell_count > 0
-    if ms1_classification == MS1_SUPPORTED and has_rt_support:
-        return "rt_ms1_supported_review_candidate"
-    if ms1_classification == MS1_NEIGHBOR and has_rt_support:
-        return "rt_supported_ms1_interference_review"
     if ms1_classification == MS1_SUPPORTED and has_rt_conflict:
         return "ms1_supported_rt_conflict_review"
+    if ms1_classification == MS1_SUPPORTED and has_rt_support:
+        return "rt_ms1_supported_review_candidate"
+    if (
+        ms1_classification == MS1_NEIGHBOR
+        and has_rt_support
+        and rt_drift_context == "biological_istd_residual_envelope_available"
+    ):
+        return "rt_supported_ms1_interference_drift_explainable_review"
+    if ms1_classification == MS1_NEIGHBOR and has_rt_support:
+        return "rt_supported_ms1_interference_review"
     if ms1_classification == MS1_SUPPORTED and has_rt_uncertainty:
         return "ms1_supported_rt_uncertain_review"
     if ms1_classification == MS1_SUPPORTED and rt_total_cell_count == 0:
@@ -289,18 +349,28 @@ def _evidence_grade(
     rt_uncertain_cell_count: int,
     rt_conflict_cell_count: int,
     rt_total_cell_count: int,
+    rt_drift_context: str,
+    rt_support_level: str,
 ) -> str:
-    has_rt_support = rt_supported_cell_count > 0
+    has_rt_support = rt_support_level == "dominant_support"
     has_rt_conflict = rt_conflict_cell_count > 0
     has_rt_uncertainty = rt_uncertain_cell_count > 0
+    if has_rt_conflict:
+        return "E_conflict_or_not_supported"
     if ms1_classification == MS1_SUPPORTED and has_rt_support:
         return "A_dual_axis_supported"
     if ms1_classification == MS1_SUPPORTED and not has_rt_conflict:
         return "B_ms1_shape_supported_rt_unconfirmed"
+    if (
+        ms1_classification == MS1_NEIGHBOR
+        and has_rt_support
+        and rt_drift_context == "biological_istd_residual_envelope_available"
+    ):
+        return "C1_drift_explainable_interference_review"
     if ms1_classification == MS1_NEIGHBOR:
-        return "C_manual_review_interference"
-    if has_rt_conflict:
-        return "E_conflict_or_not_supported"
+        if rt_drift_context == "not_provided":
+            return "C_manual_review_interference"
+        return "C2_manual_review_interference"
     if ms1_classification in {MS1_SHAPE_INSUFFICIENT, MS1_NOT_ASSESSABLE}:
         return "D_single_axis_or_not_ready"
     if has_rt_support or has_rt_uncertainty or rt_total_cell_count > 0:
@@ -312,10 +382,14 @@ def _blocking_evidence(
     *,
     ms1_classification: str,
     rt_conflict_cell_count: int,
+    rt_drift_context: str,
 ) -> str:
     blockers: list[str] = []
     if ms1_classification == MS1_NEIGHBOR:
-        blockers.append("neighboring_ms1_interference")
+        if rt_drift_context == "biological_istd_residual_envelope_available":
+            blockers.append("possible_neighboring_ms1_interference_under_rt_drift")
+        else:
+            blockers.append("neighboring_ms1_interference")
     if ms1_classification == MS1_SHAPE_INSUFFICIENT:
         blockers.append("ms1_shape_insufficient")
     if ms1_classification == MS1_NOT_ASSESSABLE:
@@ -332,12 +406,16 @@ def _missing_evidence(
     rt_uncertain_cell_count: int,
     rt_conflict_cell_count: int,
     rt_total_cell_count: int,
+    rt_drift_context: str,
+    rt_support_level: str,
 ) -> str:
     missing: list[str] = []
     if ms1_classification != MS1_SUPPORTED:
         missing.append("seed_shape_support")
-    if rt_supported_cell_count == 0 and rt_conflict_cell_count == 0:
-        if rt_total_cell_count == 0:
+    if rt_support_level != "dominant_support" and rt_conflict_cell_count == 0:
+        if rt_support_level == "weak_support":
+            missing.append("dominant_rt_support")
+        elif rt_total_cell_count == 0:
             missing.append("rt_context")
         elif rt_uncertain_cell_count > 0:
             missing.append("rt_confirmation")
@@ -349,6 +427,8 @@ def _missing_evidence(
 def _recommended_action(classification: str) -> str:
     if classification == "rt_ms1_supported_review_candidate":
         return "candidate_for_future_opt_in_gate"
+    if classification == "rt_supported_ms1_interference_drift_explainable_review":
+        return "review_interference_with_rt_envelope_context"
     if classification in {
         "rt_supported_ms1_interference_review",
         "ms1_supported_rt_conflict_review",
@@ -370,13 +450,23 @@ def _review_reason(
     rt_uncertain_cell_count: int,
     rt_conflict_cell_count: int,
     rt_total_cell_count: int,
+    rt_drift_context: str,
 ) -> str:
     if classification == "rt_ms1_supported_review_candidate":
-        return "Seed-aware MS1 shape and local biological-ISTD RT support agree."
+        return (
+            "Seed-aware MS1 shape and dominant local biological-ISTD RT support "
+            "agree."
+        )
     if classification == "rt_supported_ms1_interference_review":
         return (
             "RT support exists, but neighboring MS1 interference blocks automatic "
             "use as a production gate candidate."
+        )
+    if classification == "rt_supported_ms1_interference_drift_explainable_review":
+        return (
+            "Dominant RT support exists and the supporting biological ISTD has "
+            "an empirical residual drift envelope; treat neighboring "
+            "interference as review context, not a one-strike blocker."
         )
     if classification == "ms1_supported_rt_conflict_review":
         return (
@@ -404,7 +494,8 @@ def _review_reason(
         "No combined support; "
         f"rt_supported={rt_supported_cell_count}, "
         f"rt_uncertain={rt_uncertain_cell_count}, "
-        f"rt_conflict={rt_conflict_cell_count}, rt_total={rt_total_cell_count}."
+        f"rt_conflict={rt_conflict_cell_count}, rt_total={rt_total_cell_count}, "
+        f"rt_drift_context={rt_drift_context}."
     )
 
 
@@ -418,6 +509,72 @@ def _supporting_labels(rows: Sequence[RtShadowCellRow]) -> str:
         }
     )
     return ";".join(labels)
+
+
+def _supporting_envelopes(
+    rows: Sequence[RtShadowCellRow],
+    envelope_by_target: dict[str, IstdRtEnvelopeTargetRow],
+) -> tuple[IstdRtEnvelopeTargetRow, ...]:
+    labels = {
+        row.supporting_biological_istd_label
+        for row in rows
+        if row.row_classification == RT_SUPPORTED
+        and row.supporting_biological_istd_label
+    }
+    return tuple(
+        envelope_by_target[label]
+        for label in sorted(labels)
+        if envelope_by_target.get(label) is not None
+        and envelope_by_target[label].anchor_status == "stable_istd_anchor"
+    )
+
+
+def _rt_drift_context(
+    rows: Sequence[RtShadowCellRow],
+    envelope_by_target: dict[str, IstdRtEnvelopeTargetRow],
+) -> str:
+    if not envelope_by_target:
+        return "not_provided"
+    envelopes = _supporting_envelopes(rows, envelope_by_target)
+    if not envelopes:
+        return "missing_for_supporting_istd"
+    if any(
+        envelope.normal_abs_residual_min is not None
+        and envelope.warning_abs_residual_min is not None
+        for envelope in envelopes
+    ):
+        return "biological_istd_residual_envelope_available"
+    return "biological_istd_envelope_incomplete"
+
+
+def _rt_support_level(
+    *,
+    rt_supported: int,
+    rt_conflict: int,
+    rt_total: int,
+) -> str:
+    if rt_conflict > 0:
+        return "conflicted"
+    if rt_total <= 0 or rt_supported <= 0:
+        return "none"
+    fraction = rt_supported / rt_total
+    if (
+        rt_supported >= MIN_RT_SUPPORT_CELL_COUNT
+        and fraction >= MIN_RT_SUPPORT_FRACTION
+    ):
+        return "dominant_support"
+    return "weak_support"
+
+
+def _format_fraction(numerator: int, denominator: int) -> str:
+    if denominator <= 0:
+        return ""
+    return f"{numerator / denominator:.6g}"
+
+
+def _format_envelope_values(values: Iterable[float | None]) -> str:
+    finite = sorted({value for value in values if value is not None})
+    return ";".join(f"{value:.6g}" for value in finite)
 
 
 def _matrix_status_by_grade(
@@ -446,16 +603,17 @@ def _matrix_status_by_grade(
 def _classification_sort_key(classification: str) -> int:
     priority = {
         "rt_ms1_supported_review_candidate": 0,
-        "rt_supported_ms1_interference_review": 1,
-        "ms1_supported_rt_conflict_review": 2,
-        "ms1_supported_rt_uncertain_review": 3,
-        "ms1_supported_rt_context_missing": 4,
-        "ms1_only_review": 5,
-        "rt_only_review": 6,
-        "rt_conflict_review": 7,
-        "rt_uncertain_review": 8,
-        "ms1_not_ready_review": 9,
-        "not_supported": 10,
+        "rt_supported_ms1_interference_drift_explainable_review": 1,
+        "rt_supported_ms1_interference_review": 2,
+        "ms1_supported_rt_conflict_review": 3,
+        "ms1_supported_rt_uncertain_review": 4,
+        "ms1_supported_rt_context_missing": 5,
+        "ms1_only_review": 6,
+        "rt_only_review": 7,
+        "rt_conflict_review": 8,
+        "rt_uncertain_review": 9,
+        "ms1_not_ready_review": 10,
+        "not_supported": 11,
     }
     return priority.get(classification, 99)
 

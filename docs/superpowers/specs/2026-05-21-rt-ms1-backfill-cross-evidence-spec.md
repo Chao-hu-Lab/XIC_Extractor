@@ -78,11 +78,17 @@ The final-matrix status values are:
 ## Combined Classifications
 
 - `rt_ms1_supported_review_candidate`
-  - seed-aware MS1 shape support exists and at least one local RT-supported cell
-    exists.
+  - seed-aware MS1 shape support exists;
+  - local biological-ISTD RT support is dominant;
+  - no RT transfer conflict exists.
 - `rt_supported_ms1_interference_review`
-  - RT support exists, but MS1 neighboring interference blocks automatic
-    escalation.
+  - dominant RT support exists, but MS1 neighboring interference blocks
+    automatic escalation.
+- `rt_supported_ms1_interference_drift_explainable_review`
+  - dominant RT support exists;
+  - MS1 neighboring interference exists;
+  - the supporting biological ISTD has a stable residual RT envelope, so the
+    interference label is review context rather than a one-strike blocker.
 - `ms1_supported_rt_conflict_review`
   - MS1 shape support exists, but biological ISTD RT transfer conflicts.
 - `ms1_supported_rt_uncertain_review`
@@ -109,6 +115,12 @@ The final-matrix status values are:
   interference.
 - MS1 shape support alone must not become a production gate when RT context is
   missing or conflicting.
+- Dominant RT support requires `rt_supported_cell_count >= 3`,
+  `rt_supported_cell_count / rt_total_cell_count >= 0.10`, and
+  `rt_conflict_cell_count == 0`.
+- A single RT-supported cell is weak support, not Grade A.
+- Any RT transfer conflict is blocking evidence and caps the grade at
+  `E_conflict_or_not_supported`, even if other cells are RT-supported.
 - RT uncertainty is neutral missing confirmation, not negative evidence. It must
   not downgrade strong seed-aware MS1 shape evidence into a failed family.
 - `rt_ms1_supported_review_candidate` means candidate for future opt-in gate
@@ -138,6 +150,15 @@ backfill behavior.
 - `C_manual_review_interference`
   - Neighboring MS1 interference or comparable manual-review blocker exists.
   - RT support can add context but cannot override the blocker.
+- `C1_drift_explainable_interference_review`
+  - Neighboring MS1 interference exists, but dominant RT support and a stable
+    biological ISTD residual RT envelope suggest the apparent interference may
+    be explainable by normal biological-matrix drift.
+  - This is still review-only, not production approval.
+- `C2_manual_review_interference`
+  - Neighboring MS1 interference exists and biological residual-envelope context
+    is absent, insufficient, or not dominant.
+  - Keep as manual-review interference.
 - `D_single_axis_or_not_ready`
   - Only RT support exists, or MS1 evidence is shape-insufficient/not
     assessable.
@@ -164,6 +185,13 @@ other 85RAW review families. A scientifically interpretable run requires
 matching RT shadow rows generated from the same 85RAW family-id scope.
 
 The scope-matched 85RAW follow-up generated matching RT rows for all 101
-seed-aware families. It found only two `A_dual_axis_supported` families, but
-also surfaced `B_ms1_shape_supported_rt_unconfirmed` rows where MS1 shape is
-strong and RT is neutral/missing rather than contradictory.
+seed-aware families. After support-dominance calibration, it found only one
+`A_dual_axis_supported` family and four
+`B_ms1_shape_supported_rt_unconfirmed` families where MS1 shape is strong and
+RT is weak, neutral, or missing rather than contradictory.
+
+After biological ISTD residual-envelope context was added, the classifier must
+not use `high_raw_drift` as the C1 gate. In the current 85RAW run every stable
+biological ISTD has high raw RT range, so that flag is annotation-only and has
+no discriminatory power. C1 requires a stable residual envelope from the
+supporting ISTD plus dominant conflict-free RT support.

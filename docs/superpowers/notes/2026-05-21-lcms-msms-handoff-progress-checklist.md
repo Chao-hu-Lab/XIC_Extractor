@@ -187,14 +187,19 @@ Relationship to Level 2.5 RT shadow gate:
   alignment-support evidence.
 - [x] RT x MS1 backfill cross-evidence diagnostic exists as audit-only
   follow-up.
+- [x] Biological ISTD RT envelope diagnostic exists and defines empirical
+  biological-matrix RT drift residuals before treating RT spread as abnormal.
+- [x] RT x MS1 backfill cross-evidence can consume the ISTD RT envelope and
+  split neighboring-interference review into C1 drift-explainable vs C2
+  unresolved interference.
 - [~] Level 2 RT-aware audit / alignment-support is `go`.
 - [~] Level 2.5 8RAW smoke is `shadow_gate_ready`, with 430
   `rt_supported_shadow_candidate` rows.
 - [x] Scope-matched 85RAW RT x MS1 cross-evidence smoke exists:
   101 seed-aware families, 20756 RT families, and all 101 seed-aware families
   have matching RT rows.
-- [~] Scope-matched cross-evidence is still review-only. It identifies only 2
-  `rt_ms1_supported_review_candidate` families; most rows remain RT-only or
+- [~] Scope-matched cross-evidence is still review-only. It identifies only 1
+  `rt_ms1_supported_review_candidate` family; most rows remain RT-only or
   RT-uncertain review cases.
 - [x] Cross-evidence now reports `evidence_grade`, `blocking_evidence`, and
   `missing_evidence` so RT uncertainty is treated as missing confirmation, not
@@ -202,6 +207,12 @@ Relationship to Level 2.5 RT shadow gate:
 - [x] Cross-evidence now reports `current final matrix status x evidence grade`.
   In the 85RAW seed-aware scope, all 101 reviewed families are already in the
   current FinalMatrix with accepted rescue values.
+- [x] Biological ISTD RT envelope 85RAW smoke exists:
+  7 stable ISTD anchors; all 7 have high raw RT drift. `d3-N6-medA` has raw RT
+  range about 2.119 min but is still a stable target-specific drift anchor.
+- [x] Cross-evidence with biological ISTD RT envelope splits the previous Grade C:
+  `C1_drift_explainable_interference_review` = 2 families and
+  `C2_manual_review_interference` = 3 families.
 - [~] Level 3 RT production correction is `no_go`.
 - [ ] Level 4 response shadow model is not implemented.
 - [ ] Level 5 response production correction is not implemented.
@@ -218,11 +229,13 @@ Current reference points:
 - `tools/diagnostics/instrument_qc_biological_istd_transfer_audit.py`
 - `tools/diagnostics/instrument_qc_calibration_maturity_gate.py`
 - `tools/diagnostics/instrument_qc_rt_supported_shadow_gate.py`
+- `tools/diagnostics/instrument_qc_biological_istd_rt_envelope.py`
 - `tools/diagnostics/rt_ms1_backfill_cross_evidence.py`
 - `docs/superpowers/notes/2026-05-21-instrument-qc-rt-aware-midterm-preview.md`
 - `docs/superpowers/notes/2026-05-21-instrument-qc-level3-no-go-convergence.md`
 - `docs/superpowers/notes/2026-05-21-instrument-qc-level2-5-rt-supported-shadow-gate-validation.md`
 - `docs/superpowers/specs/2026-05-21-rt-ms1-backfill-cross-evidence-spec.md`
+- `docs/superpowers/specs/2026-05-21-biological-istd-rt-envelope-and-drift-aware-backfill-review-spec.md`
 
 ### 8. Human Review Surfaces
 
@@ -268,34 +281,54 @@ Current result:
 - Scope-matched 85RAW RT x MS1 cross-evidence:
   - seed-aware families evaluated: 101;
   - families with matching RT context: 101;
-  - `rt_ms1_supported_review_candidate`: 2 families;
-  - `rt_supported_ms1_interference_review`: 2 families;
-  - `ms1_supported_rt_uncertain_review`: 3 families;
-  - `rt_only_review`: 40 families;
-  - `rt_uncertain_review`: 48 families.
+  - `rt_ms1_supported_review_candidate`: 1 family;
+  - `rt_supported_ms1_interference_drift_explainable_review`: 2 families;
+  - `ms1_supported_rt_uncertain_review`: 4 families;
+  - `rt_only_review`: 30 families;
+  - `rt_uncertain_review`: 58 families;
+  - `ms1_not_ready_review`: 6 families.
 - Scope-matched evidence grades:
-  - `A_dual_axis_supported`: 2 families;
-  - `B_ms1_shape_supported_rt_unconfirmed`: 3 families;
-  - `C_manual_review_interference`: 5 families;
+  - `A_dual_axis_supported`: 1 family;
+  - `B_ms1_shape_supported_rt_unconfirmed`: 4 families;
+  - `C1_drift_explainable_interference_review`: 2 families;
+  - `C2_manual_review_interference`: 3 families;
   - `D_single_axis_or_not_ready`: 91 families.
 - Current FinalMatrix overlap:
-  - Grade A: 2 families already in matrix, 159 accepted rescue cells.
-  - Grade B: 3 families already in matrix, 239 accepted rescue cells.
-  - Grade C: 5 families already in matrix, 387 accepted rescue cells.
+  - Grade A: 1 family already in matrix, 78 accepted rescue cells.
+  - Grade B: 4 families already in matrix, 320 accepted rescue cells.
+  - Grade C1: 2 families already in matrix, 156 accepted rescue cells.
+  - Grade C2: 3 families already in matrix, 231 accepted rescue cells.
   - Grade D: 91 families already in matrix, 6519 accepted rescue cells.
 - Output remains audit-only: no RT, area, reliability, scoring, resolver, DNP,
   or matrix mutation.
 
+After adding biological ISTD RT envelope context:
+
+- Biological ISTD RT envelope verdict: `rt_envelope_ready`.
+- Stable biological ISTD anchors: 7.
+- All 7 stable ISTD anchors have high raw RT drift; raw RT spread is normal
+  enough in this batch that it must not be treated as a one-strike blocker.
+- Grade C splits into:
+  - `C1_drift_explainable_interference_review`: 2 families, 156 accepted rescue
+    cells.
+  - `C2_manual_review_interference`: 3 families, 231 accepted rescue cells.
+
 Key family interpretation from the scope-matched run:
 
-- `FAM010804` and `FAM020262`: both axes agree, so they are review candidates
-  for a future opt-in gate design.
-- `FAM012728` and `FAM016922`: RT support exists, but neighboring MS1
-  interference keeps them review-only.
-- `FAM020034`, `FAM020336`, and `FAM020381`: Grade B. Seed-aware MS1 shape is
-  supported; RT support is unconfirmed/uncertain, not contradictory.
-- `FAM004459`, `FAM006664`, and `FAM014256`: Grade C. These remain review-only
-  because neighboring MS1 interference is a blocker; RT uncertainty is secondary.
+- `FAM010804`: both axes agree with dominant conflict-free RT support, so it is
+  a review candidate for a future opt-in gate design.
+- `FAM020262`: moved out of Grade A after support-dominance calibration; it has
+  only weak RT support (`1/85`) and is now Grade B rather than dual-axis.
+- `FAM012728` and `FAM016922`: RT support exists and the supporting ISTDs have
+  biological RT envelope context, so they are now C1 drift-explainable
+  interference review cases. They are not production-approved, but they should
+  not be rejected by neighboring-interference wording alone.
+- `FAM020034`, `FAM020262`, `FAM020336`, and `FAM020381`: Grade B. Seed-aware
+  MS1 shape is supported; RT support is weak/unconfirmed/uncertain, not
+  contradictory.
+- `FAM004459`, `FAM006664`, and `FAM014256`: C2 unresolved interference. These
+  remain review-only because no supporting ISTD RT envelope context currently
+  explains their interference label.
 
 This means the current production backfill is broader than the new evidence
 grades. The new work is not adding missing matrix values; it is measuring which
@@ -306,7 +339,8 @@ Useful follow-up:
 
 - Review the 2 `rt_ms1_supported_review_candidate` families manually before any
   production-gate planning.
-- If the 2 families look scientifically plausible, write a narrow opt-in gate
+- If the Grade A family and the Grade B family set look scientifically
+  plausible, write a narrow opt-in gate
   plan requiring both seed-aware MS1 shape support and local biological-ISTD RT
   support.
 - Keep `neighbor_interference_review`, `shape_insufficient_review`, or
@@ -378,8 +412,11 @@ Recommended order:
    production-gate plan with separate handling for:
    - Grade A: dual-axis evidence;
    - Grade B: MS1-backed evidence with neutral/missing RT confirmation.
-5. Keep FAM004459-like Grade C cases out of automatic rescue unless neighboring
-   MS1 interference is resolved by stronger evidence.
+5. Split Grade C before deciding policy:
+   - C1: drift-explainable interference review; manual overlay review can decide
+     whether it should move toward Grade B-like treatment later.
+   - C2: unresolved interference; keep out of automatic rescue unless stronger
+     evidence resolves the competing peak concern.
 6. Decide whether Grade D current FinalMatrix backfills should stay as-is,
    move to review/provisional, or require additional MS1 overlay evidence.
 7. Add response shadow evidence only after the RT/MS1 combined evidence table is

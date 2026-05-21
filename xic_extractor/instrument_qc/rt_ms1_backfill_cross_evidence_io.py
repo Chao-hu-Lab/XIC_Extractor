@@ -9,6 +9,7 @@ from typing import Any, Mapping, Sequence
 from xic_extractor.instrument_qc.calibration_product_loaders import read_tsv_rows
 from xic_extractor.instrument_qc.rt_ms1_backfill_cross_evidence import (
     FinalMatrixFamilyRow,
+    IstdRtEnvelopeTargetRow,
     RtMs1CrossEvidenceResult,
     RtShadowCellRow,
     SeedAwareFamilyRow,
@@ -49,6 +50,15 @@ ALIGNMENT_REVIEW_REQUIRED_COLUMNS = {
     "review_rescue_count",
 }
 
+ISTD_RT_ENVELOPE_REQUIRED_COLUMNS = {
+    "target_label",
+    "anchor_status",
+    "rt_range_min",
+    "normal_abs_residual_min",
+    "warning_abs_residual_min",
+    "high_raw_drift",
+}
+
 FAMILY_COLUMNS = [
     "feature_family_id",
     "family_center_mz",
@@ -62,7 +72,13 @@ FAMILY_COLUMNS = [
     "rt_conflict_cell_count",
     "rt_clean_only_cell_count",
     "rt_total_cell_count",
+    "rt_supported_fraction",
+    "rt_support_level",
     "supporting_istd_labels",
+    "supporting_istd_normal_envelope_min",
+    "supporting_istd_warning_envelope_min",
+    "supporting_istd_high_raw_drift",
+    "rt_drift_context",
     "combined_classification",
     "evidence_grade",
     "final_matrix_status",
@@ -93,11 +109,15 @@ def build_rt_ms1_cross_evidence_from_files(
     rt_shadow_rows_tsv: Path,
     seed_aware_families_tsv: Path,
     alignment_review_tsv: Path | None = None,
+    biological_istd_rt_envelope_targets_tsv: Path | None = None,
 ) -> RtMs1CrossEvidenceResult:
     return build_rt_ms1_backfill_cross_evidence(
         rt_rows=_load_rt_shadow_rows(rt_shadow_rows_tsv),
         seed_families=_load_seed_aware_families(seed_aware_families_tsv),
         final_matrix_rows=_load_alignment_review_rows(alignment_review_tsv),
+        istd_rt_envelopes=_load_istd_rt_envelopes(
+            biological_istd_rt_envelope_targets_tsv
+        ),
     )
 
 
@@ -216,6 +236,33 @@ def _load_alignment_review_rows(
     )
 
 
+def _load_istd_rt_envelopes(
+    path: Path | None,
+) -> tuple[IstdRtEnvelopeTargetRow, ...]:
+    if path is None:
+        return ()
+    rows = read_tsv_rows(path, required_columns=ISTD_RT_ENVELOPE_REQUIRED_COLUMNS)
+    return tuple(
+        IstdRtEnvelopeTargetRow(
+            target_label=(row.get("target_label") or "").strip(),
+            anchor_status=(row.get("anchor_status") or "").strip(),
+            rt_range_min=_parse_optional_float(row, "rt_range_min", path=path),
+            normal_abs_residual_min=_parse_optional_float(
+                row,
+                "normal_abs_residual_min",
+                path=path,
+            ),
+            warning_abs_residual_min=_parse_optional_float(
+                row,
+                "warning_abs_residual_min",
+                path=path,
+            ),
+            high_raw_drift=_parse_bool(row, "high_raw_drift", path=path),
+        )
+        for row in rows
+    )
+
+
 def _summary_rows(result: RtMs1CrossEvidenceResult) -> list[dict[str, str]]:
     rows = [
         {"metric": "family_count", "value": str(result.total_families)},
@@ -323,8 +370,9 @@ def _render_markdown(
             "## Top Families",
             "",
             "| grade | class | family | m/z | RT | rescued | RT supported cells | "
-            "matrix | blockers | missing | reason |",
-            "| --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- | --- |",
+            "RT support level | matrix | blockers | missing | reason |",
+            "| --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- | "
+            "--- | --- |",
         ]
     )
     for row in result.rows[:20]:
@@ -339,6 +387,7 @@ def _render_markdown(
                     row.family_center_rt,
                     str(row.accepted_rescue_count),
                     str(row.rt_supported_cell_count),
+                    row.rt_support_level,
                     row.final_matrix_status,
                     row.blocking_evidence,
                     row.missing_evidence,
@@ -353,9 +402,16 @@ def _render_markdown(
             "## Interpretation",
             "",
             "- `rt_ms1_supported_review_candidate`: both seed-aware MS1 shape and",
-            "  local biological-ISTD RT support agree.",
-            "- `rt_supported_ms1_interference_review`: RT support exists, but",
-            "  neighboring MS1 interference still blocks production escalation.",
+            "  dominant local biological-ISTD RT support agree.",
+            "- `rt_supported_ms1_interference_review`: dominant RT support exists,",
+            "  but neighboring MS1 interference still blocks production escalation.",
+            "- `rt_supported_ms1_interference_drift_explainable_review`: RT",
+            "  support is dominant, and the supporting ISTD has biological RT",
+            "  residual envelope context. Treat the interference label as review",
+            "  context, not as a one-strike blocker.",
+            "- Dominant RT support requires at least three supported cells, at",
+            "  least 10% supported cells, and zero RT conflict cells.",
+            "- Any RT conflict caps the grade at conflict/not-supported review.",
             "- RT evidence alone must not rescue a family whose MS1 context is",
             "  conflicted.",
             "- `B_ms1_shape_supported_rt_unconfirmed` means MS1 shape evidence is",
@@ -391,6 +447,23 @@ def _parse_int(row: Mapping[str, str], column: str, *, path: Path) -> int:
     except ValueError as exc:
         raise ValueError(
             f"{path.name} column {column} has invalid integer value: {value!r}"
+        ) from exc
+
+
+def _parse_optional_float(
+    row: Mapping[str, str],
+    column: str,
+    *,
+    path: Path,
+) -> float | None:
+    value = (row.get(column) or "").strip()
+    if not value:
+        return None
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{path.name} column {column} has invalid numeric value: {value!r}"
         ) from exc
 
 

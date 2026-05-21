@@ -39,6 +39,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--biological-istd-rt-envelope-targets-tsv",
+        type=Path,
+        help=(
+            "Optional biological_istd_rt_envelope_targets.tsv. When provided, "
+            "neighboring-interference rows can be annotated with biological "
+            "ISTD RT drift envelope context."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         required=True,
@@ -55,6 +64,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             rt_shadow_rows_tsv=args.rt_shadow_rows_tsv,
             seed_aware_families_tsv=args.seed_aware_families_tsv,
             alignment_review_tsv=args.alignment_review_tsv,
+            biological_istd_rt_envelope_targets_tsv=(
+                args.biological_istd_rt_envelope_targets_tsv
+            ),
         )
         outputs = write_rt_ms1_cross_evidence_outputs(
             output_dir=args.output_dir,
