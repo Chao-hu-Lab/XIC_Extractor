@@ -57,10 +57,15 @@ def test_cross_evidence_requires_rt_and_ms1_support(tmp_path: Path) -> None:
         rows["FAM001"].combined_classification
         == "rt_ms1_supported_review_candidate"
     )
+    assert rows["FAM001"].evidence_grade == "A_dual_axis_supported"
+    assert rows["FAM001"].blocking_evidence == ""
+    assert rows["FAM001"].missing_evidence == ""
     assert (
         rows["FAM002"].combined_classification
         == "rt_supported_ms1_interference_review"
     )
+    assert rows["FAM002"].evidence_grade == "C_manual_review_interference"
+    assert rows["FAM002"].blocking_evidence == "neighboring_ms1_interference"
     assert rows["FAM002"].recommended_next_action == "manual_review_required"
     assert result.rt_family_count == 2
     assert result.matched_family_count == 2
@@ -83,7 +88,17 @@ def test_ms1_supported_rt_uncertain_and_missing_context(tmp_path: Path) -> None:
 
     rows = {row.feature_family_id: row for row in result.rows}
     assert rows["FAM001"].combined_classification == "ms1_supported_rt_uncertain_review"
+    assert (
+        rows["FAM001"].evidence_grade
+        == "B_ms1_shape_supported_rt_unconfirmed"
+    )
+    assert rows["FAM001"].missing_evidence == "rt_confirmation"
     assert rows["FAM003"].combined_classification == "ms1_supported_rt_context_missing"
+    assert (
+        rows["FAM003"].evidence_grade
+        == "B_ms1_shape_supported_rt_unconfirmed"
+    )
+    assert rows["FAM003"].missing_evidence == "rt_context"
 
 
 def test_rt_only_does_not_override_shape_insufficient_ms1(tmp_path: Path) -> None:
@@ -100,7 +115,30 @@ def test_rt_only_does_not_override_shape_insufficient_ms1(tmp_path: Path) -> Non
 
     row = result.rows[0]
     assert row.combined_classification == "rt_only_review"
+    assert row.evidence_grade == "D_single_axis_or_not_ready"
+    assert row.blocking_evidence == "ms1_shape_insufficient"
+    assert row.missing_evidence == "seed_shape_support"
     assert row.recommended_next_action == "generate_or_review_seed_specific_overlay"
+
+
+def test_rt_uncertain_neighboring_interference_is_grade_c(tmp_path: Path) -> None:
+    rt_tsv, seed_tsv = _write_inputs(
+        tmp_path,
+        rt_rows=[_rt_row("FAM001", "rt_model_uncertain")],
+        seed_rows=[_seed_row("FAM001", "neighbor_interference_review")],
+    )
+
+    result = build_rt_ms1_cross_evidence_from_files(
+        rt_shadow_rows_tsv=rt_tsv,
+        seed_aware_families_tsv=seed_tsv,
+    )
+
+    row = result.rows[0]
+    assert row.combined_classification == "rt_uncertain_review"
+    assert row.evidence_grade == "C_manual_review_interference"
+    assert row.blocking_evidence == "neighboring_ms1_interference"
+    assert row.missing_evidence == "seed_shape_support;rt_confirmation"
+    assert "neighboring interference" in row.review_reason
 
 
 def test_cli_writes_outputs(tmp_path: Path) -> None:
@@ -130,6 +168,9 @@ def test_cli_writes_outputs(tmp_path: Path) -> None:
     )
     assert payload["counts_by_classification"] == {
         "rt_ms1_supported_review_candidate": 1
+    }
+    assert payload["counts_by_evidence_grade"] == {
+        "A_dual_axis_supported": 1
     }
     assert payload["matched_family_count"] == 1
     markdown = (output_dir / "rt_ms1_backfill_cross_evidence.md").read_text(

@@ -50,6 +50,7 @@ The summary must include:
 - RT family count;
 - matched family count;
 - counts by combined classification.
+- counts by evidence grade.
 
 ## Combined Classifications
 
@@ -85,11 +86,41 @@ The summary must include:
   interference.
 - MS1 shape support alone must not become a production gate when RT context is
   missing or conflicting.
+- RT uncertainty is neutral missing confirmation, not negative evidence. It must
+  not downgrade strong seed-aware MS1 shape evidence into a failed family.
 - `rt_ms1_supported_review_candidate` means candidate for future opt-in gate
   planning only. It is not a production approval.
 - `matched_family_count` must be reviewed before interpreting the classification
   counts. Low overlap means the input artifacts likely came from mismatched
   scopes or stale runs.
+
+## Evidence Grades
+
+The human review surface must include `evidence_grade`, `blocking_evidence`, and
+`missing_evidence` so that missing RT context is not confused with conflict.
+
+- `A_dual_axis_supported`
+  - Seed-aware MS1 shape support exists and local biological-ISTD RT support
+    exists.
+  - This is a future opt-in production-gate planning candidate, not production
+    approval.
+- `B_ms1_shape_supported_rt_unconfirmed`
+  - Seed-aware MS1 shape support exists.
+  - RT support is missing or uncertain, but there is no RT transfer conflict.
+  - This is strong MS1-backed review evidence. It should not be treated as a
+    failed family.
+- `C_manual_review_interference`
+  - Neighboring MS1 interference or comparable manual-review blocker exists.
+  - RT support can add context but cannot override the blocker.
+- `D_single_axis_or_not_ready`
+  - Only RT support exists, or MS1 evidence is shape-insufficient/not
+    assessable.
+  - Keep as review-only until the missing axis is generated or manually
+    resolved.
+- `E_conflict_or_not_supported`
+  - RT transfer conflict or no useful support exists.
+  - This is the only grade family that should be interpreted as genuinely
+    negative or blocked by current evidence.
 
 ## Current Smoke
 
@@ -105,3 +136,8 @@ Result:
 This proves the diagnostic can run, but it is not enough to judge FAM004459 or
 other 85RAW review families. A scientifically interpretable run requires
 matching RT shadow rows generated from the same 85RAW family-id scope.
+
+The scope-matched 85RAW follow-up generated matching RT rows for all 101
+seed-aware families. It found only two `A_dual_axis_supported` families, but
+also surfaced `B_ms1_shape_supported_rt_unconfirmed` rows where MS1 shape is
+strong and RT is neutral/missing rather than contradictory.

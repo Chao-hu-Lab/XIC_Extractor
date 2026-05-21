@@ -190,8 +190,15 @@ Relationship to Level 2.5 RT shadow gate:
 - [~] Level 2 RT-aware audit / alignment-support is `go`.
 - [~] Level 2.5 8RAW smoke is `shadow_gate_ready`, with 430
   `rt_supported_shadow_candidate` rows.
-- [~] First RT x MS1 cross-evidence smoke is scope-limited:
-  101 seed-aware families, 2300 RT families, but only 10 matched family IDs.
+- [x] Scope-matched 85RAW RT x MS1 cross-evidence smoke exists:
+  101 seed-aware families, 20756 RT families, and all 101 seed-aware families
+  have matching RT rows.
+- [~] Scope-matched cross-evidence is still review-only. It identifies only 2
+  `rt_ms1_supported_review_candidate` families; most rows remain RT-only or
+  RT-uncertain review cases.
+- [x] Cross-evidence now reports `evidence_grade`, `blocking_evidence`, and
+  `missing_evidence` so RT uncertainty is treated as missing confirmation, not
+  as negative evidence.
 - [~] Level 3 RT production correction is `no_go`.
 - [ ] Level 4 response shadow model is not implemented.
 - [ ] Level 5 response production correction is not implemented.
@@ -254,17 +261,41 @@ Current result:
 
 - 8RAW smoke verdict: `shadow_gate_ready`.
 - `rt_supported_shadow_candidate`: 430 rows.
+- Scope-matched 85RAW Level 2.5 gate verdict: `shadow_gate_ready`.
+- Scope-matched 85RAW RT x MS1 cross-evidence:
+  - seed-aware families evaluated: 101;
+  - families with matching RT context: 101;
+  - `rt_ms1_supported_review_candidate`: 2 families;
+  - `rt_supported_ms1_interference_review`: 2 families;
+  - `ms1_supported_rt_uncertain_review`: 3 families;
+  - `rt_only_review`: 40 families;
+  - `rt_uncertain_review`: 48 families.
+- Scope-matched evidence grades:
+  - `A_dual_axis_supported`: 2 families;
+  - `B_ms1_shape_supported_rt_unconfirmed`: 3 families;
+  - `C_manual_review_interference`: 5 families;
+  - `D_single_axis_or_not_ready`: 91 families.
 - Output remains audit-only: no RT, area, reliability, scoring, resolver, DNP,
   or matrix mutation.
 
+Key family interpretation from the scope-matched run:
+
+- `FAM010804` and `FAM020262`: both axes agree, so they are review candidates
+  for a future opt-in gate design.
+- `FAM012728` and `FAM016922`: RT support exists, but neighboring MS1
+  interference keeps them review-only.
+- `FAM020034`, `FAM020336`, and `FAM020381`: Grade B. Seed-aware MS1 shape is
+  supported; RT support is unconfirmed/uncertain, not contradictory.
+- `FAM004459`, `FAM006664`, and `FAM014256`: Grade C. These remain review-only
+  because neighboring MS1 interference is a blocker; RT uncertainty is secondary.
+
 Useful follow-up:
 
-- Regenerate Level 2.5 rows in the same 85RAW alignment / family-id scope as
-  seed-aware backfill review.
-- Rerun the RT x MS1 cross-evidence diagnostic after scope alignment.
-- Identify families where both are true:
-  - `seed_shape_supported_review_candidate`;
-  - `rt_supported_shadow_candidate`.
+- Review the 2 `rt_ms1_supported_review_candidate` families manually before any
+  production-gate planning.
+- If the 2 families look scientifically plausible, write a narrow opt-in gate
+  plan requiring both seed-aware MS1 shape support and local biological-ISTD RT
+  support.
 - Keep `neighbor_interference_review`, `shape_insufficient_review`, or
   `rt_model_uncertain` rows as review-only.
 - Do not use RT support alone to override MS1 interference.
@@ -324,16 +355,21 @@ The next scientific PR should not jump to production correction.
 
 Recommended order:
 
-1. Use the Level 2.5 RT-supported shadow gate as audit evidence, not production
-   correction.
-2. Regenerate scope-matched 85RAW RT shadow rows and rerun the RT x MS1
-   cross-evidence diagnostic.
-3. Cross-tab Level 2.5 RT support with seed-aware MS1 backfill review.
-4. If both axes agree for a small, clean subset, plan an opt-in production-gate
-   candidate.
-5. Add response shadow evidence only after the RT/MS1 combined evidence table is
-   interpretable.
-6. In parallel or between scientific PRs, split oversized diagnostic tools.
+1. Keep the Level 2.5 RT-supported shadow gate as audit evidence, not
+   production correction.
+2. Manually inspect the 2 Grade A families: `FAM010804` and `FAM020262`.
+3. Also inspect the 3 Grade B families: `FAM020034`, `FAM020336`, and
+   `FAM020381`; these may be strong MS1-backed candidates even without RT
+   confirmation.
+4. If manual review supports Grade A/B families, write a narrow opt-in
+   production-gate plan with separate handling for:
+   - Grade A: dual-axis evidence;
+   - Grade B: MS1-backed evidence with neutral/missing RT confirmation.
+5. Keep FAM004459-like Grade C cases out of automatic rescue unless neighboring
+   MS1 interference is resolved by stronger evidence.
+6. Add response shadow evidence only after the RT/MS1 combined evidence table is
+   accepted as interpretable.
+7. In parallel or between scientific PRs, split oversized diagnostic tools.
 
 This preserves the useful evidence accumulated so far while avoiding a premature
 production matrix mutation.

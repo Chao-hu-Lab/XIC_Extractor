@@ -53,6 +53,9 @@ FAMILY_COLUMNS = [
     "rt_total_cell_count",
     "supporting_istd_labels",
     "combined_classification",
+    "evidence_grade",
+    "blocking_evidence",
+    "missing_evidence",
     "recommended_next_action",
     "review_reason",
     "overlay_png_paths",
@@ -160,6 +163,10 @@ def _summary_rows(result: RtMs1CrossEvidenceResult) -> list[dict[str, str]]:
         {"metric": f"classification:{label}", "value": str(count)}
         for label, count in result.counts_by_classification.items()
     )
+    rows.extend(
+        {"metric": f"evidence_grade:{label}", "value": str(count)}
+        for label, count in result.counts_by_evidence_grade.items()
+    )
     return rows
 
 
@@ -169,6 +176,7 @@ def _summary_payload(result: RtMs1CrossEvidenceResult) -> dict[str, Any]:
         "rt_family_count": result.rt_family_count,
         "matched_family_count": result.matched_family_count,
         "counts_by_classification": result.counts_by_classification,
+        "counts_by_evidence_grade": result.counts_by_evidence_grade,
     }
 
 
@@ -202,10 +210,23 @@ def _render_markdown(
     lines.extend(
         [
             "",
+            "## Evidence Grade Counts",
+            "",
+        ]
+    )
+    if result.counts_by_evidence_grade:
+        for label, count in result.counts_by_evidence_grade.items():
+            lines.append(f"- `{label}`: {count}")
+    else:
+        lines.append("- no families evaluated")
+    lines.extend(
+        [
+            "",
             "## Top Families",
             "",
-            "| class | family | m/z | RT | rescued | RT supported cells | reason |",
-            "| --- | --- | ---: | ---: | ---: | ---: | --- |",
+            "| grade | class | family | m/z | RT | rescued | RT supported cells | "
+            "blockers | missing | reason |",
+            "| --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |",
         ]
     )
     for row in result.rows[:20]:
@@ -213,12 +234,15 @@ def _render_markdown(
             "| "
             + " | ".join(
                 [
+                    f"`{row.evidence_grade}`",
                     f"`{row.combined_classification}`",
                     row.feature_family_id,
                     row.family_center_mz,
                     row.family_center_rt,
                     str(row.accepted_rescue_count),
                     str(row.rt_supported_cell_count),
+                    row.blocking_evidence,
+                    row.missing_evidence,
                     row.review_reason,
                 ]
             )
@@ -235,6 +259,8 @@ def _render_markdown(
             "  neighboring MS1 interference still blocks production escalation.",
             "- RT evidence alone must not rescue a family whose MS1 context is",
             "  conflicted.",
+            "- `B_ms1_shape_supported_rt_unconfirmed` means MS1 shape evidence is",
+            "  strong, while RT evidence is absent or uncertain rather than negative.",
             "- If families with both inputs is low, treat the run as an artifact",
             "  scope mismatch and regenerate matching RT/seed-aware diagnostics.",
             "",

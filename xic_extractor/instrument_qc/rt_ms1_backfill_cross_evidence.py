@@ -57,6 +57,9 @@ class RtMs1CrossEvidenceRow:
     rt_total_cell_count: int
     supporting_istd_labels: str
     combined_classification: str
+    evidence_grade: str
+    blocking_evidence: str
+    missing_evidence: str
     recommended_next_action: str
     review_reason: str
     overlay_png_paths: str
@@ -66,6 +69,7 @@ class RtMs1CrossEvidenceRow:
 class RtMs1CrossEvidenceResult:
     rows: tuple[RtMs1CrossEvidenceRow, ...]
     counts_by_classification: dict[str, int]
+    counts_by_evidence_grade: dict[str, int]
     total_families: int
     rt_family_count: int
     matched_family_count: int
@@ -96,6 +100,7 @@ def build_rt_ms1_backfill_cross_evidence(
             )
         ),
         counts_by_classification=_counts(row.combined_classification for row in rows),
+        counts_by_evidence_grade=_counts(row.evidence_grade for row in rows),
         total_families=len(rows),
         rt_family_count=len(rt_by_family),
         matched_family_count=len(seed_family_ids & set(rt_by_family)),
@@ -129,6 +134,13 @@ def _build_family_row(
         rt_conflict_cell_count=rt_conflict,
         rt_total_cell_count=len(rt_rows),
     )
+    evidence_grade = _evidence_grade(
+        ms1_classification=seed_family.review_classification,
+        rt_supported_cell_count=rt_supported,
+        rt_uncertain_cell_count=rt_uncertain,
+        rt_conflict_cell_count=rt_conflict,
+        rt_total_cell_count=len(rt_rows),
+    )
     return RtMs1CrossEvidenceRow(
         feature_family_id=seed_family.feature_family_id,
         family_center_mz=seed_family.family_center_mz,
@@ -144,6 +156,18 @@ def _build_family_row(
         rt_total_cell_count=len(rt_rows),
         supporting_istd_labels=_supporting_labels(rt_rows),
         combined_classification=classification,
+        evidence_grade=evidence_grade,
+        blocking_evidence=_blocking_evidence(
+            ms1_classification=seed_family.review_classification,
+            rt_conflict_cell_count=rt_conflict,
+        ),
+        missing_evidence=_missing_evidence(
+            ms1_classification=seed_family.review_classification,
+            rt_supported_cell_count=rt_supported,
+            rt_uncertain_cell_count=rt_uncertain,
+            rt_conflict_cell_count=rt_conflict,
+            rt_total_cell_count=len(rt_rows),
+        ),
         recommended_next_action=_recommended_action(classification),
         review_reason=_review_reason(
             classification,
@@ -189,6 +213,70 @@ def _classify_cross_evidence(
     if ms1_classification in {MS1_SHAPE_INSUFFICIENT, MS1_NOT_ASSESSABLE}:
         return "ms1_not_ready_review"
     return "not_supported"
+
+
+def _evidence_grade(
+    *,
+    ms1_classification: str,
+    rt_supported_cell_count: int,
+    rt_uncertain_cell_count: int,
+    rt_conflict_cell_count: int,
+    rt_total_cell_count: int,
+) -> str:
+    has_rt_support = rt_supported_cell_count > 0
+    has_rt_conflict = rt_conflict_cell_count > 0
+    has_rt_uncertainty = rt_uncertain_cell_count > 0
+    if ms1_classification == MS1_SUPPORTED and has_rt_support:
+        return "A_dual_axis_supported"
+    if ms1_classification == MS1_SUPPORTED and not has_rt_conflict:
+        return "B_ms1_shape_supported_rt_unconfirmed"
+    if ms1_classification == MS1_NEIGHBOR:
+        return "C_manual_review_interference"
+    if has_rt_conflict:
+        return "E_conflict_or_not_supported"
+    if ms1_classification in {MS1_SHAPE_INSUFFICIENT, MS1_NOT_ASSESSABLE}:
+        return "D_single_axis_or_not_ready"
+    if has_rt_support or has_rt_uncertainty or rt_total_cell_count > 0:
+        return "D_single_axis_or_not_ready"
+    return "E_conflict_or_not_supported"
+
+
+def _blocking_evidence(
+    *,
+    ms1_classification: str,
+    rt_conflict_cell_count: int,
+) -> str:
+    blockers: list[str] = []
+    if ms1_classification == MS1_NEIGHBOR:
+        blockers.append("neighboring_ms1_interference")
+    if ms1_classification == MS1_SHAPE_INSUFFICIENT:
+        blockers.append("ms1_shape_insufficient")
+    if ms1_classification == MS1_NOT_ASSESSABLE:
+        blockers.append("ms1_not_assessable")
+    if rt_conflict_cell_count > 0:
+        blockers.append("rt_transfer_conflict")
+    return ";".join(blockers)
+
+
+def _missing_evidence(
+    *,
+    ms1_classification: str,
+    rt_supported_cell_count: int,
+    rt_uncertain_cell_count: int,
+    rt_conflict_cell_count: int,
+    rt_total_cell_count: int,
+) -> str:
+    missing: list[str] = []
+    if ms1_classification != MS1_SUPPORTED:
+        missing.append("seed_shape_support")
+    if rt_supported_cell_count == 0 and rt_conflict_cell_count == 0:
+        if rt_total_cell_count == 0:
+            missing.append("rt_context")
+        elif rt_uncertain_cell_count > 0:
+            missing.append("rt_confirmation")
+        else:
+            missing.append("biological_istd_rt_support")
+    return ";".join(missing)
 
 
 def _recommended_action(classification: str) -> str:
@@ -237,6 +325,11 @@ def _review_reason(
     if classification == "rt_conflict_review":
         return "RT transfer conflict exists and MS1 support is not sufficient."
     if classification == "rt_uncertain_review":
+        if ms1_classification == MS1_NEIGHBOR:
+            return (
+                "MS1 has neighboring interference and RT rows are uncertain; "
+                "keep as review-only."
+            )
         return "RT rows are present but uncertain and MS1 support is not sufficient."
     if classification == "ms1_not_ready_review":
         return f"MS1 state is {ms1_classification}; keep as review-only."
