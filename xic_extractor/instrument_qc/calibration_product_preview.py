@@ -112,7 +112,9 @@ def build_level0_calibration_bundle(
         bundle_id=bundle_id,
     )
     evidence_tsv = output_dir / "instrument_qc_calibration_evidence.tsv"
-    evidence_summary_json = output_dir / "instrument_qc_calibration_evidence_summary.json"
+    evidence_summary_json = (
+        output_dir / "instrument_qc_calibration_evidence_summary.json"
+    )
     manifest_json = output_dir / "instrument_qc_calibration_manifest.json"
 
     write_calibration_evidence_tsv(evidence_tsv, collected.rows)
@@ -141,7 +143,9 @@ def build_level0_calibration_bundle(
         status_counts={
             "source_type": collected.summary.counts_by_source_type,
             "coverage_status": collected.summary.counts_by_coverage_status,
-            "product_support_status": collected.summary.counts_by_product_support_status,
+            "product_support_status": (
+                collected.summary.counts_by_product_support_status
+            ),
             "calibration_eligible": collected.summary.counts_by_calibration_eligible,
         },
         first_human_file="",
@@ -174,7 +178,9 @@ def build_level1_rt_calibration_preview(
     )
 
     evidence_tsv = output_dir / "instrument_qc_calibration_evidence.tsv"
-    evidence_summary_json = output_dir / "instrument_qc_calibration_evidence_summary.json"
+    evidence_summary_json = (
+        output_dir / "instrument_qc_calibration_evidence_summary.json"
+    )
     rt_preview_tsv = output_dir / "matrix_rt_calibration_preview.tsv"
     rt_preview_summary_json = output_dir / "matrix_rt_calibration_preview_summary.json"
     manifest_json = output_dir / "instrument_qc_calibration_manifest.json"
@@ -185,11 +191,13 @@ def build_level1_rt_calibration_preview(
         matrix_hash=matrix_hash_before,
         evidence_rows=collected.rows,
     )
+    rt_preview_counts = _counts(str(row.correction_status) for row in rt_rows)
     rt_summary = _preview_summary(
         bundle_id=bundle_id,
         matrix_source=matrix_input.name,
         matrix_source_hash=matrix_hash_before,
         rows=rt_rows,
+        correction_status_counts=rt_preview_counts,
     )
 
     write_calibration_evidence_tsv(evidence_tsv, collected.rows)
@@ -199,7 +207,9 @@ def build_level1_rt_calibration_preview(
 
     matrix_hash_after = _file_hash(matrix_input)
     if matrix_hash_after != matrix_hash_before:
-        raise ValueError(f"matrix input changed during preview generation: {matrix_input}")
+        raise ValueError(
+            f"matrix input changed during preview generation: {matrix_input}"
+        )
 
     source_artifacts = {
         **collected.source_artifacts,
@@ -219,7 +229,7 @@ def build_level1_rt_calibration_preview(
             ),
             ArtifactInventoryItem(
                 artifact_id="rt_preview",
-                path=rt_preview_tsv.name,
+                path=Path(rt_preview_tsv.name),
                 role="matrix_preview",
                 required=True,
                 schema_version=ARTIFACT_SCHEMA_VERSION,
@@ -227,7 +237,7 @@ def build_level1_rt_calibration_preview(
             ),
             ArtifactInventoryItem(
                 artifact_id="rt_preview_summary",
-                path=rt_preview_summary_json.name,
+                path=Path(rt_preview_summary_json.name),
                 role="summary",
                 required=True,
                 schema_version=ARTIFACT_SCHEMA_VERSION,
@@ -247,9 +257,11 @@ def build_level1_rt_calibration_preview(
         status_counts={
             "source_type": collected.summary.counts_by_source_type,
             "coverage_status": collected.summary.counts_by_coverage_status,
-            "product_support_status": collected.summary.counts_by_product_support_status,
+            "product_support_status": (
+                collected.summary.counts_by_product_support_status
+            ),
             "calibration_eligible": collected.summary.counts_by_calibration_eligible,
-            "rt_preview_status": rt_summary["counts_by_correction_status"],
+            "rt_preview_status": rt_preview_counts,
         },
         first_human_file="",
         first_machine_file=rt_preview_tsv.name,
@@ -414,7 +426,9 @@ def _append_trend_rows(
                 evidence_confidence=(row.get("trend_confidence") or "review").strip(),
                 calibration_eligible=detected,
                 coverage_status=(
-                    CoverageStatus.COVERED if detected else CoverageStatus.NOT_ASSESSABLE
+                    CoverageStatus.COVERED
+                    if detected
+                    else CoverageStatus.NOT_ASSESSABLE
                 ),
                 exclusion_reason="" if detected else (row.get("reason") or ""),
             )
@@ -431,7 +445,7 @@ def _base_artifact_inventory(
     return (
         ArtifactInventoryItem(
             artifact_id="manifest",
-            path=manifest_json.name,
+            path=Path(manifest_json.name),
             role="entrypoint",
             required=True,
             schema_version=ARTIFACT_SCHEMA_VERSION,
@@ -439,7 +453,7 @@ def _base_artifact_inventory(
         ),
         ArtifactInventoryItem(
             artifact_id="evidence",
-            path=evidence_tsv.name,
+            path=Path(evidence_tsv.name),
             role="row_contract",
             required=True,
             schema_version=ARTIFACT_SCHEMA_VERSION,
@@ -447,7 +461,7 @@ def _base_artifact_inventory(
         ),
         ArtifactInventoryItem(
             artifact_id="evidence_summary",
-            path=evidence_summary_json.name,
+            path=Path(evidence_summary_json.name),
             role="summary",
             required=True,
             schema_version=ARTIFACT_SCHEMA_VERSION,
@@ -560,6 +574,7 @@ def _preview_summary(
     matrix_source: str,
     matrix_source_hash: str,
     rows: tuple[MatrixRTPreviewRow, ...],
+    correction_status_counts: dict[str, int],
 ) -> dict[str, object]:
     return {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
@@ -567,9 +582,7 @@ def _preview_summary(
         "matrix_source": matrix_source,
         "matrix_source_hash": matrix_source_hash,
         "total_rows": len(rows),
-        "counts_by_correction_status": _counts(
-            str(row.correction_status) for row in rows
-        ),
+        "counts_by_correction_status": correction_status_counts,
     }
 
 
@@ -661,7 +674,9 @@ def _append_hcd_rows(
                 product_support_status=product_status,
                 neutral_loss_support_status=ProductSupportStatus.NOT_APPLICABLE,
                 evidence_confidence=(
-                    "high" if product_status == ProductSupportStatus.SUPPORTED else "review"
+                    "high"
+                    if product_status == ProductSupportStatus.SUPPORTED
+                    else "review"
                 ),
                 calibration_eligible=(
                     ms1_status == "detected"

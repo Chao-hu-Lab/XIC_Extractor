@@ -65,7 +65,9 @@ def _validate_args(args: argparse.Namespace) -> None:
     if not args.instrument_qc_dir.exists():
         raise ValueError(f"instrument QC dir not found: {args.instrument_qc_dir}")
     if not args.instrument_qc_dir.is_dir():
-        raise ValueError(f"instrument QC path is not a directory: {args.instrument_qc_dir}")
+        raise ValueError(
+            f"instrument QC path is not a directory: {args.instrument_qc_dir}"
+        )
     trend = args.instrument_qc_dir / "instrument_qc_sdolek_trend.tsv"
     if not trend.exists():
         raise ValueError(f"missing required trend TSV: {trend}")
@@ -73,7 +75,9 @@ def _validate_args(args: argparse.Namespace) -> None:
         if args.preview_kind is not None:
             raise ValueError("--matrix-input is required when --preview-kind is set")
         if args.matrix_input_role is not None:
-            raise ValueError("--matrix-input is required when --matrix-input-role is set")
+            raise ValueError(
+                "--matrix-input is required when --matrix-input-role is set"
+            )
         return
     if not args.matrix_input.exists():
         raise ValueError(f"matrix input not found: {args.matrix_input}")

@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import Mapping
 
 
-def read_tsv_rows(path: Path, *, required_columns: set[str]) -> tuple[dict[str, str], ...]:
+def read_tsv_rows(
+    path: Path,
+    *,
+    required_columns: set[str],
+) -> tuple[dict[str, str], ...]:
     with path.open(encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         fieldnames = set(reader.fieldnames or ())

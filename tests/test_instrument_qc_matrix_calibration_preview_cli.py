@@ -3,7 +3,6 @@ from pathlib import Path
 
 from tools.diagnostics import instrument_qc_matrix_calibration_preview
 
-
 TREND_COLUMNS = [
     "sample_name",
     "raw_path",

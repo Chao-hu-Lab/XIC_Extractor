@@ -9,7 +9,6 @@ from xic_extractor.instrument_qc.calibration_product_preview import (
     build_level1_rt_calibration_preview,
 )
 
-
 TREND_COLUMNS = [
     "sample_name",
     "raw_path",
@@ -140,7 +139,11 @@ def test_build_level0_bundle_writes_manifest_evidence_and_summary(
         HCD_COLUMNS,
         [
             _hcd_row(hcd_status="no_ms2_trigger"),
-            _hcd_row(sample_name="Mix_1", compound="5-hmdC", hcd_status="no_product_match"),
+            _hcd_row(
+                sample_name="Mix_1",
+                compound="5-hmdC",
+                hcd_status="no_product_match",
+            ),
         ],
     )
 
