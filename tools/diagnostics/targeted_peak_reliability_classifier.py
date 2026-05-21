@@ -336,7 +336,6 @@ def _is_coherent_istd_soft_trace_candidate(
         "nl_fail",
         "no_ms2",
         "local_sn_poor",
-        "rt_centrality_poor",
     }
     return not bool(concerns & hard_concerns)
 

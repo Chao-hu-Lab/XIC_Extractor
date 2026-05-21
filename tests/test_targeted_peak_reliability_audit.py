@@ -332,6 +332,133 @@ def test_selected_candidate_hard_conflict_does_not_mark_dropout_positive(
     )
 
 
+def test_istd_rt_window_cap_does_not_override_coherent_ms1_ms2_evidence(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("d3-N6-medA")],
+        result_rows=[
+            _result(
+                "Breast_Cancer_Tissue_pooled_QC1",
+                "d3-N6-medA",
+                rt=24.1827,
+                area=484_582_000.0,
+                nl="OK",
+                confidence="VERY_LOW",
+                reason=(
+                    "decision: review only, not counted; "
+                    "cap: VERY_LOW due to target RT window; "
+                    "support: strict NL OK; MS2 trace strong; local S/N strong; "
+                    "shape clean; trace clean; "
+                    "concerns: rt prior far; RT centrality poor"
+                ),
+            )
+        ],
+        score_rows=[
+            _score(
+                "Breast_Cancer_Tissue_pooled_QC1",
+                "d3-N6-medA",
+                confidence="VERY_LOW",
+                concerns="rt_prior_far;rt_centrality_poor",
+            )
+        ],
+    )
+    _write_peak_candidates(
+        candidates,
+        [
+            _peak_candidate(
+                "Breast_Cancer_Tissue_pooled_QC1",
+                "d3-N6-medA",
+                selected="TRUE",
+                raw_score="70",
+                support_labels=(
+                    "strict_nl_ok;ms2_trace_strong;local_sn_strong;"
+                    "shape_clean;trace_clean;cwt_same_apex_support"
+                ),
+                concern_labels="rt_prior_far;rt_centrality_poor",
+                proposal_sources="local_minimum;centwave_cwt",
+                ms2_present="TRUE",
+                nl_match="TRUE",
+            )
+        ],
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        peak_candidates_tsv=candidates,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "benchmark_eligible"
+    assert row.risk_reasons == ()
+    assert result.benchmark_eligible_count == 1
+
+
+def test_istd_rt_window_cap_still_requires_core_evidence_coherence(
+    tmp_path: Path,
+) -> None:
+    workbook = tmp_path / "targeted.xlsx"
+    candidates = tmp_path / "peak_candidates.tsv"
+    _write_targeted_workbook(
+        workbook,
+        targets=[_target("d3-N6-medA")],
+        result_rows=[
+            _result(
+                "Breast_Cancer_Tissue_pooled_QC1",
+                "d3-N6-medA",
+                rt=24.1827,
+                area=484_582_000.0,
+                nl="OK",
+                confidence="VERY_LOW",
+                reason=(
+                    "decision: review only, not counted; "
+                    "cap: VERY_LOW due to target RT window; "
+                    "support: strict NL OK; MS2 trace strong; "
+                    "concerns: rt prior far; RT centrality poor; local S/N poor"
+                ),
+            )
+        ],
+        score_rows=[
+            _score(
+                "Breast_Cancer_Tissue_pooled_QC1",
+                "d3-N6-medA",
+                confidence="VERY_LOW",
+                concerns="rt_prior_far;rt_centrality_poor;local_sn_poor",
+            )
+        ],
+    )
+    _write_peak_candidates(
+        candidates,
+        [
+            _peak_candidate(
+                "Breast_Cancer_Tissue_pooled_QC1",
+                "d3-N6-medA",
+                selected="TRUE",
+                raw_score="70",
+                support_labels="strict_nl_ok;ms2_trace_strong",
+                concern_labels="rt_prior_far;rt_centrality_poor;local_sn_poor",
+                proposal_sources="local_minimum",
+                ms2_present="TRUE",
+                nl_match="TRUE",
+            )
+        ],
+    )
+
+    _outputs, result = audit.run_targeted_peak_reliability_audit(
+        targeted_workbook=workbook,
+        peak_candidates_tsv=candidates,
+        output_dir=tmp_path / "audit",
+    )
+
+    row = result.rows[0]
+    assert row.reliability_state == "targeted_review"
+    assert row.risk_reasons == ("low_confidence",)
+
+
 def test_peak_candidate_input_requires_expected_columns(tmp_path: Path) -> None:
     workbook = tmp_path / "targeted.xlsx"
     candidates = tmp_path / "peak_candidates.tsv"

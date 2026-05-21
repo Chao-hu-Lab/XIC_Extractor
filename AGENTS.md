@@ -1,10 +1,52 @@
 # XIC Extractor Agent Contract
 
-Repo-local rules for code design and maintenance. Global Codex rules still
-apply. This file should stay short enough to influence implementation choices.
+Repo-local rules for communication, code design, domain evidence, and
+maintenance. Global Codex rules still apply. This file should stay short enough
+to influence implementation choices.
 
 For directory layout, file placement rules, and scratch directory hygiene, see
 [`docs/project-layout.md`](docs/project-layout.md).
+
+## Human Communication And Review Surfaces
+
+- Non-trivial task wrap-ups must state a clear current verdict first: what is
+  done, what is still blocked, and what the next recommended step is.
+- Final answers for implementation or validation work should include, in this
+  order when applicable: conclusion, changed files or artifact paths,
+  verification run, remaining risk, and next action.
+- Separate machine artifacts from human review surfaces. TSV/JSON are allowed to
+  be exhaustive; Markdown plans/specs are primarily for agents; human-facing
+  reports should be short, visual or indexed, and decision-oriented.
+- When asking for manual review, provide a compact review index instead of a long
+  raw table. Include the identifiers needed to find the row without extra lookup:
+  sample, label or family id, m/z, RT/window, status, reason, and linked
+  artifact path. Link the full TSV/JSON as supporting evidence only.
+- HTML/XLSX reports should summarize the decision, top blockers, and next action
+  before detailed tables. If a table is large, show top-ranked rows and provide a
+  separate full export.
+- Worktree or PR closeout should leave an operator-readable handoff: branch/task
+  purpose, current verdict, important artifacts, validation commands/results, and
+  explicit next-step recommendation.
+
+## Execution Hygiene And Gates
+
+- Before non-trivial edits, confirm the intended worktree, branch, and dirty diff
+  scope. Classify unrelated dirty files, and do not stage, rewrite, or revert
+  them unless explicitly requested.
+- Keep outputs organized under task-specific `output/` or `docs/superpowers/`
+  paths. Do not drop diagnostic graphs, TSVs, notebooks, or one-off artifacts in
+  the repo root. Every new diagnostic output group should have a summary or
+  index that points to the detailed files.
+- State validation status using explicit gate language: `diagnostic_only`,
+  `shadow_ready`, `production_candidate`, `production_ready`, or `inconclusive`.
+  Tests passing is not the same as production readiness.
+- For extraction, alignment, scoring, and matrix behavior changes, report whether
+  validation used synthetic tests only, 8-RAW, 85-RAW, targeted benchmark, or
+  manual EIC review. If real-data validation was skipped, say why and mark the
+  remaining risk.
+- Plans should separate `Now`, `Later`, and `Not in scope`, with checkpoint-level
+  acceptance criteria and stop conditions. Do not let a plan imply production
+  changes when the current phase is only audit, shadow, or validation.
 
 ## Design Principles
 
@@ -19,94 +61,107 @@ For directory layout, file placement rules, and scratch directory hygiene, see
   load. Avoid both monoliths and many tiny indistinguishable modules.
 - Preserve public contracts unless an approved plan says otherwise.
 
-## Ownership Map
+## LC-MS/MS Evidence Rules
 
-Use these ownership boundaries by default:
+- Treat RT as contextual evidence, not a single hard identity veto. Large,
+  reproducible, or unmodeled RT shifts may trigger ambiguity or confidence
+  demotion, especially when inconsistent with biological ISTD transfer evidence,
+  but RT alone must not prove analyte absence or override co-eluting,
+  candidate-aligned MS1/MS2 evidence unless an explicit hard RT exclusion policy
+  exists.
+- For ISTDs, when a coherent evidence chain exists, such as aligned MS1 peak
+  shape/area plus candidate-aligned NL/product/MS2/trace evidence, do not
+  downgrade only because of RT prior, RT window, or centrality concerns. If this
+  changes, add an explicit contract doc and regression tests.
+- Treat missing DDA MS2/product/NL evidence as `not_observed` by default. Use it
+  as negative evidence only when acquisition opportunity, local sensitivity,
+  precursor selection or scan coverage, and comparable positive controls show
+  that the evidence should have been observable.
+- Product ions, neutral losses, adducts, and in-source fragments are candidate
+  evidence only when co-eluting, boundary-aligned, and assigned to the same
+  precursor or candidate. Shared class fragments or common neutral losses support
+  class or substructure confidence, not analyte-specific proof by themselves.
+- Prefer evidence chains over single-metric authority. CWT, WIS, iRT, local
+  minima, RT models, and shape similarity are evidence inputs; none should
+  silently overrule the selected peak or matrix identity by itself. Any evidence
+  source that changes production behavior needs explicit config or contract,
+  machine-readable reason/status fields, and regression tests.
+- Keep source roles explicit when manifests, method docs, or target registries
+  declare them:
+  - SDO/LEK are dedicated clean standards and are expected only in their own
+    standard samples.
+  - MixSTDs are non-biological clean standards containing ISTDs and external
+    standards.
+  - Non-ISTD MixSTD targets are external standards; do not use them as required
+    biological-sample anchors unless explicitly spiked or validated.
+  - When biological samples receive ISTDs, those ISTDs are the primary transfer
+    evidence for real-matrix RT/response behavior because they share the sample
+    matrix, ion suppression/enhancement, RT drift, and sample-prep context.
+- Clean standards can describe instrument behavior and support authentic
+  reference checks, RT-aware preview, and audit or library work, but cannot alone
+  justify production correction of biological matrices. Calibration-derived
+  production RT/area/scoring/matrix gate changes require current-code biological
+  transfer evidence, row-level coverage or exclusion policy, and machine-readable
+  GO/NO-GO blockers.
+- Keep audit and production gates separate. Extrapolated, sparse, missing, or
+  low-coverage evidence stays review-only until an explicit production policy
+  exists.
+- When manual EIC/MS2 review contradicts a diagnostic label, investigate whether
+  the shared evidence rule, diagnostic wording, or reviewed row is wrong. Fix the
+  shared rule and add regression tests when the diagnostic logic is wrong; do not
+  encode one-off sample or target exceptions as the primary solution.
+- Targeted and untargeted workflows may use different priors and reporting, but
+  shared evidence concepts such as traces, candidates, boundaries, regions,
+  integration audit, and product/NL evidence should use common low-level models
+  when this prevents schema drift. Do not force shared concrete implementations
+  before the semantics match.
+- Targeted outputs may serve as benchmarks, validation evidence, or shared
+  low-level evidence, but must not leak target labels or targeted pass/fail logic
+  into untargeted production matrix identity unless an approved contract says so.
 
-- Public entry/facade: import and CLI compatibility only.
-- Pipeline orchestration: workflow order, backend choice, progress, cancellation.
-- Backend execution: serial/process mechanics and pickleable job payloads.
-- Target extraction: one raw file plus one target, XIC trace, result assembly.
-- Anchor/RT windowing: NL anchor, ISTD anchor, fallback windows, drift.
-- Peak detection: resolver-specific candidate formation.
-- Peak selection/recovery: choosing among existing candidates.
-- Trace quality: MS1/ADAP-like quality metrics.
-- Scoring: severity signals, confidence, reason, scoring-based selection.
-- Output metrics: shared review/detection/flag calculations.
-- Workbook sheets: worksheet rendering only.
-- Workbook styles: formatting helpers only.
-- HTML report: static visual report rendering only.
-- Adapters: RAW reading, CSV IO, workbook IO, GUI, GitHub, and CLI edge code.
+## Architecture And Clean Code Rules
 
-If new code crosses two ownership groups, either make the module an explicit
-orchestration facade or split the behavior.
-
-## Dependency Rules
-
-- Domain algorithms may depend on arrays, config values, typed context objects,
-  and small models.
-- Domain algorithms must not import GUI, workbook builders, CLI scripts, process
-  backends, or report renderers.
-- IO/rendering/adapters depend inward on domain helpers, not the reverse.
+- Keep one reason to change per module. If code mixes setup, parsing, domain
+  logic, diagnostics, rendering, and IO, split it or make the file an explicit
+  orchestration facade.
+- Preserve dependency direction. Domain algorithms may use arrays, config,
+  typed context objects, and small models, but must not import GUI, workbook
+  builders, CLI scripts, process backends, report renderers, or RAW/CSV adapters.
+  IO/rendering/adapters depend inward on domain helpers.
+- Public entry points and compatibility facades should stay thin. Move behavior
+  into focused modules while keeping old imports working when they are public.
+- Treat `tools/diagnostics/` as maintained product code. Diagnostic CLIs should
+  parse, validate, and orchestrate only; reusable loading, classification,
+  models, summaries, plotting, and writers belong in focused modules.
+- Diagnostic writers render TSV/JSON/HTML/XLSX/plots only. They must not
+  recompute domain evidence or re-scan RAW files; pass typed summaries from the
+  code path where trace context already exists.
+- Gate diagnostics must emit machine-readable status/reason fields plus a short
+  human summary with the blocker and next action. Missing inputs, missing
+  columns, stale artifacts, and unsupported schemas should name the expected
+  file/column and how to regenerate or bypass the artifact.
+- Optional diagnostics should use sidecar artifacts. Do not silently change
+  established TSV/workbook schemas unless an approved contract says so.
 - Shared dataclasses and protocols belong in small model/contract modules when
-  needed to avoid circular imports.
+  they prevent circular imports or schema drift. Do not create shared concrete
+  implementations before targeted/untargeted semantics actually match.
 - Windows process mode must receive pickleable payloads only. Do not pass nested
   closures or non-pickleable factories across process boundaries.
-
-## Red Flags
-
-Pause before adding code when any of these are true:
-
-- The target module is near 500 lines and the change adds a new responsibility.
-- The target module is near 800 lines and the change is not a local bug fix.
-- The function mixes setup, parsing, algorithm, diagnostics, rendering, and IO.
-- A boolean flag switches between unrelated workflows. Boolean config values are
-  fine; hidden multi-workflow functions are not.
-- A low-level module needs to import a high-level entry point or adapter.
-- A helper requires Thermo RAW files, Excel workbooks, or GUI widgets even though
-  its logic should be testable with small fixtures.
-- A change to Excel formatting, process execution, scoring, or peak detection
-  would force unrelated code in the same module to change.
-
-Line count is a signal, not a hard rule. Responsibility count matters more.
-
-## Refactor Discipline
-
-- Move behavior before changing behavior.
-- Keep compatibility wrappers at old public import locations.
+- Move behavior before changing behavior. Do not mix structural refactors with
+  scoring thresholds, peak selection rules, neutral-loss matching, or area
+  integration changes.
 - Add characterization tests before moving behavior that is not already covered.
-- Do not mix structural refactors with scoring thresholds, peak selection rules,
-  neutral-loss matching, or area integration changes.
-- Run narrow tests for moved modules, then broader CI-equivalent checks.
-- Use the 8-raw validation subset for extraction/output refactors that can
-  affect real workbook output.
-
-## Test Structure Rules
-
-- Keep tests in `tests/`; do not place test code inside `xic_extractor/` or
-  production scripts.
-- Mirror the ownership map. When production behavior moves to a focused module,
-  put its tests in a matching focused `test_*.py` file instead of expanding a
-  broad legacy test file.
-- Test behavior and public contracts first. Reach into private helpers only for
-  characterization tests, algorithm edge cases, or compatibility seams that are
-  hard to observe through the public entry point.
-- Each test should prove one behavior with explicit inputs and assertions.
-  Prefer descriptive test names over comments explaining the scenario.
-- Keep unit tests deterministic, small, and independent. Use synthetic traces,
-  `tmp_path`, `monkeypatch`, and small fakes before real RAW files, GUI widgets,
-  or full workbooks.
-- Put shared fixtures in `tests/conftest.py` only when several test files need
-  them. Keep file-local fixture factories near the tests that own them.
-- Parameterize equivalent edge cases instead of copy-pasting near-identical
-  tests, but split cases when failures would become hard to diagnose.
-- Separate real-data validation from normal unit/contract tests. Real RAW
-  checks should be explicit, fixture-gated, or run through validation scripts,
-  not silently required by the default suite.
-- For output changes, pair narrow writer/sheet tests with at least one workbook
-  contract or compare test. Do not rely on visual inspection alone.
-- For process-mode changes, include a no-RAW spawn/pickling smoke test before
-  any raw-data benchmark.
+  Tests should live in `tests/`, mirror the focused module, and prove behavior
+  or public contracts with small deterministic fixtures before real RAW data.
+- Separate real-data validation from normal unit tests. Use explicit validation
+  scripts or fixture gates for RAW/workbook checks, and use 8-RAW validation for
+  extraction/output refactors that can affect real workbook output.
+- For output changes, pair narrow writer/sheet tests with a workbook or schema
+  contract test. For process-mode changes, add a no-RAW spawn/pickling smoke
+  test before raw-data benchmarking.
+- Line count is a signal, not a hard rule. Pause when a module is near 500 lines
+  and a change adds a responsibility, or near 800 lines and the change is not a
+  local bug fix. Responsibility count matters more than exact length.
 
 ## Public Contracts
 
@@ -146,17 +201,3 @@ See:
 - `docs/superpowers/specs/2026-05-06-workbook-and-extraction-module-decomposition-spec.md`
 - `docs/superpowers/specs/2026-05-16-module-responsibility-inventory.md`
 - `docs/superpowers/specs/2026-05-16-alignment-module-responsibility-contract.md`
-
-## Source References
-
-- Python project structure: `https://docs.python-guide.org/writing/structure/`
-- pytest good integration practices:
-  `https://docs.pytest.org/en/stable/explanation/goodpractices.html`
-- pytest fixtures:
-  `https://docs.pytest.org/en/stable/how-to/fixtures.html`
-- Python testing guidance: `https://docs.python-guide.org/writing/tests/`
-- Zen of Python: `https://peps.python.org/pep-0020/`
-- Clean Code for Python: `https://github.com/zedr/clean-code-python`
-- Google Python Style Guide: `https://google.github.io/styleguide/pyguide.html`
-- Cosmic Python dependency inversion/service layer:
-  `https://www.cosmicpython.com/book/introduction.html`
