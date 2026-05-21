@@ -20,7 +20,7 @@ uv --cache-dir .uv-cache run python scripts\run_instrument_qc.py `
   --mode sdolek `
   --method-doc "C:\Users\user\Desktop\NTU cancer\2025台大乳癌組織數據for Jia\20260105中研院台大Breast cancer tissue\20260105 中研院分析.docx" `
   --emit-mixstds `
-  --mixstds-target-registry "C:\Users\user\Desktop\XIC_Extractor\config\targets.csv" `
+  --mixstds-target-registry config\MixSTDs.csv `
   --emit-hcd-audit
 ```
 
@@ -36,8 +36,8 @@ MS1 trend hash guard:
 
 - `instrument_qc_sdolek_trend.tsv`: row count/schema unchanged.
 - `instrument_qc_mixstds_trend.tsv`: row count/schema unchanged.
-- Updating `targets.csv` RT windows intentionally changes Mix STDs selected RT
-  values for the affected targets.
+- Updating `config\MixSTDs.csv` RT windows intentionally changes Mix STDs
+  selected RT values for the affected targets.
 
 ## Observed Counts
 
@@ -123,7 +123,7 @@ Mix STDs:
 - `Y` remains outside the current base-product review scope. Its row-level facts
   remain in `HCD Audit`, but it is not a priority queue item until an explicit
   product group is supplied.
-- `targets.csv` was updated for this batch:
+- `config\MixSTDs.csv` was updated for this batch:
   - `5-cadC`: `11.20-12.70` min.
   - `N6-6Ah-dA`: `19.30-20.80` min.
   - `t6A`: `30.30-33.90` min.

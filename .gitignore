@@ -35,3 +35,4 @@ progress-report.server-info.json
 config/*
 !config/settings.example.csv
 !config/targets.example.csv
+!config/MixSTDs.csv

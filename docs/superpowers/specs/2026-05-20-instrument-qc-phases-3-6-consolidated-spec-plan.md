@@ -89,9 +89,10 @@ Target-source rule:
 
 - Mix STDs targets must come from a reviewed instrument-QC target registry or
   method-doc-derived config.
-- A user-reviewed existing XIC `targets.csv` is accepted when explicitly passed
-  with `--mixstds-target-registry`; only MS1 fields (`label/mz/rt_min/rt_max/
-  ppm_tol`) are used.
+- The versioned registry `config\MixSTDs.csv` is the preferred Mix STDs source.
+  A user-reviewed existing XIC `targets.csv` is still accepted when explicitly
+  passed with `--mixstds-target-registry`; only MS1 fields
+  (`label/mz/rt_min/rt_max/ppm_tol`) are used.
 - Do not silently reuse biological target lists, targeted extraction configs,
   or FeatureHunter feature lists as instrument-QC truth.
 
@@ -353,7 +354,7 @@ uv --cache-dir .uv-cache run python scripts\run_instrument_qc.py `
   --output-dir output\instrument_qc\phase3_mixstds_smoke `
   --mode sdolek `
   --emit-mixstds `
-  --mixstds-target-registry <reviewed-instrument-qc-mixstds-targets.csv>
+  --mixstds-target-registry config\MixSTDs.csv
 ```
 
 Review gate:

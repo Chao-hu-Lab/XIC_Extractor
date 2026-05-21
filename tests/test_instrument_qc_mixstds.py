@@ -115,6 +115,20 @@ def test_mixstds_target_registry_loads_existing_targets_csv_schema(
     assert result.targets[0].neutral_loss_da == 116.0474
 
 
+def test_versioned_mixstds_registry_loads_reviewed_targets() -> None:
+    result = load_mixstds_target_registry(Path("config/MixSTDs.csv"))
+
+    assert result.status == "loaded"
+    assert len(result.targets) == 48
+    by_compound = {target.compound: target for target in result.targets}
+    assert by_compound["5-cadC"].rt_min == 11.20
+    assert by_compound["5-cadC"].rt_max == 12.70
+    assert by_compound["N6-6Ah-dA"].rt_min == 19.30
+    assert by_compound["N6-6Ah-dA"].rt_max == 20.80
+    assert by_compound["t6A"].rt_min == 30.30
+    assert by_compound["t6A"].rt_max == 33.90
+
+
 def test_mixstds_target_registry_accepts_utf8_sig_targets_csv(
     tmp_path: Path,
 ) -> None:

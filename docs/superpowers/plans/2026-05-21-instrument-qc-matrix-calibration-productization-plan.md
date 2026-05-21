@@ -34,7 +34,7 @@ uv --cache-dir .uv-cache run python scripts\run_instrument_qc.py `
   --mode sdolek `
   --method-doc "<method_docx>" `
   --emit-mixstds `
-  --mixstds-target-registry config\targets.csv `
+  --mixstds-target-registry config\MixSTDs.csv `
   --emit-hcd-audit
 ```
 
@@ -410,7 +410,7 @@ Use current instrument QC output generated from:
 
 - RAW root: `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R`
 - method doc: `C:\Users\user\Desktop\NTU cancer\2025台大乳癌組織數據for Jia\20260105中研院台大Breast cancer tissue\20260105 中研院分析.docx`
-- Mix STDs registry: `C:\Users\user\Desktop\XIC_Extractor\config\targets.csv`
+- Mix STDs registry: `config\MixSTDs.csv`
 
 Run Level 0 first. Then run Level 1 only if a supported `alignment_cells.tsv` input is available.
 
