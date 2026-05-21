@@ -143,6 +143,36 @@ def test_cli_writes_level1_rt_preview_with_matrix_input(tmp_path: Path) -> None:
     assert (output_dir / "matrix_rt_calibration_preview_summary.json").exists()
 
 
+def test_cli_writes_blocked_response_preview_with_matrix_input(tmp_path: Path) -> None:
+    instrument_qc_dir = tmp_path / "instrument_qc"
+    _write_trend(instrument_qc_dir / "instrument_qc_sdolek_trend.tsv")
+    matrix_input = tmp_path / "alignment_cells.tsv"
+    _write_alignment_cells(matrix_input)
+    output_dir = tmp_path / "bundle"
+
+    rc = instrument_qc_matrix_calibration_preview.main(
+        [
+            "--instrument-qc-dir",
+            str(instrument_qc_dir),
+            "--matrix-input",
+            str(matrix_input),
+            "--matrix-input-role",
+            "untargeted_cell_table",
+            "--preview-kind",
+            "response",
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert rc == 0
+    text = (output_dir / "matrix_response_calibration_preview.tsv").read_text(
+        encoding="utf-8"
+    )
+    assert "blocked_not_covered" in text
+    assert "biological response transfer gate is not implemented" in text
+
+
 def test_cli_rejects_preview_without_matrix_input(tmp_path: Path, capsys) -> None:
     instrument_qc_dir = tmp_path / "instrument_qc"
     _write_trend(instrument_qc_dir / "instrument_qc_sdolek_trend.tsv")

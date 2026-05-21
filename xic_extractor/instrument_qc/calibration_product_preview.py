@@ -21,13 +21,16 @@ from xic_extractor.instrument_qc.calibration_product_models import (
     CalibrationEvidenceSummary,
     CorrectionStatus,
     CoverageStatus,
+    MatrixResponsePreviewRow,
     MatrixRTPreviewRow,
     ProductSupportStatus,
+    ResponseTransferStatus,
 )
 from xic_extractor.instrument_qc.calibration_product_writers import (
     write_calibration_evidence_summary_json,
     write_calibration_evidence_tsv,
     write_calibration_manifest_json,
+    write_matrix_response_preview_tsv,
     write_matrix_rt_preview_tsv,
     write_preview_summary_json,
 )
@@ -167,8 +170,29 @@ def build_level1_rt_calibration_preview(
     output_dir: Path,
     generation_command: str,
 ) -> CalibrationBundleResult:
+    return build_level1_calibration_preview(
+        instrument_qc_dir=instrument_qc_dir,
+        matrix_input=matrix_input,
+        matrix_input_role=matrix_input_role,
+        preview_kind="rt",
+        output_dir=output_dir,
+        generation_command=generation_command,
+    )
+
+
+def build_level1_calibration_preview(
+    *,
+    instrument_qc_dir: Path,
+    matrix_input: Path,
+    matrix_input_role: str,
+    preview_kind: str,
+    output_dir: Path,
+    generation_command: str,
+) -> CalibrationBundleResult:
     if matrix_input_role != "untargeted_cell_table":
         raise ValueError(f"unsupported matrix input role: {matrix_input_role}")
+    if preview_kind not in {"rt", "response", "both"}:
+        raise ValueError(f"unsupported preview kind: {preview_kind}")
     output_dir.mkdir(parents=True, exist_ok=True)
     bundle_id = output_dir.name or "calibration_bundle"
     matrix_hash_before = _file_hash(matrix_input)
@@ -181,29 +205,110 @@ def build_level1_rt_calibration_preview(
     evidence_summary_json = (
         output_dir / "instrument_qc_calibration_evidence_summary.json"
     )
-    rt_preview_tsv = output_dir / "matrix_rt_calibration_preview.tsv"
-    rt_preview_summary_json = output_dir / "matrix_rt_calibration_preview_summary.json"
     manifest_json = output_dir / "instrument_qc_calibration_manifest.json"
-
-    rt_rows = _build_rt_preview_rows(
-        bundle_id=bundle_id,
-        matrix_input=matrix_input,
-        matrix_hash=matrix_hash_before,
-        evidence_rows=collected.rows,
-    )
-    rt_preview_counts = _counts(str(row.correction_status) for row in rt_rows)
-    rt_summary = _preview_summary(
-        bundle_id=bundle_id,
-        matrix_source=matrix_input.name,
-        matrix_source_hash=matrix_hash_before,
-        rows=rt_rows,
-        correction_status_counts=rt_preview_counts,
-    )
 
     write_calibration_evidence_tsv(evidence_tsv, collected.rows)
     write_calibration_evidence_summary_json(evidence_summary_json, collected.summary)
-    write_matrix_rt_preview_tsv(rt_preview_tsv, rt_rows)
-    write_preview_summary_json(rt_preview_summary_json, rt_summary)
+
+    rt_preview_tsv: Path | None = None
+    rt_preview_summary_json: Path | None = None
+    response_preview_tsv: Path | None = None
+    response_preview_summary_json: Path | None = None
+    rt_preview_counts: dict[str, int] = {}
+    response_preview_counts: dict[str, int] = {}
+    inventory_extra: list[ArtifactInventoryItem] = []
+    first_machine_file = evidence_tsv.name
+
+    if preview_kind in {"rt", "both"}:
+        rt_preview_tsv = output_dir / "matrix_rt_calibration_preview.tsv"
+        rt_preview_summary_json = (
+            output_dir / "matrix_rt_calibration_preview_summary.json"
+        )
+        rt_rows = _build_rt_preview_rows(
+            bundle_id=bundle_id,
+            matrix_input=matrix_input,
+            matrix_hash=matrix_hash_before,
+            evidence_rows=collected.rows,
+        )
+        rt_preview_counts = _counts(str(row.correction_status) for row in rt_rows)
+        rt_summary = _preview_summary(
+            bundle_id=bundle_id,
+            matrix_source=matrix_input.name,
+            matrix_source_hash=matrix_hash_before,
+            total_rows=len(rt_rows),
+            correction_status_counts=rt_preview_counts,
+        )
+        write_matrix_rt_preview_tsv(rt_preview_tsv, rt_rows)
+        write_preview_summary_json(rt_preview_summary_json, rt_summary)
+        inventory_extra.extend(
+            (
+                ArtifactInventoryItem(
+                    artifact_id="rt_preview",
+                    path=Path(rt_preview_tsv.name),
+                    role="matrix_preview",
+                    required=True,
+                    schema_version=ARTIFACT_SCHEMA_VERSION,
+                    status="present",
+                ),
+                ArtifactInventoryItem(
+                    artifact_id="rt_preview_summary",
+                    path=Path(rt_preview_summary_json.name),
+                    role="summary",
+                    required=True,
+                    schema_version=ARTIFACT_SCHEMA_VERSION,
+                    status="present",
+                ),
+            )
+        )
+        first_machine_file = rt_preview_tsv.name
+
+    if preview_kind in {"response", "both"}:
+        response_preview_tsv = output_dir / "matrix_response_calibration_preview.tsv"
+        response_preview_summary_json = (
+            output_dir / "matrix_response_calibration_preview_summary.json"
+        )
+        response_rows = _build_response_preview_rows(
+            bundle_id=bundle_id,
+            matrix_input=matrix_input,
+            matrix_hash=matrix_hash_before,
+        )
+        response_preview_counts = _counts(
+            str(row.correction_status) for row in response_rows
+        )
+        response_summary = _preview_summary(
+            bundle_id=bundle_id,
+            matrix_source=matrix_input.name,
+            matrix_source_hash=matrix_hash_before,
+            total_rows=len(response_rows),
+            correction_status_counts=response_preview_counts,
+        )
+        write_matrix_response_preview_tsv(response_preview_tsv, response_rows)
+        write_preview_summary_json(response_preview_summary_json, response_summary)
+        inventory_extra.extend(
+            (
+                ArtifactInventoryItem(
+                    artifact_id="response_preview",
+                    path=Path(response_preview_tsv.name),
+                    role="matrix_preview",
+                    required=True,
+                    schema_version=ARTIFACT_SCHEMA_VERSION,
+                    status="present",
+                ),
+                ArtifactInventoryItem(
+                    artifact_id="response_preview_summary",
+                    path=Path(response_preview_summary_json.name),
+                    role="summary",
+                    required=True,
+                    schema_version=ARTIFACT_SCHEMA_VERSION,
+                    status="present",
+                ),
+            )
+        )
+        first_machine_file = (
+            rt_preview_tsv.name
+            if rt_preview_tsv is not None
+            else response_preview_tsv.name
+        )
 
     matrix_hash_after = _file_hash(matrix_input)
     if matrix_hash_after != matrix_hash_before:
@@ -227,22 +332,7 @@ def build_level1_rt_calibration_preview(
                 evidence_tsv=evidence_tsv,
                 evidence_summary_json=evidence_summary_json,
             ),
-            ArtifactInventoryItem(
-                artifact_id="rt_preview",
-                path=Path(rt_preview_tsv.name),
-                role="matrix_preview",
-                required=True,
-                schema_version=ARTIFACT_SCHEMA_VERSION,
-                status="present",
-            ),
-            ArtifactInventoryItem(
-                artifact_id="rt_preview_summary",
-                path=Path(rt_preview_summary_json.name),
-                role="summary",
-                required=True,
-                schema_version=ARTIFACT_SCHEMA_VERSION,
-                status="present",
-            ),
+            *inventory_extra,
         ),
         source_artifacts=source_artifacts,
         source_contracts={
@@ -261,10 +351,15 @@ def build_level1_rt_calibration_preview(
                 collected.summary.counts_by_product_support_status
             ),
             "calibration_eligible": collected.summary.counts_by_calibration_eligible,
-            "rt_preview_status": rt_preview_counts,
+            **({"rt_preview_status": rt_preview_counts} if rt_preview_counts else {}),
+            **(
+                {"response_preview_status": response_preview_counts}
+                if response_preview_counts
+                else {}
+            ),
         },
         first_human_file="",
-        first_machine_file=rt_preview_tsv.name,
+        first_machine_file=first_machine_file,
     )
     write_calibration_manifest_json(manifest_json, manifest)
     return CalibrationBundleResult(
@@ -273,6 +368,8 @@ def build_level1_rt_calibration_preview(
         evidence_summary_json=evidence_summary_json,
         rt_preview_tsv=rt_preview_tsv,
         rt_preview_summary_json=rt_preview_summary_json,
+        response_preview_tsv=response_preview_tsv,
+        response_preview_summary_json=response_preview_summary_json,
     )
 
 
@@ -551,6 +648,84 @@ def _build_rt_preview_rows(
     return tuple(rows)
 
 
+def _build_response_preview_rows(
+    *,
+    bundle_id: str,
+    matrix_input: Path,
+    matrix_hash: str,
+) -> tuple[MatrixResponsePreviewRow, ...]:
+    rows: list[MatrixResponsePreviewRow] = []
+    for row_number, row in enumerate(
+        read_tsv_rows(matrix_input, required_columns=ALIGNMENT_CELLS_REQUIRED_COLUMNS),
+        start=1,
+    ):
+        tsv_row_number = row_number + 1
+        feature_id = (row.get("feature_family_id") or "").strip()
+        sample_stem = (row.get("sample_stem") or "").strip()
+        raw_area = parse_optional_float(
+            row,
+            "area",
+            path=matrix_input,
+            row_number=tsv_row_number,
+        )
+        raw_height = parse_optional_float(
+            row,
+            "height",
+            path=matrix_input,
+            row_number=tsv_row_number,
+        )
+        rows.append(
+            MatrixResponsePreviewRow(
+                schema_version=ARTIFACT_SCHEMA_VERSION,
+                bundle_id=bundle_id,
+                matrix_source=matrix_input.name,
+                matrix_source_hash=matrix_hash,
+                matrix_schema_version="alignment_cells.tsv",
+                source_row_id=str(tsv_row_number),
+                source_cell_key=f"{feature_id}|{sample_stem}",
+                feature_id=feature_id,
+                matrix_column_name=sample_stem,
+                sample_name=sample_stem,
+                sample_stem=sample_stem,
+                raw_file_stem=_raw_file_stem(row.get("source_raw_file"), sample_stem),
+                feature_mz=parse_optional_float(
+                    row,
+                    "family_center_mz",
+                    path=matrix_input,
+                    row_number=tsv_row_number,
+                ),
+                raw_feature_rt_min=parse_optional_float(
+                    row,
+                    "apex_rt",
+                    path=matrix_input,
+                    row_number=tsv_row_number,
+                ),
+                injection_order=None,
+                raw_area=raw_area,
+                raw_area_status="missing" if raw_area is None else "observed",
+                raw_height=raw_height,
+                raw_height_status="missing" if raw_height is None else "observed",
+                model_id="response-transfer-gate-unavailable",
+                predicted_log2_response_delta=None,
+                area_if_response_corrected=None,
+                height_if_response_corrected=None,
+                preview_area_status="blocked",
+                preview_height_status="blocked",
+                response_uncertainty_log2=None,
+                transfer_status=ResponseTransferStatus.CLEAN_ONLY,
+                correction_status=CorrectionStatus.BLOCKED_NOT_COVERED,
+                correction_block_reason=(
+                    "biological response transfer gate is not implemented"
+                ),
+                review_reason=(
+                    "Response preview is shadow-only; no area or height correction "
+                    "is applied."
+                ),
+            )
+        )
+    return tuple(rows)
+
+
 def _rt_preview_model(
     evidence_rows: tuple[CalibrationEvidenceRow, ...],
 ) -> tuple[float | None, float | None, str]:
@@ -573,7 +748,7 @@ def _preview_summary(
     bundle_id: str,
     matrix_source: str,
     matrix_source_hash: str,
-    rows: tuple[MatrixRTPreviewRow, ...],
+    total_rows: int,
     correction_status_counts: dict[str, int],
 ) -> dict[str, object]:
     return {
@@ -581,7 +756,7 @@ def _preview_summary(
         "bundle_id": bundle_id,
         "matrix_source": matrix_source,
         "matrix_source_hash": matrix_source_hash,
-        "total_rows": len(rows),
+        "total_rows": total_rows,
         "counts_by_correction_status": correction_status_counts,
     }
 

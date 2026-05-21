@@ -7,7 +7,7 @@ from typing import Sequence
 
 from xic_extractor.instrument_qc.calibration_product_preview import (
     build_level0_calibration_bundle,
-    build_level1_rt_calibration_preview,
+    build_level1_calibration_preview,
 )
 
 
@@ -42,14 +42,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 generation_command=command,
             )
         else:
-            if args.preview_kind not in {None, "rt"}:
-                raise ValueError(
-                    "only --preview-kind rt is implemented in this checkpoint"
-                )
-            result = build_level1_rt_calibration_preview(
+            result = build_level1_calibration_preview(
                 instrument_qc_dir=args.instrument_qc_dir,
                 matrix_input=args.matrix_input,
                 matrix_input_role=args.matrix_input_role or "",
+                preview_kind=args.preview_kind or "rt",
                 output_dir=args.output_dir,
                 generation_command=command,
             )
