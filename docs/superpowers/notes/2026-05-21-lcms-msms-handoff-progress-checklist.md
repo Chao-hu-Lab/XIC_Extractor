@@ -185,9 +185,13 @@ Relationship to Level 2.5 RT shadow gate:
 - [x] Calibration maturity gate exists for Level 2 through Level 5 decisions.
 - [x] Level 2.5 RT-supported shadow gate exists as row-level audit /
   alignment-support evidence.
+- [x] RT x MS1 backfill cross-evidence diagnostic exists as audit-only
+  follow-up.
 - [~] Level 2 RT-aware audit / alignment-support is `go`.
 - [~] Level 2.5 8RAW smoke is `shadow_gate_ready`, with 430
   `rt_supported_shadow_candidate` rows.
+- [~] First RT x MS1 cross-evidence smoke is scope-limited:
+  101 seed-aware families, 2300 RT families, but only 10 matched family IDs.
 - [~] Level 3 RT production correction is `no_go`.
 - [ ] Level 4 response shadow model is not implemented.
 - [ ] Level 5 response production correction is not implemented.
@@ -204,9 +208,11 @@ Current reference points:
 - `tools/diagnostics/instrument_qc_biological_istd_transfer_audit.py`
 - `tools/diagnostics/instrument_qc_calibration_maturity_gate.py`
 - `tools/diagnostics/instrument_qc_rt_supported_shadow_gate.py`
+- `tools/diagnostics/rt_ms1_backfill_cross_evidence.py`
 - `docs/superpowers/notes/2026-05-21-instrument-qc-rt-aware-midterm-preview.md`
 - `docs/superpowers/notes/2026-05-21-instrument-qc-level3-no-go-convergence.md`
 - `docs/superpowers/notes/2026-05-21-instrument-qc-level2-5-rt-supported-shadow-gate-validation.md`
+- `docs/superpowers/specs/2026-05-21-rt-ms1-backfill-cross-evidence-spec.md`
 
 ### 8. Human Review Surfaces
 
@@ -253,7 +259,9 @@ Current result:
 
 Useful follow-up:
 
-- Join Level 2.5 rows to seed-aware backfill review rows.
+- Regenerate Level 2.5 rows in the same 85RAW alignment / family-id scope as
+  seed-aware backfill review.
+- Rerun the RT x MS1 cross-evidence diagnostic after scope alignment.
 - Identify families where both are true:
   - `seed_shape_supported_review_candidate`;
   - `rt_supported_shadow_candidate`.
@@ -318,12 +326,14 @@ Recommended order:
 
 1. Use the Level 2.5 RT-supported shadow gate as audit evidence, not production
    correction.
-2. Cross-tab Level 2.5 RT support with seed-aware MS1 backfill review.
-3. If both axes agree for a small, clean subset, plan an opt-in production-gate
+2. Regenerate scope-matched 85RAW RT shadow rows and rerun the RT x MS1
+   cross-evidence diagnostic.
+3. Cross-tab Level 2.5 RT support with seed-aware MS1 backfill review.
+4. If both axes agree for a small, clean subset, plan an opt-in production-gate
    candidate.
-4. Add response shadow evidence only after the RT/MS1 combined evidence table is
+5. Add response shadow evidence only after the RT/MS1 combined evidence table is
    interpretable.
-5. In parallel or between scientific PRs, split oversized diagnostic tools.
+6. In parallel or between scientific PRs, split oversized diagnostic tools.
 
 This preserves the useful evidence accumulated so far while avoiding a premature
 production matrix mutation.
