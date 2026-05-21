@@ -33,6 +33,8 @@ Current high-level decisions:
 - Untargeted alignment production quantification remains `local_minimum`; region
   evidence is audit context only.
 - Instrument QC RT evidence is Level 2 `go` for audit / alignment-support.
+- Level 2.5 row-level RT-supported shadow gate is now available as
+  audit-only alignment-support evidence.
 - RT production correction remains Level 3 `no_go`.
 - Response / area production correction remains Level 4/5 `no_go`.
 
@@ -156,6 +158,21 @@ Current reference points:
 - `docs/superpowers/notes/2026-05-19-seed-aware-backfill-review-index.md`
 - `docs/superpowers/notes/2026-05-19-untargeted-ms1-coherence-backfill-review.md`
 
+Relationship to Level 2.5 RT shadow gate:
+
+- Seed-aware backfill review answers: does rescued-heavy MS1 evidence look like
+  the same feature family, or is it likely neighboring interference / weak
+  shape / missing seed context?
+- Level 2.5 RT shadow gate answers: is the row's RT behavior locally supported
+  by both clean-standard RT evidence and biological ISTD transfer evidence?
+- These are complementary evidence axes, not replacements.
+- `FAM004459` remains a good counterexample: even if RT support is available,
+  high neighboring MS1 interference should keep it in review-only status. RT
+  evidence alone must not rescue a family whose MS1 shape context is conflicted.
+- Future production-gate experiments should require both axes to agree:
+  seed-specific MS1 shape support, low neighboring interference, and local
+  biological-ISTD-supported RT context.
+
 ### 7. Instrument QC And Calibration Productization
 
 - [x] Method / sequence docs are the first-class source for injection order.
@@ -166,7 +183,11 @@ Current reference points:
 - [x] Clean-standard RT model preview exists.
 - [x] Biological QC ISTD transfer audit exists.
 - [x] Calibration maturity gate exists for Level 2 through Level 5 decisions.
+- [x] Level 2.5 RT-supported shadow gate exists as row-level audit /
+  alignment-support evidence.
 - [~] Level 2 RT-aware audit / alignment-support is `go`.
+- [~] Level 2.5 8RAW smoke is `shadow_gate_ready`, with 430
+  `rt_supported_shadow_candidate` rows.
 - [~] Level 3 RT production correction is `no_go`.
 - [ ] Level 4 response shadow model is not implemented.
 - [ ] Level 5 response production correction is not implemented.
@@ -182,8 +203,10 @@ Current reference points:
 - `tools/diagnostics/instrument_qc_matrix_calibration_preview.py`
 - `tools/diagnostics/instrument_qc_biological_istd_transfer_audit.py`
 - `tools/diagnostics/instrument_qc_calibration_maturity_gate.py`
+- `tools/diagnostics/instrument_qc_rt_supported_shadow_gate.py`
 - `docs/superpowers/notes/2026-05-21-instrument-qc-rt-aware-midterm-preview.md`
 - `docs/superpowers/notes/2026-05-21-instrument-qc-level3-no-go-convergence.md`
+- `docs/superpowers/notes/2026-05-21-instrument-qc-level2-5-rt-supported-shadow-gate-validation.md`
 
 ### 8. Human Review Surfaces
 
@@ -216,29 +239,27 @@ Current reference points:
 
 ## Next PR Candidates
 
-### Candidate A: Level 2.5 RT-Supported Shadow Gate
+### Candidate A: Level 2.5 RT-Supported Shadow Gate Follow-up
 
-Best next follow-up if continuing calibration work.
+The first Level 2.5 implementation now exists on
+`codex/handoff-level2-rt-shadow-gate`.
 
-Goal:
+Current result:
 
-- Create a row-level `rt_supported_shadow_candidate` gate.
-- Keep it audit / preview only.
-- Do not mutate RT, area, reliability, scoring, or matrix values.
+- 8RAW smoke verdict: `shadow_gate_ready`.
+- `rt_supported_shadow_candidate`: 430 rows.
+- Output remains audit-only: no RT, area, reliability, scoring, resolver, DNP,
+  or matrix mutation.
 
-Required inputs:
+Useful follow-up:
 
-- clean-standard RT model summary,
-- biological QC ISTD transfer audit,
-- matrix RT calibration preview TSV,
-- explicit row-level coverage / extrapolation / block labels.
-
-Go / no-go:
-
-- GO if it can identify a small reviewable subset with biological ISTD support
-  and no extrapolated / blocked status.
-- NO-GO if most rows remain extrapolated, blocked, or unsupported by biological
-  ISTDs.
+- Join Level 2.5 rows to seed-aware backfill review rows.
+- Identify families where both are true:
+  - `seed_shape_supported_review_candidate`;
+  - `rt_supported_shadow_candidate`.
+- Keep `neighbor_interference_review`, `shape_insufficient_review`, or
+  `rt_model_uncertain` rows as review-only.
+- Do not use RT support alone to override MS1 interference.
 
 ### Candidate B: Response Shadow Evidence
 
@@ -295,10 +316,14 @@ The next scientific PR should not jump to production correction.
 
 Recommended order:
 
-1. Level 2.5 RT-supported shadow gate.
-2. If Level 2.5 is clean, add response shadow evidence.
-3. If response shadow evidence is clean, consider production candidate planning.
-4. In parallel or between scientific PRs, split oversized diagnostic tools.
+1. Use the Level 2.5 RT-supported shadow gate as audit evidence, not production
+   correction.
+2. Cross-tab Level 2.5 RT support with seed-aware MS1 backfill review.
+3. If both axes agree for a small, clean subset, plan an opt-in production-gate
+   candidate.
+4. Add response shadow evidence only after the RT/MS1 combined evidence table is
+   interpretable.
+5. In parallel or between scientific PRs, split oversized diagnostic tools.
 
 This preserves the useful evidence accumulated so far while avoiding a premature
 production matrix mutation.
