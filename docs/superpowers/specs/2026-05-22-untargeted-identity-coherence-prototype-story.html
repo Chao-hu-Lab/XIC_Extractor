@@ -485,8 +485,8 @@
               </tr>
               <tr>
                 <td>Discovery candidates</td>
-                <td>candidate_id join、best_seed_rt、ms1_seed_delta_min、trace_quality、scan_support_score、matched_tag_count、tag_intersection_status</td>
-                <td>作為 seed specificity 的主要 evidence surface；不新抽 XIC。</td>
+                <td>candidate_id join、best_seed_rt、scan_support_score、matched_tag_count、tag_intersection_status；ms1_seed_delta_min / trace_quality 作 record-only context</td>
+                <td>作為 seed specificity 的主要 evidence surface；不新抽 XIC，也不借用搜尋窗 padding 當 identity 門檻。</td>
               </tr>
               <tr>
                 <td>Untargeted audit path</td>
@@ -514,6 +514,11 @@
             <strong>Import boundary：</strong>
             identity_coherence domain logic 只能依賴小型 domain primitives、typed models、metric functions。
             tools/diagnostics、workbook/report、GUI、CLI scripts 只能提供驗證產物或比較報告，不能被 promotion logic 反向 import。
+          </div>
+          <div class="callout warning">
+            <strong>Reuse 不是繼承舊 policy：</strong>
+            可以借用 signal、primitive、validation method；但 threshold、status 語義、Backfill-era coupling 必須重新驗證。
+            若現有地基太薄或誤導，就降成 review context 或定義新的 diagnostic-owned parameter。
           </div>
         </section>
 
@@ -566,12 +571,12 @@
             <tbody>
               <tr>
                 <td>Seed specificity</td>
-                <td>先用 DiscoveryCandidate join + owner boundary 共定位排除 low-specificity seed。高 recurrence 不能救弱 seed。</td>
+                <td>先用 DiscoveryCandidate join + seed RT in owner peak + seed scan-support gate 排除 low-specificity seed。高 recurrence 不能救弱 seed。</td>
                 <td><span class="tag stop">必須補</span></td>
               </tr>
               <tr>
                 <td>Trace identity</td>
-                <td>非 seed sample 改用 tiered basis：fragment &gt; shape &gt; prototype width；baseline / area-pattern 只作 review flag。</td>
+                <td>非 seed sample 改用 tiered basis：same-sample discovery fragment &gt; shape &gt; prototype width；baseline / area-pattern 只作 review flag。</td>
                 <td><span class="tag stop">必須補</span></td>
               </tr>
               <tr>
@@ -602,7 +607,7 @@
               </div>
               <div class="node ok">
                 <strong>Seed specificity</strong>
-                <span>DiscoveryCandidate join + seed RT in owner peak + scan support 先擋 low-specificity seed。</span>
+                <span>DiscoveryCandidate join + seed RT in owner peak + seed scan support；delta / trace_quality 只記錄。</span>
               </div>
               <div class="node review">
                 <strong>RT-local retrieval</strong>
@@ -610,7 +615,7 @@
               </div>
               <div class="node ok">
                 <strong>Trace identity check</strong>
-                <span>tier 1 fragment、tier 2 shape、tier 3 prototype width；tier-3-only 只能 Review-only。</span>
+                <span>tier 1 用 same-sample discovery fragment join；tier 2 shape；tier 3 prototype width。</span>
               </div>
               <div class="node">
                 <strong>Decision + controls</strong>
@@ -634,7 +639,7 @@
               </tr>
               <tr>
                 <td>non-RT identity basis 分級</td>
-                <td>tier 1 fragment match，tier 2 shape similarity，tier 3 prototype-width fallback；baseline/interference 與 area-pattern 不作 promotion basis。</td>
+                <td>tier 1 same-sample DiscoveryCandidate fragment match，tier 2 shape similarity，tier 3 prototype-width fallback；baseline/interference 與 area-pattern 不作 promotion basis。</td>
                 <td>避免鬆散 OR gate 把弱 basis 放大成 would-primary。</td>
               </tr>
               <tr>

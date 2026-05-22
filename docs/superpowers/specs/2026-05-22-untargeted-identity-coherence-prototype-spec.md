@@ -141,6 +141,13 @@ reuse mature extraction, scoring, audit, and benchmark primitives;
 rewrite only the identity-promotion layer that combines them for untargeted rows.
 ```
 
+Reuse is not inheritance. The implementation may reuse stable signals,
+domain primitives, and validation methods, but it must not inherit thresholds,
+status semantics, or policy couplings unless they are methodologically valid for
+identity promotion. When existing foundations are too thin, misleading, or tied
+to Backfill-era behavior, the spec should say so explicitly and either downgrade
+the field to review context or define a new diagnostic-owned parameter.
+
 The new diagnostic should therefore be thin orchestration around existing
 signals wherever possible. New code is justified when the existing module lacks
 the untargeted-specific identity contract, not merely because the old algorithm
@@ -267,26 +274,38 @@ Minimum v0.3 seed requirements:
 - the joined `DiscoveryCandidate.best_seed_rt` or
   `primary_identity_event.seed_rt` falls inside
   `owner_peak_start_rt..owner_peak_end_rt`;
-- `abs(ms1_seed_delta_min) <= seed_ms1_delta_max_min` when the joined
-  `DiscoveryCandidate` provides the field;
-- `ms1_trace_quality` is not a poor/missing quality label;
-- `ms1_scan_support_score >= seed_min_scan_support_score` when a numeric score
+- `ms1_scan_support_score >= seed_min_ms1_scan_support_score` when a numeric score
   is available.
 
 `high evidence score` is not required as a blanket rule, but low-specificity
 seeds cannot be rescued by recurrence alone.
 
+`ms1_seed_delta_min` is recorded but is not a hard V0.3 gate. Do not derive a
+seed co-location threshold from `DiscoverySettings.ms1_search_padding_min`;
+that setting is the XIC search-window padding used to find an MS1 peak, not a
+scientific identity threshold. If the 8RAW review shows that peak-boundary
+co-location is too loose, a later revision must derive a delta threshold from
+observed peak widths or prototype-width distributions.
+
+`ms1_trace_quality` is also recorded but not a V0.3 gate. The current discovery
+producer emits `clean` when an MS1 peak is found and `missing` when no MS1 peak
+is found, so it does not provide an independent graded owner-quality signal.
+
 Baseline seed-specificity parameters:
 
 | Parameter | Default | Source | Meaning |
 | --- | ---: | --- | --- |
-| `seed_ms1_delta_max_min` | `0.20` | `DiscoverySettings.ms1_search_padding_min` | Max MS1 apex to MS2 seed RT delta for seed coherence. |
-| `seed_min_scan_support_score` | `0.50` | `AlignmentConfig.anchor_min_scan_support_score` | Minimum numeric scan support when available. |
-| `poor_ms1_trace_quality_labels` | `POOR, MISSING` | discovery evidence semantics | Labels that force low specificity when numeric scan support is absent or poor. |
+| `seed_min_ms1_scan_support_score` | `0.50` | new identity-coherence diagnostic parameter | Minimum numeric MS1 scan sampling support for a seed owner. Initial value may mirror the current anchor heuristic, but implementation must not import or bind to `AlignmentConfig.anchor_min_scan_support_score`. |
+
+Scan support is a sampling-sufficiency guard, not a background-specificity
+guard. It can reject under-sampled peaks, but broad background features may also
+have high scan support.
 
 Context fields recorded but not used as hard gates before 8RAW review:
 
 ```text
+ms1_seed_delta_min
+ms1_trace_quality
 neutral_loss_mass_error_ppm
 matched_tag_count
 tag_intersection_status
@@ -312,8 +331,6 @@ seed_reject_reason =
   backfill_only_evidence
   nonfinite_peak
   seed_rt_outside_owner_peak
-  ms1_seed_delta_out_of_bounds
-  poor_ms1_trace_quality
   low_ms1_scan_support
 ```
 
@@ -348,9 +365,22 @@ tier 2: rt + shape_similarity
 tier 3: rt + prototype_width
 ```
 
-Tier 1 is available when that sample has pre-Backfill MS2/NL evidence matching
-the row identity: neutral-loss tag, product m/z, and observed loss all remain
-inside tolerance.
+Tier 1 is available when that sample has same-sample pre-Backfill MS2/NL
+evidence matching the row identity. The source is the current run's
+`DiscoveryCandidate` collection, joined by `sample_stem` and row identity
+constraints, not by post-Backfill cell status.
+
+Minimum tier 1 join criteria:
+
+- same non-seed sample;
+- same neutral-loss tag or declared profile identity;
+- precursor m/z, product m/z, and observed neutral loss remain inside declared
+  tolerances;
+- the matched candidate is pre-Backfill discovery evidence, not owner_backfill
+  rescue output.
+
+Ambiguous tier 1 candidate matches must be exposed as review flags and must not
+silently promote a cell.
 
 Tier 2 is available when enough XIC points exist to compare normalized local
 shape against the seed or group prototype.
@@ -702,8 +732,6 @@ Data-quality or identity rejects:
 - low seed specificity from seed-owner evidence;
 - missing discovery-candidate join;
 - seed RT outside owner peak;
-- MS1 seed delta outside seed-specificity bounds;
-- poor MS1 trace quality;
 - low MS1 scan support;
 - background recurrence pattern;
 - ambiguous owner;
@@ -741,8 +769,10 @@ This spec is ready for implementation only after review signs off on:
 - the method difference from Backfill is explicit and accepted;
 - seed specificity uses `DiscoveryCandidate` joined by `candidate_id` plus
   `SampleLocalMS1Owner` geometry;
-- low-specificity seed gates are defined in terms of seed-owner RT co-location,
-  MS1 seed delta, trace quality, and scan support;
+- low-specificity seed gates are defined in terms of seed-owner peak-boundary
+  co-location and seed-owner scan support;
+- `ms1_seed_delta_min` and `ms1_trace_quality` are record-only context fields
+  until 8RAW evidence justifies real thresholds;
 - background recurrence is a post-scan decision pattern, not a seed class;
 - tiered non-RT identity checks are defined in V0.3 MVP;
 - 8RAW and 85RAW threshold policies are separated;
