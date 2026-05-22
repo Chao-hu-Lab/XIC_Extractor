@@ -1,12 +1,25 @@
+from dataclasses import dataclass
 from pathlib import Path
 
+from xic_extractor.alignment.identity_coherence.models import (
+    CandidateIdentityMatch,
+    SeedCandidateEvidence,
+    SeedGateConfig,
+    SeedGateResult,
+)
+from xic_extractor.alignment.identity_coherence.request_builder import (
+    build_identity_coherence_request,
+)
 from xic_extractor.alignment.identity_coherence.schema import (
     IDENTITY_COHERENCE_CELL_EVIDENCE_COLUMNS,
     IDENTITY_COHERENCE_CONTROL_COLUMNS,
     IDENTITY_COHERENCE_DECISION_COLUMNS,
     IDENTITY_COHERENCE_REQUEST_COLUMNS,
+    EvidenceStage,
     RequestCandidateIdentityStatus,
     RequestIdentityCompletenessStatus,
+    SeedGateClass,
+    SeedRejectReason,
 )
 
 CONTRACT_PATH = (
@@ -89,3 +102,89 @@ def test_identity_coherence_facade_exports_stable_contract():
     assert identity_coherence.build_identity_coherence_request is not None
     assert identity_coherence.format_fragment_tags is not None
     assert identity_coherence.IDENTITY_COHERENCE_REQUEST_COLUMNS
+
+
+@dataclass
+class CandidateLike:
+    candidate_id: str = "CAND-1"
+    sample_name: str = "RAW-1"
+    precursor_mz: float = 500.0
+    product_mz: float = 384.0
+    observed_neutral_loss_da: float = 116.0
+    matched_tag_names: object = ("MeR", "dR")
+    neutral_loss_tag: str = "dR"
+
+
+def _request():
+    return build_identity_coherence_request(
+        CandidateLike(),
+        request_id="REQ-1",
+        decision_id="DEC-1",
+        precursor_tolerance_ppm=10.0,
+        product_tolerance_ppm=10.0,
+        cid_observed_loss_tolerance_ppm=10.0,
+        fragment_profile_id="profile-a",
+    )
+
+
+def test_seed_gate_enum_values_are_stable_strings():
+    assert {value.value for value in EvidenceStage} == {
+        "pre_backfill",
+        "backfill_only",
+        "post_backfill",
+    }
+    assert {value.value for value in SeedGateClass} == {
+        "coherent_seed",
+        "review_only_seed_gate_failed",
+        "blocked_seed",
+    }
+    assert {value.value for value in SeedRejectReason} == {
+        "missing_request_identity_constraint",
+        "no_quantifiable_owner",
+        "missing_discovery_candidate_join",
+        "missing_diagnostic_fragment_evidence",
+        "ambiguous_owner",
+        "duplicate_loser",
+        "backfill_only_evidence",
+        "nonfinite_peak",
+        "seed_rt_outside_owner_peak",
+        "low_ms1_scan_support",
+        "request_candidate_identity_mismatch",
+        "unsupported_fragment_observation_mode",
+        "multi_seed_requires_phase2",
+    }
+
+
+def test_seed_gate_models_hold_a_resolved_gate_result():
+    evidence = SeedCandidateEvidence(
+        candidate_id="CAND-1",
+        precursor_mz=500.0,
+        product_mz=384.0,
+        cid_observed_loss_da=116.0,
+        fragment_tags=("MeR", "dR"),
+        best_seed_rt=7.83,
+        ms1_scan_support_score=0.80,
+    )
+    match = CandidateIdentityMatch(
+        request_candidate_identity_status=RequestCandidateIdentityStatus.MATCH,
+        precursor_error_ppm=0.0,
+        product_error_ppm=0.0,
+        cid_observed_loss_error_ppm=0.0,
+        cid_observed_loss_error_da=0.0,
+        missing_fields=(),
+        mismatch_fields=(),
+        fragment_tags_supported=("dR",),
+    )
+
+    result = SeedGateResult(
+        resolved_request=_request(),
+        seed_gate_class=SeedGateClass.COHERENT_SEED,
+        seed_reject_reason=None,
+        candidate_match=match,
+        review_flags=(),
+    )
+
+    assert evidence.evidence_stage is EvidenceStage.PRE_BACKFILL
+    assert result.seed_gate_class is SeedGateClass.COHERENT_SEED
+    assert result.resolved_request.seed_candidate_id == "CAND-1"
+    assert SeedGateConfig().min_ms1_scan_support_score == 0.5

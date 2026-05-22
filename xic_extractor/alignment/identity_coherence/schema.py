@@ -30,6 +30,34 @@ class FragmentTagMatchPolicy(StrEnum):
     ALL_REQUEST_TAGS_SUPPORTED = "all_request_tags_supported"
 
 
+class EvidenceStage(StrEnum):
+    PRE_BACKFILL = "pre_backfill"
+    BACKFILL_ONLY = "backfill_only"
+    POST_BACKFILL = "post_backfill"
+
+
+class SeedGateClass(StrEnum):
+    COHERENT_SEED = "coherent_seed"
+    REVIEW_ONLY_SEED_GATE_FAILED = "review_only_seed_gate_failed"
+    BLOCKED_SEED = "blocked_seed"
+
+
+class SeedRejectReason(StrEnum):
+    MISSING_REQUEST_IDENTITY_CONSTRAINT = "missing_request_identity_constraint"
+    NO_QUANTIFIABLE_OWNER = "no_quantifiable_owner"
+    MISSING_DISCOVERY_CANDIDATE_JOIN = "missing_discovery_candidate_join"
+    MISSING_DIAGNOSTIC_FRAGMENT_EVIDENCE = "missing_diagnostic_fragment_evidence"
+    AMBIGUOUS_OWNER = "ambiguous_owner"
+    DUPLICATE_LOSER = "duplicate_loser"
+    BACKFILL_ONLY_EVIDENCE = "backfill_only_evidence"
+    NONFINITE_PEAK = "nonfinite_peak"
+    SEED_RT_OUTSIDE_OWNER_PEAK = "seed_rt_outside_owner_peak"
+    LOW_MS1_SCAN_SUPPORT = "low_ms1_scan_support"
+    REQUEST_CANDIDATE_IDENTITY_MISMATCH = "request_candidate_identity_mismatch"
+    UNSUPPORTED_FRAGMENT_OBSERVATION_MODE = "unsupported_fragment_observation_mode"
+    MULTI_SEED_REQUIRES_PHASE2 = "multi_seed_requires_phase2"
+
+
 IDENTITY_COHERENCE_REQUEST_COLUMNS: tuple[str, ...] = (
     "request_id",
     "decision_id",
