@@ -439,10 +439,17 @@ request_candidate_identity_status =
 fragment_tag_match_policy = all_request_tags_supported
 ```
 
-`request_candidate_identity_status = not_assessed` is valid only when the
-request is incomplete or the candidate join is missing. A missing candidate
-join should emit `missing_discovery_candidate_join` when it can be identified
-cleanly.
+For frozen `requests.tsv` output, `request_candidate_identity_status =
+not_assessed` is valid only when the request is incomplete or the candidate join
+is missing. A missing candidate join should emit
+`missing_discovery_candidate_join` when it can be identified cleanly.
+
+First-slice builder objects are pre-gate internal audit candidates. They may
+temporarily carry `request_identity_completeness_status = complete` and
+`request_candidate_identity_status = not_assessed` before the seed gate has run,
+but those objects must not be emitted directly as frozen `requests.tsv` rows.
+Final request audit rows require the seed gate or request-vs-candidate check to
+resolve complete joined requests to a concrete candidate identity status.
 
 `fragment_profile_hash` may be `unavailable`, but that must add
 `fragment_profile_hash_unavailable` to `request_builder_flags`.
@@ -672,7 +679,99 @@ Implementation contract is ready when:
 
 First implementation slice:
 
-- add schema constants for the four frozen TSVs;
-- add domain request/model constants needed for request builder tests;
+- write scope is limited to:
+  - `xic_extractor/alignment/identity_coherence/`;
+  - `tests/alignment/identity_coherence/`;
+- add `StrEnum` status values for domain states and ordered tuple schema
+  constants for the four frozen TSVs;
+- add `FragmentIdentity`, `CidNeutralLossConstraint`, and
+  `IdentityCoherenceRequest` dataclasses;
+- add a duck-typed request builder for `cid_neutral_loss` requests;
+- keep request builder tolerant at the adapter edge and strict in normalized
+  domain output;
+- do not implement request-vs-candidate identity matching yet;
 - do not implement a TSV writer yet;
-- do not connect RAW/XIC extraction yet.
+- do not connect RAW/XIC extraction, alignment orchestration, Backfill, workbook,
+  report, or CLI surfaces yet.
+
+First slice files:
+
+```text
+xic_extractor/alignment/identity_coherence/__init__.py
+xic_extractor/alignment/identity_coherence/models.py
+xic_extractor/alignment/identity_coherence/schema.py
+xic_extractor/alignment/identity_coherence/request_builder.py
+tests/alignment/identity_coherence/test_schema_contract.py
+tests/alignment/identity_coherence/test_fragment_identity_request_builder.py
+```
+
+First slice code rules:
+
+- domain status values use `StrEnum`; enum values are the only valid TSV
+  categorical strings;
+- this follows the repo's current `StrEnum` pattern. If CI or packaging still
+  claims Python 3.10 support, that Python-version contract must be corrected in
+  a separate task instead of hidden inside this slice;
+- schema columns use ordered tuple constants, not enums;
+- `__init__.py` is a thin facade only: re-export stable models, builder, enums,
+  and schema constants; do not put logic there;
+- request builder accepts duck-typed candidate-like objects and must not import
+  `DiscoveryCandidate`;
+- caller supplies `request_id`, `decision_id`, three ppm tolerances,
+  `fragment_profile_id`, and optional `fragment_profile_hash`;
+- missing `request_id`, `decision_id`, `candidate_id`, or
+  `fragment_profile_id` raises `ValueError` because no traceable audit row can
+  be formed;
+- ordinary missing identity fields still create an incomplete request object;
+- `request_candidate_identity_status` remains `not_assessed` in this slice only
+  on the pre-gate builder object, because candidate-vs-request matching belongs
+  to the next slice. Such objects must not be emitted as final `requests.tsv`
+  rows.
+
+First slice tag normalization:
+
+- input may be `None`, string, list, tuple, or set;
+- string input accepts `;`, `|`, or `,` as separators;
+- canonical TSV output delimiter is `;`;
+- add a small `format_fragment_tags(tags) -> str` helper so canonical TSV
+  formatting is testable before the real writer exists;
+- trim whitespace;
+- do not case-fold;
+- preserve case-only variants and add `fragment_tag_case_variant_seen`;
+- `matched_tag_names` wins over fallback `neutral_loss_tag`;
+- if both legacy fields exist but disagree, keep `matched_tag_names` and add
+  `legacy_single_tag_disagrees_with_matched_tags`;
+- tokens containing `;`, `|`, or `,` after splitting are invalid tag tokens.
+
+First slice missing-precedence rule:
+
+```text
+missing_fragment_observation_mode
+missing_precursor_mz
+missing_product_mz
+missing_fragment_tags
+missing_mode_specific_constraint
+complete
+```
+
+If multiple fields are missing, emit the first status by this order and record
+all missing fields in `request_builder_flags`.
+
+First slice tests must prove:
+
+- four schema constants have no duplicate columns;
+- four schema constants match this file's marker blocks exactly;
+- status enum values match the categorical values documented here;
+- a complete duck-typed candidate plus explicit ppm tolerances creates a
+  complete `cid_neutral_loss` request;
+- `matched_tag_names` multi-tag input wins over fallback `neutral_loss_tag`;
+- tag input supports `;`, `|`, `,`, list, tuple, and set, with canonical `;`
+  output;
+- case-sensitive tags such as `base` and `BASE` are not merged and emit a flag;
+- missing product m/z, missing tags, and missing tolerance each create an
+  incomplete request object with deterministic status;
+- default `fragment_profile_hash = unavailable` emits
+  `fragment_profile_hash_unavailable`;
+- `format_fragment_tags(("MeR", "dR")) == "MeR;dR"`;
+- missing `request_id`, `decision_id`, `candidate_id`, or
+  `fragment_profile_id` raises `ValueError`.
