@@ -95,8 +95,11 @@ Required v0.4 fields for seed coherence:
 - `cid_observed_loss_da`;
 - `cid_observed_loss_tolerance_ppm`.
 
-All mass/loss gates use ppm. Da loss error may be emitted as review context,
-but a request with only a Da tolerance cannot become `coherent_seed`.
+Required m/z, loss, and ppm tolerance values must be finite positive numbers.
+All mass/loss gates use ppm. For `cid_neutral_loss`, observed-loss ppm is
+relative to the neutral-loss mass itself, not precursor m/z. Da loss error may
+be emitted as review context, but a request with only a Da tolerance cannot
+become `coherent_seed`.
 
 `fragment_tags` output format:
 
@@ -110,15 +113,17 @@ Rules:
 - trim whitespace and preserve exact case;
 - do not case-fold or merge case-only variants;
 - stable unique ordering for TSV output;
-- empty tag after trim is invalid;
+- a normalized tag set with no non-empty tokens is `missing_fragment_tags`;
+- empty separator slots inside otherwise valid input are ignored;
 - if case-only variants are seen, emit `fragment_tag_case_variant_seen`;
 - `fragment_tag_match_policy = all_request_tags_supported`;
 - all request tags are required for seed consistency and tier 1 non-seed
   diagnostic fragment support.
 
 Legacy discovery fields such as `matched_tag_names` and `neutral_loss_tag` are
-adapter inputs only. The request builder may read them; Layer 1 and later
-domain logic must read only normalized `FragmentIdentity`.
+adapter inputs only. The request/candidate evidence builder may read them;
+Layer 1 and later domain logic must read only normalized `FragmentIdentity` and
+normalized `SeedCandidateEvidence`.
 
 Profile-level identity may support `fragment_tags` only when the profile
 deterministically expands to the requested tag set in this diagnostic context.
@@ -135,6 +140,12 @@ hash does not fail the seed gate.
 `DiscoveryCandidate`, but it does not prove that the candidate satisfies the
 request identity. Layer 1 must compare the request identity constraints with
 the joined candidate evidence before the seed can become `coherent_seed`.
+
+The executable seed-gate input is normalized `SeedCandidateEvidence`, not raw
+legacy candidate fields. It carries precursor m/z, product m/z, CID observed
+loss, fragment tag set, seed RT, scan support, and evidence stage. Any
+candidate or owner evidence stage other than `pre_backfill` must fail with
+`backfill_only_evidence`.
 
 This is required for identity decoys: a decoy may preserve provenance while
 changing the declared identity request, and the mismatch must be rejected by the
@@ -181,7 +192,9 @@ Seed gate failure order:
 4. joined candidate lacks required diagnostic fragment evidence field or
    unexpandable profile evidence -> `missing_diagnostic_fragment_evidence`;
 5. request and joined candidate are complete but outside ppm tolerance or tag
-   set mismatch -> `request_candidate_identity_mismatch`.
+   set mismatch -> `request_candidate_identity_mismatch`;
+6. candidate or owner evidence is not pre-Backfill evidence ->
+   `backfill_only_evidence`.
 
 ## Layer 1: Seed Coherence Gate And Specificity Context
 
@@ -197,10 +210,14 @@ Minimum v0.4 seed requirements:
   request ppm tolerances;
 - the candidate has diagnostic fragment evidence within declared ppm
   tolerances;
+- candidate and owner evidence are from the pre-Backfill stage;
 - a pre-Backfill sample-local MS1 owner exists;
 - owner apex, start RT, end RT, area, and height are finite;
 - `best_seed_rt` lies inside the owner peak boundaries;
-- owner is not ambiguous and not a duplicate loser;
+- owner assignment status is `primary` or `supporting`;
+- `ambiguous`, `unresolved`, or unknown owner assignment statuses are
+  Review-only;
+- owner is not a duplicate loser;
 - `ms1_scan_support_score >= seed_min_ms1_scan_support_score` when available.
 
 Record-only seed context:

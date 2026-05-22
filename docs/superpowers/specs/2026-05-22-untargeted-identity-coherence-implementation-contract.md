@@ -234,11 +234,12 @@ mode. HCD/base-product and HCD-observed-neutral-loss support must be added as
 new mode-specific constraint dataclasses under the same `FragmentIdentity`
 abstraction, not as a parallel identity pipeline.
 
-The request builder is the only adapter allowed to read legacy discovery field
-names such as `matched_tag_names`, `neutral_loss_tag`,
-`observed_neutral_loss_da`, and `neutral_loss_mass_error_ppm`. Domain gates read
-only `IdentityCoherenceRequest`, `FragmentIdentity`, and joined candidate
-evidence.
+The request/candidate evidence builder is the only adapter surface allowed to
+read legacy discovery field names such as `matched_tag_names`,
+`neutral_loss_tag`, `observed_neutral_loss_da`, and
+`neutral_loss_mass_error_ppm`. Domain gates read only
+`IdentityCoherenceRequest`, `FragmentIdentity`, and normalized
+`SeedCandidateEvidence`.
 
 Adapter tag source priority:
 
@@ -255,7 +256,8 @@ Tag normalization:
 - preserve exact case;
 - do not case-fold;
 - stable unique ordering for TSV output;
-- empty-after-trim tag is a missing constraint;
+- a normalized tag set with no non-empty tokens is a missing constraint;
+- empty separator slots inside otherwise valid input are ignored;
 - case-only variants are not merged and must emit
   `fragment_tag_case_variant_seen`.
 
@@ -263,6 +265,18 @@ Anti-parallel-variable rule: domain code must not carry both normalized
 `fragment_tags` and legacy `neutral_loss_tag` / `matched_tag_names` in parallel.
 Legacy names are adapter inputs only. TSV output is flat, but code uses the
 nested model above.
+
+The seed-gate slice introduces normalized `SeedCandidateEvidence` as the joined
+candidate payload. It carries candidate id, precursor m/z, product m/z, CID
+observed loss, supported fragment tags, seed RT, MS1 scan support, and
+`evidence_stage`. `evidence_stage` values are `pre_backfill`,
+`backfill_only`, and `post_backfill`; only `pre_backfill` may become
+`coherent_seed`.
+
+Seed-gate owner assignment handling is intentionally conservative: `primary`
+and `supporting` may pass the owner-status check, `unresolved` maps to
+`no_quantifiable_owner`, and `ambiguous` or unknown status strings map to
+`ambiguous_owner`. Unknown strings must not silently behave like `primary`.
 
 ## RAW/XIC Cost Budget
 
@@ -487,6 +501,12 @@ tolerance is not accepted as a gate. `cid_observed_loss_error_da` is review
 context only. For `cid_neutral_loss`, `missing_mode_specific_constraint` is
 reserved for the required mode payload itself, such as missing
 `cid_observed_loss_da`.
+
+Required m/z, loss, and ppm tolerance values must be finite positive numbers.
+Invalid numeric values reuse the corresponding missing-field status/flag
+instead of producing a complete request. For `cid_neutral_loss`,
+`cid_observed_loss_error_ppm` is relative to `cid_observed_loss_da`; it is not
+scaled by precursor m/z.
 
 ### Required `decisions.tsv` Columns
 
@@ -778,7 +798,10 @@ First slice tag normalization:
 - if both legacy fields exist and the fallback single tag is not a member of
   `matched_tag_names`, keep `matched_tag_names` and add
   `legacy_single_tag_disagrees_with_matched_tags`;
-- tokens containing `;`, `|`, or `,` after splitting are invalid tag tokens.
+- embedded `;`, `|`, or `,` inside list/tuple items are treated as separators,
+  not invalid tokens;
+- empty separator slots inside otherwise valid input are ignored; a tag input
+  with no non-empty tokens is `missing_fragment_tags`.
 
 First slice missing-precedence rule:
 
