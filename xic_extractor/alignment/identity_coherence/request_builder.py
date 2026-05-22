@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 from .models import CidNeutralLossConstraint, FragmentIdentity, IdentityCoherenceRequest
@@ -11,8 +10,8 @@ from .schema import (
     RequestCandidateIdentityStatus,
     RequestIdentityCompletenessStatus,
 )
+from .tags import has_fragment_tags, normalize_fragment_tags
 
-_TAG_SPLIT_RE = re.compile(r"[;|,]")
 _MISSING_STATUS_ORDER: Sequence[tuple[str, RequestIdentityCompletenessStatus]] = (
     (
         "missing_fragment_observation_mode",
@@ -72,11 +71,15 @@ def build_identity_coherence_request(
 
     matched_tag_names = _getattr_or_none(candidate_like, "matched_tag_names")
     neutral_loss_tag = _getattr_or_none(candidate_like, "neutral_loss_tag")
-    tag_source = matched_tag_names if _has_tags(matched_tag_names) else neutral_loss_tag
-    fragment_tags, tag_flags = _normalize_fragment_tags(tag_source)
+    tag_source = (
+        matched_tag_names
+        if has_fragment_tags(matched_tag_names)
+        else neutral_loss_tag
+    )
+    fragment_tags, tag_flags = normalize_fragment_tags(tag_source)
     flags.extend(tag_flags)
-    if _has_tags(matched_tag_names) and _has_tags(neutral_loss_tag):
-        fallback_tags, _ = _normalize_fragment_tags(neutral_loss_tag)
+    if has_fragment_tags(matched_tag_names) and has_fragment_tags(neutral_loss_tag):
+        fallback_tags, _ = normalize_fragment_tags(neutral_loss_tag)
         if any(tag not in fragment_tags for tag in fallback_tags):
             flags.append("legacy_single_tag_disagrees_with_matched_tags")
 
@@ -134,10 +137,6 @@ def build_identity_coherence_request(
     )
 
 
-def format_fragment_tags(tags: tuple[str, ...]) -> str:
-    return ";".join(tags)
-
-
 def _getattr_or_none(value: object, name: str) -> Any:
     return getattr(value, name, None)
 
@@ -153,38 +152,6 @@ def _first_nonempty_text(*values: object) -> str | None:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
-
-
-def _has_tags(value: object) -> bool:
-    if value is None:
-        return False
-    if isinstance(value, str):
-        return bool(value.strip())
-    if isinstance(value, Iterable):
-        return any(str(item).strip() for item in value)
-    return bool(str(value).strip())
-
-
-def _normalize_fragment_tags(value: object) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    flags: list[str] = []
-    raw_parts: list[str] = []
-    if value is None:
-        return (), ()
-    if isinstance(value, str):
-        raw_parts.extend(_TAG_SPLIT_RE.split(value))
-    elif isinstance(value, Iterable):
-        for item in value:
-            raw_parts.extend(_TAG_SPLIT_RE.split(str(item)))
-    else:
-        raw_parts.extend(_TAG_SPLIT_RE.split(str(value)))
-
-    tags = tuple(sorted({part.strip() for part in raw_parts if part.strip()}))
-    lowered: dict[str, set[str]] = {}
-    for tag in tags:
-        lowered.setdefault(tag.lower(), set()).add(tag)
-    if any(len(variants) > 1 for variants in lowered.values()):
-        flags.append("fragment_tag_case_variant_seen")
-    return tags, tuple(flags)
 
 
 def _completeness_status(

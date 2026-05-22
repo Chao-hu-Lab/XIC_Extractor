@@ -3,7 +3,7 @@ from .models import (
     FragmentIdentity,
     IdentityCoherenceRequest,
 )
-from .request_builder import build_identity_coherence_request, format_fragment_tags
+from .request_builder import build_identity_coherence_request
 from .schema import (
     IDENTITY_COHERENCE_CELL_EVIDENCE_COLUMNS,
     IDENTITY_COHERENCE_CONTROL_COLUMNS,
@@ -14,6 +14,7 @@ from .schema import (
     RequestCandidateIdentityStatus,
     RequestIdentityCompletenessStatus,
 )
+from .tags import format_fragment_tags, has_fragment_tags, normalize_fragment_tags
 
 __all__ = [
     "CidNeutralLossConstraint",
@@ -29,4 +30,6 @@ __all__ = [
     "RequestIdentityCompletenessStatus",
     "build_identity_coherence_request",
     "format_fragment_tags",
+    "has_fragment_tags",
+    "normalize_fragment_tags",
 ]

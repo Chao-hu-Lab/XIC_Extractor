@@ -9,7 +9,6 @@ from xic_extractor.alignment.identity_coherence.models import (
 )
 from xic_extractor.alignment.identity_coherence.request_builder import (
     build_identity_coherence_request,
-    format_fragment_tags,
 )
 from xic_extractor.alignment.identity_coherence.schema import (
     FragmentObservationMode,
@@ -17,6 +16,7 @@ from xic_extractor.alignment.identity_coherence.schema import (
     RequestCandidateIdentityStatus,
     RequestIdentityCompletenessStatus,
 )
+from xic_extractor.alignment.identity_coherence.tags import format_fragment_tags
 
 
 def test_fragment_identity_request_model_can_hold_complete_cid_request():
