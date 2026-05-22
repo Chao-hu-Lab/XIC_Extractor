@@ -119,14 +119,15 @@ decoy_precursor_mz = original_precursor_mz shifted outside precursor tolerance
 decoy_product_mz = original_product_mz shifted outside product tolerance
 ```
 
-Keep RT and owner geometry unchanged. The decoy is run through the same seed
-gate as a normal request. The original candidate must not be reused to satisfy
-the shifted m/z constraints.
+Keep RT, owner geometry, and provenance unchanged. The decoy is run through the
+same seed gate as a normal request. Preserving `candidate_id` is allowed only to
+exercise the core request-vs-candidate identity consistency gate; the original
+candidate must not override or satisfy the shifted m/z request.
 
 Expected outcome:
 
-- seed gate fails with missing diagnostic neutral-loss / m/z support, or all
-  non-seed cells fail the decoy identity constraints;
+- seed gate fails with `request_candidate_identity_mismatch`, or all non-seed
+  cells fail the decoy identity constraints;
 - no would-primary promotion.
 
 ### `identity_decoy_nl_shuffle`
@@ -139,13 +140,14 @@ decoy_neutral_loss_tag = tag not supported by the source DiscoveryCandidate
 decoy_neutral_loss_da = corresponding declared loss, if available
 ```
 
-Keep RT and owner geometry unchanged. The decoy is run through the same seed
-gate as a normal request. The original candidate must not be reused to satisfy
-the shuffled neutral-loss constraint.
+Keep RT, owner geometry, and provenance unchanged. The decoy is run through the
+same seed gate as a normal request. Preserving `candidate_id` is allowed only to
+exercise the core request-vs-candidate identity consistency gate; the original
+candidate must not override or satisfy the shuffled neutral-loss request.
 
 Expected outcome:
 
-- seed gate fails with missing diagnostic neutral-loss support, or all non-seed
+- seed gate fails with `request_candidate_identity_mismatch`, or all non-seed
   cells fail the decoy identity constraints;
 - no would-primary promotion.
 
@@ -153,12 +155,13 @@ Decoys must be generated from pre-Backfill identity inputs and must not read
 post-Backfill outputs, workbook outputs, final matrix inclusion, blank/QC
 filters, or downstream audit results.
 
-Decoy evaluation rule: if the decoy seed identity constraints fail, the decoy
-must not continue into tier 2 shape promotion using the original seed identity.
-Shape similarity can only support a decoy if the decoy identity constraints
-first pass the same seed gate and per-cell identity constraints as a real
-request. This prevents an m/z-shifted or NL-shuffled false identity from being
-rescued by unchanged chromatographic shape.
+Decoy evaluation rule: if the decoy request identity does not match the joined
+candidate, the decoy must fail the seed gate and must not continue into tier 2
+shape promotion using the original seed identity. Shape similarity can only
+support a decoy if the decoy identity constraints first pass the same seed gate
+and per-cell identity constraints as a real request. This prevents an
+m/z-shifted or NL-shuffled false identity from being rescued by unchanged
+chromatographic shape.
 
 Any `identity_decoy_*` control that becomes
 `would_primary_provisional_identity_family_support` is an identity-layer No-Go.
@@ -197,9 +200,10 @@ Control mapping must report:
 - RT delta;
 - tag match status.
 
-## Identity Go / No-Go
+## Identity Control-Specific Go / No-Go
 
-Identity controls add these Go/No-Go rules:
+The implementation contract owns base engineering Go/No-Go rules. Identity
+controls add these control-specific rules:
 
 | Observation after 8RAW | Decision |
 | --- | --- |

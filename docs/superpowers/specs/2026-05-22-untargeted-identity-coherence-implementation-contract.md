@@ -137,11 +137,8 @@ prototype_width_ratio_max = 2.00
 min_non_seed_tier12_identity_samples = 2
 max_infrastructure_blocked_fraction = 0.05
 min_positive_control_pass_fraction = 1.00
-max_tier3_only_would_primary_fraction = 0.00
-max_rt_only_promoted_count = 0
-max_forbidden_evidence_used_count = 0
-max_projected_85raw_xic_requests = required before 85RAW
-positive_control_manifest = optional path before 8RAW, required before interpretation
+max_projected_85raw_identity_xic_requests = required before 85RAW
+identity_controls_manifest = optional path before 8RAW, required before interpretation
 ```
 
 Optional downstream audit values are not identity policy:
@@ -183,6 +180,26 @@ downstream audit requests.
 If an MS1 scan-index or approximate fast path is used, it must be marked as an
 explicit approximate diagnostic mode. It must not silently replace vendor XIC as
 an equivalent path.
+
+## Base Identity Go / No-Go
+
+This table owns engineering and invariant gates. The controls spec adds
+control-specific positive/decoy rules.
+
+| Observation after 8RAW | Decision |
+| --- | --- |
+| `promotion_used_forbidden_evidence = false` and the firewall A/B fixture preserves decisions/counts/basis under spoofed post-Backfill fields | Proceed. |
+| `promotion_used_forbidden_evidence = true` | No-Go; identity promotion crossed the evidence firewall. |
+| Any emitted would-primary has `weak_basis_reason != none` or `tier12_non_seed_identity_sample_count < min_non_seed_tier12_identity_samples` | No-Go; implementation violated the core weak-basis rule. |
+| `infrastructure_blocked_fraction <= max_infrastructure_blocked_fraction` | Proceed for mechanics review. |
+| `infrastructure_blocked_fraction > max_infrastructure_blocked_fraction` | Pivot; fix RAW/XIC access or process-mode reliability before interpreting decisions. |
+| 85RAW run has a reviewed count+fraction policy and `projected_85raw_identity_xic_request_count <= max_projected_85raw_identity_xic_requests` | Proceed to 85RAW execution. |
+| 85RAW run lacks a reviewed count+fraction policy or request-budget ceiling | No-Go for 85RAW; 8RAW mechanics may still be reviewed. |
+| `projected_85raw_identity_xic_request_count > max_projected_85raw_identity_xic_requests` | Pivot; reduce request count or change retrieval strategy before 85RAW. |
+
+Do not add separate threshold config keys for tier-3-only or RT-only promoted
+rows. Tier-3-only and RT-only support are structurally Review-only under the
+core spec, so such thresholds would be vestigial.
 
 ## CLI / Invocation Contract
 
@@ -271,6 +288,7 @@ seed_ms1_scan_support_score
 seed_neutral_loss_mass_error_ppm
 seed_matched_tag_count
 seed_tag_intersection_status
+seed_request_candidate_identity_status
 seed_evidence_score
 seed_evidence_tier
 seed_ms2_support
@@ -293,7 +311,6 @@ tier1_cell_count
 tier2_cell_count
 tier3_cell_count
 diagnostic_nl_supported_sample_count
-weak_basis_only
 weak_basis_reason
 background_audit_status
 background_audit_flags
@@ -306,21 +323,17 @@ control_expected_decision
 notes
 ```
 
-The `decision` column must use the core decision enum exactly:
+The [core identity spec](2026-05-22-untargeted-identity-coherence-core-spec.md)
+owns the decision enum. This implementation contract must not maintain a second
+independent enum list. Schema tests must reject emitted `decision` values
+outside the core enum and must fail if a duplicated schema definition drifts
+from the core contract.
+
+`seed_request_candidate_identity_status` values:
 
 ```text
-would_primary_provisional_identity_family_support
-review_only_seed_gate_failed
-review_only_rt_only_support
-review_only_insufficient_support
-review_only_center_unstable
-review_only_weak_basis_tier3_only
-review_only_weak_basis_single_tier12_plus_tier3
-review_only_multi_seed_requires_phase2
-blocked_infrastructure
+pass | fail | not_assessed
 ```
-
-Schema tests must reject emitted `decision` values outside this enum.
 
 ### Required `cell_evidence.tsv` Columns
 
@@ -422,12 +435,13 @@ or a single shared schema definition used by both docs and implementation.
   comparison-only;
 - input hashes and row counts;
 - control manifest path and control mapping counts;
-- evidence firewall assertion and `forbidden_evidence_used_count`;
+- evidence firewall assertion `promotion_used_forbidden_evidence = false` and
+  `forbidden_evidence_seen` counts;
 - seed gate counts and seed specificity context distributions;
 - RT-only candidate counts;
 - independent trace identity pass counts by tier;
 - diagnostic-NL-supported sample counts;
-- weak-basis-only row counts;
+- weak-basis reason counts;
 - background audit status and flag counts;
 - per-sample evidence coverage and missing-basis counts;
 - infrastructure-blocked counts;
@@ -449,5 +463,9 @@ Implementation contract is ready when:
 - controls output is machine-readable;
 - `controls.tsv` schema is frozen in this file and parity-checked against the
   controls spec;
+- base Go/No-Go table owns firewall, weak-basis, infrastructure, and cost
+  criteria;
+- decision enum values are sourced from the core spec or a shared schema, not a
+  second independent list;
 - every `cell_evidence.tsv` row has pre-Backfill provenance keys;
 - request counters separate identity from optional downstream audit cost.

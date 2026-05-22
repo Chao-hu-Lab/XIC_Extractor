@@ -28,6 +28,7 @@ Read in this order:
 3. [Implementation contract](2026-05-22-untargeted-identity-coherence-implementation-contract.md)
    - evidence firewall
    - `IdentityCoherenceConfig`
+   - base identity Go/No-Go for firewall, weak-basis, infrastructure, and cost
    - inline and diagnostic invocation modes
    - process-mode payload boundary
    - frozen output schemas

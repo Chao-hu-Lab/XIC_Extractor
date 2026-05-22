@@ -36,6 +36,30 @@ Allowed identity inputs:
 Validation-only inputs such as targeted ISTD labels or decoys may be used only
 by the controls spec to evaluate decisions. They cannot promote a row.
 
+## Identity Request Contract
+
+The diagnostic evaluates an `IdentityCoherenceRequest`, not only a joined
+`DiscoveryCandidate`.
+
+The request owns the declared identity constraints:
+
+```text
+request_precursor_mz
+request_product_mz
+request_neutral_loss_tag_or_profile
+request_observed_loss_da
+request_tolerances
+```
+
+`candidate_id` is a provenance join key. It retrieves the pre-Backfill
+`DiscoveryCandidate`, but it does not prove that the candidate satisfies the
+request identity. Layer 1 must compare the request identity constraints with
+the joined candidate evidence before the seed can become `coherent_seed`.
+
+This is required for identity decoys: a decoy may preserve provenance while
+changing the declared identity request, and the mismatch must be rejected by the
+core seed gate rather than silently satisfied by the original candidate.
+
 ## Layer 1: Seed Coherence Gate And Specificity Context
 
 The seed gate establishes seed-owner coherence, quantifiability, and sampling
@@ -44,6 +68,8 @@ sufficiency. It is not a complete seed specificity classifier.
 Minimum v0.4 seed requirements:
 
 - a `DiscoveryCandidate` join exists for the owner identity event;
+- request-declared precursor m/z, product m/z, neutral-loss tag/profile, and
+  observed loss match the joined candidate within the request tolerances;
 - the candidate has diagnostic neutral-loss evidence within declared
   m/z/loss tolerances;
 - a pre-Backfill sample-local MS1 owner exists;
@@ -88,6 +114,7 @@ seed_reject_reason =
   nonfinite_peak
   seed_rt_outside_owner_peak
   low_ms1_scan_support
+  request_candidate_identity_mismatch
   overflow_or_multi_seed_requires_phase2
 ```
 
@@ -267,15 +294,11 @@ blocked_infrastructure
 
 Background / blank / QC audit must not add a row-decision enum here.
 
-## Contaminant Consequence
+## Downstream Boundary Reference
 
-A contaminant can be a real chromatographic feature with coherent shape and RT.
-If it passes identity-family evidence, it may become
-`would_primary_provisional_identity_family_support`. That is not an identity
-diagnostic failure.
-
-Whether such a row belongs in the final analytical matrix is a downstream
-filtering/QC/statistics decision, covered by the downstream audit boundary.
+A core identity decision is not final-matrix eligibility. Contaminant,
+blank/QC, area-correction, normalization, and statistics consequences are owned
+by the [downstream audit boundary](2026-05-22-untargeted-identity-coherence-downstream-audit-boundary.md).
 
 ## Acceptance Criteria
 
@@ -283,6 +306,8 @@ Core identity spec is ready when:
 
 - seed gate uses `DiscoveryCandidate` joined by `candidate_id` plus
   `SampleLocalMS1Owner` geometry;
+- seed gate verifies request-declared identity constraints against the joined
+  candidate rather than treating `candidate_id` as identity proof;
 - `ms1_seed_delta_min`, `ms1_trace_quality`, `evidence_score`, and
   `evidence_tier` are record-only context;
 - tier 1 diagnostic neutral-loss support, tier 2 shape similarity, and tier 3
