@@ -392,6 +392,7 @@
         <a href="#new">v0.3 改法</a>
         <a href="#flow">新流程圖</a>
         <a href="#decisions">待決策項</a>
+        <a href="#validation">驗收 gates</a>
         <a href="#scope">輸出 scope</a>
       </nav>
 
@@ -446,7 +447,7 @@
               <tr>
                 <td>鑑別力全在 seed qualification</td>
                 <td><span class="tag review">修正</span></td>
-                <td>Seed specificity 是起點；非 seed sample 還需要 MS1 trace identity check。</td>
+                <td>Seed gate 只保證 coherent / sufficiently sampled；真正 specificity 先作 context，非 seed sample 還需要 trace identity check。</td>
               </tr>
               <tr>
                 <td>ISTD 應該全部通過</td>
@@ -486,7 +487,7 @@
               <tr>
                 <td>Discovery candidates</td>
                 <td>candidate_id join、best_seed_rt、scan_support_score、matched_tag_count、tag_intersection_status；ms1_seed_delta_min / trace_quality 作 record-only context</td>
-                <td>作為 seed specificity 的主要 evidence surface；不新抽 XIC，也不借用搜尋窗 padding 當 identity 門檻。</td>
+                <td>作為 seed gate 與 specificity context 的主要 evidence surface；不新抽 XIC，也不借用搜尋窗 padding 當 identity 門檻。</td>
               </tr>
               <tr>
                 <td>Untargeted audit path</td>
@@ -561,7 +562,7 @@
         <section id="new">
           <h2>5. v0.3 改法</h2>
           <p>
-            V0.3 把鑑別力從 RT gate 移到三個地方：seed specificity、
+            V0.3 把鑑別力從 RT gate 移到三個地方：seed coherence gate + specificity context、
             independent trace identity checks、background guard；positive controls 只作 validation yardstick。
           </p>
           <table>
@@ -570,14 +571,14 @@
             </thead>
             <tbody>
               <tr>
-                <td>Seed specificity</td>
-                <td>先用 DiscoveryCandidate join + seed RT in owner peak + seed scan-support gate 排除 low-specificity seed。高 recurrence 不能救弱 seed。</td>
-                <td><span class="tag stop">必須補</span></td>
+                <td>Seed gate</td>
+                <td>先用 DiscoveryCandidate join + seed RT in owner peak + seed scan-support gate 排除 incoherent / under-sampled seed；specificity 暫作 context。</td>
+                <td><span class="tag ok">已界定</span></td>
               </tr>
               <tr>
                 <td>Trace identity</td>
-                <td>非 seed sample 改用 tiered basis：same-sample discovery fragment &gt; shape &gt; prototype width；baseline / area-pattern 只作 review flag。</td>
-                <td><span class="tag stop">必須補</span></td>
+                <td>非 seed sample 改用 tiered basis：diagnostic NL support &gt; shape similarity &gt; prototype width；baseline / area-pattern 只作 review flag。</td>
+                <td><span class="tag ok">已具體化</span></td>
               </tr>
               <tr>
                 <td>ISTD / stable controls</td>
@@ -606,8 +607,8 @@
                 <span>inline after cluster_owners, before owner_backfill。</span>
               </div>
               <div class="node ok">
-                <strong>Seed specificity</strong>
-                <span>DiscoveryCandidate join + seed RT in owner peak + seed scan support；delta / trace_quality 只記錄。</span>
+                <strong>Seed gate + context</strong>
+                <span>DiscoveryCandidate join + seed RT in owner peak + seed scan support；evidence tier 只作 review context。</span>
               </div>
               <div class="node review">
                 <strong>RT-local retrieval</strong>
@@ -615,7 +616,7 @@
               </div>
               <div class="node ok">
                 <strong>Trace identity check</strong>
-                <span>tier 1 用 same-sample discovery fragment join；tier 2 shape；tier 3 prototype width。</span>
+                <span>tier 1 用 same-sample diagnostic NL support；tier 2 shape；tier 3 prototype width 只作 Review-only fallback。</span>
               </div>
               <div class="node">
                 <strong>Decision + controls</strong>
@@ -633,14 +634,14 @@
             </thead>
             <tbody>
               <tr>
-                <td>最低 seed specificity</td>
-                <td>low-specificity seed 不能 would-primary；background recurrence 是 decision 層 guard。</td>
-                <td>否則 recurrence 會放大弱 seed。</td>
+                <td>seed specificity 是否要硬 gate</td>
+                <td>V0.3 先不把 evidence_tier A/B 當 gate；若 8RAW 顯示弱 specificity context 仍會 would-primary，再定 diagnostic-owned gate。</td>
+                <td>避免把 discovery review ranking 誤當 identity specificity。</td>
               </tr>
               <tr>
                 <td>non-RT identity basis 分級</td>
-                <td>tier 1 same-sample DiscoveryCandidate fragment match，tier 2 shape similarity，tier 3 prototype-width fallback；baseline/interference 與 area-pattern 不作 promotion basis。</td>
-                <td>避免鬆散 OR gate 把弱 basis 放大成 would-primary。</td>
+                <td>tier 1 diagnostic NL support，tier 2 shape similarity，tier 3 prototype-width fallback；tier 3 不單獨支撐 would-primary。</td>
+                <td>避免把普通 MS/MS fragment confirmation 或鬆散 OR gate 誤寫成 identity promotion。</td>
               </tr>
               <tr>
                 <td>8RAW threshold</td>
@@ -661,21 +662,48 @@
           </table>
         </section>
 
+        <section id="validation">
+          <h2>8. 驗收 gates</h2>
+          <p>
+            這版不把「看起來合理」當 Go 訊號。8RAW review 要先產出機器可讀的 controls manifest、
+            decisions、cell evidence、controls 與 summary，再用明確 counters 判斷能否進 85RAW。
+          </p>
+          <div class="grid">
+            <article class="panel">
+              <h3>必須有的 yardsticks</h3>
+              <p>positive ISTD / stable controls 測 sensitivity；negative blank / background / decoy 測 specificity。control label 只能 validation，不能 promotion。</p>
+              <span class="tag ok">manifest</span>
+            </article>
+            <article class="panel">
+              <h3>必須擋的 failure</h3>
+              <p>RT-only、tier-3-only、background-like、negative control promoted、post-Backfill evidence used 都不能成為 Go。</p>
+              <span class="tag stop">No-Go</span>
+            </article>
+            <article class="panel">
+              <h3>必須估的成本</h3>
+              <p>summary 要回報 per-RAW / per-decision XIC requests 與 projected 85RAW request count；85RAW budget 未定不能放行。</p>
+              <span class="tag review">budget</span>
+            </article>
+          </div>
+        </section>
+
         <section id="scope">
-          <h2>8. 輸出 scope</h2>
+          <h2>9. 輸出 scope</h2>
           <p>
             V0.3 不再一開始凍結四張大型 TSV schema。先凍結最小 review surface：
           </p>
           <pre>untargeted_identity_coherence_decisions.tsv
 untargeted_identity_coherence_cell_evidence.tsv
+untargeted_identity_coherence_controls.tsv
 untargeted_identity_coherence_summary.md</pre>
           <p>
-            cell_evidence 是必要的，因為 per-sample tiered basis、tier-3-only fallback、review flags 都要能被 audit。
+            cell_evidence 是必要的，因為 per-sample tiered basis、numeric trace metrics、tier-3-only fallback、
+            background guard 與 review flags 都要能被 audit。
             candidates/groups 等較大的 detail tables 可以先作為 exploratory artifacts 輸出，等 8RAW 跑過後再凍結。
           </p>
           <div class="callout warning">
             <strong>Implementation gate：</strong>
-            在 seed specificity gates 與 tiered trace identity basis 寫清楚前，不建議開始寫 prototype code。
+            在 config、controls、shape metric、background guard、process-mode payload 與 evidence-firewall fixture 被 review 接受前，不建議開始寫 prototype code。
           </div>
         </section>
       </div>
