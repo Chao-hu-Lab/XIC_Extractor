@@ -1,0 +1,237 @@
+# Untargeted Identity Coherence Controls Spec
+
+**Date:** 2026-05-22
+**Status:** Split review draft v0.4
+
+This spec defines validation controls for the identity prototype. It depends on:
+
+- [Overview](2026-05-22-untargeted-identity-coherence-prototype-spec.md)
+- [Core identity spec](2026-05-22-untargeted-identity-coherence-core-spec.md)
+- [Implementation contract](2026-05-22-untargeted-identity-coherence-implementation-contract.md)
+
+## Purpose
+
+Controls validate the identity diagnostic. They do not promote identities.
+
+V0.4 needs both:
+
+- positive controls for sensitivity;
+- identity decoys for specificity against false identity promotion.
+
+Background / blank / QC negative controls are downstream-facing audit
+yardsticks, not identity-promotion gates.
+
+## Manifest
+
+The control set must be declared before interpreting an 8RAW result:
+
+```text
+identity_coherence_controls_manifest.tsv
+identity_coherence_controls_manifest.yml
+```
+
+Required manifest fields:
+
+```text
+control_id
+control_type
+targeted_benchmark_artifact
+target_label
+sample_stem_or_group
+expected_mapping_status
+expected_decision
+precursor_mz_tolerance_ppm
+product_mz_tolerance_ppm
+observed_loss_tolerance_ppm
+rt_tolerance_sec
+required_failure_reason_when_missed
+```
+
+`control_type` enum:
+
+```text
+positive_istd
+stable_positive
+identity_decoy_rt_shift
+identity_decoy_mz_shift
+identity_decoy_nl_shuffle
+downstream_negative_blank
+downstream_negative_background
+```
+
+Only the first five values belong to the identity prototype. Downstream negative
+controls may appear for handoff but are non-gating.
+
+## Positive Controls
+
+Positive controls test identity-diagnostic sensitivity.
+
+Allowed positive-control sources:
+
+- targeted ISTD benchmark output from existing diagnostics;
+- selected stable-like ISTD or targeted control rows mapped to untargeted
+  candidate families.
+
+Positive-control labels are validation-only evidence. They must not change
+`decision`, coherent counts, per-cell identity basis, or any promotion gate.
+
+Expected outcomes:
+
+- pass the seed coherence gate where applicable;
+- pass tiered trace identity checks;
+- if not promoted, emit a specific failure reason.
+
+## Identity Decoys
+
+Identity decoys test whether the method promotes constructed false identity
+requests. This is in scope because the identity layer is responsible for
+false independent feature suppression.
+
+Minimum V0.4 decoy types:
+
+### `identity_decoy_rt_shift`
+
+Clone a real seed/control request, then replace the seed input field
+`best_seed_rt` with:
+
+```text
+decoy_best_seed_rt = original_best_seed_rt + preferred_rt_sec + seed_center_candidate_sec
+```
+
+The original owner peak boundaries and candidate identity constraints remain
+unchanged. The decoy is run through the same seed gate as a normal request.
+Because the shifted seed RT should fall outside the original owner peak
+boundaries, the expected failure is `seed_rt_outside_owner_peak` before
+cross-sample XIC retrieval.
+
+Expected outcome:
+
+- not `would_primary_provisional_identity_family_support`;
+- likely `review_only_seed_gate_failed`.
+
+### `identity_decoy_mz_shift`
+
+Clone a real seed/control request, then replace the seed identity constraints
+with:
+
+```text
+decoy_precursor_mz = original_precursor_mz shifted outside precursor tolerance
+decoy_product_mz = original_product_mz shifted outside product tolerance
+```
+
+Keep RT and owner geometry unchanged. The decoy is run through the same seed
+gate as a normal request. The original candidate must not be reused to satisfy
+the shifted m/z constraints.
+
+Expected outcome:
+
+- seed gate fails with missing diagnostic neutral-loss / m/z support, or all
+  non-seed cells fail the decoy identity constraints;
+- no would-primary promotion.
+
+### `identity_decoy_nl_shuffle`
+
+Clone a real seed/control request, then replace the seed identity constraints
+with:
+
+```text
+decoy_neutral_loss_tag = tag not supported by the source DiscoveryCandidate
+decoy_neutral_loss_da = corresponding declared loss, if available
+```
+
+Keep RT and owner geometry unchanged. The decoy is run through the same seed
+gate as a normal request. The original candidate must not be reused to satisfy
+the shuffled neutral-loss constraint.
+
+Expected outcome:
+
+- seed gate fails with missing diagnostic neutral-loss support, or all non-seed
+  cells fail the decoy identity constraints;
+- no would-primary promotion.
+
+Decoys must be generated from pre-Backfill identity inputs and must not read
+post-Backfill outputs, workbook outputs, final matrix inclusion, blank/QC
+filters, or downstream audit results.
+
+Decoy evaluation rule: if the decoy seed identity constraints fail, the decoy
+must not continue into tier 2 shape promotion using the original seed identity.
+Shape similarity can only support a decoy if the decoy identity constraints
+first pass the same seed gate and per-cell identity constraints as a real
+request. This prevents an m/z-shifted or NL-shuffled false identity from being
+rescued by unchanged chromatographic shape.
+
+Any `identity_decoy_*` control that becomes
+`would_primary_provisional_identity_family_support` is an identity-layer No-Go.
+
+## Controls TSV
+
+Required `untargeted_identity_coherence_controls.tsv` columns:
+
+```text
+control_id
+control_type
+targeted_benchmark_artifact
+target_label
+sample_stem_or_group
+expected_mapping_status
+actual_mapping_status
+expected_decision
+actual_decision
+source_feature_family_id
+precursor_mz_delta_ppm
+product_mz_delta_ppm
+observed_loss_delta_ppm
+rt_delta_sec
+tag_match_status
+failure_reason
+```
+
+Control mapping must report:
+
+- `mapped`;
+- `unmapped`;
+- `ambiguous_mapping`;
+- targeted label;
+- candidate family id;
+- precursor/product/loss deltas;
+- RT delta;
+- tag match status.
+
+## Identity Go / No-Go
+
+Identity controls add these Go/No-Go rules:
+
+| Observation after 8RAW | Decision |
+| --- | --- |
+| `positive_control_pass_fraction >= min_positive_control_pass_fraction` and every miss has an explicit acceptable reason | Proceed to 85RAW threshold-policy review. |
+| `positive_control_pass_fraction < min_positive_control_pass_fraction` | No-Go; add trace identity metrics or fix mapping before continuing. |
+| Any `identity_decoy_*` control becomes `would_primary_provisional_identity_family_support` | No-Go; the identity layer is promoting a constructed false identity. |
+| Decoy mapping is ambiguous or cannot be audited | Pivot; fix control mapping before using decoy results. |
+
+Background / blank / QC negative controls must not appear in identity Go/No-Go.
+
+## Learning Ladder
+
+1. First 8RAW identity mechanics run:
+   - seed gate;
+   - tiered trace checks;
+   - positive controls;
+   - at least one identity decoy;
+   - evidence firewall;
+   - identity cost counters.
+2. Optional downstream validation/audit run:
+   - blank/QC/order inputs;
+   - downstream negative blank/background yardsticks;
+   - consumes identity outputs and cannot rewrite identity decisions.
+3. 85RAW identity expansion:
+   - reviewed count+fraction policy;
+   - identity request-budget ceiling;
+   - positive controls and identity decoys still pass.
+
+## Review Questions
+
+1. Which targeted ISTD/stable rows should seed the first 8RAW positive controls?
+2. Which decoy type is cheapest and most informative for the first 8RAW run?
+3. Should the first run require one decoy total, or one decoy per high-value
+   control family?
+4. What failure reasons are acceptable for positive controls that do not promote?

@@ -368,7 +368,7 @@
   <div class="page">
     <header>
       <div>
-        <div class="eyebrow">Untargeted identity reset · v0.3</div>
+        <div class="eyebrow">Untargeted identity reset · v0.4</div>
         <h1>RT-only coherence 不足以取代 Backfill 問題</h1>
         <p class="lead">
           這版 review story 不再複製完整 spec。它只聚焦一個決策：
@@ -377,8 +377,8 @@
       </div>
       <aside class="review-box">
         <h2>Review 目標</h2>
-        <p>判斷 v0.3 是否已經把外部 critique 轉成我們自己的設計判斷，而不是單方面接受。</p>
-        <p>對應 spec：<a href="2026-05-22-untargeted-identity-coherence-prototype-spec.md">prototype spec v0.3</a></p>
+        <p>判斷 v0.4 是否已經把外部 critique 轉成我們自己的設計判斷，而不是單方面接受。</p>
+        <p>對應 spec 入口：<a href="2026-05-22-untargeted-identity-coherence-prototype-spec.md">identity coherence overview v0.4</a></p>
       </aside>
     </header>
 
@@ -389,7 +389,7 @@
         <a href="#stance">辯證立場</a>
         <a href="#reuse">可重用地基</a>
         <a href="#trap">RT-only trap</a>
-        <a href="#new">v0.3 改法</a>
+        <a href="#new">v0.4 改法</a>
         <a href="#flow">新流程圖</a>
         <a href="#decisions">待決策項</a>
         <a href="#validation">驗收 gates</a>
@@ -432,8 +432,19 @@
           <div class="callout">
             <strong>責任邊界：</strong>
             這個專案可以在 identity layer 消掉假的獨立 feature，例如 duplicate activation、duplicate owner loser、
-            或 RT 漂移但其實屬於同一 family 的觀測。它不能做的是下游 final matrix filtering、area correction、
+            或 RT 漂移但其實屬於同一 family 的觀測重新歸群。它不能做的是下游 final matrix filtering、area correction、
             normalization 或 statistical eligibility。
+          </div>
+          <div class="callout">
+            <strong>Spec 拆分：</strong>
+            overview 只保留順序與不變式；identity 方法、controls、implementation contract、
+            downstream audit boundary 分成四份文件 review。這個 HTML 只是視覺導覽，不是 contract source。
+            <ul>
+              <li><a href="2026-05-22-untargeted-identity-coherence-core-spec.md">Core identity spec</a></li>
+              <li><a href="2026-05-22-untargeted-identity-coherence-controls-spec.md">Controls spec</a></li>
+              <li><a href="2026-05-22-untargeted-identity-coherence-implementation-contract.md">Implementation contract</a></li>
+              <li><a href="2026-05-22-untargeted-identity-coherence-downstream-audit-boundary.md">Downstream audit boundary</a></li>
+            </ul>
           </div>
           <table>
             <thead>
@@ -566,9 +577,9 @@
         </section>
 
         <section id="new">
-          <h2>5. v0.3 改法</h2>
+          <h2>5. v0.4 改法</h2>
           <p>
-            V0.3 把鑑別力從 RT gate 移到三個地方：seed coherence gate + specificity context、
+            V0.4 把鑑別力從 RT gate 移到三個地方：seed coherence gate + specificity context、
             independent trace identity checks；background recurrence 只作 audit，不作 identity gate。positive controls 只作 validation yardstick。
           </p>
           <table>
@@ -602,9 +613,9 @@
 
         <section id="flow">
           <h2>6. 新流程圖</h2>
-          <div class="diagram" role="img" aria-label="Revised v0.3 identity diagnostic flow">
+          <div class="diagram" role="img" aria-label="Revised v0.4 identity diagnostic flow">
             <div class="diagram-title">
-              <span>v0.3：RT peak retrieval 只是候選收集，不是 promotion</span>
+              <span>v0.4：RT peak retrieval 只是候選收集，不是 promotion</span>
               <span class="tag ok">revised</span>
             </div>
             <div class="flow">
@@ -636,12 +647,12 @@
           <h2>7. 待你決策的點</h2>
           <table>
             <thead>
-              <tr><th>問題</th><th>v0.3 建議</th><th>為什麼重要</th></tr>
+              <tr><th>問題</th><th>v0.4 建議</th><th>為什麼重要</th></tr>
             </thead>
             <tbody>
               <tr>
                 <td>seed specificity 是否要硬 gate</td>
-                <td>V0.3 先不把 evidence_tier A/B 當 gate；若 8RAW 顯示弱 specificity context 仍會 would-primary，再定 diagnostic-owned gate。</td>
+                <td>V0.4 先不把 evidence_tier A/B 當 gate；若 8RAW 顯示弱 specificity context 仍會 would-primary，再定 diagnostic-owned gate。</td>
                 <td>避免把 discovery review ranking 誤當 identity specificity。</td>
               </tr>
               <tr>
@@ -677,12 +688,12 @@
           <div class="grid">
             <article class="panel">
               <h3>必須有的 yardsticks</h3>
-              <p>positive ISTD / stable controls 測 identity diagnostic sensitivity；blank / QC / background controls 只能作下游 audit handoff，不參與 promotion。</p>
+              <p>positive ISTD / stable controls 測 sensitivity；identity decoy 測 false identity specificity。blank / QC / background controls 只能作下游 audit handoff。</p>
               <span class="tag ok">manifest</span>
             </article>
             <article class="panel">
               <h3>必須擋的 failure</h3>
-              <p>RT-only、tier-3-only、單一 tier-1/2 cell + width fallback、post-Backfill evidence used 都不能成為 identity Go。background-like 只能是 audit flag。</p>
+              <p>RT-only、tier-3-only、單一 tier-1/2 cell + width fallback、identity decoy promoted、post-Backfill evidence used 都不能成為 identity Go。background-like 只能是 audit flag。</p>
               <span class="tag stop">No-Go</span>
             </article>
             <article class="panel">
@@ -696,7 +707,8 @@
         <section id="scope">
           <h2>9. 輸出 scope</h2>
           <p>
-            V0.3 不再一開始凍結四張大型 TSV schema。先凍結最小 review surface：
+            V0.4 不再一開始凍結大型 detail TSV schema。先凍結最小 review surface。Controls input
+            manifest 叫 `identity_coherence_controls_manifest.yml/.tsv`；frozen output 則是：
           </p>
           <pre>untargeted_identity_coherence_decisions.tsv
 untargeted_identity_coherence_cell_evidence.tsv
