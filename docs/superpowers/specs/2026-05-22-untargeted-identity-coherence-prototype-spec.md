@@ -44,7 +44,7 @@ claim unchanged. The resulting design stance is:
 | --- | --- | --- |
 | RT-windowed peak finding is too close to Backfill | Accepted | A pre-Backfill run prevents output leakage, but methodologically it is still similar to Backfill if it only checks peak presence and RT. |
 | Therefore the diagnostic is useless | Rejected | The diagnostic still catches single-sample seeds, insufficient recurrence, center instability, Backfill evidence leakage, threshold-policy errors, and multi-seed ambiguity. |
-| Seed qualification is load-bearing | Accepted | Weak or background-like seeds cannot be rescued by recurrence alone. Seed specificity must be promoted from a loose filter to a first-class gate. |
+| Seed qualification is load-bearing | Accepted | Weak or low-specificity seeds cannot be rescued by recurrence alone. Seed specificity must be promoted from a loose filter to a first-class gate. |
 | All discrimination should live in seed qualification | Modified | Non-seed samples often lack MS2 evidence, so seed specificity anchors the identity while MS1 trace identity checks support cross-sample coherence. |
 | Shape/scoring can wait until a later phase | Rejected for MVP | At least one non-RT trace identity basis must be present in v0.3, otherwise coherence collapses back to RT-local Backfill-like peak finding. |
 | Targeted ISTDs should all pass | Modified | ISTDs are positive-control yardsticks, not a blanket pass rule. Only mapped targeted/stable control rows have expected diagnostic outcomes, and misses must be explained. |
@@ -94,8 +94,10 @@ methods.
 
 Untargeted foundations to reuse:
 
+- `DiscoveryCandidate` joined by `candidate_id` as the primary seed-specificity
+  evidence surface;
 - `build_sample_local_owners` and `SampleLocalMS1Owner` as the pre-Backfill
-  owner evidence surface;
+  owner geometry surface;
 - `cluster_sample_local_owners` and `OwnerAlignedFeature` as the starting
   identity-family grouping surface;
 - ambiguous-owner and duplicate-owner signals as seed specificity and
@@ -103,7 +105,8 @@ Untargeted foundations to reuse:
 - `pre_backfill_consolidation` logic as prior art for compatible owner grouping,
   not as the final identity algorithm;
 - existing `trace_quality`, `scan_support_score`, `region_*`, and integration
-  audit fields as candidate identity inputs;
+  audit fields as candidate identity inputs, using discovery candidate fields
+  where owner models intentionally keep only geometry;
 - current `production_decisions`, `matrix_identity`, and TSV writers as
   comparison surfaces, not promotion evidence.
 
@@ -142,6 +145,11 @@ The new diagnostic should therefore be thin orchestration around existing
 signals wherever possible. New code is justified when the existing module lacks
 the untargeted-specific identity contract, not merely because the old algorithm
 will be replaced.
+
+MVP does not change `NeutralLossProfile`. Neutral-loss specificity remains a
+Phase 2 curation option. V0.3 uses existing discovery fields such as
+`matched_tag_count` and `tag_intersection_status` as zero-schema-change
+specificity context.
 
 ## Non-Goals
 
@@ -235,7 +243,18 @@ medium seed specificity
 
 ### Layer 1: Seed Specificity
 
-Seed qualification is the load-bearing gate.
+Seed qualification is the load-bearing gate. In V0.3 the seed-specificity
+surface is:
+
+```text
+SampleLocalMS1Owner geometry
+  + DiscoveryCandidate joined by primary_identity_event.candidate_id
+```
+
+`SampleLocalMS1Owner` keeps the pre-Backfill owner peak and identity event, but
+it does not carry every discovery scoring field. Inline mode must therefore
+retain a candidate lookup keyed by `candidate_id`. A missing join is Review-only
+because the diagnostic cannot audit seed specificity.
 
 Minimum v0.3 seed requirements:
 
@@ -245,30 +264,61 @@ Minimum v0.3 seed requirements:
 - sample-local MS1 owner exists before Backfill;
 - area, apex RT, height, start RT, and end RT are finite;
 - owner is not ambiguous and not a duplicate loser;
-- seed has enough fragment specificity to distinguish it from generic
-  background recurrence.
+- the joined `DiscoveryCandidate.best_seed_rt` or
+  `primary_identity_event.seed_rt` falls inside
+  `owner_peak_start_rt..owner_peak_end_rt`;
+- `abs(ms1_seed_delta_min) <= seed_ms1_delta_max_min` when the joined
+  `DiscoveryCandidate` provides the field;
+- `ms1_trace_quality` is not a poor/missing quality label;
+- `ms1_scan_support_score >= seed_min_scan_support_score` when a numeric score
+  is available.
 
 `high evidence score` is not required as a blanket rule, but low-specificity
 seeds cannot be rescued by recurrence alone.
+
+Baseline seed-specificity parameters:
+
+| Parameter | Default | Source | Meaning |
+| --- | ---: | --- | --- |
+| `seed_ms1_delta_max_min` | `0.20` | `DiscoverySettings.ms1_search_padding_min` | Max MS1 apex to MS2 seed RT delta for seed coherence. |
+| `seed_min_scan_support_score` | `0.50` | `AlignmentConfig.anchor_min_scan_support_score` | Minimum numeric scan support when available. |
+| `poor_ms1_trace_quality_labels` | `POOR, MISSING` | discovery evidence semantics | Labels that force low specificity when numeric scan support is absent or poor. |
+
+Context fields recorded but not used as hard gates before 8RAW review:
+
+```text
+neutral_loss_mass_error_ppm
+matched_tag_count
+tag_intersection_status
+evidence_score
+evidence_tier
+```
+
+These fields may split high vs medium reporting labels, but both high and medium
+can support V0.3 promotion. Only `low_specificity` blocks promotion.
 
 Required seed diagnostic fields:
 
 ```text
 seed_specificity_class =
-  high_specificity | medium_specificity | low_specificity | background_like
+  high_specificity | medium_specificity | low_specificity
 
 seed_reject_reason =
   missing_fragment_evidence
   no_quantifiable_owner
+  missing_discovery_candidate_join
   ambiguous_owner
   duplicate_loser
   backfill_only_evidence
   nonfinite_peak
-  low_fragment_specificity
-  background_like_seed
+  seed_rt_outside_owner_peak
+  ms1_seed_delta_out_of_bounds
+  poor_ms1_trace_quality
+  low_ms1_scan_support
 ```
 
-Background-like seeds are Review-only even if they recur in many samples.
+Cross-sample background behavior is not a seed-specificity class. It is reported
+later as `background_recurrence_pattern` after recurrence evidence exists.
 
 ### Layer 2: RT-Local Candidate Retrieval
 
@@ -285,39 +335,56 @@ initial_rt_max = seed_rt_min + (max_rt_sec / 60.0)
 The retrieval window may default to `max_rt_sec = 180` for 8RAW exploration,
 but the extracted peak is only a candidate for further checks.
 
-### Layer 3: Trace Identity Checks
+### Layer 3: Tiered Identity Checks
 
-Every non-seed sample that contributes to would-primary must pass at least one
-non-RT identity check.
+Every non-seed sample that contributes to would-primary must pass RT plus a
+tiered non-RT identity basis. This is not a loose OR gate.
 
-V0.3 minimum independent checks:
+V0.3 identity basis tiers:
 
-- peak morphology is complete and finite;
-- peak width is within a bounded ratio of the seed peak width;
-- local baseline / interference is not obviously incompatible;
-- normalized local trace shape has enough similarity to the seed or group
-  prototype when enough points exist;
-- area/height pattern is not a flat high-recurrence background signature.
+```text
+tier 1: rt + fragment_match
+tier 2: rt + shape_similarity
+tier 3: rt + prototype_width
+```
 
-The exact first implementation can use simple deterministic metrics, but the
-decision must expose which non-RT check admitted the sample. A cell cannot be
-`coherent` only because a positive peak exists inside an RT window.
+Tier 1 is available when that sample has pre-Backfill MS2/NL evidence matching
+the row identity: neutral-loss tag, product m/z, and observed loss all remain
+inside tolerance.
+
+Tier 2 is available when enough XIC points exist to compare normalized local
+shape against the seed or group prototype.
+
+Tier 3 is a fallback. Width must be compared to a prototype width, defined as
+the median width of complete candidates used for the stable provisional center,
+not only to the seed sample width. A single co-eluted seed peak must not become
+the reference width for every sample.
+
+Baseline/interference and area/height pattern are review flags in V0.3. They
+must not admit a cell as promotion evidence by themselves. Flat area patterns
+can describe either stable controls or background, so area-pattern flatness is
+not an identity basis without a separate biological expectation model.
+
+A row can be `would_primary_independent_identity_support` only if at least one
+non-seed coherent sample is admitted by tier 1 or tier 2. Tier-3-only rows are
+Review-only weak-basis rows for V0.3.
 
 Required cell evidence category:
 
 ```text
 cell_identity_basis =
   seed_sample
-  rt_plus_shape
-  rt_plus_width
-  rt_plus_baseline
-  rt_plus_area_pattern
+  tier1_rt_fragment_match
+  tier2_rt_shape_similarity
+  tier3_rt_prototype_width
   rt_only_review_only
   blocked_infrastructure
   data_quality_reject
 ```
 
 `rt_only_review_only` is never allowed to support would-primary.
+Baseline and area-pattern concerns must be emitted as review flags, not as
+`cell_identity_basis`.
 
 ## RT Center Rules
 
@@ -377,6 +444,35 @@ For 85RAW, the 8RAW threshold cannot be copied blindly because `3/8` and
 threshold policy, such as a minimum count plus minimum fraction, before any
 production interpretation.
 
+## RAW/XIC Cost Budget
+
+The diagnostic must keep request cost first-class because 85RAW viability
+depends on avoiding unnecessary vendor XIC calls.
+
+Layer 1 is the cost gate:
+
+```text
+low_specificity or blocked seed
+  -> no Layer 2 cross-sample XIC retrieval
+```
+
+Required counters:
+
+```text
+layer1_candidate_count
+layer1_low_specificity_count
+layer1_blocked_count
+layer2_xic_request_count
+raw_chromatogram_call_count
+xic_point_count
+wall_time_sec
+per_raw_xic_request_count
+```
+
+If an MS1 scan-index or approximate fast path is used, it must be marked as an
+explicit approximate diagnostic mode. It must not silently replace vendor XIC as
+an equivalent path.
+
 ## Positive Controls And Yardsticks
 
 V0.3 must include a cheap positive-control yardstick before interpreting 8RAW
@@ -391,6 +487,14 @@ Required if available:
   - pass seed specificity where applicable;
   - pass trace identity checks;
   - explain misses explicitly when not promoted.
+
+Control mapping must be audited before interpreting pass/fail:
+
+- map controls to untargeted candidate families by neutral-loss tag, precursor
+  m/z, and RT within declared tolerances;
+- report `mapped`, `unmapped`, and `ambiguous_mapping` counts;
+- for every mapped control, report targeted label, candidate family id,
+  precursor m/z delta, RT delta, and tag match status.
 
 The Go/No-Go table cannot use vague "expected stable-like rows" without naming
 the control set or linking the benchmark artifact.
@@ -424,6 +528,16 @@ source_feature_family_id
 primary_seed_id
 seed_sample_stem
 seed_specificity_class
+seed_reject_reason
+seed_rt_inside_owner_peak
+seed_ms1_delta_min
+seed_ms1_trace_quality
+seed_ms1_scan_support_score
+seed_neutral_loss_mass_error_ppm
+seed_matched_tag_count
+seed_tag_intersection_status
+seed_evidence_score
+seed_evidence_tier
 decision
 decision_reason
 total_coherent_sample_count
@@ -435,13 +549,15 @@ min_non_seed_coherent_samples
 center_decision
 center_drift_sec
 non_rt_identity_pass_count
+tier1_cell_count
+tier2_cell_count
+tier3_cell_count
+fragment_confirmed_sample_count
+weak_basis_only
+background_recurrence_pattern
 rt_only_candidate_count
 blocked_infrastructure_count
 data_quality_reject_count
-coherent_sample_ids
-rt_only_sample_ids
-blocked_sample_ids
-data_quality_reject_sample_ids
 forbidden_evidence_seen
 positive_control_class
 positive_control_expected_decision
@@ -456,7 +572,8 @@ review_only_low_seed_specificity
 review_only_rt_only_support
 review_only_insufficient_support
 review_only_center_unstable
-review_only_background_like_recurrence
+review_only_background_recurrence_pattern
+review_only_weak_basis_tier3_only
 review_only_multi_seed_requires_phase2
 blocked_infrastructure
 ```
@@ -479,8 +596,13 @@ sample_role
 cell_decision
 rt_delta_center_sec
 rt_gate_result
+identity_basis_tier
 non_rt_identity_basis
 non_rt_identity_result
+fragment_match_status
+shape_similarity_status
+prototype_width_status
+review_flags
 evidence_source
 reject_reason
 ```
@@ -507,7 +629,9 @@ For a `non_seed` sample to contribute to
 `non_seed_coherent_sample_count`, `cell_decision` must be
 `coherent_identity_supported`, `rt_gate_result` must be pass, and
 `non_rt_identity_result` must be pass. RT-only rows remain review evidence, not
-promotion evidence.
+promotion evidence. Tier-3-only rows must not become
+`would_primary_independent_identity_support` unless 8RAW review explicitly
+changes this contract.
 
 ### Required `summary.md` Sections
 
@@ -519,12 +643,15 @@ promotion evidence.
 - evidence firewall assertion;
 - seed specificity counts;
 - RT-only candidate counts;
-- independent trace identity pass counts;
+- independent trace identity pass counts by tier;
+- fragment-confirmed sample counts;
+- weak-basis-only row counts;
 - per-sample evidence coverage and missing-basis counts;
 - infrastructure-blocked counts;
 - data-quality reject counts;
 - threshold count and fraction summaries;
-- RAW/XIC request and timing counters;
+- RAW/XIC request, point, per-RAW, and timing counters;
+- positive-control mapping counts and ambiguous/unmapped controls;
 - Go / No-Go / Pivot table.
 
 ## CLI / Invocation Contract
@@ -572,8 +699,13 @@ Infrastructure-blocked:
 Data-quality or identity rejects:
 
 - missing fragment evidence;
-- low fragment specificity;
-- background-like seed;
+- low seed specificity from seed-owner evidence;
+- missing discovery-candidate join;
+- seed RT outside owner peak;
+- MS1 seed delta outside seed-specificity bounds;
+- poor MS1 trace quality;
+- low MS1 scan support;
+- background recurrence pattern;
 - ambiguous owner;
 - duplicate loser;
 - Backfill-only evidence rejected;
@@ -592,7 +724,9 @@ Data-quality or identity rejects:
 | --- | --- |
 | Positive-control ISTD/stable rows pass with independent identity support | Proceed to 85RAW threshold-policy review. |
 | Controls fail because only RT support is present | No-Go; add trace identity metrics before continuing. |
-| Weak or background-like seeds become would-primary through recurrence | No-Go; tighten seed specificity/background guard. |
+| Low-specificity seeds become would-primary through recurrence | No-Go; fix seed-specificity gate. |
+| Rows are promoted by broad cross-sample background recurrence | No-Go; tighten background recurrence guard. |
+| Most would-primary rows are admitted only by tier 3 width fallback | Pivot; require fragment/shape support or revise identity basis. |
 | Any row is promoted by Backfill/rescued evidence | No-Go; fix evidence firewall. |
 | Most would-primary rows are `rt_only_review_only` before non-RT checks | Pivot to shape/trace scoring before expanding scope. |
 | 8RAW threshold looks good but fraction would be trivial in 85RAW | Define count+fraction policy before 85RAW. |
@@ -605,24 +739,27 @@ Data-quality or identity rejects:
 This spec is ready for implementation only after review signs off on:
 
 - the method difference from Backfill is explicit and accepted;
-- seed specificity classes and reject reasons are sufficient to block
-  background-like recurrence;
-- at least one independent non-RT trace identity check is in V0.3 MVP;
+- seed specificity uses `DiscoveryCandidate` joined by `candidate_id` plus
+  `SampleLocalMS1Owner` geometry;
+- low-specificity seed gates are defined in terms of seed-owner RT co-location,
+  MS1 seed delta, trace quality, and scan support;
+- background recurrence is a post-scan decision pattern, not a seed class;
+- tiered non-RT identity checks are defined in V0.3 MVP;
 - 8RAW and 85RAW threshold policies are separated;
 - seed sample counting is explicit (`seed + at least 2 non-seed` for 8RAW);
 - targeted ISTD/control rows are named or a benchmark artifact is provided;
+- positive-control mapping criteria and ambiguous/unmapped counts are defined;
+- RAW/XIC request counters are first-class and Layer 1 rejects skip Layer 2 XIC;
 - inline pre-Backfill data flow is accepted as the primary path;
 - output scope is limited to `decisions.tsv`, `cell_evidence.tsv`, and
   `summary.md` as frozen contracts for the first run.
 
 ## Review Questions
 
-1. What is the minimum acceptable seed specificity gate for V0.3?
-2. Which first non-RT trace identity check should be in MVP: shape similarity,
-   peak-width ratio, baseline/interference flag, or area-pattern guard?
-3. Should background-like recurrence always block would-primary even when the
-   total coherent count is high?
-4. Which targeted ISTD or stable rows should be the 8RAW positive controls?
-5. Is `seed + 2 non-seed coherent samples` the right 8RAW support threshold?
-6. What count+fraction policy should be reviewed before 85RAW?
-7. Is post-hoc `alignment-dir` mode acceptable only as comparison/reporting?
+1. Are the hard low-specificity gates strict enough for 8RAW without requiring
+   a high evidence score?
+2. Is tier-3-only support correctly Review-only for V0.3?
+3. Which targeted ISTD or stable rows should be the 8RAW positive controls?
+4. Is `seed + 2 non-seed coherent samples` the right 8RAW support threshold?
+5. What count+fraction policy should be reviewed before 85RAW?
+6. Is post-hoc `alignment-dir` mode acceptable only as comparison/reporting?

@@ -401,7 +401,7 @@
           <div class="callout stop">
             <strong>v0.2 不應直接實作。</strong>
             它雖然防止讀 Backfill 結果，但 coherence scan 本身仍接近 Backfill 的 peak-finding 操作。
-            若只用 RT gate + peak completeness，rescue-heavy 或 background-like row 仍可能變成 would-primary。
+            若只用 RT gate + peak completeness，rescue-heavy 或 background-recurrence row 仍可能變成 would-primary。
           </div>
           <div class="grid">
             <article class="panel">
@@ -480,13 +480,18 @@
             <tbody>
               <tr>
                 <td>Untargeted owner path</td>
-                <td>sample-local owners、owner clustering、ambiguous/duplicate owner signals</td>
-                <td>作為 pre-Backfill seed / family evidence surface。</td>
+                <td>sample-local owners、owner clustering、ambiguous/duplicate owner signals、owner peak boundaries</td>
+                <td>作為 pre-Backfill owner geometry surface。</td>
+              </tr>
+              <tr>
+                <td>Discovery candidates</td>
+                <td>candidate_id join、best_seed_rt、ms1_seed_delta_min、trace_quality、scan_support_score、matched_tag_count、tag_intersection_status</td>
+                <td>作為 seed specificity 的主要 evidence surface；不新抽 XIC。</td>
               </tr>
               <tr>
                 <td>Untargeted audit path</td>
-                <td>trace_quality、scan_support_score、region_*、integration audit</td>
-                <td>作為 trace identity / Review-only reason 的初始訊號。</td>
+                <td>region_*、integration audit、owner ambiguity signals</td>
+                <td>作為 trace identity / Review-only reason 的輔助訊號。</td>
               </tr>
               <tr>
                 <td>Targeted extraction</td>
@@ -497,6 +502,11 @@
                 <td>Targeted diagnostics</td>
                 <td>ISTD benchmark、peak reliability、NL dropout audit</td>
                 <td>作為 validation artifacts、failure taxonomy、yardstick，不作為 promotion evidence。</td>
+              </tr>
+              <tr>
+                <td>NeutralLossProfile</td>
+                <td>tag + neutral_loss_da</td>
+                <td>MVP 不新增 specificity_class；先用 matched_tag_count / tag_intersection_status 作 proxy。</td>
               </tr>
             </tbody>
           </table>
@@ -556,12 +566,12 @@
             <tbody>
               <tr>
                 <td>Seed specificity</td>
-                <td>先排除 low-specificity / background-like seed。高 recurrence 不能救弱 seed。</td>
+                <td>先用 DiscoveryCandidate join + owner boundary 共定位排除 low-specificity seed。高 recurrence 不能救弱 seed。</td>
                 <td><span class="tag stop">必須補</span></td>
               </tr>
               <tr>
                 <td>Trace identity</td>
-                <td>每個非 seed sample 至少要通過一個非 RT 檢查，例如 shape、width、baseline 或 area-pattern。</td>
+                <td>非 seed sample 改用 tiered basis：fragment &gt; shape &gt; prototype width；baseline / area-pattern 只作 review flag。</td>
                 <td><span class="tag stop">必須補</span></td>
               </tr>
               <tr>
@@ -592,7 +602,7 @@
               </div>
               <div class="node ok">
                 <strong>Seed specificity</strong>
-                <span>fragment specificity + owner isolation 先擋 background-like seed。</span>
+                <span>DiscoveryCandidate join + seed RT in owner peak + scan support 先擋 low-specificity seed。</span>
               </div>
               <div class="node review">
                 <strong>RT-local retrieval</strong>
@@ -600,7 +610,7 @@
               </div>
               <div class="node ok">
                 <strong>Trace identity check</strong>
-                <span>shape / width / baseline / area-pattern 至少一項非 RT 證據。</span>
+                <span>tier 1 fragment、tier 2 shape、tier 3 prototype width；tier-3-only 只能 Review-only。</span>
               </div>
               <div class="node">
                 <strong>Decision + controls</strong>
@@ -619,13 +629,13 @@
             <tbody>
               <tr>
                 <td>最低 seed specificity</td>
-                <td>low-specificity / background-like seed 不能 would-primary。</td>
+                <td>low-specificity seed 不能 would-primary；background recurrence 是 decision 層 guard。</td>
                 <td>否則 recurrence 會放大弱 seed。</td>
               </tr>
               <tr>
-                <td>第一個非 RT identity check</td>
-                <td>先選 shape similarity、peak-width ratio、baseline/interference 或 area-pattern guard 之一。</td>
-                <td>這是 coherence 與 Backfill 的真正差異來源。</td>
+                <td>non-RT identity basis 分級</td>
+                <td>tier 1 fragment match，tier 2 shape similarity，tier 3 prototype-width fallback；baseline/interference 與 area-pattern 不作 promotion basis。</td>
+                <td>避免鬆散 OR gate 把弱 basis 放大成 would-primary。</td>
               </tr>
               <tr>
                 <td>8RAW threshold</td>
@@ -655,12 +665,12 @@
 untargeted_identity_coherence_cell_evidence.tsv
 untargeted_identity_coherence_summary.md</pre>
           <p>
-            cell_evidence 是必要的，因為 non-seed sample 的非 RT identity basis 是 promotion 的 load-bearing evidence。
+            cell_evidence 是必要的，因為 per-sample tiered basis、tier-3-only fallback、review flags 都要能被 audit。
             candidates/groups 等較大的 detail tables 可以先作為 exploratory artifacts 輸出，等 8RAW 跑過後再凍結。
           </p>
           <div class="callout warning">
             <strong>Implementation gate：</strong>
-            在 seed specificity 與第一個非 RT trace identity check 決定前，不建議開始寫 prototype code。
+            在 seed specificity gates 與 tiered trace identity basis 寫清楚前，不建議開始寫 prototype code。
           </div>
         </section>
       </div>
