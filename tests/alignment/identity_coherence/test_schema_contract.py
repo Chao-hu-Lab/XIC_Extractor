@@ -99,8 +99,20 @@ def test_identity_coherence_facade_exports_stable_contract():
     assert identity_coherence.FragmentIdentity is not None
     assert identity_coherence.CidNeutralLossConstraint is not None
     assert identity_coherence.IdentityCoherenceRequest is not None
+    assert identity_coherence.CandidateIdentityMatch is not None
+    assert identity_coherence.SeedCandidateEvidence is not None
+    assert identity_coherence.SeedGateConfig is not None
+    assert identity_coherence.SeedGateResult is not None
+    assert identity_coherence.EvidenceStage is not None
+    assert identity_coherence.SeedGateClass is not None
+    assert identity_coherence.SeedRejectReason is not None
     assert identity_coherence.build_identity_coherence_request is not None
+    assert identity_coherence.build_seed_candidate_evidence is not None
+    assert identity_coherence.match_request_to_candidate is not None
+    assert identity_coherence.evaluate_seed_gate is not None
     assert identity_coherence.format_fragment_tags is not None
+    assert identity_coherence.has_fragment_tags is not None
+    assert identity_coherence.normalize_fragment_tags is not None
     assert identity_coherence.IDENTITY_COHERENCE_REQUEST_COLUMNS
 
 
