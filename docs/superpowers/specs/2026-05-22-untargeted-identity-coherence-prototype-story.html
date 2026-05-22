@@ -407,7 +407,7 @@
           <div class="grid">
             <article class="panel">
               <h3>保留</h3>
-              <p>identity formation 先於 Backfill。這個 boundary 仍是正確的。</p>
+              <p>identity formation 先於 Backfill，再先於下游 final-matrix filtering / area correction / statistics。</p>
               <span class="tag ok">keep</span>
             </article>
             <article class="panel">
@@ -417,7 +417,7 @@
             </article>
             <article class="panel">
               <h3>砍 scope</h3>
-              <p>只凍結 decisions、cell evidence、summary；其他表等 8RAW 後再定。</p>
+              <p>只凍結 decisions、cell evidence、controls、summary；其他表等 8RAW 後再定。</p>
               <span class="tag review">reduce</span>
             </article>
           </div>
@@ -429,6 +429,12 @@
             這不是全盤接受外部 review。我的判斷是：RT-only coherence 的批評成立，
             但 diagnostic 本身仍有價值；需要改的是 promotion evidence，不是丟掉 identity-first prototype。
           </p>
+          <div class="callout">
+            <strong>責任邊界：</strong>
+            這個專案可以在 identity layer 消掉假的獨立 feature，例如 duplicate activation、duplicate owner loser、
+            或 RT 漂移但其實屬於同一 family 的觀測。它不能做的是下游 final matrix filtering、area correction、
+            normalization 或 statistical eligibility。
+          </div>
           <table>
             <thead>
               <tr><th>外部意見</th><th>採納狀態</th><th>我們的設計判斷</th></tr>
@@ -563,7 +569,7 @@
           <h2>5. v0.3 改法</h2>
           <p>
             V0.3 把鑑別力從 RT gate 移到三個地方：seed coherence gate + specificity context、
-            independent trace identity checks、background guard；positive controls 只作 validation yardstick。
+            independent trace identity checks；background recurrence 只作 audit，不作 identity gate。positive controls 只作 validation yardstick。
           </p>
           <table>
             <thead>
@@ -640,8 +646,8 @@
               </tr>
               <tr>
                 <td>non-RT identity basis 分級</td>
-                <td>tier 1 diagnostic NL support，tier 2 shape similarity，tier 3 prototype-width fallback；tier 3 不單獨支撐 would-primary。</td>
-                <td>避免把普通 MS/MS fragment confirmation 或鬆散 OR gate 誤寫成 identity promotion。</td>
+                <td>tier 1 diagnostic NL support，tier 2 shape similarity，tier 3 prototype-width fallback；would-primary 需要 2 個非 seed tier 1/2 cells。</td>
+                <td>避免一個 shape cell 加上一個 width fallback 就被放大成 would-primary。</td>
               </tr>
               <tr>
                 <td>8RAW threshold</td>
@@ -665,23 +671,23 @@
         <section id="validation">
           <h2>8. 驗收 gates</h2>
           <p>
-            這版不把「看起來合理」當 Go 訊號。8RAW review 要先產出機器可讀的 controls manifest、
-            decisions、cell evidence、controls 與 summary，再用明確 counters 判斷能否進 85RAW。
+            這版不把「看起來合理」當 Go 訊號。第一次 8RAW 是 mechanics learning loop；
+            background / blank / QC validation 必須排在 identity prototype 之後，不能先變成 row-level gate。
           </p>
           <div class="grid">
             <article class="panel">
               <h3>必須有的 yardsticks</h3>
-              <p>positive ISTD / stable controls 測 sensitivity；negative blank / background / decoy 測 specificity。control label 只能 validation，不能 promotion。</p>
+              <p>positive ISTD / stable controls 測 identity diagnostic sensitivity；blank / QC / background controls 只能作下游 audit handoff，不參與 promotion。</p>
               <span class="tag ok">manifest</span>
             </article>
             <article class="panel">
               <h3>必須擋的 failure</h3>
-              <p>RT-only、tier-3-only、background-like、negative control promoted、post-Backfill evidence used 都不能成為 Go。</p>
+              <p>RT-only、tier-3-only、單一 tier-1/2 cell + width fallback、post-Backfill evidence used 都不能成為 identity Go。background-like 只能是 audit flag。</p>
               <span class="tag stop">No-Go</span>
             </article>
             <article class="panel">
               <h3>必須估的成本</h3>
-              <p>summary 要回報 per-RAW / per-decision XIC requests 與 projected 85RAW request count；85RAW budget 未定不能放行。</p>
+              <p>summary 要拆開 identity XIC requests 與 optional downstream audit requests；不能把 blank / QC 成本藏進 identity budget。</p>
               <span class="tag review">budget</span>
             </article>
           </div>
@@ -698,12 +704,12 @@ untargeted_identity_coherence_controls.tsv
 untargeted_identity_coherence_summary.md</pre>
           <p>
             cell_evidence 是必要的，因為 per-sample tiered basis、numeric trace metrics、tier-3-only fallback、
-            background guard 與 review flags 都要能被 audit。
+            background recurrence 只保留 audit flags；final matrix filtering、area correction 與統計解讀留給下游。
             candidates/groups 等較大的 detail tables 可以先作為 exploratory artifacts 輸出，等 8RAW 跑過後再凍結。
           </p>
           <div class="callout warning">
             <strong>Implementation gate：</strong>
-            在 config、controls、shape metric、background guard、process-mode payload 與 evidence-firewall fixture 被 review 接受前，不建議開始寫 prototype code。
+            在 config、positive controls、shape metric、process-mode payload 與 evidence-firewall fixture 被 review 接受前，不建議開始寫 identity prototype code；background/QC audit 若要擴充，另開下游 spec。
           </div>
         </section>
       </div>

@@ -14,6 +14,7 @@ This spec keeps the correct abstraction boundary:
 ```text
 identity formation first
 Backfill / value recovery second
+downstream final-matrix filtering / area correction / statistics third
 ```
 
 However, v0.2 had a methodological flaw: an RT-windowed peak search before
@@ -24,8 +25,9 @@ V0.3 therefore changes the prototype question:
 
 ```text
 Can pre-Backfill seed coherence plus independent per-sample trace identity
-checks separate plausible untargeted identities from RT-coherent background or
-rescue-heavy rows?
+checks support provisional identity families without letting RT-only recurrence,
+Backfill rescue, or downstream background/QC signals masquerade as identity
+evidence?
 ```
 
 This is not a full rejection of the coherence diagnostic. It is a narrower
@@ -34,6 +36,40 @@ not enough to promote an identity.
 
 The diagnostic remains non-mutating. It must not change `alignment_matrix.tsv`,
 workbooks, current Backfill behavior, or production promotion logic.
+
+## Responsibility Boundary
+
+This project does perform filtering-like work inside identity formation, but the
+object being filtered is false independent identity, not downstream analytical
+eligibility.
+
+In scope for the untargeted identity layer:
+
+- collapse duplicate activations that are really the same feature family;
+- prevent duplicate-owner losers from becoming independent primary features;
+- recover RT-drifted observations back into the same identity family when the
+  pre-Backfill evidence supports that family relationship;
+- expose ambiguous owners, multi-seed conflicts, RT-only support, weak-basis
+  support, and Backfill-dependent support as Review-only identity states;
+- decide whether an observed row has enough identity-family evidence to be a
+  provisional primary identity candidate.
+
+Out of scope for this identity layer:
+
+- final-matrix feature filtering based on blank abundance, QC CV, biological
+  missingness, downstream cohort design, or statistical model needs;
+- area correction, normalization, imputation, batch correction, or abundance
+  transformation;
+- deciding whether a biologically real but analytically noisy feature should be
+  retained for downstream statistics.
+
+Implementation order must follow the same boundary:
+
+```text
+identity-family formation / false independent feature suppression
+  -> Backfill / value recovery for accepted identity families
+  -> downstream final-matrix filtering, area correction, normalization, statistics
+```
 
 ## Design Stance After External Review
 
@@ -45,7 +81,7 @@ claim unchanged. The resulting design stance is:
 | RT-windowed peak finding is too close to Backfill | Accepted | A pre-Backfill run prevents output leakage, but methodologically it is still similar to Backfill if it only checks peak presence and RT. |
 | Therefore the diagnostic is useless | Rejected | The diagnostic still catches single-sample seeds, insufficient recurrence, center instability, Backfill evidence leakage, threshold-policy errors, and multi-seed ambiguity. |
 | Seed qualification is load-bearing | Accepted with narrower scope | Weak seeds cannot be rescued by recurrence alone, but the hard V0.3 seed gate is coherence and sampling sufficiency, not a complete specificity classifier. |
-| All discrimination should live in seed qualification | Modified | Non-seed samples often lack MS2 evidence, so the seed gate anchors a coherent starting point while per-sample trace identity checks and post-scan recurrence guards carry the remaining discrimination. |
+| All discrimination should live in seed qualification | Modified | Non-seed samples often lack MS2 evidence, so the seed gate anchors a coherent starting point while per-sample trace identity checks carry the remaining identity evidence. Background recurrence is audit-only and belongs downstream of identity decisions. |
 | Shape/scoring can wait until a later phase | Rejected for MVP | At least one non-RT trace identity basis must be present in v0.3, otherwise coherence collapses back to RT-local Backfill-like peak finding. |
 | Targeted ISTDs should all pass | Modified | ISTDs are positive-control yardsticks, not a blanket pass rule. Only mapped targeted/stable control rows have expected diagnostic outcomes, and misses must be explained. |
 | Post-hoc `alignment-dir` can drive the diagnostic | Rejected as primary path | Current TSVs distinguish `detected` and `rescued`, but they are not a complete pre-Backfill owner-state snapshot. Post-hoc mode is comparison/reporting only. |
@@ -78,7 +114,7 @@ requires evidence that is independent of simple RT-windowed peak presence:
 
 - seed coherence and evidence sufficiency before any across-sample scan;
 - per-sample trace identity / shape quality;
-- recurrence background guard.
+- background recurrence audit as a non-gating validation surface.
 
 The resulting decision should then be benchmarked against targeted ISTD or
 stable-control yardsticks. Control labels validate the diagnostic; they do not
@@ -278,24 +314,43 @@ shape_similarity_min_cosine = 0.85
 prototype_width_min_candidates = 3
 prototype_width_ratio_min = 0.50
 prototype_width_ratio_max = 2.00
-blank_max_detection_fraction = 0.25
-sample_blank_area_ratio_min = 5.00
-qc_cv_max = 0.30
+min_non_seed_tier12_identity_samples = 2
 max_infrastructure_blocked_fraction = 0.05
 min_positive_control_pass_fraction = 1.00
-max_negative_control_promoted_count = 0
 max_tier3_only_would_primary_fraction = 0.00
 max_rt_only_promoted_count = 0
 max_forbidden_evidence_used_count = 0
 max_projected_85raw_xic_requests = required before 85RAW
 positive_control_manifest = optional path before 8RAW, required before interpretation
-negative_control_manifest = optional path before 8RAW, required before 85RAW
 ```
 
 The diagnostic summary must echo every effective config value, its source
 (default, CLI/config file, or benchmark artifact), and the units. Broad
 retrieval tolerances such as `max_rt_sec = 180` are not identity confidence
 claims; they only define candidate retrieval.
+
+Optional background recurrence audit parameters are not identity-promotion
+policy and must not be read by row-decision logic:
+
+```text
+background_audit_blank_detection_fraction = optional validation-only value
+background_audit_sample_blank_area_ratio = optional validation-only value
+background_audit_qc_cv = optional validation-only value
+```
+
+These values may be emitted in `summary.md` or a downstream audit report, but
+they cannot change `decision`, coherent counts, matrix inclusion, area values,
+Backfill behavior, or statistical eligibility.
+
+Audit threshold notes:
+
+- Schiffman et al. 2019, filtering procedures for untargeted LC-MS
+  metabolomics, <https://doi.org/10.1186/s12859-019-2871-9>. This paper
+  documents common QC CV cutoffs, blank fold-change filtering, and argues that
+  feature filtering should be data-adaptive rather than blindly inherited from
+  defaults. That is exactly why V0.3 records these signals as audit context
+  only; final-matrix filtering, area correction, and statistics remain
+  downstream.
 
 ## Discriminator Model
 
@@ -410,8 +465,8 @@ seed_reject_reason =
   low_ms1_scan_support
 ```
 
-Cross-sample background behavior is not a seed-specificity class. It is reported
-later as `background_recurrence_pattern` after recurrence evidence exists.
+Cross-sample background behavior is not a seed-specificity class. If observed,
+it is reported later as audit context after recurrence evidence exists.
 
 ### Layer 2: RT-Local Candidate Retrieval
 
@@ -514,8 +569,11 @@ can describe either stable controls or background, so area-pattern flatness is
 not an identity basis without a separate biological expectation model.
 
 A row can be `would_primary_provisional_identity_family_support` only if at
-least one non-seed coherent sample is admitted by tier 1 or tier 2.
-Tier-3-only rows are Review-only weak-basis rows for V0.3.
+least `min_non_seed_tier12_identity_samples` non-seed coherent samples are
+admitted by tier 1 or tier 2. For the 8RAW review subset this default is 2.
+Tier 3 may contribute to audit counts, but it must not be the filler that turns
+one tier-1/tier-2 cell into would-primary. Tier-3-only rows and `seed + 1
+tier1/tier2 + 1 tier3` rows are Review-only weak-basis rows for V0.3.
 
 Required cell evidence categories:
 
@@ -541,17 +599,28 @@ non_rt_identity_basis =
 Baseline and area-pattern concerns must be emitted as review flags, not as
 `non_rt_identity_basis`.
 
-### Background Recurrence Guard
+### Background Recurrence Audit (Non-Gating)
 
-`background_recurrence_pattern` is a decision signal, not a label to infer by
-eye. V0.3 must calculate a guard status for every row:
+Background recurrence is useful context because high recurrence can come from
+real identity coherence, background signal, carryover, or blank-associated
+signal. But it is not part of the identity decision in V0.3.
+
+This stage must not perform downstream final-matrix feature filtering, correct
+area, change statistical eligibility, change Backfill behavior, or block
+identity-family promotion. Those decisions belong downstream after identity
+formation and value recovery. It also must not interfere with the identity
+layer's valid false-feature work: collapsing duplicate activations, recovering
+RT-drifted observations into families, and preventing duplicate owner losers
+from becoming independent features.
+
+If blank/QC/run-order inputs are available, V0.3 may calculate an audit status:
 
 ```text
-background_guard_status =
-  pass | background_like | not_assessed
+background_audit_status =
+  not_assessed | no_background_signal_observed | background_signal_observed
 ```
 
-Required inputs when available:
+Optional audit inputs:
 
 - process blanks or solvent blanks;
 - QC pools or repeated stable samples;
@@ -561,24 +630,28 @@ Required inputs when available:
 - blank detection count and blank detection fraction;
 - QC CV or equivalent repeatability measure.
 
-Default v0.3 background-like criteria:
+Optional audit flags:
 
 ```text
-blank_detection_fraction > blank_max_detection_fraction
-median_sample_blank_area_ratio < sample_blank_area_ratio_min
-QC CV > qc_cv_max for rows expected to be stable
-carryover/run-order flag present
+blank_signal_detected
+sample_blank_ratio_low
+qc_cv_high
+carryover_or_run_order_signal
 ```
 
-Any one background-like criterion sets
-`background_guard_status = background_like` and the row decision must be
-`review_only_background_recurrence_pattern`.
+When any audit flag is present, set
+`background_audit_status = background_signal_observed`. This is a validation
+flag only. It must not create a `review_only_*` row decision and must not change
+would-primary eligibility.
 
 If blanks/QC/run-order inputs are unavailable, set
-`background_guard_status = not_assessed`. A not-assessed background guard is not
-evidence of identity. Rows with `not_assessed` may be reviewed in the 8RAW
-prototype, but they cannot be used as a Go signal for 85RAW expansion and must
-be counted separately in the summary.
+`background_audit_status = not_assessed`. This is acceptable for the identity
+prototype. It only means downstream filtering/QC interpretation cannot be drawn
+from this diagnostic.
+
+If background/QC handling grows beyond these audit fields, split it into a
+separate downstream validation spec. That spec must run after identity
+coherence, and it must not be implemented before the identity prototype.
 
 ## RT Center Rules
 
@@ -622,6 +695,7 @@ For the 8RAW review subset:
 min_total_coherent_samples = 3
 seed_counts_toward_total = true
 min_non_seed_coherent_samples = 2
+min_non_seed_tier12_identity_samples = 2
 ```
 
 The diagnostic must report both absolute count and fraction:
@@ -629,6 +703,7 @@ The diagnostic must report both absolute count and fraction:
 ```text
 total_coherent_sample_count
 non_seed_coherent_sample_count
+tier12_non_seed_identity_sample_count
 assessed_sample_count
 coherent_sample_fraction
 ```
@@ -665,13 +740,18 @@ xic_request_deduplicated_count
 wall_time_sec
 per_raw_xic_request_count
 per_decision_xic_request_count
-projected_85raw_xic_request_count
+background_guard_xic_request_count
+control_xic_request_count
+projected_85raw_identity_xic_request_count
 ```
 
 The summary must state whether request projection used observed 8RAW request
-rate, expected sample count, candidate count, or a more explicit locality model.
-If `max_projected_85raw_xic_requests` is unset before 85RAW, the run cannot be a
-Go decision.
+rate, expected biological sample count, blank count, QC count, control-manifest
+count, candidate count, or a more explicit locality model. The projection must
+separate identity-coherence requests from optional blank/QC/control audit
+requests so downstream audit work does not get hidden inside the identity
+prototype cost. If `max_projected_85raw_xic_requests` is unset before 85RAW, the
+run cannot be a Go decision.
 
 If an MS1 scan-index or approximate fast path is used, it must be marked as an
 explicit approximate diagnostic mode. It must not silently replace vendor XIC as
@@ -703,7 +783,7 @@ Required manifest fields:
 
 ```text
 control_id
-control_type = positive_istd | stable_positive | negative_blank | negative_background | decoy
+control_type = positive_istd | stable_positive | downstream_negative_blank | downstream_negative_background
 targeted_benchmark_artifact
 target_label
 sample_stem_or_group
@@ -716,9 +796,17 @@ rt_tolerance_sec
 required_failure_reason_when_missed
 ```
 
-Positive controls test sensitivity, not specificity. V0.3 must also include at
-least one negative yardstick before 85RAW expansion: a blank/background row,
-known ubiquitous/background row, ambiguous mapping, or decoy RT/mass/NL control.
+Positive controls test identity-diagnostic sensitivity. V0.3 first-run review
+should start with positive controls, because that is the cheapest way to verify
+the diagnostic mechanics. Negative blank/background controls are downstream
+validation yardsticks. They may be listed in the manifest to make handoff
+explicit, but they must not block or alter row-level identity decisions.
+
+Decoy controls are intentionally not part of the V0.3 frozen manifest enum. A
+decoy requires an explicit generation method and interpretation contract (for
+example RT-shifted, mass-shifted, or neutral-loss-shuffled controls, plus what a
+hit implies). That belongs in Phase 2 unless a concrete decoy contract is added
+before implementation.
 
 Control mapping must be audited before interpreting pass/fail:
 
@@ -731,6 +819,20 @@ Control mapping must be audited before interpreting pass/fail:
 The Go/No-Go table cannot use vague "expected stable-like rows" without naming
 the control set or linking the benchmark artifact.
 
+V0.3 learning ladder:
+
+1. First 8RAW identity mechanics run: seed gate, tiered trace checks, positive
+   controls, evidence firewall, and identity cost counters must work.
+   `background_audit_status = not_assessed` and missing downstream negative
+   controls are allowed.
+2. Optional downstream validation/audit run: add blank/QC/order inputs where
+   available and downstream negative blank/background yardsticks if the next
+   consumer wants a filtering/QC audit. This run must consume identity outputs;
+   it must not precede or replace the identity prototype.
+3. 85RAW identity expansion: requires reviewed count+fraction policy and
+   identity request-budget ceiling. Downstream filtering, area correction, and
+   statistics remain separate acceptance surfaces.
+
 ## Diagnostic Output Contract
 
 V0.3 intentionally freezes only the minimum review surface needed to audit both
@@ -742,6 +844,12 @@ untargeted_identity_coherence_cell_evidence.tsv
 untargeted_identity_coherence_controls.tsv
 untargeted_identity_coherence_summary.md
 ```
+
+`controls.tsv` is frozen because controls are part of the review contract, not
+an optional narrative appendix. In the first 8RAW mechanics run it may contain
+positive controls only. Downstream negative blank/background controls may appear
+later for validation handoff, but they do not belong to the identity-promotion
+contract.
 
 Exploratory aggregate/detail tables are allowed but not frozen before 8RAW:
 
@@ -786,13 +894,14 @@ min_non_seed_coherent_samples
 center_decision
 center_drift_sec
 non_rt_identity_pass_count
+tier12_non_seed_identity_sample_count
 tier1_cell_count
 tier2_cell_count
 tier3_cell_count
 diagnostic_nl_supported_sample_count
 weak_basis_only
-background_recurrence_pattern
-background_guard_status
+background_audit_status
+background_audit_flags
 rt_only_candidate_count
 blocked_infrastructure_count
 data_quality_reject_count
@@ -810,8 +919,6 @@ review_only_seed_gate_failed
 review_only_rt_only_support
 review_only_insufficient_support
 review_only_center_unstable
-review_only_background_recurrence_pattern
-review_only_background_guard_not_assessed
 review_only_weak_basis_tier3_only
 review_only_multi_seed_requires_phase2
 blocked_infrastructure
@@ -855,7 +962,8 @@ shape_point_count
 prototype_width_status
 prototype_width_sec
 prototype_width_ratio
-background_guard_status
+background_audit_status
+background_audit_flags
 xic_rt_min
 xic_rt_max
 xic_point_count
@@ -903,7 +1011,8 @@ non_rt_identity_result = pass | fail | not_assessed | blocked
 diagnostic_nl_status = pass | fail | ambiguous | not_assessed
 shape_similarity_status = pass | fail | low_points | zero_signal | not_assessed
 prototype_width_status = pass | fail | too_few_candidates | not_assessed
-background_guard_status = pass | background_like | not_assessed
+background_audit_status =
+  not_assessed | no_background_signal_observed | background_signal_observed
 ```
 
 ### Required `controls.tsv` Columns
@@ -943,15 +1052,18 @@ failure_reason
 - independent trace identity pass counts by tier;
 - diagnostic-NL-supported sample counts;
 - weak-basis-only row counts;
-- background guard status counts;
+- background audit status and flag counts;
 - per-sample evidence coverage and missing-basis counts;
 - infrastructure-blocked counts;
 - data-quality reject counts;
 - threshold count and fraction summaries;
 - RAW/XIC request, point, per-RAW, and timing counters;
-- per-decision XIC request counts and projected 85RAW request estimate;
-- positive/negative-control mapping counts, ambiguous/unmapped controls, and
-  negative-control promotion count;
+- per-decision, background-audit, and control XIC request counts;
+- projected 85RAW identity request estimate, with optional downstream audit
+  request components reported separately when present;
+- positive-control mapping counts and ambiguous/unmapped controls;
+- downstream negative-control mapping counts when provided, clearly marked
+  non-gating;
 - Go / No-Go / Pivot table.
 
 ## CLI / Invocation Contract
@@ -1035,16 +1147,14 @@ Data-quality or identity rejects:
 | --- | --- |
 | `positive_control_pass_fraction >= min_positive_control_pass_fraction` and every miss has an explicit acceptable reason | Proceed to 85RAW threshold-policy review. |
 | `positive_control_pass_fraction < min_positive_control_pass_fraction` | No-Go; add trace identity metrics or fix mapping before continuing. |
-| `negative_control_promoted_count > max_negative_control_promoted_count` | No-Go; background/decoy controls are being promoted. |
 | `layer1_seed_gate_failed_count` contributes to any would-primary row | No-Go; fix seed-gate enforcement. |
-| `background_guard_status = background_like` on any would-primary row | No-Go; tighten background recurrence guard or downgrade the row. |
-| `background_guard_status = not_assessed` on any would-primary row before 85RAW | Pivot; add blank/QC/order guard inputs or mark the 85RAW interpretation unavailable. |
+| `tier12_non_seed_identity_sample_count < min_non_seed_tier12_identity_samples` on any would-primary row | No-Go; one tier-1/tier-2 cell plus width fallback is not enough identity support. |
 | `tier3_only_would_primary_fraction > max_tier3_only_would_primary_fraction` | Pivot; require diagnostic NL or shape support before promotion. |
 | `rt_only_promoted_count > max_rt_only_promoted_count` | No-Go; RT-only support must remain Review-only. |
 | `forbidden_evidence_used_count > max_forbidden_evidence_used_count` | No-Go; fix evidence firewall. |
 | 8RAW count threshold passes but the coherent fraction would be below the reviewed 85RAW fraction policy | Define count+fraction policy before 85RAW. |
 | Multi-seed/overflow dominates candidate decisions by reviewed rate | Pivot to Phase 2 graph merge/split spec. |
-| `projected_85raw_xic_request_count > max_projected_85raw_xic_requests`, or the max is unset before 85RAW | Add request-budget/locality design before 85RAW. |
+| `projected_85raw_identity_xic_request_count > max_projected_85raw_xic_requests`, or the max is unset before 85RAW | Add request-budget/locality design before 85RAW. |
 | `infrastructure_blocked_fraction > max_infrastructure_blocked_fraction` | Fix run/input infrastructure before scientific interpretation. |
 
 ## Acceptance Criteria Before Implementation
@@ -1060,21 +1170,26 @@ This spec is ready for implementation only after review signs off on:
   until 8RAW evidence justifies real thresholds;
 - `evidence_score` / `evidence_tier` are explicitly review-ranking context, not
   identity-promotion gates;
-- background recurrence is a post-scan decision pattern, not a seed class;
+- background recurrence is post-scan audit context, not a seed class and not a
+  row-decision gate;
 - tiered non-RT identity checks are defined in V0.3 MVP, including the
   `rt_diagnostic_nl_support` confidence ceiling and shape-similarity metric;
-- `background_guard_status` is operationalized with blank/QC/order inputs and
-  explicit `not_assessed` behavior;
-- all thresholds live in `IdentityCoherenceConfig`, and the domain module does
-  not import or bind to `AlignmentConfig`, CLI, process, RAW, workbook, report,
-  or diagnostic-tool surfaces;
+- would-primary requires at least two non-seed tier-1/tier-2 identity-support
+  cells for the 8RAW review subset;
+- optional background audit fields are explicitly non-gating and cannot perform
+  downstream final-matrix filtering, alter areas, alter Backfill, or alter
+  statistics;
+- all identity thresholds live in `IdentityCoherenceConfig`, and the domain
+  module does not import or bind to `AlignmentConfig`, CLI, process, RAW,
+  workbook, report, or diagnostic-tool surfaces;
 - 8RAW and 85RAW threshold policies are separated;
 - seed sample counting is explicit (`seed + at least 2 non-seed` for 8RAW);
-- targeted ISTD/control rows and negative controls are declared in a
-  machine-readable control manifest;
-- positive/negative-control mapping criteria and ambiguous/unmapped counts are
-  defined in `untargeted_identity_coherence_controls.tsv`;
-- RAW/XIC request counters are first-class and Layer 1 rejects skip Layer 2 XIC;
+- targeted ISTD/control rows are declared in a machine-readable control
+  manifest before interpretation;
+- positive-control mapping criteria and ambiguous/unmapped counts are defined in
+  `untargeted_identity_coherence_controls.tsv`;
+- RAW/XIC request counters are first-class, split identity vs optional
+  downstream-audit request cost, and Layer 1 rejects skip Layer 2 XIC;
 - inline pre-Backfill data flow and process-mode pickleable payload boundaries
   are accepted as the primary path;
 - an evidence-firewall fixture proves post-Backfill/rescued evidence can be seen
@@ -1093,8 +1208,11 @@ This spec is ready for implementation only after review signs off on:
 3. Is `rt_diagnostic_nl_support` the right name for tier 1, given that V0.3
    does not claim library-grade fragment confirmation?
 4. Are the default shape-similarity settings acceptable for the first 8RAW run?
-5. Which targeted ISTD/stable rows and negative/decoy rows should seed the
-   control manifest?
-6. Is `seed + 2 non-seed coherent samples` the right 8RAW support threshold?
-7. What count+fraction and RAW/XIC budget policy must be reviewed before 85RAW?
-8. Is post-hoc `alignment-dir` mode acceptable only as comparison/reporting?
+5. Which targeted ISTD/stable rows should seed the first 8RAW positive-control
+   manifest?
+6. Should background/QC/negative-control validation be split into a separate
+   downstream audit spec after the identity prototype?
+7. Is `seed + 2 non-seed coherent samples`, with both non-seed samples admitted
+   by tier 1 or tier 2, the right 8RAW support threshold?
+8. What count+fraction and RAW/XIC budget policy must be reviewed before 85RAW?
+9. Is post-hoc `alignment-dir` mode acceptable only as comparison/reporting?
