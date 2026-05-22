@@ -48,7 +48,7 @@ def evaluate_seed_gate(
 
     if (
         request.request_identity_completeness_status
-        is not RequestIdentityCompletenessStatus.COMPLETE
+        != RequestIdentityCompletenessStatus.COMPLETE
     ):
         return _result(
             resolved_request,
@@ -58,7 +58,7 @@ def evaluate_seed_gate(
         )
     if (
         candidate_status
-        is RequestCandidateIdentityStatus.UNSUPPORTED_FRAGMENT_OBSERVATION_MODE
+        == RequestCandidateIdentityStatus.UNSUPPORTED_FRAGMENT_OBSERVATION_MODE
     ):
         return _result(
             resolved_request,
@@ -68,7 +68,7 @@ def evaluate_seed_gate(
         )
     if (
         candidate_status
-        is RequestCandidateIdentityStatus.MISSING_DISCOVERY_CANDIDATE_JOIN
+        == RequestCandidateIdentityStatus.MISSING_DISCOVERY_CANDIDATE_JOIN
     ):
         return _result(
             resolved_request,
@@ -78,7 +78,7 @@ def evaluate_seed_gate(
         )
     if (
         candidate_status
-        is RequestCandidateIdentityStatus.MISSING_DIAGNOSTIC_FRAGMENT_EVIDENCE
+        == RequestCandidateIdentityStatus.MISSING_DIAGNOSTIC_FRAGMENT_EVIDENCE
     ):
         return _result(
             resolved_request,
@@ -88,7 +88,7 @@ def evaluate_seed_gate(
         )
     if (
         candidate_status
-        is RequestCandidateIdentityStatus.REQUEST_CANDIDATE_IDENTITY_MISMATCH
+        == RequestCandidateIdentityStatus.REQUEST_CANDIDATE_IDENTITY_MISMATCH
     ):
         return _result(
             resolved_request,
@@ -98,8 +98,8 @@ def evaluate_seed_gate(
         )
 
     if (
-        candidate_evidence.evidence_stage is not EvidenceStage.PRE_BACKFILL
-        or owner_evidence_stage is not EvidenceStage.PRE_BACKFILL
+        candidate_evidence.evidence_stage != EvidenceStage.PRE_BACKFILL
+        or owner_evidence_stage != EvidenceStage.PRE_BACKFILL
     ):
         return _result(
             resolved_request,

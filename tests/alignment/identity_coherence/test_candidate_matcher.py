@@ -1,5 +1,7 @@
 from dataclasses import dataclass, replace
 
+import pytest
+
 from xic_extractor.alignment.identity_coherence.candidate_matcher import (
     match_request_to_candidate,
 )
@@ -76,6 +78,31 @@ def test_match_request_to_candidate_checks_unsupported_mode_before_missing_join(
     assert missing_join_match.missing_fields == ("candidate",)
 
 
+def test_match_request_to_candidate_accepts_schema_string_fragment_mode():
+    request = _request(CandidateLike())
+    string_identity = replace(
+        request.identity,
+        fragment_observation_mode="cid_neutral_loss",
+    )
+    string_request = replace(request, identity=string_identity)
+    match = match_request_to_candidate(string_request, _evidence(CandidateLike()))
+
+    assert match.request_candidate_identity_status is (
+        RequestCandidateIdentityStatus.MATCH
+    )
+
+
+def test_match_request_to_candidate_rejects_mismatched_candidate_id():
+    request = _request(CandidateLike())
+    candidate = replace(_evidence(CandidateLike()), candidate_id="OTHER-CAND")
+    match = match_request_to_candidate(request, candidate)
+
+    assert match.request_candidate_identity_status is (
+        RequestCandidateIdentityStatus.MISSING_DISCOVERY_CANDIDATE_JOIN
+    )
+    assert match.missing_fields == ("candidate_id",)
+
+
 def test_match_request_to_candidate_reports_missing_diagnostic_evidence():
     request = _request(CandidateLike())
     candidate = _evidence(CandidateLike(product_mz=None))
@@ -85,6 +112,30 @@ def test_match_request_to_candidate_reports_missing_diagnostic_evidence():
         RequestCandidateIdentityStatus.MISSING_DIAGNOSTIC_FRAGMENT_EVIDENCE
     )
     assert "product_mz" in match.missing_fields
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "missing_field"),
+    [
+        ("precursor_mz", float("nan"), "precursor_mz"),
+        ("product_mz", float("inf"), "product_mz"),
+        ("cid_observed_loss_da", 0.0, "observed_neutral_loss_da"),
+        ("precursor_mz", -1.0, "precursor_mz"),
+    ],
+)
+def test_match_request_to_candidate_rejects_invalid_candidate_numeric_evidence(
+    field,
+    value,
+    missing_field,
+):
+    request = _request(CandidateLike())
+    candidate = replace(_evidence(CandidateLike()), **{field: value})
+    match = match_request_to_candidate(request, candidate)
+
+    assert match.request_candidate_identity_status is (
+        RequestCandidateIdentityStatus.MISSING_DIAGNOSTIC_FRAGMENT_EVIDENCE
+    )
+    assert missing_field in match.missing_fields
 
 
 def test_match_request_to_candidate_rejects_product_mz_mismatch():

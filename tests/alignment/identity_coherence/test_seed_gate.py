@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from xic_extractor.alignment.identity_coherence.request_builder import (
     build_identity_coherence_request,
@@ -60,6 +60,19 @@ def test_evaluate_seed_gate_accepts_matching_candidate_and_owner():
     assert result.resolved_request.request_candidate_identity_status is (
         RequestCandidateIdentityStatus.MATCH
     )
+
+
+def test_evaluate_seed_gate_accepts_schema_string_pre_backfill_stage():
+    candidate = CandidateLike()
+    evidence = replace(_evidence(candidate), evidence_stage="pre_backfill")
+    result = evaluate_seed_gate(
+        _request(candidate),
+        evidence,
+        OwnerLike(),
+        owner_evidence_stage="pre_backfill",
+    )
+
+    assert result.seed_gate_class is SeedGateClass.COHERENT_SEED
 
 
 def test_evaluate_seed_gate_rejects_incomplete_request_before_candidate_match():

@@ -20,14 +20,14 @@ def match_request_to_candidate(
 ) -> CandidateIdentityMatch:
     if (
         request.request_identity_completeness_status
-        is not RequestIdentityCompletenessStatus.COMPLETE
+        != RequestIdentityCompletenessStatus.COMPLETE
     ):
         return _match(RequestCandidateIdentityStatus.NOT_ASSESSED)
 
     identity = request.identity
     if (
         identity.fragment_observation_mode
-        is not FragmentObservationMode.CID_NEUTRAL_LOSS
+        != FragmentObservationMode.CID_NEUTRAL_LOSS
     ):
         return _match(
             RequestCandidateIdentityStatus.UNSUPPORTED_FRAGMENT_OBSERVATION_MODE,
@@ -38,6 +38,11 @@ def match_request_to_candidate(
             RequestCandidateIdentityStatus.MISSING_DISCOVERY_CANDIDATE_JOIN,
             missing_fields=("candidate",),
         )
+    if candidate_evidence.candidate_id != request.seed_candidate_id:
+        return _match(
+            RequestCandidateIdentityStatus.MISSING_DISCOVERY_CANDIDATE_JOIN,
+            missing_fields=("candidate_id",),
+        )
 
     missing_fields: list[str] = []
     candidate_precursor_mz = candidate_evidence.precursor_mz
@@ -45,11 +50,11 @@ def match_request_to_candidate(
     candidate_loss_da = candidate_evidence.cid_observed_loss_da
     candidate_tags = candidate_evidence.fragment_tags
 
-    if candidate_precursor_mz is None:
+    if not _finite_positive_number(candidate_precursor_mz):
         missing_fields.append("precursor_mz")
-    if candidate_product_mz is None:
+    if not _finite_positive_number(candidate_product_mz):
         missing_fields.append("product_mz")
-    if candidate_loss_da is None:
+    if not _finite_positive_number(candidate_loss_da):
         missing_fields.append("observed_neutral_loss_da")
     if not candidate_tags:
         missing_fields.append("fragment_tags")
