@@ -522,8 +522,8 @@
                 <td>作為 validation artifacts、failure taxonomy、yardstick，不作為 promotion evidence。</td>
               </tr>
               <tr>
-                <td>NeutralLossProfile</td>
-                <td>tag + neutral_loss_da</td>
+                <td>FragmentIdentity</td>
+                <td>common fragment tags + mode-specific CID neutral-loss payload</td>
                 <td>MVP 不新增 specificity_class；先用 matched_tag_count / tag_intersection_status 作 proxy。</td>
               </tr>
             </tbody>
@@ -594,7 +594,7 @@
               </tr>
               <tr>
                 <td>Trace identity</td>
-                <td>非 seed sample 改用 tiered basis：diagnostic NL support &gt; shape similarity &gt; prototype width；baseline / area-pattern 只作 review flag。</td>
+                <td>非 seed sample 改用 tiered basis：diagnostic fragment support &gt; shape similarity &gt; prototype width；baseline / area-pattern 只作 review flag。</td>
                 <td><span class="tag ok">已具體化</span></td>
               </tr>
               <tr>
@@ -633,7 +633,7 @@
               </div>
               <div class="node ok">
                 <strong>Trace identity check</strong>
-                <span>tier 1 用 same-sample diagnostic NL support；tier 2 shape；tier 3 prototype width 只作 Review-only fallback。</span>
+                <span>tier 1 用 same-sample diagnostic fragment support；tier 2 shape；tier 3 prototype width 只作 Review-only fallback。</span>
               </div>
               <div class="node">
                 <strong>Decision + controls</strong>
@@ -657,7 +657,7 @@
               </tr>
               <tr>
                 <td>non-RT identity basis 分級</td>
-                <td>tier 1 diagnostic NL support，tier 2 prototype-medoid shape similarity，seed-shape fallback 需標記，tier 3 prototype-width fallback 只補 total coherent；would-primary 需要 2 個非 seed tier 1/2 cells。</td>
+                <td>tier 1 diagnostic fragment support，tier 2 prototype-medoid shape similarity，seed-shape fallback 需標記，tier 3 prototype-width fallback 只補 total coherent；would-primary 需要 2 個非 seed tier 1/2 cells。</td>
                 <td>避免一個 shape cell 加上一個 width fallback 就被放大成 would-primary。</td>
               </tr>
               <tr>

@@ -61,8 +61,8 @@ metrics. They are not imported by `identity_coherence` domain logic.
 
 Allowed for identity promotion:
 
-- active discovery/profile neutral-loss tag;
-- product m/z and observed neutral-loss tolerance evidence;
+- active discovery/profile fragment tag evidence;
+- product m/z and mode-specific fragment tolerance evidence;
 - pre-Backfill sample-local MS1 owner evidence;
 - diagnostic vendor XIC traces collected before Backfill;
 - seed coherence and evidence-sufficiency gates derived before Backfill;
@@ -115,32 +115,61 @@ Required firewall fixture:
 
 ## IdentityCoherenceConfig
 
-All identity policy must be explicit in a typed `IdentityCoherenceConfig`.
+All identity policy must be explicit in a typed `IdentityCoherenceConfig`. Code
+uses nested config groups. CLI and summary renderers may flatten config for
+display, but flat rendering must not drive the domain model.
 
-Identity config keys:
+Config shape:
 
 ```text
-seed_min_ms1_scan_support_score = 0.50
-precursor_mz_tolerance_ppm = declared
-product_mz_tolerance_ppm = declared
-observed_loss_tolerance_ppm = declared
-max_rt_sec = 180
-preferred_rt_sec = 60
-seed_center_candidate_sec = 30
-max_center_drift_sec = 30
-shape_min_points = 7
-shape_resample_points = 25
-shape_similarity_min_cosine = 0.85
-min_prototype_shape_candidates = 3
-min_non_seed_prototype_shape_candidates = 2
-prototype_width_min_candidates = 3
-prototype_width_ratio_min = 0.50
-prototype_width_ratio_max = 2.00
-min_non_seed_tier12_identity_samples = 2
-max_infrastructure_blocked_fraction = 0.05
-min_positive_control_pass_fraction = 1.00
-max_projected_85raw_identity_xic_requests = required before 85RAW
-identity_controls_manifest = optional path before 8RAW, required before interpretation
+IdentityCoherenceConfig
+  request:
+    require_profile_hash
+    tag_match_policy = all_request_tags_supported
+
+  seed_gate:
+    min_ms1_scan_support_score = 0.50
+    require_seed_rt_inside_owner_peak = true
+
+  promotion:
+    min_total_coherent_samples = 3
+    min_non_seed_tier12_identity_samples = 2
+
+  rt:
+    max_rt_sec = 180
+    preferred_rt_sec = 60
+    seed_center_candidate_sec = 30
+    max_center_drift_sec = 30
+    center_estimator = median_apex_rt
+
+  fragment:
+    precursor_tolerance_ppm = declared
+    product_tolerance_ppm = declared
+    cid_observed_loss_tolerance_ppm = declared
+
+  shape:
+    min_points = 7
+    resample_points = 25
+    min_cosine = 0.85
+    prototype_min_candidates = 3
+    prototype_min_non_seed_candidates = 2
+    allow_seed_shape_fallback = true
+    allow_morphology_rt_medoid = true
+
+  width:
+    prototype_min_candidates = 3
+    min_ratio = 0.50
+    max_ratio = 2.00
+
+  controls:
+    positive_control_min_pass_fraction = 1.00
+    max_decoy_promoted_count = 0
+    identity_controls_manifest = optional path before 8RAW,
+      required before interpretation
+
+  engineering:
+    max_projected_85raw_identity_xic_requests = required before 85RAW
+    max_infrastructure_blocked_fraction = 0.05
 ```
 
 Optional downstream audit values are not identity policy:
@@ -153,6 +182,79 @@ background_audit_qc_cv = optional validation-only value
 
 The diagnostic summary must echo every effective config value, source, and
 unit.
+
+Do not add separate threshold config keys for tier-3-only or RT-only promoted
+rows. Tier-3-only and RT-only support are structurally Review-only under the
+core spec, so such thresholds would be vestigial.
+
+## Domain Model And Request Builder Boundary
+
+Schema ownership lives in this implementation contract. The core identity spec
+owns behavior and links to this file instead of duplicating frozen columns.
+
+Domain-safe payload dataclasses live in
+`xic_extractor/alignment/identity_coherence/models.py`.
+
+Conceptual model:
+
+```text
+IdentityCoherenceRequest
+  request_id
+  decision_id
+  seed_candidate_id
+  seed_sample
+  identity: FragmentIdentity
+
+FragmentIdentity
+  fragment_observation_mode
+  precursor_mz
+  product_mz
+  fragment_tags
+  fragment_tag_match_policy
+  precursor_tolerance_ppm
+  product_tolerance_ppm
+  fragment_profile_id
+  fragment_profile_hash
+  mode_constraint: CidNeutralLossConstraint
+
+CidNeutralLossConstraint
+  cid_observed_loss_da
+  cid_observed_loss_tolerance_ppm
+```
+
+`fragment_observation_mode = cid_neutral_loss` is the only executable v0.4
+mode. HCD/base-product and HCD-observed-neutral-loss support must be added as
+new mode-specific constraint dataclasses under the same `FragmentIdentity`
+abstraction, not as a parallel identity pipeline.
+
+The request builder is the only adapter allowed to read legacy discovery field
+names such as `matched_tag_names`, `neutral_loss_tag`,
+`observed_neutral_loss_da`, and `neutral_loss_mass_error_ppm`. Domain gates read
+only `IdentityCoherenceRequest`, `FragmentIdentity`, and joined candidate
+evidence.
+
+Adapter tag source priority:
+
+1. use `matched_tag_names` when present and non-empty;
+2. fallback to single-value `neutral_loss_tag` only when `matched_tag_names` is
+   absent or empty;
+3. if both exist but disagree, keep `matched_tag_names` and emit
+   `legacy_single_tag_disagrees_with_matched_tags`.
+
+Tag normalization:
+
+- trim whitespace;
+- preserve exact case;
+- do not case-fold;
+- stable unique ordering for TSV output;
+- empty-after-trim tag is a missing constraint;
+- case-only variants are not merged and must emit
+  `fragment_tag_case_variant_seen`.
+
+Anti-parallel-variable rule: domain code must not carry both normalized
+`fragment_tags` and legacy `neutral_loss_tag` / `matched_tag_names` in parallel.
+Legacy names are adapter inputs only. TSV output is flat, but code uses the
+nested model above.
 
 ## RAW/XIC Cost Budget
 
@@ -183,16 +285,22 @@ If an MS1 scan-index or approximate fast path is used, it must be marked as an
 explicit approximate diagnostic mode. It must not silently replace vendor XIC as
 an equivalent path.
 
-## Base Identity Go / No-Go
+## Engineering Go / No-Go
 
-This table owns engineering and invariant gates. The controls spec adds
-control-specific positive/decoy rules.
+This table owns engineering, firewall fixture, schema, process, infrastructure,
+and cost gates. Core identity promotion invariants are owned by the core spec.
+The controls spec owns positive-control and decoy rules.
 
 | Observation after 8RAW | Decision |
 | --- | --- |
 | `promotion_used_forbidden_evidence = false` and the firewall A/B fixture preserves decisions/counts/basis under spoofed post-Backfill fields | Proceed. |
 | `promotion_used_forbidden_evidence = true` | No-Go; identity promotion crossed the evidence firewall. |
-| Any emitted would-primary has `weak_basis_reason != none` or `tier12_non_seed_identity_sample_count < min_non_seed_tier12_identity_samples` | No-Go; implementation violated the core weak-basis rule. |
+| Schema marker parity tests pass for all frozen TSV schemas | Proceed for implementation review. |
+| Any frozen schema marker parity test fails | No-Go; docs and code constants drifted. |
+| Spawn/process payload smoke test passes on Windows semantics | Proceed for process-mode review. |
+| Spawn/process payload smoke test fails | Pivot; fix pickleable payload boundaries before RAW/XIC execution. |
+| Request builder imports only domain-safe models and does not import writer/report/workbook/diagnostic-tool surfaces | Proceed. |
+| Request builder imports writer/report/workbook/diagnostic-tool surfaces | No-Go; domain import boundary is broken. |
 | `infrastructure_blocked_fraction <= max_infrastructure_blocked_fraction` | Proceed for mechanics review. |
 | `infrastructure_blocked_fraction > max_infrastructure_blocked_fraction` | Pivot; fix RAW/XIC access or process-mode reliability before interpreting decisions. |
 | 85RAW run has a reviewed count+fraction policy and `projected_85raw_identity_xic_request_count <= max_projected_85raw_identity_xic_requests` | Proceed to 85RAW execution. |
@@ -279,111 +387,103 @@ untargeted_identity_coherence_groups.tsv
 
 This is a seed/request-level audit surface. It must not include per-sample trace
 metrics, downstream blank/QC fields, Backfill output, workbook values, or the
-full neutral-loss profile blob.
+full fragment profile blob. It is the flat TSV projection of
+`IdentityCoherenceRequest` and `FragmentIdentity`.
 
 ```text
+<!-- schema:identity_coherence_requests.tsv:start -->
 request_id
 decision_id
-source_feature_family_id
 seed_candidate_id
 seed_sample
-request_precursor_mz
-request_product_mz
-request_observed_loss_da
-request_neutral_loss_tags
-request_precursor_tolerance_ppm
-request_product_tolerance_ppm
-request_observed_loss_tolerance_ppm
-request_neutral_loss_tag_match_policy
-request_profile_id
-request_profile_hash
+fragment_observation_mode
+precursor_mz
+product_mz
+fragment_tags
+fragment_tag_match_policy
+fragment_profile_id
+fragment_profile_hash
+precursor_tolerance_ppm
+product_tolerance_ppm
+cid_observed_loss_da
+cid_observed_loss_tolerance_ppm
 request_identity_completeness_status
 request_candidate_identity_status
-request_reject_reason
-request_review_flags
+precursor_error_ppm
+product_error_ppm
+cid_observed_loss_error_ppm
+cid_observed_loss_error_da
+request_builder_flags
+<!-- schema:identity_coherence_requests.tsv:end -->
 ```
 
 Required categorical values:
 
 ```text
 request_identity_completeness_status =
-  complete | missing_required_constraint
+  complete |
+  missing_fragment_observation_mode |
+  missing_precursor_mz |
+  missing_product_mz |
+  missing_fragment_tags |
+  missing_mode_specific_constraint
 
 request_candidate_identity_status =
-  pass | fail | not_assessed
-
-request_reject_reason =
-  none | missing_request_identity_constraint |
+  not_assessed |
+  match |
   missing_discovery_candidate_join |
-  missing_diagnostic_neutral_loss_evidence |
-  request_candidate_identity_mismatch
+  missing_diagnostic_fragment_evidence |
+  request_candidate_identity_mismatch |
+  unsupported_fragment_observation_mode
 
-request_neutral_loss_tag_match_policy = all_tags_required
+fragment_tag_match_policy = all_request_tags_supported
 ```
 
-`request_candidate_identity_status = not_assessed` is valid only when
-`request_identity_completeness_status = missing_required_constraint` or
-`request_reject_reason = missing_discovery_candidate_join`.
+`request_candidate_identity_status = not_assessed` is valid only when the
+request is incomplete or the candidate join is missing. A missing candidate
+join should emit `missing_discovery_candidate_join` when it can be identified
+cleanly.
 
-`request_profile_hash` may be `unavailable`, but that must add
-`request_profile_hash_unavailable` to `request_review_flags`.
+`fragment_profile_hash` may be `unavailable`, but that must add
+`fragment_profile_hash_unavailable` to `request_builder_flags`.
+
+`cid_observed_loss_tolerance_ppm` is required for `cid_neutral_loss`. Da loss
+tolerance is not accepted as a gate. `cid_observed_loss_error_da` is review
+context only.
 
 ### Required `decisions.tsv` Columns
 
 ```text
+<!-- schema:identity_coherence_decisions.tsv:start -->
 decision_id
-request_id
-source_feature_family_id
+identity_family_id
 seed_candidate_id
 seed_sample
-seed_owner_id
 seed_gate_class
-seed_reject_reason
-seed_ms1_trace_quality
-seed_ms1_delta_min
-seed_ms1_scan_support_score
-seed_neutral_loss_mass_error_ppm
-seed_matched_tag_count
-seed_tag_intersection_status
-seed_evidence_score
-seed_evidence_tier
-seed_ms2_support
-seed_ms1_support
-seed_rt_alignment
-seed_family_context
 decision
 decision_reason
+request_identity_completeness_status
+request_candidate_identity_status
 total_coherent_sample_count
 non_seed_coherent_sample_count
-assessed_sample_count
-coherent_sample_fraction
-min_total_coherent_samples
-min_non_seed_coherent_samples
-center_decision
-center_drift_sec
-non_rt_identity_pass_count
 tier12_non_seed_identity_sample_count
-tier1_cell_count
-tier2_cell_count
-prototype_shape_candidate_count
-prototype_shape_tier1_candidate_count
-tier2_prototype_shape_count
-tier2_seed_shape_fallback_count
-tier3_cell_count
-diagnostic_nl_supported_sample_count
-tier1_width_sanity_fail_count
-shape_seed_fallback_used
-shape_reference_basis
+tier1_fragment_confirmed_sample_count
+tier2_shape_supported_sample_count
+tier2_seed_shape_fallback_sample_count
+tier3_width_only_sample_count
+min_total_coherent_samples
+min_non_seed_tier12_identity_samples
 weak_basis_reason
-background_audit_status
-background_audit_flags
-rt_only_candidate_count
-blocked_infrastructure_count
-data_quality_reject_count
-forbidden_evidence_seen
-control_class
-control_expected_decision
-notes
+shape_reference_basis
+shape_reference_candidate_id
+prototype_width_sec
+center_rt_sec
+center_rt_source
+coherent_fraction
+infrastructure_blocked_sample_count
+data_quality_reject_sample_count
+forbidden_evidence_used
+<!-- schema:identity_coherence_decisions.tsv:end -->
 ```
 
 The [core identity spec](2026-05-22-untargeted-identity-coherence-core-spec.md)
@@ -392,115 +492,113 @@ independent enum list. Schema tests must reject emitted `decision` values
 outside the core enum and must fail if a duplicated schema definition drifts
 from the core contract.
 
+Do not include sample-id list columns such as `coherent_sample_ids`. Per-sample
+detail belongs in `cell_evidence.tsv`. Do not include `weak_basis_only`; it is
+derived from `weak_basis_reason != none`.
+
+`forbidden_evidence_used` must be false for every emitted decision. Summary
+still reports `forbidden_evidence_seen` counts when comparison inputs contain
+forbidden evidence.
+
 ### Required `cell_evidence.tsv` Columns
 
+This table is one row per assessed non-seed sample. The seed sample is audited
+in `requests.tsv` and `decisions.tsv`; duplicating it here would make support
+counts ambiguous.
+
 ```text
+<!-- schema:identity_coherence_cell_evidence.tsv:start -->
 decision_id
-request_id
-source_feature_family_id
+identity_family_id
+sample_id
 candidate_id
-sample_local_owner_id
-pre_backfill_owner_state_id
-raw_file_stem
-source_row_hash
-sample_stem
-sample_role
-cell_decision
-candidate_apex_rt_min
-candidate_peak_start_rt_min
-candidate_peak_end_rt_min
-candidate_peak_width_sec
-candidate_area
-candidate_height
-candidate_point_count
+cell_assessment_status
+cell_identity_tier
+cell_identity_basis
+fragment_observation_mode
+fragment_match_status
+fragment_tags_supported
 rt_delta_center_sec
-rt_gate_result
-identity_basis_tier
-non_rt_identity_basis
-non_rt_identity_result
-diagnostic_nl_status
-precursor_mz_delta_ppm
-product_mz_delta_ppm
-observed_loss_delta_ppm
-shape_similarity_status
-shape_similarity_score
-shape_point_count
-shape_reference_point_count
-shape_low_point_count_flag
-shape_alignment_method
-shape_reference_method
+rt_gate_status
+shape_status
+shape_similarity_cosine
 shape_reference_basis
 shape_reference_candidate_id
+shape_fallback_used
 shape_audit_status
-shape_seed_fallback_used
-width_sanity_status
-prototype_width_status
-prototype_width_sec
-prototype_width_ratio
-background_audit_status
-background_audit_flags
-xic_rt_min
-xic_rt_max
-xic_point_count
-xic_request_id
-review_flags
-evidence_source
-reject_reason
+width_status
+width_ratio_to_prototype
+baseline_audit_status
+area_height_status
+non_rt_identity_result
+coherent_count_contribution
+tier12_count_contribution
+blocked_reason
+data_quality_reason
+forbidden_evidence_seen
+<!-- schema:identity_coherence_cell_evidence.tsv:end -->
 ```
 
 Required categorical values:
 
 ```text
-rt_gate_result = pass | fail | not_assessed
-identity_basis_tier = seed | tier1 | tier2 | tier3 | rt_only | blocked | data_quality
-non_rt_identity_basis =
-  seed_sample | rt_diagnostic_nl_support | rt_shape_similarity |
-  rt_prototype_width | none
-non_rt_identity_result = pass | fail | not_assessed | blocked
-diagnostic_nl_status = pass | fail | ambiguous | not_assessed
-shape_similarity_status = pass | fail | low_points | zero_signal | not_assessed
-shape_alignment_method = boundary_normalized_linear_resample
-shape_reference_method = prototype_medoid | seed_shape_fallback | not_available
+cell_assessment_status = assessed | blocked | data_quality_reject | not_assessed
+cell_identity_tier = tier1 | tier2 | tier3 | rt_only | blocked | data_quality
+cell_identity_basis =
+  rt_fragment_support | rt_shape_similarity | rt_prototype_width | none
+fragment_match_status = pass | fail | ambiguous | not_assessed
+rt_gate_status = pass | fail | not_assessed
+shape_status = pass | fail | low_points | zero_signal | not_assessed
 shape_reference_basis =
   tier1_supported_medoid | morphology_rt_medoid | seed_fallback | none
 shape_audit_status =
   pass | fail | shoulder | bimodal | coelution | saturated | clipped |
   unavailable | not_assessed
-width_sanity_status = pass | fail | not_assessed
-prototype_width_status = pass | fail | too_few_candidates | not_assessed
-background_audit_status =
-  not_assessed | no_background_signal_observed | background_signal_observed
+width_status = pass | fail | not_assessed
+baseline_audit_status = pass | fail | unavailable | not_assessed
+area_height_status = pass | fail | not_assessed
+non_rt_identity_result = pass | fail | not_assessed | blocked
 ```
 
 `weak_basis_reason` values are owned by the core spec. They include
 `seed_shape_fallback_only`; do not add a separate decision enum for that case.
 
-`candidate_id`, `sample_local_owner_id`, `pre_backfill_owner_state_id`,
-`raw_file_stem`, and `source_row_hash` are required provenance keys. They make
-each per-sample evidence row traceable back to the exact pre-Backfill owner and
-candidate evidence surface.
+`coherent_count_contribution` may be true for tier 3. `tier12_count_contribution`
+may be true only for tier 1 or tier 2 cells, and seed-shape fallback-only
+support cannot satisfy `min_non_seed_tier12_identity_samples`.
+
+`baseline_audit_status` is audit context only. It is not a promotion basis.
 
 ### Required `controls.tsv` Columns
 
 These must match the controls spec exactly:
 
 ```text
+<!-- schema:identity_coherence_controls.tsv:start -->
 control_id
 control_type
-targeted_benchmark_artifact
-target_label
-sample_stem_or_group
-expected_mapping_status
-actual_mapping_status
-expected_decision
-actual_decision
-source_feature_family_id
-precursor_mz_delta_ppm
-product_mz_delta_ppm
-observed_loss_delta_ppm
-rt_delta_sec
-tag_match_status
-failure_reason
+control_name
+decision_id
+identity_family_id
+seed_candidate_id
+control_status
+control_expected_behavior
+control_observed_behavior
+control_pass
+control_failure_reason
+fragment_observation_mode
+decoy_generation_method
+decoy_source_request_id
+decoy_shift_value
+decoy_identity_constraint_changed
+positive_control_mapping_status
+positive_control_target_name
+positive_control_target_mz
+positive_control_target_rt_sec
+positive_control_mapping_error_ppm
+positive_control_mapping_delta_rt_sec
+control_notes
+<!-- schema:identity_coherence_controls.tsv:end -->
 ```
 
 Add a schema parity test that compares this list with the controls spec contract
@@ -516,10 +614,10 @@ or a single shared schema definition used by both docs and implementation.
 - control manifest path and control mapping counts;
 - evidence firewall assertion `promotion_used_forbidden_evidence = false` and
   `forbidden_evidence_seen` counts;
-- seed gate counts and seed specificity context distributions;
+- seed gate counts and seed coherence/context distributions;
 - RT-only candidate counts;
 - independent trace identity pass counts by tier;
-- diagnostic-NL-supported sample counts;
+- diagnostic-fragment-supported sample counts;
 - shape similarity score distribution by positive controls, identity decoys,
   would-primary rows, Review-only rows, and shape reference method;
 - shape point count distribution and tier-2 pass low-point fraction;
@@ -551,18 +649,30 @@ Implementation contract is ready when:
 
 - evidence firewall fixture is specified;
 - identity config is separate from downstream audit values;
+- code config is nested by responsibility while CLI/summary may render flat
+  values;
 - process-mode payload boundary is pickleable;
+- `FragmentIdentity` and typed mode constraints are the domain model, with
+  `cid_neutral_loss` as the only executable v0.4 mode;
+- legacy discovery fields are confined to the request builder adapter;
 - seed/request audit surface is frozen in `requests.tsv`;
 - per-sample evidence surface is frozen;
 - controls output is machine-readable;
-- `controls.tsv` schema is frozen in this file and parity-checked against the
-  controls spec;
-- base Go/No-Go table owns firewall, weak-basis, infrastructure, and cost
-  criteria;
+- four frozen TSV schemas are represented by code constants and parity-checked
+  against marker blocks in this file;
+- engineering Go/No-Go table owns firewall fixture, schema parity, process,
+  infrastructure, and cost criteria;
 - decision enum values are sourced from the core spec or a shared schema, not a
   second independent list;
-- every `cell_evidence.tsv` row has pre-Backfill provenance keys;
+- every `cell_evidence.tsv` row is a non-seed sample evidence row;
 - request counters separate identity from optional downstream audit cost.
 - count invariant test verifies that when
   `tier12_non_seed_identity_sample_count >= 2` and
   `seed_counts_toward_total = true`, `total_coherent_sample_count >= 3`.
+
+First implementation slice:
+
+- add schema constants for the four frozen TSVs;
+- add domain request/model constants needed for request builder tests;
+- do not implement a TSV writer yet;
+- do not connect RAW/XIC extraction yet.

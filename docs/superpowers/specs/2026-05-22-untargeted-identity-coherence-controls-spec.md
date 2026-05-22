@@ -35,14 +35,13 @@ Required manifest fields:
 ```text
 control_id
 control_type
-targeted_benchmark_artifact
-target_label
-sample_stem_or_group
+control_name
 expected_mapping_status
-expected_decision
-precursor_mz_tolerance_ppm
-product_mz_tolerance_ppm
-observed_loss_tolerance_ppm
+control_expected_behavior
+fragment_observation_mode
+precursor_tolerance_ppm
+product_tolerance_ppm
+cid_observed_loss_tolerance_ppm
 rt_tolerance_sec
 required_failure_reason_when_missed
 ```
@@ -50,17 +49,12 @@ required_failure_reason_when_missed
 `control_type` enum:
 
 ```text
-positive_istd
-stable_positive
-identity_decoy_rt_shift
-identity_decoy_mz_shift
-identity_decoy_nl_shuffle
-downstream_negative_blank
-downstream_negative_background
+positive_targeted_istd
+identity_decoy
 ```
 
-Only the first five values belong to the identity prototype. Downstream negative
-controls may appear for handoff but are non-gating.
+Downstream blank/QC/background controls must not be encoded as identity
+controls. They belong to downstream audit specs.
 
 ## Positive Controls
 
@@ -87,9 +81,9 @@ Identity decoys test whether the method promotes constructed false identity
 requests. This is in scope because the identity layer is responsible for
 false independent feature suppression.
 
-Minimum V0.4 decoy types:
+Minimum V0.4 `identity_decoy` generation methods:
 
-### `identity_decoy_rt_shift`
+### `rt_shift`
 
 Clone a real seed/control request, then replace the seed input field
 `best_seed_rt` with:
@@ -109,7 +103,7 @@ Expected outcome:
 - not `would_primary_provisional_identity_family_support`;
 - likely `review_only_seed_gate_failed`.
 
-### `identity_decoy_mz_shift`
+### `mz_shift`
 
 Clone a real seed/control request, then replace the seed identity constraints
 with:
@@ -127,30 +121,30 @@ candidate must not override or satisfy the shifted m/z request.
 Expected outcome:
 
 - `request_identity_completeness_status = complete`;
-- `request_candidate_identity_status = fail`;
+- `request_candidate_identity_status = request_candidate_identity_mismatch`;
 - seed gate fails with `request_candidate_identity_mismatch`, or all non-seed
   cells fail the decoy identity constraints before promotion;
 - no would-primary promotion.
 
-### `identity_decoy_nl_shuffle`
+### `fragment_tag_shuffle`
 
 Clone a real seed/control request, then replace the seed identity constraints
 with:
 
 ```text
-decoy_neutral_loss_tags = stable tag set not supported by the source DiscoveryCandidate
-decoy_neutral_loss_da = corresponding declared loss, if available
+decoy_fragment_tags = stable tag set not supported by the source DiscoveryCandidate
+decoy_cid_observed_loss_da = corresponding declared loss, if available
 ```
 
 Keep RT, owner geometry, and provenance unchanged. The decoy is run through the
 same seed gate as a normal request. Preserving `candidate_id` is allowed only to
 exercise the core request-vs-candidate identity consistency gate; the original
-candidate must not override or satisfy the shuffled neutral-loss tag set.
+candidate must not override or satisfy the shuffled fragment tag set.
 
 Expected outcome:
 
 - `request_identity_completeness_status = complete`;
-- `request_candidate_identity_status = fail`;
+- `request_candidate_identity_status = request_candidate_identity_mismatch`;
 - seed gate fails with `request_candidate_identity_mismatch`, or all non-seed
   cells fail the decoy identity constraints before promotion;
 - no would-primary promotion.
@@ -164,10 +158,10 @@ candidate, the decoy must fail the seed gate and must not continue into tier 2
 shape promotion using the original seed identity. Shape similarity can only
 support a decoy if the decoy identity constraints first pass the same seed gate
 and per-cell identity constraints as a real request. This prevents an
-m/z-shifted or NL-shuffled false identity from being rescued by unchanged
+m/z-shifted or fragment-shuffled false identity from being rescued by unchanged
 chromatographic shape.
 
-Any `identity_decoy_*` control that becomes
+Any `identity_decoy` control that becomes
 `would_primary_provisional_identity_family_support` is an identity-layer No-Go.
 
 ## Controls TSV
@@ -175,22 +169,31 @@ Any `identity_decoy_*` control that becomes
 Required `untargeted_identity_coherence_controls.tsv` columns:
 
 ```text
+<!-- schema:identity_coherence_controls.tsv:start -->
 control_id
 control_type
-targeted_benchmark_artifact
-target_label
-sample_stem_or_group
-expected_mapping_status
-actual_mapping_status
-expected_decision
-actual_decision
-source_feature_family_id
-precursor_mz_delta_ppm
-product_mz_delta_ppm
-observed_loss_delta_ppm
-rt_delta_sec
-tag_match_status
-failure_reason
+control_name
+decision_id
+identity_family_id
+seed_candidate_id
+control_status
+control_expected_behavior
+control_observed_behavior
+control_pass
+control_failure_reason
+fragment_observation_mode
+decoy_generation_method
+decoy_source_request_id
+decoy_shift_value
+decoy_identity_constraint_changed
+positive_control_mapping_status
+positive_control_target_name
+positive_control_target_mz
+positive_control_target_rt_sec
+positive_control_mapping_error_ppm
+positive_control_mapping_delta_rt_sec
+control_notes
+<!-- schema:identity_coherence_controls.tsv:end -->
 ```
 
 Control mapping must report:
@@ -202,7 +205,7 @@ Control mapping must report:
 - candidate family id;
 - precursor/product/loss deltas;
 - RT delta;
-- tag match status.
+- fragment tag match status.
 
 ## Identity Control-Specific Go / No-Go
 
@@ -211,9 +214,12 @@ controls add these control-specific rules:
 
 | Observation after 8RAW | Decision |
 | --- | --- |
-| `positive_control_pass_fraction >= min_positive_control_pass_fraction` and every miss has an explicit acceptable reason | Proceed to 85RAW threshold-policy review. |
-| `positive_control_pass_fraction < min_positive_control_pass_fraction` | No-Go; add trace identity metrics or fix mapping before continuing. |
-| Any `identity_decoy_*` control becomes `would_primary_provisional_identity_family_support` | No-Go; the identity layer is promoting a constructed false identity. |
+| `positive_control_pass_fraction >= positive_control_min_pass_fraction` and every miss has an explicit acceptable reason | Proceed to 85RAW threshold-policy review. |
+| `positive_control_pass_fraction < positive_control_min_pass_fraction` | No-Go; add trace identity metrics or fix mapping before continuing. |
+| `decoy_promoted_count <= max_decoy_promoted_count` | Proceed; constructed false identities were not over-promoted. |
+| `decoy_promoted_count > max_decoy_promoted_count` | No-Go; the identity layer is promoting constructed false identities. |
+| Every audited decoy failure maps to its expected seed-gate or request-candidate identity mismatch reason | Proceed. |
+| Any audited decoy fails for an unexpected or unauditable reason | Pivot; fix decoy generation or seed-gate audit before interpreting specificity. |
 | Decoy mapping is ambiguous or cannot be audited | Pivot; fix control mapping before using decoy results. |
 
 Background / blank / QC negative controls must not appear in identity Go/No-Go.

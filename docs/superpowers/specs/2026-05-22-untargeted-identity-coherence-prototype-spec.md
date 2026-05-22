@@ -27,9 +27,12 @@ Read in this order:
    - identity-layer Go/No-Go
 3. [Implementation contract](2026-05-22-untargeted-identity-coherence-implementation-contract.md)
    - evidence firewall
-   - `IdentityCoherenceConfig`
-   - base identity Go/No-Go for firewall, weak-basis, infrastructure, and cost
+   - nested `IdentityCoherenceConfig`
+   - `FragmentIdentity` domain model and mode-specific constraint payloads
+   - engineering Go/No-Go for firewall fixture, schema, process, infrastructure,
+     and cost
    - `untargeted_identity_coherence_requests.tsv` seed/request audit surface
+   - schema marker blocks and schema-constant parity tests
    - inline and diagnostic invocation modes
    - process-mode payload boundary
    - frozen output schemas
@@ -124,6 +127,9 @@ These apply to every split spec:
 - Targeted ISTD labels and controls are validation evidence only; they do not
   promote identities.
 - Identity decoys are in scope because they test false identity promotion.
+- `FragmentIdentity` is the shared request abstraction. V0.4 executes
+  `cid_neutral_loss`; future HCD modes must enter as mode-specific constraints
+  under the same abstraction, not as a parallel identity pipeline.
 - Background / blank / QC audit is non-gating and downstream-facing.
 - Domain logic must not import `tools/diagnostics`, GUI, workbook, report,
   process, CLI, or RAW adapter surfaces.
