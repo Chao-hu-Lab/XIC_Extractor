@@ -509,6 +509,7 @@ tier2_shape_supported_sample_count
 tier2_seed_shape_fallback_sample_count
 tier3_width_only_sample_count
 min_total_coherent_samples
+min_non_seed_coherent_samples
 min_non_seed_tier12_identity_samples
 weak_basis_reason
 shape_reference_basis
@@ -708,6 +709,9 @@ Implementation contract is ready when:
   `non_seed_coherent_sample_count >= min_non_seed_coherent_samples`, and
   `tier12_non_seed_identity_sample_count >=
   min_non_seed_tier12_identity_samples`.
+- a count-definition test verifies that whenever `seed_gate_class =
+  coherent_seed`, `total_coherent_sample_count == 1 +
+  non_seed_coherent_sample_count`, independent of the promotion thresholds.
 
 First implementation slice:
 

@@ -106,7 +106,8 @@ before cross-sample XIC retrieval.
 Expected outcome:
 
 - not `would_primary_provisional_identity_family_support`;
-- likely `review_only_seed_gate_failed`.
+- `review_only_seed_gate_failed` with `seed_reject_reason =
+  seed_rt_outside_owner_peak`.
 
 ### `mz_shift`
 
