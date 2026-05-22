@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from typing import Any
 
-from .models import CidNeutralLossConstraint, FragmentIdentity, IdentityCoherenceRequest
+from .models import (
+    CidNeutralLossConstraint,
+    FragmentIdentity,
+    IdentityCoherenceRequest,
+    SeedCandidateEvidence,
+)
 from .schema import (
+    EvidenceStage,
     FragmentObservationMode,
     FragmentTagMatchPolicy,
     RequestCandidateIdentityStatus,
@@ -61,6 +68,12 @@ def build_identity_coherence_request(
         "candidate_id",
     )
 
+    precursor_tolerance_ppm = _finite_positive_or_none(precursor_tolerance_ppm)
+    product_tolerance_ppm = _finite_positive_or_none(product_tolerance_ppm)
+    cid_observed_loss_tolerance_ppm = _finite_positive_or_none(
+        cid_observed_loss_tolerance_ppm
+    )
+
     flags: list[str] = []
     seed_sample = _first_nonempty_text(
         _getattr_or_none(candidate_like, "sample_name"),
@@ -86,9 +99,15 @@ def build_identity_coherence_request(
     if fragment_profile_hash == "unavailable":
         flags.append("fragment_profile_hash_unavailable")
 
-    precursor_mz = _getattr_or_none(candidate_like, "precursor_mz")
-    product_mz = _getattr_or_none(candidate_like, "product_mz")
-    cid_observed_loss_da = _getattr_or_none(candidate_like, "observed_neutral_loss_da")
+    precursor_mz = _finite_positive_or_none(
+        _getattr_or_none(candidate_like, "precursor_mz")
+    )
+    product_mz = _finite_positive_or_none(
+        _getattr_or_none(candidate_like, "product_mz")
+    )
+    cid_observed_loss_da = _finite_positive_or_none(
+        _getattr_or_none(candidate_like, "observed_neutral_loss_da")
+    )
 
     missing_flags: list[str] = []
     if precursor_mz is None:
@@ -137,6 +156,45 @@ def build_identity_coherence_request(
     )
 
 
+def build_seed_candidate_evidence(
+    candidate_like: object,
+    *,
+    evidence_stage: EvidenceStage = EvidenceStage.PRE_BACKFILL,
+) -> SeedCandidateEvidence:
+    seed_candidate_id = _require_nonempty_text(
+        _getattr_or_none(candidate_like, "candidate_id"),
+        "candidate_id",
+    )
+    matched_tag_names = _getattr_or_none(candidate_like, "matched_tag_names")
+    neutral_loss_tag = _getattr_or_none(candidate_like, "neutral_loss_tag")
+    tag_source = (
+        matched_tag_names
+        if has_fragment_tags(matched_tag_names)
+        else neutral_loss_tag
+    )
+    fragment_tags, _ = normalize_fragment_tags(tag_source)
+
+    return SeedCandidateEvidence(
+        candidate_id=seed_candidate_id,
+        precursor_mz=_finite_positive_or_none(
+            _getattr_or_none(candidate_like, "precursor_mz"),
+        ),
+        product_mz=_finite_positive_or_none(
+            _getattr_or_none(candidate_like, "product_mz"),
+        ),
+        cid_observed_loss_da=_finite_positive_or_none(
+            _getattr_or_none(candidate_like, "observed_neutral_loss_da"),
+        ),
+        fragment_tags=fragment_tags,
+        best_seed_rt=_getattr_or_none(candidate_like, "best_seed_rt"),
+        ms1_scan_support_score=_getattr_or_none(
+            candidate_like,
+            "ms1_scan_support_score",
+        ),
+        evidence_stage=evidence_stage,
+    )
+
+
 def _getattr_or_none(value: object, name: str) -> Any:
     return getattr(value, name, None)
 
@@ -152,6 +210,14 @@ def _first_nonempty_text(*values: object) -> str | None:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
+
+
+def _finite_positive_or_none(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if not math.isfinite(value) or value <= 0:
+        return None
+    return float(value)
 
 
 def _completeness_status(

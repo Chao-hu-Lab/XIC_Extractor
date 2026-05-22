@@ -1,3 +1,4 @@
+from .candidate_matcher import match_request_to_candidate
 from .models import (
     CandidateIdentityMatch,
     CidNeutralLossConstraint,
@@ -7,7 +8,10 @@ from .models import (
     SeedGateConfig,
     SeedGateResult,
 )
-from .request_builder import build_identity_coherence_request
+from .request_builder import (
+    build_identity_coherence_request,
+    build_seed_candidate_evidence,
+)
 from .schema import (
     IDENTITY_COHERENCE_CELL_EVIDENCE_COLUMNS,
     IDENTITY_COHERENCE_CONTROL_COLUMNS,
@@ -43,7 +47,9 @@ __all__ = [
     "SeedGateResult",
     "SeedRejectReason",
     "build_identity_coherence_request",
+    "build_seed_candidate_evidence",
     "format_fragment_tags",
     "has_fragment_tags",
+    "match_request_to_candidate",
     "normalize_fragment_tags",
 ]

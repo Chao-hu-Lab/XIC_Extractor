@@ -211,3 +211,38 @@ def test_missing_required_request_metadata_raises_value_error(field):
 def test_missing_candidate_id_raises_value_error():
     with pytest.raises(ValueError):
         _build(CandidateLike(candidate_id=""))
+
+
+def test_nonfinite_precursor_mz_builds_incomplete_request():
+    request = _build(CandidateLike(precursor_mz=float("nan")))
+
+    assert request.request_identity_completeness_status is (
+        RequestIdentityCompletenessStatus.MISSING_PRECURSOR_MZ
+    )
+    assert "missing_precursor_mz" in request.request_builder_flags
+
+
+def test_zero_cid_loss_payload_builds_missing_mode_constraint_request():
+    request = _build(CandidateLike(observed_neutral_loss_da=0.0))
+
+    assert request.request_identity_completeness_status is (
+        RequestIdentityCompletenessStatus.MISSING_MODE_SPECIFIC_CONSTRAINT
+    )
+    assert "missing_mode_specific_constraint" in request.request_builder_flags
+
+
+def test_nonfinite_common_tolerance_builds_missing_tolerance_request():
+    request = build_identity_coherence_request(
+        CandidateLike(),
+        request_id="REQ-1",
+        decision_id="DEC-1",
+        precursor_tolerance_ppm=float("inf"),
+        product_tolerance_ppm=10.0,
+        cid_observed_loss_tolerance_ppm=10.0,
+        fragment_profile_id="profile-a",
+    )
+
+    assert request.request_identity_completeness_status is (
+        RequestIdentityCompletenessStatus.MISSING_TOLERANCE
+    )
+    assert "missing_precursor_tolerance_ppm" in request.request_builder_flags
