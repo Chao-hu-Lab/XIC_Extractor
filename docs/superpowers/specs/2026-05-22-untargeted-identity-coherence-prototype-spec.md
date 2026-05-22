@@ -1,7 +1,7 @@
 # Untargeted Identity Coherence Diagnostic Prototype Spec
 
 **Date:** 2026-05-22
-**Status:** Executable review draft v0.2
+**Status:** Method review draft v0.3
 **Branch:** `codex/untargeted-backfill-logic-reset`
 **Worktree:** `C:\Users\user\Desktop\XIC_Extractor\.worktrees\untargeted-backfill-logic-reset`
 
@@ -9,679 +9,620 @@
 
 ## Summary
 
-This spec resets the untargeted alignment discussion one layer above Backfill.
+This spec keeps the correct abstraction boundary:
 
-Backfill is a value recovery step after an untargeted identity already exists.
-The next checkpoint must therefore test identity formation before any new
-Backfill rule is designed.
+```text
+identity formation first
+Backfill / value recovery second
+```
 
-V0.2 is a diagnostic-only prototype. It must not change `alignment_matrix.tsv`,
+However, v0.2 had a methodological flaw: an RT-windowed peak search before
+Backfill is still methodologically close to Backfill. It prevents leakage from
+Backfill outputs, but it does not by itself prove identity quality.
+
+V0.3 therefore changes the prototype question:
+
+```text
+Can pre-Backfill seed specificity plus independent per-sample trace identity
+checks separate plausible untargeted identities from RT-coherent background or
+rescue-heavy rows?
+```
+
+This is not a full rejection of the coherence diagnostic. It is a narrower
+claim: RT-only coherence is useful as a retrieval and audit signal, but it is
+not enough to promote an identity.
+
+The diagnostic remains non-mutating. It must not change `alignment_matrix.tsv`,
 workbooks, current Backfill behavior, or production promotion logic.
+
+## Design Stance After External Review
+
+The external review raised valid risks, but this spec does not accept every
+claim unchanged. The resulting design stance is:
+
+| Review point | Decision | Rationale |
+| --- | --- | --- |
+| RT-windowed peak finding is too close to Backfill | Accepted | A pre-Backfill run prevents output leakage, but methodologically it is still similar to Backfill if it only checks peak presence and RT. |
+| Therefore the diagnostic is useless | Rejected | The diagnostic still catches single-sample seeds, insufficient recurrence, center instability, Backfill evidence leakage, threshold-policy errors, and multi-seed ambiguity. |
+| Seed qualification is load-bearing | Accepted | Weak or background-like seeds cannot be rescued by recurrence alone. Seed specificity must be promoted from a loose filter to a first-class gate. |
+| All discrimination should live in seed qualification | Modified | Non-seed samples often lack MS2 evidence, so seed specificity anchors the identity while MS1 trace identity checks support cross-sample coherence. |
+| Shape/scoring can wait until a later phase | Rejected for MVP | At least one non-RT trace identity basis must be present in v0.3, otherwise coherence collapses back to RT-local Backfill-like peak finding. |
+| Targeted ISTDs should all pass | Modified | ISTDs are positive-control yardsticks, not a blanket pass rule. Only mapped targeted/stable control rows have expected diagnostic outcomes, and misses must be explained. |
+| Post-hoc `alignment-dir` can drive the diagnostic | Rejected as primary path | Current TSVs distinguish `detected` and `rescued`, but they are not a complete pre-Backfill owner-state snapshot. Post-hoc mode is comparison/reporting only. |
+| Four frozen TSV schemas are too heavy for prototype learning | Accepted with constraint | Freeze only `decisions.tsv`, `cell_evidence.tsv`, and `summary.md`; keep broader evidence tables exploratory until 8RAW review. |
+| A major untargeted redesign means starting from scratch | Rejected | Existing untargeted owner/alignment modules and targeted extraction/scoring diagnostics are reusable foundations, not legacy debris. |
+
+## Method Correction
+
+The prototype must not define coherence as only:
+
+```text
+seed center -> broad RT window -> find peak -> RT gate -> would-primary
+```
+
+That is too close to current owner Backfill mechanics. It can promote the same
+rescue-heavy rows when broad background signal has RT-windowed peaks in many
+samples.
+
+The useful part of the diagnostic is not "Backfill earlier." The useful part is
+making identity promotion observable before value recovery:
+
+- which seed is allowed to ask the cross-sample question;
+- which samples pass independent identity checks;
+- which rows are only RT-local recurrence;
+- which apparent support depends on Backfill evidence;
+- which threshold policy would break when moving from 8RAW to 85RAW.
+
+V0.3 may still use XIC extraction to collect candidate traces, but promotion
+requires evidence that is independent of simple RT-windowed peak presence:
+
+- seed specificity before any across-sample scan;
+- per-sample trace identity / shape quality;
+- recurrence background guard.
+
+The resulting decision should then be benchmarked against targeted ISTD or
+stable-control yardsticks. Control labels validate the diagnostic; they do not
+promote identities.
+
+RT coherence is necessary but not sufficient.
+
+## Reuse Existing Foundations
+
+This reset is not a rewrite-from-zero. The current untargeted path has already
+built useful foundations, and the targeted path is a major source of validated
+methods.
+
+Untargeted foundations to reuse:
+
+- `build_sample_local_owners` and `SampleLocalMS1Owner` as the pre-Backfill
+  owner evidence surface;
+- `cluster_sample_local_owners` and `OwnerAlignedFeature` as the starting
+  identity-family grouping surface;
+- ambiguous-owner and duplicate-owner signals as seed specificity and
+  Review-only pressure;
+- `pre_backfill_consolidation` logic as prior art for compatible owner grouping,
+  not as the final identity algorithm;
+- existing `trace_quality`, `scan_support_score`, `region_*`, and integration
+  audit fields as candidate identity inputs;
+- current `production_decisions`, `matrix_identity`, and TSV writers as
+  comparison surfaces, not promotion evidence.
+
+Targeted foundations to reuse:
+
+- targeted peak detection and integration primitives, including peak width,
+  baseline, scan support, and boundary/integration audit metrics;
+- targeted scoring concepts such as support/concern labels, raw score,
+  `shape_clean`, `shape_poor`, and CWT/shape support where available;
+- targeted ISTD benchmark diagnostics as positive-control yardsticks;
+- targeted peak reliability and NL-dropout diagnostics as examples for
+  separating infrastructure failure, data-quality failure, and plausible
+  biological signal;
+- targeted RT/ISTD drift evidence as validation or drift-calibration context,
+  not direct row identity-promotion evidence.
+
+Dependency boundary:
+
+- `xic_extractor.alignment.identity_coherence` may reuse small domain primitives,
+  typed models, and metric functions that are already independent of IO.
+- It must not import `tools.diagnostics.*`, workbook/report renderers, GUI code,
+  CLI scripts, or process backends.
+- Targeted diagnostics can provide validation artifacts and metric definitions.
+  If a diagnostic metric becomes required for promotion, first extract it into a
+  small domain/shared module with focused tests, then import that module from the
+  identity-coherence implementation.
+
+Design rule:
+
+```text
+reuse mature extraction, scoring, audit, and benchmark primitives;
+rewrite only the identity-promotion layer that combines them for untargeted rows.
+```
+
+The new diagnostic should therefore be thin orchestration around existing
+signals wherever possible. New code is justified when the existing module lacks
+the untargeted-specific identity contract, not merely because the old algorithm
+will be replaced.
+
+## Non-Goals
+
+- No production matrix behavior change.
+- No replacement of current `owner_backfill.py`.
+- No new default Backfill gate.
+- No production graph merge/split implementation.
+- No GUI change.
+- No workbook schema change.
+- No frozen broad multi-table diagnostic schema before 8RAW learning.
+
+## Prototype Data Flow
+
+The primary implementation path is inline pre-Backfill:
 
 ```text
 build_owners
   -> cluster_owners
-  -> identity_coherence_diagnostic   # new opt-in diagnostic stage
-  -> owner_backfill                  # unchanged production path
-  -> build_matrix / review / cells   # unchanged production path
+  -> identity_coherence_diagnostic       # new opt-in diagnostic stage
+  -> owner_backfill                      # unchanged production path
+  -> build_matrix / review / cells       # unchanged production path
 ```
 
-Core product rule:
+This is the only clean path for promotion evidence because the diagnostic needs
+pre-Backfill owner state.
 
-```text
-Primary Matrix = clean coherent identities and coherent sample values.
-Review/Audit = high-recall evidence, weak peaks, conflicts, non-coherent peaks,
-               seed provenance, and later Backfill evidence.
-Backfill = value recovery after identity promotion, not identity creation.
-```
+Post-run `--alignment-dir` mode is allowed only for comparison and report
+joining. It must not be the source of promotion evidence unless the input
+artifact explicitly encodes pre-Backfill provenance.
 
-## Problem
-
-Recent work has been stuck at the Backfill layer. That created a loop:
-
-- a weak or ambiguous untargeted identity enters the matrix;
-- Backfill rescues many sample-level peaks for that identity;
-- the rescue-heavy row looks suspicious;
-- new gates are proposed around Backfill;
-- the pipeline still has not answered whether the row identity should exist.
-
-This is the wrong abstraction boundary. Backfill can only recover values for an
-already-supported identity. It must not become the mechanism that creates
-untargeted row identity.
-
-## Design Goals
-
-- Separate identity formation from value recovery.
-- Preserve a clean downstream Primary Matrix.
-- Keep high-recall evidence visible in Review/Audit.
-- Avoid treating current `backfill` / `absent` semantics as final scientific
-  acceptance criteria.
-- Keep V0.2 small enough to prototype and review on the 8RAW subset first.
-- Preserve a clear upgrade path toward multi-seed merge/split and stronger
-  scoring later.
-
-## Non-Goals
-
-- No production matrix behavior change in V0.2.
-- No replacement of current `owner_backfill.py`.
-- No new default Backfill gate.
-- No production graph merge/split implementation in V0.2.
-- No full scoring model in V0.2.
-- No GUI change.
-- No workbook schema change.
-
-## Prototype MVP Scope
-
-V0.2 answers one question:
-
-```text
-Can seed-centered, Backfill-free coherence separate plausible untargeted
-identities from weak or rescue-heavy rows?
-```
-
-In scope:
-
-- medium seed qualification;
-- one deterministic primary seed center per source candidate;
-- seed-centered coherence scan across samples;
-- explicit reporting of secondary or overflow seed centers;
-- diagnostic tables explaining would-be Primary vs Review-only decisions;
-- 8RAW review before any 85RAW validation.
-
-Out of scope until Phase 2:
-
-- production graph merge/split;
-- merging multiple coherent seed groups into one production identity;
-- splitting conflicting seed groups into multiple production identities;
-- changing `matrix_identity`, `primary_consolidation`, or workbook output.
-
-## Prototype Data Flow And Ownership
-
-The diagnostic stage belongs between owner clustering and Backfill:
-
-```text
-Discovery events / sample-local owners
-  -> build_owners
-  -> cluster_owners
-  -> identity_coherence_diagnostic
-  -> owner_backfill
-```
-
-Implementation ownership:
-
-- domain logic should live in a focused alignment module such as
-  `xic_extractor/alignment/identity_coherence.py`;
-- TSV writing should live in a focused diagnostic writer, not in workbook code;
-- RAW opening, vendor XIC extraction, process-mode batching, and cancellation
-  stay in orchestration/backend layers;
-- the diagnostic must not mutate `AlignmentMatrix`, existing TSVs, workbook
-  outputs, or Backfill state.
-
-The diagnostic may read post-run alignment artifacts only for comparison or
-provenance. It must not use post-Backfill status, rescue counts, final matrix
-inclusion, or workbook values as identity-promotion evidence.
+Current `alignment_cells.tsv` has useful `status` and `source_candidate_id`
+columns, and `rescued` cells are distinguishable from `detected` cells. That is
+not enough to make a post-hoc run the canonical source of pre-Backfill owner
+state, because the diagnostic needs all candidate/owner context before
+Backfill and before production consolidation decisions.
 
 ## Evidence Firewall
 
-The prototype must make identity evidence provenance explicit.
+Allowed for identity promotion:
 
-| Evidence | Identity promotion use | Notes |
-| --- | --- | --- |
-| neutral loss tag from discovery/profile | allowed | Required medium seed evidence. |
-| product m/z and observed neutral loss tolerance | allowed | Required medium seed evidence. |
-| sample-local MS1 owner before `owner_backfill` | allowed | Must include finite area, apex RT, height, and boundaries. |
-| diagnostic vendor RAW XIC extracted before Backfill | allowed | Expensive path; must be counted and timed. |
-| config tolerances and sample order | allowed | Must be recorded in summary. |
-| `alignment_review.tsv` family ids | provenance/comparison only | Not identity-promotion evidence. |
-| `alignment_cells.tsv` detected owner cells | allowed only if pre-Backfill provenance is explicit | Must not mix with rescued/backfilled cells. |
-| `owner_backfill` rescued area/status | forbidden | Backfill cannot create identity evidence. |
-| `backfill`, `rescued`, `absent`, `unchecked` production statuses | forbidden for promotion | May be shown in comparison columns only. |
-| final `include_in_primary_matrix` | forbidden | Current production outcome is not evidence for the new diagnostic. |
-| workbook values | forbidden | Rendering surface, not identity evidence. |
-| family-center re-extraction after Backfill | forbidden in V0.2 | Would mix identity promotion with value rewriting. |
+- neutral loss tag from the active discovery/profile context;
+- product m/z and observed neutral loss tolerance evidence;
+- pre-Backfill sample-local MS1 owner evidence;
+- diagnostic vendor XIC traces collected before Backfill;
+- seed specificity metrics derived before Backfill;
+- trace identity / shape metrics derived from diagnostic candidate traces;
 
-Every promoted or would-promoted cell must expose `evidence_source`. Valid V0.2
-values are:
+Validation-only evidence:
 
-```text
-pre_backfill_owner
-diagnostic_vendor_xic
-comparison_only_current_alignment
-```
+- targeted ISTD benchmark/control labels and positive-control classes;
+- targeted benchmark diagnostics emitted by `tools/diagnostics/*`;
+- current production `production_decisions`, `matrix_identity`, and workbook
+  outputs;
+- post-hoc `alignment-dir` joins used only for comparison/reporting.
 
-Only the first two may support identity promotion.
+Validation-only evidence may appear in summary tables, benchmark sections, and
+positive-control columns. It must not change `decision`,
+`total_coherent_sample_count`, `non_seed_coherent_sample_count`, or any
+promotion gate.
 
-## Terminology And ID Contract
+Forbidden for identity promotion:
 
-Use stable IDs so TSVs can be joined and diffed.
+- `owner_backfill` rescued area/status;
+- `backfill`, `rescued`, `absent`, `unchecked` production statuses;
+- final `include_in_primary_matrix`;
+- workbook values;
+- family-center re-extraction after Backfill;
+- post-Backfill row inclusion or rescue dependency.
 
-| Term | Meaning |
-| --- | --- |
-| `source_feature_family_id` | Existing pre-Backfill owner/cluster family identifier, when available. |
-| `source_candidate_id` | Source discovery or owner candidate id. |
-| `seed_id` | Stable id for one qualified medium seed. |
-| `coherence_group_id` | Stable id for one seed-centered scan result. |
-| `coherence_cell_id` | Stable id for one group/sample decision. |
-| `decision_id` | Stable id for one candidate-level diagnostic decision. |
-| `would_primary_identity_id` | Diagnostic-only row id for would-be Primary output. |
-| `sample_stem` | Sample key matching existing alignment TSV style. |
-
-Recommended id formats:
+The summary must assert:
 
 ```text
-SEED000001
-COH_G000001
-COH_C000001_Sample_A
-COH_D000001
-COH_P000001
+promotion_used_forbidden_evidence = false
 ```
 
-Sorting must be deterministic: numeric id order, then `sample_stem`, then
-`source_candidate_id`.
+The decisions table should keep `forbidden_evidence_seen` when comparison
+inputs contain forbidden evidence. It should not carry a per-row "used"
+column that is defined to be always false.
 
-## Prototype CLI / IO Contract
+## Discriminator Model
 
-V0.2 should be an opt-in diagnostic command. The exact Python module can change,
-but the contract must be equivalent to:
-
-```powershell
-python -m tools.diagnostics.untargeted_identity_coherence `
-  --alignment-dir <existing_alignment_output_dir> `
-  --output-dir <diagnostic_output_dir> `
-  --max-rt-sec 180 `
-  --preferred-rt-sec 60 `
-  --min-coherent-samples 3
-```
-
-Required behavior:
-
-- exit `0` when all diagnostic artifacts are written;
-- exit non-zero when required inputs are missing or malformed;
-- write only under `--output-dir`;
-- never overwrite current `alignment_matrix.tsv`, `alignment_review.tsv`,
-  `alignment_cells.tsv`, workbook output, or Backfill audit files;
-- record input file hashes, row counts, command arguments, thresholds, and
-  no-mutation hash checks in the summary;
-- fail with a clear missing-input diagnostic instead of silently falling back to
-  Backfill-derived evidence.
-
-## Parameters And RT Units
-
-All RT fields in diagnostic TSVs must include units in the column name.
-
-Baseline parameters:
-
-| Parameter | Default | Unit | Meaning |
-| --- | ---: | --- | --- |
-| `max_rt_sec` | 180 | seconds | Broad initial extraction window around `seed_rt_min`. |
-| `preferred_rt_sec` | 60 | seconds | Narrow gate around provisional center. |
-| `min_coherent_samples` | 3 | samples | Minimum coherent cells for V0.2 would-promote. |
-| `max_center_drift_sec` | 60 | seconds | Seed anchor guard for provisional center. |
-
-Use explicit minute/second conversion:
+V0.3 promotion requires three layers. A candidate that fails any blocking layer
+stays Review-only.
 
 ```text
-initial_rt_min = seed_rt_min - (max_rt_sec / 60.0)
-initial_rt_max = seed_rt_min + (max_rt_sec / 60.0)
-
-center_drift_sec =
-  abs(provisional_center_rt_min - seed_rt_min) * 60.0
-
-rt_delta_center_sec =
-  abs(sample_apex_rt_min - provisional_center_rt_min) * 60.0
-
-coherent_rt_gate =
-  rt_delta_center_sec <= preferred_rt_sec
+medium seed specificity
+  -> RT-local candidate trace retrieval
+  -> independent trace identity checks
+  -> diagnostic would-primary / review-only decision
 ```
 
-If `center_drift_sec > max_center_drift_sec`, the group remains Review-only
-with reason `center_unstable_review_only`. This prevents a broad-window
-neighbor peak from hijacking the provisional center.
+### Layer 1: Seed Specificity
 
-The summary should also include sensitivity counters for review only:
+Seed qualification is the load-bearing gate.
 
-```text
-would_promote_at_min_samples_2
-would_promote_at_min_samples_3
-would_promote_at_min_samples_4
-would_promote_at_preferred_rt_sec_30
-would_promote_at_preferred_rt_sec_60
-would_promote_at_preferred_rt_sec_90
-```
-
-These counters do not change the V0.2 default decision.
-
-## Medium Seed Qualification
-
-A medium seed is the minimum evidence unit for creating a Review candidate.
-
-V0.2 medium seed requirements:
+Minimum v0.3 seed requirements:
 
 - neutral loss tag matches the active profile;
 - product m/z is inside tolerance;
 - observed neutral loss is inside tolerance;
-- sample-local MS1 owner is quantifiable before Backfill;
-- `seed_area`, `seed_apex_rt_min`, `seed_height`, `seed_start_rt_min`, and
-  `seed_end_rt_min` are present and finite;
-- `seed_area > 0`.
+- sample-local MS1 owner exists before Backfill;
+- area, apex RT, height, start RT, and end RT are finite;
+- owner is not ambiguous and not a duplicate loser;
+- seed has enough fragment specificity to distinguish it from generic
+  background recurrence.
 
-V0.2 does not require a high evidence score.
+`high evidence score` is not required as a blanket rule, but low-specificity
+seeds cannot be rescued by recurrence alone.
 
-These records do not qualify as medium seeds:
-
-- ambiguous MS1 owner records;
-- duplicate losers;
-- records without quantifiable MS1 owner evidence;
-- records missing product/loss evidence needed by the active profile;
-- records whose only quantifiable evidence comes from Backfill/rescue.
-
-Seed ranking for the single-seed MVP is deterministic:
-
-1. qualified medium seeds before non-qualified records;
-2. non-ambiguous owner evidence before ambiguous evidence;
-3. higher finite `seed_area`;
-4. higher finite `seed_height`;
-5. lower absolute product/loss tolerance error, if available;
-6. lexical `sample_stem`;
-7. lexical `source_candidate_id`.
-
-The top-ranked seed becomes `seed_role = primary`. All other compatible seeds
-remain visible as `seed_role = secondary` or `seed_role = overflow`.
-
-## Identity Promotion Rule
-
-One medium seed alone creates a Review candidate, not a production Primary row.
-
-V0.2 emits diagnostic decisions:
-
-| Decision | Meaning |
-| --- | --- |
-| `would_primary_single_seed` | The primary seed group passes V0.2 coherence and has no blocking error. |
-| `review_only_insufficient_coherence` | Fewer than `min_coherent_samples` coherent cells. |
-| `review_only_center_unstable` | Provisional center drift exceeds `max_center_drift_sec`. |
-| `review_only_multi_seed_requires_phase2` | Secondary/overflow seeds create unresolved multi-seed ambiguity. |
-| `review_only_error` | Required input, RAW extraction, or non-finite trace failure prevents assessment. |
-
-These are diagnostic outcomes only. They do not change current production
-matrix inclusion.
-
-## Coherence Scan
-
-Coherence scan is an identity promotion diagnostic, not Backfill.
-
-For each primary seed center:
+Required seed diagnostic fields:
 
 ```text
-primary seed center
-  -> broad extraction window in each sample
-  -> quantifiable peak candidates
-  -> provisional center from complete candidates
-  -> seed-anchor center guard
-  -> narrow RT acceptance gate
-  -> seed-specific coherent group
+seed_specificity_class =
+  high_specificity | medium_specificity | low_specificity | background_like
+
+seed_reject_reason =
+  missing_fragment_evidence
+  no_quantifiable_owner
+  ambiguous_owner
+  duplicate_loser
+  backfill_only_evidence
+  nonfinite_peak
+  low_fragment_specificity
+  background_like_seed
 ```
 
-V0.2 coherence criteria:
+Background-like seeds are Review-only even if they recur in many samples.
 
-- peak exists;
-- peak area, apex RT, height, start RT, and end RT are complete;
-- area is positive and finite;
-- `center_drift_sec <= max_center_drift_sec`;
-- `rt_delta_center_sec <= preferred_rt_sec`.
+### Layer 2: RT-Local Candidate Retrieval
 
-V0.2 intentionally does not gate on normalized MS1 shape or neighbor
-interference. The interface must leave room for a future scoring model that can
-classify coherent, weak, interfering, ambiguous, and rejected peaks.
+XIC extraction in V0.3 is candidate retrieval, not promotion evidence by
+itself.
 
-## RAW XIC Cost Budget And Stop Conditions
-
-The prototype must report RAW/XIC cost, because the known performance risk is
-request count and vendor XIC I/O.
-
-Required counters:
-
-- `candidate_count`;
-- `qualified_seed_count`;
-- `primary_seed_count`;
-- `secondary_seed_count`;
-- `overflow_seed_count`;
-- `extract_xic_count`;
-- `raw_chromatogram_call_count`;
-- `xic_point_count`;
-- `wall_time_sec`;
-- per-sample and per-RAW request counts where available.
-
-85RAW validation must not start until 8RAW has produced these counters and the
-estimated 85RAW request cardinality is reviewed.
-
-If an MS1 scan-index or approximate fast path is used, it must be marked as an
-explicit approximate diagnostic mode. It must not silently replace vendor XIC
-as an equivalent path.
-
-## Multi-Seed Handling In V0.2
-
-V0.2 is deliberately conservative.
-
-- Only the deterministic primary seed center drives `would_primary_single_seed`.
-- Secondary and overflow seeds are preserved in `candidates.tsv`.
-- If secondary/overflow evidence indicates unresolved competing RT or fragment
-  context, the candidate-level decision is
-  `review_only_multi_seed_requires_phase2`.
-- V0.2 does not merge multiple coherent seed groups.
-- V0.2 does not split conflicting seed groups into production identities.
-
-Required overflow fields:
+RT units must be explicit:
 
 ```text
-compatible_seed_count
-secondary_seed_count
-overflow_seed_count
-overflow_seed_ids
-multi_seed_review_flag
+initial_rt_min = seed_rt_min - (max_rt_sec / 60.0)
+initial_rt_max = seed_rt_min + (max_rt_sec / 60.0)
 ```
 
-Phase 2 may introduce graph merge/split only after V0.2 8RAW review confirms
-the single-seed identity-first framing is useful.
+The retrieval window may default to `max_rt_sec = 180` for 8RAW exploration,
+but the extracted peak is only a candidate for further checks.
+
+### Layer 3: Trace Identity Checks
+
+Every non-seed sample that contributes to would-primary must pass at least one
+non-RT identity check.
+
+V0.3 minimum independent checks:
+
+- peak morphology is complete and finite;
+- peak width is within a bounded ratio of the seed peak width;
+- local baseline / interference is not obviously incompatible;
+- normalized local trace shape has enough similarity to the seed or group
+  prototype when enough points exist;
+- area/height pattern is not a flat high-recurrence background signature.
+
+The exact first implementation can use simple deterministic metrics, but the
+decision must expose which non-RT check admitted the sample. A cell cannot be
+`coherent` only because a positive peak exists inside an RT window.
+
+Required cell evidence category:
+
+```text
+cell_identity_basis =
+  seed_sample
+  rt_plus_shape
+  rt_plus_width
+  rt_plus_baseline
+  rt_plus_area_pattern
+  rt_only_review_only
+  blocked_infrastructure
+  data_quality_reject
+```
+
+`rt_only_review_only` is never allowed to support would-primary.
+
+## RT Center Rules
+
+The provisional center is another load-bearing step and must not be hand-waved.
+
+For v0.3:
+
+- the seed sample always anchors the first provisional center;
+- non-seed candidates can contribute to the provisional center only after
+  passing basic morphology completeness;
+- candidates farther than `seed_center_candidate_sec` from the seed RT are not
+  used to estimate the center;
+- `max_center_drift_sec` must be tighter than `preferred_rt_sec`.
+
+Baseline review parameters for 8RAW:
+
+| Parameter | Default | Unit | Meaning |
+| --- | ---: | --- | --- |
+| `max_rt_sec` | 180 | seconds | Broad retrieval window. |
+| `preferred_rt_sec` | 60 | seconds | Final RT acceptance gate after independent checks. |
+| `seed_center_candidate_sec` | 30 | seconds | Max seed distance for center-estimation candidates. |
+| `max_center_drift_sec` | 30 | seconds | Seed-anchor guard; intentionally tighter than the 60 sec gate. |
+
+Promotion must report:
+
+```text
+center_method
+center_candidate_count
+center_drift_sec
+center_decision =
+  seed_anchored | recentered_stable | center_unstable_review_only
+```
+
+## Support Thresholds
+
+Do not treat `min_coherent_samples = 3` as a dataset-independent product rule.
+
+For the 8RAW review subset:
+
+```text
+min_total_coherent_samples = 3
+seed_counts_toward_total = true
+min_non_seed_coherent_samples = 2
+```
+
+The diagnostic must report both absolute count and fraction:
+
+```text
+total_coherent_sample_count
+non_seed_coherent_sample_count
+assessed_sample_count
+coherent_sample_fraction
+```
+
+For 85RAW, the 8RAW threshold cannot be copied blindly because `3/8` and
+`3/85` have very different meaning. 85RAW validation must use a reviewed
+threshold policy, such as a minimum count plus minimum fraction, before any
+production interpretation.
+
+## Positive Controls And Yardsticks
+
+V0.3 must include a cheap positive-control yardstick before interpreting 8RAW
+results.
+
+Required if available:
+
+- targeted ISTD benchmark output from existing `tools/diagnostics/targeted_istd_benchmark.py`;
+- selected stable-like ISTD or targeted control rows mapped to untargeted
+  candidate families;
+- expected outcome for each control:
+  - pass seed specificity where applicable;
+  - pass trace identity checks;
+  - explain misses explicitly when not promoted.
+
+The Go/No-Go table cannot use vague "expected stable-like rows" without naming
+the control set or linking the benchmark artifact.
 
 ## Diagnostic Output Contract
 
-The artifact names are fixed for V0.2:
+V0.3 intentionally freezes only the minimum review surface needed to audit both
+row-level decisions and the load-bearing per-sample non-RT evidence:
+
+```text
+untargeted_identity_coherence_decisions.tsv
+untargeted_identity_coherence_cell_evidence.tsv
+untargeted_identity_coherence_summary.md
+```
+
+Exploratory aggregate/detail tables are allowed but not frozen before 8RAW:
 
 ```text
 untargeted_identity_coherence_candidates.tsv
 untargeted_identity_coherence_groups.tsv
-untargeted_identity_coherence_cells.tsv
-untargeted_identity_coherence_decisions.tsv
-untargeted_identity_coherence_summary.md
 ```
 
-### `untargeted_identity_coherence_candidates.tsv`
+The optional tables should be emitted when useful, but their schema may change
+until the first 8RAW review identifies the fields that actually matter.
 
-Required columns:
+### Required `decisions.tsv` Columns
 
 ```text
-candidate_id
+decision_id
 source_feature_family_id
-source_candidate_id
-seed_id
-seed_role
-sample_stem
-neutral_loss_tag
-precursor_mz
-product_mz
-observed_neutral_loss_da
-seed_rt_min
-seed_area
-seed_height
-seed_start_rt_min
-seed_end_rt_min
-evidence_source
-seed_decision
-seed_reject_reason
-seed_rank
-compatible_seed_count
-secondary_seed_count
-overflow_seed_count
-overflow_seed_ids
-```
-
-`seed_decision` enum:
-
-```text
-qualified_medium_seed
-rejected_missing_fragment_evidence
-rejected_no_quantifiable_owner
-rejected_ambiguous_owner
-rejected_duplicate_loser
-rejected_backfill_only_evidence
-rejected_nonfinite_peak
-```
-
-### `untargeted_identity_coherence_groups.tsv`
-
-Required columns:
-
-```text
-coherence_group_id
-candidate_id
-seed_id
-source_feature_family_id
-seed_rt_min
-initial_rt_min
-initial_rt_max
-max_rt_sec
-preferred_rt_sec
-min_coherent_samples
-provisional_center_rt_min
-center_drift_sec
-center_decision
-coherent_sample_count
+primary_seed_id
+seed_sample_stem
+seed_specificity_class
+decision
+decision_reason
+total_coherent_sample_count
+non_seed_coherent_sample_count
 assessed_sample_count
-would_promote_at_min_samples_2
-would_promote_at_min_samples_3
-would_promote_at_min_samples_4
-would_promote_at_preferred_rt_sec_30
-would_promote_at_preferred_rt_sec_60
-would_promote_at_preferred_rt_sec_90
-group_decision
-group_reject_reason
-extract_xic_count
-raw_chromatogram_call_count
-xic_point_count
-wall_time_sec
+coherent_sample_fraction
+min_total_coherent_samples
+min_non_seed_coherent_samples
+center_decision
+center_drift_sec
+non_rt_identity_pass_count
+rt_only_candidate_count
+blocked_infrastructure_count
+data_quality_reject_count
+coherent_sample_ids
+rt_only_sample_ids
+blocked_sample_ids
+data_quality_reject_sample_ids
+forbidden_evidence_seen
+positive_control_class
+positive_control_expected_decision
+notes
 ```
 
-`group_decision` enum:
+Decision enum:
 
 ```text
-would_primary_single_seed
-review_only_insufficient_coherence
+would_primary_independent_identity_support
+review_only_low_seed_specificity
+review_only_rt_only_support
+review_only_insufficient_support
 review_only_center_unstable
+review_only_background_like_recurrence
 review_only_multi_seed_requires_phase2
-review_only_error
+blocked_infrastructure
 ```
 
-### `untargeted_identity_coherence_cells.tsv`
+`blocked_infrastructure` is separate from data-quality rejection. It covers
+missing RAW, unreadable files, extraction crashes, and malformed required
+inputs. Non-finite traces or bad peak fields are data-quality outcomes unless
+they prevent the run from assessing the sample at all.
 
-Required columns:
+### Required `cell_evidence.tsv` Columns
+
+This table is narrow but frozen because every non-seed coherent sample must have
+an auditable non-RT identity basis. It is not the old broad `cells.tsv` schema.
 
 ```text
-coherence_cell_id
-coherence_group_id
-candidate_id
-seed_id
+decision_id
+source_feature_family_id
 sample_stem
-evidence_source
-requested_rt_min
-requested_rt_max
-peak_found
-area
-height
-apex_rt_min
-start_rt_min
-end_rt_min
-rt_delta_seed_sec
-rt_delta_center_sec
+sample_role
 cell_decision
-cell_exclusion_reason
-extraction_error
+rt_delta_center_sec
+rt_gate_result
+non_rt_identity_basis
+non_rt_identity_result
+evidence_source
+reject_reason
+```
+
+`sample_role` enum:
+
+```text
+seed
+non_seed
 ```
 
 `cell_decision` enum:
 
 ```text
-coherent
-non_coherent_missing_peak
-non_coherent_incomplete_peak
-non_coherent_nonfinite_peak
-non_coherent_outside_rt_gate
-non_coherent_center_unstable
-unassessed_missing_raw
-unassessed_extraction_error
+coherent_identity_supported
+rt_only_review_only
+outside_rt_gate
+data_quality_reject
+blocked_infrastructure
+not_assessed
 ```
 
-### `untargeted_identity_coherence_decisions.tsv`
+For a `non_seed` sample to contribute to
+`non_seed_coherent_sample_count`, `cell_decision` must be
+`coherent_identity_supported`, `rt_gate_result` must be pass, and
+`non_rt_identity_result` must be pass. RT-only rows remain review evidence, not
+promotion evidence.
 
-Required columns:
+### Required `summary.md` Sections
 
-```text
-decision_id
-candidate_id
-source_feature_family_id
-would_primary_identity_id
-decision
-decision_reason
-primary_seed_id
-coherence_group_id
-coherent_sample_count
-min_coherent_samples
-secondary_seed_count
-overflow_seed_count
-multi_seed_review_flag
-evidence_sources_used
-forbidden_evidence_seen
-forbidden_evidence_used
-current_production_identity_decision
-current_include_in_primary_matrix
-notes
-```
-
-`forbidden_evidence_used` must always be `false`. If it is `true`, the run
-fails acceptance.
-
-### `untargeted_identity_coherence_summary.md`
-
-Required sections:
-
-- command and arguments;
-- input files, hashes, and row counts;
-- output files;
-- thresholds and RT unit contract;
-- no-mutation hash check;
-- decision counts by reason;
-- seed qualification counts by reason;
-- cell exclusion counts by reason;
-- multi-seed and overflow counts;
-- missing input or invalid column diagnostics;
+- command and mode;
+- inline pre-Backfill input source or explicit reason a post-hoc run is
+  comparison-only;
+- input hashes and row counts;
+- positive-control artifact and mapped control rows;
+- evidence firewall assertion;
+- seed specificity counts;
+- RT-only candidate counts;
+- independent trace identity pass counts;
+- per-sample evidence coverage and missing-basis counts;
+- infrastructure-blocked counts;
+- data-quality reject counts;
+- threshold count and fraction summaries;
 - RAW/XIC request and timing counters;
-- top examples for each failure mode;
-- sensitivity counters for min coherent samples and RT gates;
 - Go / No-Go / Pivot table.
+
+## CLI / Invocation Contract
+
+Preferred inline mode:
+
+```powershell
+python scripts\run_alignment.py `
+  <existing args> `
+  --emit-identity-coherence-diagnostic `
+  --identity-coherence-output-dir <diagnostic_output_dir>
+```
+
+Equivalent diagnostic module mode is acceptable only if it consumes an explicit
+pre-Backfill owner-state export produced before `owner_backfill`:
+
+```powershell
+python -m tools.diagnostics.untargeted_identity_coherence `
+  --pre-backfill-owner-state <owner_state.jsonl> `
+  --raw-dir <raw_dir> `
+  --output-dir <diagnostic_output_dir>
+```
+
+Post-hoc comparison mode:
+
+```powershell
+python -m tools.diagnostics.untargeted_identity_coherence_report `
+  --alignment-dir <existing_alignment_output_dir> `
+  --diagnostic-dir <diagnostic_output_dir>
+```
+
+Post-hoc comparison mode must not promote identities.
 
 ## Failure Modes That Must Be Explainable
 
-Every non-written or Review-only result must have an explicit reason.
-
-Required reason coverage:
+Infrastructure-blocked:
 
 - missing required input file;
 - missing required input column;
 - missing RAW source;
 - RAW extraction error;
+- process worker failure;
+- malformed pre-Backfill owner-state export.
+
+Data-quality or identity rejects:
+
+- missing fragment evidence;
+- low fragment specificity;
+- background-like seed;
+- ambiguous owner;
+- duplicate loser;
+- Backfill-only evidence rejected;
 - non-finite trace or peak field;
 - zero candidate peak;
 - incomplete peak boundaries;
 - center drift unstable;
 - outside recentered RT gate;
-- insufficient coherent samples;
-- ambiguous owner;
-- duplicate loser;
-- Backfill-only evidence rejected;
-- secondary/overflow seed requires Phase 2;
-- forbidden evidence detected in input but excluded.
-
-## Acceptance Criteria For Prototype
-
-V0.2 is ready for user review when it can run on the 8RAW validation subset and
-produce:
-
-- all five fixed diagnostic artifacts;
-- fixed schemas and enum values matching this spec;
-- no changes to current `alignment_matrix.tsv`, workbook, or Backfill behavior;
-- evidence provenance showing no Backfill-derived promotion evidence;
-- explicit RT units and second/minute conversion;
-- RAW/XIC request counters and wall time;
-- at least one example row for stable-like, weak/single-sample,
-  duplicate/conflict-like, and multi-seed/overflow-like cases where present;
-- a summary that explains every Review-only or non-coherent decision class.
-
-Minimum test surface before real RAW validation:
-
-- seed qualification unit tests;
-- RT unit conversion and recentered gate tests;
-- center-drift guard tests;
-- deterministic seed ranking and overflow tests;
-- schema golden tests for the five artifacts;
-- no-mutation contract test;
-- no-RAW CLI error-path test;
-- process/pickle smoke if the diagnostic uses process workers.
+- RT-only support with no independent trace identity basis;
+- insufficient total or non-seed coherent samples;
+- multi-seed ambiguity requiring Phase 2.
 
 ## Go / No-Go / Pivot Rules
 
 | Observation after 8RAW | Decision |
 | --- | --- |
-| Expected stable-like rows pass coherence without Backfill evidence | Proceed to 85RAW request-count review. |
-| Stable-like rows fail mostly because `preferred_rt_sec=60` is too narrow | Run sensitivity review before changing product rule. |
-| Single-sample or weak rows become `would_primary_single_seed` often | Tighten seed qualification or require scoring before 85RAW. |
-| Backfill/rescued evidence is used for promotion | No-Go; fix evidence firewall before any further validation. |
-| Multi-seed/overflow dominates candidate decisions | Pivot to Phase 2 graph merge/split spec before production design. |
-| RAW/XIC request count projects poorly to 85RAW | Add locality/request budget design before 85RAW. |
-| Center instability dominates | Add scoring or seed-anchor improvements before production design. |
-| Diagnostic schemas are not stable enough for diffing | No-Go; stabilize contracts before data review. |
+| Positive-control ISTD/stable rows pass with independent identity support | Proceed to 85RAW threshold-policy review. |
+| Controls fail because only RT support is present | No-Go; add trace identity metrics before continuing. |
+| Weak or background-like seeds become would-primary through recurrence | No-Go; tighten seed specificity/background guard. |
+| Any row is promoted by Backfill/rescued evidence | No-Go; fix evidence firewall. |
+| Most would-primary rows are `rt_only_review_only` before non-RT checks | Pivot to shape/trace scoring before expanding scope. |
+| 8RAW threshold looks good but fraction would be trivial in 85RAW | Define count+fraction policy before 85RAW. |
+| Multi-seed/overflow dominates candidate decisions | Pivot to Phase 2 graph merge/split spec. |
+| RAW/XIC request count projects poorly to 85RAW | Add request-budget/locality design before 85RAW. |
+| Infrastructure-blocked count is high | Fix run/input infrastructure before scientific interpretation. |
 
-85RAW validation can start only after the 8RAW review signs off on:
+## Acceptance Criteria Before Implementation
 
-- evidence firewall;
-- schema stability;
-- request-count budget;
-- sentinel case behavior;
-- decision table interpretation.
+This spec is ready for implementation only after review signs off on:
 
-## Future Upgrade Path
-
-After V0.2 review, Phase 2 can add graph merge/split:
-
-```text
-multiple seed-centered coherent groups
-  -> compatibility edges
-  -> conflict guard
-  -> merge compatible groups or split independent coherent identities
-```
-
-The scoring upgrade can replace the simple coherence gate with:
-
-```text
-classify_sample_coherence(trace, seed_context, provisional_center) ->
-    coherent | weak | neighbor_interference | ambiguous | rejected
-```
-
-Future evidence categories:
-
-- normalized MS1 shape coherence;
-- neighbor interference;
-- local baseline and integration uncertainty;
-- scan support;
-- area distribution across samples;
-- seed quality score;
-- drift-aware expected RT;
-- targeted ISTD benchmark overlays.
-
-This upgrade must keep the same separation:
-
-```text
-identity promotion first;
-Backfill/value recovery second.
-```
+- the method difference from Backfill is explicit and accepted;
+- seed specificity classes and reject reasons are sufficient to block
+  background-like recurrence;
+- at least one independent non-RT trace identity check is in V0.3 MVP;
+- 8RAW and 85RAW threshold policies are separated;
+- seed sample counting is explicit (`seed + at least 2 non-seed` for 8RAW);
+- targeted ISTD/control rows are named or a benchmark artifact is provided;
+- inline pre-Backfill data flow is accepted as the primary path;
+- output scope is limited to `decisions.tsv`, `cell_evidence.tsv`, and
+  `summary.md` as frozen contracts for the first run.
 
 ## Review Questions
 
-Review should focus on these decisions before implementation:
-
-1. Is `min_coherent_samples = 3` the right V0.2 default, with 2/3/4 emitted as
-   sensitivity counters?
-2. Is `preferred_rt_sec = 60` acceptable as the V0.2 narrow RT gate?
-3. Is `max_center_drift_sec = 60` a reasonable seed-anchor guard?
-4. Is the evidence firewall strict enough to prevent Backfill leakage?
-5. Should V0.2 keep the conservative single-seed MVP, or should Phase 2
-   multi-seed graph merge/split be planned immediately after 8RAW review?
-6. Are these TSV schemas sufficient for reviewing 8RAW and 85RAW?
+1. What is the minimum acceptable seed specificity gate for V0.3?
+2. Which first non-RT trace identity check should be in MVP: shape similarity,
+   peak-width ratio, baseline/interference flag, or area-pattern guard?
+3. Should background-like recurrence always block would-primary even when the
+   total coherent count is high?
+4. Which targeted ISTD or stable rows should be the 8RAW positive controls?
+5. Is `seed + 2 non-seed coherent samples` the right 8RAW support threshold?
+6. What count+fraction policy should be reviewed before 85RAW?
+7. Is post-hoc `alignment-dir` mode acceptable only as comparison/reporting?
