@@ -101,7 +101,7 @@ but a request with only a Da tolerance cannot become `coherent_seed`.
 `fragment_tags` output format:
 
 ```text
-tagA|tagB|tagC
+tagA;tagB;tagC
 ```
 
 Rules:
@@ -149,6 +149,7 @@ request_identity_completeness_status =
   missing_precursor_mz |
   missing_product_mz |
   missing_fragment_tags |
+  missing_tolerance |
   missing_mode_specific_constraint
 
 request_candidate_identity_status =
@@ -165,6 +166,12 @@ request is incomplete or the candidate join is missing. If the request is
 complete and a candidate is joined, the candidate identity status must resolve
 to a concrete evidence/match status. `unsupported_fragment_observation_mode` is
 Review-only and cannot become `coherent_seed`.
+
+`missing_tolerance` covers any required ppm tolerance missing from either the
+common `FragmentIdentity` fields or the active mode constraint. It must not be
+reported as `missing_mode_specific_constraint`. For `cid_neutral_loss`,
+`missing_mode_specific_constraint` is reserved for the required mode payload
+itself, such as missing `cid_observed_loss_da`.
 
 Seed gate failure order:
 
@@ -235,7 +242,7 @@ seed_reject_reason =
   low_ms1_scan_support
   request_candidate_identity_mismatch
   unsupported_fragment_observation_mode
-  overflow_or_multi_seed_requires_phase2
+  multi_seed_requires_phase2
 ```
 
 ## Layer 2: RT-Local Candidate Retrieval
@@ -414,6 +421,10 @@ evidence:
 width_sanity_status = pass | fail | not_assessed
 ```
 
+If `width_sanity_status = not_assessed`, shape similarity cannot support tier 2.
+This is intentionally conservative for V0.4: low-sample or low-point datasets
+may lose tier 2 support until the prototype-width reference can be assessed.
+
 Tier 1 diagnostic fragment support is not hard-failed by width sanity. If a tier 1
 cell has `width_sanity_status = fail`, keep tier 1 support but add
 `width_sanity_failed_on_tier1_cell` and report the count.
@@ -460,14 +471,20 @@ Default 8RAW support thresholds:
 
 ```text
 min_total_coherent_samples = 3
-seed_counts_toward_total = true
 min_non_seed_coherent_samples = 2
 min_non_seed_tier12_identity_samples = 2
 ```
 
-A row can be `would_primary_provisional_identity_family_support` only if at
-least `min_non_seed_tier12_identity_samples` non-seed coherent samples are
-admitted by tier 1 or tier 2.
+In V0.4, `total_coherent_sample_count` always includes the coherent seed plus
+coherent non-seed cells. This is a count definition, not a config switch.
+
+A row can be `would_primary_provisional_identity_family_support` only if all of
+these are true:
+
+- `total_coherent_sample_count >= min_total_coherent_samples`;
+- `non_seed_coherent_sample_count >= min_non_seed_coherent_samples`;
+- at least `min_non_seed_tier12_identity_samples` non-seed coherent samples are
+  admitted by tier 1 or tier 2.
 
 Review-only weak-basis cases:
 
@@ -507,9 +524,8 @@ weak_basis_reason =
 Count invariant:
 
 ```text
-if tier12_non_seed_identity_sample_count >= 2
-and seed_counts_toward_total = true
-then total_coherent_sample_count >= 3
+if seed_gate_class = coherent_seed
+then total_coherent_sample_count = 1 + non_seed_coherent_sample_count
 ```
 
 For 85RAW, the 8RAW threshold cannot be copied blindly. `3/8` and `3/85` have
@@ -525,6 +541,8 @@ control pass rates are owned by the implementation and controls specs.
 | --- | --- |
 | Every would-primary satisfies `total_coherent_sample_count >= min_total_coherent_samples` | Proceed for identity-rule review. |
 | Any would-primary violates `min_total_coherent_samples` | No-Go; the implementation promoted insufficient support. |
+| Every would-primary satisfies `non_seed_coherent_sample_count >= min_non_seed_coherent_samples` | Proceed for identity-rule review. |
+| Any would-primary violates `min_non_seed_coherent_samples` | No-Go; the implementation promoted a seed-dominated row. |
 | Every would-primary satisfies `tier12_non_seed_identity_sample_count >= min_non_seed_tier12_identity_samples` | Proceed for identity-rule review. |
 | Any would-primary violates `min_non_seed_tier12_identity_samples` | No-Go; the implementation promoted weak tier-3/RT-only support. |
 | `forbidden_evidence_used_count = 0` | Proceed; identity decisions stayed inside the evidence firewall. |

@@ -133,6 +133,7 @@ IdentityCoherenceConfig
 
   promotion:
     min_total_coherent_samples = 3
+    min_non_seed_coherent_samples = 2
     min_non_seed_tier12_identity_samples = 2
 
   rt:
@@ -164,6 +165,7 @@ IdentityCoherenceConfig
   controls:
     positive_control_min_pass_fraction = 1.00
     max_decoy_promoted_count = 0
+    decoy_rt_owner_boundary_margin_sec = declared
     identity_controls_manifest = optional path before 8RAW,
       required before interpretation
 
@@ -171,6 +173,11 @@ IdentityCoherenceConfig
     max_projected_85raw_identity_xic_requests = required before 85RAW
     max_infrastructure_blocked_fraction = 0.05
 ```
+
+`decoy_rt_owner_boundary_margin_sec` is configured in seconds for consistency
+with identity RT tolerances. Existing candidate RT fields are in minutes, so
+decoy generation must add `decoy_rt_owner_boundary_margin_sec / 60.0` to
+`owner_peak_end_rt` when constructing the `rt_shift` decoy.
 
 Optional downstream audit values are not identity policy:
 
@@ -238,7 +245,8 @@ Adapter tag source priority:
 1. use `matched_tag_names` when present and non-empty;
 2. fallback to single-value `neutral_loss_tag` only when `matched_tag_names` is
    absent or empty;
-3. if both exist but disagree, keep `matched_tag_names` and emit
+3. if both exist and the legacy single tag is not contained in
+   `matched_tag_names`, keep `matched_tag_names` and emit
    `legacy_single_tag_disagrees_with_matched_tags`.
 
 Tag normalization:
@@ -426,6 +434,7 @@ request_identity_completeness_status =
   missing_precursor_mz |
   missing_product_mz |
   missing_fragment_tags |
+  missing_tolerance |
   missing_mode_specific_constraint
 
 request_candidate_identity_status =
@@ -454,9 +463,30 @@ resolve complete joined requests to a concrete candidate identity status.
 `fragment_profile_hash` may be `unavailable`, but that must add
 `fragment_profile_hash_unavailable` to `request_builder_flags`.
 
-`cid_observed_loss_tolerance_ppm` is required for `cid_neutral_loss`. Da loss
+Allowed first-slice `request_builder_flags` values are:
+
+```text
+missing_seed_sample
+fragment_profile_hash_unavailable
+fragment_tag_case_variant_seen
+legacy_single_tag_disagrees_with_matched_tags
+missing_precursor_mz
+missing_product_mz
+missing_fragment_tags
+missing_precursor_tolerance_ppm
+missing_product_tolerance_ppm
+missing_cid_observed_loss_tolerance_ppm
+missing_mode_specific_constraint
+```
+
+`precursor_tolerance_ppm`, `product_tolerance_ppm`, and
+`cid_observed_loss_tolerance_ppm` are required ppm gates. If any required ppm
+tolerance is missing, the completeness status is `missing_tolerance`; do not
+borrow `missing_mode_specific_constraint` for common tolerances. Da loss
 tolerance is not accepted as a gate. `cid_observed_loss_error_da` is review
-context only.
+context only. For `cid_neutral_loss`, `missing_mode_specific_constraint` is
+reserved for the required mode payload itself, such as missing
+`cid_observed_loss_da`.
 
 ### Required `decisions.tsv` Columns
 
@@ -673,9 +703,11 @@ Implementation contract is ready when:
   second independent list;
 - every `cell_evidence.tsv` row is a non-seed sample evidence row;
 - request counters separate identity from optional downstream audit cost.
-- count invariant test verifies that when
-  `tier12_non_seed_identity_sample_count >= 2` and
-  `seed_counts_toward_total = true`, `total_coherent_sample_count >= 3`.
+- promotion logic tests verify that would-primary rows satisfy
+  `total_coherent_sample_count >= min_total_coherent_samples`,
+  `non_seed_coherent_sample_count >= min_non_seed_coherent_samples`, and
+  `tier12_non_seed_identity_sample_count >=
+  min_non_seed_tier12_identity_samples`.
 
 First implementation slice:
 
@@ -739,7 +771,8 @@ First slice tag normalization:
 - do not case-fold;
 - preserve case-only variants and add `fragment_tag_case_variant_seen`;
 - `matched_tag_names` wins over fallback `neutral_loss_tag`;
-- if both legacy fields exist but disagree, keep `matched_tag_names` and add
+- if both legacy fields exist and the fallback single tag is not a member of
+  `matched_tag_names`, keep `matched_tag_names` and add
   `legacy_single_tag_disagrees_with_matched_tags`;
 - tokens containing `;`, `|`, or `,` after splitting are invalid tag tokens.
 
@@ -750,12 +783,15 @@ missing_fragment_observation_mode
 missing_precursor_mz
 missing_product_mz
 missing_fragment_tags
+missing_tolerance
 missing_mode_specific_constraint
 complete
 ```
 
 If multiple fields are missing, emit the first status by this order and record
-all missing fields in `request_builder_flags`.
+all missing categories in `request_builder_flags`. `missing_fragment_observation_mode`
+is kept for future request adapters; the first slice hardcodes
+`cid_neutral_loss`, so that status is not reachable in the first-slice builder.
 
 First slice tests must prove:
 
@@ -768,8 +804,11 @@ First slice tests must prove:
 - tag input supports `;`, `|`, `,`, list, tuple, and set, with canonical `;`
   output;
 - case-sensitive tags such as `base` and `BASE` are not merged and emit a flag;
-- missing product m/z, missing tags, and missing tolerance each create an
-  incomplete request object with deterministic status;
+- legacy single tag does not emit a disagreement flag when it is a member of
+  `matched_tag_names`;
+- missing product m/z, missing tags, missing common tolerance, missing
+  mode-specific tolerance, and missing mode payload each create an incomplete
+  request object with deterministic status;
 - default `fragment_profile_hash = unavailable` emits
   `fragment_profile_hash_unavailable`;
 - `format_fragment_tags(("MeR", "dR")) == "MeR;dR"`;

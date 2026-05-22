@@ -132,6 +132,7 @@ def test_request_status_enum_values_are_stable_strings():
         "missing_precursor_mz",
         "missing_product_mz",
         "missing_fragment_tags",
+        "missing_tolerance",
         "missing_mode_specific_constraint",
     }
     assert {value.value for value in RequestCandidateIdentityStatus} == {
@@ -149,7 +150,7 @@ def test_request_status_enum_values_are_stable_strings():
 Run:
 
 ```powershell
-pytest tests\alignment\identity_coherence\test_schema_contract.py -q
+uv run pytest tests\alignment\identity_coherence\test_schema_contract.py -q
 ```
 
 Expected: fail because `identity_coherence.schema` does not exist.
@@ -168,6 +169,7 @@ class RequestIdentityCompletenessStatus(StrEnum):
     MISSING_PRECURSOR_MZ = "missing_precursor_mz"
     MISSING_PRODUCT_MZ = "missing_product_mz"
     MISSING_FRAGMENT_TAGS = "missing_fragment_tags"
+    MISSING_TOLERANCE = "missing_tolerance"
     MISSING_MODE_SPECIFIC_CONSTRAINT = "missing_mode_specific_constraint"
 
 
@@ -307,7 +309,7 @@ IDENTITY_COHERENCE_CONTROL_COLUMNS: tuple[str, ...] = (
 Run:
 
 ```powershell
-pytest tests\alignment\identity_coherence\test_schema_contract.py -q
+uv run pytest tests\alignment\identity_coherence\test_schema_contract.py -q
 ```
 
 Expected: pass.
@@ -377,7 +379,7 @@ def test_fragment_identity_request_model_can_hold_complete_cid_request():
 Run:
 
 ```powershell
-pytest tests\alignment\identity_coherence\test_fragment_identity_request_builder.py::test_fragment_identity_request_model_can_hold_complete_cid_request -q
+uv run pytest tests\alignment\identity_coherence\test_fragment_identity_request_builder.py::test_fragment_identity_request_model_can_hold_complete_cid_request -q
 ```
 
 Expected: fail because `identity_coherence.models` does not exist.
@@ -434,7 +436,7 @@ class IdentityCoherenceRequest:
 Run:
 
 ```powershell
-pytest tests\alignment\identity_coherence\test_fragment_identity_request_builder.py::test_fragment_identity_request_model_can_hold_complete_cid_request -q
+uv run pytest tests\alignment\identity_coherence\test_fragment_identity_request_builder.py::test_fragment_identity_request_model_can_hold_complete_cid_request -q
 ```
 
 Expected: pass.
@@ -453,6 +455,11 @@ git commit -m "feat: add identity coherence request models"
 - Modify: `tests/alignment/identity_coherence/test_fragment_identity_request_builder.py`
 
 - [ ] **Step 1: Write failing builder tests**
+
+This step modifies the same test file created in Task 2. Do not replace the
+file and lose `test_fragment_identity_request_model_can_hold_complete_cid_request`.
+Merge the imports into the existing import block, then append the builder
+fixture and tests below the model test.
 
 ```python
 from dataclasses import dataclass
@@ -510,6 +517,9 @@ def test_builder_creates_complete_cid_neutral_loss_request():
     assert request.identity.fragment_tags == ("MeR", "dR")
     assert request.identity.fragment_profile_hash == "unavailable"
     assert "fragment_profile_hash_unavailable" in request.request_builder_flags
+    assert "legacy_single_tag_disagrees_with_matched_tags" not in (
+        request.request_builder_flags
+    )
 
 
 @pytest.mark.parametrize(
@@ -566,7 +576,24 @@ def test_missing_tags_builds_incomplete_request():
     )
 
 
-def test_missing_tolerance_builds_incomplete_request():
+def test_missing_common_tolerance_builds_incomplete_request():
+    request = build_identity_coherence_request(
+        CandidateLike(),
+        request_id="REQ-1",
+        decision_id="DEC-1",
+        precursor_tolerance_ppm=None,
+        product_tolerance_ppm=10.0,
+        cid_observed_loss_tolerance_ppm=10.0,
+        fragment_profile_id="profile-a",
+    )
+
+    assert request.request_identity_completeness_status is (
+        RequestIdentityCompletenessStatus.MISSING_TOLERANCE
+    )
+    assert "missing_precursor_tolerance_ppm" in request.request_builder_flags
+
+
+def test_missing_mode_tolerance_builds_missing_tolerance_request():
     request = build_identity_coherence_request(
         CandidateLike(),
         request_id="REQ-1",
@@ -578,8 +605,18 @@ def test_missing_tolerance_builds_incomplete_request():
     )
 
     assert request.request_identity_completeness_status is (
+        RequestIdentityCompletenessStatus.MISSING_TOLERANCE
+    )
+    assert "missing_cid_observed_loss_tolerance_ppm" in request.request_builder_flags
+
+
+def test_missing_cid_loss_payload_builds_missing_mode_constraint_request():
+    request = _build(CandidateLike(observed_neutral_loss_da=None))
+
+    assert request.request_identity_completeness_status is (
         RequestIdentityCompletenessStatus.MISSING_MODE_SPECIFIC_CONSTRAINT
     )
+    assert "missing_mode_specific_constraint" in request.request_builder_flags
 
 
 @pytest.mark.parametrize("field", ["request_id", "decision_id", "fragment_profile_id"])
@@ -608,7 +645,7 @@ def test_missing_candidate_id_raises_value_error():
 Run:
 
 ```powershell
-pytest tests\alignment\identity_coherence\test_fragment_identity_request_builder.py -q
+uv run pytest tests\alignment\identity_coherence\test_fragment_identity_request_builder.py -q
 ```
 
 Expected: fail because `build_identity_coherence_request` does not exist.
@@ -637,6 +674,12 @@ _MISSING_STATUS_ORDER: Sequence[tuple[str, RequestIdentityCompletenessStatus]] =
     ("missing_precursor_mz", RequestIdentityCompletenessStatus.MISSING_PRECURSOR_MZ),
     ("missing_product_mz", RequestIdentityCompletenessStatus.MISSING_PRODUCT_MZ),
     ("missing_fragment_tags", RequestIdentityCompletenessStatus.MISSING_FRAGMENT_TAGS),
+    ("missing_precursor_tolerance_ppm", RequestIdentityCompletenessStatus.MISSING_TOLERANCE),
+    ("missing_product_tolerance_ppm", RequestIdentityCompletenessStatus.MISSING_TOLERANCE),
+    (
+        "missing_cid_observed_loss_tolerance_ppm",
+        RequestIdentityCompletenessStatus.MISSING_TOLERANCE,
+    ),
     (
         "missing_mode_specific_constraint",
         RequestIdentityCompletenessStatus.MISSING_MODE_SPECIFIC_CONSTRAINT,
@@ -681,7 +724,7 @@ def build_identity_coherence_request(
     flags.extend(tag_flags)
     if _has_tags(matched_tag_names) and _has_tags(neutral_loss_tag):
         fallback_tags, _ = _normalize_fragment_tags(neutral_loss_tag)
-        if fallback_tags and fallback_tags != fragment_tags:
+        if any(tag not in fragment_tags for tag in fallback_tags):
             flags.append("legacy_single_tag_disagrees_with_matched_tags")
 
     if fragment_profile_hash == "unavailable":
@@ -698,12 +741,13 @@ def build_identity_coherence_request(
         missing_flags.append("missing_product_mz")
     if not fragment_tags:
         missing_flags.append("missing_fragment_tags")
-    if (
-        precursor_tolerance_ppm is None
-        or product_tolerance_ppm is None
-        or cid_observed_loss_tolerance_ppm is None
-        or cid_observed_loss_da is None
-    ):
+    if precursor_tolerance_ppm is None:
+        missing_flags.append("missing_precursor_tolerance_ppm")
+    if product_tolerance_ppm is None:
+        missing_flags.append("missing_product_tolerance_ppm")
+    if cid_observed_loss_tolerance_ppm is None:
+        missing_flags.append("missing_cid_observed_loss_tolerance_ppm")
+    if cid_observed_loss_da is None:
         missing_flags.append("missing_mode_specific_constraint")
 
     flags.extend(missing_flags)
@@ -806,6 +850,10 @@ matching is a later slice. The returned request is a pre-gate object and must
 not be emitted as a final `requests.tsv` row until that status is resolved by
 the seed gate.
 
+`missing_fragment_observation_mode` is intentionally unreachable in this first
+slice because the builder hardcodes `cid_neutral_loss`. Keep the enum value for
+future request adapters; do not add dead branching just to emit it here.
+
 The public signature is:
 
 ```python
@@ -827,7 +875,7 @@ def build_identity_coherence_request(
 Run:
 
 ```powershell
-pytest tests\alignment\identity_coherence\test_fragment_identity_request_builder.py -q
+uv run pytest tests\alignment\identity_coherence\test_fragment_identity_request_builder.py -q
 ```
 
 Expected: pass.
@@ -864,7 +912,7 @@ def test_identity_coherence_facade_exports_stable_contract():
 Run:
 
 ```powershell
-pytest tests\alignment\identity_coherence\test_schema_contract.py::test_identity_coherence_facade_exports_stable_contract -q
+uv run pytest tests\alignment\identity_coherence\test_schema_contract.py::test_identity_coherence_facade_exports_stable_contract -q
 ```
 
 Expected: fail until facade exports are added.
@@ -912,7 +960,7 @@ __all__ = [
 Run:
 
 ```powershell
-pytest tests\alignment\identity_coherence -q
+uv run pytest tests\alignment\identity_coherence -q
 ```
 
 Expected: pass.
@@ -922,7 +970,7 @@ Expected: pass.
 Run:
 
 ```powershell
-python -m py_compile `
+uv run python -m py_compile `
   xic_extractor\alignment\identity_coherence\__init__.py `
   xic_extractor\alignment\identity_coherence\models.py `
   xic_extractor\alignment\identity_coherence\schema.py `

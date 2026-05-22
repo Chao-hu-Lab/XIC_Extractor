@@ -89,14 +89,19 @@ Clone a real seed/control request, then replace the seed input field
 `best_seed_rt` with:
 
 ```text
-decoy_best_seed_rt = original_best_seed_rt + preferred_rt_sec + seed_center_candidate_sec
+decoy_best_seed_rt = owner_peak_end_rt + decoy_rt_owner_boundary_margin_sec / 60.0
 ```
 
-The original owner peak boundaries and candidate identity constraints remain
-unchanged. The decoy is run through the same seed gate as a normal request.
-Because the shifted seed RT should fall outside the original owner peak
-boundaries, the expected failure is `seed_rt_outside_owner_peak` before
-cross-sample XIC retrieval.
+`decoy_rt_owner_boundary_margin_sec` must be positive and larger than the RT
+comparison epsilon. It is configured in seconds to match the other identity RT
+tolerances, but `best_seed_rt` and owner peak boundaries are stored in minutes;
+the decoy generator must convert the margin to minutes before replacing
+`best_seed_rt`. The original owner peak boundaries and candidate identity
+constraints remain unchanged. The decoy is run through the same seed gate as a
+normal request. Because the shifted seed RT is anchored to the original owner
+peak boundary, it is guaranteed to fall outside the original owner peak
+regardless of peak width. The expected failure is `seed_rt_outside_owner_peak`
+before cross-sample XIC retrieval.
 
 Expected outcome:
 
