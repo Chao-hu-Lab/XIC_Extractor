@@ -12,15 +12,23 @@ from .schema import (
     RequestIdentityCompletenessStatus,
 )
 
-
 _TAG_SPLIT_RE = re.compile(r"[;|,]")
 _MISSING_STATUS_ORDER: Sequence[tuple[str, RequestIdentityCompletenessStatus]] = (
-    ("missing_fragment_observation_mode", RequestIdentityCompletenessStatus.MISSING_FRAGMENT_OBSERVATION_MODE),
+    (
+        "missing_fragment_observation_mode",
+        RequestIdentityCompletenessStatus.MISSING_FRAGMENT_OBSERVATION_MODE,
+    ),
     ("missing_precursor_mz", RequestIdentityCompletenessStatus.MISSING_PRECURSOR_MZ),
     ("missing_product_mz", RequestIdentityCompletenessStatus.MISSING_PRODUCT_MZ),
     ("missing_fragment_tags", RequestIdentityCompletenessStatus.MISSING_FRAGMENT_TAGS),
-    ("missing_precursor_tolerance_ppm", RequestIdentityCompletenessStatus.MISSING_TOLERANCE),
-    ("missing_product_tolerance_ppm", RequestIdentityCompletenessStatus.MISSING_TOLERANCE),
+    (
+        "missing_precursor_tolerance_ppm",
+        RequestIdentityCompletenessStatus.MISSING_TOLERANCE,
+    ),
+    (
+        "missing_product_tolerance_ppm",
+        RequestIdentityCompletenessStatus.MISSING_TOLERANCE,
+    ),
     (
         "missing_cid_observed_loss_tolerance_ppm",
         RequestIdentityCompletenessStatus.MISSING_TOLERANCE,

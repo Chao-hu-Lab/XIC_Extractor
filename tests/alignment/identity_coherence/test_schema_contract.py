@@ -9,7 +9,6 @@ from xic_extractor.alignment.identity_coherence.schema import (
     RequestIdentityCompletenessStatus,
 )
 
-
 CONTRACT_PATH = (
     Path(__file__).resolve().parents[3]
     / "docs"
@@ -79,3 +78,14 @@ def test_request_status_enum_values_are_stable_strings():
         "request_candidate_identity_mismatch",
         "unsupported_fragment_observation_mode",
     }
+
+
+def test_identity_coherence_facade_exports_stable_contract():
+    import xic_extractor.alignment.identity_coherence as identity_coherence
+
+    assert identity_coherence.FragmentIdentity is not None
+    assert identity_coherence.CidNeutralLossConstraint is not None
+    assert identity_coherence.IdentityCoherenceRequest is not None
+    assert identity_coherence.build_identity_coherence_request is not None
+    assert identity_coherence.format_fragment_tags is not None
+    assert identity_coherence.IDENTITY_COHERENCE_REQUEST_COLUMNS
