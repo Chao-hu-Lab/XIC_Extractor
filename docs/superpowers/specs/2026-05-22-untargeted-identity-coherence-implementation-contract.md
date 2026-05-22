@@ -131,6 +131,8 @@ max_center_drift_sec = 30
 shape_min_points = 7
 shape_resample_points = 25
 shape_similarity_min_cosine = 0.85
+min_prototype_shape_candidates = 3
+min_non_seed_prototype_shape_candidates = 2
 prototype_width_min_candidates = 3
 prototype_width_ratio_min = 0.50
 prototype_width_ratio_max = 2.00
@@ -363,8 +365,15 @@ non_rt_identity_pass_count
 tier12_non_seed_identity_sample_count
 tier1_cell_count
 tier2_cell_count
+prototype_shape_candidate_count
+prototype_shape_tier1_candidate_count
+tier2_prototype_shape_count
+tier2_seed_shape_fallback_count
 tier3_cell_count
 diagnostic_nl_supported_sample_count
+tier1_width_sanity_fail_count
+shape_seed_fallback_used
+shape_reference_basis
 weak_basis_reason
 background_audit_status
 background_audit_flags
@@ -416,6 +425,15 @@ observed_loss_delta_ppm
 shape_similarity_status
 shape_similarity_score
 shape_point_count
+shape_reference_point_count
+shape_low_point_count_flag
+shape_alignment_method
+shape_reference_method
+shape_reference_basis
+shape_reference_candidate_id
+shape_audit_status
+shape_seed_fallback_used
+width_sanity_status
 prototype_width_status
 prototype_width_sec
 prototype_width_ratio
@@ -441,10 +459,21 @@ non_rt_identity_basis =
 non_rt_identity_result = pass | fail | not_assessed | blocked
 diagnostic_nl_status = pass | fail | ambiguous | not_assessed
 shape_similarity_status = pass | fail | low_points | zero_signal | not_assessed
+shape_alignment_method = boundary_normalized_linear_resample
+shape_reference_method = prototype_medoid | seed_shape_fallback | not_available
+shape_reference_basis =
+  tier1_supported_medoid | morphology_rt_medoid | seed_fallback | none
+shape_audit_status =
+  pass | fail | shoulder | bimodal | coelution | saturated | clipped |
+  unavailable | not_assessed
+width_sanity_status = pass | fail | not_assessed
 prototype_width_status = pass | fail | too_few_candidates | not_assessed
 background_audit_status =
   not_assessed | no_background_signal_observed | background_signal_observed
 ```
+
+`weak_basis_reason` values are owned by the core spec. They include
+`seed_shape_fallback_only`; do not add a separate decision enum for that case.
 
 `candidate_id`, `sample_local_owner_id`, `pre_backfill_owner_state_id`,
 `raw_file_stem`, and `source_row_hash` are required provenance keys. They make
@@ -491,6 +520,20 @@ or a single shared schema definition used by both docs and implementation.
 - RT-only candidate counts;
 - independent trace identity pass counts by tier;
 - diagnostic-NL-supported sample counts;
+- shape similarity score distribution by positive controls, identity decoys,
+  would-primary rows, Review-only rows, and shape reference method;
+- shape point count distribution and tier-2 pass low-point fraction;
+- prototype shape candidate counts, tier-1-supported medoid counts,
+  morphology-RT medoid counts, and seed fallback counts;
+- would-primary weaker support breakdown:
+  `would_primary_with_tier1_supported_shape_medoid_count`,
+  `would_primary_with_morphology_rt_shape_medoid_count`,
+  `would_primary_with_seed_shape_fallback_count`,
+  `would_primary_tier2_only_count`,
+  `would_primary_tier2_only_fraction`,
+  `would_primary_tier2_only_shape_reference_method_breakdown`,
+  `would_primary_tier2_only_morphology_rt_medoid_count`;
+- tier-1 cells with width sanity failure;
 - weak-basis reason counts;
 - background audit status and flag counts;
 - per-sample evidence coverage and missing-basis counts;
@@ -520,3 +563,6 @@ Implementation contract is ready when:
   second independent list;
 - every `cell_evidence.tsv` row has pre-Backfill provenance keys;
 - request counters separate identity from optional downstream audit cost.
+- count invariant test verifies that when
+  `tier12_non_seed_identity_sample_count >= 2` and
+  `seed_counts_toward_total = true`, `total_coherent_sample_count >= 3`.

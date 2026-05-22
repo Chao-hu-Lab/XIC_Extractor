@@ -417,7 +417,7 @@
             </article>
             <article class="panel">
               <h3>砍 scope</h3>
-              <p>只凍結 decisions、cell evidence、controls、summary；其他表等 8RAW 後再定。</p>
+              <p>凍結 requests、decisions、cell evidence、controls、summary；其他 detail tables 等 8RAW 後再定。</p>
               <span class="tag review">reduce</span>
             </article>
           </div>
@@ -474,7 +474,7 @@
               <tr>
                 <td>四張 TSV schema 太重</td>
                 <td><span class="tag ok">接受</span></td>
-                <td>先凍結 decisions.tsv、cell_evidence.tsv、summary.md；其餘表 exploratory。</td>
+                <td>先凍結 requests.tsv、decisions.tsv、cell_evidence.tsv、controls.tsv、summary.md；其餘表 exploratory。</td>
               </tr>
               <tr>
                 <td>大改 untargeted 等於從零重寫</td>
@@ -657,7 +657,7 @@
               </tr>
               <tr>
                 <td>non-RT identity basis 分級</td>
-                <td>tier 1 diagnostic NL support，tier 2 shape similarity，tier 3 prototype-width fallback；would-primary 需要 2 個非 seed tier 1/2 cells。</td>
+                <td>tier 1 diagnostic NL support，tier 2 prototype-medoid shape similarity，seed-shape fallback 需標記，tier 3 prototype-width fallback 只補 total coherent；would-primary 需要 2 個非 seed tier 1/2 cells。</td>
                 <td>避免一個 shape cell 加上一個 width fallback 就被放大成 would-primary。</td>
               </tr>
               <tr>

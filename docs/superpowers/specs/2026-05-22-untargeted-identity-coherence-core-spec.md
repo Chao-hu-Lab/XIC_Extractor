@@ -274,22 +274,112 @@ Ambiguous tier 1 matches must not silently promote a cell. Tie-break:
 ### Tier 2: Shape Similarity
 
 Tier 2 is available when enough XIC points exist to compare normalized local
-shape against the seed or group prototype.
+shape against a prototype shape reference. V0.4 uses prototype medoid first and
+seed shape only as an explicitly flagged fallback.
+
+Shape reference methods:
+
+```text
+shape_reference_method =
+  prototype_medoid | seed_shape_fallback | not_available
+
+shape_reference_basis =
+  tier1_supported_medoid | morphology_rt_medoid | seed_fallback
+
+shape_alignment_method = boundary_normalized_linear_resample
+```
+
+Forbidden shape alignment methods:
+
+```text
+dynamic_time_warping
+free_shift_cross_correlation
+```
+
+Prototype shape candidate pool:
+
+- pre-Backfill candidate trace only;
+- RT gate pass after final center;
+- finite apex, start, end, area, height;
+- `candidate_area > 0` and `candidate_height > 0`;
+- valid boundary ordering `start < apex < end`;
+- `candidate_point_count >= shape_min_points` inside its own peak boundaries;
+- not duplicate loser;
+- not ambiguous owner;
+- not blocked infrastructure;
+- not data-quality reject.
+
+The seed trace may be included in the prototype shape candidate pool, but the
+prototype cannot be seed-only. V0.4 requires:
+
+```text
+min_prototype_shape_candidates = 3
+min_non_seed_prototype_shape_candidates = 2
+```
+
+Prototype reference construction:
+
+1. Normalize and resample every prototype candidate trace.
+2. Compute pairwise cosine similarity.
+3. Pick the candidate with the highest average similarity as medoid.
+4. Tie-break by tier 1 diagnostic-NL support, then higher scan support, then
+   closest apex RT to row center.
+5. Record `shape_reference_candidate_id`.
+
+The prototype pool is not limited to tier 1 cells. If tier 1 candidates are
+available, they are preferred in medoid tie-breaks and reported through
+`shape_reference_basis = tier1_supported_medoid`. If no tier 1 medoid is
+available, `morphology_rt_medoid` may still support provisional would-primary,
+but it is a weaker support class and must be summarized separately.
 
 V0.4 shape contract:
 
 - both traces must have at least `shape_min_points` points inside peak
   boundaries;
+- use each candidate's own original peak boundaries, not a common RT window;
 - subtract local minimum intensity inside peak boundaries and clip at zero;
 - normalize each trace to unit L2 norm after baseline subtraction;
 - resample both traces to `shape_resample_points` over normalized RT positions;
 - compute cosine similarity on resampled vectors;
 - pass when `shape_similarity_score >= shape_similarity_min_cosine`;
+- pass requires `width_sanity_status = pass`;
 - emit review flags for low points, zero signal, shoulder/bimodal audit, or
   baseline incompatibility when available.
 
+Shape similarity is intensity-invariant. Area and intensity pattern are review
+context only, not promotion basis.
+
+`shape_min_points = 7`, `shape_resample_points = 25`, and
+`shape_similarity_min_cosine = 0.85` are V0.4 initial diagnostic values, not
+validated final constants. Resampling does not rescue low raw point count.
+
+If a reliable shape audit marks shoulder, bimodal, coelution, saturated, or
+clipped trace, shape fails. If shape audit is unavailable, emit
+`shape_audit_unavailable`; do not pretend that audit gate ran.
+
+Width sanity uses the same prototype median width and ratio range as the Tier 3
+width fallback, but it is an anti-pathology guard for Tier 2, not promotion
+evidence:
+
+```text
+width_sanity_status = pass | fail | not_assessed
+```
+
+Tier 1 diagnostic-NL support is not hard-failed by width sanity. If a tier 1
+cell has `width_sanity_status = fail`, keep tier 1 support but add
+`width_sanity_failed_on_tier1_cell` and report the count.
+
 If the metric cannot be calculated, emit
 `shape_similarity_status = not_assessed`; it must not support promotion.
+
+Seed shape fallback:
+
+- seed fallback can count as tier 2 only when prototype medoid is unavailable;
+- every seed fallback pass must set `shape_seed_fallback_used = true`;
+- would-primary cannot rely only on seed fallback shape cells;
+- at least one non-seed tier 1 cell or one non-seed prototype-medoid tier 2 cell
+  is required when seed fallback contributes to the two non-seed tier1/tier2
+  minimum.
 
 ### Tier 3: Prototype Width Fallback
 
@@ -307,6 +397,10 @@ Prototype width inputs:
 
 Tier 3 passes only when the candidate width divided by prototype median width
 is inside `prototype_width_ratio_min..prototype_width_ratio_max`.
+
+Tier 3 contributes to `total_coherent_sample_count`. It does not contribute to
+`tier12_non_seed_identity_sample_count` and cannot satisfy
+`min_non_seed_tier12_identity_samples`.
 
 Tier 3 may contribute to audit counts, but it must not be the filler that turns
 one tier-1/tier-2 cell into would-primary.
@@ -331,8 +425,22 @@ Review-only weak-basis cases:
 - RT-only support;
 - tier-3-only support;
 - `seed + 1 tier1/tier2 + 1 tier3`;
+- `seed + 2 seed_shape_fallback tier2` with no tier 1 and no prototype-medoid
+  tier 2;
 - center unstable;
 - multi-seed ambiguity requiring Phase 2.
+
+Allowed would-primary tier compositions include:
+
+- `seed + 2 non-seed tier1`;
+- `seed + 1 non-seed tier1 + 1 non-seed prototype-shape tier2`;
+- `seed + 2 non-seed prototype-shape tier2`;
+- `seed + 1 non-seed prototype-shape tier2 + 1 non-seed seed-shape-fallback
+  tier2`;
+- `seed + 1 non-seed tier1 + 1 non-seed seed-shape-fallback tier2`.
+
+`seed + 2 non-seed prototype-shape tier2` is provisional would-primary, but it
+must be summarized as tier2-only support.
 
 Required reporting:
 
@@ -343,7 +451,16 @@ tier12_non_seed_identity_sample_count
 assessed_sample_count
 coherent_sample_fraction
 weak_basis_reason =
-  none | tier3_only | single_tier12_plus_tier3 | rt_only
+  none | tier3_only | single_tier12_plus_tier3 |
+  seed_shape_fallback_only | rt_only
+```
+
+Count invariant:
+
+```text
+if tier12_non_seed_identity_sample_count >= 2
+and seed_counts_toward_total = true
+then total_coherent_sample_count >= 3
 ```
 
 For 85RAW, the 8RAW threshold cannot be copied blindly. `3/8` and `3/85` have
@@ -384,8 +501,12 @@ Core identity spec is ready when:
   `request_neutral_loss_tags` is a stable all-tags-required set;
 - `ms1_seed_delta_min`, `ms1_trace_quality`, `evidence_score`, and
   `evidence_tier` are record-only context;
-- tier 1 diagnostic neutral-loss support, tier 2 shape similarity, and tier 3
-  prototype-width fallback are defined;
+- tier 1 diagnostic neutral-loss support, tier 2 prototype-medoid shape
+  similarity with flagged seed fallback, and tier 3 prototype-width fallback are
+  defined;
+- tier 2 shape pass is intensity-invariant, uses boundary-normalized linear
+  resampling, and requires width sanity;
 - would-primary requires at least two non-seed tier-1/tier-2 cells for 8RAW;
+- seed-shape-fallback-only support is Review-only through `weak_basis_reason`;
 - false independent feature suppression is explicit and separate from
   downstream final-matrix filtering.
