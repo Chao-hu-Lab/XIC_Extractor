@@ -25,6 +25,7 @@ from .schema import (
     SeedGateClass,
     SeedRejectReason,
 )
+from .seed_gate import evaluate_seed_gate
 from .tags import format_fragment_tags, has_fragment_tags, normalize_fragment_tags
 
 __all__ = [
@@ -48,6 +49,7 @@ __all__ = [
     "SeedRejectReason",
     "build_identity_coherence_request",
     "build_seed_candidate_evidence",
+    "evaluate_seed_gate",
     "format_fragment_tags",
     "has_fragment_tags",
     "match_request_to_candidate",
