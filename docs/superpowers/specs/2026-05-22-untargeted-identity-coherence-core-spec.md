@@ -39,17 +39,62 @@ by the controls spec to evaluate decisions. They cannot promote a row.
 ## Identity Request Contract
 
 The diagnostic evaluates an `IdentityCoherenceRequest`, not only a joined
-`DiscoveryCandidate`.
+`DiscoveryCandidate`. In normal inline mode, each seed `DiscoveryCandidate`
+emits one seed-level request. V0.4 does not create family-level requests; any
+case that needs multiple seed requests to define one identity is
+`review_only_multi_seed_requires_phase2`.
 
 The request owns the declared identity constraints:
 
 ```text
 request_precursor_mz
 request_product_mz
-request_neutral_loss_tag_or_profile
 request_observed_loss_da
-request_tolerances
+request_neutral_loss_tags
+request_precursor_tolerance_ppm
+request_product_tolerance_ppm
+request_observed_loss_tolerance_ppm
+request_profile_id
+request_profile_hash
 ```
+
+Required fields for seed coherence:
+
+- `request_precursor_mz`;
+- `request_product_mz`;
+- `request_observed_loss_da`;
+- `request_neutral_loss_tags`;
+- all three request tolerance snapshots.
+
+`request_product_mz` and `request_observed_loss_da` are scalar in V0.4 because
+the current discovery/alignment evidence surface models one best diagnostic
+product/loss event per seed candidate. `request_neutral_loss_tags` may contain a
+multi-tag set attached to that scalar event/profile.
+
+`request_neutral_loss_tags` output format:
+
+```text
+tagA|tagB|tagC
+```
+
+Rules:
+
+- stable lexicographic sort;
+- no spaces;
+- empty value is invalid;
+- all request tags are required for seed request consistency and tier 1
+  non-seed diagnostic neutral-loss support.
+
+Profile-level identity may support `request_neutral_loss_tags` only when the
+profile deterministically expands to the requested tag set in this diagnostic
+context. If a profile cannot be expanded, the seed lacks auditable diagnostic
+neutral-loss evidence.
+
+`request_profile_hash` is required on the request audit surface for
+traceability. If the current profile system cannot provide a stable hash, emit
+`request_profile_hash = unavailable` and add
+`request_profile_hash_unavailable` to request review flags. Missing profile
+hash does not fail the seed gate.
 
 `candidate_id` is a provenance join key. It retrieves the pre-Backfill
 `DiscoveryCandidate`, but it does not prove that the candidate satisfies the
@@ -60,6 +105,30 @@ This is required for identity decoys: a decoy may preserve provenance while
 changing the declared identity request, and the mismatch must be rejected by the
 core seed gate rather than silently satisfied by the original candidate.
 
+Request status:
+
+```text
+request_identity_completeness_status =
+  complete | missing_required_constraint
+
+request_candidate_identity_status =
+  pass | fail | not_assessed
+```
+
+`request_candidate_identity_status = not_assessed` is allowed only when the
+request is incomplete or the candidate join is missing. If the request is
+complete and the candidate is joined, the candidate identity status must be
+`pass` or `fail`.
+
+Seed gate failure order:
+
+1. missing request required field -> `missing_request_identity_constraint`;
+2. missing candidate join -> `missing_discovery_candidate_join`;
+3. joined candidate lacks required diagnostic neutral-loss evidence field or
+   unexpandable profile evidence -> `missing_diagnostic_neutral_loss_evidence`;
+4. request and joined candidate are complete but outside tolerance or tag set
+   mismatch -> `request_candidate_identity_mismatch`.
+
 ## Layer 1: Seed Coherence Gate And Specificity Context
 
 The seed gate establishes seed-owner coherence, quantifiability, and sampling
@@ -67,8 +136,9 @@ sufficiency. It is not a complete seed specificity classifier.
 
 Minimum v0.4 seed requirements:
 
+- request identity completeness status is `complete`;
 - a `DiscoveryCandidate` join exists for the owner identity event;
-- request-declared precursor m/z, product m/z, neutral-loss tag/profile, and
+- request-declared precursor m/z, product m/z, neutral-loss tag set, and
   observed loss match the joined candidate within the request tolerances;
 - the candidate has diagnostic neutral-loss evidence within declared
   m/z/loss tolerances;
@@ -105,9 +175,10 @@ seed_gate_class =
   coherent_seed | review_only_seed_gate_failed | blocked_seed
 
 seed_reject_reason =
-  missing_diagnostic_neutral_loss_evidence
+  missing_request_identity_constraint
   no_quantifiable_owner
   missing_discovery_candidate_join
+  missing_diagnostic_neutral_loss_evidence
   ambiguous_owner
   duplicate_loser
   backfill_only_evidence
@@ -181,7 +252,8 @@ confirmation. It supports only provisional identity-family coherence.
 Minimum tier 1 join criteria:
 
 - same non-seed sample;
-- same neutral-loss tag or declared profile identity;
+- all `request_neutral_loss_tags` are supported by the non-seed diagnostic
+  candidate, or by a deterministic profile expansion to the same tag set;
 - precursor m/z, product m/z, and observed neutral loss remain inside declared
   tolerances, with ppm units recorded per cell;
 - matched candidate is pre-Backfill discovery evidence, not `owner_backfill`
@@ -308,6 +380,8 @@ Core identity spec is ready when:
   `SampleLocalMS1Owner` geometry;
 - seed gate verifies request-declared identity constraints against the joined
   candidate rather than treating `candidate_id` as identity proof;
+- `request_product_mz` and `request_observed_loss_da` are scalar, while
+  `request_neutral_loss_tags` is a stable all-tags-required set;
 - `ms1_seed_delta_min`, `ms1_trace_quality`, `evidence_score`, and
   `evidence_tier` are record-only context;
 - tier 1 diagnostic neutral-loss support, tier 2 shape similarity, and tier 3

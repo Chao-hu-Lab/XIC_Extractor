@@ -259,6 +259,7 @@ Post-hoc comparison mode must not promote identities.
 V0.4 freezes:
 
 ```text
+untargeted_identity_coherence_requests.tsv
 untargeted_identity_coherence_decisions.tsv
 untargeted_identity_coherence_cell_evidence.tsv
 untargeted_identity_coherence_controls.tsv
@@ -272,10 +273,64 @@ untargeted_identity_coherence_candidates.tsv
 untargeted_identity_coherence_groups.tsv
 ```
 
+### Required `requests.tsv` Columns
+
+This is a seed/request-level audit surface. It must not include per-sample trace
+metrics, downstream blank/QC fields, Backfill output, workbook values, or the
+full neutral-loss profile blob.
+
+```text
+request_id
+decision_id
+source_feature_family_id
+seed_candidate_id
+seed_sample
+request_precursor_mz
+request_product_mz
+request_observed_loss_da
+request_neutral_loss_tags
+request_precursor_tolerance_ppm
+request_product_tolerance_ppm
+request_observed_loss_tolerance_ppm
+request_neutral_loss_tag_match_policy
+request_profile_id
+request_profile_hash
+request_identity_completeness_status
+request_candidate_identity_status
+request_reject_reason
+request_review_flags
+```
+
+Required categorical values:
+
+```text
+request_identity_completeness_status =
+  complete | missing_required_constraint
+
+request_candidate_identity_status =
+  pass | fail | not_assessed
+
+request_reject_reason =
+  none | missing_request_identity_constraint |
+  missing_discovery_candidate_join |
+  missing_diagnostic_neutral_loss_evidence |
+  request_candidate_identity_mismatch
+
+request_neutral_loss_tag_match_policy = all_tags_required
+```
+
+`request_candidate_identity_status = not_assessed` is valid only when
+`request_identity_completeness_status = missing_required_constraint` or
+`request_reject_reason = missing_discovery_candidate_join`.
+
+`request_profile_hash` may be `unavailable`, but that must add
+`request_profile_hash_unavailable` to `request_review_flags`.
+
 ### Required `decisions.tsv` Columns
 
 ```text
 decision_id
+request_id
 source_feature_family_id
 seed_candidate_id
 seed_sample
@@ -288,7 +343,6 @@ seed_ms1_scan_support_score
 seed_neutral_loss_mass_error_ppm
 seed_matched_tag_count
 seed_tag_intersection_status
-seed_request_candidate_identity_status
 seed_evidence_score
 seed_evidence_tier
 seed_ms2_support
@@ -329,16 +383,11 @@ independent enum list. Schema tests must reject emitted `decision` values
 outside the core enum and must fail if a duplicated schema definition drifts
 from the core contract.
 
-`seed_request_candidate_identity_status` values:
-
-```text
-pass | fail | not_assessed
-```
-
 ### Required `cell_evidence.tsv` Columns
 
 ```text
 decision_id
+request_id
 source_feature_family_id
 candidate_id
 sample_local_owner_id
@@ -434,6 +483,7 @@ or a single shared schema definition used by both docs and implementation.
 - inline pre-Backfill input source, or explicit reason post-hoc run is
   comparison-only;
 - input hashes and row counts;
+- request completeness and request-vs-candidate identity status counts;
 - control manifest path and control mapping counts;
 - evidence firewall assertion `promotion_used_forbidden_evidence = false` and
   `forbidden_evidence_seen` counts;
@@ -459,6 +509,7 @@ Implementation contract is ready when:
 - evidence firewall fixture is specified;
 - identity config is separate from downstream audit values;
 - process-mode payload boundary is pickleable;
+- seed/request audit surface is frozen in `requests.tsv`;
 - per-sample evidence surface is frozen;
 - controls output is machine-readable;
 - `controls.tsv` schema is frozen in this file and parity-checked against the

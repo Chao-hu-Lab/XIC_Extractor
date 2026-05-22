@@ -710,12 +710,13 @@
             V0.4 不再一開始凍結大型 detail TSV schema。先凍結最小 review surface。Controls input
             manifest 叫 `identity_coherence_controls_manifest.yml/.tsv`；frozen output 則是：
           </p>
-          <pre>untargeted_identity_coherence_decisions.tsv
+          <pre>untargeted_identity_coherence_requests.tsv
+untargeted_identity_coherence_decisions.tsv
 untargeted_identity_coherence_cell_evidence.tsv
 untargeted_identity_coherence_controls.tsv
 untargeted_identity_coherence_summary.md</pre>
           <p>
-            cell_evidence 是必要的，因為 per-sample tiered basis、numeric trace metrics、tier-3-only fallback、
+            requests 是 seed/request-level audit surface；cell_evidence 是必要的，因為 per-sample tiered basis、numeric trace metrics、tier-3-only fallback、
             background recurrence 只保留 audit flags；final matrix filtering、area correction 與統計解讀留給下游。
             candidates/groups 等較大的 detail tables 可以先作為 exploratory artifacts 輸出，等 8RAW 跑過後再凍結。
           </p>

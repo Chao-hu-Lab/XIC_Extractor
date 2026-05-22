@@ -126,8 +126,10 @@ candidate must not override or satisfy the shifted m/z request.
 
 Expected outcome:
 
+- `request_identity_completeness_status = complete`;
+- `request_candidate_identity_status = fail`;
 - seed gate fails with `request_candidate_identity_mismatch`, or all non-seed
-  cells fail the decoy identity constraints;
+  cells fail the decoy identity constraints before promotion;
 - no would-primary promotion.
 
 ### `identity_decoy_nl_shuffle`
@@ -136,19 +138,21 @@ Clone a real seed/control request, then replace the seed identity constraints
 with:
 
 ```text
-decoy_neutral_loss_tag = tag not supported by the source DiscoveryCandidate
+decoy_neutral_loss_tags = stable tag set not supported by the source DiscoveryCandidate
 decoy_neutral_loss_da = corresponding declared loss, if available
 ```
 
 Keep RT, owner geometry, and provenance unchanged. The decoy is run through the
 same seed gate as a normal request. Preserving `candidate_id` is allowed only to
 exercise the core request-vs-candidate identity consistency gate; the original
-candidate must not override or satisfy the shuffled neutral-loss request.
+candidate must not override or satisfy the shuffled neutral-loss tag set.
 
 Expected outcome:
 
+- `request_identity_completeness_status = complete`;
+- `request_candidate_identity_status = fail`;
 - seed gate fails with `request_candidate_identity_mismatch`, or all non-seed
-  cells fail the decoy identity constraints;
+  cells fail the decoy identity constraints before promotion;
 - no would-primary promotion.
 
 Decoys must be generated from pre-Backfill identity inputs and must not read

@@ -29,6 +29,7 @@ Read in this order:
    - evidence firewall
    - `IdentityCoherenceConfig`
    - base identity Go/No-Go for firewall, weak-basis, infrastructure, and cost
+   - `untargeted_identity_coherence_requests.tsv` seed/request audit surface
    - inline and diagnostic invocation modes
    - process-mode payload boundary
    - frozen output schemas
