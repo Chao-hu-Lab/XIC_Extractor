@@ -131,6 +131,9 @@ def test_evaluate_positive_control_uses_actual_decision_as_failure_reason():
 
     assert row["control_observed_behavior"] == "review_only_seed_gate_failed"
     assert row["control_failure_reason"] == "review_only_seed_gate_failed"
+    assert row["control_notes"] == (
+        "required_failure_reason_when_missed=review_only_insufficient_support"
+    )
 
 
 def test_evaluate_positive_control_fails_mapping_error_ppm_out_of_tolerance():

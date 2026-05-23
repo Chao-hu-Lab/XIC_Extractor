@@ -221,6 +221,17 @@ _ManifestRow = Mapping[str | None, str | list[str] | None]
 def _validate_required_fields(fieldnames: Sequence[str] | None) -> None:
     if fieldnames is None:
         raise ValueError("identity controls manifest is missing a header row")
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for field_name in fieldnames:
+        if field_name in seen and field_name not in duplicates:
+            duplicates.append(field_name)
+        seen.add(field_name)
+    if duplicates:
+        raise ValueError(
+            "identity controls manifest duplicate fields: "
+            + ", ".join(duplicates)
+        )
     missing = [
         field_name
         for field_name in REQUIRED_MANIFEST_FIELDS
@@ -441,6 +452,15 @@ def evaluate_positive_control(
     observed = str(_enum_value(decision.decision))
     passed = observed == "would_primary_provisional_identity_family_support"
     failure_reason = "" if passed else observed
+    control_notes = (
+        entry.control_notes
+        if passed
+        else _append_control_note(
+            entry.control_notes,
+            "required_failure_reason_when_missed="
+            f"{entry.required_failure_reason_when_missed}",
+        )
+    )
     return _control_row(
         entry,
         decision_id=decision.decision_id,
@@ -451,6 +471,7 @@ def evaluate_positive_control(
         control_pass=passed,
         control_failure_reason=failure_reason,
         positive_control_mapping_status=mapping_status,
+        control_notes=control_notes,
     )
 
 
@@ -558,6 +579,12 @@ def _is_finite_number(value: object) -> bool:
         and isinstance(value, int | float)
         and math.isfinite(value)
     )
+
+
+def _append_control_note(existing: str, note: str) -> str:
+    if not existing:
+        return note
+    return f"{existing}; {note}"
 
 
 @dataclass(frozen=True)
@@ -1006,6 +1033,7 @@ def _control_row(
     decoy_source_request_id: str = "",
     decoy_shift_value: float | str = "",
     decoy_identity_constraint_changed: str = "",
+    control_notes: str | None = None,
 ) -> dict[str, object]:
     return {
         "control_id": entry.control_id,
@@ -1034,7 +1062,9 @@ def _control_row(
         "positive_control_mapping_delta_rt_sec": (
             entry.positive_control_mapping_delta_rt_sec
         ),
-        "control_notes": entry.control_notes,
+        "control_notes": (
+            entry.control_notes if control_notes is None else control_notes
+        ),
     }
 
 

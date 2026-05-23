@@ -169,3 +169,22 @@ def test_tsv_rows_with_extra_columns_are_rejected(tmp_path, extra_value):
 
     with pytest.raises(ValueError, match="unexpected extra fields"):
         read_identity_controls_manifest(path)
+
+
+def test_duplicate_manifest_headers_are_rejected(tmp_path):
+    path = tmp_path / "identity_controls.tsv"
+    duplicate_header = (
+        *MANIFEST_HEADER,
+        "decision_id",
+        "decision_id",
+    )
+    path.write_text(
+        "\t".join(duplicate_header)
+        + "\n"
+        + "\t".join((*_positive_row(), "DEC-1", "DEC-2"))
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate fields: decision_id"):
+        read_identity_controls_manifest(path)
