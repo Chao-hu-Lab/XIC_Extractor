@@ -6,7 +6,7 @@
 
 **Architecture:** Introduce a focused `xic_extractor.diagnostics.timing` module with a small recorder/context-manager API. Thread an optional recorder through discovery and alignment orchestration only; domain algorithms continue to receive normal data and do not import CLI, GUI, workbook, or process backends. CLI commands create and write timing JSON only when `--timing-output` is provided, keeping default behavior unchanged.
 
-**Tech Stack:** Python 3.10+, stdlib `time.perf_counter`, stdlib `json`, pytest, existing fake RAW sources.
+**Tech Stack:** Python 3.11+, stdlib `time.perf_counter`, stdlib `json`, pytest, existing fake RAW sources.
 
 ---
 

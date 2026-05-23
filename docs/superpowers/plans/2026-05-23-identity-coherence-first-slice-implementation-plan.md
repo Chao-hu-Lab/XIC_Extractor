@@ -8,9 +8,9 @@
 
 **Tech Stack:** Python dataclasses, `enum.StrEnum`, pytest, Markdown schema marker parsing.
 
-**Version note:** This plan follows the repo's current `StrEnum` pattern. If CI
-or packaging still claims Python 3.10 support, correct that Python-version
-contract in a separate task; do not hide the version decision inside this slice.
+**Version note:** This plan follows the repo's current `StrEnum` pattern. The
+package Python floor is 3.11 because `enum.StrEnum` is part of the public schema
+implementation contract.
 
 ---
 

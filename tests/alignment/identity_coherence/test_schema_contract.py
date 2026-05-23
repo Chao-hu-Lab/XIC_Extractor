@@ -120,6 +120,30 @@ def test_request_status_enum_values_are_stable_strings():
 def test_identity_coherence_facade_exports_stable_contract():
     import xic_extractor.alignment.identity_coherence as identity_coherence
 
+    schema_enums = (
+        IdentityDecision,
+        WeakBasisReason,
+        RtCenterDecision,
+        CellAssessmentStatus,
+        CellIdentityTier,
+        CellIdentityBasis,
+        FragmentMatchStatus,
+        RtGateStatus,
+        NonRtIdentityResult,
+        ShapeStatus,
+        ShapeReferenceBasis,
+        ShapeAuditStatus,
+        WidthStatus,
+        BaselineAuditStatus,
+        AreaHeightStatus,
+        CellBlockedReason,
+        CellDataQualityReason,
+        DecisionReason,
+    )
+    for schema_enum in schema_enums:
+        assert getattr(identity_coherence, schema_enum.__name__) is schema_enum
+        assert schema_enum.__name__ in identity_coherence.__all__
+
     assert identity_coherence.FragmentIdentity is not None
     assert identity_coherence.CidNeutralLossConstraint is not None
     assert identity_coherence.IdentityCoherenceRequest is not None

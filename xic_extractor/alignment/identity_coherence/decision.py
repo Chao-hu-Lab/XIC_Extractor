@@ -12,6 +12,7 @@ from .schema import (
     DecisionReason,
     IdentityDecision,
     RtCenterDecision,
+    RtGateStatus,
     SeedGateClass,
     ShapeReferenceBasis,
     WeakBasisReason,
@@ -198,6 +199,10 @@ def _tier3_count(cells: tuple[CellEvidenceResult, ...]) -> int:
 def _has_rt_only_support(cells: tuple[CellEvidenceResult, ...]) -> bool:
     return any(
         cell.cell_identity_tier == CellIdentityTier.RT_ONLY
-        and cell.rt_gate_status.value == "pass"
+        and _enum_value(cell.rt_gate_status) == RtGateStatus.PASS.value
         for cell in cells
     )
+
+
+def _enum_value(value: object) -> object:
+    return getattr(value, "value", value)

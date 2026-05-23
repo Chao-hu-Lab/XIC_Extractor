@@ -765,9 +765,9 @@ First slice code rules:
 
 - domain status values use `StrEnum`; enum values are the only valid TSV
   categorical strings;
-- this follows the repo's current `StrEnum` pattern. If CI or packaging still
-  claims Python 3.10 support, that Python-version contract must be corrected in
-  a separate task instead of hidden inside this slice;
+- this follows the repo's current `StrEnum` pattern. The package Python floor is
+  3.11 because `enum.StrEnum` is part of the public schema implementation
+  contract;
 - schema columns use ordered tuple constants, not enums;
 - `__init__.py` is a thin facade only: re-export stable models, builder, enums,
   and schema constants; do not put logic there;

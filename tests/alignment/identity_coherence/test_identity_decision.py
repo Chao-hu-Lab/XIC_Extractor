@@ -232,6 +232,30 @@ def test_summarize_identity_decision_reports_rt_only_support_path():
     assert summary.tier12_non_seed_identity_sample_count == 0
 
 
+def test_summarize_identity_decision_accepts_string_rt_gate_status():
+    rt_only = replace(
+        _tier1_cell("RAW-2"),
+        cell_identity_tier=CellIdentityTier.RT_ONLY,
+        cell_identity_basis=CellIdentityBasis.NONE,
+        fragment_match_status=FragmentMatchStatus.FAIL,
+        non_rt_identity_result=NonRtIdentityResult.FAIL,
+        rt_gate_status="pass",
+        coherent_count_contribution=False,
+        tier12_count_contribution=False,
+    )
+    summary = summarize_identity_decision(
+        _seed_result(),
+        (rt_only,),
+        _center(),
+        IdentityCoherenceConfig(),
+        identity_family_id="IDF-1",
+        assessed_sample_count=8,
+    )
+
+    assert summary.decision is IdentityDecision.REVIEW_ONLY_RT_ONLY_SUPPORT
+    assert summary.decision.value == "review_only_rt_only_support"
+
+
 def test_summarize_identity_decision_detects_forbidden_evidence_seen():
     forbidden = replace(_tier1_cell("RAW-2"), forbidden_evidence_seen=True)
     summary = summarize_identity_decision(

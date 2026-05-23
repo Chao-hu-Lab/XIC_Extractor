@@ -6,7 +6,7 @@
 
 **Architecture:** Keep sample-local ownership, drift evidence, edge scoring, and output diagnostics as separate modules. Production family construction may consume only detected owner strong edges; targeted workbooks are read only by a drift adapter and validation tools, never by production identity logic.
 
-**Tech Stack:** Python 3.10+, dataclasses, openpyxl, pytest, existing `AlignmentConfig`, existing owner-based alignment pipeline, existing Thermo RAW process backend, existing targeted GT audit diagnostics.
+**Tech Stack:** Python 3.11+, dataclasses, openpyxl, pytest, existing `AlignmentConfig`, existing owner-based alignment pipeline, existing Thermo RAW process backend, existing targeted GT audit diagnostics.
 
 ---
 
