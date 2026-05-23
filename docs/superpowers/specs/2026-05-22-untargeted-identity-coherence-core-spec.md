@@ -382,8 +382,8 @@ Prototype shape candidate pool:
 - not blocked infrastructure;
 - not data-quality reject.
 
-The seed trace may be included in the prototype shape candidate pool, but the
-prototype cannot be seed-only. V0.4 requires:
+The seed trace is excluded from the prototype shape candidate pool. Seed trace
+can be used only through the explicit seed-fallback path. V0.4 requires:
 
 ```text
 min_prototype_shape_candidates = 3
@@ -469,7 +469,8 @@ Prototype width inputs:
 - candidate passes RT gate and morphology completeness;
 - candidate is inside `seed_center_candidate_sec` of the seed RT before
   recentering;
-- at least `prototype_width_min_candidates` candidates are required;
+- seed sample is excluded from the width prototype reference;
+- at least `prototype_width_min_candidates` non-seed candidates are required;
 - otherwise `prototype_width_status = not_assessed`.
 
 Tier 3 passes only when the candidate width divided by prototype median width
