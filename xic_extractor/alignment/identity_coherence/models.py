@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from .schema import (
@@ -26,6 +27,53 @@ from .schema import (
     WeakBasisReason,
     WidthStatus,
 )
+
+_TRACE_RESULT_STATUSES = frozenset(
+    {
+        "pass",
+        "blocked_infrastructure",
+        "data_quality_reject",
+        "not_assessed",
+    }
+)
+
+
+def _require_non_empty_text(value: object, field_name: str) -> str:
+    text = "" if value is None else str(value).strip()
+    if not text:
+        raise ValueError(f"{field_name} must be non-empty")
+    return text
+
+
+def _require_finite_positive(value: object, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field_name} must be finite positive")
+    numeric = float(value)
+    if not math.isfinite(numeric) or numeric <= 0:
+        raise ValueError(f"{field_name} must be finite positive")
+    return numeric
+
+
+def _require_finite_number(value: object, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field_name} must be finite")
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        raise ValueError(f"{field_name} must be finite")
+    return numeric
+
+
+def _require_finite_nonnegative(value: object, field_name: str) -> float:
+    numeric = _require_finite_number(value, field_name)
+    if numeric < 0:
+        raise ValueError(f"{field_name} must be nonnegative")
+    return numeric
+
+
+def _require_nonnegative_int(value: object, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{field_name} must be a nonnegative integer")
+    return value
 
 
 @dataclass(frozen=True)
@@ -144,12 +192,164 @@ class CandidateTrace:
 
 
 @dataclass(frozen=True)
+class EngineeringConfig:
+    max_infrastructure_blocked_fraction: float = 0.05
+    max_projected_85raw_identity_xic_requests: int | None = None
+
+    def __post_init__(self) -> None:
+        blocked_fraction = _require_finite_nonnegative(
+            self.max_infrastructure_blocked_fraction,
+            "max_infrastructure_blocked_fraction",
+        )
+        if blocked_fraction > 1.0:
+            raise ValueError("max_infrastructure_blocked_fraction must be <= 1")
+        object.__setattr__(
+            self,
+            "max_infrastructure_blocked_fraction",
+            blocked_fraction,
+        )
+
+        budget = self.max_projected_85raw_identity_xic_requests
+        if budget is None:
+            return
+        if isinstance(budget, bool) or not isinstance(budget, int) or budget < 0:
+            raise ValueError(
+                "max_projected_85raw_identity_xic_requests must be nonnegative"
+            )
+
+
+@dataclass(frozen=True)
+class IdentityCoherenceTraceRequest:
+    decision_id: str
+    request_id: str
+    sample_id: str
+    candidate_id: str
+    precursor_mz: float
+    ppm_tolerance: float
+    rt_min: float
+    rt_max: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "decision_id",
+            _require_non_empty_text(self.decision_id, "decision_id"),
+        )
+        object.__setattr__(
+            self,
+            "request_id",
+            _require_non_empty_text(self.request_id, "request_id"),
+        )
+        object.__setattr__(
+            self,
+            "sample_id",
+            _require_non_empty_text(self.sample_id, "sample_id"),
+        )
+        object.__setattr__(
+            self,
+            "candidate_id",
+            _require_non_empty_text(self.candidate_id, "candidate_id"),
+        )
+        object.__setattr__(
+            self,
+            "precursor_mz",
+            _require_finite_positive(self.precursor_mz, "precursor_mz"),
+        )
+        object.__setattr__(
+            self,
+            "ppm_tolerance",
+            _require_finite_positive(self.ppm_tolerance, "ppm_tolerance"),
+        )
+        rt_min = _require_finite_number(self.rt_min, "rt_min")
+        rt_max = _require_finite_number(self.rt_max, "rt_max")
+        if rt_min > rt_max:
+            raise ValueError("rt_min must be <= rt_max")
+        object.__setattr__(self, "rt_min", rt_min)
+        object.__setattr__(self, "rt_max", rt_max)
+
+
+@dataclass(frozen=True)
+class IdentityCoherenceTraceResult:
+    request: IdentityCoherenceTraceRequest
+    trace: CandidateTrace | None
+    status: str
+    blocked_reason: str = ""
+    raw_xic_request_count: int = 0
+    raw_chromatogram_call_count: int = 0
+    xic_point_count: int = 0
+    elapsed_sec: float = 0.0
+
+    def __post_init__(self) -> None:
+        status = _require_non_empty_text(self.status, "status")
+        if status not in _TRACE_RESULT_STATUSES:
+            raise ValueError(f"unsupported trace result status: {status}")
+        object.__setattr__(self, "status", status)
+        object.__setattr__(
+            self,
+            "blocked_reason",
+            "" if self.blocked_reason is None else str(self.blocked_reason).strip(),
+        )
+        object.__setattr__(
+            self,
+            "raw_xic_request_count",
+            _require_nonnegative_int(
+                self.raw_xic_request_count,
+                "raw_xic_request_count",
+            ),
+        )
+        object.__setattr__(
+            self,
+            "raw_chromatogram_call_count",
+            _require_nonnegative_int(
+                self.raw_chromatogram_call_count,
+                "raw_chromatogram_call_count",
+            ),
+        )
+        point_count = _require_nonnegative_int(
+            self.xic_point_count,
+            "xic_point_count",
+        )
+        if self.trace is not None and point_count != len(self.trace.rt_min):
+            raise ValueError("xic_point_count must equal trace length")
+        object.__setattr__(self, "xic_point_count", point_count)
+        elapsed = _require_finite_number(self.elapsed_sec, "elapsed_sec")
+        if elapsed < 0:
+            raise ValueError("elapsed_sec must be nonnegative")
+        object.__setattr__(self, "elapsed_sec", elapsed)
+
+
+@dataclass(frozen=True)
+class IdentityCoherenceResult:
+    request: IdentityCoherenceRequest
+    decision: IdentityDecisionSummary
+    cells: tuple[CellEvidenceResult, ...]
+
+    def __post_init__(self) -> None:
+        if self.request.decision_id != self.decision.decision_id:
+            raise ValueError("decision_id mismatch between request and decision")
+        if self.request.seed_candidate_id != self.decision.seed_candidate_id:
+            raise ValueError(
+                "seed_candidate_id mismatch between request and decision"
+            )
+        if self.request.seed_sample != self.decision.seed_sample:
+            raise ValueError("seed_sample mismatch between request and decision")
+        for cell in self.cells:
+            if cell.decision_id != self.decision.decision_id:
+                raise ValueError("decision_id mismatch between cell and decision")
+            if cell.identity_family_id != self.decision.identity_family_id:
+                raise ValueError(
+                    "identity_family_id mismatch between cell and decision"
+                )
+
+
+@dataclass(frozen=True)
 class IdentityCoherenceConfig:
     seed_gate: SeedGateConfig = field(default_factory=SeedGateConfig)
     promotion: PromotionConfig = field(default_factory=PromotionConfig)
     rt: RtConfig = field(default_factory=RtConfig)
     shape: ShapeConfig = field(default_factory=ShapeConfig)
     width: WidthConfig = field(default_factory=WidthConfig)
+    engineering: EngineeringConfig = field(default_factory=EngineeringConfig)
 
 
 @dataclass(frozen=True)

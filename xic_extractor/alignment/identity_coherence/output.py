@@ -41,6 +41,10 @@ class IdentityCoherenceOutputContext:
     raw_xic_request_count: int | None = None
     xic_point_count: int | None = None
     projected_85raw_identity_request_count: int | None = None
+    max_projected_85raw_identity_xic_requests: int | None = None
+    max_infrastructure_blocked_fraction: float = 0.05
+    firewall_fixture_status: str = "not_assessed"
+    spawn_payload_smoke_status: str = "not_assessed"
 
 
 @dataclass(frozen=True)
@@ -606,6 +610,19 @@ def render_identity_coherence_summary(
             ),
             "",
             "",
+            "## Engineering Go / No-Go",
+            "",
+        ]
+    )
+    lines.extend(
+        _engineering_go_no_go_rows(
+            decision_rows,
+            context=context,
+            assessed_sample_total=_total_assessed_sample_count(decision_rows),
+        )
+    )
+    lines.extend(
+        [
             "## Cost Counters",
             "",
             "| Counter | Value |",
@@ -749,6 +766,117 @@ def _counter_table(counter: Counter[str], label: str) -> list[str]:
         *[f"| `{key}` | {count} |" for key, count in sorted(counter.items())],
         "",
     ]
+
+
+def _engineering_go_no_go_rows(
+    decision_rows: Sequence[IdentityDecisionSummary],
+    *,
+    context: IdentityCoherenceOutputContext,
+    assessed_sample_total: int,
+) -> list[str]:
+    blocked_count = _sum_decision_field(
+        list(decision_rows),
+        "infrastructure_blocked_sample_count",
+    )
+    blocked_fraction = (
+        0.0 if assessed_sample_total <= 0 else blocked_count / assessed_sample_total
+    )
+    forbidden_used_count = sum(
+        1 for row in decision_rows if row.forbidden_evidence_used
+    )
+    firewall_row = (
+        "| evidence_firewall | Proceed | "
+        "`promotion_used_forbidden_evidence = false` |"
+        if forbidden_used_count == 0
+        else (
+            "| evidence_firewall | No-Go | "
+            f"`forbidden_evidence_used_count = {forbidden_used_count}` |"
+        )
+    )
+    rows = [
+        "| Check | Decision | Basis |",
+        "| --- | --- | --- |",
+        firewall_row,
+        _status_row(
+            "firewall_fixture",
+            context.firewall_fixture_status,
+            pass_basis="firewall A/B fixture passed",
+        ),
+        _status_row(
+            "spawn_payload_smoke",
+            context.spawn_payload_smoke_status,
+            pass_basis="spawn payload smoke passed",
+        ),
+    ]
+    if assessed_sample_total <= 0:
+        rows.append(
+            "| infrastructure_blocked_fraction | Not assessed | "
+            "`assessed_sample_total` not assessed |"
+        )
+    else:
+        max_blocked_fraction = context.max_infrastructure_blocked_fraction
+        blocked_basis = (
+            f"`{blocked_count} / {assessed_sample_total} = "
+            f"{blocked_fraction:.12g}`"
+        )
+        if blocked_fraction <= max_blocked_fraction:
+            rows.append(
+                "| infrastructure_blocked_fraction | Proceed | "
+                f"{blocked_basis} <= `{max_blocked_fraction}` |"
+            )
+        else:
+            rows.append(
+                "| infrastructure_blocked_fraction | Pivot | "
+                f"{blocked_basis} exceeds `{max_blocked_fraction}` |"
+            )
+
+    projected = context.projected_85raw_identity_request_count
+    max_projected = context.max_projected_85raw_identity_xic_requests
+    if projected is None:
+        rows.append(
+            "| projected_85raw_identity_xic_requests | No-Go for 85RAW | "
+            "`projected_85raw_identity_request_count` not assessed |"
+        )
+    elif max_projected is None:
+        rows.append(
+            "| projected_85raw_identity_xic_requests | No-Go for 85RAW | "
+            "`max_projected_85raw_identity_xic_requests` not provided |"
+        )
+    elif projected <= max_projected:
+        rows.append(
+            "| projected_85raw_identity_xic_requests | Proceed | "
+            f"`{projected}` <= `{max_projected}` |"
+        )
+    else:
+        rows.append(
+            "| projected_85raw_identity_xic_requests | Pivot | "
+            f"`{projected}` exceeds `{max_projected}` |"
+        )
+    rows.append("")
+    return rows
+
+
+def _status_row(name: str, status: str, *, pass_basis: str) -> str:
+    normalized = "" if status is None else str(status).strip()
+    if normalized == "pass":
+        return f"| {name} | Proceed | {pass_basis} |"
+    if normalized == "not_assessed" or not normalized:
+        return f"| {name} | Not assessed | `{name}` not assessed |"
+    return f"| {name} | Pivot | `{normalized}` |"
+
+
+def _assessed_sample_count_for_decision(
+    row: IdentityDecisionSummary,
+) -> int:
+    if row.coherent_fraction in {None, 0}:
+        return 0
+    return max(1, round(row.total_coherent_sample_count / row.coherent_fraction))
+
+
+def _total_assessed_sample_count(
+    decision_rows: Sequence[IdentityDecisionSummary],
+) -> int:
+    return sum(_assessed_sample_count_for_decision(row) for row in decision_rows)
 
 
 def _hash_lines(input_hashes: tuple[tuple[str, str], ...]) -> list[str]:

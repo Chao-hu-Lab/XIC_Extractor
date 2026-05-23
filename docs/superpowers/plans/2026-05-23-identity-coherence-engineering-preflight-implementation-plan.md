@@ -145,6 +145,13 @@ Out of scope:
 - Engineering Go/No-Go rows are summary/audit rows. They do not change identity decisions.
 - Synthetic Go/No-Go tests prove renderer/preflight semantics only. A Proceed
   row in this slice is not 8RAW or 85RAW data clearance.
+- The engineering blocked-fraction denominator is inferred as
+  `sum(per-row inferred assessed_sample_count)` for this slice. That assumes
+  different identity families do not share sample pools, so it can overestimate
+  the denominator and understate the blocked fraction when many families share
+  the same samples. This is accepted as an engineering preflight approximation
+  only; replace it with a real sample-aggregate denominator in the future
+  retrieval/adapter slice.
 - If a later implementation needs real trace retrieval, it must create a separate adapter plan and keep RAW/XIC calls outside `identity_coherence` domain code.
 
 ---
@@ -719,8 +726,9 @@ Also add a dependency-boundary test for the new helper module:
 
 ```python
 def test_identity_coherence_process_payload_stays_no_raw_boundary() -> None:
-    source = Path(
-        "xic_extractor/alignment/identity_coherence/process_payload.py"
+    repo_root = Path(__file__).resolve().parents[3]
+    source = (
+        repo_root / "xic_extractor/alignment/identity_coherence/process_payload.py"
     ).read_text(encoding="utf-8")
     forbidden_snippets = (
         "raw_reader",
@@ -734,6 +742,8 @@ def test_identity_coherence_process_payload_stays_no_raw_boundary() -> None:
         "report",
     )
 
+    # Syntactic-only firewall: tighten to an AST import scan once this module
+    # grows beyond payload dataclasses and the no-RAW smoke worker.
     for snippet in forbidden_snippets:
         assert snippet not in source
 ```
@@ -997,20 +1007,26 @@ def _engineering_go_no_go_rows(
             pass_basis="spawn payload smoke passed",
         ),
     ]
-    blocked_basis = (
-        f"`{blocked_count} / {assessed_sample_total} = "
-        f"{blocked_fraction:.12g}`"
-    )
-    if blocked_fraction <= context.max_infrastructure_blocked_fraction:
+    if assessed_sample_total <= 0:
         rows.append(
-            "| infrastructure_blocked_fraction | Proceed | "
-            f"{blocked_basis} <= `{context.max_infrastructure_blocked_fraction}` |"
+            "| infrastructure_blocked_fraction | Not assessed | "
+            "`assessed_sample_total` not assessed |"
         )
     else:
-        rows.append(
-            "| infrastructure_blocked_fraction | Pivot | "
-            f"{blocked_basis} exceeds `{context.max_infrastructure_blocked_fraction}` |"
+        blocked_basis = (
+            f"`{blocked_count} / {assessed_sample_total} = "
+            f"{blocked_fraction:.12g}`"
         )
+        if blocked_fraction <= context.max_infrastructure_blocked_fraction:
+            rows.append(
+                "| infrastructure_blocked_fraction | Proceed | "
+                f"{blocked_basis} <= `{context.max_infrastructure_blocked_fraction}` |"
+            )
+        else:
+            rows.append(
+                "| infrastructure_blocked_fraction | Pivot | "
+                f"{blocked_basis} exceeds `{context.max_infrastructure_blocked_fraction}` |"
+            )
 
     projected = context.projected_85raw_identity_request_count
     max_projected = context.max_projected_85raw_identity_xic_requests
@@ -1064,16 +1080,13 @@ and table rows must stay adjacent:
         _engineering_go_no_go_rows(
             decision_rows,
             context=context,
-            assessed_sample_total=max(
-                1,
-                _total_assessed_sample_count(decision_rows),
-            ),
+            assessed_sample_total=_total_assessed_sample_count(decision_rows),
         )
     )
 ```
 
 Do not append the rows after the Cost Counters or Writer Contract Checks
-sections. Also update the existing heading-order test so
+sections. Also update the existing `test_summary_section_heading_order` test so
 `## Engineering Go / No-Go` appears before `## Cost Counters`.
 
 Add helpers:
@@ -1093,10 +1106,11 @@ def _total_assessed_sample_count(
     return sum(_assessed_sample_count_for_decision(row) for row in decision_rows)
 ```
 
-Use `max(1, ...)` in the caller so empty synthetic fixtures do not divide by
-zero. Do not use a single maximum inferred sample count as the denominator
-across multiple rows; that overestimates blocked fraction when several identity
-families are summarized together.
+When `_total_assessed_sample_count(decision_rows) <= 0`, render
+`infrastructure_blocked_fraction` as `Not assessed`; do not coerce the
+denominator to `1`. Do not use a single maximum inferred sample count as the
+denominator across multiple rows; that overestimates blocked fraction when
+several identity families are summarized together.
 
 - [ ] **Step 6: Run focused tests**
 
@@ -1534,6 +1548,7 @@ git ls-files --others --exclude-standard
 Expected changed files are limited to:
 
 ```text
+docs/superpowers/plans/2026-05-23-identity-coherence-engineering-preflight-implementation-plan.md
 tests/alignment/identity_coherence/test_firewall_fixture.py
 tests/alignment/identity_coherence/test_output_writer.py
 tests/alignment/identity_coherence/test_process_payload.py

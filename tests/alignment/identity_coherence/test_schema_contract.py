@@ -9,6 +9,7 @@ from xic_extractor.alignment.identity_coherence.models import (
     CandidateTrace,
     CellCandidateEvidence,
     CellEvidenceResult,
+    EngineeringConfig,
     IdentityCoherenceConfig,
     IdentityDecisionSummary,
     RtCenterResult,
@@ -303,6 +304,42 @@ def test_identity_coherence_facade_exports_controls_surface():
     )
 
 
+def test_identity_coherence_facade_exports_process_payload_surface():
+    import xic_extractor.alignment.identity_coherence as identity_coherence
+
+    assert identity_coherence.EngineeringConfig is not None
+    assert identity_coherence.IdentityCoherenceResult is not None
+    assert identity_coherence.IdentityCoherenceTraceRequest is not None
+    assert identity_coherence.IdentityCoherenceTraceResult is not None
+    assert "EngineeringConfig" in identity_coherence.__all__
+    assert "IdentityCoherenceResult" in identity_coherence.__all__
+    assert "IdentityCoherenceTraceRequest" in identity_coherence.__all__
+    assert "IdentityCoherenceTraceResult" in identity_coherence.__all__
+
+
+def test_identity_coherence_process_payload_stays_no_raw_boundary() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    source = (
+        repo_root / "xic_extractor/alignment/identity_coherence/process_payload.py"
+    ).read_text(encoding="utf-8")
+    forbidden_snippets = (
+        "raw_reader",
+        "ms1_index_source",
+        "owner_backfill",
+        "alignment.pipeline",
+        "scripts.run_alignment",
+        "source_for_owner_backfill_backend",
+        "xic_extractor.output",
+        "workbook",
+        "report",
+    )
+
+    # Syntactic-only firewall: tighten to an AST import scan once this module
+    # grows beyond payload dataclasses and the no-RAW smoke worker.
+    for snippet in forbidden_snippets:
+        assert snippet not in source
+
+
 def test_domain_modules_do_not_import_controls_or_output_surfaces():
     package_root = (
         Path(__file__).resolve().parents[3]
@@ -584,6 +621,9 @@ def test_identity_coherence_config_defaults_match_v04_review_values():
     assert config.width.prototype_min_candidates == 3
     assert config.width.min_ratio == 0.50
     assert config.width.max_ratio == 2.00
+    assert isinstance(config.engineering, EngineeringConfig)
+    assert config.engineering.max_infrastructure_blocked_fraction == 0.05
+    assert config.engineering.max_projected_85raw_identity_xic_requests is None
 
 
 def test_candidate_trace_is_nested_domain_model_not_flat_schema_columns():

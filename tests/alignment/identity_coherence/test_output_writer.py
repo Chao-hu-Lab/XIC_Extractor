@@ -169,6 +169,7 @@ def test_summary_renderer_reports_required_sections_and_counts():
         "## Threshold Count And Fraction Summaries",
         "## Weak Basis Counts",
         "## Identity Controls",
+        "## Engineering Go / No-Go",
         "## Cost Counters",
         "## Writer Contract Checks",
     )
@@ -305,3 +306,203 @@ def test_summary_renderer_rejects_mixed_threshold_rows():
             ),
             control_rows=(),
         )
+
+
+def test_summary_renders_engineering_go_no_go_rows():
+    record = output_record()
+    markdown = render_identity_coherence_summary(
+        (record,),
+        context=IdentityCoherenceOutputContext(
+            command="pytest",
+            mode="inline_pre_backfill",
+            input_source="pre_backfill_owner_state.jsonl",
+            firewall_fixture_status="pass",
+            spawn_payload_smoke_status="pass",
+            max_infrastructure_blocked_fraction=0.05,
+            projected_85raw_identity_request_count=10,
+            max_projected_85raw_identity_xic_requests=20,
+        ),
+    )
+
+    assert "## Engineering Go / No-Go" in markdown
+    assert "| evidence_firewall | Proceed |" in markdown
+    assert "| firewall_fixture | Proceed |" in markdown
+    assert "| spawn_payload_smoke | Proceed |" in markdown
+    assert "| infrastructure_blocked_fraction | Proceed |" in markdown
+    assert "| projected_85raw_identity_xic_requests | Proceed |" in markdown
+
+
+def test_summary_marks_engineering_no_go_when_85raw_budget_missing():
+    markdown = render_identity_coherence_summary(
+        (output_record(),),
+        context=IdentityCoherenceOutputContext(
+            command="pytest",
+            mode="inline_pre_backfill",
+            input_source="pre_backfill_owner_state.jsonl",
+            firewall_fixture_status="pass",
+            spawn_payload_smoke_status="pass",
+            projected_85raw_identity_request_count=10,
+            max_projected_85raw_identity_xic_requests=None,
+        ),
+    )
+
+    assert (
+        "| projected_85raw_identity_xic_requests | No-Go for 85RAW | "
+        "`max_projected_85raw_identity_xic_requests` not provided |"
+    ) in markdown
+
+
+def test_summary_marks_infrastructure_pivot_when_blocked_fraction_exceeds_limit():
+    record = output_record()
+    blocked_decision = replace(
+        record.row_result.decision,
+        infrastructure_blocked_sample_count=2,
+    )
+    blocked_record = replace(
+        record,
+        row_result=replace(record.row_result, decision=blocked_decision),
+    )
+
+    markdown = render_identity_coherence_summary(
+        (blocked_record,),
+        context=IdentityCoherenceOutputContext(
+            command="pytest",
+            mode="inline_pre_backfill",
+            input_source="pre_backfill_owner_state.jsonl",
+            max_infrastructure_blocked_fraction=0.05,
+        ),
+    )
+
+    assert (
+        "| infrastructure_blocked_fraction | Pivot | "
+        "`2 / 8 = 0.25` exceeds `0.05` |"
+    ) in markdown
+
+
+def test_summary_uses_row_level_denominator_for_blocked_fraction():
+    record = output_record()
+    first_decision = replace(
+        record.row_result.decision,
+        total_coherent_sample_count=4,
+        coherent_fraction=0.5,
+        infrastructure_blocked_sample_count=1,
+    )
+    second_decision = replace(
+        record.row_result.decision,
+        decision_id="DEC-SECOND",
+        identity_family_id="IDF-SECOND",
+        total_coherent_sample_count=4,
+        coherent_fraction=0.5,
+        infrastructure_blocked_sample_count=1,
+    )
+    first_record = replace(
+        record,
+        row_result=replace(record.row_result, decision=first_decision),
+    )
+    second_request = replace(
+        record.seed_gate.resolved_request,
+        decision_id="DEC-SECOND",
+    )
+    second_seed_gate = replace(
+        record.seed_gate,
+        resolved_request=second_request,
+    )
+    second_cells = tuple(
+        replace(
+            cell,
+            decision_id="DEC-SECOND",
+            identity_family_id="IDF-SECOND",
+        )
+        for cell in record.row_result.cells
+    )
+    second_record = replace(
+        record,
+        seed_gate=second_seed_gate,
+        row_result=replace(
+            record.row_result,
+            cells=second_cells,
+            decision=second_decision,
+        ),
+    )
+
+    markdown = render_identity_coherence_summary(
+        (first_record, second_record),
+        context=IdentityCoherenceOutputContext(
+            command="pytest",
+            mode="inline_pre_backfill",
+            input_source="pre_backfill_owner_state.jsonl",
+            max_infrastructure_blocked_fraction=0.2,
+        ),
+    )
+
+    assert (
+        "| infrastructure_blocked_fraction | Proceed | "
+        "`2 / 16 = 0.125` <= `0.2` |"
+    ) in markdown
+
+
+def test_summary_marks_blocked_fraction_not_assessed_without_denominator():
+    record = output_record()
+    zero_denominator_decision = replace(
+        record.row_result.decision,
+        total_coherent_sample_count=0,
+        coherent_fraction=None,
+        infrastructure_blocked_sample_count=0,
+    )
+    zero_denominator_record = replace(
+        record,
+        row_result=replace(
+            record.row_result,
+            decision=zero_denominator_decision,
+        ),
+    )
+
+    markdown = render_identity_coherence_summary(
+        (zero_denominator_record,),
+        context=IdentityCoherenceOutputContext(
+            command="pytest",
+            mode="inline_pre_backfill",
+            input_source="pre_backfill_owner_state.jsonl",
+        ),
+    )
+
+    assert (
+        "| infrastructure_blocked_fraction | Not assessed | "
+        "`assessed_sample_total` not assessed |"
+    ) in markdown
+
+
+def test_summary_rejects_forbidden_evidence_used_before_go_no_go_render():
+    record = output_record()
+    forbidden_decision = replace(
+        record.row_result.decision,
+        forbidden_evidence_used=True,
+    )
+    forbidden_record = replace(
+        record,
+        row_result=replace(record.row_result, decision=forbidden_decision),
+    )
+
+    with pytest.raises(ValueError, match="forbidden_evidence_used"):
+        render_identity_coherence_summary(
+            (forbidden_record,),
+            context=IdentityCoherenceOutputContext(
+                command="pytest",
+                mode="inline_pre_backfill",
+                input_source="pre_backfill_owner_state.jsonl",
+            ),
+        )
+
+
+def test_summary_can_record_passed_firewall_fixture_status():
+    markdown = render_identity_coherence_summary(
+        (output_record(),),
+        context=IdentityCoherenceOutputContext(
+            command="pytest",
+            mode="inline_pre_backfill",
+            input_source="tests/fixtures/identity_coherence/firewall_spoof",
+            firewall_fixture_status="pass",
+        ),
+    )
+
+    assert "| firewall_fixture | Proceed | firewall A/B fixture passed |" in markdown
