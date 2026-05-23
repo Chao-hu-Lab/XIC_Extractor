@@ -1,16 +1,32 @@
 from dataclasses import replace
 
+import pytest
+
 from tests.alignment.identity_coherence.output_fixtures import output_record
+from xic_extractor.alignment.identity_coherence import controls as controls_module
 from xic_extractor.alignment.identity_coherence.controls import (
     IdentityControlManifestEntry,
+    IdentityControlsConfig,
+    IdentityDecoySource,
+    evaluate_identity_decoy,
     evaluate_positive_control,
+)
+from xic_extractor.alignment.identity_coherence.models import (
+    SeedCandidateEvidence,
+    SeedGateConfig,
 )
 from xic_extractor.alignment.identity_coherence.schema import (
     ControlStatus,
     ControlType,
+    DecoyGenerationMethod,
+    EvidenceStage,
     FragmentObservationMode,
     IdentityDecision,
     PositiveControlMappingStatus,
+    SeedRejectReason,
+)
+from xic_extractor.alignment.identity_coherence.seed_gate import (
+    evaluate_seed_gate as real_evaluate_seed_gate,
 )
 
 
@@ -226,3 +242,398 @@ def test_positive_control_labels_do_not_mutate_decision_summary():
 
     assert record.row_result.decision is before
     assert before.decision is IdentityDecision.WOULD_PRIMARY
+
+
+class OwnerLike:
+    owner_apex_rt = 5.0
+    owner_peak_start_rt = 4.90
+    owner_peak_end_rt = 5.10
+    owner_area = 1000.0
+    owner_height = 200.0
+
+
+class MissingOwnerPeakStartLike:
+    owner_apex_rt = 5.0
+    owner_peak_end_rt = 5.10
+    owner_area = 1000.0
+    owner_height = 200.0
+
+
+class NonfiniteOwnerAreaLike:
+    owner_apex_rt = 5.0
+    owner_peak_start_rt = 4.90
+    owner_peak_end_rt = 5.10
+    owner_area = float("nan")
+    owner_height = 200.0
+
+
+class MissingOwnerPeakEndLike:
+    owner_apex_rt = 5.0
+    owner_peak_start_rt = 4.90
+    owner_area = 1000.0
+    owner_height = 200.0
+
+
+class NonfiniteOwnerPeakEndLike:
+    owner_apex_rt = 5.0
+    owner_peak_start_rt = 4.90
+    owner_peak_end_rt = float("inf")
+    owner_area = 1000.0
+    owner_height = 200.0
+
+
+def _decoy_entry(method, **overrides):
+    values = dict(
+        control_id=f"CTRL-DECOY-{method.value}",
+        control_type=ControlType.IDENTITY_DECOY,
+        control_name=f"{method.value} decoy",
+        expected_mapping_status=PositiveControlMappingStatus.MAPPED,
+        control_expected_behavior="not_would_primary",
+        fragment_observation_mode=FragmentObservationMode.CID_NEUTRAL_LOSS,
+        precursor_tolerance_ppm=10.0,
+        product_tolerance_ppm=10.0,
+        cid_observed_loss_tolerance_ppm=10.0,
+        rt_tolerance_sec=60.0,
+        required_failure_reason_when_missed="request_candidate_identity_mismatch",
+        decision_id="DEC-1",
+        decoy_generation_method=method,
+    )
+    values.update(overrides)
+    return IdentityControlManifestEntry(**values)
+
+
+def _decoy_source():
+    return IdentityDecoySource(
+        source_record=output_record(),
+        seed_evidence=SeedCandidateEvidence(
+            candidate_id="CAND-1",
+            precursor_mz=500.0,
+            product_mz=384.0,
+            cid_observed_loss_da=116.0,
+            fragment_tags=("MeR", "dR"),
+            best_seed_rt=5.0,
+            ms1_scan_support_score=0.9,
+            evidence_stage=EvidenceStage.PRE_BACKFILL,
+        ),
+        owner_like=OwnerLike(),
+    )
+
+
+def test_rt_shift_decoy_uses_owner_boundary_plus_seconds_margin(monkeypatch):
+    captured = {}
+
+    def capture_seed_gate(request, candidate_evidence, owner_like, **kwargs):
+        captured["best_seed_rt"] = candidate_evidence.best_seed_rt
+        return real_evaluate_seed_gate(
+            request,
+            candidate_evidence,
+            owner_like,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(controls_module, "evaluate_seed_gate", capture_seed_gate)
+
+    row = evaluate_identity_decoy(
+        _decoy_entry(
+            DecoyGenerationMethod.RT_SHIFT,
+            required_failure_reason_when_missed="seed_rt_outside_owner_peak",
+        ),
+        _decoy_source(),
+        IdentityControlsConfig(decoy_rt_owner_boundary_margin_sec=6.0),
+    )
+
+    assert captured["best_seed_rt"] == pytest.approx(5.20)
+    assert row["control_pass"] is True
+    assert row["control_observed_behavior"] == (
+        SeedRejectReason.SEED_RT_OUTSIDE_OWNER_PEAK.value
+    )
+    assert row["decoy_generation_method"] == "rt_shift"
+    assert row["decoy_shift_value"] == 6.0
+    assert row["decoy_identity_constraint_changed"] == "best_seed_rt"
+
+
+def test_mz_shift_decoy_fails_request_candidate_identity_match(monkeypatch):
+    captured = {}
+
+    def capture_seed_gate(request, candidate_evidence, owner_like, **kwargs):
+        captured["request_precursor_mz"] = request.identity.precursor_mz
+        captured["request_product_mz"] = request.identity.product_mz
+        captured["evidence_precursor_mz"] = candidate_evidence.precursor_mz
+        captured["evidence_product_mz"] = candidate_evidence.product_mz
+        return real_evaluate_seed_gate(
+            request,
+            candidate_evidence,
+            owner_like,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(controls_module, "evaluate_seed_gate", capture_seed_gate)
+
+    row = evaluate_identity_decoy(
+        _decoy_entry(DecoyGenerationMethod.MZ_SHIFT),
+        _decoy_source(),
+        IdentityControlsConfig(),
+    )
+
+    assert captured["request_precursor_mz"] > 500.0
+    assert captured["request_product_mz"] > 384.0
+    assert captured["evidence_precursor_mz"] == 500.0
+    assert captured["evidence_product_mz"] == 384.0
+    assert row["control_pass"] is True
+    assert row["control_observed_behavior"] == (
+        SeedRejectReason.REQUEST_CANDIDATE_IDENTITY_MISMATCH.value
+    )
+    assert row["decoy_identity_constraint_changed"] == "precursor_mz;product_mz"
+
+
+def test_fragment_tag_shuffle_decoy_uses_manifest_tags_for_request(monkeypatch):
+    source = _decoy_source()
+    original_mode_constraint = (
+        source.source_record.seed_gate.resolved_request.identity.mode_constraint
+    )
+    captured = {}
+
+    def capture_seed_gate(request, candidate_evidence, owner_like, **kwargs):
+        captured["request_fragment_tags"] = request.identity.fragment_tags
+        captured["evidence_fragment_tags"] = candidate_evidence.fragment_tags
+        captured["mode_constraint"] = request.identity.mode_constraint
+        return real_evaluate_seed_gate(
+            request,
+            candidate_evidence,
+            owner_like,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(controls_module, "evaluate_seed_gate", capture_seed_gate)
+
+    row = evaluate_identity_decoy(
+        _decoy_entry(
+            DecoyGenerationMethod.FRAGMENT_TAG_SHUFFLE,
+            decoy_fragment_tags=("other_diagnostic_tag",),
+        ),
+        source,
+        IdentityControlsConfig(),
+    )
+
+    assert captured["request_fragment_tags"] == ("other_diagnostic_tag",)
+    assert captured["evidence_fragment_tags"] == ("MeR", "dR")
+    assert captured["mode_constraint"] is original_mode_constraint
+    assert row["control_pass"] is True
+    assert row["control_observed_behavior"] == (
+        SeedRejectReason.REQUEST_CANDIDATE_IDENTITY_MISMATCH.value
+    )
+    assert row["decoy_identity_constraint_changed"] == "fragment_tags"
+
+
+def test_fragment_tag_shuffle_decoy_generates_default_unmatched_tag(monkeypatch):
+    captured = {}
+
+    def capture_seed_gate(request, candidate_evidence, owner_like, **kwargs):
+        captured["request_fragment_tags"] = request.identity.fragment_tags
+        return real_evaluate_seed_gate(
+            request,
+            candidate_evidence,
+            owner_like,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(controls_module, "evaluate_seed_gate", capture_seed_gate)
+
+    row = evaluate_identity_decoy(
+        _decoy_entry(DecoyGenerationMethod.FRAGMENT_TAG_SHUFFLE),
+        _decoy_source(),
+        IdentityControlsConfig(),
+    )
+
+    assert captured["request_fragment_tags"] == ("identity_decoy_unmatched_tag",)
+    assert row["control_pass"] is True
+    assert row["control_observed_behavior"] == (
+        SeedRejectReason.REQUEST_CANDIDATE_IDENTITY_MISMATCH.value
+    )
+
+
+def test_decoy_that_reaches_coherent_seed_is_control_failure():
+    row = evaluate_identity_decoy(
+        _decoy_entry(
+            DecoyGenerationMethod.RT_SHIFT,
+            required_failure_reason_when_missed="seed_rt_outside_owner_peak",
+        ),
+        _decoy_source(),
+        IdentityControlsConfig(decoy_rt_owner_boundary_margin_sec=6.0),
+        seed_gate_config=SeedGateConfig(require_seed_rt_inside_owner_peak=False),
+    )
+
+    assert row["control_pass"] is False
+    assert row["control_failure_reason"] == "decoy_seed_gate_coherent"
+
+
+def test_decoy_rejected_by_earlier_seed_gate_still_passes_control():
+    source = _decoy_source()
+    source = replace(
+        source,
+        seed_evidence=replace(source.seed_evidence, ms1_scan_support_score=0.0),
+    )
+
+    row = evaluate_identity_decoy(
+        _decoy_entry(
+            DecoyGenerationMethod.RT_SHIFT,
+            required_failure_reason_when_missed="seed_rt_outside_owner_peak",
+        ),
+        source,
+        IdentityControlsConfig(),
+        seed_gate_config=SeedGateConfig(require_seed_rt_inside_owner_peak=False),
+    )
+
+    assert row["control_pass"] is True
+    assert row["control_observed_behavior"] == "low_ms1_scan_support"
+    assert row["control_failure_reason"] == ""
+
+
+def test_decoy_rejects_backfill_only_seed_evidence():
+    source = _decoy_source()
+    source = replace(
+        source,
+        seed_evidence=replace(
+            source.seed_evidence,
+            evidence_stage=EvidenceStage.BACKFILL_ONLY,
+        ),
+    )
+
+    row = evaluate_identity_decoy(
+        _decoy_entry(
+            DecoyGenerationMethod.RT_SHIFT,
+            required_failure_reason_when_missed="seed_rt_outside_owner_peak",
+        ),
+        source,
+        IdentityControlsConfig(),
+    )
+
+    assert row["control_status"] == ControlStatus.NOT_ASSESSED.value
+    assert row["control_pass"] is False
+    assert row["control_observed_behavior"] == "invalid_decoy_source_stage"
+    assert row["control_failure_reason"] == "invalid_decoy_source_stage"
+
+
+def test_decoy_rejects_post_backfill_owner_evidence():
+    source = replace(_decoy_source(), owner_evidence_stage=EvidenceStage.POST_BACKFILL)
+
+    row = evaluate_identity_decoy(
+        _decoy_entry(
+            DecoyGenerationMethod.RT_SHIFT,
+            required_failure_reason_when_missed="seed_rt_outside_owner_peak",
+        ),
+        source,
+        IdentityControlsConfig(),
+    )
+
+    assert row["control_status"] == ControlStatus.NOT_ASSESSED.value
+    assert row["control_pass"] is False
+    assert row["control_observed_behavior"] == "invalid_decoy_source_stage"
+    assert row["control_failure_reason"] == "invalid_decoy_source_stage"
+
+
+@pytest.mark.parametrize(
+    "source_overrides",
+    [
+        {"owner_assignment_status": "ambiguous"},
+        {"duplicate_loser": True},
+    ],
+)
+def test_decoy_rejects_non_primary_or_duplicate_source(source_overrides):
+    row = evaluate_identity_decoy(
+        _decoy_entry(
+            DecoyGenerationMethod.RT_SHIFT,
+            required_failure_reason_when_missed="seed_rt_outside_owner_peak",
+        ),
+        replace(_decoy_source(), **source_overrides),
+        IdentityControlsConfig(),
+    )
+
+    assert row["control_status"] == ControlStatus.NOT_ASSESSED.value
+    assert row["control_pass"] is False
+    assert row["control_observed_behavior"] == "invalid_decoy_source_stage"
+    assert row["control_failure_reason"] == "invalid_decoy_source_stage"
+
+
+@pytest.mark.parametrize(
+    "owner_like",
+    [
+        MissingOwnerPeakStartLike(),
+        NonfiniteOwnerAreaLike(),
+    ],
+)
+def test_mz_shift_decoy_rejects_missing_or_nonfinite_owner_fields(owner_like):
+    row = evaluate_identity_decoy(
+        _decoy_entry(DecoyGenerationMethod.MZ_SHIFT),
+        replace(_decoy_source(), owner_like=owner_like),
+        IdentityControlsConfig(),
+    )
+
+    assert row["control_status"] == ControlStatus.NOT_ASSESSED.value
+    assert row["control_pass"] is False
+    assert row["control_observed_behavior"] == "invalid_decoy_source_stage"
+    assert row["control_failure_reason"] == "invalid_decoy_source_stage"
+
+
+@pytest.mark.parametrize(
+    "owner_like",
+    [
+        MissingOwnerPeakEndLike(),
+        NonfiniteOwnerPeakEndLike(),
+    ],
+)
+def test_rt_shift_decoy_rejects_invalid_owner_peak_end_without_raising(owner_like):
+    row = evaluate_identity_decoy(
+        _decoy_entry(
+            DecoyGenerationMethod.RT_SHIFT,
+            required_failure_reason_when_missed="seed_rt_outside_owner_peak",
+        ),
+        replace(_decoy_source(), owner_like=owner_like),
+        IdentityControlsConfig(),
+    )
+
+    assert row["control_status"] == ControlStatus.NOT_ASSESSED.value
+    assert row["control_pass"] is False
+    assert row["control_observed_behavior"] == "invalid_decoy_source_stage"
+    assert row["control_failure_reason"] == "invalid_decoy_source_stage"
+
+
+def test_decoy_rejects_source_request_id_mismatch():
+    row = evaluate_identity_decoy(
+        _decoy_entry(
+            DecoyGenerationMethod.MZ_SHIFT,
+            decoy_source_request_id="OTHER",
+        ),
+        _decoy_source(),
+        IdentityControlsConfig(),
+    )
+
+    assert row["control_status"] == ControlStatus.NOT_ASSESSED.value
+    assert row["control_pass"] is False
+    assert row["control_observed_behavior"] == "invalid_decoy_source_stage"
+    assert row["control_failure_reason"] == "invalid_decoy_source_stage"
+    assert row["decoy_source_request_id"] == "REQ-1"
+
+
+def test_decoy_accepts_matching_source_request_id():
+    row = evaluate_identity_decoy(
+        _decoy_entry(
+            DecoyGenerationMethod.MZ_SHIFT,
+            decoy_source_request_id="REQ-1",
+        ),
+        _decoy_source(),
+        IdentityControlsConfig(),
+    )
+
+    assert row["control_status"] == ControlStatus.ASSESSED.value
+    assert row["control_pass"] is True
+    assert row["decoy_source_request_id"] == "REQ-1"
+
+
+def test_identity_controls_config_rejects_invalid_thresholds():
+    with pytest.raises(ValueError, match="positive_control_min_pass_fraction"):
+        IdentityControlsConfig(positive_control_min_pass_fraction=1.5)
+    with pytest.raises(ValueError, match="max_decoy_coherent_seed_count"):
+        IdentityControlsConfig(max_decoy_coherent_seed_count=-1)
+    with pytest.raises(ValueError, match="decoy_rt_owner_boundary_margin_sec"):
+        IdentityControlsConfig(decoy_rt_owner_boundary_margin_sec=0.0)
