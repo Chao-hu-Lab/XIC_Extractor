@@ -3,6 +3,7 @@ from dataclasses import dataclass, replace
 import pytest
 
 from xic_extractor.alignment.identity_coherence.candidate_matcher import (
+    match_identity_constraints_to_candidate,
     match_request_to_candidate,
 )
 from xic_extractor.alignment.identity_coherence.request_builder import (
@@ -223,4 +224,25 @@ def test_match_request_to_candidate_leaves_incomplete_request_not_assessed():
     )
     assert match.request_candidate_identity_status is (
         RequestCandidateIdentityStatus.NOT_ASSESSED
+    )
+
+
+def test_identity_constraint_match_allows_non_seed_candidate_id():
+    request = _request(CandidateLike())
+    non_seed_candidate = replace(
+        _evidence(CandidateLike()),
+        candidate_id="NON-SEED-CAND",
+    )
+
+    seed_join_match = match_request_to_candidate(request, non_seed_candidate)
+    identity_match = match_identity_constraints_to_candidate(
+        request,
+        non_seed_candidate,
+    )
+
+    assert seed_join_match.request_candidate_identity_status is (
+        RequestCandidateIdentityStatus.MISSING_DISCOVERY_CANDIDATE_JOIN
+    )
+    assert identity_match.request_candidate_identity_status is (
+        RequestCandidateIdentityStatus.MATCH
     )

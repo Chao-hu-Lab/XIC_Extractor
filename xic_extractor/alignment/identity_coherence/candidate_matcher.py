@@ -18,6 +18,30 @@ def match_request_to_candidate(
     request: IdentityCoherenceRequest,
     candidate_evidence: SeedCandidateEvidence | None,
 ) -> CandidateIdentityMatch:
+    return _match_request_to_candidate(
+        request,
+        candidate_evidence,
+        require_seed_candidate_id_match=True,
+    )
+
+
+def match_identity_constraints_to_candidate(
+    request: IdentityCoherenceRequest,
+    candidate_evidence: SeedCandidateEvidence | None,
+) -> CandidateIdentityMatch:
+    return _match_request_to_candidate(
+        request,
+        candidate_evidence,
+        require_seed_candidate_id_match=False,
+    )
+
+
+def _match_request_to_candidate(
+    request: IdentityCoherenceRequest,
+    candidate_evidence: SeedCandidateEvidence | None,
+    *,
+    require_seed_candidate_id_match: bool,
+) -> CandidateIdentityMatch:
     if (
         request.request_identity_completeness_status
         != RequestIdentityCompletenessStatus.COMPLETE
@@ -38,7 +62,10 @@ def match_request_to_candidate(
             RequestCandidateIdentityStatus.MISSING_DISCOVERY_CANDIDATE_JOIN,
             missing_fields=("candidate",),
         )
-    if candidate_evidence.candidate_id != request.seed_candidate_id:
+    if (
+        require_seed_candidate_id_match
+        and candidate_evidence.candidate_id != request.seed_candidate_id
+    ):
         return _match(
             RequestCandidateIdentityStatus.MISSING_DISCOVERY_CANDIDATE_JOIN,
             missing_fields=("candidate_id",),
