@@ -367,8 +367,10 @@ def render_identity_coherence_summary(
         "# Untargeted Identity Coherence Summary",
         "",
         "This diagnostic is non-mutating. It reports identity-family evidence only; "
-        "it does not perform final-matrix filtering, background filtering, area "
-        "correction, normalization, statistics, Backfill, or RAW/XIC retrieval.",
+        "it may retrieve RAW/XIC traces for diagnostic identity evidence, but it "
+        "does not mutate Backfill or final-matrix outputs and does not perform "
+        "final-matrix filtering, background filtering, area correction, "
+        "normalization, or statistics.",
         "",
         "## Run Context",
         "",

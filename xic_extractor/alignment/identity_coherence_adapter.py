@@ -67,6 +67,14 @@ class IdentityCoherenceDiagnosticRun:
     paths: IdentityCoherenceOutputPaths
 
 
+@dataclass(frozen=True)
+class _SeedTracePlan:
+    source_index: int
+    source: IdentityCoherenceSeedSource
+    candidate_pool: tuple[DiscoveryCandidate, ...]
+    trace_requests: tuple[IdentityCoherenceTraceRequest, ...]
+
+
 class IdentityCoherenceRawSource(Protocol):
     def extract_xic(
         self,
@@ -309,24 +317,66 @@ def run_identity_coherence_diagnostic(
         config=identity_config,
     )
     assignment_by_candidate_id = assignment_status_by_candidate_id(ownership)
-    records: list[IdentityCoherenceOutputRecord] = []
-    trace_results: list[IdentityCoherenceTraceResult] = []
-    for source in sources:
-        record, source_trace_results = _record_for_seed_source(
+    records_by_source_index: dict[int, IdentityCoherenceOutputRecord] = {}
+    trace_plans: list[_SeedTracePlan] = []
+    trace_requests: list[IdentityCoherenceTraceRequest] = []
+    for source_index, source in enumerate(sources):
+        if source.seed_gate.seed_gate_class != SeedGateClass.COHERENT_SEED:
+            records_by_source_index[source_index] = _record_for_seed_source(
+                source,
+                candidate_pool=(),
+                trace_results=(),
+                assignment_by_candidate_id=assignment_by_candidate_id,
+                sample_order=tuple(sample_order),
+                config=identity_config,
+            )
+            continue
+        candidate_pool = _candidate_pool_for_seed_source(
             source,
             candidates,
+            alignment_config=alignment_config,
+        )
+        source_trace_requests = _trace_requests_for_seed_source(
+            source,
+            candidate_pool,
+            alignment_config=alignment_config,
+        )
+        trace_plans.append(
+            _SeedTracePlan(
+                source_index=source_index,
+                source=source,
+                candidate_pool=candidate_pool,
+                trace_requests=source_trace_requests,
+            )
+        )
+        trace_requests.extend(source_trace_requests)
+
+    trace_results = retrieve_identity_coherence_traces(
+        tuple(trace_requests),
+        raw_sources=raw_sources,
+        raw_paths=raw_paths,
+        dll_dir=dll_dir,
+        raw_workers=raw_workers,
+        raw_xic_batch_size=raw_xic_batch_size,
+    )
+    trace_offset = 0
+    for plan in trace_plans:
+        source_trace_count = len(plan.trace_requests)
+        source_trace_results = trace_results[
+            trace_offset : trace_offset + source_trace_count
+        ]
+        records_by_source_index[plan.source_index] = _record_for_seed_source(
+            plan.source,
+            candidate_pool=plan.candidate_pool,
+            trace_results=source_trace_results,
             assignment_by_candidate_id=assignment_by_candidate_id,
             sample_order=tuple(sample_order),
-            raw_sources=raw_sources,
-            raw_paths=raw_paths,
-            dll_dir=dll_dir,
-            raw_workers=raw_workers,
-            raw_xic_batch_size=raw_xic_batch_size,
-            alignment_config=alignment_config,
             config=identity_config,
         )
-        records.append(record)
-        trace_results.extend(source_trace_results)
+        trace_offset += source_trace_count
+    records = tuple(
+        records_by_source_index[source_index] for source_index in range(len(sources))
+    )
 
     decoy_sources = tuple(
         IdentityDecoySource(
@@ -383,9 +433,9 @@ def run_identity_coherence_diagnostic(
         control_rows=control_rows,
     )
     return IdentityCoherenceDiagnosticRun(
-        records=tuple(records),
+        records=records,
         control_rows=control_rows,
-        trace_results=tuple(trace_results),
+        trace_results=trace_results,
         context=context,
         paths=paths,
     )
@@ -393,18 +443,13 @@ def run_identity_coherence_diagnostic(
 
 def _record_for_seed_source(
     source: IdentityCoherenceSeedSource,
-    candidates: Sequence[DiscoveryCandidate],
     *,
+    candidate_pool: tuple[DiscoveryCandidate, ...],
+    trace_results: tuple[IdentityCoherenceTraceResult, ...],
     assignment_by_candidate_id: Mapping[str, str],
     sample_order: tuple[str, ...],
-    raw_sources: Mapping[str, IdentityCoherenceRawSource],
-    raw_paths: Mapping[str, Path],
-    dll_dir: Path,
-    raw_workers: int,
-    raw_xic_batch_size: int,
-    alignment_config: AlignmentConfig,
     config: IdentityCoherenceConfig,
-) -> tuple[IdentityCoherenceOutputRecord, tuple[IdentityCoherenceTraceResult, ...]]:
+) -> IdentityCoherenceOutputRecord:
     if source.seed_gate.seed_gate_class != SeedGateClass.COHERENT_SEED:
         row = evaluate_identity_coherence_row(
             source.seed_gate,
@@ -415,43 +460,11 @@ def _record_for_seed_source(
             identity_family_id=source.identity_family_id,
             assessed_sample_count=len(sample_order),
         )
-        return IdentityCoherenceOutputRecord(source.seed_gate, row), ()
+        return IdentityCoherenceOutputRecord(source.seed_gate, row)
 
-    candidate_pool = tuple(
-        candidate
-        for candidate in candidates
-        if candidate_is_non_seed_pool_member(
-            source.request,
-            candidate,
-            seed_candidate=source.seed_candidate,
-            config=alignment_config,
-        )
-    )
-    trace_requests = [
-        trace_request_for_candidate(
-            source=source,
-            candidate=source.seed_candidate,
-            ppm_tolerance=alignment_config.preferred_ppm,
-        )
-    ]
-    trace_requests.extend(
-        trace_request_for_candidate(
-            source=source,
-            candidate=candidate,
-            ppm_tolerance=alignment_config.preferred_ppm,
-        )
-        for candidate in candidate_pool
-    )
-    trace_results = list(
-        retrieve_identity_coherence_traces(
-            tuple(trace_requests),
-            raw_sources=raw_sources,
-            raw_paths=raw_paths,
-            dll_dir=dll_dir,
-            raw_workers=raw_workers,
-            raw_xic_batch_size=raw_xic_batch_size,
-        )
-    )
+    expected_trace_count = len(candidate_pool) + 1
+    if len(trace_results) != expected_trace_count:
+        raise ValueError("trace result count does not match seed source plan")
     trace_by_candidate_id = {
         result.request.candidate_id: result for result in trace_results
     }
@@ -483,7 +496,48 @@ def _record_for_seed_source(
         identity_family_id=source.identity_family_id,
         assessed_sample_count=len(sample_order),
     )
-    return IdentityCoherenceOutputRecord(source.seed_gate, row), tuple(trace_results)
+    return IdentityCoherenceOutputRecord(source.seed_gate, row)
+
+
+def _candidate_pool_for_seed_source(
+    source: IdentityCoherenceSeedSource,
+    candidates: Sequence[DiscoveryCandidate],
+    *,
+    alignment_config: AlignmentConfig,
+) -> tuple[DiscoveryCandidate, ...]:
+    return tuple(
+        candidate
+        for candidate in candidates
+        if candidate_is_non_seed_pool_member(
+            source.request,
+            candidate,
+            seed_candidate=source.seed_candidate,
+            config=alignment_config,
+        )
+    )
+
+
+def _trace_requests_for_seed_source(
+    source: IdentityCoherenceSeedSource,
+    candidate_pool: tuple[DiscoveryCandidate, ...],
+    *,
+    alignment_config: AlignmentConfig,
+) -> tuple[IdentityCoherenceTraceRequest, ...]:
+    return (
+        trace_request_for_candidate(
+            source=source,
+            candidate=source.seed_candidate,
+            ppm_tolerance=alignment_config.preferred_ppm,
+        ),
+        *(
+            trace_request_for_candidate(
+                source=source,
+                candidate=candidate,
+                ppm_tolerance=alignment_config.preferred_ppm,
+            )
+            for candidate in candidate_pool
+        ),
+    )
 
 
 def assignment_status_by_candidate_id(

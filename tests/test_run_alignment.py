@@ -83,6 +83,17 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert captured["emit_alignment_cells"] is True
     assert captured["emit_alignment_integration_audit"] is True
     assert captured["emit_alignment_backfill_seed_audit"] is True
+    assert captured["emit_alignment_status_matrix"] is True
+    assert captured["raw_workers"] == 1
+    assert captured["raw_xic_batch_size"] == 1
+    assert captured["drift_lookup"] is None
+    stdout = capsys.readouterr().out
+    assert "Alignment review TSV:" in stdout
+    assert "alignment_review.tsv" in stdout
+    assert "alignment_cell_integration_audit.tsv" in stdout
+    assert "alignment_owner_backfill_seed_audit.tsv" in stdout
+    assert "alignment_matrix_status.tsv" in stdout
+    assert "Owner edge evidence TSV:" in stdout
 
 
 def test_run_alignment_cli_passes_identity_coherence_flags(monkeypatch, tmp_path):

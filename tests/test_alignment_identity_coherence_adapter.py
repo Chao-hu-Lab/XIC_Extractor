@@ -668,3 +668,74 @@ def test_run_diagnostic_process_mode_matches_serial_ordering(
     assert [result.request.candidate_id for result in process.trace_results] == [
         result.request.candidate_id for result in serial.trace_results
     ]
+
+
+def test_run_diagnostic_process_mode_batches_all_seed_trace_requests_once(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    seed_a = _candidate("CAND-SEED-A", sample_stem="Sample_A", best_seed_rt=5.0)
+    seed_d = _candidate("CAND-SEED-D", sample_stem="Sample_D", best_seed_rt=5.01)
+    non_seed_b = _candidate("CAND-B", sample_stem="Sample_B", best_seed_rt=5.02)
+    non_seed_c = _candidate("CAND-C", sample_stem="Sample_C", best_seed_rt=5.03)
+    captured_batches: list[tuple[IdentityCoherenceTraceRequest, ...]] = []
+
+    def fake_process(requests, **kwargs):
+        captured_batches.append(tuple(requests))
+        return type(
+            "ProcessOutput",
+            (),
+            {
+                "results": tuple(
+                    IdentityCoherenceTraceResult(
+                        request=request,
+                        trace=CandidateTrace(
+                            rt_min=(
+                                request.rt_min,
+                                (request.rt_min + request.rt_max) / 2.0,
+                                request.rt_max,
+                            ),
+                            intensity=(0.0, 10.0, 0.0),
+                        ),
+                        status="pass",
+                        raw_xic_request_count=1,
+                        xic_point_count=3,
+                    )
+                    for request in requests
+                ),
+                "timing_stats": (),
+            },
+        )()
+
+    monkeypatch.setattr(
+        "xic_extractor.alignment.identity_coherence_adapter.run_identity_trace_process",
+        fake_process,
+    )
+
+    result = run_identity_coherence_diagnostic(
+        candidates=(seed_a, seed_d, non_seed_b, non_seed_c),
+        ownership=_ownership(_owner(seed_a), _owner(seed_d)),
+        sample_order=("Sample_A", "Sample_D", "Sample_B", "Sample_C"),
+        raw_sources={},
+        raw_paths={
+            "Sample_A": tmp_path / "Sample_A.raw",
+            "Sample_D": tmp_path / "Sample_D.raw",
+            "Sample_B": tmp_path / "Sample_B.raw",
+            "Sample_C": tmp_path / "Sample_C.raw",
+        },
+        dll_dir=tmp_path,
+        raw_workers=8,
+        raw_xic_batch_size=64,
+        output_dir=tmp_path / "process",
+        alignment_config=AlignmentConfig(),
+        fragment_profile_id="dna-cid-v1",
+        fragment_profile_hash="hash1",
+    )
+
+    assert len(captured_batches) == 1
+    assert len(captured_batches[0]) == len(result.trace_results)
+    assert result.context.raw_xic_request_count == len(captured_batches[0])
+    assert [
+        record.seed_gate.resolved_request.seed_candidate_id
+        for record in result.records
+    ] == ["CAND-SEED-A", "CAND-SEED-D"]

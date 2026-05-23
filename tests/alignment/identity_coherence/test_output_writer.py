@@ -176,6 +176,9 @@ def test_summary_renderer_reports_required_sections_and_counts():
     for heading in headings:
         assert heading in markdown
     _assert_in_order(markdown, headings)
+    assert "may retrieve RAW/XIC traces for diagnostic identity evidence" in markdown
+    assert "does not mutate Backfill" in markdown
+    assert "or final-matrix outputs" in markdown
     assert "| `promotion_used_forbidden_evidence` | `false` |" in markdown
     assert "| `would_primary_provisional_identity_family_support` | 1 |" in markdown
     assert "| raw_xic_request_count | not_assessed |" in markdown
