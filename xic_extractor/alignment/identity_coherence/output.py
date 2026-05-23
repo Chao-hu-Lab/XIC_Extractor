@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import csv
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -182,6 +183,55 @@ def project_control_row(row: Mapping[str, object]) -> dict[str, str]:
     return _project_columns(IDENTITY_COHERENCE_CONTROL_COLUMNS, row)
 
 
+def write_identity_coherence_requests_tsv(
+    path: Path,
+    records: Sequence[IdentityCoherenceOutputRecord],
+) -> Path:
+    validated = tuple(_validate_output_record(record) for record in records)
+    return _write_tsv(
+        path,
+        IDENTITY_COHERENCE_REQUEST_COLUMNS,
+        [project_request_row(record.seed_gate) for record in validated],
+    )
+
+
+def write_identity_coherence_decisions_tsv(
+    path: Path,
+    records: Sequence[IdentityCoherenceOutputRecord],
+) -> Path:
+    validated = tuple(_validate_output_record(record) for record in records)
+    return _write_tsv(
+        path,
+        IDENTITY_COHERENCE_DECISION_COLUMNS,
+        [project_decision_row(record.row_result.decision) for record in validated],
+    )
+
+
+def write_identity_coherence_cell_evidence_tsv(
+    path: Path,
+    records: Sequence[IdentityCoherenceOutputRecord],
+) -> Path:
+    validated = tuple(_validate_output_record(record) for record in records)
+    rows: list[dict[str, str]] = []
+    for record in validated:
+        rows.extend(
+            project_cell_evidence_row(cell)
+            for cell in record.row_result.cells
+        )
+    return _write_tsv(path, IDENTITY_COHERENCE_CELL_EVIDENCE_COLUMNS, rows)
+
+
+def write_identity_coherence_controls_tsv(
+    path: Path,
+    rows: Sequence[Mapping[str, object]],
+) -> Path:
+    return _write_tsv(
+        path,
+        IDENTITY_COHERENCE_CONTROL_COLUMNS,
+        [project_control_row(row) for row in rows],
+    )
+
+
 def _validate_frozen_request_status(request: object) -> None:
     completeness = _enum_value(request.request_identity_completeness_status)
     candidate_status = _enum_value(request.request_candidate_identity_status)
@@ -195,6 +245,64 @@ def _validate_frozen_request_status(request: object) -> None:
 def _validate_decision_summary(summary: IdentityDecisionSummary) -> None:
     if summary.forbidden_evidence_used:
         raise ValueError("forbidden_evidence_used cannot be emitted")
+
+
+def _validate_output_record(
+    record: IdentityCoherenceOutputRecord,
+) -> IdentityCoherenceOutputRecord:
+    request = record.seed_gate.resolved_request
+    decision = record.row_result.decision
+    if request.decision_id != decision.decision_id:
+        raise ValueError("decision_id mismatch between request and decision")
+    if request.seed_candidate_id != decision.seed_candidate_id:
+        raise ValueError("seed_candidate_id mismatch between request and decision")
+    if request.seed_sample != decision.seed_sample:
+        raise ValueError("seed_sample mismatch between request and decision")
+    if (
+        request.request_identity_completeness_status
+        != decision.request_identity_completeness_status
+    ):
+        raise ValueError(
+            "request_identity_completeness_status mismatch between "
+            "request and decision"
+        )
+    if (
+        request.request_candidate_identity_status
+        != decision.request_candidate_identity_status
+    ):
+        raise ValueError(
+            "request_candidate_identity_status mismatch between "
+            "request and decision"
+        )
+    _validate_decision_summary(decision)
+    for cell in record.row_result.cells:
+        if cell.decision_id != decision.decision_id:
+            raise ValueError("decision_id mismatch between decision and cell")
+        if cell.identity_family_id != decision.identity_family_id:
+            raise ValueError(
+                "identity_family_id mismatch between decision and cell"
+            )
+        if request.seed_sample and cell.sample_id == request.seed_sample:
+            raise ValueError("seed sample cannot be emitted in cell_evidence.tsv")
+    return record
+
+
+def _write_tsv(
+    path: Path,
+    columns: tuple[str, ...],
+    rows: Sequence[Mapping[str, str]],
+) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=columns,
+            dialect="excel-tab",
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in columns})
+    return path
 
 
 def _project_columns(
