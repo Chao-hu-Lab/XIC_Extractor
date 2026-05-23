@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from xic_extractor.alignment.config import AlignmentConfig
@@ -9,12 +10,14 @@ from xic_extractor.alignment.identity_coherence.models import (
     IdentityCoherenceTraceResult,
 )
 from xic_extractor.alignment.identity_coherence_adapter import (
+    IdentityCoherenceDiagnosticRun,
     IdentityCoherenceSeedSource,
     build_cell_candidate_evidence,
     build_identity_coherence_seed_sources,
     candidate_identity_family_id,
     candidate_is_non_seed_pool_member,
     retrieve_identity_coherence_trace,
+    run_identity_coherence_diagnostic,
 )
 from xic_extractor.alignment.ownership import OwnershipBuildResult
 from xic_extractor.alignment.ownership_models import (
@@ -410,3 +413,258 @@ def test_build_cell_candidate_evidence_marks_data_quality_trace() -> None:
 
     assert cell.blocked_reason == ""
     assert cell.data_quality_reason == "invalid_trace_payload"
+
+
+def test_run_diagnostic_writes_outputs_for_pre_backfill_state(tmp_path) -> None:
+    seed = _candidate("CAND-SEED", sample_stem="Sample_A", best_seed_rt=5.0)
+    non_seed_1 = _candidate("CAND-B", sample_stem="Sample_B", best_seed_rt=5.02)
+    non_seed_2 = _candidate("CAND-C", sample_stem="Sample_C", best_seed_rt=5.03)
+    output_dir = tmp_path / "identity"
+
+    result = run_identity_coherence_diagnostic(
+        candidates=(seed, non_seed_1, non_seed_2),
+        ownership=_ownership(_owner(seed)),
+        sample_order=("Sample_A", "Sample_B", "Sample_C"),
+        raw_sources={
+            "Sample_A": FakeRawSource(),
+            "Sample_B": FakeRawSource(),
+            "Sample_C": FakeRawSource(),
+        },
+        raw_paths={},
+        dll_dir=tmp_path,
+        raw_workers=1,
+        raw_xic_batch_size=64,
+        output_dir=output_dir,
+        alignment_config=AlignmentConfig(),
+        fragment_profile_id="dna-cid-v1",
+        fragment_profile_hash="hash1",
+    )
+
+    assert isinstance(result, IdentityCoherenceDiagnosticRun)
+    assert len(result.records) == 1
+    assert result.paths.requests_tsv.is_file()
+    assert result.paths.decisions_tsv.is_file()
+    assert result.paths.cell_evidence_tsv.is_file()
+    assert result.paths.controls_tsv.is_file()
+    assert result.paths.summary_md.is_file()
+    assert result.context.raw_xic_request_count == 3
+    assert result.context.xic_point_count == 9
+    assert "Backfill" in result.paths.summary_md.read_text(encoding="utf-8")
+    assert result.records[0].row_result.decision.seed_candidate_id == "CAND-SEED"
+
+
+def test_run_diagnostic_does_not_retrieve_non_seed_traces_when_seed_gate_fails(
+    tmp_path,
+) -> None:
+    seed = _candidate(
+        "CAND-SEED",
+        sample_stem="Sample_A",
+        best_seed_rt=5.0,
+    )
+    bad_owner = replace(
+        _owner(seed),
+        owner_peak_start_rt=5.10,
+        owner_peak_end_rt=5.20,
+    )
+    non_seed = _candidate("CAND-B", sample_stem="Sample_B", best_seed_rt=5.02)
+    source_b = FakeRawSource()
+
+    result = run_identity_coherence_diagnostic(
+        candidates=(seed, non_seed),
+        ownership=_ownership(bad_owner),
+        sample_order=("Sample_A", "Sample_B"),
+        raw_sources={"Sample_A": FakeRawSource(), "Sample_B": source_b},
+        raw_paths={},
+        dll_dir=tmp_path,
+        raw_workers=1,
+        raw_xic_batch_size=64,
+        output_dir=tmp_path / "identity",
+        alignment_config=AlignmentConfig(),
+        fragment_profile_id="dna-cid-v1",
+        fragment_profile_hash="hash1",
+    )
+
+    assert result.records[0].row_result.cells == ()
+    assert source_b.calls == []
+    assert result.context.raw_xic_request_count == 0
+
+
+def test_run_diagnostic_evaluates_controls_manifest(tmp_path) -> None:
+    seed = _candidate("CAND-SEED", sample_stem="Sample_A", best_seed_rt=5.0)
+    non_seed_1 = _candidate("CAND-B", sample_stem="Sample_B", best_seed_rt=5.02)
+    non_seed_2 = _candidate("CAND-C", sample_stem="Sample_C", best_seed_rt=5.03)
+    manifest = tmp_path / "controls.tsv"
+    manifest.write_text(
+        "\t".join(
+            [
+                "control_id",
+                "control_type",
+                "control_name",
+                "expected_mapping_status",
+                "control_expected_behavior",
+                "fragment_observation_mode",
+                "precursor_tolerance_ppm",
+                "product_tolerance_ppm",
+                "cid_observed_loss_tolerance_ppm",
+                "rt_tolerance_sec",
+                "required_failure_reason_when_missed",
+                "seed_candidate_id",
+                "positive_control_target_name",
+                "positive_control_target_mz",
+                "positive_control_target_rt_sec",
+                "positive_control_mapping_error_ppm",
+                "positive_control_mapping_delta_rt_sec",
+            ]
+        )
+        + "\n"
+        + "\t".join(
+            [
+                "CTRL-1",
+                "positive_targeted_istd",
+                "seed positive",
+                "mapped",
+                "would_primary",
+                "cid_neutral_loss",
+                "20",
+                "20",
+                "20",
+                "60",
+                "review_only_insufficient_support",
+                "CAND-SEED",
+                "seed positive",
+                "500.0",
+                "300.0",
+                "0.0",
+                "0.0",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_identity_coherence_diagnostic(
+        candidates=(seed, non_seed_1, non_seed_2),
+        ownership=_ownership(_owner(seed)),
+        sample_order=("Sample_A", "Sample_B", "Sample_C"),
+        raw_sources={
+            "Sample_A": FakeRawSource(),
+            "Sample_B": FakeRawSource(),
+            "Sample_C": FakeRawSource(),
+        },
+        raw_paths={},
+        dll_dir=tmp_path,
+        raw_workers=1,
+        raw_xic_batch_size=64,
+        output_dir=tmp_path / "identity",
+        alignment_config=AlignmentConfig(),
+        controls_manifest_path=manifest,
+        fragment_profile_id="dna-cid-v1",
+        fragment_profile_hash="hash1",
+    )
+
+    assert len(result.control_rows) == 1
+    assert result.context.control_manifest_path == str(manifest)
+    assert result.control_rows[0]["control_status"] == "assessed"
+    assert result.control_rows[0]["control_pass"] in {True, "true"}
+
+
+def test_run_diagnostic_process_mode_matches_serial_ordering(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    seed = _candidate("CAND-SEED", sample_stem="Sample_A", best_seed_rt=5.0)
+    non_seed_1 = _candidate("CAND-B", sample_stem="Sample_B", best_seed_rt=5.02)
+    non_seed_2 = _candidate("CAND-C", sample_stem="Sample_C", best_seed_rt=5.03)
+    candidates = (seed, non_seed_1, non_seed_2)
+    ownership = _ownership(_owner(seed))
+
+    serial = run_identity_coherence_diagnostic(
+        candidates=candidates,
+        ownership=ownership,
+        sample_order=("Sample_A", "Sample_B", "Sample_C"),
+        raw_sources={
+            "Sample_A": FakeRawSource(),
+            "Sample_B": FakeRawSource(),
+            "Sample_C": FakeRawSource(),
+        },
+        raw_paths={},
+        dll_dir=tmp_path,
+        raw_workers=1,
+        raw_xic_batch_size=64,
+        output_dir=tmp_path / "serial",
+        alignment_config=AlignmentConfig(),
+        fragment_profile_id="dna-cid-v1",
+        fragment_profile_hash="hash1",
+    )
+
+    def fake_process(requests, **kwargs):
+        return type(
+            "ProcessOutput",
+            (),
+            {
+                "results": tuple(
+                    IdentityCoherenceTraceResult(
+                        request=request,
+                        trace=CandidateTrace(
+                            rt_min=(
+                                request.rt_min,
+                                (request.rt_min + request.rt_max) / 2.0,
+                                request.rt_max,
+                            ),
+                            intensity=(0.0, 10.0, 0.0),
+                        ),
+                        status="pass",
+                        raw_xic_request_count=1,
+                        xic_point_count=3,
+                    )
+                    for request in requests
+                ),
+                "timing_stats": (),
+            },
+        )()
+
+    monkeypatch.setattr(
+        "xic_extractor.alignment.identity_coherence_adapter.run_identity_trace_process",
+        fake_process,
+    )
+    process = run_identity_coherence_diagnostic(
+        candidates=candidates,
+        ownership=ownership,
+        sample_order=("Sample_A", "Sample_B", "Sample_C"),
+        raw_sources={},
+        raw_paths={
+            "Sample_A": tmp_path / "Sample_A.raw",
+            "Sample_B": tmp_path / "Sample_B.raw",
+            "Sample_C": tmp_path / "Sample_C.raw",
+        },
+        dll_dir=tmp_path,
+        raw_workers=8,
+        raw_xic_batch_size=64,
+        output_dir=tmp_path / "process",
+        alignment_config=AlignmentConfig(),
+        fragment_profile_id="dna-cid-v1",
+        fragment_profile_hash="hash1",
+    )
+
+    def row_signature(result):
+        return [
+            (
+                record.seed_gate.resolved_request.request_id,
+                record.row_result.decision.decision_id,
+                record.row_result.decision.identity_family_id,
+                record.row_result.decision.decision,
+            )
+            for record in result.records
+        ]
+
+    assert row_signature(process) == row_signature(serial)
+    assert [
+        [cell.candidate_id for cell in record.row_result.cells]
+        for record in process.records
+    ] == [
+        [cell.candidate_id for cell in record.row_result.cells]
+        for record in serial.records
+    ]
+    assert [result.request.candidate_id for result in process.trace_results] == [
+        result.request.candidate_id for result in serial.trace_results
+    ]
