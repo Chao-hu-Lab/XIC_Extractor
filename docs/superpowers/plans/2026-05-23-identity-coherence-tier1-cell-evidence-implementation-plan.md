@@ -156,8 +156,8 @@ Extend the existing schema import block in
 ```python
     AreaHeightStatus,
     BaselineAuditStatus,
-    CellBlockedReason,
     CellAssessmentStatus,
+    CellBlockedReason,
     CellDataQualityReason,
     CellIdentityBasis,
     CellIdentityTier,
@@ -1208,8 +1208,8 @@ from xic_extractor.alignment.identity_coherence.request_builder import (
     build_identity_coherence_request,
 )
 from xic_extractor.alignment.identity_coherence.schema import (
-    CellBlockedReason,
     CellAssessmentStatus,
+    CellBlockedReason,
     CellDataQualityReason,
     CellIdentityBasis,
     CellIdentityTier,
