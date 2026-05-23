@@ -4,10 +4,12 @@ import csv
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import cast
+from typing import Any, Protocol, cast
 
 from .schema import (
+    ControlStatus,
     ControlType,
     DecoyGenerationMethod,
     FragmentObservationMode,
@@ -70,6 +72,11 @@ _UNSUPPORTED_CONTROL_TYPES: frozenset[str] = frozenset(
         "contaminant",
     }
 )
+
+
+class IdentityCoherenceOutputRecordLike(Protocol):
+    seed_gate: Any
+    row_result: Any
 
 
 @dataclass(frozen=True)
@@ -388,3 +395,203 @@ def _normalize_text(value: object) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def evaluate_positive_control(
+    entry: IdentityControlManifestEntry,
+    records: Sequence[IdentityCoherenceOutputRecordLike],
+) -> dict[str, object]:
+    if entry.control_type is not ControlType.POSITIVE_TARGETED_ISTD:
+        raise ValueError("evaluate_positive_control requires positive_targeted_istd")
+
+    mapping_status, record = _resolve_record_for_entry(entry, records)
+    mapping_status, mapping_failure_reason = _validate_positive_control_mapping(
+        entry,
+        mapping_status,
+    )
+    if record is None or mapping_failure_reason:
+        control_status = _control_status_for_mapping_status(mapping_status)
+        failure_reason = mapping_failure_reason or str(_enum_value(mapping_status))
+        return _control_row(
+            entry,
+            control_status=control_status,
+            control_observed_behavior=failure_reason,
+            control_pass=False,
+            control_failure_reason=failure_reason,
+            positive_control_mapping_status=mapping_status,
+        )
+
+    decision = record.row_result.decision
+    observed = str(_enum_value(decision.decision))
+    passed = observed == "would_primary_provisional_identity_family_support"
+    failure_reason = "" if passed else observed
+    return _control_row(
+        entry,
+        decision_id=decision.decision_id,
+        identity_family_id=decision.identity_family_id,
+        seed_candidate_id=decision.seed_candidate_id,
+        control_status=ControlStatus.ASSESSED,
+        control_observed_behavior=observed,
+        control_pass=passed,
+        control_failure_reason=failure_reason,
+        positive_control_mapping_status=mapping_status,
+    )
+
+
+def _validate_positive_control_mapping(
+    entry: IdentityControlManifestEntry,
+    mapping_status: PositiveControlMappingStatus,
+) -> tuple[PositiveControlMappingStatus, str]:
+    if mapping_status is not PositiveControlMappingStatus.MAPPED:
+        return mapping_status, str(_enum_value(mapping_status))
+    if entry.expected_mapping_status is not PositiveControlMappingStatus.MAPPED:
+        return (
+            PositiveControlMappingStatus.UNMAPPED,
+            "expected_mapping_status_mismatch",
+        )
+
+    mapping_numbers = (
+        entry.positive_control_target_mz,
+        entry.positive_control_target_rt_sec,
+        entry.positive_control_mapping_error_ppm,
+        entry.positive_control_mapping_delta_rt_sec,
+    )
+    if not all(_is_finite_number(value) for value in mapping_numbers):
+        return (
+            PositiveControlMappingStatus.UNMAPPED,
+            "positive_control_mapping_missing_evidence",
+        )
+    if (
+        abs(float(entry.positive_control_mapping_error_ppm))
+        > entry.precursor_tolerance_ppm
+        or abs(float(entry.positive_control_mapping_delta_rt_sec))
+        > entry.rt_tolerance_sec
+    ):
+        return (
+            PositiveControlMappingStatus.UNMAPPED,
+            "positive_control_mapping_out_of_tolerance",
+        )
+    return PositiveControlMappingStatus.MAPPED, ""
+
+
+def _control_status_for_mapping_status(
+    mapping_status: PositiveControlMappingStatus,
+) -> ControlStatus:
+    if mapping_status is PositiveControlMappingStatus.AMBIGUOUS_MAPPING:
+        return ControlStatus.AMBIGUOUS_MAPPING
+    if mapping_status is PositiveControlMappingStatus.MAPPED:
+        return ControlStatus.ASSESSED
+    return ControlStatus.UNMAPPED
+
+
+def _resolve_record_for_entry(
+    entry: IdentityControlManifestEntry,
+    records: Sequence[IdentityCoherenceOutputRecordLike],
+) -> tuple[PositiveControlMappingStatus, IdentityCoherenceOutputRecordLike | None]:
+    supplied = _record_match_constraints(entry)
+    if not supplied:
+        return PositiveControlMappingStatus.UNMAPPED, None
+
+    exact_matches = [
+        record
+        for record in records
+        if all(_record_value(record, field) == value for field, value in supplied)
+    ]
+    if len(exact_matches) == 1:
+        return PositiveControlMappingStatus.MAPPED, exact_matches[0]
+    if len(exact_matches) > 1:
+        return PositiveControlMappingStatus.AMBIGUOUS_MAPPING, None
+
+    partial_fields = {
+        field
+        for field, value in supplied
+        if any(_record_value(record, field) == value for record in records)
+    }
+    if partial_fields:
+        return PositiveControlMappingStatus.AMBIGUOUS_MAPPING, None
+    return PositiveControlMappingStatus.UNMAPPED, None
+
+
+def _record_match_constraints(
+    entry: IdentityControlManifestEntry,
+) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (field, value)
+        for field, value in (
+            ("decision_id", entry.decision_id),
+            ("identity_family_id", entry.identity_family_id),
+            ("seed_candidate_id", entry.seed_candidate_id),
+        )
+        if value
+    )
+
+
+def _record_value(record: IdentityCoherenceOutputRecordLike, field: str) -> str:
+    decision = record.row_result.decision
+    values = {
+        "decision_id": decision.decision_id,
+        "identity_family_id": decision.identity_family_id,
+        "seed_candidate_id": decision.seed_candidate_id,
+    }
+    return values[field]
+
+
+def _is_finite_number(value: object) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int | float)
+        and math.isfinite(value)
+    )
+
+
+def _control_row(
+    entry: IdentityControlManifestEntry,
+    *,
+    decision_id: str = "",
+    identity_family_id: str = "",
+    seed_candidate_id: str = "",
+    control_status: ControlStatus,
+    control_observed_behavior: str,
+    control_pass: bool | str,
+    control_failure_reason: str,
+    positive_control_mapping_status: PositiveControlMappingStatus,
+    decoy_generation_method: DecoyGenerationMethod | None = None,
+    decoy_source_request_id: str = "",
+    decoy_shift_value: float | str = "",
+    decoy_identity_constraint_changed: str = "",
+) -> dict[str, object]:
+    return {
+        "control_id": entry.control_id,
+        "control_type": entry.control_type,
+        "control_name": entry.control_name,
+        "decision_id": decision_id or entry.decision_id,
+        "identity_family_id": identity_family_id or entry.identity_family_id,
+        "seed_candidate_id": seed_candidate_id or entry.seed_candidate_id,
+        "control_status": control_status,
+        "control_expected_behavior": entry.control_expected_behavior,
+        "control_observed_behavior": control_observed_behavior,
+        "control_pass": control_pass,
+        "control_failure_reason": control_failure_reason,
+        "fragment_observation_mode": entry.fragment_observation_mode,
+        "decoy_generation_method": decoy_generation_method or "",
+        "decoy_source_request_id": decoy_source_request_id,
+        "decoy_shift_value": decoy_shift_value,
+        "decoy_identity_constraint_changed": decoy_identity_constraint_changed,
+        "positive_control_mapping_status": positive_control_mapping_status,
+        "positive_control_target_name": entry.positive_control_target_name,
+        "positive_control_target_mz": entry.positive_control_target_mz,
+        "positive_control_target_rt_sec": entry.positive_control_target_rt_sec,
+        "positive_control_mapping_error_ppm": (
+            entry.positive_control_mapping_error_ppm
+        ),
+        "positive_control_mapping_delta_rt_sec": (
+            entry.positive_control_mapping_delta_rt_sec
+        ),
+        "control_notes": entry.control_notes,
+    }
+
+
+def _enum_value(value: object) -> object:
+    if isinstance(value, Enum):
+        return value.value
+    return value
