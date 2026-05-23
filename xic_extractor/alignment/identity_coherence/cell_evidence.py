@@ -10,7 +10,9 @@ from .models import (
     CellEvidenceResult,
     IdentityCoherenceConfig,
     IdentityCoherenceRequest,
+    PrototypeWidthResult,
     RtCenterResult,
+    ShapeReferenceResult,
 )
 from .schema import (
     AreaHeightStatus,
@@ -30,6 +32,8 @@ from .schema import (
     ShapeStatus,
     WidthStatus,
 )
+from .shape import compare_shape_to_reference
+from .width import assess_width_against_prototype
 
 
 def select_cell_evidence_for_sample(
@@ -39,6 +43,8 @@ def select_cell_evidence_for_sample(
     config: IdentityCoherenceConfig,
     *,
     identity_family_id: str,
+    shape_reference: ShapeReferenceResult | None = None,
+    prototype_width: PrototypeWidthResult | None = None,
 ) -> CellEvidenceResult:
     if not candidates:
         raise ValueError("at least one candidate is required for cell selection")
@@ -50,6 +56,8 @@ def select_cell_evidence_for_sample(
             center,
             config,
             identity_family_id=identity_family_id,
+            shape_reference=shape_reference,
+            prototype_width=prototype_width,
         )
         for candidate in candidates
     )
@@ -92,8 +100,13 @@ def evaluate_cell_evidence(
     config: IdentityCoherenceConfig,
     *,
     identity_family_id: str,
+    shape_reference: ShapeReferenceResult | None = None,
+    prototype_width: PrototypeWidthResult | None = None,
 ) -> CellEvidenceResult:
-    if candidate.candidate_evidence.evidence_stage != EvidenceStage.PRE_BACKFILL:
+    if (
+        _enum_value(candidate.candidate_evidence.evidence_stage)
+        != EvidenceStage.PRE_BACKFILL.value
+    ):
         return _blocked_cell(
             request,
             candidate,
@@ -135,19 +148,51 @@ def evaluate_cell_evidence(
     fragment_match_status = _fragment_match_status(candidate_match)
     non_rt_identity_result = (
         NonRtIdentityResult.PASS
-        if candidate_match.request_candidate_identity_status
-        == RequestCandidateIdentityStatus.MATCH
+        if _enum_value(candidate_match.request_candidate_identity_status)
+        == RequestCandidateIdentityStatus.MATCH.value
         else NonRtIdentityResult.FAIL
     )
+    prototype_width_sec = (
+        prototype_width.prototype_width_sec if prototype_width is not None else None
+    )
+    width_assessment = assess_width_against_prototype(
+        candidate,
+        prototype_width_sec=prototype_width_sec,
+        config=config,
+    )
+    shape_comparison = compare_shape_to_reference(
+        candidate,
+        shape_reference,
+        config,
+        width_sanity_status=width_assessment.width_status,
+    )
 
-    if (
-        rt_gate_status is RtGateStatus.PASS
-        and non_rt_identity_result is NonRtIdentityResult.PASS
-    ):
+    rt_gate_pass = _enum_value(rt_gate_status) == RtGateStatus.PASS.value
+    non_rt_pass = (
+        _enum_value(non_rt_identity_result) == NonRtIdentityResult.PASS.value
+    )
+    shape_pass = (
+        _enum_value(shape_comparison.shape_status) == ShapeStatus.PASS.value
+    )
+    width_pass = (
+        _enum_value(width_assessment.width_status) == WidthStatus.PASS.value
+    )
+
+    if rt_gate_pass and non_rt_pass:
         tier = CellIdentityTier.TIER1
         basis = CellIdentityBasis.RT_FRAGMENT_SUPPORT
         coherent = True
         tier12 = True
+    elif rt_gate_pass and shape_pass:
+        tier = CellIdentityTier.TIER2
+        basis = CellIdentityBasis.RT_SHAPE_SIMILARITY
+        coherent = True
+        tier12 = True
+    elif rt_gate_pass and width_pass:
+        tier = CellIdentityTier.TIER3
+        basis = CellIdentityBasis.RT_PROTOTYPE_WIDTH
+        coherent = True
+        tier12 = False
     else:
         tier = CellIdentityTier.RT_ONLY
         basis = CellIdentityBasis.NONE
@@ -170,6 +215,14 @@ def evaluate_cell_evidence(
         tier12_count_contribution=tier12,
         blocked_reason="",
         data_quality_reason="",
+        shape_status=shape_comparison.shape_status,
+        shape_similarity_cosine=shape_comparison.shape_similarity_cosine,
+        shape_reference_basis=shape_comparison.shape_reference_basis,
+        shape_reference_candidate_id=shape_comparison.shape_reference_candidate_id,
+        shape_fallback_used=shape_comparison.shape_fallback_used,
+        shape_audit_status=shape_comparison.shape_audit_status,
+        width_status=width_assessment.width_status,
+        width_ratio_to_prototype=width_assessment.width_ratio_to_prototype,
     )
 
 
@@ -240,6 +293,14 @@ def _cell(
     tier12_count_contribution: bool,
     blocked_reason: str,
     data_quality_reason: str,
+    shape_status: ShapeStatus = ShapeStatus.NOT_ASSESSED,
+    shape_similarity_cosine: float | None = None,
+    shape_reference_basis: ShapeReferenceBasis = ShapeReferenceBasis.NONE,
+    shape_reference_candidate_id: str = "",
+    shape_fallback_used: bool = False,
+    shape_audit_status: ShapeAuditStatus = ShapeAuditStatus.NOT_ASSESSED,
+    width_status: WidthStatus = WidthStatus.NOT_ASSESSED,
+    width_ratio_to_prototype: float | None = None,
 ) -> CellEvidenceResult:
     return CellEvidenceResult(
         decision_id=request.decision_id,
@@ -254,14 +315,14 @@ def _cell(
         fragment_tags_supported=candidate.candidate_evidence.fragment_tags,
         rt_delta_center_sec=rt_delta_center_sec,
         rt_gate_status=rt_gate_status,
-        shape_status=ShapeStatus.NOT_ASSESSED,
-        shape_similarity_cosine=None,
-        shape_reference_basis=ShapeReferenceBasis.NONE,
-        shape_reference_candidate_id="",
-        shape_fallback_used=False,
-        shape_audit_status=ShapeAuditStatus.NOT_ASSESSED,
-        width_status=WidthStatus.NOT_ASSESSED,
-        width_ratio_to_prototype=None,
+        shape_status=shape_status,
+        shape_similarity_cosine=shape_similarity_cosine,
+        shape_reference_basis=shape_reference_basis,
+        shape_reference_candidate_id=shape_reference_candidate_id,
+        shape_fallback_used=shape_fallback_used,
+        shape_audit_status=shape_audit_status,
+        width_status=width_status,
+        width_ratio_to_prototype=width_ratio_to_prototype,
         baseline_audit_status=BaselineAuditStatus.NOT_ASSESSED,
         area_height_status=area_height_status,
         non_rt_identity_result=non_rt_identity_result,
@@ -271,8 +332,8 @@ def _cell(
         data_quality_reason=data_quality_reason,
         forbidden_evidence_seen=(
             candidate.forbidden_evidence_seen
-            or candidate.candidate_evidence.evidence_stage
-            != EvidenceStage.PRE_BACKFILL
+            or _enum_value(candidate.candidate_evidence.evidence_stage)
+            != EvidenceStage.PRE_BACKFILL.value
         ),
     )
 
@@ -297,10 +358,18 @@ def _tier1_tie_break_key(
 
 def _non_tier1_fallback_key(
     cell: CellEvidenceResult,
-) -> tuple[int, float, str]:
-    rt_pass_penalty = 0 if cell.rt_gate_status is RtGateStatus.PASS else 1
+) -> tuple[int, int, float, str]:
+    tier_rank = {
+        CellIdentityTier.TIER2.value: 0,
+        CellIdentityTier.TIER3.value: 1,
+    }.get(_enum_value(cell.cell_identity_tier), 2)
+    rt_pass_penalty = (
+        0
+        if _enum_value(cell.rt_gate_status) == RtGateStatus.PASS.value
+        else 1
+    )
     rt_delta = _abs_or_inf(cell.rt_delta_center_sec)
-    return (rt_pass_penalty, rt_delta, cell.candidate_id)
+    return (tier_rank, rt_pass_penalty, rt_delta, cell.candidate_id)
 
 
 def _ambiguous_cell(cell: CellEvidenceResult) -> CellEvidenceResult:
@@ -323,8 +392,8 @@ def _fragment_match_status(
     candidate_match: CandidateIdentityMatch,
 ) -> FragmentMatchStatus:
     if (
-        candidate_match.request_candidate_identity_status
-        == RequestCandidateIdentityStatus.MATCH
+        _enum_value(candidate_match.request_candidate_identity_status)
+        == RequestCandidateIdentityStatus.MATCH.value
     ):
         return FragmentMatchStatus.PASS
     return FragmentMatchStatus.FAIL
@@ -355,3 +424,7 @@ def _finite_number(value: object) -> bool:
         and isinstance(value, (int, float))
         and math.isfinite(value)
     )
+
+
+def _enum_value(value: object) -> object:
+    return getattr(value, "value", value)

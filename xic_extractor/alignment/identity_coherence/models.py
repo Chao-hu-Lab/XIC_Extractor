@@ -115,10 +115,41 @@ class RtConfig:
 
 
 @dataclass(frozen=True)
+class ShapeConfig:
+    min_points: int = 7
+    resample_points: int = 25
+    min_cosine: float = 0.85
+    prototype_min_candidates: int = 3
+    prototype_min_non_seed_candidates: int = 2
+    allow_seed_shape_fallback: bool = True
+    allow_morphology_rt_medoid: bool = True
+
+
+@dataclass(frozen=True)
+class WidthConfig:
+    prototype_min_candidates: int = 3
+    min_ratio: float = 0.50
+    max_ratio: float = 2.00
+
+
+@dataclass(frozen=True)
+class CandidateTrace:
+    rt_min: tuple[float, ...]
+    intensity: tuple[float, ...]
+    shape_audit_status: ShapeAuditStatus = ShapeAuditStatus.UNAVAILABLE
+
+    def __post_init__(self) -> None:
+        if len(self.rt_min) != len(self.intensity):
+            raise ValueError("rt_min and intensity must have the same length")
+
+
+@dataclass(frozen=True)
 class IdentityCoherenceConfig:
     seed_gate: SeedGateConfig = field(default_factory=SeedGateConfig)
     promotion: PromotionConfig = field(default_factory=PromotionConfig)
     rt: RtConfig = field(default_factory=RtConfig)
+    shape: ShapeConfig = field(default_factory=ShapeConfig)
+    width: WidthConfig = field(default_factory=WidthConfig)
 
 
 @dataclass(frozen=True)
@@ -136,6 +167,42 @@ class CellCandidateEvidence:
     forbidden_evidence_seen: bool = False
     blocked_reason: str = ""
     data_quality_reason: str = ""
+    trace: CandidateTrace | None = None
+
+
+@dataclass(frozen=True)
+class PrototypeWidthResult:
+    width_status: WidthStatus
+    prototype_width_sec: float | None
+    candidate_count: int
+    non_seed_candidate_count: int
+    width_candidate_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class WidthAssessmentResult:
+    width_status: WidthStatus
+    width_ratio_to_prototype: float | None
+
+
+@dataclass(frozen=True)
+class ShapeReferenceResult:
+    shape_reference_basis: ShapeReferenceBasis
+    shape_reference_candidate_id: str
+    normalized_intensity: tuple[float, ...]
+    candidate_count: int
+    non_seed_candidate_count: int
+    seed_fallback_used: bool = False
+
+
+@dataclass(frozen=True)
+class ShapeComparisonResult:
+    shape_status: ShapeStatus
+    shape_similarity_cosine: float | None
+    shape_reference_basis: ShapeReferenceBasis
+    shape_reference_candidate_id: str
+    shape_fallback_used: bool
+    shape_audit_status: ShapeAuditStatus
 
 
 @dataclass(frozen=True)

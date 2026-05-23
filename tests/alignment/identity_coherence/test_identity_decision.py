@@ -6,6 +6,7 @@ from xic_extractor.alignment.identity_coherence.decision import (
 from xic_extractor.alignment.identity_coherence.models import (
     CellEvidenceResult,
     IdentityCoherenceConfig,
+    PrototypeWidthResult,
     RtCenterResult,
     SeedCandidateEvidence,
     SeedGateResult,
@@ -270,3 +271,179 @@ def test_summarize_identity_decision_detects_forbidden_evidence_seen():
     assert summary.decision is IdentityDecision.WOULD_PRIMARY
     assert summary.forbidden_evidence_seen is True
     assert summary.forbidden_evidence_used is False
+
+
+def _cell(
+    sample_id: str,
+    *,
+    tier: CellIdentityTier,
+    coherent: bool,
+    tier12: bool,
+    shape_fallback_used: bool = False,
+    shape_reference_basis: ShapeReferenceBasis = ShapeReferenceBasis.NONE,
+    shape_reference_candidate_id: str = "",
+) -> CellEvidenceResult:
+    cell = _tier1_cell(sample_id)
+    basis = CellIdentityBasis.RT_FRAGMENT_SUPPORT
+    if tier == CellIdentityTier.TIER2:
+        basis = CellIdentityBasis.RT_SHAPE_SIMILARITY
+    elif tier == CellIdentityTier.TIER3:
+        basis = CellIdentityBasis.RT_PROTOTYPE_WIDTH
+    return replace(
+        cell,
+        cell_identity_tier=tier,
+        cell_identity_basis=basis,
+        shape_fallback_used=shape_fallback_used,
+        shape_reference_basis=shape_reference_basis,
+        shape_reference_candidate_id=shape_reference_candidate_id,
+        coherent_count_contribution=coherent,
+        tier12_count_contribution=tier12,
+    )
+
+
+def test_decision_marks_tier3_only_support_review_only():
+    seed_gate = _seed_result()
+    cells = (
+        _cell("S2", tier=CellIdentityTier.TIER3, coherent=True, tier12=False),
+        _cell("S3", tier=CellIdentityTier.TIER3, coherent=True, tier12=False),
+    )
+
+    summary = summarize_identity_decision(
+        seed_gate,
+        cells,
+        _center(),
+        IdentityCoherenceConfig(),
+        identity_family_id="IDF-1",
+        assessed_sample_count=3,
+    )
+
+    assert summary.decision is IdentityDecision.REVIEW_ONLY_WEAK_BASIS_TIER3_ONLY
+    assert summary.weak_basis_reason is WeakBasisReason.TIER3_ONLY
+    assert summary.total_coherent_sample_count == 3
+    assert summary.tier12_non_seed_identity_sample_count == 0
+
+
+def test_decision_marks_single_tier12_plus_tier3_review_only():
+    seed_gate = _seed_result()
+    cells = (
+        _cell("S2", tier=CellIdentityTier.TIER2, coherent=True, tier12=True),
+        _cell("S3", tier=CellIdentityTier.TIER3, coherent=True, tier12=False),
+    )
+
+    summary = summarize_identity_decision(
+        seed_gate,
+        cells,
+        _center(),
+        IdentityCoherenceConfig(),
+        identity_family_id="IDF-1",
+        assessed_sample_count=3,
+    )
+
+    assert (
+        summary.decision
+        is IdentityDecision.REVIEW_ONLY_WEAK_BASIS_SINGLE_TIER12_PLUS_TIER3
+    )
+    assert summary.weak_basis_reason is WeakBasisReason.SINGLE_TIER12_PLUS_TIER3
+    assert summary.total_coherent_sample_count == 3
+    assert summary.tier12_non_seed_identity_sample_count == 1
+
+
+def test_decision_marks_seed_shape_fallback_only_review_only():
+    seed_gate = _seed_result()
+    cells = (
+        _cell(
+            "S2",
+            tier=CellIdentityTier.TIER2,
+            coherent=True,
+            tier12=True,
+            shape_fallback_used=True,
+        ),
+        _cell(
+            "S3",
+            tier=CellIdentityTier.TIER2,
+            coherent=True,
+            tier12=True,
+            shape_fallback_used=True,
+        ),
+    )
+
+    summary = summarize_identity_decision(
+        seed_gate,
+        cells,
+        _center(),
+        IdentityCoherenceConfig(),
+        identity_family_id="IDF-1",
+        assessed_sample_count=3,
+    )
+
+    assert summary.decision is IdentityDecision.REVIEW_ONLY_INSUFFICIENT_SUPPORT
+    assert summary.weak_basis_reason is WeakBasisReason.SEED_SHAPE_FALLBACK_ONLY
+
+
+def test_decision_allows_seed_fallback_when_supported_by_prototype_shape():
+    seed_gate = _seed_result()
+    cells = (
+        _cell(
+            "S2",
+            tier=CellIdentityTier.TIER2,
+            coherent=True,
+            tier12=True,
+            shape_reference_basis=ShapeReferenceBasis.MORPHOLOGY_RT_MEDOID,
+        ),
+        _cell(
+            "S3",
+            tier=CellIdentityTier.TIER2,
+            coherent=True,
+            tier12=True,
+            shape_fallback_used=True,
+            shape_reference_basis=ShapeReferenceBasis.SEED_FALLBACK,
+        ),
+    )
+
+    summary = summarize_identity_decision(
+        seed_gate,
+        cells,
+        _center(),
+        IdentityCoherenceConfig(),
+        identity_family_id="IDF-1",
+        assessed_sample_count=3,
+    )
+
+    assert summary.decision is IdentityDecision.WOULD_PRIMARY
+    assert summary.weak_basis_reason is WeakBasisReason.NONE
+
+
+def test_decision_records_row_shape_reference_and_prototype_width():
+    seed_gate = _seed_result()
+    cells = (
+        _cell(
+            "S2",
+            tier=CellIdentityTier.TIER2,
+            coherent=True,
+            tier12=True,
+            shape_reference_basis=ShapeReferenceBasis.MORPHOLOGY_RT_MEDOID,
+            shape_reference_candidate_id="REF",
+        ),
+        _cell("S3", tier=CellIdentityTier.TIER1, coherent=True, tier12=True),
+    )
+    prototype_width = PrototypeWidthResult(
+        width_status=WidthStatus.PASS,
+        prototype_width_sec=6.2,
+        candidate_count=3,
+        non_seed_candidate_count=2,
+        width_candidate_ids=("REF", "S2", "S3"),
+    )
+
+    summary = summarize_identity_decision(
+        seed_gate,
+        cells,
+        _center(),
+        IdentityCoherenceConfig(),
+        identity_family_id="IDF-1",
+        assessed_sample_count=3,
+        prototype_width=prototype_width,
+    )
+
+    assert summary.shape_reference_basis is ShapeReferenceBasis.MORPHOLOGY_RT_MEDOID
+    assert summary.shape_reference_candidate_id == "REF"
+    assert summary.prototype_width_sec == 6.2

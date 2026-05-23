@@ -6,6 +6,7 @@ from .cell_evidence import evaluate_cell_evidence, select_cell_evidence_for_samp
 from .decision import summarize_identity_decision
 from .models import (
     CandidateIdentityMatch,
+    CandidateTrace,
     CellCandidateEvidence,
     CellEvidenceResult,
     CidNeutralLossConstraint,
@@ -13,14 +14,24 @@ from .models import (
     IdentityCoherenceConfig,
     IdentityCoherenceRequest,
     IdentityDecisionSummary,
+    PrototypeWidthResult,
     RtCenterResult,
     SeedCandidateEvidence,
     SeedGateConfig,
     SeedGateResult,
+    ShapeComparisonResult,
+    ShapeConfig,
+    ShapeReferenceResult,
+    WidthAssessmentResult,
+    WidthConfig,
 )
 from .request_builder import (
     build_identity_coherence_request,
     build_seed_candidate_evidence,
+)
+from .row_evaluator import (
+    IdentityCoherenceRowResult,
+    evaluate_identity_coherence_row,
 )
 from .rt_center import estimate_rt_center
 from .schema import (
@@ -55,10 +66,18 @@ from .schema import (
     WidthStatus,
 )
 from .seed_gate import evaluate_seed_gate
+from .shape import (
+    compare_shape_to_reference,
+    create_seed_shape_reference,
+    estimate_shape_reference,
+    normalize_trace_for_shape,
+)
 from .tags import format_fragment_tags, has_fragment_tags, normalize_fragment_tags
+from .width import assess_width_against_prototype, estimate_prototype_width
 
 __all__ = [
     "CandidateIdentityMatch",
+    "CandidateTrace",
     "AreaHeightStatus",
     "BaselineAuditStatus",
     "CellAssessmentStatus",
@@ -83,7 +102,9 @@ __all__ = [
     "IdentityCoherenceRequest",
     "IdentityDecision",
     "IdentityDecisionSummary",
+    "IdentityCoherenceRowResult",
     "NonRtIdentityResult",
+    "PrototypeWidthResult",
     "RequestCandidateIdentityStatus",
     "RequestIdentityCompletenessStatus",
     "RtCenterDecision",
@@ -94,21 +115,33 @@ __all__ = [
     "SeedGateConfig",
     "SeedGateResult",
     "SeedRejectReason",
+    "ShapeComparisonResult",
     "ShapeAuditStatus",
+    "ShapeConfig",
     "ShapeReferenceBasis",
+    "ShapeReferenceResult",
     "ShapeStatus",
     "WeakBasisReason",
+    "WidthAssessmentResult",
+    "WidthConfig",
     "WidthStatus",
     "build_identity_coherence_request",
     "build_seed_candidate_evidence",
+    "assess_width_against_prototype",
+    "compare_shape_to_reference",
+    "create_seed_shape_reference",
     "estimate_rt_center",
+    "estimate_prototype_width",
+    "estimate_shape_reference",
     "evaluate_cell_evidence",
+    "evaluate_identity_coherence_row",
     "evaluate_seed_gate",
     "format_fragment_tags",
     "has_fragment_tags",
     "match_identity_constraints_to_candidate",
     "match_request_to_candidate",
     "normalize_fragment_tags",
+    "normalize_trace_for_shape",
     "select_cell_evidence_for_sample",
     "summarize_identity_decision",
 ]

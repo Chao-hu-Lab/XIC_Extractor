@@ -1,8 +1,11 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+
 from xic_extractor.alignment.identity_coherence.models import (
     CandidateIdentityMatch,
+    CandidateTrace,
     CellCandidateEvidence,
     CellEvidenceResult,
     IdentityCoherenceConfig,
@@ -164,11 +167,26 @@ def test_identity_coherence_facade_exports_stable_contract():
     assert identity_coherence.IDENTITY_COHERENCE_REQUEST_COLUMNS
     assert identity_coherence.CellCandidateEvidence is not None
     assert identity_coherence.CellEvidenceResult is not None
+    assert identity_coherence.CandidateTrace is not None
+    assert identity_coherence.ShapeConfig is not None
+    assert identity_coherence.WidthConfig is not None
+    assert identity_coherence.ShapeReferenceResult is not None
+    assert identity_coherence.ShapeComparisonResult is not None
+    assert identity_coherence.PrototypeWidthResult is not None
+    assert identity_coherence.WidthAssessmentResult is not None
     assert identity_coherence.IdentityCoherenceConfig is not None
+    assert identity_coherence.IdentityCoherenceRowResult is not None
     assert identity_coherence.IdentityDecisionSummary is not None
     assert identity_coherence.RtCenterResult is not None
     assert identity_coherence.estimate_rt_center is not None
+    assert identity_coherence.estimate_prototype_width is not None
+    assert identity_coherence.assess_width_against_prototype is not None
+    assert identity_coherence.estimate_shape_reference is not None
+    assert identity_coherence.create_seed_shape_reference is not None
+    assert identity_coherence.compare_shape_to_reference is not None
+    assert identity_coherence.normalize_trace_for_shape is not None
     assert identity_coherence.evaluate_cell_evidence is not None
+    assert identity_coherence.evaluate_identity_coherence_row is not None
     assert identity_coherence.select_cell_evidence_for_sample is not None
     assert identity_coherence.summarize_identity_decision is not None
     assert identity_coherence.match_identity_constraints_to_candidate is not None
@@ -386,8 +404,57 @@ def test_identity_coherence_config_defaults_match_v04_review_values():
     assert config.rt.preferred_rt_sec == 60.0
     assert config.rt.seed_center_candidate_sec == 30.0
     assert config.rt.max_center_drift_sec == 30.0
-    assert not hasattr(config, "shape")
-    assert not hasattr(config, "width")
+    assert config.shape.min_points == 7
+    assert config.shape.resample_points == 25
+    assert config.shape.min_cosine == 0.85
+    assert config.shape.prototype_min_candidates == 3
+    assert config.shape.prototype_min_non_seed_candidates == 2
+    assert config.shape.allow_seed_shape_fallback is True
+    assert config.shape.allow_morphology_rt_medoid is True
+    assert config.width.prototype_min_candidates == 3
+    assert config.width.min_ratio == 0.50
+    assert config.width.max_ratio == 2.00
+
+
+def test_candidate_trace_is_nested_domain_model_not_flat_schema_columns():
+    trace = CandidateTrace(
+        rt_min=(7.75, 7.80, 7.85),
+        intensity=(1.0, 5.0, 1.0),
+        shape_audit_status=ShapeAuditStatus.PASS,
+    )
+
+    candidate = CellCandidateEvidence(
+        sample_id="S2",
+        candidate_evidence=SeedCandidateEvidence(
+            candidate_id="C2",
+            precursor_mz=500.0,
+            product_mz=384.0,
+            cid_observed_loss_da=116.0,
+            fragment_tags=("MeR", "dR"),
+            best_seed_rt=7.80,
+            ms1_scan_support_score=0.75,
+        ),
+        apex_rt=7.80,
+        peak_start_rt=7.75,
+        peak_end_rt=7.85,
+        area=10.0,
+        height=5.0,
+        point_count=3,
+        trace=trace,
+    )
+
+    assert candidate.trace is trace
+    assert "rt_min" not in IDENTITY_COHERENCE_CELL_EVIDENCE_COLUMNS
+    assert "intensity" not in IDENTITY_COHERENCE_CELL_EVIDENCE_COLUMNS
+
+
+def test_candidate_trace_rejects_mismatched_rt_and_intensity_lengths():
+    with pytest.raises(ValueError, match="rt_min and intensity"):
+        CandidateTrace(
+            rt_min=(7.75, 7.80, 7.85),
+            intensity=(1.0, 5.0),
+            shape_audit_status=ShapeAuditStatus.PASS,
+        )
 
 
 def test_cell_and_decision_models_hold_tier1_slice_state():

@@ -4,6 +4,7 @@ from .models import (
     CellEvidenceResult,
     IdentityCoherenceConfig,
     IdentityDecisionSummary,
+    PrototypeWidthResult,
     RtCenterResult,
     SeedGateResult,
 )
@@ -27,6 +28,7 @@ def summarize_identity_decision(
     *,
     identity_family_id: str,
     assessed_sample_count: int,
+    prototype_width: PrototypeWidthResult | None = None,
 ) -> IdentityDecisionSummary:
     if seed_gate.seed_gate_class != SeedGateClass.COHERENT_SEED:
         return _summary(
@@ -58,6 +60,7 @@ def summarize_identity_decision(
         decision_reason=_decision_reason(decision),
         weak_basis_reason=_weak_basis_reason(cells, decision),
         include_seed=True,
+        prototype_width=prototype_width,
     )
 
 
@@ -71,7 +74,23 @@ def _decision_for_coherent_seed(
 
     non_seed_coherent = _non_seed_coherent_count(cells)
     tier12 = _tier12_count(cells)
+    tier3 = _tier3_count(cells)
+    seed_fallback_tier2 = _tier2_seed_fallback_count(cells)
+    prototype_tier2 = _tier2_prototype_shape_count(cells)
     total = 1 + non_seed_coherent
+
+    if non_seed_coherent >= config.promotion.min_non_seed_coherent_samples:
+        if tier12 == 0 and tier3 > 0:
+            return IdentityDecision.REVIEW_ONLY_WEAK_BASIS_TIER3_ONLY
+        if tier12 == 1 and tier3 > 0:
+            return IdentityDecision.REVIEW_ONLY_WEAK_BASIS_SINGLE_TIER12_PLUS_TIER3
+        if tier12 >= config.promotion.min_non_seed_tier12_identity_samples:
+            if (
+                seed_fallback_tier2 == tier12
+                and prototype_tier2 == 0
+                and _tier1_count(cells) == 0
+            ):
+                return IdentityDecision.REVIEW_ONLY_INSUFFICIENT_SUPPORT
 
     if (
         total >= config.promotion.min_total_coherent_samples
@@ -96,6 +115,7 @@ def _summary(
     decision_reason: str,
     weak_basis_reason: WeakBasisReason,
     include_seed: bool,
+    prototype_width: PrototypeWidthResult | None = None,
 ) -> IdentityDecisionSummary:
     non_seed_coherent = (
         _non_seed_coherent_count(cells) if include_seed else 0
@@ -133,9 +153,13 @@ def _summary(
             config.promotion.min_non_seed_tier12_identity_samples
         ),
         weak_basis_reason=weak_basis_reason,
-        shape_reference_basis=ShapeReferenceBasis.NONE,
-        shape_reference_candidate_id="",
-        prototype_width_sec=None,
+        shape_reference_basis=_row_shape_reference_basis(cells),
+        shape_reference_candidate_id=_row_shape_reference_candidate_id(cells),
+        prototype_width_sec=(
+            prototype_width.prototype_width_sec
+            if prototype_width is not None
+            else None
+        ),
         center_rt_source=center.center_decision.value,
         center=center,
         coherent_fraction=coherent_fraction,
@@ -162,8 +186,24 @@ def _weak_basis_reason(
     cells: tuple[CellEvidenceResult, ...],
     decision: IdentityDecision,
 ) -> WeakBasisReason:
-    if decision is IdentityDecision.REVIEW_ONLY_RT_ONLY_SUPPORT:
+    decision_value = _enum_value(decision)
+    if decision_value == IdentityDecision.REVIEW_ONLY_RT_ONLY_SUPPORT.value:
         return WeakBasisReason.RT_ONLY
+    if decision_value == IdentityDecision.REVIEW_ONLY_WEAK_BASIS_TIER3_ONLY.value:
+        return WeakBasisReason.TIER3_ONLY
+    if (
+        decision_value
+        == IdentityDecision.REVIEW_ONLY_WEAK_BASIS_SINGLE_TIER12_PLUS_TIER3.value
+    ):
+        return WeakBasisReason.SINGLE_TIER12_PLUS_TIER3
+    if (
+        decision_value == IdentityDecision.REVIEW_ONLY_INSUFFICIENT_SUPPORT.value
+        and _tier12_count(cells) > 0
+        and _tier2_seed_fallback_count(cells) == _tier12_count(cells)
+        and _tier1_count(cells) == 0
+        and _tier2_prototype_shape_count(cells) == 0
+    ):
+        return WeakBasisReason.SEED_SHAPE_FALLBACK_ONLY
     return WeakBasisReason.NONE
 
 
@@ -176,32 +216,94 @@ def _tier12_count(non_seed_cells: tuple[CellEvidenceResult, ...]) -> int:
 
 
 def _tier1_count(cells: tuple[CellEvidenceResult, ...]) -> int:
-    return sum(1 for cell in cells if cell.cell_identity_tier == CellIdentityTier.TIER1)
+    return sum(
+        1
+        for cell in cells
+        if _enum_value(cell.cell_identity_tier) == CellIdentityTier.TIER1.value
+    )
 
 
 def _tier2_shape_count(cells: tuple[CellEvidenceResult, ...]) -> int:
-    return sum(1 for cell in cells if cell.cell_identity_tier == CellIdentityTier.TIER2)
+    return sum(
+        1
+        for cell in cells
+        if _enum_value(cell.cell_identity_tier) == CellIdentityTier.TIER2.value
+    )
 
 
 def _tier2_seed_fallback_count(cells: tuple[CellEvidenceResult, ...]) -> int:
     return sum(
         1
         for cell in cells
-        if cell.cell_identity_tier == CellIdentityTier.TIER2
+        if _enum_value(cell.cell_identity_tier) == CellIdentityTier.TIER2.value
         and cell.shape_fallback_used
     )
 
 
+def _tier2_prototype_shape_count(cells: tuple[CellEvidenceResult, ...]) -> int:
+    return sum(
+        1
+        for cell in cells
+        if _enum_value(cell.cell_identity_tier) == CellIdentityTier.TIER2.value
+        and not cell.shape_fallback_used
+    )
+
+
 def _tier3_count(cells: tuple[CellEvidenceResult, ...]) -> int:
-    return sum(1 for cell in cells if cell.cell_identity_tier == CellIdentityTier.TIER3)
+    return sum(
+        1
+        for cell in cells
+        if _enum_value(cell.cell_identity_tier) == CellIdentityTier.TIER3.value
+    )
 
 
 def _has_rt_only_support(cells: tuple[CellEvidenceResult, ...]) -> bool:
     return any(
-        cell.cell_identity_tier == CellIdentityTier.RT_ONLY
+        _enum_value(cell.cell_identity_tier) == CellIdentityTier.RT_ONLY.value
         and _enum_value(cell.rt_gate_status) == RtGateStatus.PASS.value
         for cell in cells
     )
+
+
+def _row_shape_reference_basis(
+    cells: tuple[CellEvidenceResult, ...],
+) -> ShapeReferenceBasis:
+    tier2_cells = _tier2_cells(cells)
+    if not tier2_cells:
+        return ShapeReferenceBasis.NONE
+    return _preferred_shape_reference_cell(tier2_cells).shape_reference_basis
+
+
+def _row_shape_reference_candidate_id(cells: tuple[CellEvidenceResult, ...]) -> str:
+    tier2_cells = _tier2_cells(cells)
+    if not tier2_cells:
+        return ""
+    return _preferred_shape_reference_cell(tier2_cells).shape_reference_candidate_id
+
+
+def _tier2_cells(
+    cells: tuple[CellEvidenceResult, ...],
+) -> tuple[CellEvidenceResult, ...]:
+    return tuple(
+        cell
+        for cell in cells
+        if _enum_value(cell.cell_identity_tier) == CellIdentityTier.TIER2.value
+    )
+
+
+def _preferred_shape_reference_cell(
+    tier2_cells: tuple[CellEvidenceResult, ...],
+) -> CellEvidenceResult:
+    return sorted(
+        tier2_cells,
+        key=lambda cell: (
+            1
+            if _enum_value(cell.shape_reference_basis)
+            == ShapeReferenceBasis.SEED_FALLBACK.value
+            else 0,
+            cell.shape_reference_candidate_id,
+        ),
+    )[0]
 
 
 def _enum_value(value: object) -> object:
