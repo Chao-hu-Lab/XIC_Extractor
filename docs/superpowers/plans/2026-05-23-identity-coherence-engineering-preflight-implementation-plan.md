@@ -41,6 +41,15 @@ Use that exact hash as `<base_commit_before_task1>` in the final scope guard.
 If `git branch --show-current` returns `main` or `master`, stop. This plan must
 not commit directly to the primary branch.
 
+The working tree must be clean before Task 1 starts. If `git status --short`
+prints any tracked, staged, or untracked file, stop and classify it with the
+user before continuing. Do not stage unrelated user edits into this plan's
+task commits.
+
+Before every task commit, rerun `git status --short` and verify that the only
+dirty paths are the files explicitly listed for that task. If any other path is
+dirty, stop before `git add`.
+
 ## Current State
 
 Already implemented:
@@ -76,7 +85,9 @@ In scope:
 - Add a tiny importable no-RAW process smoke worker under `xic_extractor/alignment/identity_coherence/process_payload.py`.
 - Add tests proving payload validation, pickle round-trip, and Windows `spawn` process round-trip.
 - Add engineering preflight fields to `IdentityCoherenceOutputContext` and render an explicit Engineering Go/No-Go table.
-- Add the required firewall spoof fixture directory and a test proving spoofed post-Backfill fields are seen but cannot affect decisions/counts/basis.
+- Add the required firewall spoof fixture directory and a fixture-level A/B test
+  proving spoofed post-Backfill columns can be detected as present while the
+  baseline decision/count/basis projection remains stable.
 - Re-export the new public payload surface through `xic_extractor.alignment.identity_coherence`.
 
 Out of scope:
@@ -102,7 +113,9 @@ Out of scope:
   - Add engineering preflight fields to `IdentityCoherenceOutputContext`.
   - Render `## Engineering Go / No-Go` in the summary.
 - Modify `xic_extractor/alignment/identity_coherence/__init__.py`
-  - Re-export the new payload dataclasses and smoke worker.
+  - Re-export the new payload dataclasses.
+  - Do not re-export the no-RAW smoke worker; it is an internal preflight helper,
+    not a public facade contract.
 - Create `tests/alignment/identity_coherence/test_process_payload.py`
   - Test payload validation, pickleability, and Windows spawn round-trip.
 - Create `tests/fixtures/identity_coherence/firewall_spoof/pre_backfill_owner_state.jsonl`
@@ -123,8 +136,15 @@ Out of scope:
 - Payload dataclasses are typed process contracts, not RAW adapters.
 - The smoke worker must not read a RAW file; it only proves `spawn` can import the identity-coherence module and round-trip pickleable payloads.
 - `IdentityCoherenceResult` is a model-level container. It does not replace `IdentityCoherenceRowResult`; it gives future process adapters a domain-safe return shape without importing `output.py`.
-- Firewall spoof data is validation-only. Spoofed fields may set `forbidden_evidence_seen = true`, but they must never set `forbidden_evidence_used = true` and must never alter decision, coherent counts, seed gate, or cell identity basis.
+- Firewall spoof data is validation-only. In this slice it is a fixture contract,
+  not the future production adapter. The test-local adapter may set
+  `forbidden_evidence_seen = true`, but it must never set
+  `forbidden_evidence_used = true` and must never alter decision, coherent
+  counts, seed gate, or cell identity basis. Production adapter enforcement
+  belongs to the later opt-in retrieval/adapter slice.
 - Engineering Go/No-Go rows are summary/audit rows. They do not change identity decisions.
+- Synthetic Go/No-Go tests prove renderer/preflight semantics only. A Proceed
+  row in this slice is not 8RAW or 85RAW data clearance.
 - If a later implementation needs real trace retrieval, it must create a separate adapter plan and keep RAW/XIC calls outside `identity_coherence` domain code.
 
 ---
@@ -631,7 +651,7 @@ def identity_coherence_trace_payload_smoke_worker(
     )
 ```
 
-- [ ] **Step 4: Re-export payload surface**
+- [ ] **Step 4: Re-export payload dataclasses only**
 
 In `xic_extractor/alignment/identity_coherence/__init__.py`, import the new names:
 
@@ -663,12 +683,6 @@ from .models import (
 )
 ```
 
-Add:
-
-```python
-from .process_payload import identity_coherence_trace_payload_smoke_worker
-```
-
 Add these strings to `__all__`:
 
 ```python
@@ -676,8 +690,12 @@ Add these strings to `__all__`:
 "IdentityCoherenceResult",
 "IdentityCoherenceTraceRequest",
 "IdentityCoherenceTraceResult",
-"identity_coherence_trace_payload_smoke_worker",
 ```
+
+Do not import or include `identity_coherence_trace_payload_smoke_worker` in
+`__all__`. Tests may import it from
+`xic_extractor.alignment.identity_coherence.process_payload`, but the package
+facade should expose only stable payload models.
 
 - [ ] **Step 5: Add facade export assertions**
 
@@ -691,13 +709,37 @@ def test_identity_coherence_facade_exports_process_payload_surface():
     assert identity_coherence.IdentityCoherenceResult is not None
     assert identity_coherence.IdentityCoherenceTraceRequest is not None
     assert identity_coherence.IdentityCoherenceTraceResult is not None
-    assert identity_coherence.identity_coherence_trace_payload_smoke_worker is not None
     assert "EngineeringConfig" in identity_coherence.__all__
     assert "IdentityCoherenceResult" in identity_coherence.__all__
     assert "IdentityCoherenceTraceRequest" in identity_coherence.__all__
     assert "IdentityCoherenceTraceResult" in identity_coherence.__all__
-    assert "identity_coherence_trace_payload_smoke_worker" in identity_coherence.__all__
 ```
+
+Also add a dependency-boundary test for the new helper module:
+
+```python
+def test_identity_coherence_process_payload_stays_no_raw_boundary() -> None:
+    source = Path(
+        "xic_extractor/alignment/identity_coherence/process_payload.py"
+    ).read_text(encoding="utf-8")
+    forbidden_snippets = (
+        "raw_reader",
+        "ms1_index_source",
+        "owner_backfill",
+        "alignment.pipeline",
+        "scripts.run_alignment",
+        "source_for_owner_backfill_backend",
+        "xic_extractor.output",
+        "workbook",
+        "report",
+    )
+
+    for snippet in forbidden_snippets:
+        assert snippet not in source
+```
+
+If `Path` is not already imported in `test_schema_contract.py`, merge
+`from pathlib import Path` into the top import block.
 
 - [ ] **Step 6: Run focused tests**
 
@@ -707,7 +749,12 @@ Run:
 uv run pytest tests\alignment\identity_coherence\test_process_payload.py tests\alignment\identity_coherence\test_schema_contract.py -q
 ```
 
-Expected: PASS. If Windows sandbox process spawning fails with `PermissionError: [WinError 5]`, rerun the same command outside the sandbox using the standard escalation path and record both results in the final implementation note.
+Expected: PASS. If Windows sandbox process spawning fails with `PermissionError:
+[WinError 5]`, Codex workers should rerun the exact same `uv run pytest ...`
+command with shell escalation and should not alter test selection. Human
+PowerShell fallback: open a normal PowerShell in the required worktree and run
+the exact same command after the same env setup. Record both results in the
+final implementation note.
 
 - [ ] **Step 7: Commit**
 
@@ -737,9 +784,6 @@ git commit -m "test: add identity coherence spawn payload smoke"
 Append to `tests/alignment/identity_coherence/test_output_writer.py`:
 
 ```python
-from dataclasses import replace
-
-
 def test_summary_renders_engineering_go_no_go_rows():
     record = output_record()
     markdown = render_identity_coherence_summary(
@@ -811,6 +855,47 @@ def test_summary_marks_infrastructure_pivot_when_blocked_fraction_exceeds_limit(
     ) in markdown
 
 
+def test_summary_uses_row_level_denominator_for_blocked_fraction():
+    record = output_record()
+    first_decision = replace(
+        record.row_result.decision,
+        total_coherent_sample_count=4,
+        coherent_fraction=0.5,
+        infrastructure_blocked_sample_count=1,
+    )
+    second_decision = replace(
+        record.row_result.decision,
+        decision_id="DEC-SECOND",
+        identity_family_id="IDF-SECOND",
+        total_coherent_sample_count=4,
+        coherent_fraction=0.5,
+        infrastructure_blocked_sample_count=1,
+    )
+    first_record = replace(
+        record,
+        row_result=replace(record.row_result, decision=first_decision),
+    )
+    second_record = replace(
+        record,
+        row_result=replace(record.row_result, decision=second_decision),
+    )
+
+    markdown = render_identity_coherence_summary(
+        (first_record, second_record),
+        context=IdentityCoherenceOutputContext(
+            command="pytest",
+            mode="inline_pre_backfill",
+            input_source="pre_backfill_owner_state.jsonl",
+            max_infrastructure_blocked_fraction=0.2,
+        ),
+    )
+
+    assert (
+        "| infrastructure_blocked_fraction | Proceed | "
+        "`2 / 16 = 0.125` <= `0.2` |"
+    ) in markdown
+
+
 def test_summary_rejects_forbidden_evidence_used_before_go_no_go_render():
     record = output_record()
     forbidden_decision = replace(
@@ -833,7 +918,8 @@ def test_summary_rejects_forbidden_evidence_used_before_go_no_go_render():
         )
 ```
 
-If `test_output_writer.py` already imports `replace`, do not add a duplicate import.
+`test_output_writer.py` already imports `replace` at the top of the file. Do
+not add `from dataclasses import replace` in the appended block.
 
 - [ ] **Step 2: Run tests and verify they fail**
 
@@ -875,14 +961,14 @@ def _engineering_go_no_go_rows(
     decision_rows: Sequence[IdentityDecisionSummary],
     *,
     context: IdentityCoherenceOutputContext,
-    assessed_sample_count: int,
+    assessed_sample_total: int,
 ) -> list[str]:
     blocked_count = _sum_decision_field(
         decision_rows,
         "infrastructure_blocked_sample_count",
     )
     blocked_fraction = (
-        0.0 if assessed_sample_count <= 0 else blocked_count / assessed_sample_count
+        0.0 if assessed_sample_total <= 0 else blocked_count / assessed_sample_total
     )
     forbidden_used_count = sum(
         1 for row in decision_rows if row.forbidden_evidence_used
@@ -912,7 +998,7 @@ def _engineering_go_no_go_rows(
         ),
     ]
     blocked_basis = (
-        f"`{blocked_count} / {assessed_sample_count} = "
+        f"`{blocked_count} / {assessed_sample_total} = "
         f"{blocked_fraction:.12g}`"
     )
     if blocked_fraction <= context.max_infrastructure_blocked_fraction:
@@ -963,44 +1049,54 @@ def _status_row(name: str, status: str, *, pass_basis: str) -> str:
 
 - [ ] **Step 5: Render the Go/No-Go section**
 
-In `render_identity_coherence_summary()`, immediately before `"## Cost Counters"`, insert:
+In `render_identity_coherence_summary()`, place the Engineering Go/No-Go section
+as a complete block immediately before the Cost Counters section. The heading
+and table rows must stay adjacent:
 
 ```python
+    lines.extend(
+        [
             "## Engineering Go / No-Go",
             "",
-```
-
-Then extend with:
-
-```python
+        ]
+    )
     lines.extend(
         _engineering_go_no_go_rows(
             decision_rows,
             context=context,
-            assessed_sample_count=max(1, _assessed_sample_count(decision_rows)),
+            assessed_sample_total=max(
+                1,
+                _total_assessed_sample_count(decision_rows),
+            ),
         )
     )
 ```
 
-Add helper:
+Do not append the rows after the Cost Counters or Writer Contract Checks
+sections. Also update the existing heading-order test so
+`## Engineering Go / No-Go` appears before `## Cost Counters`.
+
+Add helpers:
 
 ```python
-def _assessed_sample_count(
+def _assessed_sample_count_for_decision(
+    row: IdentityDecisionSummary,
+) -> int:
+    if row.coherent_fraction in {None, 0}:
+        return 1
+    return max(1, round(row.total_coherent_sample_count / row.coherent_fraction))
+
+
+def _total_assessed_sample_count(
     decision_rows: Sequence[IdentityDecisionSummary],
 ) -> int:
-    if not decision_rows:
-        return 0
-    fractions = [
-        row.total_coherent_sample_count / row.coherent_fraction
-        for row in decision_rows
-        if row.coherent_fraction not in {None, 0}
-    ]
-    if not fractions:
-        return len(decision_rows)
-    return max(1, round(max(fractions)))
+    return sum(_assessed_sample_count_for_decision(row) for row in decision_rows)
 ```
 
-Use `max(1, ...)` in the caller so empty/partial synthetic fixtures do not divide by zero. Real diagnostic output should supply meaningful `coherent_fraction` through the decision summary.
+Use `max(1, ...)` in the caller so empty synthetic fixtures do not divide by
+zero. Do not use a single maximum inferred sample count as the denominator
+across multiple rows; that overestimates blocked fraction when several identity
+families are summarized together.
 
 - [ ] **Step 6: Run focused tests**
 
@@ -1214,9 +1310,9 @@ def _apply_firewall_spoof_fixture(
     """Test adapter for the firewall A/B fixture contract.
 
     This is not the future post-hoc diagnostic adapter. It exercises the same
-    fixture semantics required by the implementation contract: forbidden
+    fixture-level semantics required before that adapter exists: forbidden
     post-Backfill fields may be detected as present, but only
-    `forbidden_evidence_seen` may change.
+    `forbidden_evidence_seen` may change in this A/B projection.
     """
 
     required_spoof_columns = {
@@ -1384,7 +1480,11 @@ Run:
 uv run pytest tests\alignment\identity_coherence\test_process_payload.py tests\alignment\identity_coherence\test_firewall_fixture.py tests\alignment\identity_coherence\test_output_writer.py tests\alignment\identity_coherence\test_schema_contract.py -q
 ```
 
-Expected: PASS. If the spawn smoke test fails in the sandbox with `PermissionError: [WinError 5]`, rerun this same command outside the sandbox using the standard escalation path and report both sandbox and escalated results.
+Expected: PASS. If the spawn smoke test fails in the sandbox with
+`PermissionError: [WinError 5]`, Codex workers should rerun this exact command
+with shell escalation and should not alter test selection. Human PowerShell
+fallback: run the exact command in a normal PowerShell from the required
+worktree. Report both sandbox and escalated results.
 
 - [ ] **Step 2: Run identity coherence suite**
 
@@ -1486,8 +1586,9 @@ If no cleanup edits were required, do not create an empty commit.
 
 - [ ] No task imports RAW readers, Backfill, workbook/report renderers, CLI scripts, or alignment pipeline code from `identity_coherence` domain modules.
 - [ ] The spawn smoke worker is no-RAW and proves only pickle/import/process payload safety.
+- [ ] The spawn smoke worker remains importable from `process_payload.py` for tests but is not exported from the package facade.
 - [ ] The firewall fixture contains one would-primary and one Review-only row.
-- [ ] Spoofed post-Backfill fields can only affect `forbidden_evidence_seen`; they never alter decisions/counts/basis and never set `forbidden_evidence_used`.
+- [ ] Spoofed post-Backfill fixture fields can only affect `forbidden_evidence_seen` in the fixture-level A/B projection; they never alter decisions/counts/basis and never set `forbidden_evidence_used`. Production adapter enforcement remains out of scope.
 - [ ] Engineering Go/No-Go rows are summary/audit only and cannot mutate identity decisions.
 - [ ] The plan leaves opt-in pipeline/CLI/RAW retrieval adapter work to a separate next slice.
 - [ ] `uv run pytest tests\alignment\identity_coherence -q` is the minimum required verification before handing this slice to the next plan.
