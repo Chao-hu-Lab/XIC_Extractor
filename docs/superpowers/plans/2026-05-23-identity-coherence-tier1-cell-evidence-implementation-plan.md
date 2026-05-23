@@ -156,9 +156,12 @@ Extend the existing schema import block in
 ```python
     AreaHeightStatus,
     BaselineAuditStatus,
+    CellBlockedReason,
     CellAssessmentStatus,
+    CellDataQualityReason,
     CellIdentityBasis,
     CellIdentityTier,
+    DecisionReason,
     FragmentMatchStatus,
     FragmentObservationMode,
     IdentityDecision,
@@ -253,6 +256,15 @@ def test_cell_evidence_enum_values_are_stable_strings():
         "fail",
         "not_assessed",
         "blocked",
+    }
+    assert {value.value for value in CellBlockedReason} == {
+        "backfill_only_evidence",
+    }
+    assert {value.value for value in CellDataQualityReason} == {
+        "invalid_peak_morphology",
+    }
+    assert {value.value for value in DecisionReason} == {
+        "tier1_support",
     }
 
 
@@ -414,6 +426,18 @@ class NonRtIdentityResult(StrEnum):
     FAIL = "fail"
     NOT_ASSESSED = "not_assessed"
     BLOCKED = "blocked"
+
+
+class CellBlockedReason(StrEnum):
+    BACKFILL_ONLY_EVIDENCE = "backfill_only_evidence"
+
+
+class CellDataQualityReason(StrEnum):
+    INVALID_PEAK_MORPHOLOGY = "invalid_peak_morphology"
+
+
+class DecisionReason(StrEnum):
+    TIER1_SUPPORT = "tier1_support"
 ```
 
 - [ ] **Step 4: Add failing model tests**
@@ -443,11 +467,8 @@ def test_identity_coherence_config_defaults_match_v04_review_values():
     assert config.rt.preferred_rt_sec == 60.0
     assert config.rt.seed_center_candidate_sec == 30.0
     assert config.rt.max_center_drift_sec == 30.0
-    assert config.shape.min_points == 7
-    assert config.shape.resample_points == 25
-    assert config.shape.min_cosine == 0.85
-    assert config.width.min_ratio == 0.50
-    assert config.width.max_ratio == 2.00
+    assert not hasattr(config, "shape")
+    assert not hasattr(config, "width")
 
 
 def test_cell_and_decision_models_hold_tier1_slice_state():
@@ -518,7 +539,7 @@ def test_cell_and_decision_models_hold_tier1_slice_state():
         ),
         request_candidate_identity_status=RequestCandidateIdentityStatus.MATCH,
         decision=IdentityDecision.WOULD_PRIMARY,
-        decision_reason="tier1_support",
+        decision_reason=DecisionReason.TIER1_SUPPORT.value,
         total_coherent_sample_count=3,
         non_seed_coherent_sample_count=2,
         tier12_non_seed_identity_sample_count=2,
@@ -612,30 +633,10 @@ class RtConfig:
 
 
 @dataclass(frozen=True)
-class ShapeConfig:
-    min_points: int = 7
-    resample_points: int = 25
-    min_cosine: float = 0.85
-    prototype_min_candidates: int = 3
-    prototype_min_non_seed_candidates: int = 2
-    allow_seed_shape_fallback: bool = True
-    allow_morphology_rt_medoid: bool = True
-
-
-@dataclass(frozen=True)
-class WidthConfig:
-    prototype_min_candidates: int = 3
-    min_ratio: float = 0.50
-    max_ratio: float = 2.00
-
-
-@dataclass(frozen=True)
 class IdentityCoherenceConfig:
     seed_gate: SeedGateConfig = field(default_factory=SeedGateConfig)
     promotion: PromotionConfig = field(default_factory=PromotionConfig)
     rt: RtConfig = field(default_factory=RtConfig)
-    shape: ShapeConfig = field(default_factory=ShapeConfig)
-    width: WidthConfig = field(default_factory=WidthConfig)
 
 
 @dataclass(frozen=True)
@@ -730,9 +731,10 @@ class IdentityDecisionSummary:
     forbidden_evidence_used: bool
 ```
 
-This slice intentionally omits request, fragment, controls, and engineering
-config groups from the broader implementation contract. Add those groups in the
-slices that first consume them; do not add inert config placeholders here.
+This slice intentionally omits request, fragment, shape, width, controls, and
+engineering config groups from the broader implementation contract. Add those
+groups in the slices that first consume them; do not add inert config
+placeholders here.
 
 - [ ] **Step 7: Run Task 1 tests**
 
@@ -1206,7 +1208,9 @@ from xic_extractor.alignment.identity_coherence.request_builder import (
     build_identity_coherence_request,
 )
 from xic_extractor.alignment.identity_coherence.schema import (
+    CellBlockedReason,
     CellAssessmentStatus,
+    CellDataQualityReason,
     CellIdentityBasis,
     CellIdentityTier,
     EvidenceStage,
@@ -1255,6 +1259,7 @@ def _candidate(
     candidate_id: str = "CAND-2",
     sample_id: str = "RAW-2",
     apex_rt: float = 7.82,
+    precursor_mz: float = 500.0,
     product_mz: float = 384.0,
     fragment_tags: tuple[str, ...] = ("MeR", "dR"),
     evidence_stage: EvidenceStage | str = EvidenceStage.PRE_BACKFILL,
@@ -1264,7 +1269,7 @@ def _candidate(
         sample_id=sample_id,
         candidate_evidence=SeedCandidateEvidence(
             candidate_id=candidate_id,
-            precursor_mz=500.0,
+            precursor_mz=precursor_mz,
             product_mz=product_mz,
             cid_observed_loss_da=116.0,
             fragment_tags=fragment_tags,
@@ -1384,7 +1389,7 @@ def test_evaluate_cell_evidence_blocks_backfill_only_candidate_evidence():
     assert cell.cell_assessment_status is CellAssessmentStatus.BLOCKED
     assert cell.cell_identity_tier is CellIdentityTier.BLOCKED
     assert cell.non_rt_identity_result is NonRtIdentityResult.BLOCKED
-    assert cell.blocked_reason == "backfill_only_evidence"
+    assert cell.blocked_reason == CellBlockedReason.BACKFILL_ONLY_EVIDENCE.value
     assert cell.coherent_count_contribution is False
     assert cell.forbidden_evidence_seen is True
 
@@ -1402,7 +1407,40 @@ def test_evaluate_cell_evidence_rejects_bad_morphology_as_data_quality():
     assert cell.cell_assessment_status is CellAssessmentStatus.DATA_QUALITY_REJECT
     assert cell.cell_identity_tier is CellIdentityTier.DATA_QUALITY
     assert cell.area_height_status.value == "fail"
-    assert cell.data_quality_reason == "invalid_peak_morphology"
+    assert cell.data_quality_reason == (
+        CellDataQualityReason.INVALID_PEAK_MORPHOLOGY.value
+    )
+
+
+def test_select_cell_evidence_without_tier1_uses_stable_fallback_order():
+    farther = _candidate(
+        candidate_id="NON-TIER1-FAR",
+        apex_rt=7.92,
+        product_mz=390.0,
+    )
+    closer = _candidate(
+        candidate_id="NON-TIER1-CLOSE",
+        apex_rt=7.81,
+        product_mz=390.0,
+    )
+
+    first_order = select_cell_evidence_for_sample(
+        _request(),
+        (farther, closer),
+        _center(),
+        IdentityCoherenceConfig(),
+        identity_family_id="IDF-1",
+    )
+    second_order = select_cell_evidence_for_sample(
+        _request(),
+        (closer, farther),
+        _center(),
+        IdentityCoherenceConfig(),
+        identity_family_id="IDF-1",
+    )
+
+    assert first_order.candidate_id == "NON-TIER1-CLOSE"
+    assert second_order.candidate_id == "NON-TIER1-CLOSE"
 ```
 
 - [ ] **Step 6: Run cell evidence tests and verify failure**
@@ -1438,6 +1476,8 @@ from .schema import (
     AreaHeightStatus,
     BaselineAuditStatus,
     CellAssessmentStatus,
+    CellBlockedReason,
+    CellDataQualityReason,
     CellIdentityBasis,
     CellIdentityTier,
     EvidenceStage,
@@ -1486,7 +1526,7 @@ def select_cell_evidence_for_sample(
         if cell.cell_identity_tier == CellIdentityTier.TIER1
     )
     if not tier1:
-        return assessed[0]
+        return min(assessed, key=_non_tier1_fallback_key)
     if len(tier1) == 1:
         return tier1[0][1]
 
@@ -1518,7 +1558,7 @@ def evaluate_cell_evidence(
             request,
             candidate,
             identity_family_id,
-            "backfill_only_evidence",
+            CellBlockedReason.BACKFILL_ONLY_EVIDENCE.value,
         )
     if candidate.blocked_reason:
         return _blocked_cell(
@@ -1539,7 +1579,7 @@ def evaluate_cell_evidence(
             request,
             candidate,
             identity_family_id,
-            "invalid_peak_morphology",
+            CellDataQualityReason.INVALID_PEAK_MORPHOLOGY.value,
         )
 
     rt_delta_center_sec = (float(candidate.apex_rt) - center.center_rt_min) * 60.0
@@ -1715,6 +1755,14 @@ def _tier1_tie_break_key(
     )
 
 
+def _non_tier1_fallback_key(
+    cell: CellEvidenceResult,
+) -> tuple[int, float, str]:
+    rt_pass_penalty = 0 if cell.rt_gate_status is RtGateStatus.PASS else 1
+    rt_delta = _abs_or_inf(cell.rt_delta_center_sec)
+    return (rt_pass_penalty, rt_delta, cell.candidate_id)
+
+
 def _ambiguous_cell(cell: CellEvidenceResult) -> CellEvidenceResult:
     return replace(
         cell,
@@ -1821,6 +1869,7 @@ from xic_extractor.alignment.identity_coherence.schema import (
     CellAssessmentStatus,
     CellIdentityBasis,
     CellIdentityTier,
+    DecisionReason,
     EvidenceStage,
     FragmentMatchStatus,
     FragmentObservationMode,
@@ -1942,6 +1991,14 @@ def test_summarize_identity_decision_promotes_seed_plus_two_tier1_cells():
     assert summary.non_seed_coherent_sample_count == 2
     assert summary.tier12_non_seed_identity_sample_count == 2
     assert summary.tier1_fragment_confirmed_sample_count == 2
+    assert summary.tier2_shape_supported_sample_count == 0
+    assert summary.tier2_seed_shape_fallback_sample_count == 0
+    assert summary.tier3_width_only_sample_count == 0
+    assert (
+        summary.tier12_non_seed_identity_sample_count
+        == summary.tier1_fragment_confirmed_sample_count
+    )
+    assert summary.decision_reason == DecisionReason.TIER1_SUPPORT.value
     assert summary.request_candidate_identity_status is (
         RequestCandidateIdentityStatus.MATCH
     )
@@ -2000,6 +2057,31 @@ def test_summarize_identity_decision_rejects_seed_plus_one_tier1_cell():
     assert summary.tier12_non_seed_identity_sample_count == 1
 
 
+def test_summarize_identity_decision_reports_rt_only_support_path():
+    rt_only = replace(
+        _tier1_cell("RAW-2"),
+        cell_identity_tier=CellIdentityTier.RT_ONLY,
+        cell_identity_basis=CellIdentityBasis.NONE,
+        fragment_match_status=FragmentMatchStatus.FAIL,
+        non_rt_identity_result=NonRtIdentityResult.FAIL,
+        coherent_count_contribution=False,
+        tier12_count_contribution=False,
+    )
+    summary = summarize_identity_decision(
+        _seed_result(),
+        (rt_only,),
+        _center(),
+        IdentityCoherenceConfig(),
+        identity_family_id="IDF-1",
+        assessed_sample_count=8,
+    )
+
+    assert summary.decision is IdentityDecision.REVIEW_ONLY_RT_ONLY_SUPPORT
+    assert summary.weak_basis_reason is WeakBasisReason.RT_ONLY
+    assert summary.total_coherent_sample_count == 1
+    assert summary.tier12_non_seed_identity_sample_count == 0
+
+
 def test_summarize_identity_decision_detects_forbidden_evidence_seen():
     forbidden = replace(_tier1_cell("RAW-2"), forbidden_evidence_seen=True)
     summary = summarize_identity_decision(
@@ -2042,6 +2124,7 @@ from .models import (
 )
 from .schema import (
     CellIdentityTier,
+    DecisionReason,
     IdentityDecision,
     RtCenterDecision,
     SeedGateClass,
@@ -2183,7 +2266,7 @@ def _summary(
 
 def _decision_reason(decision: IdentityDecision) -> str:
     if decision is IdentityDecision.WOULD_PRIMARY:
-        return "tier1_support"
+        return DecisionReason.TIER1_SUPPORT.value
     return decision.value
 
 
@@ -2200,8 +2283,8 @@ def _non_seed_coherent_count(cells: tuple[CellEvidenceResult, ...]) -> int:
     return sum(1 for cell in cells if cell.coherent_count_contribution)
 
 
-def _tier12_count(cells: tuple[CellEvidenceResult, ...]) -> int:
-    return sum(1 for cell in cells if cell.tier12_count_contribution)
+def _tier12_count(non_seed_cells: tuple[CellEvidenceResult, ...]) -> int:
+    return sum(1 for cell in non_seed_cells if cell.tier12_count_contribution)
 
 
 def _tier1_count(cells: tuple[CellEvidenceResult, ...]) -> int:
@@ -2274,6 +2357,7 @@ Extend `test_identity_coherence_facade_exports_stable_contract` in `tests/alignm
     assert identity_coherence.select_cell_evidence_for_sample is not None
     assert identity_coherence.summarize_identity_decision is not None
     assert identity_coherence.match_identity_constraints_to_candidate is not None
+    assert "match_identity_constraints_to_candidate" in identity_coherence.__all__
 ```
 
 - [ ] **Step 2: Run facade test and verify failure**
@@ -2376,6 +2460,7 @@ Run:
 
 ```powershell
 uv run pytest tests/alignment/identity_coherence
+uv run pytest --tb=short -q
 uv run ruff check xic_extractor/alignment/identity_coherence tests/alignment/identity_coherence
 git -c safe.directory=C:/Users/user/Desktop/XIC_Extractor/.worktrees/untargeted-backfill-logic-reset diff --check
 git -c safe.directory=C:/Users/user/Desktop/XIC_Extractor/.worktrees/untargeted-backfill-logic-reset status --short
@@ -2384,6 +2469,7 @@ git -c safe.directory=C:/Users/user/Desktop/XIC_Extractor/.worktrees/untargeted-
 Expected:
 
 - all identity coherence tests pass;
+- the full repository test suite passes with short tracebacks;
 - ruff passes;
 - no whitespace errors;
 - clean worktree after implementation commits. The plan file should already be
@@ -2413,9 +2499,14 @@ Expected:
 - [ ] Same-sample Tier 1 candidate ambiguity produces
       `fragment_match_status = ambiguous` and cannot increment coherent counts.
 - [ ] RT-only and RT-failed cells cannot increment coherent counts.
+- [ ] Tier2/tier3 counters remain zero in this tier1-only slice, and
+      `tier12_non_seed_identity_sample_count` equals
+      `tier1_fragment_confirmed_sample_count`.
 - [ ] `forbidden_evidence_seen` is aggregated for row audit while
       `forbidden_evidence_used` stays false because this slice records seen
       forbidden evidence but does not use it for promotion.
 - [ ] Would-primary requires seed plus two non-seed tier1 cells in this tier1-only slice.
+- [ ] Final verification includes the focused identity-coherence tests and the
+      full repository `uv run pytest --tb=short -q` suite.
 - [ ] No TSV writer or CLI is added.
 - [ ] No Backfill or downstream filtering behavior is changed.
