@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
+from dataclasses import replace
 from pathlib import Path
 
 from xic_extractor.alignment.backfill import (
@@ -19,6 +20,9 @@ from xic_extractor.alignment.edge_scoring import (
 )
 from xic_extractor.alignment.family_integration import integrate_feature_family_matrix
 from xic_extractor.alignment.feature_family import build_ms1_feature_families
+from xic_extractor.alignment.identity_coherence_adapter import (
+    run_identity_coherence_diagnostic,
+)
 from xic_extractor.alignment.matrix import AlignmentMatrix
 from xic_extractor.alignment.ms1_index_source import OwnerBackfillXicBackend
 from xic_extractor.alignment.output_levels import AlignmentOutputLevel
@@ -85,6 +89,9 @@ def run_alignment(
     raw_xic_batch_size: int = 1,
     owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw",
     preconsolidate_owner_families: bool = False,
+    emit_identity_coherence_diagnostic: bool = False,
+    identity_coherence_output_dir: Path | None = None,
+    identity_coherence_controls_manifest: Path | None = None,
     drift_lookup: DriftLookupProtocol | None = None,
     timing_recorder: TimingRecorder | None = None,
 ) -> AlignmentRunOutputs:
@@ -214,6 +221,39 @@ def run_alignment(
                     ownership.ambiguous_records,
                     start_index=len(owner_features) + 1,
                 ),
+            )
+        if emit_identity_coherence_diagnostic:
+            identity_output_dir = (
+                identity_coherence_output_dir
+                if identity_coherence_output_dir is not None
+                else output_dir / "identity_coherence"
+            )
+            with recorder.stage("alignment.identity_coherence_diagnostic") as stage:
+                diagnostic_run = run_identity_coherence_diagnostic(
+                    candidates=candidates,
+                    ownership=ownership,
+                    sample_order=batch.sample_order,
+                    raw_sources=raw_sources,
+                    raw_paths=raw_paths,
+                    dll_dir=dll_dir,
+                    raw_workers=raw_workers,
+                    raw_xic_batch_size=raw_xic_batch_size,
+                    output_dir=identity_output_dir,
+                    alignment_config=alignment_config,
+                    fragment_profile_id="alignment-cid-neutral-loss-v0.4",
+                    fragment_profile_hash="unavailable",
+                    controls_manifest_path=identity_coherence_controls_manifest,
+                )
+                stage.metrics["record_count"] = len(diagnostic_run.records)
+                stage.metrics["raw_xic_request_count"] = (
+                    diagnostic_run.context.raw_xic_request_count or 0
+                )
+                stage.metrics["xic_point_count"] = (
+                    diagnostic_run.context.xic_point_count or 0
+                )
+            outputs = replace(
+                outputs,
+                identity_coherence_output_dir=identity_output_dir,
             )
         if preconsolidate_owner_families:
             with recorder.stage("alignment.pre_backfill_consolidation"):

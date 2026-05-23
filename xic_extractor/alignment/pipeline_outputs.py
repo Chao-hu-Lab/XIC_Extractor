@@ -45,6 +45,7 @@ class AlignmentRunOutputs:
     event_to_owner_tsv: Path | None = None
     ambiguous_owners_tsv: Path | None = None
     edge_evidence_tsv: Path | None = None
+    identity_coherence_output_dir: Path | None = None
 
 
 def output_paths(

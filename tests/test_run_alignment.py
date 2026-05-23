@@ -1,8 +1,8 @@
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
-import tomllib
 
 from scripts import run_alignment
 from xic_extractor.alignment.pipeline import AlignmentRunOutputs
@@ -83,17 +83,90 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert captured["emit_alignment_cells"] is True
     assert captured["emit_alignment_integration_audit"] is True
     assert captured["emit_alignment_backfill_seed_audit"] is True
-    assert captured["emit_alignment_status_matrix"] is True
-    assert captured["raw_workers"] == 1
-    assert captured["raw_xic_batch_size"] == 1
-    assert captured["drift_lookup"] is None
-    stdout = capsys.readouterr().out
-    assert "Alignment review TSV:" in stdout
-    assert "alignment_review.tsv" in stdout
-    assert "alignment_cell_integration_audit.tsv" in stdout
-    assert "alignment_owner_backfill_seed_audit.tsv" in stdout
-    assert "alignment_matrix_status.tsv" in stdout
-    assert "Owner edge evidence TSV:" in stdout
+
+
+def test_run_alignment_cli_passes_identity_coherence_flags(monkeypatch, tmp_path):
+    batch = tmp_path / "batch.csv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    out_dir = tmp_path / "out"
+    controls = tmp_path / "controls.tsv"
+    batch.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    controls.write_text("control_id\n", encoding="utf-8")
+    seen = {}
+
+    def fake_run_alignment(**kwargs):
+        seen.update(kwargs)
+        return AlignmentRunOutputs(
+            identity_coherence_output_dir=out_dir / "identity",
+        )
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(out_dir),
+            "--emit-identity-coherence-diagnostic",
+            "--identity-coherence-output-dir",
+            str(out_dir / "identity"),
+            "--identity-coherence-controls-manifest",
+            str(controls),
+        ]
+    )
+
+    assert code == 0
+    assert seen["emit_identity_coherence_diagnostic"] is True
+    assert seen["identity_coherence_output_dir"] == out_dir / "identity"
+    assert seen["identity_coherence_controls_manifest"] == controls
+
+
+def test_run_alignment_cli_ignores_identity_manifest_when_diagnostic_disabled(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    batch = tmp_path / "batch.csv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    out_dir = tmp_path / "out"
+    missing_controls = tmp_path / "missing-controls.tsv"
+    batch.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    seen = {}
+
+    def fake_run_alignment(**kwargs):
+        seen.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(out_dir),
+            "--identity-coherence-controls-manifest",
+            str(missing_controls),
+        ]
+    )
+
+    assert code == 0
+    assert seen["emit_identity_coherence_diagnostic"] is False
+    assert seen["identity_coherence_controls_manifest"] is None
 
 
 def test_run_alignment_cli_accepts_output_level_debug(

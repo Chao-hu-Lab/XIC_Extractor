@@ -93,6 +93,22 @@ def test_identity_coherence_domain_does_not_import_inline_adapter() -> None:
         assert not any(token in text for token in forbidden), path
 
 
+def test_inline_adapter_does_not_modify_raw_or_backfill_modules() -> None:
+    root = Path(__file__).resolve().parents[3]
+    adapter_text = (
+        root / "xic_extractor" / "alignment" / "identity_coherence_adapter.py"
+    ).read_text(encoding="utf-8")
+    forbidden = (
+        "from xic_extractor.raw_reader import",
+        "import xic_extractor.raw_reader",
+        "from xic_extractor.alignment.owner_backfill import",
+        "from xic_extractor.alignment.backfill import",
+        "source_for_owner_backfill_backend",
+        "timed_owner_backfill_sources",
+    )
+    assert not any(token in adapter_text for token in forbidden)
+
+
 def _forbidden_identity_coherence_imports(source: str) -> list[str]:
     tree = ast.parse(source)
     violations: list[str] = []
