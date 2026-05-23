@@ -90,6 +90,26 @@ def test_cell_writer_rejects_seed_sample_cell(tmp_path):
         )
 
 
+def test_cell_writer_rejects_unresolved_seed_sample(tmp_path):
+    record = _record()
+    bad_seed_gate = replace(
+        record.seed_gate,
+        resolved_request=replace(
+            record.seed_gate.resolved_request,
+            seed_sample=None,
+        ),
+    )
+    bad_decision = replace(record.row_result.decision, seed_sample=None)
+    bad_row = replace(record.row_result, decision=bad_decision)
+    bad_record = replace(record, seed_gate=bad_seed_gate, row_result=bad_row)
+
+    with pytest.raises(ValueError, match="resolved seed_sample"):
+        write_identity_coherence_cell_evidence_tsv(
+            tmp_path / "cells.tsv",
+            (bad_record,),
+        )
+
+
 def test_writers_reject_mismatched_record_join_keys(tmp_path):
     record = _record()
     bad_decision = replace(record.row_result.decision, decision_id="OTHER")

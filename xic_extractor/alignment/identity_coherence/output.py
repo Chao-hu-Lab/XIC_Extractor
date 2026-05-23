@@ -598,6 +598,8 @@ def _validate_output_record(
             "request and decision"
         )
     _validate_decision_summary(decision)
+    if not request.seed_sample:
+        raise ValueError("writer requires resolved seed_sample")
     for cell in record.row_result.cells:
         if cell.decision_id != decision.decision_id:
             raise ValueError("decision_id mismatch between decision and cell")
