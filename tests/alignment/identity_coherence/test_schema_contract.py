@@ -81,6 +81,18 @@ def _is_relative_forbidden_surface(module_name: str) -> bool:
     return surface in FORBIDDEN_IDENTITY_COHERENCE_SURFACES
 
 
+def test_identity_coherence_domain_does_not_import_inline_adapter() -> None:
+    root = Path(__file__).resolve().parents[3]
+    package_dir = root / "xic_extractor" / "alignment" / "identity_coherence"
+    forbidden = (
+        "identity_coherence_adapter",
+        "from xic_extractor.alignment.identity_coherence_adapter",
+    )
+    for path in package_dir.glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        assert not any(token in text for token in forbidden), path
+
+
 def _forbidden_identity_coherence_imports(source: str) -> list[str]:
     tree = ast.parse(source)
     violations: list[str] = []
