@@ -58,6 +58,137 @@ class SeedRejectReason(StrEnum):
     MULTI_SEED_REQUIRES_PHASE2 = "multi_seed_requires_phase2"
 
 
+class IdentityDecision(StrEnum):
+    WOULD_PRIMARY = "would_primary_provisional_identity_family_support"
+    REVIEW_ONLY_SEED_GATE_FAILED = "review_only_seed_gate_failed"
+    REVIEW_ONLY_RT_ONLY_SUPPORT = "review_only_rt_only_support"
+    REVIEW_ONLY_INSUFFICIENT_SUPPORT = "review_only_insufficient_support"
+    REVIEW_ONLY_CENTER_UNSTABLE = "review_only_center_unstable"
+    REVIEW_ONLY_WEAK_BASIS_TIER3_ONLY = "review_only_weak_basis_tier3_only"
+    REVIEW_ONLY_WEAK_BASIS_SINGLE_TIER12_PLUS_TIER3 = (
+        "review_only_weak_basis_single_tier12_plus_tier3"
+    )
+    REVIEW_ONLY_MULTI_SEED_REQUIRES_PHASE2 = (
+        "review_only_multi_seed_requires_phase2"
+    )
+    BLOCKED_INFRASTRUCTURE = "blocked_infrastructure"
+
+
+class WeakBasisReason(StrEnum):
+    NONE = "none"
+    TIER3_ONLY = "tier3_only"
+    SINGLE_TIER12_PLUS_TIER3 = "single_tier12_plus_tier3"
+    SEED_SHAPE_FALLBACK_ONLY = "seed_shape_fallback_only"
+    RT_ONLY = "rt_only"
+
+
+class RtCenterDecision(StrEnum):
+    SEED_ANCHORED = "seed_anchored"
+    RECENTERED_STABLE = "recentered_stable"
+    CENTER_UNSTABLE_REVIEW_ONLY = "center_unstable_review_only"
+
+
+class CellAssessmentStatus(StrEnum):
+    ASSESSED = "assessed"
+    BLOCKED = "blocked"
+    DATA_QUALITY_REJECT = "data_quality_reject"
+    NOT_ASSESSED = "not_assessed"
+
+
+class CellIdentityTier(StrEnum):
+    TIER1 = "tier1"
+    TIER2 = "tier2"
+    TIER3 = "tier3"
+    RT_ONLY = "rt_only"
+    BLOCKED = "blocked"
+    DATA_QUALITY = "data_quality"
+
+
+class CellIdentityBasis(StrEnum):
+    RT_FRAGMENT_SUPPORT = "rt_fragment_support"
+    RT_SHAPE_SIMILARITY = "rt_shape_similarity"
+    RT_PROTOTYPE_WIDTH = "rt_prototype_width"
+    NONE = "none"
+
+
+class FragmentMatchStatus(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    AMBIGUOUS = "ambiguous"
+    NOT_ASSESSED = "not_assessed"
+
+
+class RtGateStatus(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    NOT_ASSESSED = "not_assessed"
+
+
+class ShapeStatus(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    LOW_POINTS = "low_points"
+    ZERO_SIGNAL = "zero_signal"
+    NOT_ASSESSED = "not_assessed"
+
+
+class ShapeReferenceBasis(StrEnum):
+    TIER1_SUPPORTED_MEDOID = "tier1_supported_medoid"
+    MORPHOLOGY_RT_MEDOID = "morphology_rt_medoid"
+    SEED_FALLBACK = "seed_fallback"
+    NONE = "none"
+
+
+class ShapeAuditStatus(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    SHOULDER = "shoulder"
+    BIMODAL = "bimodal"
+    COELUTION = "coelution"
+    SATURATED = "saturated"
+    CLIPPED = "clipped"
+    UNAVAILABLE = "unavailable"
+    NOT_ASSESSED = "not_assessed"
+
+
+class WidthStatus(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    NOT_ASSESSED = "not_assessed"
+
+
+class BaselineAuditStatus(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    UNAVAILABLE = "unavailable"
+    NOT_ASSESSED = "not_assessed"
+
+
+class AreaHeightStatus(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    NOT_ASSESSED = "not_assessed"
+
+
+class NonRtIdentityResult(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    NOT_ASSESSED = "not_assessed"
+    BLOCKED = "blocked"
+
+
+class CellBlockedReason(StrEnum):
+    BACKFILL_ONLY_EVIDENCE = "backfill_only_evidence"
+
+
+class CellDataQualityReason(StrEnum):
+    INVALID_PEAK_MORPHOLOGY = "invalid_peak_morphology"
+
+
+class DecisionReason(StrEnum):
+    TIER1_SUPPORT = "tier1_support"
+
+
 IDENTITY_COHERENCE_REQUEST_COLUMNS: tuple[str, ...] = (
     "request_id",
     "decision_id",
