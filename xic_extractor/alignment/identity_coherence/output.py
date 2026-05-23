@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import math
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
@@ -232,6 +233,316 @@ def write_identity_coherence_controls_tsv(
     )
 
 
+def write_identity_coherence_outputs(
+    output_dir: Path,
+    records: Sequence[IdentityCoherenceOutputRecord],
+    *,
+    context: IdentityCoherenceOutputContext,
+    control_rows: Sequence[Mapping[str, object]] = (),
+) -> IdentityCoherenceOutputPaths:
+    validated = tuple(_validate_output_record(record) for record in records)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths = IdentityCoherenceOutputPaths(
+        requests_tsv=output_dir / "untargeted_identity_coherence_requests.tsv",
+        decisions_tsv=output_dir / "untargeted_identity_coherence_decisions.tsv",
+        cell_evidence_tsv=(
+            output_dir / "untargeted_identity_coherence_cell_evidence.tsv"
+        ),
+        controls_tsv=output_dir / "untargeted_identity_coherence_controls.tsv",
+        summary_md=output_dir / "untargeted_identity_coherence_summary.md",
+    )
+    write_identity_coherence_requests_tsv(paths.requests_tsv, validated)
+    write_identity_coherence_decisions_tsv(paths.decisions_tsv, validated)
+    write_identity_coherence_cell_evidence_tsv(paths.cell_evidence_tsv, validated)
+    write_identity_coherence_controls_tsv(paths.controls_tsv, control_rows)
+    paths.summary_md.write_text(
+        render_identity_coherence_summary(
+            validated,
+            context=context,
+            control_rows=control_rows,
+        ),
+        encoding="utf-8",
+    )
+    return paths
+
+
+def render_identity_coherence_summary(
+    records: Sequence[IdentityCoherenceOutputRecord],
+    *,
+    context: IdentityCoherenceOutputContext,
+    control_rows: Sequence[Mapping[str, object]] = (),
+) -> str:
+    validated = tuple(_validate_output_record(record) for record in records)
+    decision_rows = [record.row_result.decision for record in validated]
+    cell_rows = [
+        cell
+        for record in validated
+        for cell in record.row_result.cells
+    ]
+    request_rows = [record.seed_gate.resolved_request for record in validated]
+    projected_85raw = (
+        context.projected_85raw_identity_request_count
+        if context.projected_85raw_identity_request_count is not None
+        else "not_assessed"
+    )
+    raw_xic_requests = (
+        context.raw_xic_request_count
+        if context.raw_xic_request_count is not None
+        else "not_assessed"
+    )
+    xic_points = (
+        context.xic_point_count
+        if context.xic_point_count is not None
+        else "not_assessed"
+    )
+
+    lines = [
+        "# Untargeted Identity Coherence Summary",
+        "",
+        "This diagnostic is non-mutating. It reports identity-family evidence only; "
+        "it does not perform final-matrix filtering, background filtering, area "
+        "correction, normalization, statistics, Backfill, or RAW/XIC retrieval.",
+        "",
+        "## Run Context",
+        "",
+        "| Field | Value |",
+        "| --- | --- |",
+        f"| command | `{context.command}` |",
+        f"| mode | `{context.mode}` |",
+        f"| input_source | `{context.input_source}` |",
+        f"| input_row_count | {len(validated)} |",
+        f"| control_manifest_path | `{context.control_manifest_path}` |",
+        "",
+        "## Input Hashes",
+        "",
+    ]
+    lines.extend(_hash_lines(context.input_hashes))
+    lines.extend(
+        [
+            "",
+            "## Request Status Counts",
+            "",
+        ]
+    )
+    lines.extend(
+        _counter_table(
+            Counter(
+                str(_enum_value(row.request_identity_completeness_status))
+                for row in request_rows
+            ),
+            "request_identity_completeness_status",
+        )
+    )
+    lines.extend(
+        _counter_table(
+            Counter(
+                str(_enum_value(row.request_candidate_identity_status))
+                for row in request_rows
+            ),
+            "request_candidate_identity_status",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Evidence Firewall",
+            "",
+            "| Metric | Value |",
+            "| --- | --- |",
+            "| `promotion_used_forbidden_evidence` | `false` |",
+            (
+                "| `forbidden_evidence_seen_count` | "
+                f"{sum(1 for row in decision_rows if row.forbidden_evidence_seen)} |"
+            ),
+            "",
+            "## Seed Gate Counts",
+            "",
+        ]
+    )
+    lines.extend(
+        _counter_table(
+            Counter(str(_enum_value(row.seed_gate_class)) for row in decision_rows),
+            "seed_gate_class",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Decision Counts",
+            "",
+        ]
+    )
+    lines.extend(
+        _counter_table(
+            Counter(str(_enum_value(row.decision)) for row in decision_rows),
+            "decision",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Tier Support Counts",
+            "",
+            "| Metric | Count |",
+            "| --- | ---: |",
+            (
+                "| tier1_fragment_confirmed_sample_count | "
+                f"{sum(row.tier1_fragment_confirmed_sample_count for row in decision_rows)} |"
+            ),
+            (
+                "| tier2_shape_supported_sample_count | "
+                f"{sum(row.tier2_shape_supported_sample_count for row in decision_rows)} |"
+            ),
+            (
+                "| tier2_seed_shape_fallback_sample_count | "
+                f"{sum(row.tier2_seed_shape_fallback_sample_count for row in decision_rows)} |"
+            ),
+            (
+                "| tier3_width_only_sample_count | "
+                f"{sum(row.tier3_width_only_sample_count for row in decision_rows)} |"
+            ),
+            "",
+            "## RT-Only Candidate Counts",
+            "",
+        ]
+    )
+    lines.extend(
+        _counter_table(
+            Counter(
+                str(_enum_value(cell.cell_identity_tier))
+                for cell in cell_rows
+                if _enum_value(cell.cell_identity_tier) == "rt_only"
+            ),
+            "rt_only_cell_identity_tier",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Shape And Width Review",
+            "",
+        ]
+    )
+    lines.extend(
+        _counter_table(
+            Counter(
+                str(_enum_value(cell.shape_reference_basis))
+                for cell in cell_rows
+            ),
+            "shape_reference_basis",
+        )
+    )
+    lines.extend(
+        _counter_table(
+            Counter(str(_enum_value(cell.width_status)) for cell in cell_rows),
+            "width_status",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Per-Sample Evidence Coverage",
+            "",
+            "| Metric | Count |",
+            "| --- | ---: |",
+            f"| assessed_non_seed_cell_count | {len(cell_rows)} |",
+            (
+                "| missing_shape_basis_count | "
+                f"{_cell_status_count(cell_rows, 'shape_status', 'not_assessed')} |"
+            ),
+            (
+                "| missing_width_basis_count | "
+                f"{_cell_status_count(cell_rows, 'width_status', 'not_assessed')} |"
+            ),
+            "",
+            "## Infrastructure And Data Quality",
+            "",
+            "| Metric | Count |",
+            "| --- | ---: |",
+            (
+                "| infrastructure_blocked_sample_count | "
+                f"{sum(row.infrastructure_blocked_sample_count for row in decision_rows)} |"
+            ),
+            (
+                "| data_quality_reject_sample_count | "
+                f"{sum(row.data_quality_reject_sample_count for row in decision_rows)} |"
+            ),
+            "",
+            "## Threshold Count And Fraction Summaries",
+            "",
+            "| Metric | Value |",
+            "| --- | ---: |",
+            (
+                "| min_total_coherent_samples | "
+                f"{_first_threshold(decision_rows, 'min_total_coherent_samples')} |"
+            ),
+            (
+                "| min_non_seed_coherent_samples | "
+                f"{_first_threshold(decision_rows, 'min_non_seed_coherent_samples')} |"
+            ),
+            (
+                "| min_non_seed_tier12_identity_samples | "
+                f"{_first_threshold(decision_rows, 'min_non_seed_tier12_identity_samples')} |"
+            ),
+            "",
+            "## Weak Basis Counts",
+            "",
+        ]
+    )
+    lines.extend(
+        _counter_table(
+            Counter(str(_enum_value(row.weak_basis_reason)) for row in decision_rows),
+            "weak_basis_reason",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Controls Pass-Through",
+            "",
+            "Control fields are reported only, not evaluated by this writer slice.",
+            "",
+        ]
+    )
+    lines.extend(
+        _counter_table(
+            Counter(str(row.get("control_type", "")) for row in control_rows),
+            "control_type",
+        )
+    )
+    lines.extend(
+        _counter_table(
+            Counter(
+                _format_tsv_value(row.get("control_pass"))
+                for row in control_rows
+            ),
+            "supplied_control_pass_value",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Cost Counters",
+            "",
+            "| Counter | Value |",
+            "| --- | ---: |",
+            f"| raw_xic_request_count | {raw_xic_requests} |",
+            f"| xic_point_count | {xic_points} |",
+            f"| projected_85raw_identity_request_count | {projected_85raw} |",
+            "",
+            "## Writer Contract Checks",
+            "",
+            "| Check | Result |",
+            "| --- | --- |",
+            "| forbidden_evidence_used | enforced: writer raises before emission |",
+            "| schema_projection | Proceed when TSV headers match schema constants |",
+            "| controls | pass-through only; evaluation belongs to a later controls slice |",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _validate_frozen_request_status(request: object) -> None:
     completeness = _enum_value(request.request_identity_completeness_status)
     candidate_status = _enum_value(request.request_candidate_identity_status)
@@ -303,6 +614,59 @@ def _write_tsv(
         for row in rows:
             writer.writerow({column: row.get(column, "") for column in columns})
     return path
+
+
+def _first_threshold(
+    rows: list[IdentityDecisionSummary],
+    field_name: str,
+) -> object:
+    if not rows:
+        return "not_assessed"
+    values = {getattr(row, field_name) for row in rows}
+    if len(values) != 1:
+        raise ValueError(f"mixed {field_name} values in summary rows")
+    return getattr(rows[0], field_name)
+
+
+def _cell_status_count(
+    rows: list[CellEvidenceResult],
+    field_name: str,
+    value: str,
+) -> int:
+    return sum(
+        1 for row in rows
+        if _enum_value(getattr(row, field_name)) == value
+    )
+
+
+def _counter_table(counter: Counter[str], label: str) -> list[str]:
+    if not counter:
+        return [
+            f"| {label} | Count |",
+            "| --- | ---: |",
+            "| `none` | 0 |",
+            "",
+        ]
+    return [
+        f"| {label} | Count |",
+        "| --- | ---: |",
+        *[f"| `{key}` | {count} |" for key, count in sorted(counter.items())],
+        "",
+    ]
+
+
+def _hash_lines(input_hashes: tuple[tuple[str, str], ...]) -> list[str]:
+    if not input_hashes:
+        return [
+            "| Input | Hash |",
+            "| --- | --- |",
+            "| `not_provided` | `not_provided` |",
+        ]
+    return [
+        "| Input | Hash |",
+        "| --- | --- |",
+        *[f"| `{name}` | `{digest}` |" for name, digest in input_hashes],
+    ]
 
 
 def _project_columns(
