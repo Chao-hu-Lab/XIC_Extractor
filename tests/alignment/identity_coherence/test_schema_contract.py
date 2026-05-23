@@ -193,6 +193,57 @@ def test_identity_coherence_facade_exports_stable_contract():
     assert "match_identity_constraints_to_candidate" in identity_coherence.__all__
 
 
+def test_identity_coherence_facade_exports_output_writer_surface():
+    import xic_extractor.alignment.identity_coherence as identity_coherence
+
+    assert identity_coherence.IdentityCoherenceOutputContext is not None
+    assert identity_coherence.IdentityCoherenceOutputPaths is not None
+    assert identity_coherence.IdentityCoherenceOutputRecord is not None
+    assert identity_coherence.project_request_row is not None
+    assert identity_coherence.project_decision_row is not None
+    assert identity_coherence.project_cell_evidence_row is not None
+    assert identity_coherence.project_control_row is not None
+    assert identity_coherence.render_identity_coherence_summary is not None
+    assert identity_coherence.write_identity_coherence_outputs is not None
+    assert identity_coherence.write_identity_coherence_requests_tsv is not None
+    assert identity_coherence.write_identity_coherence_decisions_tsv is not None
+    assert identity_coherence.write_identity_coherence_cell_evidence_tsv is not None
+    assert identity_coherence.write_identity_coherence_controls_tsv is not None
+
+
+def test_identity_coherence_domain_modules_do_not_import_output_writer():
+    package_root = (
+        Path(__file__).resolve().parents[3]
+        / "xic_extractor"
+        / "alignment"
+        / "identity_coherence"
+    )
+    domain_modules = (
+        "candidate_matcher.py",
+        "cell_evidence.py",
+        "decision.py",
+        "models.py",
+        "request_builder.py",
+        "row_evaluator.py",
+        "rt_center.py",
+        "schema.py",
+        "seed_gate.py",
+        "shape.py",
+        "tags.py",
+        "width.py",
+    )
+    forbidden_snippets = (
+        "from .output import",
+        "from . import output",
+        "from xic_extractor.alignment.identity_coherence.output",
+        "import xic_extractor.alignment.identity_coherence.output",
+    )
+    for module_name in domain_modules:
+        source = (package_root / module_name).read_text(encoding="utf-8")
+        for snippet in forbidden_snippets:
+            assert snippet not in source, f"{module_name} imports output writer"
+
+
 @dataclass
 class CandidateLike:
     candidate_id: str = "CAND-1"
