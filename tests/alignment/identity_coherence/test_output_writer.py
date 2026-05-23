@@ -10,10 +10,10 @@ from xic_extractor.alignment.identity_coherence.output import (
     IdentityCoherenceOutputPaths,
     IdentityCoherenceOutputRecord,
     render_identity_coherence_summary,
-    write_identity_coherence_outputs,
     write_identity_coherence_cell_evidence_tsv,
     write_identity_coherence_controls_tsv,
     write_identity_coherence_decisions_tsv,
+    write_identity_coherence_outputs,
     write_identity_coherence_requests_tsv,
 )
 from xic_extractor.alignment.identity_coherence.schema import (

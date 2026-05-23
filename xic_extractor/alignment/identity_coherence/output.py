@@ -295,6 +295,42 @@ def render_identity_coherence_summary(
         if context.xic_point_count is not None
         else "not_assessed"
     )
+    forbidden_seen_count = sum(
+        1 for row in decision_rows if row.forbidden_evidence_seen
+    )
+    tier1_count = _sum_decision_field(
+        decision_rows,
+        "tier1_fragment_confirmed_sample_count",
+    )
+    tier2_count = _sum_decision_field(
+        decision_rows,
+        "tier2_shape_supported_sample_count",
+    )
+    tier2_fallback_count = _sum_decision_field(
+        decision_rows,
+        "tier2_seed_shape_fallback_sample_count",
+    )
+    tier3_count = _sum_decision_field(
+        decision_rows,
+        "tier3_width_only_sample_count",
+    )
+    infrastructure_blocked_count = _sum_decision_field(
+        decision_rows,
+        "infrastructure_blocked_sample_count",
+    )
+    data_quality_reject_count = _sum_decision_field(
+        decision_rows,
+        "data_quality_reject_sample_count",
+    )
+    min_total = _first_threshold(decision_rows, "min_total_coherent_samples")
+    min_non_seed = _first_threshold(
+        decision_rows,
+        "min_non_seed_coherent_samples",
+    )
+    min_tier12 = _first_threshold(
+        decision_rows,
+        "min_non_seed_tier12_identity_samples",
+    )
 
     lines = [
         "# Untargeted Identity Coherence Summary",
@@ -352,7 +388,7 @@ def render_identity_coherence_summary(
             "| `promotion_used_forbidden_evidence` | `false` |",
             (
                 "| `forbidden_evidence_seen_count` | "
-                f"{sum(1 for row in decision_rows if row.forbidden_evidence_seen)} |"
+                f"{forbidden_seen_count} |"
             ),
             "",
             "## Seed Gate Counts",
@@ -385,22 +421,10 @@ def render_identity_coherence_summary(
             "",
             "| Metric | Count |",
             "| --- | ---: |",
-            (
-                "| tier1_fragment_confirmed_sample_count | "
-                f"{sum(row.tier1_fragment_confirmed_sample_count for row in decision_rows)} |"
-            ),
-            (
-                "| tier2_shape_supported_sample_count | "
-                f"{sum(row.tier2_shape_supported_sample_count for row in decision_rows)} |"
-            ),
-            (
-                "| tier2_seed_shape_fallback_sample_count | "
-                f"{sum(row.tier2_seed_shape_fallback_sample_count for row in decision_rows)} |"
-            ),
-            (
-                "| tier3_width_only_sample_count | "
-                f"{sum(row.tier3_width_only_sample_count for row in decision_rows)} |"
-            ),
+            f"| tier1_fragment_confirmed_sample_count | {tier1_count} |",
+            f"| tier2_shape_supported_sample_count | {tier2_count} |",
+            f"| tier2_seed_shape_fallback_sample_count | {tier2_fallback_count} |",
+            f"| tier3_width_only_sample_count | {tier3_count} |",
             "",
             "## RT-Only Candidate Counts",
             "",
@@ -459,31 +483,16 @@ def render_identity_coherence_summary(
             "",
             "| Metric | Count |",
             "| --- | ---: |",
-            (
-                "| infrastructure_blocked_sample_count | "
-                f"{sum(row.infrastructure_blocked_sample_count for row in decision_rows)} |"
-            ),
-            (
-                "| data_quality_reject_sample_count | "
-                f"{sum(row.data_quality_reject_sample_count for row in decision_rows)} |"
-            ),
+            f"| infrastructure_blocked_sample_count | {infrastructure_blocked_count} |",
+            f"| data_quality_reject_sample_count | {data_quality_reject_count} |",
             "",
             "## Threshold Count And Fraction Summaries",
             "",
             "| Metric | Value |",
             "| --- | ---: |",
-            (
-                "| min_total_coherent_samples | "
-                f"{_first_threshold(decision_rows, 'min_total_coherent_samples')} |"
-            ),
-            (
-                "| min_non_seed_coherent_samples | "
-                f"{_first_threshold(decision_rows, 'min_non_seed_coherent_samples')} |"
-            ),
-            (
-                "| min_non_seed_tier12_identity_samples | "
-                f"{_first_threshold(decision_rows, 'min_non_seed_tier12_identity_samples')} |"
-            ),
+            f"| min_total_coherent_samples | {min_total} |",
+            f"| min_non_seed_coherent_samples | {min_non_seed} |",
+            f"| min_non_seed_tier12_identity_samples | {min_tier12} |",
             "",
             "## Weak Basis Counts",
             "",
@@ -536,7 +545,10 @@ def render_identity_coherence_summary(
             "| --- | --- |",
             "| forbidden_evidence_used | enforced: writer raises before emission |",
             "| schema_projection | Proceed when TSV headers match schema constants |",
-            "| controls | pass-through only; evaluation belongs to a later controls slice |",
+            (
+                "| controls | pass-through only; evaluation belongs to a "
+                "later controls slice |"
+            ),
             "",
         ]
     )
@@ -626,6 +638,13 @@ def _first_threshold(
     if len(values) != 1:
         raise ValueError(f"mixed {field_name} values in summary rows")
     return getattr(rows[0], field_name)
+
+
+def _sum_decision_field(
+    rows: list[IdentityDecisionSummary],
+    field_name: str,
+) -> int:
+    return sum(int(getattr(row, field_name)) for row in rows)
 
 
 def _cell_status_count(

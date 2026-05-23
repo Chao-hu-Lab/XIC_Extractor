@@ -213,9 +213,13 @@ def test_project_request_row_uses_frozen_request_schema_values():
     assert row["fragment_tags"] == "MeR;dR"
     assert row["fragment_tag_match_policy"] == "all_request_tags_supported"
     assert row["request_candidate_identity_status"] == "match"
+    expected_flags = (
+        "fragment_profile_hash_unavailable;"
+        "legacy_single_tag_disagrees_with_matched_tags"
+    )
     assert (
         row["request_builder_flags"]
-        == "fragment_profile_hash_unavailable;legacy_single_tag_disagrees_with_matched_tags"
+        == expected_flags
     )
 
 
