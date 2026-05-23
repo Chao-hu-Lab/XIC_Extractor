@@ -168,7 +168,7 @@ def test_summary_renderer_reports_required_sections_and_counts():
         "## Infrastructure And Data Quality",
         "## Threshold Count And Fraction Summaries",
         "## Weak Basis Counts",
-        "## Controls Pass-Through",
+        "## Identity Controls",
         "## Cost Counters",
         "## Writer Contract Checks",
     )
@@ -182,29 +182,79 @@ def test_summary_renderer_reports_required_sections_and_counts():
     assert "| projected_85raw_identity_request_count | 255 |" in markdown
 
 
-def test_summary_renderer_reports_control_rows_without_interpreting_them():
+def test_summary_renderer_reports_evaluated_identity_controls():
     markdown = render_identity_coherence_summary(
         (_record(),),
         context=IdentityCoherenceOutputContext(
-            command="pytest",
-            mode="inline_pre_backfill",
-            input_source="synthetic",
-            control_manifest_path="controls.tsv",
+            command="identity-coherence",
+            mode="inline_pre_backfill_diagnostic",
+            input_source="pre_backfill",
+            control_manifest_path="identity_coherence_controls_manifest.tsv",
         ),
         control_rows=(
             {
-                "control_id": "CTRL-1",
-                "control_type": "positive_identity_control",
+                "control_id": "CTRL-ISTD-1",
+                "control_type": "positive_targeted_istd",
                 "control_status": "assessed",
-                "control_pass": True,
+                "control_pass": "true",
+                "positive_control_mapping_status": "mapped",
+                "decoy_generation_method": "",
+                "control_failure_reason": "",
+            },
+            {
+                "control_id": "CTRL-DECOY-1",
+                "control_type": "identity_decoy",
+                "control_status": "assessed",
+                "control_pass": "true",
+                "positive_control_mapping_status": "not_applicable",
+                "decoy_generation_method": "mz_shift",
+                "control_failure_reason": "",
             },
         ),
     )
 
-    assert "| control_manifest_path | `controls.tsv` |" in markdown
-    assert "| `positive_identity_control` | 1 |" in markdown
-    assert "| `true` | 1 |" in markdown
-    assert "reported only, not evaluated by this writer slice" in markdown
+    assert "## Identity Controls" in markdown
+    assert "| `positive_targeted_istd` | 1 |" in markdown
+    assert "| `identity_decoy` | 1 |" in markdown
+    assert "| `mapped` | 1 |" in markdown
+    assert "| `mz_shift` | 1 |" in markdown
+    assert "| positive_control_pass_fraction | 1 |" in markdown
+    assert "| decoy_correctly_rejected_count | 1 |" in markdown
+    assert "| `true` | 2 |" in markdown
+
+
+@pytest.mark.parametrize(
+    "control_rows",
+    [
+        (),
+        (
+            {
+                "control_id": "CTRL-ISTD-1",
+                "control_type": "positive_targeted_istd",
+                "control_status": "assessed",
+                "control_pass": "true",
+                "positive_control_mapping_status": "mapped",
+                "decoy_generation_method": "",
+                "control_failure_reason": "",
+            },
+        ),
+    ],
+)
+def test_summary_renderer_reports_decoy_metric_not_assessed_without_decoys(
+    control_rows,
+):
+    markdown = render_identity_coherence_summary(
+        (_record(),),
+        context=IdentityCoherenceOutputContext(
+            command="identity-coherence",
+            mode="inline_pre_backfill_diagnostic",
+            input_source="pre_backfill",
+            control_manifest_path="identity_coherence_controls_manifest.tsv",
+        ),
+        control_rows=control_rows,
+    )
+
+    assert "| decoy_correctly_rejected_count | not_assessed |" in markdown
 
 
 def test_write_identity_coherence_outputs_writes_all_frozen_paths(tmp_path):

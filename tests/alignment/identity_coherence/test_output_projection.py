@@ -295,13 +295,13 @@ def test_project_control_row_is_pass_through_but_schema_limited():
     row = project_control_row(
         {
             "control_id": "CTRL-1",
-            "control_type": "positive_identity_control",
+            "control_type": "positive_targeted_istd",
             "control_pass": True,
             "extra": "ignored",
         }
     )
 
     assert row["control_id"] == "CTRL-1"
-    assert row["control_type"] == "positive_identity_control"
+    assert row["control_type"] == "positive_targeted_istd"
     assert row["control_pass"] == "true"
     assert "extra" not in row

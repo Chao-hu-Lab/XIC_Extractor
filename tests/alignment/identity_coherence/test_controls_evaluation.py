@@ -8,6 +8,7 @@ from xic_extractor.alignment.identity_coherence.controls import (
     IdentityControlManifestEntry,
     IdentityControlsConfig,
     IdentityDecoySource,
+    evaluate_identity_controls,
     evaluate_identity_decoy,
     evaluate_positive_control,
 )
@@ -628,6 +629,93 @@ def test_decoy_accepts_matching_source_request_id():
     assert row["control_status"] == ControlStatus.ASSESSED.value
     assert row["control_pass"] is True
     assert row["decoy_source_request_id"] == "REQ-1"
+
+
+def test_evaluate_identity_controls_preserves_manifest_order():
+    positive = _positive_entry(control_id="CTRL-A")
+    decoy = _decoy_entry(
+        DecoyGenerationMethod.MZ_SHIFT,
+        control_id="CTRL-B",
+    )
+
+    result = evaluate_identity_controls(
+        (positive, decoy),
+        records=(output_record(),),
+        decoy_sources=(_decoy_source(),),
+        config=IdentityControlsConfig(),
+    )
+
+    rows = result.rows
+    assert [row["control_id"] for row in rows] == ["CTRL-A", "CTRL-B"]
+    assert [row["control_pass"] for row in rows] == [True, True]
+    assert result.positive_control_pass_fraction == 1.0
+    assert result.positive_control_threshold_met is True
+    assert result.decoy_coherent_seed_count == 0
+    assert result.decoy_coherent_seed_threshold_met is True
+
+
+def test_evaluate_identity_controls_reports_missing_decoy_source():
+    decoy = _decoy_entry(DecoyGenerationMethod.MZ_SHIFT)
+
+    result = evaluate_identity_controls(
+        (decoy,),
+        records=(output_record(),),
+        decoy_sources=(),
+        config=IdentityControlsConfig(),
+    )
+
+    rows = result.rows
+    assert rows[0]["control_status"] == "unmapped"
+    assert rows[0]["control_pass"] is False
+    assert rows[0]["control_failure_reason"] == "missing_decoy_source"
+
+
+def test_evaluate_identity_controls_flags_request_id_key_conflict(monkeypatch):
+    decoy = _decoy_entry(
+        DecoyGenerationMethod.MZ_SHIFT,
+        decoy_source_request_id="REQ-1",
+        seed_candidate_id="OTHER",
+    )
+
+    def fail_if_evaluated(*args, **kwargs):
+        raise AssertionError("conflicted decoy source must not be evaluated")
+
+    monkeypatch.setattr(
+        controls_module,
+        "evaluate_identity_decoy",
+        fail_if_evaluated,
+    )
+
+    result = evaluate_identity_controls(
+        (decoy,),
+        records=(output_record(),),
+        decoy_sources=(_decoy_source(),),
+        config=IdentityControlsConfig(),
+    )
+
+    row = result.rows[0]
+    assert row["control_status"] == "ambiguous_mapping"
+    assert row["control_pass"] is False
+    assert row["control_failure_reason"] == "ambiguous_mapping"
+
+
+def test_evaluate_identity_controls_flags_decoy_coherent_seed_threshold():
+    decoy = _decoy_entry(
+        DecoyGenerationMethod.RT_SHIFT,
+        required_failure_reason_when_missed="seed_rt_outside_owner_peak",
+    )
+    source = _decoy_source()
+
+    result = evaluate_identity_controls(
+        (decoy,),
+        records=(output_record(),),
+        decoy_sources=(source,),
+        config=IdentityControlsConfig(max_decoy_coherent_seed_count=0),
+        seed_gate_config=SeedGateConfig(require_seed_rt_inside_owner_peak=False),
+    )
+
+    assert result.decoy_coherent_seed_count == 1
+    assert result.decoy_coherent_seed_threshold_met is False
 
 
 def test_identity_controls_config_rejects_invalid_thresholds():

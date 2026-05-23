@@ -504,32 +504,107 @@ def render_identity_coherence_summary(
             "weak_basis_reason",
         )
     )
+    positive_rows = [
+        row
+        for row in control_rows
+        if _format_tsv_value(row.get("control_type")) == "positive_targeted_istd"
+    ]
+    positive_pass_count = sum(
+        1 for row in positive_rows if _control_pass_is_true(row.get("control_pass"))
+    )
+    positive_fraction = (
+        "not_assessed"
+        if not positive_rows
+        else f"{positive_pass_count / len(positive_rows):.12g}"
+    )
+    decoy_rows = [
+        row
+        for row in control_rows
+        if _format_tsv_value(row.get("control_type")) == "identity_decoy"
+    ]
+    decoy_correctly_rejected_count = sum(
+        1 for row in decoy_rows if _control_pass_is_true(row.get("control_pass"))
+    )
+    decoy_correctly_rejected_value: int | str = (
+        "not_assessed"
+        if not decoy_rows
+        else decoy_correctly_rejected_count
+    )
     lines.extend(
         [
             "",
-            "## Controls Pass-Through",
+            "## Identity Controls",
             "",
-            "Control fields are reported only, not evaluated by this writer slice.",
+            (
+                "Control fields validate identity diagnostic behavior only; they "
+                "do not promote identities or filter the final matrix."
+            ),
             "",
         ]
     )
     lines.extend(
         _counter_table(
-            Counter(str(row.get("control_type", "")) for row in control_rows),
+            Counter(
+                _format_tsv_value(row.get("control_type")) for row in control_rows
+            ),
             "control_type",
         )
     )
     lines.extend(
         _counter_table(
             Counter(
-                _format_tsv_value(row.get("control_pass"))
+                _format_tsv_value(row.get("control_status"))
                 for row in control_rows
             ),
-            "supplied_control_pass_value",
+            "control_status",
+        )
+    )
+    lines.extend(
+        _counter_table(
+            Counter(
+                _format_tsv_value(row.get("control_pass")) for row in control_rows
+            ),
+            "control_pass",
+        )
+    )
+    lines.extend(
+        _counter_table(
+            Counter(
+                _format_tsv_value(row.get("positive_control_mapping_status"))
+                for row in control_rows
+            ),
+            "positive_control_mapping_status",
+        )
+    )
+    lines.extend(
+        _counter_table(
+            Counter(
+                _format_tsv_value(row.get("decoy_generation_method"))
+                for row in decoy_rows
+            ),
+            "decoy_generation_method",
+        )
+    )
+    lines.extend(
+        _counter_table(
+            Counter(
+                _format_tsv_value(row.get("control_failure_reason"))
+                for row in control_rows
+                if _format_tsv_value(row.get("control_failure_reason"))
+            ),
+            "control_failure_reason",
         )
     )
     lines.extend(
         [
+            "| Metric | Value |",
+            "| --- | ---: |",
+            f"| positive_control_pass_fraction | {positive_fraction} |",
+            (
+                "| decoy_correctly_rejected_count | "
+                f"{decoy_correctly_rejected_value} |"
+            ),
+            "",
             "",
             "## Cost Counters",
             "",
@@ -546,8 +621,8 @@ def render_identity_coherence_summary(
             "| forbidden_evidence_used | enforced: writer raises before emission |",
             "| schema_projection | Proceed when TSV headers match schema constants |",
             (
-                "| controls | pass-through only; evaluation belongs to a "
-                "later controls slice |"
+                "| controls | evaluated rows are rendered; identity decisions "
+                "remain immutable |"
             ),
             "",
         ]
@@ -720,6 +795,14 @@ def _format_tsv_value(value: object) -> str:
     if text.startswith(("=", "+", "-", "@")):
         return f"'{text}"
     return text
+
+
+def _control_pass_is_true(value: object) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return False
 
 
 def _enum_value(value: object) -> object:
