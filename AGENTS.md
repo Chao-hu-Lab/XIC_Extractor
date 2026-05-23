@@ -163,6 +163,15 @@ For directory layout, file placement rules, and scratch directory hygiene, see
   and a change adds a responsibility, or near 800 lines and the change is not a
   local bug fix. Responsibility count matters more than exact length.
 
+## CodeGraph Tooling Preference
+
+- Prefer the `codegraph` CLI for CodeGraph-assisted repository inspection.
+  Treat the CodeGraph MCP tools as a fallback when the CLI is unavailable,
+  insufficient for the specific query, or explicitly requested.
+- For subagent reviews, tell reviewers to avoid CodeGraph MCP by default. They
+  should use `codegraph` CLI, `rg`, and targeted file reads unless MCP access is
+  intentionally part of the task.
+
 ## Public Contracts
 
 Treat these as public unless a plan explicitly changes them:
