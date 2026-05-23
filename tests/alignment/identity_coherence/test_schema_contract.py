@@ -138,6 +138,17 @@ def test_identity_coherence_facade_exports_stable_contract():
     assert identity_coherence.has_fragment_tags is not None
     assert identity_coherence.normalize_fragment_tags is not None
     assert identity_coherence.IDENTITY_COHERENCE_REQUEST_COLUMNS
+    assert identity_coherence.CellCandidateEvidence is not None
+    assert identity_coherence.CellEvidenceResult is not None
+    assert identity_coherence.IdentityCoherenceConfig is not None
+    assert identity_coherence.IdentityDecisionSummary is not None
+    assert identity_coherence.RtCenterResult is not None
+    assert identity_coherence.estimate_rt_center is not None
+    assert identity_coherence.evaluate_cell_evidence is not None
+    assert identity_coherence.select_cell_evidence_for_sample is not None
+    assert identity_coherence.summarize_identity_decision is not None
+    assert identity_coherence.match_identity_constraints_to_candidate is not None
+    assert "match_identity_constraints_to_candidate" in identity_coherence.__all__
 
 
 @dataclass
