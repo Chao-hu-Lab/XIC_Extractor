@@ -30,6 +30,31 @@ class FragmentTagMatchPolicy(StrEnum):
     ALL_REQUEST_TAGS_SUPPORTED = "all_request_tags_supported"
 
 
+class ControlType(StrEnum):
+    POSITIVE_TARGETED_ISTD = "positive_targeted_istd"
+    IDENTITY_DECOY = "identity_decoy"
+
+
+class ControlStatus(StrEnum):
+    ASSESSED = "assessed"
+    NOT_ASSESSED = "not_assessed"
+    UNMAPPED = "unmapped"
+    AMBIGUOUS_MAPPING = "ambiguous_mapping"
+
+
+class PositiveControlMappingStatus(StrEnum):
+    MAPPED = "mapped"
+    UNMAPPED = "unmapped"
+    AMBIGUOUS_MAPPING = "ambiguous_mapping"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class DecoyGenerationMethod(StrEnum):
+    RT_SHIFT = "rt_shift"
+    MZ_SHIFT = "mz_shift"
+    FRAGMENT_TAG_SHUFFLE = "fragment_tag_shuffle"
+
+
 class EvidenceStage(StrEnum):
     PRE_BACKFILL = "pre_backfill"
     BACKFILL_ONLY = "backfill_only"
