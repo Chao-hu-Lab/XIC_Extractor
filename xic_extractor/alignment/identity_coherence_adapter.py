@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
+from time import perf_counter
+from typing import Protocol
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.identity_coherence.models import (
+    CandidateTrace,
+    CellCandidateEvidence,
     IdentityCoherenceConfig,
     IdentityCoherenceRequest,
+    IdentityCoherenceTraceRequest,
+    IdentityCoherenceTraceResult,
     SeedCandidateEvidence,
     SeedGateResult,
 )
@@ -18,6 +25,7 @@ from xic_extractor.alignment.identity_coherence.request_builder import (
 from xic_extractor.alignment.identity_coherence.seed_gate import evaluate_seed_gate
 from xic_extractor.alignment.ownership import OwnershipBuildResult
 from xic_extractor.alignment.ownership_models import SampleLocalMS1Owner
+from xic_extractor.alignment.process_backend import run_identity_trace_process
 from xic_extractor.discovery.models import DiscoveryCandidate
 
 
@@ -32,6 +40,17 @@ class IdentityCoherenceSeedSource:
     owner: SampleLocalMS1Owner
     owner_assignment_status: str
     seed_gate: SeedGateResult
+
+
+class IdentityCoherenceRawSource(Protocol):
+    def extract_xic(
+        self,
+        mz: float,
+        rt_min: float,
+        rt_max: float,
+        ppm_tol: float,
+    ) -> object:
+        raise NotImplementedError
 
 
 def build_identity_coherence_seed_sources(
@@ -96,6 +115,144 @@ def build_identity_coherence_seed_sources(
             )
         )
     return tuple(sources)
+
+
+def trace_request_for_candidate(
+    *,
+    source: IdentityCoherenceSeedSource,
+    candidate: DiscoveryCandidate,
+    ppm_tolerance: float,
+) -> IdentityCoherenceTraceRequest:
+    return IdentityCoherenceTraceRequest(
+        decision_id=source.decision_id,
+        request_id=source.request_id,
+        sample_id=candidate.sample_stem,
+        candidate_id=candidate.candidate_id,
+        precursor_mz=candidate.precursor_mz,
+        ppm_tolerance=ppm_tolerance,
+        rt_min=float(candidate.ms1_peak_rt_start),
+        rt_max=float(candidate.ms1_peak_rt_end),
+    )
+
+
+def retrieve_identity_coherence_trace(
+    request: IdentityCoherenceTraceRequest,
+    raw_sources: Mapping[str, IdentityCoherenceRawSource],
+) -> IdentityCoherenceTraceResult:
+    raw_source = raw_sources.get(request.sample_id)
+    if raw_source is None:
+        return IdentityCoherenceTraceResult(
+            request=request,
+            trace=None,
+            status="blocked_infrastructure",
+            blocked_reason="missing_raw_source",
+        )
+
+    start = perf_counter()
+    try:
+        raw_result = raw_source.extract_xic(
+            request.precursor_mz,
+            request.rt_min,
+            request.rt_max,
+            request.ppm_tolerance,
+        )
+    except Exception:
+        return IdentityCoherenceTraceResult(
+            request=request,
+            trace=None,
+            status="blocked_infrastructure",
+            blocked_reason="raw_xic_extraction_error",
+            raw_xic_request_count=1,
+            elapsed_sec=perf_counter() - start,
+        )
+
+    try:
+        rt_values, intensity_values = raw_result
+        trace = CandidateTrace(
+            rt_min=tuple(float(value) for value in rt_values),
+            intensity=tuple(float(value) for value in intensity_values),
+        )
+    except (TypeError, ValueError):
+        return IdentityCoherenceTraceResult(
+            request=request,
+            trace=None,
+            status="data_quality_reject",
+            blocked_reason="invalid_trace_payload",
+            raw_xic_request_count=1,
+            elapsed_sec=perf_counter() - start,
+        )
+
+    return IdentityCoherenceTraceResult(
+        request=request,
+        trace=trace,
+        status="pass",
+        raw_xic_request_count=1,
+        raw_chromatogram_call_count=1,
+        xic_point_count=len(trace.rt_min),
+        elapsed_sec=perf_counter() - start,
+    )
+
+
+def retrieve_identity_coherence_traces(
+    requests: Sequence[IdentityCoherenceTraceRequest],
+    *,
+    raw_sources: Mapping[str, IdentityCoherenceRawSource],
+    raw_paths: Mapping[str, Path],
+    dll_dir: Path,
+    raw_workers: int,
+    raw_xic_batch_size: int,
+) -> tuple[IdentityCoherenceTraceResult, ...]:
+    if raw_workers < 1:
+        raise ValueError("raw_workers must be >= 1")
+    if raw_xic_batch_size < 1:
+        raise ValueError("raw_xic_batch_size must be >= 1")
+    if raw_workers == 1:
+        return tuple(
+            retrieve_identity_coherence_trace(request, raw_sources)
+            for request in requests
+        )
+    process_output = run_identity_trace_process(
+        requests,
+        raw_paths=raw_paths,
+        dll_dir=dll_dir,
+        max_workers=raw_workers,
+        raw_xic_batch_size=raw_xic_batch_size,
+    )
+    return process_output.results
+
+
+def build_cell_candidate_evidence(
+    candidate: DiscoveryCandidate,
+    *,
+    owner_assignment_status: str,
+    trace_result: IdentityCoherenceTraceResult | None,
+) -> CellCandidateEvidence:
+    blocked_reason = ""
+    data_quality_reason = ""
+    trace = None
+    point_count = None
+    if trace_result is not None:
+        if trace_result.status == "pass":
+            trace = trace_result.trace
+            point_count = trace_result.xic_point_count
+        elif trace_result.status == "blocked_infrastructure":
+            blocked_reason = trace_result.blocked_reason
+        elif trace_result.status == "data_quality_reject":
+            data_quality_reason = trace_result.blocked_reason
+    return CellCandidateEvidence(
+        sample_id=candidate.sample_stem,
+        candidate_evidence=build_seed_candidate_evidence(candidate),
+        apex_rt=candidate.ms1_apex_rt,
+        peak_start_rt=candidate.ms1_peak_rt_start,
+        peak_end_rt=candidate.ms1_peak_rt_end,
+        area=candidate.ms1_area,
+        height=candidate.ms1_height,
+        point_count=point_count,
+        owner_assignment_status=owner_assignment_status,
+        trace=trace,
+        blocked_reason=blocked_reason,
+        data_quality_reason=data_quality_reason,
+    )
 
 
 def assignment_status_by_candidate_id(

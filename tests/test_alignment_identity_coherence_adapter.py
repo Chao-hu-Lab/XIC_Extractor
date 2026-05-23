@@ -3,11 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.identity_coherence.models import (
+    CandidateTrace,
+    IdentityCoherenceTraceRequest,
+    IdentityCoherenceTraceResult,
+)
 from xic_extractor.alignment.identity_coherence_adapter import (
     IdentityCoherenceSeedSource,
+    build_cell_candidate_evidence,
     build_identity_coherence_seed_sources,
     candidate_identity_family_id,
     candidate_is_non_seed_pool_member,
+    retrieve_identity_coherence_trace,
 )
 from xic_extractor.alignment.ownership import OwnershipBuildResult
 from xic_extractor.alignment.ownership_models import (
@@ -230,3 +237,176 @@ def test_candidate_pool_member_uses_metadata_before_trace_retrieval() -> None:
 
 def test_candidate_identity_family_id_is_diagnostic_only() -> None:
     assert candidate_identity_family_id(3) == "ICF000003"
+
+
+class FakeRawSource:
+    def __init__(self) -> None:
+        self.calls: list[tuple[float, float, float, float]] = []
+
+    def extract_xic(self, mz: float, rt_min: float, rt_max: float, ppm_tol: float):
+        self.calls.append((mz, rt_min, rt_max, ppm_tol))
+        return (
+            [rt_min, (rt_min + rt_max) / 2.0, rt_max],
+            [0.0, 10.0, 0.0],
+        )
+
+
+class FailingRawSource:
+    def extract_xic(self, mz: float, rt_min: float, rt_max: float, ppm_tol: float):
+        raise OSError("raw unavailable")
+
+
+def test_retrieve_identity_trace_uses_candidate_peak_boundaries() -> None:
+    request = IdentityCoherenceTraceRequest(
+        decision_id="ICD000001",
+        request_id="ICR000001",
+        sample_id="Sample_B",
+        candidate_id="CAND-2",
+        precursor_mz=500.0,
+        ppm_tolerance=20.0,
+        rt_min=5.10,
+        rt_max=5.20,
+    )
+    source = FakeRawSource()
+
+    result = retrieve_identity_coherence_trace(request, {"Sample_B": source})
+
+    assert result.status == "pass"
+    assert result.request == request
+    assert result.raw_xic_request_count == 1
+    assert result.xic_point_count == 3
+    assert source.calls == [(500.0, 5.10, 5.20, 20.0)]
+    assert result.trace == CandidateTrace(
+        rt_min=(5.10, 5.15, 5.20),
+        intensity=(0.0, 10.0, 0.0),
+    )
+
+
+def test_retrieve_identity_trace_blocks_missing_raw_source() -> None:
+    request = IdentityCoherenceTraceRequest(
+        decision_id="ICD000001",
+        request_id="ICR000001",
+        sample_id="Missing",
+        candidate_id="CAND-2",
+        precursor_mz=500.0,
+        ppm_tolerance=20.0,
+        rt_min=5.10,
+        rt_max=5.20,
+    )
+
+    result = retrieve_identity_coherence_trace(request, {})
+
+    assert result.status == "blocked_infrastructure"
+    assert result.blocked_reason == "missing_raw_source"
+    assert result.raw_xic_request_count == 0
+    assert result.xic_point_count == 0
+    assert result.trace is None
+
+
+def test_retrieve_identity_trace_blocks_extraction_error() -> None:
+    request = IdentityCoherenceTraceRequest(
+        decision_id="ICD000001",
+        request_id="ICR000001",
+        sample_id="Sample_B",
+        candidate_id="CAND-2",
+        precursor_mz=500.0,
+        ppm_tolerance=20.0,
+        rt_min=5.10,
+        rt_max=5.20,
+    )
+
+    result = retrieve_identity_coherence_trace(
+        request,
+        {"Sample_B": FailingRawSource()},
+    )
+
+    assert result.status == "blocked_infrastructure"
+    assert result.blocked_reason == "raw_xic_extraction_error"
+    assert result.raw_xic_request_count == 1
+    assert result.trace is None
+
+
+def test_build_cell_candidate_evidence_attaches_pass_trace() -> None:
+    candidate = _candidate("CAND-2", sample_stem="Sample_B")
+    trace_result = retrieve_identity_coherence_trace(
+        IdentityCoherenceTraceRequest(
+            decision_id="ICD000001",
+            request_id="ICR000001",
+            sample_id="Sample_B",
+            candidate_id="CAND-2",
+            precursor_mz=500.0,
+            ppm_tolerance=20.0,
+            rt_min=4.95,
+            rt_max=5.05,
+        ),
+        {"Sample_B": FakeRawSource()},
+    )
+
+    cell = build_cell_candidate_evidence(
+        candidate,
+        owner_assignment_status="supporting",
+        trace_result=trace_result,
+    )
+
+    assert cell.sample_id == "Sample_B"
+    assert cell.candidate_evidence.candidate_id == "CAND-2"
+    assert cell.owner_assignment_status == "supporting"
+    assert cell.trace is not None
+    assert cell.point_count == 3
+    assert cell.blocked_reason == ""
+
+
+def test_build_cell_candidate_evidence_marks_blocked_trace() -> None:
+    candidate = _candidate("CAND-2", sample_stem="Sample_B")
+    trace_result = retrieve_identity_coherence_trace(
+        IdentityCoherenceTraceRequest(
+            decision_id="ICD000001",
+            request_id="ICR000001",
+            sample_id="Sample_B",
+            candidate_id="CAND-2",
+            precursor_mz=500.0,
+            ppm_tolerance=20.0,
+            rt_min=4.95,
+            rt_max=5.05,
+        ),
+        {},
+    )
+
+    cell = build_cell_candidate_evidence(
+        candidate,
+        owner_assignment_status="primary",
+        trace_result=trace_result,
+    )
+
+    assert cell.trace is None
+    assert cell.blocked_reason == "missing_raw_source"
+
+
+def test_build_cell_candidate_evidence_marks_data_quality_trace() -> None:
+    candidate = _candidate("CAND-2", sample_stem="Sample_B")
+    request = IdentityCoherenceTraceRequest(
+        decision_id="ICD000001",
+        request_id="ICR000001",
+        sample_id="Sample_B",
+        candidate_id="CAND-2",
+        precursor_mz=500.0,
+        ppm_tolerance=20.0,
+        rt_min=4.95,
+        rt_max=5.05,
+    )
+    trace_result = IdentityCoherenceTraceResult(
+        request=request,
+        trace=None,
+        status="data_quality_reject",
+        blocked_reason="invalid_trace_payload",
+        raw_xic_request_count=1,
+    )
+
+    cell = build_cell_candidate_evidence(
+        candidate,
+        owner_assignment_status="primary",
+        trace_result=trace_result,
+    )
+
+    assert cell.blocked_reason == ""
+    assert cell.data_quality_reason == "invalid_trace_payload"
