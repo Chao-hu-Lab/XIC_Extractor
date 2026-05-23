@@ -19,7 +19,12 @@ from .models import (
     ShapeReferenceResult,
 )
 from .rt_center import estimate_rt_center
-from .schema import CellIdentityTier, EvidenceStage, RequestCandidateIdentityStatus
+from .schema import (
+    CellIdentityTier,
+    EvidenceStage,
+    RequestCandidateIdentityStatus,
+    SeedGateClass,
+)
 from .shape import create_seed_shape_reference, estimate_shape_reference
 from .width import estimate_prototype_width
 
@@ -45,14 +50,42 @@ def evaluate_identity_coherence_row(
     identity_family_id: str,
     assessed_sample_count: int,
 ) -> IdentityCoherenceRowResult:
+    if _enum_value(seed_gate.seed_gate_class) != SeedGateClass.COHERENT_SEED.value:
+        center = estimate_rt_center(seed_evidence, (), config)
+        prototype_width = estimate_prototype_width(
+            (),
+            config,
+            seed_sample_id=seed_gate.resolved_request.seed_sample,
+            seed_rt_min=float(seed_evidence.best_seed_rt),
+            center_rt_min=center.center_rt_min,
+        )
+        shape_reference = estimate_shape_reference(
+            (),
+            config,
+            seed_sample_id=seed_gate.resolved_request.seed_sample,
+            tier_by_candidate_id={},
+            center_rt_min=center.center_rt_min,
+        )
+        decision = summarize_identity_decision(
+            seed_gate,
+            (),
+            center,
+            config,
+            identity_family_id=identity_family_id,
+            assessed_sample_count=assessed_sample_count,
+            prototype_width=prototype_width,
+        )
+        return IdentityCoherenceRowResult(
+            center=center,
+            prototype_width=prototype_width,
+            shape_reference=shape_reference,
+            cells=(),
+            decision=decision,
+        )
+
     center = estimate_rt_center(seed_evidence, non_seed_candidates, config)
-    all_width_candidates = (
-        (seed_candidate,) + non_seed_candidates
-        if seed_candidate is not None
-        else non_seed_candidates
-    )
     prototype_width = estimate_prototype_width(
-        all_width_candidates,
+        non_seed_candidates,
         config,
         seed_sample_id=seed_gate.resolved_request.seed_sample,
         seed_rt_min=float(seed_evidence.best_seed_rt),

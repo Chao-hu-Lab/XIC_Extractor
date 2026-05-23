@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from xic_extractor.alignment.identity_coherence.models import (
     CandidateTrace,
     CellCandidateEvidence,
@@ -17,6 +19,8 @@ from xic_extractor.alignment.identity_coherence.schema import (
     CellIdentityTier,
     EvidenceStage,
     IdentityDecision,
+    SeedGateClass,
+    SeedRejectReason,
     ShapeReferenceBasis,
 )
 from xic_extractor.alignment.identity_coherence.seed_gate import evaluate_seed_gate
@@ -144,3 +148,72 @@ def test_evaluate_identity_coherence_row_promotes_two_prototype_shape_cells():
         cell.cell_identity_tier in {CellIdentityTier.TIER2, CellIdentityTier.TIER3}
         for cell in result.cells
     )
+
+
+def test_evaluate_identity_coherence_row_short_circuits_failed_seed_gate():
+    request = _request()
+    seed_evidence = _seed_evidence()
+    failed_seed_gate = evaluate_seed_gate(request, seed_evidence, OwnerLike())
+    failed_seed_gate = replace(
+        failed_seed_gate,
+        seed_gate_class=SeedGateClass.REVIEW_ONLY_SEED_GATE_FAILED,
+        seed_reject_reason=SeedRejectReason.LOW_MS1_SCAN_SUPPORT,
+    )
+    result = evaluate_identity_coherence_row(
+        failed_seed_gate,
+        seed_evidence,
+        _candidate(
+            "SEED",
+            "S1",
+            fragment_tags=("MeR", "dR"),
+            precursor_mz=500.0,
+            product_mz=384.0,
+            loss_da=116.0,
+        ),
+        (
+            _candidate("A", "S2"),
+            _candidate("B", "S3"),
+            _candidate("C", "S4"),
+        ),
+        IdentityCoherenceConfig(shape=ShapeConfig(resample_points=9)),
+        identity_family_id="IDF-1",
+        assessed_sample_count=4,
+    )
+
+    assert result.cells == ()
+    assert result.decision.decision is IdentityDecision.REVIEW_ONLY_SEED_GATE_FAILED
+    assert result.decision.total_coherent_sample_count == 0
+    assert result.decision.tier12_non_seed_identity_sample_count == 0
+    assert result.shape_reference.shape_reference_basis is ShapeReferenceBasis.NONE
+    assert result.prototype_width.prototype_width_sec is None
+    assert result.center.center_candidate_count == 0
+
+
+def test_evaluate_identity_coherence_row_never_counts_seed_in_width_pool():
+    request = _request()
+    request = replace(request, seed_sample=None)
+    seed_evidence = _seed_evidence()
+    seed_gate = evaluate_seed_gate(request, seed_evidence, OwnerLike())
+
+    result = evaluate_identity_coherence_row(
+        seed_gate,
+        seed_evidence,
+        _candidate(
+            "SEED",
+            "S1",
+            fragment_tags=("MeR", "dR"),
+            precursor_mz=500.0,
+            product_mz=384.0,
+            loss_da=116.0,
+        ),
+        (
+            _candidate("A", "S2"),
+            _candidate("B", "S3"),
+        ),
+        IdentityCoherenceConfig(shape=ShapeConfig(resample_points=9)),
+        identity_family_id="IDF-1",
+        assessed_sample_count=3,
+    )
+
+    assert result.prototype_width.prototype_width_sec is None
+    assert result.prototype_width.non_seed_candidate_count == 2

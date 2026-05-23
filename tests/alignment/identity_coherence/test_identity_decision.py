@@ -236,7 +236,7 @@ def test_summarize_identity_decision_reports_rt_only_support_path():
 def test_summarize_identity_decision_accepts_string_rt_gate_status():
     rt_only = replace(
         _tier1_cell("RAW-2"),
-        cell_identity_tier=CellIdentityTier.RT_ONLY,
+        cell_identity_tier="rt_only",
         cell_identity_basis=CellIdentityBasis.NONE,
         fragment_match_status=FragmentMatchStatus.FAIL,
         non_rt_identity_result=NonRtIdentityResult.FAIL,
@@ -244,10 +244,12 @@ def test_summarize_identity_decision_accepts_string_rt_gate_status():
         coherent_count_contribution=False,
         tier12_count_contribution=False,
     )
+    seed_gate = replace(_seed_result(), seed_gate_class="coherent_seed")
+    center = replace(_center(), center_decision="seed_anchored")
     summary = summarize_identity_decision(
-        _seed_result(),
+        seed_gate,
         (rt_only,),
-        _center(),
+        center,
         IdentityCoherenceConfig(),
         identity_family_id="IDF-1",
         assessed_sample_count=8,
@@ -255,6 +257,7 @@ def test_summarize_identity_decision_accepts_string_rt_gate_status():
 
     assert summary.decision is IdentityDecision.REVIEW_ONLY_RT_ONLY_SUPPORT
     assert summary.decision.value == "review_only_rt_only_support"
+    assert summary.center_rt_source == "seed_anchored"
 
 
 def test_summarize_identity_decision_detects_forbidden_evidence_seen():
@@ -411,6 +414,40 @@ def test_decision_allows_seed_fallback_when_supported_by_prototype_shape():
 
     assert summary.decision is IdentityDecision.WOULD_PRIMARY
     assert summary.weak_basis_reason is WeakBasisReason.NONE
+    assert summary.decision_reason == DecisionReason.TIER2_SHAPE_SUPPORT.value
+
+
+def test_decision_reports_tier2_shape_reason_for_tier2_only_would_primary():
+    seed_gate = _seed_result()
+    cells = (
+        _cell(
+            "S2",
+            tier=CellIdentityTier.TIER2,
+            coherent=True,
+            tier12=True,
+            shape_reference_basis=ShapeReferenceBasis.MORPHOLOGY_RT_MEDOID,
+        ),
+        _cell(
+            "S3",
+            tier=CellIdentityTier.TIER2,
+            coherent=True,
+            tier12=True,
+            shape_reference_basis=ShapeReferenceBasis.MORPHOLOGY_RT_MEDOID,
+        ),
+    )
+
+    summary = summarize_identity_decision(
+        seed_gate,
+        cells,
+        _center(),
+        IdentityCoherenceConfig(),
+        identity_family_id="IDF-1",
+        assessed_sample_count=3,
+    )
+
+    assert summary.decision is IdentityDecision.WOULD_PRIMARY
+    assert summary.tier1_fragment_confirmed_sample_count == 0
+    assert summary.decision_reason == DecisionReason.TIER2_SHAPE_SUPPORT.value
 
 
 def test_decision_records_row_shape_reference_and_prototype_width():

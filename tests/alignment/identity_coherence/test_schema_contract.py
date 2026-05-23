@@ -365,6 +365,7 @@ def test_cell_evidence_enum_values_are_stable_strings():
     }
     assert {value.value for value in DecisionReason} == {
         "tier1_support",
+        "tier2_shape_support",
     }
 
 

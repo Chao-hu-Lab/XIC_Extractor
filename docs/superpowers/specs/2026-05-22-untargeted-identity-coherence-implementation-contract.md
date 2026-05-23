@@ -550,6 +550,11 @@ independent enum list. Schema tests must reject emitted `decision` values
 outside the core enum and must fail if a duplicated schema definition drifts
 from the core contract.
 
+`decision_reason` values are stable strings. `tier1_support` means at least one
+non-seed tier 1 fragment-confirmed cell supported a provisional would-primary
+decision. `tier2_shape_support` means provisional would-primary was supported by
+tier 2 shape evidence without any tier 1 fragment-confirmed non-seed cell.
+
 Do not include sample-id list columns such as `coherent_sample_ids`. Per-sample
 detail belongs in `cell_evidence.tsv`. Do not include `weak_basis_only`; it is
 derived from `weak_basis_reason != none`.

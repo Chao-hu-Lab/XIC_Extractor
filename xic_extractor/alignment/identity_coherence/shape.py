@@ -154,9 +154,14 @@ def estimate_shape_reference(
     )
     basis = (
         ShapeReferenceBasis.TIER1_SUPPORTED_MEDOID
-        if medoid_tier is CellIdentityTier.TIER1
+        if _enum_value(medoid_tier) == CellIdentityTier.TIER1.value
         else ShapeReferenceBasis.MORPHOLOGY_RT_MEDOID
     )
+    if (
+        _enum_value(basis) == ShapeReferenceBasis.MORPHOLOGY_RT_MEDOID.value
+        and not config.shape.allow_morphology_rt_medoid
+    ):
+        return _empty_shape_reference(non_seed_count)
     return ShapeReferenceResult(
         shape_reference_basis=basis,
         shape_reference_candidate_id=medoid_candidate.candidate_evidence.candidate_id,
@@ -288,8 +293,10 @@ def _select_medoid(
         )
         tier_rank = (
             0
-            if tier_by_candidate_id.get(candidate.candidate_evidence.candidate_id)
-            is CellIdentityTier.TIER1
+            if _enum_value(
+                tier_by_candidate_id.get(candidate.candidate_evidence.candidate_id)
+            )
+            == CellIdentityTier.TIER1.value
             else 1
         )
         scan_support = candidate.candidate_evidence.ms1_scan_support_score

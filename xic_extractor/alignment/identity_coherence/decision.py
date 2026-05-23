@@ -30,7 +30,7 @@ def summarize_identity_decision(
     assessed_sample_count: int,
     prototype_width: PrototypeWidthResult | None = None,
 ) -> IdentityDecisionSummary:
-    if seed_gate.seed_gate_class != SeedGateClass.COHERENT_SEED:
+    if _enum_value(seed_gate.seed_gate_class) != SeedGateClass.COHERENT_SEED.value:
         return _summary(
             seed_gate,
             cells,
@@ -40,7 +40,7 @@ def summarize_identity_decision(
             assessed_sample_count=assessed_sample_count,
             decision=IdentityDecision.REVIEW_ONLY_SEED_GATE_FAILED,
             decision_reason=(
-                seed_gate.seed_reject_reason.value
+                _enum_value(seed_gate.seed_reject_reason)
                 if seed_gate.seed_reject_reason is not None
                 else "seed_gate_failed"
             ),
@@ -57,7 +57,7 @@ def summarize_identity_decision(
         identity_family_id=identity_family_id,
         assessed_sample_count=assessed_sample_count,
         decision=decision,
-        decision_reason=_decision_reason(decision),
+        decision_reason=_decision_reason(decision, cells),
         weak_basis_reason=_weak_basis_reason(cells, decision),
         include_seed=True,
         prototype_width=prototype_width,
@@ -69,7 +69,10 @@ def _decision_for_coherent_seed(
     center: RtCenterResult,
     config: IdentityCoherenceConfig,
 ) -> IdentityDecision:
-    if center.center_decision == RtCenterDecision.CENTER_UNSTABLE_REVIEW_ONLY:
+    if (
+        _enum_value(center.center_decision)
+        == RtCenterDecision.CENTER_UNSTABLE_REVIEW_ONLY.value
+    ):
         return IdentityDecision.REVIEW_ONLY_CENTER_UNSTABLE
 
     non_seed_coherent = _non_seed_coherent_count(cells)
@@ -160,7 +163,7 @@ def _summary(
             if prototype_width is not None
             else None
         ),
-        center_rt_source=center.center_decision.value,
+        center_rt_source=str(_enum_value(center.center_decision)),
         center=center,
         coherent_fraction=coherent_fraction,
         infrastructure_blocked_sample_count=sum(
@@ -176,10 +179,15 @@ def _summary(
     )
 
 
-def _decision_reason(decision: IdentityDecision) -> str:
-    if decision is IdentityDecision.WOULD_PRIMARY:
+def _decision_reason(
+    decision: IdentityDecision,
+    cells: tuple[CellEvidenceResult, ...],
+) -> str:
+    if _enum_value(decision) == IdentityDecision.WOULD_PRIMARY.value:
+        if _tier1_count(cells) == 0 and _tier2_shape_count(cells) > 0:
+            return DecisionReason.TIER2_SHAPE_SUPPORT.value
         return DecisionReason.TIER1_SUPPORT.value
-    return decision.value
+    return str(_enum_value(decision))
 
 
 def _weak_basis_reason(

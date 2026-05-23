@@ -187,6 +187,7 @@ class CellDataQualityReason(StrEnum):
 
 class DecisionReason(StrEnum):
     TIER1_SUPPORT = "tier1_support"
+    TIER2_SHAPE_SUPPORT = "tier2_shape_support"
 
 
 IDENTITY_COHERENCE_REQUEST_COLUMNS: tuple[str, ...] = (

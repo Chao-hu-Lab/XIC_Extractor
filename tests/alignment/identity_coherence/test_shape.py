@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from xic_extractor.alignment.identity_coherence.models import (
@@ -178,6 +180,49 @@ def test_estimate_shape_reference_allows_morphology_rt_medoid_when_no_tier1():
 
     assert result.shape_reference_basis is ShapeReferenceBasis.MORPHOLOGY_RT_MEDOID
     assert result.shape_reference_candidate_id in {"M1", "M2", "M3"}
+
+
+def test_estimate_shape_reference_respects_morphology_rt_medoid_opt_out():
+    config = IdentityCoherenceConfig(
+        shape=replace(
+            IdentityCoherenceConfig().shape,
+            allow_morphology_rt_medoid=False,
+        )
+    )
+    result = estimate_shape_reference(
+        (
+            _candidate("M1", sample_id="S2"),
+            _candidate("M2", sample_id="S3"),
+            _candidate("M3", sample_id="S4"),
+        ),
+        config,
+        seed_sample_id="S1",
+        tier_by_candidate_id={},
+        center_rt_min=7.80,
+    )
+
+    assert result.shape_reference_basis is ShapeReferenceBasis.NONE
+    assert result.normalized_intensity == ()
+    assert result.candidate_count == 3
+    assert result.non_seed_candidate_count == 3
+
+
+def test_estimate_shape_reference_accepts_string_tier_map_values():
+    config = IdentityCoherenceConfig()
+    result = estimate_shape_reference(
+        (
+            _candidate("Z_TIER1", sample_id="S2"),
+            _candidate("A_MORPH", sample_id="S3"),
+            _candidate("B_MORPH", sample_id="S4"),
+        ),
+        config,
+        seed_sample_id="S1",
+        tier_by_candidate_id={"Z_TIER1": "tier1"},
+        center_rt_min=7.80,
+    )
+
+    assert result.shape_reference_basis is ShapeReferenceBasis.TIER1_SUPPORTED_MEDOID
+    assert result.shape_reference_candidate_id == "Z_TIER1"
 
 
 def test_estimate_shape_reference_requires_non_seed_candidates():
