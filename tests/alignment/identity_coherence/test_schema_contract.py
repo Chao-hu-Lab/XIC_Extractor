@@ -626,6 +626,35 @@ def test_identity_coherence_config_defaults_match_v04_review_values():
     assert config.engineering.max_projected_85raw_identity_xic_requests is None
 
 
+@pytest.mark.parametrize(
+    ("engineering_config_kwargs", "message"),
+    (
+        (
+            {"max_infrastructure_blocked_fraction": -0.01},
+            "max_infrastructure_blocked_fraction must be nonnegative",
+        ),
+        (
+            {"max_infrastructure_blocked_fraction": 1.01},
+            "max_infrastructure_blocked_fraction must be <= 1",
+        ),
+        (
+            {"max_projected_85raw_identity_xic_requests": True},
+            "max_projected_85raw_identity_xic_requests must be nonnegative",
+        ),
+        (
+            {"max_projected_85raw_identity_xic_requests": -1},
+            "max_projected_85raw_identity_xic_requests must be nonnegative",
+        ),
+    ),
+)
+def test_engineering_config_rejects_invalid_bounds(
+    engineering_config_kwargs,
+    message,
+):
+    with pytest.raises(ValueError, match=message):
+        EngineeringConfig(**engineering_config_kwargs)
+
+
 def test_candidate_trace_is_nested_domain_model_not_flat_schema_columns():
     trace = CandidateTrace(
         rt_min=(7.75, 7.80, 7.85),

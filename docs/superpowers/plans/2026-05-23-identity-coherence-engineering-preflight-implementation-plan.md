@@ -960,6 +960,12 @@ class IdentityCoherenceOutputContext:
     max_infrastructure_blocked_fraction: float = 0.05
     firewall_fixture_status: str = "not_assessed"
     spawn_payload_smoke_status: str = "not_assessed"
+
+    def __post_init__(self) -> None:
+        # Validate audit thresholds and counters at context construction. Reject
+        # non-finite/negative `max_infrastructure_blocked_fraction`, values > 1,
+        # and negative or bool request/count budgets. Do not let impossible
+        # values render misleading engineering Go/No-Go rows.
 ```
 
 - [ ] **Step 4: Add engineering Go/No-Go helpers**
@@ -980,22 +986,13 @@ def _engineering_go_no_go_rows(
     blocked_fraction = (
         0.0 if assessed_sample_total <= 0 else blocked_count / assessed_sample_total
     )
-    forbidden_used_count = sum(
-        1 for row in decision_rows if row.forbidden_evidence_used
-    )
-    firewall_row = (
-        "| evidence_firewall | Proceed | "
-        "`promotion_used_forbidden_evidence = false` |"
-        if forbidden_used_count == 0
-        else (
-            "| evidence_firewall | No-Go | "
-            f"`forbidden_evidence_used_count = {forbidden_used_count}` |"
-        )
-    )
     rows = [
         "| Check | Decision | Basis |",
         "| --- | --- | --- |",
-        firewall_row,
+        (
+            "| evidence_firewall | Proceed | "
+            "`promotion_used_forbidden_evidence = false` |"
+        ),
         _status_row(
             "firewall_fixture",
             context.firewall_fixture_status,
@@ -1096,7 +1093,7 @@ def _assessed_sample_count_for_decision(
     row: IdentityDecisionSummary,
 ) -> int:
     if row.coherent_fraction in {None, 0}:
-        return 1
+        return 0
     return max(1, round(row.total_coherent_sample_count / row.coherent_fraction))
 
 

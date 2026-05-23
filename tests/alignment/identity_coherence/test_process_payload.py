@@ -70,12 +70,50 @@ def test_trace_result_rejects_inconsistent_trace_point_count() -> None:
         )
 
 
+def test_trace_result_rejects_point_count_without_trace() -> None:
+    with pytest.raises(ValueError, match="xic_point_count must be 0"):
+        IdentityCoherenceTraceResult(
+            request=_trace_request(),
+            trace=None,
+            status="not_assessed",
+            raw_xic_request_count=0,
+            raw_chromatogram_call_count=0,
+            xic_point_count=5,
+            elapsed_sec=0.0,
+        )
+
+
 def test_trace_result_rejects_unknown_status() -> None:
     with pytest.raises(ValueError, match="unsupported trace result status"):
         IdentityCoherenceTraceResult(
             request=_trace_request(),
             trace=None,
             status="rescued",
+            raw_xic_request_count=0,
+            raw_chromatogram_call_count=0,
+            xic_point_count=0,
+            elapsed_sec=0.0,
+        )
+
+
+def test_trace_result_rejects_contradictory_status_and_blocked_reason() -> None:
+    with pytest.raises(ValueError, match="pass status cannot have blocked_reason"):
+        IdentityCoherenceTraceResult(
+            request=_trace_request(),
+            trace=CandidateTrace(rt_min=(4.0, 5.0), intensity=(0.0, 1.0)),
+            status="pass",
+            blocked_reason="raw_open_failed",
+            raw_xic_request_count=1,
+            raw_chromatogram_call_count=1,
+            xic_point_count=2,
+            elapsed_sec=0.0,
+        )
+
+    with pytest.raises(ValueError, match="blocked_infrastructure requires"):
+        IdentityCoherenceTraceResult(
+            request=_trace_request(),
+            trace=None,
+            status="blocked_infrastructure",
             raw_xic_request_count=0,
             raw_chromatogram_call_count=0,
             xic_point_count=0,

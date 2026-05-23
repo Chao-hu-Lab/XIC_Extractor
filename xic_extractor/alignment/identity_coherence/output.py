@@ -46,6 +46,33 @@ class IdentityCoherenceOutputContext:
     firewall_fixture_status: str = "not_assessed"
     spawn_payload_smoke_status: str = "not_assessed"
 
+    def __post_init__(self) -> None:
+        blocked_fraction = _validate_nonnegative_float(
+            self.max_infrastructure_blocked_fraction,
+            "max_infrastructure_blocked_fraction",
+        )
+        if blocked_fraction > 1.0:
+            raise ValueError("max_infrastructure_blocked_fraction must be <= 1")
+        object.__setattr__(
+            self,
+            "max_infrastructure_blocked_fraction",
+            blocked_fraction,
+        )
+        for field_name in (
+            "raw_xic_request_count",
+            "xic_point_count",
+            "projected_85raw_identity_request_count",
+            "max_projected_85raw_identity_xic_requests",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _validate_optional_nonnegative_int(
+                    getattr(self, field_name),
+                    field_name,
+                ),
+            )
+
 
 @dataclass(frozen=True)
 class IdentityCoherenceOutputPaths:
@@ -775,28 +802,19 @@ def _engineering_go_no_go_rows(
     assessed_sample_total: int,
 ) -> list[str]:
     blocked_count = _sum_decision_field(
-        list(decision_rows),
+        decision_rows,
         "infrastructure_blocked_sample_count",
     )
     blocked_fraction = (
         0.0 if assessed_sample_total <= 0 else blocked_count / assessed_sample_total
     )
-    forbidden_used_count = sum(
-        1 for row in decision_rows if row.forbidden_evidence_used
-    )
-    firewall_row = (
-        "| evidence_firewall | Proceed | "
-        "`promotion_used_forbidden_evidence = false` |"
-        if forbidden_used_count == 0
-        else (
-            "| evidence_firewall | No-Go | "
-            f"`forbidden_evidence_used_count = {forbidden_used_count}` |"
-        )
-    )
     rows = [
         "| Check | Decision | Basis |",
         "| --- | --- | --- |",
-        firewall_row,
+        (
+            "| evidence_firewall | Proceed | "
+            "`promotion_used_forbidden_evidence = false` |"
+        ),
         _status_row(
             "firewall_fixture",
             context.firewall_fixture_status,
@@ -877,6 +895,26 @@ def _total_assessed_sample_count(
     decision_rows: Sequence[IdentityDecisionSummary],
 ) -> int:
     return sum(_assessed_sample_count_for_decision(row) for row in decision_rows)
+
+
+def _validate_nonnegative_float(value: object, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field_name} must be nonnegative")
+    numeric = float(value)
+    if not math.isfinite(numeric) or numeric < 0:
+        raise ValueError(f"{field_name} must be nonnegative")
+    return numeric
+
+
+def _validate_optional_nonnegative_int(
+    value: object,
+    field_name: str,
+) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{field_name} must be nonnegative")
+    return value
 
 
 def _hash_lines(input_hashes: tuple[tuple[str, str], ...]) -> list[str]:

@@ -36,6 +36,12 @@ _TRACE_RESULT_STATUSES = frozenset(
         "not_assessed",
     }
 )
+_TRACE_RESULT_STATUSES_REQUIRING_REASON = frozenset(
+    {
+        "blocked_infrastructure",
+        "data_quality_reject",
+    }
+)
 
 
 def _require_non_empty_text(value: object, field_name: str) -> str:
@@ -284,10 +290,17 @@ class IdentityCoherenceTraceResult:
         if status not in _TRACE_RESULT_STATUSES:
             raise ValueError(f"unsupported trace result status: {status}")
         object.__setattr__(self, "status", status)
+        blocked_reason = (
+            "" if self.blocked_reason is None else str(self.blocked_reason).strip()
+        )
+        if status == "pass" and blocked_reason:
+            raise ValueError("pass status cannot have blocked_reason")
+        if status in _TRACE_RESULT_STATUSES_REQUIRING_REASON and not blocked_reason:
+            raise ValueError(f"{status} requires blocked_reason")
         object.__setattr__(
             self,
             "blocked_reason",
-            "" if self.blocked_reason is None else str(self.blocked_reason).strip(),
+            blocked_reason,
         )
         object.__setattr__(
             self,
@@ -309,6 +322,8 @@ class IdentityCoherenceTraceResult:
             self.xic_point_count,
             "xic_point_count",
         )
+        if self.trace is None and point_count != 0:
+            raise ValueError("xic_point_count must be 0 when trace is None")
         if self.trace is not None and point_count != len(self.trace.rt_min):
             raise ValueError("xic_point_count must equal trace length")
         object.__setattr__(self, "xic_point_count", point_count)

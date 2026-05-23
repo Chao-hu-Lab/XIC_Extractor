@@ -326,6 +326,7 @@ def test_summary_renders_engineering_go_no_go_rows():
 
     assert "## Engineering Go / No-Go" in markdown
     assert "| evidence_firewall | Proceed |" in markdown
+    assert "forbidden_evidence_used_count" not in markdown
     assert "| firewall_fixture | Proceed |" in markdown
     assert "| spawn_payload_smoke | Proceed |" in markdown
     assert "| infrastructure_blocked_fraction | Proceed |" in markdown
@@ -491,6 +492,52 @@ def test_summary_rejects_forbidden_evidence_used_before_go_no_go_render():
                 mode="inline_pre_backfill",
                 input_source="pre_backfill_owner_state.jsonl",
             ),
+        )
+
+
+@pytest.mark.parametrize(
+    ("context_kwargs", "message"),
+    (
+        (
+            {"max_infrastructure_blocked_fraction": -0.01},
+            "max_infrastructure_blocked_fraction must be nonnegative",
+        ),
+        (
+            {"max_infrastructure_blocked_fraction": 1.01},
+            "max_infrastructure_blocked_fraction must be <= 1",
+        ),
+        (
+            {"projected_85raw_identity_request_count": True},
+            "projected_85raw_identity_request_count must be nonnegative",
+        ),
+        (
+            {"projected_85raw_identity_request_count": -1},
+            "projected_85raw_identity_request_count must be nonnegative",
+        ),
+        (
+            {"max_projected_85raw_identity_xic_requests": -1},
+            "max_projected_85raw_identity_xic_requests must be nonnegative",
+        ),
+        (
+            {"raw_xic_request_count": -1},
+            "raw_xic_request_count must be nonnegative",
+        ),
+        (
+            {"xic_point_count": -1},
+            "xic_point_count must be nonnegative",
+        ),
+    ),
+)
+def test_output_context_rejects_invalid_engineering_values(
+    context_kwargs,
+    message,
+):
+    with pytest.raises(ValueError, match=message):
+        IdentityCoherenceOutputContext(
+            command="pytest",
+            mode="inline_pre_backfill",
+            input_source="synthetic",
+            **context_kwargs,
         )
 
 

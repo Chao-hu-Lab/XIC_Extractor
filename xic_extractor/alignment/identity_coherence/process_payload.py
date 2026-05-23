@@ -10,7 +10,7 @@ from .models import (
 def identity_coherence_trace_payload_smoke_worker(
     request: IdentityCoherenceTraceRequest,
 ) -> IdentityCoherenceTraceResult:
-    """Round-trip an identity-coherence trace request without RAW IO."""
+    """Round-trip a payload without RAW IO using a zero-intensity sentinel trace."""
 
     trace = CandidateTrace(
         rt_min=(request.rt_min, request.rt_max),
