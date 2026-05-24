@@ -102,6 +102,33 @@ The old contract already says not to start with `primary_consolidation.py`,
 safer cleanup front: identity-coherence output/control surfaces have much better
 localized tests and are diagnostic-only.
 
+## Reviewer Follow-Up Decisions
+
+A parallel review raised five cleanup gaps. Handle them this way:
+
+- Summary model/rendering split: accept. In Workstream B,
+  `output_summary.py` must remain a Markdown layout renderer. Counts,
+  threshold consistency checks, control pass fractions, decoy metrics, and
+  Go/No-Go row shaping belong in `output_summary_model.py`.
+- PPM helper duplication: accept as an inventory item, but not as a blind
+  Workstream A quick-win. Current helpers differ by signed vs absolute error,
+  denominator choice, `None`, and non-positive denominator handling. First
+  classify existing semantics, then extract a small helper with characterization
+  tests.
+- Control model naming: keep `control_models.py` unless implementation proves
+  ambiguity. `models.py` owns identity-evidence domain dataclasses/configs;
+  `control_models.py` should own control manifest, control config, evaluation
+  result, and record-like protocol contracts only. If this still reads poorly
+  during Workstream C, prefer a more specific name such as
+  `control_contracts.py` before moving behavior.
+- Test catch-alls: accept. Large test-file decomposition deserves its own
+  Workstream H and should not be hidden inside legacy diagnostics cleanup.
+- Performance baseline: accept as a gate for performance-claimed changes, not
+  as a blocker for move-only cleanup. `scripts/benchmark_parallel.py` already
+  exists for serial/process extraction timing, but future performance PRs need
+  a pinned 8RAW command and `docs/perf_baseline.md` with hardware/input/output
+  context before claiming no regression.
+
 ## Cleanup Workstreams
 
 ### Workstream A - Tooling And Inventory Baseline
@@ -403,6 +430,37 @@ Actions:
 - When splitting a large test file, move shared factories into local fixture
   helpers rather than centralizing everything in `tests/conftest.py`.
 
+### Workstream H - Catch-All Test Decomposition
+
+Goal: make future behavior changes easier to localize without changing
+production behavior.
+
+First target:
+
+- `tests/test_alignment_pipeline.py`
+  - Split into focused files by behavior surface, for example import/boundary
+    smoke, owner/backfill integration, primary matrix contracts, and
+    process/pipeline orchestration.
+  - Move only tests and local fixtures. Do not change production code to make
+    the split easier.
+  - Preserve existing test names where feasible, or keep searchable behavior
+    phrases in the new names.
+
+Required checks:
+
+- Run the moved test files directly.
+- Run `uv run pytest --collect-only tests -q` or a narrower collect-only command
+  that proves the moved tests still collect once.
+- If any shared helper is introduced, keep it local to the new test package
+  unless at least two unrelated test areas need it.
+
+Non-goals:
+
+- no assertion broadening,
+- no fixture semantic changes,
+- no production behavior changes,
+- no unrelated large-test cleanup in the same PR.
+
 ## Do Not Start Here
 
 These are important but should not be the first cleanup PR after PR #60:
@@ -479,11 +537,17 @@ Definition of done:
 1. Add the identity-coherence output boundary guard, then split
    identity-coherence output.
 2. Split identity-coherence controls.
-3. Split 8RAW validation CLI internals.
-4. Review identity-coherence adapter boundary.
-5. Inventory instrument-QC productization modules with a new focused spec.
-6. Continue legacy diagnostic rendering splits.
-7. Only then revisit alignment domain-heavy modules with characterization tests.
+3. Split catch-all alignment tests in a dedicated test-only PR.
+4. Split 8RAW validation CLI internals.
+5. Review identity-coherence adapter boundary.
+6. Inventory instrument-QC productization modules with a new focused spec.
+7. Add or refresh a documented 8RAW performance baseline before any
+   performance-claimed or process-backend behavior PR.
+8. Classify and extract ppm helper semantics only after characterization tests
+   prove signed/absolute and denominator behavior stays stable.
+9. Continue legacy diagnostic rendering splits.
+10. Only then revisit alignment domain-heavy modules with characterization
+    tests.
 
 ## Review Checklist For Cleanup PRs
 
