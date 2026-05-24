@@ -1,11 +1,103 @@
 from __future__ import annotations
 
 import csv
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from openpyxl import Workbook
 
 from tools.diagnostics import targeted_gt_alignment_audit as audit
+
+
+def test_path_style_cli_help_preserves_public_script_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = repo_root / "tools" / "diagnostics" / "targeted_gt_alignment_audit.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--target-workbook" in result.stdout
+    assert "--alignment-run" in result.stdout
+    assert "--output-dir" in result.stdout
+
+
+def test_module_style_cli_help_preserves_public_module_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.diagnostics.targeted_gt_alignment_audit",
+            "--help",
+        ],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--target-workbook" in result.stdout
+    assert "--alignment-run" in result.stdout
+    assert "--output-dir" in result.stdout
+
+
+def test_facade_preserves_existing_helper_import_surface() -> None:
+    expected_names = [
+        "DRIFT_MODE",
+        "DUPLICATE_MODE",
+        "MISS_MODE",
+        "PASS_MODE",
+        "PRODUCTION_STATUSES",
+        "SPLIT_MODE",
+        "AuditConfig",
+        "TargetGroundTruth",
+        "_as_output_dict",
+        "_cell_rt",
+        "_cells_by_sample_in_review_range",
+        "_classify_sample",
+        "_closest_cell",
+        "_escape_excel_formula",
+        "_failure_mode",
+        "_filter_review_by_mz",
+        "_format_float",
+        "_is_numeric_text",
+        "_is_production_cell",
+        "_is_trueish",
+        "_join_ids",
+        "_load_target_ground_truth",
+        "_load_tsv",
+        "_parse_args",
+        "_production_cells_in_gt_window",
+        "_propagate_sample_context",
+        "_rows_by_target_role",
+        "_rt_delta_sec",
+        "_status",
+        "_svg_text",
+        "_target_workbook_rows",
+        "_to_float",
+        "_to_int",
+        "_unescape_excel_formula",
+        "_write_dict_csv",
+        "_write_report",
+        "_write_svg",
+        "main",
+    ]
+
+    assert set(audit.__all__) == set(expected_names)
+    for name in expected_names:
+        assert hasattr(audit, name), name
 
 
 def test_targeted_gt_audit_writes_outputs_and_escapes_formula_values(
@@ -56,12 +148,49 @@ def test_targeted_gt_audit_writes_outputs_and_escapes_formula_values(
     assert (output_dir / "failure_mode_chart.svg").exists()
 
     comparison = _read_csv(output_dir / "comparison.csv")
+    with (output_dir / "gt_target.csv").open(encoding="utf-8") as handle:
+        assert csv.DictReader(handle).fieldnames == [
+            "sample_stem",
+            "group",
+            "target_mz",
+            "target_rt_min",
+            "target_peak_start_min",
+            "target_peak_end_min",
+            "target_peak_width_min",
+            "target_area",
+            "target_confidence",
+            "target_nl_ok",
+            "target_reason",
+            "istd_rt_min",
+            "istd_rt_delta_sec",
+        ]
+    with (output_dir / "comparison.csv").open(encoding="utf-8") as handle:
+        assert csv.DictReader(handle).fieldnames == [
+            "sample_stem",
+            "group",
+            "gt_target_rt_min",
+            "gt_target_confidence",
+            "gt_peak_start_min",
+            "gt_peak_end_min",
+            "family_count_total",
+            "family_ids_all",
+            "production_family_ids",
+            "duplicate_family_ids",
+            "production_family_count_in_gt_window",
+            "production_family_ids_in_gt_window",
+            "closest_family_id",
+            "closest_family_mz",
+            "closest_status",
+            "closest_apex_rt_min",
+            "closest_rt_delta_sec",
+            "failure_mode",
+        ]
     assert comparison[0]["sample_stem"] == "'=Sample_A"
     assert comparison[0]["failure_mode"] == "PASS"
     assert comparison[0]["closest_rt_delta_sec"] == "-0.60"
-    assert "FAILURE MODE" not in (
-        output_dir / "failure_mode_report.md"
-    ).read_text(encoding="utf-8")
+    assert "FAILURE MODE" not in (output_dir / "failure_mode_report.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_targeted_gt_audit_classifies_pass(tmp_path: Path) -> None:
@@ -229,28 +358,31 @@ def _run_single_sample_audit(
     )
     output_dir = tmp_path / "audit"
 
-    assert audit.main(
-        [
-            "--target-workbook",
-            str(workbook),
-            "--alignment-run",
-            str(alignment_run),
-            "--target-label",
-            "5-medC",
-            "--istd-label",
-            "d3-5-medC",
-            "--target-mz",
-            "242.1136",
-            "--ppm",
-            "50",
-            "--pass-rt-sec",
-            "5",
-            "--drift-rt-sec",
-            "60",
-            "--output-dir",
-            str(output_dir),
-        ],
-    ) == 0
+    assert (
+        audit.main(
+            [
+                "--target-workbook",
+                str(workbook),
+                "--alignment-run",
+                str(alignment_run),
+                "--target-label",
+                "5-medC",
+                "--istd-label",
+                "d3-5-medC",
+                "--target-mz",
+                "242.1136",
+                "--ppm",
+                "50",
+                "--pass-rt-sec",
+                "5",
+                "--drift-rt-sec",
+                "60",
+                "--output-dir",
+                str(output_dir),
+            ],
+        )
+        == 0
+    )
     return _read_csv(output_dir / "comparison.csv")[0]
 
 

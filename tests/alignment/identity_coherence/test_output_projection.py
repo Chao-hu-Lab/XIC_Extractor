@@ -22,6 +22,10 @@ from xic_extractor.alignment.identity_coherence.request_builder import (
     build_identity_coherence_request,
 )
 from xic_extractor.alignment.identity_coherence.schema import (
+    IDENTITY_COHERENCE_CELL_EVIDENCE_COLUMNS,
+    IDENTITY_COHERENCE_CONTROL_COLUMNS,
+    IDENTITY_COHERENCE_DECISION_COLUMNS,
+    IDENTITY_COHERENCE_REQUEST_COLUMNS,
     AreaHeightStatus,
     BaselineAuditStatus,
     CellAssessmentStatus,
@@ -305,3 +309,23 @@ def test_project_control_row_is_pass_through_but_schema_limited():
     assert row["control_type"] == "positive_targeted_istd"
     assert row["control_pass"] == "true"
     assert "extra" not in row
+
+
+def test_projectors_preserve_contract_column_order():
+    assert tuple(project_request_row(_seed_gate())) == (
+        IDENTITY_COHERENCE_REQUEST_COLUMNS
+    )
+    assert tuple(project_decision_row(_decision())) == (
+        IDENTITY_COHERENCE_DECISION_COLUMNS
+    )
+    assert tuple(project_cell_evidence_row(_cell())) == (
+        IDENTITY_COHERENCE_CELL_EVIDENCE_COLUMNS
+    )
+    assert tuple(
+        project_control_row(
+            {
+                "control_id": "CTRL-1",
+                "control_type": "positive_targeted_istd",
+            }
+        )
+    ) == IDENTITY_COHERENCE_CONTROL_COLUMNS

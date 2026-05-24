@@ -1,7 +1,29 @@
 import csv
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from tools.diagnostics import family_ms1_overlay_plot as report
+
+
+def test_path_style_cli_help_preserves_public_script_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = repo_root / "tools" / "diagnostics" / "family_ms1_overlay_plot.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--alignment-cells" in result.stdout
+    assert "--family-id" in result.stdout
 
 
 def test_load_family_cells_and_assign_highlight_groups(tmp_path: Path) -> None:
@@ -107,11 +129,66 @@ def test_write_family_ms1_overlay_outputs_from_synthetic_traces(
     assert outputs.png_path.is_file()
     assert outputs.pdf_path.is_file()
     assert outputs.trace_data_json.is_file()
-    summary_rows = list(csv.DictReader(outputs.summary_tsv.open(), delimiter="\t"))
+    with outputs.summary_tsv.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        assert reader.fieldnames == [
+            "sample_stem",
+            "status",
+            "cell_area",
+            "cell_height",
+            "cell_apex_rt",
+            "cell_start_rt",
+            "cell_end_rt",
+            "trace_max_intensity",
+            "trace_apex_rt",
+            "global_trace_apex_delta_min",
+            "local_window_max_intensity",
+            "local_window_apex_delta_min",
+            "local_window_to_global_max_ratio",
+            "region_shadow_verdict",
+            "source_candidate_id",
+            "highlight_group",
+            "apex_aligned_shape_similarity",
+        ]
+        summary_rows = list(reader)
     assert summary_rows[0]["highlight_group"] == "detected_seed"
     assert summary_rows[1]["region_shadow_verdict"] == "split_supported"
-    assert "global_trace_apex_delta_min" in summary_rows[0]
-    assert "local_window_to_global_max_ratio" in summary_rows[0]
+
+    payload = json.loads(outputs.trace_data_json.read_text(encoding="utf-8"))
+    assert list(payload) == [
+        "family_id",
+        "mz",
+        "ppm",
+        "rt_min",
+        "rt_max",
+        "family_center_rt",
+        "trace_count",
+        "evidence_summary",
+        "traces",
+    ]
+    assert list(payload["traces"][0]) == [
+        "sample_stem",
+        "status",
+        "group",
+        "cell_area",
+        "cell_height",
+        "cell_apex_rt",
+        "cell_start_rt",
+        "cell_end_rt",
+        "trace_max_intensity",
+        "trace_apex_rt",
+        "global_trace_apex_delta_min",
+        "local_window_max_intensity",
+        "local_window_apex_delta_min",
+        "local_window_to_global_max_ratio",
+        "region_shadow_verdict",
+        "source_candidate_id",
+        "apex_aligned_shape_similarity",
+        "rt",
+        "intensity",
+    ]
+    assert payload["trace_count"] == 2
+    assert payload["traces"][0]["rt"] == [1.0, 1.1, 1.2]
 
 
 def test_stable_jitter_is_reproducible() -> None:

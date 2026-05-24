@@ -3,7 +3,13 @@ from dataclasses import replace
 import pytest
 
 from tests.alignment.identity_coherence.output_fixtures import output_record
+from xic_extractor.alignment.identity_coherence import (
+    control_evaluation as control_evaluation_module,
+)
 from xic_extractor.alignment.identity_coherence import controls as controls_module
+from xic_extractor.alignment.identity_coherence import (
+    decoy_controls as decoy_controls_module,
+)
 from xic_extractor.alignment.identity_coherence.controls import (
     IdentityControlManifestEntry,
     IdentityControlsConfig,
@@ -356,6 +362,37 @@ def test_rt_shift_decoy_uses_owner_boundary_plus_seconds_margin(monkeypatch):
     assert row["decoy_identity_constraint_changed"] == "best_seed_rt"
 
 
+def test_decoy_split_module_resolves_seed_gate_hook_at_call_time(monkeypatch):
+    captured = {}
+
+    def capture_seed_gate(request, candidate_evidence, owner_like, **kwargs):
+        captured["best_seed_rt"] = candidate_evidence.best_seed_rt
+        return real_evaluate_seed_gate(
+            request,
+            candidate_evidence,
+            owner_like,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(
+        decoy_controls_module,
+        "evaluate_seed_gate",
+        capture_seed_gate,
+    )
+
+    row = decoy_controls_module.evaluate_identity_decoy(
+        _decoy_entry(
+            DecoyGenerationMethod.RT_SHIFT,
+            required_failure_reason_when_missed="seed_rt_outside_owner_peak",
+        ),
+        _decoy_source(),
+        IdentityControlsConfig(decoy_rt_owner_boundary_margin_sec=6.0),
+    )
+
+    assert captured["best_seed_rt"] == pytest.approx(5.20)
+    assert row["control_status"] == "assessed"
+
+
 def test_mz_shift_decoy_fails_request_candidate_identity_match(monkeypatch):
     captured = {}
 
@@ -655,6 +692,88 @@ def test_evaluate_identity_controls_preserves_manifest_order():
     assert result.positive_control_threshold_met is True
     assert result.decoy_coherent_seed_count == 0
     assert result.decoy_coherent_seed_threshold_met is True
+
+
+def test_evaluate_identity_controls_uses_facade_seed_gate_hook(monkeypatch):
+    captured = {}
+
+    def capture_seed_gate(request, candidate_evidence, owner_like, **kwargs):
+        captured["called"] = True
+        captured["best_seed_rt"] = candidate_evidence.best_seed_rt
+        return real_evaluate_seed_gate(
+            request,
+            candidate_evidence,
+            owner_like,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(controls_module, "evaluate_seed_gate", capture_seed_gate)
+
+    result = evaluate_identity_controls(
+        (_decoy_entry(DecoyGenerationMethod.RT_SHIFT),),
+        records=(output_record(),),
+        decoy_sources=(_decoy_source(),),
+        config=IdentityControlsConfig(),
+    )
+
+    assert captured["called"] is True
+    assert captured["best_seed_rt"] == pytest.approx(5.2)
+    assert result.rows[0]["control_status"] == "assessed"
+
+
+def test_control_evaluation_split_module_resolves_evaluators_at_call_time(
+    monkeypatch,
+):
+    calls = []
+
+    def fake_positive(entry, records):
+        calls.append(("positive", entry.control_id, len(records)))
+        return {
+            "control_type": "positive_targeted_istd",
+            "control_pass": True,
+            "control_failure_reason": "",
+        }
+
+    def fake_decoy(entry, source, config, *, seed_gate_config):
+        calls.append(
+            (
+                "decoy",
+                entry.control_id,
+                source.source_record.seed_gate.resolved_request.request_id,
+            )
+        )
+        return {
+            "control_type": "identity_decoy",
+            "control_pass": True,
+            "control_failure_reason": "",
+        }
+
+    monkeypatch.setattr(
+        control_evaluation_module,
+        "evaluate_positive_control",
+        fake_positive,
+    )
+    monkeypatch.setattr(
+        control_evaluation_module,
+        "evaluate_identity_decoy",
+        fake_decoy,
+    )
+
+    result = control_evaluation_module.evaluate_identity_controls(
+        (
+            _positive_entry(control_id="CTRL-POS"),
+            _decoy_entry(DecoyGenerationMethod.MZ_SHIFT, control_id="CTRL-DECOY"),
+        ),
+        records=(output_record(),),
+        decoy_sources=(_decoy_source(),),
+        config=IdentityControlsConfig(),
+    )
+
+    assert calls == [
+        ("positive", "CTRL-POS", 1),
+        ("decoy", "CTRL-DECOY", "REQ-1"),
+    ]
+    assert len(result.rows) == 2
 
 
 def test_evaluate_identity_controls_reports_missing_decoy_source():

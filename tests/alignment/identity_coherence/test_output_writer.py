@@ -16,6 +16,9 @@ from xic_extractor.alignment.identity_coherence.output import (
     write_identity_coherence_outputs,
     write_identity_coherence_requests_tsv,
 )
+from xic_extractor.alignment.identity_coherence.output_summary_model import (
+    build_identity_coherence_summary_model,
+)
 from xic_extractor.alignment.identity_coherence.schema import (
     IDENTITY_COHERENCE_CELL_EVIDENCE_COLUMNS,
     IDENTITY_COHERENCE_CONTROL_COLUMNS,
@@ -259,6 +262,54 @@ def test_summary_renderer_reports_decoy_metric_not_assessed_without_decoys(
     )
 
     assert "| decoy_correctly_rejected_count | not_assessed |" in markdown
+
+
+def test_summary_model_computes_counts_controls_and_go_no_go_rows():
+    model = build_identity_coherence_summary_model(
+        (_record(),),
+        context=IdentityCoherenceOutputContext(
+            command="identity-coherence",
+            mode="inline_pre_backfill_diagnostic",
+            input_source="pre_backfill",
+            raw_xic_request_count=5,
+            xic_point_count=123,
+            projected_85raw_identity_request_count=10,
+            max_projected_85raw_identity_xic_requests=20,
+        ),
+        control_rows=(
+            {
+                "control_type": "positive_targeted_istd",
+                "control_status": "assessed",
+                "control_pass": "true",
+                "positive_control_mapping_status": "mapped",
+                "decoy_generation_method": "",
+                "control_failure_reason": "",
+            },
+            {
+                "control_type": "identity_decoy",
+                "control_status": "assessed",
+                "control_pass": "true",
+                "positive_control_mapping_status": "not_applicable",
+                "decoy_generation_method": "mz_shift",
+                "control_failure_reason": "",
+            },
+        ),
+    )
+
+    assert model.input_row_count == 1
+    assert model.tier1_count == 2
+    assert model.assessed_non_seed_cell_count == 1
+    assert model.raw_xic_request_count == 5
+    assert model.xic_point_count == 123
+    assert model.positive_control_pass_fraction == "1"
+    assert model.decoy_correctly_rejected_count == 1
+    assert model.control_type_counts["positive_targeted_istd"] == 1
+    assert model.control_type_counts["identity_decoy"] == 1
+    assert model.decoy_generation_method_counts["mz_shift"] == 1
+    assert any(
+        "| projected_85raw_identity_xic_requests | Proceed |" in row
+        for row in model.engineering_go_no_go_rows
+    )
 
 
 def test_write_identity_coherence_outputs_writes_all_frozen_paths(tmp_path):

@@ -63,30 +63,155 @@ CONTRACT_PATH = (
     / "2026-05-22-untargeted-identity-coherence-implementation-contract.md"
 )
 IDENTITY_COHERENCE_PACKAGE = "xic_extractor.alignment.identity_coherence"
-FORBIDDEN_IDENTITY_COHERENCE_SURFACES = ("controls", "output")
+INLINE_ADAPTER_MODULES = (
+    "identity_coherence_adapter",
+    "identity_coherence_source_mapping",
+    "identity_coherence_trace_retrieval",
+    "identity_coherence_record_builder",
+)
+FORBIDDEN_IDENTITY_COHERENCE_SURFACES = (
+    "controls",
+    "control_evaluation",
+    "control_manifest",
+    "control_models",
+    "control_rows",
+    "decoy_controls",
+    "output",
+    "positive_controls",
+)
+OUTPUT_MODULE_FORBIDDEN_RELATIVE_SURFACES = {
+    "output_formatting.py": (),
+    "output_models.py": (
+        "controls",
+        "output",
+        "output_projection",
+        "output_summary",
+        "output_summary_model",
+        "output_validation",
+        "output_writers",
+    ),
+    "output_projection.py": (
+        "controls",
+        "output",
+        "output_summary",
+        "output_summary_model",
+        "output_writers",
+    ),
+    "output_validation.py": (
+        "controls",
+        "output",
+        "output_projection",
+        "output_summary",
+        "output_summary_model",
+        "output_writers",
+    ),
+    "output_summary_model.py": (
+        "controls",
+        "output",
+        "output_projection",
+        "output_summary",
+        "output_writers",
+    ),
+    "output_summary.py": (
+        "controls",
+        "output",
+        "output_projection",
+        "output_validation",
+        "output_writers",
+    ),
+    "output_writers.py": (
+        "controls",
+        "output",
+    ),
+}
+FORBIDDEN_OUTPUT_ABSOLUTE_IMPORT_PREFIXES = (
+    "scripts",
+    "xic_extractor.raw_reader",
+    "xic_extractor.output",
+    "xic_extractor.gui",
+    "xic_extractor.alignment.identity_coherence_adapter",
+    "xic_extractor.alignment.identity_coherence_source_mapping",
+    "xic_extractor.alignment.identity_coherence_trace_retrieval",
+    "xic_extractor.alignment.identity_coherence_record_builder",
+    "xic_extractor.alignment.process_backend",
+    "xic_extractor.alignment.owner_backfill",
+    "xic_extractor.alignment.backfill",
+)
+FORBIDDEN_CONTROL_RELATIVE_SURFACES = (
+    "controls",
+    "output",
+    "output_formatting",
+    "output_go_no_go",
+    "output_models",
+    "output_projection",
+    "output_summary",
+    "output_summary_model",
+    "output_validation",
+    "output_writers",
+)
+CONTROL_MODULE_FORBIDDEN_RELATIVE_SURFACES = {
+    "controls.py": FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+    "control_models.py": FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+    "control_manifest.py": (
+        *FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+        "control_evaluation",
+        "decoy_controls",
+        "positive_controls",
+    ),
+    "positive_controls.py": (
+        *FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+        "control_evaluation",
+        "decoy_controls",
+    ),
+    "decoy_controls.py": (
+        *FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+        "control_evaluation",
+        "positive_controls",
+    ),
+    "control_evaluation.py": FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+    "control_rows.py": (
+        *FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+        "control_evaluation",
+        "control_manifest",
+        "decoy_controls",
+        "positive_controls",
+    ),
+}
+
+
+def _is_forbidden_identity_coherence_surface(surface_name: str) -> bool:
+    return (
+        surface_name in FORBIDDEN_IDENTITY_COHERENCE_SURFACES
+        or surface_name.startswith("output_")
+    )
 
 
 def _is_forbidden_identity_coherence_module(module_name: str) -> bool:
-    for surface in FORBIDDEN_IDENTITY_COHERENCE_SURFACES:
-        forbidden_module = f"{IDENTITY_COHERENCE_PACKAGE}.{surface}"
-        if module_name == forbidden_module or module_name.startswith(
-            f"{forbidden_module}."
-        ):
-            return True
-    return False
+    if module_name == IDENTITY_COHERENCE_PACKAGE:
+        return True
+    package_prefix = f"{IDENTITY_COHERENCE_PACKAGE}."
+    if not module_name.startswith(package_prefix):
+        return False
+    relative_name = module_name.removeprefix(package_prefix)
+    surface_name = relative_name.split(".", maxsplit=1)[0]
+    return _is_forbidden_identity_coherence_surface(surface_name)
 
 
 def _is_relative_forbidden_surface(module_name: str) -> bool:
     surface = module_name.split(".", maxsplit=1)[0]
-    return surface in FORBIDDEN_IDENTITY_COHERENCE_SURFACES
+    return _is_forbidden_identity_coherence_surface(surface)
 
 
 def test_identity_coherence_domain_does_not_import_inline_adapter() -> None:
     root = Path(__file__).resolve().parents[3]
     package_dir = root / "xic_extractor" / "alignment" / "identity_coherence"
-    forbidden = (
-        "identity_coherence_adapter",
-        "from xic_extractor.alignment.identity_coherence_adapter",
+    forbidden = tuple(
+        token
+        for module_name in INLINE_ADAPTER_MODULES
+        for token in (
+            module_name,
+            f"from xic_extractor.alignment.{module_name}",
+        )
     )
     for path in package_dir.glob("*.py"):
         text = path.read_text(encoding="utf-8")
@@ -129,7 +254,7 @@ def _forbidden_identity_coherence_imports(source: str) -> list[str]:
                 violations.append(f"line {node.lineno}: from .{module_name} import")
             elif not module_name:
                 for alias in node.names:
-                    if alias.name in FORBIDDEN_IDENTITY_COHERENCE_SURFACES:
+                    if _is_forbidden_identity_coherence_surface(alias.name):
                         violations.append(
                             f"line {node.lineno}: from . import {alias.name}"
                         )
@@ -139,12 +264,79 @@ def _forbidden_identity_coherence_imports(source: str) -> list[str]:
             violations.append(f"line {node.lineno}: from {module_name} import")
         elif module_name == IDENTITY_COHERENCE_PACKAGE:
             for alias in node.names:
-                if alias.name in FORBIDDEN_IDENTITY_COHERENCE_SURFACES:
+                violations.append(
+                    f"line {node.lineno}: from {module_name} import {alias.name}"
+                )
+        elif module_name == "xic_extractor.alignment":
+            for alias in node.names:
+                if alias.name == "identity_coherence":
                     violations.append(
                         f"line {node.lineno}: from {module_name} import {alias.name}"
                     )
 
     return violations
+
+
+def _identity_coherence_import_surfaces(source: str) -> list[tuple[int, str]]:
+    tree = ast.parse(source)
+    imports: list[tuple[int, str]] = []
+    package_prefix = f"{IDENTITY_COHERENCE_PACKAGE}."
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == IDENTITY_COHERENCE_PACKAGE:
+                    imports.append((node.lineno, "__package__"))
+                elif alias.name.startswith(package_prefix):
+                    relative_name = alias.name.removeprefix(package_prefix)
+                    imports.append((node.lineno, relative_name.split(".", 1)[0]))
+            continue
+
+        if not isinstance(node, ast.ImportFrom):
+            continue
+
+        module_name = node.module or ""
+        if node.level:
+            if module_name:
+                imports.append((node.lineno, module_name.split(".", 1)[0]))
+            elif node.level == 1:
+                imports.extend(
+                    (node.lineno, alias.name.split(".", 1)[0])
+                    for alias in node.names
+                )
+            continue
+
+        if module_name.startswith(package_prefix):
+            relative_name = module_name.removeprefix(package_prefix)
+            imports.append((node.lineno, relative_name.split(".", 1)[0]))
+        elif module_name == IDENTITY_COHERENCE_PACKAGE:
+            imports.extend(
+                (node.lineno, alias.name.split(".", 1)[0])
+                for alias in node.names
+            )
+        elif module_name == "xic_extractor.alignment":
+            imports.extend(
+                (node.lineno, "__package__")
+                for alias in node.names
+                if alias.name == "identity_coherence"
+            )
+
+    return imports
+
+
+def _absolute_import_modules(source: str) -> list[tuple[int, str]]:
+    tree = ast.parse(source)
+    imports: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.extend((node.lineno, alias.name) for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            imports.append((node.lineno, node.module))
+            imports.extend(
+                (node.lineno, f"{node.module}.{alias.name}")
+                for alias in node.names
+            )
+    return imports
 
 
 def _schema_block(name: str) -> tuple[str, ...]:
@@ -284,24 +476,96 @@ def test_identity_coherence_facade_exports_stable_contract():
 
 def test_identity_coherence_facade_exports_output_writer_surface():
     import xic_extractor.alignment.identity_coherence as identity_coherence
+    from xic_extractor.alignment.identity_coherence import output as output_module
 
-    assert identity_coherence.IdentityCoherenceOutputContext is not None
-    assert identity_coherence.IdentityCoherenceOutputPaths is not None
-    assert identity_coherence.IdentityCoherenceOutputRecord is not None
-    assert identity_coherence.project_request_row is not None
-    assert identity_coherence.project_decision_row is not None
-    assert identity_coherence.project_cell_evidence_row is not None
-    assert identity_coherence.project_control_row is not None
-    assert identity_coherence.render_identity_coherence_summary is not None
-    assert identity_coherence.write_identity_coherence_outputs is not None
-    assert identity_coherence.write_identity_coherence_requests_tsv is not None
-    assert identity_coherence.write_identity_coherence_decisions_tsv is not None
-    assert identity_coherence.write_identity_coherence_cell_evidence_tsv is not None
-    assert identity_coherence.write_identity_coherence_controls_tsv is not None
+    exported_names = (
+        "IdentityCoherenceOutputContext",
+        "IdentityCoherenceOutputPaths",
+        "IdentityCoherenceOutputRecord",
+        "project_request_row",
+        "project_decision_row",
+        "project_cell_evidence_row",
+        "project_control_row",
+        "render_identity_coherence_summary",
+        "write_identity_coherence_outputs",
+        "write_identity_coherence_requests_tsv",
+        "write_identity_coherence_decisions_tsv",
+        "write_identity_coherence_cell_evidence_tsv",
+        "write_identity_coherence_controls_tsv",
+    )
+
+    for name in exported_names:
+        assert getattr(identity_coherence, name) is getattr(output_module, name)
+        assert name in identity_coherence.__all__
+        assert name in output_module.__all__
+
+
+def test_identity_coherence_output_split_modules_import_directly():
+    from xic_extractor.alignment.identity_coherence import (
+        output_formatting,
+        output_models,
+        output_projection,
+        output_summary,
+        output_summary_model,
+        output_validation,
+        output_writers,
+    )
+
+    assert output_formatting.format_tsv_value is not None
+    assert output_models.IdentityCoherenceOutputContext is not None
+    assert output_models.IdentityCoherenceOutputPaths is not None
+    assert output_models.IdentityCoherenceOutputRecord is not None
+    assert output_projection.project_request_row is not None
+    assert output_projection.project_decision_row is not None
+    assert output_projection.project_cell_evidence_row is not None
+    assert output_projection.project_control_row is not None
+    assert output_validation.validate_output_record is not None
+    assert output_summary_model.build_identity_coherence_summary_model is not None
+    assert output_summary_model.engineering_go_no_go_rows is not None
+    assert output_summary.render_identity_coherence_summary is not None
+    assert output_writers.write_identity_coherence_outputs is not None
+
+
+def test_identity_coherence_control_split_modules_import_directly():
+    from xic_extractor.alignment.identity_coherence import (
+        control_evaluation,
+        control_manifest,
+        control_models,
+        control_rows,
+        decoy_controls,
+        positive_controls,
+    )
+
+    assert control_models.IdentityControlManifestEntry is not None
+    assert control_models.IdentityControlsConfig is not None
+    assert control_models.IdentityDecoySource is not None
+    assert control_manifest.read_identity_controls_manifest is not None
+    assert control_manifest.read_identity_controls_manifest_tsv is not None
+    assert positive_controls.evaluate_positive_control is not None
+    assert decoy_controls.evaluate_identity_decoy is not None
+    assert control_evaluation.evaluate_identity_controls is not None
+    assert control_rows.control_row is not None
+
+
+def test_identity_coherence_output_record_runtime_type_hints_resolve():
+    from typing import get_type_hints
+
+    from xic_extractor.alignment.identity_coherence import (
+        IdentityCoherenceOutputRecord,
+    )
+    from xic_extractor.alignment.identity_coherence.row_evaluator import (
+        IdentityCoherenceRowResult,
+    )
+
+    hints = get_type_hints(IdentityCoherenceOutputRecord)
+
+    assert hints["seed_gate"] is SeedGateResult
+    assert hints["row_result"] is IdentityCoherenceRowResult
 
 
 def test_identity_coherence_facade_exports_controls_surface():
     import xic_extractor.alignment.identity_coherence as identity_coherence
+    from xic_extractor.alignment.identity_coherence import controls as controls_module
 
     exported_names = (
         "ControlType",
@@ -312,6 +576,7 @@ def test_identity_coherence_facade_exports_controls_surface():
         "IdentityControlManifestEntry",
         "IdentityControlsConfig",
         "IdentityDecoySource",
+        "REQUIRED_MANIFEST_FIELDS",
         "read_identity_controls_manifest",
         "read_identity_controls_manifest_tsv",
         "evaluate_positive_control",
@@ -320,8 +585,11 @@ def test_identity_coherence_facade_exports_controls_surface():
     )
 
     for name in exported_names:
-        assert getattr(identity_coherence, name) is not None
+        assert getattr(identity_coherence, name) is getattr(controls_module, name)
         assert name in identity_coherence.__all__
+        assert name in controls_module.__all__
+
+    assert identity_coherence.REQUIRED_MANIFEST_FIELDS is not None
 
     assert identity_coherence.ControlType is ControlType
     assert identity_coherence.ControlStatus is ControlStatus
@@ -398,6 +666,84 @@ def test_domain_modules_do_not_import_controls_or_output_surfaces():
     assert violations == []
 
 
+def test_output_modules_follow_declared_dependency_direction():
+    package_root = (
+        Path(__file__).resolve().parents[3]
+        / "xic_extractor"
+        / "alignment"
+        / "identity_coherence"
+    )
+    violations = []
+
+    for module_name, forbidden_surfaces in (
+        OUTPUT_MODULE_FORBIDDEN_RELATIVE_SURFACES.items()
+    ):
+        source = (package_root / module_name).read_text(encoding="utf-8")
+        relative_imports = _identity_coherence_import_surfaces(source)
+        if module_name == "output_formatting.py" and relative_imports:
+            for line_number, surface in relative_imports:
+                violations.append(
+                    f"{module_name}: line {line_number}: local import {surface}"
+                )
+        for line_number, surface in relative_imports:
+            if surface in forbidden_surfaces:
+                violations.append(
+                    f"{module_name}: line {line_number}: forbidden import {surface}"
+                )
+        for line_number, module in _absolute_import_modules(source):
+            if _is_forbidden_output_absolute_import(module):
+                violations.append(
+                    f"{module_name}: line {line_number}: forbidden import {module}"
+                )
+
+    assert violations == []
+
+
+def test_control_modules_do_not_import_output_or_adapter_surfaces():
+    package_root = (
+        Path(__file__).resolve().parents[3]
+        / "xic_extractor"
+        / "alignment"
+        / "identity_coherence"
+    )
+    violations = []
+
+    for module_name, forbidden_surfaces in (
+        CONTROL_MODULE_FORBIDDEN_RELATIVE_SURFACES.items()
+    ):
+        source = (package_root / module_name).read_text(encoding="utf-8")
+        for line_number, surface in _identity_coherence_import_surfaces(source):
+            if surface in forbidden_surfaces:
+                violations.append(
+                    f"{module_name}: line {line_number}: forbidden import {surface}"
+                )
+        for line_number, module in _absolute_import_modules(source):
+            if _is_forbidden_output_absolute_import(module):
+                violations.append(
+                    f"{module_name}: line {line_number}: forbidden import {module}"
+                )
+
+    assert violations == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        "import xic_extractor.alignment.identity_coherence as ic\n",
+        "from xic_extractor.alignment import identity_coherence\n",
+    ),
+)
+def test_split_module_import_surface_scan_detects_package_facade(source):
+    assert _identity_coherence_import_surfaces(source) == [(1, "__package__")]
+
+
+def _is_forbidden_output_absolute_import(module_name: str) -> bool:
+    return any(
+        module_name == prefix or module_name.startswith(f"{prefix}.")
+        for prefix in FORBIDDEN_OUTPUT_ABSOLUTE_IMPORT_PREFIXES
+    )
+
+
 def test_forbidden_import_scan_ignores_comments_docstrings_and_plain_strings():
     source = '''
 """Mention xic_extractor.alignment.identity_coherence.output in docs."""
@@ -412,19 +758,77 @@ TEXT = "identity_coherence.output"
     "source",
     (
         "import xic_extractor.alignment.identity_coherence.controls\n",
+        "import xic_extractor.alignment.identity_coherence as ic\n",
+        "from xic_extractor.alignment import identity_coherence\n",
         "import xic_extractor.alignment.identity_coherence.output\n",
+        "import xic_extractor.alignment.identity_coherence.control_models\n",
+        "import xic_extractor.alignment.identity_coherence.control_manifest\n",
+        "import xic_extractor.alignment.identity_coherence.control_rows\n",
+        "import xic_extractor.alignment.identity_coherence.control_evaluation\n",
+        "import xic_extractor.alignment.identity_coherence.positive_controls\n",
+        "import xic_extractor.alignment.identity_coherence.decoy_controls\n",
         "from xic_extractor.alignment.identity_coherence.controls import X\n",
         "from xic_extractor.alignment.identity_coherence.output import X\n",
+        "from xic_extractor.alignment.identity_coherence.control_models import X\n",
+        "from xic_extractor.alignment.identity_coherence.control_manifest import X\n",
+        "from xic_extractor.alignment.identity_coherence.control_rows import X\n",
+        "from xic_extractor.alignment.identity_coherence.control_evaluation import X\n",
+        "from xic_extractor.alignment.identity_coherence.positive_controls import X\n",
+        "from xic_extractor.alignment.identity_coherence.decoy_controls import X\n",
+        (
+            "from xic_extractor.alignment.identity_coherence "
+            "import evaluate_identity_controls\n"
+        ),
+        (
+            "from xic_extractor.alignment.identity_coherence "
+            "import write_identity_coherence_outputs\n"
+        ),
         "from xic_extractor.alignment.identity_coherence import controls\n",
         "from xic_extractor.alignment.identity_coherence import output\n",
         "from . import controls\n",
+        "from . import control_models\n",
+        "from . import control_manifest\n",
+        "from . import control_rows\n",
+        "from . import control_evaluation\n",
+        "from . import positive_controls\n",
+        "from . import decoy_controls\n",
         "from . import output\n",
+        "from . import output_models\n",
+        "from .control_models import X\n",
+        "from .control_manifest import X\n",
+        "from .control_rows import X\n",
+        "from .control_evaluation import X\n",
+        "from .positive_controls import X\n",
+        "from .decoy_controls import X\n",
+        "from .output_models import X\n",
+        "import xic_extractor.alignment.identity_coherence.output_models\n",
+        "from xic_extractor.alignment.identity_coherence.output_models import X\n",
         "from .controls import X\n",
         "from .output import X\n",
     ),
 )
 def test_forbidden_import_scan_detects_controls_and_output_surfaces(source):
     assert _forbidden_identity_coherence_imports(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        "from xic_extractor import raw_reader\n",
+        "from xic_extractor.alignment import owner_backfill\n",
+        "from xic_extractor.alignment import backfill\n",
+        "from xic_extractor.alignment import process_backend\n",
+        "from xic_extractor.alignment import identity_coherence_adapter\n",
+        "from xic_extractor.alignment import identity_coherence_source_mapping\n",
+        "from xic_extractor.alignment import identity_coherence_trace_retrieval\n",
+        "from xic_extractor.alignment import identity_coherence_record_builder\n",
+    ),
+)
+def test_absolute_forbidden_import_scan_expands_parent_package_aliases(source):
+    assert any(
+        _is_forbidden_output_absolute_import(module)
+        for _, module in _absolute_import_modules(source)
+    )
 
 
 @dataclass

@@ -2,11 +2,60 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from openpyxl import Workbook
 
 from tools.diagnostics import targeted_nl_dropout_root_cause_audit as audit
+
+
+def test_path_style_cli_help_preserves_public_script_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = (
+        repo_root / "tools" / "diagnostics" / "targeted_nl_dropout_root_cause_audit.py"
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--targeted-reliability-rows-tsv" in result.stdout
+    assert "--peak-candidates-tsv" in result.stdout
+
+
+def test_facade_preserves_existing_helper_import_surface() -> None:
+    expected_names = [
+        "_CANDIDATE_COLUMNS",
+        "_OPTIONAL_CANDIDATE_COLUMNS",
+        "_RELIABILITY_COLUMNS",
+        "_ROW_COLUMNS",
+        "_SUMMARY_COLUMNS",
+        "_classify_root_cause",
+        "_parse_args",
+        "_read_candidate_rows",
+        "_read_reliability_rows",
+        "_read_target_mz",
+        "_root_cause_rows",
+        "_summary",
+        "_write_outputs",
+        "CandidateRow",
+        "ReliabilityRow",
+        "RootCauseRow",
+        "TargetedNLDropoutRootCauseResult",
+        "run_targeted_nl_dropout_root_cause_audit",
+    ]
+
+    for name in expected_names:
+        assert hasattr(audit, name), name
 
 
 def test_root_cause_audit_classifies_review_positive_buckets(
@@ -82,23 +131,18 @@ def test_root_cause_audit_classifies_review_positive_buckets(
         "hard_candidate_conflict"
     )
     assert by_key[("S3", "no_trigger")].root_cause_bucket == "no_ms2_trigger"
-    assert by_key[("S4", "no_product")].root_cause_bucket == (
-        "no_diagnostic_product"
-    )
+    assert by_key[("S4", "no_product")].root_cause_bucket == ("no_diagnostic_product")
     assert by_key[("S4", "no_product")].diagnostic_product_absence_reason == (
         "product_below_intensity_floor"
     )
-    assert "product_below_intensity_floor" in by_key[
-        ("S4", "no_product")
-    ].root_cause_reason
+    assert (
+        "product_below_intensity_floor"
+        in by_key[("S4", "no_product")].root_cause_reason
+    )
     assert by_key[("S5", "off_apex")].root_cause_bucket == "off_apex_ms2"
     assert by_key[("S6", "ppm_fail")].root_cause_bucket == "ppm_gate_fail"
-    assert by_key[("S7", "weak_product")].root_cause_bucket == (
-        "weak_product_ratio"
-    )
-    assert by_key[("S8", "coherent")].root_cause_bucket == (
-        "coherent_ms1_nl_dropout"
-    )
+    assert by_key[("S7", "weak_product")].root_cause_bucket == ("weak_product_ratio")
+    assert by_key[("S8", "coherent")].root_cause_bucket == ("coherent_ms1_nl_dropout")
     assert result.summary.review_positive_count == 8
     assert result.summary.bucket_counts == (
         "coherent_ms1_nl_dropout:1;"
@@ -112,6 +156,50 @@ def test_root_cause_audit_classifies_review_positive_buckets(
     )
 
     rows = _read_tsv(outputs.rows_tsv)
+    with outputs.summary_tsv.open(encoding="utf-8", newline="") as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "rows_checked",
+            "review_positive_count",
+            "included_count",
+            "missing_candidate_count",
+            "bucket_counts",
+            "target_counts",
+            "product_absence_reason_counts",
+        ]
+    with outputs.rows_tsv.open(encoding="utf-8", newline="") as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "sample_name",
+            "target_label",
+            "target_mz",
+            "role",
+            "reliability_state",
+            "targeted_risk_reasons",
+            "resolver_mode",
+            "selected_candidate_id",
+            "selected_rt_apex_min",
+            "selected_raw_score",
+            "selected_confidence",
+            "proposal_sources",
+            "support_labels",
+            "concern_labels",
+            "quality_flags",
+            "ms2_present",
+            "nl_match",
+            "nl_status",
+            "best_loss_ppm",
+            "best_ms2_scan_rt_min",
+            "apex_ms2_delta_min",
+            "best_product_base_ratio",
+            "trigger_scan_count",
+            "strict_nl_scan_count",
+            "ms2_alignment_source",
+            "diagnostic_product_absence_reason",
+            "nearest_product_loss_ppm",
+            "nearest_product_base_ratio",
+            "nearest_product_mz",
+            "root_cause_bucket",
+            "root_cause_reason",
+        ]
     assert {row["target_label"] for row in rows} == {
         "missing_selected",
         "hard_conflict",

@@ -4,6 +4,7 @@ from .candidate_matcher import (
 )
 from .cell_evidence import evaluate_cell_evidence, select_cell_evidence_for_sample
 from .controls import (
+    REQUIRED_MANIFEST_FIELDS,
     IdentityControlEvaluationResult,
     IdentityControlManifestEntry,
     IdentityControlsConfig,
@@ -154,6 +155,7 @@ __all__ = [
     "NonRtIdentityResult",
     "PositiveControlMappingStatus",
     "PrototypeWidthResult",
+    "REQUIRED_MANIFEST_FIELDS",
     "RequestCandidateIdentityStatus",
     "RequestIdentityCompletenessStatus",
     "RtCenterDecision",
