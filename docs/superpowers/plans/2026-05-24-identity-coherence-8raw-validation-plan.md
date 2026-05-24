@@ -132,6 +132,25 @@ The script exits:
 - `1` when any parity check fails.
 - `2` for invalid CLI inputs, failed child commands, or missing expected artifacts.
 
+## Determinism Risk
+
+This runner enforces row-order equality but does not itself guarantee it. Row
+order is set by the upstream identity coherence adapter and by the writers in
+`xic_extractor/alignment/identity_coherence/output.py`, which preserve the
+incoming iterable order.
+
+If parity fails, do not patch this validator to sort before comparing. Sorting
+inside the validator would hide the bug this runner is meant to catch. Fix the
+source ordering at the identity coherence adapter collection boundary or in the
+writer contract, then rerun this validation.
+
+## Import Block Management
+
+The test import block changes as new symbols become available. Replace the
+whole import block shown by each task; do not append imports in the middle of
+the file. Task 1 intentionally imports only Task 1 symbols so every intermediate
+commit can pass `ruff check`.
+
 ## Task 0: Preflight And Base Commit
 
 This task does not edit files.
@@ -259,6 +278,24 @@ def test_compare_bundles_fails_when_row_order_changes(tmp_path: Path) -> None:
     assert result.failed_count == 1
     assert {row.check_name: row.status for row in result.rows}[
         "decisions_tsv_exact"
+    ] == "fail"
+
+
+def test_compare_bundles_fails_when_summary_missing(tmp_path: Path) -> None:
+    serial = _write_bundle(
+        tmp_path / "serial",
+        decision_rows="ICD-1\twould_primary_provisional_identity_family_support\n",
+    )
+    process = _write_bundle(
+        tmp_path / "process",
+        decision_rows="ICD-1\twould_primary_provisional_identity_family_support\n",
+    )
+    serial.summary_md.unlink()
+
+    result = compare_identity_coherence_bundles(serial, process)
+
+    assert {row.check_name: row.status for row in result.rows}[
+        "summary_md_presence"
     ] == "fail"
 ```
 
@@ -488,7 +525,9 @@ def test_build_serial_command_omits_validation_fast_profile(tmp_path: Path) -> N
 
     joined = " ".join(str(part) for part in command)
     assert "--emit-identity-coherence-diagnostic" in joined
-    assert "--identity-coherence-output-dir" in joined
+    assert "--identity-coherence-output-dir" not in command
+    assert "--emit-alignment-cells" not in command
+    assert "--timing-output" not in command
     assert "--performance-profile" not in command
     assert "validation-fast" not in command
     assert command[command.index("--raw-workers") + 1] == "1"
@@ -507,6 +546,9 @@ def test_build_process_command_uses_validation_fast_profile(tmp_path: Path) -> N
 
     assert "--performance-profile" in command
     assert "validation-fast" in command
+    assert "--identity-coherence-output-dir" not in command
+    assert "--emit-alignment-cells" not in command
+    assert "--timing-output" not in command
     assert "--identity-coherence-controls-manifest" in command
     assert str(tmp_path / "controls.tsv") in command
 ```
@@ -540,7 +582,6 @@ def build_alignment_command(
 ) -> list[str]:
     if mode not in {"serial", "process"}:
         raise ValueError("mode must be 'serial' or 'process'")
-    identity_output_dir = output_dir / "identity_coherence"
     command = [
         sys.executable,
         str(Path(__file__).resolve().parent / "run_alignment.py"),
@@ -554,12 +595,7 @@ def build_alignment_command(
         str(output_dir),
         "--output-level",
         "machine",
-        "--emit-alignment-cells",
         "--emit-identity-coherence-diagnostic",
-        "--identity-coherence-output-dir",
-        str(identity_output_dir),
-        "--timing-output",
-        str(output_dir / "alignment_timing.json"),
     ]
     if mode == "serial":
         command.extend(["--raw-workers", "1", "--raw-xic-batch-size", "1"])
@@ -1177,7 +1213,10 @@ uv run python scripts\validate_identity_coherence_8raw.py `
   --controls-manifest docs\superpowers\fixtures\identity_coherence_controls_manifest_8raw.tsv
 ```
 
-If `docs\superpowers\fixtures\identity_coherence_controls_manifest_8raw.tsv` does not exist, skip this optional command. Do not create a manifest in this implementation slice.
+If `docs\superpowers\fixtures\identity_coherence_controls_manifest_8raw.tsv`
+does not exist, skip this optional command. Do not create a manifest in this
+implementation slice. Controls manifest design and fixture creation belong to
+the next validation plan, not this parity runner slice.
 
 ### Step 6: Commit
 
