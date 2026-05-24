@@ -42,6 +42,12 @@ Read in this order:
    - contaminant handling consequence
    - final-matrix filtering, area correction, normalization, and statistics
    - future downstream audit spec boundary
+5. [Post-V0.4 85RAW roadmap](2026-05-24-identity-coherence-post-v04-85raw-roadmap-spec.md)
+   - accepted 8RAW evidence handoff
+   - 85RAW request-budget and count+fraction policy preflight
+   - 85RAW diagnostic execution sequence
+   - 85RAW controls/decoy acceptance
+   - production adoption and downstream split boundary
 
 The review story is a visual companion:
 
@@ -145,8 +151,15 @@ Use the split specs to review specific questions:
 - Specificity/sensitivity evidence: review the controls spec.
 - Engineering feasibility and schemas: review the implementation contract.
 - Scope creep and filtering boundary: review the downstream audit boundary.
+- Post-8RAW scale-up order, 85RAW budget, and count+fraction policy: review the
+  post-V0.4 85RAW roadmap.
 
 Implementation should not begin until the core spec, controls spec, and
 implementation contract have been reviewed together. The downstream audit
 boundary is allowed to remain intentionally thin, but it must not be violated by
 identity implementation.
+
+85RAW implementation should not begin until the post-V0.4 85RAW roadmap has
+also been reviewed. In particular, 85RAW work requires a reviewed budget,
+count+fraction policy shape, and controls bootstrap sequence before full-scale
+diagnostic execution is interpreted.

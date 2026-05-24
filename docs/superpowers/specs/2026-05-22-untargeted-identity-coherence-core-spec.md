@@ -532,12 +532,16 @@ Required reporting:
 total_coherent_sample_count
 non_seed_coherent_sample_count
 tier12_non_seed_identity_sample_count
-assessed_sample_count
-coherent_sample_fraction
+coherent_fraction
 weak_basis_reason =
   none | tier3_only | single_tier12_plus_tier3 |
   seed_shape_fallback_only | rt_only
 ```
+
+`coherent_fraction` is the frozen decision-level fraction field for V0.4. If a
+future 85RAW policy needs additional denominators, such as assessed sample count
+or tier12 identity fraction, those fields must be added to a frozen schema or
+computed from frozen cell evidence before they can become promotion thresholds.
 
 Count invariant:
 
