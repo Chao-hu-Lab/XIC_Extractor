@@ -39,7 +39,7 @@ behavior change needs its own spec.
 
 Structural scan from the cleanup worktree before the first split commits:
 
-- CodeGraph CLI synchronized locally: 598 files, 10,613 nodes, 26,679 edges.
+- CodeGraph CLI synchronized locally: 603 files, 10,643 nodes, 26,719 edges.
 - `xic_extractor/`, `tools/`, and `scripts/` now contain several files over
   the repo-local 500/800-line red-flag thresholds.
 - The largest post-PR60 hotspots are now split across three areas:
@@ -57,8 +57,8 @@ Largest production / tool modules:
 | 702 | `scripts/validate_migration.py` | Migration validation script; defer unless it blocks current cleanup validation. |
 | 683 | `tools/diagnostics/low_ms1_coverage_review_classifier.py` | Diagnostic classifier; split only behind stable review TSV/JSON outputs. |
 | 668 | `xic_extractor/alignment/clustering.py` | Domain-heavy clustering module; still deferred unless characterization tests pin clustering decisions. |
-| 609 | `tools/diagnostics/targeted_gt_alignment_audit.py` | Diagnostic audit surface; split only behind stable TSV/JSON/Markdown outputs. |
 | 606 | `xic_extractor/discovery/ms1_backfill.py` | Domain-heavy discovery/backfill module; defer until behavior is pinned by focused tests. |
+| 592 | `xic_extractor/instrument_qc/calibration_rt_model.py` | Domain-heavy calibration model; defer unless tests pin calibration outputs. |
 
 Identity-coherence internal line pressure:
 
@@ -235,6 +235,12 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 120 | `tools/diagnostics/cross_report_evidence_consistency_io.py` | Targeted reliability rows, peak candidates, and workbook target-m/z loading. |
 | 233 | `tools/diagnostics/cross_report_evidence_consistency_analysis.py` | Targeted reliability/candidate consistency classification and summaries. |
 | 83 | `tools/diagnostics/cross_report_evidence_consistency_writers.py` | Cross-report TSV/JSON/Markdown writers and value formatting. |
+| 165 | `tools/diagnostics/targeted_gt_alignment_audit.py` | Targeted GT alignment audit CLI/orchestration compatibility facade. |
+| 51 | `tools/diagnostics/targeted_gt_alignment_audit_models.py` | Targeted GT audit constants and dataclasses. |
+| 73 | `tools/diagnostics/targeted_gt_alignment_audit_utils.py` | Shared numeric, RT-delta, ID-joining, and Excel-formula helpers. |
+| 148 | `tools/diagnostics/targeted_gt_alignment_audit_io.py` | Target workbook and alignment TSV loading/enrichment helpers. |
+| 150 | `tools/diagnostics/targeted_gt_alignment_audit_analysis.py` | Per-sample PASS/SPLIT/DRIFT/DUPLICATE/MISS classification helpers. |
+| 175 | `tools/diagnostics/targeted_gt_alignment_audit_writers.py` | GT CSV, comparison CSV, Markdown, and SVG writers. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -660,6 +666,10 @@ Targets already partly improved:
   compatibility facade. Dataclasses/columns, TSV/workbook loading, consistency
   classification, summaries, and TSV/JSON/Markdown writers live in focused
   modules.
+- `targeted_gt_alignment_audit.py` now stays as the CLI/orchestration
+  compatibility facade. Constants/dataclasses, workbook/TSV loading, failure
+  mode classification, shared helpers, and CSV/Markdown/SVG writers live in
+  focused modules.
 - targeted reliability and low-MS1 coverage now have more focused modules but
   still carry large tests and report renderers.
 
