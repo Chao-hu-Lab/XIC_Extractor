@@ -278,7 +278,7 @@ else:
 
 已完成的責任切分：
 
-- `tools/diagnostics/alignment_decision_report.py`、`single_dr_production_gate_decision_report.py`、`targeted_istd_benchmark.py`、`family_ms1_backfill_review_report.py`、`analyze_rt_normalization_anchors.py`、`family_ms1_overlay_plot.py`、`untargeted_alignment_guardrails.py`、`seed_aware_backfill_review.py`、`targeted_nl_dropout_root_cause_audit.py`、`peak_candidate_score_calibration_report.py`、`evidence_spine_consistency.py` 已拆出 loading / report model / matching / summary / analysis / rendering / style / guardrail 或 writing helpers。
+- `tools/diagnostics/alignment_decision_report.py`、`single_dr_production_gate_decision_report.py`、`targeted_istd_benchmark.py`、`family_ms1_backfill_review_report.py`、`analyze_rt_normalization_anchors.py`、`family_ms1_overlay_plot.py`、`untargeted_alignment_guardrails.py`、`seed_aware_backfill_review.py`、`targeted_nl_dropout_root_cause_audit.py`、`peak_candidate_score_calibration_report.py`、`evidence_spine_consistency.py`、`area_integration_uncertainty_audit.py` 已拆出 loading / report model / matching / summary / analysis / rendering / style / guardrail 或 writing helpers。
 - `xic_extractor/alignment/pipeline.py` 已拆出 `pipeline_outputs.py` 與 `raw_sources.py`，保留 `run_alignment(...)` 作 orchestration facade。
 
 相關 spec：

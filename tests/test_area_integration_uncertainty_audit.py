@@ -1,9 +1,107 @@
 import csv
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from tools.diagnostics import area_integration_uncertainty_audit as report
+
+
+def test_path_style_cli_help_preserves_public_script_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = (
+        repo_root / "tools" / "diagnostics" / "area_integration_uncertainty_audit.py"
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--evidence-spine-rows-tsv" in result.stdout
+    assert "--alignment-integration-audit-tsv" in result.stdout
+    assert "--output-dir" in result.stdout
+
+
+def test_module_style_cli_help_preserves_public_module_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.diagnostics.area_integration_uncertainty_audit",
+            "--help",
+        ],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--evidence-spine-rows-tsv" in result.stdout
+    assert "--alignment-integration-audit-tsv" in result.stdout
+    assert "--output-dir" in result.stdout
+
+
+def test_facade_preserves_existing_helper_import_surface() -> None:
+    expected_names = [
+        "BOUNDARY_DELTA_CONCERN_MIN",
+        "HIGH_UNCERTAINTY_FRACTION",
+        "LOW_BASELINE_FRACTION",
+        "RAW_AREA_RATIO_MAX",
+        "RAW_AREA_RATIO_MIN",
+        "ROW_FIELDS",
+        "SUMMARY_FIELDS",
+        "AlignmentIntegrationAudit",
+        "AreaIntegrationRow",
+        "AreaIntegrationSummary",
+        "AreaIntegrationUncertaintyOutputs",
+        "AreaIntegrationUncertaintyResult",
+        "EvidenceRow",
+        "TargetedAudit",
+        "_abs_gt",
+        "_bool_value",
+        "_boundary_sensitive",
+        "_build_row",
+        "_classify",
+        "_fmt",
+        "_format_counter",
+        "_format_value",
+        "_gt",
+        "_has_high_uncertainty",
+        "_label_mismatch",
+        "_lt",
+        "_nonempty_diff",
+        "_optional_float",
+        "_parse_args",
+        "_ratio",
+        "_ratio_in_window",
+        "_read_alignment_integration_audits",
+        "_read_boundary_alternatives",
+        "_read_evidence_rows",
+        "_read_required_tsv",
+        "_read_targeted_audits",
+        "_summarize",
+        "_write_markdown",
+        "_write_outputs",
+        "_write_tsv",
+        "main",
+        "run_area_integration_uncertainty_audit",
+    ]
+
+    assert set(report.__all__) == set(expected_names)
+    for name in expected_names:
+        assert hasattr(report, name), name
 
 
 def test_area_integration_uncertainty_audit_classifies_all_buckets(
@@ -121,6 +219,44 @@ def test_area_integration_uncertainty_audit_classifies_all_buckets(
     )
 
     assert outputs.rows_tsv.is_file()
+    with outputs.summary_tsv.open(encoding="utf-8", newline="") as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "rows_checked",
+            "bucket_counts",
+            "missing_alignment_match_count",
+            "integration_context_incomplete_count",
+            "unexplained_area_mismatch_count",
+        ]
+    with outputs.rows_tsv.open(encoding="utf-8", newline="") as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "sample",
+            "target_label",
+            "role",
+            "targeted_candidate_id",
+            "untargeted_family_id",
+            "target_mz",
+            "untargeted_family_mz",
+            "targeted_area",
+            "untargeted_area",
+            "raw_area_ratio",
+            "targeted_baseline_area",
+            "untargeted_baseline_area",
+            "baseline_area_ratio",
+            "targeted_uncertainty_fraction",
+            "untargeted_uncertainty_fraction",
+            "targeted_baseline_fraction",
+            "untargeted_baseline_fraction",
+            "boundary_delta_start_min",
+            "boundary_delta_end_min",
+            "boundary_alternative_area_ratio",
+            "targeted_region_verdict",
+            "untargeted_region_verdict",
+            "targeted_local_mixture_verdict",
+            "untargeted_local_mixture_verdict",
+            "evidence_spine_mismatch_reason",
+            "integration_bucket",
+            "integration_reason",
+        ]
     by_target = {row.target_label: row.integration_bucket for row in result.rows}
     assert by_target == {
         "missing": "missing_alignment_match",
@@ -230,9 +366,7 @@ def _evidence_row(
         "untargeted_family_mz": "289.1" if family_id else "",
         "targeted_area": "100",
         "untargeted_area": f"{100 * raw_ratio:.6g}" if family_id else "",
-        "area_ratio_untargeted_to_targeted": f"{raw_ratio:.6g}"
-        if family_id
-        else "",
+        "area_ratio_untargeted_to_targeted": f"{raw_ratio:.6g}" if family_id else "",
         "boundary_delta_start_min": f"{boundary_start_delta:.6g}" if family_id else "",
         "boundary_delta_end_min": "0" if family_id else "",
         "targeted_region_verdict": targeted_region,

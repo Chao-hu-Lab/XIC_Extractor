@@ -39,7 +39,7 @@ behavior change needs its own spec.
 
 Structural scan from the cleanup worktree before the first split commits:
 
-- CodeGraph CLI synchronized locally: 586 files, 10,535 nodes, 26,599 edges.
+- CodeGraph CLI synchronized locally: 590 files, 10,563 nodes, 26,624 edges.
 - `xic_extractor/`, `tools/`, and `scripts/` now contain several files over
   the repo-local 500/800-line red-flag thresholds.
 - The largest post-PR60 hotspots are now split across three areas:
@@ -56,8 +56,8 @@ Largest production / tool modules:
 | 714 | `xic_extractor/alignment/primary_consolidation.py` | Domain-heavy alignment module; still deferred until characterization tests pin graph/winner/cell merge behavior. |
 | 702 | `scripts/validate_migration.py` | Migration validation script; defer unless it blocks current cleanup validation. |
 | 683 | `tools/diagnostics/low_ms1_coverage_review_classifier.py` | Diagnostic classifier; split only behind stable review TSV/JSON outputs. |
-| 682 | `tools/diagnostics/area_integration_uncertainty_audit.py` | Diagnostic uncertainty surface; split only behind stable TSV/JSON/Markdown outputs. |
 | 668 | `xic_extractor/alignment/clustering.py` | Domain-heavy clustering module; still deferred unless characterization tests pin clustering decisions. |
+| 632 | `tools/diagnostics/cwt_peak_candidate_audit.py` | Diagnostic audit surface; split only behind stable TSV/JSON/Markdown outputs. |
 
 Identity-coherence internal line pressure:
 
@@ -219,6 +219,11 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 160 | `tools/diagnostics/evidence_spine_consistency_io.py` | Targeted candidate, target m/z, shadow summary, and alignment-cell TSV loading. |
 | 224 | `tools/diagnostics/evidence_spine_consistency_analysis.py` | Targeted/untargeted matching, mismatch reasons, summary counters, and numeric helpers. |
 | 87 | `tools/diagnostics/evidence_spine_consistency_writers.py` | Evidence spine TSV/JSON/Markdown writers and value formatting. |
+| 178 | `tools/diagnostics/area_integration_uncertainty_audit.py` | Area integration uncertainty CLI/orchestration compatibility facade. |
+| 156 | `tools/diagnostics/area_integration_uncertainty_models.py` | Area integration dataclasses, thresholds, and TSV field contracts. |
+| 188 | `tools/diagnostics/area_integration_uncertainty_io.py` | Evidence spine, targeted audit, boundary audit, and alignment integration TSV loading. |
+| 219 | `tools/diagnostics/area_integration_uncertainty_analysis.py` | Integration bucket classification, mismatch helpers, summaries, and numeric predicates. |
+| 84 | `tools/diagnostics/area_integration_uncertainty_writers.py` | Area integration TSV/JSON/Markdown writers and value formatting. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -632,6 +637,10 @@ Targets already partly improved:
   compatibility facade. Dataclasses/field contracts, TSV loading,
   targeted/untargeted matching, mismatch summaries, and TSV/JSON/Markdown
   writers live in focused modules.
+- `area_integration_uncertainty_audit.py` now stays as the CLI/orchestration
+  compatibility facade. Dataclasses/thresholds, TSV loading, integration bucket
+  classification, summaries, and TSV/JSON/Markdown writers live in focused
+  modules.
 - targeted reliability and low-MS1 coverage now have more focused modules but
   still carry large tests and report renderers.
 
