@@ -46,6 +46,32 @@ def _write_bundle(root: Path, *, decision_rows: str) -> DiagnosticBundle:
     return bundle
 
 
+def _write_controls_bundle(
+    root: Path,
+    *,
+    controls_rows: str,
+) -> DiagnosticBundle:
+    # Minimal fixture for method-row calculation. Frozen output schema parity is
+    # covered by the existing writer tests; this validator only consumes these
+    # five controls.tsv fields for summary metrics.
+    bundle = _bundle(root)
+    _write(bundle.requests_tsv, "request_id\tseed_candidate_id\nICR-1\tC1\n")
+    _write(
+        bundle.decisions_tsv,
+        "decision_id\tdecision\n"
+        "ICD-1\twould_primary_provisional_identity_family_support\n",
+    )
+    _write(bundle.cell_evidence_tsv, "decision_id\tsample_id\nICD-1\tS2\n")
+    _write(
+        bundle.controls_tsv,
+        "control_id\tcontrol_type\tcontrol_pass\tcontrol_status\t"
+        "control_failure_reason\n"
+        + controls_rows,
+    )
+    _write(bundle.summary_md, "# Summary\n")
+    return bundle
+
+
 def test_read_tsv_rows_preserves_header_and_order(tmp_path: Path) -> None:
     path = _write(tmp_path / "rows.tsv", "a\tb\n1\t2\n3\t4\n")
 
@@ -77,6 +103,104 @@ def test_compare_bundles_passes_identical_tsvs(tmp_path: Path) -> None:
     assert {row.check_name: row.details for row in result.rows}[
         "controls_tsv_parity_only"
     ].startswith("controls file parity only")
+
+
+def test_controls_rows_remain_not_assessed_without_manifest(
+    tmp_path: Path,
+) -> None:
+    serial = _write_controls_bundle(
+        tmp_path / "serial",
+        controls_rows="IDC-1\tidentity_decoy\ttrue\tassessed\t\n",
+    )
+    process = _write_controls_bundle(
+        tmp_path / "process",
+        controls_rows="IDC-1\tidentity_decoy\ttrue\tassessed\t\n",
+    )
+
+    result = compare_identity_coherence_bundles(
+        serial,
+        process,
+        controls_manifest=None,
+    )
+
+    rows = {row.check_name: row for row in result.rows}
+    assert rows["controls_manifest_assessment"].status == "not_assessed"
+    assert rows["positive_control_pass_fraction"].status == "not_assessed"
+    assert rows["decoy_coherent_seed_count"].status == "not_assessed"
+
+
+def test_controls_rows_report_positive_and_decoy_metrics(tmp_path: Path) -> None:
+    manifest = tmp_path / "controls.tsv"
+    manifest.write_text("manifest\n", encoding="utf-8")
+    controls = (
+        "PC-1\tpositive_targeted_istd\ttrue\tassessed\t\n"
+        "IDC-1\tidentity_decoy\ttrue\tassessed\t\n"
+    )
+    serial = _write_controls_bundle(tmp_path / "serial", controls_rows=controls)
+    process = _write_controls_bundle(tmp_path / "process", controls_rows=controls)
+
+    result = compare_identity_coherence_bundles(
+        serial,
+        process,
+        controls_manifest=manifest,
+    )
+
+    rows = {row.check_name: row for row in result.rows}
+    assert rows["positive_control_pass_fraction"].status == "pass"
+    assert rows["positive_control_pass_fraction"].serial_value == "1.000"
+    assert rows["decoy_coherent_seed_count"].status == "pass"
+    assert rows["decoy_coherent_seed_count"].serial_value == "0"
+    assert rows["decoy_correctly_rejected_count"].serial_value == "1/1"
+
+
+def test_controls_rows_fail_when_decoy_reaches_coherent_seed(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "controls.tsv"
+    manifest.write_text("manifest\n", encoding="utf-8")
+    controls = (
+        "IDC-1\tidentity_decoy\tfalse\tassessed\tdecoy_seed_gate_coherent\n"
+    )
+    serial = _write_controls_bundle(tmp_path / "serial", controls_rows=controls)
+    process = _write_controls_bundle(tmp_path / "process", controls_rows=controls)
+
+    result = compare_identity_coherence_bundles(
+        serial,
+        process,
+        controls_manifest=manifest,
+    )
+
+    rows = {row.check_name: row for row in result.rows}
+    assert rows["decoy_coherent_seed_count"].status == "fail"
+    assert rows["decoy_coherent_seed_count"].serial_value == "1"
+
+
+def test_controls_rows_do_not_interpret_when_controls_parity_fails(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "controls.tsv"
+    manifest.write_text("manifest\n", encoding="utf-8")
+    serial = _write_controls_bundle(
+        tmp_path / "serial",
+        controls_rows="IDC-1\tidentity_decoy\ttrue\tassessed\t\n",
+    )
+    process = _write_controls_bundle(
+        tmp_path / "process",
+        controls_rows="IDC-1\tidentity_decoy\tfalse\tassessed\t"
+        "decoy_seed_gate_coherent\n",
+    )
+
+    result = compare_identity_coherence_bundles(
+        serial,
+        process,
+        controls_manifest=manifest,
+    )
+
+    rows = {row.check_name: row for row in result.rows}
+    assert rows["controls_tsv_parity_only"].status == "fail"
+    assert rows["decoy_coherent_seed_count"].status == "fail"
+    assert rows["decoy_coherent_seed_count"].serial_value == "not_assessed"
+    assert rows["decoy_coherent_seed_count"].process_value == "not_assessed"
 
 
 def test_compare_bundles_fails_when_row_order_changes(tmp_path: Path) -> None:

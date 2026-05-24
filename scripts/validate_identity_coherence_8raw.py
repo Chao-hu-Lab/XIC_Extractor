@@ -280,6 +280,14 @@ def compare_identity_coherence_bundles(
     *,
     controls_manifest: Path | None = None,
 ) -> ValidationResult:
+    controls_parity = _compare_tsv(
+        "controls_tsv_parity_only",
+        serial.controls_tsv,
+        process.controls_tsv,
+        success_details=(
+            "controls file parity only; method controls summarized separately"
+        ),
+    )
     rows = [
         _compare_tsv("requests_tsv_exact", serial.requests_tsv, process.requests_tsv),
         _compare_tsv(
@@ -292,15 +300,14 @@ def compare_identity_coherence_bundles(
             serial.cell_evidence_tsv,
             process.cell_evidence_tsv,
         ),
-        _compare_tsv(
-            "controls_tsv_parity_only",
+        controls_parity,
+        _controls_manifest_row(controls_manifest),
+        *_control_method_rows(
             serial.controls_tsv,
             process.controls_tsv,
-            success_details=(
-                "controls file parity only; no biological controls assessed here"
-            ),
+            controls_manifest,
+            controls_parity_pass=controls_parity.status == "pass",
         ),
-        _controls_manifest_row(controls_manifest),
         _compare_summary_presence(serial.summary_md, process.summary_md),
     ]
     return ValidationResult(rows=tuple(rows))
@@ -354,6 +361,186 @@ def _controls_manifest_row(controls_manifest: Path | None) -> ValidationRow:
             "positive-control sensitivity or decoy specificity"
         ),
     )
+
+
+def _control_method_rows(
+    serial_controls_tsv: Path,
+    process_controls_tsv: Path,
+    controls_manifest: Path | None,
+    *,
+    controls_parity_pass: bool,
+) -> tuple[ValidationRow, ...]:
+    if controls_manifest is None:
+        return (
+            ValidationRow(
+                check_name="positive_control_pass_fraction",
+                status="not_assessed",
+                serial_value="not_assessed",
+                process_value="not_assessed",
+                details="controls manifest not provided",
+            ),
+            ValidationRow(
+                check_name="decoy_coherent_seed_count",
+                status="not_assessed",
+                serial_value="not_assessed",
+                process_value="not_assessed",
+                details="controls manifest not provided",
+            ),
+            ValidationRow(
+                check_name="decoy_correctly_rejected_count",
+                status="not_assessed",
+                serial_value="not_assessed",
+                process_value="not_assessed",
+                details="controls manifest not provided",
+            ),
+        )
+    if not controls_parity_pass:
+        return (
+            ValidationRow(
+                check_name="positive_control_pass_fraction",
+                status="fail",
+                serial_value="not_assessed",
+                process_value="not_assessed",
+                details="controls TSV parity failed; method rows not interpreted",
+            ),
+            ValidationRow(
+                check_name="decoy_coherent_seed_count",
+                status="fail",
+                serial_value="not_assessed",
+                process_value="not_assessed",
+                details="controls TSV parity failed; method rows not interpreted",
+            ),
+            ValidationRow(
+                check_name="decoy_correctly_rejected_count",
+                status="fail",
+                serial_value="not_assessed",
+                process_value="not_assessed",
+                details="controls TSV parity failed; method rows not interpreted",
+            ),
+        )
+    serial_rows = _read_tsv_dict_rows(serial_controls_tsv)
+    process_rows = _read_tsv_dict_rows(process_controls_tsv)
+    serial_positive = _positive_control_fraction_row(
+        _rows_by_control_type(serial_rows, "positive_targeted_istd"),
+    )
+    process_positive = _positive_control_fraction_row(
+        _rows_by_control_type(process_rows, "positive_targeted_istd"),
+    )
+    serial_coherent = _decoy_coherent_count_row(
+        _rows_by_control_type(serial_rows, "identity_decoy"),
+    )
+    process_coherent = _decoy_coherent_count_row(
+        _rows_by_control_type(process_rows, "identity_decoy"),
+    )
+    serial_rejected = _decoy_rejected_count_row(
+        _rows_by_control_type(serial_rows, "identity_decoy"),
+    )
+    process_rejected = _decoy_rejected_count_row(
+        _rows_by_control_type(process_rows, "identity_decoy"),
+    )
+    return (
+        _merge_method_row(serial_positive, process_positive),
+        _merge_method_row(serial_coherent, process_coherent),
+        _merge_method_row(serial_rejected, process_rejected),
+    )
+
+
+def _read_tsv_dict_rows(path: Path) -> tuple[dict[str, str], ...]:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle, dialect="excel-tab")
+        return tuple(dict(row) for row in reader)
+
+
+def _rows_by_control_type(
+    rows: tuple[dict[str, str], ...],
+    control_type: str,
+) -> list[dict[str, str]]:
+    return [row for row in rows if row.get("control_type") == control_type]
+
+
+def _merge_method_row(serial: ValidationRow, process: ValidationRow) -> ValidationRow:
+    status = "pass" if serial.status == process.status == "pass" else "fail"
+    if serial.status == process.status == "not_assessed":
+        status = "not_assessed"
+    return ValidationRow(
+        check_name=serial.check_name,
+        status=status,
+        serial_value=serial.serial_value,
+        process_value=process.serial_value,
+        details=f"serial: {serial.details}; process: {process.details}",
+    )
+
+
+def _positive_control_fraction_row(
+    rows: list[dict[str, str]],
+) -> ValidationRow:
+    if not rows:
+        return ValidationRow(
+            check_name="positive_control_pass_fraction",
+            status="not_assessed",
+            serial_value="0/0",
+            process_value="0/0",
+            details="no positive_targeted_istd controls in controls.tsv",
+        )
+    passed = sum(1 for row in rows if _control_pass_is_true(row))
+    fraction = passed / len(rows)
+    value = f"{fraction:.3f}"
+    return ValidationRow(
+        check_name="positive_control_pass_fraction",
+        status="pass" if passed == len(rows) else "fail",
+        serial_value=value,
+        process_value=value,
+        details=f"{passed}/{len(rows)} positive controls passed",
+    )
+
+
+def _decoy_coherent_count_row(rows: list[dict[str, str]]) -> ValidationRow:
+    if not rows:
+        return ValidationRow(
+            check_name="decoy_coherent_seed_count",
+            status="not_assessed",
+            serial_value="0",
+            process_value="0",
+            details="no identity_decoy controls in controls.tsv",
+        )
+    coherent = sum(
+        1
+        for row in rows
+        if row.get("control_failure_reason") == "decoy_seed_gate_coherent"
+    )
+    return ValidationRow(
+        check_name="decoy_coherent_seed_count",
+        status="pass" if coherent == 0 else "fail",
+        serial_value=str(coherent),
+        process_value=str(coherent),
+        details="decoy controls that reached coherent_seed",
+    )
+
+
+def _decoy_rejected_count_row(rows: list[dict[str, str]]) -> ValidationRow:
+    if not rows:
+        return ValidationRow(
+            check_name="decoy_correctly_rejected_count",
+            status="not_assessed",
+            serial_value="0/0",
+            process_value="0/0",
+            details="no identity_decoy controls in controls.tsv",
+        )
+    passed = sum(1 for row in rows if _control_pass_is_true(row))
+    value = f"{passed}/{len(rows)}"
+    return ValidationRow(
+        check_name="decoy_correctly_rejected_count",
+        status="pass" if passed == len(rows) else "fail",
+        serial_value=value,
+        process_value=value,
+        details="identity decoys rejected before false promotion",
+    )
+
+
+def _control_pass_is_true(row: dict[str, str]) -> bool:
+    # Intentional duplication: validator must not import alignment internals,
+    # and independent controls summary computation is the cross-check.
+    return row.get("control_pass", "").strip().lower() == "true"
 
 
 def _compare_summary_presence(serial_path: Path, process_path: Path) -> ValidationRow:
