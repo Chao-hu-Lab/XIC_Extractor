@@ -3,6 +3,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
+from scripts import validate_identity_coherence_8raw as validation_script
 from scripts.validate_identity_coherence_8raw import (
     DiagnosticBundle,
     ValidationResult,
@@ -277,3 +280,104 @@ def test_write_validation_outputs_labels_controls_not_assessed(
         tmp_path / "identity_coherence_8raw_validation_summary.tsv"
     ).read_text(encoding="utf-8")
     assert "controls_manifest_assessment\tnot_assessed" in summary
+
+
+def test_main_rejects_missing_controls_manifest(tmp_path: Path, capsys) -> None:
+    batch = tmp_path / "batch.csv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    batch.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+
+    code = validation_script.main(
+        [
+            "--discovery-batch-index",
+            str(batch),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-root",
+            str(tmp_path / "out"),
+            "--controls-manifest",
+            str(tmp_path / "missing.tsv"),
+        ]
+    )
+
+    assert code == 2
+    assert "controls manifest does not exist" in capsys.readouterr().err
+
+
+def test_main_returns_one_when_parity_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch = tmp_path / "batch.csv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    batch.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+
+    def fake_run_validation(**kwargs) -> ValidationResult:
+        return ValidationResult(
+            rows=(
+                ValidationRow(
+                    check_name="decisions_tsv_exact",
+                    status="fail",
+                    serial_value="a",
+                    process_value="b",
+                    details="different",
+                ),
+            )
+        )
+
+    monkeypatch.setattr(validation_script, "run_validation", fake_run_validation)
+
+    code = validation_script.main(
+        [
+            "--discovery-batch-index",
+            str(batch),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-root",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert code == 1
+
+
+def test_main_returns_two_when_validation_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch = tmp_path / "batch.csv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    batch.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+
+    def fake_run_validation(**kwargs) -> ValidationResult:
+        raise RuntimeError("serial alignment failed")
+
+    monkeypatch.setattr(validation_script, "run_validation", fake_run_validation)
+
+    code = validation_script.main(
+        [
+            "--discovery-batch-index",
+            str(batch),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-root",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert code == 2

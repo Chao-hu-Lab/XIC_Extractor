@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import csv
 import shutil
 import subprocess
@@ -200,6 +201,68 @@ def write_validation_outputs(
         controls_manifest=controls_manifest,
         run_metadata=metadata,
     )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run serial-vs-process 8RAW validation for the identity coherence "
+            "diagnostic sidecar."
+        )
+    )
+    parser.add_argument("--discovery-batch-index", type=Path, required=True)
+    parser.add_argument("--raw-dir", type=Path, required=True)
+    parser.add_argument("--dll-dir", type=Path, required=True)
+    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--controls-manifest", type=Path)
+    args = parser.parse_args(argv)
+
+    if not args.discovery_batch_index.is_file():
+        print(
+            f"{args.discovery_batch_index}: discovery batch index does not exist",
+            file=sys.stderr,
+        )
+        return 2
+    if not args.raw_dir.is_dir():
+        print(f"{args.raw_dir}: raw directory does not exist", file=sys.stderr)
+        return 2
+    if not args.dll_dir.is_dir():
+        print(f"{args.dll_dir}: dll directory does not exist", file=sys.stderr)
+        return 2
+    if args.controls_manifest is not None and not args.controls_manifest.is_file():
+        print(
+            f"{args.controls_manifest}: controls manifest does not exist",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        result = run_validation(
+            discovery_batch_index=args.discovery_batch_index,
+            raw_dir=args.raw_dir,
+            dll_dir=args.dll_dir,
+            output_root=args.output_root,
+            controls_manifest=args.controls_manifest,
+        )
+        write_validation_outputs(
+            output_root=args.output_root,
+            result=result,
+            controls_manifest=args.controls_manifest,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if result.failed_count:
+        print(
+            f"FAIL identity_coherence_sidecar_parity failed={result.failed_count}",
+            file=sys.stderr,
+        )
+        return 1
+    print(
+        "PASS identity_coherence_sidecar_parity "
+        f"summary={args.output_root / 'identity_coherence_8raw_validation_report.md'}"
+    )
+    return 0
 
 
 def read_tsv_rows(path: Path) -> TsvRows:
@@ -418,3 +481,7 @@ def _write_report_md(
         )
     lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
