@@ -63,6 +63,12 @@ CONTRACT_PATH = (
     / "2026-05-22-untargeted-identity-coherence-implementation-contract.md"
 )
 IDENTITY_COHERENCE_PACKAGE = "xic_extractor.alignment.identity_coherence"
+INLINE_ADAPTER_MODULES = (
+    "identity_coherence_adapter",
+    "identity_coherence_source_mapping",
+    "identity_coherence_trace_retrieval",
+    "identity_coherence_record_builder",
+)
 FORBIDDEN_IDENTITY_COHERENCE_SURFACES = (
     "controls",
     "control_evaluation",
@@ -124,6 +130,9 @@ FORBIDDEN_OUTPUT_ABSOLUTE_IMPORT_PREFIXES = (
     "xic_extractor.output",
     "xic_extractor.gui",
     "xic_extractor.alignment.identity_coherence_adapter",
+    "xic_extractor.alignment.identity_coherence_source_mapping",
+    "xic_extractor.alignment.identity_coherence_trace_retrieval",
+    "xic_extractor.alignment.identity_coherence_record_builder",
     "xic_extractor.alignment.process_backend",
     "xic_extractor.alignment.owner_backfill",
     "xic_extractor.alignment.backfill",
@@ -196,9 +205,13 @@ def _is_relative_forbidden_surface(module_name: str) -> bool:
 def test_identity_coherence_domain_does_not_import_inline_adapter() -> None:
     root = Path(__file__).resolve().parents[3]
     package_dir = root / "xic_extractor" / "alignment" / "identity_coherence"
-    forbidden = (
-        "identity_coherence_adapter",
-        "from xic_extractor.alignment.identity_coherence_adapter",
+    forbidden = tuple(
+        token
+        for module_name in INLINE_ADAPTER_MODULES
+        for token in (
+            module_name,
+            f"from xic_extractor.alignment.{module_name}",
+        )
     )
     for path in package_dir.glob("*.py"):
         text = path.read_text(encoding="utf-8")
@@ -806,6 +819,9 @@ def test_forbidden_import_scan_detects_controls_and_output_surfaces(source):
         "from xic_extractor.alignment import backfill\n",
         "from xic_extractor.alignment import process_backend\n",
         "from xic_extractor.alignment import identity_coherence_adapter\n",
+        "from xic_extractor.alignment import identity_coherence_source_mapping\n",
+        "from xic_extractor.alignment import identity_coherence_trace_retrieval\n",
+        "from xic_extractor.alignment import identity_coherence_record_builder\n",
     ),
 )
 def test_absolute_forbidden_import_scan_expands_parent_package_aliases(source):

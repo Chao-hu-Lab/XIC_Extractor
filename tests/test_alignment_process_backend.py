@@ -533,7 +533,9 @@ def _identity_trace_request(
     )
 
 
-def test_run_identity_trace_process_groups_requests_by_sample(tmp_path: Path) -> None:
+def test_run_identity_trace_process_builds_pickleable_jobs_and_groups_by_sample(
+    tmp_path: Path,
+) -> None:
     requests = (
         _identity_trace_request("sample-a", "A1"),
         _identity_trace_request("sample-b", "B1"),
@@ -543,6 +545,8 @@ def test_run_identity_trace_process_groups_requests_by_sample(tmp_path: Path) ->
 
     def fake_runner(jobs, *, max_workers):
         captured_jobs.extend(jobs)
+        for job in jobs:
+            pickle.loads(pickle.dumps(job))
         assert max_workers == 8
         return [
             IdentityTraceSampleResult(

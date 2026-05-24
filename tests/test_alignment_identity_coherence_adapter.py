@@ -624,7 +624,8 @@ def test_run_diagnostic_process_mode_matches_serial_ordering(
         )()
 
     monkeypatch.setattr(
-        "xic_extractor.alignment.identity_coherence_adapter.run_identity_trace_process",
+        "xic_extractor.alignment.identity_coherence_trace_retrieval."
+        "run_identity_trace_process",
         fake_process,
     )
     process = run_identity_coherence_diagnostic(
@@ -708,7 +709,8 @@ def test_run_diagnostic_process_mode_batches_all_seed_trace_requests_once(
         )()
 
     monkeypatch.setattr(
-        "xic_extractor.alignment.identity_coherence_adapter.run_identity_trace_process",
+        "xic_extractor.alignment.identity_coherence_trace_retrieval."
+        "run_identity_trace_process",
         fake_process,
     )
 

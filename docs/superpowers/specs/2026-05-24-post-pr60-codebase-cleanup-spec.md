@@ -102,6 +102,11 @@ This branch has now implemented the first identity-coherence cleanup bundle:
   Common models, TSV bundle reads, V0.4 acceptance verdicts, serial/process
   compare rows, controls summary rows, decoy manifest proposal generation, and
   validation TSV/Markdown outputs live under `identity_coherence_validation/`.
+- Workstream E: `identity_coherence_adapter.py` is now an orchestration facade.
+  Seed source mapping, RAW/XIC trace retrieval, and row record construction live
+  in focused root-level alignment modules. Controls orchestration remains in the
+  facade because it is currently just manifest wiring plus existing controls
+  evaluation, not a deep module of its own.
 
 The original plan recommended landing Workstream H in a dedicated test-only PR.
 This branch intentionally keeps B/C/H in one cleanup bundle after review because
@@ -132,6 +137,10 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 206 | `xic_extractor/alignment/identity_coherence_validation/controls_summary.py` | Positive-control and identity-decoy method summary rows. |
 | 139 | `xic_extractor/alignment/identity_coherence_validation/decoy_manifest_proposal.py` | Proposed identity-decoy manifest writer. |
 | 232 | `xic_extractor/alignment/identity_coherence_validation/outputs.py` | Validation summary TSV and Markdown output rendering. |
+| 231 | `xic_extractor/alignment/identity_coherence_adapter.py` | Workstream E orchestration facade: trace planning, controls wiring, context, output dispatch. |
+| 187 | `xic_extractor/alignment/identity_coherence_source_mapping.py` | Seed-owner joins, request IDs, seed gate input mapping, non-seed pool eligibility. |
+| 134 | `xic_extractor/alignment/identity_coherence_trace_retrieval.py` | Serial/process trace retrieval dispatch and trace payload conversion. |
+| 171 | `xic_extractor/alignment/identity_coherence_record_builder.py` | Trace-plan records, cell evidence, row output record construction. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -416,7 +425,22 @@ Goal: review `identity_coherence_adapter.py` after PR #60 and decide whether it
 should remain one orchestration adapter or split by source mapping, trace
 retrieval, row evaluation, and controls.
 
-Potential split only after Workstreams B/C stabilize:
+Decision after boundary inventory:
+
+- Split source mapping. It owns owner/candidate joins, deterministic request and
+  family IDs, seed-gate input construction, and pre-trace non-seed pool
+  eligibility.
+- Split trace retrieval. It owns the serial/process dispatch seam, RAW source
+  protocol, XIC payload conversion, and blocked/data-quality trace statuses.
+- Split record builder. It owns trace-plan-to-cell conversion and output record
+  construction before the output writer sees frozen records.
+- Do not split controls orchestration yet. The remaining adapter code only
+  creates decoy sources, reads the optional manifest, calls the existing controls
+  evaluator, and passes rows into output context. A separate module here would be
+  a shallow pass-through until controls behavior grows a second caller or deeper
+  policy.
+
+Implemented split after Workstreams B/C stabilized:
 
 - `identity_coherence_source_mapping.py`
 - `identity_coherence_trace_retrieval.py`
