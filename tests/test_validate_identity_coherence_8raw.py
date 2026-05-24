@@ -5,10 +5,13 @@ from pathlib import Path
 
 from scripts.validate_identity_coherence_8raw import (
     DiagnosticBundle,
+    ValidationResult,
+    ValidationRow,
     build_alignment_command,
     compare_identity_coherence_bundles,
     read_tsv_rows,
     run_validation,
+    write_validation_outputs,
 )
 
 
@@ -240,3 +243,37 @@ def test_run_validation_clears_previous_mode_outputs(tmp_path: Path) -> None:
 
     assert result.failed_count == 0
     assert "STALE" not in stale.read_text(encoding="utf-8")
+
+
+def test_write_validation_outputs_labels_controls_not_assessed(
+    tmp_path: Path,
+) -> None:
+    result = ValidationResult(
+        rows=(
+            ValidationRow(
+                check_name="requests_tsv_exact",
+                status="pass",
+                serial_value="1",
+                process_value="1",
+                details="ok",
+            ),
+        )
+    )
+
+    write_validation_outputs(
+        output_root=tmp_path,
+        result=result,
+        controls_manifest=None,
+    )
+
+    report = (
+        tmp_path / "identity_coherence_8raw_validation_report.md"
+    ).read_text(encoding="utf-8")
+    assert "Controls: not_assessed" in report
+    assert "diagnostic-only" in report
+    assert "does not validate final matrix filtering" in report
+    assert "not final retained feature inclusion" in report
+    summary = (
+        tmp_path / "identity_coherence_8raw_validation_summary.tsv"
+    ).read_text(encoding="utf-8")
+    assert "controls_manifest_assessment\tnot_assessed" in summary

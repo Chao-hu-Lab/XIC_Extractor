@@ -180,6 +180,28 @@ def run_validation(
     return ValidationResult(rows=result.rows, run_metadata=tuple(metadata))
 
 
+def write_validation_outputs(
+    *,
+    output_root: Path,
+    result: ValidationResult,
+    controls_manifest: Path | None,
+    run_metadata: tuple[RunMetadata, ...] = (),
+) -> None:
+    output_root.mkdir(parents=True, exist_ok=True)
+    metadata = run_metadata if run_metadata else result.run_metadata
+    result = _with_controls_manifest_row(result, controls_manifest)
+    _write_summary_tsv(
+        output_root / "identity_coherence_8raw_validation_summary.tsv",
+        result,
+    )
+    _write_report_md(
+        output_root / "identity_coherence_8raw_validation_report.md",
+        result=result,
+        controls_manifest=controls_manifest,
+        run_metadata=metadata,
+    )
+
+
 def read_tsv_rows(path: Path) -> TsvRows:
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.reader(handle, dialect="excel-tab")
@@ -306,3 +328,93 @@ def _tail(text: str | None, *, limit: int = 1000) -> str:
     if not text:
         return ""
     return text[-limit:]
+
+
+def _with_controls_manifest_row(
+    result: ValidationResult,
+    controls_manifest: Path | None,
+) -> ValidationResult:
+    if any(row.check_name == "controls_manifest_assessment" for row in result.rows):
+        return result
+    return ValidationResult(
+        rows=(*result.rows, _controls_manifest_row(controls_manifest)),
+        run_metadata=result.run_metadata,
+    )
+
+
+def _write_summary_tsv(path: Path, result: ValidationResult) -> None:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=VALIDATION_SUMMARY_COLUMNS,
+            dialect="excel-tab",
+        )
+        writer.writeheader()
+        for row in result.rows:
+            writer.writerow(
+                {
+                    "check_name": row.check_name,
+                    "status": row.status,
+                    "serial_value": row.serial_value,
+                    "process_value": row.process_value,
+                    "details": row.details,
+                }
+            )
+
+
+def _write_report_md(
+    path: Path,
+    *,
+    result: ValidationResult,
+    controls_manifest: Path | None,
+    run_metadata: tuple[RunMetadata, ...] = (),
+) -> None:
+    parity_result = "PASS" if result.failed_count == 0 else "FAIL"
+    controls_status = (
+        "provided_not_assessed" if controls_manifest is not None else "not_assessed"
+    )
+    lines = [
+        "# Identity Coherence 8RAW Validation",
+        "",
+        f"Parity result: {parity_result}",
+        "",
+        "This report is diagnostic-only. It validates identity coherence sidecar "
+        "parity and does not validate final matrix filtering. It is not method "
+        "validation and does not establish positive-control sensitivity or decoy "
+        "specificity unless those checks are explicitly reported.",
+        "",
+        "`would_primary_provisional_identity_family_support` is a diagnostic "
+        "sidecar label, not final retained feature inclusion.",
+        "",
+        f"Controls: {controls_status}",
+        "",
+        "## Run Metadata",
+        "",
+        "| Mode | Return Code | Output Dir | Command |",
+        "| --- | ---: | --- | --- |",
+    ]
+    if not run_metadata:
+        lines.append("| `not_assessed` | 0 |  | metadata not supplied |")
+    for item in run_metadata:
+        lines.append(
+            "| "
+            f"`{item.mode}` | {item.returncode} | `{item.output_dir}` | "
+            f"`{item.command_line}` |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Parity Checks",
+            "",
+            "| Check | Status | Serial | Process | Details |",
+            "| --- | --- | ---: | ---: | --- |",
+        ]
+    )
+    for row in result.rows:
+        lines.append(
+            "| "
+            f"`{row.check_name}` | `{row.status}` | {row.serial_value} | "
+            f"{row.process_value} | {row.details} |"
+        )
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
