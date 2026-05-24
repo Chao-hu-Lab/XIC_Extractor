@@ -7,8 +7,8 @@ import pytest
 
 from scripts import validate_identity_coherence_8raw as validation_script
 from scripts.validate_identity_coherence_8raw import (
-    DiagnosticBundle,
     V04_ACCEPTANCE_PASS_PREFIX,
+    DiagnosticBundle,
     ValidationResult,
     ValidationRow,
     _merge_method_row,
@@ -1274,7 +1274,13 @@ def test_main_passes_controls_manifest_proposal_path(
                     "not_assessed",
                     "no manifest",
                 ),
-                ValidationRow("summary_md_presence", "pass", "present", "present", "ok"),
+                ValidationRow(
+                    "summary_md_presence",
+                    "pass",
+                    "present",
+                    "present",
+                    "ok",
+                ),
             )
         )
 
