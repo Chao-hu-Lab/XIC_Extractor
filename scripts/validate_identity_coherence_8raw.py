@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import csv
+import shutil
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-
+from typing import Protocol
 
 IDENTITY_COHERENCE_FILES = {
     "requests_tsv": "untargeted_identity_coherence_requests.tsv",
@@ -64,6 +67,11 @@ class ValidationResult:
         return sum(1 for row in self.rows if row.status == "fail")
 
 
+class CommandRunner(Protocol):
+    def __call__(self, command: list[str]) -> subprocess.CompletedProcess[str]:
+        ...
+
+
 def bundle_from_output_dir(output_dir: Path) -> DiagnosticBundle:
     identity_dir = output_dir / "identity_coherence"
     return DiagnosticBundle(
@@ -74,6 +82,102 @@ def bundle_from_output_dir(output_dir: Path) -> DiagnosticBundle:
         controls_tsv=identity_dir / IDENTITY_COHERENCE_FILES["controls_tsv"],
         summary_md=identity_dir / IDENTITY_COHERENCE_FILES["summary_md"],
     )
+
+
+def build_alignment_command(
+    *,
+    mode: str,
+    discovery_batch_index: Path,
+    raw_dir: Path,
+    dll_dir: Path,
+    output_dir: Path,
+    controls_manifest: Path | None,
+) -> list[str]:
+    if mode not in {"serial", "process"}:
+        raise ValueError("mode must be 'serial' or 'process'")
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve().parent / "run_alignment.py"),
+        "--discovery-batch-index",
+        str(discovery_batch_index),
+        "--raw-dir",
+        str(raw_dir),
+        "--dll-dir",
+        str(dll_dir),
+        "--output-dir",
+        str(output_dir),
+        "--emit-identity-coherence-diagnostic",
+        "--output-level",
+        "validation",
+    ]
+    if mode == "serial":
+        command.extend(
+            [
+                "--raw-workers",
+                "1",
+                "--raw-xic-batch-size",
+                "1",
+            ]
+        )
+    else:
+        command.extend(["--performance-profile", "validation-fast"])
+    if controls_manifest is not None:
+        command.extend(
+            ["--identity-coherence-controls-manifest", str(controls_manifest)]
+        )
+    return command
+
+
+def run_validation(
+    *,
+    discovery_batch_index: Path,
+    raw_dir: Path,
+    dll_dir: Path,
+    output_root: Path,
+    controls_manifest: Path | None,
+    runner: CommandRunner | None = None,
+) -> ValidationResult:
+    output_root.mkdir(parents=True, exist_ok=True)
+    runner = runner or _run_command
+    serial_output = output_root / "serial"
+    process_output = output_root / "process"
+    _reset_run_dir(serial_output)
+    _reset_run_dir(process_output)
+    metadata: list[RunMetadata] = []
+    for mode, output_dir in (
+        ("serial", serial_output),
+        ("process", process_output),
+    ):
+        command = build_alignment_command(
+            mode=mode,
+            discovery_batch_index=discovery_batch_index,
+            raw_dir=raw_dir,
+            dll_dir=dll_dir,
+            output_dir=output_dir,
+            controls_manifest=controls_manifest,
+        )
+        completed = runner(command)
+        metadata.append(
+            RunMetadata(
+                mode=mode,
+                command_line=subprocess.list2cmdline(command),
+                output_dir=output_dir,
+                returncode=completed.returncode,
+            )
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"{mode} alignment failed with exit code {completed.returncode}: "
+                f"command={subprocess.list2cmdline(command)} "
+                f"stdout={_tail(completed.stdout)} "
+                f"stderr={_tail(completed.stderr)}"
+            )
+    result = compare_identity_coherence_bundles(
+        bundle_from_output_dir(serial_output),
+        bundle_from_output_dir(process_output),
+        controls_manifest=controls_manifest,
+    )
+    return ValidationResult(rows=result.rows, run_metadata=tuple(metadata))
 
 
 def read_tsv_rows(path: Path) -> TsvRows:
@@ -93,7 +197,11 @@ def compare_identity_coherence_bundles(
 ) -> ValidationResult:
     rows = [
         _compare_tsv("requests_tsv_exact", serial.requests_tsv, process.requests_tsv),
-        _compare_tsv("decisions_tsv_exact", serial.decisions_tsv, process.decisions_tsv),
+        _compare_tsv(
+            "decisions_tsv_exact",
+            serial.decisions_tsv,
+            process.decisions_tsv,
+        ),
         _compare_tsv(
             "cell_evidence_tsv_exact",
             serial.cell_evidence_tsv,
@@ -177,3 +285,24 @@ def _compare_summary_presence(serial_path: Path, process_path: Path) -> Validati
 
 def _tsv_digest(rows: TsvRows) -> str:
     return f"header={len(rows.header)} rows={len(rows.rows)}"
+
+
+def _run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+
+def _reset_run_dir(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _tail(text: str | None, *, limit: int = 1000) -> str:
+    if not text:
+        return ""
+    return text[-limit:]
