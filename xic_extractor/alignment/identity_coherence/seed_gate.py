@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 from .candidate_matcher import match_request_to_candidate
 from .models import (
@@ -96,6 +96,13 @@ def evaluate_seed_gate(
             SeedRejectReason.REQUEST_CANDIDATE_IDENTITY_MISMATCH,
             review_flags,
         )
+    if candidate_evidence is None:
+        return _result(
+            resolved_request,
+            candidate_match,
+            SeedRejectReason.MISSING_DISCOVERY_CANDIDATE_JOIN,
+            review_flags,
+        )
 
     if (
         candidate_evidence.evidence_stage != EvidenceStage.PRE_BACKFILL
@@ -168,13 +175,12 @@ def evaluate_seed_gate(
             SeedRejectReason.NONFINITE_PEAK,
             review_flags,
         )
+    seed_rt_value = float(cast(float, seed_rt))
+    owner_peak_start_rt = float(cast(float, owner_values["owner_peak_start_rt"]))
+    owner_peak_end_rt = float(cast(float, owner_values["owner_peak_end_rt"]))
     if (
         config.require_seed_rt_inside_owner_peak
-        and not (
-            owner_values["owner_peak_start_rt"]
-            <= seed_rt
-            <= owner_values["owner_peak_end_rt"]
-        )
+        and not (owner_peak_start_rt <= seed_rt_value <= owner_peak_end_rt)
     ):
         return _result(
             resolved_request,

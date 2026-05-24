@@ -314,5 +314,5 @@ def _preferred_shape_reference_cell(
     )[0]
 
 
-def _enum_value(value: object) -> object:
-    return getattr(value, "value", value)
+def _enum_value(value: object) -> str:
+    return str(getattr(value, "value", value))

@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass
+from typing import cast
 
 from .candidate_matcher import match_identity_constraints_to_candidate
 from .cell_evidence import select_cell_evidence_for_sample
@@ -52,11 +53,12 @@ def evaluate_identity_coherence_row(
 ) -> IdentityCoherenceRowResult:
     if _enum_value(seed_gate.seed_gate_class) != SeedGateClass.COHERENT_SEED.value:
         center = estimate_rt_center(seed_evidence, (), config)
+        seed_rt = _seed_rt(seed_evidence)
         prototype_width = estimate_prototype_width(
             (),
             config,
             seed_sample_id=seed_gate.resolved_request.seed_sample,
-            seed_rt_min=float(seed_evidence.best_seed_rt),
+            seed_rt_min=seed_rt,
             center_rt_min=center.center_rt_min,
         )
         shape_reference = estimate_shape_reference(
@@ -84,11 +86,12 @@ def evaluate_identity_coherence_row(
         )
 
     center = estimate_rt_center(seed_evidence, non_seed_candidates, config)
+    seed_rt = _seed_rt(seed_evidence)
     prototype_width = estimate_prototype_width(
         non_seed_candidates,
         config,
         seed_sample_id=seed_gate.resolved_request.seed_sample,
-        seed_rt_min=float(seed_evidence.best_seed_rt),
+        seed_rt_min=seed_rt,
         center_rt_min=center.center_rt_min,
     )
 
@@ -206,7 +209,7 @@ def _candidate_has_tier1_support(
         return False
     if not _has_complete_morphology(candidate):
         return False
-    rt_delta_sec = (float(candidate.apex_rt) - center.center_rt_min) * 60.0
+    rt_delta_sec = (_candidate_apex_rt(candidate) - center.center_rt_min) * 60.0
     if abs(rt_delta_sec) > config.rt.preferred_rt_sec:
         return False
     match = match_identity_constraints_to_candidate(
@@ -219,7 +222,17 @@ def _candidate_has_tier1_support(
     )
 
 
-def _has_complete_morphology(candidate: CellCandidateEvidence) -> bool:
+def _seed_rt(seed_evidence: SeedCandidateEvidence) -> float:
+    return float(cast(float, seed_evidence.best_seed_rt))
+
+
+def _candidate_apex_rt(candidate: CellCandidateEvidence) -> float:
+    return float(cast(float, candidate.apex_rt))
+
+
+def _morphology_values(
+    candidate: CellCandidateEvidence,
+) -> tuple[float, float, float, float, float] | None:
     values = (
         candidate.apex_rt,
         candidate.peak_start_rt,
@@ -228,14 +241,19 @@ def _has_complete_morphology(candidate: CellCandidateEvidence) -> bool:
         candidate.height,
     )
     if any(not _finite_number(value) for value in values):
-        return False
-    return (
-        float(candidate.peak_start_rt)
-        < float(candidate.apex_rt)
-        < float(candidate.peak_end_rt)
-        and float(candidate.area) > 0.0
-        and float(candidate.height) > 0.0
-    )
+        return None
+    apex_rt = float(cast(float, candidate.apex_rt))
+    peak_start_rt = float(cast(float, candidate.peak_start_rt))
+    peak_end_rt = float(cast(float, candidate.peak_end_rt))
+    area = float(cast(float, candidate.area))
+    height = float(cast(float, candidate.height))
+    if not (peak_start_rt < apex_rt < peak_end_rt and area > 0.0 and height > 0.0):
+        return None
+    return apex_rt, peak_start_rt, peak_end_rt, area, height
+
+
+def _has_complete_morphology(candidate: CellCandidateEvidence) -> bool:
+    return _morphology_values(candidate) is not None
 
 
 def _finite_number(value: object) -> bool:
@@ -246,5 +264,5 @@ def _finite_number(value: object) -> bool:
     )
 
 
-def _enum_value(value: object) -> object:
-    return getattr(value, "value", value)
+def _enum_value(value: object) -> str:
+    return str(getattr(value, "value", value))

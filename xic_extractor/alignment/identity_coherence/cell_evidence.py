@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import replace
+from typing import cast
 
 from .candidate_matcher import match_identity_constraints_to_candidate
 from .models import (
@@ -24,6 +25,7 @@ from .schema import (
     CellIdentityTier,
     EvidenceStage,
     FragmentMatchStatus,
+    FragmentObservationMode,
     NonRtIdentityResult,
     RequestCandidateIdentityStatus,
     RtGateStatus,
@@ -127,15 +129,17 @@ def evaluate_cell_evidence(
             identity_family_id,
             candidate.data_quality_reason,
         )
-    if not _has_valid_morphology(candidate):
+    morphology = _morphology_values(candidate)
+    if morphology is None:
         return _data_quality_cell(
             request,
             candidate,
             identity_family_id,
             CellDataQualityReason.INVALID_PEAK_MORPHOLOGY.value,
         )
+    apex_rt, _peak_start_rt, _peak_end_rt, _area, _height = morphology
 
-    rt_delta_center_sec = (float(candidate.apex_rt) - center.center_rt_min) * 60.0
+    rt_delta_center_sec = (apex_rt - center.center_rt_min) * 60.0
     rt_gate_status = (
         RtGateStatus.PASS
         if abs(rt_delta_center_sec) <= config.rt.preferred_rt_sec
@@ -310,7 +314,10 @@ def _cell(
         cell_assessment_status=cell_assessment_status,
         cell_identity_tier=cell_identity_tier,
         cell_identity_basis=cell_identity_basis,
-        fragment_observation_mode=request.identity.fragment_observation_mode,
+        fragment_observation_mode=cast(
+            FragmentObservationMode,
+            request.identity.fragment_observation_mode,
+        ),
         fragment_match_status=fragment_match_status,
         fragment_tags_supported=candidate.candidate_evidence.fragment_tags,
         rt_delta_center_sec=rt_delta_center_sec,
@@ -347,7 +354,7 @@ def _tier1_tie_break_key(
     requested_tags = set(request.identity.fragment_tags)
     supported_tags = set(candidate_match.fragment_tags_supported)
     tag_set_penalty = 0.0 if supported_tags == requested_tags else 1.0
-    rt_delta_sec = (float(candidate.apex_rt) - center.center_rt_min) * 60.0
+    rt_delta_sec = (_candidate_apex_rt(candidate) - center.center_rt_min) * 60.0
     return (
         tag_set_penalty,
         _abs_or_inf(candidate_match.precursor_error_ppm),
@@ -399,7 +406,13 @@ def _fragment_match_status(
     return FragmentMatchStatus.FAIL
 
 
-def _has_valid_morphology(candidate: CellCandidateEvidence) -> bool:
+def _candidate_apex_rt(candidate: CellCandidateEvidence) -> float:
+    return float(cast(float, candidate.apex_rt))
+
+
+def _morphology_values(
+    candidate: CellCandidateEvidence,
+) -> tuple[float, float, float, float, float] | None:
     values = (
         candidate.apex_rt,
         candidate.peak_start_rt,
@@ -408,14 +421,19 @@ def _has_valid_morphology(candidate: CellCandidateEvidence) -> bool:
         candidate.height,
     )
     if any(not _finite_number(value) for value in values):
-        return False
-    return (
-        float(candidate.peak_start_rt)
-        < float(candidate.apex_rt)
-        < float(candidate.peak_end_rt)
-        and float(candidate.area) > 0.0
-        and float(candidate.height) > 0.0
-    )
+        return None
+    apex_rt = float(cast(float, candidate.apex_rt))
+    peak_start_rt = float(cast(float, candidate.peak_start_rt))
+    peak_end_rt = float(cast(float, candidate.peak_end_rt))
+    area = float(cast(float, candidate.area))
+    height = float(cast(float, candidate.height))
+    if not (peak_start_rt < apex_rt < peak_end_rt and area > 0.0 and height > 0.0):
+        return None
+    return apex_rt, peak_start_rt, peak_end_rt, area, height
+
+
+def _has_valid_morphology(candidate: CellCandidateEvidence) -> bool:
+    return _morphology_values(candidate) is not None
 
 
 def _finite_number(value: object) -> bool:
@@ -426,5 +444,5 @@ def _finite_number(value: object) -> bool:
     )
 
 
-def _enum_value(value: object) -> object:
-    return getattr(value, "value", value)
+def _enum_value(value: object) -> str:
+    return str(getattr(value, "value", value))

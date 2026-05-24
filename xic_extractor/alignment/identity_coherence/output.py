@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .models import (
     CellEvidenceResult,
+    IdentityCoherenceRequest,
     IdentityDecisionSummary,
     SeedGateResult,
 )
@@ -676,7 +677,7 @@ def render_identity_coherence_summary(
     return "\n".join(lines)
 
 
-def _validate_frozen_request_status(request: object) -> None:
+def _validate_frozen_request_status(request: IdentityCoherenceRequest) -> None:
     completeness = _enum_value(request.request_identity_completeness_status)
     candidate_status = _enum_value(request.request_candidate_identity_status)
     if (
@@ -752,7 +753,7 @@ def _write_tsv(
 
 
 def _first_threshold(
-    rows: list[IdentityDecisionSummary],
+    rows: Sequence[IdentityDecisionSummary],
     field_name: str,
 ) -> object:
     if not rows:
@@ -764,7 +765,7 @@ def _first_threshold(
 
 
 def _sum_decision_field(
-    rows: list[IdentityDecisionSummary],
+    rows: Sequence[IdentityDecisionSummary],
     field_name: str,
 ) -> int:
     return sum(int(getattr(row, field_name)) for row in rows)
@@ -890,7 +891,10 @@ def _assessed_sample_count_for_decision(
 ) -> int:
     if row.coherent_fraction in {None, 0}:
         return 0
-    return max(1, round(row.total_coherent_sample_count / row.coherent_fraction))
+    coherent_fraction = row.coherent_fraction
+    if coherent_fraction is None:
+        return 0
+    return max(1, round(row.total_coherent_sample_count / coherent_fraction))
 
 
 def _total_assessed_sample_count(
@@ -973,7 +977,7 @@ def _control_pass_is_true(value: object) -> bool:
     return False
 
 
-def _enum_value(value: object) -> object:
+def _enum_value(value: object) -> str:
     if isinstance(value, Enum):
-        return value.value
-    return value
+        return str(value.value)
+    return str(value)

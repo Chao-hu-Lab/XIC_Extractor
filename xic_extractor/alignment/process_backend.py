@@ -8,7 +8,7 @@ from dataclasses import dataclass, fields, is_dataclass
 from multiprocessing import get_context
 from pathlib import Path
 from time import perf_counter
-from types import ModuleType
+from types import ModuleType, TracebackType
 from typing import Any
 
 from xic_extractor.alignment.config import AlignmentConfig
@@ -740,7 +740,11 @@ def extract_identity_trace_sample_job(
             for index, request in job.requests
         )
     else:
-        exc_info = (None, None, None)
+        exc_info: tuple[
+            type[BaseException] | None,
+            BaseException | None,
+            TracebackType | None,
+        ] = (None, None, None)
         try:
             timed_raw = _TimedProcessRawSource(raw, stats=stats)
             indexed_results = _extract_identity_trace_results_for_sample(

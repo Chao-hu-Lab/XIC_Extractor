@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from statistics import median
+from typing import cast
 
 from .models import (
     CellCandidateEvidence,
@@ -77,7 +78,7 @@ def assess_width_against_prototype(
             width_ratio_to_prototype=None,
         )
 
-    ratio = _candidate_width_sec(candidate) / float(prototype_width_sec)
+    ratio = _candidate_width_sec(candidate) / float(cast(float, prototype_width_sec))
     status = (
         WidthStatus.PASS
         if config.width.min_ratio <= ratio <= config.width.max_ratio
@@ -112,15 +113,23 @@ def _is_width_candidate(
         return False
     if not _has_complete_morphology(candidate):
         return False
-    center_delta_sec = abs(float(candidate.apex_rt) - center_rt_min) * 60.0
+    apex_rt = _candidate_apex_rt(candidate)
+    center_delta_sec = abs(apex_rt - center_rt_min) * 60.0
     if center_delta_sec > config.rt.preferred_rt_sec:
         return False
-    seed_delta_sec = abs(float(candidate.apex_rt) - seed_rt_min) * 60.0
+    seed_delta_sec = abs(apex_rt - seed_rt_min) * 60.0
     return seed_delta_sec <= config.rt.seed_center_candidate_sec
 
 
 def _candidate_width_sec(candidate: CellCandidateEvidence) -> float:
-    return (float(candidate.peak_end_rt) - float(candidate.peak_start_rt)) * 60.0
+    return (
+        float(cast(float, candidate.peak_end_rt))
+        - float(cast(float, candidate.peak_start_rt))
+    ) * 60.0
+
+
+def _candidate_apex_rt(candidate: CellCandidateEvidence) -> float:
+    return float(cast(float, candidate.apex_rt))
 
 
 def _has_complete_morphology(candidate: CellCandidateEvidence) -> bool:
@@ -133,17 +142,16 @@ def _has_complete_morphology(candidate: CellCandidateEvidence) -> bool:
     )
     if any(not _finite_number(value) for value in values):
         return False
-    return (
-        float(candidate.peak_start_rt)
-        < float(candidate.apex_rt)
-        < float(candidate.peak_end_rt)
-        and float(candidate.area) > 0.0
-        and float(candidate.height) > 0.0
-    )
+    peak_start_rt = float(cast(float, candidate.peak_start_rt))
+    apex_rt = float(cast(float, candidate.apex_rt))
+    peak_end_rt = float(cast(float, candidate.peak_end_rt))
+    area = float(cast(float, candidate.area))
+    height = float(cast(float, candidate.height))
+    return peak_start_rt < apex_rt < peak_end_rt and area > 0.0 and height > 0.0
 
 
 def _finite_positive(value: object) -> bool:
-    return _finite_number(value) and float(value) > 0.0
+    return _finite_number(value) and float(cast(float, value)) > 0.0
 
 
 def _finite_number(value: object) -> bool:
@@ -154,5 +162,5 @@ def _finite_number(value: object) -> bool:
     )
 
 
-def _enum_value(value: object) -> object:
-    return getattr(value, "value", value)
+def _enum_value(value: object) -> str:
+    return str(getattr(value, "value", value))

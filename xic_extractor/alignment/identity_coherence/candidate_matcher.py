@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from typing import cast
 
 from .models import (
     CandidateIdentityMatch,
@@ -91,6 +92,9 @@ def _match_request_to_candidate(
             missing_fields=tuple(missing_fields),
             fragment_tags_supported=candidate_tags,
         )
+    candidate_precursor_mz = cast(float, candidate_precursor_mz)
+    candidate_product_mz = cast(float, candidate_product_mz)
+    candidate_loss_da = cast(float, candidate_loss_da)
 
     if not all(
         _finite_positive_number(value)
@@ -109,25 +113,27 @@ def _match_request_to_candidate(
             fragment_tags_supported=candidate_tags,
         )
 
-    precursor_error_ppm = _ppm_error(candidate_precursor_mz, identity.precursor_mz)
-    product_error_ppm = _ppm_error(candidate_product_mz, identity.product_mz)
-    loss_error_da = (
-        candidate_loss_da - identity.mode_constraint.cid_observed_loss_da
-    )
-    loss_error_ppm = _ppm_error(
-        candidate_loss_da,
-        identity.mode_constraint.cid_observed_loss_da,
+    request_precursor_mz = cast(float, identity.precursor_mz)
+    request_product_mz = cast(float, identity.product_mz)
+    request_loss_da = cast(float, identity.mode_constraint.cid_observed_loss_da)
+    precursor_tolerance_ppm = cast(float, identity.precursor_tolerance_ppm)
+    product_tolerance_ppm = cast(float, identity.product_tolerance_ppm)
+    loss_tolerance_ppm = cast(
+        float,
+        identity.mode_constraint.cid_observed_loss_tolerance_ppm,
     )
 
+    precursor_error_ppm = _ppm_error(candidate_precursor_mz, request_precursor_mz)
+    product_error_ppm = _ppm_error(candidate_product_mz, request_product_mz)
+    loss_error_da = candidate_loss_da - request_loss_da
+    loss_error_ppm = _ppm_error(candidate_loss_da, request_loss_da)
+
     mismatch_fields: list[str] = []
-    if abs(precursor_error_ppm) > identity.precursor_tolerance_ppm + 1e-9:
+    if abs(precursor_error_ppm) > precursor_tolerance_ppm + 1e-9:
         mismatch_fields.append("precursor_mz")
-    if abs(product_error_ppm) > identity.product_tolerance_ppm + 1e-9:
+    if abs(product_error_ppm) > product_tolerance_ppm + 1e-9:
         mismatch_fields.append("product_mz")
-    if (
-        abs(loss_error_ppm)
-        > identity.mode_constraint.cid_observed_loss_tolerance_ppm + 1e-9
-    ):
+    if abs(loss_error_ppm) > loss_tolerance_ppm + 1e-9:
         mismatch_fields.append("cid_observed_loss_da")
     if any(tag not in candidate_tags for tag in identity.fragment_tags):
         mismatch_fields.append("fragment_tags")

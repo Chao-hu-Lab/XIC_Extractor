@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, TypeVar, cast
 
 from .models import (
     IdentityCoherenceRequest,
@@ -89,10 +89,15 @@ _REQUIRED_DECOY_OWNER_FIELDS: tuple[str, ...] = (
     "owner_height",
 )
 
+_EnumT = TypeVar("_EnumT", bound=Enum)
+
 
 class IdentityCoherenceOutputRecordLike(Protocol):
-    seed_gate: Any
-    row_result: Any
+    @property
+    def seed_gate(self) -> Any: ...
+
+    @property
+    def row_result(self) -> Any: ...
 
 
 @dataclass(frozen=True)
@@ -403,12 +408,10 @@ def _optional_enum(
 
 
 def _parse_enum(
-    enum_type: type[PositiveControlMappingStatus]
-    | type[FragmentObservationMode]
-    | type[DecoyGenerationMethod],
+    enum_type: type[_EnumT],
     value: object,
     field_name: str,
-) -> PositiveControlMappingStatus | FragmentObservationMode | DecoyGenerationMethod:
+) -> _EnumT:
     if isinstance(value, enum_type):
         return value
     raw_value = _normalize_text(value)
@@ -498,11 +501,13 @@ def _validate_positive_control_mapping(
             PositiveControlMappingStatus.UNMAPPED,
             "positive_control_mapping_missing_evidence",
         )
+    mapping_error_ppm = float(cast(float, entry.positive_control_mapping_error_ppm))
+    mapping_delta_rt_sec = float(
+        cast(float, entry.positive_control_mapping_delta_rt_sec)
+    )
     if (
-        abs(float(entry.positive_control_mapping_error_ppm))
-        > entry.precursor_tolerance_ppm
-        or abs(float(entry.positive_control_mapping_delta_rt_sec))
-        > entry.rt_tolerance_sec
+        abs(mapping_error_ppm) > entry.precursor_tolerance_ppm
+        or abs(mapping_delta_rt_sec) > entry.rt_tolerance_sec
     ):
         return (
             PositiveControlMappingStatus.UNMAPPED,

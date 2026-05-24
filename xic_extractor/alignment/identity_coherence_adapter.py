@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import Protocol
+from typing import Protocol, cast
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.identity_coherence.controls import (
@@ -82,7 +82,7 @@ class IdentityCoherenceRawSource(Protocol):
         rt_min: float,
         rt_max: float,
         ppm_tol: float,
-    ) -> object:
+    ) -> tuple[object, object]:
         raise NotImplementedError
 
 
@@ -163,8 +163,8 @@ def trace_request_for_candidate(
         candidate_id=candidate.candidate_id,
         precursor_mz=candidate.precursor_mz,
         ppm_tolerance=ppm_tolerance,
-        rt_min=float(candidate.ms1_peak_rt_start),
-        rt_max=float(candidate.ms1_peak_rt_end),
+        rt_min=float(cast(float, candidate.ms1_peak_rt_start)),
+        rt_max=float(cast(float, candidate.ms1_peak_rt_end)),
     )
 
 
@@ -202,8 +202,10 @@ def retrieve_identity_coherence_trace(
     try:
         rt_values, intensity_values = raw_result
         trace = CandidateTrace(
-            rt_min=tuple(float(value) for value in rt_values),
-            intensity=tuple(float(value) for value in intensity_values),
+            rt_min=tuple(float(value) for value in cast(Iterable[float], rt_values)),
+            intensity=tuple(
+                float(value) for value in cast(Iterable[float], intensity_values)
+            ),
         )
     except (TypeError, ValueError):
         return IdentityCoherenceTraceResult(
@@ -604,11 +606,11 @@ def _has_complete_candidate_morphology(candidate: DiscoveryCandidate) -> bool:
     if any(not _finite_number(value) for value in values):
         return False
     return (
-        float(candidate.ms1_peak_rt_start)
-        < float(candidate.ms1_apex_rt)
-        < float(candidate.ms1_peak_rt_end)
-        and float(candidate.ms1_area) > 0.0
-        and float(candidate.ms1_height) > 0.0
+        float(cast(float, candidate.ms1_peak_rt_start))
+        < float(cast(float, candidate.ms1_apex_rt))
+        < float(cast(float, candidate.ms1_peak_rt_end))
+        and float(cast(float, candidate.ms1_area)) > 0.0
+        and float(cast(float, candidate.ms1_height)) > 0.0
     )
 
 

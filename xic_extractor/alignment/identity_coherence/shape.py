@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
@@ -55,7 +56,8 @@ def normalize_trace_for_shape(
             normalized_intensity=(),
             shape_audit_status=ShapeAuditStatus.NOT_ASSESSED,
         )
-    if not _has_complete_morphology(candidate):
+    morphology = _morphology_values(candidate)
+    if morphology is None:
         return NormalizedShapeTrace(
             shape_status=ShapeStatus.NOT_ASSESSED,
             normalized_intensity=(),
@@ -74,12 +76,13 @@ def normalize_trace_for_shape(
             shape_audit_status=audit_status,
         )
 
+    _apex_rt, peak_start_rt, peak_end_rt, _area, _height = morphology
     rt_values = np.asarray(candidate.trace.rt_min, dtype=float)
     intensity_values = np.asarray(candidate.trace.intensity, dtype=float)
     finite = np.isfinite(rt_values) & np.isfinite(intensity_values)
     inside = (
-        (rt_values >= float(candidate.peak_start_rt))
-        & (rt_values <= float(candidate.peak_end_rt))
+        (rt_values >= peak_start_rt)
+        & (rt_values <= peak_end_rt)
         & finite
     )
     rt_inside = rt_values[inside]
@@ -97,8 +100,8 @@ def normalize_trace_for_shape(
     shifted = np.clip(intensity_inside - np.min(intensity_inside), 0.0, None)
 
     normalized_positions = (
-        (rt_inside - float(candidate.peak_start_rt))
-        / (float(candidate.peak_end_rt) - float(candidate.peak_start_rt))
+        (rt_inside - peak_start_rt)
+        / (peak_end_rt - peak_start_rt)
     )
     target_positions = np.linspace(0.0, 1.0, config.shape.resample_points)
     resampled = np.interp(target_positions, normalized_positions, shifted)
@@ -261,7 +264,8 @@ def _is_shape_candidate(
         return False
     if not _has_complete_morphology(candidate):
         return False
-    center_delta_sec = abs(float(candidate.apex_rt) - center_rt_min) * 60.0
+    apex_rt = _candidate_apex_rt(candidate)
+    center_delta_sec = abs(apex_rt - center_rt_min) * 60.0
     return center_delta_sec <= config.rt.preferred_rt_sec
 
 
@@ -304,8 +308,10 @@ def _select_medoid(
             (
                 -mean_similarity,
                 tier_rank,
-                -float(scan_support) if _finite_number(scan_support) else 0.0,
-                abs(float(candidate.apex_rt) - center_rt_min),
+                -float(cast(float, scan_support))
+                if _finite_number(scan_support)
+                else 0.0,
+                abs(_candidate_apex_rt(candidate) - center_rt_min),
                 candidate.candidate_evidence.candidate_id,
                 candidate,
                 normalized,
@@ -369,7 +375,13 @@ def _cosine(left: tuple[float, ...], right: tuple[float, ...]) -> float:
     return float(np.dot(left_values, right_values))
 
 
-def _has_complete_morphology(candidate: CellCandidateEvidence) -> bool:
+def _candidate_apex_rt(candidate: CellCandidateEvidence) -> float:
+    return float(cast(float, candidate.apex_rt))
+
+
+def _morphology_values(
+    candidate: CellCandidateEvidence,
+) -> tuple[float, float, float, float, float] | None:
     values = (
         candidate.apex_rt,
         candidate.peak_start_rt,
@@ -378,14 +390,19 @@ def _has_complete_morphology(candidate: CellCandidateEvidence) -> bool:
         candidate.height,
     )
     if any(not _finite_number(value) for value in values):
-        return False
-    return (
-        float(candidate.peak_start_rt)
-        < float(candidate.apex_rt)
-        < float(candidate.peak_end_rt)
-        and float(candidate.area) > 0.0
-        and float(candidate.height) > 0.0
-    )
+        return None
+    apex_rt = float(cast(float, candidate.apex_rt))
+    peak_start_rt = float(cast(float, candidate.peak_start_rt))
+    peak_end_rt = float(cast(float, candidate.peak_end_rt))
+    area = float(cast(float, candidate.area))
+    height = float(cast(float, candidate.height))
+    if not (peak_start_rt < apex_rt < peak_end_rt and area > 0.0 and height > 0.0):
+        return None
+    return apex_rt, peak_start_rt, peak_end_rt, area, height
+
+
+def _has_complete_morphology(candidate: CellCandidateEvidence) -> bool:
+    return _morphology_values(candidate) is not None
 
 
 def _finite_number(value: object) -> bool:
@@ -396,5 +413,5 @@ def _finite_number(value: object) -> bool:
     )
 
 
-def _enum_value(value: object) -> object:
-    return getattr(value, "value", value)
+def _enum_value(value: object) -> str:
+    return str(getattr(value, "value", value))
