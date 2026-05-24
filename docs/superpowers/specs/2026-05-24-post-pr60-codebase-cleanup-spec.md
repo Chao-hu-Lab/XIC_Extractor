@@ -124,7 +124,7 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 256 | `tests/test_alignment_pipeline_timing.py` | Focused alignment timing/raw-source tests. |
 | 282 | `tests/alignment_pipeline_helpers.py` | Shared alignment-pipeline batch/matrix fixtures for focused tests. |
 | 274 | `scripts/validate_identity_coherence_8raw.py` | Public CLI facade: argument validation, command building, run orchestration, process reset. |
-| 957 | `tests/test_validate_identity_coherence_8raw.py` | CLI wrapper and exit-code contract tests after focused module tests moved out. |
+| 705 | `tests/test_validate_identity_coherence_8raw.py` | CLI wrapper and exit-code contract tests after focused module tests moved out. |
 | 137 | `xic_extractor/alignment/identity_coherence_validation/models.py` | Validator dataclasses and frozen column/name constants. |
 | 41 | `xic_extractor/alignment/identity_coherence_validation/bundle.py` | Frozen bundle paths and TSV reads. |
 | 171 | `xic_extractor/alignment/identity_coherence_validation/acceptance.py` | V0.4 acceptance verdict logic. |
@@ -133,7 +133,7 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 139 | `xic_extractor/alignment/identity_coherence_validation/decoy_manifest_proposal.py` | Proposed identity-decoy manifest writer. |
 | 232 | `xic_extractor/alignment/identity_coherence_validation/outputs.py` | Validation summary TSV and Markdown output rendering. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
-| 114 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
+| 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
 | 121 | `tests/alignment/identity_coherence_validation/test_controls_summary.py` | Focused module tests for controls summary rows. |
 | 212 | `tests/alignment/identity_coherence_validation/test_decoy_manifest_proposal.py` | Focused module tests for proposed decoy manifests. |

@@ -24,6 +24,39 @@ def _passing_sidecar_rows() -> tuple[ValidationRow, ...]:
     )
 
 
+def _passing_reviewed_control_rows() -> tuple[ValidationRow, ...]:
+    return (
+        ValidationRow(
+            "controls_manifest_assessment",
+            "not_assessed",
+            "provided",
+            "provided",
+            "manifest provided",
+        ),
+        ValidationRow(
+            "positive_control_pass_fraction",
+            "pass",
+            "1.000",
+            "1.000",
+            "all positives passed",
+        ),
+        ValidationRow(
+            "decoy_coherent_seed_count",
+            "pass",
+            "0",
+            "0",
+            "no decoy promotion",
+        ),
+        ValidationRow(
+            "decoy_correctly_rejected_count",
+            "pass",
+            "3/3",
+            "3/3",
+            "all decoys rejected",
+        ),
+    )
+
+
 def test_sidecar_parity_failed_count_requires_all_frozen_sidecars() -> None:
     result = _result_with_rows(
         (
@@ -74,6 +107,69 @@ def test_v04_acceptance_passes_when_parity_and_reviewed_controls_pass() -> None:
     assert rows["v04_acceptance"].status == "pass"
 
 
+def test_v04_acceptance_fails_without_reviewed_controls() -> None:
+    result = _result_with_rows(
+        (
+            *_passing_sidecar_rows(),
+            ValidationRow(
+                "controls_manifest_assessment",
+                "not_assessed",
+                "not_provided",
+                "not_provided",
+                "no manifest",
+            ),
+            ValidationRow(
+                "positive_control_pass_fraction",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+            ValidationRow(
+                "decoy_coherent_seed_count",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+            ValidationRow(
+                "decoy_correctly_rejected_count",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+        )
+    )
+
+    report = evaluate_v04_acceptance(
+        result,
+        controls_manifest=Path("identity_coherence_controls_manifest.reviewed.tsv"),
+    )
+
+    rows = {row.criterion: row for row in report.rows}
+    assert rows["serial_process_sidecar_parity"].status == "pass"
+    assert rows["reviewed_controls_manifest"].status == "fail"
+    assert rows["v04_acceptance"].status == "fail"
+    assert not report.accepted
+
+
+def test_v04_acceptance_fails_for_non_reviewed_manifest_name() -> None:
+    result = _result_with_rows(
+        (
+            *_passing_sidecar_rows(),
+            *_passing_reviewed_control_rows(),
+        )
+    )
+
+    report = evaluate_v04_acceptance(result, controls_manifest=Path("controls.tsv"))
+
+    rows = {row.criterion: row for row in report.rows}
+    assert rows["reviewed_controls_manifest"].status == "fail"
+    assert rows["v04_acceptance"].status == "fail"
+    assert not report.accepted
+
+
 def test_v04_acceptance_fails_when_decoy_promotes() -> None:
     result = _result_with_rows(
         (
@@ -112,3 +208,49 @@ def test_v04_acceptance_fails_when_decoy_promotes() -> None:
     assert report.accepted is False
     assert rows["identity_decoy_specificity"].status == "fail"
     assert rows["v04_acceptance"].evidence == "identity_decoy_specificity"
+
+
+def test_v04_acceptance_fails_when_decoy_rejected_count_fails() -> None:
+    result = _result_with_rows(
+        (
+            *_passing_sidecar_rows(),
+            ValidationRow(
+                "controls_manifest_assessment",
+                "not_assessed",
+                "provided",
+                "provided",
+                "manifest provided",
+            ),
+            ValidationRow(
+                "positive_control_pass_fraction",
+                "pass",
+                "1.000",
+                "1.000",
+                "all positives passed",
+            ),
+            ValidationRow(
+                "decoy_coherent_seed_count",
+                "pass",
+                "0",
+                "0",
+                "no coherent decoy",
+            ),
+            ValidationRow(
+                "decoy_correctly_rejected_count",
+                "fail",
+                "2/3",
+                "2/3",
+                "one decoy not correctly rejected",
+            ),
+        )
+    )
+
+    report = evaluate_v04_acceptance(
+        result,
+        controls_manifest=Path("identity_coherence_controls_manifest.reviewed.tsv"),
+    )
+
+    rows = {row.criterion: row for row in report.rows}
+    assert rows["identity_decoy_specificity"].status == "fail"
+    assert rows["v04_acceptance"].status == "fail"
+    assert not report.accepted
