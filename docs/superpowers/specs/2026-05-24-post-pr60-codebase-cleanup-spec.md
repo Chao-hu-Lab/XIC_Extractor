@@ -39,7 +39,7 @@ behavior change needs its own spec.
 
 Structural scan from the cleanup worktree before the first split commits:
 
-- CodeGraph CLI synchronized locally: 565 files, 10,401 nodes, 26,410 edges.
+- CodeGraph CLI synchronized locally: 570 files, 10,433 nodes, 26,457 edges.
 - `xic_extractor/`, `tools/`, and `scripts/` now contain several files over
   the repo-local 500/800-line red-flag thresholds.
 - The largest post-PR60 hotspots are now split across three areas:
@@ -52,11 +52,11 @@ Largest production / tool modules:
 | 962 | `xic_extractor/peak_scoring.py` | Existing decomposition target; still deferred until characterization tests pin scoring outputs. |
 | 898 | `xic_extractor/alignment/process_backend.py` | Process mechanics plus alignment/trace payloads; split only with spawn/pickle smoke tests. |
 | 848 | `scripts/local_minimum_param_sweep.py` | Validation/development script; not part of PR60 cleanup unless it blocks tooling. |
-| 759 | `tools/diagnostics/untargeted_alignment_guardrails.py` | Guardrail CLI/reporting surface; split only behind stable CSV/JSON outputs. |
 | 717 | `tools/diagnostics/seed_aware_backfill_review.py` | Diagnostic review surface; candidate after current legacy report cleanup. |
 | 676 | `tools/diagnostics/targeted_nl_dropout_root_cause_audit.py` | Targeted diagnostic audit; split loaders/model/writers without changing buckets. |
 | 661 | `tools/diagnostics/peak_candidate_score_calibration_report.py` | Diagnostic report surface; prefer rendering/writer splits before score semantics. |
 | 644 | `xic_extractor/alignment/ownership.py` | Domain-heavy ownership module; still deferred unless characterization tests pin owner decisions. |
+| 630 | `tools/diagnostics/low_ms1_coverage_review_classifier.py` | Diagnostic classifier; split only behind stable review TSV/JSON outputs. |
 | 624 | `xic_extractor/alignment/primary_consolidation.py` | Domain-heavy alignment module; still deferred until characterization tests pin graph/winner/cell merge behavior. |
 | 615 | `scripts/validate_migration.py` | Migration validation script; defer unless it blocks current cleanup validation. |
 
@@ -194,6 +194,12 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 457 | `tools/diagnostics/family_ms1_overlay_rendering.py` | Matplotlib figure layout and panel rendering. |
 | 99 | `tools/diagnostics/family_ms1_overlay_rendering_styles.py` | Overlay colors, line/point styles, deterministic jitter, center RT marker, and legend. |
 | 190 | `tools/diagnostics/family_ms1_overlay_writers.py` | Trace summary TSV, trace data JSON, and renderer output dispatch. |
+| 240 | `tools/diagnostics/untargeted_alignment_guardrails.py` | Untargeted guardrail CLI/orchestration compatibility facade. |
+| 70 | `tools/diagnostics/untargeted_alignment_guardrail_models.py` | Guardrail dataclasses, constants, comparison columns, and case windows. |
+| 340 | `tools/diagnostics/untargeted_alignment_guardrail_metrics.py` | Alignment guardrail metric and case-assertion calculations. |
+| 160 | `tools/diagnostics/untargeted_alignment_guardrail_targets.py` | Targeted audit comparison and targeted ISTD benchmark guardrail rows. |
+| 60 | `tools/diagnostics/untargeted_alignment_guardrail_outputs.py` | Guardrail comparison rows and case assertion TSV writer. |
+| 31 | `tools/diagnostics/untargeted_alignment_guardrail_io.py` | Shared TSV/JSON/CSV IO helpers. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -588,6 +594,10 @@ Targets already partly improved:
 - `family_ms1_overlay_plot.py` now stays as the CLI/orchestration compatibility
   facade. Alignment-cell/RAW trace extraction, plotting, style helpers, and
   TSV/JSON writers live in focused modules.
+- `untargeted_alignment_guardrails.py` now stays as the CLI/orchestration
+  compatibility facade. Alignment metric calculations, targeted audit/benchmark
+  guardrails, output row writers, IO helpers, and dataclasses live in focused
+  modules.
 - targeted reliability and low-MS1 coverage now have more focused modules but
   still carry large tests and report renderers.
 

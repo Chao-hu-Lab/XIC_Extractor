@@ -2,9 +2,49 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from tools.diagnostics import untargeted_alignment_guardrails as guardrails
+
+
+def test_path_style_cli_help_preserves_public_script_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = (
+        repo_root / "tools" / "diagnostics" / "untargeted_alignment_guardrails.py"
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--alignment-dir" in result.stdout
+    assert "--targeted-istd-benchmark-json" in result.stdout
+
+
+def test_facade_preserves_existing_helper_import_surface() -> None:
+    expected_names = [
+        "_case_status_reason",
+        "_compute_case_assertions",
+        "_int_value",
+        "_row_flags",
+        "_metrics_to_json",
+        "_write_dict_csv",
+        "compute_guardrails",
+        "compare_guardrails",
+        "targeted_istd_benchmark_guardrail_rows",
+    ]
+
+    for name in expected_names:
+        assert hasattr(guardrails, name), name
 
 
 def test_compute_guardrails_counts_families_cases_and_writes_case_summary(
