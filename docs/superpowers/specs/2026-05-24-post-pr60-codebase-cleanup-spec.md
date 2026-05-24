@@ -95,7 +95,8 @@ This branch has now implemented the first identity-coherence cleanup bundle:
 - Workstream B: `identity_coherence/output.py` is a compatibility facade.
 - Workstream C: `identity_coherence/controls.py` is a compatibility facade.
 - Workstream H: the first two `tests/test_alignment_pipeline.py` slices moved
-  into focused test files.
+  into focused test files, and their shared batch/matrix fixtures now live in
+  `tests/alignment_pipeline_helpers.py`.
 
 The original plan recommended landing Workstream H in a dedicated test-only PR.
 This branch intentionally keeps B/C/H in one cleanup bundle after review because
@@ -113,9 +114,10 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 37 | `xic_extractor/alignment/identity_coherence/output.py` | Compatibility facade after Workstream B. |
 | 356 | `xic_extractor/alignment/identity_coherence/output_summary_model.py` | Summary model and Go/No-Go calculations. |
 | 302 | `xic_extractor/alignment/identity_coherence/output_summary.py` | Markdown rendering only. |
-| 1605 | `tests/test_alignment_pipeline.py` | Still large; reduced by first Workstream H slices. |
-| 503 | `tests/test_alignment_identity_coherence_pipeline.py` | Focused identity-coherence pipeline diagnostic tests. |
-| 500 | `tests/test_alignment_pipeline_timing.py` | Focused alignment timing/raw-source tests. |
+| 1382 | `tests/test_alignment_pipeline.py` | Still large; reduced by first Workstream H slices and shared helper extraction. |
+| 292 | `tests/test_alignment_identity_coherence_pipeline.py` | Focused identity-coherence pipeline diagnostic tests. |
+| 256 | `tests/test_alignment_pipeline_timing.py` | Focused alignment timing/raw-source tests. |
+| 282 | `tests/alignment_pipeline_helpers.py` | Shared alignment-pipeline batch/matrix fixtures for focused tests. |
 
 ## Existing Contracts To Preserve
 
@@ -567,17 +569,15 @@ Definition of done:
 
 1. Decide PR packaging for this branch: keep the reviewed B/C/H cleanup bundle,
    or split the two Workstream H commits into a dedicated test-only PR.
-2. If a third focused alignment-pipeline test file needs the same long
-   discovery/matrix fixtures, extract a shared test helper in its own commit.
-3. Split 8RAW validation CLI internals.
-4. Review identity-coherence adapter boundary.
-5. Inventory instrument-QC productization modules with a new focused spec.
-6. Add or refresh a documented 8RAW performance baseline before any
+2. Split 8RAW validation CLI internals.
+3. Review identity-coherence adapter boundary.
+4. Inventory instrument-QC productization modules with a new focused spec.
+5. Add or refresh a documented 8RAW performance baseline before any
    performance-claimed or process-backend behavior PR.
-7. Classify and extract ppm helper semantics only after characterization tests
+6. Classify and extract ppm helper semantics only after characterization tests
    prove signed/absolute and denominator behavior stays stable.
-8. Continue legacy diagnostic rendering splits.
-9. Only then revisit alignment domain-heavy modules with characterization
+7. Continue legacy diagnostic rendering splits.
+8. Only then revisit alignment domain-heavy modules with characterization
     tests.
 
 ## Review Checklist For Cleanup PRs
