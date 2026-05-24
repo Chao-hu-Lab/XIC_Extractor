@@ -49,16 +49,16 @@ Largest production / tool modules:
 
 | Lines | File | First cleanup interpretation |
 |---:|---|---|
-| 1078 | `scripts/validate_identity_coherence_8raw.py` | Public CLI wrapper plus validation logic; split only behind same CLI. |
-| 962 | `xic_extractor/peak_scoring.py` | Existing decomposition target; do not mix with identity cleanup. |
-| 948 | `xic_extractor/alignment/identity_coherence/controls.py` | New high-value target: manifest parsing, positive controls, decoys, evaluation rows. |
-| 936 | `xic_extractor/instrument_qc/calibration_product_preview.py` | Productization surface; likely mixes loaders, models, preview decision logic, and writers. |
-| 481 | `tools/diagnostics/alignment_decision_report_rendering.py` | Workstream G section assembly after HTML components and CSS were split out. |
-| 914 | `xic_extractor/alignment/identity_coherence/output.py` | New high-value target: projection, validation, TSV writers, Markdown summary. |
-| 908 | `tools/diagnostics/family_ms1_overlay_plot.py` | Diagnostic plotting; lower production risk but large rendering/data mix. |
-| 898 | `xic_extractor/alignment/process_backend.py` | Process mechanics plus alignment/trace payloads; split only with spawn/pickle smoke tests. |
-| 872 | `tools/diagnostics/analyze_rt_normalization_anchors.py` | Diagnostic CLI; candidate for loader/model/writer split. |
-| 848 | `scripts/local_minimum_param_sweep.py` | Validation/development script; not part of PR60 cleanup unless it blocks tooling. |
+| 1092 | `xic_extractor/peak_scoring.py` | Existing decomposition target; still deferred until characterization tests pin scoring outputs. |
+| 1012 | `xic_extractor/alignment/process_backend.py` | Process mechanics plus alignment/trace payloads; split only with spawn/pickle smoke tests. |
+| 980 | `tools/diagnostics/analyze_rt_normalization_anchors.py` | Diagnostic CLI; candidate for loader/model/writer split. |
+| 979 | `tools/diagnostics/family_ms1_overlay_plot.py` | Diagnostic plotting; lower production risk but large rendering/data mix. |
+| 968 | `scripts/local_minimum_param_sweep.py` | Validation/development script; not part of PR60 cleanup unless it blocks tooling. |
+| 862 | `tools/diagnostics/untargeted_alignment_guardrails.py` | Guardrail CLI/reporting surface; split only behind stable CSV/JSON outputs. |
+| 800 | `tools/diagnostics/seed_aware_backfill_review.py` | Diagnostic review surface; candidate after current legacy report cleanup. |
+| 753 | `tools/diagnostics/peak_candidate_score_calibration_report.py` | Diagnostic report surface; prefer rendering/writer splits before score semantics. |
+| 747 | `tools/diagnostics/targeted_nl_dropout_root_cause_audit.py` | Targeted diagnostic audit; split loaders/model/writers without changing buckets. |
+| 731 | `tools/diagnostics/family_ms1_backfill_review_report.py` | Diagnostic report CLI/model/writer mix; candidate for next report cleanup. |
 
 Identity-coherence internal line pressure:
 
@@ -176,6 +176,10 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 355 | `tools/diagnostics/targeted_evidence_review_report_rendering.py` | Workstream G section assembly for the targeted evidence human-review report. |
 | 154 | `tools/diagnostics/targeted_evidence_review_report_components.py` | Reusable HTML components, tone helpers, escaping, and chart primitives. |
 | 358 | `tools/diagnostics/targeted_evidence_review_report_styles.py` | CSS for the targeted evidence human-review report. |
+| 207 | `tools/diagnostics/targeted_istd_benchmark.py` | Targeted ISTD benchmark CLI/orchestration facade. |
+| 179 | `tools/diagnostics/targeted_istd_benchmark_matching.py` | Target-to-alignment exact/isotope-shift matching helpers. |
+| 337 | `tools/diagnostics/targeted_istd_benchmark_summary.py` | Target summary gate calculations and targeted-reliability warning modes. |
+| 74 | `tools/diagnostics/targeted_istd_benchmark_stats.py` | Small numeric statistics helpers for RT/area correlation checks. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -558,8 +562,11 @@ Targets already partly improved:
 - `targeted_evidence_review_report.py` is split into CLI/model/rendering pieces.
   Rendering is now further split into section assembly, reusable HTML
   components, and CSS.
-- targeted reliability, low-MS1 coverage, and targeted ISTD benchmark now have
-  more focused modules but still carry large tests and report renderers.
+- `targeted_istd_benchmark.py` now stays as the CLI/orchestration facade.
+  Matching, summary gate calculations, and numeric statistics live in focused
+  modules.
+- targeted reliability and low-MS1 coverage now have more focused modules but
+  still carry large tests and report renderers.
 
 Actions:
 
