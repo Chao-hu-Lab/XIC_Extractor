@@ -5,153 +5,32 @@ import csv
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
 
-IDENTITY_COHERENCE_FILES = {
-    "requests_tsv": "untargeted_identity_coherence_requests.tsv",
-    "decisions_tsv": "untargeted_identity_coherence_decisions.tsv",
-    "cell_evidence_tsv": "untargeted_identity_coherence_cell_evidence.tsv",
-    "controls_tsv": "untargeted_identity_coherence_controls.tsv",
-    "summary_md": "untargeted_identity_coherence_summary.md",
-}
-
-VALIDATION_SUMMARY_COLUMNS = (
-    "check_name",
-    "status",
-    "serial_value",
-    "process_value",
-    "details",
+from xic_extractor.alignment.identity_coherence_validation.bundle import (
+    bundle_from_output_dir,
+    read_tsv_rows,
 )
-
-# Keep this in sync with controls.py:REQUIRED_MANIFEST_FIELDS plus the optional
-# fields read by _entry_from_row(); tests must round-trip proposals through the
-# real manifest reader to catch drift.
-CONTROL_MANIFEST_COLUMNS = (
-    "control_id",
-    "control_type",
-    "control_name",
-    "expected_mapping_status",
-    "control_expected_behavior",
-    "fragment_observation_mode",
-    "precursor_tolerance_ppm",
-    "product_tolerance_ppm",
-    "cid_observed_loss_tolerance_ppm",
-    "rt_tolerance_sec",
-    "required_failure_reason_when_missed",
-    "decision_id",
-    "identity_family_id",
-    "seed_candidate_id",
-    "decoy_generation_method",
-    "decoy_source_request_id",
-    "decoy_fragment_tags",
-    "positive_control_target_name",
-    "positive_control_target_mz",
-    "positive_control_target_rt_sec",
-    "positive_control_mapping_error_ppm",
-    "positive_control_mapping_delta_rt_sec",
-    "control_notes",
+from xic_extractor.alignment.identity_coherence_validation.bundle import (
+    read_tsv_dict_rows as _read_tsv_dict_rows,
 )
-
-
-@dataclass(frozen=True)
-class DiagnosticBundle:
-    requests_tsv: Path
-    decisions_tsv: Path
-    cell_evidence_tsv: Path
-    controls_tsv: Path
-    summary_md: Path
-
-
-@dataclass(frozen=True)
-class TsvRows:
-    header: tuple[str, ...]
-    rows: tuple[tuple[str, ...], ...]
-
-
-@dataclass(frozen=True)
-class ValidationRow:
-    check_name: str
-    status: str
-    serial_value: str
-    process_value: str
-    details: str
-
-
-@dataclass(frozen=True)
-class RunMetadata:
-    mode: str
-    command_line: str
-    output_dir: Path
-    returncode: int
-
-
-@dataclass(frozen=True)
-class ValidationResult:
-    rows: tuple[ValidationRow, ...]
-    run_metadata: tuple[RunMetadata, ...] = ()
-
-    @property
-    def failed_count(self) -> int:
-        return sum(1 for row in self.rows if row.status == "fail")
-
-
-ACCEPTANCE_SUMMARY_COLUMNS = (
-    "criterion",
-    "status",
-    "evidence",
-    "details",
+from xic_extractor.alignment.identity_coherence_validation.bundle import (
+    tsv_digest as _tsv_digest,
 )
-
-V04_ACCEPTANCE_PASS_PREFIX = (
-    "PASS identity_coherence_v04_acceptance "
-    "scope=8raw_method_review_only not_85raw_ready"
+from xic_extractor.alignment.identity_coherence_validation.models import (
+    ACCEPTANCE_SUMMARY_COLUMNS,
+    CONTROL_MANIFEST_COLUMNS,
+    SIDECAR_PARITY_CHECKS,
+    V04_ACCEPTANCE_PASS_PREFIX,
+    VALIDATION_SUMMARY_COLUMNS,
+    AcceptanceReport,
+    AcceptanceRow,
+    CommandRunner,
+    DiagnosticBundle,
+    RunMetadata,
+    ValidationResult,
+    ValidationRow,
 )
-
-SIDECAR_PARITY_CHECKS = (
-    "requests_tsv_exact",
-    "decisions_tsv_exact",
-    "cell_evidence_tsv_exact",
-    "controls_tsv_parity_only",
-    "summary_md_presence",
-)
-
-
-@dataclass(frozen=True)
-class AcceptanceRow:
-    criterion: str
-    status: str
-    evidence: str
-    details: str
-
-
-@dataclass(frozen=True)
-class AcceptanceReport:
-    rows: tuple[AcceptanceRow, ...]
-
-    @property
-    def accepted(self) -> bool:
-        rows = {row.criterion: row for row in self.rows}
-        final = rows.get("v04_acceptance")
-        return final is not None and final.status == "pass"
-
-
-class CommandRunner(Protocol):
-    def __call__(self, command: list[str]) -> subprocess.CompletedProcess[str]:
-        ...
-
-
-def bundle_from_output_dir(output_dir: Path) -> DiagnosticBundle:
-    identity_dir = output_dir / "identity_coherence"
-    return DiagnosticBundle(
-        requests_tsv=identity_dir / IDENTITY_COHERENCE_FILES["requests_tsv"],
-        decisions_tsv=identity_dir / IDENTITY_COHERENCE_FILES["decisions_tsv"],
-        cell_evidence_tsv=identity_dir
-        / IDENTITY_COHERENCE_FILES["cell_evidence_tsv"],
-        controls_tsv=identity_dir / IDENTITY_COHERENCE_FILES["controls_tsv"],
-        summary_md=identity_dir / IDENTITY_COHERENCE_FILES["summary_md"],
-    )
 
 
 def build_alignment_command(
@@ -405,15 +284,6 @@ def main(argv: list[str] | None = None) -> int:
             f"{args.write_controls_manifest_proposal}"
         )
     return 0
-
-
-def read_tsv_rows(path: Path) -> TsvRows:
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.reader(handle, dialect="excel-tab")
-        rows = tuple(tuple(row) for row in reader)
-    if not rows:
-        raise ValueError(f"{path}: empty TSV")
-    return TsvRows(header=rows[0], rows=rows[1:])
 
 
 def compare_identity_coherence_bundles(
@@ -747,12 +617,6 @@ def _control_method_rows(
     )
 
 
-def _read_tsv_dict_rows(path: Path) -> tuple[dict[str, str], ...]:
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle, dialect="excel-tab")
-        return tuple(dict(row) for row in reader)
-
-
 def _rows_by_control_type(
     rows: tuple[dict[str, str], ...],
     control_type: str,
@@ -982,10 +846,6 @@ def _compare_summary_presence(serial_path: Path, process_path: Path) -> Validati
         process_value=str(process_exists).lower(),
         details="summary markdown is reviewed manually; TSVs are exact-compared",
     )
-
-
-def _tsv_digest(rows: TsvRows) -> str:
-    return f"header={len(rows.header)} rows={len(rows.rows)}"
 
 
 def _run_command(command: list[str]) -> subprocess.CompletedProcess[str]:

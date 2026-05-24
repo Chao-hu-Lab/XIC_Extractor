@@ -97,6 +97,8 @@ This branch has now implemented the first identity-coherence cleanup bundle:
 - Workstream H: the first two `tests/test_alignment_pipeline.py` slices moved
   into focused test files, and their shared batch/matrix fixtures now live in
   `tests/alignment_pipeline_helpers.py`.
+- Workstream D: the first validator split slice moved common models and TSV
+  bundle reads into `identity_coherence_validation/`.
 
 The original plan recommended landing Workstream H in a dedicated test-only PR.
 This branch intentionally keeps B/C/H in one cleanup bundle after review because
@@ -118,6 +120,10 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 292 | `tests/test_alignment_identity_coherence_pipeline.py` | Focused identity-coherence pipeline diagnostic tests. |
 | 256 | `tests/test_alignment_pipeline_timing.py` | Focused alignment timing/raw-source tests. |
 | 282 | `tests/alignment_pipeline_helpers.py` | Shared alignment-pipeline batch/matrix fixtures for focused tests. |
+| 1050 | `scripts/validate_identity_coherence_8raw.py` | Public CLI plus remaining validation orchestration after first Workstream D slice. |
+| 138 | `xic_extractor/alignment/identity_coherence_validation/models.py` | Validator dataclasses and frozen column/name constants. |
+| 42 | `xic_extractor/alignment/identity_coherence_validation/bundle.py` | Frozen bundle paths and TSV reads. |
+| 62 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 
 ## Existing Contracts To Preserve
 
@@ -346,6 +352,7 @@ moving validation internals behind focused modules.
 Candidate target package:
 
 - `xic_extractor/alignment/identity_coherence_validation/`
+  - `models.py`: dataclasses plus frozen validation columns and artifact names,
   - `bundle.py`: frozen output bundle discovery and reads,
   - `compare.py`: serial/process parity checks,
   - `controls_summary.py`: positive/decoy method rows,
@@ -569,7 +576,9 @@ Definition of done:
 
 1. Decide PR packaging for this branch: keep the reviewed B/C/H cleanup bundle,
    or split the two Workstream H commits into a dedicated test-only PR.
-2. Split 8RAW validation CLI internals.
+2. Continue splitting 8RAW validation CLI internals after the first models/bundle
+   slice: next targets are compare, controls summary, proposal generation,
+   acceptance verdict, and writer modules.
 3. Review identity-coherence adapter boundary.
 4. Inventory instrument-QC productization modules with a new focused spec.
 5. Add or refresh a documented 8RAW performance baseline before any

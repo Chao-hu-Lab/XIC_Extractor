@@ -15,7 +15,6 @@ from scripts.validate_identity_coherence_8raw import (
     build_alignment_command,
     compare_identity_coherence_bundles,
     evaluate_v04_acceptance,
-    read_tsv_rows,
     run_validation,
     write_decoy_manifest_proposal,
     write_validation_outputs,
@@ -105,15 +104,6 @@ def _write_proposal_source_bundle(root: Path) -> DiagnosticBundle:
     _write(bundle.controls_tsv, "control_id\tcontrol_type\tcontrol_pass\n")
     _write(bundle.summary_md, "# Summary\n")
     return bundle
-
-
-def test_read_tsv_rows_preserves_header_and_order(tmp_path: Path) -> None:
-    path = _write(tmp_path / "rows.tsv", "a\tb\n1\t2\n3\t4\n")
-
-    rows = read_tsv_rows(path)
-
-    assert rows.header == ("a", "b")
-    assert rows.rows == (("1", "2"), ("3", "4"))
 
 
 def test_compare_bundles_passes_identical_tsvs(tmp_path: Path) -> None:
