@@ -39,7 +39,7 @@ behavior change needs its own spec.
 
 Structural scan from the cleanup worktree before the first split commits:
 
-- CodeGraph CLI synchronized locally: 594 files, 10,587 nodes, 26,656 edges.
+- CodeGraph CLI synchronized locally: 598 files, 10,613 nodes, 26,679 edges.
 - `xic_extractor/`, `tools/`, and `scripts/` now contain several files over
   the repo-local 500/800-line red-flag thresholds.
 - The largest post-PR60 hotspots are now split across three areas:
@@ -58,6 +58,7 @@ Largest production / tool modules:
 | 683 | `tools/diagnostics/low_ms1_coverage_review_classifier.py` | Diagnostic classifier; split only behind stable review TSV/JSON outputs. |
 | 668 | `xic_extractor/alignment/clustering.py` | Domain-heavy clustering module; still deferred unless characterization tests pin clustering decisions. |
 | 609 | `tools/diagnostics/targeted_gt_alignment_audit.py` | Diagnostic audit surface; split only behind stable TSV/JSON/Markdown outputs. |
+| 606 | `xic_extractor/discovery/ms1_backfill.py` | Domain-heavy discovery/backfill module; defer until behavior is pinned by focused tests. |
 
 Identity-coherence internal line pressure:
 
@@ -229,6 +230,11 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 101 | `tools/diagnostics/cwt_peak_candidate_audit_io.py` | Peak-candidate TSV and optional targeted workbook target-m/z loading. |
 | 197 | `tools/diagnostics/cwt_peak_candidate_audit_analysis.py` | CWT agreement/conditioned classification, nearest-CWT selection, and summary counts. |
 | 147 | `tools/diagnostics/cwt_peak_candidate_audit_writers.py` | CWT audit TSV/JSON/Markdown writers and value formatting. |
+| 145 | `tools/diagnostics/cross_report_evidence_consistency.py` | Cross-report evidence consistency CLI/orchestration compatibility facade. |
+| 132 | `tools/diagnostics/cross_report_evidence_consistency_models.py` | Cross-report dataclasses and TSV field contracts. |
+| 120 | `tools/diagnostics/cross_report_evidence_consistency_io.py` | Targeted reliability rows, peak candidates, and workbook target-m/z loading. |
+| 233 | `tools/diagnostics/cross_report_evidence_consistency_analysis.py` | Targeted reliability/candidate consistency classification and summaries. |
+| 83 | `tools/diagnostics/cross_report_evidence_consistency_writers.py` | Cross-report TSV/JSON/Markdown writers and value formatting. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -650,6 +656,10 @@ Targets already partly improved:
   compatibility facade. Dataclasses/constants, TSV/workbook loading, CWT
   agreement classification, summaries, and TSV/JSON/Markdown writers live in
   focused modules.
+- `cross_report_evidence_consistency.py` now stays as the CLI/orchestration
+  compatibility facade. Dataclasses/columns, TSV/workbook loading, consistency
+  classification, summaries, and TSV/JSON/Markdown writers live in focused
+  modules.
 - targeted reliability and low-MS1 coverage now have more focused modules but
   still carry large tests and report renderers.
 

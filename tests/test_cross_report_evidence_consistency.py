@@ -2,11 +2,99 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from openpyxl import Workbook
 
 from tools.diagnostics import cross_report_evidence_consistency as report
+
+
+def test_path_style_cli_help_preserves_public_script_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = (
+        repo_root / "tools" / "diagnostics" / "cross_report_evidence_consistency.py"
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--targeted-reliability-rows-tsv" in result.stdout
+    assert "--peak-candidates-tsv" in result.stdout
+    assert "--output-dir" in result.stdout
+
+
+def test_module_style_cli_help_preserves_public_module_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.diagnostics.cross_report_evidence_consistency",
+            "--help",
+        ],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--targeted-reliability-rows-tsv" in result.stdout
+    assert "--peak-candidates-tsv" in result.stdout
+    assert "--output-dir" in result.stdout
+
+
+def test_facade_preserves_existing_helper_import_surface() -> None:
+    expected_names = [
+        "CandidateRow",
+        "ConsistencyResult",
+        "ConsistencyRow",
+        "ConsistencySummary",
+        "CrossReportConsistencyOutputs",
+        "ReliabilityRow",
+        "_CANDIDATE_COLUMNS",
+        "_RELIABILITY_COLUMNS",
+        "_ROW_COLUMNS",
+        "_SUMMARY_COLUMNS",
+        "_bool_value",
+        "_candidate_consistency",
+        "_classify_consistency",
+        "_consistency_row",
+        "_consistency_rows",
+        "_format_value",
+        "_has_review_positive_blocker",
+        "_markdown",
+        "_optional_float",
+        "_parse_args",
+        "_read_candidate_rows",
+        "_read_reliability_rows",
+        "_read_required_tsv",
+        "_read_target_mz",
+        "_row_dicts",
+        "_split_labels",
+        "_summary",
+        "_text",
+        "_write_outputs",
+        "_write_tsv",
+        "main",
+        "run_cross_report_evidence_consistency",
+    ]
+
+    assert set(report.__all__) == set(expected_names)
+    for name in expected_names:
+        assert hasattr(report, name), name
 
 
 def test_cross_report_consistency_flags_mismatched_evidence(
@@ -121,10 +209,7 @@ def test_cross_report_consistency_flags_mismatched_evidence(
         targeted_workbook=workbook,
     )
 
-    by_key = {
-        (row.sample_name, row.target_label): row
-        for row in result.rows
-    }
+    by_key = {(row.sample_name, row.target_label): row for row in result.rows}
     assert by_key[("S2", "dropout_ok")].consistency_status == "consistent"
     assert by_key[("S1", "clean_conflict")].issue_type == (
         "targeted_clean_candidate_conflict"
@@ -132,9 +217,7 @@ def test_cross_report_consistency_flags_mismatched_evidence(
     assert by_key[("S1", "clean_conflict")].target_mz == 301.1
     assert by_key[("S9", "clean_shape_review")].consistency_status == "consistent"
     assert by_key[("S10", "dropout_weak_area")].consistency_status == "consistent"
-    assert by_key[("S10", "dropout_weak_area")].targeted_area_to_median_ratio == (
-        0.004
-    )
+    assert by_key[("S10", "dropout_weak_area")].targeted_area_to_median_ratio == (0.004)
     assert by_key[("S3", "dropout_missing")].issue_type == (
         "review_positive_not_supported_by_candidate"
     )
@@ -159,6 +242,35 @@ def test_cross_report_consistency_flags_mismatched_evidence(
     assert result.summary.mismatch_count == 6
 
     rows = _read_tsv(outputs.rows_tsv)
+    with outputs.summary_tsv.open(encoding="utf-8", newline="") as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "rows_checked",
+            "consistent_count",
+            "mismatch_count",
+            "missing_candidate_count",
+            "missing_reliability_count",
+            "issue_counts",
+        ]
+    with outputs.rows_tsv.open(encoding="utf-8", newline="") as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "sample_name",
+            "target_label",
+            "target_mz",
+            "reliability_state",
+            "targeted_risk_reasons",
+            "resolver_mode",
+            "selected_candidate_id",
+            "selected_rt_apex_min",
+            "selected_raw_score",
+            "selected_confidence",
+            "targeted_area_to_median_ratio",
+            "candidate_support_labels",
+            "candidate_concern_labels",
+            "candidate_consistency_labels",
+            "consistency_status",
+            "issue_type",
+            "reason",
+        ]
     assert rows[0]["target_mz"]
     assert (output_dir / "cross_report_evidence_consistency.md").is_file()
     payload = json.loads(outputs.json_path.read_text(encoding="utf-8"))
