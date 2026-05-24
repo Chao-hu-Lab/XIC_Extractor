@@ -8,10 +8,13 @@ import pytest
 from scripts import validate_identity_coherence_8raw as validation_script
 from scripts.validate_identity_coherence_8raw import (
     DiagnosticBundle,
+    V04_ACCEPTANCE_PASS_PREFIX,
     ValidationResult,
     ValidationRow,
+    _merge_method_row,
     build_alignment_command,
     compare_identity_coherence_bundles,
+    evaluate_v04_acceptance,
     read_tsv_rows,
     run_validation,
     write_decoy_manifest_proposal,
@@ -233,6 +236,269 @@ def test_controls_rows_do_not_interpret_when_controls_parity_fails(
     assert rows["decoy_coherent_seed_count"].status == "fail"
     assert rows["decoy_coherent_seed_count"].serial_value == "not_assessed"
     assert rows["decoy_coherent_seed_count"].process_value == "not_assessed"
+
+
+def test_merge_method_row_preserves_process_process_value() -> None:
+    merged = _merge_method_row(
+        ValidationRow("decoy_correctly_rejected_count", "pass", "3/3", "3/3", "s"),
+        ValidationRow("decoy_correctly_rejected_count", "pass", "2/3", "2/3", "p"),
+    )
+
+    assert merged.serial_value == "3/3"
+    assert merged.process_value == "2/3"
+
+
+def _validation_result_with_rows(rows: tuple[ValidationRow, ...]) -> ValidationResult:
+    return ValidationResult(rows=rows)
+
+
+def test_evaluate_v04_acceptance_fails_without_reviewed_controls() -> None:
+    result = _validation_result_with_rows(
+        (
+            ValidationRow("requests_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("decisions_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("cell_evidence_tsv_exact", "pass", "8", "8", "ok"),
+            ValidationRow("controls_tsv_parity_only", "pass", "0", "0", "ok"),
+            ValidationRow(
+                "controls_manifest_assessment",
+                "not_assessed",
+                "not_provided",
+                "not_provided",
+                "no manifest",
+            ),
+            ValidationRow(
+                "positive_control_pass_fraction",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+            ValidationRow(
+                "decoy_coherent_seed_count",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+            ValidationRow(
+                "decoy_correctly_rejected_count",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+            ValidationRow("summary_md_presence", "pass", "present", "present", "ok"),
+        )
+    )
+
+    report = evaluate_v04_acceptance(
+        result,
+        controls_manifest=Path("identity_coherence_controls_manifest.reviewed.tsv"),
+    )
+
+    rows = {row.criterion: row for row in report.rows}
+    assert rows["serial_process_sidecar_parity"].status == "pass"
+    assert rows["reviewed_controls_manifest"].status == "fail"
+    assert rows["v04_acceptance"].status == "fail"
+    assert not report.accepted
+
+
+def test_evaluate_v04_acceptance_passes_when_controls_pass() -> None:
+    result = _validation_result_with_rows(
+        (
+            ValidationRow("requests_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("decisions_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("cell_evidence_tsv_exact", "pass", "8", "8", "ok"),
+            ValidationRow("controls_tsv_parity_only", "pass", "2", "2", "ok"),
+            ValidationRow(
+                "controls_manifest_assessment",
+                "not_assessed",
+                "provided",
+                "provided",
+                "manifest provided",
+            ),
+            ValidationRow(
+                "positive_control_pass_fraction",
+                "pass",
+                "1.000",
+                "1.000",
+                "all positives passed",
+            ),
+            ValidationRow(
+                "decoy_coherent_seed_count",
+                "pass",
+                "0",
+                "0",
+                "no decoy promotion",
+            ),
+            ValidationRow(
+                "decoy_correctly_rejected_count",
+                "pass",
+                "3/3",
+                "3/3",
+                "all decoys rejected",
+            ),
+            ValidationRow("summary_md_presence", "pass", "present", "present", "ok"),
+        )
+    )
+
+    report = evaluate_v04_acceptance(
+        result,
+        controls_manifest=Path("identity_coherence_controls_manifest.reviewed.tsv"),
+    )
+
+    rows = {row.criterion: row for row in report.rows}
+    assert rows["positive_control_sensitivity"].status == "pass"
+    assert rows["identity_decoy_specificity"].status == "pass"
+    assert rows["v04_acceptance"].status == "pass"
+    assert report.accepted
+
+
+def test_evaluate_v04_acceptance_fails_for_non_reviewed_manifest_name() -> None:
+    result = _validation_result_with_rows(
+        (
+            ValidationRow("requests_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("decisions_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("cell_evidence_tsv_exact", "pass", "8", "8", "ok"),
+            ValidationRow("controls_tsv_parity_only", "pass", "2", "2", "ok"),
+            ValidationRow(
+                "controls_manifest_assessment",
+                "not_assessed",
+                "provided",
+                "provided",
+                "manifest provided",
+            ),
+            ValidationRow(
+                "positive_control_pass_fraction",
+                "pass",
+                "1.000",
+                "1.000",
+                "all positives passed",
+            ),
+            ValidationRow(
+                "decoy_coherent_seed_count",
+                "pass",
+                "0",
+                "0",
+                "no decoy promotion",
+            ),
+            ValidationRow(
+                "decoy_correctly_rejected_count",
+                "pass",
+                "3/3",
+                "3/3",
+                "all decoys rejected",
+            ),
+            ValidationRow("summary_md_presence", "pass", "present", "present", "ok"),
+        )
+    )
+
+    report = evaluate_v04_acceptance(result, controls_manifest=Path("controls.tsv"))
+
+    rows = {row.criterion: row for row in report.rows}
+    assert rows["reviewed_controls_manifest"].status == "fail"
+    assert rows["v04_acceptance"].status == "fail"
+    assert not report.accepted
+
+
+def test_evaluate_v04_acceptance_fails_when_decoy_promotes() -> None:
+    result = _validation_result_with_rows(
+        (
+            ValidationRow("requests_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("decisions_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("cell_evidence_tsv_exact", "pass", "8", "8", "ok"),
+            ValidationRow("controls_tsv_parity_only", "pass", "2", "2", "ok"),
+            ValidationRow(
+                "controls_manifest_assessment",
+                "not_assessed",
+                "provided",
+                "provided",
+                "manifest provided",
+            ),
+            ValidationRow(
+                "positive_control_pass_fraction",
+                "pass",
+                "1.000",
+                "1.000",
+                "all positives passed",
+            ),
+            ValidationRow(
+                "decoy_coherent_seed_count",
+                "fail",
+                "1",
+                "1",
+                "decoy promoted",
+            ),
+            ValidationRow(
+                "decoy_correctly_rejected_count",
+                "fail",
+                "2/3",
+                "2/3",
+                "one decoy promoted",
+            ),
+            ValidationRow("summary_md_presence", "pass", "present", "present", "ok"),
+        )
+    )
+
+    report = evaluate_v04_acceptance(
+        result,
+        controls_manifest=Path("identity_coherence_controls_manifest.reviewed.tsv"),
+    )
+
+    rows = {row.criterion: row for row in report.rows}
+    assert rows["identity_decoy_specificity"].status == "fail"
+    assert rows["v04_acceptance"].status == "fail"
+    assert not report.accepted
+
+
+def test_evaluate_v04_acceptance_fails_when_decoy_rejected_count_fails() -> None:
+    result = _validation_result_with_rows(
+        (
+            ValidationRow("requests_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("decisions_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("cell_evidence_tsv_exact", "pass", "8", "8", "ok"),
+            ValidationRow("controls_tsv_parity_only", "pass", "2", "2", "ok"),
+            ValidationRow(
+                "controls_manifest_assessment",
+                "not_assessed",
+                "provided",
+                "provided",
+                "manifest provided",
+            ),
+            ValidationRow(
+                "positive_control_pass_fraction",
+                "pass",
+                "1.000",
+                "1.000",
+                "all positives passed",
+            ),
+            ValidationRow(
+                "decoy_coherent_seed_count",
+                "pass",
+                "0",
+                "0",
+                "no coherent decoy",
+            ),
+            ValidationRow(
+                "decoy_correctly_rejected_count",
+                "fail",
+                "2/3",
+                "2/3",
+                "one decoy not correctly rejected",
+            ),
+            ValidationRow("summary_md_presence", "pass", "present", "present", "ok"),
+        )
+    )
+
+    report = evaluate_v04_acceptance(
+        result,
+        controls_manifest=Path("identity_coherence_controls_manifest.reviewed.tsv"),
+    )
+
+    rows = {row.criterion: row for row in report.rows}
+    assert rows["identity_decoy_specificity"].status == "fail"
+    assert rows["v04_acceptance"].status == "fail"
+    assert not report.accepted
 
 
 def test_compare_bundles_fails_when_row_order_changes(tmp_path: Path) -> None:
