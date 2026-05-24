@@ -58,7 +58,7 @@ Largest production / tool modules:
 | 800 | `tools/diagnostics/seed_aware_backfill_review.py` | Diagnostic review surface; candidate after current legacy report cleanup. |
 | 753 | `tools/diagnostics/peak_candidate_score_calibration_report.py` | Diagnostic report surface; prefer rendering/writer splits before score semantics. |
 | 747 | `tools/diagnostics/targeted_nl_dropout_root_cause_audit.py` | Targeted diagnostic audit; split loaders/model/writers without changing buckets. |
-| 731 | `tools/diagnostics/family_ms1_backfill_review_report.py` | Diagnostic report CLI/model/writer mix; candidate for next report cleanup. |
+| 714 | `xic_extractor/alignment/primary_consolidation.py` | Domain-heavy alignment module; still deferred until characterization tests pin graph/winner/cell merge behavior. |
 
 Identity-coherence internal line pressure:
 
@@ -180,6 +180,10 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 179 | `tools/diagnostics/targeted_istd_benchmark_matching.py` | Target-to-alignment exact/isotope-shift matching helpers. |
 | 337 | `tools/diagnostics/targeted_istd_benchmark_summary.py` | Target summary gate calculations and targeted-reliability warning modes. |
 | 74 | `tools/diagnostics/targeted_istd_benchmark_stats.py` | Small numeric statistics helpers for RT/area correlation checks. |
+| 221 | `tools/diagnostics/family_ms1_backfill_review_report.py` | Family MS1 backfill review CLI/orchestration facade. |
+| 279 | `tools/diagnostics/family_ms1_backfill_review_model.py` | Candidate classification, priority, queue, and summary helpers. |
+| 53 | `tools/diagnostics/family_ms1_backfill_review_io.py` | Alignment TSV and overlay evidence loading helpers. |
+| 218 | `tools/diagnostics/family_ms1_backfill_review_writers.py` | TSV/JSON/Markdown writers and stable output field ordering. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -565,6 +569,9 @@ Targets already partly improved:
 - `targeted_istd_benchmark.py` now stays as the CLI/orchestration facade.
   Matching, summary gate calculations, and numeric statistics live in focused
   modules.
+- `family_ms1_backfill_review_report.py` now stays as the CLI/orchestration
+  facade. Candidate classification, TSV/overlay loading, and output writers
+  live in focused modules.
 - targeted reliability and low-MS1 coverage now have more focused modules but
   still carry large tests and report renderers.
 

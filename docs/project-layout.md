@@ -278,7 +278,7 @@ else:
 
 已完成的責任切分：
 
-- `tools/diagnostics/alignment_decision_report.py`、`single_dr_production_gate_decision_report.py`、`targeted_istd_benchmark.py` 已拆出 loading / report model / matching / summary / rendering 或 writing helpers。
+- `tools/diagnostics/alignment_decision_report.py`、`single_dr_production_gate_decision_report.py`、`targeted_istd_benchmark.py`、`family_ms1_backfill_review_report.py` 已拆出 loading / report model / matching / summary / rendering 或 writing helpers。
 - `xic_extractor/alignment/pipeline.py` 已拆出 `pipeline_outputs.py` 與 `raw_sources.py`，保留 `run_alignment(...)` 作 orchestration facade。
 
 相關 spec：
