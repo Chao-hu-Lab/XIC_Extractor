@@ -119,7 +119,8 @@ This branch has now implemented the first identity-coherence cleanup bundle:
   tests pin its output.
 - Workstream G: `alignment_decision_report_rendering.py` now keeps section
   assembly only. Reusable HTML components and CSS live in separate diagnostic
-  rendering modules, with report-model verdict/evidence logic untouched.
+  rendering modules, with report-model verdict/evidence logic untouched. The
+  targeted evidence human-review report now follows the same rendering split.
 
 The original plan recommended landing Workstream H in a dedicated test-only PR.
 This branch intentionally keeps B/C/H in one cleanup bundle after review because
@@ -172,6 +173,9 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 481 | `tools/diagnostics/alignment_decision_report_rendering.py` | Workstream G section assembly for the HTML diagnostic report. |
 | 212 | `tools/diagnostics/alignment_decision_report_components.py` | Reusable HTML components, escaping, formatting, and chart primitives. |
 | 296 | `tools/diagnostics/alignment_decision_report_styles.py` | CSS for the alignment decision diagnostic report. |
+| 355 | `tools/diagnostics/targeted_evidence_review_report_rendering.py` | Workstream G section assembly for the targeted evidence human-review report. |
+| 154 | `tools/diagnostics/targeted_evidence_review_report_components.py` | Reusable HTML components, tone helpers, escaping, and chart primitives. |
+| 358 | `tools/diagnostics/targeted_evidence_review_report_styles.py` | CSS for the targeted evidence human-review report. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -549,6 +553,9 @@ identity-coherence internals.
 Targets already partly improved:
 
 - `alignment_decision_report.py` is split into CLI/model/rendering pieces.
+  Rendering is now further split into section assembly, reusable HTML
+  components, and CSS.
+- `targeted_evidence_review_report.py` is split into CLI/model/rendering pieces.
   Rendering is now further split into section assembly, reusable HTML
   components, and CSS.
 - targeted reliability, low-MS1 coverage, and targeted ISTD benchmark now have
