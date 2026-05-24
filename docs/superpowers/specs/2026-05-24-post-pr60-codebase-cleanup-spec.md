@@ -39,7 +39,7 @@ behavior change needs its own spec.
 
 Structural scan from the cleanup worktree before the first split commits:
 
-- CodeGraph CLI synchronized locally: 578 files, 10,484 nodes, 26,529 edges.
+- CodeGraph CLI synchronized locally: 582 files, 10,507 nodes, 26,561 edges.
 - `xic_extractor/`, `tools/`, and `scripts/` now contain several files over
   the repo-local 500/800-line red-flag thresholds.
 - The largest post-PR60 hotspots are now split across three areas:
@@ -52,12 +52,12 @@ Largest production / tool modules:
 | 1092 | `xic_extractor/peak_scoring.py` | Existing decomposition target; still deferred until characterization tests pin scoring outputs. |
 | 1012 | `xic_extractor/alignment/process_backend.py` | Process mechanics plus alignment/trace payloads; split only with spawn/pickle smoke tests. |
 | 968 | `scripts/local_minimum_param_sweep.py` | Validation/development script; not part of PR60 cleanup unless it blocks tooling. |
-| 753 | `tools/diagnostics/peak_candidate_score_calibration_report.py` | Diagnostic report surface; prefer rendering/writer splits before score semantics. |
 | 714 | `xic_extractor/alignment/ownership.py` | Domain-heavy ownership module; still deferred unless characterization tests pin owner decisions. |
 | 714 | `xic_extractor/alignment/primary_consolidation.py` | Domain-heavy alignment module; still deferred until characterization tests pin graph/winner/cell merge behavior. |
 | 702 | `scripts/validate_migration.py` | Migration validation script; defer unless it blocks current cleanup validation. |
 | 683 | `tools/diagnostics/low_ms1_coverage_review_classifier.py` | Diagnostic classifier; split only behind stable review TSV/JSON outputs. |
 | 682 | `tools/diagnostics/evidence_spine_consistency.py` | Diagnostic consistency surface; split only behind stable report outputs. |
+| 682 | `tools/diagnostics/area_integration_uncertainty_audit.py` | Diagnostic uncertainty surface; split only behind stable TSV/JSON/Markdown outputs. |
 
 Identity-coherence internal line pressure:
 
@@ -209,6 +209,11 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 145 | `tools/diagnostics/targeted_nl_dropout_root_cause_io.py` | Reliability TSV, candidate TSV, targeted workbook, and primitive parsing helpers. |
 | 260 | `tools/diagnostics/targeted_nl_dropout_root_cause_logic.py` | Selected-candidate grouping, root-cause buckets, trace-quality interpretation, and summary rows. |
 | 88 | `tools/diagnostics/targeted_nl_dropout_root_cause_writers.py` | Summary/row TSV, JSON, and Markdown writers. |
+| 142 | `tools/diagnostics/peak_candidate_score_calibration_report.py` | Peak-candidate score calibration CLI/orchestration compatibility facade. |
+| 149 | `tools/diagnostics/peak_candidate_score_calibration_models.py` | Score calibration dataclasses, column contracts, and label parsing shared by row models. |
+| 79 | `tools/diagnostics/peak_candidate_score_calibration_io.py` | Peak-candidate TSV loading and primitive value parsing. |
+| 388 | `tools/diagnostics/peak_candidate_score_calibration_analysis.py` | Risk grouping, label impact, summary counters, and recommendations. |
+| 127 | `tools/diagnostics/peak_candidate_score_calibration_writers.py` | Score calibration TSV/JSON/Markdown writers and value formatting. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -614,6 +619,10 @@ Targets already partly improved:
   CLI/orchestration compatibility facade. Dataclasses/columns, TSV/workbook
   loading, root-cause classification, and TSV/JSON/Markdown writers live in
   focused modules.
+- `peak_candidate_score_calibration_report.py` now stays as the
+  CLI/orchestration compatibility facade. Dataclasses/columns, TSV loading,
+  scoring-risk analysis, label-impact summaries, and TSV/JSON/Markdown writers
+  live in focused modules.
 - targeted reliability and low-MS1 coverage now have more focused modules but
   still carry large tests and report renderers.
 

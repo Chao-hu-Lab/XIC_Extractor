@@ -1,8 +1,84 @@
 import csv
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from tools.diagnostics import peak_candidate_score_calibration_report as report
+
+
+def test_path_style_cli_help_preserves_public_script_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = (
+        repo_root
+        / "tools"
+        / "diagnostics"
+        / "peak_candidate_score_calibration_report.py"
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--peak-candidates-tsv" in result.stdout
+    assert "--output-dir" in result.stdout
+
+
+def test_facade_preserves_existing_helper_import_surface() -> None:
+    expected_names = [
+        "_APEX_SHADOW_RT_WINDOW_MIN",
+        "_LABEL_COLUMNS",
+        "_REQUIRED_COLUMNS",
+        "_RISK_COLUMNS",
+        "_SUMMARY_COLUMNS",
+        "_best_challenger",
+        "_bool_value",
+        "_format_label_impact_row",
+        "_format_optional_float",
+        "_format_risk_row",
+        "_group_risks",
+        "_has_new_support",
+        "_label_impact",
+        "_label_impact_row",
+        "_markdown",
+        "_median_score",
+        "_optional_float",
+        "_parse_args",
+        "_plausible_nl_dropout",
+        "_read_peak_candidates",
+        "_recommendations",
+        "_risk_group_counts",
+        "_risk_row",
+        "_risk_rows",
+        "_row_from_dict",
+        "_same_or_near_apex",
+        "_score_greater",
+        "_score_sort_value",
+        "_selected_nl_fail",
+        "_selected_no_ms2",
+        "_selected_review_only",
+        "_split_labels",
+        "_summary",
+        "_write_label_impact",
+        "_write_outputs",
+        "_write_risk_rows",
+        "_write_summary",
+        "PeakCandidateScoreRow",
+        "ScoreLabelImpactRow",
+        "ScoreRiskRow",
+        "main",
+    ]
+
+    assert set(report.__all__) == set(expected_names)
+    for name in expected_names:
+        assert hasattr(report, name), name
 
 
 def test_score_calibration_report_flags_selected_risks_and_challengers(
@@ -113,10 +189,49 @@ def test_score_calibration_report_flags_selected_risks_and_challengers(
         "cwt_supported_rejected_challenger_group_count": 0,
     }
 
+    with (output_dir / "peak_candidate_score_calibration_summary.tsv").open(
+        encoding="utf-8", newline=""
+    ) as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "candidate_row_count",
+            "candidate_group_count",
+            "selected_row_count",
+            "rejected_row_count",
+            "selected_review_only_count",
+            "selected_nl_fail_count",
+            "selected_no_ms2_count",
+            "plausible_nl_dropout_selected_count",
+            "apex_evidence_shadow_group_count",
+            "high_score_rejected_challenger_group_count",
+            "strict_nl_rejected_challenger_group_count",
+            "cwt_supported_rejected_challenger_group_count",
+        ]
+
     risk_rows = _read_tsv(output_dir / "peak_candidate_score_risk_rows.tsv")
-    assert {
-        (row["group_id"], row["risk_type"]) for row in risk_rows
-    } == {
+    with (output_dir / "peak_candidate_score_risk_rows.tsv").open(
+        encoding="utf-8", newline=""
+    ) as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "group_id",
+            "sample_name",
+            "target_label",
+            "resolver_mode",
+            "risk_type",
+            "selected_candidate_id",
+            "selected_rt_apex_min",
+            "selected_raw_score",
+            "selected_confidence",
+            "selected_support_labels",
+            "selected_concern_labels",
+            "challenger_candidate_id",
+            "challenger_rt_apex_min",
+            "challenger_raw_score",
+            "challenger_confidence",
+            "challenger_support_labels",
+            "challenger_concern_labels",
+            "reason",
+        ]
+    assert {(row["group_id"], row["risk_type"]) for row in risk_rows} == {
         ("SampleA|CleanTarget|arbitrated", "high_score_rejected_challenger"),
         ("SampleA|CleanTarget|arbitrated", "apex_evidence_shadow"),
         ("SampleB|RiskTarget|arbitrated", "selected_review_only"),
@@ -126,6 +241,18 @@ def test_score_calibration_report_flags_selected_risks_and_challengers(
     }
 
     label_rows = _read_tsv(output_dir / "peak_candidate_score_label_impact.tsv")
+    with (output_dir / "peak_candidate_score_label_impact.tsv").open(
+        encoding="utf-8", newline=""
+    ) as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "label_kind",
+            "label",
+            "selected_count",
+            "rejected_count",
+            "selected_rate",
+            "selected_median_raw_score",
+            "rejected_median_raw_score",
+        ]
     strict_nl = next(row for row in label_rows if row["label"] == "strict_nl_ok")
     assert strict_nl["label_kind"] == "support"
     assert strict_nl["selected_count"] == "1"
