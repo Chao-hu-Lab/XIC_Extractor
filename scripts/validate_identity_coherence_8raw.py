@@ -270,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if (
         args.controls_manifest is not None
-        and ".proposed." in args.controls_manifest.name
+        and ".proposed." in args.controls_manifest.name.lower()
     ):
         print(
             "proposal manifests must be reviewed and renamed before use as "
@@ -608,18 +608,19 @@ def write_decoy_manifest_proposal(
         raise ValueError("max_decoys must be nonnegative")
     request_rows = _read_tsv_dict_rows(serial_bundle.requests_tsv)
     decision_rows = _read_tsv_dict_rows(serial_bundle.decisions_tsv)
-    request_by_decision = {
-        row.get("decision_id", ""): row
-        for row in request_rows
-        if row.get("decision_id")
-    }
+    request_by_decision, ambiguous_decision_ids = _unique_requests_by_decision(
+        request_rows
+    )
     proposal_rows: list[dict[str, str]] = []
     for decision in decision_rows:
         if len(proposal_rows) >= max_decoys:
             break
+        decision_id = decision.get("decision_id", "")
+        if decision_id in ambiguous_decision_ids:
+            continue
         if decision.get("seed_gate_class") != "coherent_seed":
             continue
-        request = request_by_decision.get(decision.get("decision_id", ""))
+        request = request_by_decision.get(decision_id)
         if request is None:
             continue
         if request.get("seed_candidate_id") != decision.get("seed_candidate_id"):
@@ -637,6 +638,24 @@ def write_decoy_manifest_proposal(
         )
     _write_manifest_rows(proposal_path, proposal_rows)
     return len(proposal_rows)
+
+
+def _unique_requests_by_decision(
+    request_rows: tuple[dict[str, str], ...],
+) -> tuple[dict[str, dict[str, str]], set[str]]:
+    request_by_decision: dict[str, dict[str, str]] = {}
+    ambiguous: set[str] = set()
+    for row in request_rows:
+        decision_id = row.get("decision_id", "")
+        if not decision_id:
+            continue
+        if decision_id in request_by_decision:
+            ambiguous.add(decision_id)
+            request_by_decision.pop(decision_id, None)
+            continue
+        if decision_id not in ambiguous:
+            request_by_decision[decision_id] = row
+    return request_by_decision, ambiguous
 
 
 def _proposal_request_has_required_values(request: dict[str, str]) -> bool:

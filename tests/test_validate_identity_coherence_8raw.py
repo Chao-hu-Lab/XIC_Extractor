@@ -479,6 +479,25 @@ def test_write_decoy_manifest_proposal_joins_by_decision_id(
     assert "\tICR-WRONG\t" not in text
 
 
+def test_write_decoy_manifest_proposal_skips_ambiguous_decision_join(
+    tmp_path: Path,
+) -> None:
+    bundle = _write_proposal_source_bundle(tmp_path / "serial")
+    original = bundle.requests_tsv.read_text(encoding="utf-8")
+    header, row = original.splitlines()
+    duplicate = row.replace("ICR-1\tICD-1\tC1\tS1", "ICR-DUP\tICD-1\tC1\tS1")
+    bundle.requests_tsv.write_text(
+        f"{header}\n{row}\n{duplicate}\n",
+        encoding="utf-8",
+    )
+    proposal = tmp_path / "proposal.tsv"
+
+    count = write_decoy_manifest_proposal(bundle, proposal, max_decoys=1)
+
+    assert count == 0
+    assert len(proposal.read_text(encoding="utf-8").splitlines()) == 1
+
+
 def test_write_decoy_manifest_proposal_skips_incomplete_tolerances(
     tmp_path: Path,
 ) -> None:
@@ -668,6 +687,38 @@ def test_main_rejects_proposed_controls_manifest(
     raw_dir = tmp_path / "raw"
     dll_dir = tmp_path / "dll"
     proposed = tmp_path / "identity_coherence_controls_manifest.proposed.tsv"
+    batch.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    proposed.write_text("control_id\n", encoding="utf-8")
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+
+    code = validation_script.main(
+        [
+            "--discovery-batch-index",
+            str(batch),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-root",
+            str(tmp_path / "out"),
+            "--controls-manifest",
+            str(proposed),
+        ]
+    )
+
+    assert code == 2
+    assert "must be reviewed and renamed" in capsys.readouterr().err
+
+
+def test_main_rejects_uppercase_proposed_controls_manifest(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    batch = tmp_path / "batch.csv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    proposed = tmp_path / "identity_coherence_controls_manifest.PROPOSED.TSV"
     batch.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
     proposed.write_text("control_id\n", encoding="utf-8")
     raw_dir.mkdir()
