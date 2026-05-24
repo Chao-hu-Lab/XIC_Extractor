@@ -1,9 +1,9 @@
 # Post-PR60 Codebase Cleanup Spec
 
-**Date:** 2026-05-24  
-**Status:** Planning spec for the next cleanup branch  
-**Branch:** `codex/codebase-cleanup-inventory`  
-**Base:** `ef05335` (`Merge pull request #60 from Chao-hu-Lab/codex/untargeted-backfill-logic-reset`)  
+**Date:** 2026-05-24
+**Status:** Implementation checkpoint for the cleanup branch
+**Branch:** `codex/codebase-cleanup-inventory`
+**Base:** `ef05335` (`Merge pull request #60 from Chao-hu-Lab/codex/untargeted-backfill-logic-reset`)
 
 ---
 
@@ -35,9 +35,9 @@ Cleanup may move code, split files, add characterization tests, tighten import
 boundaries, delete proven-dead compatibility wrappers, and update docs. Any
 behavior change needs its own spec.
 
-## Current Snapshot
+## Baseline Snapshot
 
-Structural scan from the cleanup worktree:
+Structural scan from the cleanup worktree before the first split commits:
 
 - CodeGraph CLI initialized locally: 503 files, 9,969 nodes, 25,878 edges.
 - `xic_extractor/`, `tools/`, and `scripts/` now contain several files over
@@ -87,6 +87,35 @@ Test pressure:
 | 1646 | `tests/test_extractor.py` | Existing broad targeted extraction suite. |
 | 1265 | `tests/test_validate_identity_coherence_8raw.py` | Public validation CLI tests; split only with stable helper fixtures. |
 | 1048 | `tests/test_peak_scoring.py` | Existing scoring decomposition target. |
+
+## Implementation Checkpoint
+
+This branch has now implemented the first identity-coherence cleanup bundle:
+
+- Workstream B: `identity_coherence/output.py` is a compatibility facade.
+- Workstream C: `identity_coherence/controls.py` is a compatibility facade.
+- Workstream H: the first two `tests/test_alignment_pipeline.py` slices moved
+  into focused test files.
+
+The original plan recommended landing Workstream H in a dedicated test-only PR.
+This branch intentionally keeps B/C/H in one cleanup bundle after review because
+the H commits are test-only, already isolated after the production refactors,
+and reduce review pressure on the remaining catch-all file. If PR packaging
+requires stricter separation, split the two Workstream H commits into a
+dedicated PR before merge.
+
+Post-split line-count checkpoint, measured as total physical lines with
+`Get-Content <path>).Count`:
+
+| Lines | File | Status |
+|---:|---|---|
+| 89 | `xic_extractor/alignment/identity_coherence/controls.py` | Compatibility facade after Workstream C. |
+| 37 | `xic_extractor/alignment/identity_coherence/output.py` | Compatibility facade after Workstream B. |
+| 356 | `xic_extractor/alignment/identity_coherence/output_summary_model.py` | Summary model and Go/No-Go calculations. |
+| 302 | `xic_extractor/alignment/identity_coherence/output_summary.py` | Markdown rendering only. |
+| 1605 | `tests/test_alignment_pipeline.py` | Still large; reduced by first Workstream H slices. |
+| 503 | `tests/test_alignment_identity_coherence_pipeline.py` | Focused identity-coherence pipeline diagnostic tests. |
+| 500 | `tests/test_alignment_pipeline_timing.py` | Focused alignment timing/raw-source tests. |
 
 ## Existing Contracts To Preserve
 
@@ -182,6 +211,7 @@ Candidate module split:
   - `IdentityCoherenceOutputContext`
   - `IdentityCoherenceOutputPaths`
   - `IdentityCoherenceOutputRecord`
+  - may import domain result models needed for runtime type-hint resolution,
   - must not import `output_validation.py`.
 - `identity_coherence/output_projection.py`
   - `project_request_row`
@@ -211,9 +241,9 @@ Allowed dependency direction:
 | Module | May import | Must not import |
 |---|---|---|
 | `output_formatting.py` | standard library only | any local output/domain module |
-| `output_models.py` | primitive validators local to the file, standard library | `output_validation.py`, writers, summary |
+| `output_models.py` | primitive validators local to the file, standard library, domain result models needed by public dataclass annotations | `output_validation.py`, writers, summary |
 | `output_validation.py` | `output_models.py`, domain result models | projection, writers, summary |
-| `output_projection.py` | schema, tags, formatting, domain result models | writers, summary |
+| `output_projection.py` | schema, tags, formatting, validation, domain result models | writers, summary |
 | `output_summary_model.py` / `output_go_no_go.py` | models, validation, schema enums, formatting | writers, CLI, adapters |
 | `output_summary.py` | models, validation, formatting, summary model | writers, CLI, adapters |
 | `output_writers.py` | models, validation, projection, summary | adapters, CLI |
@@ -475,9 +505,10 @@ These are important but should not be the first cleanup PR after PR #60:
 Touching them first creates scientific regression risk before the new
 diagnostic/reporting surfaces have settled.
 
-## Recommended First PR
+## Original Recommended First PR
 
-First cleanup PR should be the Workstream A boundary guard plus Workstream B:
+The initial planning recommendation was for the first cleanup PR to include the
+Workstream A boundary guard plus Workstream B:
 
 **Title:** `refactor: split identity coherence output surface`
 
@@ -534,19 +565,19 @@ Definition of done:
 
 ## Follow-Up PR Order
 
-1. Add the identity-coherence output boundary guard, then split
-   identity-coherence output.
-2. Split identity-coherence controls.
-3. Split catch-all alignment tests in a dedicated test-only PR.
-4. Split 8RAW validation CLI internals.
-5. Review identity-coherence adapter boundary.
-6. Inventory instrument-QC productization modules with a new focused spec.
-7. Add or refresh a documented 8RAW performance baseline before any
+1. Decide PR packaging for this branch: keep the reviewed B/C/H cleanup bundle,
+   or split the two Workstream H commits into a dedicated test-only PR.
+2. If a third focused alignment-pipeline test file needs the same long
+   discovery/matrix fixtures, extract a shared test helper in its own commit.
+3. Split 8RAW validation CLI internals.
+4. Review identity-coherence adapter boundary.
+5. Inventory instrument-QC productization modules with a new focused spec.
+6. Add or refresh a documented 8RAW performance baseline before any
    performance-claimed or process-backend behavior PR.
-8. Classify and extract ppm helper semantics only after characterization tests
+7. Classify and extract ppm helper semantics only after characterization tests
    prove signed/absolute and denominator behavior stays stable.
-9. Continue legacy diagnostic rendering splits.
-10. Only then revisit alignment domain-heavy modules with characterization
+8. Continue legacy diagnostic rendering splits.
+9. Only then revisit alignment domain-heavy modules with characterization
     tests.
 
 ## Review Checklist For Cleanup PRs

@@ -26,9 +26,14 @@ def evaluate_identity_controls(
     decoy_sources: Sequence[IdentityDecoySource],
     config: IdentityControlsConfig,
     seed_gate_config: SeedGateConfig = SeedGateConfig(),
-    positive_control_evaluator=evaluate_positive_control,
-    decoy_evaluator=evaluate_identity_decoy,
+    positive_control_evaluator=None,
+    decoy_evaluator=None,
 ) -> IdentityControlEvaluationResult:
+    if positive_control_evaluator is None:
+        positive_control_evaluator = evaluate_positive_control
+    if decoy_evaluator is None:
+        decoy_evaluator = evaluate_identity_decoy
+
     rows: list[dict[str, object]] = []
     for entry in entries:
         if entry.control_type is ControlType.POSITIVE_TARGETED_ISTD:

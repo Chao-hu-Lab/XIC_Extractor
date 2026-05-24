@@ -38,8 +38,11 @@ def evaluate_identity_decoy(
     config: IdentityControlsConfig,
     *,
     seed_gate_config: SeedGateConfig = SeedGateConfig(),
-    seed_gate_evaluator=evaluate_seed_gate,
+    seed_gate_evaluator=None,
 ) -> dict[str, object]:
+    if seed_gate_evaluator is None:
+        seed_gate_evaluator = evaluate_seed_gate
+
     if entry.control_type is not ControlType.IDENTITY_DECOY:
         raise ValueError("evaluate_identity_decoy requires identity_decoy")
     if entry.decoy_generation_method is None:
