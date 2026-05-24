@@ -39,7 +39,7 @@ behavior change needs its own spec.
 
 Structural scan from the cleanup worktree before the first split commits:
 
-- CodeGraph CLI initialized locally: 503 files, 9,969 nodes, 25,878 edges.
+- CodeGraph CLI synchronized locally: 561 files, 10,364 nodes, 26,355 edges.
 - `xic_extractor/`, `tools/`, and `scripts/` now contain several files over
   the repo-local 500/800-line red-flag thresholds.
 - The largest post-PR60 hotspots are now split across three areas:
@@ -49,16 +49,16 @@ Largest production / tool modules:
 
 | Lines | File | First cleanup interpretation |
 |---:|---|---|
-| 1092 | `xic_extractor/peak_scoring.py` | Existing decomposition target; still deferred until characterization tests pin scoring outputs. |
-| 1012 | `xic_extractor/alignment/process_backend.py` | Process mechanics plus alignment/trace payloads; split only with spawn/pickle smoke tests. |
-| 980 | `tools/diagnostics/analyze_rt_normalization_anchors.py` | Diagnostic CLI; candidate for loader/model/writer split. |
-| 979 | `tools/diagnostics/family_ms1_overlay_plot.py` | Diagnostic plotting; lower production risk but large rendering/data mix. |
-| 968 | `scripts/local_minimum_param_sweep.py` | Validation/development script; not part of PR60 cleanup unless it blocks tooling. |
-| 862 | `tools/diagnostics/untargeted_alignment_guardrails.py` | Guardrail CLI/reporting surface; split only behind stable CSV/JSON outputs. |
-| 800 | `tools/diagnostics/seed_aware_backfill_review.py` | Diagnostic review surface; candidate after current legacy report cleanup. |
-| 753 | `tools/diagnostics/peak_candidate_score_calibration_report.py` | Diagnostic report surface; prefer rendering/writer splits before score semantics. |
-| 747 | `tools/diagnostics/targeted_nl_dropout_root_cause_audit.py` | Targeted diagnostic audit; split loaders/model/writers without changing buckets. |
-| 714 | `xic_extractor/alignment/primary_consolidation.py` | Domain-heavy alignment module; still deferred until characterization tests pin graph/winner/cell merge behavior. |
+| 962 | `xic_extractor/peak_scoring.py` | Existing decomposition target; still deferred until characterization tests pin scoring outputs. |
+| 908 | `tools/diagnostics/family_ms1_overlay_plot.py` | Diagnostic plotting; lower production risk but large rendering/data mix. |
+| 898 | `xic_extractor/alignment/process_backend.py` | Process mechanics plus alignment/trace payloads; split only with spawn/pickle smoke tests. |
+| 848 | `scripts/local_minimum_param_sweep.py` | Validation/development script; not part of PR60 cleanup unless it blocks tooling. |
+| 759 | `tools/diagnostics/untargeted_alignment_guardrails.py` | Guardrail CLI/reporting surface; split only behind stable CSV/JSON outputs. |
+| 717 | `tools/diagnostics/seed_aware_backfill_review.py` | Diagnostic review surface; candidate after current legacy report cleanup. |
+| 676 | `tools/diagnostics/targeted_nl_dropout_root_cause_audit.py` | Targeted diagnostic audit; split loaders/model/writers without changing buckets. |
+| 661 | `tools/diagnostics/peak_candidate_score_calibration_report.py` | Diagnostic report surface; prefer rendering/writer splits before score semantics. |
+| 644 | `xic_extractor/alignment/ownership.py` | Domain-heavy ownership module; still deferred unless characterization tests pin owner decisions. |
+| 624 | `xic_extractor/alignment/primary_consolidation.py` | Domain-heavy alignment module; still deferred until characterization tests pin graph/winner/cell merge behavior. |
 
 Identity-coherence internal line pressure:
 
@@ -184,6 +184,11 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 279 | `tools/diagnostics/family_ms1_backfill_review_model.py` | Candidate classification, priority, queue, and summary helpers. |
 | 53 | `tools/diagnostics/family_ms1_backfill_review_io.py` | Alignment TSV and overlay evidence loading helpers. |
 | 218 | `tools/diagnostics/family_ms1_backfill_review_writers.py` | TSV/JSON/Markdown writers and stable output field ordering. |
+| 183 | `tools/diagnostics/analyze_rt_normalization_anchors.py` | RT normalization anchor diagnostic CLI/orchestration facade. |
+| 85 | `tools/diagnostics/rt_normalization_anchor_models.py` | RT normalization diagnostic dataclasses. |
+| 196 | `tools/diagnostics/rt_normalization_anchor_loaders.py` | Targeted workbook, alignment TSV, anchor point, and sample-info loaders. |
+| 326 | `tools/diagnostics/rt_normalization_anchor_analysis.py` | Family RT summaries, leave-one-anchor-out checks, support levels, and status calculations. |
+| 149 | `tools/diagnostics/rt_normalization_anchor_writers.py` | TSV/JSON/Markdown output writers. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -572,6 +577,9 @@ Targets already partly improved:
 - `family_ms1_backfill_review_report.py` now stays as the CLI/orchestration
   facade. Candidate classification, TSV/overlay loading, and output writers
   live in focused modules.
+- `analyze_rt_normalization_anchors.py` now stays as the CLI/orchestration
+  facade. Workbook/alignment loading, RT normalization analysis, dataclasses,
+  and TSV/JSON/Markdown writers live in focused modules.
 - targeted reliability and low-MS1 coverage now have more focused modules but
   still carry large tests and report renderers.
 

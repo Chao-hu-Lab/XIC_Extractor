@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,6 +15,29 @@ from xic_extractor.alignment.rt_normalization import (
     AnchorPoint,
     apply_anchor_reference_source,
 )
+
+
+def test_path_style_cli_help_preserves_public_script_contract():
+    repo_root = Path(__file__).resolve().parents[1]
+    script = (
+        repo_root
+        / "tools"
+        / "diagnostics"
+        / "analyze_rt_normalization_anchors.py"
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--targeted-workbook" in result.stdout
+    assert "--alignment-dir" in result.stdout
 
 
 def test_anchor_normalization_fits_models_and_reduces_family_rt_spread(
