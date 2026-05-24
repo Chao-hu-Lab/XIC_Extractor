@@ -1,9 +1,98 @@
+import csv
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from openpyxl import Workbook
 
+from tools.diagnostics import cwt_peak_candidate_audit as audit
 from tools.diagnostics.cwt_peak_candidate_audit import main
+
+
+def test_path_style_cli_help_preserves_public_script_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = repo_root / "tools" / "diagnostics" / "cwt_peak_candidate_audit.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--peak-candidates-tsv" in result.stdout
+    assert "--output-dir" in result.stdout
+
+
+def test_module_style_cli_help_preserves_public_module_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.diagnostics.cwt_peak_candidate_audit",
+            "--help",
+        ],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--peak-candidates-tsv" in result.stdout
+    assert "--output-dir" in result.stdout
+
+
+def test_facade_preserves_existing_helper_import_surface() -> None:
+    expected_names = [
+        "CwtCandidateRow",
+        "CwtGroupAuditRow",
+        "CwtOnlyAuditRow",
+        "_CWT_ONLY_COLUMNS",
+        "_CWT_SOURCE",
+        "_DEFAULT_NEAR_RT_WINDOW_MIN",
+        "_GROUP_COLUMNS",
+        "_REQUIRED_COLUMNS",
+        "_SUMMARY_COLUMNS",
+        "_agreement_class",
+        "_audit_group",
+        "_audit_groups",
+        "_chemically_plausible",
+        "_conditioned_class",
+        "_conditioned_class_count",
+        "_cwt_only_rows",
+        "_float_value",
+        "_format_cwt_only_row",
+        "_format_group_row",
+        "_format_optional_float",
+        "_group_class_count",
+        "_markdown",
+        "_nearest_cwt",
+        "_parse_args",
+        "_read_peak_candidates",
+        "_read_target_mz",
+        "_required_indexes",
+        "_row_from_dict",
+        "_summary",
+        "_text",
+        "_write_cwt_only",
+        "_write_groups",
+        "_write_outputs",
+        "_write_summary",
+        "main",
+    ]
+
+    assert set(audit.__all__) == set(expected_names)
+    for name in expected_names:
+        assert hasattr(audit, name), name
 
 
 def test_cwt_peak_candidate_audit_classifies_agreement_and_far_alternatives(
@@ -41,18 +130,60 @@ def test_cwt_peak_candidate_audit_classifies_agreement_and_far_alternatives(
     }
 
     group_rows = _read_tsv(output_dir / "cwt_peak_candidate_groups.tsv")
-    assert {
-        row["group_id"]: row["cwt_agreement_class"] for row in group_rows
-    } == {
+    with (output_dir / "cwt_peak_candidate_audit_summary.tsv").open(
+        encoding="utf-8", newline=""
+    ) as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "candidate_row_count",
+            "candidate_group_count",
+            "cwt_row_count",
+            "cwt_only_row_count",
+            "selected_cwt_agreed_group_count",
+            "selected_cwt_nearby_group_count",
+            "selected_cwt_far_alternative_group_count",
+            "selected_without_cwt_group_count",
+            "cwt_selected_support_group_count",
+            "cwt_far_unconfirmed_group_count",
+            "cwt_far_chemically_plausible_group_count",
+        ]
+    with (output_dir / "cwt_peak_candidate_groups.tsv").open(
+        encoding="utf-8", newline=""
+    ) as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "group_id",
+            "sample_name",
+            "target_label",
+            "target_mz",
+            "resolver_mode",
+            "cwt_agreement_class",
+            "cwt_conditioned_class",
+            "candidate_count",
+            "cwt_row_count",
+            "cwt_only_row_count",
+            "selected_candidate_id",
+            "selected_rt_apex_min",
+            "selected_proposal_sources",
+            "selected_ms2_present",
+            "selected_nl_match",
+            "selected_ms2_trace_strength",
+            "nearest_cwt_candidate_id",
+            "nearest_cwt_rt_apex_min",
+            "nearest_cwt_delta_min",
+            "nearest_cwt_ms2_present",
+            "nearest_cwt_nl_match",
+            "nearest_cwt_ms2_trace_strength",
+            "selected_confidence",
+            "selected_raw_score",
+            "selected_reason",
+        ]
+    assert {row["group_id"]: row["cwt_agreement_class"] for row in group_rows} == {
         "SampleA|TargetAgreed|arbitrated": "selected_cwt_agreed",
         "SampleA|TargetFarAlternative|arbitrated": "selected_cwt_far_alternative",
         "SampleA|TargetChemFar|arbitrated": "selected_cwt_far_alternative",
         "SampleA|TargetNearby|arbitrated": "selected_cwt_nearby",
         "SampleB|TargetNoCwt|arbitrated": "selected_without_cwt",
     }
-    assert {
-        row["group_id"]: row["cwt_conditioned_class"] for row in group_rows
-    } == {
+    assert {row["group_id"]: row["cwt_conditioned_class"] for row in group_rows} == {
         "SampleA|TargetAgreed|arbitrated": "cwt_selected_support",
         "SampleA|TargetFarAlternative|arbitrated": "cwt_far_unconfirmed",
         "SampleA|TargetChemFar|arbitrated": "cwt_far_chemically_plausible",
@@ -79,13 +210,26 @@ def test_cwt_peak_candidate_audit_classifies_agreement_and_far_alternatives(
     assert chemically_plausible["nearest_cwt_ms2_trace_strength"] == "moderate"
 
     cwt_only_rows = _read_tsv(output_dir / "cwt_peak_candidate_cwt_only.tsv")
+    with (output_dir / "cwt_peak_candidate_cwt_only.tsv").open(
+        encoding="utf-8", newline=""
+    ) as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "group_id",
+            "sample_name",
+            "target_label",
+            "target_mz",
+            "resolver_mode",
+            "candidate_id",
+            "rt_apex_min",
+            "confidence",
+            "raw_score",
+            "reason",
+        ]
     assert len(cwt_only_rows) == 1
     assert cwt_only_rows[0]["target_label"] == "TargetFarAlternative"
     assert (output_dir / "cwt_peak_candidate_audit_summary.tsv").is_file()
     far_rows = _read_tsv(output_dir / "cwt_peak_candidate_far_alternatives.tsv")
-    assert {
-        row["group_id"]: row["cwt_conditioned_class"] for row in far_rows
-    } == {
+    assert {row["group_id"]: row["cwt_conditioned_class"] for row in far_rows} == {
         "SampleA|TargetFarAlternative|arbitrated": "cwt_far_unconfirmed",
         "SampleA|TargetChemFar|arbitrated": "cwt_far_chemically_plausible",
     }
@@ -335,10 +479,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         ),
     )
     path.write_text(
-        "\t".join(header)
-        + "\n"
-        + "\n".join("\t".join(row) for row in rows)
-        + "\n",
+        "\t".join(header) + "\n" + "\n".join("\t".join(row) for row in rows) + "\n",
         encoding=encoding,
     )
 
