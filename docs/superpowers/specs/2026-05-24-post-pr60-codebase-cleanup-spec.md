@@ -97,9 +97,11 @@ This branch has now implemented the first identity-coherence cleanup bundle:
 - Workstream H: the first two `tests/test_alignment_pipeline.py` slices moved
   into focused test files, and their shared batch/matrix fixtures now live in
   `tests/alignment_pipeline_helpers.py`.
-- Workstream D: the first validator split slices moved common models, TSV bundle
-  reads, and V0.4 acceptance verdict logic into
-  `identity_coherence_validation/`.
+- Workstream D: the validator split now keeps
+  `scripts/validate_identity_coherence_8raw.py` as a thin public CLI facade.
+  Common models, TSV bundle reads, V0.4 acceptance verdicts, serial/process
+  compare rows, controls summary rows, decoy manifest proposal generation, and
+  validation TSV/Markdown outputs live under `identity_coherence_validation/`.
 
 The original plan recommended landing Workstream H in a dedicated test-only PR.
 This branch intentionally keeps B/C/H in one cleanup bundle after review because
@@ -121,12 +123,21 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 292 | `tests/test_alignment_identity_coherence_pipeline.py` | Focused identity-coherence pipeline diagnostic tests. |
 | 256 | `tests/test_alignment_pipeline_timing.py` | Focused alignment timing/raw-source tests. |
 | 282 | `tests/alignment_pipeline_helpers.py` | Shared alignment-pipeline batch/matrix fixtures for focused tests. |
-| 892 | `scripts/validate_identity_coherence_8raw.py` | Public CLI plus remaining validation orchestration after first Workstream D slices. |
+| 274 | `scripts/validate_identity_coherence_8raw.py` | Public CLI facade: argument validation, command building, run orchestration, process reset. |
+| 957 | `tests/test_validate_identity_coherence_8raw.py` | CLI wrapper and exit-code contract tests after focused module tests moved out. |
 | 137 | `xic_extractor/alignment/identity_coherence_validation/models.py` | Validator dataclasses and frozen column/name constants. |
 | 41 | `xic_extractor/alignment/identity_coherence_validation/bundle.py` | Frozen bundle paths and TSV reads. |
 | 171 | `xic_extractor/alignment/identity_coherence_validation/acceptance.py` | V0.4 acceptance verdict logic. |
+| 94 | `xic_extractor/alignment/identity_coherence_validation/compare.py` | Serial/process frozen sidecar parity rows. |
+| 206 | `xic_extractor/alignment/identity_coherence_validation/controls_summary.py` | Positive-control and identity-decoy method summary rows. |
+| 139 | `xic_extractor/alignment/identity_coherence_validation/decoy_manifest_proposal.py` | Proposed identity-decoy manifest writer. |
+| 232 | `xic_extractor/alignment/identity_coherence_validation/outputs.py` | Validation summary TSV and Markdown output rendering. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 114 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
+| 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
+| 121 | `tests/alignment/identity_coherence_validation/test_controls_summary.py` | Focused module tests for controls summary rows. |
+| 212 | `tests/alignment/identity_coherence_validation/test_decoy_manifest_proposal.py` | Focused module tests for proposed decoy manifests. |
+| 162 | `tests/alignment/identity_coherence_validation/test_outputs.py` | Focused module tests for validation TSV/Markdown outputs. |
 
 ## Existing Contracts To Preserve
 
@@ -361,7 +372,7 @@ Candidate target package:
   - `controls_summary.py`: positive/decoy method rows,
   - `decoy_manifest_proposal.py`: proposal generation,
   - `acceptance.py`: V0.4 acceptance verdict,
-  - `writer.py`: validation summary TSV/Markdown outputs.
+  - `outputs.py`: validation summary TSV/Markdown outputs.
 
 `scripts/validate_identity_coherence_8raw.py` should become an argparse
 wrapper around this package.
@@ -372,7 +383,7 @@ Migration rule:
 - New validator module tests should live under
   `tests/alignment/identity_coherence_validation/`, split by module:
   `test_bundle.py`, `test_compare.py`, `test_controls_summary.py`,
-  `test_decoy_manifest_proposal.py`, `test_acceptance.py`, `test_writer.py`,
+  `test_decoy_manifest_proposal.py`, `test_acceptance.py`, `test_outputs.py`,
   and `test_cli_contract.py`.
 - Shared test builders should live in
   `tests/alignment/identity_coherence_validation/fixtures.py` or local
