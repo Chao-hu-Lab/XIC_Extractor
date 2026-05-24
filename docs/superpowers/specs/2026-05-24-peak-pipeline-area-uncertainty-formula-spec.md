@@ -99,6 +99,14 @@ The implementation must:
 - not raise on `scan_period_s <= 0` (return `area_uncertainty = None`)
 - preserve the `BaselineIntegration` and `CellIntegrationAuditSummary`
   field names — only the value semantics changes
+- emit enough provenance for downstream readers to distinguish the new formula
+  from the legacy in-peak-diff formula. This provenance must be TSV-local
+  because `alignment_cell_integration_audit.tsv` has no run-metadata channel
+  today. Required additive fields:
+  - `area_uncertainty_formula_version`
+  - `baseline_residual_mad` or an equivalent reproducibility field
+  The validation note must state the exact formula version string and columns
+  emitted.
 
 ## Validation Contract
 
@@ -125,15 +133,18 @@ thresholds. Known consumers:
   — record that the formula changed; the prior decision's evidence labels
   are now interpreted under the new scale
 
-No external public API exposes `area_uncertainty`. The internal change is
-self-contained.
+The TSV column itself is a public contract. Keeping the name
+`area_uncertainty` is a compatibility decision, not proof that the change is
+internal. P4 must include a formula-version / compatibility note and must
+review known downstream thresholds before landing.
 
 ## What This Spec Does Not Change
 
 - `area_raw_counts_seconds`
 - `area_baseline_corrected`
 - `baseline_score`
-- field names in any TSV output
+- existing required field names in TSV output; additive TSV-local provenance
+  columns are allowed as described above
 - scoring, selection, alignment, or matrix decisions
 
 ## Rollback Condition
@@ -168,10 +179,13 @@ Implementation should keep the formula change self-contained so Phase 2 C5
   multiple modules. C5 will merge this into `integrate_peak_region`; a
   scattered implementation makes C5 harder.
 - do not rename `BaselineIntegration.area_uncertainty`. C5 expects the same
-  field name on the unified return type.
+  semantic field on the unified return type, even if the implementation later
+  carries it through a local DTO before C3's hypothesis spine owns the final
+  model.
 - if a new `residual_mad` field is added (Open Question option 1), put it
-  on `BaselineIntegration` so C5 can carry it through `IntegrationResult`
-  without further refactoring.
+  on `BaselineIntegration`, `CellIntegrationAuditSummary`, or the C5 local
+  integration DTO. The key is that diagnostic writers receive the value from
+  the integration/audit boundary and do not recompute the noise estimate.
 
 ## Acceptance Owner
 

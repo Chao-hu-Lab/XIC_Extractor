@@ -1,9 +1,10 @@
 # C4 — peak_scoring Split Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.1
+**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
-**Precondition:** C3 (hypothesis model unification) landed and validated.
+**Precondition:** Phase 1 stable, and C3 (hypothesis model unification)
+landed and validated.
 
 ## Purpose
 
@@ -50,8 +51,9 @@ imports the hypothesis spine and not the legacy spine.
 - numerous private helpers
 
 The module imports `asls_baseline`, `MS2TraceStrength`, and types from
-`peak_scoring_evidence.py`. After C1 the AsLS import path changes; after
-C3 the input types change.
+`peak_scoring_evidence.py`. `peak_scoring_evidence.py` is already an extracted
+evidence module, not a new target to recreate. After C1 the AsLS import path
+changes; after C3 the input types change.
 
 ## Required Change
 
@@ -78,7 +80,7 @@ xic_extractor/peak_scoring/
     __init__.py
     cwt_support.py           # _has_cwt_chemical_support, _has_same_apex_cwt_support
     adap_flags.py            # ADAP-like flag handling
-    ms2_trace.py             # MS2 trace selection points
+    ms2_trace.py             # wraps or moves existing peak_scoring_evidence.py logic
   quality/
     __init__.py
     low_scan_demotion.py     # low-scan demotion logic
@@ -87,6 +89,16 @@ xic_extractor/peak_scoring/
 
 Each module less than ~250 lines (the hard cap reviewers can read in one
 sitting).
+
+Do not create a second evidence abstraction beside `peak_scoring_evidence.py`.
+At refactor time choose one of:
+
+- keep `peak_scoring_evidence.py` as a compatibility sibling and import it
+  from the new package modules
+- move its contents into `peak_scoring/evidence/ms2_trace.py` and leave a
+  re-export shim at the old path
+
+Either option must preserve existing import paths and evidence semantics.
 
 ### Public API Preservation
 
@@ -122,7 +134,8 @@ the re-export list before deleting the legacy `peak_scoring.py` file.
 1. Create the package directory and empty modules
 2. Move dataclasses (`context.py`, `result.py`) first
 3. Move severity functions one at a time, each with parity validation
-4. Move evidence helpers (cwt_support, adap_flags, ms2_trace)
+4. Move evidence helpers (cwt_support, adap_flags) and either wrap or migrate
+   existing `peak_scoring_evidence.py` without duplicating it
 5. Move quality logic (low_scan_demotion, dominant_nl)
 6. Move `compute_local_sn_cache` to `local_sn.py`
 7. Move `score_candidate` main routine to `scorer.py` last, since it

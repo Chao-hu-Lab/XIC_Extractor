@@ -1,16 +1,24 @@
 # P1 — Resolver Default Switch Spec
 
 **Date:** 2026-05-24
-**Status:** Implementation slice draft v0.1
+**Status:** Implementation slice draft v0.2, hotfix-aligned
 **Overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
 
 ## Purpose
 
-Switch the production resolver default from `local_minimum` to
-`region_first_safe_merge`. Both resolvers already exist in the code base. The
-new default activates the existing safe-merge gating so that local minimum
-remains the underlying proposal source but cannot make the final boundary
-decision in cases where adjacent WIS evidence supports a single merged region.
+Switch the extraction / targeted-validation default surface from
+`local_minimum` to `region_first_safe_merge` while keeping untargeted alignment
+production quantification on `local_minimum`.
+
+Both resolvers already exist in the code base. The new targeted default
+activates the existing safe-merge gating so that local minimum remains the
+underlying proposal source but cannot make the final boundary decision in cases
+where adjacent WIS evidence supports a single merged region. Untargeted
+alignment is different: the 2026-05-18 validation decision and P1 8RAW hotfix
+showed that allowing `region_first_safe_merge` to mutate alignment production
+quantification can regress strict ISTD evidence. In alignment, region-first
+evidence remains audit context only until a separate production promotion gate
+passes.
 
 ## Why This Switch Is Safe
 
@@ -36,18 +44,37 @@ four gates pass will see a different production area.
   promotion logic
 - `xic_extractor/peak_detection/region_model_selection.py` produces the
   `RegionSelectionDecision` consumed by safe merge
-- `config/settings.csv:resolver_mode` is the current production switch
+- `config/settings.example.csv`, `xic_extractor/settings_schema.py`
+  (`CANONICAL_SETTINGS_DEFAULTS`), `scripts/run_alignment.py --resolver-mode`,
+  and `scripts/validation_harness.py --resolver-mode` are the public config
+  surfaces
+- Pre-P1 `scripts/run_alignment.py` routed the alignment production run through
+  a resolver-mode adapter that converted `region_first_safe_merge` back to
+  `local_minimum`, so config alone did not switch the end-to-end alignment
+  default
 
 ## Required Change
 
-Single configuration line:
+P1 must update every targeted / extraction default surface:
 
 ```text
-# config/settings.csv
+# config/settings.example.csv
 resolver_mode,region_first_safe_merge,峰切割演算法...
 ```
 
-No code change is required for activation.
+- update `CANONICAL_SETTINGS_DEFAULTS["resolver_mode"]` to
+  `region_first_safe_merge`
+- update `scripts/run_alignment.py --resolver-mode` CLI default to
+  `region_first_safe_merge`, but keep the alignment production resolver guard
+  that rewrites `region_first_safe_merge` to `local_minimum`
+- update `scripts/validation_harness.py --resolver-mode` default to
+  `region_first_safe_merge`
+- update any tests or validation harness defaults that assert
+  `local_minimum` as the targeted / extraction default
+
+Do not touch the discovery / instrument-QC hardcoded overrides in P1 unless
+validation shows they participate in this production acceptance path. C2 owns
+the wider cleanup of those overrides.
 
 ## Validation Contract
 
@@ -58,8 +85,12 @@ Before promoting the new default, run the following acceptance gates:
    - per-ISTD area RSD must not increase by more than 0.5 absolute percentage
      points relative to the `local_minimum` baseline
    - per-ISTD RT residual median must not shift by more than 0.5 sec
-   - the `d3-N6-medA` row must remain `consistent` per the 2026-05-18
-     uncertainty decision
+   - the `d3-N6-medA` row must remain `consistent` when evidence-spine
+     consistency is evaluated on the same production surface. For the hotfix
+     alignment path, compare targeted `local_minimum` output against the
+     hotfix alignment output. A targeted `region_first_safe_merge` artifact
+     compared directly against hotfix alignment is a cross-resolver drift probe,
+     not the hard rollback gate.
 2. Identity coherence 8RAW acceptance (`scripts/validate_identity_coherence_8raw.py`
    or successor):
    - controls / decoy verdicts must match the pre-change run
@@ -79,15 +110,22 @@ Each candidate that takes the safe-merge promotion path must:
   string so downstream review can identify promoted candidates
 
 If a candidate would have been promoted but failed a gate, the rejection
-reason must be visible in the audit row (existing
-`is_region_first_safe_merge_eligible` returns explain why).
+reason must be visible in the audit row. The current helper
+`is_region_first_safe_merge_eligible(...)` is bool-only, so P1 must add a
+reason-bearing result (for example `SafeMergeEligibility(eligible, reason)`)
+or an adjacent helper that exposes the failed gate name without changing the
+promotion thresholds.
 
 ## Rollback Condition
 
-Revert `config/settings.csv:resolver_mode` to `local_minimum` if any of:
+Revert the P1 targeted / extraction default surfaces
+(`config/settings.example.csv`, `CANONICAL_SETTINGS_DEFAULTS`,
+`scripts/run_alignment.py --resolver-mode` default, and
+`scripts/validation_harness.py`) to `local_minimum` if any of:
 
 - any ISTD area RSD regresses by more than 0.5 absolute percentage points
-- `d3-N6-medA` row evidence spine mismatch reason changes from `consistent`
+- same-surface production evidence-spine comparison changes the `d3-N6-medA`
+  row from `consistent`
 - identity coherence controls / decoy verdict differs from pre-change run
 - `unexplained_area_mismatch` becomes nonzero
 
@@ -108,9 +146,9 @@ Record the rollback under
 
 - Should the activation be a single global switch or per-mode
   (`extraction`, `discovery`, `instrument_qc`)? Current code path
-  (`discovery/models.py:117`, `instrument_qc/pipeline.py:593`) hardcodes
-  `local_minimum` inside discovery and instrument_qc; the global default
-  switch alone will not change those callers. **Resolution path:** P1
+  (`discovery/models.py:117`, `instrument_qc/pipeline_extraction.py:126`)
+  hardcodes `local_minimum` inside discovery and instrument_qc; the global
+  default switch alone will not change those callers. **Resolution path:** P1
   lands with the global switch only. The hardcoded sites are removed by
   Phase 2 [C2 — Resolver collapse](2026-05-24-peak-pipeline-cleanup-resolver-collapse-spec.md)
   Step 4, after P1 stability is confirmed. P1 reviewers should not expect
@@ -130,11 +168,11 @@ Implementation should leave the following structure intact so Phase 2 C2
   `arbitrated`-related helpers in `facade.py` as part of P1. They are
   removed by C2 after P1 is validated stable.
 - do not change the `resolver_mode` permitted-value list in
-  `config/settings.csv` beyond switching the default. C2 owns the value
-  narrowing.
+  `config/settings.example.csv` / `RESOLVER_MODES` beyond switching the
+  default. C2 owns the value narrowing.
 - the hardcoded `resolver_mode = "local_minimum"` in
-  `discovery/models.py:117` and `instrument_qc/pipeline.py:593` can stay
-  for P1 (already noted as an open question); C2 owns their removal.
+  `discovery/models.py:117` and `instrument_qc/pipeline_extraction.py:126`
+  can stay for P1 (already noted as an open question); C2 owns their removal.
 
 ## Acceptance Owner
 

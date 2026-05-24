@@ -1,11 +1,10 @@
 # C5 — Area Integration Single Entry Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.1
+**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
-**Precondition:** C1a (baseline module relocation) landed. C1a in turn
-requires Phase 1 (P1-P6) stable, so P2 promotion is implicit through the
-C1a precondition chain.
+**Precondition:** P2b AsLS promotion has a GO note and C1a (baseline module
+relocation) landed. C1a in turn requires Phase 1 stable.
 
 ## Purpose
 
@@ -16,11 +15,11 @@ variants.
 This refactor introduces no behavioral change. Validation is behavioral
 parity.
 
-## Current State (assumed after P2 promoted + C1a)
+## Current State (assumed after P2b promoted + C1a)
 
 This section describes the working-tree state C5 expects when it runs.
 **Today (pre-P2) only `integrate_linear_edge_baseline` exists at these call
-sites.** After P2 promotion adds the `integrate_with_baseline` selector
+sites.** After P2b promotion makes AsLS production and P2's selector exists,
 choosing AsLS, and C1a relocates `asls_baseline` into the peak_detection
 package, the call sites still go through `integrate_with_baseline`, but
 selecting the AsLS path.
@@ -49,7 +48,7 @@ integrate_peak_region(
     rt_values, intensity_values, *,
     left_index, right_index,
     asls_cache=None,
-) -> IntegrationResult
+) -> AreaIntegrationResult
 ```
 
 Behavior:
@@ -59,7 +58,7 @@ Behavior:
   Strategy)
 - compute baseline-corrected area
 - compute residual MAD and area uncertainty per P4 formula
-- return one `IntegrationResult` containing all of:
+- return one local DTO, `AreaIntegrationResult`, containing all of:
   - `area_raw_counts_seconds`
   - `area_baseline_corrected`
   - `area_uncertainty`
@@ -68,8 +67,10 @@ Behavior:
   - `integration_scan_count`
   - `residual_mad`
 
-`IntegrationResult` lives on the hypothesis spine (see C3) and is the only
-return type used by integration paths.
+`AreaIntegrationResult` is intentionally local to the integration module for
+C5. C3 may later map it into, rename it to, or replace it with the hypothesis
+spine `IntegrationResult`. C5 must not depend on C3's future model, because C3
+is ordered after C5.
 
 ### Step 2 — Thin adapters at each call site
 
@@ -81,12 +82,12 @@ Each existing caller becomes a thin adapter:
 - `region_safe_merge.py` — wraps `integrate_peak_region` and applies the
   safe-merge area-ratio gate
 - `hypotheses.py` — calls `integrate_peak_region` directly, no wrapping
-  needed; this becomes the canonical caller
+  needed once C3 maps the local DTO into the hypothesis spine
 - `peak_candidate_boundaries.py` — wraps `integrate_peak_region` per
   boundary hypothesis
 
 Adapters carry no integration logic; they only translate
-`IntegrationResult` to the output shape that each consumer expects.
+`AreaIntegrationResult` to the output shape that each consumer expects.
 
 ### Step 3 — Remove duplicate bounds-validation
 
@@ -107,7 +108,10 @@ Behavioral parity required:
    `alignment_review.tsv`, `alignment_cells.tsv` must hash-match
 5. `region_safe_merge` promotion decisions must match (the safe-merge
    area-ratio gate runs against the same area values)
-6. `IntegrationResult` outputs from the hypothesis spine must hash-match
+6. Adapter output shapes derived from `AreaIntegrationResult` must hash-match
+   their pre-refactor values. If the hypothesis spine still emits its own
+   `IntegrationResult`, the adapter mapping from `AreaIntegrationResult` to
+   that type must also hash-match.
 
 ## Rollback Condition
 
@@ -138,9 +142,10 @@ Revert the refactor if any of:
   raw bounds? After C3 the spine carries the boundary; the function could
   unpack the boundary internally. Decision deferred to refactor time.
 - Should the audit summary's `uncertainty_fraction` and `baseline_fraction`
-  move to `IntegrationResult` so audit no longer recomputes them? Lean yes,
-  but only if it does not bloat the integration result for non-audit
-  callers.
+  move to `AreaIntegrationResult` so audit no longer recomputes them? Lean
+  yes, but only if it does not bloat the integration result for non-audit
+  callers. C3 can decide later whether those fields belong on the hypothesis
+  spine `IntegrationResult`.
 
 ## Acceptance Owner
 

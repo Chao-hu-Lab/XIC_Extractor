@@ -1,12 +1,12 @@
 # C6 — Alignment Grouping Consolidation Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.1
+**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
-**Precondition:** Phase 1 (P1-P6) validated and stable, **and** P3
+**Precondition:** Phase 1 validated and stable, **and** P3
 (third-party shadow comparison) findings recorded under
-`docs/superpowers/notes/`. The scope of this spec (A / B / C) is set after
-reading the P3 findings note.
+`docs/superpowers/notes/`. This spec is Scope A only: pure refactor with
+behavioral parity.
 
 ## Purpose
 
@@ -16,8 +16,9 @@ tie-break rule, and adjacency definition. The behavior is correct for the
 DNA adductomics use case but the code surface is large and the rules drift
 between stages.
 
-This refactor **may** introduce behavioral changes depending on findings —
-see the Scope Decision section below.
+This refactor must not introduce behavioral changes. If P3 evidence suggests
+an algorithm upgrade, that upgrade belongs in a separate P-style behavior spec
+after Phase 1, not in C6.
 
 ## Current State
 
@@ -26,8 +27,8 @@ should be treated as one":
 
 - `clustering.py` — main per-NL-tag greedy clustering (the production
   entrypoint that combines compatibility checks, sort key, eject-and-reattach,
-  finalization). This is the most central grouping module and the most
-  likely target for an algorithm upgrade (Scope B).
+  finalization). This is the most central grouping module; C6 may extract
+  shared mechanics but must preserve its algorithm exactly.
 - `ownership.py` — build sample-local owners from candidates
 - `owner_clustering.py` — cluster owners across samples (a second
   clustering pass at the owner granularity)
@@ -43,8 +44,10 @@ should be treated as one":
   arbitrator when multiple owners claim the same MS1 peak)
 - `matrix_identity.py` — matrix identity formation (the final grouping pass
   that decides which rows become primary / provisional / audit identities)
-- `identity_coherence_adapter.py` and `identity_gates.py` — identity
-  coherence layer
+- `identity_coherence_adapter.py` and `identity_gates.py` are **not grouping
+  cleanup targets** for C6. They are identity/evidence gates. C6 may read them
+  during inventory to avoid semantic drift, but must not consolidate them into
+  generic grouping primitives unless a separate identity contract says so.
 
 Each has its own:
 
@@ -61,12 +64,7 @@ The handoff progress checklist §8 has already noted that some diagnostic
 tools are too broad and should be split. This spec is about the production
 side of the same observation.
 
-## Scope Decision (set during P3 review)
-
-This spec deliberately leaves the implementation scope partially open until
-P3 third-party comparison reports findings. Three possible scopes:
-
-### Scope A: Pure refactor
+## Scope
 
 Extract three grouping primitives:
 
@@ -79,24 +77,17 @@ Extract three grouping primitives:
 Each stage becomes a thin adapter on top of the primitives. Behavior is
 byte-identical. Code surface shrinks by an estimated 30-40%.
 
-### Scope B: Refactor + selective algorithm upgrade
+Out of scope:
 
-Same as Scope A, plus replace one or more stages with a graph-based or
-EM-iterative grouping (e.g. `owner_clustering.py`'s greedy clustering
-upgraded to graph community detection). This introduces behavior changes
-and requires its own validation cycle.
+- graph-based grouping, EM-style grouping, or any algorithm upgrade
+- new tolerances, new tie-break priority, or new ejection behavior
+- identity coherence gate consolidation
 
-### Scope C: Defer to a separate spec
+If P3 evidence shows alignment is not the bottleneck, C6 may simply be
+deferred. If P3 evidence shows an algorithmic bottleneck, write a separate
+behavior-change spec.
 
-If P3 evidence shows alignment is not the bottleneck (e.g. third-party
-tools agree with current alignment on the strict ISTD set), defer C6 in
-favor of other cleanup priorities.
-
-The choice is made by the methodology owner after reviewing the P3 findings
-note. This spec lands as Scope A by default unless an explicit Scope B / C
-note is recorded.
-
-## Required Change (Scope A baseline)
+## Required Change
 
 ### Step 1 — Inventory grouping primitives
 
@@ -141,9 +132,9 @@ After migration, several helper functions (per-stage `_attach_to_*`,
 
 ## Validation Contract
 
-Behavioral parity required for Scope A:
+Behavioral parity required:
 
-1. Run 8RAW with Phase 1 final state + C1a + C2 + C5 + C1b + C3
+1. Run 8RAW with Phase 1 final state and P3 findings recorded
 2. Apply C6 Scope A refactor
 3. Re-run 8RAW
 4. All alignment TSVs hash-identical:
@@ -155,23 +146,16 @@ Behavioral parity required for Scope A:
 5. Identity coherence verdicts unchanged
 6. Backfill detected / rescued / absent labels unchanged
 
-For Scope B (algorithm upgrade), validation is materially different: the
-upgrade is treated as a new behavioral change with its own ISTD benchmark.
-Scope B requires a separate spec.
-
 ## Rollback Condition
 
-For Scope A: revert the refactor if any of:
+Revert the refactor if any of:
 
 - hash mismatch on alignment TSVs
 - a previously-undetected stage-specific behavior is dropped by the
   primitives (e.g. one stage's tie-break depended on a side effect that the
   primitive does not preserve)
 
-For Scope B: not applicable in this spec; that scope opens a separate
-behavior-validation cycle.
-
-## What This Spec Does Not Change (Scope A)
+## What This Spec Does Not Change
 
 - alignment behavior (production output identical)
 - backfill semantics
@@ -187,9 +171,9 @@ behavior-validation cycle.
   with slightly different semantics. Are the differences intentional? The
   inventory step must catalog and resolve this before introducing a shared
   primitive.
-- Scope B candidates: which stage benefits most from a graph-based or
-  EM-iterative upgrade? Likely `owner_clustering.py` based on the earlier
-  methodology review, but P3 third-party evidence may point elsewhere.
+- Algorithm-upgrade candidates are intentionally not answered by C6. If P3
+  points to `owner_clustering.py` or another stage as a bottleneck, open a
+  separate behavior spec with its own validation thresholds.
 - The `identity_coherence_adapter.py` is the newest of the layers and was
   designed with a cleaner abstraction. Should the primitives be modeled
   after its API, or designed fresh? Lean toward modeling on identity
@@ -197,6 +181,6 @@ behavior-validation cycle.
 
 ## Acceptance Owner
 
-Methodology owner reviews P3 findings, sets the scope (A / B / C), records
-the decision. Engineering owner runs parity validation if Scope A, schedules
-follow-up spec if Scope B, records deferral note if Scope C.
+Methodology owner reviews P3 findings and records whether C6 should proceed
+as a pure refactor or be deferred. Engineering owner runs parity validation
+if it proceeds. Any algorithm upgrade is scheduled as a separate spec.

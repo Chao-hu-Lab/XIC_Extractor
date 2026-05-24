@@ -1,10 +1,10 @@
 # C1b — Linear Edge Baseline Retirement Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.1
+**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Companion spec:** [C1a — Baseline module relocation](2026-05-24-peak-pipeline-cleanup-baseline-module-consolidation-spec.md)
-**Precondition:** P2 promoted (AsLS is the production baseline). C5 (area
+**Precondition:** P2b promoted (AsLS is the production baseline). C5 (area
 integration single entry) landed and validated. C1a landed and validated.
 
 ## Purpose
@@ -32,11 +32,11 @@ created a circular dependency with C5 (C5 needed C1 done; C1 Step 3 needed
 C5 done). Splitting into C1a (independent) and C1b (after C5) removes the
 cycle.
 
-## Current State (assumed after P2 promoted + C1a + C5)
+## Current State (assumed after P2b promoted + C1a + C5)
 
 This section describes the working-tree state C1b expects to find when it
 runs. **None of these state items exist in working tree today** — they are
-the cumulative output of P2 promotion, C1a, and C5:
+the cumulative output of P2b promotion, C1a, and C5:
 
 - `xic_extractor/peak_detection/baseline.py` will define both
   `integrate_linear_edge_baseline` (legacy) and an AsLS-using path (added

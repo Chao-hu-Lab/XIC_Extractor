@@ -4,7 +4,10 @@
 **Status:** Diagnostic slice draft v0.1
 **Overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
 **Precondition:** P3 third-party shadow comparison report indicates that
-anchor-based LOESS is the RT correction bottleneck. Without P3 evidence,
+anchor-based LOESS is the RT correction bottleneck with a quantitative gate
+(for example: anchor-sparse rows show materially higher internal RT residuals
+than third-party references, and RT residual explains a meaningful share of
+area / match disagreement). Without P3 evidence and a recorded threshold,
 P6 is not scheduled.
 
 ## Purpose
@@ -34,7 +37,10 @@ production alignment.
   or `injection-loess` source)
 - `xic_extractor/alignment/rt_normalization.py:243-306` implements
   `fit_sample_rt_models` (fits a `SampleRtModel` per sample)
-- model types: `linear`, `piecewise`, `injection-loess`
+- fitted `SampleRtModel.model_type` values in current code are `shift`
+  (one-anchor model), `affine` (normal linear fit), and `piecewise`.
+  `injection-loess` is a reference-source mode accepted by
+  `apply_anchor_reference_source`, not a fitted model type.
 - consumers: `alignment/pipeline.py`, alignment cluster compatibility checks,
   family RT centering
 - there is no chromatogram-level warping (DTW-style); RT correction is a
@@ -95,9 +101,12 @@ Promotion of OBI-Warp to production is not in this spec. Promotion needs:
 
 - `pyopenms` is the only new dependency. It has prebuilt wheels for Windows /
   macOS / Linux on Python 3.9-3.13.
-- install in the project venv (`uv pip install pyopenms`), not an isolated
-  venv. pyOpenMS is general-purpose enough that future specs may also use it
-  (e.g., `FeatureFindingMetabo` as another reference engine).
+- install in an isolated diagnostics venv by default, or declare an optional
+  diagnostics extra with import guards. Do not add pyOpenMS to the mandatory
+  production environment in P6.
+- the diagnostic script must fail with an actionable message when pyOpenMS is
+  unavailable, while normal production imports and runs continue to work
+  without pyOpenMS installed.
 
 ## What This Spec Does Not Change
 
@@ -110,8 +119,8 @@ Promotion of OBI-Warp to production is not in this spec. Promotion needs:
 
 ## Rollback / Removal
 
-Remove the diagnostic script and uninstall pyOpenMS (if it is the only
-consumer). No production change to revert.
+Remove the diagnostic script and delete the isolated diagnostics venv (or
+remove the optional diagnostics extra). No production change to revert.
 
 ## Open Questions
 
@@ -142,10 +151,9 @@ Same constraints as P3 — diagnostic code isolation:
   `xic_extractor/alignment/` does not import from it.
 - the shadow output TSV is consumed only by humans / methodology reviewers;
   no production module reads it.
-- pyOpenMS may live in the main `pyproject.toml` (unlike asari / MassCube
-  in P3) because it is general-purpose and may be reused later. But its
-  use is **opt-in via CLI / env flag**; production runs without pyOpenMS
-  must not break.
+- pyOpenMS must remain optional in P6. A later promotion or shared-tooling
+  spec may decide to add it to the main dependency set, but this shadow
+  diagnostic should not widen the production install footprint.
 
 ## Acceptance Owner
 

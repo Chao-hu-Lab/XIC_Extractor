@@ -91,6 +91,7 @@ class AuditTrail:
     proposal_sources: tuple[str, ...] = ()
     source_apex_rank: int | None = None
     merge_note: str = ""
+    safe_merge_rejection_reason: str = ""
     safe_merge_promotion_source: str = ""
     safe_merge_promotion_shadow_boundary_id: str = ""
     safe_merge_promotion_area_ratio: float | None = None
@@ -205,6 +206,9 @@ def build_peak_hypotheses(
                     proposal_sources=candidate.proposal_sources,
                     source_apex_rank=candidate.source_apex_rank,
                     merge_note=candidate.merge_note,
+                    safe_merge_rejection_reason=(
+                        candidate.safe_merge_rejection_reason
+                    ),
                     safe_merge_promotion_source=(
                         candidate.safe_merge_promotion_source
                     ),

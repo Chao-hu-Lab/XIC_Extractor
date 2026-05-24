@@ -83,6 +83,7 @@ PEAK_CANDIDATE_HEADERS = (
     "safe_merge_promotion_area_ratio",
     "safe_merge_promotion_selected_interval_count",
     "safe_merge_promotion_selected_interval_gap_max_min",
+    "safe_merge_rejection_reason",
 )
 
 def candidate_audit_id(
@@ -253,6 +254,7 @@ def _row_from_hypothesis(
         "safe_merge_promotion_selected_interval_gap_max_min": _format_optional_float(
             hypothesis.audit.safe_merge_promotion_selected_interval_gap_max_min
         ),
+        "safe_merge_rejection_reason": hypothesis.audit.safe_merge_rejection_reason,
     }
 
 

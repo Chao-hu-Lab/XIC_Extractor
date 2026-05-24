@@ -110,7 +110,7 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.smooth_window == 15
     assert config.smooth_polyorder == 3
     assert config.count_no_ms2_as_detected is False
-    assert config.resolver_mode == "legacy_savgol"
+    assert config.resolver_mode == "region_first_safe_merge"
     assert config.resolver_chrom_threshold == pytest.approx(0.05)
     assert config.resolver_min_search_range_min == pytest.approx(0.08)
     assert config.resolver_min_relative_height == pytest.approx(0.02)
@@ -359,6 +359,7 @@ def test_canonical_settings_defaults_include_parallel_settings() -> None:
 
 
 def test_canonical_settings_defaults_include_local_minimum_preset() -> None:
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_mode"] == "region_first_safe_merge"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_chrom_threshold"] == "0.05"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_search_range_min"] == "0.08"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_relative_height"] == "0.02"
@@ -420,7 +421,7 @@ def test_settings_example_documents_region_first_safe_merge_mode() -> None:
         rows = {row["key"]: row for row in csv.DictReader(handle)}
 
     resolver_row = rows["resolver_mode"]
-    assert resolver_row["value"] == "legacy_savgol"
+    assert resolver_row["value"] == "region_first_safe_merge"
     assert "region_first_safe_merge" in resolver_row["description"]
 
 

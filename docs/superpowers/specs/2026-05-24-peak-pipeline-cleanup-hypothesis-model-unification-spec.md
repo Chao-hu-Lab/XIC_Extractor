@@ -1,13 +1,13 @@
 # C3 — Hypothesis Model Unification Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.1
+**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
-**Precondition:** C1a (baseline module relocation), C2 (resolver collapse),
-C5 (area integration single entry), and C1b (linear edge retirement) all
-landed and validated. C1b is included because the post-C1b state finalizes
-the `BaselineIntegration` shape that the hypothesis spine `IntegrationResult`
-mirrors.
+**Precondition:** Phase 1 stable, and C1a (baseline module relocation), C2
+(resolver collapse), C5 (area integration single entry), and C1b (linear edge
+retirement) all landed and validated. C1b is included because the post-C1b
+state finalizes the `BaselineIntegration` shape that the hypothesis spine
+`IntegrationResult` mirrors.
 
 ## Purpose
 
@@ -50,19 +50,35 @@ legacy results. Every downstream consumer (scoring, alignment, output) reads
 from legacy types. Adding a new evidence dimension or audit field requires
 touching both layers.
 
+### Shared evidence layer
+
+C3 must also preserve the existing shared evidence semantics:
+
+- `xic_extractor/evidence_semantics.py`
+- `CommonEvidence` / `EvidenceSignalSet` consumers
+- `xic_extractor/peak_scoring_evidence.py`
+- drift / ISTD evidence adapter boundaries such as `drift_evidence.py`
+
+These modules prevent targeted, untargeted, drift, and scoring code from
+inventing incompatible evidence meanings. C3 may move adapters, but it must
+not duplicate or bypass this evidence layer while unifying peak models.
+
 ## Required Change
 
 ### Step 1 — Inventory legacy consumers
 
 Run a grep for every reference to `PeakResult`, `PeakCandidate`,
-`PeakCandidatesResult`, `PeakDetectionResult`, `PeakCandidateScore`. Catalog
-each as one of:
+`PeakCandidatesResult`, `PeakDetectionResult`, `PeakCandidateScore`,
+`CommonEvidence`, `EvidenceSignalSet`, and public
+`xic_extractor.signal_processing` imports. Catalog each as one of:
 
 - (a) producer site (where the legacy object is constructed)
 - (b) reader site (where the legacy object is consumed)
 - (c) audit site (where the legacy object is serialized to TSV)
 - (d) re-export shim (where the legacy object is exposed under a different
   import path)
+- (e) shared evidence boundary (where evidence semantics are translated
+  between targeted / untargeted / scoring / drift contexts)
 
 Expected sites (verify at refactor time):
 
@@ -81,8 +97,11 @@ Expected sites (verify at refactor time):
   `extraction/istd_recovery.py:from xic_extractor.signal_processing import
   PeakCandidate, PeakDetectionResult`) use the shim instead of importing
   from `peak_detection.models` directly. C3 must either update the shim
-  to re-export the hypothesis spine, or delete the shim and migrate every
-  shim consumer.
+  with compatibility aliases, or delete the shim and migrate every shim
+  consumer under a separate breaking-change decision.
+- evidence semantics: `evidence_semantics.py`, `peak_scoring_evidence.py`,
+  and drift evidence adapters must be cataloged before moving fields onto
+  `EvidenceVector`.
 
 ### Step 2 — Replace producers with hypothesis spine
 
@@ -119,29 +138,34 @@ corresponding field to `AuditTrail` rather than reviving a legacy type.
 
 Two options:
 
-- (a) **Keep the shim, update `__all__`**: replace the legacy symbols with
-  re-exports of the hypothesis spine (`PeakHypothesis`, `EvidenceVector`,
-  `IntegrationResult`, `AuditTrail`). External callers continue to import
-  from `xic_extractor.signal_processing` but receive the new types.
+- (a) **Keep the shim with compatibility aliases**: preserve old import names
+  (`PeakCandidate`, `PeakDetectionResult`, etc.) and return shapes until a
+  separate breaking-change spec removes them. The implementation may back
+  those names with wrappers/adapters around the hypothesis spine, but import
+  statements and public `find_peak_and_area` / `find_peak_candidates` return
+  contracts must keep working.
 - (b) **Delete the shim**: migrate every caller of
   `xic_extractor.signal_processing` to import directly from
   `xic_extractor.peak_detection.hypotheses` (or wherever the type lives).
+  This is a breaking public-surface change and is not allowed in C3 unless a
+  separate approval note exists.
 
 Decision: lean toward (a). The shim has historically been the "external
-import surface" and callers depend on its stability. Updating `__all__` is
-mechanical. Deletion would be a wider change that competes for review
-attention with the model unification itself.
+import surface" and callers depend on its stability. Compatibility aliases
+keep C3 a refactor instead of a public API break. Deletion would be a wider
+change that competes for review attention with the model unification itself.
 
 Document the decision in `xic_extractor/signal_processing.py` docstring at
 implementation time.
 
-### Step 6 — Delete the legacy module
+### Step 6 — Retire legacy concrete storage
 
 After all producer, reader, and audit sites consume the hypothesis spine,
-and after Step 5 resolves the shim, delete `PeakResult`, `PeakCandidate`,
-`PeakCandidatesResult`, `PeakDetectionResult`, and `PeakCandidateScore`
-from `xic_extractor/peak_detection/models.py`. The file may still contain
-shared support types (`LocalMinimumRegionQuality`, `LocalMinimumQualityFlag`,
+and after Step 5 resolves the shim, remove legacy concrete storage where it
+is internal-only. If a legacy name is public through
+`xic_extractor.signal_processing`, keep a compatibility wrapper or alias until
+a separate breaking-change spec retires it. The file may still contain shared
+support types (`LocalMinimumRegionQuality`, `LocalMinimumQualityFlag`,
 `PeakStatus`); keep those.
 
 ## Validation Contract
@@ -162,6 +186,10 @@ Behavioral parity required:
 6. Identity coherence verdicts unchanged
 7. `peak_scoring.py` outputs (`ScoredCandidate.evidence_score.raw_score`,
    `confidence`, `reason`) byte-identical to pre-refactor
+8. Import smoke tests for `xic_extractor.signal_processing` legacy names pass
+   and public return shapes are unchanged
+9. Evidence semantics fixtures for `CommonEvidence` / `EvidenceSignalSet` and
+   peak scoring evidence remain byte-identical
 
 ## Implementation Strategy
 
@@ -174,8 +202,8 @@ Recommended split across multiple PRs:
 | 3c | Switch readers one consumer at a time to the hypothesis spine. | parity TSV check after each consumer |
 | 3d | Switch audit serializers to read from hypothesis spine. | parity TSV check |
 | 3e | Delete dual-write code paths; only hypothesis spine remains. | parity TSV check |
-| 3f | Update `signal_processing.py` shim `__all__` to re-export hypothesis spine. | compile + tests + import smoke |
-| 3g | Delete legacy types from `models.py`. | compile + tests |
+| 3f | Update `signal_processing.py` shim with compatibility aliases / wrappers backed by the hypothesis spine. | compile + tests + import smoke |
+| 3g | Delete internal legacy storage while preserving public aliases; defer any public deletion to a breaking-change spec. | compile + tests |
 
 This staging keeps each PR reviewable. The intermediate dual-write state
 adds memory cost but is safe to revert at any step.
@@ -211,6 +239,9 @@ Roll back any individual PR (3a-3f) if:
   refactor time.
 - Adapter functions in `hypotheses.py` that wrap legacy types can be
   deleted after Step 5. Confirm no external caller imports them.
+- Which evidence semantics should live on `EvidenceVector` versus remain in
+  `CommonEvidence` / `EvidenceSignalSet`? Default: preserve the shared
+  evidence layer and only add adapter fields when parity requires them.
 
 ## Acceptance Owner
 

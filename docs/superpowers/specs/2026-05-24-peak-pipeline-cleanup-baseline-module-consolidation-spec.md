@@ -1,18 +1,20 @@
 # C1a — Baseline Module Relocation Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.1
+**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Companion spec:** [C1b — Linear edge retirement](2026-05-24-peak-pipeline-cleanup-linear-edge-retirement-spec.md)
-**Precondition:** Phase 1 (P1-P6) validation reports clean. C1a is one of
-the first cleanup specs that can land; no other C-spec is prerequisite.
+**Precondition:** Phase 1 validation reports clean, and P2b AsLS promotion has
+a GO note if this refactor assumes AsLS is production. C1a is one of the first
+cleanup specs that can land after that; no other C-spec is prerequisite.
 
 ## Purpose
 
 Relocate `asls_baseline` from the top-level `xic_extractor/baseline.py`
-module into the `xic_extractor/peak_detection/` package, then delete the
-empty top-level module. This is purely structural and has no behavioral
-impact.
+module into the `xic_extractor/peak_detection/` package, while preserving the
+top-level import surface as a compatibility re-export unless a separate
+breaking-change decision explicitly allows deletion. This is purely structural
+and has no behavioral impact.
 
 C1a is the first half of the original C1 plan. The second half — retiring
 `integrate_linear_edge_baseline` and the `integrate_with_baseline`
@@ -34,10 +36,11 @@ Two baseline modules coexist:
   `bounded_trace_interval`, `_area_counts_seconds`,
   `_area_uncertainty_counts_seconds`, `_safe_ratio`
 
-After P2 lands (selector + AsLS path) and P2 promotion (AsLS becomes
+After P2 lands (selector + AsLS path) and P2b promotion (AsLS becomes
 production default for `area_baseline_corrected`), `integrate_linear_edge_baseline`
 has no production caller for `area_baseline_corrected`. The selector
-(`integrate_with_baseline`) becomes a thin wrapper around AsLS.
+(`integrate_with_baseline`) becomes a thin wrapper around AsLS. If P2b has
+not landed, C1a must not assume this state.
 
 After P4 lands (uncertainty formula correction), `_area_uncertainty_counts_seconds`
 is replaced by a baseline-residual-based computation that needs an AsLS
@@ -58,10 +61,18 @@ Update imports:
   `from xic_extractor.peak_detection.baseline import asls_baseline`
 - any other consumer found by grep at refactor time
 
-### Step 2 — Delete the empty top-level module
+### Step 2 — Preserve the top-level compatibility module
 
-After the move, `xic_extractor/baseline.py` is empty. Delete the file.
-Confirm via `grep -r "from xic_extractor.baseline"` that no consumer remains.
+After the move, replace `xic_extractor/baseline.py` with a thin re-export shim:
+
+```text
+from xic_extractor.peak_detection.baseline import asls_baseline
+```
+
+Confirm via grep that internal consumers have migrated to the new import path,
+then keep the shim for external callers and tests that still import
+`xic_extractor.baseline`. Deleting the file is out of scope unless a separate
+public-contract break is approved.
 
 ### Out of scope for C1a
 
@@ -80,7 +91,7 @@ Behavioral parity required:
 
 1. Run 8RAW with `resolver_mode = region_first_safe_merge` and AsLS
    production baseline (i.e. the Phase 1 final state)
-2. Apply C1 refactor
+2. Apply C1a relocation refactor
 3. Re-run 8RAW
 4. `peak_candidates.tsv`, `alignment_matrix.tsv`, `alignment_review.tsv`,
    `alignment_cells.tsv` must hash-match
@@ -88,15 +99,19 @@ Behavioral parity required:
    is unchanged, only the module location differs)
 6. `compute_local_sn_cache` output must be byte-identical (it calls
    `asls_baseline` which moved, but the function body did not change)
+7. Import smoke tests must pass:
+   - `from xic_extractor.baseline import asls_baseline`
+   - `from xic_extractor.peak_detection.baseline import asls_baseline`
 
 ## Rollback Condition
 
-Restore the deleted files and revert imports if any of:
+Restore the prior imports if any of:
 
 - hash mismatch on the parity TSVs
 - a non-obvious import cycle is introduced by moving AsLS into the
   peak_detection package (peak_detection currently imports from the global
   namespace, not the reverse)
+- the compatibility re-export changes function identity or defaults
 
 ## What This Spec Does Not Change
 
@@ -118,9 +133,9 @@ Restore the deleted files and revert imports if any of:
   refactor time that no cycle is introduced through the
   `peak_detection.models` -> `peak_scoring` -> `peak_detection.baseline`
   path.
-- If P2 promotion has not happened (AsLS is still shadow-only at refactor
-  time), C1 must wait. The precondition is explicit; the open question is
-  who declares P2 "promoted" and how that is recorded.
+- If P2b promotion has not happened (AsLS is still shadow-only at refactor
+  time), C1a must wait. The precondition is explicit; P2b's GO / NO-GO note
+  declares whether AsLS is promoted and how Cleanup should proceed.
 
 ## Acceptance Owner
 

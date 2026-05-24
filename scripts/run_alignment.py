@@ -333,7 +333,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--resolver-mode",
         choices=RESOLVER_MODES,
-        default="local_minimum",
+        default="region_first_safe_merge",
     )
     parser.add_argument(
         "--output-level",

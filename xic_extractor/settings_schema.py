@@ -21,7 +21,7 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "smooth_polyorder": "3",
     "peak_rel_height": "0.95",
     "peak_min_prominence_ratio": "0.10",
-    "resolver_mode": "legacy_savgol",
+    "resolver_mode": "region_first_safe_merge",
     "resolver_chrom_threshold": "0.05",
     "resolver_min_search_range_min": "0.08",
     "resolver_min_relative_height": "0.02",

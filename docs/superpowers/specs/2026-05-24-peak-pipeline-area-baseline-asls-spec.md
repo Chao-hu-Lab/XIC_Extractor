@@ -89,11 +89,18 @@ Add `baseline_method` to `CellIntegrationAuditSummary` plumbing
 - TSV writer (`alignment/tsv_writer.py`) emits two additional columns:
   `area_baseline_corrected_asls` and `baseline_score_asls`
 - production `area_baseline_corrected` continues to use `linear_edge` until a
-  separate promotion spec lands
+  separate promotion spec lands:
+  [P2b — Area integration AsLS promotion](2026-05-24-peak-pipeline-area-baseline-asls-promotion-spec.md)
+- the writer must read those shadow values from
+  `CellIntegrationAuditSummary` (or a nested shadow-result field on that
+  summary). Do not model `baseline_score_asls` as a field on
+  `BaselineIntegration`; `BaselineIntegration.baseline_score` remains the
+  score for whichever single integration result it represents.
 
 Configuration flag:
 
-- `config/settings.csv` gains `baseline_audit_method,asls` (default empty so
+- `config/settings.example.csv` and the settings schema gain
+  `baseline_audit_method,asls` or an equivalent opt-in flag (default empty so
   the shadow column is not emitted unless explicitly turned on)
 - CLI flag `--emit-baseline-audit-asls` on `scripts/run_alignment.py`
 - environment flag for one-shot diagnostics: `BASELINE_AUDIT_METHOD=asls`
@@ -215,11 +222,13 @@ integration single entry) can land without rework:
   cache layer, not in the selector. C1b will delete the selector entirely
   once C5 has migrated callers; a thin selector is trivial to remove.
 - keep `asls_baseline` importable from `xic_extractor.baseline` for now;
-  C1a will relocate it after P2 lands. Do not pre-emptively move the
-  function.
-- the new `BaselineIntegration` field `baseline_score_asls` (shadow column)
-  uses the same convention as the existing `baseline_score`. Do not
-  introduce new dataclass shapes beyond what the shadow column requires.
+  C1a may relocate it only after Phase 1 is stable and P2b has clarified
+  whether AsLS is production. Do not pre-emptively move the function.
+- the new `CellIntegrationAuditSummary` shadow fields
+  `area_baseline_corrected_asls` and `baseline_score_asls` use the same
+  formatting and ratio convention as the existing production fields. Keep
+  `BaselineIntegration` focused on one integration method; do not overload it
+  with method-specific shadow columns.
 
 ## Acceptance Owner
 

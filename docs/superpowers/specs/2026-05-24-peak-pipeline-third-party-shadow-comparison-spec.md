@@ -92,8 +92,19 @@ Two thin adapters under `tools/diagnostics/`:
 
 ### `tools/diagnostics/shadow_comparison_join.py`
 
-- match internal `alignment_cells.tsv` rows to asari and MassCube feature rows
-  by `(sample_stem, m/z within preferred_ppm, rt_apex_min within max_rt_sec)`
+- consume internal `alignment_cells.tsv` plus the explicit coordinate source
+  needed for labels and target/reference coordinates. `alignment_cells.tsv`
+  alone is not sufficient: it is a family/cell output and does not guarantee
+  `label`, `mz_target`, or `rt_target_min` columns.
+- for the 8RAW strict ISTD comparison, join cells through the strict target
+  registry / targeted benchmark table so the report can emit target label,
+  expected m/z, and expected RT
+- for the 85RAW cohort, use feature-family coordinates
+  (`feature_family_id`, family-center m/z / RT, or the accepted family
+  coordinate artifact) rather than pretending target labels exist for every
+  row
+- match internal rows to asari and MassCube feature rows by
+  `(sample_stem, m/z within preferred_ppm, rt_apex_min within max_rt_sec)`
 - emit `output/shadow_comparison_<dataset>.tsv` with columns:
   - `sample_stem`, `label`, `mz_target`, `rt_target_min`
   - `area_internal`, `area_internal_baseline_corrected`,
@@ -101,6 +112,8 @@ Two thin adapters under `tools/diagnostics/`:
   - `area_asari`, `area_masscube`
   - `rt_apex_min_internal`, `rt_apex_min_asari`, `rt_apex_min_masscube`
   - `area_rel_diff_asari_pct`, `area_rel_diff_masscube_pct`
+  - `internal_coordinate_source` (`strict_target_registry`,
+    `feature_family_center`, or another recorded source)
   - `match_status` (`triple_match`, `pair_match_asari`,
     `pair_match_masscube`, `internal_only`, `asari_only`, `masscube_only`)
   - `verdict` (free text from the matcher)
@@ -195,8 +208,11 @@ forced to reckon with diagnostic dependencies:
   delete or move the diagnostic scripts without touching production
   dependencies.
 - if the diagnostic runner needs a project utility (e.g. mzML conversion),
-  copy the utility into `tools/diagnostics/` rather than importing it.
-  Diagnostic code can be deleted without grep-fear.
+  import a stable project helper when that helper does not pull optional
+  third-party packages into production. Keep only the asari / MassCube
+  adapter and dependency-launch code isolated in `tools/diagnostics/`; do not
+  duplicate maintained project utilities just to keep the diagnostic script
+  deletable.
 
 ## Acceptance Owner
 

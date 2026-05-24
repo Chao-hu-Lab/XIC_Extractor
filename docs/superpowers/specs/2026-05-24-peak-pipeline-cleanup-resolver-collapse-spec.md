@@ -1,11 +1,11 @@
 # C2 — Resolver Collapse Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.1
+**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
-**Precondition:** P1 (resolver default switch) and P5 (CWT evidence honesty)
-both validated clean. Confirmation that no external caller depends on the
-`arbitrated` resolver_mode.
+**Precondition:** Phase 1 is stable, P1 (resolver default switch) and P5
+(CWT evidence honesty) both have GO notes, and removed public resolver values
+have an approved migration / deprecation plan.
 
 ## Purpose
 
@@ -38,17 +38,40 @@ not function as a top-level resolver.
 Additional hardcoded `resolver_mode = "local_minimum"`:
 
 - `xic_extractor/discovery/models.py:117`
-- `xic_extractor/instrument_qc/pipeline.py:593`
+- `xic_extractor/instrument_qc/pipeline_extraction.py:126`
+- script / validation harness defaults such as
+  `scripts/validation_harness_core.py:42`
 
-These hardcoded sites bypass the global `config/settings.csv:resolver_mode`
-setting and were addressed as an open question in P1.
+These hardcoded sites bypass the canonical settings defaults and were
+addressed as an open question in P1.
 
 ## Required Change
 
-### Step 1 — Remove the `arbitrated` resolver mode
+### Step 1 — Public resolver-value migration gate
+
+Before deleting any public resolver value, scan repo configs, examples,
+scripts, GUI/config docs, validation harnesses, and known deployment handoff
+paths for all values being removed or demoted:
+
+- `arbitrated`
+- `legacy_savgol`
+- `local_minimum` if it stops being an accepted top-level production value
+
+For each value, record one of:
+
+- migrated to `region_first_safe_merge`
+- retained as a compatibility alias for one release cycle
+- blocked because an external caller still depends on it
+
+Old configs must either keep working through an explicit compatibility alias
+or fail fast with an actionable unsupported-value error that names
+`region_first_safe_merge` as the replacement. Do not silently map old values
+without a migration note and regression tests.
+
+### Step 2 — Remove the `arbitrated` resolver mode
 
 Verify no external caller (other repos, deployment configs, CI scripts) uses
-`resolver_mode=arbitrated`. If confirmed:
+`resolver_mode=arbitrated`. If confirmed by Step 1:
 
 - delete the `arbitrated` branch from `facade.py:212-217`
 - delete the supporting functions: `_find_peak_candidates_arbitrated`,
@@ -62,13 +85,14 @@ Verify no external caller (other repos, deployment configs, CI scripts) uses
   After the arbitrated path is removed, the recovery caller still needs
   this helper. Leave the function in place; only delete its arbitrated
   call site
-- update `config/settings.csv` documentation: remove `arbitrated` from the
-  permitted value list
+- update `config/settings.example.csv`, `settings_schema.py`, GUI/config docs,
+  validation harness help text, and any CLI validation that lists permitted
+  resolver values according to the Step 1 migration decision
 
 If external callers exist, defer the removal and document the constraint
 under `docs/superpowers/notes/`.
 
-### Step 2 — Convert `legacy_savgol` from resolver_mode to utility
+### Step 3 — Convert `legacy_savgol` from resolver_mode to utility
 
 After P1, no production caller depends on `legacy_savgol` as a top-level
 resolver. The SG noise floor estimation in
@@ -83,9 +107,13 @@ Plan:
   `legacy_savgol.py`
 - delete the `legacy_savgol.py` file
 - delete the `legacy_savgol` fallback branch from `facade.py:218-223`
-- update `config/settings.csv` permitted values
+- update `config/settings.example.csv`, `settings_schema.py`, GUI/config docs,
+  and CLI validation permitted values according to the Step 1 migration
+  decision. Add tests for old `legacy_savgol` config behavior: either the
+  compatibility alias works for the transition period or the unsupported-value
+  error is explicit.
 
-### Step 3 — Retire the standalone CWT resolver mode
+### Step 4 — Retire the standalone CWT resolver mode
 
 After P5, CWT emits audit-flag-only evidence; it does not function as a
 peak finder. Plan:
@@ -99,16 +127,16 @@ peak finder. Plan:
   whether `_CWT_SAME_APEX_SUPPORT_POINTS = 5` evidence is empirically
   useful — see open question
 
-### Step 4 — Address hardcoded resolver_mode sites
+### Step 5 — Address hardcoded resolver_mode sites
 
 Two sites pin `resolver_mode` to `"local_minimum"` independently of the
-global `config/settings.csv` value, but their nature differs:
+canonical defaults, but their nature differs:
 
 - `discovery/models.py:117` — **dataclass field default**:
   `resolver_mode: str = "local_minimum"` on a `DiscoverySettings`-like
   dataclass. Edit semantics: change the default literal, or remove the
   field if the caller path can inherit from the global config object.
-- `instrument_qc/pipeline.py:593` — **inline keyword argument**:
+- `instrument_qc/pipeline_extraction.py:126` — **inline keyword argument**:
   `resolver_mode="local_minimum"` passed when constructing the QC config.
   Edit semantics: change or remove the keyword argument.
 
@@ -117,7 +145,7 @@ value: `region_first_safe_merge`. The hardcoded sites should either inherit
 the global default or be deleted as dead overrides. Treat them as
 separate diffs since the edit kind is different.
 
-### Step 5 — Rename `resolver_mode` (optional)
+### Step 6 — Rename `resolver_mode` (optional)
 
 After collapse, `resolver_mode` has one permitted value, which makes the
 config field redundant. Two options:
@@ -147,12 +175,19 @@ Additional check:
   8RAW; result must be either equivalent to or strictly worse than the
   region-first run. If `arbitrated` is materially better on any ISTD, the
   collapse is premature — record findings and defer
+- scan repo configs, examples, scripts, docs, GUI/config surfaces, validation
+  harnesses, and known deployment handoff paths for every removed value
+  (`arbitrated`, `legacy_savgol`, and optionally `local_minimum`). Each hit
+  must be migrated, documented as external, covered by a compatibility alias,
+  or block C2
 
 ## Rollback Condition
 
 Restore deleted modes if any of:
 
 - a non-internal caller of `arbitrated` surfaces during validation
+- a non-internal caller of `legacy_savgol` or `local_minimum` cannot be
+  migrated or covered by an explicit compatibility policy
 - hash mismatch on parity TSVs (would indicate the dispatch deletion changed
   behavior unexpectedly)
 - the noise estimation extracted in Step 2 changes `_prominence_threshold`
@@ -169,8 +204,9 @@ Restore deleted modes if any of:
 
 ## Open Questions
 
-- Has anyone enabled `arbitrated` in a downstream config? No grep evidence
-  in this repo. Confirmation from production deployment owners needed.
+- Has anyone enabled `arbitrated`, `legacy_savgol`, or `local_minimum` in a
+  downstream config? Repo grep is not sufficient; confirmation from production
+  deployment owners is needed.
 - Does `_CWT_SAME_APEX_SUPPORT_POINTS = 5` give measurable benefit on the
   strict ISTD benchmark? If not, P5 followup (delete CWT entirely) can be
   bundled into C2. If yes, keep the proposal source through C2.
@@ -184,6 +220,6 @@ Restore deleted modes if any of:
 
 ## Acceptance Owner
 
-Engineering owner confirms no external `arbitrated` caller, runs parity
+Engineering owner confirms the resolver-value migration checklist, runs parity
 validation, records under `docs/superpowers/notes/`. PR includes the parity
 report and the resolved mode-removal checklist.

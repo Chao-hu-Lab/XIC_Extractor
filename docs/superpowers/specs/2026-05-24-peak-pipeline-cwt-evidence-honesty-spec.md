@@ -55,11 +55,16 @@ caveat:
 
 Scorer change (`peak_scoring.py:776-784`):
 
-- replace the `cwt_best_scale OR cwt_ridge_persistence` check with the
-  explicit `centwave_cwt in proposal_sources AND any other source in
-  proposal_sources` check, dropping the numeric-truthy probe
-- behavior remains identical (the existing check was effectively the same
-  thing, just expressed in misleading terms)
+- keep the current behavior exactly: `centwave_cwt` must be present in
+  `proposal_sources`, at least one non-CWT proposal source must also be
+  present, and either `cwt_best_scale` or `cwt_ridge_persistence` must be a
+  positive finite metric
+- rename or document the helper so the positive-finite check is understood as
+  a legacy CWT-presence guard, not as a scientifically meaningful CWT scale /
+  ridge threshold
+- do **not** drop the numeric positive-finite guard in P5a. Dropping it would
+  be a production scoring change and belongs in P5b or a separate scoring
+  spec.
 
 ## P5b — Optional Real CWT Upgrade
 
@@ -113,11 +118,16 @@ audit-side-only path:
 
 1. Keep `cwt_width` in the default `sources` tuple of
    `enumerate_boundary_hypotheses`. Do not change `boundaries.py`.
-2. At the audit emitter (`peak_candidate_boundaries.py`), suppress the
-   `cwt_width` row when the source-only boundary cannot be backed by real
-   CWT evidence. Use an explicit `cwt_audit_filter_reason` column so
-   reviewers see why a hypothesis was hidden rather than silently dropped.
-3. The `region_safe_merge` path continues to receive the full source set so
+2. At the boundary-audit summary builder, mark source-only `cwt_width`
+   hypotheses that cannot be backed by real CWT evidence. Diagnostic writers
+   must only render the supplied marker; they must not recompute whether CWT
+   is real.
+3. Do not silently drop the evidence. Either:
+   - keep the row with `cwt_audit_filter_reason` and an `audit_visible` /
+     `suppressed` marker, or
+   - write a sidecar `peak_candidate_boundaries_cwt_suppressed.tsv` carrying
+     the suppressed row identity and reason.
+4. The `region_safe_merge` path continues to receive the full source set so
    its `RegionSelectionDecision` is byte-identical before and after P5a.
 
 If a later spec (P5b) introduces real CWT, the audit filter is removed and
@@ -146,8 +156,10 @@ P5a is a pure rename / audit-wiring change. Validation:
   audit-side `cwt_width` hypothesis filtering differ)
 - `peak_candidates.tsv` row count must be identical
 - `alignment_matrix.tsv` and `alignment_review.tsv` hashes must be identical
-- `peak_candidate_boundaries.tsv` (or equivalent boundary audit TSV) may show
-  fewer `cwt_width` rows, accompanied by `cwt_audit_filter_reason` entries
+- `peak_candidate_boundaries.tsv` row count may stay identical with suppressed
+  CWT rows marked in place, or a sidecar suppressed-CWT TSV may be emitted.
+  A row cannot simply disappear without a machine-readable reason that
+  includes sample, candidate/feature identity, source, and suppression reason.
 - `RegionSelectionDecision` outputs in the region-first audit surface must be
   byte-identical before and after the change
 
@@ -157,7 +169,7 @@ have).
 
 ## What This Spec Does Not Change (P5a)
 
-- production peak selection
+- production peak selection or CWT same-apex scoring logic
 - area / RT / baseline values
 - alignment / matrix outputs
 - the `centwave_cwt` proposal source itself (still runs, still flags
@@ -170,9 +182,10 @@ have).
 
 ## Rollback Condition (P5a)
 
-Restore the previous audit column names and the OR check if reviewers depend
-on the numeric `cwt_best_scale` or `cwt_ridge_persistence` columns through
-external scripts that were not visible at spec time.
+Restore the previous boundary-audit rendering if reviewers depend on the
+current `cwt_width` audit rows through external scripts that were not visible
+at spec time. The scorer's legacy positive-finite guard should remain
+unchanged throughout P5a, so there should be no scoring rollback.
 
 ## Open Questions
 
@@ -188,16 +201,18 @@ Implementation should leave a clean marker so Phase 2 C2 (resolver collapse)
 can identify CWT-related audit rows for bulk removal if the project decides
 to retire the CWT proposal source entirely:
 
-- the new `cwt_audit_filter_reason` column is the **single canonical marker**
-  for CWT-suppressed boundary hypotheses. Do not introduce parallel markers
-  (e.g. a separate `cwt_filtered_*` flag elsewhere). C2 will grep for this
-  one column when deleting CWT audit rows.
+- the new `cwt_audit_filter_reason` field is the **single canonical marker**
+  for CWT-suppressed boundary hypotheses, whether rendered in the main TSV or
+  in a sidecar. Do not introduce parallel markers (e.g. a separate
+  `cwt_filtered_*` flag elsewhere). C2 will grep for this one field when
+  deleting CWT audit rows.
 - keep the `centwave_cwt` proposal source name unchanged. C2 may decide to
   delete the proposal source entirely; using the same string makes the
   removal mechanical.
-- the audit-side filter logic in `peak_candidate_boundaries.py` is a
-  **separate code path** from production scoring. Do not share helpers with
-  `region_safe_merge.py`'s use of `enumerate_boundary_hypotheses`.
+- the CWT-suppression decision is computed before writer/rendering and is a
+  **separate audit path** from production scoring. Do not share helpers with
+  `region_safe_merge.py`'s use of `enumerate_boundary_hypotheses`; diagnostic
+  writers should render the already-computed reason only.
 
 ## Acceptance Owner
 
