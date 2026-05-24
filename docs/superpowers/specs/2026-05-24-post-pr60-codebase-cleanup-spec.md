@@ -116,6 +116,10 @@ Tasks:
   inventory if repeated scans remain useful.
 - Add an architecture boundary smoke test for the newest diagnostic surfaces:
   domain modules must not import report/workbook/CLI/process adapter layers.
+- Before any `identity_coherence/output.py` split, update the boundary smoke
+  test so identity-coherence domain modules are forbidden from importing the
+  new `output_*` modules, writer modules, report/summary modules, CLI scripts,
+  adapters, process backends, workbooks, or GUI code.
 - Record any proven-dead public facade exports before deleting them. Deletion
   requires a grep/CodeGraph caller check plus at least one import-contract test.
 
@@ -129,12 +133,29 @@ Exit criteria:
 
 Goal: split `identity_coherence/output.py` without changing frozen outputs.
 
+Required first commit:
+
+- Update the architecture boundary smoke test before moving output code.
+- The boundary must scan the existing identity-coherence domain modules and any
+  newly introduced output modules. Domain modules such as `candidate_matcher.py`,
+  `cell_evidence.py`, `decision.py`, `models.py`, `request_builder.py`,
+  `row_evaluator.py`, `rt_center.py`, `schema.py`, `seed_gate.py`, `shape.py`,
+  `tags.py`, and `width.py` must not import `identity_coherence.output`,
+  `identity_coherence.output_*`, CLI scripts, adapters, process backends,
+  report/workbook renderers, or GUI code.
+
 Candidate module split:
 
+- `identity_coherence/output_formatting.py`
+  - dependency-free TSV/Markdown formatting primitives,
+  - `_format_tsv_value`-equivalent behavior,
+  - counter-table Markdown formatting helpers only if they do not compute
+    method or engineering verdicts.
 - `identity_coherence/output_models.py`
   - `IdentityCoherenceOutputContext`
   - `IdentityCoherenceOutputPaths`
   - `IdentityCoherenceOutputRecord`
+  - must not import `output_validation.py`.
 - `identity_coherence/output_projection.py`
   - `project_request_row`
   - `project_cell_evidence_row`
@@ -148,16 +169,47 @@ Candidate module split:
   - TSV writer functions
   - bundle writer
 - `identity_coherence/output_summary.py`
-  - Markdown summary renderer and Go/No-Go rows
+  - Markdown summary renderer only,
+  - table/section layout and escaping.
+- `identity_coherence/output_summary_model.py` or
+  `identity_coherence/output_go_no_go.py`
+  - engineering Go/No-Go row computation,
+  - threshold/cost row shaping,
+  - other summary model calculations that are not pure Markdown formatting.
 - keep `identity_coherence/output.py` as a compatibility facade until imports
   settle.
+
+Allowed dependency direction:
+
+| Module | May import | Must not import |
+|---|---|---|
+| `output_formatting.py` | standard library only | any local output/domain module |
+| `output_models.py` | primitive validators local to the file, standard library | `output_validation.py`, writers, summary |
+| `output_validation.py` | `output_models.py`, domain result models | projection, writers, summary |
+| `output_projection.py` | schema, tags, formatting, domain result models | writers, summary |
+| `output_summary_model.py` / `output_go_no_go.py` | models, validation, schema enums, formatting | writers, CLI, adapters |
+| `output_summary.py` | models, validation, formatting, summary model | writers, CLI, adapters |
+| `output_writers.py` | models, validation, projection, summary | adapters, CLI |
+| `output.py` facade | all new output modules | new behavior |
+
+`IdentityCoherenceOutputContext.__post_init__` should keep primitive
+non-negative validation local to `output_models.py` or a dependency-free helper.
+It must not depend on `output_validation.py`, otherwise `output_models ->
+output_validation -> output_models` becomes a circular import risk.
 
 Required tests:
 
 - Existing output projection/writer tests must pass unchanged first.
 - Add facade import tests so old public import paths remain valid.
+- Add direct import tests for each new output module so the new modules are not
+  only reachable through the facade.
 - Add column-order parity tests at the new module boundaries.
+- Update the architecture boundary test before moving behavior.
 - Run `uv run pytest tests/alignment/identity_coherence/test_output_projection.py tests/alignment/identity_coherence/test_output_writer.py -q`.
+- Also run:
+  - `uv run pytest tests/alignment/identity_coherence/test_schema_contract.py tests/test_alignment_identity_coherence_adapter.py -q`
+  - `uv run pytest --collect-only tests/alignment/identity_coherence -q`
+  - `uv run ruff check <new-output-modules> <touched-tests>`
 
 Non-goals:
 
@@ -175,7 +227,9 @@ Candidate module split:
 - `identity_coherence/control_models.py`
   - control manifest entries,
   - control configs,
-  - evaluation result dataclasses.
+  - evaluation result dataclasses,
+  - structural record-like protocols currently represented by
+    `IdentityCoherenceOutputRecordLike`.
 - `identity_coherence/control_manifest.py`
   - TSV/YAML rejection,
   - row parsing,
@@ -189,13 +243,35 @@ Candidate module split:
 - keep `identity_coherence/controls.py` as compatibility facade until imports
   settle.
 
+Allowed dependency direction:
+
+| Module | May import | Must not import |
+|---|---|---|
+| `control_models.py` | schema/domain model types needed for protocols | `output*`, writers, summary, CLI, adapters |
+| `control_manifest.py` | control models, schema, formatting primitives if needed | output modules, writers, summary, CLI |
+| `positive_controls.py` | control models, schema, small domain models | output modules, writers, summary, CLI |
+| `decoy_controls.py` | control models, seed gate, request builder, schema | output modules, writers, summary, CLI |
+| `control_evaluation.py` | control manifest, positive controls, decoy controls, control models | output modules, writers, summary, CLI |
+| `controls.py` facade | new control modules | new behavior |
+
+Controls must keep depending on structural record-like protocols rather than
+the concrete `IdentityCoherenceOutputRecord`. This preserves the current
+direction where controls can validate records without importing the output
+layer.
+
 Required tests:
 
 - Existing `test_controls_manifest.py` and `test_controls_evaluation.py` pass
   unchanged before refactoring assertions.
 - Add facade import tests for stable control API names.
-- Add no-import-backwards test: control evaluation must not import output
-  writer/summary modules.
+- Add no-import-backwards tests for every control module. They must reject
+  imports of `identity_coherence.output`, `identity_coherence.output_models`,
+  `identity_coherence.output_projection`, `identity_coherence.output_validation`,
+  `identity_coherence.output_writers`, `identity_coherence.output_summary`,
+  `identity_coherence.output_summary_model`, and
+  `identity_coherence.output_go_no_go`.
+- Update the existing boundary test module list so newly introduced
+  `control_*` files are covered.
 
 Non-goals:
 
@@ -220,6 +296,26 @@ Candidate target package:
 
 `scripts/validate_identity_coherence_8raw.py` should become an argparse
 wrapper around this package.
+
+Migration rule:
+
+- Do not keep expanding `tests/test_validate_identity_coherence_8raw.py`.
+- New validator module tests should live under
+  `tests/alignment/identity_coherence_validation/`, split by module:
+  `test_bundle.py`, `test_compare.py`, `test_controls_summary.py`,
+  `test_decoy_manifest_proposal.py`, `test_acceptance.py`, `test_writer.py`,
+  and `test_cli_contract.py`.
+- Shared test builders should live in
+  `tests/alignment/identity_coherence_validation/fixtures.py` or local
+  per-file helpers, not in broad `tests/conftest.py`.
+- The old `tests/test_validate_identity_coherence_8raw.py` should either keep
+  only CLI wrapper / legacy import compatibility / exit-code contract tests, or
+  be explicitly split as part of the validator PR.
+- During the first split, either keep script-level compatibility re-exports for
+  current helper names, or migrate tests to the new package first with explicit
+  script entry-point import-contract tests.
+- Do not rewrite fixture behavior in the same PR unless the change is strictly
+  import-path migration.
 
 Required tests:
 
@@ -323,7 +419,7 @@ diagnostic/reporting surfaces have settled.
 
 ## Recommended First PR
 
-First cleanup PR should be Workstream B only:
+First cleanup PR should be the Workstream A boundary guard plus Workstream B:
 
 **Title:** `refactor: split identity coherence output surface`
 
@@ -333,21 +429,55 @@ Why first:
 - It has direct tests.
 - It reduces a 914-line file with multiple clear responsibilities.
 - It improves reviewability before any further identity-coherence features.
+- It establishes the new `output_*` boundary guard before those modules exist
+  widely enough to leak into domain code.
+
+Implementation order:
+
+1. Add/update boundary and import-contract tests for the future `output_*`
+   module family.
+2. Move output models and primitive formatting helpers.
+3. Move projection functions.
+4. Move validation functions.
+5. Move TSV writers and bundle writer.
+6. Move summary model / Go-No-Go row shaping.
+7. Move Markdown rendering.
+8. Reduce `identity_coherence/output.py` to a compatibility facade.
+9. Only after tests pass, consider removing unused private helpers left behind.
+
+Stop conditions:
+
+- any frozen TSV header, path, or summary section diff appears,
+- schema constants need to change,
+- acceptance, decision, promotion, seed-gate, control, or 8RAW policy logic
+  needs to change,
+- RAW/XIC retrieval, Backfill, final matrix, owner, clustering, or
+  primary-consolidation code needs to be touched,
+- facade imports cannot be preserved without behavior changes,
+- a domain module needs to import an `output_*` module.
 
 Definition of done:
 
 - `identity_coherence/output.py` becomes a compatibility facade.
 - New focused output modules own models, projection, validation, writers, and
-  summary separately.
+  summary/report-model responsibilities separately.
+- Architecture boundary smoke tests cover `output_*` forbidden imports.
+- Direct new-module imports and facade imports are both tested.
 - No frozen TSV, Markdown section, CLI, or schema behavior changes.
 - Narrow tests pass:
   - `uv run pytest tests/alignment/identity_coherence/test_output_projection.py tests/alignment/identity_coherence/test_output_writer.py -q`
+- Contract tests pass:
+  - `uv run pytest tests/alignment/identity_coherence/test_schema_contract.py tests/test_alignment_identity_coherence_adapter.py -q`
+- Collect/lint smoke passes:
+  - `uv run pytest --collect-only tests/alignment/identity_coherence -q`
+  - `uv run ruff check <new-output-modules> <touched-tests>`
 - Broader identity-coherence tests pass before merge:
   - `uv run pytest tests/alignment/identity_coherence -q`
 
 ## Follow-Up PR Order
 
-1. Split identity-coherence output.
+1. Add the identity-coherence output boundary guard, then split
+   identity-coherence output.
 2. Split identity-coherence controls.
 3. Split 8RAW validation CLI internals.
 4. Review identity-coherence adapter boundary.
@@ -367,4 +497,3 @@ Definition of done:
 - Did tests move toward focused ownership instead of expanding catch-all files?
 - Is there at least one import/facade compatibility test when public paths move?
 - If a large file remains large, does it still have one reason to change?
-
