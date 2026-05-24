@@ -39,7 +39,7 @@ behavior change needs its own spec.
 
 Structural scan from the cleanup worktree before the first split commits:
 
-- CodeGraph CLI synchronized locally: 561 files, 10,364 nodes, 26,355 edges.
+- CodeGraph CLI synchronized locally: 565 files, 10,401 nodes, 26,410 edges.
 - `xic_extractor/`, `tools/`, and `scripts/` now contain several files over
   the repo-local 500/800-line red-flag thresholds.
 - The largest post-PR60 hotspots are now split across three areas:
@@ -50,7 +50,6 @@ Largest production / tool modules:
 | Lines | File | First cleanup interpretation |
 |---:|---|---|
 | 962 | `xic_extractor/peak_scoring.py` | Existing decomposition target; still deferred until characterization tests pin scoring outputs. |
-| 908 | `tools/diagnostics/family_ms1_overlay_plot.py` | Diagnostic plotting; lower production risk but large rendering/data mix. |
 | 898 | `xic_extractor/alignment/process_backend.py` | Process mechanics plus alignment/trace payloads; split only with spawn/pickle smoke tests. |
 | 848 | `scripts/local_minimum_param_sweep.py` | Validation/development script; not part of PR60 cleanup unless it blocks tooling. |
 | 759 | `tools/diagnostics/untargeted_alignment_guardrails.py` | Guardrail CLI/reporting surface; split only behind stable CSV/JSON outputs. |
@@ -59,6 +58,7 @@ Largest production / tool modules:
 | 661 | `tools/diagnostics/peak_candidate_score_calibration_report.py` | Diagnostic report surface; prefer rendering/writer splits before score semantics. |
 | 644 | `xic_extractor/alignment/ownership.py` | Domain-heavy ownership module; still deferred unless characterization tests pin owner decisions. |
 | 624 | `xic_extractor/alignment/primary_consolidation.py` | Domain-heavy alignment module; still deferred until characterization tests pin graph/winner/cell merge behavior. |
+| 615 | `scripts/validate_migration.py` | Migration validation script; defer unless it blocks current cleanup validation. |
 
 Identity-coherence internal line pressure:
 
@@ -189,6 +189,11 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 196 | `tools/diagnostics/rt_normalization_anchor_loaders.py` | Targeted workbook, alignment TSV, anchor point, and sample-info loaders. |
 | 326 | `tools/diagnostics/rt_normalization_anchor_analysis.py` | Family RT summaries, leave-one-anchor-out checks, support levels, and status calculations. |
 | 149 | `tools/diagnostics/rt_normalization_anchor_writers.py` | TSV/JSON/Markdown output writers. |
+| 175 | `tools/diagnostics/family_ms1_overlay_plot.py` | Family MS1 overlay CLI/orchestration compatibility facade. |
+| 142 | `tools/diagnostics/family_ms1_overlay_trace.py` | Alignment-cell loading, RAW trace extraction, highlighting, and trace row construction. |
+| 457 | `tools/diagnostics/family_ms1_overlay_rendering.py` | Matplotlib figure layout and panel rendering. |
+| 99 | `tools/diagnostics/family_ms1_overlay_rendering_styles.py` | Overlay colors, line/point styles, deterministic jitter, center RT marker, and legend. |
+| 190 | `tools/diagnostics/family_ms1_overlay_writers.py` | Trace summary TSV, trace data JSON, and renderer output dispatch. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -580,6 +585,9 @@ Targets already partly improved:
 - `analyze_rt_normalization_anchors.py` now stays as the CLI/orchestration
   facade. Workbook/alignment loading, RT normalization analysis, dataclasses,
   and TSV/JSON/Markdown writers live in focused modules.
+- `family_ms1_overlay_plot.py` now stays as the CLI/orchestration compatibility
+  facade. Alignment-cell/RAW trace extraction, plotting, style helpers, and
+  TSV/JSON writers live in focused modules.
 - targeted reliability and low-MS1 coverage now have more focused modules but
   still carry large tests and report renderers.
 
