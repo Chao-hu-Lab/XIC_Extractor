@@ -1,9 +1,98 @@
 import csv
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from tools.diagnostics import evidence_spine_consistency as report
+
+
+def test_path_style_cli_help_preserves_public_script_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = repo_root / "tools" / "diagnostics" / "evidence_spine_consistency.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--targeted-dir" in result.stdout
+    assert "--alignment-dir" in result.stdout
+    assert "--output-dir" in result.stdout
+
+
+def test_module_style_cli_help_preserves_public_module_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.diagnostics.evidence_spine_consistency",
+            "--help",
+        ],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--targeted-dir" in result.stdout
+    assert "--alignment-dir" in result.stdout
+    assert "--output-dir" in result.stdout
+
+
+def test_facade_preserves_existing_helper_import_surface() -> None:
+    expected_names = [
+        "DEFAULT_FOCUS_LABELS",
+        "ROW_FIELDS",
+        "SUMMARY_FIELDS",
+        "AlignmentCell",
+        "ConsistencyRow",
+        "ConsistencySummary",
+        "EvidenceSpineConsistencyOutputs",
+        "EvidenceSpineConsistencyResult",
+        "TargetedCandidate",
+        "TargetedShadow",
+        "_best_alignment_match",
+        "_bool_value",
+        "_build_rows",
+        "_consistency_row",
+        "_fmt",
+        "_format_counter",
+        "_format_rt_window",
+        "_format_value",
+        "_mismatch_reasons",
+        "_optional_float",
+        "_optional_int",
+        "_parse_args",
+        "_ppm",
+        "_ratio",
+        "_read_alignment_cells",
+        "_read_required_tsv",
+        "_read_target_mz",
+        "_read_targeted_candidates",
+        "_read_targeted_shadows",
+        "_summarize",
+        "_write_markdown",
+        "_write_outputs",
+        "_write_tsv",
+        "main",
+        "run_evidence_spine_consistency",
+    ]
+
+    assert set(report.__all__) == set(expected_names)
+    for name in expected_names:
+        assert hasattr(report, name), name
 
 
 def test_evidence_spine_consistency_matches_shared_semantics(tmp_path: Path) -> None:
@@ -108,6 +197,48 @@ def test_evidence_spine_consistency_matches_shared_semantics(tmp_path: Path) -> 
     )
 
     assert outputs.rows_tsv.is_file()
+    with outputs.summary_tsv.open(encoding="utf-8", newline="") as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "rows_checked",
+            "matched_rows",
+            "consistent_rows",
+            "mismatch_rows",
+            "missing_alignment_rows",
+            "focused_target_labels",
+            "included_istd_rows",
+            "mismatch_reason_counts",
+        ]
+    with outputs.rows_tsv.open(encoding="utf-8", newline="") as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "sample",
+            "target_label",
+            "role",
+            "targeted_candidate_id",
+            "untargeted_family_id",
+            "target_mz",
+            "untargeted_family_mz",
+            "mz_delta_ppm",
+            "trace_scan_count",
+            "rt_window_min",
+            "targeted_selected_rt",
+            "untargeted_selected_rt",
+            "rt_delta_min",
+            "targeted_boundary_start",
+            "targeted_boundary_end",
+            "untargeted_boundary_start",
+            "untargeted_boundary_end",
+            "boundary_delta_start_min",
+            "boundary_delta_end_min",
+            "targeted_area",
+            "untargeted_area",
+            "area_ratio_untargeted_to_targeted",
+            "baseline_corrected_area_available",
+            "targeted_region_verdict",
+            "untargeted_region_verdict",
+            "targeted_local_mixture_verdict",
+            "untargeted_local_mixture_verdict",
+            "mismatch_reason",
+        ]
     assert result.summary.rows_checked == 1
     assert result.summary.consistent_rows == 1
     row = result.rows[0]
