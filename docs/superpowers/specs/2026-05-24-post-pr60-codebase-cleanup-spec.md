@@ -83,7 +83,10 @@ Test pressure:
 
 | Lines | File | Notes |
 |---:|---|---|
-| 1948 | `tests/test_alignment_pipeline.py` | Catch-all test file; future additions should move to focused tests. |
+| 341 | `tests/test_alignment_pipeline.py` | Core orchestration anchor after Workstream H; no longer a catch-all. |
+| 410 | `tests/test_alignment_pipeline_backends.py` | Focused backend/raw-source/process-owner tests. |
+| 379 | `tests/test_alignment_pipeline_outputs.py` | Focused output-level and sidecar emission tests. |
+| 256 | `tests/test_alignment_pipeline_atomic_writes.py` | Focused atomic writer rollback and writer contract tests. |
 | 1646 | `tests/test_extractor.py` | Existing broad targeted extraction suite. |
 | 1265 | `tests/test_validate_identity_coherence_8raw.py` | Public validation CLI tests; split only with stable helper fixtures. |
 | 1048 | `tests/test_peak_scoring.py` | Existing scoring decomposition target. |
@@ -94,9 +97,10 @@ This branch has now implemented the first identity-coherence cleanup bundle:
 
 - Workstream B: `identity_coherence/output.py` is a compatibility facade.
 - Workstream C: `identity_coherence/controls.py` is a compatibility facade.
-- Workstream H: the first two `tests/test_alignment_pipeline.py` slices moved
-  into focused test files, and their shared batch/matrix fixtures now live in
-  `tests/alignment_pipeline_helpers.py`.
+- Workstream H: `tests/test_alignment_pipeline.py` is now a core orchestration
+  anchor; backend/raw-source/process-owner, output-level/sidecar, atomic writer,
+  and timing slices live in focused test files. Shared batch/matrix fixtures now
+  live in `tests/alignment_pipeline_helpers.py`.
 - Workstream D: the validator split now keeps
   `scripts/validate_identity_coherence_8raw.py` as a thin public CLI facade.
   Common models, TSV bundle reads, V0.4 acceptance verdicts, serial/process
@@ -130,10 +134,13 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 37 | `xic_extractor/alignment/identity_coherence/output.py` | Compatibility facade after Workstream B. |
 | 356 | `xic_extractor/alignment/identity_coherence/output_summary_model.py` | Summary model and Go/No-Go calculations. |
 | 302 | `xic_extractor/alignment/identity_coherence/output_summary.py` | Markdown rendering only. |
-| 1382 | `tests/test_alignment_pipeline.py` | Still large; reduced by first Workstream H slices and shared helper extraction. |
+| 341 | `tests/test_alignment_pipeline.py` | Core orchestration anchor after Workstream H; historical file-level test commands still collect meaningful tests. |
+| 410 | `tests/test_alignment_pipeline_backends.py` | Focused backend/raw-source/process-owner tests. |
+| 379 | `tests/test_alignment_pipeline_outputs.py` | Focused output-level and sidecar emission tests. |
+| 256 | `tests/test_alignment_pipeline_atomic_writes.py` | Focused atomic writer rollback and writer contract tests. |
 | 292 | `tests/test_alignment_identity_coherence_pipeline.py` | Focused identity-coherence pipeline diagnostic tests. |
 | 256 | `tests/test_alignment_pipeline_timing.py` | Focused alignment timing/raw-source tests. |
-| 282 | `tests/alignment_pipeline_helpers.py` | Shared alignment-pipeline batch/matrix fixtures for focused tests. |
+| 308 | `tests/alignment_pipeline_helpers.py` | Shared alignment-pipeline batch/matrix fixtures and owner-edge fake evidence for focused tests. |
 | 274 | `scripts/validate_identity_coherence_8raw.py` | Public CLI facade: argument validation, command building, run orchestration, process reset. |
 | 705 | `tests/test_validate_identity_coherence_8raw.py` | CLI wrapper and exit-code contract tests after focused module tests moved out. |
 | 137 | `xic_extractor/alignment/identity_coherence_validation/models.py` | Validator dataclasses and frozen column/name constants. |

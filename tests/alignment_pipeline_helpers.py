@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import xic_extractor.alignment.pipeline as pipeline_module
+from xic_extractor.alignment.edge_scoring import OwnerEdgeEvidence
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
 from xic_extractor.config import ExtractionConfig
@@ -279,4 +280,29 @@ def peak_config() -> ExtractionConfig:
         peak_min_prominence_ratio=0.1,
         ms2_precursor_tol_da=1.6,
         nl_min_intensity_ratio=0.01,
+    )
+
+
+def owner_edge_evidence() -> OwnerEdgeEvidence:
+    return OwnerEdgeEvidence(
+        left_owner_id="OWN-Sample_A-000001",
+        right_owner_id="OWN-Sample_B-000001",
+        left_sample_stem="Sample_A",
+        right_sample_stem="Sample_B",
+        neutral_loss_tag="DNA_dR",
+        left_precursor_mz=500.0,
+        right_precursor_mz=500.1,
+        left_rt_min=8.5,
+        right_rt_min=8.6,
+        decision="strong_edge",
+        failure_reason="",
+        rt_raw_delta_sec=6.0,
+        rt_drift_corrected_delta_sec=1.0,
+        drift_prior_source="targeted_istd_trend",
+        injection_order_gap=1,
+        owner_quality="clean",
+        seed_support_level="strong",
+        duplicate_context="none",
+        score=100,
+        reason="strong_edge: score=100",
     )
