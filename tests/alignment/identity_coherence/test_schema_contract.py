@@ -119,6 +119,45 @@ FORBIDDEN_OUTPUT_ABSOLUTE_IMPORT_PREFIXES = (
     "xic_extractor.alignment.owner_backfill",
     "xic_extractor.alignment.backfill",
 )
+FORBIDDEN_CONTROL_RELATIVE_SURFACES = (
+    "controls",
+    "output",
+    "output_formatting",
+    "output_go_no_go",
+    "output_models",
+    "output_projection",
+    "output_summary",
+    "output_summary_model",
+    "output_validation",
+    "output_writers",
+)
+CONTROL_MODULE_FORBIDDEN_RELATIVE_SURFACES = {
+    "control_models.py": FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+    "control_manifest.py": (
+        *FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+        "control_evaluation",
+        "decoy_controls",
+        "positive_controls",
+    ),
+    "positive_controls.py": (
+        *FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+        "control_evaluation",
+        "decoy_controls",
+    ),
+    "decoy_controls.py": (
+        *FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+        "control_evaluation",
+        "positive_controls",
+    ),
+    "control_evaluation.py": FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+    "control_rows.py": (
+        *FORBIDDEN_CONTROL_RELATIVE_SURFACES,
+        "control_evaluation",
+        "control_manifest",
+        "decoy_controls",
+        "positive_controls",
+    ),
+}
 
 
 def _is_forbidden_identity_coherence_surface(surface_name: str) -> bool:
@@ -437,6 +476,27 @@ def test_identity_coherence_output_split_modules_import_directly():
     assert output_writers.write_identity_coherence_outputs is not None
 
 
+def test_identity_coherence_control_split_modules_import_directly():
+    from xic_extractor.alignment.identity_coherence import (
+        control_evaluation,
+        control_manifest,
+        control_models,
+        control_rows,
+        decoy_controls,
+        positive_controls,
+    )
+
+    assert control_models.IdentityControlManifestEntry is not None
+    assert control_models.IdentityControlsConfig is not None
+    assert control_models.IdentityDecoySource is not None
+    assert control_manifest.read_identity_controls_manifest is not None
+    assert control_manifest.read_identity_controls_manifest_tsv is not None
+    assert positive_controls.evaluate_positive_control is not None
+    assert decoy_controls.evaluate_identity_decoy is not None
+    assert control_evaluation.evaluate_identity_controls is not None
+    assert control_rows.control_row is not None
+
+
 def test_identity_coherence_output_record_runtime_type_hints_resolve():
     from typing import get_type_hints
 
@@ -465,6 +525,7 @@ def test_identity_coherence_facade_exports_controls_surface():
         "IdentityControlManifestEntry",
         "IdentityControlsConfig",
         "IdentityDecoySource",
+        "REQUIRED_MANIFEST_FIELDS",
         "read_identity_controls_manifest",
         "read_identity_controls_manifest_tsv",
         "evaluate_positive_control",
@@ -475,6 +536,8 @@ def test_identity_coherence_facade_exports_controls_surface():
     for name in exported_names:
         assert getattr(identity_coherence, name) is not None
         assert name in identity_coherence.__all__
+
+    assert identity_coherence.REQUIRED_MANIFEST_FIELDS is not None
 
     assert identity_coherence.ControlType is ControlType
     assert identity_coherence.ControlStatus is ControlStatus
@@ -571,6 +634,33 @@ def test_output_modules_follow_declared_dependency_direction():
                     f"{module_name}: line {line_number}: local import {surface}"
                 )
         for line_number, surface in relative_imports:
+            if surface in forbidden_surfaces:
+                violations.append(
+                    f"{module_name}: line {line_number}: forbidden import {surface}"
+                )
+        for line_number, module in _absolute_import_modules(source):
+            if _is_forbidden_output_absolute_import(module):
+                violations.append(
+                    f"{module_name}: line {line_number}: forbidden import {module}"
+                )
+
+    assert violations == []
+
+
+def test_control_modules_do_not_import_output_or_adapter_surfaces():
+    package_root = (
+        Path(__file__).resolve().parents[3]
+        / "xic_extractor"
+        / "alignment"
+        / "identity_coherence"
+    )
+    violations = []
+
+    for module_name, forbidden_surfaces in (
+        CONTROL_MODULE_FORBIDDEN_RELATIVE_SURFACES.items()
+    ):
+        source = (package_root / module_name).read_text(encoding="utf-8")
+        for line_number, surface in _identity_coherence_import_surfaces(source):
             if surface in forbidden_surfaces:
                 violations.append(
                     f"{module_name}: line {line_number}: forbidden import {surface}"

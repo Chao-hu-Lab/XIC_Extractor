@@ -657,6 +657,33 @@ def test_evaluate_identity_controls_preserves_manifest_order():
     assert result.decoy_coherent_seed_threshold_met is True
 
 
+def test_evaluate_identity_controls_uses_facade_seed_gate_hook(monkeypatch):
+    captured = {}
+
+    def capture_seed_gate(request, candidate_evidence, owner_like, **kwargs):
+        captured["called"] = True
+        captured["best_seed_rt"] = candidate_evidence.best_seed_rt
+        return real_evaluate_seed_gate(
+            request,
+            candidate_evidence,
+            owner_like,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(controls_module, "evaluate_seed_gate", capture_seed_gate)
+
+    result = evaluate_identity_controls(
+        (_decoy_entry(DecoyGenerationMethod.RT_SHIFT),),
+        records=(output_record(),),
+        decoy_sources=(_decoy_source(),),
+        config=IdentityControlsConfig(),
+    )
+
+    assert captured["called"] is True
+    assert captured["best_seed_rt"] == pytest.approx(5.2)
+    assert result.rows[0]["control_status"] == "assessed"
+
+
 def test_evaluate_identity_controls_reports_missing_decoy_source():
     decoy = _decoy_entry(DecoyGenerationMethod.MZ_SHIFT)
 
