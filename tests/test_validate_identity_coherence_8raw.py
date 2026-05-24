@@ -983,6 +983,221 @@ def test_write_validation_outputs_keeps_parity_report_pass_when_controls_fail(
     assert not acceptance.accepted
 
 
+def test_main_require_v04_acceptance_returns_one_when_not_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch = _write(tmp_path / "batch.csv", "sample_stem,raw_file,candidate_csv\n")
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    output_root = tmp_path / "out"
+    result = _validation_result_with_rows(
+        (
+            ValidationRow("requests_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("decisions_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("cell_evidence_tsv_exact", "pass", "8", "8", "ok"),
+            ValidationRow("controls_tsv_parity_only", "pass", "0", "0", "ok"),
+            ValidationRow(
+                "controls_manifest_assessment",
+                "not_assessed",
+                "not_provided",
+                "not_provided",
+                "no manifest",
+            ),
+            ValidationRow(
+                "positive_control_pass_fraction",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+            ValidationRow(
+                "decoy_coherent_seed_count",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+            ValidationRow(
+                "decoy_correctly_rejected_count",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+            ValidationRow("summary_md_presence", "pass", "present", "present", "ok"),
+        )
+    )
+    monkeypatch.setattr(validation_script, "run_validation", lambda **_: result)
+
+    code = validation_script.main(
+        [
+            "--discovery-batch-index",
+            str(batch),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-root",
+            str(output_root),
+            "--require-v04-acceptance",
+        ]
+    )
+
+    assert code == 1
+    stderr = capsys.readouterr().err
+    assert "FAIL identity_coherence_v04_acceptance" in stderr
+    assert "reviewed_controls_manifest" in stderr
+    assert (output_root / "identity_coherence_v04_acceptance.tsv").exists()
+
+
+def test_main_without_strict_acceptance_prints_no_go_but_returns_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch = _write(tmp_path / "batch.csv", "sample_stem,raw_file,candidate_csv\n")
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    output_root = tmp_path / "out"
+    result = _validation_result_with_rows(
+        (
+            ValidationRow("requests_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("decisions_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("cell_evidence_tsv_exact", "pass", "8", "8", "ok"),
+            ValidationRow("controls_tsv_parity_only", "pass", "0", "0", "ok"),
+            ValidationRow(
+                "controls_manifest_assessment",
+                "not_assessed",
+                "not_provided",
+                "not_provided",
+                "no manifest",
+            ),
+            ValidationRow(
+                "positive_control_pass_fraction",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+            ValidationRow(
+                "decoy_coherent_seed_count",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+            ValidationRow(
+                "decoy_correctly_rejected_count",
+                "not_assessed",
+                "not_assessed",
+                "not_assessed",
+                "no manifest",
+            ),
+            ValidationRow("summary_md_presence", "pass", "present", "present", "ok"),
+        )
+    )
+    monkeypatch.setattr(validation_script, "run_validation", lambda **_: result)
+
+    code = validation_script.main(
+        [
+            "--discovery-batch-index",
+            str(batch),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-root",
+            str(output_root),
+        ]
+    )
+
+    assert code == 0
+    stdout = capsys.readouterr().out
+    assert "PASS identity_coherence_sidecar_parity" in stdout
+    assert "NO-GO identity_coherence_v04_acceptance" in stdout
+    assert "reviewed_controls_manifest" in stdout
+
+
+def test_main_require_v04_acceptance_passes_when_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch = _write(tmp_path / "batch.csv", "sample_stem,raw_file,candidate_csv\n")
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    controls = tmp_path / "controls.reviewed.tsv"
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    controls.write_text("reviewed\n", encoding="utf-8")
+    output_root = tmp_path / "out"
+    result = _validation_result_with_rows(
+        (
+            ValidationRow("requests_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("decisions_tsv_exact", "pass", "3", "3", "ok"),
+            ValidationRow("cell_evidence_tsv_exact", "pass", "8", "8", "ok"),
+            ValidationRow("controls_tsv_parity_only", "pass", "2", "2", "ok"),
+            ValidationRow(
+                "controls_manifest_assessment",
+                "not_assessed",
+                "provided",
+                "provided",
+                "manifest provided",
+            ),
+            ValidationRow(
+                "positive_control_pass_fraction",
+                "pass",
+                "1.000",
+                "1.000",
+                "all positives passed",
+            ),
+            ValidationRow(
+                "decoy_coherent_seed_count",
+                "pass",
+                "0",
+                "0",
+                "no decoy promotion",
+            ),
+            ValidationRow(
+                "decoy_correctly_rejected_count",
+                "pass",
+                "3/3",
+                "3/3",
+                "all decoys rejected",
+            ),
+            ValidationRow("summary_md_presence", "pass", "present", "present", "ok"),
+        )
+    )
+    monkeypatch.setattr(validation_script, "run_validation", lambda **_: result)
+
+    code = validation_script.main(
+        [
+            "--discovery-batch-index",
+            str(batch),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-root",
+            str(output_root),
+            "--controls-manifest",
+            str(controls),
+            "--require-v04-acceptance",
+        ]
+    )
+
+    assert code == 0
+    stdout = capsys.readouterr().out
+    assert "PASS identity_coherence_sidecar_parity" in stdout
+    assert V04_ACCEPTANCE_PASS_PREFIX in stdout
+
+
 def test_main_rejects_missing_controls_manifest(tmp_path: Path, capsys) -> None:
     batch = tmp_path / "batch.csv"
     raw_dir = tmp_path / "raw"
@@ -1025,15 +1240,41 @@ def test_main_passes_controls_manifest_proposal_path(
 
     def fake_run_validation(**kwargs) -> ValidationResult:
         seen.update(kwargs)
-        return ValidationResult(
-            rows=(
+        return _validation_result_with_rows(
+            (
+                ValidationRow("requests_tsv_exact", "pass", "1", "1", "same"),
+                ValidationRow("decisions_tsv_exact", "pass", "1", "1", "same"),
+                ValidationRow("cell_evidence_tsv_exact", "pass", "1", "1", "same"),
+                ValidationRow("controls_tsv_parity_only", "pass", "0", "0", "same"),
                 ValidationRow(
-                    check_name="decisions_tsv_exact",
-                    status="pass",
-                    serial_value="1",
-                    process_value="1",
-                    details="same",
+                    "controls_manifest_assessment",
+                    "not_assessed",
+                    "not_provided",
+                    "not_provided",
+                    "no manifest",
                 ),
+                ValidationRow(
+                    "positive_control_pass_fraction",
+                    "not_assessed",
+                    "not_assessed",
+                    "not_assessed",
+                    "no manifest",
+                ),
+                ValidationRow(
+                    "decoy_coherent_seed_count",
+                    "not_assessed",
+                    "not_assessed",
+                    "not_assessed",
+                    "no manifest",
+                ),
+                ValidationRow(
+                    "decoy_correctly_rejected_count",
+                    "not_assessed",
+                    "not_assessed",
+                    "not_assessed",
+                    "no manifest",
+                ),
+                ValidationRow("summary_md_presence", "pass", "present", "present", "ok"),
             )
         )
 

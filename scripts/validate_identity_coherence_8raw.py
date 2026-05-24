@@ -250,6 +250,8 @@ def run_validation(
     )
     if controls_manifest_proposal is not None:
         if result.failed_count:
+            # Proposal generation stays conservative: if any existing validation
+            # row is already failed, do not emit a new proposed controls manifest.
             controls_manifest_proposal.unlink(missing_ok=True)
         else:
             write_decoy_manifest_proposal(
@@ -308,6 +310,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--controls-manifest", type=Path)
     parser.add_argument("--write-controls-manifest-proposal", type=Path)
+    parser.add_argument(
+        "--require-v04-acceptance",
+        action="store_true",
+        help=(
+            "Exit non-zero unless serial/process parity, reviewed controls, "
+            "positive controls, and identity decoys pass V0.4 acceptance."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if not args.discovery_batch_index.is_file():
@@ -348,7 +358,7 @@ def main(argv: list[str] | None = None) -> int:
             controls_manifest=args.controls_manifest,
             controls_manifest_proposal=args.write_controls_manifest_proposal,
         )
-        write_validation_outputs(
+        acceptance = write_validation_outputs(
             output_root=args.output_root,
             result=result,
             controls_manifest=args.controls_manifest,
@@ -356,9 +366,21 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, RuntimeError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    if result.failed_count:
+    sidecar_failed_count = sidecar_parity_failed_count(result)
+    if sidecar_failed_count:
         print(
-            f"FAIL identity_coherence_sidecar_parity failed={result.failed_count}",
+            "FAIL identity_coherence_sidecar_parity "
+            f"failed={sidecar_failed_count}",
+            file=sys.stderr,
+        )
+        return 1
+    acceptance_rows = {row.criterion: row for row in acceptance.rows}
+    final_acceptance = acceptance_rows["v04_acceptance"]
+    if args.require_v04_acceptance and not acceptance.accepted:
+        print(
+            "FAIL identity_coherence_v04_acceptance "
+            f"reason={final_acceptance.evidence} "
+            f"summary={args.output_root / 'identity_coherence_v04_acceptance.md'}",
             file=sys.stderr,
         )
         return 1
@@ -366,6 +388,17 @@ def main(argv: list[str] | None = None) -> int:
         "PASS identity_coherence_sidecar_parity "
         f"summary={args.output_root / 'identity_coherence_8raw_validation_report.md'}"
     )
+    if acceptance.accepted:
+        print(
+            f"{V04_ACCEPTANCE_PASS_PREFIX} "
+            f"summary={args.output_root / 'identity_coherence_v04_acceptance.md'}"
+        )
+    else:
+        print(
+            "NO-GO identity_coherence_v04_acceptance "
+            f"reason={final_acceptance.evidence} "
+            f"summary={args.output_root / 'identity_coherence_v04_acceptance.md'}"
+        )
     if args.write_controls_manifest_proposal is not None:
         print(
             "Controls manifest proposal: "
