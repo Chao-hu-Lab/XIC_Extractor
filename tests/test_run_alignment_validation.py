@@ -1,6 +1,5 @@
-from pathlib import Path
-
 import tomllib
+from pathlib import Path
 
 from scripts import run_alignment_validation
 from xic_extractor.alignment.validation_pipeline import AlignmentValidationOutputs

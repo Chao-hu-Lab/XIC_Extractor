@@ -25,6 +25,8 @@ local_validation_raw/
 # Superpowers / Claude dev artefacts
 .superpowers/
 .remember/
+.codegraph/
+graphify-out/
 .worktrees/
 progress-report.html
 progress-report.notes.json

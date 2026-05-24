@@ -1,11 +1,11 @@
 import csv
 import re
+import tomllib
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import tomllib
 
 from xic_extractor.config import ConfigError, ExtractionConfig, Target
 from xic_extractor.extractor import DiagnosticRecord, RunOutput
@@ -391,7 +391,7 @@ def test_pyproject_exposes_cli_entry_point() -> None:
 def test_pyproject_excludes_python_314_for_pythonnet() -> None:
     pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
 
-    assert pyproject["project"]["requires-python"] == ">=3.10,<3.14"
+    assert pyproject["project"]["requires-python"] == ">=3.11,<3.14"
 
 
 def test_pyproject_dev_group_includes_ruff_for_ci_lint() -> None:

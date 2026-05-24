@@ -6,7 +6,7 @@
 
 **Architecture:** Add a new `xic_extractor.discovery` package parallel to targeted extraction. Reuse low-level RAW access, neutral-loss semantics, and `find_peak_and_area`, but keep discovery models, grouping, priority, CSV, and CLI separate from targeted result models and workbook output.
 
-**Tech Stack:** Python 3.10+, `numpy`, existing Thermo `raw_reader`, existing `ExtractionConfig`, `signal_processing.find_peak_and_area`, `pytest`, `ruff`, `mypy`.
+**Tech Stack:** Python 3.11+, `numpy`, existing Thermo `raw_reader`, existing `ExtractionConfig`, `signal_processing.find_peak_and_area`, `pytest`, `ruff`, `mypy`.
 
 ---
 

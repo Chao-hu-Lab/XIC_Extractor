@@ -42,6 +42,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     dll_dir = args.dll_dir.resolve()
     output_dir = args.output_dir.resolve()
     raw_workers, raw_xic_batch_size = _resolve_raw_execution_settings(args)
+    identity_coherence_output_dir = (
+        args.identity_coherence_output_dir.resolve()
+        if args.identity_coherence_output_dir is not None
+        else None
+    )
+    identity_coherence_controls_manifest = (
+        args.identity_coherence_controls_manifest.resolve()
+        if args.emit_identity_coherence_diagnostic
+        and args.identity_coherence_controls_manifest is not None
+        else None
+    )
 
     if not discovery_batch_index.is_file():
         print(
@@ -54,6 +65,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     if not dll_dir.is_dir():
         print(f"{dll_dir}: dll directory does not exist", file=sys.stderr)
+        return 2
+    if (
+        args.emit_identity_coherence_diagnostic
+        and identity_coherence_controls_manifest is not None
+        and not identity_coherence_controls_manifest.is_file()
+    ):
+        print(
+            (
+                f"{identity_coherence_controls_manifest}: identity coherence "
+                "controls manifest does not exist"
+            ),
+            file=sys.stderr,
+        )
         return 2
     if args.sample_info is not None and args.targeted_istd_workbook is not None:
         sample_info = args.sample_info.resolve()
@@ -118,6 +142,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.owner_backfill_xic_backend
             ),
             preconsolidate_owner_families=args.preconsolidate_owner_families,
+            emit_identity_coherence_diagnostic=(
+                args.emit_identity_coherence_diagnostic
+            ),
+            identity_coherence_output_dir=identity_coherence_output_dir,
+            identity_coherence_controls_manifest=identity_coherence_controls_manifest,
             drift_lookup=drift_lookup,
             **timing_kwargs,
         )
@@ -153,6 +182,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Ambiguous MS1 owners TSV: {outputs.ambiguous_owners_tsv}")
     if outputs.edge_evidence_tsv is not None:
         print(f"Owner edge evidence TSV: {outputs.edge_evidence_tsv}")
+    if outputs.identity_coherence_output_dir is not None:
+        print(
+            "Identity coherence diagnostic: "
+            f"{outputs.identity_coherence_output_dir}"
+        )
     if timing_recorder is not None:
         timing_path = args.timing_output.resolve()
         timing_recorder.write_json(timing_path)
@@ -248,6 +282,32 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help=(
             "Experimental algorithm mode: merge identity-compatible "
             "single-sample owner families before owner-centered backfill."
+        ),
+    )
+    parser.add_argument(
+        "--emit-identity-coherence-diagnostic",
+        action="store_true",
+        help=(
+            "Emit the opt-in pre-Backfill identity coherence diagnostic. "
+            "This diagnostic writes sidecar outputs and does not mutate the "
+            "alignment matrix."
+        ),
+    )
+    parser.add_argument(
+        "--identity-coherence-output-dir",
+        type=Path,
+        help=(
+            "Output directory for identity coherence diagnostic sidecars. "
+            "Defaults to <output-dir>/identity_coherence when the diagnostic "
+            "is enabled."
+        ),
+    )
+    parser.add_argument(
+        "--identity-coherence-controls-manifest",
+        type=Path,
+        help=(
+            "Optional controls manifest for the identity coherence diagnostic. "
+            "Ignored unless --emit-identity-coherence-diagnostic is set."
         ),
     )
     parser.add_argument(

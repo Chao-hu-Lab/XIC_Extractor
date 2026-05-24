@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Untargeted Identity Coherence Review</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1f2630;
+      --muted: #5f6c79;
+      --line: #d6dde5;
+      --paper: #fbfcfd;
+      --panel: #ffffff;
+      --ok: #177245;
+      --warn: #99640f;
+      --stop: #b3261e;
+      --review: #6554c0;
+      --blue: #1d64a5;
+      --soft-blue: #eaf3fb;
+      --soft-green: #eaf7ef;
+      --soft-red: #fbeceb;
+      --soft-warn: #fff6de;
+      font-family:
+        "Noto Sans TC",
+        "Microsoft JhengHei",
+        "PingFang TC",
+        system-ui,
+        sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, #eef4f8 0, #fbfcfd 260px),
+        var(--paper);
+      line-height: 1.65;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 36px 0 56px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 28px;
+      align-items: start;
+      padding: 28px 0 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 8px 0 12px;
+      max-width: 820px;
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 25px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 17px;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    .lead {
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .review-box,
+    .panel,
+    .callout,
+    .diagram,
+    table {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+    }
+
+    .review-box {
+      padding: 18px;
+    }
+
+    .review-box p {
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      gap: 28px;
+      margin-top: 26px;
+    }
+
+    nav {
+      position: sticky;
+      top: 18px;
+      align-self: start;
+      display: grid;
+      gap: 6px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .9);
+      backdrop-filter: blur(8px);
+    }
+
+    nav strong {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    nav a {
+      padding: 7px 8px;
+      border-radius: 6px;
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    nav a:hover {
+      background: var(--soft-blue);
+    }
+
+    section {
+      padding: 28px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .panel {
+      padding: 16px;
+    }
+
+    .panel p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .callout {
+      margin: 16px 0;
+      padding: 15px 16px;
+      border-left: 4px solid var(--blue);
+    }
+
+    .callout.warning {
+      background: var(--soft-warn);
+      border-color: var(--warn);
+    }
+
+    .callout.stop {
+      background: var(--soft-red);
+      border-color: var(--stop);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .tag.ok {
+      color: var(--ok);
+      background: var(--soft-green);
+    }
+
+    .tag.stop {
+      color: var(--stop);
+      background: var(--soft-red);
+    }
+
+    .tag.review {
+      color: var(--review);
+      background: #f0edff;
+    }
+
+    .tag.warn {
+      color: var(--warn);
+      background: var(--soft-warn);
+    }
+
+    .diagram {
+      margin-top: 16px;
+      padding: 18px;
+      overflow-x: auto;
+    }
+
+    .diagram-title {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      font-weight: 800;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      gap: 10px;
+      min-width: 780px;
+    }
+
+    .node {
+      min-height: 112px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    .node strong,
+    .node span {
+      display: block;
+    }
+
+    .node span {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .node.stop {
+      background: var(--soft-red);
+      border-color: #efb3ae;
+    }
+
+    .node.ok {
+      background: var(--soft-green);
+      border-color: #b6dfc6;
+    }
+
+    .node.review {
+      background: #f0edff;
+      border-color: #cfc6ff;
+    }
+
+    .node.warn {
+      background: var(--soft-warn);
+      border-color: #edd28a;
+    }
+
+    table {
+      width: 100%;
+      margin-top: 14px;
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+    }
+
+    th,
+    td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    th {
+      background: #f2f5f8;
+      font-weight: 800;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    code,
+    pre {
+      font-family: "Cascadia Code", Consolas, monospace;
+    }
+
+    pre {
+      margin: 14px 0 0;
+      padding: 14px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #111827;
+      color: #e5eef9;
+      line-height: 1.55;
+    }
+
+    ul {
+      margin: 10px 0 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    footer {
+      color: var(--muted);
+      padding-top: 22px;
+      font-size: 13px;
+    }
+
+    @media (max-width: 900px) {
+      .page {
+        width: min(100% - 24px, 720px);
+      }
+
+      header,
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      nav {
+        position: static;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div>
+        <div class="eyebrow">Untargeted identity reset · v0.4</div>
+        <h1>RT-only coherence 不足以取代 Backfill 問題</h1>
+        <p class="lead">
+          這版 review story 不再複製完整 spec。它只聚焦一個決策：
+          prototype 必須有獨立於 RT-windowed peak finding 的鑑別力，否則只是把 Backfill 提前跑一次。
+        </p>
+      </div>
+      <aside class="review-box">
+        <h2>Review 目標</h2>
+        <p>判斷 v0.4 是否已經把外部 critique 轉成我們自己的設計判斷，而不是單方面接受。</p>
+        <p>對應 spec 入口：<a href="2026-05-22-untargeted-identity-coherence-prototype-spec.md">identity coherence overview v0.4</a></p>
+      </aside>
+    </header>
+
+    <main>
+      <nav aria-label="Review sections">
+        <strong>章節</strong>
+        <a href="#verdict">結論</a>
+        <a href="#stance">辯證立場</a>
+        <a href="#reuse">可重用地基</a>
+        <a href="#trap">RT-only trap</a>
+        <a href="#new">v0.4 改法</a>
+        <a href="#flow">新流程圖</a>
+        <a href="#decisions">待決策項</a>
+        <a href="#validation">驗收 gates</a>
+        <a href="#scope">輸出 scope</a>
+      </nav>
+
+      <div>
+        <section id="verdict">
+          <h2>1. 結論</h2>
+          <div class="callout stop">
+            <strong>v0.2 不應直接實作。</strong>
+            它雖然防止讀 Backfill 結果，但 coherence scan 本身仍接近 Backfill 的 peak-finding 操作。
+            若只用 RT gate + peak completeness，rescue-heavy 或 background-recurrence row 仍可能變成 would-primary。
+          </div>
+          <div class="grid">
+            <article class="panel">
+              <h3>保留</h3>
+              <p>identity formation 先於 Backfill，再先於下游 final-matrix filtering / area correction / statistics。</p>
+              <span class="tag ok">keep</span>
+            </article>
+            <article class="panel">
+              <h3>修正</h3>
+              <p>coherence 不能只等於 RT window 裡找得到 peak。</p>
+              <span class="tag stop">fix</span>
+            </article>
+            <article class="panel">
+              <h3>砍 scope</h3>
+              <p>凍結 requests、decisions、cell evidence、controls、summary；其他 detail tables 等 8RAW 後再定。</p>
+              <span class="tag review">reduce</span>
+            </article>
+          </div>
+        </section>
+
+        <section id="stance">
+          <h2>2. 辯證立場</h2>
+          <p>
+            這不是全盤接受外部 review。我的判斷是：RT-only coherence 的批評成立，
+            但 diagnostic 本身仍有價值；需要改的是 promotion evidence，不是丟掉 identity-first prototype。
+          </p>
+          <div class="callout">
+            <strong>責任邊界：</strong>
+            這個專案可以在 identity layer 消掉假的獨立 feature，例如 duplicate activation、duplicate owner loser、
+            或 RT 漂移但其實屬於同一 family 的觀測重新歸群。它不能做的是下游 final matrix filtering、area correction、
+            normalization 或 statistical eligibility。
+          </div>
+          <div class="callout">
+            <strong>Spec 拆分：</strong>
+            overview 只保留順序與不變式；identity 方法、controls、implementation contract、
+            downstream audit boundary 分成四份文件 review。這個 HTML 只是視覺導覽，不是 contract source。
+            <ul>
+              <li><a href="2026-05-22-untargeted-identity-coherence-core-spec.md">Core identity spec</a></li>
+              <li><a href="2026-05-22-untargeted-identity-coherence-controls-spec.md">Controls spec</a></li>
+              <li><a href="2026-05-22-untargeted-identity-coherence-implementation-contract.md">Implementation contract</a></li>
+              <li><a href="2026-05-22-untargeted-identity-coherence-downstream-audit-boundary.md">Downstream audit boundary</a></li>
+            </ul>
+          </div>
+          <table>
+            <thead>
+              <tr><th>外部意見</th><th>採納狀態</th><th>我們的設計判斷</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>RT-windowed peak finding 太像 Backfill</td>
+                <td><span class="tag ok">接受</span></td>
+                <td>不能用 RT-local peak presence 當 promotion evidence。</td>
+              </tr>
+              <tr>
+                <td>所以 diagnostic 沒價值</td>
+                <td><span class="tag stop">反駁</span></td>
+                <td>它仍能揭露 single-seed、threshold、Backfill leakage、center instability、multi-seed ambiguity。</td>
+              </tr>
+              <tr>
+                <td>鑑別力全在 seed qualification</td>
+                <td><span class="tag review">修正</span></td>
+                <td>Seed gate 只保證 coherent / sufficiently sampled；真正 specificity 先作 context，非 seed sample 還需要 trace identity check。</td>
+              </tr>
+              <tr>
+                <td>ISTD 應該全部通過</td>
+                <td><span class="tag review">修正</span></td>
+                <td>ISTD 是 yardstick，不是無條件 pass rule；只評估已映射的 control rows。</td>
+              </tr>
+              <tr>
+                <td>四張 TSV schema 太重</td>
+                <td><span class="tag ok">接受</span></td>
+                <td>先凍結 requests.tsv、decisions.tsv、cell_evidence.tsv、controls.tsv、summary.md；其餘表 exploratory。</td>
+              </tr>
+              <tr>
+                <td>大改 untargeted 等於從零重寫</td>
+                <td><span class="tag stop">反駁</span></td>
+                <td>舊 untargeted 已經有 owner/alignment 地基；targeted 方法也是可借用本錢。</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="reuse">
+          <h2>3. 可重用地基</h2>
+          <p>
+            新 identity layer 不應重新造 extraction、scoring、audit。該重寫的是 untargeted identity promotion，
+            不是把已經打好的 owner、trace、targeted benchmark 全部丟掉。
+          </p>
+          <table>
+            <thead>
+              <tr><th>來源</th><th>可借用資產</th><th>在新設計中的用途</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Untargeted owner path</td>
+                <td>sample-local owners、owner clustering、ambiguous/duplicate owner signals、owner peak boundaries</td>
+                <td>作為 pre-Backfill owner geometry surface。</td>
+              </tr>
+              <tr>
+                <td>Discovery candidates</td>
+                <td>candidate_id join、best_seed_rt、scan_support_score、matched_tag_count、tag_intersection_status；ms1_seed_delta_min / trace_quality 作 record-only context</td>
+                <td>作為 seed gate 與 specificity context 的主要 evidence surface；不新抽 XIC，也不借用搜尋窗 padding 當 identity 門檻。</td>
+              </tr>
+              <tr>
+                <td>Untargeted audit path</td>
+                <td>region_*、integration audit、owner ambiguity signals</td>
+                <td>作為 trace identity / Review-only reason 的輔助訊號。</td>
+              </tr>
+              <tr>
+                <td>Targeted extraction</td>
+                <td>peak width、baseline、boundary、shape metrics、scoring labels</td>
+                <td>把 non-RT identity check 建在已驗證的 peak-scoring 本錢上。</td>
+              </tr>
+              <tr>
+                <td>Targeted diagnostics</td>
+                <td>ISTD benchmark、peak reliability、NL dropout audit</td>
+                <td>作為 validation artifacts、failure taxonomy、yardstick，不作為 promotion evidence。</td>
+              </tr>
+              <tr>
+                <td>FragmentIdentity</td>
+                <td>common fragment tags + mode-specific CID neutral-loss payload</td>
+                <td>MVP 不新增 specificity_class；先用 matched_tag_count / tag_intersection_status 作 proxy。</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout warning">
+            <strong>Import boundary：</strong>
+            identity_coherence domain logic 只能依賴小型 domain primitives、typed models、metric functions。
+            tools/diagnostics、workbook/report、GUI、CLI scripts 只能提供驗證產物或比較報告，不能被 promotion logic 反向 import。
+          </div>
+          <div class="callout warning">
+            <strong>Reuse 不是繼承舊 policy：</strong>
+            可以借用 signal、primitive、validation method；但 threshold、status 語義、Backfill-era coupling 必須重新驗證。
+            若現有地基太薄或誤導，就降成 review context 或定義新的 diagnostic-owned parameter。
+          </div>
+        </section>
+
+        <section id="trap">
+          <h2>4. RT-only trap</h2>
+          <p>
+            Evidence firewall 防的是「不要用 Backfill 的輸出」。但如果 diagnostic 自己做的事仍是
+            RT window 抽 XIC、找 peak、檢查 RT delta，它的方法學仍然和 Backfill 太接近。
+          </p>
+          <div class="diagram" role="img" aria-label="RT-only coherence duplicates Backfill mechanics">
+            <div class="diagram-title">
+              <span>v0.2 的問題：同一種 peak-finding，只是更早執行</span>
+              <span class="tag stop">not enough</span>
+            </div>
+            <div class="flow">
+              <div class="node">
+                <strong>Seed center</strong>
+                <span>一個 medium seed 提供 m/z/RT center。</span>
+              </div>
+              <div class="node warn">
+                <strong>Broad RT XIC</strong>
+                <span>±180 sec 抽 trace，這一步和 Backfill 很像。</span>
+              </div>
+              <div class="node warn">
+                <strong>Find peak</strong>
+                <span>只要求 peak 完整、RT 近。</span>
+              </div>
+              <div class="node stop">
+                <strong>Recurrence</strong>
+                <span>background ion 也可能在多 sample 重複出現。</span>
+              </div>
+              <div class="node stop">
+                <strong>False clean</strong>
+                <span>would-primary 其實只是 RT-coherent noise。</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="new">
+          <h2>5. v0.4 改法</h2>
+          <p>
+            V0.4 把鑑別力從 RT gate 移到三個地方：seed coherence gate + specificity context、
+            independent trace identity checks；background recurrence 只作 audit，不作 identity gate。positive controls 只作 validation yardstick。
+          </p>
+          <table>
+            <thead>
+              <tr><th>Layer</th><th>作用</th><th>Review 決策</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Seed gate</td>
+                <td>先用 DiscoveryCandidate join + seed RT in owner peak + seed scan-support gate 排除 incoherent / under-sampled seed；specificity 暫作 context。</td>
+                <td><span class="tag ok">已界定</span></td>
+              </tr>
+              <tr>
+                <td>Trace identity</td>
+                <td>非 seed sample 改用 tiered basis：diagnostic fragment support &gt; shape similarity &gt; prototype width；baseline / area-pattern 只作 review flag。</td>
+                <td><span class="tag ok">已具體化</span></td>
+              </tr>
+              <tr>
+                <td>ISTD / stable controls</td>
+                <td>8RAW 不能只靠肉眼 review；要有 targeted ISTD 或 stable-like positive control，但它們不參與 promotion。</td>
+                <td><span class="tag review">指定控制組</span></td>
+              </tr>
+              <tr>
+                <td>Threshold policy</td>
+                <td>8RAW 的 3 samples 不能直接搬到 85RAW。要同時看 count + fraction。</td>
+                <td><span class="tag review">分開定</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="flow">
+          <h2>6. 新流程圖</h2>
+          <div class="diagram" role="img" aria-label="Revised v0.4 identity diagnostic flow">
+            <div class="diagram-title">
+              <span>v0.4：RT peak retrieval 只是候選收集，不是 promotion</span>
+              <span class="tag ok">revised</span>
+            </div>
+            <div class="flow">
+              <div class="node ok">
+                <strong>Pre-Backfill owner state</strong>
+                <span>inline after cluster_owners, before owner_backfill。</span>
+              </div>
+              <div class="node ok">
+                <strong>Seed gate + context</strong>
+                <span>DiscoveryCandidate join + seed RT in owner peak + seed scan support；evidence tier 只作 review context。</span>
+              </div>
+              <div class="node review">
+                <strong>RT-local retrieval</strong>
+                <span>抽 XIC 只產生 candidate trace。</span>
+              </div>
+              <div class="node ok">
+                <strong>Trace identity check</strong>
+                <span>tier 1 用 same-sample diagnostic fragment support；tier 2 shape；tier 3 prototype width 只作 Review-only fallback。</span>
+              </div>
+              <div class="node">
+                <strong>Decision + controls</strong>
+                <span>用 decisions + cell evidence + summary review；ISTD/stable controls 只當 yardstick。</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="decisions">
+          <h2>7. 待你決策的點</h2>
+          <table>
+            <thead>
+              <tr><th>問題</th><th>v0.4 建議</th><th>為什麼重要</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>seed specificity 是否要硬 gate</td>
+                <td>V0.4 先不把 evidence_tier A/B 當 gate；若 8RAW 顯示弱 specificity context 仍會 would-primary，再定 diagnostic-owned gate。</td>
+                <td>避免把 discovery review ranking 誤當 identity specificity。</td>
+              </tr>
+              <tr>
+                <td>non-RT identity basis 分級</td>
+                <td>tier 1 diagnostic fragment support，tier 2 prototype-medoid shape similarity，seed-shape fallback 需標記，tier 3 prototype-width fallback 只補 total coherent；would-primary 需要 2 個非 seed tier 1/2 cells。</td>
+                <td>避免一個 shape cell 加上一個 width fallback 就被放大成 would-primary。</td>
+              </tr>
+              <tr>
+                <td>8RAW threshold</td>
+                <td>明定 seed sample count：`seed + at least 2 non-seed`。</td>
+                <td>避免 3 samples 的嚴格度不清楚。</td>
+              </tr>
+              <tr>
+                <td>85RAW threshold</td>
+                <td>不要沿用 3 samples；先定 count + fraction policy。</td>
+                <td>3/8 和 3/85 意義差太多。</td>
+              </tr>
+              <tr>
+                <td>Positive controls</td>
+                <td>指定 targeted ISTD / stable-like rows 或 benchmark artifact；不得參與 promotion。</td>
+                <td>沒有 yardstick，8RAW review 會變成肉眼判斷；但 control label 不能替 row 建立 identity。</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="validation">
+          <h2>8. 驗收 gates</h2>
+          <p>
+            這版不把「看起來合理」當 Go 訊號。第一次 8RAW 是 mechanics learning loop；
+            background / blank / QC validation 必須排在 identity prototype 之後，不能先變成 row-level gate。
+          </p>
+          <div class="grid">
+            <article class="panel">
+              <h3>必須有的 yardsticks</h3>
+              <p>positive ISTD / stable controls 測 sensitivity；identity decoy 測 false identity specificity。blank / QC / background controls 只能作下游 audit handoff。</p>
+              <span class="tag ok">manifest</span>
+            </article>
+            <article class="panel">
+              <h3>必須擋的 failure</h3>
+              <p>RT-only、tier-3-only、單一 tier-1/2 cell + width fallback、request/candidate identity mismatch、identity decoy promoted、forbidden evidence used 都不能成為 identity Go。background-like 只能是 audit flag。</p>
+              <span class="tag stop">No-Go</span>
+            </article>
+            <article class="panel">
+              <h3>必須估的成本</h3>
+              <p>summary 要拆開 identity XIC requests 與 optional downstream audit requests；不能把 blank / QC 成本藏進 identity budget。</p>
+              <span class="tag review">budget</span>
+            </article>
+          </div>
+        </section>
+
+        <section id="scope">
+          <h2>9. 輸出 scope</h2>
+          <p>
+            V0.4 不再一開始凍結大型 detail TSV schema。先凍結最小 review surface。Controls input
+            manifest 叫 `identity_coherence_controls_manifest.yml/.tsv`；frozen output 則是：
+          </p>
+          <pre>untargeted_identity_coherence_requests.tsv
+untargeted_identity_coherence_decisions.tsv
+untargeted_identity_coherence_cell_evidence.tsv
+untargeted_identity_coherence_controls.tsv
+untargeted_identity_coherence_summary.md</pre>
+          <p>
+            requests 是 seed/request-level audit surface；cell_evidence 是必要的，因為 per-sample tiered basis、numeric trace metrics、tier-3-only fallback、
+            background recurrence 只保留 audit flags；final matrix filtering、area correction 與統計解讀留給下游。
+            candidates/groups 等較大的 detail tables 可以先作為 exploratory artifacts 輸出，等 8RAW 跑過後再凍結。
+          </p>
+          <div class="callout warning">
+            <strong>Implementation gate：</strong>
+            在 config、positive controls、shape metric、process-mode payload 與 evidence-firewall fixture 被 review 接受前，不建議開始寫 identity prototype code；background/QC audit 若要擴充，另開下游 spec。
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer>
+      <p>Generated for review on 2026-05-22. This artifact is documentation only and does not change pipeline behavior.</p>
+    </footer>
+  </div>
+</body>
+</html>

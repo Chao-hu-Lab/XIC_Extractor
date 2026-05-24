@@ -8,7 +8,7 @@
 
 **Architecture:** Introduce a new `xic_extractor/` package. `config.py` owns schema loading and migration, `raw_reader.py` owns Thermo `.NET` interop, `signal_processing.py` owns scipy peak detection and integration, `neutral_loss.py` owns MS2 confirmation, and `extractor.py` orchestrates per-file extraction and CSV writes. `scripts/run_extraction.py` and `gui/workers/pipeline_worker.py` both call the same `extractor.run(config, targets, ...)`. `scripts/csv_to_excel.py` consumes both output CSVs to build Data, Summary, and Diagnostics sheets.
 
-**Tech Stack:** Python 3.10+, PyQt6, openpyxl, numpy, scipy, pythonnet, pytest, pytest-cov, uv, Windows PowerShell.
+**Tech Stack:** Python 3.11+, PyQt6, openpyxl, numpy, scipy, pythonnet, pytest, pytest-cov, uv, Windows PowerShell.
 
 ---
 

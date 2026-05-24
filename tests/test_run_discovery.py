@@ -1,8 +1,8 @@
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
-import tomllib
 
 from scripts import run_discovery
 from xic_extractor.discovery.models import DiscoveryBatchOutputs, DiscoveryRunOutputs
