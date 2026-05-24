@@ -39,7 +39,7 @@ behavior change needs its own spec.
 
 Structural scan from the cleanup worktree before the first split commits:
 
-- CodeGraph CLI synchronized locally: 570 files, 10,433 nodes, 26,457 edges.
+- CodeGraph CLI synchronized locally: 574 files, 10,459 nodes, 26,493 edges.
 - `xic_extractor/`, `tools/`, and `scripts/` now contain several files over
   the repo-local 500/800-line red-flag thresholds.
 - The largest post-PR60 hotspots are now split across three areas:
@@ -52,7 +52,6 @@ Largest production / tool modules:
 | 962 | `xic_extractor/peak_scoring.py` | Existing decomposition target; still deferred until characterization tests pin scoring outputs. |
 | 898 | `xic_extractor/alignment/process_backend.py` | Process mechanics plus alignment/trace payloads; split only with spawn/pickle smoke tests. |
 | 848 | `scripts/local_minimum_param_sweep.py` | Validation/development script; not part of PR60 cleanup unless it blocks tooling. |
-| 717 | `tools/diagnostics/seed_aware_backfill_review.py` | Diagnostic review surface; candidate after current legacy report cleanup. |
 | 676 | `tools/diagnostics/targeted_nl_dropout_root_cause_audit.py` | Targeted diagnostic audit; split loaders/model/writers without changing buckets. |
 | 661 | `tools/diagnostics/peak_candidate_score_calibration_report.py` | Diagnostic report surface; prefer rendering/writer splits before score semantics. |
 | 644 | `xic_extractor/alignment/ownership.py` | Domain-heavy ownership module; still deferred unless characterization tests pin owner decisions. |
@@ -200,6 +199,11 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 160 | `tools/diagnostics/untargeted_alignment_guardrail_targets.py` | Targeted audit comparison and targeted ISTD benchmark guardrail rows. |
 | 60 | `tools/diagnostics/untargeted_alignment_guardrail_outputs.py` | Guardrail comparison rows and case assertion TSV writer. |
 | 31 | `tools/diagnostics/untargeted_alignment_guardrail_io.py` | Shared TSV/JSON/CSV IO helpers. |
+| 178 | `tools/diagnostics/seed_aware_backfill_review.py` | Seed-aware backfill review CLI/orchestration compatibility facade. |
+| 60 | `tools/diagnostics/seed_aware_backfill_review_constants.py` | Review classification constants, thresholds, and input schema columns. |
+| 35 | `tools/diagnostics/seed_aware_backfill_review_io.py` | TSV loading, required-column checks, path normalization, and family grouping. |
+| 437 | `tools/diagnostics/seed_aware_backfill_review_model.py` | Seed-aware family classification, overlay/seed summaries, blast-radius rows, and numeric helpers. |
+| 252 | `tools/diagnostics/seed_aware_backfill_review_writers.py` | TSV/JSON/Markdown writers and stable output field ordering. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -598,6 +602,9 @@ Targets already partly improved:
   compatibility facade. Alignment metric calculations, targeted audit/benchmark
   guardrails, output row writers, IO helpers, and dataclasses live in focused
   modules.
+- `seed_aware_backfill_review.py` now stays as the CLI/orchestration
+  compatibility facade. Classification constants, TSV loading, family review
+  model logic, and TSV/JSON/Markdown writers live in focused modules.
 - targeted reliability and low-MS1 coverage now have more focused modules but
   still carry large tests and report renderers.
 

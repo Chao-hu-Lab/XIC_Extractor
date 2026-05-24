@@ -1,8 +1,29 @@
 import csv
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from tools.diagnostics import seed_aware_backfill_review as review
+
+
+def test_path_style_cli_help_preserves_public_script_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = repo_root / "tools" / "diagnostics" / "seed_aware_backfill_review.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--review-candidates-tsv" in result.stdout
+    assert "--overlay-batch-summary-tsv" in result.stdout
 
 
 def test_seed_shape_supported_candidate_requires_seed_and_clean_overlay(
@@ -219,6 +240,63 @@ def test_outputs_all_review_and_blast_files(tmp_path: Path) -> None:
     assert (output_dir / "seed_aware_backfill_review.md").is_file()
     assert (output_dir / "seed_aware_backfill_blast_radius.tsv").is_file()
     assert (output_dir / "seed_aware_backfill_blast_radius.md").is_file()
+    with (output_dir / "seed_aware_backfill_review_families.tsv").open(
+        encoding="utf-8",
+        newline="",
+    ) as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "feature_family_id",
+            "neutral_loss_tag",
+            "family_center_mz",
+            "family_center_rt",
+            "detected_count",
+            "accepted_rescue_count",
+            "accepted_cell_count",
+            "input_review_classification",
+            "all_overlay_row_count",
+            "seed_overlay_row_count",
+            "overlay_row_count",
+            "overlay_success_count",
+            "overlay_support_count",
+            "overlay_neighbor_count",
+            "overlay_failed_count",
+            "max_global_apex_interference_fraction",
+            "min_selected_apex_in_trace_window_fraction",
+            "min_global_apex_assessable_fraction",
+            "min_shape_supported_fraction",
+            "seed_audit_row_count",
+            "seed_group_count",
+            "seed_rt_span",
+            "low_ms1_detail_row_count",
+            "protected_family",
+            "review_classification",
+            "recommended_next_action",
+            "review_reason",
+            "would_withhold_rescued_cells",
+            "png_paths",
+            "pdf_paths",
+            "row_flags",
+            "primary_evidence",
+            "reason",
+        ]
+    with (output_dir / "seed_aware_backfill_blast_radius.tsv").open(
+        encoding="utf-8",
+        newline="",
+    ) as handle:
+        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+            "feature_family_id",
+            "family_center_mz",
+            "family_center_rt",
+            "review_classification",
+            "detected_count",
+            "accepted_rescue_count",
+            "accepted_cell_count",
+            "would_withhold_family",
+            "would_withhold_rescued_cells",
+            "protected_family",
+            "blast_radius_action",
+            "review_reason",
+        ]
     payload = json.loads(
         (output_dir / "seed_aware_backfill_review.json").read_text(
             encoding="utf-8",
