@@ -107,6 +107,12 @@ This branch has now implemented the first identity-coherence cleanup bundle:
   in focused root-level alignment modules. Controls orchestration remains in the
   facade because it is currently just manifest wiring plus existing controls
   evaluation, not a deep module of its own.
+- Workstream F: the newest instrument-QC productization surfaces are split by
+  responsibility. Calibration preview orchestration, source evidence collection,
+  matrix preview rows, workbook rendering, manual-review queue decisions, and
+  pipeline input/extraction/HCD/MixSTDs helpers now live in focused modules.
+  `calibration_rt_model.py` remains intact until model-fitting characterization
+  tests pin its output.
 
 The original plan recommended landing Workstream H in a dedicated test-only PR.
 This branch intentionally keeps B/C/H in one cleanup bundle after review because
@@ -141,6 +147,18 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 187 | `xic_extractor/alignment/identity_coherence_source_mapping.py` | Seed-owner joins, request IDs, seed gate input mapping, non-seed pool eligibility. |
 | 134 | `xic_extractor/alignment/identity_coherence_trace_retrieval.py` | Serial/process trace retrieval dispatch and trace payload conversion. |
 | 171 | `xic_extractor/alignment/identity_coherence_record_builder.py` | Trace-plan records, cell evidence, row output record construction. |
+| 399 | `xic_extractor/instrument_qc/calibration_product_preview.py` | Workstream F orchestration facade for level 0/1 calibration preview artifacts. |
+| 382 | `xic_extractor/instrument_qc/calibration_product_evidence.py` | Calibration evidence collection from SDOLEK/MixSTDs trend and HCD audit TSVs. |
+| 244 | `xic_extractor/instrument_qc/calibration_matrix_preview.py` | Matrix RT/response preview row construction and preview summaries. |
+| 295 | `xic_extractor/instrument_qc/workbook.py` | Workbook rendering, sheet layout, style, and Excel-safe value handling. |
+| 435 | `xic_extractor/instrument_qc/workbook_manual_review.py` | Manual-review queue grouping, priority, hints, and suggested actions. |
+| 227 | `xic_extractor/instrument_qc/pipeline.py` | Instrument-QC orchestration facade and output dispatch. |
+| 22 | `xic_extractor/instrument_qc/pipeline_contracts.py` | RAW/XIC source and opener protocols. |
+| 97 | `xic_extractor/instrument_qc/pipeline_inputs.py` | RAW discovery, injection-order metadata, and sequence-manifest context reads. |
+| 127 | `xic_extractor/instrument_qc/pipeline_extraction.py` | SDOLEK/MixSTDs target extraction rows and error rows. |
+| 43 | `xic_extractor/instrument_qc/pipeline_hcd.py` | HCD audit row append bridge. |
+| 134 | `xic_extractor/instrument_qc/pipeline_mixstds.py` | MixSTDs extraction orchestration. |
+| 592 | `xic_extractor/instrument_qc/calibration_rt_model.py` | Deferred: do not split until model-fitting characterization tests pin output. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -463,7 +481,30 @@ Non-goals:
 Goal: inventory and split the newest instrument-QC productization surfaces only
 where tests make behavior safe.
 
-Recommended order:
+Implemented decision:
+
+1. `instrument_qc/calibration_product_preview.py`
+   - now only orchestrates level 0/1 bundle generation, manifest inventory, and
+     writer dispatch.
+   - `calibration_product_evidence.py` owns SDOLEK/MixSTDs/HCD evidence reads
+     and summary counts.
+   - `calibration_matrix_preview.py` owns matrix RT/response preview row
+     construction, injection-order lookup, and preview summaries.
+2. `instrument_qc/workbook.py`
+   - now owns workbook rendering, sheet layout, styles, autosizing, and
+     Excel-safe value conversion.
+   - `workbook_manual_review.py` owns manual-review queue grouping, skip rules,
+     priorities, hints, and suggested actions.
+3. `instrument_qc/pipeline.py`
+   - now owns run orchestration and output dispatch.
+   - `pipeline_contracts.py`, `pipeline_inputs.py`, `pipeline_extraction.py`,
+     `pipeline_hcd.py`, and `pipeline_mixstds.py` own the focused helper
+     responsibilities.
+4. `instrument_qc/calibration_rt_model.py`
+   - deferred. Do not split until characterization tests pin model fitting,
+     local-anchor selection, LOAO, and summary payload output.
+
+Original recommended order:
 
 1. `instrument_qc/calibration_product_preview.py`
    - separate loaders, preview domain model, preview decision logic, and writer
