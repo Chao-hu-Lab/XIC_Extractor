@@ -53,7 +53,7 @@ Largest production / tool modules:
 | 962 | `xic_extractor/peak_scoring.py` | Existing decomposition target; do not mix with identity cleanup. |
 | 948 | `xic_extractor/alignment/identity_coherence/controls.py` | New high-value target: manifest parsing, positive controls, decoys, evaluation rows. |
 | 936 | `xic_extractor/instrument_qc/calibration_product_preview.py` | Productization surface; likely mixes loaders, models, preview decision logic, and writers. |
-| 916 | `tools/diagnostics/alignment_decision_report_rendering.py` | Legacy diagnostic rendering surface; prior specs already identify report splitting. |
+| 481 | `tools/diagnostics/alignment_decision_report_rendering.py` | Workstream G section assembly after HTML components and CSS were split out. |
 | 914 | `xic_extractor/alignment/identity_coherence/output.py` | New high-value target: projection, validation, TSV writers, Markdown summary. |
 | 908 | `tools/diagnostics/family_ms1_overlay_plot.py` | Diagnostic plotting; lower production risk but large rendering/data mix. |
 | 898 | `xic_extractor/alignment/process_backend.py` | Process mechanics plus alignment/trace payloads; split only with spawn/pickle smoke tests. |
@@ -117,6 +117,9 @@ This branch has now implemented the first identity-coherence cleanup bundle:
   pipeline input/extraction/HCD/MixSTDs helpers now live in focused modules.
   `calibration_rt_model.py` remains intact until model-fitting characterization
   tests pin its output.
+- Workstream G: `alignment_decision_report_rendering.py` now keeps section
+  assembly only. Reusable HTML components and CSS live in separate diagnostic
+  rendering modules, with report-model verdict/evidence logic untouched.
 
 The original plan recommended landing Workstream H in a dedicated test-only PR.
 This branch intentionally keeps B/C/H in one cleanup bundle after review because
@@ -166,6 +169,9 @@ Post-split line-count checkpoint, measured as total physical lines with
 | 43 | `xic_extractor/instrument_qc/pipeline_hcd.py` | HCD audit row append bridge. |
 | 134 | `xic_extractor/instrument_qc/pipeline_mixstds.py` | MixSTDs extraction orchestration. |
 | 592 | `xic_extractor/instrument_qc/calibration_rt_model.py` | Deferred: do not split until model-fitting characterization tests pin output. |
+| 481 | `tools/diagnostics/alignment_decision_report_rendering.py` | Workstream G section assembly for the HTML diagnostic report. |
+| 212 | `tools/diagnostics/alignment_decision_report_components.py` | Reusable HTML components, escaping, formatting, and chart primitives. |
+| 296 | `tools/diagnostics/alignment_decision_report_styles.py` | CSS for the alignment decision diagnostic report. |
 | 61 | `tests/alignment/identity_coherence_validation/test_bundle.py` | Focused module tests for bundle helpers. |
 | 256 | `tests/alignment/identity_coherence_validation/test_acceptance.py` | Focused module tests for acceptance verdicts. |
 | 101 | `tests/alignment/identity_coherence_validation/test_compare.py` | Focused module tests for bundle comparison. |
@@ -542,8 +548,9 @@ identity-coherence internals.
 
 Targets already partly improved:
 
-- `alignment_decision_report.py` appears to have split into model/rendering
-  pieces, but rendering is still 916 lines.
+- `alignment_decision_report.py` is split into CLI/model/rendering pieces.
+  Rendering is now further split into section assembly, reusable HTML
+  components, and CSS.
 - targeted reliability, low-MS1 coverage, and targeted ISTD benchmark now have
   more focused modules but still carry large tests and report renderers.
 
