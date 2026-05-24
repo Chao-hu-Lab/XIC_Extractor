@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import csv
 from collections.abc import Mapping, Sequence
+from enum import Enum
 from pathlib import Path
-from typing import cast
+from typing import TypeVar, cast
 
 from .control_models import (
     IdentityControlManifestEntry,
     _normalize_text,
+    _parse_control_type,
+    _parse_enum,
+    _parse_finite_float,
+    _parse_float,
 )
 from .schema import (
     DecoyGenerationMethod,
@@ -31,6 +36,7 @@ REQUIRED_MANIFEST_FIELDS: tuple[str, ...] = (
 )
 
 _ManifestRow = Mapping[str | None, str | list[str] | None]
+_EnumT = TypeVar("_EnumT", bound=Enum)
 
 
 def read_identity_controls_manifest(
@@ -101,23 +107,35 @@ def _entry_from_row(
 ) -> IdentityControlManifestEntry:
     return IdentityControlManifestEntry(
         control_id=_required(row, "control_id", row_index),
-        control_type=_required(row, "control_type", row_index),
+        control_type=_parse_control_type(
+            _required(row, "control_type", row_index)
+        ),
         control_name=_required(row, "control_name", row_index),
-        expected_mapping_status=_required(
-            row, "expected_mapping_status", row_index
+        expected_mapping_status=_parse_enum(
+            PositiveControlMappingStatus,
+            _required(row, "expected_mapping_status", row_index),
+            "expected_mapping_status",
         ),
         control_expected_behavior=_required(
             row, "control_expected_behavior", row_index
         ),
-        fragment_observation_mode=_required(
-            row, "fragment_observation_mode", row_index
+        fragment_observation_mode=_parse_enum(
+            FragmentObservationMode,
+            _required(row, "fragment_observation_mode", row_index),
+            "fragment_observation_mode",
         ),
-        precursor_tolerance_ppm=_required(row, "precursor_tolerance_ppm", row_index),
-        product_tolerance_ppm=_required(row, "product_tolerance_ppm", row_index),
-        cid_observed_loss_tolerance_ppm=_required(
-            row, "cid_observed_loss_tolerance_ppm", row_index
+        precursor_tolerance_ppm=_required_float(
+            row, "precursor_tolerance_ppm", row_index
         ),
-        rt_tolerance_sec=_required(row, "rt_tolerance_sec", row_index),
+        product_tolerance_ppm=_required_float(
+            row, "product_tolerance_ppm", row_index
+        ),
+        cid_observed_loss_tolerance_ppm=_required_float(
+            row,
+            "cid_observed_loss_tolerance_ppm",
+            row_index,
+        ),
+        rt_tolerance_sec=_required_float(row, "rt_tolerance_sec", row_index),
         required_failure_reason_when_missed=_required(
             row, "required_failure_reason_when_missed", row_index
         ),
@@ -172,14 +190,22 @@ def _optional_text(row: _ManifestRow, field_name: str) -> str:
     return _normalize_text(row.get(field_name))
 
 
+def _required_float(
+    row: _ManifestRow,
+    field_name: str,
+    row_index: int,
+) -> float:
+    return _parse_float(_required(row, field_name, row_index), field_name)
+
+
 def _optional_float(
     row: _ManifestRow,
     field_name: str,
-) -> float | str | None:
+) -> float | None:
     raw_value = _optional_text(row, field_name)
     if not raw_value:
         return None
-    return raw_value
+    return _parse_finite_float(raw_value, field_name)
 
 
 def _optional_fragment_tags(row: _ManifestRow, field_name: str) -> tuple[str, ...]:
@@ -188,15 +214,11 @@ def _optional_fragment_tags(row: _ManifestRow, field_name: str) -> tuple[str, ..
 
 
 def _optional_enum(
-    enum_type: type[DecoyGenerationMethod],
+    enum_type: type[_EnumT],
     row: _ManifestRow,
     field_name: str,
-) -> DecoyGenerationMethod | str | None:
+) -> _EnumT | None:
     raw_value = _optional_text(row, field_name)
     if not raw_value:
         return None
-    if enum_type is FragmentObservationMode:
-        return raw_value
-    if enum_type is PositiveControlMappingStatus:
-        return raw_value
-    return raw_value
+    return _parse_enum(enum_type, raw_value, field_name)
