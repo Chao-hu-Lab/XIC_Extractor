@@ -253,6 +253,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dll-dir", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--controls-manifest", type=Path)
+    parser.add_argument("--write-controls-manifest-proposal", type=Path)
     args = parser.parse_args(argv)
 
     if not args.discovery_batch_index.is_file():
@@ -266,6 +267,16 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if not args.dll_dir.is_dir():
         print(f"{args.dll_dir}: dll directory does not exist", file=sys.stderr)
+        return 2
+    if (
+        args.controls_manifest is not None
+        and ".proposed." in args.controls_manifest.name
+    ):
+        print(
+            "proposal manifests must be reviewed and renamed before use as "
+            "--controls-manifest",
+            file=sys.stderr,
+        )
         return 2
     if args.controls_manifest is not None and not args.controls_manifest.is_file():
         print(
@@ -281,6 +292,7 @@ def main(argv: list[str] | None = None) -> int:
             dll_dir=args.dll_dir,
             output_root=args.output_root,
             controls_manifest=args.controls_manifest,
+            controls_manifest_proposal=args.write_controls_manifest_proposal,
         )
         write_validation_outputs(
             output_root=args.output_root,
@@ -300,6 +312,11 @@ def main(argv: list[str] | None = None) -> int:
         "PASS identity_coherence_sidecar_parity "
         f"summary={args.output_root / 'identity_coherence_8raw_validation_report.md'}"
     )
+    if args.write_controls_manifest_proposal is not None:
+        print(
+            "Controls manifest proposal: "
+            f"{args.write_controls_manifest_proposal}"
+        )
     return 0
 
 

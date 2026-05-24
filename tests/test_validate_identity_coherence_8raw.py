@@ -612,6 +612,86 @@ def test_main_rejects_missing_controls_manifest(tmp_path: Path, capsys) -> None:
     assert "controls manifest does not exist" in capsys.readouterr().err
 
 
+def test_main_passes_controls_manifest_proposal_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch = tmp_path / "batch.csv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    proposal = tmp_path / "proposal.tsv"
+    batch.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    seen: dict[str, object] = {}
+
+    def fake_run_validation(**kwargs) -> ValidationResult:
+        seen.update(kwargs)
+        return ValidationResult(
+            rows=(
+                ValidationRow(
+                    check_name="decisions_tsv_exact",
+                    status="pass",
+                    serial_value="1",
+                    process_value="1",
+                    details="same",
+                ),
+            )
+        )
+
+    monkeypatch.setattr(validation_script, "run_validation", fake_run_validation)
+
+    code = validation_script.main(
+        [
+            "--discovery-batch-index",
+            str(batch),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-root",
+            str(tmp_path / "out"),
+            "--write-controls-manifest-proposal",
+            str(proposal),
+        ]
+    )
+
+    assert code == 0
+    assert seen["controls_manifest_proposal"] == proposal
+
+
+def test_main_rejects_proposed_controls_manifest(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    batch = tmp_path / "batch.csv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    proposed = tmp_path / "identity_coherence_controls_manifest.proposed.tsv"
+    batch.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    proposed.write_text("control_id\n", encoding="utf-8")
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+
+    code = validation_script.main(
+        [
+            "--discovery-batch-index",
+            str(batch),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-root",
+            str(tmp_path / "out"),
+            "--controls-manifest",
+            str(proposed),
+        ]
+    )
+
+    assert code == 2
+    assert "must be reviewed and renamed" in capsys.readouterr().err
+
+
 def test_main_returns_one_when_parity_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
