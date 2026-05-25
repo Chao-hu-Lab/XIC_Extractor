@@ -70,6 +70,7 @@ def build_cell_integration_audit_summary(
             right_index,
             uncertainty_baseline_values=asls_baseline_values,
             baseline_residual_mad=residual_mad,
+            baseline_residual_mad_source="asls_residual",
         )
         asls_shadow = (
             integrate_asls_baseline(

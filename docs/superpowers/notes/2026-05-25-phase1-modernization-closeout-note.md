@@ -18,6 +18,12 @@ current evidence.
 | P5 CWT evidence honesty | `audit_only` | Implemented as model documentation and boundary-audit marker. No production scoring change. |
 | P6 OBI-Warp RT shadow | not triggered | Do not run from this evidence set; P3 did not identify anchor LOESS / RT correction as the blocker. |
 
+Post-review gate framing: P3 and P6 are external/reference audit tracks, not
+Phase 1 modernization critical-path gates. P3 can raise questions but does not
+close targeted ISTD identity, boundary, baseline, or absolute area truth. P6
+should be triggered by broader RT residual / anchor-sparse evidence, not by the
+existence of an inconclusive untargeted third-party comparison.
+
 ## Evidence Pointers
 
 - P1: `docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md`

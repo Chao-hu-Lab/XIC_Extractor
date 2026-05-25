@@ -27,6 +27,12 @@ RT-correction escalation. The temporary runner / normalizer / joiner code is
 not retained as maintained Phase 1 code; preserve the findings note and local
 output artifacts as diagnostic evidence only.
 
+Post-review framing: P3 is an external-reference audit track, not a
+modernization critical-path gate. It can raise follow-up questions, but it
+cannot by itself close targeted ISTD identity, boundary, baseline, or absolute
+area truth questions because the external tools are untargeted feature-finding
+pipelines with different prominence, boundary, and area contracts.
+
 ## Why Third-Party Reference
 
 Internal benchmarks rely on the strict ISTD set and the identity coherence
@@ -243,4 +249,5 @@ no live P3 diagnostic scripts are retained in the worktree:
 Diagnostic report reviewed by the methodology owner. Findings recorded under
 `docs/superpowers/notes/2026-MM-DD-third-party-shadow-findings.md`. No
 production change is gated on this; the note records the evidence and any
-follow-up decisions.
+follow-up decisions. Future external-shadow audits should first state which
+GO/NO-GO question they can close; otherwise they remain `diagnostic_only`.

@@ -3,17 +3,20 @@
 **Date:** 2026-05-24
 **Status:** Diagnostic slice draft v0.1
 **Overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
-**Precondition:** P3 third-party shadow comparison report indicates that
-anchor-based LOESS is the RT correction bottleneck with a quantitative gate
-(for example: anchor-sparse rows show materially higher internal RT residuals
-than third-party references, and RT residual explains a meaningful share of
-area / match disagreement). Without P3 evidence and a recorded threshold,
-P6 is not scheduled.
+**Precondition:** A broader RT diagnostic or redesigned external-reference audit
+indicates that anchor-based LOESS / current RT correction is the bottleneck with
+a quantitative gate. The preferred trigger is internal evidence: anchor-sparse
+rows show materially higher RT residuals, selected-family RT errors exceed the
+same-peak tolerance, or RT residual explains a meaningful share of boundary /
+match disagreement. P3 may contribute evidence, but P3 is not required and does
+not automatically schedule P6. Without a recorded threshold, P6 is not
+scheduled.
 
 ## Purpose
 
-Introduce pyOpenMS OBI-Warp (Prince & Marcotte 2006) as a shadow non-linear
-RT correction path. The current production RT correction is anchor-based:
+If triggered, introduce pyOpenMS OBI-Warp (Prince & Marcotte 2006) as a shadow
+non-linear RT correction path. The current production RT correction is
+anchor-based:
 ISTDs and known targets feed `rt_normalization.fit_sample_rt_models`, which
 produces a per-sample linear / piecewise / LOESS-interpolated model. Outside
 the anchor density region the model degrades to extrapolation.

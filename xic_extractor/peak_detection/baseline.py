@@ -31,6 +31,7 @@ def integrate_linear_edge_baseline(
     *,
     uncertainty_baseline_values: np.ndarray | None = None,
     baseline_residual_mad: float | None = None,
+    baseline_residual_mad_source: str = "asls_residual",
 ) -> BaselineIntegration:
     rt = np.asarray(rt_values, dtype=float)
     intensity = np.asarray(intensity_values, dtype=float)
@@ -43,12 +44,13 @@ def integrate_linear_edge_baseline(
     corrected_area = _area_counts_seconds(corrected, segment_rt)
     raw_area = integrate_area_counts_seconds(intensity, rt, left_index, right_index)
     residual_mad = baseline_residual_mad
+    noise_source = baseline_residual_mad_source if residual_mad is not None else ""
     if residual_mad is None:
         _baseline_values, residual_mad = compute_asls_residual_mad(
             intensity,
             baseline_values=uncertainty_baseline_values,
         )
-    noise_source = "asls_residual" if residual_mad is not None else ""
+        noise_source = "asls_residual" if residual_mad is not None else ""
     if residual_mad is None:
         residual_mad = _pre_peak_mad(intensity, left_index)
         noise_source = "pre_peak_mad" if residual_mad is not None else ""
@@ -58,9 +60,6 @@ def integrate_linear_edge_baseline(
         right_index,
         baseline_residual_mad=residual_mad,
     )
-    if uncertainty is None:
-        residual_mad = None
-        noise_source = ""
     return BaselineIntegration(
         area_baseline_corrected=corrected_area,
         area_uncertainty=uncertainty,
@@ -100,11 +99,24 @@ def integrate_asls_baseline(
     corrected = np.maximum(segment - baseline_segment, 0.0)
     corrected_area = _area_counts_seconds(corrected, segment_rt)
     raw_area = integrate_area_counts_seconds(intensity, rt, left_index, right_index)
+    _baseline_values, residual_mad = compute_asls_residual_mad(
+        intensity,
+        baseline_values=full_baseline,
+    )
+    uncertainty = _area_uncertainty_counts_seconds(
+        rt,
+        left_index,
+        right_index,
+        baseline_residual_mad=residual_mad,
+    )
     return BaselineIntegration(
         area_baseline_corrected=corrected_area,
-        area_uncertainty=None,
+        area_uncertainty=uncertainty,
         baseline_type="asls",
         baseline_score=_safe_ratio(corrected_area, raw_area),
+        area_uncertainty_formula_version=AREA_UNCERTAINTY_FORMULA_VERSION,
+        baseline_residual_mad=residual_mad,
+        area_uncertainty_noise_source="asls_residual" if residual_mad is not None else "",
     )
 
 
@@ -156,15 +168,16 @@ def compute_asls_residual_mad(
     values = np.asarray(intensity_values, dtype=float)
     if len(values) < 5 or not np.all(np.isfinite(values)):
         return None, None
-    try:
-        baseline = (
-            np.asarray(baseline_values, dtype=float)
-            if baseline_values is not None
-            else asls_baseline(values)
-        )
-    except (ValueError, FloatingPointError):
-        return None, None
+    if baseline_values is not None:
+        baseline = np.asarray(baseline_values, dtype=float)
+    else:
+        try:
+            baseline = asls_baseline(values)
+        except (ValueError, FloatingPointError):
+            return None, None
     if baseline.shape != values.shape:
+        if baseline_values is not None:
+            raise ValueError("baseline_values must match intensity_values shape")
         return None, None
     residual = values - baseline
     residual_mad = float(np.median(np.abs(residual - np.median(residual))))

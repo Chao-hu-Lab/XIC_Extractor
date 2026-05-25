@@ -3,8 +3,10 @@
 **Date:** 2026-05-24
 **Status:** Revised 8RAW promotion-candidate gate implemented
 **Overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
-**Precondition:** P2 AsLS shadow emitted, P3 third-party shadow comparison
-findings recorded, and P4 uncertainty formula decision recorded.
+**Precondition:** P2 AsLS shadow emitted, P4 uncertainty formula decision
+recorded, and baseline-truth plus RT/boundary evidence available. P3
+third-party shadow disposition should be recorded when available, but P3 is
+`diagnostic_only` external-reference evidence and is not a hard P2b gate.
 
 ## Purpose
 
@@ -95,11 +97,13 @@ Promotion requires:
    - no new `unexplained_area_mismatch`
    - no systematic loss of detected / rescued cells in the strict ISTD set
    - top area-difference outliers have manual-reviewable audit rows
-3. P3 third-party comparison:
-   - AsLS does not increase third-party area disagreement counts by more than
-     the linear-edge baseline
-   - matrix-hump cases where AsLS improves disagreement are listed in the GO
-     note
+3. P3 third-party disposition:
+   - if P3 findings are available, the GO note records whether they raise any
+     new hard blocker; `diagnostic_only`, unavailable external output,
+     MassCube runner failure, or absolute-area scale mismatch does not block
+     8RAW `GO_FOR_PRODUCTION_CANDIDATE` by itself
+   - P3 may support follow-up investigation, but it must not override
+     targeted ISTD identity, baseline-truth, or RT/boundary same-peak evidence
 4. P4 uncertainty formula:
    - the promoted area path and uncertainty audit use the same baseline
      residual source, or the difference is documented as a temporary
@@ -132,5 +136,6 @@ The GO note must state:
 
 ## Acceptance Owner
 
-Engineering owner and methodology owner jointly review the 8RAW, 85RAW, P3,
-and P4 evidence. Without an explicit GO note, this promotion has not landed.
+Engineering owner and methodology owner jointly review the 8RAW, 85RAW, P4,
+baseline-truth, RT/boundary, and any available P3 disposition evidence. Without
+an explicit GO note, this promotion has not landed.

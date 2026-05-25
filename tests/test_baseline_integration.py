@@ -3,6 +3,7 @@ import pytest
 
 from xic_extractor.peak_detection.baseline import (
     bounded_trace_interval,
+    compute_asls_residual_mad,
     integrate_asls_baseline,
     integrate_linear_edge_baseline,
     integrate_with_baseline,
@@ -48,13 +49,14 @@ def test_area_uncertainty_uses_baseline_residual_noise_not_peak_height(
 
 
 def test_area_uncertainty_returns_none_for_non_positive_scan_period() -> None:
-    rt = np.asarray([0.1, 0.1, 0.1, 0.1])
-    intensity = np.asarray([10.0, 20.0, 25.0, 12.0])
+    rt = np.asarray([0.1, 0.1, 0.1, 0.1, 0.1])
+    intensity = np.asarray([10.0, 20.0, 25.0, 12.0, 11.0])
 
-    result = integrate_linear_edge_baseline(intensity, rt, 0, 4)
+    result = integrate_linear_edge_baseline(intensity, rt, 0, 5)
 
     assert result.area_uncertainty is None
-    assert result.baseline_residual_mad is None
+    assert result.baseline_residual_mad is not None
+    assert result.area_uncertainty_noise_source == "asls_residual"
 
 
 def test_area_uncertainty_can_fallback_to_pre_peak_mad(
@@ -78,6 +80,23 @@ def test_area_uncertainty_can_fallback_to_pre_peak_mad(
     assert result.area_uncertainty_noise_source == "pre_peak_mad"
 
 
+def test_linear_edge_preserves_caller_residual_mad_source() -> None:
+    rt = np.asarray([0.0, 0.1, 0.2, 0.3])
+    intensity = np.asarray([10.0, 30.0, 25.0, 12.0])
+
+    result = integrate_linear_edge_baseline(
+        intensity,
+        rt,
+        0,
+        4,
+        baseline_residual_mad=2.5,
+        baseline_residual_mad_source="manual_residual",
+    )
+
+    assert result.baseline_residual_mad == pytest.approx(2.5)
+    assert result.area_uncertainty_noise_source == "manual_residual"
+
+
 def test_linear_edge_baseline_rejects_mismatched_arrays() -> None:
     with pytest.raises(ValueError, match="same length"):
         integrate_linear_edge_baseline(
@@ -95,12 +114,36 @@ def test_asls_baseline_integrates_shadow_area_without_exceeding_raw() -> None:
     result = integrate_asls_baseline(intensity, rt, 1, 5)
 
     assert result.baseline_type == "asls"
-    assert result.area_uncertainty is None
     assert result.area_baseline_corrected > 0.0
     raw_area = 60.0 * float(np.trapezoid(intensity[1:5], rt[1:5]))
     assert result.area_baseline_corrected <= raw_area
     assert result.baseline_score is not None
     assert 0.0 <= result.baseline_score <= 1.0
+    assert result.area_uncertainty is not None
+    assert result.area_uncertainty_formula_version == "baseline_residual_mad_v1"
+    assert result.baseline_residual_mad is not None
+    assert result.area_uncertainty_noise_source == "asls_residual"
+
+
+def test_asls_baseline_keeps_provenance_when_uncertainty_unavailable() -> None:
+    rt = np.asarray([0.1, 0.1, 0.1, 0.1, 0.1])
+    intensity = np.asarray([8.0, 12.0, 70.0, 20.0, 12.0])
+    baseline = np.full_like(intensity, 8.0)
+
+    result = integrate_asls_baseline(intensity, rt, 0, 5, baseline_values=baseline)
+
+    assert result.area_uncertainty is None
+    assert result.area_uncertainty_formula_version == "baseline_residual_mad_v1"
+    assert result.baseline_residual_mad is not None
+    assert result.area_uncertainty_noise_source == "asls_residual"
+
+
+def test_compute_asls_residual_mad_rejects_explicit_shape_mismatch() -> None:
+    with pytest.raises(ValueError, match="baseline_values"):
+        compute_asls_residual_mad(
+            np.asarray([1.0, 2.0, 3.0, 4.0, 5.0]),
+            baseline_values=np.asarray([1.0, 2.0]),
+        )
 
 
 def test_integrate_with_baseline_dispatches_supported_methods() -> None:

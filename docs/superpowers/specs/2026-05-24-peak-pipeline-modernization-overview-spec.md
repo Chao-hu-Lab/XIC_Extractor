@@ -42,6 +42,8 @@ Read in this order:
    - limited asari support; MassCube unavailable under the isolated runner
    - no production behavior changes, no P2b GO, and no P6 escalation
    - external runner / joiner code is not retained as maintained Phase 1 code
+   - not a production gate or P2b critical-path precondition; keep as an
+     external-reference audit track only
 4. [P2b — Area integration AsLS promotion](2026-05-24-peak-pipeline-area-baseline-asls-promotion-spec.md)
    - old strict RSD gate was `NO-GO`; RT/boundary-first revised 8RAW gate is
      `GO_FOR_PRODUCTION_CANDIDATE`
@@ -70,12 +72,17 @@ Read in this order:
    - introduce pyOpenMS OBI-Warp as a shadow non-linear RT correction option
    - compare against the existing anchor-based LOESS path
    - never mutates production RT or alignment until a separate promotion spec
+   - future diagnostic trigger only; not scheduled by the current P3 evidence
+     and not required for P2b
 
-The non-negotiable order is P1 -> P2 -> P3. P4 / P5 can run in parallel after
-P3 begins because they are audit-boundary changes. P2b is a promotion gate
-after P2 / P3 / P4 evidence; the old strict RSD gate is `NO-GO`, but the
+The production-facing Phase 1 order is P1 -> P2 -> P4/P5 -> P2b. P3 is no
+longer a non-negotiable sequencing dependency because the completed audit showed
+that untargeted external tools are useful `diagnostic_only` references but do
+not close targeted ISTD production GO/NO-GO questions. P2b is a promotion gate
+after P2 shadow evidence, P4 uncertainty provenance, baseline truth, and
+RT/boundary evidence. The old strict RSD gate is `NO-GO`, but the
 RT/boundary-first revised 8RAW gate records `GO_FOR_PRODUCTION_CANDIDATE`. P6
-is contingent on P3 evidence; the current closeout does not trigger it.
+is a future RT-shadow diagnostic only; the current closeout does not trigger it.
 
 Phase 1 closeout note:
 [2026-05-25 Phase 1 modernization closeout](../notes/2026-05-25-phase1-modernization-closeout-note.md).
@@ -83,10 +90,16 @@ Phase 1 closeout note:
 ## Two-Phase Relationship
 
 ```text
-Phase 1 — this spec set (P1 .. P6, plus P2b if AsLS promotion is accepted)
+Phase 1 — production-facing specs (P1, P2, P4, P5, plus P2b if AsLS
+          promotion is accepted)
   goal: production peak-pipeline output is closer to handoff vision
   validation: strict ISTD benchmark, identity coherence, area RSD
   outcome: behavior changes and shadow evidence; structure stays the same
+
+External/reference audit track — P3 and future P6
+  goal: optional lower-bound or RT-shadow evidence
+  validation: diagnostic-only reports reviewed by humans
+  outcome: findings notes only; not a critical path for P2b
 
   ↓ after Phase 1 stable
 
@@ -147,30 +160,33 @@ handoff vision and current production:
 
 These are surgical, low-risk changes. None of them require new architecture.
 
-## Non-Negotiable Implementation Order
+## Phase 1 Decision Order
 
 ```text
 P1 resolver default switch
   -> P2 area baseline AsLS (shadow)
-  -> P3 third-party shadow comparison
-  -> P4 audit field correction          (parallel from P3)
-  -> P5 CWT evidence honesty            (parallel from P3)
-  -> P2b AsLS production promotion      (only after P2/P3/P4 evidence)
-  -> P6 OBI-Warp RT shadow              (contingent on P3 evidence)
+  -> P4 audit field correction
+  -> P5 CWT evidence honesty
+  -> P2b AsLS production promotion      (only after P2/P4/internal evidence)
+
+External/reference track:
+P3 third-party shadow comparison        (diagnostic_only; non-blocking)
+P6 OBI-Warp RT shadow                   (future trigger only)
 ```
 
 P1 must validate clean on the strict ISTD benchmark, identity coherence, and
 area-uncertainty gates before P2 begins. The 2026-05-24/25 P1 validation note
 records a P2-entry GO at `production_candidate` strength for 8RAW; it is not
 85RAW or `production_ready`. P2 must remain shadow-only until P2b records a
-separate promotion GO note. P3 provided diagnostic-only decision evidence and
-did not trigger P6. The RT/boundary-first revised P2b gate records
-`GO_FOR_PRODUCTION_CANDIDATE` for 8RAW, but production area has not been
-switched. P6 is not triggered. P4 and P5 are audit-only at the
+separate promotion GO note. P3 provided `diagnostic_only` external-reference
+evidence, but it is not a P2b hard gate because it cannot adjudicate targeted
+ISTD identity or absolute area truth by itself. The RT/boundary-first revised
+P2b gate records `GO_FOR_PRODUCTION_CANDIDATE` for 8RAW, but production area
+has not been switched. P6 is not triggered. P4 and P5 are audit-only at the
 production-decision boundary but may carry schema changes to audit TSVs (see
-TSV Schema Impact below). They may run in parallel with P3. P6 is contingent
-on RT residual evidence from P3 indicating that anchor-based LOESS is the
-bottleneck.
+TSV Schema Impact below). P6 should be scheduled only if a future broader RT
+diagnostic or redesigned external-reference audit shows that anchor-sparse RT
+correction is the current blocker.
 
 ### Identity Coherence Check Coverage
 
@@ -227,8 +243,8 @@ In scope for this modernization:
 - optional AsLS production promotion (P2b)
 - audit field formula correctness (P4)
 - audit field honesty about evidence provenance (P5)
-- shadow execution of third-party tools (P3 findings only) and pyOpenMS map
-  alignment (P6, contingent)
+- optional external-reference audit findings from third-party tools (P3
+  findings only) and pyOpenMS map alignment (P6, future trigger only)
 
 Out of scope for this modernization:
 
