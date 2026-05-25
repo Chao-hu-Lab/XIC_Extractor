@@ -22,6 +22,7 @@ from xic_extractor.peak_detection.traces import TraceGroup
 from xic_extractor.sample_groups import classify_sample_group
 
 PeakCandidateBoundaryRow = dict[str, str]
+CWT_LEGACY_AUDIT_FILTER_REASON = "legacy_cwt_width_not_real_cwt"
 
 PEAK_CANDIDATE_BOUNDARY_HEADERS = (
     "sample_name",
@@ -37,6 +38,7 @@ PEAK_CANDIDATE_BOUNDARY_HEADERS = (
     "selected_candidate",
     "boundary_id",
     "boundary_sources",
+    "cwt_audit_filter_reason",
     "rt_left_min",
     "rt_apex_min",
     "rt_right_min",
@@ -44,6 +46,9 @@ PEAK_CANDIDATE_BOUNDARY_HEADERS = (
     "area_raw_counts_seconds",
     "area_baseline_corrected",
     "area_uncertainty",
+    "area_uncertainty_formula_version",
+    "baseline_residual_mad",
+    "area_uncertainty_noise_source",
     "baseline_type",
     "baseline_score",
     "boundary_audit_score",
@@ -209,6 +214,7 @@ def _row_from_boundary(
         "selected_candidate": "TRUE" if selected_candidate else "FALSE",
         "boundary_id": boundary.boundary_id,
         "boundary_sources": _join(boundary.sources),
+        "cwt_audit_filter_reason": _cwt_audit_filter_reason(boundary),
         "rt_left_min": _format_float(boundary.rt_left_min),
         "rt_apex_min": _format_float(boundary.rt_apex_min),
         "rt_right_min": _format_float(boundary.rt_right_min),
@@ -222,6 +228,11 @@ def _row_from_boundary(
             digits=2,
         ),
         "area_uncertainty": _format_optional_float(baseline.area_uncertainty),
+        "area_uncertainty_formula_version": (
+            baseline.area_uncertainty_formula_version
+        ),
+        "baseline_residual_mad": _format_optional_float(baseline.baseline_residual_mad),
+        "area_uncertainty_noise_source": baseline.area_uncertainty_noise_source,
         "baseline_type": baseline.baseline_type,
         "baseline_score": _format_optional_float(baseline.baseline_score),
         "boundary_audit_score": str(boundary_score.score),
@@ -245,6 +256,14 @@ def _row_from_boundary(
         if "candidate_interval" in boundary.sources
         else "FALSE",
     }
+
+
+def _cwt_audit_filter_reason(boundary: BoundaryHypothesis) -> str:
+    return (
+        CWT_LEGACY_AUDIT_FILTER_REASON
+        if boundary.sources == ("cwt_width",)
+        else ""
+    )
 
 
 def _apply_boundary_audit_rank(rows: list[PeakCandidateBoundaryRow]) -> None:

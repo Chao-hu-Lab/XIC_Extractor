@@ -92,7 +92,7 @@ def test_owner_backfill_process_builds_pickleable_sample_jobs_and_orders_output(
         },
         dll_dir=tmp_path / "dll",
         alignment_config=AlignmentConfig(),
-        peak_config=_peak_config(tmp_path),
+        peak_config=_peak_config(tmp_path, baseline_audit_method="asls"),
         max_workers=2,
         owner_backfill_xic_backend="ms1_index",
         emit_region_audit=True,
@@ -103,6 +103,7 @@ def test_owner_backfill_process_builds_pickleable_sample_jobs_and_orders_output(
     assert [job.sample_index for job in captured_jobs] == [1, 2]
     assert {job.owner_backfill_xic_backend for job in captured_jobs} == {"ms1_index"}
     assert {job.emit_region_audit for job in captured_jobs} == {True}
+    assert {job.peak_config.baseline_audit_method for job in captured_jobs} == {"asls"}
     assert [cell.sample_stem for cell in output.cells] == ["sample-b", "sample-a"]
     assert [stat.sample_stem for stat in output.timing_stats] == [
         "sample-a",
@@ -199,7 +200,7 @@ def test_owner_build_process_builds_pickleable_sample_jobs_and_merges_output(
         },
         dll_dir=tmp_path / "dll",
         alignment_config=AlignmentConfig(),
-        peak_config=_peak_config(tmp_path),
+        peak_config=_peak_config(tmp_path, baseline_audit_method="asls"),
         max_workers=2,
         emit_region_audit=True,
         runner=fake_runner,
@@ -208,6 +209,7 @@ def test_owner_build_process_builds_pickleable_sample_jobs_and_merges_output(
     assert [job.sample_stem for job in captured_jobs] == ["sample-a", "sample-b"]
     assert [len(job.candidates) for job in captured_jobs] == [1, 1]
     assert {job.emit_region_audit for job in captured_jobs} == {True}
+    assert {job.peak_config.baseline_audit_method for job in captured_jobs} == {"asls"}
     assert output.ownership.owners == (owner_a, owner_b)
     assert output.ownership.assignments == (unresolved_a, primary_a, primary_b)
     assert [stat.sample_stem for stat in output.timing_stats] == [
@@ -502,7 +504,11 @@ class _SubmitFailingExecutor:
         raise RuntimeError("submit boom")
 
 
-def _peak_config(tmp_path: Path) -> ExtractionConfig:
+def _peak_config(
+    tmp_path: Path,
+    *,
+    baseline_audit_method: str = "",
+) -> ExtractionConfig:
     return ExtractionConfig(
         data_dir=tmp_path,
         dll_dir=tmp_path / "dll",
@@ -514,6 +520,7 @@ def _peak_config(tmp_path: Path) -> ExtractionConfig:
         peak_min_prominence_ratio=0.01,
         ms2_precursor_tol_da=1.6,
         nl_min_intensity_ratio=0.01,
+        baseline_audit_method=baseline_audit_method,
     )
 
 

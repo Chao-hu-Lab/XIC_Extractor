@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,6 +12,22 @@ from tests.alignment_pipeline_helpers import (
 from tests.alignment_pipeline_helpers import peak_config as _peak_config
 from tests.alignment_pipeline_helpers import write_batch as _write_batch
 from xic_extractor.alignment import AlignmentConfig
+from xic_extractor.alignment.pipeline_outputs import alignment_metadata
+
+
+def test_alignment_metadata_records_baseline_audit_method() -> None:
+    peak_config = replace(_peak_config(), baseline_audit_method="asls")
+
+    metadata = alignment_metadata(
+        discovery_batch_index=Path("batch.csv"),
+        raw_dir=Path("raw"),
+        dll_dir=Path("dll"),
+        owner_backfill_xic_backend="raw",
+        output_level="validation",
+        peak_config=peak_config,
+    )
+
+    assert metadata["baseline_audit_method"] == "asls"
 
 
 def test_pipeline_debug_flags_write_optional_outputs(

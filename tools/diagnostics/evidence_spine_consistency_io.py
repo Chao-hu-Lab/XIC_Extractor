@@ -113,6 +113,7 @@ def _read_alignment_cells(path: Path) -> tuple[AlignmentCell, ...]:
             right=_optional_float(row["peak_end_rt"]),
             region_verdict=row["region_shadow_verdict"],
             local_mixture_diagnostic=row["region_local_mixture_diagnostic"],
+            reason=row.get("reason", ""),
         )
         for row in rows
     )

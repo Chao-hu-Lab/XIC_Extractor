@@ -44,6 +44,9 @@ class IntegrationResult:
     boundary_sources: tuple[str, ...] = ("candidate_interval",)
     area_baseline_corrected: float | None = None
     area_uncertainty: float | None = None
+    area_uncertainty_formula_version: str = ""
+    baseline_residual_mad: float | None = None
+    area_uncertainty_noise_source: str = ""
     baseline_type: str = ""
     baseline_score: float | None = None
     raw_scan_indices: tuple[int, ...] = ()
@@ -51,6 +54,12 @@ class IntegrationResult:
 
 @dataclass(frozen=True)
 class EvidenceVector:
+    """Audit evidence attached to a peak hypothesis.
+
+    The legacy CWT fields mirror `PeakCandidate` audit-presence flags only
+    and are not interpretable as CWT scale or ridge metrics.
+    """
+
     confidence: str = ""
     raw_score: int | None = None
     support_labels: tuple[str, ...] = ()
@@ -289,6 +298,15 @@ def _integration_from_candidate(
             baseline.area_baseline_corrected if baseline is not None else None
         ),
         area_uncertainty=baseline.area_uncertainty if baseline is not None else None,
+        area_uncertainty_formula_version=(
+            baseline.area_uncertainty_formula_version if baseline is not None else ""
+        ),
+        baseline_residual_mad=(
+            baseline.baseline_residual_mad if baseline is not None else None
+        ),
+        area_uncertainty_noise_source=(
+            baseline.area_uncertainty_noise_source if baseline is not None else ""
+        ),
         baseline_type=baseline.baseline_type if baseline is not None else "",
         baseline_score=baseline.baseline_score if baseline is not None else None,
         raw_scan_indices=raw_scan_indices,

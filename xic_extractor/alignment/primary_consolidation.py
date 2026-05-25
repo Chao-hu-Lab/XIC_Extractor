@@ -17,6 +17,7 @@ _PRESENT_STATUSES = {"detected", "rescued"}
 _DUPLICATE_WINNER_RE = re.compile(r"(?:^|;\s*)winner=([^;]+)")
 _ORIGINAL_STATUS_RE = re.compile(r"(?:^|;\s*)original_status=([^;]+)")
 _PRODUCT_PRECURSOR_SHIFT_TOLERANCE_DA = 0.02
+_SAME_APEX_DETECTED_PREFERENCE_SEC = 1.0
 
 
 @dataclass(frozen=True)
@@ -300,7 +301,7 @@ def _selected_observations_by_sample(
     for observation in observations:
         by_sample[observation.cell.sample_stem].append(observation)
     return {
-        sample_stem: min(items, key=lambda item: _observation_sort_key(item, center_rt))
+        sample_stem: _selected_observation(items, center_rt)
         for sample_stem, items in by_sample.items()
     }
 
@@ -501,6 +502,76 @@ def _observation_sort_key(
     return (
         -area,
         0 if observation.original_status == "detected" else 1,
+        abs((cell.apex_rt or center_rt) - center_rt),
+        _trace_quality_rank(cell.trace_quality),
+        observation.source_cluster_id,
+    )
+
+
+def _selected_observation(
+    observations: list[_Observation],
+    center_rt: float,
+) -> _Observation:
+    same_apex_detected_projection = _same_apex_detected_projection(observations)
+    if same_apex_detected_projection:
+        return min(
+            same_apex_detected_projection,
+            key=lambda item: _detected_preference_observation_sort_key(
+                item,
+                center_rt,
+            ),
+        )
+    return min(observations, key=lambda item: _observation_sort_key(item, center_rt))
+
+
+def _same_apex_detected_projection(
+    observations: list[_Observation],
+) -> list[_Observation]:
+    detected_apexes = [
+        observation.cell.apex_rt
+        for observation in observations
+        if observation.original_status == "detected"
+        and observation.cell.apex_rt is not None
+        and _finite(observation.cell.apex_rt)
+    ]
+    if not detected_apexes:
+        return []
+    projected = [
+        observation
+        for observation in observations
+        if observation.original_status != "detected"
+        and observation.cell.apex_rt is not None
+        and _finite(observation.cell.apex_rt)
+        and any(
+            abs(observation.cell.apex_rt - detected_apex) * 60.0
+            <= _SAME_APEX_DETECTED_PREFERENCE_SEC
+            for detected_apex in detected_apexes
+        )
+    ]
+    if not projected:
+        return []
+    return [
+        observation
+        for observation in observations
+        if observation.cell.apex_rt is not None
+        and _finite(observation.cell.apex_rt)
+        and any(
+            abs(observation.cell.apex_rt - detected_apex) * 60.0
+            <= _SAME_APEX_DETECTED_PREFERENCE_SEC
+            for detected_apex in detected_apexes
+        )
+    ]
+
+
+def _detected_preference_observation_sort_key(
+    observation: _Observation,
+    center_rt: float,
+) -> tuple[object, ...]:
+    cell = observation.cell
+    area = float(cell.area or 0.0)
+    return (
+        0 if observation.original_status == "detected" else 1,
+        -area,
         abs((cell.apex_rt or center_rt) - center_rt),
         _trace_quality_rank(cell.trace_quality),
         observation.source_cluster_id,

@@ -46,6 +46,9 @@ _PRE_NL_DIAGNOSTIC_HEADERS = (
     "area_raw_counts_seconds",
     "area_baseline_corrected",
     "area_uncertainty",
+    "area_uncertainty_formula_version",
+    "baseline_residual_mad",
+    "area_uncertainty_noise_source",
     "quality_flags",
     "region_scan_count",
     "region_duration_min",
@@ -341,6 +344,11 @@ def test_build_rows_can_emit_baseline_corrected_audit_area() -> None:
 
     assert rows[0]["area_baseline_corrected"] == "390.00000"
     assert rows[0]["area_uncertainty"] != ""
+    assert rows[0]["area_uncertainty_formula_version"] == (
+        "baseline_residual_mad_v1"
+    )
+    assert rows[0]["baseline_residual_mad"] != ""
+    assert rows[0]["area_uncertainty_noise_source"] != ""
 
 
 def test_build_rows_prefers_shared_trace_group_arrays() -> None:

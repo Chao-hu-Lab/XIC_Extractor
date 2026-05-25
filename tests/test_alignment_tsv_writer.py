@@ -564,10 +564,66 @@ def test_write_alignment_cell_integration_audit_tsv_is_sidecar(
     assert audit[0]["neutral_loss_tag"] == "DNA_dR"
     assert audit[0]["area_baseline_corrected"] == "7.5"
     assert audit[0]["area_uncertainty"] == "2"
+    assert audit[0]["area_uncertainty_formula_version"] == "baseline_residual_mad_v1"
+    assert audit[0]["baseline_residual_mad"] == "0.5"
+    assert audit[0]["area_uncertainty_noise_source"] == "asls_residual"
     assert audit[0]["baseline_type"] == "linear_edge"
     assert audit[0]["uncertainty_fraction"] == "0.2"
     assert audit[0]["baseline_fraction"] == "0.75"
     assert audit[0]["integration_scan_count"] == "5"
+
+
+def test_write_alignment_cell_integration_audit_tsv_default_schema_includes_p4_provenance(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import (
+        ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
+        write_alignment_cell_integration_audit_tsv,
+    )
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(),),
+        cells=(_cell("sample-a", "detected", area=10.0, integration=True),),
+        sample_order=("sample-a",),
+    )
+
+    rows = _read_tsv(
+        write_alignment_cell_integration_audit_tsv(
+            tmp_path / "alignment_cell_integration_audit.tsv",
+            matrix,
+        )
+    )
+
+    assert list(rows[0]) == list(ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS)
+    assert "area_baseline_corrected_asls" not in rows[0]
+    assert "baseline_score_asls" not in rows[0]
+
+
+def test_write_alignment_cell_integration_audit_tsv_emits_asls_shadow_columns(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import (
+        write_alignment_cell_integration_audit_tsv,
+    )
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(),),
+        cells=(_cell("sample-a", "detected", area=10.0, integration=True),),
+        sample_order=("sample-a",),
+    )
+
+    rows = _read_tsv(
+        write_alignment_cell_integration_audit_tsv(
+            tmp_path / "alignment_cell_integration_audit.tsv",
+            matrix,
+            baseline_audit_method="asls",
+        )
+    )
+
+    assert rows[0]["area_baseline_corrected"] == "7.5"
+    assert rows[0]["baseline_score"] == "0.75"
+    assert rows[0]["area_baseline_corrected_asls"] == "8"
+    assert rows[0]["baseline_score_asls"] == "0.8"
 
 
 def test_write_alignment_owner_backfill_seed_audit_tsv_is_sidecar(
@@ -750,11 +806,16 @@ def _cell(
                 raw_area=area,
                 area_baseline_corrected=7.5,
                 area_uncertainty=2.0,
+                area_uncertainty_formula_version="baseline_residual_mad_v1",
+                baseline_residual_mad=0.5,
+                area_uncertainty_noise_source="asls_residual",
                 baseline_type="linear_edge",
                 baseline_score=0.75,
                 uncertainty_fraction=0.2,
                 baseline_fraction=0.75,
                 integration_scan_count=5,
+                area_baseline_corrected_asls=8.0,
+                baseline_score_asls=0.8,
             )
             if integration
             else None

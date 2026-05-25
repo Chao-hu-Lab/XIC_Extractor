@@ -1,7 +1,7 @@
 # P4 — Area Uncertainty Formula Correction Spec
 
 **Date:** 2026-05-24
-**Status:** Audit-only correction draft v0.1
+**Status:** Audit-only correction implemented and 8RAW-validated on 2026-05-25
 **Overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
 **Parallel to:** P3, P5
 
@@ -101,8 +101,9 @@ The implementation must:
   field names — only the value semantics changes
 - emit enough provenance for downstream readers to distinguish the new formula
   from the legacy in-peak-diff formula. This provenance must be TSV-local
-  because `alignment_cell_integration_audit.tsv` has no run-metadata channel
-  today. Required additive fields:
+  because `alignment_cell_integration_audit.tsv`, `peak_candidates.tsv`, and
+  `peak_candidate_boundaries.tsv` have no run-metadata channel today.
+  Required additive fields next to any emitted `area_uncertainty` value:
   - `area_uncertainty_formula_version`
   - `baseline_residual_mad` or an equivalent reproducibility field
   The validation note must state the exact formula version string and columns

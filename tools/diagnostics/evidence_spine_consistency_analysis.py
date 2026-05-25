@@ -62,17 +62,28 @@ def _best_alignment_match(
 ) -> AlignmentCell | None:
     if target_mz is None or candidate.rt is None:
         return None
-    candidates: list[tuple[float, AlignmentCell]] = []
+    candidates: list[tuple[float, int, str, AlignmentCell]] = []
     for cell in cells:
         if cell.mz is None or cell.rt is None:
             continue
         ppm = _ppm(cell.mz, target_mz)
         rt_delta = abs(cell.rt - candidate.rt)
         if ppm <= match_ppm and rt_delta <= match_rt_min:
-            candidates.append((ppm + rt_delta, cell))
+            candidates.append(
+                (
+                    ppm + rt_delta,
+                    _primary_consolidation_rank(cell),
+                    cell.family_id,
+                    cell,
+                )
+            )
     if not candidates:
         return None
-    return min(candidates, key=lambda item: item[0])[1]
+    return min(candidates, key=lambda item: item[:3])[3]
+
+
+def _primary_consolidation_rank(cell: AlignmentCell) -> int:
+    return 0 if cell.reason.startswith("primary family consolidation") else 1
 
 
 def _consistency_row(

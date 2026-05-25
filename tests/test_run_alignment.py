@@ -64,6 +64,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
             "--emit-alignment-integration-audit",
             "--emit-alignment-backfill-seed-audit",
             "--emit-alignment-status-matrix",
+            "--emit-baseline-audit-asls",
         ]
     )
 
@@ -79,6 +80,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert peak_config.output_csv == output_dir.resolve() / "xic_results.csv"
     assert peak_config.diagnostics_csv == output_dir.resolve() / "xic_diagnostics.csv"
     assert peak_config.resolver_mode == "legacy_savgol"
+    assert peak_config.baseline_audit_method == "asls"
     assert captured["output_level"] == "machine"
     assert captured["emit_alignment_cells"] is True
     assert captured["emit_alignment_integration_audit"] is True
@@ -94,6 +96,43 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert "alignment_owner_backfill_seed_audit.tsv" in stdout
     assert "alignment_matrix_status.tsv" in stdout
     assert "Owner edge evidence TSV:" in stdout
+
+
+def test_run_alignment_env_enables_asls_baseline_audit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setenv("BASELINE_AUDIT_METHOD", "asls")
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert code == 0
+    assert captured["peak_config"].baseline_audit_method == "asls"
 
 
 def test_run_alignment_cli_passes_identity_coherence_flags(monkeypatch, tmp_path):

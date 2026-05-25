@@ -138,6 +138,7 @@ def alignment_metadata(
         "owner_backfill_xic_backend": owner_backfill_xic_backend,
         "output_level": output_level,
         "resolver_mode": peak_config.resolver_mode,
+        "baseline_audit_method": peak_config.baseline_audit_method,
     }
 
 
@@ -149,6 +150,7 @@ def write_outputs_atomic(
     ownership: OwnershipBuildResult,
     alignment_config: AlignmentConfig,
     edge_evidence: Sequence[OwnerEdgeEvidence] = (),
+    baseline_audit_method: str = "",
 ) -> None:
     output_paths_and_writers: list[tuple[Path, Callable[[Path], Path]]] = []
     if outputs.workbook is not None:
@@ -200,7 +202,11 @@ def write_outputs_atomic(
         output_paths_and_writers.append(
             (
                 outputs.integration_audit_tsv,
-                lambda path: write_alignment_cell_integration_audit_tsv(path, matrix),
+                lambda path: write_alignment_cell_integration_audit_tsv(
+                    path,
+                    matrix,
+                    baseline_audit_method=baseline_audit_method,
+                ),
             ),
         )
     if outputs.backfill_seed_audit_tsv is not None:

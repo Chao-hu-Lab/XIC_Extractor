@@ -293,6 +293,68 @@ def test_evidence_spine_consistency_reports_missing_alignment(tmp_path: Path) ->
     assert "no_alignment_mz_rt_match" in result.rows[0].mismatch_reason
 
 
+def test_evidence_spine_consistency_prefers_primary_consolidation_match(
+    tmp_path: Path,
+) -> None:
+    targeted_dir = tmp_path / "targeted"
+    alignment_dir = tmp_path / "alignment"
+    targeted_dir.mkdir()
+    alignment_dir.mkdir()
+    _write_minimal_targeted(targeted_dir, mz="289.0841")
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [
+            {
+                "sample_stem": "sample-a",
+                "feature_family_id": "FAM000001",
+                "status": "detected",
+                "area": "1100",
+                "apex_rt": "25.0",
+                "peak_start_rt": "24.9",
+                "peak_end_rt": "25.1",
+                "family_center_mz": "289.0841",
+                "region_shadow_verdict": "current_supported",
+                "region_local_mixture_diagnostic": "current_single_envelope",
+                "reason": "sample-local MS1 owner with original MS2 evidence",
+            },
+            {
+                "sample_stem": "sample-a",
+                "feature_family_id": "FAM000002",
+                "status": "detected",
+                "area": "1100",
+                "apex_rt": "25.0",
+                "peak_start_rt": "24.9",
+                "peak_end_rt": "25.1",
+                "family_center_mz": "289.0841",
+                "region_shadow_verdict": "current_supported",
+                "region_local_mixture_diagnostic": "current_single_envelope",
+                "reason": "primary family consolidation; source_family=FAM000001",
+            },
+        ],
+        fields=(
+            "sample_stem",
+            "feature_family_id",
+            "status",
+            "area",
+            "apex_rt",
+            "peak_start_rt",
+            "peak_end_rt",
+            "family_center_mz",
+            "region_shadow_verdict",
+            "region_local_mixture_diagnostic",
+            "reason",
+        ),
+    )
+
+    _outputs, result = report.run_evidence_spine_consistency(
+        targeted_dir=targeted_dir,
+        alignment_dir=alignment_dir,
+        output_dir=tmp_path / "out",
+    )
+
+    assert result.rows[0].untargeted_family_id == "FAM000002"
+
+
 def test_evidence_spine_consistency_fails_on_missing_columns(tmp_path: Path) -> None:
     targeted_dir = tmp_path / "targeted"
     alignment_dir = tmp_path / "alignment"

@@ -1,9 +1,28 @@
 # P5 — CWT Evidence Honesty Spec
 
 **Date:** 2026-05-24
-**Status:** Audit-only correction draft v0.1
+**Status:** Audit-only implemented and 8RAW-validated
 **Overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
 **Parallel to:** P3, P4
+
+## 2026-05-25 Implementation Note
+
+P5a is implemented as an audit-honesty change only:
+
+- `PeakCandidate` and `EvidenceVector` now document that the legacy CWT
+  numeric fields are audit-presence flags, not real CWT scale or ridge
+  metrics.
+- `_has_same_apex_cwt_support(...)` still uses the same positive-finite
+  behavior through a legacy-presence wrapper helper.
+- `peak_candidate_boundaries.tsv` now emits `cwt_audit_filter_reason`.
+  Source-only `cwt_width` rows are retained and marked with
+  `legacy_cwt_width_not_real_cwt`.
+
+8RAW targeted refresh kept `peak_candidates.tsv` at 172 rows and
+`peak_candidate_boundaries.tsv` at 529 rows. The 44 source-only `cwt_width`
+rows were all marked, and no non-`cwt_width` rows were marked. Production
+scoring, `region_safe_merge.py`, and the default boundary source set were not
+changed.
 
 ## Purpose
 
@@ -47,7 +66,7 @@ caveat:
   "audit-flag use only; value is reverse-engineered from non-CWT decisions
   and not interpretable as a CWT scale or ridge length"
 - in `xic_extractor/peak_detection/hypotheses.py`, add the same note on
-  `PeakHypothesis.cwt_best_scale` and `PeakHypothesis.cwt_ridge_persistence`
+  `EvidenceVector.cwt_best_scale` and `EvidenceVector.cwt_ridge_persistence`
 - if any future audit TSV emitter wants to expose these fields, it must
   rename them to `cwt_proposal_present` (boolean) or suffix with
   `_legacy_audit` plus a header-comment explaining the provenance. P5 does
@@ -122,11 +141,10 @@ audit-side-only path:
    hypotheses that cannot be backed by real CWT evidence. Diagnostic writers
    must only render the supplied marker; they must not recompute whether CWT
    is real.
-3. Do not silently drop the evidence. Either:
-   - keep the row with `cwt_audit_filter_reason` and an `audit_visible` /
-     `suppressed` marker, or
-   - write a sidecar `peak_candidate_boundaries_cwt_suppressed.tsv` carrying
-     the suppressed row identity and reason.
+3. Do not silently drop the evidence. Keep the row in
+   `peak_candidate_boundaries.tsv` with `cwt_audit_filter_reason` as the
+   single canonical marker. Do not add parallel `audit_visible`,
+   `suppressed`, or sidecar marker fields in P5a.
 4. The `region_safe_merge` path continues to receive the full source set so
    its `RegionSelectionDecision` is byte-identical before and after P5a.
 
@@ -149,19 +167,21 @@ P5 land in parallel with or after P1 without coupling them.
 
 ## Validation Contract
 
-P5a is a pure rename / audit-wiring change. Validation:
+P5a is a pure documentation / audit-wiring change. Validation:
 
-- 8RAW strict ISTD benchmark must produce identical peak selection and
-  scoring outputs before / after the change (only audit column names and the
-  audit-side `cwt_width` hypothesis filtering differ)
+- focused scoring and boundary tests must prove the same-apex CWT scoring
+  truth values are unchanged and source-only `cwt_width` rows are retained
+  and marked
+- 8RAW targeted refresh must not change `peak_candidates.tsv` or
+  `peak_candidate_boundaries.tsv` row counts
 - `peak_candidates.tsv` row count must be identical
-- `alignment_matrix.tsv` and `alignment_review.tsv` hashes must be identical
-- `peak_candidate_boundaries.tsv` row count may stay identical with suppressed
-  CWT rows marked in place, or a sidecar suppressed-CWT TSV may be emitted.
-  A row cannot simply disappear without a machine-readable reason that
-  includes sample, candidate/feature identity, source, and suppression reason.
-- `RegionSelectionDecision` outputs in the region-first audit surface must be
-  byte-identical before and after the change
+- `peak_candidate_boundaries.tsv` row count must stay identical with
+  source-only CWT rows marked in place. A row cannot simply disappear without
+  a machine-readable reason that includes sample, candidate/feature identity,
+  source, and reason.
+- code review must confirm `region_safe_merge.py`,
+  `enumerate_boundary_hypotheses` defaults, and production scoring constants
+  were not changed
 
 If production peak selection or `RegionSelectionDecision` differs, treat as a
 bug in the audit filter (it touched the production path when it should not

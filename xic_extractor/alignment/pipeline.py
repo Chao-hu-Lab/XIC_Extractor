@@ -346,6 +346,7 @@ def run_alignment(
                 ownership=ownership,
                 alignment_config=alignment_config,
                 edge_evidence=edge_evidence or (),
+                baseline_audit_method=getattr(peak_config, "baseline_audit_method", ""),
             )
         return outputs
 

@@ -121,6 +121,7 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.resolver_min_scans == 5
     assert config.parallel_mode == "process"
     assert config.parallel_workers == default_parallel_workers()
+    assert config.baseline_audit_method == ""
     assert config.emit_peak_candidates is False
     assert targets[0].label == "Analyte"
     assert targets[0].neutral_loss_da == pytest.approx(116.0474)
@@ -351,11 +352,33 @@ def test_load_config_accepts_emit_peak_candidates_setting(tmp_path: Path) -> Non
     assert config.emit_peak_candidates is True
 
 
+def test_load_config_accepts_asls_baseline_audit_method(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"baseline_audit_method": "asls"})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.baseline_audit_method == "asls"
+
+
+def test_load_config_rejects_unknown_baseline_audit_method(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"baseline_audit_method": "airpls"})
+    _write_targets(config_dir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "settings.csv", "baseline_audit_method", "airpls")
+
+
 def test_canonical_settings_defaults_include_parallel_settings() -> None:
     assert CANONICAL_SETTINGS_DEFAULTS["parallel_mode"] == "process"
     assert CANONICAL_SETTINGS_DEFAULTS["parallel_workers"] == str(
         default_parallel_workers()
     )
+    assert CANONICAL_SETTINGS_DEFAULTS["baseline_audit_method"] == ""
 
 
 def test_canonical_settings_defaults_include_local_minimum_preset() -> None:
@@ -378,6 +401,7 @@ def test_settings_example_includes_parallel_settings() -> None:
 
     assert rows["parallel_mode"] == "process"
     assert int(rows["parallel_workers"]) >= 1
+    assert rows["baseline_audit_method"] == ""
 
 
 def test_settings_example_includes_review_report_setting() -> None:

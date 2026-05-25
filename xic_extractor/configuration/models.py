@@ -35,6 +35,7 @@ class ExtractionConfig:
     emit_review_report: bool = False
     emit_peak_candidates: bool = False
     keep_intermediate_csv: bool = False
+    baseline_audit_method: str = ""
     parallel_mode: str = "serial"
     parallel_workers: int = 1
     config_hash: str = ""

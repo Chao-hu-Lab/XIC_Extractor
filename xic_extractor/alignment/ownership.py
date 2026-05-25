@@ -25,6 +25,8 @@ from xic_extractor.peak_detection.region_audit import (
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
 
+_OWNER_PEAK_WINDOW_PADDING_MIN = 0.10
+
 
 class OwnershipXICSource(Protocol):
     def extract_xic(
@@ -148,8 +150,11 @@ def _resolve_candidates(
             outcomes[index] = _unresolved_outcome(candidate, "missing_raw_source")
             continue
         seed_rt = _candidate_seed_rt(candidate)
-        rt_min = seed_rt - alignment_config.max_rt_sec / 60.0
-        rt_max = seed_rt + alignment_config.max_rt_sec / 60.0
+        rt_min, rt_max = _candidate_resolution_rt_window(
+            candidate,
+            seed_rt,
+            alignment_config,
+        )
         requests_by_sample[sample_stem].append(
             (
                 index,
@@ -197,8 +202,11 @@ def _resolve_candidate(
     if source is None:
         return _unresolved_outcome(candidate, "missing_raw_source")
     seed_rt = _candidate_seed_rt(candidate)
-    rt_min = seed_rt - alignment_config.max_rt_sec / 60.0
-    rt_max = seed_rt + alignment_config.max_rt_sec / 60.0
+    rt_min, rt_max = _candidate_resolution_rt_window(
+        candidate,
+        seed_rt,
+        alignment_config,
+    )
     rt, intensity = source.extract_xic(
         float(candidate.precursor_mz),
         rt_min,
@@ -665,6 +673,54 @@ def _candidate_seed_rt(candidate: Any) -> float:
         ):
             return float(value)
     raise ValueError("ownership candidate requires finite best_seed_rt or ms1_apex_rt")
+
+
+def _candidate_resolution_rt_window(
+    candidate: Any,
+    seed_rt: float,
+    config: AlignmentConfig,
+) -> tuple[float, float]:
+    ms1_apex = _finite_attr(candidate, "ms1_apex_rt")
+    peak_start = _finite_attr(candidate, "ms1_peak_rt_start")
+    peak_end = _finite_attr(candidate, "ms1_peak_rt_end")
+    if (
+        peak_start is not None
+        and peak_end is not None
+        and peak_start < peak_end
+        and (
+            _contains_rt(peak_start, peak_end, seed_rt)
+            or (ms1_apex is not None and _contains_rt(peak_start, peak_end, ms1_apex))
+        )
+    ):
+        return (
+            peak_start - _OWNER_PEAK_WINDOW_PADDING_MIN,
+            peak_end + _OWNER_PEAK_WINDOW_PADDING_MIN,
+        )
+
+    search_start = _finite_attr(candidate, "ms1_search_rt_min")
+    search_end = _finite_attr(candidate, "ms1_search_rt_max")
+    if (
+        search_start is not None
+        and search_end is not None
+        and search_start < search_end
+        and _contains_rt(search_start, search_end, seed_rt)
+    ):
+        return search_start, search_end
+
+    margin_min = config.max_rt_sec / 60.0
+    return seed_rt - margin_min, seed_rt + margin_min
+
+
+def _finite_attr(candidate: Any, field: str) -> float | None:
+    value = getattr(candidate, field, None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    value = float(value)
+    return value if math.isfinite(value) else None
+
+
+def _contains_rt(left: float, right: float, rt: float) -> bool:
+    return left <= rt <= right
 
 
 def _window_overlap_fraction(
