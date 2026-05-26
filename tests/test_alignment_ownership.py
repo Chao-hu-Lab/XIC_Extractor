@@ -298,6 +298,26 @@ def test_sample_local_owner_gets_region_audit_when_enabled() -> None:
     assert region_audit.selected_proposal_sources
 
 
+def test_sample_local_owner_region_audit_honors_candidate_allowlist() -> None:
+    candidates = (_candidate("s1#region", seed_rt=8.0),)
+    source = FakeXICSource(
+        rt=np.array([7.88, 7.94, 8.00, 8.06, 8.12], dtype=float),
+        intensity=np.array([0.0, 40.0, 120.0, 40.0, 0.0], dtype=float),
+    )
+
+    result = build_sample_local_owners(
+        candidates,
+        raw_sources={"s1": source},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        emit_region_audit=True,
+        region_audit_family_ids=frozenset({"other"}),
+    )
+
+    assert len(result.owners) == 1
+    assert result.owners[0].region_audit is None
+
+
 def test_custom_peak_resolver_without_region_audit_remains_supported() -> None:
     result = build_sample_local_owners(
         (_candidate("s1#custom", seed_rt=8.0),),

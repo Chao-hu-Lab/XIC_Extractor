@@ -45,9 +45,11 @@ def test_pipeline_records_alignment_timing_stages(
         "alignment.run_config",
         "alignment.read_batch_index",
         "alignment.read_candidates",
+        "alignment.audit_evidence_mode",
         "alignment.open_raw_sources",
         "alignment.build_owners",
         "alignment.cluster_owners",
+        "alignment.backfill_scope",
         "alignment.owner_backfill",
         "alignment.build_matrix",
         "alignment.claim_registry",
@@ -61,9 +63,20 @@ def test_pipeline_records_alignment_timing_stages(
         "raw_workers": 1,
         "raw_xic_batch_size": 1,
         "owner_backfill_xic_backend": "raw",
+        "owner_backfill_window_strategy": "exact",
+        "owner_backfill_superwindow_span_factor": 2,
         "preconsolidate_owner_families": False,
         "output_level": "machine",
+        "backfill_scope": "full-audit",
+        "requested_audit_evidence_mode": "auto",
+        "selected_family_count": 0,
         "drift_prior_source": "none",
+    }
+    assert records_by_stage["alignment.audit_evidence_mode"].metrics == {
+        "requested_audit_evidence_mode": "auto",
+        "audit_evidence_mode": "none",
+        "audit_evidence_mode_reason": "no_audit_destination",
+        "heavy_audit_enabled": False,
     }
     assert records_by_stage["alignment.read_candidates"].metrics["candidate_count"] == 1
     assert records_by_stage["alignment.open_raw_sources"].metrics["raw_count"] == 1
@@ -125,6 +138,16 @@ def test_pipeline_records_alignment_extract_xic_inner_timing(
     }
     assert build_record.metrics == expected_metrics
     assert backfill_record.metrics == expected_metrics
+
+    owner_backfill_record = records_by_stage_sample[("alignment.owner_backfill", "")]
+    assert owner_backfill_record.metrics == {
+        "extract_xic_count": 1,
+        "extract_xic_batch_count": 1,
+        "raw_chromatogram_call_count": 0,
+        "point_count": 3,
+        "mean_xic_per_raw_chromatogram_call": None,
+        "mean_xic_per_extract_batch": 1.0,
+    }
 
 
 def test_timed_raw_source_records_batch_calls() -> None:

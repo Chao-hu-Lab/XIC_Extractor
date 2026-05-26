@@ -12,6 +12,10 @@ from types import ModuleType, TracebackType
 from typing import Any
 
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.backfill_scope import (
+    REQUEST_PLAN_VERSION,
+    backfill_features_for_sample,
+)
 from xic_extractor.alignment.identity_coherence.models import (
     CandidateTrace,
     IdentityCoherenceTraceRequest,
@@ -36,6 +40,8 @@ from xic_extractor.alignment.ownership_models import (
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.xic_models import XICRequest, XICTrace
 
+ProcessProgressCallback = Callable[[Any], None]
+
 
 @dataclass(frozen=True)
 class OwnerBuildSampleJob:
@@ -48,6 +54,8 @@ class OwnerBuildSampleJob:
     peak_config: ExtractionConfig
     raw_xic_batch_size: int = 1
     emit_region_audit: bool = False
+    region_audit_family_ids: frozenset[str] | None = None
+    audit_evidence_mode: str = "full"
 
 
 @dataclass(frozen=True)
@@ -95,7 +103,14 @@ class OwnerBackfillSampleJob:
     peak_config: ExtractionConfig
     raw_xic_batch_size: int = 1
     owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw"
+    owner_backfill_window_strategy: str = "exact"
+    owner_backfill_superwindow_span_factor: int = 2
     emit_region_audit: bool = False
+    region_audit_family_ids: frozenset[str] | None = None
+    audit_evidence_mode: str = "full"
+    request_plan_id: str = REQUEST_PLAN_VERSION
+    backfill_scope: str = "full-audit"
+    feature_payload_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -192,7 +207,10 @@ def run_owner_build_process(
     max_workers: int,
     raw_xic_batch_size: int = 1,
     emit_region_audit: bool = False,
+    region_audit_family_ids: frozenset[str] | None = None,
+    audit_evidence_mode: str = "full",
     runner: Callable[..., list[OwnerBuildWorkerResult]] | None = None,
+    progress_callback: ProcessProgressCallback | None = None,
 ) -> OwnerBuildProcessOutput:
     if max_workers < 1:
         raise ValueError("max_workers must be >= 1")
@@ -220,15 +238,18 @@ def run_owner_build_process(
                 peak_config=peak_config,
                 raw_xic_batch_size=raw_xic_batch_size,
                 emit_region_audit=emit_region_audit,
+                region_audit_family_ids=region_audit_family_ids,
+                audit_evidence_mode=audit_evidence_mode,
             )
-            parent_results.append(
-                _owner_build_sample_result(
-                    sample_index=index,
-                    sample_stem=sample_stem,
-                    ownership=ownership,
-                    timing_stats=(),
-                )
+            result = _owner_build_sample_result(
+                sample_index=index,
+                sample_stem=sample_stem,
+                ownership=ownership,
+                timing_stats=(),
             )
+            if progress_callback is not None:
+                progress_callback(result)
+            parent_results.append(result)
             continue
         jobs.append(
             OwnerBuildSampleJob(
@@ -241,10 +262,21 @@ def run_owner_build_process(
                 peak_config=peak_config,
                 raw_xic_batch_size=raw_xic_batch_size,
                 emit_region_audit=emit_region_audit,
+                region_audit_family_ids=region_audit_family_ids,
+                audit_evidence_mode=audit_evidence_mode,
             )
         )
     active_runner = runner or run_owner_build_jobs
-    worker_results = active_runner(jobs, max_workers=max_workers) if jobs else []
+    if not jobs:
+        worker_results = []
+    elif progress_callback is None:
+        worker_results = active_runner(jobs, max_workers=max_workers)
+    else:
+        worker_results = active_runner(
+            jobs,
+            max_workers=max_workers,
+            progress_callback=progress_callback,
+        )
     return collect_owner_build_results((*parent_results, *worker_results))
 
 
@@ -315,6 +347,7 @@ def run_owner_build_jobs(
     *,
     max_workers: int,
     executor_factory: Callable[..., Any] | None = None,
+    progress_callback: ProcessProgressCallback | None = None,
 ) -> list[OwnerBuildWorkerResult]:
     return _run_process_jobs(
         jobs,
@@ -322,6 +355,7 @@ def run_owner_build_jobs(
         error_factory=_owner_build_worker_error,
         max_workers=max_workers,
         executor_factory=executor_factory,
+        progress_callback=progress_callback,
     )
 
 
@@ -341,6 +375,8 @@ def extract_owner_build_sample_job(
                 peak_config=job.peak_config,
                 raw_xic_batch_size=job.raw_xic_batch_size,
                 emit_region_audit=job.emit_region_audit,
+                region_audit_family_ids=job.region_audit_family_ids,
+                audit_evidence_mode=job.audit_evidence_mode,
             )
         return _owner_build_sample_result(
             sample_index=job.sample_index,
@@ -379,33 +415,70 @@ def run_owner_backfill_process(
     max_workers: int,
     raw_xic_batch_size: int = 1,
     owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw",
+    owner_backfill_window_strategy: str = "exact",
+    owner_backfill_superwindow_span_factor: int = 2,
+    backfill_scope: str = "full-audit",
     emit_region_audit: bool = False,
+    region_audit_family_ids: frozenset[str] | None = None,
+    audit_evidence_mode: str = "full",
     runner: Callable[..., list[OwnerBackfillWorkerResult]] | None = None,
+    progress_callback: ProcessProgressCallback | None = None,
 ) -> OwnerBackfillProcessOutput:
     if max_workers < 1:
         raise ValueError("max_workers must be >= 1")
     if raw_xic_batch_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
-    jobs = [
-        OwnerBackfillSampleJob(
-            sample_index=index,
+    if owner_backfill_superwindow_span_factor < 1:
+        raise ValueError("owner_backfill_superwindow_span_factor must be >= 1")
+    jobs: list[OwnerBackfillSampleJob] = []
+    raw_sample_stems = frozenset(raw_paths)
+    for index, sample_stem in enumerate(sample_order, start=1):
+        raw_path = raw_paths.get(sample_stem)
+        if raw_path is None:
+            continue
+        sample_features = backfill_features_for_sample(
+            features,
             sample_stem=sample_stem,
-            raw_path=raw_paths[sample_stem],
-            dll_dir=dll_dir,
-            features=features,
+            sample_order=sample_order,
+            raw_sample_stems=raw_sample_stems,
             alignment_config=alignment_config,
-            peak_config=peak_config,
-            raw_xic_batch_size=raw_xic_batch_size,
-            owner_backfill_xic_backend=owner_backfill_xic_backend,
-            emit_region_audit=emit_region_audit,
         )
-        for index, sample_stem in enumerate(sample_order, start=1)
-        if sample_stem in raw_paths
-    ]
+        if not sample_features:
+            continue
+        jobs.append(
+            OwnerBackfillSampleJob(
+                sample_index=index,
+                sample_stem=sample_stem,
+                raw_path=raw_path,
+                dll_dir=dll_dir,
+                features=sample_features,
+                alignment_config=alignment_config,
+                peak_config=peak_config,
+                raw_xic_batch_size=raw_xic_batch_size,
+                owner_backfill_xic_backend=owner_backfill_xic_backend,
+                owner_backfill_window_strategy=owner_backfill_window_strategy,
+                owner_backfill_superwindow_span_factor=(
+                    owner_backfill_superwindow_span_factor
+                ),
+                emit_region_audit=emit_region_audit,
+                region_audit_family_ids=region_audit_family_ids,
+                audit_evidence_mode=audit_evidence_mode,
+                request_plan_id=REQUEST_PLAN_VERSION,
+                backfill_scope=backfill_scope,
+                feature_payload_count=len(sample_features),
+            )
+        )
     if not jobs:
         return OwnerBackfillProcessOutput(cells=(), timing_stats=())
     active_runner = runner or run_owner_backfill_jobs
-    results = active_runner(jobs, max_workers=max_workers)
+    if progress_callback is None:
+        results = active_runner(jobs, max_workers=max_workers)
+    else:
+        results = active_runner(
+            jobs,
+            max_workers=max_workers,
+            progress_callback=progress_callback,
+        )
     return collect_owner_backfill_results(
         results,
         feature_order=tuple(feature.feature_family_id for feature in features),
@@ -457,6 +530,7 @@ def run_owner_backfill_jobs(
     *,
     max_workers: int,
     executor_factory: Callable[..., Any] | None = None,
+    progress_callback: ProcessProgressCallback | None = None,
 ) -> list[OwnerBackfillWorkerResult]:
     return _run_process_jobs(
         jobs,
@@ -464,6 +538,7 @@ def run_owner_backfill_jobs(
         error_factory=_owner_backfill_worker_error,
         max_workers=max_workers,
         executor_factory=executor_factory,
+        progress_callback=progress_callback,
     )
 
 
@@ -586,6 +661,7 @@ def _run_process_jobs(
     error_factory: Callable[[Any, Exception], Any],
     max_workers: int,
     executor_factory: Callable[..., Any] | None = None,
+    progress_callback: ProcessProgressCallback | None = None,
 ) -> list[Any]:
     pending_jobs = list(jobs)
     for job in pending_jobs:
@@ -612,7 +688,10 @@ def _run_process_jobs(
                 try:
                     future = executor.submit(worker, job)
                 except Exception as exc:
-                    results.append(error_factory(job, exc))
+                    result = error_factory(job, exc)
+                    results.append(result)
+                    if progress_callback is not None:
+                        progress_callback(result)
                     continue
                 future_to_job[future] = job
 
@@ -629,9 +708,12 @@ def _run_process_jobs(
                 job = future_to_job.pop(future)
                 _submit_until_capacity()
                 try:
-                    results.append(future.result())
+                    result = future.result()
                 except Exception as exc:
-                    results.append(error_factory(job, exc))
+                    result = error_factory(job, exc)
+                results.append(result)
+                if progress_callback is not None:
+                    progress_callback(result)
     return results
 
 
@@ -690,7 +772,13 @@ def extract_owner_backfill_sample_job(
                 alignment_config=job.alignment_config,
                 peak_config=job.peak_config,
                 raw_xic_batch_size=job.raw_xic_batch_size,
+                owner_backfill_window_strategy=job.owner_backfill_window_strategy,
+                owner_backfill_superwindow_span_factor=(
+                    job.owner_backfill_superwindow_span_factor
+                ),
                 emit_region_audit=job.emit_region_audit,
+                region_audit_family_ids=job.region_audit_family_ids,
+                audit_evidence_mode=job.audit_evidence_mode,
             )
         return OwnerBackfillSampleResult(
             sample_index=job.sample_index,
@@ -966,6 +1054,9 @@ class _TimedProcessRawSource:
 
     def scan_window_for_request(self, request):
         return self._source.scan_window_for_request(request)
+
+    def retention_time_for_scan(self, scan_number):
+        return self._source.retention_time_for_scan(scan_number)
 
 
 def _trace_point_count(trace: object) -> int:

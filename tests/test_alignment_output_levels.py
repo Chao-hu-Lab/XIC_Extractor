@@ -50,6 +50,14 @@ def test_validation_output_level_adds_owner_edge_evidence_tsv():
     )
 
 
+def test_validation_minimal_output_level_is_machine_gate_surface_only():
+    assert artifact_names_for_output_level("validation-minimal") == (
+        "alignment_matrix.tsv",
+        "alignment_review.tsv",
+        "alignment_cells.tsv",
+    )
+
+
 def test_parse_alignment_output_level_rejects_unknown_value():
     with pytest.raises(ValueError, match="output_level"):
         parse_alignment_output_level("everything")

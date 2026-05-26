@@ -68,6 +68,38 @@ def test_owner_backfill_region_audit_is_opt_in(monkeypatch) -> None:
     assert cells[0].region_shadow_status == ""
 
 
+def test_owner_backfill_audit_mode_none_skips_all_heavy_audit(monkeypatch) -> None:
+    source = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 50.0, 120.0, 50.0, 0.0]),
+    )
+    calls = {"region": 0}
+
+    def fail_region_audit(*args, **kwargs):
+        calls["region"] += 1
+        raise AssertionError("heavy audit must not run when audit_evidence_mode=none")
+
+    monkeypatch.setattr(
+        owner_backfill_module,
+        "build_peak_region_audit_summary",
+        fail_region_audit,
+    )
+
+    cells = build_owner_backfill_cells(
+        (_feature(),),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=replace(_peak_config(), baseline_audit_method="asls"),
+        emit_region_audit=True,
+        audit_evidence_mode="none",
+    )
+
+    assert len(cells) == 1
+    assert calls["region"] == 0
+    assert cells[0].region_candidate_count is None
+
+
 def test_owner_backfill_region_audit_receives_untargeted_trace_group(
     monkeypatch,
 ) -> None:
@@ -104,6 +136,45 @@ def test_owner_backfill_region_audit_receives_untargeted_trace_group(
     assert trace_group.context_id == "FAM000001"
     assert trace_group.primary_trace.sample_name == "sample-b"
     assert trace_group.primary_trace.ppm_tol == 20.0
+
+
+def test_owner_backfill_region_audit_honors_family_allowlist(monkeypatch) -> None:
+    source = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 50.0, 120.0, 50.0, 0.0]),
+    )
+    audited: list[str] = []
+
+    def fake_region_audit(*args, **kwargs):
+        audited.append(kwargs["trace_group"].context_id)
+        return PeakRegionAuditSummary(
+            candidate_count=1,
+            shadow_status="evaluated",
+        )
+
+    monkeypatch.setattr(
+        owner_backfill_module,
+        "build_peak_region_audit_summary",
+        fake_region_audit,
+    )
+
+    cells = build_owner_backfill_cells(
+        (
+            _feature(feature_family_id="FAM000001", mz=500.0),
+            _feature(feature_family_id="FAM000002", mz=501.0),
+        ),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=_peak_config(),
+        emit_region_audit=True,
+        region_audit_family_ids=frozenset({"FAM000002"}),
+    )
+
+    by_family = {cell.cluster_id: cell for cell in cells}
+    assert audited == ["FAM000002"]
+    assert by_family["FAM000001"].region_candidate_count is None
+    assert by_family["FAM000002"].region_candidate_count == 1
 
 
 def test_owner_backfill_skips_review_only_identity_conflicts() -> None:
@@ -633,6 +704,123 @@ def test_owner_backfill_falls_back_when_scan_window_unavailable() -> None:
     )
 
     assert source.batch_centers == [(8.5, 8.5), (10.5,)]
+
+
+def test_owner_backfill_superwindow_crops_to_original_request_windows() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class SuperWindowSource:
+        def __init__(self) -> None:
+            self.batches = []
+
+        def scan_window_for_request(self, request):
+            return (int(round(request.rt_min * 100)), int(round(request.rt_max * 100)))
+
+        def retention_time_for_scan(self, scan_number):
+            return scan_number / 100.0
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.batches.append(requests)
+            traces = []
+            for request in requests:
+                if request.mz == 500.0:
+                    traces.append(
+                        XICTrace.from_arrays(
+                            [7.60, 8.49, 8.50, 8.51, 9.40, 9.95, 10.10],
+                            [0.0, 60.0, 120.0, 60.0, 0.0, 1000.0, 0.0],
+                        )
+                    )
+                else:
+                    traces.append(
+                        XICTrace.from_arrays(
+                            [7.75, 8.40, 9.19, 9.20, 9.21, 10.10],
+                            [1000.0, 0.0, 65.0, 130.0, 65.0, 0.0],
+                        )
+                    )
+            return tuple(traces)
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source = SuperWindowSource()
+    feature_a = _feature(feature_family_id="FAM000001", mz=500.0, rt=8.5)
+    feature_b = _feature(feature_family_id="FAM000002", mz=510.0, rt=9.2)
+
+    cells = build_owner_backfill_cells(
+        (feature_a, feature_b),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=64,
+        owner_backfill_window_strategy="super-window",
+        owner_backfill_superwindow_span_factor=2,
+    )
+
+    assert len(source.batches) == 1
+    assert [(request.rt_min, request.rt_max) for request in source.batches[0]] == [
+        (7.5, 10.2),
+        (7.5, 10.2),
+    ]
+    assert [(cell.cluster_id, cell.apex_rt) for cell in cells] == [
+        ("FAM000001", 8.5),
+        ("FAM000002", 9.2),
+    ]
+    assert np.isclose(cells[0].backfill_request_rt_min, 7.5)
+    assert np.isclose(cells[0].backfill_request_rt_max, 9.5)
+    assert np.isclose(cells[1].backfill_request_rt_min, 8.2)
+    assert np.isclose(cells[1].backfill_request_rt_max, 10.2)
+
+
+def test_owner_backfill_superwindow_falls_back_to_exact_without_scan_rt_lookup() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class ScanOnlySource:
+        def __init__(self) -> None:
+            self.batches = []
+
+        def scan_window_for_request(self, request):
+            return (int(round(request.rt_min * 100)), int(round(request.rt_max * 100)))
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.batches.append(requests)
+            return tuple(
+                XICTrace.from_arrays(
+                    [
+                        (request.rt_min + request.rt_max) / 2.0 - 0.01,
+                        (request.rt_min + request.rt_max) / 2.0,
+                        (request.rt_min + request.rt_max) / 2.0 + 0.01,
+                    ],
+                    [0.0, 120.0, 0.0],
+                )
+                for request in requests
+            )
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source = ScanOnlySource()
+
+    build_owner_backfill_cells(
+        (
+            _feature(feature_family_id="FAM000001", mz=500.0, rt=8.5),
+            _feature(feature_family_id="FAM000002", mz=510.0, rt=9.2),
+        ),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=64,
+        owner_backfill_window_strategy="super-window",
+        owner_backfill_superwindow_span_factor=2,
+    )
+
+    assert [(request.rt_min, request.rt_max) for request in source.batches[0]] == [
+        (7.5, 9.5),
+        (8.2, 10.2),
+    ]
 
 
 class FakeBackfillSource:

@@ -524,6 +524,30 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
     assert status[0]["sample-b"] == "unchecked"
 
 
+def test_alignment_cells_tsv_can_emit_without_region_audit(tmp_path: Path) -> None:
+    from xic_extractor.alignment.tsv_writer import write_alignment_cells_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(),),
+        cells=(
+            _cell(
+                "sample-a",
+                "detected",
+                area=10.0,
+                candidate_id="sample-a#1",
+            ),
+        ),
+        sample_order=("sample-a",),
+    )
+
+    cells = _read_tsv(write_alignment_cells_tsv(tmp_path / "cells.tsv", matrix))
+    region_columns = [column for column in cells[0] if column.startswith("region_")]
+
+    assert cells[0]["status"] == "detected"
+    assert region_columns
+    assert all(cells[0][column] == "" for column in region_columns)
+
+
 def test_write_alignment_cell_integration_audit_tsv_is_sidecar(
     tmp_path: Path,
 ) -> None:

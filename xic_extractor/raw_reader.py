@@ -113,6 +113,9 @@ class RawFileHandle:
             int(self._raw_file.ScanNumberFromRetentionTime(request.rt_max)),
         )
 
+    def retention_time_for_scan(self, scan_number: int) -> float:
+        return float(self._raw_file.RetentionTimeFromScanNumber(scan_number))
+
     def iter_ms2_scans(self, rt_min: float, rt_max: float) -> Iterator[Ms2ScanEvent]:
         start_scan = self._raw_file.ScanNumberFromRetentionTime(rt_min)
         end_scan = self._raw_file.ScanNumberFromRetentionTime(rt_max)

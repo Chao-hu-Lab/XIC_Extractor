@@ -94,6 +94,9 @@ class TimedRawSource:
     def scan_window_for_request(self, request):
         return self._source.scan_window_for_request(request)
 
+    def retention_time_for_scan(self, scan_number):
+        return self._source.retention_time_for_scan(scan_number)
+
 
 def existing_raw_paths(
     *,

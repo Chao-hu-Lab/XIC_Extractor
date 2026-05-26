@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import cProfile
+import io
 import os
+import pstats
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from xic_extractor.alignment.backfill_scope import read_family_allowlist_tsv
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.drift_evidence import read_targeted_istd_drift_evidence
 from xic_extractor.alignment.pipeline import run_alignment
@@ -95,9 +99,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         sample_info = None
         targeted_istd_workbook = None
+    try:
+        selected_family_ids, selected_family_source = _resolve_selected_families(args)
+    except (OSError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
 
     timing_recorder = (
-        TimingRecorder("alignment") if args.timing_output is not None else None
+        TimingRecorder(
+            "alignment",
+            live_output_path=(
+                args.timing_live_output.resolve()
+                if args.timing_live_output is not None
+                else None
+            ),
+        )
+        if args.timing_output is not None or args.timing_live_output is not None
+        else None
     )
     timing_kwargs = (
         {"timing_recorder": timing_recorder}
@@ -114,44 +132,66 @@ def main(argv: Sequence[str] | None = None) -> int:
             if sample_info is not None and targeted_istd_workbook is not None
             else None
         )
-        outputs = run_alignment(
-            discovery_batch_index=discovery_batch_index,
-            raw_dir=raw_dir,
-            dll_dir=dll_dir,
-            output_dir=output_dir,
-            alignment_config=AlignmentConfig(
+        run_kwargs = {
+            "discovery_batch_index": discovery_batch_index,
+            "raw_dir": raw_dir,
+            "dll_dir": dll_dir,
+            "output_dir": output_dir,
+            "alignment_config": AlignmentConfig(
                 owner_backfill_min_detected_samples=(
                     args.owner_backfill_min_detected_samples
                 ),
             ),
-            peak_config=_peak_config(
+            "peak_config": _peak_config(
                 raw_dir,
                 dll_dir,
                 output_dir,
                 _alignment_production_resolver_mode(args.resolver_mode),
                 baseline_audit_method=_baseline_audit_method(args),
             ),
-            output_level=args.output_level,
-            emit_alignment_cells=args.emit_alignment_cells,
-            emit_alignment_status_matrix=args.emit_alignment_status_matrix,
-            emit_alignment_integration_audit=args.emit_alignment_integration_audit,
-            emit_alignment_backfill_seed_audit=(
+            "output_level": args.output_level,
+            "emit_alignment_cells": args.emit_alignment_cells,
+            "emit_alignment_status_matrix": args.emit_alignment_status_matrix,
+            "emit_alignment_integration_audit": args.emit_alignment_integration_audit,
+            "emit_alignment_backfill_seed_audit": (
                 args.emit_alignment_backfill_seed_audit
             ),
-            raw_workers=raw_workers,
-            raw_xic_batch_size=raw_xic_batch_size,
-            owner_backfill_xic_backend=_owner_backfill_xic_backend(
+            "raw_workers": raw_workers,
+            "raw_xic_batch_size": raw_xic_batch_size,
+            "owner_backfill_xic_backend": _owner_backfill_xic_backend(
                 args.owner_backfill_xic_backend
             ),
-            preconsolidate_owner_families=args.preconsolidate_owner_families,
-            emit_identity_coherence_diagnostic=(
+            "owner_backfill_window_strategy": args.owner_backfill_window_strategy,
+            "owner_backfill_superwindow_span_factor": (
+                args.owner_backfill_superwindow_span_factor
+            ),
+            "preconsolidate_owner_families": args.preconsolidate_owner_families,
+            "emit_identity_coherence_diagnostic": (
                 args.emit_identity_coherence_diagnostic
             ),
-            identity_coherence_output_dir=identity_coherence_output_dir,
-            identity_coherence_controls_manifest=identity_coherence_controls_manifest,
-            drift_lookup=drift_lookup,
+            "identity_coherence_output_dir": identity_coherence_output_dir,
+            "identity_coherence_controls_manifest": (
+                identity_coherence_controls_manifest
+            ),
+            "drift_lookup": drift_lookup,
+            "backfill_scope": args.backfill_scope,
+            "audit_evidence_mode": args.audit_evidence_mode,
+            "selected_family_ids": selected_family_ids,
+            "selected_family_source": selected_family_source,
             **timing_kwargs,
-        )
+        }
+        profiler = cProfile.Profile() if args.profile == "cprofile" else None
+        try:
+            if profiler is None:
+                outputs = run_alignment(**run_kwargs)
+            else:
+                outputs = profiler.runcall(run_alignment, **run_kwargs)
+        finally:
+            if profiler is not None:
+                _write_cprofile_outputs(
+                    profiler,
+                    _profile_output_dir(args, output_dir),
+                )
     except (
         AlignmentProcessExecutionError,
         RawReaderError,
@@ -184,15 +224,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Ambiguous MS1 owners TSV: {outputs.ambiguous_owners_tsv}")
     if outputs.edge_evidence_tsv is not None:
         print(f"Owner edge evidence TSV: {outputs.edge_evidence_tsv}")
+    if outputs.skipped_evidence_ledger_tsv is not None:
+        print(f"Skipped evidence ledger TSV: {outputs.skipped_evidence_ledger_tsv}")
+    if outputs.run_metadata_json is not None:
+        print(f"Alignment run metadata JSON: {outputs.run_metadata_json}")
     if outputs.identity_coherence_output_dir is not None:
         print(
             "Identity coherence diagnostic: "
             f"{outputs.identity_coherence_output_dir}"
         )
     if timing_recorder is not None:
-        timing_path = args.timing_output.resolve()
-        timing_recorder.write_json(timing_path)
-        print(f"Timing JSON: {timing_path}")
+        if args.timing_live_output is not None:
+            print(f"Timing live JSON: {args.timing_live_output.resolve()}")
+        if args.timing_output is not None:
+            timing_path = args.timing_output.resolve()
+            timing_recorder.write_json(timing_path)
+            print(f"Timing JSON: {timing_path}")
     return 0
 
 
@@ -228,6 +275,25 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--timing-output",
         type=Path,
         help="Optional JSON path for alignment stage timing.",
+    )
+    parser.add_argument(
+        "--timing-live-output",
+        type=Path,
+        help=(
+            "Optional JSON path updated after each timing record. Use this as "
+            "a timeout-safe heartbeat for long 85RAW validation runs."
+        ),
+    )
+    parser.add_argument(
+        "--profile",
+        choices=("off", "cprofile"),
+        default="off",
+        help="Optional alignment micro-profiler. cprofile writes sidecar files.",
+    )
+    parser.add_argument(
+        "--profile-output-dir",
+        type=Path,
+        help="Output directory for --profile cprofile sidecar files.",
     )
     parser.add_argument(
         "--raw-workers",
@@ -279,11 +345,74 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--owner-backfill-window-strategy",
+        choices=("exact", "super-window"),
+        default="exact",
+        help=(
+            "Owner-backfill RAW window strategy. Default exact preserves the "
+            "current request shape. super-window is an opt-in validation "
+            "optimization that merges overlapping scan windows and crops each "
+            "trace back to the original request window before peak picking."
+        ),
+    )
+    parser.add_argument(
+        "--owner-backfill-superwindow-span-factor",
+        type=_positive_int,
+        default=2,
+        help=(
+            "Maximum merged scan span as a multiple of the largest original "
+            "request span when --owner-backfill-window-strategy super-window "
+            "is enabled. Default 2."
+        ),
+    )
+    parser.add_argument(
         "--preconsolidate-owner-families",
         action="store_true",
         help=(
             "Experimental algorithm mode: merge identity-compatible "
             "single-sample owner families before owner-centered backfill."
+        ),
+    )
+    parser.add_argument(
+        "--backfill-scope",
+        choices=("full-audit", "production-equivalent", "selected-families"),
+        default="full-audit",
+        help=(
+            "Owner-backfill evidence scope. Default full-audit preserves legacy "
+            "audit output. production-equivalent skips only rows proven unable "
+            "to affect the primary matrix. selected-families is diagnostic-only."
+        ),
+    )
+    parser.add_argument(
+        "--audit-evidence-mode",
+        choices=("auto", "none", "full", "selected"),
+        default="auto",
+        help=(
+            "Controls heavy audit evidence computation independently from artifact "
+            "emission. auto preserves legacy full-audit outputs but keeps "
+            "production-equivalent validation slim unless an explicit audit "
+            "destination is requested."
+        ),
+    )
+    parser.add_argument(
+        "--backfill-family-list-tsv",
+        type=Path,
+        help=(
+            "TSV allowlist for --backfill-scope selected-families. The default "
+            "family id column is feature_family_id."
+        ),
+    )
+    parser.add_argument(
+        "--backfill-family-id-column",
+        default="feature_family_id",
+        help="Family id column in --backfill-family-list-tsv.",
+    )
+    parser.add_argument(
+        "--backfill-family-id",
+        action="append",
+        help=(
+            "Family id to include in --backfill-scope selected-families. May be "
+            "specified multiple times."
         ),
     )
     parser.add_argument(
@@ -339,7 +468,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-level",
-        choices=("production", "machine", "debug", "validation"),
+        choices=(
+            "production",
+            "machine",
+            "debug",
+            "validation",
+            "validation-minimal",
+        ),
         default="machine",
         help=(
             "Alignment artifact level. Default remains machine until "
@@ -373,6 +508,43 @@ def _resolve_raw_execution_settings(args: argparse.Namespace) -> tuple[int, int]
     return raw_workers, raw_xic_batch_size
 
 
+def _resolve_selected_families(args: argparse.Namespace) -> tuple[frozenset[str], str]:
+    inline_ids = frozenset(
+        family_id.strip()
+        for family_id in (args.backfill_family_id or ())
+        if family_id.strip()
+    )
+    if args.backfill_scope != "selected-families":
+        if args.backfill_family_list_tsv is not None or inline_ids:
+            raise ValueError(
+                "backfill family allowlist flags require "
+                "--backfill-scope selected-families"
+            )
+        return frozenset(), ""
+
+    selected = set(inline_ids)
+    sources: list[str] = []
+    if args.backfill_family_list_tsv is not None:
+        path = args.backfill_family_list_tsv.resolve()
+        if not path.is_file():
+            raise ValueError(f"{path}: backfill family list TSV does not exist")
+        sources.append(f"tsv:{path}")
+        selected.update(
+            read_family_allowlist_tsv(
+                path,
+                family_id_column=args.backfill_family_id_column,
+            )
+        )
+    if inline_ids:
+        sources.append("inline:" + ",".join(sorted(inline_ids)))
+    if not selected:
+        raise ValueError(
+            "selected-families backfill scope requires --backfill-family-id "
+            "or --backfill-family-list-tsv"
+        )
+    return frozenset(selected), ";".join(sources)
+
+
 def _positive_int(value: str) -> int:
     try:
         parsed = int(value)
@@ -381,6 +553,25 @@ def _positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("value must be an integer >= 1")
     return parsed
+
+
+def _profile_output_dir(args: argparse.Namespace, output_dir: Path) -> Path:
+    if args.profile_output_dir is not None:
+        return args.profile_output_dir.resolve()
+    return output_dir / "profile"
+
+
+def _write_cprofile_outputs(profiler: cProfile.Profile, output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    profile_path = output_dir / "profile.prof"
+    top_path = output_dir / "profile_top.txt"
+    profiler.dump_stats(str(profile_path))
+    stream = io.StringIO()
+    stats = pstats.Stats(profiler, stream=stream).sort_stats("cumulative")
+    stats.print_stats(50)
+    top_path.write_text(stream.getvalue(), encoding="utf-8")
+    print(f"cProfile binary: {profile_path}")
+    print(f"cProfile top functions: {top_path}")
 
 
 def _owner_backfill_xic_backend(value: str) -> str:

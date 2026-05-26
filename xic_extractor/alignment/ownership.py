@@ -88,10 +88,13 @@ def build_sample_local_owners(
     peak_resolver: PeakResolver | None = None,
     raw_xic_batch_size: int = 1,
     emit_region_audit: bool = False,
+    region_audit_family_ids: frozenset[str] | None = None,
+    audit_evidence_mode: str = "full",
 ) -> OwnershipBuildResult:
     if raw_xic_batch_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
     active_peak_resolver = peak_resolver or _default_peak_resolver
+    effective_emit_region_audit = emit_region_audit and audit_evidence_mode != "none"
     outcomes = _resolve_candidates(
         candidates,
         raw_sources,
@@ -99,7 +102,8 @@ def build_sample_local_owners(
         peak_config,
         active_peak_resolver,
         raw_xic_batch_size,
-        emit_region_audit,
+        effective_emit_region_audit,
+        region_audit_family_ids,
     )
     resolved = tuple(
         outcome.resolved for outcome in outcomes if outcome.resolved is not None
@@ -137,11 +141,12 @@ def _resolve_candidates(
     peak_resolver: PeakResolver,
     raw_xic_batch_size: int,
     emit_region_audit: bool,
+    region_audit_family_ids: frozenset[str] | None,
 ) -> tuple[_ResolutionOutcome, ...]:
     outcomes: list[_ResolutionOutcome | None] = [None] * len(candidates)
     requests_by_sample: dict[
         str,
-        list[tuple[int, Any, float, XICRequest]],
+        list[tuple[int, Any, float, XICRequest, bool]],
     ] = defaultdict(list)
     for index, candidate in enumerate(candidates):
         sample_stem = str(candidate.sample_stem)
@@ -166,13 +171,18 @@ def _resolve_candidates(
                     rt_max=rt_max,
                     ppm_tol=alignment_config.preferred_ppm,
                 ),
+                _emit_region_audit_for_candidate(
+                    emit_region_audit,
+                    candidate,
+                    region_audit_family_ids,
+                ),
             )
         )
     for sample_stem, sample_requests in requests_by_sample.items():
         source = raw_sources[sample_stem]
         for chunk in _chunked(tuple(sample_requests), raw_xic_batch_size):
             traces = _extract_many(source, tuple(item[3] for item in chunk))
-            for (index, candidate, seed_rt, _request), trace in zip(
+            for (index, candidate, seed_rt, _request, item_emit_region_audit), trace in zip(
                 chunk,
                 traces,
                 strict=True,
@@ -184,7 +194,7 @@ def _resolve_candidates(
                     peak_config,
                     peak_resolver,
                     ppm_tol=_request.ppm_tol,
-                    emit_region_audit=emit_region_audit,
+                    emit_region_audit=item_emit_region_audit,
                 )
     return tuple(outcome for outcome in outcomes if outcome is not None)
 
@@ -196,6 +206,7 @@ def _resolve_candidate(
     peak_config: ExtractionConfig,
     peak_resolver: PeakResolver,
     emit_region_audit: bool = False,
+    region_audit_family_ids: frozenset[str] | None = None,
 ) -> _ResolutionOutcome:
     sample_stem = str(candidate.sample_stem)
     source = raw_sources.get(sample_stem)
@@ -222,7 +233,11 @@ def _resolve_candidate(
         seed_rt,
         peak_resolver,
         ppm_tol=alignment_config.preferred_ppm,
-        emit_region_audit=emit_region_audit,
+        emit_region_audit=_emit_region_audit_for_candidate(
+            emit_region_audit,
+            candidate,
+            region_audit_family_ids,
+        ),
     )
     if peak is None:
         return _unresolved_outcome(candidate, "peak_not_found")
@@ -343,6 +358,22 @@ def _unresolved_outcome(candidate: Any, reason: str) -> _ResolutionOutcome:
             reason,
         ),
     )
+
+
+def _emit_region_audit_for_candidate(
+    emit_region_audit: bool,
+    candidate: Any,
+    region_audit_family_ids: frozenset[str] | None,
+) -> bool:
+    if not emit_region_audit:
+        return False
+    if region_audit_family_ids is None:
+        return True
+    candidate_ids = {
+        str(getattr(candidate, "feature_family_id", "")),
+        str(getattr(candidate, "candidate_id", "")),
+    }
+    return bool(region_audit_family_ids.intersection(candidate_ids))
 
 
 def _default_peak_resolver(

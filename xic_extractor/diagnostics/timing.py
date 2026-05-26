@@ -39,11 +39,13 @@ class TimingRecorder:
         *,
         run_id: str | None = None,
         enabled: bool = True,
+        live_output_path: Path | None = None,
         timer: Callable[[], float] = perf_counter,
     ) -> None:
         self.pipeline = pipeline
         self.run_id = run_id or _default_run_id()
         self.enabled = enabled
+        self.live_output_path = live_output_path
         self._timer = timer
         self._records: list[TimingRecord] = []
 
@@ -70,7 +72,7 @@ class TimingRecorder:
     ) -> None:
         if not self.enabled:
             return
-        self._records.append(
+        self._append_record(
             TimingRecord(
                 stage=stage,
                 elapsed_sec=max(0.0, elapsed_sec),
@@ -97,7 +99,7 @@ class TimingRecorder:
             yield scope
         finally:
             elapsed = self._timer() - start
-            self._records.append(
+            self._append_record(
                 TimingRecord(
                     stage=stage,
                     elapsed_sec=max(0.0, elapsed),
@@ -108,16 +110,23 @@ class TimingRecorder:
 
     def write_json(self, path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
+        path.write_text(
+            json.dumps(self.to_json_dict(), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        return path
+
+    def to_json_dict(self) -> dict[str, object]:
+        return {
             "run_id": self.run_id,
             "pipeline": self.pipeline,
             "records": [record.to_json_dict() for record in self._records],
         }
-        path.write_text(
-            json.dumps(payload, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        return path
+
+    def _append_record(self, record: TimingRecord) -> None:
+        self._records.append(record)
+        if self.live_output_path is not None:
+            self.write_json(self.live_output_path)
 
 
 def _clean_metrics(metrics: Mapping[str, object]) -> dict[str, JsonMetric]:
