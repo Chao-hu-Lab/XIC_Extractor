@@ -74,6 +74,14 @@ Read in this order:
    - never mutates production RT or alignment until a separate promotion spec
    - future diagnostic trigger only; not scheduled by the current P3 evidence
      and not required for P2b
+8. [P7 — Evidence chain cost control](2026-05-25-peak-pipeline-evidence-chain-cost-control-spec.md)
+   - added after the 85RAW P2b follow-up was operationally blocked by
+     full-evidence alignment cost
+   - keeps RAW as first-class input and preserves production result
+     equivalence
+   - pushes cheap primary/audit eligibility before owner backfill and gates
+     audit-only evidence by destination and selected scope
+   - prerequisite for rerunning 85RAW P2b efficiently; not a Cleanup C-spec
 
 The production-facing Phase 1 order is P1 -> P2 -> P4/P5 -> P2b. P3 is no
 longer a non-negotiable sequencing dependency because the completed audit showed
@@ -83,6 +91,10 @@ after P2 shadow evidence, P4 uncertainty provenance, baseline truth, and
 RT/boundary evidence. The old strict RSD gate is `NO-GO`, but the
 RT/boundary-first revised 8RAW gate records `GO_FOR_PRODUCTION_CANDIDATE`. P6
 is a future RT-shadow diagnostic only; the current closeout does not trigger it.
+P7 is the performance/evidence-scope prerequisite for any practical 85RAW P2b
+rerun. It is not a scientific gate by itself; it prevents audit-only evidence
+from consuming RAW/XIC resources before cheap production/audit predicates have
+split the work.
 
 Phase 1 closeout note:
 [2026-05-25 Phase 1 modernization closeout](../notes/2026-05-25-phase1-modernization-closeout-note.md).
@@ -168,6 +180,7 @@ P1 resolver default switch
   -> P4 audit field correction
   -> P5 CWT evidence honesty
   -> P2b AsLS production promotion      (only after P2/P4/internal evidence)
+  -> P7 evidence-chain cost control     (before practical 85RAW P2b rerun)
 
 External/reference track:
 P3 third-party shadow comparison        (diagnostic_only; non-blocking)
@@ -230,6 +243,12 @@ assume the omission is an oversight.
   existing TSV schema to migrate
 - P3 retained local diagnostic output artifacts only; no change to existing
   TSVs. P6, if later run, adds new diagnostic files only.
+- P7 adds a sidecar skipped-evidence ledger for optimized evidence-chain runs,
+  such as `skipped_evidence_ledger.tsv`, plus timing/economics comparison
+  artifacts under `output/phase1_p7_evidence_chain_cost_control/`. It does not
+  silently remove existing audit TSV schemas: `full-audit` keeps legacy review
+  surfaces available, while `production-equivalent` records intentionally
+  skipped non-primary evidence in the sidecar ledger.
 
 Reviewers and downstream consumers should know which spec touches which TSV
 before agreeing to land any of them.
@@ -243,6 +262,9 @@ In scope for this modernization:
 - optional AsLS production promotion (P2b)
 - audit field formula correctness (P4)
 - audit field honesty about evidence provenance (P5)
+- evidence-chain cost control for practical 85RAW P2b reruns (P7), including
+  `--backfill-scope`, destination-gated audit evidence, selected-family
+  diagnostic scope, and the skipped-evidence ledger sidecar
 - optional external-reference audit findings from third-party tools (P3
   findings only) and pyOpenMS map alignment (P6, future trigger only)
 

@@ -6,6 +6,8 @@ to influence implementation choices.
 
 For directory layout, file placement rules, and scratch directory hygiene, see
 [`docs/project-layout.md`](docs/project-layout.md).
+For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
+[`docs/agent-parameter-settings.md`](docs/agent-parameter-settings.md).
 
 ## Human Communication And Review Surfaces
 
@@ -33,6 +35,11 @@ For directory layout, file placement rules, and scratch directory hygiene, see
 - Before non-trivial edits, confirm the intended worktree, branch, and dirty diff
   scope. Classify unrelated dirty files, and do not stage, rewrite, or revert
   them unless explicitly requested.
+- Before running commands that depend on Python environment, Thermo RAW files,
+  DLLs, or common validation data, read `docs/agent-parameter-settings.md` and
+  use its documented paths and runners. Task-specific artifacts belong in the
+  active spec, plan, validation note, or output index, not in the long-lived
+  agent settings file.
 - Keep outputs organized under task-specific `output/` or `docs/superpowers/`
   paths. Do not drop diagnostic graphs, TSVs, notebooks, or one-off artifacts in
   the repo root. Every new diagnostic output group should have a summary or
@@ -44,6 +51,13 @@ For directory layout, file placement rules, and scratch directory hygiene, see
   validation used synthetic tests only, 8-RAW, 85-RAW, targeted benchmark, or
   manual EIC review. If real-data validation was skipped, say why and mark the
   remaining risk.
+- For alignment validation or downstream handoff, prefer
+  `--output-level validation-minimal`: `alignment_matrix.tsv` is the downstream
+  correction/statistics contract, while targeted benchmark diagnostics also need
+  `alignment_review.tsv` and `alignment_cells.tsv`. Do not generate `.xlsx`,
+  HTML, owner-edge, status-matrix, event-owner, or ambiguous-owner artifacts for
+  large validation runs unless a human review or debug task explicitly needs
+  them.
 - Plans should separate `Now`, `Later`, and `Not in scope`, with checkpoint-level
   acceptance criteria and stop conditions. Do not let a plan imply production
   changes when the current phase is only audit, shadow, or validation.
@@ -133,6 +147,13 @@ For directory layout, file placement rules, and scratch directory hygiene, see
 - Treat `tools/diagnostics/` as maintained product code. Diagnostic CLIs should
   parse, validate, and orchestrate only; reusable loading, classification,
   models, summaries, plotting, and writers belong in focused modules.
+- Before any PR that adds, removes, or renames a CLI entry-point in
+  `tools/diagnostics/`, read `tools/diagnostics/INDEX.md` and cite which
+  existing entries were considered. Every PR that changes the set of
+  entry-points must update `INDEX.md` in the same diff (Purpose, Topic
+  group, Originating spec/plan for new entries; tombstone for retired
+  ones). Full lifecycle rules live in
+  `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`.
 - Diagnostic writers render TSV/JSON/HTML/XLSX/plots only. They must not
   recompute domain evidence or re-scan RAW files; pass typed summaries from the
   code path where trace context already exists.
