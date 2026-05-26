@@ -88,6 +88,7 @@ def _run_verdict_section(report: Mapping[str, Any]) -> str:
                 ("Matrix Rows", run["matrix_row_count"], "neutral"),
                 ("Samples", run["sample_count"], "neutral"),
                 ("ISTD Pass", run["istd_pass_count"], "pass"),
+                ("ISTD Warn", run["istd_warning_count"], "warn"),
                 ("ISTD Known", run["istd_known_count"], "warn"),
                 ("ISTD Fail", run["istd_fail_count"], "fail"),
             )
@@ -123,6 +124,7 @@ def _run_verdict_section(report: Mapping[str, Any]) -> str:
                 ("provisional_discovery", identity.get("provisional_discovery", 0)),
                 ("audit_family", identity.get("audit_family", 0)),
                 ("ISTD Pass", run["istd_pass_count"]),
+                ("ISTD Warn", run["istd_warning_count"]),
                 ("ISTD Known", run["istd_known_count"]),
                 ("ISTD Fail", run["istd_fail_count"]),
                 ("Runtime", _runtime_text(runtime)),

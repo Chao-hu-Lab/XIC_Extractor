@@ -70,6 +70,7 @@ def build_report(
             "sample_count": _sample_count(matrix.fieldnames),
             "identity_counts": cleanliness["identity_counts"],
             "istd_pass_count": istd["pass_count"],
+            "istd_warning_count": istd["warning_count"],
             "istd_fail_count": istd["fail_count"],
             "istd_known_count": istd["known_count"],
             "runtime": timing["summary"],
@@ -95,6 +96,7 @@ def _verdict(
         or not economics["provided"]
         or not timing["provided"]
         or istd["known_count"]
+        or istd["warning_count"]
         or cleanliness["warning_count"]
     ):
         return "WARN"
@@ -163,6 +165,7 @@ def _istd_benchmark(
         raise ValueError(f"{path}: summaries must be a list")
     rows: list[dict[str, Any]] = []
     pass_count = 0
+    warning_count = 0
     known_count = 0
     unhandled: list[dict[str, Any]] = []
     for item in summaries:
@@ -181,6 +184,8 @@ def _istd_benchmark(
             pass_count += 1
         elif known:
             known_count += 1
+        elif active and status == "WARN":
+            warning_count += 1
         elif active and status != "PASS":
             unhandled.append(
                 {
@@ -209,6 +214,7 @@ def _istd_benchmark(
         "provided": True,
         "source": str(path),
         "pass_count": pass_count,
+        "warning_count": warning_count,
         "known_count": known_count,
         "fail_count": len(unhandled),
         "unhandled_failures": unhandled,
@@ -321,6 +327,7 @@ def _not_provided(reason: str) -> dict[str, Any]:
         "provided": False,
         "reason": reason,
         "pass_count": 0,
+        "warning_count": 0,
         "known_count": 0,
         "fail_count": 0,
         "unhandled_failures": [],

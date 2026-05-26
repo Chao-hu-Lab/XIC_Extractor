@@ -71,15 +71,16 @@ def _best_alignment_match(
         if ppm <= match_ppm and rt_delta <= match_rt_min:
             candidates.append(
                 (
-                    ppm + rt_delta,
                     _primary_consolidation_rank(cell),
+                    rt_delta,
+                    ppm,
                     cell.family_id,
                     cell,
                 )
             )
     if not candidates:
         return None
-    return min(candidates, key=lambda item: item[:3])[3]
+    return min(candidates, key=lambda item: item[:4])[4]
 
 
 def _primary_consolidation_rank(cell: AlignmentCell) -> int:
