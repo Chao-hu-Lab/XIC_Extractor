@@ -78,6 +78,11 @@ def test_peak_audit_appender_reuses_one_cwt_audit_result(
     assert boundary_rows
     assert candidate_rows[0]["area_baseline_corrected"] != ""
     assert candidate_rows[0]["area_uncertainty"] != ""
+    assert candidate_rows[0]["area_uncertainty_formula_version"] == (
+        "baseline_residual_mad_v1"
+    )
+    assert candidate_rows[0]["baseline_residual_mad"] != ""
+    assert candidate_rows[0]["area_uncertainty_noise_source"] != ""
 
 
 def test_peak_audit_appender_uses_shared_trace_group_for_audit_rows(

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-import csv
 from pathlib import Path
 
 from openpyxl import load_workbook
 
+from tools.diagnostics.diagnostic_io import (
+    read_tsv_required,
+    required_indexes as _required_indexes,
+    text_value as _text,
+)
 from tools.diagnostics.cwt_peak_candidate_audit_models import (
     _REQUIRED_COLUMNS,
     CwtCandidateRow,
@@ -12,15 +16,8 @@ from tools.diagnostics.cwt_peak_candidate_audit_models import (
 
 
 def _read_peak_candidates(path: Path) -> tuple[CwtCandidateRow, ...]:
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle, delimiter="\t")
-        fieldnames = tuple(reader.fieldnames or ())
-        missing = [column for column in _REQUIRED_COLUMNS if column not in fieldnames]
-        if missing:
-            raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
-        return tuple(
-            _row_from_dict(path, index, row) for index, row in enumerate(reader, 2)
-        )
+    rows = read_tsv_required(path, _REQUIRED_COLUMNS)
+    return tuple(_row_from_dict(path, index, row) for index, row in enumerate(rows, 2))
 
 
 def _read_target_mz(path: Path) -> dict[str, float]:
@@ -47,22 +44,6 @@ def _read_target_mz(path: Path) -> dict[str, float]:
         return target_mz
     finally:
         workbook.close()
-
-
-def _required_indexes(
-    header: object,
-    required: tuple[str, ...],
-    sheet_name: str,
-) -> dict[str, int]:
-    if not isinstance(header, tuple):
-        raise ValueError(f"{sheet_name}: header row is invalid")
-    indexes = {_text(value): index for index, value in enumerate(header)}
-    missing = [column for column in required if column not in indexes]
-    if missing:
-        raise ValueError(
-            f"{sheet_name}: missing required columns: {', '.join(missing)}"
-        )
-    return {column: indexes[column] for column in required}
 
 
 def _row_from_dict(
@@ -93,9 +74,3 @@ def _float_value(path: Path, row_number: int, column: str, value: str) -> float:
     except ValueError as exc:
         message = f"{path}: row {row_number} invalid {column}: {value!r}"
         raise ValueError(message) from exc
-
-
-def _text(value: object) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()

@@ -10,13 +10,22 @@ from types import SimpleNamespace
 from typing import Any
 
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.family_compatibility import (
+    compatible_primary_family,
+    family_center_mz,
+    family_center_rt,
+    family_observed_loss,
+    family_product_mz,
+    loose_compatible_primary_family,
+    ppm,
+)
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.output_rows import cells_by_cluster, row_id
 
 _PRESENT_STATUSES = {"detected", "rescued"}
 _DUPLICATE_WINNER_RE = re.compile(r"(?:^|;\s*)winner=([^;]+)")
 _ORIGINAL_STATUS_RE = re.compile(r"(?:^|;\s*)original_status=([^;]+)")
-_PRODUCT_PRECURSOR_SHIFT_TOLERANCE_DA = 0.02
+_SAME_APEX_DETECTED_PREFERENCE_SEC = 1.0
 
 
 @dataclass(frozen=True)
@@ -300,7 +309,7 @@ def _selected_observations_by_sample(
     for observation in observations:
         by_sample[observation.cell.sample_stem].append(observation)
     return {
-        sample_stem: min(items, key=lambda item: _observation_sort_key(item, center_rt))
+        sample_stem: _selected_observation(items, center_rt)
         for sample_stem, items in by_sample.items()
     }
 
@@ -507,6 +516,76 @@ def _observation_sort_key(
     )
 
 
+def _selected_observation(
+    observations: list[_Observation],
+    center_rt: float,
+) -> _Observation:
+    same_apex_detected_projection = _same_apex_detected_projection(observations)
+    if same_apex_detected_projection:
+        return min(
+            same_apex_detected_projection,
+            key=lambda item: _detected_preference_observation_sort_key(
+                item,
+                center_rt,
+            ),
+        )
+    return min(observations, key=lambda item: _observation_sort_key(item, center_rt))
+
+
+def _same_apex_detected_projection(
+    observations: list[_Observation],
+) -> list[_Observation]:
+    detected_apexes = [
+        observation.cell.apex_rt
+        for observation in observations
+        if observation.original_status == "detected"
+        and observation.cell.apex_rt is not None
+        and _finite(observation.cell.apex_rt)
+    ]
+    if not detected_apexes:
+        return []
+    projected = [
+        observation
+        for observation in observations
+        if observation.original_status != "detected"
+        and observation.cell.apex_rt is not None
+        and _finite(observation.cell.apex_rt)
+        and any(
+            abs(observation.cell.apex_rt - detected_apex) * 60.0
+            <= _SAME_APEX_DETECTED_PREFERENCE_SEC
+            for detected_apex in detected_apexes
+        )
+    ]
+    if not projected:
+        return []
+    return [
+        observation
+        for observation in observations
+        if observation.cell.apex_rt is not None
+        and _finite(observation.cell.apex_rt)
+        and any(
+            abs(observation.cell.apex_rt - detected_apex) * 60.0
+            <= _SAME_APEX_DETECTED_PREFERENCE_SEC
+            for detected_apex in detected_apexes
+        )
+    ]
+
+
+def _detected_preference_observation_sort_key(
+    observation: _Observation,
+    center_rt: float,
+) -> tuple[object, ...]:
+    cell = observation.cell
+    area = float(cell.area or 0.0)
+    return (
+        0 if observation.original_status == "detected" else 1,
+        -area,
+        abs((cell.apex_rt or center_rt) - center_rt),
+        _trace_quality_rank(cell.trace_quality),
+        observation.source_cluster_id,
+    )
+
+
 def _current_present_count(cells: tuple[AlignedCell, ...]) -> int:
     return sum(1 for cell in cells if cell.status in _PRESENT_STATUSES)
 
@@ -553,28 +632,7 @@ def _compatible_primary_family(
     right: Any,
     config: AlignmentConfig,
 ) -> bool:
-    if bool(getattr(left, "review_only", False)) or bool(
-        getattr(right, "review_only", False),
-    ):
-        return False
-    if str(left.neutral_loss_tag) != str(right.neutral_loss_tag):
-        return False
-    if _ppm(_family_center_mz(left), _family_center_mz(right)) > config.max_ppm:
-        return False
-    if (
-        abs(_family_center_rt(left) - _family_center_rt(right)) * 60.0
-        > config.identity_rt_candidate_window_sec
-    ):
-        return False
-    if (
-        _ppm(_family_product_mz(left), _family_product_mz(right))
-        > config.product_mz_tolerance_ppm
-    ):
-        return False
-    return (
-        _ppm(_family_observed_loss(left), _family_observed_loss(right))
-        <= config.observed_loss_tolerance_ppm
-    )
+    return compatible_primary_family(left, right, config)
 
 
 def _loose_compatible_primary_family(
@@ -582,31 +640,7 @@ def _loose_compatible_primary_family(
     right: Any,
     config: AlignmentConfig,
 ) -> bool:
-    if str(left.neutral_loss_tag) != str(right.neutral_loss_tag):
-        return False
-    if _ppm(_family_center_mz(left), _family_center_mz(right)) > config.max_ppm:
-        return False
-    if (
-        abs(_family_center_rt(left) - _family_center_rt(right)) * 60.0
-        > config.identity_rt_candidate_window_sec
-    ):
-        return False
-    if (
-        _ppm(_family_observed_loss(left), _family_observed_loss(right))
-        > config.observed_loss_tolerance_ppm
-    ):
-        return False
-    if (
-        _ppm(_family_product_mz(left), _family_product_mz(right))
-        <= config.product_mz_tolerance_ppm
-    ):
-        return True
-    precursor_delta = _family_center_mz(right) - _family_center_mz(left)
-    product_delta = _family_product_mz(right) - _family_product_mz(left)
-    return (
-        abs(product_delta - precursor_delta)
-        <= _PRODUCT_PRECURSOR_SHIFT_TOLERANCE_DA
-    )
+    return loose_compatible_primary_family(left, right, config)
 
 
 def _review_only_or_loser(row: Any) -> bool:
@@ -659,27 +693,19 @@ def _trace_quality_rank(value: str) -> int:
 
 
 def _family_center_mz(row: Any) -> float:
-    if hasattr(row, "family_center_mz"):
-        return float(row.family_center_mz)
-    return float(row.cluster_center_mz)
+    return family_center_mz(row)
 
 
 def _family_center_rt(row: Any) -> float:
-    if hasattr(row, "family_center_rt"):
-        return float(row.family_center_rt)
-    return float(row.cluster_center_rt)
+    return family_center_rt(row)
 
 
 def _family_product_mz(row: Any) -> float:
-    if hasattr(row, "family_product_mz"):
-        return float(row.family_product_mz)
-    return float(row.cluster_product_mz)
+    return family_product_mz(row)
 
 
 def _family_observed_loss(row: Any) -> float:
-    if hasattr(row, "family_observed_neutral_loss_da"):
-        return float(row.family_observed_neutral_loss_da)
-    return float(row.cluster_observed_neutral_loss_da)
+    return family_observed_loss(row)
 
 
 def _event_cluster_ids(row: Any) -> tuple[str, ...]:
@@ -703,7 +729,7 @@ def _family_evidence(row: Any) -> str:
 
 
 def _ppm(left: float, right: float) -> float:
-    return abs(left - right) / max(abs(left), 1e-12) * 1_000_000.0
+    return ppm(left, right)
 
 
 def _finite(value: object) -> bool:

@@ -3,6 +3,8 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
+from xic_extractor import peak_scoring
+from xic_extractor.peak_detection.hypotheses import EvidenceVector
 from xic_extractor.peak_scoring import (
     Confidence,
     ScoredCandidate,
@@ -310,6 +312,35 @@ def test_score_candidate_records_same_apex_cwt_support() -> None:
 
     assert "cwt_same_apex_support" in scored.evidence_score.support_labels
     assert scored.evidence_score.positive_points >= 5
+
+
+def test_peak_candidate_documents_legacy_cwt_metric_semantics() -> None:
+    assert PeakCandidate.__doc__ is not None
+    peak_candidate_doc = " ".join(PeakCandidate.__doc__.split())
+    assert "audit-presence flags" in PeakCandidate.__doc__
+    assert "not interpretable as CWT scale or ridge metrics" in peak_candidate_doc
+    assert EvidenceVector.__doc__ is not None
+    evidence_vector_doc = " ".join(EvidenceVector.__doc__.split())
+    assert "audit-presence flags" in EvidenceVector.__doc__
+    assert "not interpretable as CWT scale or ridge metrics" in evidence_vector_doc
+
+
+def test_cwt_same_apex_support_keeps_legacy_positive_finite_guard() -> None:
+    supported = replace(
+        _make_candidate(apex_rt=8.0, apex_intensity=100.0),
+        proposal_sources=("legacy_savgol", "centwave_cwt"),
+        cwt_best_scale=4.0,
+        cwt_ridge_persistence=0.0,
+    )
+    cwt_only = replace(
+        _make_candidate(apex_rt=8.0, apex_intensity=100.0),
+        proposal_sources=("centwave_cwt",),
+        cwt_best_scale=4.0,
+        cwt_ridge_persistence=0.5,
+    )
+
+    assert peak_scoring._has_same_apex_cwt_support(supported) is True
+    assert peak_scoring._has_same_apex_cwt_support(cwt_only) is False
 
 
 def test_cwt_only_candidate_does_not_receive_same_apex_support_bonus() -> None:

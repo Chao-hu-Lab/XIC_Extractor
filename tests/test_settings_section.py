@@ -28,6 +28,8 @@ def _canonical_settings() -> dict[str, str]:
         "emit_score_breakdown": "false",
         "emit_review_report": "false",
         "emit_peak_candidates": "false",
+        "baseline_audit_method": "",
+        "baseline_integration_method": "asls",
         "keep_intermediate_csv": "false",
         "nl_rt_anchor_search_margin_min": "2.0",
         "nl_rt_anchor_half_window_min": "1.0",

@@ -164,6 +164,50 @@ def test_consolidation_prefers_stronger_sample_peak_over_weak_detected_peak():
     assert winner_cells["s1"].status == "rescued"
 
 
+def test_consolidation_prefers_detected_over_same_apex_rescued_duplicate():
+    matrix = AlignmentMatrix(
+        clusters=(
+            _feature("FAM001", rt=8.50),
+            _feature("FAM002", rt=8.50),
+        ),
+        sample_order=("s1", "s2"),
+        cells=(
+            _cell("s1", "FAM001", "detected", 100.0, apex=8.50),
+            _duplicate_cell(
+                "s1",
+                "FAM002",
+                winner="FAM001",
+                original="rescued",
+                apex=8.50,
+                area=1000.0,
+            ),
+            _duplicate_cell(
+                "s2",
+                "FAM001",
+                winner="FAM002",
+                original="rescued",
+                apex=8.50,
+                area=1000.0,
+            ),
+            _cell("s2", "FAM002", "detected", 200.0, apex=8.50),
+        ),
+    )
+
+    consolidated = consolidate_primary_family_rows(matrix, AlignmentConfig())
+    winner_cells = {
+        cell.sample_stem: cell
+        for cell in consolidated.cells
+        if cell.cluster_id == "FAM001"
+    }
+
+    assert [
+        (sample, cell.status, cell.area) for sample, cell in winner_cells.items()
+    ] == [
+        ("s1", "detected", 100.0),
+        ("s2", "detected", 200.0),
+    ]
+
+
 def test_near_duplicate_rescue_heavy_primary_family_is_demoted_to_audit():
     matrix = AlignmentMatrix(
         clusters=(
@@ -270,8 +314,9 @@ def _duplicate_cell(
     winner: str,
     original: str,
     apex: float,
+    area: float = 100.0,
 ) -> AlignedCell:
-    source = _cell(sample_stem, cluster_id, original, 100.0, apex=apex)
+    source = _cell(sample_stem, cluster_id, original, area, apex=apex)
     return AlignedCell(
         sample_stem=source.sample_stem,
         cluster_id=source.cluster_id,

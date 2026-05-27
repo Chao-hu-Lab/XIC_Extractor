@@ -95,6 +95,7 @@ class AlignmentCell:
     right: float | None
     region_verdict: str
     local_mixture_diagnostic: str
+    reason: str = ""
 
 
 @dataclass(frozen=True)

@@ -39,7 +39,7 @@ class ValidationRunSpec:
     command: tuple[str, ...]
     data_dir: Path | None = None
     expected_raw_count: int | None = None
-    resolver_mode: str = "local_minimum"
+    resolver_mode: str = "region_first_safe_merge"
     parallel_mode: str = "process"
     workers: int = 4
     settings_overrides: tuple[tuple[str, str], ...] = ()

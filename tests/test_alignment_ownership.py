@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.ownership import build_sample_local_owners
@@ -196,6 +197,85 @@ def test_build_sample_local_owners_uses_batch_source_when_available() -> None:
     assert len(result.assignments) == 2
 
 
+def test_sample_local_owner_uses_padded_candidate_peak_bounds_for_xic_request() -> None:
+    candidate = _candidate(
+        "s1#bounded",
+        seed_rt=9.10,
+        ms1_apex_rt=9.08,
+        ms1_peak_rt_start=9.00,
+        ms1_peak_rt_end=9.20,
+    )
+    source = FakeXICSource(
+        rt=np.array([8.90, 9.00, 9.08, 9.20, 9.30], dtype=float),
+        intensity=np.array([0.0, 30.0, 100.0, 30.0, 0.0], dtype=float),
+    )
+
+    result = build_sample_local_owners(
+        (candidate,),
+        raw_sources={"s1": source},
+        alignment_config=AlignmentConfig(max_rt_sec=180.0),
+        peak_config=_peak_config(),
+    )
+
+    assert len(result.owners) == 1
+    _mz, rt_min, rt_max, _ppm = source.calls[0]
+    assert rt_min == pytest.approx(8.90)
+    assert rt_max == pytest.approx(9.30)
+
+
+@pytest.mark.parametrize(
+    ("candidate_kwargs", "expected_rt_min", "expected_rt_max"),
+    [
+        (
+            {
+                "seed_rt": 9.50,
+                "ms1_apex_rt": 9.10,
+                "ms1_peak_rt_start": 9.00,
+                "ms1_peak_rt_end": 9.20,
+            },
+            8.90,
+            9.30,
+        ),
+        (
+            {
+                "seed_rt": 8.90,
+                "ms1_search_rt_min": 8.70,
+                "ms1_search_rt_max": 9.10,
+            },
+            8.70,
+            9.10,
+        ),
+        (
+            {"seed_rt": 8.90},
+            6.90,
+            10.90,
+        ),
+    ],
+)
+def test_sample_local_owner_rt_window_fallback_order(
+    candidate_kwargs,
+    expected_rt_min,
+    expected_rt_max,
+) -> None:
+    candidate = _candidate("s1#window-order", **candidate_kwargs)
+    source = FakeXICSource(
+        rt=np.array([8.80, 8.90, 9.00], dtype=float),
+        intensity=np.array([0.0, 100.0, 0.0], dtype=float),
+    )
+
+    build_sample_local_owners(
+        (candidate,),
+        raw_sources={"s1": source},
+        alignment_config=AlignmentConfig(max_rt_sec=120.0),
+        peak_config=_peak_config(),
+        peak_resolver=_always_peak_at_seed,
+    )
+
+    _mz, rt_min, rt_max, _ppm = source.calls[0]
+    assert rt_min == pytest.approx(expected_rt_min)
+    assert rt_max == pytest.approx(expected_rt_max)
+
+
 def test_sample_local_owner_gets_region_audit_when_enabled() -> None:
     candidates = (_candidate("s1#region", seed_rt=8.0),)
     source = FakeXICSource(
@@ -216,6 +296,26 @@ def test_sample_local_owner_gets_region_audit_when_enabled() -> None:
     assert region_audit is not None
     assert region_audit.candidate_count is not None
     assert region_audit.selected_proposal_sources
+
+
+def test_sample_local_owner_region_audit_honors_candidate_allowlist() -> None:
+    candidates = (_candidate("s1#region", seed_rt=8.0),)
+    source = FakeXICSource(
+        rt=np.array([7.88, 7.94, 8.00, 8.06, 8.12], dtype=float),
+        intensity=np.array([0.0, 40.0, 120.0, 40.0, 0.0], dtype=float),
+    )
+
+    result = build_sample_local_owners(
+        candidates,
+        raw_sources={"s1": source},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        emit_region_audit=True,
+        region_audit_family_ids=frozenset({"other"}),
+    )
+
+    assert len(result.owners) == 1
+    assert result.owners[0].region_audit is None
 
 
 def test_custom_peak_resolver_without_region_audit_remains_supported() -> None:
@@ -289,6 +389,11 @@ def _candidate(
     seed_rt=12.5927,
     evidence_score=80,
     seed_event_count=2,
+    ms1_apex_rt=None,
+    ms1_peak_rt_start=None,
+    ms1_peak_rt_end=None,
+    ms1_search_rt_min=None,
+    ms1_search_rt_max=None,
 ):
     return SimpleNamespace(
         candidate_id=candidate_id,
@@ -299,6 +404,11 @@ def _candidate(
         product_mz=product_mz,
         observed_neutral_loss_da=observed_loss,
         best_seed_rt=seed_rt,
+        ms1_apex_rt=ms1_apex_rt,
+        ms1_peak_rt_start=ms1_peak_rt_start,
+        ms1_peak_rt_end=ms1_peak_rt_end,
+        ms1_search_rt_min=ms1_search_rt_min,
+        ms1_search_rt_max=ms1_search_rt_max,
         evidence_score=evidence_score,
         seed_event_count=seed_event_count,
     )

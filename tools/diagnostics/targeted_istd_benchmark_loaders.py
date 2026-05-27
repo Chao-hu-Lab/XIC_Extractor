@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
-import csv
 import json
-import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 
 from openpyxl import load_workbook
 
+from tools.diagnostics.diagnostic_io import (
+    bool_value,
+    optional_float as _float_value,
+    read_tsv_required,
+    require_fields as _require_fields,
+    required_float as _required_float,
+    required_indexes as _required_indexes,
+    text_value as _text,
+)
 from tools.diagnostics.targeted_istd_benchmark_models import (
     AlignmentCell,
     AlignmentFeature,
@@ -155,7 +162,7 @@ def read_targeted_reliability_points(
 
 
 def read_alignment_review(path: Path) -> tuple[AlignmentFeature, ...]:
-    rows = _read_required_tsv(path)
+    rows = list(read_tsv_required(path, ()))
     _require_fields(
         rows,
         (
@@ -200,7 +207,7 @@ def read_alignment_review(path: Path) -> tuple[AlignmentFeature, ...]:
 
 
 def read_alignment_matrix(path: Path) -> AlignmentMatrixData:
-    rows = _read_required_tsv(path)
+    rows = list(read_tsv_required(path, ()))
     _require_fields(rows, ("feature_family_id",), path)
     metadata_columns = {
         "feature_family_id",
@@ -240,7 +247,7 @@ def _is_primary_review_row(row: Mapping[str, str]) -> bool:
 
 
 def read_alignment_cells(path: Path) -> dict[tuple[str, str], AlignmentCell]:
-    rows = _read_required_tsv(path)
+    rows = list(read_tsv_required(path, ()))
     _require_fields(
         rows,
         ("feature_family_id", "sample_stem", "status", "area", "apex_rt"),
@@ -259,26 +266,6 @@ def read_alignment_cells(path: Path) -> dict[tuple[str, str], AlignmentCell]:
         cells[(cell.feature_family_id, sample)] = cell
     return cells
 
-def _read_required_tsv(path: Path) -> list[dict[str, str]]:
-    if not path.exists():
-        raise FileNotFoundError(str(path))
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        return list(csv.DictReader(handle, delimiter="\t"))
-
-
-def _require_fields(
-    rows: list[dict[str, str]],
-    required: Sequence[str],
-    path: Path,
-) -> None:
-    if not rows:
-        raise ValueError(f"{path} has no data rows")
-    fieldnames = set(rows[0])
-    missing = [field for field in required if field not in fieldnames]
-    if missing:
-        raise ValueError(f"{path} is missing required columns: {missing}")
-
-
 def _required_text_value(
     path: Path,
     row_number: int,
@@ -289,45 +276,6 @@ def _required_text_value(
     if not value:
         raise ValueError(f"{path} rows[{row_number}] is missing {field}")
     return value
-
-
-def _required_indexes(
-    header: Sequence[object],
-    required: Sequence[str],
-    sheet_name: str,
-) -> dict[str, int]:
-    indexes = {str(value).strip(): index for index, value in enumerate(header) if value}
-    missing = [field for field in required if field not in indexes]
-    if missing:
-        raise ValueError(f"{sheet_name} sheet missing required columns: {missing}")
-    return indexes
-
-
-def _required_float(value: object, field: str, label: str) -> float:
-    parsed = _float_value(value)
-    if parsed is None:
-        raise ValueError(f"{label} has invalid {field}: {value!r}")
-    return parsed
-
-
-def _float_value(value: object) -> float | None:
-    if value in (None, "") or isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        if math.isfinite(value):
-            return float(value)
-        return None
-    try:
-        parsed = float(str(value).strip())
-    except ValueError:
-        return None
-    return parsed if math.isfinite(parsed) else None
-
-
-def _text(value: object) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
 
 
 def _risk_reasons_value(value: object) -> tuple[str, ...]:
@@ -347,6 +295,4 @@ def _normalize_sample_id(sample_id: str) -> str:
 
 
 def _is_trueish(value: str | None) -> bool:
-    if value is None:
-        return False
-    return value.strip().lower() in {"1", "true", "t", "yes", "y"}
+    return bool_value(value) is True

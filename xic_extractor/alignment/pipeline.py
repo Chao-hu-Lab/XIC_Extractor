@@ -1,12 +1,21 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import AbstractContextManager, ExitStack
 from dataclasses import replace
 from pathlib import Path
 
 from xic_extractor.alignment.backfill import (
     backfill_alignment_matrix,
+)
+from xic_extractor.alignment.backfill_scope import (
+    PREDICATE_VERSION,
+    REQUEST_PLAN_VERSION,
+    BackfillScope,
+    backfill_request_sample_stems,
+    backfill_seed_centers,
+    select_backfill_features,
+    skipped_evidence_summary,
 )
 from xic_extractor.alignment.claim_registry import apply_ms1_peak_claim_registry
 from xic_extractor.alignment.config import AlignmentConfig
@@ -26,7 +35,10 @@ from xic_extractor.alignment.identity_coherence_adapter import (
 from xic_extractor.alignment.matrix import AlignmentMatrix
 from xic_extractor.alignment.ms1_index_source import OwnerBackfillXicBackend
 from xic_extractor.alignment.output_levels import AlignmentOutputLevel
-from xic_extractor.alignment.owner_backfill import build_owner_backfill_cells
+from xic_extractor.alignment.owner_backfill import (
+    OwnerBackfillWindowStrategy,
+    build_owner_backfill_cells,
+)
 from xic_extractor.alignment.owner_clustering import (
     cluster_sample_local_owners,
     review_only_features_from_ambiguous_records,
@@ -47,6 +59,10 @@ from xic_extractor.alignment.primary_consolidation import (
     consolidate_primary_family_rows,
 )
 from xic_extractor.alignment.process_backend import (
+    OwnerBackfillSampleResult,
+    OwnerBackfillWorkerError,
+    OwnerBuildSampleResult,
+    OwnerBuildWorkerError,
     run_owner_backfill_process,
     run_owner_build_process,
 )
@@ -88,17 +104,25 @@ def run_alignment(
     raw_workers: int = 1,
     raw_xic_batch_size: int = 1,
     owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw",
+    owner_backfill_window_strategy: OwnerBackfillWindowStrategy = "exact",
+    owner_backfill_superwindow_span_factor: int = 2,
     preconsolidate_owner_families: bool = False,
     emit_identity_coherence_diagnostic: bool = False,
     identity_coherence_output_dir: Path | None = None,
     identity_coherence_controls_manifest: Path | None = None,
     drift_lookup: DriftLookupProtocol | None = None,
     timing_recorder: TimingRecorder | None = None,
+    backfill_scope: BackfillScope = "full-audit",
+    audit_evidence_mode: str = "auto",
+    selected_family_ids: frozenset[str] = frozenset(),
+    selected_family_source: str = "",
 ) -> AlignmentRunOutputs:
     if raw_workers < 1:
         raise ValueError("raw_workers must be >= 1")
     if raw_xic_batch_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
+    if owner_backfill_superwindow_span_factor < 1:
+        raise ValueError("owner_backfill_superwindow_span_factor must be >= 1")
     recorder = timing_recorder or TimingRecorder.disabled("alignment")
     recorder.record(
         "alignment.run_config",
@@ -107,8 +131,15 @@ def run_alignment(
             "raw_workers": raw_workers,
             "raw_xic_batch_size": raw_xic_batch_size,
             "owner_backfill_xic_backend": owner_backfill_xic_backend,
+            "owner_backfill_window_strategy": owner_backfill_window_strategy,
+            "owner_backfill_superwindow_span_factor": (
+                owner_backfill_superwindow_span_factor
+            ),
             "preconsolidate_owner_families": preconsolidate_owner_families,
             "output_level": output_level,
+            "backfill_scope": backfill_scope,
+            "requested_audit_evidence_mode": audit_evidence_mode,
+            "selected_family_count": len(selected_family_ids),
             "drift_prior_source": (
                 drift_lookup.source if drift_lookup is not None else "none"
             ),
@@ -133,9 +164,29 @@ def run_alignment(
         emit_alignment_status_matrix=emit_alignment_status_matrix,
         emit_alignment_integration_audit=emit_alignment_integration_audit,
         emit_alignment_backfill_seed_audit=emit_alignment_backfill_seed_audit,
+        emit_skipped_evidence_ledger=backfill_scope != "full-audit",
     )
-    emit_cell_region_audit = (
-        outputs.cells_tsv is not None or outputs.integration_audit_tsv is not None
+    resolved_audit_evidence_mode, audit_evidence_mode_reason = (
+        _resolve_audit_evidence_mode(
+            backfill_scope=backfill_scope,
+            requested_mode=audit_evidence_mode,
+            output_level=output_level,
+            outputs=outputs,
+        )
+    )
+    recorder.record(
+        "alignment.audit_evidence_mode",
+        elapsed_sec=0.0,
+        metrics={
+            "requested_audit_evidence_mode": audit_evidence_mode,
+            "audit_evidence_mode": resolved_audit_evidence_mode,
+            "audit_evidence_mode_reason": audit_evidence_mode_reason,
+            "heavy_audit_enabled": resolved_audit_evidence_mode != "none",
+        },
+    )
+    emit_cell_region_audit = resolved_audit_evidence_mode in {"full", "selected"}
+    region_audit_family_ids = (
+        selected_family_ids if backfill_scope == "selected-families" else None
     )
 
     with ExitStack() as stack:
@@ -167,6 +218,12 @@ def run_alignment(
                     max_workers=raw_workers,
                     raw_xic_batch_size=raw_xic_batch_size,
                     emit_region_audit=emit_cell_region_audit,
+                    region_audit_family_ids=region_audit_family_ids,
+                    audit_evidence_mode=resolved_audit_evidence_mode,
+                    progress_callback=lambda result: _record_owner_build_progress(
+                        recorder,
+                        result,
+                    ),
                 )
                 ownership = owner_output.ownership
                 for stats in owner_output.timing_stats:
@@ -195,6 +252,8 @@ def run_alignment(
                     peak_config=peak_config,
                     raw_xic_batch_size=raw_xic_batch_size,
                     emit_region_audit=emit_cell_region_audit,
+                    region_audit_family_ids=region_audit_family_ids,
+                    audit_evidence_mode=resolved_audit_evidence_mode,
                 )
                 record_timed_raw_sources(timed_raw_sources_, recorder=recorder)
         edge_evidence: list[OwnerEdgeEvidence] | None = (
@@ -261,10 +320,39 @@ def run_alignment(
                     owner_features,
                     config=alignment_config,
                 )
-        with recorder.stage("alignment.owner_backfill"):
+        with recorder.stage("alignment.backfill_scope") as stage:
+            scope_selection = select_backfill_features(
+                owner_features,
+                sample_order=batch.sample_order,
+                raw_sample_stems=frozenset(raw_paths),
+                alignment_config=alignment_config,
+                scope=backfill_scope,
+                selected_family_ids=selected_family_ids,
+            )
+            backfill_features = scope_selection.features
+            request_summary = _backfill_request_summary(
+                backfill_features,
+                sample_order=batch.sample_order,
+                raw_sample_stems=frozenset(raw_paths),
+                alignment_config=alignment_config,
+            )
+            stage.metrics.update(
+                {
+                    "backfill_scope": backfill_scope,
+                    "input_feature_count": len(owner_features),
+                    "backfill_feature_count": len(backfill_features),
+                    "skipped_feature_count": (
+                        len(owner_features) - len(backfill_features)
+                    ),
+                    "selected_family_count": len(selected_family_ids),
+                    **skipped_evidence_summary(scope_selection.skipped),
+                    **request_summary,
+                }
+            )
+        with recorder.stage("alignment.owner_backfill") as owner_backfill_stage:
             if raw_workers > 1:
                 process_output = run_owner_backfill_process(
-                    owner_features,
+                    backfill_features,
                     sample_order=batch.sample_order,
                     raw_paths=raw_paths,
                     dll_dir=dll_dir,
@@ -273,9 +361,23 @@ def run_alignment(
                     max_workers=raw_workers,
                     raw_xic_batch_size=raw_xic_batch_size,
                     owner_backfill_xic_backend=owner_backfill_xic_backend,
+                    owner_backfill_window_strategy=owner_backfill_window_strategy,
+                    owner_backfill_superwindow_span_factor=(
+                        owner_backfill_superwindow_span_factor
+                    ),
+                    backfill_scope=backfill_scope,
                     emit_region_audit=emit_cell_region_audit,
+                    region_audit_family_ids=region_audit_family_ids,
+                    audit_evidence_mode=resolved_audit_evidence_mode,
+                    progress_callback=lambda result: _record_owner_backfill_progress(
+                        recorder,
+                        result,
+                    ),
                 )
                 rescued_cells = process_output.cells
+                owner_backfill_stage.metrics.update(
+                    _summarize_xic_timing_stats(process_output.timing_stats),
+                )
                 for backfill_stats in process_output.timing_stats:
                     recorder.record(
                         "alignment.owner_backfill.extract_xic",
@@ -308,14 +410,23 @@ def run_alignment(
                     else {}
                 )
                 rescued_cells = build_owner_backfill_cells(
-                    owner_features,
+                    backfill_features,
                     sample_order=batch.sample_order,
                     raw_sources=backfill_raw_sources,
                     **validation_kwargs,
                     alignment_config=alignment_config,
                     peak_config=peak_config,
                     raw_xic_batch_size=raw_xic_batch_size,
+                    owner_backfill_window_strategy=owner_backfill_window_strategy,
+                    owner_backfill_superwindow_span_factor=(
+                        owner_backfill_superwindow_span_factor
+                    ),
                     emit_region_audit=emit_cell_region_audit,
+                    region_audit_family_ids=region_audit_family_ids,
+                    audit_evidence_mode=resolved_audit_evidence_mode,
+                )
+                owner_backfill_stage.metrics.update(
+                    _summarize_xic_timing_stats(timing_stats),
                 )
                 record_raw_source_timing_stats(timing_stats, recorder=recorder)
         with recorder.stage("alignment.build_matrix"):
@@ -340,12 +451,46 @@ def run_alignment(
                     raw_dir=raw_dir,
                     dll_dir=dll_dir,
                     owner_backfill_xic_backend=owner_backfill_xic_backend,
+                    owner_backfill_window_strategy=owner_backfill_window_strategy,
+                    owner_backfill_superwindow_span_factor=(
+                        owner_backfill_superwindow_span_factor
+                    ),
                     output_level=output_level,
                     peak_config=peak_config,
+                    backfill_scope=backfill_scope,
+                    output_scope=(
+                        "diagnostic_only"
+                        if backfill_scope == "selected-families"
+                        else backfill_scope
+                    ),
+                    selected_family_count=len(selected_family_ids),
+                    selected_family_source=_selected_family_source(
+                        backfill_scope,
+                        selected_family_ids,
+                        selected_family_source,
+                    ),
+                    request_plan_version=REQUEST_PLAN_VERSION,
+                    audit_evidence_mode=resolved_audit_evidence_mode,
+                    requested_audit_evidence_mode=audit_evidence_mode,
+                    heavy_audit_enabled=resolved_audit_evidence_mode != "none",
+                    audit_evidence_mode_reason=audit_evidence_mode_reason,
+                    scope_warning=(
+                        "diagnostic_only_incomplete_scope"
+                        if backfill_scope == "selected-families"
+                        else ""
+                    ),
+                    skipped_evidence_predicate_version=PREDICATE_VERSION,
                 ),
                 ownership=ownership,
                 alignment_config=alignment_config,
                 edge_evidence=edge_evidence or (),
+                skipped_evidence=scope_selection.skipped,
+                baseline_integration_method=getattr(
+                    peak_config,
+                    "baseline_integration_method",
+                    "asls",
+                ),
+                baseline_audit_method=getattr(peak_config, "baseline_audit_method", ""),
             )
         return outputs
 
@@ -386,6 +531,208 @@ _existing_raw_paths = existing_raw_paths
 _output_paths = output_paths
 _write_outputs_atomic = write_outputs_atomic
 _metadata = alignment_metadata
+
+
+def _resolve_audit_evidence_mode(
+    *,
+    backfill_scope: BackfillScope,
+    requested_mode: str,
+    output_level: str,
+    outputs: AlignmentRunOutputs,
+) -> tuple[str, str]:
+    if requested_mode not in {"auto", "none", "full", "selected"}:
+        raise ValueError("audit_evidence_mode must be auto, none, full, or selected")
+    if requested_mode == "selected" and backfill_scope != "selected-families":
+        raise ValueError(
+            "audit_evidence_mode selected requires backfill_scope selected-families"
+        )
+    if requested_mode != "auto":
+        return requested_mode, f"explicit_{requested_mode}"
+
+    has_integration_destination = outputs.integration_audit_tsv is not None
+    if output_level == "validation-minimal" and not has_integration_destination:
+        return "none", "validation_minimal_default_no_audit"
+    if backfill_scope == "full-audit":
+        if outputs.cells_tsv is not None or has_integration_destination:
+            return "full", "full_audit_legacy_audit_output"
+        return "none", "no_audit_destination"
+    if backfill_scope == "selected-families":
+        if has_integration_destination:
+            return "selected", "selected_family_audit_destination"
+        return "none", "selected_family_no_audit_destination"
+    if has_integration_destination:
+        return "full", "production_equivalent_explicit_audit_destination"
+    return "none", "production_equivalent_default_no_audit"
+
+
+def _selected_family_source(
+    backfill_scope: BackfillScope,
+    selected_family_ids: frozenset[str],
+    selected_family_source: str,
+) -> str:
+    if backfill_scope != "selected-families":
+        return ""
+    if selected_family_source:
+        return selected_family_source
+    return "inline:" + ",".join(sorted(selected_family_ids))
+
+
+def _backfill_request_summary(
+    features,
+    *,
+    sample_order: tuple[str, ...],
+    raw_sample_stems: frozenset[str],
+    alignment_config: AlignmentConfig,
+) -> dict[str, int | float | bool]:
+    sample_extract_counts = {sample_stem: 0 for sample_stem in sample_order}
+    request_target_count = 0
+    extract_request_count = 0
+    for feature in features:
+        try:
+            request_samples = backfill_request_sample_stems(
+                feature,
+                sample_order=sample_order,
+                raw_sample_stems=raw_sample_stems,
+                alignment_config=alignment_config,
+            )
+            seed_count = len(backfill_seed_centers(feature))
+        except AttributeError:
+            return {"request_summary_unavailable": True}
+        request_target_count += len(request_samples)
+        extract_request_count += len(request_samples) * seed_count
+        for sample_stem in request_samples:
+            sample_extract_counts[sample_stem] = (
+                sample_extract_counts.get(sample_stem, 0) + seed_count
+            )
+    counts = sorted(sample_extract_counts.values())
+    median_count = 0.0
+    if counts:
+        midpoint = len(counts) // 2
+        if len(counts) % 2:
+            median_count = float(counts[midpoint])
+        else:
+            median_count = (counts[midpoint - 1] + counts[midpoint]) / 2.0
+    return {
+        "request_target_count": request_target_count,
+        "extract_request_count": extract_request_count,
+        "max_sample_extract_request_count": max(counts) if counts else 0,
+        "median_sample_extract_request_count": median_count,
+    }
+
+
+def _record_owner_build_progress(
+    recorder: TimingRecorder,
+    result: OwnerBuildSampleResult | OwnerBuildWorkerError,
+) -> None:
+    if isinstance(result, OwnerBuildWorkerError):
+        recorder.record(
+            "alignment.build_owners.sample_error",
+            elapsed_sec=0.0,
+            sample_stem=result.sample_stem,
+            metrics={
+                "sample_index": result.sample_index,
+                "raw_name": result.raw_name,
+                "message": result.message,
+            },
+        )
+        return
+    metrics: dict[str, object] = {
+        "sample_index": result.sample_index,
+        "owner_count": len(result.owners),
+        "assignment_count": len(result.assignments),
+        "ambiguous_record_count": len(result.ambiguous_records),
+    }
+    if result.timing_stats:
+        stats = result.timing_stats[0]
+        metrics.update(
+            {
+                "extract_xic_count": stats.extract_xic_count,
+                "extract_xic_batch_count": stats.extract_xic_batch_count,
+                "raw_chromatogram_call_count": stats.raw_chromatogram_call_count,
+                "point_count": stats.point_count,
+                "worker_elapsed_sec": stats.elapsed_sec,
+            }
+        )
+    recorder.record(
+        "alignment.build_owners.sample_complete",
+        elapsed_sec=0.0,
+        sample_stem=result.sample_stem,
+        metrics=metrics,
+    )
+
+
+def _record_owner_backfill_progress(
+    recorder: TimingRecorder,
+    result: OwnerBackfillSampleResult | OwnerBackfillWorkerError,
+) -> None:
+    if isinstance(result, OwnerBackfillWorkerError):
+        recorder.record(
+            "alignment.owner_backfill.sample_error",
+            elapsed_sec=0.0,
+            sample_stem=result.sample_stem,
+            metrics={
+                "sample_index": result.sample_index,
+                "raw_name": result.raw_name,
+                "message": result.message,
+            },
+        )
+        return
+    metrics: dict[str, object] = {
+        "sample_index": result.sample_index,
+        "rescued_cell_count": len(result.cells),
+    }
+    if result.timing_stats:
+        stats = result.timing_stats[0]
+        metrics.update(
+            {
+                "extract_xic_count": stats.extract_xic_count,
+                "extract_xic_batch_count": stats.extract_xic_batch_count,
+                "raw_chromatogram_call_count": stats.raw_chromatogram_call_count,
+                "point_count": stats.point_count,
+                "worker_elapsed_sec": stats.elapsed_sec,
+            }
+        )
+    recorder.record(
+        "alignment.owner_backfill.sample_complete",
+        elapsed_sec=0.0,
+        sample_stem=result.sample_stem,
+        metrics=metrics,
+    )
+
+
+def _summarize_xic_timing_stats(
+    timing_stats: Iterable[object],
+) -> dict[str, int | float | None]:
+    stats_items = tuple(timing_stats)
+    extract_xic_count = sum(
+        int(getattr(stats, "extract_xic_count", 0)) for stats in stats_items
+    )
+    extract_xic_batch_count = sum(
+        int(getattr(stats, "extract_xic_batch_count", 0)) for stats in stats_items
+    )
+    raw_chromatogram_call_count = sum(
+        int(getattr(stats, "raw_chromatogram_call_count", 0))
+        for stats in stats_items
+    )
+    point_count = sum(int(getattr(stats, "point_count", 0)) for stats in stats_items)
+    return {
+        "extract_xic_count": extract_xic_count,
+        "extract_xic_batch_count": extract_xic_batch_count,
+        "raw_chromatogram_call_count": raw_chromatogram_call_count,
+        "point_count": point_count,
+        "mean_xic_per_raw_chromatogram_call": (
+            None
+            if raw_chromatogram_call_count == 0
+            else extract_xic_count / raw_chromatogram_call_count
+        ),
+        "mean_xic_per_extract_batch": (
+            None
+            if extract_xic_batch_count == 0
+            else extract_xic_count / extract_xic_batch_count
+        ),
+    }
+
+
 def _default_raw_opener(
     raw_path: Path,
     dll_dir: Path,

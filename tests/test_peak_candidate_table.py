@@ -46,6 +46,9 @@ _PRE_NL_DIAGNOSTIC_HEADERS = (
     "area_raw_counts_seconds",
     "area_baseline_corrected",
     "area_uncertainty",
+    "area_uncertainty_formula_version",
+    "baseline_residual_mad",
+    "area_uncertainty_noise_source",
     "quality_flags",
     "region_scan_count",
     "region_duration_min",
@@ -89,6 +92,7 @@ _SAFE_MERGE_PROVENANCE_HEADERS = (
     "safe_merge_promotion_area_ratio",
     "safe_merge_promotion_selected_interval_count",
     "safe_merge_promotion_selected_interval_gap_max_min",
+    "safe_merge_rejection_reason",
 )
 
 
@@ -289,6 +293,33 @@ def test_build_rows_exposes_safe_merge_promotion_provenance() -> None:
     assert row["safe_merge_promotion_selected_interval_gap_max_min"] == "0.04144"
 
 
+def test_build_rows_exposes_safe_merge_rejection_reason() -> None:
+    selected = _candidate(
+        8.5,
+        proposal_sources=("local_minimum",),
+        safe_merge_rejection_reason="gap_exceeds_safe_merge_max",
+    )
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=20,
+        max_smoothed=3000.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+    )
+
+    row = build_peak_candidate_rows(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="",
+        resolver_mode="region_first_safe_merge",
+        peak_result=result,
+    )[0]
+
+    assert row["safe_merge_rejection_reason"] == "gap_exceeds_safe_merge_max"
+
+
 def test_build_rows_can_emit_baseline_corrected_audit_area() -> None:
     selected = _candidate(8.2, left=8.0, right=8.4, proposal_sources=("legacy_savgol",))
     result = PeakDetectionResult(
@@ -313,6 +344,11 @@ def test_build_rows_can_emit_baseline_corrected_audit_area() -> None:
 
     assert rows[0]["area_baseline_corrected"] == "390.00000"
     assert rows[0]["area_uncertainty"] != ""
+    assert rows[0]["area_uncertainty_formula_version"] == (
+        "baseline_residual_mad_v1"
+    )
+    assert rows[0]["baseline_residual_mad"] != ""
+    assert rows[0]["area_uncertainty_noise_source"] != ""
 
 
 def test_build_rows_prefers_shared_trace_group_arrays() -> None:
@@ -560,6 +596,7 @@ def _candidate(
     safe_merge_promotion_area_ratio: float | None = None,
     safe_merge_promotion_selected_interval_count: int | None = None,
     safe_merge_promotion_selected_interval_gap_max_min: float | None = None,
+    safe_merge_rejection_reason: str = "",
 ) -> PeakCandidate:
     peak_start = rt - 0.2 if left is None else left
     peak_end = rt + 0.2 if right is None else right
@@ -593,6 +630,7 @@ def _candidate(
         safe_merge_promotion_selected_interval_gap_max_min=(
             safe_merge_promotion_selected_interval_gap_max_min
         ),
+        safe_merge_rejection_reason=safe_merge_rejection_reason,
     )
 
 

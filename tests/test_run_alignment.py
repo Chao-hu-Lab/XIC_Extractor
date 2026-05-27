@@ -64,6 +64,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
             "--emit-alignment-integration-audit",
             "--emit-alignment-backfill-seed-audit",
             "--emit-alignment-status-matrix",
+            "--emit-baseline-audit-asls",
         ]
     )
 
@@ -79,6 +80,8 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert peak_config.output_csv == output_dir.resolve() / "xic_results.csv"
     assert peak_config.diagnostics_csv == output_dir.resolve() / "xic_diagnostics.csv"
     assert peak_config.resolver_mode == "legacy_savgol"
+    assert peak_config.baseline_audit_method == "asls"
+    assert peak_config.baseline_integration_method == "linear_edge"
     assert captured["output_level"] == "machine"
     assert captured["emit_alignment_cells"] is True
     assert captured["emit_alignment_integration_audit"] is True
@@ -86,6 +89,11 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert captured["emit_alignment_status_matrix"] is True
     assert captured["raw_workers"] == 1
     assert captured["raw_xic_batch_size"] == 1
+    assert captured["owner_backfill_window_strategy"] == "exact"
+    assert captured["owner_backfill_superwindow_span_factor"] == 2
+    assert captured["backfill_scope"] == "full-audit"
+    assert captured["audit_evidence_mode"] == "auto"
+    assert captured["selected_family_ids"] == frozenset()
     assert captured["drift_lookup"] is None
     stdout = capsys.readouterr().out
     assert "Alignment review TSV:" in stdout
@@ -94,6 +102,215 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert "alignment_owner_backfill_seed_audit.tsv" in stdout
     assert "alignment_matrix_status.tsv" in stdout
     assert "Owner edge evidence TSV:" in stdout
+
+
+def test_run_alignment_accepts_baseline_integration_method_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        review = output_dir / "alignment_review.tsv"
+        matrix = output_dir / "alignment_matrix.tsv"
+        for path in (review, matrix):
+            path.write_text("x\n", encoding="utf-8")
+        return AlignmentRunOutputs(
+            workbook=None,
+            review_html=None,
+            review_tsv=review,
+            matrix_tsv=matrix,
+            cells_tsv=None,
+            integration_audit_tsv=None,
+            backfill_seed_audit_tsv=None,
+            status_matrix_tsv=None,
+            edge_evidence_tsv=None,
+        )
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--baseline-integration-method",
+            "linear_edge",
+        ]
+    )
+
+    assert code == 0
+    assert captured["peak_config"].baseline_integration_method == "linear_edge"
+
+
+def test_run_alignment_cli_passes_selected_family_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    allowlist = tmp_path / "families.tsv"
+    allowlist.write_text("feature_family_id\nFAM001\n", encoding="utf-8")
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--backfill-scope",
+            "selected-families",
+            "--backfill-family-list-tsv",
+            str(allowlist),
+            "--backfill-family-id",
+            "FAM002",
+        ]
+    )
+
+    assert code == 0
+    assert captured["backfill_scope"] == "selected-families"
+    assert captured["selected_family_ids"] == frozenset({"FAM001", "FAM002"})
+    assert "families.tsv" in captured["selected_family_source"]
+    assert "inline:FAM002" in captured["selected_family_source"]
+
+
+def test_run_alignment_cli_passes_audit_evidence_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--backfill-scope",
+            "production-equivalent",
+            "--audit-evidence-mode",
+            "none",
+        ]
+    )
+
+    assert code == 0
+    assert captured["backfill_scope"] == "production-equivalent"
+    assert captured["audit_evidence_mode"] == "none"
+
+
+def test_run_alignment_cli_rejects_allowlist_outside_selected_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    calls = {}
+
+    def fake_run_alignment(**kwargs):
+        calls.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--backfill-family-id",
+            "FAM001",
+        ]
+    )
+
+    assert code == 2
+    assert calls == {}
+    assert "backfill family allowlist flags require" in capsys.readouterr().err
+
+
+def test_run_alignment_env_enables_asls_baseline_audit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setenv("BASELINE_AUDIT_METHOD", "asls")
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert code == 0
+    assert captured["peak_config"].baseline_audit_method == "asls"
 
 
 def test_run_alignment_cli_passes_identity_coherence_flags(monkeypatch, tmp_path):
@@ -215,6 +432,39 @@ def test_run_alignment_cli_accepts_output_level_debug(
     assert captured["output_level"] == "debug"
 
 
+def test_run_alignment_cli_defaults_to_local_minimum_production_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+        ],
+    )
+
+    assert code == 0
+    assert captured["peak_config"].resolver_mode == "local_minimum"
+
+
 def test_run_alignment_cli_keeps_region_first_safe_merge_out_of_production_mode(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -248,6 +498,41 @@ def test_run_alignment_cli_keeps_region_first_safe_merge_out_of_production_mode(
 
     assert code == 0
     assert captured["peak_config"].resolver_mode == "local_minimum"
+
+
+def test_run_alignment_cli_accepts_validation_minimal_output_level(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-level",
+            "validation-minimal",
+        ],
+    )
+
+    assert code == 0
+    assert captured["output_level"] == "validation-minimal"
 
 
 def test_run_alignment_cli_passes_raw_workers(
@@ -353,6 +638,64 @@ def test_run_alignment_cli_passes_owner_backfill_xic_backend(
 
     assert code == 0
     assert captured["owner_backfill_xic_backend"] == "ms1_index"
+
+
+def test_run_alignment_cli_passes_owner_backfill_window_strategy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--owner-backfill-window-strategy",
+            "super-window",
+            "--owner-backfill-superwindow-span-factor",
+            "2",
+        ],
+    )
+
+    assert code == 0
+    assert captured["owner_backfill_window_strategy"] == "super-window"
+    assert captured["owner_backfill_superwindow_span_factor"] == 2
+
+
+def test_run_alignment_cli_rejects_invalid_superwindow_span_factor(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        run_alignment.main(
+            [
+                "--discovery-batch-index",
+                str(tmp_path / "missing.csv"),
+                "--raw-dir",
+                str(tmp_path / "raws"),
+                "--dll-dir",
+                str(tmp_path / "dll"),
+                "--owner-backfill-superwindow-span-factor",
+                "0",
+            ],
+        )
+
+    assert exc_info.value.code == 2
 
 
 def test_run_alignment_cli_passes_hybrid_owner_backfill_xic_backend(
@@ -826,6 +1169,83 @@ def test_run_alignment_cli_writes_timing_json(
     assert payload["records"][0]["stage"] == "alignment.read_candidates"
     assert payload["records"][0]["metrics"] == {"candidate_count": 0}
     assert "Timing JSON:" in capsys.readouterr().out
+
+
+def test_run_alignment_cli_writes_live_timing_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    live_path = tmp_path / "diagnostics" / "alignment_live_timing.json"
+
+    def fake_run_alignment(**kwargs):
+        timing_recorder = kwargs["timing_recorder"]
+        timing_recorder.record("alignment.run_config", elapsed_sec=0.0)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--timing-live-output",
+            str(live_path),
+        ],
+    )
+
+    assert code == 0
+    payload = json.loads(live_path.read_text(encoding="utf-8"))
+    assert payload["records"][0]["stage"] == "alignment.run_config"
+    assert "Timing live JSON:" in capsys.readouterr().out
+
+
+def test_run_alignment_cli_writes_cprofile_outputs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    profile_dir = tmp_path / "profile"
+
+    monkeypatch.setattr(
+        run_alignment,
+        "run_alignment",
+        lambda **kwargs: AlignmentRunOutputs(),
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--profile",
+            "cprofile",
+            "--profile-output-dir",
+            str(profile_dir),
+        ],
+    )
+
+    assert code == 0
+    assert (profile_dir / "profile.prof").is_file()
+    assert (profile_dir / "profile_top.txt").is_file()
 
 
 def test_run_alignment_cli_rejects_invalid_raw_workers(

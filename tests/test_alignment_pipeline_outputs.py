@@ -1,3 +1,5 @@
+import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,6 +13,117 @@ from tests.alignment_pipeline_helpers import (
 from tests.alignment_pipeline_helpers import peak_config as _peak_config
 from tests.alignment_pipeline_helpers import write_batch as _write_batch
 from xic_extractor.alignment import AlignmentConfig
+from xic_extractor.alignment.pipeline_outputs import alignment_metadata, output_paths
+
+
+def test_alignment_metadata_records_baseline_audit_method() -> None:
+    peak_config = replace(_peak_config(), baseline_audit_method="asls")
+
+    metadata = alignment_metadata(
+        discovery_batch_index=Path("batch.csv"),
+        raw_dir=Path("raw"),
+        dll_dir=Path("dll"),
+        owner_backfill_xic_backend="raw",
+        output_level="validation",
+        peak_config=peak_config,
+    )
+
+    assert metadata["baseline_audit_method"] == "asls"
+    assert metadata["backfill_scope"] == "full-audit"
+    assert metadata["output_scope"] == "full-audit"
+    assert metadata["selected_family_source"] == ""
+    assert metadata["scope_warning"] == ""
+
+
+def test_alignment_metadata_records_baseline_integration_method() -> None:
+    peak_config = replace(_peak_config(), baseline_integration_method="linear_edge")
+
+    metadata = alignment_metadata(
+        discovery_batch_index=Path("batch.csv"),
+        raw_dir=Path("raw"),
+        dll_dir=Path("dll"),
+        owner_backfill_xic_backend="raw",
+        output_level="machine",
+        peak_config=peak_config,
+    )
+
+    assert metadata["baseline_integration_method"] == "linear_edge"
+
+
+def test_alignment_metadata_records_backfill_scope() -> None:
+    metadata = alignment_metadata(
+        discovery_batch_index=Path("batch.csv"),
+        raw_dir=Path("raw"),
+        dll_dir=Path("dll"),
+        owner_backfill_xic_backend="raw",
+        output_level="validation",
+        peak_config=_peak_config(),
+        backfill_scope="selected-families",
+        output_scope="diagnostic_only",
+        selected_family_count=2,
+        selected_family_source="tsv:selected.tsv",
+        scope_warning="diagnostic_only_incomplete_scope",
+        skipped_evidence_predicate_version="p7-test",
+    )
+
+    assert metadata["backfill_scope"] == "selected-families"
+    assert metadata["output_scope"] == "diagnostic_only"
+    assert metadata["selected_family_count"] == "2"
+    assert metadata["selected_family_source"] == "tsv:selected.tsv"
+    assert metadata["scope_warning"] == "diagnostic_only_incomplete_scope"
+    assert metadata["skipped_evidence_predicate_version"] == "p7-test"
+
+
+def test_alignment_metadata_records_audit_evidence_mode() -> None:
+    metadata = alignment_metadata(
+        discovery_batch_index=Path("batch.csv"),
+        raw_dir=Path("raw"),
+        dll_dir=Path("dll"),
+        owner_backfill_xic_backend="raw",
+        output_level="validation",
+        peak_config=_peak_config(),
+        backfill_scope="production-equivalent",
+        output_scope="production-equivalent",
+        audit_evidence_mode="none",
+        requested_audit_evidence_mode="auto",
+        heavy_audit_enabled=False,
+        audit_evidence_mode_reason="production_equivalent_default_no_audit",
+    )
+
+    assert metadata["audit_evidence_mode"] == "none"
+    assert metadata["requested_audit_evidence_mode"] == "auto"
+    assert metadata["heavy_audit_enabled"] == "False"
+    assert metadata["request_plan_version"] == "p7-owner-backfill-request-plan-v1"
+    assert (
+        metadata["audit_evidence_mode_reason"]
+        == "production_equivalent_default_no_audit"
+    )
+
+
+def test_validation_minimal_outputs_keep_gate_artifacts_without_debug_surfaces(
+    tmp_path: Path,
+) -> None:
+    outputs = output_paths(
+        tmp_path,
+        output_level="validation-minimal",
+        emit_alignment_cells=False,
+        emit_alignment_status_matrix=False,
+        emit_skipped_evidence_ledger=True,
+    )
+
+    assert outputs.matrix_tsv == tmp_path / "alignment_matrix.tsv"
+    assert outputs.review_tsv == tmp_path / "alignment_review.tsv"
+    assert outputs.cells_tsv == tmp_path / "alignment_cells.tsv"
+    assert outputs.workbook is None
+    assert outputs.review_html is None
+    assert outputs.edge_evidence_tsv is None
+    assert outputs.status_matrix_tsv is None
+    assert outputs.event_to_owner_tsv is None
+    assert outputs.ambiguous_owners_tsv is None
+    assert (
+        outputs.skipped_evidence_ledger_tsv == tmp_path / "skipped_evidence_ledger.tsv"
+    )
+    assert outputs.run_metadata_json == tmp_path / "alignment_run_metadata.json"
 
 
 def test_pipeline_debug_flags_write_optional_outputs(
@@ -51,6 +164,36 @@ def test_pipeline_debug_flags_write_optional_outputs(
     assert outputs.integration_audit_tsv.exists()
     assert outputs.backfill_seed_audit_tsv.exists()
     assert outputs.status_matrix_tsv.exists()
+
+
+def test_pipeline_writes_run_metadata_sidecar_for_p7_scoped_runs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A", "Sample_B"))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    (raw_dir / "Sample_B.raw").write_text("raw", encoding="utf-8")
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    outputs = pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+        backfill_scope="production-equivalent",
+    )
+
+    assert outputs.run_metadata_json == tmp_path / "out" / "alignment_run_metadata.json"
+    payload = json.loads(outputs.run_metadata_json.read_text(encoding="utf-8"))
+    assert payload["backfill_scope"] == "production-equivalent"
+    assert payload["audit_evidence_mode"] == "none"
+    assert payload["requested_audit_evidence_mode"] == "auto"
+    assert payload["request_plan_version"] == "p7-owner-backfill-request-plan-v1"
 
 
 def test_pipeline_enables_region_audit_only_when_alignment_cells_are_emitted(
@@ -293,6 +436,94 @@ def test_run_alignment_output_level_does_not_emit_integration_audit_by_default(
     assert "alignment_owner_backfill_seed_audit.tsv" not in names
     assert outputs.integration_audit_tsv is None
     assert outputs.backfill_seed_audit_tsv is None
+
+
+def test_run_alignment_validation_minimal_writes_machine_gate_surface_only(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    outputs = _run_minimal_alignment(
+        tmp_path,
+        monkeypatch,
+        output_level="validation-minimal",
+    )
+
+    names = sorted(path.name for path in (tmp_path / "out").iterdir())
+    assert names == [
+        "alignment_cells.tsv",
+        "alignment_matrix.tsv",
+        "alignment_review.tsv",
+    ]
+    assert outputs.matrix_tsv == tmp_path / "out" / "alignment_matrix.tsv"
+    assert outputs.review_tsv == tmp_path / "out" / "alignment_review.tsv"
+    assert outputs.cells_tsv == tmp_path / "out" / "alignment_cells.tsv"
+    assert outputs.workbook is None
+    assert outputs.review_html is None
+    assert outputs.edge_evidence_tsv is None
+    assert outputs.status_matrix_tsv is None
+
+
+def test_validation_minimal_auto_mode_does_not_enable_heavy_region_audit(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    calls = {}
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        lambda candidates, **kwargs: SimpleNamespace(
+            owners=("owner",),
+            assignments=(),
+            ambiguous_records=(),
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (
+            "feature",
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+
+    def fake_owner_backfill(features, **kwargs):
+        calls["emit_region_audit"] = kwargs["emit_region_audit"]
+        calls["audit_evidence_mode"] = kwargs["audit_evidence_mode"]
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        fake_owner_backfill,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        output_level="validation-minimal",
+        raw_opener=FakeRawOpener(),
+    )
+
+    assert calls["emit_region_audit"] is False
+    assert calls["audit_evidence_mode"] == "none"
 
 
 def test_run_alignment_validation_level_writes_owner_edge_evidence_tsv(

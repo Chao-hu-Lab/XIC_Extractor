@@ -30,9 +30,28 @@ jobs:
       - run: uv run mypy xic_extractor
 
   test:
-    uses: Chao-hu-Lab/shared-workflows/.github/workflows/python-ci.yml@c5276382aafc2ee6c0f14b3651cad8aca9f74758
-    with:
-      python-versions: '["3.11", "3.12"]'
-      install-args: "-e .[dev]"
-      pythonpath: ""
-      submodules: false
+    name: test / Test (Python ${{ matrix.python-version }})
+    runs-on: self-hosted
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo-${{ matrix.python-version }}
+          submodules: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          working-directory: repo-${{ matrix.python-version }}
+      - name: Install
+        shell: pwsh
+        working-directory: repo-${{ matrix.python-version }}
+        run: |
+          uv venv --python ${{ matrix.python-version }} --clear
+          uv pip install -e .[dev]
+      - name: Test
+        shell: pwsh
+        working-directory: repo-${{ matrix.python-version }}
+        run: uv run pytest -v --tb=short -x

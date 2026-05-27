@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
+from xic_extractor.alignment.backfill_scope import (
+    REQUEST_PLAN_VERSION,
+    SkippedEvidenceRecord,
+    write_skipped_evidence_ledger_tsv,
+)
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.debug_writer import (
     write_ambiguous_ms1_owners_tsv,
@@ -45,6 +51,8 @@ class AlignmentRunOutputs:
     event_to_owner_tsv: Path | None = None
     ambiguous_owners_tsv: Path | None = None
     edge_evidence_tsv: Path | None = None
+    skipped_evidence_ledger_tsv: Path | None = None
+    run_metadata_json: Path | None = None
     identity_coherence_output_dir: Path | None = None
 
 
@@ -56,6 +64,7 @@ def output_paths(
     emit_alignment_status_matrix: bool,
     emit_alignment_integration_audit: bool = False,
     emit_alignment_backfill_seed_audit: bool = False,
+    emit_skipped_evidence_ledger: bool = False,
 ) -> AlignmentRunOutputs:
     artifacts = set(artifact_names_for_output_level(output_level))
     if emit_alignment_cells:
@@ -118,6 +127,16 @@ def output_paths(
             if "owner_edge_evidence.tsv" in artifacts
             else None
         ),
+        skipped_evidence_ledger_tsv=(
+            output_dir / "skipped_evidence_ledger.tsv"
+            if emit_skipped_evidence_ledger
+            else None
+        ),
+        run_metadata_json=(
+            output_dir / "alignment_run_metadata.json"
+            if emit_skipped_evidence_ledger
+            else None
+        ),
     )
 
 
@@ -129,6 +148,19 @@ def alignment_metadata(
     owner_backfill_xic_backend: OwnerBackfillXicBackend,
     output_level: AlignmentOutputLevel,
     peak_config: ExtractionConfig,
+    owner_backfill_window_strategy: str = "exact",
+    owner_backfill_superwindow_span_factor: int = 2,
+    backfill_scope: str = "full-audit",
+    output_scope: str = "full-audit",
+    selected_family_count: int = 0,
+    selected_family_source: str = "",
+    request_plan_version: str = REQUEST_PLAN_VERSION,
+    audit_evidence_mode: str = "full",
+    requested_audit_evidence_mode: str = "auto",
+    heavy_audit_enabled: bool = True,
+    audit_evidence_mode_reason: str = "",
+    scope_warning: str = "",
+    skipped_evidence_predicate_version: str = "",
 ) -> dict[str, str]:
     return {
         "schema_version": "alignment-results-v1",
@@ -136,8 +168,25 @@ def alignment_metadata(
         "raw_dir": str(raw_dir),
         "dll_dir": str(dll_dir),
         "owner_backfill_xic_backend": owner_backfill_xic_backend,
+        "owner_backfill_window_strategy": owner_backfill_window_strategy,
+        "owner_backfill_superwindow_span_factor": str(
+            owner_backfill_superwindow_span_factor,
+        ),
         "output_level": output_level,
         "resolver_mode": peak_config.resolver_mode,
+        "baseline_audit_method": peak_config.baseline_audit_method,
+        "baseline_integration_method": peak_config.baseline_integration_method,
+        "backfill_scope": backfill_scope,
+        "output_scope": output_scope,
+        "selected_family_count": str(selected_family_count),
+        "selected_family_source": selected_family_source,
+        "request_plan_version": request_plan_version,
+        "audit_evidence_mode": audit_evidence_mode,
+        "requested_audit_evidence_mode": requested_audit_evidence_mode,
+        "heavy_audit_enabled": str(heavy_audit_enabled),
+        "audit_evidence_mode_reason": audit_evidence_mode_reason,
+        "scope_warning": scope_warning,
+        "skipped_evidence_predicate_version": skipped_evidence_predicate_version,
     }
 
 
@@ -149,6 +198,9 @@ def write_outputs_atomic(
     ownership: OwnershipBuildResult,
     alignment_config: AlignmentConfig,
     edge_evidence: Sequence[OwnerEdgeEvidence] = (),
+    skipped_evidence: Sequence[SkippedEvidenceRecord] = (),
+    baseline_integration_method: str = "asls",
+    baseline_audit_method: str = "",
 ) -> None:
     output_paths_and_writers: list[tuple[Path, Callable[[Path], Path]]] = []
     if outputs.workbook is not None:
@@ -200,7 +252,12 @@ def write_outputs_atomic(
         output_paths_and_writers.append(
             (
                 outputs.integration_audit_tsv,
-                lambda path: write_alignment_cell_integration_audit_tsv(path, matrix),
+                lambda path: write_alignment_cell_integration_audit_tsv(
+                    path,
+                    matrix,
+                    baseline_integration_method=baseline_integration_method,
+                    baseline_audit_method=baseline_audit_method,
+                ),
             ),
         )
     if outputs.backfill_seed_audit_tsv is not None:
@@ -242,6 +299,20 @@ def write_outputs_atomic(
             (
                 outputs.edge_evidence_tsv,
                 lambda path: write_owner_edge_evidence_tsv(path, edge_evidence),
+            ),
+        )
+    if outputs.skipped_evidence_ledger_tsv is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.skipped_evidence_ledger_tsv,
+                lambda path: write_skipped_evidence_ledger_tsv(path, skipped_evidence),
+            ),
+        )
+    if outputs.run_metadata_json is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.run_metadata_json,
+                lambda path: _write_metadata_json(path, metadata),
             ),
         )
 
@@ -286,6 +357,15 @@ def write_outputs_atomic(
 
 def _temp_path(final_path: Path) -> Path:
     return final_path.with_name(f"{final_path.name}.tmp")
+
+
+def _write_metadata_json(path: Path, metadata: dict[str, str]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return path
 
 
 def _backup_path(final_path: Path) -> Path:

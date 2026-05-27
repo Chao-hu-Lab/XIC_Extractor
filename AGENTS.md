@@ -6,6 +6,8 @@ to influence implementation choices.
 
 For directory layout, file placement rules, and scratch directory hygiene, see
 [`docs/project-layout.md`](docs/project-layout.md).
+For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
+[`docs/agent-parameter-settings.md`](docs/agent-parameter-settings.md).
 
 ## Human Communication And Review Surfaces
 
@@ -33,6 +35,15 @@ For directory layout, file placement rules, and scratch directory hygiene, see
 - Before non-trivial edits, confirm the intended worktree, branch, and dirty diff
   scope. Classify unrelated dirty files, and do not stage, rewrite, or revert
   them unless explicitly requested.
+- Before running commands that depend on Python environment, Thermo RAW files,
+  DLLs, or common validation data, read `docs/agent-parameter-settings.md` and
+  use its documented paths and runners. Task-specific artifacts belong in the
+  active spec, plan, validation note, or output index, not in the long-lived
+  agent settings file.
+- Treat `docs/agent-parameter-settings.md` as maintained operational memory.
+  After a RAW / validation run establishes a reusable command shape, or after a
+  launch pattern repeatedly fails, update that file with the stable parameters,
+  anti-pattern, and evidence note before repeating the workflow.
 - Keep outputs organized under task-specific `output/` or `docs/superpowers/`
   paths. Do not drop diagnostic graphs, TSVs, notebooks, or one-off artifacts in
   the repo root. Every new diagnostic output group should have a summary or
@@ -44,9 +55,68 @@ For directory layout, file placement rules, and scratch directory hygiene, see
   validation used synthetic tests only, 8-RAW, 85-RAW, targeted benchmark, or
   manual EIC review. If real-data validation was skipped, say why and mark the
   remaining risk.
+- For long RAW / validation runs, preflight the exact command shape before
+  launch: documented runner, sample set, output level, expected artifacts,
+  heartbeat sidecars, timeout / stop condition, and whether existing artifacts
+  can answer the question without rerunning. If a run stalls or exceeds the
+  expected heartbeat, stop and inspect timing / profiling output instead of
+  relaunching the same command.
+- For alignment validation or downstream handoff, prefer
+  `--output-level validation-minimal`: `alignment_matrix.tsv` is the downstream
+  correction/statistics contract, while targeted benchmark diagnostics also need
+  `alignment_review.tsv` and `alignment_cells.tsv`. Do not generate `.xlsx`,
+  HTML, owner-edge, status-matrix, event-owner, or ambiguous-owner artifacts for
+  large validation runs unless a human review or debug task explicitly needs
+  them.
+- Do not run 85-RAW validation by launching a background `Start-Process` from
+  the Codex shell and then returning to poll it. That pattern has repeatedly
+  failed in this environment. Use the foreground command shape documented in
+  `docs/agent-parameter-settings.md` with heartbeat sidecars, or get explicit
+  user approval for an external terminal / automation.
 - Plans should separate `Now`, `Later`, and `Not in scope`, with checkpoint-level
   acceptance criteria and stop conditions. Do not let a plan imply production
   changes when the current phase is only audit, shadow, or validation.
+
+## Planning And Evidence Budget
+
+- Before a phase plan or expensive validation run, name the decision it can
+  close, the strongest existing internal oracle, the missing independent
+  evidence, expected runtime/artifacts, and the fail-fast or inconclusive path.
+- Search `tools/diagnostics/INDEX.md`, relevant notes, and existing validation
+  outputs before inventing a new workflow. Reuse them unless they cannot answer
+  the current phase decision.
+- Any `audit_only`, `shadow_only`, or `diagnostic_only` path needs an exit rule:
+  promote, kill, externalize, or name the single missing evidence.
+- Do not expand validation when the result cannot change the next action. Use
+  the smallest confirmation plus rollback guard.
+
+## Product Roadmap Discipline
+
+- P-specs, C-specs, and implementation plans must state whether they advance
+  `Trace` / `TraceGroup`, multi-source `PeakHypothesis`, `EvidenceVector`,
+  `IntegrationResult`, model selection, or `AuditTrail`. If they advance none,
+  label them cleanup-only and do not present them as modernization progress.
+- Separate infrastructure existence from product behavior. Diagnostic TSVs,
+  shadow reports, wrappers, and sidecars prove observability, not product
+  usability.
+- Prefer establishing the minimal future spine or dual-write contract before
+  polishing legacy DTOs, resolver names, or scoring split points likely to move
+  during handoff migration.
+- CWT, WIS, local minima, curvature, derivative, and region-first logic are
+  evidence or hypothesis sources. A phase touching them must declare one mode:
+  audit-only, hypothesis enumeration, model-selection calibration, production
+  candidate, or retirement.
+
+## Validation Phase Types
+
+- Science phase: require independent domain evidence capable of disproving false
+  confidence. Median RSD alone is not enough.
+- Cleanup phase: require numerical parity against the settled baseline; behavior
+  changes relabel the phase.
+- Engineering phase: require characterization parity and maintainability gain;
+  do not bundle behavior changes.
+- Documentation / diagnostic phase: require consistency and reviewer
+  readability; no numerical gate language applies.
 
 ## Design Principles
 
@@ -133,6 +203,13 @@ For directory layout, file placement rules, and scratch directory hygiene, see
 - Treat `tools/diagnostics/` as maintained product code. Diagnostic CLIs should
   parse, validate, and orchestrate only; reusable loading, classification,
   models, summaries, plotting, and writers belong in focused modules.
+- Before any PR that adds, removes, or renames a CLI entry-point in
+  `tools/diagnostics/`, read `tools/diagnostics/INDEX.md` and cite which
+  existing entries were considered. Every PR that changes the set of
+  entry-points must update `INDEX.md` in the same diff (Purpose, Topic
+  group, Originating spec/plan for new entries; tombstone for retired
+  ones). Full lifecycle rules live in
+  `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`.
 - Diagnostic writers render TSV/JSON/HTML/XLSX/plots only. They must not
   recompute domain evidence or re-scan RAW files; pass typed summaries from the
   code path where trace context already exists.

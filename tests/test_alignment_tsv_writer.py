@@ -1,5 +1,6 @@
 import csv
 import math
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -234,8 +235,7 @@ def test_write_alignment_review_tsv_reports_folded_clusters(tmp_path: Path):
                 folded_member_count=5,
                 folded_sample_fill_count=1,
                 fold_evidence=(
-                    "cid_nl_only;max_mz_ppm=2;max_rt_sec=1;"
-                    "min_shared_detected=4"
+                    "cid_nl_only;max_mz_ppm=2;max_rt_sec=1;min_shared_detected=4"
                 ),
             ),
         ),
@@ -253,8 +253,7 @@ def test_write_alignment_review_tsv_reports_folded_clusters(tmp_path: Path):
     assert rows[0]["event_member_count"] == "7"
     assert rows[0]["family_evidence"].startswith("cid_nl_only;")
     assert rows[0]["reason"] == (
-        "anchor family; 2/2 present; 1 MS1 backfilled; "
-        "merged 3 event clusters"
+        "anchor family; 2/2 present; 1 MS1 backfilled; merged 3 event clusters"
     )
 
 
@@ -449,9 +448,7 @@ def test_write_alignment_status_matrix_tsv_preserves_duplicate_assigned(
         sample_order=("sample-a",),
     )
 
-    rows = _read_tsv(
-        write_alignment_status_matrix_tsv(tmp_path / "status.tsv", matrix)
-    )
+    rows = _read_tsv(write_alignment_status_matrix_tsv(tmp_path / "status.tsv", matrix))
 
     assert rows[0]["sample-a"] == "duplicate_assigned"
 
@@ -524,6 +521,30 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
     assert status[0]["sample-b"] == "unchecked"
 
 
+def test_alignment_cells_tsv_can_emit_without_region_audit(tmp_path: Path) -> None:
+    from xic_extractor.alignment.tsv_writer import write_alignment_cells_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(),),
+        cells=(
+            _cell(
+                "sample-a",
+                "detected",
+                area=10.0,
+                candidate_id="sample-a#1",
+            ),
+        ),
+        sample_order=("sample-a",),
+    )
+
+    cells = _read_tsv(write_alignment_cells_tsv(tmp_path / "cells.tsv", matrix))
+    region_columns = [column for column in cells[0] if column.startswith("region_")]
+
+    assert cells[0]["status"] == "detected"
+    assert region_columns
+    assert all(cells[0][column] == "" for column in region_columns)
+
+
 def test_write_alignment_cell_integration_audit_tsv_is_sidecar(
     tmp_path: Path,
 ) -> None:
@@ -562,12 +583,97 @@ def test_write_alignment_cell_integration_audit_tsv_is_sidecar(
     assert audit[0]["sample_stem"] == "sample-a"
     assert audit[0]["status"] == "detected"
     assert audit[0]["neutral_loss_tag"] == "DNA_dR"
-    assert audit[0]["area_baseline_corrected"] == "7.5"
+    assert audit[0]["area_baseline_corrected"] == "8"
     assert audit[0]["area_uncertainty"] == "2"
-    assert audit[0]["baseline_type"] == "linear_edge"
+    assert audit[0]["area_uncertainty_formula_version"] == "baseline_residual_mad_v1"
+    assert audit[0]["baseline_residual_mad"] == "0.5"
+    assert audit[0]["area_uncertainty_noise_source"] == "asls_residual"
+    assert audit[0]["baseline_type"] == "asls"
     assert audit[0]["uncertainty_fraction"] == "0.2"
-    assert audit[0]["baseline_fraction"] == "0.75"
+    assert audit[0]["baseline_fraction"] == "0.8"
     assert audit[0]["integration_scan_count"] == "5"
+    assert audit[0]["area_baseline_corrected_linear_edge"] == "7.5"
+    assert audit[0]["baseline_score_linear_edge"] == "0.75"
+
+
+def test_cell_integration_audit_default_schema_uses_asls_with_linear_rollback(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import (
+        ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
+        write_alignment_cell_integration_audit_tsv,
+    )
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(),),
+        cells=(_cell("sample-a", "detected", area=10.0, integration=True),),
+        sample_order=("sample-a",),
+    )
+
+    rows = _read_tsv(
+        write_alignment_cell_integration_audit_tsv(
+            tmp_path / "alignment_cell_integration_audit.tsv",
+            matrix,
+        )
+    )
+
+    assert list(rows[0]) == list(ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS)
+    assert rows[0]["baseline_type"] == "asls"
+    assert rows[0]["area_baseline_corrected"] == "8"
+    assert rows[0]["baseline_score"] == "0.8"
+    assert rows[0]["area_baseline_corrected_linear_edge"] == "7.5"
+    assert rows[0]["baseline_score_linear_edge"] == "0.75"
+    assert "area_baseline_corrected_asls" not in rows[0]
+    assert "baseline_score_asls" not in rows[0]
+
+
+def test_cell_integration_audit_can_emit_legacy_asls_shadow_for_linear_edge(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import (
+        write_alignment_cell_integration_audit_tsv,
+    )
+
+    cell = _cell("sample-a", "detected", area=10.0, integration=True)
+    cell = replace(
+        cell,
+        integration_audit=CellIntegrationAuditSummary(
+            raw_area=10.0,
+            area_baseline_corrected=7.5,
+            area_uncertainty=2.0,
+            area_uncertainty_formula_version="baseline_residual_mad_v1",
+            baseline_residual_mad=0.5,
+            area_uncertainty_noise_source="asls_residual",
+            baseline_type="linear_edge",
+            baseline_score=0.75,
+            uncertainty_fraction=0.2,
+            baseline_fraction=0.75,
+            integration_scan_count=5,
+            area_baseline_corrected_asls=8.0,
+            baseline_score_asls=0.8,
+        ),
+    )
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(),),
+        cells=(cell,),
+        sample_order=("sample-a",),
+    )
+
+    rows = _read_tsv(
+        write_alignment_cell_integration_audit_tsv(
+            tmp_path / "alignment_cell_integration_audit.tsv",
+            matrix,
+            baseline_integration_method="linear_edge",
+            baseline_audit_method="asls",
+        )
+    )
+
+    assert rows[0]["area_baseline_corrected"] == "7.5"
+    assert rows[0]["baseline_score"] == "0.75"
+    assert rows[0]["area_baseline_corrected_asls"] == "8"
+    assert rows[0]["baseline_score_asls"] == "0.8"
+    assert "area_baseline_corrected_linear_edge" not in rows[0]
+    assert "baseline_score_linear_edge" not in rows[0]
 
 
 def test_write_alignment_owner_backfill_seed_audit_tsv_is_sidecar(
@@ -738,9 +844,7 @@ def _cell(
         region_area_ratio=1.04 if region else None,
         region_selected_interval_count=2 if region else None,
         region_selected_interval_gap_max_min=0.04 if region else None,
-        region_local_mixture_diagnostic=(
-            "one_envelope_supported" if region else ""
-        ),
+        region_local_mixture_diagnostic=("one_envelope_supported" if region else ""),
         region_local_mixture_reason=(
             "adjacent intervals support one envelope" if region else ""
         ),
@@ -748,13 +852,18 @@ def _cell(
         integration_audit=(
             CellIntegrationAuditSummary(
                 raw_area=area,
-                area_baseline_corrected=7.5,
+                area_baseline_corrected=8.0,
                 area_uncertainty=2.0,
-                baseline_type="linear_edge",
-                baseline_score=0.75,
+                area_uncertainty_formula_version="baseline_residual_mad_v1",
+                baseline_residual_mad=0.5,
+                area_uncertainty_noise_source="asls_residual",
+                baseline_type="asls",
+                baseline_score=0.8,
                 uncertainty_fraction=0.2,
-                baseline_fraction=0.75,
+                baseline_fraction=0.8,
                 integration_scan_count=5,
+                area_baseline_corrected_linear_edge=7.5,
+                baseline_score_linear_edge=0.75,
             )
             if integration
             else None

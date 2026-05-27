@@ -1,6 +1,9 @@
-
+import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 import xic_extractor.alignment.pipeline as pipeline_module
 from tests.alignment_pipeline_helpers import FakeRawOpener
@@ -33,6 +36,8 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
         peak_config,
         raw_xic_batch_size,
         emit_region_audit,
+        region_audit_family_ids,
+        audit_evidence_mode,
     ):
         calls["candidates"] = tuple(candidate.sample_stem for candidate in candidates)
         calls["owner_raw_sources"] = raw_sources
@@ -40,6 +45,8 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
         calls["peak_config"] = peak_config
         calls["owner_raw_xic_batch_size"] = raw_xic_batch_size
         calls["owner_emit_region_audit"] = emit_region_audit
+        calls["owner_region_audit_family_ids"] = region_audit_family_ids
+        calls["owner_audit_evidence_mode"] = audit_evidence_mode
         return SimpleNamespace(owners=("owner",), ambiguous_records=())
 
     def fake_cluster_owners(owners, *, config):
@@ -55,13 +62,23 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
         alignment_config,
         peak_config,
         raw_xic_batch_size,
+        owner_backfill_window_strategy,
+        owner_backfill_superwindow_span_factor,
         emit_region_audit,
+        region_audit_family_ids,
+        audit_evidence_mode,
     ):
         calls["features"] = features
         calls["sample_order"] = sample_order
         calls["raw_sources"] = raw_sources
         calls["backfill_raw_xic_batch_size"] = raw_xic_batch_size
+        calls["owner_backfill_window_strategy"] = owner_backfill_window_strategy
+        calls["owner_backfill_superwindow_span_factor"] = (
+            owner_backfill_superwindow_span_factor
+        )
         calls["emit_region_audit"] = emit_region_audit
+        calls["backfill_region_audit_family_ids"] = region_audit_family_ids
+        calls["audit_evidence_mode"] = audit_evidence_mode
         return ("rescued",)
 
     def fake_owner_matrix(
@@ -110,8 +127,14 @@ def test_pipeline_loads_candidates_builds_owners_backfills_and_writes_defaults(
     assert set(calls["raw_sources"]) == {"Sample_A", "Sample_B"}
     assert calls["owner_raw_xic_batch_size"] == 1
     assert calls["owner_emit_region_audit"] is False
+    assert calls["owner_region_audit_family_ids"] is None
+    assert calls["owner_audit_evidence_mode"] == "none"
     assert calls["backfill_raw_xic_batch_size"] == 1
+    assert calls["owner_backfill_window_strategy"] == "exact"
+    assert calls["owner_backfill_superwindow_span_factor"] == 2
     assert calls["emit_region_audit"] is False
+    assert calls["backfill_region_audit_family_ids"] is None
+    assert calls["audit_evidence_mode"] == "none"
     assert calls["matrix_features"] == ("feature",)
     assert calls["ambiguous_by_sample"] == {}
     assert calls["rescued_cells"] == ("rescued",)
@@ -236,6 +259,176 @@ def test_pipeline_builds_owner_features_before_owner_matrix(
     assert calls["written_matrix"] is owner_matrix
 
 
+def test_pipeline_production_equivalent_scope_skips_safe_backfill_only(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A", "Sample_B"))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    (raw_dir / "Sample_B.raw").write_text("raw", encoding="utf-8")
+    feature = _scope_feature("FAM001", owners=("Sample_A",))
+    calls = {}
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        lambda candidates, **kwargs: SimpleNamespace(
+            owners=("owner",),
+            assignments=(),
+            ambiguous_records=(),
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (
+            feature,
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+
+    def fake_backfill(features, **kwargs):
+        calls["backfill_features"] = features
+        return ()
+
+    def fake_owner_matrix(features, *, sample_order, **kwargs):
+        calls["matrix_features"] = features
+        return _matrix(sample_order)
+
+    monkeypatch.setattr(pipeline_module, "build_owner_backfill_cells", fake_backfill)
+    monkeypatch.setattr(
+        pipeline_module, "build_owner_alignment_matrix", fake_owner_matrix
+    )
+
+    outputs = pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+        backfill_scope="production-equivalent",
+    )
+
+    assert calls["backfill_features"] == ()
+    assert calls["matrix_features"] == (feature,)
+    assert outputs.skipped_evidence_ledger_tsv is not None
+    ledger_text = outputs.skipped_evidence_ledger_tsv.read_text(encoding="utf-8")
+    assert "single_detected_no_consolidation_candidate" in ledger_text
+    assert "\tSample_B\t" in ledger_text
+    assert outputs.run_metadata_json is not None
+    metadata = json.loads(outputs.run_metadata_json.read_text(encoding="utf-8"))
+    assert metadata["backfill_scope"] == "production-equivalent"
+    assert metadata["audit_evidence_mode"] == "none"
+    assert metadata["request_plan_version"] == "p7-owner-backfill-request-plan-v1"
+
+
+def test_pipeline_production_equivalent_validation_does_not_enable_heavy_audit(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A", "Sample_B"))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    (raw_dir / "Sample_B.raw").write_text("raw", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    def fake_owner_backfill(features, **kwargs):
+        calls["emit_region_audit"] = kwargs["emit_region_audit"]
+        calls["audit_evidence_mode"] = kwargs["audit_evidence_mode"]
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module, "build_owner_backfill_cells", fake_owner_backfill
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+        emit_alignment_cells=True,
+        backfill_scope="production-equivalent",
+    )
+
+    assert calls["emit_region_audit"] is False
+    assert calls["audit_evidence_mode"] == "none"
+
+
+def test_pipeline_asls_flag_without_audit_destination_stays_slim(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A", "Sample_B"))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    (raw_dir / "Sample_B.raw").write_text("raw", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    def fake_owner_backfill(features, **kwargs):
+        calls["emit_region_audit"] = kwargs["emit_region_audit"]
+        calls["audit_evidence_mode"] = kwargs["audit_evidence_mode"]
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module, "build_owner_backfill_cells", fake_owner_backfill
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=replace(_peak_config(), baseline_audit_method="asls"),
+        raw_opener=FakeRawOpener(),
+        backfill_scope="production-equivalent",
+    )
+
+    assert calls["emit_region_audit"] is False
+    assert calls["audit_evidence_mode"] == "none"
+
+
+def test_pipeline_rejects_selected_audit_mode_outside_selected_scope(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    with pytest.raises(ValueError, match="selected-families"):
+        pipeline_module.run_alignment(
+            discovery_batch_index=batch_index,
+            raw_dir=raw_dir,
+            dll_dir=tmp_path / "dll",
+            output_dir=tmp_path / "out",
+            alignment_config=AlignmentConfig(),
+            peak_config=_peak_config(),
+            raw_opener=FakeRawOpener(),
+            backfill_scope="production-equivalent",
+            audit_evidence_mode="selected",
+        )
+
+
 def test_pipeline_applies_claim_registry_before_writing(
     tmp_path: Path,
     monkeypatch,
@@ -339,3 +532,27 @@ class _DriftLookup:
 
     def injection_order(self, sample_stem: str) -> int | None:
         return {"Sample_A": 1}.get(sample_stem)
+
+
+def _scope_feature(
+    family_id: str,
+    *,
+    owners: tuple[str, ...],
+    confirm: bool = False,
+):
+    return SimpleNamespace(
+        feature_family_id=family_id,
+        neutral_loss_tag="DNA_dR",
+        family_center_mz=500.0,
+        family_center_rt=8.5,
+        family_product_mz=384.0,
+        family_observed_neutral_loss_da=116.0,
+        has_anchor=True,
+        owners=tuple(
+            SimpleNamespace(sample_stem=sample, owner_area=100.0) for sample in owners
+        ),
+        evidence="single_sample_local_owner",
+        review_only=False,
+        confirm_local_owners_with_backfill=confirm,
+        backfill_seed_centers=(),
+    )

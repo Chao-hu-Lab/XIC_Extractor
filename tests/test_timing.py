@@ -58,6 +58,32 @@ def test_timing_recorder_records_exception_stage_before_reraising() -> None:
     assert recorder.records[0].elapsed_sec == pytest.approx(0.25)
 
 
+def test_timing_recorder_live_output_updates_on_each_record(tmp_path: Path) -> None:
+    live_path = tmp_path / "live" / "timing.json"
+    recorder = TimingRecorder(
+        "alignment",
+        run_id="run-live",
+        live_output_path=live_path,
+        timer=_Timer([1.0, 1.5, 2.0, 2.25]),
+    )
+
+    recorder.record("alignment.run_config", elapsed_sec=0.0)
+    payload = json.loads(live_path.read_text(encoding="utf-8"))
+    assert [record["stage"] for record in payload["records"]] == [
+        "alignment.run_config"
+    ]
+
+    with recorder.stage("alignment.read_batch_index"):
+        pass
+
+    payload = json.loads(live_path.read_text(encoding="utf-8"))
+    assert [record["stage"] for record in payload["records"]] == [
+        "alignment.run_config",
+        "alignment.read_batch_index",
+    ]
+    assert payload["records"][1]["elapsed_sec"] == pytest.approx(0.5)
+
+
 def test_timing_recorder_disabled_mode_records_nothing() -> None:
     recorder = TimingRecorder.disabled("discovery", timer=_Timer([1.0, 2.0]))
 

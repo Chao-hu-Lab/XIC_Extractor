@@ -110,7 +110,7 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.smooth_window == 15
     assert config.smooth_polyorder == 3
     assert config.count_no_ms2_as_detected is False
-    assert config.resolver_mode == "legacy_savgol"
+    assert config.resolver_mode == "region_first_safe_merge"
     assert config.resolver_chrom_threshold == pytest.approx(0.05)
     assert config.resolver_min_search_range_min == pytest.approx(0.08)
     assert config.resolver_min_relative_height == pytest.approx(0.02)
@@ -121,6 +121,7 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.resolver_min_scans == 5
     assert config.parallel_mode == "process"
     assert config.parallel_workers == default_parallel_workers()
+    assert config.baseline_audit_method == ""
     assert config.emit_peak_candidates is False
     assert targets[0].label == "Analyte"
     assert targets[0].neutral_loss_da == pytest.approx(116.0474)
@@ -351,14 +352,75 @@ def test_load_config_accepts_emit_peak_candidates_setting(tmp_path: Path) -> Non
     assert config.emit_peak_candidates is True
 
 
+def test_load_config_accepts_asls_baseline_audit_method(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"baseline_audit_method": "asls"})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.baseline_audit_method == "asls"
+
+
+def test_load_config_defaults_baseline_integration_method_to_asls(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.baseline_integration_method == "asls"
+
+
+def test_load_config_accepts_linear_edge_baseline_integration_method(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"baseline_integration_method": "linear_edge"})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.baseline_integration_method == "linear_edge"
+
+
+def test_load_config_rejects_unknown_baseline_integration_method(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"baseline_integration_method": "airpls"})
+    _write_targets(config_dir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "settings.csv", "baseline_integration_method", "airpls")
+
+
+def test_load_config_rejects_unknown_baseline_audit_method(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"baseline_audit_method": "airpls"})
+    _write_targets(config_dir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "settings.csv", "baseline_audit_method", "airpls")
+
+
 def test_canonical_settings_defaults_include_parallel_settings() -> None:
     assert CANONICAL_SETTINGS_DEFAULTS["parallel_mode"] == "process"
     assert CANONICAL_SETTINGS_DEFAULTS["parallel_workers"] == str(
         default_parallel_workers()
     )
+    assert CANONICAL_SETTINGS_DEFAULTS["baseline_audit_method"] == ""
+    assert CANONICAL_SETTINGS_DEFAULTS["baseline_integration_method"] == "asls"
 
 
 def test_canonical_settings_defaults_include_local_minimum_preset() -> None:
+    assert CANONICAL_SETTINGS_DEFAULTS["resolver_mode"] == "region_first_safe_merge"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_chrom_threshold"] == "0.05"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_search_range_min"] == "0.08"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_relative_height"] == "0.02"
@@ -377,6 +439,8 @@ def test_settings_example_includes_parallel_settings() -> None:
 
     assert rows["parallel_mode"] == "process"
     assert int(rows["parallel_workers"]) >= 1
+    assert rows["baseline_audit_method"] == ""
+    assert rows["baseline_integration_method"] == "asls"
 
 
 def test_settings_example_includes_review_report_setting() -> None:
@@ -420,7 +484,7 @@ def test_settings_example_documents_region_first_safe_merge_mode() -> None:
         rows = {row["key"]: row for row in csv.DictReader(handle)}
 
     resolver_row = rows["resolver_mode"]
-    assert resolver_row["value"] == "legacy_savgol"
+    assert resolver_row["value"] == "region_first_safe_merge"
     assert "region_first_safe_merge" in resolver_row["description"]
 
 

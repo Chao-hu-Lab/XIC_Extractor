@@ -225,10 +225,18 @@ def test_stop_requests_interruption(tmp_path: Path, monkeypatch) -> None:
     assert called == [True]
 
 
-def test_main_window_run_uses_user_writable_config_dir(monkeypatch, qtbot) -> None:
+def test_main_window_run_uses_user_writable_config_dir(
+    tmp_path: Path,
+    monkeypatch,
+    qtbot,
+) -> None:
     import gui.main_window as module
 
     created: list[Path] = []
+    data_dir = tmp_path / "data"
+    dll_dir = tmp_path / "dll"
+    data_dir.mkdir()
+    dll_dir.mkdir()
 
     class FakeWorker:
         progress = _Signal()
@@ -242,7 +250,11 @@ def test_main_window_run_uses_user_writable_config_dir(monkeypatch, qtbot) -> No
             pass
 
     monkeypatch.setattr(module, "PipelineWorker", FakeWorker)
-    monkeypatch.setattr(module, "read_settings", lambda: {})
+    monkeypatch.setattr(
+        module,
+        "read_settings",
+        lambda: {"data_dir": str(data_dir), "dll_dir": str(dll_dir)},
+    )
     monkeypatch.setattr(module, "read_targets", lambda: [])
     monkeypatch.setattr(module, "write_settings", lambda _settings: None)
     monkeypatch.setattr(module, "write_targets", lambda _targets: None)
@@ -307,17 +319,23 @@ def test_main_window_does_not_start_worker_when_parallel_settings_are_invalid(
 
 
 def test_main_window_load_config_persists_first_run_settings_migration(
-    monkeypatch, qtbot
+    tmp_path: Path,
+    monkeypatch,
+    qtbot,
 ) -> None:
     import gui.main_window as module
 
     saved: list[dict[str, str]] = []
+    data_dir = tmp_path / "data"
+    dll_dir = tmp_path / "dll"
+    data_dir.mkdir()
+    dll_dir.mkdir()
     monkeypatch.setattr(
         module,
         "read_settings",
         lambda: {
-            "data_dir": "C:\\data",
-            "dll_dir": "C:\\dll",
+            "data_dir": str(data_dir),
+            "dll_dir": str(dll_dir),
             "smooth_points": "19",
             "smooth_sigma": "3.0",
         },

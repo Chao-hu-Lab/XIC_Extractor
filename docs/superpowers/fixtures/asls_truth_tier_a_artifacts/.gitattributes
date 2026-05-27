@@ -1,0 +1,8 @@
+*.json text eol=lf
+*.md text eol=lf
+*.tsv text eol=lf
+**/*.json text eol=lf
+**/*.md text eol=lf
+**/*.tsv text eol=lf
+*.png binary
+**/*.png binary

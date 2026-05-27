@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import csv
 from collections import defaultdict
 from pathlib import Path
 
 from openpyxl import load_workbook
 
+from tools.diagnostics.diagnostic_io import read_tsv_required
 from tools.diagnostics.targeted_gt_alignment_audit_models import (
     AuditConfig,
     TargetGroundTruth,
@@ -98,11 +98,10 @@ def _rows_by_target_role(
 
 
 def _load_tsv(path: Path) -> list[dict[str, str]]:
-    with path.open(encoding="utf-8", newline="") as handle:
-        return [
-            {key: _unescape_excel_formula(value) for key, value in row.items()}
-            for row in csv.DictReader(handle, delimiter="\t")
-        ]
+    return [
+        {key: _unescape_excel_formula(value) for key, value in row.items()}
+        for row in read_tsv_required(path, ())
+    ]
 
 
 def _filter_review_by_mz(

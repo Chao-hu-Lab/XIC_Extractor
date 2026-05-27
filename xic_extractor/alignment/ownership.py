@@ -25,6 +25,8 @@ from xic_extractor.peak_detection.region_audit import (
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
 
+_OWNER_PEAK_WINDOW_PADDING_MIN = 0.10
+
 
 class OwnershipXICSource(Protocol):
     def extract_xic(
@@ -86,10 +88,13 @@ def build_sample_local_owners(
     peak_resolver: PeakResolver | None = None,
     raw_xic_batch_size: int = 1,
     emit_region_audit: bool = False,
+    region_audit_family_ids: frozenset[str] | None = None,
+    audit_evidence_mode: str = "full",
 ) -> OwnershipBuildResult:
     if raw_xic_batch_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
     active_peak_resolver = peak_resolver or _default_peak_resolver
+    effective_emit_region_audit = emit_region_audit and audit_evidence_mode != "none"
     outcomes = _resolve_candidates(
         candidates,
         raw_sources,
@@ -97,7 +102,8 @@ def build_sample_local_owners(
         peak_config,
         active_peak_resolver,
         raw_xic_batch_size,
-        emit_region_audit,
+        effective_emit_region_audit,
+        region_audit_family_ids,
     )
     resolved = tuple(
         outcome.resolved for outcome in outcomes if outcome.resolved is not None
@@ -135,11 +141,12 @@ def _resolve_candidates(
     peak_resolver: PeakResolver,
     raw_xic_batch_size: int,
     emit_region_audit: bool,
+    region_audit_family_ids: frozenset[str] | None,
 ) -> tuple[_ResolutionOutcome, ...]:
     outcomes: list[_ResolutionOutcome | None] = [None] * len(candidates)
     requests_by_sample: dict[
         str,
-        list[tuple[int, Any, float, XICRequest]],
+        list[tuple[int, Any, float, XICRequest, bool]],
     ] = defaultdict(list)
     for index, candidate in enumerate(candidates):
         sample_stem = str(candidate.sample_stem)
@@ -148,8 +155,11 @@ def _resolve_candidates(
             outcomes[index] = _unresolved_outcome(candidate, "missing_raw_source")
             continue
         seed_rt = _candidate_seed_rt(candidate)
-        rt_min = seed_rt - alignment_config.max_rt_sec / 60.0
-        rt_max = seed_rt + alignment_config.max_rt_sec / 60.0
+        rt_min, rt_max = _candidate_resolution_rt_window(
+            candidate,
+            seed_rt,
+            alignment_config,
+        )
         requests_by_sample[sample_stem].append(
             (
                 index,
@@ -161,13 +171,24 @@ def _resolve_candidates(
                     rt_max=rt_max,
                     ppm_tol=alignment_config.preferred_ppm,
                 ),
+                _emit_region_audit_for_candidate(
+                    emit_region_audit,
+                    candidate,
+                    region_audit_family_ids,
+                ),
             )
         )
     for sample_stem, sample_requests in requests_by_sample.items():
         source = raw_sources[sample_stem]
         for chunk in _chunked(tuple(sample_requests), raw_xic_batch_size):
             traces = _extract_many(source, tuple(item[3] for item in chunk))
-            for (index, candidate, seed_rt, _request), trace in zip(
+            for (
+                index,
+                candidate,
+                seed_rt,
+                _request,
+                item_emit_region_audit,
+            ), trace in zip(
                 chunk,
                 traces,
                 strict=True,
@@ -179,7 +200,7 @@ def _resolve_candidates(
                     peak_config,
                     peak_resolver,
                     ppm_tol=_request.ppm_tol,
-                    emit_region_audit=emit_region_audit,
+                    emit_region_audit=item_emit_region_audit,
                 )
     return tuple(outcome for outcome in outcomes if outcome is not None)
 
@@ -191,14 +212,18 @@ def _resolve_candidate(
     peak_config: ExtractionConfig,
     peak_resolver: PeakResolver,
     emit_region_audit: bool = False,
+    region_audit_family_ids: frozenset[str] | None = None,
 ) -> _ResolutionOutcome:
     sample_stem = str(candidate.sample_stem)
     source = raw_sources.get(sample_stem)
     if source is None:
         return _unresolved_outcome(candidate, "missing_raw_source")
     seed_rt = _candidate_seed_rt(candidate)
-    rt_min = seed_rt - alignment_config.max_rt_sec / 60.0
-    rt_max = seed_rt + alignment_config.max_rt_sec / 60.0
+    rt_min, rt_max = _candidate_resolution_rt_window(
+        candidate,
+        seed_rt,
+        alignment_config,
+    )
     rt, intensity = source.extract_xic(
         float(candidate.precursor_mz),
         rt_min,
@@ -214,7 +239,11 @@ def _resolve_candidate(
         seed_rt,
         peak_resolver,
         ppm_tol=alignment_config.preferred_ppm,
-        emit_region_audit=emit_region_audit,
+        emit_region_audit=_emit_region_audit_for_candidate(
+            emit_region_audit,
+            candidate,
+            region_audit_family_ids,
+        ),
     )
     if peak is None:
         return _unresolved_outcome(candidate, "peak_not_found")
@@ -320,8 +349,7 @@ def _chunked(
     if chunk_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
     return tuple(
-        items[index : index + chunk_size]
-        for index in range(0, len(items), chunk_size)
+        items[index : index + chunk_size] for index in range(0, len(items), chunk_size)
     )
 
 
@@ -335,6 +363,22 @@ def _unresolved_outcome(candidate: Any, reason: str) -> _ResolutionOutcome:
             reason,
         ),
     )
+
+
+def _emit_region_audit_for_candidate(
+    emit_region_audit: bool,
+    candidate: Any,
+    region_audit_family_ids: frozenset[str] | None,
+) -> bool:
+    if not emit_region_audit:
+        return False
+    if region_audit_family_ids is None:
+        return True
+    candidate_ids = {
+        str(getattr(candidate, "feature_family_id", "")),
+        str(getattr(candidate, "candidate_id", "")),
+    }
+    return bool(region_audit_family_ids.intersection(candidate_ids))
 
 
 def _default_peak_resolver(
@@ -610,7 +654,6 @@ def _assignment_reason(
     return "owner_exact_apex_match"
 
 
-
 def _primary_and_supporting(
     group: list[_ResolvedCandidate],
 ) -> tuple[_ResolvedCandidate, list[_ResolvedCandidate]]:
@@ -665,6 +708,54 @@ def _candidate_seed_rt(candidate: Any) -> float:
         ):
             return float(value)
     raise ValueError("ownership candidate requires finite best_seed_rt or ms1_apex_rt")
+
+
+def _candidate_resolution_rt_window(
+    candidate: Any,
+    seed_rt: float,
+    config: AlignmentConfig,
+) -> tuple[float, float]:
+    ms1_apex = _finite_attr(candidate, "ms1_apex_rt")
+    peak_start = _finite_attr(candidate, "ms1_peak_rt_start")
+    peak_end = _finite_attr(candidate, "ms1_peak_rt_end")
+    if (
+        peak_start is not None
+        and peak_end is not None
+        and peak_start < peak_end
+        and (
+            _contains_rt(peak_start, peak_end, seed_rt)
+            or (ms1_apex is not None and _contains_rt(peak_start, peak_end, ms1_apex))
+        )
+    ):
+        return (
+            peak_start - _OWNER_PEAK_WINDOW_PADDING_MIN,
+            peak_end + _OWNER_PEAK_WINDOW_PADDING_MIN,
+        )
+
+    search_start = _finite_attr(candidate, "ms1_search_rt_min")
+    search_end = _finite_attr(candidate, "ms1_search_rt_max")
+    if (
+        search_start is not None
+        and search_end is not None
+        and search_start < search_end
+        and _contains_rt(search_start, search_end, seed_rt)
+    ):
+        return search_start, search_end
+
+    margin_min = config.max_rt_sec / 60.0
+    return seed_rt - margin_min, seed_rt + margin_min
+
+
+def _finite_attr(candidate: Any, field: str) -> float | None:
+    value = getattr(candidate, field, None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    value = float(value)
+    return value if math.isfinite(value) else None
+
+
+def _contains_rt(left: float, right: float, rt: float) -> bool:
+    return left <= rt <= right
 
 
 def _window_overlap_fraction(

@@ -21,7 +21,7 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "smooth_polyorder": "3",
     "peak_rel_height": "0.95",
     "peak_min_prominence_ratio": "0.10",
-    "resolver_mode": "legacy_savgol",
+    "resolver_mode": "region_first_safe_merge",
     "resolver_chrom_threshold": "0.05",
     "resolver_min_search_range_min": "0.08",
     "resolver_min_relative_height": "0.02",
@@ -41,6 +41,8 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "emit_review_report": "false",
     "emit_peak_candidates": "false",
     "keep_intermediate_csv": "false",
+    "baseline_audit_method": "",
+    "baseline_integration_method": "asls",
     "nl_rt_anchor_search_margin_min": "2.0",
     "nl_rt_anchor_half_window_min": "1.0",
     "nl_fallback_half_window_min": "2.0",
@@ -98,6 +100,14 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "emit_review_report": "是否輸出 Review Report HTML（預設關閉）",
     "emit_peak_candidates": "是否輸出 Peak Candidate TSV（除錯/審計用，預設關閉）",
     "keep_intermediate_csv": "是否保留中間 CSV 檔（除錯用，預設關閉）",
+    "baseline_audit_method": (
+        "Integration audit baseline shadow method; leave empty for default TSV "
+        "schema or set to asls to emit AsLS comparison columns"
+    ),
+    "baseline_integration_method": (
+        "Production baseline method for alignment integration audit "
+        "(asls or linear_edge; default asls after P2b promotion)"
+    ),
     "nl_rt_anchor_search_margin_min": (
         "NL 錨定搜尋半徑（min）：以 rt_center ±此值搜尋 NL 確認的 MS2 作為 RT anchor"
     ),

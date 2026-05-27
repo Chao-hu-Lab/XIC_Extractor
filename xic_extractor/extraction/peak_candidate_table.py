@@ -46,6 +46,9 @@ PEAK_CANDIDATE_HEADERS = (
     "area_raw_counts_seconds",
     "area_baseline_corrected",
     "area_uncertainty",
+    "area_uncertainty_formula_version",
+    "baseline_residual_mad",
+    "area_uncertainty_noise_source",
     "quality_flags",
     "region_scan_count",
     "region_duration_min",
@@ -83,6 +86,7 @@ PEAK_CANDIDATE_HEADERS = (
     "safe_merge_promotion_area_ratio",
     "safe_merge_promotion_selected_interval_count",
     "safe_merge_promotion_selected_interval_gap_max_min",
+    "safe_merge_rejection_reason",
 )
 
 def candidate_audit_id(
@@ -178,6 +182,15 @@ def _row_from_hypothesis(
         "area_uncertainty": _format_optional_float(
             hypothesis.integration.area_uncertainty
         ),
+        "area_uncertainty_formula_version": (
+            hypothesis.integration.area_uncertainty_formula_version
+        ),
+        "baseline_residual_mad": _format_optional_float(
+            hypothesis.integration.baseline_residual_mad
+        ),
+        "area_uncertainty_noise_source": (
+            hypothesis.integration.area_uncertainty_noise_source
+        ),
         "quality_flags": _join(hypothesis.evidence.quality_flags),
         "region_scan_count": _format_optional_int(
             hypothesis.evidence.region_scan_count
@@ -253,6 +266,7 @@ def _row_from_hypothesis(
         "safe_merge_promotion_selected_interval_gap_max_min": _format_optional_float(
             hypothesis.audit.safe_merge_promotion_selected_interval_gap_max_min
         ),
+        "safe_merge_rejection_reason": hypothesis.audit.safe_merge_rejection_reason,
     }
 
 

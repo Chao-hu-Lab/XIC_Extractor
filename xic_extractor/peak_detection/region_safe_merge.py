@@ -36,6 +36,12 @@ SAFE_MERGE_GAP_MAX_MIN = 0.08
 
 
 @dataclass(frozen=True)
+class SafeMergeEligibility:
+    eligible: bool
+    reason: str
+
+
+@dataclass(frozen=True)
 class RegionFirstSafeMergeOutcome:
     candidates_result: PeakCandidatesResult
     selected_candidate: PeakCandidate
@@ -92,7 +98,16 @@ def apply_region_first_safe_merge_decision(
     *,
     candidate_scores: tuple[PeakCandidateScore, ...] = (),
 ) -> RegionFirstSafeMergeOutcome:
-    if not is_region_first_safe_merge_eligible(decision):
+    eligibility = eligibility_for_region_first_safe_merge(decision)
+    if not eligibility.eligible:
+        if _should_annotate_safe_merge_rejection(decision):
+            return _rejected_outcome(
+                candidates_result,
+                selected_candidate,
+                candidate_scores,
+                decision,
+                reason=eligibility.reason,
+            )
         return RegionFirstSafeMergeOutcome(
             candidates_result=candidates_result,
             selected_candidate=selected_candidate,
@@ -102,11 +117,12 @@ def apply_region_first_safe_merge_decision(
 
     selected_boundaries = _selected_shadow_boundaries(decision, boundary_by_id)
     if not selected_boundaries:
-        return RegionFirstSafeMergeOutcome(
-            candidates_result=candidates_result,
-            selected_candidate=selected_candidate,
-            candidate_scores=candidate_scores,
-            decision=decision,
+        return _rejected_outcome(
+            candidates_result,
+            selected_candidate,
+            candidate_scores,
+            decision,
+            reason="shadow_boundaries_missing",
         )
 
     rt = np.asarray(rt_values, dtype=float)
@@ -121,11 +137,12 @@ def apply_region_first_safe_merge_decision(
     )
     area_ratio = _safe_ratio(promoted_area, selected_candidate.peak.area)
     if not (SAFE_MERGE_AREA_RATIO_MIN <= area_ratio <= SAFE_MERGE_AREA_RATIO_MAX):
-        return RegionFirstSafeMergeOutcome(
-            candidates_result=candidates_result,
-            selected_candidate=selected_candidate,
-            candidate_scores=candidate_scores,
-            decision=decision,
+        return _rejected_outcome(
+            candidates_result,
+            selected_candidate,
+            candidate_scores,
+            decision,
+            reason="promoted_area_ratio_outside_safe_merge_range",
         )
 
     promoted_candidate = _promoted_candidate(
@@ -162,28 +179,38 @@ def apply_region_first_safe_merge_decision(
 def is_region_first_safe_merge_eligible(
     decision: RegionSelectionDecision,
 ) -> bool:
+    return eligibility_for_region_first_safe_merge(decision).eligible
+
+
+def eligibility_for_region_first_safe_merge(
+    decision: RegionSelectionDecision,
+) -> SafeMergeEligibility:
     if decision.shadow_status != "evaluated":
-        return False
+        return SafeMergeEligibility(False, "shadow_not_evaluated")
     if decision.shadow_verdict != "merge_suggested":
-        return False
+        return SafeMergeEligibility(False, "shadow_verdict_not_merge_suggested")
     if decision.merge_suggestion_source != "adjacent_wis_local_minimum_merge":
-        return False
+        return SafeMergeEligibility(False, "unsupported_merge_suggestion_source")
     if (decision.selected_interval_count or 0) < 2:
-        return False
+        return SafeMergeEligibility(False, "selected_interval_count_lt_2")
     gap_max = decision.selected_interval_gap_max_min
-    if gap_max is None or gap_max > SAFE_MERGE_GAP_MAX_MIN:
-        return False
+    if gap_max is None:
+        return SafeMergeEligibility(False, "selected_interval_gap_missing")
+    if gap_max > SAFE_MERGE_GAP_MAX_MIN:
+        return SafeMergeEligibility(False, "gap_exceeds_safe_merge_max")
     if (
         decision.area_ratio is not None
         and decision.area_ratio > SAFE_MERGE_AREA_RATIO_MAX
     ):
-        return False
+        return SafeMergeEligibility(False, "shadow_area_ratio_exceeds_safe_merge_max")
     if decision.current_rt_apex_min is None or decision.shadow_rt_apex_min is None:
-        return False
-    return (
+        return SafeMergeEligibility(False, "apex_rt_missing")
+    if (
         abs(decision.current_rt_apex_min - decision.shadow_rt_apex_min)
-        <= SAFE_MERGE_APEX_DELTA_MAX_MIN
-    )
+        > SAFE_MERGE_APEX_DELTA_MAX_MIN
+    ):
+        return SafeMergeEligibility(False, "apex_delta_exceeds_safe_merge_max")
+    return SafeMergeEligibility(True, "eligible")
 
 
 def scored_region_boundaries_for_candidates(
@@ -306,6 +333,43 @@ def _score_boundary(
         concern_labels=score.concern_labels,
     )
     return _ScoredBoundary(boundary=boundary, evidence=evidence, score=score.score)
+
+
+def _should_annotate_safe_merge_rejection(
+    decision: RegionSelectionDecision,
+) -> bool:
+    return decision.shadow_verdict == "merge_suggested"
+
+
+def _rejected_outcome(
+    candidates_result: PeakCandidatesResult,
+    selected_candidate: PeakCandidate,
+    candidate_scores: tuple[PeakCandidateScore, ...],
+    decision: RegionSelectionDecision,
+    *,
+    reason: str,
+) -> RegionFirstSafeMergeOutcome:
+    rejected_candidate = replace(
+        selected_candidate,
+        safe_merge_rejection_reason=reason,
+    )
+    return RegionFirstSafeMergeOutcome(
+        candidates_result=replace(
+            candidates_result,
+            candidates=_replace_candidate(
+                candidates_result.candidates,
+                selected_candidate,
+                rejected_candidate,
+            ),
+        ),
+        selected_candidate=rejected_candidate,
+        candidate_scores=_replace_candidate_scores(
+            candidate_scores,
+            selected_candidate,
+            rejected_candidate,
+        ),
+        decision=decision,
+    )
 
 
 def _promoted_candidate(

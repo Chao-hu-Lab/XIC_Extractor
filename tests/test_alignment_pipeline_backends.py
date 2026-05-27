@@ -57,6 +57,11 @@ def test_pipeline_applies_single_worker_hybrid_owner_backfill_backend(
         "review_only_features_from_ambiguous_records",
         lambda records, *, start_index: (),
     )
+    monkeypatch.setattr(
+        pipeline_module,
+        "_backfill_request_summary",
+        lambda *args, **kwargs: {},
+    )
 
     def fake_source_for_owner_backfill_backend(source, backend):
         calls["backend"] = backend
@@ -140,6 +145,11 @@ def test_pipeline_preconsolidates_owner_families_when_enabled(
         pipeline_module,
         "review_only_features_from_ambiguous_records",
         lambda records, *, start_index: (),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "_backfill_request_summary",
+        lambda *args, **kwargs: {},
     )
 
     def fake_preconsolidate(features, *, config):

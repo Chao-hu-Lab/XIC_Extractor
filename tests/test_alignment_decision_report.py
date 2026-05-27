@@ -153,6 +153,37 @@ def test_alignment_decision_report_treats_known_reliability_warning_as_known(
     )
 
 
+def test_alignment_decision_report_treats_unhandled_warning_as_warn_not_fail(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _alignment_dir(tmp_path, clean=True)
+    benchmark = tmp_path / "targeted_istd_benchmark.json"
+    _write_json(
+        benchmark,
+        _benchmark_payload(
+            status="WARN",
+            failure_modes=(),
+            warning_modes=(
+                "TARGETED_REVIEW_POSITIVE_EVIDENCE",
+                "TARGETED_REVIEW_POSITIVE_REASON:product_outside_diagnostic_window",
+            ),
+        ),
+    )
+
+    payload = report.build_report(
+        alignment_dir=alignment_dir,
+        targeted_istd_benchmark_json=benchmark,
+        owner_backfill_economics_json=tmp_path / "economics.json",
+        timing_json=tmp_path / "timing.json",
+    )
+
+    assert payload["verdict"] == "WARN"
+    assert payload["istd"]["warning_count"] == 1
+    assert payload["istd"]["fail_count"] == 0
+    assert payload["istd"]["unhandled_failures"] == []
+    assert payload["istd"]["rows"][1]["known"] is False
+
+
 def test_alignment_decision_report_warns_when_optional_inputs_are_missing(
     tmp_path: Path,
 ) -> None:

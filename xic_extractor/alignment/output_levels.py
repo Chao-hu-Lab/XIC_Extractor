@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import Literal, cast
 
-AlignmentOutputLevel = Literal["production", "machine", "debug", "validation"]
+AlignmentOutputLevel = Literal[
+    "production",
+    "machine",
+    "debug",
+    "validation",
+    "validation-minimal",
+]
 
 _ARTIFACTS: dict[AlignmentOutputLevel, tuple[str, ...]] = {
     "production": (
@@ -37,13 +43,19 @@ _ARTIFACTS: dict[AlignmentOutputLevel, tuple[str, ...]] = {
         "ambiguous_ms1_owners.tsv",
         "owner_edge_evidence.tsv",
     ),
+    "validation-minimal": (
+        "alignment_matrix.tsv",
+        "alignment_review.tsv",
+        "alignment_cells.tsv",
+    ),
 }
 
 
 def parse_alignment_output_level(value: str) -> AlignmentOutputLevel:
     if value not in _ARTIFACTS:
         raise ValueError(
-            "output_level must be one of production, machine, debug, validation",
+            "output_level must be one of production, machine, debug, "
+            "validation, validation-minimal",
         )
     return cast(AlignmentOutputLevel, value)
 

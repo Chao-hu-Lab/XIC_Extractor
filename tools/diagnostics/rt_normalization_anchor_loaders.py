@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
-import csv
-import math
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from openpyxl import load_workbook
 
+from tools.diagnostics.diagnostic_io import (
+    bool_value,
+    optional_float as _float_value,
+    read_tsv_required,
+    require_fields as _require_fields,
+    required_float as _required_float,
+    required_indexes as _required_indexes,
+    text_value as _text,
+)
 from tools.diagnostics.rt_normalization_anchor_models import (
     AlignmentCell,
     AlignmentFeature,
@@ -116,7 +123,7 @@ def _read_optional_injection_order(
 
 
 def _read_alignment_review(path: Path) -> dict[str, AlignmentFeature]:
-    rows = _read_required_tsv(path)
+    rows = list(read_tsv_required(path, ()))
     _require_fields(rows, ("feature_family_id",), path)
     features: dict[str, AlignmentFeature] = {}
     for row in rows:
@@ -133,7 +140,7 @@ def _read_alignment_review(path: Path) -> dict[str, AlignmentFeature]:
 
 
 def _read_alignment_cells(path: Path) -> tuple[AlignmentCell, ...]:
-    rows = _read_required_tsv(path)
+    rows = list(read_tsv_required(path, ()))
     _require_fields(
         rows,
         ("feature_family_id", "sample_stem", "apex_rt"),
@@ -154,63 +161,6 @@ def _read_alignment_cells(path: Path) -> tuple[AlignmentCell, ...]:
     return tuple(cells)
 
 
-def _read_required_tsv(path: Path) -> list[dict[str, str]]:
-    if not path.exists():
-        raise FileNotFoundError(str(path))
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        return list(csv.DictReader(handle, delimiter="\t"))
-
-
-def _require_fields(
-    rows: list[dict[str, str]],
-    required: Sequence[str],
-    path: Path,
-) -> None:
-    if not rows:
-        raise ValueError(f"{path} has no data rows")
-    fieldnames = set(rows[0])
-    missing = [field for field in required if field not in fieldnames]
-    if missing:
-        raise ValueError(f"{path} is missing required columns: {missing}")
-
-
-def _required_indexes(
-    header: Sequence[object],
-    required: Sequence[str],
-    sheet_name: str,
-) -> dict[str, int]:
-    indexes = {str(value).strip(): index for index, value in enumerate(header) if value}
-    missing = [field for field in required if field not in indexes]
-    if missing:
-        raise ValueError(f"{sheet_name} sheet missing required columns: {missing}")
-    return indexes
-
-
-def _required_float(value: object, field: str, label: str) -> float:
-    parsed = _float_value(value)
-    if parsed is None:
-        raise ValueError(f"{label} has invalid {field}: {value!r}")
-    return parsed
-
-
-def _float_value(value: object) -> float | None:
-    if value in (None, "") or isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        return float(value) if math.isfinite(value) else None
-    try:
-        parsed = float(str(value).strip())
-    except ValueError:
-        return None
-    return parsed if math.isfinite(parsed) else None
-
-
-def _text(value: object) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
 def _normalize_sample_id(sample_id: str) -> str:
     value = sample_id.strip()
     return re.sub(
@@ -221,6 +171,4 @@ def _normalize_sample_id(sample_id: str) -> str:
 
 
 def _is_trueish(value: str | None) -> bool:
-    if value is None:
-        return False
-    return value.strip().lower() in {"1", "true", "t", "yes", "y"}
+    return bool_value(value) is True

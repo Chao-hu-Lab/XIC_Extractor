@@ -42,7 +42,7 @@ from xic_extractor.xic_models import XICRequest, XICTrace
 def test_owner_backfill_process_builds_pickleable_sample_jobs_and_orders_output(
     tmp_path: Path,
 ) -> None:
-    feature_a = _feature()
+    feature_a = _confirmable_feature_for_sample_a()
     feature_b = replace(_feature(), feature_family_id="FAM000002")
     features = (feature_b, feature_a)
     cell_a = _cell(cluster_id=feature_a.feature_family_id, sample_stem="sample-a")
@@ -92,22 +92,119 @@ def test_owner_backfill_process_builds_pickleable_sample_jobs_and_orders_output(
         },
         dll_dir=tmp_path / "dll",
         alignment_config=AlignmentConfig(),
-        peak_config=_peak_config(tmp_path),
+        peak_config=_peak_config(tmp_path, baseline_audit_method="asls"),
         max_workers=2,
         owner_backfill_xic_backend="ms1_index",
+        owner_backfill_window_strategy="super-window",
+        owner_backfill_superwindow_span_factor=2,
+        backfill_scope="production-equivalent",
         emit_region_audit=True,
+        region_audit_family_ids=frozenset({"FAM000001"}),
+        audit_evidence_mode="full",
         runner=fake_runner,
     )
 
     assert [job.sample_stem for job in captured_jobs] == ["sample-a", "sample-b"]
     assert [job.sample_index for job in captured_jobs] == [1, 2]
     assert {job.owner_backfill_xic_backend for job in captured_jobs} == {"ms1_index"}
+    assert {job.owner_backfill_window_strategy for job in captured_jobs} == {
+        "super-window"
+    }
+    assert {job.owner_backfill_superwindow_span_factor for job in captured_jobs} == {2}
+    assert {job.request_plan_id for job in captured_jobs} == {
+        "p7-owner-backfill-request-plan-v1"
+    }
+    assert {job.backfill_scope for job in captured_jobs} == {"production-equivalent"}
+    assert [job.feature_payload_count for job in captured_jobs] == [1, 2]
     assert {job.emit_region_audit for job in captured_jobs} == {True}
+    assert {job.audit_evidence_mode for job in captured_jobs} == {"full"}
+    assert {job.region_audit_family_ids for job in captured_jobs} == {
+        frozenset({"FAM000001"})
+    }
+    assert {job.peak_config.baseline_audit_method for job in captured_jobs} == {"asls"}
     assert [cell.sample_stem for cell in output.cells] == ["sample-b", "sample-a"]
     assert [stat.sample_stem for stat in output.timing_stats] == [
         "sample-a",
         "sample-b",
     ]
+
+
+def test_owner_backfill_process_sends_only_sample_requested_features(
+    tmp_path: Path,
+) -> None:
+    feature_a = _confirmable_feature_for_sample_a()
+    feature_b = replace(_feature(), feature_family_id="FAM000002")
+    captured_jobs = []
+
+    def fake_runner(jobs, *, max_workers):
+        captured_jobs.extend(jobs)
+        return []
+
+    run_owner_backfill_process(
+        (feature_a, feature_b),
+        sample_order=("sample-a", "sample-b"),
+        raw_paths={
+            "sample-a": tmp_path / "sample-a.raw",
+            "sample-b": tmp_path / "sample-b.raw",
+        },
+        dll_dir=tmp_path / "dll",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(tmp_path),
+        max_workers=2,
+        runner=fake_runner,
+    )
+
+    by_sample = {job.sample_stem: job for job in captured_jobs}
+    assert tuple(
+        feature.feature_family_id for feature in by_sample["sample-a"].features
+    ) == (feature_a.feature_family_id,)
+    assert tuple(
+        feature.feature_family_id for feature in by_sample["sample-b"].features
+    ) == (
+        feature_a.feature_family_id,
+        feature_b.feature_family_id,
+    )
+    assert by_sample["sample-a"].feature_payload_count == 1
+    assert by_sample["sample-b"].feature_payload_count == 2
+
+
+def test_owner_backfill_process_passes_progress_callback_to_runner(
+    tmp_path: Path,
+) -> None:
+    feature = _confirmable_feature_for_sample_a()
+    cell = _cell(cluster_id=feature.feature_family_id, sample_stem="sample-a")
+    seen = []
+
+    def fake_runner(jobs, *, max_workers, progress_callback):
+        result = OwnerBackfillSampleResult(
+            sample_index=1,
+            sample_stem="sample-a",
+            cells=(cell,),
+            timing_stats=(
+                OwnerBackfillTimingStats(
+                    sample_stem="sample-a",
+                    elapsed_sec=1.0,
+                    extract_xic_count=2,
+                    point_count=20,
+                ),
+            ),
+        )
+        progress_callback(result)
+        return [result]
+
+    run_owner_backfill_process(
+        (feature,),
+        sample_order=("sample-a",),
+        raw_paths={"sample-a": tmp_path / "sample-a.raw"},
+        dll_dir=tmp_path / "dll",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(tmp_path),
+        max_workers=2,
+        runner=fake_runner,
+        progress_callback=seen.append,
+    )
+
+    assert [result.sample_stem for result in seen] == ["sample-a"]
 
 
 def test_owner_backfill_process_raises_worker_errors(tmp_path: Path) -> None:
@@ -126,7 +223,7 @@ def test_owner_backfill_process_raises_worker_errors(tmp_path: Path) -> None:
         match="sample-a.raw: RuntimeError: boom",
     ):
         run_owner_backfill_process(
-            (_feature(),),
+            (_confirmable_feature_for_sample_a(),),
             sample_order=("sample-a",),
             raw_paths={"sample-a": tmp_path / "sample-a.raw"},
             dll_dir=tmp_path / "dll",
@@ -199,15 +296,20 @@ def test_owner_build_process_builds_pickleable_sample_jobs_and_merges_output(
         },
         dll_dir=tmp_path / "dll",
         alignment_config=AlignmentConfig(),
-        peak_config=_peak_config(tmp_path),
+        peak_config=_peak_config(tmp_path, baseline_audit_method="asls"),
         max_workers=2,
         emit_region_audit=True,
+        region_audit_family_ids=frozenset({"sample-a@F0001"}),
         runner=fake_runner,
     )
 
     assert [job.sample_stem for job in captured_jobs] == ["sample-a", "sample-b"]
     assert [len(job.candidates) for job in captured_jobs] == [1, 1]
     assert {job.emit_region_audit for job in captured_jobs} == {True}
+    assert {job.region_audit_family_ids for job in captured_jobs} == {
+        frozenset({"sample-a@F0001"})
+    }
+    assert {job.peak_config.baseline_audit_method for job in captured_jobs} == {"asls"}
     assert output.ownership.owners == (owner_a, owner_b)
     assert output.ownership.assignments == (unresolved_a, primary_a, primary_b)
     assert [stat.sample_stem for stat in output.timing_stats] == [
@@ -254,6 +356,7 @@ def test_owner_build_process_handles_missing_raw_in_parent_process(
     owner = _owner("sample-a")
     assignment = OwnerAssignment("sample-a#1", owner.owner_id, "primary", "primary")
     calls = {}
+    seen = []
 
     def fake_build_sample_local_owners(candidates, **kwargs):
         calls["candidates"] = candidates
@@ -277,6 +380,7 @@ def test_owner_build_process_handles_missing_raw_in_parent_process(
         alignment_config=AlignmentConfig(),
         peak_config=_peak_config(tmp_path),
         max_workers=2,
+        progress_callback=seen.append,
     )
 
     assert tuple(candidate.sample_stem for candidate in calls["candidates"]) == (
@@ -286,6 +390,7 @@ def test_owner_build_process_handles_missing_raw_in_parent_process(
     assert output.ownership.owners == (owner,)
     assert output.ownership.assignments == (assignment,)
     assert output.timing_stats == ()
+    assert [result.sample_stem for result in seen] == ["sample-a"]
 
 
 def test_owner_build_jobs_wrap_executor_exceptions_as_build_errors(
@@ -341,10 +446,12 @@ def test_owner_build_jobs_wrap_submit_exceptions_as_build_errors(
         ),
     )
 
+    progress = []
     results = run_owner_build_jobs(
         jobs,
         max_workers=2,
         executor_factory=_SubmitFailingExecutor,
+        progress_callback=progress.append,
     )
 
     assert results == [
@@ -361,6 +468,7 @@ def test_owner_build_jobs_wrap_submit_exceptions_as_build_errors(
             message="RuntimeError: submit boom",
         ),
     ]
+    assert progress == results
 
 
 def test_timed_process_raw_source_records_batch_calls() -> None:
@@ -417,6 +525,19 @@ def test_timed_process_raw_source_delegates_scan_window_lookup() -> None:
     assert window == (8, 9)
 
 
+def test_timed_process_raw_source_delegates_retention_time_lookup() -> None:
+    import xic_extractor.alignment.process_backend as process_module
+
+    class WindowSource:
+        def retention_time_for_scan(self, scan_number):
+            return scan_number / 100.0
+
+    stats = process_module._TimedProcessStats(sample_stem="Sample_A")
+    source = process_module._TimedProcessRawSource(WindowSource(), stats=stats)
+
+    assert source.retention_time_for_scan(812) == 8.12
+
+
 def _cell(*, cluster_id: str, sample_stem: str) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,
@@ -433,6 +554,16 @@ def _cell(*, cluster_id: str, sample_stem: str) -> AlignedCell:
         source_candidate_id=None,
         source_raw_file=None,
         reason="owner-centered MS1 backfill",
+    )
+
+
+def _confirmable_feature_for_sample_a():
+    base = _feature()
+    low_area_owner = replace(base.owners[0], owner_area=1.0)
+    return replace(
+        base,
+        owners=(low_area_owner, _owner("sample-c")),
+        confirm_local_owners_with_backfill=True,
     )
 
 
@@ -502,7 +633,11 @@ class _SubmitFailingExecutor:
         raise RuntimeError("submit boom")
 
 
-def _peak_config(tmp_path: Path) -> ExtractionConfig:
+def _peak_config(
+    tmp_path: Path,
+    *,
+    baseline_audit_method: str = "",
+) -> ExtractionConfig:
     return ExtractionConfig(
         data_dir=tmp_path,
         dll_dir=tmp_path / "dll",
@@ -514,6 +649,7 @@ def _peak_config(tmp_path: Path) -> ExtractionConfig:
         peak_min_prominence_ratio=0.01,
         ms2_precursor_tol_da=1.6,
         nl_min_intensity_ratio=0.01,
+        baseline_audit_method=baseline_audit_method,
     )
 
 
@@ -651,8 +787,7 @@ def test_identity_trace_worker_uses_xic_request_shape(
             seen["requests"] = tuple(requests)
             assert all(isinstance(item, XICRequest) for item in requests)
             return tuple(
-                XICTrace.from_arrays([5.0, 5.1], [0.0, 10.0])
-                for _ in requests
+                XICTrace.from_arrays([5.0, 5.1], [0.0, 10.0]) for _ in requests
             )
 
     monkeypatch.setattr(
@@ -699,8 +834,7 @@ def test_identity_trace_process_returns_blocked_results_on_extraction_error(
             if self.calls == 1:
                 raise OSError("chunk unavailable")
             return tuple(
-                XICTrace.from_arrays([5.0, 5.1], [0.0, 10.0])
-                for _ in requests
+                XICTrace.from_arrays([5.0, 5.1], [0.0, 10.0]) for _ in requests
             )
 
     monkeypatch.setattr(

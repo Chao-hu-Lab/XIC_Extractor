@@ -112,6 +112,27 @@ def test_build_validation_specs_accepts_region_first_safe_merge_mode(
     )
 
 
+def test_cli_defaults_extraction_suite_to_region_first_safe_merge(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    exit_code = main(
+        [
+            "--suite",
+            "tissue-8raw",
+            "--output-root",
+            str(tmp_path / "validation_harness"),
+            "--run-id",
+            "default_safe_merge",
+            "--dry-run",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "--resolver-mode region_first_safe_merge" in output
+
+
 def test_build_validation_specs_rejects_resolver_mode_setting(
     tmp_path: Path,
 ) -> None:

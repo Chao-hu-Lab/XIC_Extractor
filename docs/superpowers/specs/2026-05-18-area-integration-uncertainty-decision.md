@@ -79,3 +79,11 @@ mismatch reproduces with this audit context enabled.
 - If required audit fields are missing, fix evidence plumbing before any
   algorithm discussion.
 
+## 2026-05-25 P4 Formula Compatibility Note
+
+The original decision used the legacy in-peak first-difference MAD
+`area_uncertainty` formula. P4 changes the audit TSV value to
+`baseline_residual_mad_v1` and emits TSV-local provenance columns. Prior
+bucket counts and thresholds should not be compared numerically without
+re-running the area uncertainty diagnostic.
+

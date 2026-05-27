@@ -18,7 +18,33 @@ from xic_extractor.peak_detection.region_model_selection import (
 from xic_extractor.peak_detection.region_safe_merge import (
     RegionFirstSafeMergeOutcome,
     apply_region_first_safe_merge_decision,
+    eligibility_for_region_first_safe_merge,
 )
+
+
+def test_safe_merge_eligibility_reports_ok_reason() -> None:
+    result = eligibility_for_region_first_safe_merge(
+        _decision(
+            shadow_boundary_id="left;right",
+            source="adjacent_wis_local_minimum_merge",
+        )
+    )
+
+    assert result.eligible is True
+    assert result.reason == "eligible"
+
+
+def test_safe_merge_eligibility_reports_failed_gap_gate() -> None:
+    result = eligibility_for_region_first_safe_merge(
+        _decision(
+            shadow_boundary_id="left;right",
+            source="adjacent_wis_local_minimum_merge",
+            selected_interval_gap_max_min=0.2,
+        )
+    )
+
+    assert result.eligible is False
+    assert result.reason == "gap_exceeds_safe_merge_max"
 
 
 def test_adjacent_wis_safe_merge_updates_selected_boundary_and_area() -> None:
@@ -111,6 +137,7 @@ def test_adjacent_wis_safe_merge_refuses_large_interval_gap() -> None:
     intensity = np.asarray([100.0, 100.0, 100.0, 100.0], dtype=float)
     selected = _candidate(area=1700.0)
     result = _result(selected)
+    score = PeakCandidateScore(candidate=selected, confidence="high", reason="ok")
     decision = _decision(
         shadow_boundary_id="left;right",
         source="adjacent_wis_local_minimum_merge",
@@ -127,10 +154,44 @@ def test_adjacent_wis_safe_merge_refuses_large_interval_gap() -> None:
             "left": _boundary("left", 0, 2),
             "right": _boundary("right", 2, 4),
         },
+        candidate_scores=(score,),
     )
 
     assert outcome.promoted is False
-    assert outcome.selected_candidate == selected
+    assert outcome.selected_candidate.peak == selected.peak
+    assert (
+        outcome.selected_candidate.safe_merge_rejection_reason
+        == "gap_exceeds_safe_merge_max"
+    )
+    assert outcome.candidates_result.candidates[0] == outcome.selected_candidate
+    assert outcome.candidate_scores[0].candidate == outcome.selected_candidate
+
+
+def test_safe_merge_refuses_missing_shadow_boundaries_with_reason() -> None:
+    rt = np.asarray([10.0, 10.1, 10.2, 10.3], dtype=float)
+    intensity = np.asarray([100.0, 100.0, 100.0, 100.0], dtype=float)
+    selected = _candidate(area=1700.0)
+    result = _result(selected)
+    decision = _decision(
+        shadow_boundary_id="left;missing",
+        source="adjacent_wis_local_minimum_merge",
+    )
+
+    outcome = apply_region_first_safe_merge_decision(
+        rt,
+        intensity,
+        result,
+        selected,
+        decision,
+        {"left": _boundary("left", 0, 2)},
+    )
+
+    assert outcome.promoted is False
+    assert outcome.selected_candidate.peak == selected.peak
+    assert (
+        outcome.selected_candidate.safe_merge_rejection_reason
+        == "shadow_boundaries_missing"
+    )
 
 
 @pytest.mark.parametrize(
@@ -169,8 +230,16 @@ def test_safe_merge_refuses_non_adjacent_wis_decisions(
     )
 
     assert outcome.promoted is False
-    assert outcome.selected_candidate == selected
-    assert outcome.candidates_result == result
+    assert outcome.selected_candidate.peak == selected.peak
+    if verdict == "merge_suggested":
+        assert (
+            outcome.selected_candidate.safe_merge_rejection_reason
+            == "unsupported_merge_suggestion_source"
+        )
+        assert outcome.candidates_result.candidates[0] == outcome.selected_candidate
+    else:
+        assert outcome.selected_candidate == selected
+        assert outcome.candidates_result == result
 
 
 def test_safe_merge_refuses_large_continuous_area_gain() -> None:
@@ -196,7 +265,11 @@ def test_safe_merge_refuses_large_continuous_area_gain() -> None:
     )
 
     assert outcome.promoted is False
-    assert outcome.selected_candidate == selected
+    assert outcome.selected_candidate.peak == selected.peak
+    assert (
+        outcome.selected_candidate.safe_merge_rejection_reason
+        == "promoted_area_ratio_outside_safe_merge_range"
+    )
 
 
 def test_safe_merge_refuses_continuous_area_loss() -> None:
@@ -222,7 +295,11 @@ def test_safe_merge_refuses_continuous_area_loss() -> None:
     )
 
     assert outcome.promoted is False
-    assert outcome.selected_candidate == selected
+    assert outcome.selected_candidate.peak == selected.peak
+    assert (
+        outcome.selected_candidate.safe_merge_rejection_reason
+        == "promoted_area_ratio_outside_safe_merge_range"
+    )
 
 
 def test_region_first_safe_merge_candidate_finder_preserves_local_identity(

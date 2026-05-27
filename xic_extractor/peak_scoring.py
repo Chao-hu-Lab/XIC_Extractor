@@ -779,9 +779,15 @@ def _has_same_apex_cwt_support(candidate: Any) -> bool:
         return False
     if not sources.difference({_CWT_PROPOSAL_SOURCE}):
         return False
-    return _positive_finite_metric(
+    return _positive_finite_legacy_cwt_presence_metric(
         getattr(candidate, "cwt_best_scale", None)
-    ) or _positive_finite_metric(getattr(candidate, "cwt_ridge_persistence", None))
+    ) or _positive_finite_legacy_cwt_presence_metric(
+        getattr(candidate, "cwt_ridge_persistence", None)
+    )
+
+
+def _positive_finite_legacy_cwt_presence_metric(value: object) -> bool:
+    return _positive_finite_metric(value)
 
 
 def _positive_finite_metric(value: object) -> bool:

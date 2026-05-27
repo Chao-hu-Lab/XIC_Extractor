@@ -116,6 +116,8 @@ def _istd_tile(row: Mapping[str, Any]) -> str:
         tone = "warn"
     elif status == "pass":
         tone = "pass"
+    elif status == "warn":
+        tone = "warn"
     else:
         tone = "fail"
     known = '<span class="known-chip">KNOWN</span>' if row.get("known") else ""

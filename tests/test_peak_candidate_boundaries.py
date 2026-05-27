@@ -73,6 +73,11 @@ def test_build_boundary_rows_emits_alternatives_for_each_candidate() -> None:
     assert all(row["area_delta_vs_candidate_interval"] != "" for row in rows)
     assert all(row["area_baseline_corrected"] != "" for row in rows)
     assert all(row["area_uncertainty"] != "" for row in rows)
+    assert {row["area_uncertainty_formula_version"] for row in rows} == {
+        "baseline_residual_mad_v1"
+    }
+    assert all(row["baseline_residual_mad"] != "" for row in rows)
+    assert all(row["area_uncertainty_noise_source"] != "" for row in rows)
     assert {row["baseline_type"] for row in rows} == {"linear_edge"}
     assert all(row["baseline_score"] != "" for row in rows)
     assert all(row["boundary_audit_score"] != "" for row in rows)
@@ -96,6 +101,44 @@ def test_build_boundary_rows_emits_alternatives_for_each_candidate() -> None:
         for row in rows
     )
     assert any(row["boundary_concern_labels"] != "" for row in rows)
+
+
+def test_source_only_cwt_width_boundary_rows_are_marked_legacy_audit() -> None:
+    candidate = _candidate(
+        8.30,
+        left=8.00,
+        right=8.60,
+        sources=("legacy_savgol", "centwave_cwt"),
+        cwt_best_scale=3.0,
+    )
+    rows = build_peak_candidate_boundary_rows(
+        sample_name="SampleA",
+        target_label="Analyte",
+        target_mz=258.1085,
+        role="Analyte",
+        istd_pair="ISTD",
+        resolver_mode="arbitrated",
+        peak_result=PeakDetectionResult(
+            status="OK",
+            peak=candidate.peak,
+            n_points=11,
+            max_smoothed=100.0,
+            n_prominent_peaks=1,
+            candidates=(candidate,),
+        ),
+        rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 9.0]),
+        intensity=np.asarray(
+            [10.0, 18.0, 70.0, 100.0, 70.0, 18.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+        ),
+    )
+
+    cwt_rows = [row for row in rows if row["boundary_sources"] == "cwt_width"]
+    non_cwt_rows = [row for row in rows if row["boundary_sources"] != "cwt_width"]
+    assert cwt_rows
+    assert {row["cwt_audit_filter_reason"] for row in cwt_rows} == {
+        "legacy_cwt_width_not_real_cwt"
+    }
+    assert all(row["cwt_audit_filter_reason"] == "" for row in non_cwt_rows)
 
 
 def test_build_boundary_rows_prefers_shared_trace_group_arrays() -> None:
@@ -311,6 +354,7 @@ def _candidate(
     left: float,
     right: float,
     sources: tuple[str, ...] = ("legacy_savgol",),
+    cwt_best_scale: float | None = None,
 ) -> PeakCandidate:
     peak = PeakResult(
         rt=rt,
@@ -329,6 +373,7 @@ def _candidate(
         raw_apex_intensity=100.0,
         raw_apex_index=3,
         prominence=90.0,
+        cwt_best_scale=cwt_best_scale,
         proposal_sources=sources,
         source_apex_rank=1,
     )
