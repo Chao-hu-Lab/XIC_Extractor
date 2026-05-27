@@ -172,6 +172,64 @@ def test_run_p2_baseline_truth_audit_writes_review_outputs(tmp_path: Path) -> No
     assert outputs.plot_dir.exists()
 
 
+def test_run_p2_baseline_truth_audit_reads_promoted_asls_schema(
+    tmp_path: Path,
+) -> None:
+    gate_rows = tmp_path / "p2_gate_rows.tsv"
+    audit = tmp_path / "alignment_cell_integration_audit.tsv"
+    _write_tsv(
+        gate_rows,
+        [
+            {
+                "target_label": "ISTD-A",
+                "selected_feature_id": "FAM001",
+                "status": "FAIL",
+                "failure_reasons": "area_rsd_regression",
+            }
+        ],
+    )
+    _write_tsv(
+        audit,
+        [
+            {
+                "feature_family_id": "FAM001",
+                "sample_stem": "S1",
+                "status": "detected",
+                "area": "1000",
+                "area_baseline_corrected": "980",
+                "area_baseline_corrected_linear_edge": "800",
+                "baseline_type": "asls",
+                "family_center_mz": "245",
+                "peak_start_rt": "10.0",
+                "apex_rt": "10.1",
+                "peak_end_rt": "10.3",
+            }
+        ],
+    )
+
+    def fake_trace_loader(
+        sample_stem: str,
+        mz: float,
+        rt_min: float,
+        rt_max: float,
+        ppm: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        return (
+            np.asarray([9.8, 9.9, 10.0, 10.1, 10.2, 10.3, 10.4]),
+            np.asarray([10.0, 20.0, 120.0, 200.0, 130.0, 25.0, 10.0]),
+        )
+
+    _outputs, result = run_p2_baseline_truth_audit(
+        p2_gate_rows_tsv=gate_rows,
+        alignment_integration_audit_tsv=audit,
+        output_dir=tmp_path / "truth",
+        trace_loader=fake_trace_loader,
+    )
+
+    assert result.rows[0].linear_area == pytest.approx(800.0)
+    assert result.rows[0].asls_area == pytest.approx(980.0)
+
+
 def test_run_p2_baseline_truth_audit_can_include_pass_gate_rows(tmp_path: Path) -> None:
     gate_rows = tmp_path / "p2_gate_rows.tsv"
     audit = tmp_path / "alignment_cell_integration_audit.tsv"

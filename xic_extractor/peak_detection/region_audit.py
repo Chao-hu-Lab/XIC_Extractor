@@ -116,6 +116,11 @@ def build_peak_region_audit_summary(
             peak_start_rt=selected.peak.peak_start,
             peak_end_rt=selected.peak.peak_end,
             raw_area=selected.peak.area,
+            baseline_integration_method=getattr(
+                config,
+                "baseline_integration_method",
+                "asls",
+            ),
             baseline_audit_method=getattr(config, "baseline_audit_method", ""),
         ),
     )

@@ -242,6 +242,7 @@ def test_area_integration_uncertainty_audit_classifies_all_buckets(
             "targeted_baseline_area",
             "untargeted_baseline_area",
             "baseline_area_ratio",
+            "baseline_area_method",
             "targeted_uncertainty_fraction",
             "untargeted_uncertainty_fraction",
             "targeted_baseline_fraction",
@@ -278,6 +279,69 @@ def test_area_integration_uncertainty_audit_classifies_all_buckets(
     )
     assert alignment_rows[0]["baseline_residual_mad"] == "0.5"
     assert alignment_rows[0]["area_uncertainty_noise_source"] == "asls_residual"
+
+
+def test_area_integration_uncertainty_uses_linear_edge_rollback_for_promoted_asls_schema(
+    tmp_path: Path,
+) -> None:
+    evidence_path = tmp_path / "evidence.tsv"
+    candidates_path = tmp_path / "peak_candidates.tsv"
+    boundaries_path = tmp_path / "peak_candidate_boundaries.tsv"
+    alignment_path = tmp_path / "alignment_cell_integration_audit.tsv"
+    _write_tsv(
+        evidence_path,
+        [
+            _evidence_row(
+                "baseline",
+                family_id="FAM_BASELINE",
+                raw_ratio=2.0,
+                targeted_region="current_single",
+                untargeted_region="current_single",
+                boundary_start_delta=0.0,
+            )
+        ],
+        fields=EVIDENCE_FIELDS,
+    )
+    _write_tsv(
+        candidates_path,
+        [_candidate_row("baseline")],
+        fields=CANDIDATE_FIELDS,
+    )
+    _write_tsv(
+        boundaries_path,
+        [_boundary_row("baseline", area_ratio="1.0")],
+        fields=BOUNDARY_FIELDS,
+    )
+    _write_tsv(
+        alignment_path,
+        [
+            {
+                **_alignment_row(
+                    "FAM_BASELINE",
+                    area="200",
+                    baseline_area="160",
+                    uncertainty_fraction="0.05",
+                    baseline_fraction="0.8",
+                ),
+                "area_baseline_corrected_linear_edge": "80",
+            }
+        ],
+        fields=(*ALIGNMENT_FIELDS, "area_baseline_corrected_linear_edge"),
+    )
+
+    _outputs, result = report.run_area_integration_uncertainty_audit(
+        evidence_spine_rows_tsv=evidence_path,
+        targeted_peak_candidates_tsv=candidates_path,
+        targeted_boundaries_tsv=boundaries_path,
+        alignment_integration_audit_tsv=alignment_path,
+        output_dir=tmp_path / "out",
+    )
+
+    row = result.rows[0]
+    assert row.integration_bucket == "baseline_explains_raw_mismatch"
+    assert row.untargeted_baseline_area == pytest.approx(80.0)
+    assert row.baseline_area_ratio == pytest.approx(1.0)
+    assert row.baseline_area_method == "linear_edge_compatible"
 
 
 def test_area_integration_uncertainty_audit_fails_on_missing_columns(

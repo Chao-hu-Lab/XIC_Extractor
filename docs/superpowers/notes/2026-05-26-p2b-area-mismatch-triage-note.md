@@ -201,7 +201,17 @@ Result:
 This keeps strict targeted reliability warnings visible while preventing them
 from being misclassified as hard P2B failures.
 
+The P2B AsLS promotion gate now has an optional
+`--target-rt-trend-summary-tsv` input. A selected-family RT delta above
+`0.5 sec` is still a blocker when unexplained, but it is accepted as
+target-trend-supported when the target summary is locally coherent
+(`local_abs_delta_p95_min <= 0.10` and no local moderate/severe drift rows).
+This keeps severe local-drift targets such as `d3-N6-medA` from being blocked
+solely because their absolute RT differs from the targeted reference.
+
 ## Next Action
 
 Proceed with P2B as `production_candidate` while tracking the `d3-N6-medA`
-localized ownership/boundary tails as a separate post-P2B review item.
+localized ownership/boundary tails as a separate post-P2B review item. Keep
+target RT trend evidence wired into P2B reruns so large absolute RT shifts are
+classified by local coherence instead of treated as standalone failures.

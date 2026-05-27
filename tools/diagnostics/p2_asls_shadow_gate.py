@@ -46,7 +46,6 @@ _AUDIT_REQUIRED_COLUMNS = {
     "sample_stem",
     "area",
     "area_baseline_corrected",
-    "area_baseline_corrected_asls",
 }
 _SUMMARY_REQUIRED_COLUMNS = {
     "target_label",
@@ -215,8 +214,7 @@ def _build_row(
         if row.get("feature_family_id", "").strip() != target.selected_feature_id:
             continue
         raw_area = _optional_float(row.get("area"))
-        linear_area = _optional_float(row.get("area_baseline_corrected"))
-        asls_area = _optional_float(row.get("area_baseline_corrected_asls"))
+        linear_area, asls_area = _linear_and_asls_area(row)
         if raw_area is None or linear_area is None or asls_area is None:
             continue
         linear_areas.append(linear_area)
@@ -260,6 +258,14 @@ def _build_row(
         status="FAIL" if reasons else "PASS",
         failure_reasons=tuple(reasons),
     )
+
+
+def _linear_and_asls_area(row: Mapping[str, str]) -> tuple[float | None, float | None]:
+    promoted_linear = _optional_float(row.get("area_baseline_corrected_linear_edge"))
+    reported_area = _optional_float(row.get("area_baseline_corrected"))
+    if promoted_linear is not None:
+        return promoted_linear, reported_area
+    return reported_area, _optional_float(row.get("area_baseline_corrected_asls"))
 
 
 def _area_rsd_pct(values: Sequence[float]) -> float | None:

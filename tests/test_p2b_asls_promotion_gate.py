@@ -295,6 +295,71 @@ def test_revised_gate_blocks_area_rsd_when_rt_delta_is_large(
     assert "rt_boundary_rt_delta_exceeds_0.5_sec" in result.rows[0].hard_blockers
 
 
+def test_revised_gate_accepts_large_rt_delta_when_target_trend_is_locally_coherent(
+    tmp_path: Path,
+) -> None:
+    p2_rows = tmp_path / "p2_rows.tsv"
+    truth = tmp_path / "truth.tsv"
+    uncertainty = tmp_path / "uncertainty.tsv"
+    evidence_spine = tmp_path / "evidence_spine.tsv"
+    target_rt_trend = tmp_path / "target_rt_trend.tsv"
+    _write_area_rsd_row(p2_rows)
+    _write_manual_review_truth(truth)
+    _write_clean_area_uncertainty(uncertainty)
+    _write_tsv(
+        evidence_spine,
+        [
+            {
+                "sample": "s1",
+                "target_label": "ISTD-A",
+                "untargeted_family_id": "FAM001",
+                "rt_delta_min": "0.02",
+                "boundary_delta_start_min": "0",
+                "boundary_delta_end_min": "0",
+                "mismatch_reason": "consistent",
+            },
+            {
+                "sample": "s2",
+                "target_label": "ISTD-A",
+                "untargeted_family_id": "FAM001",
+                "rt_delta_min": "0",
+                "boundary_delta_start_min": "0",
+                "boundary_delta_end_min": "0",
+                "mismatch_reason": "consistent",
+            },
+        ],
+    )
+    _write_tsv(
+        target_rt_trend,
+        [
+            {
+                "target_label": "ISTD-A",
+                "sample_count": "85",
+                "range_rt_min": "2.15",
+                "global_abs_delta_p95_min": "1.45",
+                "local_abs_delta_p95_min": "0.048",
+                "local_moderate_or_severe_count": "0",
+                "local_severe_count": "0",
+            }
+        ],
+    )
+
+    _outputs, result = run_p2b_asls_promotion_gate(
+        p2_gate_rows_tsv=p2_rows,
+        baseline_truth_summary_tsv=truth,
+        area_uncertainty_summary_tsv=uncertainty,
+        evidence_spine_rows_tsv=evidence_spine,
+        target_rt_trend_summary_tsv=target_rt_trend,
+        output_dir=tmp_path / "gate",
+    )
+
+    row = result.rows[0]
+    assert result.overall_status == "GO_FOR_PRODUCTION_CANDIDATE"
+    assert row.revised_status == "ACCEPTED_REVIEW"
+    assert row.evidence_spine_status == "rt_boundary_rt_delta_explained_by_target_trend"
+    assert "target_rt_trend_supports_large_rt_delta" in row.accepted_reasons
+
+
 def test_revised_gate_blocks_area_rsd_when_alignment_boundary_is_overwide(
     tmp_path: Path,
 ) -> None:
@@ -414,6 +479,7 @@ def test_revised_gate_cli_exit_codes(tmp_path: Path) -> None:
     p2_rows = tmp_path / "p2_rows.tsv"
     truth = tmp_path / "truth.tsv"
     uncertainty = tmp_path / "uncertainty.tsv"
+    target_rt_trend = tmp_path / "target_rt_trend.tsv"
     _write_tsv(
         p2_rows,
         [
@@ -454,6 +520,17 @@ def test_revised_gate_cli_exit_codes(tmp_path: Path) -> None:
         ],
     )
     _write_clean_area_uncertainty(uncertainty)
+    _write_tsv(
+        target_rt_trend,
+        [
+            {
+                "target_label": "ISTD-A",
+                "local_abs_delta_p95_min": "0.05",
+                "local_moderate_or_severe_count": "0",
+                "local_severe_count": "0",
+            }
+        ],
+    )
 
     pass_code = p2b_asls_promotion_gate_main(
         [
@@ -463,6 +540,8 @@ def test_revised_gate_cli_exit_codes(tmp_path: Path) -> None:
             str(truth),
             "--area-uncertainty-summary-tsv",
             str(uncertainty),
+            "--target-rt-trend-summary-tsv",
+            str(target_rt_trend),
             "--output-dir",
             str(tmp_path / "pass_gate"),
         ]

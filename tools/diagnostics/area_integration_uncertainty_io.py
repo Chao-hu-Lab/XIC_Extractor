@@ -135,16 +135,26 @@ def _read_alignment_integration_audits(
     audits: dict[tuple[str, str], AlignmentIntegrationAudit] = {}
     for row in rows:
         key = (row["feature_family_id"], row["sample_stem"])
+        area = _optional_float(row["area"])
+        baseline_area, baseline_area_method = _alignment_baseline_area(row)
         audits[key] = AlignmentIntegrationAudit(
             family_id=row["feature_family_id"],
             sample=row["sample_stem"],
-            area=_optional_float(row["area"]),
-            baseline_area=_optional_float(row["area_baseline_corrected"]),
+            area=area,
+            baseline_area=baseline_area,
+            baseline_area_method=baseline_area_method,
             area_uncertainty=_optional_float(row["area_uncertainty"]),
             uncertainty_fraction=_optional_float(row["uncertainty_fraction"]),
-            baseline_fraction=_optional_float(row["baseline_fraction"]),
+            baseline_fraction=_ratio(baseline_area, area),
         )
     return audits
+
+
+def _alignment_baseline_area(row: dict[str, str]) -> tuple[float | None, str]:
+    rollback_area = _optional_float(row.get("area_baseline_corrected_linear_edge"))
+    if rollback_area is not None:
+        return rollback_area, "linear_edge_compatible"
+    return _optional_float(row["area_baseline_corrected"]), "reported_baseline"
 
 
 def _read_required_tsv(

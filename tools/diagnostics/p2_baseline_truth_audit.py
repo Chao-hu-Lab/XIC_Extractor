@@ -72,7 +72,6 @@ _AUDIT_REQUIRED_COLUMNS = {
     "status",
     "area",
     "area_baseline_corrected",
-    "area_baseline_corrected_asls",
     "family_center_mz",
     "peak_start_rt",
     "apex_rt",
@@ -396,6 +395,7 @@ def run_p2_baseline_truth_audit(
             rt_max,
             ppm,
         )
+        linear_area, asls_area = _linear_and_asls_area(audit_row)
         plot_rel_path = f"plots/{_safe_filename(target.target_label)}__{family_id}.png"
         row = build_baseline_truth_row(
             target_label=target.target_label,
@@ -403,8 +403,8 @@ def run_p2_baseline_truth_audit(
             sample_stem=audit_row["sample_stem"].strip(),
             status=audit_row["status"].strip(),
             raw_area=_optional_float(audit_row.get("area")),
-            linear_area=_optional_float(audit_row.get("area_baseline_corrected")),
-            asls_area=_optional_float(audit_row.get("area_baseline_corrected_asls")),
+            linear_area=linear_area,
+            asls_area=asls_area,
             mz=mz,
             peak_start_rt=peak_start_rt,
             apex_rt=apex_rt,
@@ -489,6 +489,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"Plot directory: {outputs.plot_dir}")
     print(f"Rows: {result.row_count}; Families: {result.family_count}")
     return 0
+
+
+def _linear_and_asls_area(row: Mapping[str, str]) -> tuple[float | None, float | None]:
+    promoted_linear = _optional_float(row.get("area_baseline_corrected_linear_edge"))
+    reported_area = _optional_float(row.get("area_baseline_corrected"))
+    if promoted_linear is not None:
+        return promoted_linear, reported_area
+    return reported_area, _optional_float(row.get("area_baseline_corrected_asls"))
 
 
 def _read_gate_targets(

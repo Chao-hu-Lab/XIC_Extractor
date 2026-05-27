@@ -32,6 +32,7 @@ ROW_FIELDS = (
     "targeted_baseline_area",
     "untargeted_baseline_area",
     "baseline_area_ratio",
+    "baseline_area_method",
     "targeted_uncertainty_fraction",
     "untargeted_uncertainty_fraction",
     "targeted_baseline_fraction",
@@ -105,6 +106,7 @@ class AlignmentIntegrationAudit:
     sample: str
     area: float | None
     baseline_area: float | None
+    baseline_area_method: str
     area_uncertainty: float | None
     uncertainty_fraction: float | None
     baseline_fraction: float | None
@@ -125,6 +127,7 @@ class AreaIntegrationRow:
     targeted_baseline_area: float | None
     untargeted_baseline_area: float | None
     baseline_area_ratio: float | None
+    baseline_area_method: str
     targeted_uncertainty_fraction: float | None
     untargeted_uncertainty_fraction: float | None
     targeted_baseline_fraction: float | None

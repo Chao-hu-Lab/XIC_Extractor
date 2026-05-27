@@ -1,13 +1,18 @@
 # P2d RT/Boundary-First P2b Gate Note
 
+Update 2026-05-26: this note records the pre-promotion P2b gate decision. The
+implementation has since advanced to integration-audit `production_candidate`;
+see
+`docs/superpowers/notes/2026-05-26-p2b-asls-production-promotion-note.md`.
+
 ## Verdict
 
 Status: `GO_FOR_PRODUCTION_CANDIDATE` on the current 8RAW artifacts.
 
-This is not `production_ready` and does not switch production area integration
-to AsLS. It means the current P2b hard blockers are cleared when area-only
-regressions are judged against RT and boundary evidence instead of treating
-linear-edge area RSD as truth.
+This note by itself is not `production_ready` and did not switch production
+area integration to AsLS. It means the current P2b hard blockers were cleared
+when area-only regressions were judged against RT and boundary evidence instead
+of treating linear-edge area RSD as truth.
 
 ## Root Cause
 
@@ -32,15 +37,23 @@ baseline region.
 
 - `tools/diagnostics/p2b_asls_promotion_gate.py`
   - Added optional `--evidence-spine-rows-tsv`.
+  - Added optional `--target-rt-trend-summary-tsv` so large absolute RT deltas
+    can be interpreted against target-level local drift coherence.
   - Added row-level evidence fields:
     - `evidence_spine_status`
     - `evidence_spine_sample_count`
     - `evidence_spine_max_abs_rt_delta_sec`
     - `evidence_spine_overwide_boundary_count`
     - `evidence_spine_narrower_boundary_count`
+    - `target_rt_trend_status`
+    - `target_rt_trend_local_abs_delta_p95_min`
+    - `target_rt_trend_local_moderate_or_severe_count`
+    - `target_rt_trend_local_severe_count`
   - Accepts `area_rsd_regression` as review evidence when RT/boundary evidence
     supports same-peak identity.
-  - Keeps RT delta > 0.5 sec and over-wide alignment boundary as hard blockers.
+  - Keeps over-wide alignment boundary as a hard blocker. RT delta > 0.5 sec
+    remains a hard blocker only when target RT trend evidence is missing or not
+    locally coherent.
 - `tools/diagnostics/evidence_spine_consistency_analysis.py`
   - Prefers primary-consolidation alignment cells over pre-consolidation
     duplicate cells when mz/RT matches tie.
@@ -56,7 +69,7 @@ C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe -m tools.diagnostic
 P2d gate rerun:
 
 ```powershell
-C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe -m tools.diagnostics.p2b_asls_promotion_gate --p2-gate-rows-tsv output\phase1_p2c_owner_boundary_window_validation\diagnostics\p2_asls_shadow_gate\p2_asls_shadow_gate_rows.tsv --baseline-truth-summary-tsv output\phase1_p2c_owner_boundary_window_validation\baseline_truth_audit_all_statuses\baseline_truth_audit_summary.tsv --area-uncertainty-summary-tsv output\phase1_p4_area_uncertainty_formula\diagnostics\area_integration_uncertainty\area_integration_uncertainty_summary.tsv --evidence-spine-rows-tsv output\phase1_p2d_rt_boundary_first_p2b_gate\diagnostics\evidence_spine_consistency\evidence_spine_consistency_rows.tsv --output-dir output\phase1_p2d_rt_boundary_first_p2b_gate\diagnostics\p2b_asls_promotion_gate
+C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe -m tools.diagnostics.p2b_asls_promotion_gate --p2-gate-rows-tsv output\phase1_p2c_owner_boundary_window_validation\diagnostics\p2_asls_shadow_gate\p2_asls_shadow_gate_rows.tsv --baseline-truth-summary-tsv output\phase1_p2c_owner_boundary_window_validation\baseline_truth_audit_all_statuses\baseline_truth_audit_summary.tsv --area-uncertainty-summary-tsv output\phase1_p4_area_uncertainty_formula\diagnostics\area_integration_uncertainty\area_integration_uncertainty_summary.tsv --evidence-spine-rows-tsv output\phase1_p2d_rt_boundary_first_p2b_gate\diagnostics\evidence_spine_consistency\evidence_spine_consistency_rows.tsv --target-rt-trend-summary-tsv output\phase1_p8b_superwindow\diagnostics\targeted_istd_rt_trend_85raw\targeted_istd_rt_drift_summary.tsv --output-dir output\phase1_p2d_rt_boundary_first_p2b_gate\diagnostics\p2b_asls_promotion_gate_target_rt_trend
 ```
 
 Result:
@@ -105,6 +118,7 @@ Result:
 
 - This is still 8RAW evidence only.
 - 85RAW is still required before claiming `production_ready`.
-- Production `area_baseline_corrected` has not been switched to AsLS.
+- At the time of this note, production `area_baseline_corrected` had not yet
+  been switched to AsLS.
 - The stricter area-only benchmark still fails by design because it treats area
   mismatch as a hard failure even when RT identity is correct.

@@ -31,6 +31,10 @@ ROW_FIELDS = (
     "evidence_spine_max_abs_rt_delta_sec",
     "evidence_spine_overwide_boundary_count",
     "evidence_spine_narrower_boundary_count",
+    "target_rt_trend_status",
+    "target_rt_trend_local_abs_delta_p95_min",
+    "target_rt_trend_local_moderate_or_severe_count",
+    "target_rt_trend_local_severe_count",
     "revised_status",
     "hard_blockers",
     "accepted_reasons",
@@ -72,6 +76,12 @@ _EVIDENCE_SPINE_REQUIRED_COLUMNS = {
     "boundary_delta_start_min",
     "boundary_delta_end_min",
 }
+_TARGET_RT_TREND_REQUIRED_COLUMNS = {
+    "target_label",
+    "local_abs_delta_p95_min",
+    "local_moderate_or_severe_count",
+    "local_severe_count",
+}
 _HARD_FAILURE_REASONS = {
     "sample_count_lt_2",
     "shadow_coverage_incomplete",
@@ -80,6 +90,7 @@ _HARD_FAILURE_REASONS = {
 }
 _RT_BOUNDARY_MAX_RT_DELTA_SEC = 0.5
 _RT_BOUNDARY_OVERWIDE_TOLERANCE_MIN = 0.10
+_TARGET_RT_TREND_LOCAL_P95_MAX_MIN = 0.10
 
 
 @dataclass(frozen=True)
@@ -107,6 +118,10 @@ class P2bAslsPromotionGateRow:
     evidence_spine_max_abs_rt_delta_sec: float | None
     evidence_spine_overwide_boundary_count: int
     evidence_spine_narrower_boundary_count: int
+    target_rt_trend_status: str
+    target_rt_trend_local_abs_delta_p95_min: float | None
+    target_rt_trend_local_moderate_or_severe_count: int | None
+    target_rt_trend_local_severe_count: int | None
     revised_status: str
     hard_blockers: tuple[str, ...]
     accepted_reasons: tuple[str, ...]
@@ -119,6 +134,14 @@ class _EvidenceSpineSummary:
     max_abs_rt_delta_sec: float | None
     overwide_boundary_count: int
     narrower_boundary_count: int
+
+
+@dataclass(frozen=True)
+class _TargetRtTrendSummary:
+    status: str
+    local_abs_delta_p95_min: float | None
+    local_moderate_or_severe_count: int | None
+    local_severe_count: int | None
 
 
 @dataclass(frozen=True)
@@ -139,6 +162,7 @@ def run_p2b_asls_promotion_gate(
     baseline_truth_summary_tsv: Path,
     area_uncertainty_summary_tsv: Path,
     evidence_spine_rows_tsv: Path | None = None,
+    target_rt_trend_summary_tsv: Path | None = None,
     output_dir: Path,
 ) -> tuple[P2bAslsPromotionGateOutputs, P2bAslsPromotionGateResult]:
     p2_rows = _read_tsv(p2_gate_rows_tsv, _P2_REQUIRED_COLUMNS)
@@ -147,6 +171,11 @@ def run_p2b_asls_promotion_gate(
         None
         if evidence_spine_rows_tsv is None
         else _read_tsv(evidence_spine_rows_tsv, _EVIDENCE_SPINE_REQUIRED_COLUMNS)
+    )
+    target_rt_trend_by_label = (
+        {}
+        if target_rt_trend_summary_tsv is None
+        else _read_target_rt_trend(target_rt_trend_summary_tsv)
     )
     uncertainty_row = _single_row(
         _read_tsv(area_uncertainty_summary_tsv, _UNCERTAINTY_REQUIRED_COLUMNS),
@@ -162,6 +191,7 @@ def run_p2b_asls_promotion_gate(
             row,
             truth_by_family=truth_by_family,
             evidence_spine_rows=evidence_spine_rows,
+            target_rt_trend_by_label=target_rt_trend_by_label,
         )
         for row in p2_rows
     )
@@ -214,6 +244,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--baseline-truth-summary-tsv", type=Path, required=True)
     parser.add_argument("--area-uncertainty-summary-tsv", type=Path, required=True)
     parser.add_argument("--evidence-spine-rows-tsv", type=Path)
+    parser.add_argument("--target-rt-trend-summary-tsv", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
@@ -222,6 +253,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             baseline_truth_summary_tsv=args.baseline_truth_summary_tsv,
             area_uncertainty_summary_tsv=args.area_uncertainty_summary_tsv,
             evidence_spine_rows_tsv=args.evidence_spine_rows_tsv,
+            target_rt_trend_summary_tsv=args.target_rt_trend_summary_tsv,
             output_dir=args.output_dir,
         )
     except (OSError, ValueError) as exc:
@@ -239,6 +271,7 @@ def _build_row(
     *,
     truth_by_family: Mapping[str, Mapping[str, str]],
     evidence_spine_rows: Sequence[Mapping[str, str]] | None,
+    target_rt_trend_by_label: Mapping[str, _TargetRtTrendSummary],
 ) -> P2bAslsPromotionGateRow:
     family_id = row["selected_feature_id"].strip()
     target_label = row["target_label"].strip()
@@ -268,6 +301,10 @@ def _build_row(
         f"unsupported_old_failure_reason:{reason}" for reason in unknown_reasons
     )
     evidence_spine_summary = _empty_evidence_spine_summary()
+    target_rt_trend = target_rt_trend_by_label.get(
+        target_label,
+        _empty_target_rt_trend_summary(),
+    )
     if "area_rsd_regression" in old_reasons:
         if truth is None:
             hard_blockers.append("baseline_truth_missing")
@@ -284,11 +321,17 @@ def _build_row(
                     row.get("sample_count", ""),
                     "sample_count",
                 ),
+                target_rt_trend=target_rt_trend,
             )
             if evidence_spine_summary.status == "rt_boundary_supported":
                 accepted_reasons.append(
                     "rt_boundary_evidence_supports_area_variability"
                 )
+            elif (
+                evidence_spine_summary.status
+                == "rt_boundary_rt_delta_explained_by_target_trend"
+            ):
+                accepted_reasons.append("target_rt_trend_supports_large_rt_delta")
             else:
                 hard_blockers.append(evidence_spine_summary.status)
         else:
@@ -321,6 +364,14 @@ def _build_row(
         evidence_spine_narrower_boundary_count=(
             evidence_spine_summary.narrower_boundary_count
         ),
+        target_rt_trend_status=target_rt_trend.status,
+        target_rt_trend_local_abs_delta_p95_min=(
+            target_rt_trend.local_abs_delta_p95_min
+        ),
+        target_rt_trend_local_moderate_or_severe_count=(
+            target_rt_trend.local_moderate_or_severe_count
+        ),
+        target_rt_trend_local_severe_count=target_rt_trend.local_severe_count,
         revised_status=revised_status,
         hard_blockers=tuple(hard_blockers),
         accepted_reasons=tuple(accepted_reasons),
@@ -337,12 +388,22 @@ def _empty_evidence_spine_summary() -> _EvidenceSpineSummary:
     )
 
 
+def _empty_target_rt_trend_summary() -> _TargetRtTrendSummary:
+    return _TargetRtTrendSummary(
+        status="",
+        local_abs_delta_p95_min=None,
+        local_moderate_or_severe_count=None,
+        local_severe_count=None,
+    )
+
+
 def _summarize_evidence_spine(
     rows: Sequence[Mapping[str, str]],
     *,
     target_label: str,
     family_id: str,
     expected_sample_count: int,
+    target_rt_trend: _TargetRtTrendSummary,
 ) -> _EvidenceSpineSummary:
     matched = [
         row
@@ -379,7 +440,10 @@ def _summarize_evidence_spine(
 
     max_abs_rt_delta_sec = max(rt_deltas_sec)
     if max_abs_rt_delta_sec > _RT_BOUNDARY_MAX_RT_DELTA_SEC:
-        status = "rt_boundary_rt_delta_exceeds_0.5_sec"
+        if _target_rt_trend_supports_large_rt_delta(target_rt_trend):
+            status = "rt_boundary_rt_delta_explained_by_target_trend"
+        else:
+            status = "rt_boundary_rt_delta_exceeds_0.5_sec"
     elif overwide_count:
         status = "rt_boundary_alignment_overwide"
     else:
@@ -391,6 +455,49 @@ def _summarize_evidence_spine(
         overwide_boundary_count=overwide_count,
         narrower_boundary_count=narrower_count,
     )
+
+
+def _read_target_rt_trend(path: Path) -> dict[str, _TargetRtTrendSummary]:
+    rows = _read_tsv(path, _TARGET_RT_TREND_REQUIRED_COLUMNS)
+    return {
+        row["target_label"].strip(): _target_rt_trend_summary(row)
+        for row in rows
+        if row.get("target_label", "").strip()
+    }
+
+
+def _target_rt_trend_summary(row: Mapping[str, str]) -> _TargetRtTrendSummary:
+    local_p95 = _optional_float(row.get("local_abs_delta_p95_min"))
+    moderate_or_severe = _parse_optional_non_negative_int(
+        row.get("local_moderate_or_severe_count"),
+        "local_moderate_or_severe_count",
+    )
+    severe = _parse_optional_non_negative_int(
+        row.get("local_severe_count"),
+        "local_severe_count",
+    )
+    status = (
+        "locally_coherent"
+        if (
+            local_p95 is not None
+            and local_p95 <= _TARGET_RT_TREND_LOCAL_P95_MAX_MIN
+            and moderate_or_severe == 0
+            and severe == 0
+        )
+        else "not_locally_coherent"
+    )
+    return _TargetRtTrendSummary(
+        status=status,
+        local_abs_delta_p95_min=local_p95,
+        local_moderate_or_severe_count=moderate_or_severe,
+        local_severe_count=severe,
+    )
+
+
+def _target_rt_trend_supports_large_rt_delta(
+    summary: _TargetRtTrendSummary,
+) -> bool:
+    return summary.status == "locally_coherent"
 
 
 def _write_outputs(
@@ -531,6 +638,13 @@ def _parse_non_negative_int(value: object, field_name: str) -> int:
     if parsed < 0:
         raise ValueError(f"{field_name} must be >= 0")
     return parsed
+
+
+def _parse_optional_non_negative_int(value: object, field_name: str) -> int | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    return _parse_non_negative_int(text, field_name)
 
 
 def _format_value(value: object) -> str:

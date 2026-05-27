@@ -211,19 +211,22 @@ If, during shadow runs, AsLS produces:
 
 ## Cleanup Hook
 
-Implementation should leave the following structure intact so Phase 2 C1a /
-C1b (baseline module relocation + linear edge retirement) and C5 (area
-integration single entry) can land without rework:
+Implementation should leave the following structure intact so Phase 2 C1a
+(baseline module relocation) and C5 (area integration single entry) can land
+without rework. C1b linear-edge retirement is now explicitly blocked until a
+separate AsLS truth-validation spec proves accuracy/linearity/blank behavior or
+an equivalent known-baseline benchmark.
 
 - `integrate_with_baseline` selector is a **thin wrapper** that only
   dispatches between `linear_edge` and `asls`. Do not add other dispatch
   logic (e.g. baseline-aware caching, per-trace overrides) inside the
   selector. Cache strategy belongs in the AsLS-using function or a shared
-  cache layer, not in the selector. C1b will delete the selector entirely
-  once C5 has migrated callers; a thin selector is trivial to remove.
+  cache layer, not in the selector. C1b may delete the selector only after C5
+  has migrated callers and the AsLS truth-validation blocker is cleared.
 - keep `asls_baseline` importable from `xic_extractor.baseline` for now;
-  C1a may relocate it only after Phase 1 is stable and P2b has clarified
-  whether AsLS is production. Do not pre-emptively move the function.
+  C1a may relocate it only after Phase 1 is stable and P2b has clarified the
+  conditional audit-promotion surface. Do not pre-emptively move the function,
+  and do not treat P2b as permission to retire linear-edge.
 - the new `CellIntegrationAuditSummary` shadow fields
   `area_baseline_corrected_asls` and `baseline_score_asls` use the same
   formatting and ratio convention as the existing production fields. Keep

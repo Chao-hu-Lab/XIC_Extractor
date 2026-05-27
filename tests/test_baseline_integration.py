@@ -204,16 +204,19 @@ def test_cell_integration_audit_reports_baseline_corrected_area() -> None:
     )
 
     assert summary.raw_area == pytest.approx(1200.0)
-    assert summary.area_baseline_corrected == pytest.approx(390.0)
-    assert summary.baseline_type == "linear_edge"
+    assert summary.area_baseline_corrected is not None
+    assert summary.baseline_type == "asls"
+    assert summary.area_baseline_corrected_linear_edge == pytest.approx(390.0)
     assert summary.area_uncertainty_formula_version == "baseline_residual_mad_v1"
     assert summary.baseline_residual_mad is not None
     assert summary.area_uncertainty_noise_source in {"asls_residual", "pre_peak_mad"}
-    assert summary.baseline_fraction == pytest.approx(390.0 / 1200.0)
+    assert summary.baseline_fraction == pytest.approx(
+        summary.area_baseline_corrected / 1200.0
+    )
     assert summary.integration_scan_count == 5
 
 
-def test_cell_integration_audit_can_emit_asls_shadow_values() -> None:
+def test_cell_integration_audit_defaults_to_asls_production_with_linear_edge_rollback() -> None:
     rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
     intensity = np.asarray([8.0, 12.0, 70.0, 65.0, 20.0, 12.0])
 
@@ -223,6 +226,66 @@ def test_cell_integration_audit_can_emit_asls_shadow_values() -> None:
         peak_start_rt=0.1,
         peak_end_rt=0.4,
         raw_area=60.0 * float(np.trapezoid(intensity[1:5], rt[1:5])),
+    )
+
+    assert summary.baseline_type == "asls"
+    assert summary.area_baseline_corrected is not None
+    assert summary.baseline_score is not None
+    assert summary.area_baseline_corrected_linear_edge is not None
+    assert summary.baseline_score_linear_edge is not None
+    assert summary.area_uncertainty_formula_version == "baseline_residual_mad_v1"
+    assert summary.area_uncertainty_noise_source == "asls_residual"
+
+
+def test_cell_integration_audit_can_rollback_to_linear_edge_production() -> None:
+    rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4])
+    intensity = np.asarray([10.0, 25.0, 50.0, 35.0, 20.0])
+
+    summary = build_cell_integration_audit_summary(
+        rt,
+        intensity,
+        peak_start_rt=0.0,
+        peak_end_rt=0.4,
+        raw_area=1200.0,
+        baseline_integration_method="linear_edge",
+    )
+
+    assert summary.baseline_type == "linear_edge"
+    assert summary.area_baseline_corrected == pytest.approx(390.0)
+    assert summary.area_baseline_corrected_linear_edge is None
+    assert summary.baseline_score_linear_edge is None
+
+
+def test_cell_integration_audit_falls_back_to_linear_edge_when_asls_unavailable() -> None:
+    rt = np.asarray([0.0, 0.1, 0.2])
+    intensity = np.asarray([10.0, 80.0, 20.0])
+
+    summary = build_cell_integration_audit_summary(
+        rt,
+        intensity,
+        peak_start_rt=0.0,
+        peak_end_rt=0.2,
+        raw_area=60.0 * float(np.trapezoid(intensity, rt)),
+        baseline_integration_method="asls",
+    )
+
+    assert summary.is_empty is False
+    assert summary.baseline_type == "linear_edge_fallback"
+    assert summary.area_baseline_corrected is not None
+    assert summary.area_baseline_corrected_linear_edge is None
+
+
+def test_cell_integration_audit_can_emit_legacy_asls_shadow_values() -> None:
+    rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
+    intensity = np.asarray([8.0, 12.0, 70.0, 65.0, 20.0, 12.0])
+
+    summary = build_cell_integration_audit_summary(
+        rt,
+        intensity,
+        peak_start_rt=0.1,
+        peak_end_rt=0.4,
+        raw_area=60.0 * float(np.trapezoid(intensity[1:5], rt[1:5])),
+        baseline_integration_method="linear_edge",
         baseline_audit_method="asls",
     )
 
@@ -231,6 +294,7 @@ def test_cell_integration_audit_can_emit_asls_shadow_values() -> None:
     assert summary.area_baseline_corrected_asls is not None
     assert summary.baseline_score_asls is not None
     assert 0.0 <= summary.baseline_score_asls <= 1.0
+    assert summary.area_baseline_corrected_linear_edge is None
 
 
 def test_cell_integration_audit_reuses_asls_fit_for_uncertainty_and_shadow(
@@ -256,15 +320,15 @@ def test_cell_integration_audit_reuses_asls_fit_for_uncertainty_and_shadow(
         peak_start_rt=0.1,
         peak_end_rt=0.4,
         raw_area=60.0 * float(np.trapezoid(intensity[1:5], rt[1:5])),
-        baseline_audit_method="asls",
     )
 
     assert calls == 1
-    assert summary.area_baseline_corrected_asls is not None
+    assert summary.baseline_type == "asls"
+    assert summary.area_baseline_corrected is not None
     assert summary.baseline_residual_mad is not None
 
 
-def test_cell_integration_audit_default_has_no_asls_shadow_values() -> None:
+def test_cell_integration_audit_default_has_no_legacy_asls_shadow_values() -> None:
     rt = np.asarray([0.0, 0.1, 0.2, 0.3])
     intensity = np.asarray([10.0, 30.0, 25.0, 12.0])
 
