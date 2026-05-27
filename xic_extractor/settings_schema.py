@@ -105,8 +105,8 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
         "schema or set to asls to emit AsLS comparison columns"
     ),
     "baseline_integration_method": (
-        "Production baseline method for alignment integration audit "
-        "(asls or linear_edge; default asls after P2b promotion)"
+        "Alignment integration-audit baseline method "
+        "(asls or linear_edge; default asls after P2b conditional audit promotion)"
     ),
     "nl_rt_anchor_search_margin_min": (
         "NL 錨定搜尋半徑（min）：以 rt_center ±此值搜尋 NL 確認的 MS2 作為 RT anchor"
