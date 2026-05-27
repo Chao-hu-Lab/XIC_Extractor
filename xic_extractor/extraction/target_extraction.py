@@ -16,6 +16,10 @@ from xic_extractor.extraction.diagnostics import (
     istd_anchor_missing_diagnostic,
 )
 from xic_extractor.extraction.drift import estimate_sample_drift
+from xic_extractor.extraction.handoff_spine_runtime import (
+    build_production_peak_hypotheses,
+    selected_peak_hypothesis,
+)
 from xic_extractor.extraction.istd_recovery import recover_istd_anchor_peak_if_needed
 from xic_extractor.extraction.ms2_selection import selected_candidate_ms2_evidence
 from xic_extractor.extraction.peak_candidate_audit import append_peak_audit_rows
@@ -309,6 +313,17 @@ def extract_one_target(
         candidate_ms2_cache,
         _cached_candidate_ms2_builder,
     )
+    production_hypotheses = build_production_peak_hypotheses(
+        config=config,
+        sample_name=sample_name,
+        target=target,
+        peak_result=peak_result,
+        selected_candidate_ms2_evidence=candidate_ms2_evidence,
+        rt=audit_rt,
+        intensity=audit_intensity,
+        trace_group=trace_group,
+    )
+    selected_hypothesis = selected_peak_hypothesis(production_hypotheses)
 
     result = build_extraction_result(
         peak_result=peak_result,
@@ -317,6 +332,7 @@ def extract_one_target(
         target=target,
         candidate=candidate,
         scoring_context_builder=scoring_context_builder,
+        selected_hypothesis=selected_hypothesis,
     )
     results[target.label] = result
     diagnostics.extend(build_diagnostic_records(sample_name, target, result, config))
