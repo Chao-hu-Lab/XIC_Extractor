@@ -37,7 +37,7 @@ def test_candidate_interval_boundary_reproduces_current_candidate_interval() -> 
     )
 
 
-def test_boundary_candidate_context_reproduces_candidate_interval_without_legacy_model() -> None:
+def test_boundary_context_reproduces_interval_without_legacy_model() -> None:
     rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4], dtype=float)
     intensity = np.asarray([1.0, 5.0, 10.0, 5.0, 1.0], dtype=float)
     candidate = BoundaryCandidateContext(

@@ -194,7 +194,7 @@ def test_build_boundary_rows_prefers_shared_trace_group_arrays() -> None:
     assert candidate_row["baseline_score"] != "0.00000"
 
 
-def test_build_boundary_rows_from_hypotheses_projects_spine_without_legacy_result() -> None:
+def test_build_boundary_rows_from_hypotheses_without_legacy_result() -> None:
     hypothesis = PeakHypothesis(
         hypothesis_id="hypothesis-boundary-row-id",
         trace_group_id="SampleA|HypothesisTarget|hypothesis_resolver",
