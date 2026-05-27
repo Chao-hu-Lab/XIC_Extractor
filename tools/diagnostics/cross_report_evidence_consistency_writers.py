@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import csv
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
+from tools.diagnostics.diagnostic_io import write_tsv as _write_diagnostic_tsv
 from tools.diagnostics.cross_report_evidence_consistency_models import (
     _ROW_COLUMNS,
     _SUMMARY_COLUMNS,
@@ -44,13 +44,7 @@ def _write_tsv(
     fieldnames: Sequence[str],
     rows: Sequence[Mapping[str, object]],
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {key: _format_value(row.get(key, "")) for key in fieldnames}
-            )
+    _write_diagnostic_tsv(path, rows, fieldnames, formatter=_format_value)
 
 
 def _markdown(result: ConsistencyResult) -> str:

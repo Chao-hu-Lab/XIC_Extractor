@@ -38,11 +38,12 @@ Audit on 2026-05-26 (this worktree) found:
   diagnostic path is effectively dead.
 - 11 files have no caller, no docs reference, and no commit in 60+ days, but
   still ship in the repo.
-- Multiple topic groups duplicate logic: evidence consistency twins
-  (`evidence_spine_consistency_*` and `cross_report_evidence_consistency_*`),
-  backfill review trio (`seed_aware`, `family_ms1`, `low_ms1_coverage`),
-  writer infrastructure re-implemented in 8 separate `_writers.py` / `_io.py`
-  files instead of using `diagnostic_io.py`.
+- Multiple topic groups historically duplicated logic. The evidence consistency
+  twins (`evidence_spine_consistency_*` and
+  `cross_report_evidence_consistency_*`) and the listed writer/loader
+  infrastructure were consolidated through `diagnostic_io.py` on 2026-05-26;
+  the backfill review trio (`seed_aware`, `family_ms1`, `low_ms1_coverage`)
+  still requires method-level review before consolidation.
 
 Root cause: the in-package diagnostic path is dead, so new findings always
 land in `tools/diagnostics/`. The 5-file modular template from the post-PR60
@@ -186,11 +187,13 @@ author must:
 
 Shared infrastructure that **must** be reused, not re-implemented:
 
-- `tools/diagnostics/diagnostic_io.py` for TSV reads, writes, and
+- `tools/diagnostics/diagnostic_io.py` for delimited/TSV reads and writes,
+  scalar parsing, required-column/header validation, label splitting, and
   formatted-value helpers.
-- A future `tools/diagnostics/_common/` module that consolidates `openpyxl`
-  cell styling, color palettes, and Excel-safe value conversion. The 8 known
-  re-implementations identified by the 2026-05-26 audit migrate to this
+- A future `tools/diagnostics/_common/` module only if genuinely shared
+  `openpyxl` styling, color palettes, or Excel-safe value conversion appear.
+  The 8 known re-implementations identified by the 2026-05-26 audit migrated
+  to `diagnostic_io.py`, so do not add `_common/` merely for ceremony.
   module on their next touch.
 
 A new tool that re-implements `openpyxl` cell writing, TSV reading, or value

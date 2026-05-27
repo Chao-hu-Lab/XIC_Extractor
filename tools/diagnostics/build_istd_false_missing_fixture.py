@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from openpyxl import load_workbook
+
+from tools.diagnostics.diagnostic_io import (
+    required_indexes,
+    write_delimited_rows,
+)
 
 OLD_ROW_TO_TARGET = {
     "245.1332/12.28": "d3-5-medC",
@@ -130,11 +134,13 @@ def _targeted_rows(
     try:
         sheet = workbook[sheet_name]
         header = list(next(sheet.iter_rows(min_row=1, max_row=1, values_only=True)))
-        indexes = {str(name): index for index, name in enumerate(header) if name}
-        required = {"SampleName", "Target", "RT", "Area", "NL", "Confidence", "Reason"}
-        missing = required - set(indexes)
-        if missing:
-            raise KeyError(f"Targeted workbook is missing columns: {sorted(missing)}")
+        required = ("SampleName", "Target", "RT", "Area", "NL", "Confidence", "Reason")
+        try:
+            indexes = required_indexes(header, required, "XIC Results")
+        except ValueError as exc:
+            present = {str(name).strip() for name in header if name}
+            missing = sorted(set(required) - present)
+            raise KeyError(f"Targeted workbook is missing columns: {missing}") from exc
         rows: dict[tuple[str, str], dict[str, object]] = {}
         current_sample = ""
         for row in sheet.iter_rows(min_row=2, values_only=True):
@@ -164,10 +170,7 @@ def _map_sample_id(sample_id: str) -> str:
 
 def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(FIELDNAMES))
-        writer.writeheader()
-        writer.writerows(rows)
+    write_delimited_rows(path, rows, FIELDNAMES)
 
 
 def _text(value: object) -> str:

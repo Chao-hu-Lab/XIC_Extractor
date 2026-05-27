@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-import csv
-import math
-from collections.abc import Sequence
 from pathlib import Path
 
+from tools.diagnostics.diagnostic_io import (
+    bool_value as _bool_value,
+    optional_float as _optional_float,
+    optional_int as _optional_int,
+    read_tsv_required as _read_required_tsv,
+)
 from tools.diagnostics.evidence_spine_consistency_models import (
     AlignmentCell,
     TargetedCandidate,
@@ -117,45 +120,3 @@ def _read_alignment_cells(path: Path) -> tuple[AlignmentCell, ...]:
         )
         for row in rows
     )
-
-
-def _read_required_tsv(
-    path: Path,
-    required: Sequence[str],
-) -> tuple[dict[str, str], ...]:
-    if not path.exists():
-        raise FileNotFoundError(str(path))
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle, delimiter="\t")
-        fieldnames = tuple(reader.fieldnames or ())
-        missing = [column for column in required if column not in fieldnames]
-        if missing:
-            raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
-        return tuple(dict(row) for row in reader)
-
-
-def _optional_float(value: object) -> float | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        parsed = float(text)
-    except ValueError:
-        return None
-    return parsed if math.isfinite(parsed) else None
-
-
-def _optional_int(value: object) -> int | None:
-    parsed = _optional_float(value)
-    if parsed is None:
-        return None
-    return int(parsed)
-
-
-def _bool_value(value: object) -> bool | None:
-    text = str(value or "").strip().lower()
-    if text in {"true", "1", "yes", "y"}:
-        return True
-    if text in {"false", "0", "no", "n"}:
-        return False
-    return None

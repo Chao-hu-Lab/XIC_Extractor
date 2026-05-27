@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
 **Last generated:** 2026-05-26
-**Total entry-points:** 38
-**Total files (incl. helpers):** ~108
+**Total entry-points:** 39
+**Total files (incl. helpers):** ~114
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 
 ---
@@ -21,7 +21,7 @@
 
 ## Table of Contents
 
-1. [Phase Gates (P1/P2/P2b/P7)](#phase-gates-p1p2p2bp7) — 6 tools
+1. [Phase Gates (P1/P2/P2b/P2c/P7)](#phase-gates-p1p2p2bp2cp7) — 7 tools
 2. [Evidence Consistency](#evidence-consistency) — 2 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
 4. [Backfill Reviews](#backfill-reviews) — 5 tools
@@ -34,7 +34,7 @@
 
 ---
 
-## Phase Gates (P1/P2/P2b/P7)
+## Phase Gates (P1/P2/P2b/P2c/P7)
 
 Pipeline-tier gates that compare candidate configurations against current
 production, or summarize cost/parity for production decisions. These are
@@ -52,28 +52,37 @@ per the lifecycle spec.
 
 ### `p2_asls_shadow_gate.py`
 
-**Purpose**: Gate P2 AsLS shadow baseline columns against linear-edge integration audit rows for targeted ISTD benchmark selections.
+**Purpose**: Gate P2 AsLS baseline area against linear-edge integration audit rows for targeted ISTD benchmark selections; supports both legacy AsLS-shadow and promoted AsLS schemas.
 **Topic group**: `p2_asls_shadow_gate.py`
 **Originating spec**: `2026-05-24-peak-pipeline-area-baseline-asls-spec.md`
-**Recent doc**: `plans/2026-05-25-p2-asls-baseline-shadow-implementation.md`
+**Recent doc**: `plans/2026-05-25-p2-asls-baseline-shadow-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
 
 ---
 
 ### `p2_baseline_truth_audit.py`
 
-**Purpose**: Build a diagnostic-only baseline truth audit for P2 AsLS shadow gate ISTD families.
+**Purpose**: Build a diagnostic-only baseline truth audit for P2/P2b AsLS gate ISTD families; compares linear-edge rollback against promoted AsLS when available.
 **Topic group**: `p2_baseline_truth_audit.py`
 **Originating spec**: `2026-05-24-peak-pipeline-area-baseline-asls-spec.md` (shared with shadow gate)
-**Recent doc**: `plans/2026-05-25-p2-baseline-truth-audit-implementation.md`
+**Recent doc**: `plans/2026-05-25-p2-baseline-truth-audit-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
 
 ---
 
 ### `p2b_asls_promotion_gate.py`
 
-**Purpose**: Run the revised P2b AsLS promotion gate.
+**Purpose**: Run the revised P2b AsLS promotion gate, including optional evidence-spine and target RT trend support for large RT-delta interpretation.
 **Topic group**: `p2b_asls_promotion_gate.py`
 **Originating spec**: `2026-05-24-peak-pipeline-area-baseline-asls-promotion-spec.md`
-**Recent doc**: `plans/2026-05-25-p2b-revised-asls-promotion-gate-implementation.md`, `plans/2026-05-25-p2d-rt-boundary-first-p2b-gate-implementation.md`
+**Recent doc**: `plans/2026-05-25-p2b-revised-asls-promotion-gate-implementation.md`, `plans/2026-05-25-p2d-rt-boundary-first-p2b-gate-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
+
+---
+
+### `asls_truth_validation.py`
+
+**Purpose**: Run the P2c AsLS truth-validation gate with Tier A selected-family guard, locked synthetic Tier B1/B2 benchmark, optional Tier C evidence, methodology waiver documentation, retirement prerequisite manifest, and deletion-safe exit codes.
+**Topic group**: `asls_truth_validation.py` + `_models`, `_manifests`, `_synthetic`, `_inputs`, `_analysis` (6 files)
+**Originating spec/plan**: `specs/2026-05-26-peak-pipeline-asls-truth-validation-spec.md`, `plans/2026-05-27-p2c-tier-b-b1-b2-redesign-plan.md`
+**Current gate note**: Exit `0` is reserved for true linear-edge retirement authority. B1 relevance fixtures are the only synthetic layer that can drive `decision_target=c1b-plan`; B2 stress evidence is reported for retirement/Tier C follow-up and must not by itself create a C1b no-go. v1 fixture outputs are non-authoritative under the B1/B2 contract and should be treated as `LEGACY_V1_NON_AUTHORITATIVE` / `INCONCLUSIVE_FIXTURE_SCOPE_MISMATCH`.
 
 ---
 
@@ -97,8 +106,9 @@ per the lifecycle spec.
 ## Evidence Consistency
 
 Compare evidence rows produced by parallel pipelines (targeted vs untargeted,
-spine vs cell). The two tools below are known twins; see
-`2026-05-26-diagnostic-lifecycle-audit-note.md` Cluster 1.
+spine vs cell). The two tools below share low-level diagnostic IO helpers, but
+keep separate row models because their output schemas are intentionally
+different; see `2026-05-26-diagnostic-lifecycle-audit-note.md` Cluster 1.
 
 ### `evidence_spine_consistency.py`
 
@@ -114,7 +124,7 @@ spine vs cell). The two tools below are known twins; see
 **Purpose**: Compare targeted reliability and peak candidate evidence.
 **Topic group**: `cross_report_evidence_consistency.py` + `_io`, `_models`, `_analysis`, `_writers` (5 files)
 **Originating spec**: (none found — likely landed alongside post-PR60 cleanup; see `2026-05-24-post-pr60-codebase-cleanup-spec.md` Workstream G context)
-**Duplication note**: Shares `ConsistencyRow` / `ConsistencySummary` dataclasses and 4 helpers with `evidence_spine_consistency`; pending consolidation per audit-note Cluster 1.
+**Duplication note**: Low-level parsing/writing helpers are consolidated through `diagnostic_io.py`; row dataclasses stay separate because the schemas differ.
 
 ---
 
@@ -371,7 +381,8 @@ backfill candidates.
 **Purpose**: Classify targeted/untargeted area mismatch by integration audit.
 **Topic group**: `area_integration_uncertainty_audit.py` + `_io`, `_models`, `_analysis`, `_writers` (5 files)
 **Originating spec**: `2026-05-18-area-integration-uncertainty-audit-gate.md`
-**Recent doc**: `plans/2026-05-25-p4-area-uncertainty-formula-implementation.md`
+**Recent doc**: `plans/2026-05-25-p4-area-uncertainty-formula-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
+**Schema note**: When promoted AsLS audit rows include `area_baseline_corrected_linear_edge`, baseline-area mismatch checks use that linear-edge-compatible rollback value, not the promoted AsLS value.
 
 ---
 
@@ -401,7 +412,7 @@ to be re-run only when the underlying data shape changes.
 
 Not entry-points, but referenced by multiple topic groups:
 
-- `tools/diagnostics/diagnostic_io.py` — shared TSV/JSON read/write and value formatting. Currently under-used (only ~3 callers). See audit-note Cluster 3 for the consolidation plan; pending `_common/` extraction.
+- `tools/diagnostics/diagnostic_io.py` — shared delimited/TSV read-write, scalar parsing, header validation, label splitting, and value formatting. Cluster 1 and the listed Cluster 3 loaders now reuse this module; use it before adding local `_read_required_tsv`, `_bool_value`, `_optional_float`, `_text`, `_required_indexes`, or `_write_tsv` copies.
 
 ## Maintenance Notes
 

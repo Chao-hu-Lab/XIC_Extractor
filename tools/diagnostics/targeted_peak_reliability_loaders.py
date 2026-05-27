@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
-import math
 from collections import defaultdict
-from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, cast
 
 from openpyxl import load_workbook
 
-from tools.diagnostics.diagnostic_io import read_delimited_rows
+from tools.diagnostics.diagnostic_io import (
+    bool_value as _bool_value,
+    optional_float as _float_value,
+    optional_int as _int_value,
+    read_tsv_required as _read_required_tsv,
+    required_indexes as _required_indexes,
+    split_semicolon_labels as _split_semicolon_labels,
+    text_value as _text,
+)
 from tools.diagnostics.targeted_peak_reliability_models import (
     _PEAK_CANDIDATE_COLUMNS,
     _CandidateEvidence,
@@ -150,64 +155,3 @@ def _load_selected_candidate_evidence(
     return {
         key: values[0] for key, values in selected_by_key.items() if len(values) == 1
     }
-
-
-def _read_required_tsv(
-    path: Path,
-    required: Sequence[str],
-) -> tuple[dict[str, str], ...]:
-    if not path.exists():
-        raise FileNotFoundError(str(path))
-    return tuple(
-        read_delimited_rows(
-            path,
-            required_columns=required,
-            encoding="utf-8-sig",
-        )
-    )
-
-
-def _bool_value(value: object) -> bool | None:
-    token = _text(value).strip().upper()
-    if token in {"TRUE", "T", "YES", "Y", "1"}:
-        return True
-    if token in {"FALSE", "F", "NO", "N", "0"}:
-        return False
-    return None
-
-
-def _required_indexes(
-    header: Sequence[object],
-    required: Sequence[str],
-    sheet_name: str,
-) -> dict[str, int]:
-    indexes = {str(value).strip(): index for index, value in enumerate(header) if value}
-    missing = [field for field in required if field not in indexes]
-    if missing:
-        raise ValueError(f"{sheet_name} is missing required columns: {missing}")
-    return {field: indexes[field] for field in required}
-
-
-def _float_value(value: object) -> float | None:
-    try:
-        numeric = float(cast(Any, value))
-    except (TypeError, ValueError):
-        return None
-    return numeric if math.isfinite(numeric) else None
-
-
-def _int_value(value: object) -> int | None:
-    numeric = _float_value(value)
-    if numeric is None:
-        return None
-    return int(numeric)
-
-
-def _text(value: object) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
-def _split_semicolon_labels(value: str) -> list[str]:
-    return [part.strip() for part in value.split(";") if part.strip()]

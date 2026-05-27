@@ -94,13 +94,13 @@ smoke test, and does not change any TSV/JSON/Markdown schema.
 - `tools/diagnostics/evidence_spine_consistency*` (5 files)
 - `tools/diagnostics/cross_report_evidence_consistency*` (5 files)
 
-Same-named dataclasses (`ConsistencyRow`, `ConsistencySummary`) defined
-independently in each group; helper functions (`_bool_value`,
-`_optional_float`, `_read_required_tsv`, `_read_target_mz`) duplicated.
+**Status:** addressed by `2026-05-26-diagnostic-cleanup-cluster1-3-plan.md`.
+The two groups now share low-level TSV/scalar/writer helpers through
+`tools/diagnostics/diagnostic_io.py`.
 
-**Recommended action:** Extract `tools/diagnostics/_evidence_consistency_common.py`
-containing the shared dataclass base + helpers; convert both top-level CLIs
-into thin orchestrators.
+`ConsistencyRow` and `ConsistencySummary` remain independently defined because
+the row schemas are not identical. Treat future duplicate helper additions here
+as drift; do not merge the row dataclasses without an explicit schema contract.
 
 ### Cluster 2: Backfill Review Trio
 
@@ -119,10 +119,11 @@ whether the three axes are orthogonal (legitimate) or redundant views
 
 ### Cluster 3: Writer Infrastructure Non-Sharing
 
-- `tools/diagnostics/diagnostic_io.py` (63 lines) is currently shared by only
-  about 3 topic groups.
-- 8 other writer / loader modules re-implement TSV reading, `openpyxl` cell
-  writing, or value formatting independently:
+- `tools/diagnostics/diagnostic_io.py` now owns shared delimited/TSV IO,
+  scalar parsing, label splitting, required-column reads, and workbook header
+  index validation.
+- The originally listed writer / loader modules were migrated where
+  behavior-equivalent:
   - `build_istd_false_missing_fixture.py`
   - `cross_report_evidence_consistency_io.py`
   - `cwt_peak_candidate_audit_io.py`
@@ -132,9 +133,9 @@ whether the three axes are orthogonal (legitimate) or redundant views
   - `targeted_nl_dropout_root_cause_io.py`
   - `targeted_peak_reliability_loaders.py`
 
-**Recommended action:** Extract `tools/diagnostics/_common/` package with
-`openpyxl` helpers, color palettes, and value formatters. Migrate the 8
-modules on their next functional touch rather than a single flag-day rewrite.
+**Status:** addressed for the listed modules. No `_common/` package was added
+because the repeated behavior fit the existing `diagnostic_io.py` module and a
+new package would add ceremony without reducing more coupling.
 
 ## Suggested Implementation Sequence
 
@@ -148,12 +149,13 @@ Per the spec's principle of "rules first, actions in separate PRs":
 2. **PR B (medium risk, ~10-15h):** Promote the 6 phase-gate groups into
    `xic_extractor/diagnostics/gates/`. One sub-PR per group is recommended
    for review clarity.
-3. **PR C (medium risk, ~3-4h):** Extract evidence-consistency common
-   helpers (Cluster 1).
+3. **PR C (DONE):** Evidence-consistency common helpers consolidated through
+   `diagnostic_io.py`; schema-specific row models retained.
 4. **PR D (write-only spec first, then implementation):** Spec defining
    backfill review axis semantics (Cluster 2), then consolidation PR(s).
-5. **PR E (incremental):** New `_common/` writer module; the 8 listed modules
-   migrate on their next functional touch.
+5. **PR E (DONE for listed modules):** Cluster 3 listed modules migrated to
+   `diagnostic_io.py` where behavior-equivalent. Future diagnostics should use
+   that module before adding local parser/writer helpers.
 
 ## Out-of-Scope For This Audit Note
 

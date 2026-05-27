@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-import csv
-from collections.abc import Sequence
 from pathlib import Path
 
 from openpyxl import load_workbook
 
+from tools.diagnostics.diagnostic_io import (
+    bool_value as _bool_value,
+    optional_float as _optional_float,
+    read_tsv_required as _read_required_tsv,
+    required_indexes,
+    split_semicolon_labels as _split_labels,
+    text_value as _text,
+)
 from tools.diagnostics.cross_report_evidence_consistency_models import (
     _CANDIDATE_COLUMNS,
     _RELIABILITY_COLUMNS,
@@ -53,21 +59,6 @@ def _read_candidate_rows(path: Path) -> tuple[CandidateRow, ...]:
     )
 
 
-def _read_required_tsv(
-    path: Path,
-    required: Sequence[str],
-) -> tuple[dict[str, str], ...]:
-    if not path.exists():
-        raise FileNotFoundError(str(path))
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle, delimiter="\t")
-        fieldnames = tuple(reader.fieldnames or ())
-        missing = [column for column in required if column not in fieldnames]
-        if missing:
-            raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
-        return tuple(dict(row) for row in reader)
-
-
 def _read_target_mz(path: Path) -> dict[str, float]:
     if not path.exists():
         raise FileNotFoundError(str(path))
@@ -76,12 +67,7 @@ def _read_target_mz(path: Path) -> dict[str, float]:
         sheet = workbook["Targets"]
         rows = sheet.iter_rows(values_only=True)
         header = next(rows)
-        indexes = {
-            str(value).strip(): index for index, value in enumerate(header) if value
-        }
-        for required in ("Label", "m/z"):
-            if required not in indexes:
-                raise ValueError(f"Targets is missing required column: {required}")
+        indexes = required_indexes(header, ("Label", "m/z"), "Targets")
         values: dict[str, float] = {}
         for row in rows:
             label = _text(row[indexes["Label"]])
@@ -91,30 +77,3 @@ def _read_target_mz(path: Path) -> dict[str, float]:
         return values
     finally:
         workbook.close()
-
-
-def _split_labels(value: str) -> list[str]:
-    return [part.strip() for part in value.split(";") if part.strip()]
-
-
-def _optional_float(value: str) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number
-
-
-def _bool_value(value: str) -> bool | None:
-    normalized = value.strip().upper()
-    if normalized in {"TRUE", "T", "YES", "Y", "1"}:
-        return True
-    if normalized in {"FALSE", "F", "NO", "N", "0"}:
-        return False
-    return None
-
-
-def _text(value: object) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
