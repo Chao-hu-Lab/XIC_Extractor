@@ -16,8 +16,8 @@ from xic_extractor.extraction.diagnostics import (
     istd_anchor_missing_diagnostic,
 )
 from xic_extractor.extraction.drift import estimate_sample_drift
+from xic_extractor.extraction.handoff_spine_runtime import selected_handoff_peak
 from xic_extractor.extraction.istd_recovery import recover_istd_anchor_peak_if_needed
-from xic_extractor.extraction.ms2_selection import selected_candidate_ms2_evidence
 from xic_extractor.extraction.peak_candidate_audit import append_peak_audit_rows
 from xic_extractor.extraction.result_assembly import build_extraction_result
 from xic_extractor.extraction.rt_windows import get_rt_window
@@ -26,7 +26,6 @@ from xic_extractor.extraction.scoring_factory import (
     selected_candidate,
     selected_shape_metrics,
 )
-from xic_extractor.extraction.trace_context import targeted_extraction_trace_group
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.output.messages import (
     DiagnosticRecord,
@@ -285,38 +284,34 @@ def extract_one_target(
         if recovery_decision.intensity is not None
         else intensity
     )
-    trace_group = (
-        targeted_extraction_trace_group(
-            sample_name=sample_name,
-            target=target,
-            config=config,
-            rt=audit_rt,
-            intensity=audit_intensity,
-            rt_min=rt_min,
-            rt_max=rt_max,
-            expected_rt_min=anchor_rt,
-        )
-        if config.emit_peak_candidates
-        else None
-    )
     shape_intensity = audit_intensity
     shape_metrics = selected_shape_metrics(shape_intensity, peak_result)
     candidate = selected_candidate(peak_result)
     if shape_metrics_by_label is not None and shape_metrics is not None:
         shape_metrics_by_label[target.label] = shape_metrics
-    candidate_ms2_evidence = selected_candidate_ms2_evidence(
-        candidate,
-        candidate_ms2_cache,
-        _cached_candidate_ms2_builder,
+    handoff_peak = selected_handoff_peak(
+        config=config,
+        sample_name=sample_name,
+        target=target,
+        peak_result=peak_result,
+        candidate=candidate,
+        candidate_ms2_cache=candidate_ms2_cache,
+        candidate_ms2_builder=_cached_candidate_ms2_builder,
+        rt=audit_rt,
+        intensity=audit_intensity,
+        rt_min=rt_min,
+        rt_max=rt_max,
+        expected_rt_min=anchor_rt,
     )
 
     result = build_extraction_result(
         peak_result=peak_result,
         nl_result=nl_result,
-        candidate_ms2_evidence=candidate_ms2_evidence,
+        candidate_ms2_evidence=handoff_peak.candidate_ms2_evidence,
         target=target,
         candidate=candidate,
         scoring_context_builder=scoring_context_builder,
+        selected_hypothesis=handoff_peak.selected_hypothesis,
     )
     results[target.label] = result
     diagnostics.extend(build_diagnostic_records(sample_name, target, result, config))
@@ -340,7 +335,7 @@ def extract_one_target(
         peak_result=peak_result,
         candidate_ms2_builder=_cached_candidate_ms2_builder,
         rt=audit_rt, intensity=audit_intensity,
-        trace_group=trace_group,
+        trace_group=handoff_peak.trace_group,
         scoring_context_builder=scoring_context_builder,
         istd_confidence_note=istd_confidence_note,
     )

@@ -97,6 +97,9 @@ def build_peak_candidate_boundary_rows(
         istd_pair=istd_pair,
         resolver_mode=resolver_mode,
         peak_result=peak_result,
+        rt=trace_rt,
+        intensity=trace_intensity,
+        trace_group=trace_group,
     )
     return build_peak_candidate_boundary_rows_from_hypotheses(
         sample_name=sample_name,
@@ -168,18 +171,60 @@ def append_peak_candidate_boundary_rows(
             intensity,
             config,
         )
-    rows.extend(
-        build_peak_candidate_boundary_rows(
+    append_peak_candidate_boundary_rows_from_hypotheses(
+        rows,
+        config,
+        sample_name,
+        target,
+        build_peak_hypotheses(
             sample_name=sample_name,
             target_label=target.label,
-            target_mz=target.mz,
             role="ISTD" if target.is_istd else "Analyte",
             istd_pair=target.istd_pair,
             resolver_mode=config.resolver_mode,
             peak_result=audited,
-            rt=rt,
-            intensity=intensity,
+            rt=(
+                trace_group.primary_trace.rt if trace_group is not None else rt
+            ),
+            intensity=(
+                trace_group.primary_trace.intensity
+                if trace_group is not None
+                else intensity
+            ),
             trace_group=trace_group,
+        ),
+        rt=rt,
+        intensity=intensity,
+        trace_group=trace_group,
+    )
+
+
+def append_peak_candidate_boundary_rows_from_hypotheses(
+    rows: list[PeakCandidateBoundaryRow] | None,
+    config: ExtractionConfig,
+    sample_name: str,
+    target: Target,
+    hypotheses: tuple[PeakHypothesis, ...],
+    *,
+    rt: Any,
+    intensity: Any,
+    trace_group: TraceGroup | None = None,
+    group: str | None = None,
+) -> None:
+    if not config.emit_peak_candidates or rows is None:
+        return
+    trace_rt = trace_group.primary_trace.rt if trace_group is not None else rt
+    trace_intensity = (
+        trace_group.primary_trace.intensity if trace_group is not None else intensity
+    )
+    rows.extend(
+        build_peak_candidate_boundary_rows_from_hypotheses(
+            sample_name=sample_name,
+            target_mz=target.mz,
+            hypotheses=hypotheses,
+            rt=trace_rt,
+            intensity=trace_intensity,
+            group=group,
         )
     )
 

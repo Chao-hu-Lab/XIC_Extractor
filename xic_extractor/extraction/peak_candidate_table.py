@@ -155,6 +155,53 @@ def build_peak_candidate_rows_from_hypotheses(
     ]
 
 
+def build_peak_candidate_audit_hypotheses(
+    *,
+    config: ExtractionConfig,
+    sample_name: str,
+    target: Target,
+    peak_result: PeakDetectionResult,
+    candidate_ms2_builder: Callable[[PeakCandidate], CandidateMS2Evidence | None],
+    rt: object | None = None,
+    intensity: object | None = None,
+    trace_group: TraceGroup | None = None,
+    audit_peak_result: PeakDetectionResult | None = None,
+    scoring_context_builder: Callable[[PeakCandidate], ScoringContext] | None = None,
+    istd_confidence_note: str | None = None,
+    include_candidate_ms2_evidence: bool = True,
+) -> tuple[PeakHypothesis, ...]:
+    audited = audit_peak_result
+    if audited is None:
+        audited = (
+            add_cwt_proposals_for_audit(peak_result, rt, intensity, config)
+            if rt is not None and intensity is not None
+            else peak_result
+        )
+    if scoring_context_builder is not None:
+        audited = _with_rescored_audit_candidates(
+            audited,
+            peak_result,
+            scoring_context_builder,
+            istd_confidence_note=istd_confidence_note,
+        )
+    return build_peak_hypotheses(
+        sample_name=sample_name,
+        target_label=target.label,
+        role="ISTD" if target.is_istd else "Analyte",
+        istd_pair=target.istd_pair,
+        resolver_mode=config.resolver_mode,
+        peak_result=audited,
+        candidate_ms2_evidence=(
+            _candidate_table_ms2_evidence(audited, candidate_ms2_builder)
+            if include_candidate_ms2_evidence
+            else None
+        ),
+        rt=rt,
+        intensity=intensity,
+        trace_group=trace_group,
+    )
+
+
 def _row_from_hypothesis(
     *,
     sample_name: str,
@@ -301,35 +348,41 @@ def append_peak_candidate_rows(
 ) -> None:
     if not config.emit_peak_candidates or rows is None:
         return
-    audited = audit_peak_result
-    if audited is None:
-        audited = (
-            add_cwt_proposals_for_audit(peak_result, rt, intensity, config)
-            if rt is not None and intensity is not None
-            else peak_result
-        )
-    if scoring_context_builder is not None:
-        audited = _with_rescored_audit_candidates(
-            audited,
-            peak_result,
-            scoring_context_builder,
-            istd_confidence_note=istd_confidence_note,
-        )
-    rows.extend(
-        build_peak_candidate_rows(
+    append_peak_candidate_rows_from_hypotheses(
+        rows,
+        config,
+        sample_name,
+        build_peak_candidate_audit_hypotheses(
+            config=config,
             sample_name=sample_name,
-            target_label=target.label,
-            role="ISTD" if target.is_istd else "Analyte",
-            istd_pair=target.istd_pair,
-            resolver_mode=config.resolver_mode,
-            peak_result=audited,
-            candidate_ms2_evidence=_candidate_table_ms2_evidence(
-                audited,
-                candidate_ms2_builder,
-            ),
+            target=target,
+            peak_result=peak_result,
+            candidate_ms2_builder=candidate_ms2_builder,
             rt=rt,
             intensity=intensity,
             trace_group=trace_group,
+            audit_peak_result=audit_peak_result,
+            scoring_context_builder=scoring_context_builder,
+            istd_confidence_note=istd_confidence_note,
+        ),
+    )
+
+
+def append_peak_candidate_rows_from_hypotheses(
+    rows: list[PeakCandidateTableRow] | None,
+    config: ExtractionConfig,
+    sample_name: str,
+    hypotheses: tuple[PeakHypothesis, ...],
+    *,
+    group: str | None = None,
+) -> None:
+    if not config.emit_peak_candidates or rows is None:
+        return
+    rows.extend(
+        build_peak_candidate_rows_from_hypotheses(
+            sample_name=sample_name,
+            group=group,
+            hypotheses=hypotheses,
         )
     )
 
