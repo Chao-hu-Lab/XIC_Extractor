@@ -288,6 +288,9 @@ def test_build_boundary_rows_projects_from_peak_hypothesis_spine(monkeypatch) ->
         _fake_build_peak_hypotheses,
     )
 
+    rt = np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6])
+    intensity = np.asarray([10.0, 18.0, 70.0, 100.0, 70.0, 18.0, 10.0])
+
     rows = build_peak_candidate_boundary_rows(
         sample_name="SampleA",
         target_label="LegacyTarget",
@@ -295,8 +298,8 @@ def test_build_boundary_rows_projects_from_peak_hypothesis_spine(monkeypatch) ->
         istd_pair="LegacyPair",
         resolver_mode="legacy_savgol",
         peak_result=peak_result,
-        rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6]),
-        intensity=np.asarray([10.0, 18.0, 70.0, 100.0, 70.0, 18.0, 10.0]),
+        rt=rt,
+        intensity=intensity,
     )
 
     assert rows
@@ -307,9 +310,9 @@ def test_build_boundary_rows_projects_from_peak_hypothesis_spine(monkeypatch) ->
     assert {row["resolver_mode"] for row in rows} == {"hypothesis_resolver"}
     assert {row["proposal_sources"] for row in rows} == {"hypothesis_source"}
     assert {row["selected_candidate"] for row in rows} == {"TRUE"}
-    assert "rt" not in captured_kwargs
-    assert "intensity" not in captured_kwargs
-    assert "trace_group" not in captured_kwargs
+    assert captured_kwargs["rt"] is rt
+    assert captured_kwargs["intensity"] is intensity
+    assert captured_kwargs["trace_group"] is None
 
 
 def test_write_peak_candidate_boundaries_tsv_serializes_rows_safely(

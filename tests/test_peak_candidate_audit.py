@@ -1,6 +1,7 @@
 import numpy as np
 
 from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.extraction import peak_candidate_table
 from xic_extractor.extraction.peak_candidate_audit import append_peak_audit_rows
 from xic_extractor.peak_detection.traces import Trace, targeted_trace_group
 from xic_extractor.signal_processing import (
@@ -58,6 +59,19 @@ def test_peak_audit_appender_reuses_one_cwt_audit_result(
         "xic_extractor.extraction.peak_candidate_audit.add_cwt_proposals_for_audit",
         _fake_cwt,
     )
+    build_calls = 0
+    real_build_peak_hypotheses = peak_candidate_table.build_peak_hypotheses
+
+    def _count_build_peak_hypotheses(**kwargs):
+        nonlocal build_calls
+        build_calls += 1
+        return real_build_peak_hypotheses(**kwargs)
+
+    monkeypatch.setattr(
+        peak_candidate_table,
+        "build_peak_hypotheses",
+        _count_build_peak_hypotheses,
+    )
     candidate_rows: list[dict[str, str]] = []
     boundary_rows: list[dict[str, str]] = []
 
@@ -74,6 +88,7 @@ def test_peak_audit_appender_reuses_one_cwt_audit_result(
     )
 
     assert calls == 1
+    assert build_calls == 1
     assert candidate_rows
     assert boundary_rows
     assert candidate_rows[0]["area_baseline_corrected"] != ""
