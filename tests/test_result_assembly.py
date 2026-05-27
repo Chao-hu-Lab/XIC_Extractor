@@ -72,7 +72,8 @@ def test_build_extraction_result_preserves_parity_with_selected_hypothesis() -> 
     assert with_hypothesis.score_breakdown == legacy.score_breakdown
 
 
-def test_build_extraction_result_keeps_high_fallback_without_scoring_confidence() -> None:
+def test_build_extraction_result_keeps_high_fallback_without_scoring_confidence(
+) -> None:
     target = _target()
     candidate = _candidate()
     peak_result = PeakDetectionResult(
@@ -108,7 +109,8 @@ def test_build_extraction_result_keeps_high_fallback_without_scoring_confidence(
     assert result.reason == ""
 
 
-def test_build_extraction_result_preserves_final_confidence_when_score_is_stale() -> None:
+def test_build_extraction_result_preserves_final_confidence_when_score_is_stale(
+) -> None:
     target = _target()
     candidate = _candidate()
     peak_result = PeakDetectionResult(

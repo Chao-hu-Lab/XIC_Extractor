@@ -5,8 +5,7 @@ from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.istd_recovery import IstdAnchorRecoveryDecision
 from xic_extractor.extraction.ms2_selection import selected_candidate_ms2_evidence
 from xic_extractor.extractor import ExtractionResult
-from xic_extractor.neutral_loss import CandidateMS2Evidence
-from xic_extractor.neutral_loss import NLResult
+from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.peak_detection.hypotheses import PeakHypothesis
 from xic_extractor.peak_detection.models import (
     PeakCandidate,
@@ -89,7 +88,7 @@ def test_extract_one_target_passes_selected_hypothesis_to_result_assembly(
         def extract_xic(self, *_args, **_kwargs):
             return (
                 np.asarray([8.3, 8.4, 8.5, 8.6, 8.7]),
-                np.asarray([10.0, 25.0, 100.0, 25.0, 10.0]),
+                np.asarray([10.0, 100.0, 40.0, 20.0, 10.0]),
             )
 
     monkeypatch.setattr(
