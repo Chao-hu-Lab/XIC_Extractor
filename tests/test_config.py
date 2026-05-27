@@ -362,6 +362,43 @@ def test_load_config_accepts_asls_baseline_audit_method(tmp_path: Path) -> None:
     assert config.baseline_audit_method == "asls"
 
 
+def test_load_config_defaults_baseline_integration_method_to_asls(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.baseline_integration_method == "asls"
+
+
+def test_load_config_accepts_linear_edge_baseline_integration_method(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"baseline_integration_method": "linear_edge"})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.baseline_integration_method == "linear_edge"
+
+
+def test_load_config_rejects_unknown_baseline_integration_method(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"baseline_integration_method": "airpls"})
+    _write_targets(config_dir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "settings.csv", "baseline_integration_method", "airpls")
+
+
 def test_load_config_rejects_unknown_baseline_audit_method(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     _write_settings(config_dir, {"baseline_audit_method": "airpls"})
@@ -379,6 +416,7 @@ def test_canonical_settings_defaults_include_parallel_settings() -> None:
         default_parallel_workers()
     )
     assert CANONICAL_SETTINGS_DEFAULTS["baseline_audit_method"] == ""
+    assert CANONICAL_SETTINGS_DEFAULTS["baseline_integration_method"] == "asls"
 
 
 def test_canonical_settings_defaults_include_local_minimum_preset() -> None:
@@ -402,6 +440,7 @@ def test_settings_example_includes_parallel_settings() -> None:
     assert rows["parallel_mode"] == "process"
     assert int(rows["parallel_workers"]) >= 1
     assert rows["baseline_audit_method"] == ""
+    assert rows["baseline_integration_method"] == "asls"
 
 
 def test_settings_example_includes_review_report_setting() -> None:

@@ -36,6 +36,7 @@ class ExtractionConfig:
     emit_peak_candidates: bool = False
     keep_intermediate_csv: bool = False
     baseline_audit_method: str = ""
+    baseline_integration_method: str = "asls"
     parallel_mode: str = "serial"
     parallel_workers: int = 1
     config_hash: str = ""

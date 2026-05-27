@@ -40,6 +40,10 @@ For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
   use its documented paths and runners. Task-specific artifacts belong in the
   active spec, plan, validation note, or output index, not in the long-lived
   agent settings file.
+- Treat `docs/agent-parameter-settings.md` as maintained operational memory.
+  After a RAW / validation run establishes a reusable command shape, or after a
+  launch pattern repeatedly fails, update that file with the stable parameters,
+  anti-pattern, and evidence note before repeating the workflow.
 - Keep outputs organized under task-specific `output/` or `docs/superpowers/`
   paths. Do not drop diagnostic graphs, TSVs, notebooks, or one-off artifacts in
   the repo root. Every new diagnostic output group should have a summary or
@@ -58,6 +62,11 @@ For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
   HTML, owner-edge, status-matrix, event-owner, or ambiguous-owner artifacts for
   large validation runs unless a human review or debug task explicitly needs
   them.
+- Do not run 85-RAW validation by launching a background `Start-Process` from
+  the Codex shell and then returning to poll it. That pattern has repeatedly
+  failed in this environment. Use the foreground command shape documented in
+  `docs/agent-parameter-settings.md` with heartbeat sidecars, or get explicit
+  user approval for an external terminal / automation.
 - Plans should separate `Now`, `Later`, and `Not in scope`, with checkpoint-level
   acceptance criteria and stop conditions. Do not let a plan imply production
   changes when the current phase is only audit, shadow, or validation.

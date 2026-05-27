@@ -81,6 +81,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert peak_config.diagnostics_csv == output_dir.resolve() / "xic_diagnostics.csv"
     assert peak_config.resolver_mode == "legacy_savgol"
     assert peak_config.baseline_audit_method == "asls"
+    assert peak_config.baseline_integration_method == "linear_edge"
     assert captured["output_level"] == "machine"
     assert captured["emit_alignment_cells"] is True
     assert captured["emit_alignment_integration_audit"] is True
@@ -101,6 +102,59 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert "alignment_owner_backfill_seed_audit.tsv" in stdout
     assert "alignment_matrix_status.tsv" in stdout
     assert "Owner edge evidence TSV:" in stdout
+
+
+def test_run_alignment_accepts_baseline_integration_method_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        review = output_dir / "alignment_review.tsv"
+        matrix = output_dir / "alignment_matrix.tsv"
+        for path in (review, matrix):
+            path.write_text("x\n", encoding="utf-8")
+        return AlignmentRunOutputs(
+            workbook=None,
+            review_html=None,
+            review_tsv=review,
+            matrix_tsv=matrix,
+            cells_tsv=None,
+            integration_audit_tsv=None,
+            backfill_seed_audit_tsv=None,
+            status_matrix_tsv=None,
+            edge_evidence_tsv=None,
+        )
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--baseline-integration-method",
+            "linear_edge",
+        ]
+    )
+
+    assert code == 0
+    assert captured["peak_config"].baseline_integration_method == "linear_edge"
 
 
 def test_run_alignment_cli_passes_selected_family_scope(

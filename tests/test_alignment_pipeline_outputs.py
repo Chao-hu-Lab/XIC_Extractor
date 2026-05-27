@@ -36,6 +36,21 @@ def test_alignment_metadata_records_baseline_audit_method() -> None:
     assert metadata["scope_warning"] == ""
 
 
+def test_alignment_metadata_records_baseline_integration_method() -> None:
+    peak_config = replace(_peak_config(), baseline_integration_method="linear_edge")
+
+    metadata = alignment_metadata(
+        discovery_batch_index=Path("batch.csv"),
+        raw_dir=Path("raw"),
+        dll_dir=Path("dll"),
+        owner_backfill_xic_backend="raw",
+        output_level="machine",
+        peak_config=peak_config,
+    )
+
+    assert metadata["baseline_integration_method"] == "linear_edge"
+
+
 def test_alignment_metadata_records_backfill_scope() -> None:
     metadata = alignment_metadata(
         discovery_batch_index=Path("batch.csv"),

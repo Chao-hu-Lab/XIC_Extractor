@@ -5,6 +5,20 @@ artifact，例如某個 Phase 的 `discovery_batch_index.csv`、benchmark summar
 一次性 gate output、plot/report，不放在這裡；請查當前 spec、plan、
 validation note 或本輪 `output/` index。
 
+這份文件是 operational memory，不是一次性備忘錄。當某個 RAW / validation
+命令實際跑通，或某個啟動方式反覆失敗，應把穩定參數形狀與教訓更新到本檔。
+不要只把教訓留在單次 conversation 或 phase note。
+
+維護規則：
+
+- 只固定跨任務會重複使用的 runner、資料根目錄、DLL 目錄、validation tier、
+  command shape、preflight check、以及反覆踩雷的 anti-pattern。
+- 任務特定 output path、phase-specific discovery index、一次性 benchmark 結論
+  留在 validation note；本檔只引用該 note 作為 evidence。
+- 成功 run 要記錄「可重用的參數形狀」與 evidence note；失敗 run 要記錄
+  「不可再用的啟動方式」與替代做法。
+- 若後續 P-spec / C-spec 改變正式驗收形狀，先更新本檔再開長時間 RAW run。
+
 ## Python Runner
 
 這台 Windows 機器目前有兩個常用 Python 入口，但用途不同：
@@ -76,7 +90,9 @@ python -m pytest <narrow-test-shard> -q
 ```
 
 Validation / downstream handoff alignment should use the minimal machine gate
-surface by default:
+surface by default. For 85RAW validation, the current canonical shape is
+`validation-minimal + production-equivalent + validation-fast + super-window +
+timing heartbeat`:
 
 ```powershell
 .venv\Scripts\python.exe -m scripts.run_alignment `
@@ -87,6 +103,9 @@ surface by default:
   --output-level validation-minimal `
   --backfill-scope production-equivalent `
   --audit-evidence-mode none `
+  --performance-profile validation-fast `
+  --owner-backfill-window-strategy super-window `
+  --owner-backfill-superwindow-span-factor 2 `
   --timing-output <task-specific-output-dir>\timing.json `
   --timing-live-output <task-specific-output-dir>\timing.live.json
 ```
@@ -102,6 +121,27 @@ ambiguous-owner debug outputs. Use fuller output levels only when a human
 review surface or debug artifact is explicitly required. In `auto` audit mode,
 `validation-minimal` resolves to no heavy audit evidence unless an explicit
 integration audit destination is requested.
+
+Before starting 85RAW, verify the batch index actually contains 85 rows. Do not
+reuse the historical 8RAW index by path similarity:
+
+```powershell
+(Import-Csv <current-spec-discovery-batch-index.csv>).Count
+```
+
+If this prints `8`, stop and locate the current 85RAW discovery artifact from
+the active spec or validation note before running alignment.
+
+## Validated Command Profiles
+
+| Profile | Status | Reusable parameters | Evidence |
+| --- | --- | --- | --- |
+| 85RAW validation-minimal super-window | Verified foreground run, exit code `0`, wall-clock `620.9 s` | `.venv\Scripts\python.exe`, 85RAW RAW root, `--output-level validation-minimal`, `--backfill-scope production-equivalent`, `--audit-evidence-mode none`, `--performance-profile validation-fast`, `--owner-backfill-window-strategy super-window`, `--owner-backfill-superwindow-span-factor 2`, timing output + live heartbeat | `docs\superpowers\notes\2026-05-26-p8b-85raw-superwindow-acceptance-note.md` |
+
+Do not treat `--performance-profile validation-fast` alone as the full 85RAW
+validation profile. It only sets RAW worker count and XIC batch size; the formal
+85RAW shape also needs output thinning, production-equivalent backfill,
+audit-evidence cutoff, super-window, and heartbeat output.
 
 RAW / alignment commands:
 
@@ -129,6 +169,14 @@ Long RAW alignment runs should be observable while they are running:
 It is overwritten after each timing record, including per-sample process-worker
 completion records. If the process is killed by an external timeout, use this
 file to identify the last completed stage/sample before rerunning anything.
+
+Do not launch 85RAW from the Codex shell with `Start-Process` / background mode
+and then let the shell command return. In this environment, background launch
+attempts have repeatedly exited or been cleaned up without completing, sometimes
+with empty stdout/stderr. The verified 85RAW acceptance run used a foreground
+process with heartbeat sidecars. If background execution is required, it must be
+an explicitly user-approved external terminal / automation, and the heartbeat
+artifact must still be polled.
 
 For micro-profiling, start with 8RAW or a scoped 85RAW diagnostic:
 
@@ -165,3 +213,13 @@ Validation harness details live in [`docs/validation-harness.md`](validation-har
    沒有 heartbeat artifact 就不要宣稱已完成可審計 profiling。
 8. validation / downstream handoff 預設用 `--output-level validation-minimal`。
    `.xlsx` 和 HTML 不是正式交付契約；只有明確需要人工檢視或 debug 時才產生。
+9. 85RAW 正式驗收預設加 `--performance-profile validation-fast` 與
+   `--owner-backfill-window-strategy super-window`。如果刻意不用，必須在
+   validation note 說明原因。
+10. 85RAW 開跑前先檢查 discovery index row count；8RAW index 不可拿來跑
+    full tissue validation。
+11. 不要用 Codex shell 的 background `Start-Process` 跑 85RAW 後就回來輪詢；
+    這個模式已反覆失敗。用前景 run 搭配足夠 timeout，或先取得使用者同意
+    轉到外部 terminal / automation。
+12. 每次長時間 RAW run 後，若發現新的穩定參數或反覆失敗模式，更新本檔；
+    不要只把教訓留在聊天紀錄。

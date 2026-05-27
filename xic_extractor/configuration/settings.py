@@ -53,6 +53,7 @@ class _ParsedSettings:
     emit_peak_candidates: bool
     keep_intermediate_csv: bool
     baseline_audit_method: str
+    baseline_integration_method: str
     parallel_mode: str
     parallel_workers: int
 
@@ -263,6 +264,9 @@ def _parse_settings_values(
         baseline_audit_method=(
             settings.get("baseline_audit_method", "").strip().lower()
         ),
+        baseline_integration_method=(
+            settings.get("baseline_integration_method", "asls").strip().lower()
+        ),
         parallel_mode=_setting_value(settings, settings_path, "parallel_mode"),
         parallel_workers=_parse_int(
             settings_path,
@@ -442,6 +446,14 @@ def _validate_settings_ranges(
             settings.get("baseline_audit_method", ""),
             "must be empty or asls",
         )
+    if parsed.baseline_integration_method not in {"asls", "linear_edge"}:
+        raise _config_error(
+            settings_path,
+            None,
+            "baseline_integration_method",
+            settings.get("baseline_integration_method", ""),
+            "must be asls or linear_edge",
+        )
     if parsed.parallel_mode not in {"serial", "process"}:
         raise _config_error(
             settings_path,
@@ -496,6 +508,7 @@ def _build_config(
         emit_peak_candidates=parsed.emit_peak_candidates,
         keep_intermediate_csv=parsed.keep_intermediate_csv,
         baseline_audit_method=parsed.baseline_audit_method,
+        baseline_integration_method=parsed.baseline_integration_method,
         parallel_mode=parsed.parallel_mode,
         parallel_workers=parsed.parallel_workers,
         config_hash=config_hash,

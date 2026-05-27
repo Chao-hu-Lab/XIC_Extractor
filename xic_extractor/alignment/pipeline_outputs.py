@@ -175,6 +175,7 @@ def alignment_metadata(
         "output_level": output_level,
         "resolver_mode": peak_config.resolver_mode,
         "baseline_audit_method": peak_config.baseline_audit_method,
+        "baseline_integration_method": peak_config.baseline_integration_method,
         "backfill_scope": backfill_scope,
         "output_scope": output_scope,
         "selected_family_count": str(selected_family_count),
@@ -198,6 +199,7 @@ def write_outputs_atomic(
     alignment_config: AlignmentConfig,
     edge_evidence: Sequence[OwnerEdgeEvidence] = (),
     skipped_evidence: Sequence[SkippedEvidenceRecord] = (),
+    baseline_integration_method: str = "asls",
     baseline_audit_method: str = "",
 ) -> None:
     output_paths_and_writers: list[tuple[Path, Callable[[Path], Path]]] = []
@@ -253,6 +255,7 @@ def write_outputs_atomic(
                 lambda path: write_alignment_cell_integration_audit_tsv(
                     path,
                     matrix,
+                    baseline_integration_method=baseline_integration_method,
                     baseline_audit_method=baseline_audit_method,
                 ),
             ),

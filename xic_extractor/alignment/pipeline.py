@@ -485,6 +485,11 @@ def run_alignment(
                 alignment_config=alignment_config,
                 edge_evidence=edge_evidence or (),
                 skipped_evidence=scope_selection.skipped,
+                baseline_integration_method=getattr(
+                    peak_config,
+                    "baseline_integration_method",
+                    "asls",
+                ),
                 baseline_audit_method=getattr(peak_config, "baseline_audit_method", ""),
             )
         return outputs

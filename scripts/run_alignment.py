@@ -148,6 +148,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_dir,
                 _alignment_production_resolver_mode(args.resolver_mode),
                 baseline_audit_method=_baseline_audit_method(args),
+                baseline_integration_method=_baseline_integration_method(args),
             ),
             "output_level": args.output_level,
             "emit_alignment_cells": args.emit_alignment_cells,
@@ -488,6 +489,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Emit AsLS shadow columns in alignment_cell_integration_audit.tsv.",
     )
+    parser.add_argument(
+        "--baseline-integration-method",
+        choices=("asls", "linear_edge"),
+        help="Production baseline method for alignment integration audit.",
+    )
     parser.add_argument("--emit-alignment-backfill-seed-audit", action="store_true")
     parser.add_argument("--emit-alignment-status-matrix", action="store_true")
     return parser.parse_args(argv)
@@ -597,12 +603,26 @@ def _baseline_audit_method(args: argparse.Namespace) -> str:
     raise ValueError("BASELINE_AUDIT_METHOD must be empty or asls")
 
 
+def _baseline_integration_method(args: argparse.Namespace) -> str:
+    if args.baseline_integration_method:
+        return args.baseline_integration_method
+    if _baseline_audit_method(args) == "asls":
+        return "linear_edge"
+    env_method = os.environ.get("BASELINE_INTEGRATION_METHOD", "").strip().lower()
+    if env_method in {"", "asls"}:
+        return "asls"
+    if env_method == "linear_edge":
+        return "linear_edge"
+    raise ValueError("BASELINE_INTEGRATION_METHOD must be asls or linear_edge")
+
+
 def _peak_config(
     raw_dir: Path,
     dll_dir: Path,
     output_dir: Path,
     resolver_mode: str,
     baseline_audit_method: str = "",
+    baseline_integration_method: str = "asls",
 ) -> ExtractionConfig:
     defaults = CANONICAL_SETTINGS_DEFAULTS
     return ExtractionConfig(
@@ -626,6 +646,7 @@ def _peak_config(
         resolver_peak_duration_max=float(defaults["resolver_peak_duration_max"]),
         resolver_min_scans=int(defaults["resolver_min_scans"]),
         baseline_audit_method=baseline_audit_method,
+        baseline_integration_method=baseline_integration_method,
     )
 
 

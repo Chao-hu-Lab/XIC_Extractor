@@ -42,6 +42,7 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "emit_peak_candidates": "false",
     "keep_intermediate_csv": "false",
     "baseline_audit_method": "",
+    "baseline_integration_method": "asls",
     "nl_rt_anchor_search_margin_min": "2.0",
     "nl_rt_anchor_half_window_min": "1.0",
     "nl_fallback_half_window_min": "2.0",
@@ -102,6 +103,10 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "baseline_audit_method": (
         "Integration audit baseline shadow method; leave empty for default TSV "
         "schema or set to asls to emit AsLS comparison columns"
+    ),
+    "baseline_integration_method": (
+        "Production baseline method for alignment integration audit "
+        "(asls or linear_edge; default asls after P2b promotion)"
     ),
     "nl_rt_anchor_search_margin_min": (
         "NL 錨定搜尋半徑（min）：以 rt_center ±此值搜尋 NL 確認的 MS2 作為 RT anchor"

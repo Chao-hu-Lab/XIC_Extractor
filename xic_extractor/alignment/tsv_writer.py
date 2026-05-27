@@ -88,7 +88,7 @@ ALIGNMENT_CELLS_COLUMNS = (
     "region_review_reason",
 )
 
-ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
+BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
     "feature_family_id",
     "sample_stem",
     "status",
@@ -109,6 +109,16 @@ ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
     "uncertainty_fraction",
     "baseline_fraction",
     "integration_scan_count",
+)
+
+LINEAR_EDGE_ROLLBACK_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
+    "area_baseline_corrected_linear_edge",
+    "baseline_score_linear_edge",
+)
+
+ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
+    *BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
+    *LINEAR_EDGE_ROLLBACK_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
 )
 
 ASLS_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
@@ -247,18 +257,24 @@ def write_alignment_cell_integration_audit_tsv(
     path: Path,
     matrix: AlignmentMatrix,
     *,
+    baseline_integration_method: str = "asls",
     baseline_audit_method: str = "",
 ) -> Path:
+    if baseline_integration_method not in {"asls", "linear_edge"}:
+        raise ValueError(
+            "baseline_integration_method must be 'asls' or 'linear_edge'"
+        )
     if baseline_audit_method not in {"", "asls"}:
         raise ValueError("baseline_audit_method must be empty or 'asls'")
-    columns = (
-        (
-            *ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
+    if baseline_integration_method == "asls":
+        columns = ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
+    elif baseline_audit_method == "asls":
+        columns = (
+            *BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
             *ASLS_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
         )
-        if baseline_audit_method == "asls"
-        else ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
-    )
+    else:
+        columns = BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
     clusters_by_id = {row_id(cluster): cluster for cluster in matrix.clusters}
     rows: list[dict[str, object]] = []
     for cell in matrix.cells:
@@ -294,7 +310,14 @@ def write_alignment_cell_integration_audit_tsv(
                 audit.integration_scan_count
             ),
         }
-        if baseline_audit_method == "asls":
+        if baseline_integration_method == "asls":
+            row["area_baseline_corrected_linear_edge"] = format_value(
+                audit.area_baseline_corrected_linear_edge
+            )
+            row["baseline_score_linear_edge"] = format_value(
+                audit.baseline_score_linear_edge
+            )
+        elif baseline_audit_method == "asls":
             row["area_baseline_corrected_asls"] = format_value(
                 audit.area_baseline_corrected_asls
             )
