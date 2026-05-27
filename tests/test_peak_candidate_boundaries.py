@@ -276,7 +276,10 @@ def test_build_boundary_rows_projects_from_peak_hypothesis_spine(monkeypatch) ->
         ),
     )
 
-    def _fake_build_peak_hypotheses(**_kwargs):
+    captured_kwargs = {}
+
+    def _fake_build_peak_hypotheses(**kwargs):
+        captured_kwargs.update(kwargs)
         return (hypothesis,)
 
     monkeypatch.setattr(
@@ -304,6 +307,9 @@ def test_build_boundary_rows_projects_from_peak_hypothesis_spine(monkeypatch) ->
     assert {row["resolver_mode"] for row in rows} == {"hypothesis_resolver"}
     assert {row["proposal_sources"] for row in rows} == {"hypothesis_source"}
     assert {row["selected_candidate"] for row in rows} == {"TRUE"}
+    assert "rt" not in captured_kwargs
+    assert "intensity" not in captured_kwargs
+    assert "trace_group" not in captured_kwargs
 
 
 def test_write_peak_candidate_boundaries_tsv_serializes_rows_safely(

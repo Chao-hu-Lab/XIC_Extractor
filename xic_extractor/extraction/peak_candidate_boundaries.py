@@ -97,9 +97,6 @@ def build_peak_candidate_boundary_rows(
         istd_pair=istd_pair,
         resolver_mode=resolver_mode,
         peak_result=peak_result,
-        rt=trace_rt,
-        intensity=trace_intensity,
-        trace_group=trace_group,
     )
     return build_peak_candidate_boundary_rows_from_hypotheses(
         sample_name=sample_name,
