@@ -23,24 +23,70 @@ shape, not the full external catalog. A goal-shaped contract is not the same as
 registering an active runtime goal; active goals require explicit user request
 or runtime permission.
 
+Reusable workflow skills should live in the global skill roots and may be
+mirrored to the Claude Code compatibility root when that runtime needs them.
+Repo-local skills under `.codex/skills` should be thin overlays for XIC-specific
+RAW, validation, artifact, and handoff rules. Use skills when their trigger
+threshold applies before recreating process instructions:
+
+- global `goal-execution` for goal contract creation, review, tightening, and
+  execution; `xic-goal-execution` only adds XIC constraints and validation tiers.
+- global `critical-artifact-review` for multi-angle review of durable specs,
+  plans, goal prompts, workflow rules, handoff docs, and public contracts;
+  `xic-critical-artifact-review` only adds XIC routing and domain risks.
+- global `pr-closeout` for durable PR/branch closeout; `xic-pr-closeout` only
+  adds XIC readiness labels and artifact rules.
+- `xic-raw-validation` remains repo-local because 8RAW/85RAW, Thermo RAW paths,
+  output levels, heartbeat, timing, and benchmark acceptance are XIC-specific.
+
+Every skill, role, or workflow route needs a visible adoption reason. If it does
+not offer a clearer decision, lower repeat-failure risk, better recovery, or
+repo-specific capability that an existing owner lacks, improve the existing
+owner instead of adding a parallel entry.
+
+This repo owns only the `.codex/skills` overlays and the routing docs. Global
+skills are environment-level workflow dependencies outside this repo diff. If a
+named global skill is unavailable, report `global skill unavailable`, use
+`AGENTS.md`, this routing doc, `docs/agent-parameter-settings.md`, and the
+matching XIC overlay as the minimal fallback checklist, and do not recreate or
+copy the global workflow into the repo.
+
+GStack skills are still available and not retired. For this repo, treat them as
+upstream workflow references or explicit user-requested tools while the local
+skills mature. Do not silently replace the repo-local XIC contracts with a broad
+gstack ship/PR/deploy workflow; if a gstack workflow proves better, absorb the
+specific lesson into the local skill or explicitly switch the route.
+
 ## Dispatch Rules
 
 - Default is main agent only.
 - Normal maximum dispatch is two reviewers.
 - Use three reviewers only when surfaces are genuinely independent and the
   findings can change the next action.
+- When the user explicitly says to use subagents to review a spec, plan, goal,
+  or workflow rule, use the critical artifact review flow below. Do not satisfy
+  that request with one generic reviewer unless a thread limit blocks the
+  required review and the bypass is reported.
 - Reviewer dispatch is an auditable checklist item, not a tool-enforced gate.
   When a hard trigger below applies, the plan/final summary must state which
   reviewer was used or why it was intentionally bypassed.
 - Subagents do not auto-spawn. Delegate explicitly and give each reviewer a
   bounded read-only task.
+- Repo-local `.codex/agents/*.toml` files are role profiles, not guaranteed
+  runtime `agent_type` values. If the available tool exposes only generic
+  `reviewer`, spawn that generic reviewer and paste the relevant repo-local role
+  brief into the prompt. Name the intended role in the prompt and final
+  synthesis.
 - The main agent owns synthesis, file edits, final judgment, and verification.
 - Reviewer subagents are read-only. `implementation-worker` is the only
   repo-local role allowed to edit assigned files. `tester` is workspace-write
   only for command side effects such as caches, logs, and named output
   artifacts. Do not give two agents the same write scope.
 - If thread limits block full review, dispatch in this order: mandatory blocker
-  reviewer, original blocker re-check, then optional specialist.
+  reviewer, original blocker re-check, then optional specialist. Close stale
+  agents before downgrading a required multi-angle review. If the review still
+  cannot fit, run reviewers sequentially rather than silently collapsing to one
+  angle.
 
 ## Reviewer Output Contract
 
@@ -53,6 +99,7 @@ Evidence:
 Would this change next action?:
 Smallest fix:
 Residual risk:
+Ownership / placement:
 ```
 
 Findings that cannot change the next action should be labeled minor or deferred.
@@ -137,38 +184,57 @@ Execution roles:
 `preflight`, `acceptance`, `science`, and `performance`; use at most two modes in
 one review.
 
+## Critical Artifact Review
+
+Use the global `critical-artifact-review` workflow when this section triggers,
+then apply `.codex/skills/xic-critical-artifact-review/SKILL.md` for
+XIC-specific routing and domain risks.
+
+When the user asks for subagent or critical review of durable artifacts, dispatch
+by review angle, not by artifact count. If two independent artifacts are reviewed
+in the same turn, each artifact gets the relevant angles unless the main agent
+explicitly reports a thread-limit downgrade and runs the missing angle
+sequentially.
+
+| Artifact | Required reviewers | Add when relevant |
+| --- | --- | --- |
+| Handoff productization spec or phase plan | `strategy-challenger` and `implementation-contract-reviewer` | `docs-handoff-reviewer` when docs/source-of-truth wording changes |
+| Cleanup-only structural spec | `implementation-contract-reviewer` | `strategy-challenger` when phase order, legacy retirement, or product direction could drift |
+| Validation, RAW, benchmark, or gate spec | `strategy-challenger` and `validation-evidence-reviewer` | `ops-triager` for runner/path/PowerShell risk |
+| Workflow, AGENTS, subagent, hook, sandbox, or goal-routing spec | `docs-handoff-reviewer` and `strategy-challenger` | `implementation-contract-reviewer` when CLI/config/tests are touched |
+| Small docs wording-only change | `docs-handoff-reviewer` | none unless it changes a gate or public contract |
+
+For every reviewer prompt, include:
+
+- exact worktree and file path;
+- intended repo-local role name;
+- read-only constraint;
+- the decision the reviewer should challenge;
+- the compact output contract from this document.
+
+Trigger phrases that must use this section for non-trivial durable artifacts
+include: `subagent review`, `用 subagent 審`, `審 spec`, `審 plan`,
+`挑戰這份 spec`, `critical-thinking review`, `review goal prompt`,
+`review workflow`, and `review handoff`. For typo-only or link-only docs
+changes, use a local self-review or `docs-handoff-reviewer` instead of a full
+review.
+
 ## Goal Contracts
 
-Use the full goal shape for high-risk, long-running, cross-module, RAW/data,
-CI, migration, release, or productization work. Use compact goal shape only
-when the context is obvious and verification is one or two commands.
+Use the global `goal-execution` skill for goal creation, tightening, review, and
+runtime execution. Apply `.codex/skills/xic-goal-execution/SKILL.md` only for
+XIC-specific context, validation tiers, RAW stop rules, and handoff/productization
+constraints.
 
-Default to writing or following the contract. Do not call the runtime's active
-goal creation tool unless the user explicitly asked for a goal run, or a
-system/developer/runtime instruction explicitly says to create one.
-
-Every repo goal should include:
-
-- `GOAL`: one measurable finish line, not a backlog.
-- `CONTEXT`: exact files, docs, artifacts, commands, failures, screenshots, or
-  plans to read first.
-- `CONSTRAINTS`: what must not change, public contracts to preserve, and
-  verification integrity.
-- `DONE WHEN`: mechanically checkable end state.
-- `VERIFY`: fresh commands, reports, screenshots, artifacts, or exact blockers.
-- `OUTPUT`: changed files, key decisions, verification, residual risk, and next
-  action.
-- `STOP RULES`: secrets, production access, destructive data operations, unclear
-  product decisions, or three failed attempts on the same symptom.
-
-For XIC Extractor, goals should normally reference `AGENTS.md`,
-`docs/agent-parameter-settings.md`, this routing doc, the active spec/plan, and
-existing diagnostics or validation artifacts. Avoid broad goals such as
-"improve the pipeline" unless the goal first asks for a bounded plan.
+Do not maintain a second goal template in this routing doc. The global skill is
+the canonical reusable contract shape. XIC goals should normally reference
+`AGENTS.md`, `docs/agent-parameter-settings.md`, this routing doc, the active
+spec/plan, and existing diagnostics or validation artifacts. Avoid broad goals
+such as "improve the pipeline" unless the goal first asks for a bounded plan.
 
 ## 補強 Loop
 
-Post-review補強 should not spawn a new panel.
+Post-review補強 should not spawn a new review group.
 
 1. Main agent fixes the blocker directly.
 2. Ask the original blocker reviewer to re-check, when available.
@@ -215,6 +281,8 @@ Current recommended posture for this repo:
 - Before changing sandbox posture for a command, prefer
   `python -m scripts.agent_sandbox_doctor --command "<command>"`. The doctor is
   diagnostic only; it does not execute the command or replace human approval.
+- For RAW-backed runs, use `.codex/skills/xic-raw-validation/SKILL.md` before
+  launching or accepting the result.
 
 ## Hooks Adoption
 
@@ -248,6 +316,12 @@ future agent execution before the agent can reason about the repo.
   Nits must not block progress when the change improves code health.
 - PR or closeout descriptions should state what changed, why it changed, tests
   run, known shortcomings, and follow-up direction.
+
+Use the global `pr-closeout` workflow when preparing, opening, updating, or
+closing out a PR or development branch whose description will become future
+project memory. Apply `.codex/skills/xic-pr-closeout/SKILL.md` for XIC-specific
+readiness labels, validation tiers, downstream handoff, RAW artifacts, and
+merge/history expectations.
 
 ## Acceptance Labels
 

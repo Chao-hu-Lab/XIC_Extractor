@@ -10,6 +10,7 @@ For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
 [`docs/agent-parameter-settings.md`](docs/agent-parameter-settings.md).
 For repo-local subagent roles, goal usage, and runtime routing, see
 [`docs/agent-subagent-routing.md`](docs/agent-subagent-routing.md).
+Repo-local XIC overlay skills live under [`.codex/skills`](.codex/skills).
 
 ## Human Communication And Review Surfaces
 
@@ -158,12 +159,30 @@ For repo-local subagent roles, goal usage, and runtime routing, see
   or the relevant local contract instead of leaving the lesson only in chat.
 - For broad specs, phase plans, workflow rules, or validation strategy changes,
   use read-only reviewer families only when their findings can change the next
-  action. Normal dispatch is capped at two reviewers; a third reviewer requires
-  genuinely independent surfaces. The main agent owns integration and final
-  judgment; reviewers do not share a write scope.
+  action. When the user explicitly asks for subagents to review specs, plans, or
+  goals, follow the critical review routing in
+  `docs/agent-subagent-routing.md`; do not replace a requested multi-angle
+  review with one generic reviewer per artifact.
+  Normal dispatch is capped at two reviewers per artifact; a third reviewer
+  requires genuinely independent surfaces. The main agent owns integration and
+  final judgment; reviewers do not share a write scope.
 - Repo-local subagent definitions live in `.codex/agents/`; phase routing lives
   in `docs/agent-subagent-routing.md`. Delegate to them explicitly; do not
-  assume custom subagents auto-spawn.
+  assume custom subagents auto-spawn. If the runtime only exposes a generic
+  reviewer type, paste the intended repo-local role brief into the subagent
+  prompt and name that role in the synthesis.
+- Reusable workflow skills should live in the global skill roots. Repo-local
+  `.codex/skills/` entries should be thin XIC overlays for RAW, validation,
+  artifact, and handoff rules. Use global `goal-execution`,
+  `critical-artifact-review`, and `pr-closeout` first; use `xic-*` skills only
+  for XIC-specific additions. If a named global skill is unavailable, state that
+  explicitly and fall back to `docs/agent-subagent-routing.md` plus the matching
+  XIC overlay instead of recreating a duplicate local workflow.
+- New skills, roles, workflow routes, and diagnostics need a clear adoption
+  reason: a capability, recovery path, decision quality gain, or repeated
+  failure reduction that the existing owner does not provide. Without that
+  differentiation, improve or retire the existing owner instead of adding
+  another entry point.
 - Repo-local execution subagents are opt-in. Use `implementation-worker` only for
   a small, self-contained slice with an explicit non-overlapping write scope. Use
   `tester` for clean-context verification or regression reproduction; testers
@@ -172,8 +191,9 @@ For repo-local subagent roles, goal usage, and runtime routing, see
   unless a separate implementation task is assigned. Tester reports must include
   final `git status --short` so verification side effects do not hide source or
   docs edits.
-- Do not create repo-local skills unless an existing global skill plus this file
-  cannot express the repeated workflow. Prefer improving this contract,
+- Do not create new repo-local skills unless an existing repo-local or global
+  skill plus this file cannot express the repeated workflow. Prefer improving
+  the existing `.codex/skills/` entry, this contract,
   `docs/agent-parameter-settings.md`, or the relevant diagnostic index first.
 
 ## Design Principles
