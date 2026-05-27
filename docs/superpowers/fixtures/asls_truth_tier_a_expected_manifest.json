@@ -1,0 +1,118 @@
+{
+  "manifest_version": "asls_truth_tier_a_manifest_v1",
+  "generated_by_command": ".venv\\Scripts\\python.exe -m tools.diagnostics.p2_baseline_truth_audit --include-gate-status FAIL --include-gate-status PASS; P2c Task4 contract patch appended rt_identity_status=PASS and boundary_status=accepted",
+  "environment_profile": "agent-parameter-settings validated PowerShell profile; .venv Python; RAW direct-read; no mzML conversion",
+  "generated_by_git_sha": "eaa2f3894198e6e15f1b4f2e018c295f876c17c8",
+  "current_code_compatibility_status": "accepted_current_worktree_artifact_hashes",
+  "expected_dataset_label": "phase1_p2_baseline_truth_audit_all_statuses",
+  "raw_subset": "8RAW selected ISTD audit rows",
+  "branch_family": "codex/peak-pipeline-modernization",
+  "p2b_semantic_version": "conditional_audit_promotion_2026-05-26",
+  "source_inputs": {
+    "p2_gate_rows_tsv": {
+      "path": "output/phase1_p2_asls_shadow_validation/diagnostics/p2_asls_shadow_gate/p2_asls_shadow_gate_rows.tsv",
+      "sha256": "fcdfc55c8730cdc24bb6a91167a2eb0df71b5aa20b09b0e58afd01aafeb102e0"
+    },
+    "alignment_integration_audit_tsv": {
+      "path": "output/phase1_p2_asls_shadow_validation/alignment/asls_shadow/alignment_cell_integration_audit.tsv",
+      "sha256": "a59a856f162548fddaeabc0a92f1f41420d5d263deac427d2ff6aa59a8f87a13"
+    }
+  },
+  "artifact_hashes": {
+    "rows": {
+      "path": "output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit_rows.tsv",
+      "sha256": "ea701c521605285925dcc95fbaeddd3b962a33184d23a79a0c00c3ba52ce4f81"
+    },
+    "summary": {
+      "path": "output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit_summary.tsv",
+      "sha256": "10c2738ce427ec2fc7e95a75859d70094ae8892732af4a33b8565b41bdf0355d"
+    },
+    "json": {
+      "path": "output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit.json",
+      "sha256": "6cbf405dbdee0ee7b205df168af9683c5ab51644893d0ebc39c41bc537a4b8ff"
+    },
+    "report": {
+      "path": "output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit.md",
+      "sha256": "0f9e201c84bf2edb5d1b85990aab80db7e4e59f71ddb64cf525625e45a65f0c7"
+    }
+  },
+  "expected_family_count": 6,
+  "expected_row_count": 48,
+  "expected_families": [
+    {
+      "target_label": "15N5-8-oxodG",
+      "feature_family_id": "FAM000538",
+      "old_p2_status": "PASS",
+      "expected_row_count": 8,
+      "expected_sample_count": 8,
+      "required_plot_path": "plots/15N5-8-oxodG__FAM000538.png"
+    },
+    {
+      "target_label": "d3-5-hmdC",
+      "feature_family_id": "FAM000153",
+      "old_p2_status": "FAIL",
+      "expected_row_count": 8,
+      "expected_sample_count": 8,
+      "required_plot_path": "plots/d3-5-hmdC__FAM000153.png"
+    },
+    {
+      "target_label": "d3-5-medC",
+      "feature_family_id": "FAM000031",
+      "old_p2_status": "PASS",
+      "expected_row_count": 8,
+      "expected_sample_count": 8,
+      "required_plot_path": "plots/d3-5-medC__FAM000031.png"
+    },
+    {
+      "target_label": "d3-N6-medA",
+      "feature_family_id": "FAM000242",
+      "old_p2_status": "PASS",
+      "expected_row_count": 8,
+      "expected_sample_count": 8,
+      "required_plot_path": "plots/d3-N6-medA__FAM000242.png"
+    },
+    {
+      "target_label": "d3-dG-C8-MeIQx",
+      "feature_family_id": "FAM001878",
+      "old_p2_status": "FAIL",
+      "expected_row_count": 8,
+      "expected_sample_count": 8,
+      "required_plot_path": "plots/d3-dG-C8-MeIQx__FAM001878.png"
+    },
+    {
+      "target_label": "d4-N6-2HE-dA",
+      "feature_family_id": "FAM000807",
+      "old_p2_status": "FAIL",
+      "expected_row_count": 8,
+      "expected_sample_count": 8,
+      "required_plot_path": "plots/d4-N6-2HE-dA__FAM000807.png"
+    }
+  ],
+  "p2b_85raw_acceptance_refs": [
+    {
+      "artifact": "p2b_85raw_foreground_validation_note",
+      "path": "docs/superpowers/notes/2026-05-26-p2b-85raw-foreground-validation-note.md",
+      "sha256": "57a70f105038585b788f9bd4cd1926e126d99b92593ae1262aea1239fbb77bb6"
+    },
+    {
+      "artifact": "p2b_asls_production_promotion_note",
+      "path": "docs/superpowers/notes/2026-05-26-p2b-asls-production-promotion-note.md",
+      "sha256": "61632228fc97e3908abc16e9b10a849710571f0d067fa2e8ca3c85742bbb6587"
+    },
+    {
+      "artifact": "alignment_matrix_tsv",
+      "path": "output/phase1_p2b_85raw_formal_validation/alignment/85raw_validation_minimal_superwindow_foreground/alignment_matrix.tsv",
+      "sha256": "d4e313ccbe7a4fb3d540198a8bab87ed7e8db360b6894451b7b7fc93ee938190"
+    },
+    {
+      "artifact": "alignment_review_tsv",
+      "path": "output/phase1_p2b_85raw_formal_validation/alignment/85raw_validation_minimal_superwindow_foreground/alignment_review.tsv",
+      "sha256": "bd5234dc98b7ed29fe27e1922121e4724f6432bb23aa5718b08b810feac215d7"
+    },
+    {
+      "artifact": "alignment_cells_tsv",
+      "path": "output/phase1_p2b_85raw_formal_validation/alignment/85raw_validation_minimal_superwindow_foreground/alignment_cells.tsv",
+      "sha256": "ffc309a7a249742d8c0cec9dce9063a0f3620d902b7193b13a7d882434683b93"
+    }
+  ]
+}
