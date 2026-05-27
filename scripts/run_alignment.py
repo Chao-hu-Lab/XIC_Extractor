@@ -492,7 +492,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--baseline-integration-method",
         choices=("asls", "linear_edge"),
-        help="Production baseline method for alignment integration audit.",
+        help="Alignment integration-audit baseline method.",
     )
     parser.add_argument("--emit-alignment-backfill-seed-audit", action="store_true")
     parser.add_argument("--emit-alignment-status-matrix", action="store_true")

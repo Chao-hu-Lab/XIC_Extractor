@@ -16,13 +16,14 @@ resolver behavior, baseline correction, third-party comparison, audit field
 hygiene, evidence honesty, and chromatogram-level alignment.
 
 This is Phase 1 of a two-phase plan. This worktree is scoped to Phase 1.
-Cleanup is explicitly on hold until Phase 1 has GO / NO-GO notes. Phase 1
-changed the targeted / extraction default surface and added new code paths
-(shadow columns, selectors, audit filters); Phase 2 (the
+Phase 1 now has GO / NO-GO notes for the supported scope. Phase 1 changed the
+targeted / extraction default surface and added new code paths (shadow columns,
+selectors, audit filters); Phase 2 (the
 [cleanup roadmap](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md))
-removes legacy paths and consolidates the new ones only after those decisions
-are stable. The two phases are sibling workstreams with different validation
-disciplines — see "Two-Phase Relationship" below.
+may consolidate the stable, method-preserving parts and build the handoff spine.
+It must not remove linear-edge or claim baseline truth without the separate
+P2c retirement decision. The two phases are sibling workstreams with different
+validation disciplines — see "Two-Phase Relationship" below.
 
 ## Spec Map
 
@@ -139,11 +140,10 @@ Phase 2 — cleanup roadmap (C1a, C1b, C2 .. C6)
   outcome: structure changes, behavior stays the same
 ```
 
-Cleanup Phase 2 cannot start until Phase 1 stabilizes. In this worktree,
-Cleanup specs are review material only; do not implement C-specs before the
-full Phase 1 modernization has GO / NO-GO notes. P2 inside this Phase 1 spec set
-may begin after the P1 validation note records a P2-entry GO. Each P-spec
-carries a "Cleanup Hook" note describing structural
+Cleanup Phase 2 may start only in the method-preserving scope established by
+the Phase 1 closeout. Do not implement C-specs that delete linear-edge or
+assume AsLS baseline truth until P2c reaches `GO_FOR_LINEAR_EDGE_RETIREMENT`.
+Each P-spec carries a "Cleanup Hook" note describing structural
 constraints that Phase 1 implementers should honor to keep Phase 2 tractable.
 Examples:
 

@@ -1,12 +1,15 @@
 # Peak Pipeline Cleanup Roadmap Overview
 
 **Date:** 2026-05-24
-**Status:** Roadmap draft v0.3 — DESIGN CORRECTION APPLIED; ON HOLD until
-conditional Phase 1 blockers are resolved
+**Status:** Roadmap draft v0.4 — DESIGN CORRECTION APPLIED; method-preserving
+cleanup and handoff-spine work may proceed after Phase 1 closeout; C1b
+linear-edge retirement remains blocked
 **Sibling overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
-**Precondition:** modernization Phase 1 validation reports clean. If Cleanup
-assumes AsLS production or linear-edge retirement, P2b audit promotion is not
-enough; [P2c AsLS truth validation](2026-05-26-peak-pipeline-asls-truth-validation-spec.md)
+**Precondition:** modernization Phase 1 closeout records the supported scope:
+P2b conditional audit promotion, 85RAW primary-delivery validation with known
+exceptions, and no P6 trigger. Method-preserving cleanup may proceed under that
+scope. If Cleanup assumes AsLS-only production or linear-edge retirement, P2b
+audit promotion is not enough; [P2c AsLS truth validation](2026-05-26-peak-pipeline-asls-truth-validation-spec.md)
 must reach `GO_FOR_LINEAR_EDGE_RETIREMENT`.
 
 **Correction note:** [Phase 1 / Phase 2 design correction](../notes/2026-05-26-phase1-phase2-design-correction-note.md)
@@ -41,8 +44,9 @@ Phase 2 — structural cleanup (C1a, C1b, C2 .. C6)
 Phase 2 introduces no production behavior by default. Every C-spec validation
 is "before and after this refactor produce byte-identical TSVs / hashes /
 matrix values". Behavior is locked to Phase 1's final state unless a separate
-behavior spec explicitly changes it. Until the Phase 1 conditional blockers are
-resolved, every C-spec is planning material only.
+behavior spec explicitly changes it. After the Phase 1 closeout, the next
+allowed work is method-preserving cleanup and handoff-spine scaffolding, not
+linear-edge deletion.
 
 ## 2026-05-26 Design Correction
 
