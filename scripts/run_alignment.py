@@ -11,9 +11,14 @@ from pathlib import Path
 
 from xic_extractor.alignment.backfill_scope import read_family_allowlist_tsv
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.csv_io import (
+    DiscoveryBatchInput,
+    read_discovery_batch_index,
+)
 from xic_extractor.alignment.drift_evidence import read_targeted_istd_drift_evidence
 from xic_extractor.alignment.pipeline import run_alignment
 from xic_extractor.alignment.process_backend import AlignmentProcessExecutionError
+from xic_extractor.alignment.raw_sources import existing_raw_paths
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.raw_reader import RawReaderError
@@ -71,6 +76,45 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not dll_dir.is_dir():
         print(f"{dll_dir}: dll directory does not exist", file=sys.stderr)
         return 2
+    try:
+        discovery_batch = read_discovery_batch_index(discovery_batch_index)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    try:
+        _validate_unique_sample_stems(discovery_batch_index, discovery_batch)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    discovery_sample_count = len(discovery_batch.sample_order)
+    if (
+        args.expected_sample_count is not None
+        and discovery_sample_count != args.expected_sample_count
+    ):
+        print(
+            (
+                f"{discovery_batch_index}: expected {args.expected_sample_count} "
+                f"discovery batch samples, found {discovery_sample_count}"
+            ),
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        _validate_expected_85raw_contract(args)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    try:
+        resolved_raw_paths = _validate_launch_artifacts(
+            discovery_batch,
+            raw_dir=raw_dir,
+            require_all_raw=(
+                args.preflight_only or args.expected_sample_count == 85
+            ),
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     if (
         args.emit_identity_coherence_diagnostic
         and identity_coherence_controls_manifest is not None
@@ -104,6 +148,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
+
+    if args.preflight_only:
+        _print_preflight_summary(
+            args,
+            discovery_batch_index=discovery_batch_index,
+            discovery_batch=discovery_batch,
+            resolved_raw_paths=resolved_raw_paths,
+            raw_dir=raw_dir,
+            dll_dir=dll_dir,
+            output_dir=output_dir,
+            raw_workers=raw_workers,
+            raw_xic_batch_size=raw_xic_batch_size,
+        )
+        return 0
 
     timing_recorder = (
         TimingRecorder(
@@ -283,6 +341,22 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help=(
             "Optional JSON path updated after each timing record. Use this as "
             "a timeout-safe heartbeat for long 85RAW validation runs."
+        ),
+    )
+    parser.add_argument(
+        "--expected-sample-count",
+        type=_positive_int,
+        help=(
+            "Expected discovery_batch_index sample count. Use 8 or 85 for scoped "
+            "validation gates to fail fast when the wrong batch index is passed."
+        ),
+    )
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help=(
+            "Validate launch inputs, print the resolved alignment contract, and "
+            "exit without loading discovery candidates or reading RAW files."
         ),
     )
     parser.add_argument(
@@ -497,6 +571,196 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--emit-alignment-backfill-seed-audit", action="store_true")
     parser.add_argument("--emit-alignment-status-matrix", action="store_true")
     return parser.parse_args(argv)
+
+
+def _validate_launch_artifacts(
+    discovery_batch: DiscoveryBatchInput,
+    *,
+    raw_dir: Path,
+    require_all_raw: bool,
+) -> dict[str, Path]:
+    missing_candidate_csvs = tuple(
+        (sample_stem, candidate_csv)
+        for sample_stem, candidate_csv in discovery_batch.candidate_csvs.items()
+        if not candidate_csv.is_file()
+    )
+    if missing_candidate_csvs:
+        sample_stem, candidate_csv = missing_candidate_csvs[0]
+        suffix = _truncated_count_suffix(len(missing_candidate_csvs))
+        raise ValueError(
+            "candidate CSV does not exist for discovery sample "
+            f"{sample_stem}: {candidate_csv}{suffix}"
+        )
+
+    resolved_raw_paths = existing_raw_paths(
+        sample_order=discovery_batch.sample_order,
+        raw_files=discovery_batch.raw_files,
+        raw_dir=raw_dir,
+    )
+    missing_raw_samples = tuple(
+        sample_stem
+        for sample_stem in discovery_batch.sample_order
+        if sample_stem not in resolved_raw_paths
+    )
+    if require_all_raw and missing_raw_samples:
+        sample_text = ", ".join(missing_raw_samples[:5])
+        suffix = _truncated_count_suffix(len(missing_raw_samples))
+        raise ValueError(
+            f"{raw_dir}: RAW file does not exist for discovery sample(s): "
+            f"{sample_text}{suffix}"
+        )
+    return resolved_raw_paths
+
+
+def _validate_unique_sample_stems(
+    path: Path,
+    discovery_batch: DiscoveryBatchInput,
+) -> None:
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for sample_stem in discovery_batch.sample_order:
+        if sample_stem in seen and sample_stem not in duplicates:
+            duplicates.append(sample_stem)
+        seen.add(sample_stem)
+    if duplicates:
+        duplicate_text = ", ".join(duplicates[:5])
+        suffix = _truncated_count_suffix(len(duplicates))
+        raise ValueError(
+            f"{path}: duplicate sample_stem values are not supported: "
+            f"{duplicate_text}{suffix}"
+        )
+
+
+def _validate_expected_85raw_contract(args: argparse.Namespace) -> None:
+    if args.expected_sample_count != 85:
+        return
+
+    failures: list[str] = []
+    _expect_arg(
+        failures,
+        "--output-level",
+        args.output_level,
+        "validation-minimal",
+    )
+    _expect_arg(
+        failures,
+        "--backfill-scope",
+        args.backfill_scope,
+        "production-equivalent",
+    )
+    _expect_arg(failures, "--audit-evidence-mode", args.audit_evidence_mode, "none")
+    _expect_arg(
+        failures,
+        "--performance-profile",
+        args.performance_profile,
+        "validation-fast",
+    )
+    _expect_arg(
+        failures,
+        "--owner-backfill-window-strategy",
+        args.owner_backfill_window_strategy,
+        "super-window",
+    )
+    _expect_arg(
+        failures,
+        "--owner-backfill-superwindow-span-factor",
+        args.owner_backfill_superwindow_span_factor,
+        2,
+    )
+    if args.timing_output is None:
+        failures.append("--timing-output is required for canonical 85RAW runs")
+    if args.timing_live_output is None:
+        failures.append("--timing-live-output is required for canonical 85RAW runs")
+    if not _is_repo_venv_python():
+        failures.append(
+            "Python executable must be under this worktree .venv for canonical "
+            f"85RAW runs; got {sys.executable}"
+        )
+
+    if failures:
+        joined = "\n- ".join(failures)
+        raise ValueError(f"85RAW canonical launch contract failed:\n- {joined}")
+
+
+def _expect_arg(
+    failures: list[str],
+    flag: str,
+    actual: object,
+    expected: object,
+) -> None:
+    if actual != expected:
+        failures.append(f"{flag} must be {expected!r}; got {actual!r}")
+
+
+def _is_repo_venv_python() -> bool:
+    repo_venv = (_repo_root() / ".venv").resolve()
+    try:
+        python_executable = Path(sys.executable).resolve()
+    except OSError:
+        return False
+    return repo_venv == python_executable or repo_venv in python_executable.parents
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _truncated_count_suffix(count: int) -> str:
+    if count <= 1:
+        return ""
+    hidden = count - 1
+    return f" (+{hidden} more)"
+
+
+def _print_preflight_summary(
+    args: argparse.Namespace,
+    *,
+    discovery_batch_index: Path,
+    discovery_batch: DiscoveryBatchInput,
+    resolved_raw_paths: dict[str, Path],
+    raw_dir: Path,
+    dll_dir: Path,
+    output_dir: Path,
+    raw_workers: int,
+    raw_xic_batch_size: int,
+) -> None:
+    sample_count = len(discovery_batch.sample_order)
+    print("Alignment launch preflight OK (diagnostic_only; no validation completed)")
+    print(
+        "Preflight scope: shared discovery-batch parser, candidate CSV existence, "
+        "RAW path existence; no candidate CSVs loaded; no RAW files opened."
+    )
+    print(f"Discovery batch index: {discovery_batch_index}")
+    print(f"Discovery batch samples: {sample_count}")
+    print(f"Candidate CSVs found: {len(discovery_batch.candidate_csvs)}")
+    print(f"RAW paths found: {len(resolved_raw_paths)}")
+    if args.expected_sample_count is not None:
+        print(f"Expected sample count: {args.expected_sample_count}")
+    print(
+        "85RAW canonical contract: "
+        f"{'enforced' if args.expected_sample_count == 85 else 'not requested'}"
+    )
+    print(f"Python executable: {sys.executable}")
+    print(f"run_alignment module: {Path(__file__).resolve()}")
+    print(f"Working directory: {Path.cwd().resolve()}")
+    print(f"RAW dir: {raw_dir}")
+    print(f"DLL dir: {dll_dir}")
+    print(f"Output dir: {output_dir}")
+    print(f"Output level: {args.output_level}")
+    print(f"Backfill scope: {args.backfill_scope}")
+    print(f"Audit evidence mode: {args.audit_evidence_mode}")
+    print(f"Performance profile: {args.performance_profile or '<none>'}")
+    print(f"RAW workers: {raw_workers}")
+    print(f"RAW XIC batch size: {raw_xic_batch_size}")
+    print(f"Owner backfill window strategy: {args.owner_backfill_window_strategy}")
+    print(
+        "Owner backfill superwindow span factor: "
+        f"{args.owner_backfill_superwindow_span_factor}"
+    )
+    print(
+        "Timing live JSON: "
+        f"{args.timing_live_output.resolve() if args.timing_live_output else '<none>'}"
+    )
 
 
 def _resolve_raw_execution_settings(args: argparse.Namespace) -> tuple[int, int]:

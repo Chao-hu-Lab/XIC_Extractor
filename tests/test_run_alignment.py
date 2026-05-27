@@ -1349,6 +1349,377 @@ def test_run_alignment_cli_rejects_missing_dll_dir(
     assert "dll directory does not exist" in capsys.readouterr().err
 
 
+def test_run_alignment_cli_rejects_expected_sample_count_mismatch(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text(
+        "sample_stem,raw_file,candidate_csv\n"
+        "S1,S1.raw,s1.csv\n"
+        "S2,S2.raw,s2.csv\n",
+        encoding="utf-8",
+    )
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--expected-sample-count",
+            "85",
+        ]
+    )
+
+    assert code == 2
+    assert "expected 85 discovery batch samples, found 2" in capsys.readouterr().err
+
+
+def test_run_alignment_cli_rejects_duplicate_sample_stems(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text(
+        "sample_stem,raw_file,candidate_csv\n"
+        "S1,S1.raw,s1.csv\n"
+        "S1,S1.raw,s1_again.csv\n",
+        encoding="utf-8",
+    )
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--expected-sample-count",
+            "2",
+        ]
+    )
+
+    assert code == 2
+    stderr = capsys.readouterr().err
+    assert "duplicate sample_stem values are not supported" in stderr
+    assert "S1" in stderr
+
+
+def test_run_alignment_cli_normal_run_does_not_require_all_raw_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text(
+        "sample_stem,raw_file,candidate_csv\n"
+        "S1,S1.raw,s1.csv\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "s1.csv").write_text("", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    def fake_run_alignment(**kwargs):
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+        ]
+    )
+
+    assert code == 0
+
+
+def test_run_alignment_cli_preflight_only_prints_launch_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text(
+        "sample_stem,raw_file,candidate_csv\n"
+        "S1,S1.raw,s1.csv\n"
+        "S2,S2.raw,s2.csv\n",
+        encoding="utf-8",
+    )
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    (raw_dir / "S1.raw").write_text("", encoding="utf-8")
+    (raw_dir / "S2.raw").write_text("", encoding="utf-8")
+    (tmp_path / "s1.csv").write_text("", encoding="utf-8")
+    (tmp_path / "s2.csv").write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+
+    def fail_run_alignment(**kwargs):
+        raise AssertionError("preflight-only should not run alignment")
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fail_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--output-level",
+            "validation-minimal",
+            "--backfill-scope",
+            "production-equivalent",
+            "--audit-evidence-mode",
+            "none",
+            "--performance-profile",
+            "validation-fast",
+            "--owner-backfill-window-strategy",
+            "super-window",
+            "--expected-sample-count",
+            "2",
+            "--timing-live-output",
+            str(output_dir / "timing.live.json"),
+            "--preflight-only",
+        ]
+    )
+
+    assert code == 0
+    stdout = capsys.readouterr().out
+    assert (
+        "Alignment launch preflight OK (diagnostic_only; no validation completed)"
+        in stdout
+    )
+    assert "no candidate CSVs loaded; no RAW files opened" in stdout
+    assert "Discovery batch samples: 2" in stdout
+    assert "Candidate CSVs found: 2" in stdout
+    assert "RAW paths found: 2" in stdout
+    assert "Output level: validation-minimal" in stdout
+    assert "Backfill scope: production-equivalent" in stdout
+    assert "Audit evidence mode: none" in stdout
+    assert "Performance profile: validation-fast" in stdout
+    assert "Owner backfill window strategy: super-window" in stdout
+    assert "85RAW canonical contract: not requested" in stdout
+    assert "Python executable:" in stdout
+    assert "run_alignment module:" in stdout
+    assert "Working directory:" in stdout
+    assert "Timing live JSON:" in stdout
+
+
+def test_run_alignment_cli_preflight_only_uses_shared_batch_parser(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text(
+        "sample_stem,raw_file,candidate_csv\n"
+        "S1,S1.raw,\n",
+        encoding="utf-8",
+    )
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--preflight-only",
+        ]
+    )
+
+    assert code == 2
+    assert "candidate_csv is required" in capsys.readouterr().err
+
+
+def test_run_alignment_cli_preflight_only_rejects_missing_candidate_csv(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text(
+        "sample_stem,raw_file,candidate_csv\n"
+        "S1,S1.raw,missing.csv\n",
+        encoding="utf-8",
+    )
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    (raw_dir / "S1.raw").write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--preflight-only",
+        ]
+    )
+
+    assert code == 2
+    stderr = capsys.readouterr().err
+    assert "candidate CSV does not exist" in stderr
+    assert "missing.csv" in stderr
+
+
+def test_run_alignment_cli_preflight_only_rejects_missing_raw_file(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text(
+        "sample_stem,raw_file,candidate_csv\n"
+        "S1,S1.raw,s1.csv\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "s1.csv").write_text("", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--preflight-only",
+        ]
+    )
+
+    assert code == 2
+    stderr = capsys.readouterr().err
+    assert "RAW file does not exist" in stderr
+    assert "S1" in stderr
+
+
+def test_run_alignment_cli_rejects_noncanonical_85raw_contract(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text(
+        "sample_stem,raw_file,candidate_csv\n"
+        + "".join(f"S{i},S{i}.raw,s{i}.csv\n" for i in range(85)),
+        encoding="utf-8",
+    )
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--expected-sample-count",
+            "85",
+        ]
+    )
+
+    assert code == 2
+    stderr = capsys.readouterr().err
+    assert "85RAW canonical launch contract failed" in stderr
+    assert "--output-level must be 'validation-minimal'" in stderr
+    assert "--timing-live-output is required" in stderr
+
+
+def test_run_alignment_cli_rejects_85raw_wrong_python_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text(
+        "sample_stem,raw_file,candidate_csv\n"
+        + "".join(f"S{i},S{i}.raw,s{i}.csv\n" for i in range(85)),
+        encoding="utf-8",
+    )
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    monkeypatch.setattr(
+        run_alignment.sys,
+        "executable",
+        str(tmp_path / "wrong-python" / "python.exe"),
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--expected-sample-count",
+            "85",
+            "--output-level",
+            "validation-minimal",
+            "--backfill-scope",
+            "production-equivalent",
+            "--audit-evidence-mode",
+            "none",
+            "--performance-profile",
+            "validation-fast",
+            "--owner-backfill-window-strategy",
+            "super-window",
+            "--timing-output",
+            str(output_dir / "timing.json"),
+            "--timing-live-output",
+            str(output_dir / "timing.live.json"),
+            "--preflight-only",
+        ]
+    )
+
+    assert code == 2
+    stderr = capsys.readouterr().err
+    assert "Python executable must be under this worktree .venv" in stderr
+
+
 @pytest.mark.parametrize("exc", [RawReaderError("raw fail"), ValueError("bad input")])
 def test_run_alignment_cli_returns_2_for_user_visible_errors(
     monkeypatch: pytest.MonkeyPatch,
