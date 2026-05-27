@@ -21,7 +21,7 @@
   "artifact_hashes": {
     "rows": {
       "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/baseline_truth_audit_rows.tsv",
-      "sha256": "ea701c521605285925dcc95fbaeddd3b962a33184d23a79a0c00c3ba52ce4f81"
+      "sha256": "ad3fa613f6ea124ecd0fd9deeb589bc815b2c6f1da5a68954cb33bbbbbdeceae"
     },
     "summary": {
       "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/baseline_truth_audit_summary.tsv",
@@ -29,11 +29,11 @@
     },
     "json": {
       "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/baseline_truth_audit.json",
-      "sha256": "6cbf405dbdee0ee7b205df168af9683c5ab51644893d0ebc39c41bc537a4b8ff"
+      "sha256": "7b96838c3d3405505785ad862764c46178b221944b9a2ab7ce0ba183ada4eb72"
     },
     "report": {
       "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/baseline_truth_audit.md",
-      "sha256": "0f9e201c84bf2edb5d1b85990aab80db7e4e59f71ddb64cf525625e45a65f0c7"
+      "sha256": "28065cfae13b208168cf7b33cdcd43ee0b14144ee65e8c4277268f0260a8efcd"
     }
   },
   "expected_family_count": 6,
