@@ -40,7 +40,7 @@ from gui.sections.settings_value_helpers import (
 )
 from gui.sections.settings_widgets import CollapsibleSection, _LabeledSpin
 from xic_extractor.config import migrate_settings_dict
-from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
+from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS, RESOLVER_MODES
 
 
 class SettingsSection(QWidget):
@@ -450,7 +450,7 @@ class SettingsSection(QWidget):
             and 0.01 <= peak_min_prominence_ratio <= 0.50
             and ms2_precursor_tol_da > 0
             and 0 < nl_min_intensity_ratio <= 1
-            and values["resolver_mode"] in {"legacy_savgol", "local_minimum"}
+            and values["resolver_mode"] in RESOLVER_MODES
             and resolver_min_search_range_min > 0
             and 0 <= resolver_min_relative_height <= 1
             and resolver_min_absolute_height >= 0
