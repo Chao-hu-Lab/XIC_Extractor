@@ -55,6 +55,12 @@ For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
   validation used synthetic tests only, 8-RAW, 85-RAW, targeted benchmark, or
   manual EIC review. If real-data validation was skipped, say why and mark the
   remaining risk.
+- For long RAW / validation runs, preflight the exact command shape before
+  launch: documented runner, sample set, output level, expected artifacts,
+  heartbeat sidecars, timeout / stop condition, and whether existing artifacts
+  can answer the question without rerunning. If a run stalls or exceeds the
+  expected heartbeat, stop and inspect timing / profiling output instead of
+  relaunching the same command.
 - For alignment validation or downstream handoff, prefer
   `--output-level validation-minimal`: `alignment_matrix.tsv` is the downstream
   correction/statistics contract, while targeted benchmark diagnostics also need
@@ -70,6 +76,47 @@ For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
 - Plans should separate `Now`, `Later`, and `Not in scope`, with checkpoint-level
   acceptance criteria and stop conditions. Do not let a plan imply production
   changes when the current phase is only audit, shadow, or validation.
+
+## Planning And Evidence Budget
+
+- Before a phase plan or expensive validation run, name the decision it can
+  close, the strongest existing internal oracle, the missing independent
+  evidence, expected runtime/artifacts, and the fail-fast or inconclusive path.
+- Search `tools/diagnostics/INDEX.md`, relevant notes, and existing validation
+  outputs before inventing a new workflow. Reuse them unless they cannot answer
+  the current phase decision.
+- Any `audit_only`, `shadow_only`, or `diagnostic_only` path needs an exit rule:
+  promote, kill, externalize, or name the single missing evidence.
+- Do not expand validation when the result cannot change the next action. Use
+  the smallest confirmation plus rollback guard.
+
+## Product Roadmap Discipline
+
+- P-specs, C-specs, and implementation plans must state whether they advance
+  `Trace` / `TraceGroup`, multi-source `PeakHypothesis`, `EvidenceVector`,
+  `IntegrationResult`, model selection, or `AuditTrail`. If they advance none,
+  label them cleanup-only and do not present them as modernization progress.
+- Separate infrastructure existence from product behavior. Diagnostic TSVs,
+  shadow reports, wrappers, and sidecars prove observability, not product
+  usability.
+- Prefer establishing the minimal future spine or dual-write contract before
+  polishing legacy DTOs, resolver names, or scoring split points likely to move
+  during handoff migration.
+- CWT, WIS, local minima, curvature, derivative, and region-first logic are
+  evidence or hypothesis sources. A phase touching them must declare one mode:
+  audit-only, hypothesis enumeration, model-selection calibration, production
+  candidate, or retirement.
+
+## Validation Phase Types
+
+- Science phase: require independent domain evidence capable of disproving false
+  confidence. Median RSD alone is not enough.
+- Cleanup phase: require numerical parity against the settled baseline; behavior
+  changes relabel the phase.
+- Engineering phase: require characterization parity and maintainability gain;
+  do not bundle behavior changes.
+- Documentation / diagnostic phase: require consistency and reviewer
+  readability; no numerical gate language applies.
 
 ## Design Principles
 
