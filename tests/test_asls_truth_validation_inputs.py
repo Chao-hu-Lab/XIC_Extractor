@@ -7,8 +7,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import pytest
-
 from tools.diagnostics.asls_truth_validation_inputs import (
     NOT_APPLICABLE_WITH_EXCLUSION,
     NOT_PROVIDED,
@@ -30,26 +28,14 @@ from tools.diagnostics.asls_truth_validation_models import (
     INCONCLUSIVE_REGENERATE_TIER_A,
 )
 
-
 FIXTURE_DIR = Path("docs/superpowers/fixtures")
+TIER_A_ARTIFACT_DIR = FIXTURE_DIR / "asls_truth_tier_a_artifacts"
 TIER_A_MANIFEST = FIXTURE_DIR / "asls_truth_tier_a_expected_manifest.json"
 FIXTURE_MANIFEST = FIXTURE_DIR / "asls_truth_validation_fixture_manifest.json"
-ROWS = Path(
-    "output/phase1_p2_baseline_truth_audit_all_statuses/"
-    "baseline_truth_audit_rows.tsv"
-)
-SUMMARY = Path(
-    "output/phase1_p2_baseline_truth_audit_all_statuses/"
-    "baseline_truth_audit_summary.tsv"
-)
-JSON_REPORT = Path(
-    "output/phase1_p2_baseline_truth_audit_all_statuses/"
-    "baseline_truth_audit.json"
-)
-MARKDOWN_REPORT = Path(
-    "output/phase1_p2_baseline_truth_audit_all_statuses/"
-    "baseline_truth_audit.md"
-)
+ROWS = TIER_A_ARTIFACT_DIR / "baseline_truth_audit_rows.tsv"
+SUMMARY = TIER_A_ARTIFACT_DIR / "baseline_truth_audit_summary.tsv"
+JSON_REPORT = TIER_A_ARTIFACT_DIR / "baseline_truth_audit.json"
+MARKDOWN_REPORT = TIER_A_ARTIFACT_DIR / "baseline_truth_audit.md"
 
 
 def test_validate_tier_a_accepts_locked_six_family_artifacts() -> None:
@@ -181,7 +167,9 @@ def test_validate_tier_a_rejects_row_overflow_cells(tmp_path: Path) -> None:
     assert "unexpected_column" in result.reasons
 
 
-def test_validate_tier_a_requires_rt_and_boundary_status_columns(tmp_path: Path) -> None:
+def test_validate_tier_a_requires_rt_and_boundary_status_columns(
+    tmp_path: Path,
+) -> None:
     rows_path = _copy_tsv(ROWS, tmp_path / "rows.tsv")
     rows = _read_tsv(rows_path)
     for row in rows:
@@ -298,7 +286,9 @@ def test_coverage_gap_returns_fixture_gap(tmp_path: Path) -> None:
     assert any(row.coverage_status == INCONCLUSIVE_FIXTURE_GAP for row in coverage)
 
 
-def test_linear_edge_pattern_coverage_includes_baseline_and_boundary_hard_cases() -> None:
+def test_linear_edge_pattern_coverage_includes_baseline_and_boundary_hard_cases() -> (
+    None
+):
     fixture_manifest = load_fixture_manifest(FIXTURE_MANIFEST)
 
     coverage = build_coverage_rows(
@@ -820,7 +810,9 @@ def test_validate_retirement_prerequisites_rejects_unsupported_status_enum(
                 "area_baseline_corrected_linear_edge",
                 "baseline_score_linear_edge",
             ],
-            "affected_public_contracts_reviewed": ["alignment_cell_integration_audit.tsv"],
+            "affected_public_contracts_reviewed": [
+                "alignment_cell_integration_audit.tsv"
+            ],
             "reviewer_identity": "reviewer",
             "review_date": "2026-05-27",
         },
@@ -847,7 +839,9 @@ def test_validate_retirement_prerequisites_distinguishes_not_satisfied(
                 "area_baseline_corrected_linear_edge",
                 "baseline_score_linear_edge",
             ],
-            "affected_public_contracts_reviewed": ["alignment_cell_integration_audit.tsv"],
+            "affected_public_contracts_reviewed": [
+                "alignment_cell_integration_audit.tsv"
+            ],
             "reviewer_identity": "reviewer",
             "review_date": "2026-05-27",
         },
@@ -876,7 +870,9 @@ def test_validate_retirement_prerequisites_requires_hashes_and_schema_artifact(
                 "area_baseline_corrected_linear_edge",
                 "baseline_score_linear_edge",
             ],
-            "affected_public_contracts_reviewed": ["alignment_cell_integration_audit.tsv"],
+            "affected_public_contracts_reviewed": [
+                "alignment_cell_integration_audit.tsv"
+            ],
             "reviewer_identity": "reviewer",
             "review_date": "2026-05-27",
         },
@@ -902,7 +898,9 @@ def test_validate_retirement_prerequisites_rejects_non_schema_artifact(
                 "area_baseline_corrected_linear_edge",
                 "baseline_score_linear_edge",
             ],
-            "affected_public_contracts_reviewed": ["alignment_cell_integration_audit.tsv"],
+            "affected_public_contracts_reviewed": [
+                "alignment_cell_integration_audit.tsv"
+            ],
             "reviewer_identity": "reviewer",
             "review_date": "2026-05-27",
         },
@@ -929,7 +927,9 @@ def test_validate_retirement_prerequisites_rejects_weak_two_column_schema_artifa
                 "area_baseline_corrected_linear_edge",
                 "baseline_score_linear_edge",
             ],
-            "affected_public_contracts_reviewed": ["alignment_cell_integration_audit.tsv"],
+            "affected_public_contracts_reviewed": [
+                "alignment_cell_integration_audit.tsv"
+            ],
             "reviewer_identity": "reviewer",
             "review_date": "2026-05-27",
         },
@@ -956,7 +956,9 @@ def test_validate_retirement_prerequisites_resolves_repo_relative_refs_from_othe
                 "area_baseline_corrected_linear_edge",
                 "baseline_score_linear_edge",
             ],
-            "affected_public_contracts_reviewed": ["alignment_cell_integration_audit.tsv"],
+            "affected_public_contracts_reviewed": [
+                "alignment_cell_integration_audit.tsv"
+            ],
             "reviewer_identity": "reviewer",
             "review_date": "2026-05-27",
         },
@@ -992,7 +994,9 @@ def test_validate_retirement_prerequisites_requires_absent_linear_edge_columns(
             "rollback_schema_deprecation_note": _hashed_ref(MARKDOWN_REPORT),
             "post_rollback_audit_schema_artifact": _hashed_ref(artifact),
             "post_rollback_absent_columns": ["area_baseline_corrected_linear_edge"],
-            "affected_public_contracts_reviewed": ["alignment_cell_integration_audit.tsv"],
+            "affected_public_contracts_reviewed": [
+                "alignment_cell_integration_audit.tsv"
+            ],
             "reviewer_identity": "reviewer",
             "review_date": "2026-05-27",
         },
@@ -1019,7 +1023,9 @@ def test_validate_retirement_prerequisites_requires_absent_columns_list(
                 "area_baseline_corrected_linear_edge": True,
                 "baseline_score_linear_edge": True,
             },
-            "affected_public_contracts_reviewed": ["alignment_cell_integration_audit.tsv"],
+            "affected_public_contracts_reviewed": [
+                "alignment_cell_integration_audit.tsv"
+            ],
             "reviewer_identity": "reviewer",
             "review_date": "2026-05-27",
         },

@@ -11,11 +11,11 @@ from time import perf_counter
 from types import ModuleType, TracebackType
 from typing import Any
 
-from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.backfill_scope import (
     REQUEST_PLAN_VERSION,
     backfill_features_for_sample,
 )
+from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.identity_coherence.models import (
     CandidateTrace,
     IdentityCoherenceTraceRequest,
@@ -26,7 +26,10 @@ from xic_extractor.alignment.ms1_index_source import (
     OwnerBackfillXicBackend,
     source_for_owner_backfill_backend,
 )
-from xic_extractor.alignment.owner_backfill import build_owner_backfill_cells
+from xic_extractor.alignment.owner_backfill import (
+    OwnerBackfillWindowStrategy,
+    build_owner_backfill_cells,
+)
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.alignment.ownership import (
     OwnershipBuildResult,
@@ -103,7 +106,7 @@ class OwnerBackfillSampleJob:
     peak_config: ExtractionConfig
     raw_xic_batch_size: int = 1
     owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw"
-    owner_backfill_window_strategy: str = "exact"
+    owner_backfill_window_strategy: OwnerBackfillWindowStrategy = "exact"
     owner_backfill_superwindow_span_factor: int = 2
     emit_region_audit: bool = False
     region_audit_family_ids: frozenset[str] | None = None
@@ -415,7 +418,7 @@ def run_owner_backfill_process(
     max_workers: int,
     raw_xic_batch_size: int = 1,
     owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw",
-    owner_backfill_window_strategy: str = "exact",
+    owner_backfill_window_strategy: OwnerBackfillWindowStrategy = "exact",
     owner_backfill_superwindow_span_factor: int = 2,
     backfill_scope: str = "full-audit",
     emit_region_audit: bool = False,

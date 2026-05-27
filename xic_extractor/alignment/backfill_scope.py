@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import csv
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.family_compatibility import (
@@ -86,7 +86,10 @@ def select_backfill_features(
     if scope == "selected-families" and not selected_family_ids:
         raise ValueError("selected-families backfill scope requires selected families")
     if scope not in {"production-equivalent", "selected-families"}:
-        raise ValueError("backfill scope must be full-audit, production-equivalent, or selected-families")
+        raise ValueError(
+            "backfill scope must be full-audit, production-equivalent, "
+            "or selected-families"
+        )
 
     selected: list[OwnerAlignedFeature] = []
     skipped: list[SkippedEvidenceRecord] = []
@@ -160,12 +163,9 @@ def backfill_request_sample_stems(
             and not feature.confirm_local_owners_with_backfill
         ):
             continue
-        if (
-            sample_stem in detected_samples
-            and not any_detected_owner_can_be_superseded(
-                feature,
-                owners_by_sample.get(sample_stem),
-            )
+        if sample_stem in detected_samples and not any_detected_owner_can_be_superseded(
+            feature,
+            owners_by_sample.get(sample_stem),
         ):
             continue
         requested.append(sample_stem)
@@ -206,8 +206,7 @@ def any_detected_owner_can_be_superseded(
     owners: Sequence[SampleLocalMS1Owner] | None,
 ) -> bool:
     return any(
-        detected_owner_can_be_superseded(feature, owner)
-        for owner in owners or ()
+        detected_owner_can_be_superseded(feature, owner) for owner in owners or ()
     )
 
 

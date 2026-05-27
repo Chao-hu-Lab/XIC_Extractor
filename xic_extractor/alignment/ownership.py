@@ -182,7 +182,13 @@ def _resolve_candidates(
         source = raw_sources[sample_stem]
         for chunk in _chunked(tuple(sample_requests), raw_xic_batch_size):
             traces = _extract_many(source, tuple(item[3] for item in chunk))
-            for (index, candidate, seed_rt, _request, item_emit_region_audit), trace in zip(
+            for (
+                index,
+                candidate,
+                seed_rt,
+                _request,
+                item_emit_region_audit,
+            ), trace in zip(
                 chunk,
                 traces,
                 strict=True,
@@ -343,8 +349,7 @@ def _chunked(
     if chunk_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
     return tuple(
-        items[index : index + chunk_size]
-        for index in range(0, len(items), chunk_size)
+        items[index : index + chunk_size] for index in range(0, len(items), chunk_size)
     )
 
 
@@ -647,7 +652,6 @@ def _assignment_reason(
     if relation == "owner_tail_assignment":
         return relation
     return "owner_exact_apex_match"
-
 
 
 def _primary_and_supporting(

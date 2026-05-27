@@ -20,7 +20,10 @@ def test_locality_summary_uses_actual_backfill_seed_centers(tmp_path: Path) -> N
     summary = backfill_scope_probe._locality_summary(
         features,
         sample_order=("sample-a", "sample-b"),
-        raw_paths={"sample-a": tmp_path / "sample-a.raw", "sample-b": tmp_path / "sample-b.raw"},
+        raw_paths={
+            "sample-a": tmp_path / "sample-a.raw",
+            "sample-b": tmp_path / "sample-b.raw",
+        },
         dll_dir=tmp_path / "dll",
         alignment_config=AlignmentConfig(),
         raw_xic_batch_size=2,

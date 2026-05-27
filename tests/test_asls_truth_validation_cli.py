@@ -19,27 +19,15 @@ from tools.diagnostics.asls_truth_validation_models import (
     TruthValidationOutputs,
 )
 
-
 FIXTURE_DIR = Path("docs/superpowers/fixtures")
+TIER_A_ARTIFACT_DIR = FIXTURE_DIR / "asls_truth_tier_a_artifacts"
 TIER_A_MANIFEST = FIXTURE_DIR / "asls_truth_tier_a_expected_manifest.json"
 FIXTURE_MANIFEST = FIXTURE_DIR / "asls_truth_validation_fixture_manifest.json"
 FIXTURE_LOCK = FIXTURE_DIR / "asls_truth_validation_fixture_lock.json"
-ROWS = Path(
-    "output/phase1_p2_baseline_truth_audit_all_statuses/"
-    "baseline_truth_audit_rows.tsv"
-)
-SUMMARY = Path(
-    "output/phase1_p2_baseline_truth_audit_all_statuses/"
-    "baseline_truth_audit_summary.tsv"
-)
-JSON_REPORT = Path(
-    "output/phase1_p2_baseline_truth_audit_all_statuses/"
-    "baseline_truth_audit.json"
-)
-MARKDOWN_REPORT = Path(
-    "output/phase1_p2_baseline_truth_audit_all_statuses/"
-    "baseline_truth_audit.md"
-)
+ROWS = TIER_A_ARTIFACT_DIR / "baseline_truth_audit_rows.tsv"
+SUMMARY = TIER_A_ARTIFACT_DIR / "baseline_truth_audit_summary.tsv"
+JSON_REPORT = TIER_A_ARTIFACT_DIR / "baseline_truth_audit.json"
+MARKDOWN_REPORT = TIER_A_ARTIFACT_DIR / "baseline_truth_audit.md"
 
 
 def test_cli_writes_outputs_for_c1b_planning_target(
@@ -154,15 +142,21 @@ def test_cli_copies_optional_evidence_when_supplied(
     assert summary["waiver_expiry_or_revalidation_trigger"] == "2026-12-31"
     assert summary["c1a_status"] == "PLANNED"
     assert summary["c5_status"] == "LANDED_VALIDATED"
-    assert (
-        summary["rollback_column_status"]
-        == "DEPRECATED_BY_APPROVED_SCHEMA_NOTE"
-    )
+    assert summary["rollback_column_status"] == "DEPRECATED_BY_APPROVED_SCHEMA_NOTE"
     payload = _json_payload(output_dir)
     assert payload["inputs"]["p2b_85raw_acceptance"]["hash"]
-    assert payload["inputs"]["tier_c_evidence"]["object"]["tier_c_axis"] == "spike_in_recovery"
-    assert payload["inputs"]["methodology_waiver"]["object"]["methodology_owner"] == "methodology_owner"
-    assert payload["inputs"]["retirement_prerequisites"]["object"]["c5_status"] == "LANDED_VALIDATED"
+    assert (
+        payload["inputs"]["tier_c_evidence"]["object"]["tier_c_axis"]
+        == "spike_in_recovery"
+    )
+    assert (
+        payload["inputs"]["methodology_waiver"]["object"]["methodology_owner"]
+        == "methodology_owner"
+    )
+    assert (
+        payload["inputs"]["retirement_prerequisites"]["object"]["c5_status"]
+        == "LANDED_VALIDATED"
+    )
 
 
 def test_cli_invalid_waiver_exits_invalid_input(
@@ -243,7 +237,10 @@ def test_cli_missing_p2b_85raw_acceptance_exits_two(
     exit_code = main([*args, "--decision-target", "linear-edge-retirement"])
 
     assert exit_code == 2
-    assert _summary(output_dir)["gate_decision"] == INCONCLUSIVE_MISSING_P2B_85RAW_ACCEPTANCE
+    assert (
+        _summary(output_dir)["gate_decision"]
+        == INCONCLUSIVE_MISSING_P2B_85RAW_ACCEPTANCE
+    )
 
 
 def test_cli_missing_fixture_manifest_writes_audit_outputs(
@@ -457,7 +454,9 @@ def _write_prereq(path: Path, schema_path: Path) -> Path:
                 "area_baseline_corrected_linear_edge",
                 "baseline_score_linear_edge",
             ],
-            "affected_public_contracts_reviewed": ["alignment_cell_integration_audit.tsv"],
+            "affected_public_contracts_reviewed": [
+                "alignment_cell_integration_audit.tsv"
+            ],
             "reviewer_identity": "reviewer",
             "review_date": "2026-05-27",
         },

@@ -20,19 +20,19 @@
   },
   "artifact_hashes": {
     "rows": {
-      "path": "output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit_rows.tsv",
+      "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/baseline_truth_audit_rows.tsv",
       "sha256": "ea701c521605285925dcc95fbaeddd3b962a33184d23a79a0c00c3ba52ce4f81"
     },
     "summary": {
-      "path": "output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit_summary.tsv",
+      "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/baseline_truth_audit_summary.tsv",
       "sha256": "10c2738ce427ec2fc7e95a75859d70094ae8892732af4a33b8565b41bdf0355d"
     },
     "json": {
-      "path": "output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit.json",
+      "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/baseline_truth_audit.json",
       "sha256": "6cbf405dbdee0ee7b205df168af9683c5ab51644893d0ebc39c41bc537a4b8ff"
     },
     "report": {
-      "path": "output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit.md",
+      "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/baseline_truth_audit.md",
       "sha256": "0f9e201c84bf2edb5d1b85990aab80db7e4e59f71ddb64cf525625e45a65f0c7"
     }
   },

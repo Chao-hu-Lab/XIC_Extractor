@@ -266,6 +266,7 @@ def write_alignment_cell_integration_audit_tsv(
         )
     if baseline_audit_method not in {"", "asls"}:
         raise ValueError("baseline_audit_method must be empty or 'asls'")
+    columns: tuple[str, ...]
     if baseline_integration_method == "asls":
         columns = ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
     elif baseline_audit_method == "asls":

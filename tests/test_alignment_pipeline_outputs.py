@@ -13,8 +13,7 @@ from tests.alignment_pipeline_helpers import (
 from tests.alignment_pipeline_helpers import peak_config as _peak_config
 from tests.alignment_pipeline_helpers import write_batch as _write_batch
 from xic_extractor.alignment import AlignmentConfig
-from xic_extractor.alignment.pipeline_outputs import alignment_metadata
-from xic_extractor.alignment.pipeline_outputs import output_paths
+from xic_extractor.alignment.pipeline_outputs import alignment_metadata, output_paths
 
 
 def test_alignment_metadata_records_baseline_audit_method() -> None:
@@ -121,7 +120,9 @@ def test_validation_minimal_outputs_keep_gate_artifacts_without_debug_surfaces(
     assert outputs.status_matrix_tsv is None
     assert outputs.event_to_owner_tsv is None
     assert outputs.ambiguous_owners_tsv is None
-    assert outputs.skipped_evidence_ledger_tsv == tmp_path / "skipped_evidence_ledger.tsv"
+    assert (
+        outputs.skipped_evidence_ledger_tsv == tmp_path / "skipped_evidence_ledger.tsv"
+    )
     assert outputs.run_metadata_json == tmp_path / "alignment_run_metadata.json"
 
 

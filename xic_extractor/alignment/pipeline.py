@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import AbstractContextManager, ExitStack
 from dataclasses import replace
 from pathlib import Path
@@ -9,9 +9,9 @@ from xic_extractor.alignment.backfill import (
     backfill_alignment_matrix,
 )
 from xic_extractor.alignment.backfill_scope import (
-    BackfillScope,
     PREDICATE_VERSION,
     REQUEST_PLAN_VERSION,
+    BackfillScope,
     backfill_request_sample_stems,
     backfill_seed_centers,
     select_backfill_features,
@@ -701,7 +701,7 @@ def _record_owner_backfill_progress(
 
 
 def _summarize_xic_timing_stats(
-    timing_stats: object,
+    timing_stats: Iterable[object],
 ) -> dict[str, int | float | None]:
     stats_items = tuple(timing_stats)
     extract_xic_count = sum(

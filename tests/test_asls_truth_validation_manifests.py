@@ -16,7 +16,6 @@ from tools.diagnostics.asls_truth_validation_manifests import (
     load_tier_a_manifest,
 )
 
-
 FIXTURE_DIR = Path("docs/superpowers/fixtures")
 TIER_A_MANIFEST = FIXTURE_DIR / "asls_truth_tier_a_expected_manifest.json"
 FIXTURE_MANIFEST = FIXTURE_DIR / "asls_truth_validation_fixture_manifest.json"

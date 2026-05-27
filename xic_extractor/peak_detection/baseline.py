@@ -116,7 +116,9 @@ def integrate_asls_baseline(
         baseline_score=_safe_ratio(corrected_area, raw_area),
         area_uncertainty_formula_version=AREA_UNCERTAINTY_FORMULA_VERSION,
         baseline_residual_mad=residual_mad,
-        area_uncertainty_noise_source="asls_residual" if residual_mad is not None else "",
+        area_uncertainty_noise_source="asls_residual"
+        if residual_mad is not None
+        else "",
     )
 
 

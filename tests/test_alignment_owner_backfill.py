@@ -773,7 +773,9 @@ def test_owner_backfill_superwindow_crops_to_original_request_windows() -> None:
     assert np.isclose(cells[1].backfill_request_rt_max, 10.2)
 
 
-def test_owner_backfill_superwindow_falls_back_to_exact_without_scan_rt_lookup() -> None:
+def test_owner_backfill_superwindow_falls_back_to_exact_without_scan_rt_lookup() -> (
+    None
+):
     from xic_extractor.xic_models import XICTrace
 
     class ScanOnlySource:

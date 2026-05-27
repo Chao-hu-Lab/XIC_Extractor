@@ -6,12 +6,12 @@ from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
-from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.backfill_scope import (
     REQUEST_PLAN_VERSION,
     SkippedEvidenceRecord,
     write_skipped_evidence_ledger_tsv,
 )
+from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.debug_writer import (
     write_ambiguous_ms1_owners_tsv,
     write_event_to_ms1_owner_tsv,

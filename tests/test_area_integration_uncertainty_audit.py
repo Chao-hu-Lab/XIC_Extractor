@@ -281,7 +281,7 @@ def test_area_integration_uncertainty_audit_classifies_all_buckets(
     assert alignment_rows[0]["area_uncertainty_noise_source"] == "asls_residual"
 
 
-def test_area_integration_uncertainty_uses_linear_edge_rollback_for_promoted_asls_schema(
+def test_uncertainty_audit_uses_linear_edge_rollback_for_promoted_asls(
     tmp_path: Path,
 ) -> None:
     evidence_path = tmp_path / "evidence.tsv"

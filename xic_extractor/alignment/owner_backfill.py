@@ -8,13 +8,13 @@ from typing import Literal, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
-from xic_extractor.alignment.cell_region_audit import with_region_audit
-from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.backfill_scope import (
     any_detected_owner_can_be_superseded,
     backfill_request_sample_stems,
     backfill_seed_centers,
 )
+from xic_extractor.alignment.cell_region_audit import with_region_audit
+from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
 from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature

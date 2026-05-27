@@ -24,7 +24,6 @@ from tools.diagnostics.asls_truth_validation_models import (
 )
 from tools.diagnostics.asls_truth_validation_synthetic import (
     SyntheticComparisonRow,
-    SyntheticTrace,
     blank_false_positive,
     classify_tier_b_blockers,
     compare_synthetic_trace,
@@ -33,7 +32,6 @@ from tools.diagnostics.asls_truth_validation_synthetic import (
     validate_synthetic_fixture_lock,
 )
 from xic_extractor.peak_detection.baseline import BaselineIntegration
-
 
 FIXTURE_DIR = Path("docs/superpowers/fixtures")
 FIXTURE_MANIFEST = FIXTURE_DIR / "asls_truth_validation_fixture_manifest.json"
@@ -80,9 +78,7 @@ def test_generate_synthetic_traces_preserves_heldout_cross_coverage() -> None:
             "typical",
             "wide",
         }
-        assert {
-            (trace.sn_stratum, trace.peak_width_stratum) for trace in heldout
-        } == {
+        assert {(trace.sn_stratum, trace.peak_width_stratum) for trace in heldout} == {
             ("low", "narrow"),
             ("low", "typical"),
             ("low", "wide"),
@@ -226,14 +222,23 @@ def test_compare_synthetic_trace_flags_asls_raw_area_exceedance(
 
 def test_tier_b_hard_blockers_include_heldout_error_thresholds() -> None:
     rows = (
-        _comparison_row("flat_peak_control", linear_abs=1.0, asls_abs=6.0, true_area=100.0),
-        _comparison_row("flat_peak_control", linear_abs=1.0, asls_abs=6.0, true_area=100.0),
-        _comparison_row("flat_peak_control", linear_abs=1.0, asls_abs=10.0, true_area=100.0),
+        _comparison_row(
+            "flat_peak_control", linear_abs=1.0, asls_abs=6.0, true_area=100.0
+        ),
+        _comparison_row(
+            "flat_peak_control", linear_abs=1.0, asls_abs=6.0, true_area=100.0
+        ),
+        _comparison_row(
+            "flat_peak_control", linear_abs=1.0, asls_abs=10.0, true_area=100.0
+        ),
     )
 
     summary = classify_tier_b_blockers(rows)
 
-    assert "flat_peak_control:median_asls_relative_error_gt_5pct" in summary.b1_hard_blockers
+    assert (
+        "flat_peak_control:median_asls_relative_error_gt_5pct"
+        in summary.b1_hard_blockers
+    )
     assert "flat_peak_control:p95_asls_relative_error_gt_8pct" in summary.b1_cautions
 
 
@@ -258,7 +263,7 @@ def test_tier_b_hard_blockers_enforce_improvement_or_low_error_classes() -> None
     assert "tailing_peak:asls_lacks_20pct_improvement_or_3pct_abs_error" in blockers
 
 
-def test_tier_b_hard_blockers_do_not_fail_low_relative_error_for_small_improvement() -> None:
+def test_tier_b_hard_blockers_allow_low_error_with_small_improvement() -> None:
     rows = (
         _comparison_row(
             "sloped_baseline_peak",

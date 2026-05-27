@@ -1,10 +1,10 @@
-
 import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 import xic_extractor.alignment.pipeline as pipeline_module
 from tests.alignment_pipeline_helpers import FakeRawOpener
 from tests.alignment_pipeline_helpers import matrix as _matrix
@@ -302,7 +302,9 @@ def test_pipeline_production_equivalent_scope_skips_safe_backfill_only(
         return _matrix(sample_order)
 
     monkeypatch.setattr(pipeline_module, "build_owner_backfill_cells", fake_backfill)
-    monkeypatch.setattr(pipeline_module, "build_owner_alignment_matrix", fake_owner_matrix)
+    monkeypatch.setattr(
+        pipeline_module, "build_owner_alignment_matrix", fake_owner_matrix
+    )
 
     outputs = pipeline_module.run_alignment(
         discovery_batch_index=batch_index,
@@ -346,7 +348,9 @@ def test_pipeline_production_equivalent_validation_does_not_enable_heavy_audit(
         calls["audit_evidence_mode"] = kwargs["audit_evidence_mode"]
         return ()
 
-    monkeypatch.setattr(pipeline_module, "build_owner_backfill_cells", fake_owner_backfill)
+    monkeypatch.setattr(
+        pipeline_module, "build_owner_backfill_cells", fake_owner_backfill
+    )
 
     pipeline_module.run_alignment(
         discovery_batch_index=batch_index,
@@ -382,7 +386,9 @@ def test_pipeline_asls_flag_without_audit_destination_stays_slim(
         calls["audit_evidence_mode"] = kwargs["audit_evidence_mode"]
         return ()
 
-    monkeypatch.setattr(pipeline_module, "build_owner_backfill_cells", fake_owner_backfill)
+    monkeypatch.setattr(
+        pipeline_module, "build_owner_backfill_cells", fake_owner_backfill
+    )
 
     pipeline_module.run_alignment(
         discovery_batch_index=batch_index,
@@ -543,8 +549,7 @@ def _scope_feature(
         family_observed_neutral_loss_da=116.0,
         has_anchor=True,
         owners=tuple(
-            SimpleNamespace(sample_stem=sample, owner_area=100.0)
-            for sample in owners
+            SimpleNamespace(sample_stem=sample, owner_area=100.0) for sample in owners
         ),
         evidence="single_sample_local_owner",
         review_only=False,

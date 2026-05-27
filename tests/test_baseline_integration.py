@@ -216,7 +216,7 @@ def test_cell_integration_audit_reports_baseline_corrected_area() -> None:
     assert summary.integration_scan_count == 5
 
 
-def test_cell_integration_audit_defaults_to_asls_production_with_linear_edge_rollback() -> None:
+def test_cell_integration_audit_defaults_to_asls_with_linear_rollback() -> None:
     rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
     intensity = np.asarray([8.0, 12.0, 70.0, 65.0, 20.0, 12.0])
 
@@ -256,7 +256,9 @@ def test_cell_integration_audit_can_rollback_to_linear_edge_production() -> None
     assert summary.baseline_score_linear_edge is None
 
 
-def test_cell_integration_audit_falls_back_to_linear_edge_when_asls_unavailable() -> None:
+def test_cell_integration_audit_falls_back_to_linear_edge_when_asls_unavailable() -> (
+    None
+):
     rt = np.asarray([0.0, 0.1, 0.2])
     intensity = np.asarray([10.0, 80.0, 20.0])
 

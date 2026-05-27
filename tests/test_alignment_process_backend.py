@@ -155,10 +155,12 @@ def test_owner_backfill_process_sends_only_sample_requested_features(
     )
 
     by_sample = {job.sample_stem: job for job in captured_jobs}
-    assert tuple(feature.feature_family_id for feature in by_sample["sample-a"].features) == (
-        feature_a.feature_family_id,
-    )
-    assert tuple(feature.feature_family_id for feature in by_sample["sample-b"].features) == (
+    assert tuple(
+        feature.feature_family_id for feature in by_sample["sample-a"].features
+    ) == (feature_a.feature_family_id,)
+    assert tuple(
+        feature.feature_family_id for feature in by_sample["sample-b"].features
+    ) == (
         feature_a.feature_family_id,
         feature_b.feature_family_id,
     )
@@ -785,8 +787,7 @@ def test_identity_trace_worker_uses_xic_request_shape(
             seen["requests"] = tuple(requests)
             assert all(isinstance(item, XICRequest) for item in requests)
             return tuple(
-                XICTrace.from_arrays([5.0, 5.1], [0.0, 10.0])
-                for _ in requests
+                XICTrace.from_arrays([5.0, 5.1], [0.0, 10.0]) for _ in requests
             )
 
     monkeypatch.setattr(
@@ -833,8 +834,7 @@ def test_identity_trace_process_returns_blocked_results_on_extraction_error(
             if self.calls == 1:
                 raise OSError("chunk unavailable")
             return tuple(
-                XICTrace.from_arrays([5.0, 5.1], [0.0, 10.0])
-                for _ in requests
+                XICTrace.from_arrays([5.0, 5.1], [0.0, 10.0]) for _ in requests
             )
 
     monkeypatch.setattr(

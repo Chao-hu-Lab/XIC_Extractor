@@ -235,8 +235,7 @@ def test_write_alignment_review_tsv_reports_folded_clusters(tmp_path: Path):
                 folded_member_count=5,
                 folded_sample_fill_count=1,
                 fold_evidence=(
-                    "cid_nl_only;max_mz_ppm=2;max_rt_sec=1;"
-                    "min_shared_detected=4"
+                    "cid_nl_only;max_mz_ppm=2;max_rt_sec=1;min_shared_detected=4"
                 ),
             ),
         ),
@@ -254,8 +253,7 @@ def test_write_alignment_review_tsv_reports_folded_clusters(tmp_path: Path):
     assert rows[0]["event_member_count"] == "7"
     assert rows[0]["family_evidence"].startswith("cid_nl_only;")
     assert rows[0]["reason"] == (
-        "anchor family; 2/2 present; 1 MS1 backfilled; "
-        "merged 3 event clusters"
+        "anchor family; 2/2 present; 1 MS1 backfilled; merged 3 event clusters"
     )
 
 
@@ -450,9 +448,7 @@ def test_write_alignment_status_matrix_tsv_preserves_duplicate_assigned(
         sample_order=("sample-a",),
     )
 
-    rows = _read_tsv(
-        write_alignment_status_matrix_tsv(tmp_path / "status.tsv", matrix)
-    )
+    rows = _read_tsv(write_alignment_status_matrix_tsv(tmp_path / "status.tsv", matrix))
 
     assert rows[0]["sample-a"] == "duplicate_assigned"
 
@@ -600,7 +596,7 @@ def test_write_alignment_cell_integration_audit_tsv_is_sidecar(
     assert audit[0]["baseline_score_linear_edge"] == "0.75"
 
 
-def test_write_alignment_cell_integration_audit_tsv_default_schema_reports_asls_and_linear_edge_rollback(
+def test_cell_integration_audit_default_schema_uses_asls_with_linear_rollback(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.alignment.tsv_writer import (
@@ -631,7 +627,7 @@ def test_write_alignment_cell_integration_audit_tsv_default_schema_reports_asls_
     assert "baseline_score_asls" not in rows[0]
 
 
-def test_write_alignment_cell_integration_audit_tsv_can_emit_legacy_asls_shadow_for_linear_edge(
+def test_cell_integration_audit_can_emit_legacy_asls_shadow_for_linear_edge(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.alignment.tsv_writer import (
@@ -848,9 +844,7 @@ def _cell(
         region_area_ratio=1.04 if region else None,
         region_selected_interval_count=2 if region else None,
         region_selected_interval_gap_max_min=0.04 if region else None,
-        region_local_mixture_diagnostic=(
-            "one_envelope_supported" if region else ""
-        ),
+        region_local_mixture_diagnostic=("one_envelope_supported" if region else ""),
         region_local_mixture_reason=(
             "adjacent intervals support one envelope" if region else ""
         ),

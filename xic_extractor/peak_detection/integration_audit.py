@@ -135,7 +135,9 @@ def build_cell_integration_audit_summary(
             else linear_edge_rollback.area_baseline_corrected
         ),
         baseline_score_linear_edge=(
-            None if linear_edge_rollback is None else linear_edge_rollback.baseline_score
+            None
+            if linear_edge_rollback is None
+            else linear_edge_rollback.baseline_score
         ),
     )
 
