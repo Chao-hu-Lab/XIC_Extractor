@@ -1,0 +1,42 @@
+---
+name: xic-pr-closeout
+description: XIC Extractor overlay for the global pr-closeout skill. Use when preparing, opening, updating, or closing out an XIC PR or branch where phase/spec work, validation artifacts, RAW-backed evidence, workflow rules, public contracts, multiple commits, or downstream handoff need durable review context. First use global `pr-closeout`; then apply XIC readiness labels, artifact rules, and merge/history expectations. Do not use for simple status checks, tiny commits with no PR, or pure GitHub mechanics already covered by create-pr/commit.
+---
+
+# XIC PR Closeout
+
+This is a repo-specific overlay. The reusable workflow lives in the global
+`pr-closeout` skill. Do not duplicate the global workflow here.
+
+If the global skill is unavailable, report `global skill unavailable` and use
+`AGENTS.md`, `docs/agent-subagent-routing.md`, and the XIC additions below as
+the fallback closeout contract.
+
+Use the global skill first for PR/branch narrative, verification, residual risk,
+and follow-up structure. Then apply the XIC-specific additions below.
+
+## XIC Closeout Additions
+
+Include these when relevant:
+
+- readiness label: `diagnostic_only`, `shadow_ready`, `production_candidate`,
+  `production_ready`, or `inconclusive`;
+- validation tier: synthetic, focused tests, 8RAW, 85RAW, targeted benchmark,
+  manual EIC/MS2 review, or CI shard;
+- downstream handoff impact, especially whether `alignment_matrix.tsv` is
+  preserved or changed;
+- whether `peak_candidates.tsv` is a debug/audit projection or a production
+  contract in this PR;
+- important artifacts or output indexes under `output/` or `docs/superpowers/`;
+- skipped RAW validation and what future evidence would close the risk;
+- merge mode and whether branch history, worktree contents, or local `output/`
+  artifacts must be preserved.
+
+## XIC Overclaim Guard
+
+Do not claim production behavior from wrappers, reports, sidecars, or TSV
+diagnostics alone. State what was observed and what remains unproven.
+
+Do not let a PR description imply handoff productization progress unless the PR
+actually advances `TraceGroup`, `PeakHypothesis`, `EvidenceVector`,
+`IntegrationResult`, `AuditTrail`, or downstream matrix handoff.
