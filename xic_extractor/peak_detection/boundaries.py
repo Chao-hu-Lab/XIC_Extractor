@@ -32,10 +32,31 @@ class BoundaryHypothesis:
     scan_count: int
 
 
+@dataclass(frozen=True)
+class BoundaryCandidateContext:
+    selection_apex_rt: float
+    rt_left_min: float
+    rt_right_min: float
+    cwt_best_scale: float | None = None
+    proposal_sources: tuple[str, ...] = ()
+
+
+def boundary_candidate_from_peak_candidate(
+    candidate: PeakCandidate,
+) -> BoundaryCandidateContext:
+    return BoundaryCandidateContext(
+        selection_apex_rt=candidate.selection_apex_rt,
+        rt_left_min=candidate.peak.peak_start,
+        rt_right_min=candidate.peak.peak_end,
+        cwt_best_scale=candidate.cwt_best_scale,
+        proposal_sources=candidate.proposal_sources,
+    )
+
+
 def enumerate_boundary_hypotheses(
     rt_values: np.ndarray,
     intensity_values: np.ndarray,
-    candidate: PeakCandidate,
+    candidate: PeakCandidate | BoundaryCandidateContext,
     *,
     candidate_id: str | None = None,
     sources: tuple[BoundarySource, ...] = (
@@ -49,11 +70,18 @@ def enumerate_boundary_hypotheses(
     rt = np.asarray(rt_values, dtype=float)
     intensity = np.asarray(intensity_values, dtype=float)
     _validate_trace_arrays(rt, intensity)
+    candidate_context = _boundary_candidate_context(candidate)
 
-    apex_index = _nearest_index(rt, candidate.selection_apex_rt)
+    apex_index = _nearest_index(rt, candidate_context.selection_apex_rt)
     intervals: list[tuple[tuple[str, ...], int, int]] = []
     for source in sources:
-        interval = _interval_for_source(source, rt, intensity, candidate, apex_index)
+        interval = _interval_for_source(
+            source,
+            rt,
+            intensity,
+            candidate_context,
+            apex_index,
+        )
         if interval is not None:
             intervals.append(((source,), *interval))
 
@@ -62,14 +90,23 @@ def enumerate_boundary_hypotheses(
         _build_boundary_hypothesis(
             rt,
             intensity,
-            candidate,
-            candidate_id=candidate_id or _candidate_boundary_base_id(candidate),
+            candidate_context,
+            candidate_id=candidate_id
+            or _candidate_context_boundary_base_id(candidate_context),
             sources=boundary_sources,
             left_index=left_index,
             right_index=right_index,
         )
         for boundary_sources, left_index, right_index in merged
     )
+
+
+def _boundary_candidate_context(
+    candidate: PeakCandidate | BoundaryCandidateContext,
+) -> BoundaryCandidateContext:
+    if isinstance(candidate, BoundaryCandidateContext):
+        return candidate
+    return boundary_candidate_from_peak_candidate(candidate)
 
 
 def boundary_audit_id(*, candidate_id: str, boundary: BoundaryHypothesis) -> str:
@@ -96,7 +133,7 @@ def _interval_for_source(
     source: BoundarySource,
     rt: np.ndarray,
     intensity: np.ndarray,
-    candidate: PeakCandidate,
+    candidate: BoundaryCandidateContext,
     apex_index: int,
 ) -> tuple[int, int] | None:
     if source == "candidate_interval":
@@ -114,17 +151,17 @@ def _interval_for_source(
 
 def _candidate_interval(
     rt: np.ndarray,
-    candidate: PeakCandidate,
+    candidate: BoundaryCandidateContext,
 ) -> tuple[int, int]:
-    left_index = _nearest_index(rt, candidate.peak.peak_start)
-    right_inclusive = _nearest_index(rt, candidate.peak.peak_end)
+    left_index = _nearest_index(rt, candidate.rt_left_min)
+    right_inclusive = _nearest_index(rt, candidate.rt_right_min)
     return _valid_interval(left_index, right_inclusive + 1, len(rt))
 
 
 def _threshold_interval(
     rt: np.ndarray,
     intensity: np.ndarray,
-    candidate: PeakCandidate,
+    candidate: BoundaryCandidateContext,
     apex_index: int,
     *,
     fraction: float,
@@ -175,7 +212,7 @@ def _derivative_zero_crossing_interval(
 
 def _cwt_width_interval(
     rt: np.ndarray,
-    candidate: PeakCandidate,
+    candidate: BoundaryCandidateContext,
     apex_index: int,
 ) -> tuple[int, int] | None:
     if (
@@ -228,7 +265,7 @@ def _combine_sources(
 def _build_boundary_hypothesis(
     rt: np.ndarray,
     intensity: np.ndarray,
-    candidate: PeakCandidate,
+    candidate: BoundaryCandidateContext,
     *,
     candidate_id: str,
     sources: tuple[str, ...],
@@ -264,6 +301,13 @@ def _build_boundary_hypothesis(
 
 
 def _candidate_boundary_base_id(candidate: PeakCandidate) -> str:
+    context = boundary_candidate_from_peak_candidate(candidate)
+    return _candidate_context_boundary_base_id(context)
+
+
+def _candidate_context_boundary_base_id(
+    candidate: BoundaryCandidateContext,
+) -> str:
     return "|".join(
         (
             _join(candidate.proposal_sources),

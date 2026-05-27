@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from xic_extractor.peak_detection.boundaries import (
+    BoundaryCandidateContext,
     BoundaryHypothesis,
     boundary_audit_id,
     enumerate_boundary_hypotheses,
@@ -33,6 +34,40 @@ def test_candidate_interval_boundary_reproduces_current_candidate_interval() -> 
     assert (
         boundary.boundary_id
         == "Sample|Target|candidate|candidate_interval|0.10000|0.30000"
+    )
+
+
+def test_boundary_candidate_context_reproduces_candidate_interval_without_legacy_model() -> None:
+    rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4], dtype=float)
+    intensity = np.asarray([1.0, 5.0, 10.0, 5.0, 1.0], dtype=float)
+    candidate = BoundaryCandidateContext(
+        selection_apex_rt=0.2,
+        rt_left_min=0.1,
+        rt_right_min=0.3,
+        cwt_best_scale=3.0,
+        proposal_sources=("hypothesis_source",),
+    )
+
+    boundaries = enumerate_boundary_hypotheses(
+        rt,
+        intensity,
+        candidate,
+        candidate_id="Sample|Target|hypothesis",
+        sources=("candidate_interval", "cwt_width"),
+    )
+
+    by_source = {
+        source: boundary
+        for boundary in boundaries
+        for source in boundary.sources
+    }
+    assert by_source["candidate_interval"].left_index == 1
+    assert by_source["candidate_interval"].right_index == 4
+    assert by_source["cwt_width"].left_index == 1
+    assert by_source["cwt_width"].right_index == 4
+    assert all(
+        boundary.boundary_id.startswith("Sample|Target|hypothesis")
+        for boundary in boundaries
     )
 
 

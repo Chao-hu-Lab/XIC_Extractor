@@ -3,9 +3,12 @@ from pathlib import Path
 
 import numpy as np
 
+import xic_extractor.extraction.peak_candidate_boundaries as boundary_rows
 from xic_extractor.extraction.peak_candidate_boundaries import (
+    PEAK_CANDIDATE_BOUNDARY_HEADERS,
     _apply_boundary_nonoverlap_selection,
     build_peak_candidate_boundary_rows,
+    build_peak_candidate_boundary_rows_from_hypotheses,
 )
 from xic_extractor.extraction.peak_candidate_boundary_summary import (
     build_peak_candidate_boundary_summary_rows,
@@ -15,6 +18,12 @@ from xic_extractor.output.peak_candidate_boundaries import (
 )
 from xic_extractor.output.peak_candidate_boundary_summary import (
     write_peak_candidate_boundary_summary_tsv,
+)
+from xic_extractor.peak_detection.hypotheses import (
+    AuditTrail,
+    EvidenceVector,
+    IntegrationResult,
+    PeakHypothesis,
 )
 from xic_extractor.peak_detection.traces import Trace, targeted_trace_group
 from xic_extractor.signal_processing import (
@@ -185,6 +194,118 @@ def test_build_boundary_rows_prefers_shared_trace_group_arrays() -> None:
     assert candidate_row["baseline_score"] != "0.00000"
 
 
+def test_build_boundary_rows_from_hypotheses_projects_spine_without_legacy_result() -> None:
+    hypothesis = PeakHypothesis(
+        hypothesis_id="hypothesis-boundary-row-id",
+        trace_group_id="SampleA|HypothesisTarget|hypothesis_resolver",
+        target_label="HypothesisTarget",
+        role="ISTD",
+        istd_pair="HypothesisPair",
+        analysis_mode="targeted",
+        resolver_mode="hypothesis_resolver",
+        integration=IntegrationResult(
+            rt_left_min=8.00,
+            rt_apex_min=8.30,
+            rt_right_min=8.60,
+            raw_apex_rt_min=8.30,
+            rt_width_min=0.60,
+            height_raw=100.0,
+            height_smoothed=95.0,
+            area_raw_counts_seconds=1200.0,
+        ),
+        evidence=EvidenceVector(cwt_best_scale=3.0),
+        audit=AuditTrail(
+            proposal_sources=("hypothesis_source",),
+            selected=True,
+        ),
+    )
+
+    rows = build_peak_candidate_boundary_rows_from_hypotheses(
+        sample_name="SampleA",
+        group="Tumor",
+        target_mz=258.1085,
+        hypotheses=(hypothesis,),
+        rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6]),
+        intensity=np.asarray([10.0, 18.0, 70.0, 100.0, 70.0, 18.0, 10.0]),
+    )
+
+    assert rows
+    assert {row["candidate_id"] for row in rows} == {"hypothesis-boundary-row-id"}
+    assert {row["group"] for row in rows} == {"Tumor"}
+    assert {row["target_label"] for row in rows} == {"HypothesisTarget"}
+    assert {row["target_mz"] for row in rows} == {"258.10850"}
+    assert {row["role"] for row in rows} == {"ISTD"}
+    assert {row["istd_pair"] for row in rows} == {"HypothesisPair"}
+    assert {row["proposal_sources"] for row in rows} == {"hypothesis_source"}
+    assert {row["selected_candidate"] for row in rows} == {"TRUE"}
+    assert any("candidate_interval" in row["boundary_sources"] for row in rows)
+
+
+def test_build_boundary_rows_projects_from_peak_hypothesis_spine(monkeypatch) -> None:
+    legacy_candidate = _candidate(8.30, left=8.00, right=8.60)
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=legacy_candidate.peak,
+        n_points=7,
+        max_smoothed=100.0,
+        n_prominent_peaks=1,
+        candidates=(legacy_candidate,),
+    )
+    hypothesis = PeakHypothesis(
+        hypothesis_id="hypothesis-row-id",
+        trace_group_id="SampleA|HypothesisTarget|hypothesis_resolver",
+        target_label="HypothesisTarget",
+        role="ISTD",
+        istd_pair="HypothesisPair",
+        analysis_mode="targeted",
+        resolver_mode="hypothesis_resolver",
+        integration=IntegrationResult(
+            rt_left_min=8.00,
+            rt_apex_min=8.30,
+            rt_right_min=8.60,
+            raw_apex_rt_min=8.30,
+            rt_width_min=0.60,
+            height_raw=100.0,
+            height_smoothed=95.0,
+            area_raw_counts_seconds=1200.0,
+        ),
+        evidence=EvidenceVector(cwt_best_scale=3.0),
+        audit=AuditTrail(
+            proposal_sources=("hypothesis_source",),
+            selected=True,
+        ),
+    )
+
+    def _fake_build_peak_hypotheses(**_kwargs):
+        return (hypothesis,)
+
+    monkeypatch.setattr(
+        boundary_rows,
+        "build_peak_hypotheses",
+        _fake_build_peak_hypotheses,
+    )
+
+    rows = build_peak_candidate_boundary_rows(
+        sample_name="SampleA",
+        target_label="LegacyTarget",
+        role="Analyte",
+        istd_pair="LegacyPair",
+        resolver_mode="legacy_savgol",
+        peak_result=peak_result,
+        rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6]),
+        intensity=np.asarray([10.0, 18.0, 70.0, 100.0, 70.0, 18.0, 10.0]),
+    )
+
+    assert rows
+    assert {row["candidate_id"] for row in rows} == {"hypothesis-row-id"}
+    assert {row["target_label"] for row in rows} == {"HypothesisTarget"}
+    assert {row["role"] for row in rows} == {"ISTD"}
+    assert {row["istd_pair"] for row in rows} == {"HypothesisPair"}
+    assert {row["resolver_mode"] for row in rows} == {"hypothesis_resolver"}
+    assert {row["proposal_sources"] for row in rows} == {"hypothesis_source"}
+    assert {row["selected_candidate"] for row in rows} == {"TRUE"}
+
+
 def test_write_peak_candidate_boundaries_tsv_serializes_rows_safely(
     tmp_path: Path,
 ) -> None:
@@ -207,15 +328,21 @@ def test_write_peak_candidate_boundaries_tsv_serializes_rows_safely(
         intensity=np.asarray([10.0, 18.0, 70.0, 100.0, 70.0, 18.0, 10.0]),
     )[0]
     row["boundary_sources"] = "line1\nline2\twith tab"
+    row["trace_group_id"] = "debug-only-internal-id"
+    row.pop("boundary_concern_labels")
 
     write_peak_candidate_boundaries_tsv(path, [row])
 
     text = path.read_text(encoding="utf-8-sig")
     assert "line1 line2 with tab" in text
     with path.open(newline="", encoding="utf-8-sig") as handle:
-        rows = list(csv.DictReader(handle, delimiter="\t"))
+        reader = csv.DictReader(handle, delimiter="\t")
+        assert reader.fieldnames == list(PEAK_CANDIDATE_BOUNDARY_HEADERS)
+        assert "trace_group_id" not in reader.fieldnames
+        rows = list(reader)
     assert rows[0]["sample_name"] == "SampleA"
     assert rows[0]["boundary_sources"] == "line1 line2 with tab"
+    assert rows[0]["boundary_concern_labels"] == ""
 
 
 def test_build_boundary_summary_keeps_only_top_rows_with_review_context() -> None:

@@ -131,6 +131,20 @@ def build_peak_candidate_rows(
         intensity=intensity,
         trace_group=trace_group,
     )
+    return build_peak_candidate_rows_from_hypotheses(
+        sample_name=sample_name,
+        group=sample_group,
+        hypotheses=hypotheses,
+    )
+
+
+def build_peak_candidate_rows_from_hypotheses(
+    *,
+    sample_name: str,
+    hypotheses: tuple[PeakHypothesis, ...],
+    group: str | None = None,
+) -> list[PeakCandidateTableRow]:
+    sample_group = group or classify_sample_group(sample_name)
     return [
         _row_from_hypothesis(
             sample_name=sample_name,

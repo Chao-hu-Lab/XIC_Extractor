@@ -24,6 +24,11 @@ This refactor introduces no behavioral change. Validation is behavioral parity.
 The early slice should be dual-write only; legacy readers stay in place until
 the spine has parity evidence and a timeboxed migration plan.
 
+For the current Step 1 source of truth, see
+`../notes/2026-05-27-handoff-productization-c0-source-of-truth.md`.
+`peak_candidates.tsv` is a schema-frozen debug/audit projection of the spine,
+not the canonical domain model and not the downstream production matrix.
+
 ## Current State
 
 Two model layers exist:
@@ -50,6 +55,14 @@ The two spines are connected via adapters in `hypotheses.py` that wrap
 legacy results. Every downstream consumer (scoring, alignment, output) reads
 from legacy types. Adding a new evidence dimension or audit field requires
 touching both layers.
+
+2026-05-27 update: `extraction/peak_candidate_boundaries.py` is the first audit
+consumer migrated to project rows from `PeakHypothesis`, with a lower-level
+`BoundaryCandidateContext` preserving boundary-enumerator compatibility for
+legacy callers. This is still scaffold/dual-write work, not production behavior
+readiness. Candidate and boundary TSV projections also expose explicit
+`*_from_hypotheses` builders so later migrated consumers can bypass legacy row
+projection without changing public TSV schemas.
 
 ### Shared evidence layer
 
@@ -176,13 +189,16 @@ Behavioral parity required:
 1. Run 8RAW after Phase 1 + C1a + C2 + C5 + C1b (i.e. the cleanup interim state)
 2. Apply C3 refactor
 3. Re-run 8RAW
-4. All production TSV outputs hash-identical:
+4. All public/generated TSV parity artifacts hash-identical:
    - `peak_candidates.tsv`
    - `peak_candidate_boundaries.tsv`
    - `alignment_matrix.tsv`
    - `alignment_review.tsv`
    - `alignment_cells.tsv`
    - `alignment_cell_integration_audit.tsv`
+   `alignment_matrix.tsv` is the downstream delivery surface; the candidate and
+   boundary TSVs are audit projection surfaces that remain parity-stable during
+   this cleanup.
 5. Strict ISTD benchmark identical
 6. Identity coherence verdicts unchanged
 7. `peak_scoring.py` outputs (`ScoredCandidate.evidence_score.raw_score`,

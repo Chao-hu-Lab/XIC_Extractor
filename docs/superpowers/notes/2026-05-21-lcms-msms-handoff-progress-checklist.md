@@ -2,6 +2,13 @@
 
 Date: 2026-05-21
 
+**Historical status:** Inventory only. This checklist is preserved to show what
+had been mapped from the original handoff, but its planning direction and
+acceptance rules are superseded by
+`2026-05-27-handoff-productization-c0-source-of-truth.md` and the
+2026-05-26 design correction note. Treat `[x]` entries here as historical
+implementation inventory, not as current product-readiness claims.
+
 Source handoff:
 
 - `C:\Users\user\Downloads\lcms_gcms_peak_pipeline_handoff.md`
@@ -290,6 +297,15 @@ Good targets:
 - `tools/diagnostics/instrument_qc_calibration_maturity_gate.py`
 
 ## Current Recommended Direction
+
+Superseded for planning by
+`2026-05-27-handoff-productization-c0-source-of-truth.md` and
+`2026-05-26-phase1-phase2-design-correction-note.md`.
+
+The original recommendation below is retained as historical context only. It was
+written before the Phase 1 / Phase 2 critique clarified that the next low-risk
+work should move the handoff spine forward, not add more production-correction
+gates.
 
 The next scientific PR should not jump to production correction.
 

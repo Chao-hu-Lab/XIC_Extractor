@@ -24,6 +24,10 @@ The follow-up audit slice writes these hypotheses to
 artifacts are TSV-only and debug-only; they do not change `peak_candidates.tsv`,
 `XIC Results`, or any workbook schema.
 
+Current productization contract: boundary TSVs and `peak_candidates.tsv` are
+audit projection surfaces. They may pin parity for cleanup, but they are not the
+downstream production quantitative matrix.
+
 ## Contract
 
 This phase must:
