@@ -223,64 +223,51 @@ process mode 目前是 opt-in；預設設定仍保留 serial，確保既有 work
 
 `scripts/01_extract_xic.ps1` 已不再是支援的 extraction entry point。
 
-### Real-data validation harness
+### Real-data validation
 
-開發用 real-data validation 固定走三層，不把 85 個 `.raw` 當成日常預設：
+開發用 real-data validation 分成兩種 surface，不要混用：
+
+- targeted extraction / workbook regression：使用 `scripts\validation_harness.py`。
+- untargeted alignment / downstream statistics handoff：使用 `scripts.run_alignment`，
+  以 `alignment_matrix.tsv` 為 machine contract。
+
+Targeted workbook harness 預設只跑 `manual-2raw` 與 `tissue-8raw`，不把
+85 個 `.raw` 當成日常預設：
 
 ```powershell
-uv run python scripts\validation_harness.py --run-id method_dev --output-root output\validation_harness
+.venv\Scripts\python.exe scripts\validation_harness.py `
+  --run-id method_dev `
+  --output-root output\validation_harness
 ```
 
-預設會跑 `manual-2raw` 與 `tissue-8raw`，使用 `local_minimum`、
+目前 harness 預設使用 `resolver_mode=region_first_safe_merge`、
 `parallel_mode=process`、`parallel_workers=4`，並寫出
-`validation_summary.csv`。完整 85-raw gate 必須顯式加
-`--suite tissue-85raw --confirm-full-run`。
-
-`local_minimum` preset calibration 使用較小的 focused grid，專門比較
-`resolver_peak_duration_max` 與 `resolver_min_search_range_min` 的候選值：
+`validation_summary.csv`。若要做 local-minimum preset calibration，必須明確指定
+`--resolver-mode local_minimum` 與 focused grid：
 
 ```powershell
-uv run python scripts\validation_harness.py `
+.venv\Scripts\python.exe scripts\validation_harness.py `
   --suite manual-2raw `
+  --resolver-mode local_minimum `
   --grid calibration-v1 `
   --run-id local_minimum_calibration_v1 `
   --output-root output\validation_harness
 ```
 
-這個 grid 產生 preset evidence；若乾淨基質 manual truth 不變差，且候選值讓參數語意更合理，可以作為更新 `settings.example.csv` 與 GUI preset 的依據。
+Alignment validation / 85RAW downstream handoff 不走 workbook harness。正式大規模
+alignment 驗收預設使用 `validation-minimal + production-equivalent +
+validation-fast + super-window + timing heartbeat`。主要 machine gate surface 是
+`alignment_matrix.tsv`、`alignment_review.tsv`、`alignment_cells.tsv`；必要時仍可能
+產生 `skipped_evidence_ledger.tsv`、`alignment_run_metadata.json` 這類輕量 sidecar。
+`.xlsx` 與 HTML 只在明確需要人工 review 或 debug 時產生。
+正式 85RAW alignment run 應加 `--expected-sample-count 85`，需要先檢查 launch
+contract 時可同一組參數加 `--preflight-only`。這個 85RAW guard 會檢查 canonical
+profile、heartbeat、Python `.venv`、candidate CSV path 與 RAW path。
 
-後續參數收斂可用 `--grid calibration-v2`，聚焦
-`resolver_peak_duration_min` 與 `resolver_min_relative_height`。校準順序以
-純標準品 manual truth 先確認積分行為，其中 NoSplit STD 的方法較接近真實
-tissue 樣本，因此判讀權重高於 Split 方法開發樣本；接著再用 8-raw tissue
-subset 做真實樣本 smoke。尿液等複雜基質作為後段 robustness stress test。
-
-目前 `calibration-v2` 的結論是：`resolver_min_relative_height=0.02` 可改善
-NoSplit STD 面積誤差；在 strict-NL boundary rescue 後，8-raw tissue smoke
-沒有 detection、RT、area、NL 或 confidence regression。`0.03` 仍會造成
-QC 8-oxodG 換峰與面積大變，因此 shipped preset 收斂到 `0.02`。
-
-詳細命令、baseline compare 路徑與各層用途見 `docs/validation-harness.md`。
-
-Untargeted alignment 的 8-raw 開發 smoke 可用顯式 fast profile，不改 CLI
-預設：
-
-```powershell
-uv run python scripts\run_alignment.py `
-  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
-  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
-  --dll-dir "C:\Xcalibur\system\programs" `
-  --output-dir output\alignment\timing_phase0_validation_fast_8raw `
-  --output-level machine `
-  --emit-alignment-cells `
-  --performance-profile validation-fast `
-  --timing-output output\diagnostics\timing_phase0_validation_fast_8raw\alignment_timing.json
-```
-
-`validation-fast` 會套用 `raw-workers=8` 與 `raw-xic-batch-size=64`。
-若命令同時顯式提供 `--raw-workers` 或 `--raw-xic-batch-size`，顯式值優先。
-目前 8-raw tissue subset 實測與 conservative baseline 的 machine TSV 與
-workbook sheet values 一致，alignment wall time 約從 343 秒降到 44 秒。
+詳細 runner、RAW/DLL 路徑、85RAW sample-count / path preflight、heartbeat 與不要使用
+background `Start-Process` 的規則見 `docs/agent-parameter-settings.md`。Workbook
+harness 的 baseline compare 與 targeted extraction suite 說明見
+`docs/validation-harness.md`。
 
 ---
 

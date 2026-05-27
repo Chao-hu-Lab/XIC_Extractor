@@ -8,6 +8,8 @@ For directory layout, file placement rules, and scratch directory hygiene, see
 [`docs/project-layout.md`](docs/project-layout.md).
 For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
 [`docs/agent-parameter-settings.md`](docs/agent-parameter-settings.md).
+For repo-local subagent roles, goal usage, and runtime routing, see
+[`docs/agent-subagent-routing.md`](docs/agent-subagent-routing.md).
 
 ## Human Communication And Review Surfaces
 
@@ -61,6 +63,9 @@ For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
   can answer the question without rerunning. If a run stalls or exceeds the
   expected heartbeat, stop and inspect timing / profiling output instead of
   relaunching the same command.
+- When sandbox, PowerShell syntax, output path, network approval, or RAW runner
+  choice is uncertain, run `python -m scripts.agent_sandbox_doctor --command
+  "<command>"` before launching the expensive or permission-sensitive command.
 - For alignment validation or downstream handoff, prefer
   `--output-level validation-minimal`: `alignment_matrix.tsv` is the downstream
   correction/statistics contract, while targeted benchmark diagnostics also need
@@ -73,6 +78,20 @@ For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
   failed in this environment. Use the foreground command shape documented in
   `docs/agent-parameter-settings.md` with heartbeat sidecars, or get explicit
   user approval for an external terminal / automation.
+- The default Codex posture for this repo is `workspace-write` with
+  `on-request` approvals. Use read-only mode for reviewer roles; tester roles
+  may use workspace-write only for verification side effects. Do not switch to
+  `danger-full-access`, `never`, broad writable roots, or persistent execpolicy
+  rules unless a reviewed plan names the exact risk being removed.
+- Treat `.codex/config.toml`, hooks, execpolicy, and subagent TOML as
+  execution-affecting config. Changes to them need docs/handoff review and a
+  smoke check; prefer passive logging or warning hooks before blocking hooks.
+- Before staging or pushing docs/settings/config changes, scan the diff for
+  secrets, private local paths, absolute machine-specific paths, and accidentally
+  tracked local Codex config. Machine-local paths in
+  `docs/agent-parameter-settings.md` are operational memory for this repo; if
+  the repo or PR target is public, move them to an untracked local override or
+  sanitize them first.
 - Plans should separate `Now`, `Later`, and `Not in scope`, with checkpoint-level
   acceptance criteria and stop conditions. Do not let a plan imply production
   changes when the current phase is only audit, shadow, or validation.
@@ -89,6 +108,17 @@ For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
   promote, kill, externalize, or name the single missing evidence.
 - Do not expand validation when the result cannot change the next action. Use
   the smallest confirmation plus rollback guard.
+- Use a goal-shaped contract for long-running, multi-step, or easy-to-drift
+  work. Register an active goal only when the user explicitly asks for one or
+  the current runtime instruction explicitly permits it. A goal contract must
+  have one measurable objective, concrete context to read first, hard
+  constraints, mechanically checkable `DONE WHEN`, fresh `VERIFY`, output
+  expectations, and stop rules. Do not create goals for tiny bug fixes, one-off
+  commands, or commits.
+- Goal contracts for this repo must point to the canonical local surfaces:
+  `AGENTS.md`, `docs/agent-parameter-settings.md`, `docs/agent-subagent-routing.md`,
+  active specs/plans, and existing diagnostics or validation outputs. Mark a
+  goal complete only after checking `DONE WHEN` and `VERIFY`.
 
 ## Product Roadmap Discipline
 
@@ -117,6 +147,34 @@ For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
   do not bundle behavior changes.
 - Documentation / diagnostic phase: require consistency and reviewer
   readability; no numerical gate language applies.
+
+## Review Discipline
+
+- Non-trivial specs, plans, docs, and implementations need a review pass with a
+  critical-thinking angle: name the strongest assumption, stale-artifact risk,
+  cheaper existing oracle, or condition that would invalidate the chosen path.
+- Treat repeated syntax failures as operational memory. If PowerShell, ruff,
+  Markdown, or command-shape mistakes recur, update `docs/agent-parameter-settings.md`
+  or the relevant local contract instead of leaving the lesson only in chat.
+- For broad specs, phase plans, workflow rules, or validation strategy changes,
+  use read-only reviewer families only when their findings can change the next
+  action. Normal dispatch is capped at two reviewers; a third reviewer requires
+  genuinely independent surfaces. The main agent owns integration and final
+  judgment; reviewers do not share a write scope.
+- Repo-local subagent definitions live in `.codex/agents/`; phase routing lives
+  in `docs/agent-subagent-routing.md`. Delegate to them explicitly; do not
+  assume custom subagents auto-spawn.
+- Repo-local execution subagents are opt-in. Use `implementation-worker` only for
+  a small, self-contained slice with an explicit non-overlapping write scope. Use
+  `tester` for clean-context verification or regression reproduction; testers
+  may run commands that write normal cache/log/output side effects, but must not
+  edit, stage, commit, revert, rename, or delete source/docs/config/test files
+  unless a separate implementation task is assigned. Tester reports must include
+  final `git status --short` so verification side effects do not hide source or
+  docs edits.
+- Do not create repo-local skills unless an existing global skill plus this file
+  cannot express the repeated workflow. Prefer improving this contract,
+  `docs/agent-parameter-settings.md`, or the relevant diagnostic index first.
 
 ## Design Principles
 

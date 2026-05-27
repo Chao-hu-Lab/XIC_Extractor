@@ -69,6 +69,50 @@ Test-Path "C:\Xcalibur\system\programs"
 如果本檔列出的 stable path 存在，就使用它。除非 `Test-Path` 失敗或使用者
 提供更新路徑，否則不要重新搜尋，也不要自行替換成 sibling directory。
 
+對 sandbox、PowerShell、approval、RAW runner、或 output 路徑不確定時，先跑
+repo-local doctor。它只分類命令，不執行命令，也不讀 RAW：
+
+```powershell
+python -m scripts.agent_sandbox_doctor --command "<command-to-check>"
+```
+
+長時間或昂貴命令可加 `--strict`，讓 blocker/review finding 以 non-zero exit
+code 先停下來：
+
+```powershell
+python -m scripts.agent_sandbox_doctor --strict --command ".venv\Scripts\python.exe -m scripts.run_alignment --expected-sample-count 85 ..."
+```
+
+## Sandbox Friction Playbook
+
+目前建議姿態是 `workspace-write + on-request`。這不是最順的模式，但對這個
+repo 是合理預設：agent 可以寫工作樹與 `C:\tmp`，讀外部 RAW / DLL / reference
+data，遇到外部寫入、network、GUI、或高風險命令時才升權。
+
+常見 friction 不要全部用放寬 sandbox 解決：
+
+| 症狀 | 先做什麼 | 不要做什麼 |
+| --- | --- | --- |
+| 寫入 `C:\Xcalibur`、桌面資料夾、`$CODEX_HOME` / `%USERPROFILE%\.codex` 失敗 | 把 output / cache / sidecar 改到目前 worktree 的 `output\...` 或 `C:\tmp`；若真的要改全域 Codex 設定，先明確取得使用者要求 | 不要切 `danger-full-access` 或擴大 writable root 只為了省一次路徑修正 |
+| package install、`npx`、下載文件、GitHub/網路失敗 | 確認這是任務必要條件後，用 narrow approval / prefix；成功後記錄穩定命令或替代離線路徑 | 不要把 network access 永久打開當預設 |
+| pytest / Python 產生 cache 被擋 | 在 worktree 內跑；必要時加 `$env:PYTHONDONTWRITEBYTECODE='1'` 和 `-p no:cacheprovider`；tester role 可 workspace-write 只為 verification side effects，驗證後要回報 `git status` 是否只剩預期 side effects | 不要把 tester 當 implementation worker 讓它改 source |
+| RAW / DLL 讀不到 | 先跑本檔 Preflight 的 `Test-Path` 與 Python runner check；RAW 命令用 `.venv\Scripts\python.exe` | 不要用 bare `python` 重試 RAW，也不要掃 sibling directory 猜路徑 |
+| PowerShell 語法錯誤 | 改成 PowerShell 語法；多行命令用 backtick；inline Python 用 `python -c` 或 PowerShell here-string pipe；不確定時先跑 `scripts.agent_sandbox_doctor` | 不要貼 Bash heredoc、`export`、`&&` |
+| 長時間 85RAW 卡住 | 用 foreground command + `--timing-live-output`；先看 heartbeat / timing artifact 再重跑 | 不要背景 `Start-Process` 後回來輪詢 |
+
+只有在「失敗模式重複、doctor 或現有 preflight 無法降低風險、且人工 approval
+本身變成主要摩擦」時，才考慮新增 project-local execpolicy 或 hook。新增前
+必須回答：
+
+1. 這個規則是否只允許一個可預期、可重複的安全命令形狀？
+2. 它是否會允許任意 Python / shell / deletion / network access？
+3. 它是否比把 output 改到 worktree、固定 runner、或更新本檔更好？
+4. 它是否有 smoke check，且不會把使用者真正該審的決策藏起來？
+
+目前不建議新增 repo-local `.codex/config.toml` 或 active hooks。先把重複失敗
+收斂到本檔、`docs/agent-subagent-routing.md`、或 CLI preflight；等 passive hook
+能證明它真的擋住反覆失敗，再考慮 blocking hook。
+
 ## Validation Tiers
 
 | Tier | 使用時機 | 常用資料 | Gate 意義 |
@@ -100,6 +144,7 @@ timing heartbeat`:
   --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
   --dll-dir C:\Xcalibur\system\programs `
   --output-dir <task-specific-output-dir> `
+  --expected-sample-count 85 `
   --output-level validation-minimal `
   --backfill-scope production-equivalent `
   --audit-evidence-mode none `
@@ -110,7 +155,7 @@ timing heartbeat`:
   --timing-live-output <task-specific-output-dir>\timing.live.json
 ```
 
-`validation-minimal` writes the machine gate surface:
+`validation-minimal` writes the primary machine gate surface:
 
 - `alignment_matrix.tsv`: downstream correction / statistics handoff.
 - `alignment_review.tsv`: targeted benchmark and decision diagnostics.
@@ -120,10 +165,41 @@ It does not write `.xlsx`, HTML, owner-edge, status-matrix, event-owner, or
 ambiguous-owner debug outputs. Use fuller output levels only when a human
 review surface or debug artifact is explicitly required. In `auto` audit mode,
 `validation-minimal` resolves to no heavy audit evidence unless an explicit
-integration audit destination is requested.
+integration audit destination is requested. Some lightweight sidecars, such as
+`skipped_evidence_ledger.tsv` and `alignment_run_metadata.json`, may still be
+emitted when backfill scope needs machine-readable skip provenance.
 
-Before starting 85RAW, verify the batch index actually contains 85 rows. Do not
-reuse the historical 8RAW index by path similarity:
+Before starting 85RAW, verify the batch index actually contains 85 samples. Do
+not reuse the historical 8RAW index by path similarity. Prefer the CLI preflight
+guard because it uses the same discovery-batch parser, checks candidate CSV
+existence and RAW path existence, and prints the launch contract without loading
+candidate CSV rows or opening RAW files:
+
+```powershell
+.venv\Scripts\python.exe -m scripts.run_alignment `
+  --discovery-batch-index <current-spec-discovery-batch-index.csv> `
+  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
+  --dll-dir C:\Xcalibur\system\programs `
+  --output-dir <task-specific-output-dir> `
+  --expected-sample-count 85 `
+  --output-level validation-minimal `
+  --backfill-scope production-equivalent `
+  --audit-evidence-mode none `
+  --performance-profile validation-fast `
+  --owner-backfill-window-strategy super-window `
+  --owner-backfill-superwindow-span-factor 2 `
+  --timing-output <task-specific-output-dir>\timing.json `
+  --timing-live-output <task-specific-output-dir>\timing.live.json `
+  --preflight-only
+```
+
+When `--expected-sample-count 85` is present, `scripts.run_alignment` also
+enforces the canonical 85RAW launch contract: `validation-minimal`,
+`production-equivalent`, `audit-evidence-mode none`, `validation-fast`,
+`super-window`, timing JSON + live heartbeat, and a Python executable under this
+worktree's `.venv`.
+
+Manual fallback:
 
 ```powershell
 (Import-Csv <current-spec-discovery-batch-index.csv>).Count
@@ -137,6 +213,10 @@ the active spec or validation note before running alignment.
 | Profile | Status | Reusable parameters | Evidence |
 | --- | --- | --- | --- |
 | 85RAW validation-minimal super-window | Verified foreground run, exit code `0`, wall-clock `620.9 s` | `.venv\Scripts\python.exe`, 85RAW RAW root, `--output-level validation-minimal`, `--backfill-scope production-equivalent`, `--audit-evidence-mode none`, `--performance-profile validation-fast`, `--owner-backfill-window-strategy super-window`, `--owner-backfill-superwindow-span-factor 2`, timing output + live heartbeat | `docs\superpowers\notes\2026-05-26-p8b-85raw-superwindow-acceptance-note.md` |
+
+The cited `620.9 s` run predates the `--expected-sample-count 85` guard. The
+guard is a later test-covered launch safety check and should be included in new
+85RAW commands, but it is not part of that historical runtime evidence.
 
 Do not treat `--performance-profile validation-fast` alone as the full 85RAW
 validation profile. It only sets RAW worker count and XIC batch size; the formal
@@ -194,7 +274,22 @@ For micro-profiling, start with 8RAW or a scoped 85RAW diagnostic:
 Python process exits cleanly. For a likely timeout, rely on
 `--timing-live-output` first.
 
-Validation harness details live in [`docs/validation-harness.md`](validation-harness.md).
+Targeted extraction / workbook harness details live in
+[`docs/validation-harness.md`](validation-harness.md). That harness is not the
+canonical 85RAW alignment acceptance runner unless it is explicitly updated to
+emit the same minimal machine contract and heartbeat shape documented here.
+
+## Syntax Anti-patterns
+
+- This repo is normally operated from PowerShell. Do not paste Bash heredocs such
+  as `python - <<'PY'`; PowerShell treats `<` as redirection and fails before
+  Python starts. Use `python -c "..."`, a short PowerShell loop, or a temporary
+  checked-in helper when the logic is worth keeping.
+- For multiline PowerShell commands, use backtick continuations exactly as shown
+  in this file, or split the command into separate lines in the shell. Do not use
+  `&&` or Unix-style `export`.
+- For Markdown edits, run a cheap fence check before finishing when code blocks
+  were added or removed.
 
 ## Agent Rules
 
@@ -216,10 +311,13 @@ Validation harness details live in [`docs/validation-harness.md`](validation-har
 9. 85RAW 正式驗收預設加 `--performance-profile validation-fast` 與
    `--owner-backfill-window-strategy super-window`。如果刻意不用，必須在
    validation note 說明原因。
-10. 85RAW 開跑前先檢查 discovery index row count；8RAW index 不可拿來跑
-    full tissue validation。
+10. 85RAW 開跑前先檢查 discovery index sample count、candidate CSV path、
+    RAW path；8RAW index 不可拿來跑 full tissue validation。正式 alignment
+    run 用 `--expected-sample-count 85` 固化 sample-count 檢查。
 11. 不要用 Codex shell 的 background `Start-Process` 跑 85RAW 後就回來輪詢；
     這個模式已反覆失敗。用前景 run 搭配足夠 timeout，或先取得使用者同意
     轉到外部 terminal / automation。
 12. 每次長時間 RAW run 後，若發現新的穩定參數或反覆失敗模式，更新本檔；
     不要只把教訓留在聊天紀錄。
+13. PowerShell 語法錯誤、ruff E501、Markdown fence mismatch 這類可重複避免
+    的錯誤，修完後要把穩定教訓寫回本檔或相關 repo-local contract。
