@@ -47,6 +47,7 @@ def build_extraction_result(
         quality_penalty=quality_penalty,
         quality_flags=_result_quality_flags(quality_flags, selected_hypothesis),
         score_breakdown=peak_result.score_breakdown,
+        selected_hypothesis=selected_hypothesis,
     )
 
 

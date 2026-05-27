@@ -4,6 +4,11 @@ from pathlib import Path
 from typing import Literal
 
 from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.extraction.handoff_spine_runtime import (
+    build_production_peak_hypotheses,
+    selected_peak_hypothesis,
+)
+from xic_extractor.extraction.result_assembly import build_extraction_result
 from xic_extractor.extractor import DiagnosticRecord, ExtractionResult, FileResult
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.output.csv_writers import (
@@ -14,6 +19,12 @@ from xic_extractor.output.csv_writers import (
     write_long_csv,
     write_score_breakdown_csv,
     write_wide_csv,
+)
+from xic_extractor.peak_detection.hypotheses import (
+    AuditTrail,
+    EvidenceVector,
+    IntegrationResult,
+    PeakHypothesis,
 )
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -284,6 +295,132 @@ def test_score_breakdown_csv_can_emit_ms2_trace_labels_without_schema_change(
     assert breakdown["Concerns"] == "ms2_trace_weak"
 
 
+def test_csv_rows_preserve_values_with_runtime_selected_hypothesis() -> None:
+    target = _target("WithNL")
+    legacy = _result(nl=NLResult("WARN", 12.34, None, 3, 0, 2))
+    selected = selected_peak_hypothesis(
+        build_production_peak_hypotheses(
+            config=_Config(),
+            sample_name="SampleA",
+            target=target,
+            peak_result=legacy.peak_result,
+        )
+    )
+    assert selected is not None
+    with_selected = build_extraction_result(
+        peak_result=legacy.peak_result,
+        nl_result=legacy.nl,
+        candidate_ms2_evidence=legacy.candidate_ms2_evidence,
+        target=target,
+        candidate=legacy.peak_result.candidates[0],
+        scoring_context_builder=None,
+        selected_hypothesis=selected,
+    )
+
+    fallback_file = FileResult(sample_name="SampleA", results={"WithNL": legacy})
+    selected_file = FileResult(
+        sample_name="SampleA",
+        results={"WithNL": with_selected},
+    )
+
+    assert _output_row(selected_file, [target]) == _output_row(
+        fallback_file,
+        [target],
+    )
+    assert _long_output_rows(selected_file, [target]) == _long_output_rows(
+        fallback_file,
+        [target],
+    )
+
+
+def test_csv_rows_project_selected_integration_values_when_present() -> None:
+    target = _target("WithNL")
+    result = replace(
+        _result(nl=NLResult("WARN", 12.34, None, 3, 0, 2)),
+        selected_hypothesis=_selected_hypothesis_with_integration(
+            IntegrationResult(
+                rt_left_min=8.7,
+                rt_apex_min=8.95,
+                rt_right_min=9.3,
+                raw_apex_rt_min=8.96,
+                rt_width_min=-0.42,
+                height_raw=765.0,
+                height_smoothed=700.0,
+                area_raw_counts_seconds=4567.89,
+            )
+        ),
+    )
+    file_result = FileResult(sample_name="SampleA", results={"WithNL": result})
+
+    wide_row = _output_row(file_result, [target])
+    long_rows = _long_output_rows(file_result, [target])
+
+    assert len(long_rows) == 1
+    long_row = long_rows[0]
+    assert list(wide_row) == [
+        "SampleName",
+        "WithNL_RT",
+        "WithNL_Int",
+        "WithNL_Area",
+        "WithNL_PeakStart",
+        "WithNL_PeakEnd",
+        "WithNL_PeakWidth",
+        "WithNL_NL",
+    ]
+    assert wide_row["WithNL_RT"] == "8.9500"
+    assert wide_row["WithNL_Area"] == "4567.89"
+    assert wide_row["WithNL_Int"] == "765"
+    assert wide_row["WithNL_PeakStart"] == "8.7000"
+    assert wide_row["WithNL_PeakEnd"] == "9.3000"
+    assert wide_row["WithNL_PeakWidth"] == "0.4200"
+    assert wide_row["WithNL_NL"] == "WARN_12.3ppm"
+    assert long_row["RT"] == "8.9500"
+    assert long_row["Area"] == "4567.89"
+    assert long_row["Int"] == "765"
+    assert long_row["PeakStart"] == "8.7000"
+    assert long_row["PeakEnd"] == "9.3000"
+    assert long_row["PeakWidth"] == "0.4200"
+    assert long_row["NL"] == "WARN_12.3ppm"
+    assert long_row["Confidence"] == "LOW"
+    assert long_row["Reason"] == "concerns: local_sn (minor)"
+
+
+def test_csv_rows_preserve_no_peak_nd_projection() -> None:
+    target = _target("WithNL")
+    orphan_candidate = _result().peak_result.candidates[0]
+    result = ExtractionResult(
+        peak_result=PeakDetectionResult(
+            status="NO_PEAK",
+            peak=None,
+            n_points=4,
+            max_smoothed=0.0,
+            n_prominent_peaks=0,
+            candidates=(orphan_candidate,),
+        ),
+        nl=NLResult("NO_MS2", None, None, 0, 0, 0),
+        target_label="WithNL",
+        role="Analyte",
+        istd_pair="",
+        confidence="",
+        reason="",
+    )
+    file_result = FileResult(sample_name="SampleA", results={"WithNL": result})
+
+    wide_row = _output_row(file_result, [target])
+    long_row = _long_output_rows(file_result, [target])[0]
+
+    for suffix in ("RT", "Int", "Area", "PeakStart", "PeakEnd", "PeakWidth"):
+        assert wide_row[f"WithNL_{suffix}"] == "ND"
+    assert wide_row["WithNL_NL"] == "NO_MS2"
+    assert long_row["RT"] == "ND"
+    assert long_row["Area"] == "ND"
+    assert long_row["Int"] == "ND"
+    assert long_row["PeakStart"] == "ND"
+    assert long_row["PeakEnd"] == "ND"
+    assert long_row["PeakWidth"] == "ND"
+    assert long_row["NL"] == "NO_MS2"
+
+
 def test_write_all_gates_score_breakdown(tmp_path: Path) -> None:
     config = _config(tmp_path)
     target = _target("WithNL")
@@ -307,3 +444,24 @@ def test_write_all_gates_score_breakdown(tmp_path: Path) -> None:
         emit_score_breakdown=True,
     )
     assert config.output_csv.with_name("xic_score_breakdown.csv").exists()
+
+
+class _Config:
+    resolver_mode = "local_minimum"
+
+
+def _selected_hypothesis_with_integration(
+    integration: IntegrationResult,
+) -> PeakHypothesis:
+    return PeakHypothesis(
+        hypothesis_id="SampleA|WithNL|selected",
+        trace_group_id="SampleA|WithNL|targeted",
+        target_label="WithNL",
+        role="Analyte",
+        istd_pair="ISTD",
+        analysis_mode="targeted",
+        resolver_mode="local_minimum",
+        integration=integration,
+        evidence=EvidenceVector(confidence="LOW", reason="selected spine"),
+        audit=AuditTrail(selected=True, selection_rank=1),
+    )

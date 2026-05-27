@@ -1,10 +1,21 @@
+import typing
+
+import pytest
+
 from xic_extractor.config import Target
 from xic_extractor.extraction.handoff_spine_runtime import (
     build_production_peak_hypotheses,
     selected_peak_hypothesis,
 )
 from xic_extractor.extraction.result_assembly import build_extraction_result
+from xic_extractor.extractor import ExtractionResult
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
+from xic_extractor.peak_detection.hypotheses import (
+    AuditTrail,
+    EvidenceVector,
+    IntegrationResult,
+    PeakHypothesis,
+)
 from xic_extractor.peak_detection.models import (
     PeakCandidate,
     PeakCandidateScore,
@@ -156,6 +167,67 @@ def test_build_extraction_result_preserves_final_confidence_when_score_is_stale(
     assert result.reason == "decision: review only, not counted; cap: VERY_LOW"
 
 
+def test_extraction_result_reports_selected_integration_values() -> None:
+    peak_result = _peak_result_with_candidate()
+    selected = _selected_hypothesis_with_integration(
+        IntegrationResult(
+            rt_left_min=8.7,
+            rt_apex_min=8.95,
+            rt_right_min=9.3,
+            raw_apex_rt_min=8.96,
+            rt_width_min=-0.42,
+            height_raw=765.0,
+            height_smoothed=700.0,
+            area_raw_counts_seconds=4567.89,
+        )
+    )
+
+    result = build_extraction_result(
+        peak_result=peak_result,
+        nl_result=None,
+        candidate_ms2_evidence=None,
+        target=_target(),
+        candidate=peak_result.candidates[0],
+        scoring_context_builder=None,
+        selected_hypothesis=selected,
+    )
+
+    assert result.reported_rt == 8.95
+    assert result.reported_peak_area == 4567.89
+    assert result.reported_peak_intensity == 765.0
+    assert result.reported_peak_start == 8.7
+    assert result.reported_peak_end == 9.3
+    assert result.reported_peak_width == pytest.approx(0.42)
+
+
+def test_extraction_result_runtime_type_hints_are_resolvable() -> None:
+    hints = typing.get_type_hints(ExtractionResult)
+
+    assert hints["selected_hypothesis"] == PeakHypothesis | None
+
+
+def test_extraction_result_projection_accessors_fall_back_to_legacy_peak() -> None:
+    peak_result = _peak_result_with_candidate()
+    result = build_extraction_result(
+        peak_result=peak_result,
+        nl_result=None,
+        candidate_ms2_evidence=None,
+        target=_target(),
+        candidate=peak_result.candidates[0],
+        scoring_context_builder=None,
+        selected_hypothesis=None,
+    )
+
+    peak = peak_result.peak
+    assert peak is not None
+    assert result.reported_rt == peak_result.candidates[0].selection_apex_rt
+    assert result.reported_peak_area == peak.area
+    assert result.reported_peak_intensity == peak.intensity
+    assert result.reported_peak_start == peak.peak_start
+    assert result.reported_peak_end == peak.peak_end
+    assert result.reported_peak_width == abs(peak.peak_end - peak.peak_start)
+
+
 class _Config:
     resolver_mode = "region_first_safe_merge"
 
@@ -194,6 +266,40 @@ def _candidate() -> PeakCandidate:
         raw_apex_index=1,
         prominence=700.0,
         quality_flags=("too_broad",),
+    )
+
+
+def _peak_result_with_candidate() -> PeakDetectionResult:
+    candidate = _candidate()
+    return PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        n_points=12,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(candidate,),
+        confidence="LOW",
+        reason="concerns: local_sn",
+        severities=((1, "local_sn"),),
+        score_breakdown=(("Raw Score", "41"),),
+        candidate_scores=(_score(candidate),),
+    )
+
+
+def _selected_hypothesis_with_integration(
+    integration: IntegrationResult,
+) -> PeakHypothesis:
+    return PeakHypothesis(
+        hypothesis_id="SampleA|Analyte|selected",
+        trace_group_id="SampleA|Analyte|targeted",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="ISTD",
+        analysis_mode="targeted",
+        resolver_mode="local_minimum",
+        integration=integration,
+        evidence=EvidenceVector(confidence="LOW", reason="selected spine"),
+        audit=AuditTrail(selected=True, selection_rank=1),
     )
 
 

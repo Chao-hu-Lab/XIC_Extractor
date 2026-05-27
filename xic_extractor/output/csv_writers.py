@@ -12,7 +12,7 @@ from xic_extractor.output.schema import (
     SCORE_BREAKDOWN_HEADERS,
 )
 from xic_extractor.sample_groups import classify_sample_group
-from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
+from xic_extractor.signal_processing import PeakDetectionResult
 
 
 class DiagnosticRecordLike(Protocol):
@@ -71,6 +71,21 @@ class ExtractionResultLike(Protocol):
 
     @property
     def reported_rt(self) -> float | None: ...
+
+    @property
+    def reported_peak_area(self) -> float | None: ...
+
+    @property
+    def reported_peak_intensity(self) -> float | None: ...
+
+    @property
+    def reported_peak_start(self) -> float | None: ...
+
+    @property
+    def reported_peak_end(self) -> float | None: ...
+
+    @property
+    def reported_peak_width(self) -> float | None: ...
 
     @property
     def total_severity(self) -> int: ...
@@ -283,17 +298,15 @@ def _set_long_ms1_values(row: dict[str, str], value: str) -> None:
 
 
 def _set_long_peak_values(row: dict[str, str], result: ExtractionResultLike) -> None:
-    peak = result.peak_result.peak
-    if peak is None:
+    if not _has_reported_peak(result):
         _set_long_ms1_values(row, "ND")
         return
-    reported_rt = result.reported_rt
-    row["RT"] = f"{reported_rt:.4f}" if reported_rt is not None else "ND"
-    row["Area"] = f"{peak.area:.2f}"
-    row["Int"] = f"{peak.intensity:.0f}"
-    row["PeakStart"] = f"{peak.peak_start:.4f}"
-    row["PeakEnd"] = f"{peak.peak_end:.4f}"
-    row["PeakWidth"] = _format_peak_width(peak)
+    row["RT"] = _format_peak_decimal(result.reported_rt, digits=4)
+    row["Area"] = _format_peak_decimal(result.reported_peak_area, digits=2)
+    row["Int"] = _format_peak_decimal(result.reported_peak_intensity, digits=0)
+    row["PeakStart"] = _format_peak_decimal(result.reported_peak_start, digits=4)
+    row["PeakEnd"] = _format_peak_decimal(result.reported_peak_end, digits=4)
+    row["PeakWidth"] = _format_peak_decimal(result.reported_peak_width, digits=4)
 
 
 def _output_fieldnames(targets: Sequence[Target]) -> list[str]:
@@ -338,25 +351,51 @@ def _set_peak_values(
     target: Target,
     result: ExtractionResultLike,
 ) -> None:
-    peak = result.peak_result.peak
-    if peak is None:
+    if not _has_reported_peak(result):
         for suffix in MS1_SUFFIXES:
             row[f"{target.label}_{suffix}"] = "ND"
         return
 
-    reported_rt = result.reported_rt
-    row[f"{target.label}_RT"] = (
-        f"{reported_rt:.4f}" if reported_rt is not None else "ND"
+    row[f"{target.label}_RT"] = _format_peak_decimal(result.reported_rt, digits=4)
+    row[f"{target.label}_Int"] = _format_peak_decimal(
+        result.reported_peak_intensity,
+        digits=0,
     )
-    row[f"{target.label}_Int"] = f"{peak.intensity:.0f}"
-    row[f"{target.label}_Area"] = f"{peak.area:.2f}"
-    row[f"{target.label}_PeakStart"] = f"{peak.peak_start:.4f}"
-    row[f"{target.label}_PeakEnd"] = f"{peak.peak_end:.4f}"
-    row[f"{target.label}_PeakWidth"] = _format_peak_width(peak)
+    row[f"{target.label}_Area"] = _format_peak_decimal(
+        result.reported_peak_area,
+        digits=2,
+    )
+    row[f"{target.label}_PeakStart"] = _format_peak_decimal(
+        result.reported_peak_start,
+        digits=4,
+    )
+    row[f"{target.label}_PeakEnd"] = _format_peak_decimal(
+        result.reported_peak_end,
+        digits=4,
+    )
+    row[f"{target.label}_PeakWidth"] = _format_peak_decimal(
+        result.reported_peak_width,
+        digits=4,
+    )
 
 
-def _format_peak_width(peak: PeakResult) -> str:
-    return f"{abs(peak.peak_end - peak.peak_start):.4f}"
+def _has_reported_peak(result: ExtractionResultLike) -> bool:
+    return all(
+        value is not None
+        for value in (
+            result.reported_peak_area,
+            result.reported_peak_intensity,
+            result.reported_peak_start,
+            result.reported_peak_end,
+            result.reported_peak_width,
+        )
+    )
+
+
+def _format_peak_decimal(value: float | None, *, digits: int) -> str:
+    if value is None:
+        return "ND"
+    return f"{value:.{digits}f}"
 
 
 def _sample_group(name: str) -> str:

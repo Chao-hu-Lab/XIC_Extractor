@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -8,6 +10,7 @@ from xic_extractor.output.messages import (
     DiagnosticIssue,
     DiagnosticRecord,
 )
+from xic_extractor.peak_detection.hypotheses import IntegrationResult, PeakHypothesis
 from xic_extractor.rt_prior_library import LibraryEntry
 
 open_raw = raw_reader.open_raw
@@ -28,6 +31,8 @@ __all__ = [
     "RunOutput",
     "run",
 ]
+
+
 @dataclass(frozen=True)
 class ExtractionResult:
     peak_result: PeakDetectionResult
@@ -44,6 +49,7 @@ class ExtractionResult:
     quality_penalty: int = 0
     quality_flags: tuple[str, ...] = ()
     score_breakdown: tuple[tuple[str, str], ...] = ()
+    selected_hypothesis: PeakHypothesis | None = None
 
     @property
     def peak(self) -> PeakResult | None:
@@ -66,8 +72,17 @@ class ExtractionResult:
         return sum(severity for severity, _ in self.severities) + self.quality_penalty
 
     @property
+    def _selected_integration(self) -> IntegrationResult | None:
+        if self.selected_hypothesis is None:
+            return None
+        return self.selected_hypothesis.integration
+
+    @property
     def reported_rt(self) -> float | None:
-        """User-facing RT uses the selected candidate apex when available."""
+        """User-facing RT uses selected integration apex when available."""
+        integration = self._selected_integration
+        if integration is not None:
+            return integration.rt_apex_min
         candidate = selected_candidate(self.peak_result)
         if candidate is not None:
             return candidate.selection_apex_rt
@@ -75,6 +90,49 @@ class ExtractionResult:
         if peak is None:
             return None
         return peak.rt
+
+    @property
+    def reported_peak_area(self) -> float | None:
+        integration = self._selected_integration
+        if integration is not None:
+            return integration.area_raw_counts_seconds
+        peak = self.peak
+        return None if peak is None else peak.area
+
+    @property
+    def reported_peak_intensity(self) -> float | None:
+        integration = self._selected_integration
+        if integration is not None:
+            return integration.height_raw
+        peak = self.peak
+        return None if peak is None else peak.intensity
+
+    @property
+    def reported_peak_start(self) -> float | None:
+        integration = self._selected_integration
+        if integration is not None:
+            return integration.rt_left_min
+        peak = self.peak
+        return None if peak is None else peak.peak_start
+
+    @property
+    def reported_peak_end(self) -> float | None:
+        integration = self._selected_integration
+        if integration is not None:
+            return integration.rt_right_min
+        peak = self.peak
+        return None if peak is None else peak.peak_end
+
+    @property
+    def reported_peak_width(self) -> float | None:
+        integration = self._selected_integration
+        if integration is not None:
+            return abs(integration.rt_width_min)
+        start = self.reported_peak_start
+        end = self.reported_peak_end
+        if start is None or end is None:
+            return None
+        return abs(end - start)
 
 
 @dataclass
