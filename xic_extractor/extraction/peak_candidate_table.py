@@ -168,6 +168,7 @@ def build_peak_candidate_audit_hypotheses(
     audit_peak_result: PeakDetectionResult | None = None,
     scoring_context_builder: Callable[[PeakCandidate], ScoringContext] | None = None,
     istd_confidence_note: str | None = None,
+    include_candidate_ms2_evidence: bool = True,
 ) -> tuple[PeakHypothesis, ...]:
     audited = audit_peak_result
     if audited is None:
@@ -190,9 +191,10 @@ def build_peak_candidate_audit_hypotheses(
         istd_pair=target.istd_pair,
         resolver_mode=config.resolver_mode,
         peak_result=audited,
-        candidate_ms2_evidence=_candidate_table_ms2_evidence(
-            audited,
-            candidate_ms2_builder,
+        candidate_ms2_evidence=(
+            _candidate_table_ms2_evidence(audited, candidate_ms2_builder)
+            if include_candidate_ms2_evidence
+            else None
         ),
         rt=rt,
         intensity=intensity,

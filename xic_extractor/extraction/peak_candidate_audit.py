@@ -57,6 +57,7 @@ def append_peak_audit_rows(
         trace_group=trace_group,
         scoring_context_builder=scoring_context_builder,
         istd_confidence_note=istd_confidence_note,
+        include_candidate_ms2_evidence=peak_candidate_rows is not None,
     )
     append_peak_candidate_rows_from_hypotheses(
         peak_candidate_rows,
