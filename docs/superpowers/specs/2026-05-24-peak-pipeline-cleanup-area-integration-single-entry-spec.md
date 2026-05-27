@@ -1,28 +1,31 @@
 # C5 — Area Integration Single Entry Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
+**Status:** Cleanup slice draft v0.3 — METHOD-PRESERVING after design correction
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
-**Precondition:** P2b AsLS promotion has a GO note and C1a (baseline module
-relocation) landed. C1a in turn requires Phase 1 stable.
+**Precondition:** C3a/C3b hypothesis-spine scaffold is accepted or explicitly
+deferred, C1a baseline relocation landed if needed, and Phase 1 conditional
+blockers are documented. P2b conditional audit promotion is enough to preserve
+AsLS audit support, but not enough to make this entry AsLS-only.
 
 ## Purpose
 
-Collapse four baseline-corrected area integration call sites onto one entry
-point with thin adapters for production / audit / hypothesis-spine
-variants.
+Collapse four baseline-corrected area integration call sites onto one
+method-preserving entry point with thin adapters for production / audit /
+hypothesis-spine variants.
 
 This refactor introduces no behavioral change. Validation is behavioral
 parity.
 
-## Current State (assumed after P2b promoted + C1a)
+## Current State (assumed after design correction)
 
 This section describes the working-tree state C5 expects when it runs.
-**Today (pre-P2) only `integrate_linear_edge_baseline` exists at these call
-sites.** After P2b promotion makes AsLS production and P2's selector exists,
-choosing AsLS, and C1a relocates `asls_baseline` into the peak_detection
-package, the call sites still go through `integrate_with_baseline`, but
-selecting the AsLS path.
+The 2026-05-26 design correction rejects an AsLS-only C5 unless the P2c
+truth-validation closeout explicitly reaches `GO_FOR_LINEAR_EDGE_RETIREMENT`
+and cleanup owner approval names C5 as retirement-ready. C5 should unify
+mechanics and provenance while preserving method selection. It must not force all
+callers to AsLS only because P2b reached conditional audit promotion or because
+P2c only reaches `GO_FOR_C1B_PLAN_SYNTHETIC_ONLY`.
 
 The four current call sites, each with its own surrounding wrapper logic:
 
@@ -47,6 +50,7 @@ Define one function in `xic_extractor/peak_detection/integration.py`:
 integrate_peak_region(
     rt_values, intensity_values, *,
     left_index, right_index,
+    baseline_method,
     asls_cache=None,
 ) -> AreaIntegrationResult
 ```
@@ -54,8 +58,8 @@ integrate_peak_region(
 Behavior:
 
 - compute the raw trapezoid area
-- compute AsLS baseline (reusing the cache if supplied; see P2 AsLS Cache
-  Strategy)
+- compute the selected baseline method (`asls` or `linear_edge`) and record it
+  explicitly
 - compute baseline-corrected area
 - compute residual MAD and area uncertainty per P4 formula
 - return one local DTO, `AreaIntegrationResult`, containing all of:
@@ -63,14 +67,13 @@ Behavior:
   - `area_baseline_corrected`
   - `area_uncertainty`
   - `baseline_score`
-  - `baseline_type` ("asls")
+  - `baseline_type`
   - `integration_scan_count`
   - `residual_mad`
 
-`AreaIntegrationResult` is intentionally local to the integration module for
-C5. C3 may later map it into, rename it to, or replace it with the hypothesis
-spine `IntegrationResult`. C5 must not depend on C3's future model, because C3
-is ordered after C5.
+`AreaIntegrationResult` should be shaped to map cleanly into the hypothesis
+spine `IntegrationResult`. If C3a/C3b has already defined the spine contract,
+C5 should use that contract rather than inventing a second DTO shape.
 
 ### Step 2 — Thin adapters at each call site
 

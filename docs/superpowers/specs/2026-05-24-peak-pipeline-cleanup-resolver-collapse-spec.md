@@ -1,21 +1,27 @@
 # C2 — Resolver Collapse Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
+**Status:** Cleanup slice draft v0.3 — DESIGN CORRECTION APPLIED; honest
+resolver-semantics cleanup only
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
-**Precondition:** Phase 1 is stable, P1 (resolver default switch) and P5
-(CWT evidence honesty) both have GO notes, and removed public resolver values
-have an approved migration / deprecation plan.
+**Precondition:** Phase 1 conditional blockers are documented, P1's supported
+resolver behavior is described honestly as conservative
+`local_minimum_with_wis_merge_v1`, P5 (CWT evidence honesty) has a GO note, and
+removed public resolver values have an approved migration / deprecation plan.
 
 ## Purpose
 
-Collapse five resolver modes into one production path plus a small set of
-internal proposal sources. The current `resolver_mode` flag exposes
-historical implementation choices that have lost their independent meaning
-after P1.
+Collapse obsolete resolver modes without pretending that the current default is
+already the intended true region-first resolver. The current `resolver_mode`
+flag exposes historical implementation choices that have lost their independent
+meaning after P1, but the surviving behavior is still local-minimum-centered.
 
 This refactor introduces no behavioral change for the supported (post-P1)
 production mode. Validation is behavioral parity.
+
+C2 is therefore a naming and compatibility cleanup, not a new boundary
+algorithm. A true region-first v2 belongs in a separate behavior spec with
+multi-source hypothesis enumeration, score comparison, and manual EIC review.
 
 ## Current State
 
@@ -26,9 +32,9 @@ source (CWT) that is not a top-level `resolver_mode`:
 | Mode (top-level dispatch) | Role | Post-P1 status |
 |---------------------------|------|----------------|
 | `legacy_savgol` | SG smoothing + prominence | Fallback branch in `facade.py` |
-| `local_minimum` | Local minimum boundary | Routed via the `{local_minimum, region_first_safe_merge}` branch; remains the proposal source for region-first |
+| `local_minimum` | Local minimum boundary | Routed via the `{local_minimum, region_first_safe_merge}` branch; remains the main production proposal source |
 | `arbitrated` | Merge legacy + local results | **No production caller** |
-| `region_first_safe_merge` | Local minimum + safe-merge promotion | **Production default after P1** |
+| `region_first_safe_merge` | Compatibility name for local-minimum boundary plus safe-merge/WIS promotion | **Production default after P1; not true region-first v2** |
 
 Plus a **non-dispatched proposal source** (not a `resolver_mode` value, no
 `facade.py` branch): `centwave_cwt` invoked via `peak_detection/cwt.py`
@@ -47,6 +53,15 @@ addressed as an open question in P1.
 
 ## Required Change
 
+Collapse the public resolver surface to the supported conservative resolver path
+while preserving behavior. Do not delete local-minimum internals just because
+the public default is named `region_first_safe_merge`; the default still relies
+on those internals.
+
+Where human-facing docs would otherwise imply a true region-first algorithm,
+describe the current production behavior as `local_minimum_with_wis_merge_v1`.
+Keep the public config value stable until a separate migration plan exists.
+
 ### Step 1 — Public resolver-value migration gate
 
 Before deleting any public resolver value, scan repo configs, examples,
@@ -55,7 +70,7 @@ paths for all values being removed or demoted:
 
 - `arbitrated`
 - `legacy_savgol`
-- `local_minimum` if it stops being an accepted top-level production value
+- `local_minimum` only if it stops being an accepted compatibility value
 
 For each value, record one of:
 
@@ -64,9 +79,13 @@ For each value, record one of:
 - blocked because an external caller still depends on it
 
 Old configs must either keep working through an explicit compatibility alias
-or fail fast with an actionable unsupported-value error that names
-`region_first_safe_merge` as the replacement. Do not silently map old values
-without a migration note and regression tests.
+or fail fast with an actionable unsupported-value error that names the
+supported replacement. Do not silently map old values without a migration note
+and regression tests.
+
+Because `region_first_safe_merge` is itself a compatibility name, the migration
+note must also state that production behavior is conservative local-minimum +
+WIS/safe-merge, not true region-first v2.
 
 ### Step 2 — Remove the `arbitrated` resolver mode
 
@@ -140,18 +159,21 @@ canonical defaults, but their nature differs:
   `resolver_mode="local_minimum"` passed when constructing the QC config.
   Edit semantics: change or remove the keyword argument.
 
-The post-collapse resolver_mode permitted values reduce to one production
-value: `region_first_safe_merge`. The hardcoded sites should either inherit
-the global default or be deleted as dead overrides. Treat them as
-separate diffs since the edit kind is different.
+The post-collapse production behavior reduces to one supported conservative
+path. Public permitted values may still include `local_minimum` as an explicit
+compatibility alias if Step 1 finds active callers. The hardcoded sites should
+either inherit the global default, use the documented compatibility alias, or
+be deleted as dead overrides. Treat them as separate diffs since the edit kind
+is different.
 
 ### Step 6 — Rename `resolver_mode` (optional)
 
-After collapse, `resolver_mode` has one permitted value, which makes the
-config field redundant. Two options:
+After collapse, `resolver_mode` has one supported production behavior, which
+makes the config field close to redundant. Two options:
 
-- (a) keep the field with `region_first_safe_merge` literal for
-  forward-compatibility (when an alternative resolver lands later)
+- (a) keep the field with `region_first_safe_merge` literal for compatibility
+  while documenting that the implementation is
+  `local_minimum_with_wis_merge_v1`
 - (b) remove the field entirely, hardcoding the resolver in `facade.py`
 
 Decision: keep (a). Matches the same logic as C1's `baseline_type` field.
@@ -173,13 +195,15 @@ Additional check:
 
 - before deletion, run a one-shot scan with `resolver_mode=arbitrated` on
   8RAW; result must be either equivalent to or strictly worse than the
-  region-first run. If `arbitrated` is materially better on any ISTD, the
-  collapse is premature — record findings and defer
+  supported conservative run. If `arbitrated` is materially better on any ISTD,
+  the collapse is premature — record findings and defer
 - scan repo configs, examples, scripts, docs, GUI/config surfaces, validation
   harnesses, and known deployment handoff paths for every removed value
   (`arbitrated`, `legacy_savgol`, and optionally `local_minimum`). Each hit
   must be migrated, documented as external, covered by a compatibility alias,
   or block C2
+- confirm that docs and summary notes no longer describe the current default as
+  true region-first behavior
 
 ## Rollback Condition
 
@@ -196,6 +220,8 @@ Restore deleted modes if any of:
 ## What This Spec Does Not Change
 
 - production peak selection for `region_first_safe_merge`
+- local-minimum proposal internals used by the supported conservative default
+- true region-first v2 behavior
 - AsLS baseline (owned by C1)
 - area integration entry (owned by C5)
 - hypothesis spine (owned by C3)
@@ -207,6 +233,10 @@ Restore deleted modes if any of:
 - Has anyone enabled `arbitrated`, `legacy_savgol`, or `local_minimum` in a
   downstream config? Repo grep is not sufficient; confirmation from production
   deployment owners is needed.
+- Should the public config value eventually be renamed from
+  `region_first_safe_merge` to `local_minimum_with_wis_merge_v1`, or should the
+  old name remain as a stable compatibility token until true region-first v2 is
+  ready? Defer to a config migration spec.
 - Does `_CWT_SAME_APEX_SUPPORT_POINTS = 5` give measurable benefit on the
   strict ISTD benchmark? If not, P5 followup (delete CWT entirely) can be
   bundled into C2. If yes, keep the proposal source through C2.

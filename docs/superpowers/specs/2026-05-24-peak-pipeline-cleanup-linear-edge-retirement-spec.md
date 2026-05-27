@@ -1,16 +1,19 @@
 # C1b — Linear Edge Baseline Retirement Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
+**Status:** Cleanup slice draft v0.3 — PAUSED until AsLS truth validation
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Companion spec:** [C1a — Baseline module relocation](2026-05-24-peak-pipeline-cleanup-baseline-module-consolidation-spec.md)
-**Precondition:** P2b promoted (AsLS is the production baseline). C5 (area
-integration single entry) landed and validated. C1a landed and validated.
+**Precondition:** C5 (area integration single entry) landed and validated, C1a
+landed and validated, and [P2c AsLS truth validation](2026-05-26-peak-pipeline-asls-truth-validation-spec.md)
+has reached `GO_FOR_LINEAR_EDGE_RETIREMENT`. P2b conditional audit promotion is
+not sufficient. P2b's temporary linear-edge rollback audit columns must also be
+deprecated by an approved schema note before implementation starts.
 
 ## Purpose
 
 Retire the linear-edge baseline path. After C5 has migrated every caller
-to the single integration entry (which uses AsLS), the
+to the single integration entry and AsLS truth validation has cleared, the
 `integrate_linear_edge_baseline` function and the `integrate_with_baseline`
 selector wrapper have no remaining callers and can be deleted.
 
@@ -20,33 +23,47 @@ the peak-detection package. C1b removes the dead linear-edge code path.
 This refactor introduces no behavioral change. Validation is behavioral
 parity.
 
-## Why C1b Has to Wait for C5
+## Why C1b Has to Wait for C5 And AsLS Truth
 
 C5 owns the migration of the four current `integrate_linear_edge_baseline`
 callers (`integration_audit.py`, `region_safe_merge.py`, `hypotheses.py`,
 `peak_candidate_boundaries.py`) onto a single integration entry. Until C5
 lands, the linear-edge function still has callers and cannot be deleted.
 
+The 2026-05-26 design correction adds a second blocker: P2b currently proves
+only conditional audit promotion, not baseline truth. Linear-edge deletion
+requires evidence such as spike-in recovery, concentration-series linearity,
+blank behavior, or synthetic known-baseline traces.
+
+A third blocker is the temporary P2b rollback audit surface. If
+`alignment_cell_integration_audit.tsv` still emits
+`area_baseline_corrected_linear_edge` or `baseline_score_linear_edge`, C1b
+cannot delete the linear-edge computation and also preserve audit parity. Those
+rollback columns require a separate schema/deprecation decision before C1b
+starts.
+
 The original C1 spec tried to own both relocation and retirement, which
 created a circular dependency with C5 (C5 needed C1 done; C1 Step 3 needed
 C5 done). Splitting into C1a (independent) and C1b (after C5) removes the
 cycle.
 
-## Current State (assumed after P2b promoted + C1a + C5)
+## Current State (assumed after C1a + C5 + AsLS truth validation)
 
 This section describes the working-tree state C1b expects to find when it
 runs. **None of these state items exist in working tree today** — they are
-the cumulative output of P2b promotion, C1a, and C5:
+the cumulative output of C1a, C5, and a separate AsLS truth-validation spec:
 
 - `xic_extractor/peak_detection/baseline.py` will define both
   `integrate_linear_edge_baseline` (legacy) and an AsLS-using path (added
   by P2)
 - `integrate_with_baseline` selector (added by P2) will dispatch on
   `baseline_method` argument
-- After C5, all production callers will go through `integrate_peak_region`,
-  which only uses AsLS
+- After C5 and truth validation, all production callers will go through
+  `integrate_peak_region`, and the selected method will be AsLS-only
 - `BaselineIntegration.baseline_type` field will exist and take only
   `"asls"` in production runs
+- P2b temporary linear-edge rollback columns will already be absent from the
+  accepted post-rollback audit schema, with a schema/deprecation note and hash
 
 If any of these conditions are not met at C1b kick-off, escalate to spec
 owner — the precondition chain is broken and C1b should not start.
@@ -87,8 +104,11 @@ docstring so reviewers do not assume it is dynamic.
 Since `baseline_type` is constant in all rows, audit TSV emitters can
 either keep emitting the column (`alignment_cell_integration_audit.tsv`
 already has the column) or drop it. Keep emitting; column constancy is
-not a reason to remove it. The C-spec validation contract requires TSV
-columns to remain stable.
+not a reason to remove it.
+
+Do not silently keep or recompute linear-edge rollback columns. If the columns
+still exist, stop C1b. Their removal is a public audit schema migration and
+must be approved before this refactor.
 
 ## Validation Contract
 
@@ -98,9 +118,12 @@ Behavioral parity required:
 2. Apply C1b refactor
 3. Re-run 8RAW
 4. `peak_candidates.tsv`, `peak_candidate_boundaries.tsv`,
-   `alignment_matrix.tsv`, `alignment_review.tsv`, `alignment_cells.tsv`,
-   `alignment_cell_integration_audit.tsv` must hash-match
-5. `baseline_type` audit column must contain `"asls"` in all rows
+   `alignment_matrix.tsv`, `alignment_review.tsv`, and `alignment_cells.tsv`
+   must hash-match
+5. `alignment_cell_integration_audit.tsv` must hash-match only against the
+   approved post-rollback-column baseline. If rollback columns still exist,
+   this validation is invalid and C1b must not start.
+6. `baseline_type` audit column must contain `"asls"` in all rows
 
 ## Rollback Condition
 
@@ -108,6 +131,8 @@ Restore the deleted functions if any of:
 
 - a caller of `integrate_linear_edge_baseline` or `integrate_with_baseline`
   is found at refactor time (means C5 missed a site)
+- `area_baseline_corrected_linear_edge` or `baseline_score_linear_edge` is still
+  emitted by the accepted audit schema
 - hash mismatch on parity TSVs (would be a regression in the AsLS-only
   path)
 
@@ -115,7 +140,8 @@ Restore the deleted functions if any of:
 
 - AsLS formula or parameters
 - production area or matrix output
-- TSV column names
+- TSV column names, except for the separately approved rollback-column
+  deprecation that must happen before C1b starts
 - `BaselineIntegration` dataclass shape (only the docstring constraint
   changes)
 - scoring weights or evidence values

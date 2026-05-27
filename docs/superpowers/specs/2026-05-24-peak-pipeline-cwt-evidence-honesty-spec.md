@@ -198,7 +198,7 @@ have).
   `peak_scoring.py` (still grants `_CWT_SAME_APEX_SUPPORT_POINTS = 5`)
 - the default `sources` tuple of `enumerate_boundary_hypotheses` in
   `peak_detection/boundaries.py`
-- `RegionSelectionDecision` output in region-first scoring
+- `RegionSelectionDecision` output in safe-merge/WIS scoring
 
 ## Rollback Condition (P5a)
 

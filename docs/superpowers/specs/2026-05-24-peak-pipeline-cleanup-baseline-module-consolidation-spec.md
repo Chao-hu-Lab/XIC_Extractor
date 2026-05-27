@@ -1,12 +1,14 @@
 # C1a — Baseline Module Relocation Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
+**Status:** Cleanup slice draft v0.3 — structural relocation only after design
+correction
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Companion spec:** [C1b — Linear edge retirement](2026-05-24-peak-pipeline-cleanup-linear-edge-retirement-spec.md)
-**Precondition:** Phase 1 validation reports clean, and P2b AsLS promotion has
-a GO note if this refactor assumes AsLS is production. C1a is one of the first
-cleanup specs that can land after that; no other C-spec is prerequisite.
+**Precondition:** Phase 1 conditional blockers are documented and P2b's
+conditional audit-promotion surface is stable. C1a must not assume AsLS
+production readiness or linear-edge retirement. C1a is one of the first cleanup
+specs that can land after that; no other C-spec is prerequisite.
 
 ## Purpose
 
@@ -36,11 +38,12 @@ Two baseline modules coexist:
   `bounded_trace_interval`, `_area_counts_seconds`,
   `_area_uncertainty_counts_seconds`, `_safe_ratio`
 
-After P2 lands (selector + AsLS path) and P2b promotion (AsLS becomes
-production default for `area_baseline_corrected`), `integrate_linear_edge_baseline`
-has no production caller for `area_baseline_corrected`. The selector
-(`integrate_with_baseline`) becomes a thin wrapper around AsLS. If P2b has
-not landed, C1a must not assume this state.
+After P2 lands (selector + AsLS path) and P2b conditional audit promotion,
+`alignment_cell_integration_audit.tsv` can report AsLS in
+`area_baseline_corrected`, but this does not prove AsLS baseline truth and does
+not authorize deleting `integrate_linear_edge_baseline`. The selector
+(`integrate_with_baseline`) remains method-preserving until C5 and the separate
+AsLS truth-validation blocker are resolved.
 
 After P4 lands (uncertainty formula correction), `_area_uncertainty_counts_seconds`
 is replaced by a baseline-residual-based computation that needs an AsLS
@@ -89,14 +92,14 @@ function first, so they cannot land alongside C1a.
 
 Behavioral parity required:
 
-1. Run 8RAW with `resolver_mode = region_first_safe_merge` and AsLS
-   production baseline (i.e. the Phase 1 final state)
+1. Run 8RAW with the accepted Phase 1 resolver/config surface and the current
+   P2b conditional audit-promotion baseline surface
 2. Apply C1a relocation refactor
 3. Re-run 8RAW
 4. `peak_candidates.tsv`, `alignment_matrix.tsv`, `alignment_review.tsv`,
    `alignment_cells.tsv` must hash-match
-5. `alignment_cell_integration_audit.tsv` must hash-match (since AsLS path
-   is unchanged, only the module location differs)
+5. `alignment_cell_integration_audit.tsv` must hash-match (the selected audit
+   baseline method is unchanged; only the module location differs)
 6. `compute_local_sn_cache` output must be byte-identical (it calls
    `asls_baseline` which moved, but the function body did not change)
 7. Import smoke tests must pass:
@@ -133,9 +136,10 @@ Restore the prior imports if any of:
   refactor time that no cycle is introduced through the
   `peak_detection.models` -> `peak_scoring` -> `peak_detection.baseline`
   path.
-- If P2b promotion has not happened (AsLS is still shadow-only at refactor
-  time), C1a must wait. The precondition is explicit; P2b's GO / NO-GO note
-  declares whether AsLS is promoted and how Cleanup should proceed.
+- If P2b conditional audit promotion has not happened (AsLS is still
+  shadow-only at refactor time), C1a must wait. The precondition is explicit;
+  P2b's note declares the audit surface that Cleanup should preserve, but it
+  does not declare AsLS production-ready baseline truth.
 
 ## Acceptance Owner
 

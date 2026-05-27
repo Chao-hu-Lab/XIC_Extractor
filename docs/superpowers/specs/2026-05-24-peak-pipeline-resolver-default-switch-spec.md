@@ -1,14 +1,20 @@
 # P1 — Resolver Default Switch Spec
 
 **Date:** 2026-05-24
-**Status:** Implementation slice draft v0.2, hotfix-aligned
+**Status:** Implemented through conservative resolver behavior;
+design-correction note applied
 **Overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
 
 ## Purpose
 
 Switch the extraction / targeted-validation default surface from
-`local_minimum` to `region_first_safe_merge` while keeping untargeted alignment
-production quantification on `local_minimum`.
+`local_minimum` to the public config value `region_first_safe_merge` while
+keeping untargeted alignment production quantification on `local_minimum`.
+
+Design correction: the implemented behavior should be read as
+`local_minimum_with_wis_merge_v1`, not as the final true region-first resolver.
+The public config value remains stable for compatibility, but the underlying
+proposal source is still local-minimum-centered.
 
 Both resolvers already exist in the code base. The new targeted default
 activates the existing safe-merge gating so that local minimum remains the
@@ -16,7 +22,7 @@ underlying proposal source but cannot make the final boundary decision in cases
 where adjacent WIS evidence supports a single merged region. Untargeted
 alignment is different: the 2026-05-18 validation decision and P1 8RAW hotfix
 showed that allowing `region_first_safe_merge` to mutate alignment production
-quantification can regress strict ISTD evidence. In alignment, region-first
+quantification can regress strict ISTD evidence. In alignment, safe-merge/WIS
 evidence remains audit context only until a separate production promotion gate
 passes.
 
@@ -33,7 +39,7 @@ gates that must all pass before a merge is promoted:
 
 If any gate fails, the resolver falls back to the original local-minimum
 candidate. Most candidates will not change. Only candidates where the existing
-region-first evidence already classified them as `merge_suggested` and all
+region-model/WIS evidence already classified them as `merge_suggested` and all
 four gates pass will see a different production area.
 
 ## Inputs Already Available
@@ -106,7 +112,7 @@ Each candidate that takes the safe-merge promotion path must:
 
 - expose the `RegionSelectionDecision` fields in `peak_candidates.tsv` via the
   existing `peak_candidate_audit` writer
-- record `merge_note = same_apex_merged` or the existing region-first audit
+- record `merge_note = same_apex_merged` or the existing safe-merge audit
   string so downstream review can identify promoted candidates
 
 If a candidate would have been promoted but failed a gate, the rejection

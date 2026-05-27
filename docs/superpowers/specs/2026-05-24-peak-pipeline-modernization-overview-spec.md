@@ -1,11 +1,14 @@
 # Peak Pipeline Modernization Overview
 
 **Date:** 2026-05-24
-**Status:** Phase 1 implemented through supported scope; P2b revised gate is 8RAW production_candidate and P6 not triggered
+**Status:** Phase 1 implemented through supported scope; P2b conditional audit
+promotion has 85RAW primary-delivery validation, not production-ready baseline
+truth; P6 not triggered
 **Source memo:** `C:\Users\user\Downloads\lcms_gcms_peak_pipeline_handoff.md`
 **Progress checklist:** [2026-05-21 LC-MS/MS handoff progress checklist](../notes/2026-05-21-lcms-msms-handoff-progress-checklist.md)
 **Second-pass review session:** 2026-05-24 conversation
 **Sibling overview:** [Peak pipeline cleanup roadmap](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
+**Design correction:** [2026-05-26 Phase 1 / Phase 2 correction](../notes/2026-05-26-phase1-phase2-design-correction-note.md)
 
 This file is the entrypoint for the next-phase peak-pipeline modernization. The
 detailed contract is split into focused sub-specs so review can separate
@@ -28,8 +31,11 @@ Read in this order:
 1. [P1 — Resolver default switch](2026-05-24-peak-pipeline-resolver-default-switch-spec.md)
    - switch targeted / extraction defaults from `local_minimum` to
      `region_first_safe_merge`
+   - design-correction note: current implementation is conservative
+     `local_minimum_with_wis_merge_v1`, not true primary region-first
+     hypothesis enumeration
    - keep untargeted alignment production quantification on `local_minimum`;
-     use region-first evidence as audit context there
+     use safe-merge/WIS evidence as audit context there
    - conservative gating already lives in the code base
    - validation against strict ISTD benchmark before promotion
 2. [P2 — Area integration AsLS baseline](2026-05-24-peak-pipeline-area-baseline-asls-spec.md)
@@ -46,12 +52,19 @@ Read in this order:
      external-reference audit track only
 4. [P2b — Area integration AsLS promotion](2026-05-24-peak-pipeline-area-baseline-asls-promotion-spec.md)
    - old strict RSD gate was `NO-GO`; RT/boundary-first revised 8RAW gate is
-     `GO_FOR_PRODUCTION_CANDIDATE`
-   - switches production `area_baseline_corrected` to AsLS only after a GO
-     note
-   - current note does not switch production area; Cleanup cannot assume AsLS
-     production until a separate production-switch step lands
-5. [P4 — Area uncertainty formula correction](2026-05-24-peak-pipeline-area-uncertainty-formula-spec.md)
+     accepted only as `conditional_audit_promotion`
+   - promoted `alignment_cell_integration_audit.tsv` can report AsLS as the
+     audit baseline, with linear-edge rollback columns
+   - does not prove AsLS absolute accuracy / linearity / blank behavior and
+     does not authorize linear-edge retirement
+5. [P2c — AsLS truth validation](2026-05-26-peak-pipeline-asls-truth-validation-spec.md)
+   - defines the locked synthetic benchmark, Tier A real-data guard, and Tier C
+     / methodology-owner waiver needed before linear-edge retirement
+   - synthetic-only PASS can support writing a C1b plan but cannot authorize
+     deleting linear-edge
+   - does not replace the separate schema decision needed to retire P2b's
+     temporary linear-edge rollback audit columns
+6. [P4 — Area uncertainty formula correction](2026-05-24-peak-pipeline-area-uncertainty-formula-spec.md)
    - 8RAW audit-only correction completed with formula version
      `baseline_residual_mad_v1`
    - audit-only change; no production area mutation
@@ -75,13 +88,15 @@ Read in this order:
    - future diagnostic trigger only; not scheduled by the current P3 evidence
      and not required for P2b
 8. [P7 — Evidence chain cost control](2026-05-25-peak-pipeline-evidence-chain-cost-control-spec.md)
-   - added after the 85RAW P2b follow-up was operationally blocked by
+   - added after the 85RAW P2b follow-up was initially operationally blocked by
      full-evidence alignment cost
    - keeps RAW as first-class input and preserves production result
      equivalence
    - pushes cheap primary/audit eligibility before owner backfill and gates
      audit-only evidence by destination and selected scope
    - prerequisite for rerunning 85RAW P2b efficiently; not a Cleanup C-spec
+   - 85RAW foreground rerun now completed for the primary matrix/review/cells
+     delivery surface
 
 The production-facing Phase 1 order is P1 -> P2 -> P4/P5 -> P2b. P3 is no
 longer a non-negotiable sequencing dependency because the completed audit showed
@@ -89,12 +104,13 @@ that untargeted external tools are useful `diagnostic_only` references but do
 not close targeted ISTD production GO/NO-GO questions. P2b is a promotion gate
 after P2 shadow evidence, P4 uncertainty provenance, baseline truth, and
 RT/boundary evidence. The old strict RSD gate is `NO-GO`, but the
-RT/boundary-first revised 8RAW gate records `GO_FOR_PRODUCTION_CANDIDATE`. P6
-is a future RT-shadow diagnostic only; the current closeout does not trigger it.
-P7 is the performance/evidence-scope prerequisite for any practical 85RAW P2b
-rerun. It is not a scientific gate by itself; it prevents audit-only evidence
-from consuming RAW/XIC resources before cheap production/audit predicates have
-split the work.
+RT/boundary-first revised 8RAW gate records only a conditional audit promotion.
+P6 is a future RT-shadow diagnostic only; the current closeout does not trigger
+it. P7 was the performance/evidence-scope prerequisite for a practical 85RAW
+P2b rerun. The 2026-05-26 foreground 85RAW rerun now validates the primary
+matrix/review/cells delivery surface. P7 is not a scientific gate by itself; it
+prevents audit-only evidence from consuming RAW/XIC resources before cheap
+production/audit predicates have split the work.
 
 Phase 1 closeout note:
 [2026-05-25 Phase 1 modernization closeout](../notes/2026-05-25-phase1-modernization-closeout-note.md).
@@ -102,8 +118,8 @@ Phase 1 closeout note:
 ## Two-Phase Relationship
 
 ```text
-Phase 1 — production-facing specs (P1, P2, P4, P5, plus P2b if AsLS
-          promotion is accepted)
+Phase 1 — production-facing specs (P1, P2, P4, P5, plus P2b conditional
+          audit promotion)
   goal: production peak-pipeline output is closer to handoff vision
   validation: strict ISTD benchmark, identity coherence, area RSD
   outcome: behavior changes and shadow evidence; structure stays the same
@@ -117,7 +133,8 @@ External/reference audit track — P3 and future P6
 
 Phase 2 — cleanup roadmap (C1a, C1b, C2 .. C6)
   see: 2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md
-  goal: code structure is closer to handoff vision
+  goal: code structure is closer to handoff vision, starting with the
+        hypothesis/evidence/integration/audit spine
   validation: behavioral parity (hash-identical TSVs)
   outcome: structure changes, behavior stays the same
 ```
@@ -130,9 +147,11 @@ carries a "Cleanup Hook" note describing structural
 constraints that Phase 1 implementers should honor to keep Phase 2 tractable.
 Examples:
 
-- P2 selector is a thin wrapper, removable by Phase 2 C1b
-- P2b is the only spec that can make AsLS production. Without P2b GO, Phase 2
-  cannot assume linear-edge retirement is legal
+- P2 selector is a thin wrapper, but Phase 2 C1b may remove it only after C5
+  and P2c reaches `GO_FOR_LINEAR_EDGE_RETIREMENT`.
+- P2b can promote AsLS only for the integration-audit surface. Phase 2 cannot
+  assume linear-edge retirement is legal from P2b alone; P2c truth validation
+  is also required.
 - P4 may place `residual_mad` on `BaselineIntegration` and/or the audit
   summary so Phase 2 C5 can carry it through the unified integration result
   without recomputing it
@@ -155,7 +174,7 @@ handoff vision and current production:
   `config/settings.example.csv`, `CANONICAL_SETTINGS_DEFAULTS`, and validation
   harness defaults still exposed legacy defaults. Alignment has a separate
   contract: `scripts/run_alignment.py` may accept `region_first_safe_merge` but
-  keeps production quantification on `local_minimum` and emits region-first
+  keeps production quantification on `local_minimum` and emits safe-merge/WIS
   audit context. The handoff asks for local minimum to be weak boundary evidence
   rather than the final targeted decision. The `region_first_safe_merge`
   resolver is already implemented as a conservative targeted production override
@@ -170,7 +189,10 @@ handoff vision and current production:
   as a boolean flag), but the boundary audit can render `cwt_width` symmetric
   intervals that look more meaningful than they are.
 
-These are surgical, low-risk changes. None of them require new architecture.
+These are surgical, low-risk changes. They are not sufficient by themselves to
+complete the handoff architecture. The design correction note adds explicit
+vision milestones so future work distinguishes local cleanup from architecture
+progress.
 
 ## Phase 1 Decision Order
 
@@ -179,8 +201,9 @@ P1 resolver default switch
   -> P2 area baseline AsLS (shadow)
   -> P4 audit field correction
   -> P5 CWT evidence honesty
-  -> P2b AsLS production promotion      (only after P2/P4/internal evidence)
-  -> P7 evidence-chain cost control     (before practical 85RAW P2b rerun)
+  -> P2b AsLS conditional audit promotion (only after P2/P4/internal evidence)
+  -> P7 evidence-chain cost control
+  -> 85RAW foreground primary-delivery validation
 
 External/reference track:
 P3 third-party shadow comparison        (diagnostic_only; non-blocking)
@@ -189,16 +212,19 @@ P6 OBI-Warp RT shadow                   (future trigger only)
 
 P1 must validate clean on the strict ISTD benchmark, identity coherence, and
 area-uncertainty gates before P2 begins. The 2026-05-24/25 P1 validation note
-records a P2-entry GO at `production_candidate` strength for 8RAW; it is not
-85RAW or `production_ready`. P2 must remain shadow-only until P2b records a
-separate promotion GO note. P3 provided `diagnostic_only` external-reference
-evidence, but it is not a P2b hard gate because it cannot adjudicate targeted
-ISTD identity or absolute area truth by itself. The RT/boundary-first revised
-P2b gate records `GO_FOR_PRODUCTION_CANDIDATE` for 8RAW, but production area
-has not been switched. P6 is not triggered. P4 and P5 are audit-only at the
-production-decision boundary but may carry schema changes to audit TSVs (see
-TSV Schema Impact below). P6 should be scheduled only if a future broader RT
-diagnostic or redesigned external-reference audit shows that anchor-sparse RT
+records an 8RAW P2-entry GO for the conservative resolver default; it is not
+true region-first v2. P2 remained shadow-only until P2b recorded a separate
+conditional audit promotion note. P3 provided `diagnostic_only`
+external-reference evidence, but it is not a P2b hard gate because it cannot
+adjudicate targeted ISTD identity or absolute area truth by itself. The
+RT/boundary-first revised P2b gate supports conditional audit promotion, and
+the 2026-05-26 foreground 85RAW rerun validates the primary delivery surface,
+but this still does not prove baseline truth or authorize linear-edge
+retirement. P2c defines that separate truth gate. P6 is not triggered. P4 and
+P5 are audit-only at the production-decision boundary but may carry schema
+changes to audit TSVs (see TSV Schema Impact below). P6 should be scheduled
+only if a future broader RT diagnostic or redesigned external-reference audit
+shows that anchor-sparse RT
 correction is the current blocker.
 
 ### Identity Coherence Check Coverage
@@ -259,7 +285,7 @@ In scope for this modernization:
 
 - targeted / extraction resolver default value plus alignment audit context (P1)
 - area integration baseline method (P2)
-- optional AsLS production promotion (P2b)
+- conditional AsLS integration-audit promotion (P2b)
 - audit field formula correctness (P4)
 - audit field honesty about evidence provenance (P5)
 - evidence-chain cost control for practical 85RAW P2b reruns (P7), including

@@ -1,11 +1,15 @@
 # Peak Pipeline Cleanup Roadmap Overview
 
 **Date:** 2026-05-24
-**Status:** Roadmap draft v0.2 — ON HOLD until Phase 1 GO / NO-GO notes
+**Status:** Roadmap draft v0.3 — DESIGN CORRECTION APPLIED; ON HOLD until
+conditional Phase 1 blockers are resolved
 **Sibling overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
 **Precondition:** modernization Phase 1 validation reports clean. If Cleanup
-assumes AsLS production, [P2b — Area integration AsLS promotion](2026-05-24-peak-pipeline-area-baseline-asls-promotion-spec.md)
-must also have a GO note.
+assumes AsLS production or linear-edge retirement, P2b audit promotion is not
+enough; [P2c AsLS truth validation](2026-05-26-peak-pipeline-asls-truth-validation-spec.md)
+must reach `GO_FOR_LINEAR_EDGE_RETIREMENT`.
+
+**Correction note:** [Phase 1 / Phase 2 design correction](../notes/2026-05-26-phase1-phase2-design-correction-note.md)
 
 This file is the entrypoint for Phase 2 structural cleanup. It is the
 companion to the modernization roadmap. Phase 1 (the modernization overview)
@@ -34,14 +38,34 @@ Phase 2 — structural cleanup (C1a, C1b, C2 .. C6)
               output for the same input set)
 ```
 
-Phase 2 introduces no new behavior. Every C-spec validation is "before and
-after this refactor produce byte-identical TSVs / hashes / matrix values".
-Behavior is locked to Phase 1's final state. Until Phase 1 has GO / NO-GO
-notes, every C-spec is planning material only.
+Phase 2 introduces no production behavior by default. Every C-spec validation
+is "before and after this refactor produce byte-identical TSVs / hashes /
+matrix values". Behavior is locked to Phase 1's final state unless a separate
+behavior spec explicitly changes it. Until the Phase 1 conditional blockers are
+resolved, every C-spec is planning material only.
+
+## 2026-05-26 Design Correction
+
+The first cleanup roadmap over-weighted local cleanup and under-weighted the
+handoff spine. The corrected strategy is:
+
+- establish the hypothesis/evidence/integration/audit spine before retiring
+  behavior;
+- treat current AsLS as `conditional_audit_promotion`, not production-ready
+  baseline truth;
+- keep linear-edge retirement blocked until P2c reaches
+  `GO_FOR_LINEAR_EDGE_RETIREMENT`;
+- describe `region_first_safe_merge` honestly as a compatibility name for
+  conservative `local_minimum_with_wis_merge_v1` behavior;
+- keep P7/P7.5 on the critical path for any 85RAW-backed cleanup decision.
+
+The old implementation order remains useful historical context, but is not the
+current recommended order.
 
 ## Spec Map
 
-Listed in implementation order (matches Non-Negotiable Order below):
+Listed in original cleanup-slice order. The corrected recommended order is in
+"Corrected Recommended Order" below.
 
 1. [C1a — Baseline module relocation](2026-05-24-peak-pipeline-cleanup-baseline-module-consolidation-spec.md)
    - move `asls_baseline` from `xic_extractor/baseline.py` into
@@ -66,7 +90,9 @@ Listed in implementation order (matches Non-Negotiable Order below):
      `integrate_with_baseline` selector wrapper after C5 has migrated all
      callers
    - single AsLS source of truth on the area integration path
-   - depends on C5
+   - depends on C5, C1a, P2c `GO_FOR_LINEAR_EDGE_RETIREMENT`, and a prior
+     rollback-column deprecation decision; do not start from P2b audit-promotion
+     evidence alone
 5. [C3 — Hypothesis model unification](2026-05-24-peak-pipeline-cleanup-hypothesis-model-unification-spec.md)
    - migrate `PeakCandidate` / `PeakResult` / `PeakDetectionResult`
      consumers to the `PeakHypothesis` / `EvidenceVector` /
@@ -85,8 +111,22 @@ Listed in implementation order (matches Non-Negotiable Order below):
    - pure Scope A refactor only; algorithm upgrades require a separate spec
    - depends on Phase 1 + P3 findings
 
-Order rationale and dependencies are listed under "Non-Negotiable Order"
-below.
+Order rationale and dependencies are superseded by "Corrected Recommended
+Order" below.
+
+## Vision Milestones
+
+Every future P-spec or C-spec should state which milestone it advances. If a
+spec advances none of these, it is cleanup-only and must not be presented as
+handoff modernization.
+
+| Milestone | Definition | Current status |
+|---|---|---|
+| M1 TraceGroup wrapper | Trace / ROI / EIC arrays can be passed as a stable trace-group object | Not started |
+| M2 Multi-source hypothesis enumeration | At least two independent proposal sources can emit boundary hypotheses for the same trace | Partial audit-only boundary hypotheses exist |
+| M3 EvidenceVector schema freeze | At least three evidence sources contribute through a documented schema | Partial adapter exists; not authoritative |
+| M4 Model selection criterion | WIS/AIC/BIC/other criterion selects among hypotheses with a validation target | Not production; WIS is local helper only |
+| M5 End-to-end AuditTrail case | One case runs trace -> hypotheses -> selection -> integration -> audit trail | Partial adapter, not end-to-end authoritative |
 
 ## Why Phase 2 Cannot Be Merged Into Phase 1
 
@@ -105,37 +145,38 @@ discipline.
 Mixing the two would make every PR ambiguous. Splitting them keeps each
 review tractable.
 
-## Non-Negotiable Order
+## Corrected Recommended Order
 
 ```text
-all of Phase 1 must be stable and validated
-  -> P2b AsLS promotion GO if Cleanup assumes AsLS production
-  -> C1a baseline module relocation       (independent)
-  -> C2  resolver collapse                (after P5 stable; can parallel C1a)
-  -> C5  area integration single entry    (after C1a + P2b)
-  -> C1b linear edge retirement           (after C5)
-  -> C3  hypothesis model unification     (after C1a, C2, C5, C1b)
-  -> C4  peak_scoring split               (after C3)
-  -> C6  alignment grouping consolidation (after P3 evidence + Phase 1 stable)
+Phase 1 conditional blockers resolved
+  -> C0  roadmap correction / acceptance rules
+  -> C3a/C3b hypothesis spine scaffold + dual-write
+  -> C5  area integration single entry, method-preserving
+  -> C2  resolver naming/collapse on honest semantics
+  -> C4  peak_scoring split on hypothesis spine
+  -> C6  alignment grouping consolidation with golden parity
+  -> C1b linear edge retirement only after P2c truth validation
 ```
 
 Dependencies:
 
-- C1a and C2 are largely independent and can run in parallel after Phase 1,
-  but C1a cannot delete the top-level baseline import surface without an
-  explicit compatibility decision
-- C5 depends on C1a because the single integration entry imports AsLS from
-  the relocated module; it also depends on P2b if the entry is meant to be
-  AsLS production-only
-- C1b depends on C5 because deleting `integrate_linear_edge_baseline`
-  requires no remaining callers
-- C3 depends on C1a, C2, and C5 because the unified model assumes one
-  baseline module, one resolver path, and one area entry point
+- C1a baseline module relocation may still run early if it is pure import
+  movement. It must not imply AsLS-only production.
+- C3a/C3b should move earlier because the handoff spine is the main architecture
+  boundary. Later cleanup should target this spine rather than the legacy table
+  model.
+- C5 should be method-preserving until AsLS truth validation passes. It can
+  unify integration mechanics without deleting linear-edge.
+- C2 should not describe `region_first_safe_merge` as true region-first. Treat
+  it as conservative `local_minimum_with_wis_merge_v1` unless a future v2 spec
+  implements primary region/hypothesis enumeration.
 - C4 depends on C3 because splitting `peak_scoring.py` cleanly assumes the
-  hypothesis spine is already authoritative
-- C6 depends on P3 evidence and Phase 1 stability only to decide whether the
-  pure refactor is worth prioritizing. Its scope stays Scope A; behavior
-  upgrades require a separate spec
+  hypothesis spine is already visible.
+- C6 requires golden parity for matrix/review/cells and should not proceed as a
+  casual grouping refactor.
+- C1b is last. Deleting linear-edge requires C1a, C5 migration, P2c
+  `GO_FOR_LINEAR_EDGE_RETIREMENT`, and deprecation of P2b temporary linear-edge
+  rollback columns.
 
 ## Cleanup Hooks Phase 1 Should Provide
 

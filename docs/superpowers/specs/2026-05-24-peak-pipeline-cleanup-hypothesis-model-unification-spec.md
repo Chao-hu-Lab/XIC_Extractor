@@ -1,13 +1,12 @@
 # C3 — Hypothesis Model Unification Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
+**Status:** Cleanup slice draft v0.3 — move scaffold earlier after design correction
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
-**Precondition:** Phase 1 stable, and C1a (baseline module relocation), C2
-(resolver collapse), C5 (area integration single entry), and C1b (linear edge
-retirement) all landed and validated. C1b is included because the post-C1b
-state finalizes the `BaselineIntegration` shape that the hypothesis spine
-`IntegrationResult` mirrors.
+**Precondition:** Phase 1 conditional blockers are documented. The early
+scaffold / dual-write slice (C3a/C3b) may start before C1b. Full legacy model
+removal still waits for C1a, C2, C5, and any approved baseline-retirement
+decision.
 
 ## Purpose
 
@@ -17,11 +16,13 @@ data spine (`PeakHypothesis` + `EvidenceVector` + `IntegrationResult` +
 `PeakDetectionResult`) still exists in parallel. Every consumer goes
 through an adapter.
 
-This is the largest refactor in the cleanup roadmap. It touches the most
-files. It also unlocks C4 (peak_scoring split).
+This is the main handoff-spine refactor in the cleanup roadmap. The 2026-05-26
+design correction moves the scaffold earlier so C5 and C4 do not build new
+legacy-shaped DTOs that must be migrated again.
 
-This refactor introduces no behavioral change. Validation is behavioral
-parity.
+This refactor introduces no behavioral change. Validation is behavioral parity.
+The early slice should be dual-write only; legacy readers stay in place until
+the spine has parity evidence and a timeboxed migration plan.
 
 ## Current State
 
