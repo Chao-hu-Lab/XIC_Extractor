@@ -1501,6 +1501,8 @@ def test_run_alignment_cli_preflight_only_prints_launch_contract(
             "super-window",
             "--expected-sample-count",
             "2",
+            "--timing-output",
+            str(output_dir / "timing.json"),
             "--timing-live-output",
             str(output_dir / "timing.live.json"),
             "--preflight-only",
@@ -1526,6 +1528,7 @@ def test_run_alignment_cli_preflight_only_prints_launch_contract(
     assert "Python executable:" in stdout
     assert "run_alignment module:" in stdout
     assert "Working directory:" in stdout
+    assert f"Timing JSON: {output_dir / 'timing.json'}" in stdout
     assert "Timing live JSON:" in stdout
 
 

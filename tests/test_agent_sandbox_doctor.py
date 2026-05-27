@@ -98,3 +98,24 @@ def test_main_strict_json_output_reports_blockers(
     assert code == 2
     assert "preflight_blocked" in stdout
     assert "raw_runner_not_venv" in output.read_text(encoding="utf-8")
+
+
+def test_default_allowed_write_roots_are_absolute(tmp_path: Path) -> None:
+    roots = agent_sandbox_doctor._default_allowed_write_roots(tmp_path)
+
+    assert tmp_path.resolve() in roots
+    assert all(root.is_absolute() for root in roots)
+
+
+def test_probe_write_does_not_clobber_existing_probe_file(tmp_path: Path) -> None:
+    existing = tmp_path / ".agent_sandbox_doctor_probe"
+    existing.write_text("keep me\n", encoding="utf-8")
+
+    report = agent_sandbox_doctor.build_environment_report(
+        workspace_root=tmp_path,
+        allowed_write_roots=(tmp_path,),
+        probe_write=True,
+    )
+
+    assert report.status == "ok"
+    assert existing.read_text(encoding="utf-8") == "keep me\n"

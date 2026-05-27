@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import tempfile
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -206,7 +207,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     allowed_write_roots = (
         tuple(root.resolve() for root in args.allowed_write_root)
         if args.allowed_write_root
-        else (workspace_root, Path("C:/tmp"))
+        else _default_allowed_write_roots(workspace_root)
     )
     report = build_environment_report(
         workspace_root=workspace_root,
@@ -250,7 +251,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=Path,
         default=None,
         help=(
-            "Allowed write root. Repeatable. Defaults to workspace root and C:\\tmp."
+            "Allowed write root. Repeatable. Defaults to workspace root and "
+            "C:\\tmp when that is an absolute path on the current platform."
         ),
     )
     parser.add_argument(
@@ -291,6 +293,14 @@ def _print_report(report: DoctorReport) -> None:
 
 def _normalize_command(command: str) -> str:
     return " ".join(command.replace("`", " ").split())
+
+
+def _default_allowed_write_roots(workspace_root: Path) -> tuple[Path, ...]:
+    roots = [workspace_root.resolve()]
+    tmp_root = Path("C:/tmp")
+    if tmp_root.is_absolute():
+        roots.append(tmp_root.resolve())
+    return tuple(roots)
 
 
 def _looks_like_long_raw_run(lower_command: str) -> bool:
@@ -360,10 +370,17 @@ def _is_relative_to(path: Path, root: Path) -> bool:
 def _probe_write_roots(roots: Sequence[Path]) -> tuple[Finding, ...]:
     findings: list[Finding] = []
     for root in roots:
-        probe = root / ".agent_sandbox_doctor_probe"
         try:
             root.mkdir(parents=True, exist_ok=True)
-            probe.write_text("ok\n", encoding="utf-8")
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                prefix=".agent_sandbox_doctor_probe_",
+                dir=root,
+                delete=False,
+            ) as handle:
+                probe = Path(handle.name)
+                handle.write("ok\n")
             probe.unlink()
         except OSError as exc:
             findings.append(

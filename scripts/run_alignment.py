@@ -698,7 +698,7 @@ def _is_repo_venv_python() -> bool:
         python_executable = Path(sys.executable).resolve()
     except OSError:
         return False
-    return repo_venv == python_executable or repo_venv in python_executable.parents
+    return python_executable.is_relative_to(repo_venv)
 
 
 def _repo_root() -> Path:
@@ -756,6 +756,10 @@ def _print_preflight_summary(
     print(
         "Owner backfill superwindow span factor: "
         f"{args.owner_backfill_superwindow_span_factor}"
+    )
+    print(
+        "Timing JSON: "
+        f"{args.timing_output.resolve() if args.timing_output else '<none>'}"
     )
     print(
         "Timing live JSON: "
