@@ -3,91 +3,77 @@
 This repo keeps real-data validation explicit and tiered. The default CI test
 suite does not require Thermo RAW files.
 
-## Validation Tiers
+This document covers `scripts\validation_harness.py`, which is a targeted
+extraction / workbook comparison harness. It is not the canonical runner for
+large untargeted alignment acceptance. For stable local Python runners, RAW/DLL
+paths, 85RAW command shape, `validation-minimal`, heartbeat sidecars, and known
+launch anti-patterns, read [`agent-parameter-settings.md`](agent-parameter-settings.md)
+before starting any RAW run.
+
+## Harness Scope
 
 | Suite | Purpose | Default data | Output contract |
 | --- | --- | --- | --- |
 | `manual-2raw` | Manual truth area/RT comparison for resolver development | `C:\Xcalibur\data\20251219_need process data\XIC test` | `local_minimum_param_sweep_summary.xlsx` |
-| `tissue-8raw` | Daily real-data smoke and workbook A/B comparison | `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation` | `xic_results_process_w4.xlsx` |
-| `tissue-85raw` | Full tissue release gate only | `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R` | `xic_results_process_w4.xlsx` |
+| `tissue-8raw` | Targeted extraction workbook smoke / A-B comparison | `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation` | `xic_results_<mode>_w<workers>.xlsx` |
+| `tissue-85raw` | Full targeted extraction workbook gate, opt-in only | `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R` | `xic_results_<mode>_w<workers>.xlsx` |
 
-All tiers write a `validation_summary.csv` under the selected run directory.
-The 8-raw and 85-raw tiers validate the expected `.raw` count before running:
-8 and 85 respectively.
+All suites write `validation_summary.csv` under the selected run directory. The
+8RAW and 85RAW suites validate the expected `.raw` count before running: 8 and
+85 respectively.
 
-## Daily Method Validation
+Use this harness when the decision depends on targeted extraction workbook
+behavior. Do not use it for alignment/downstream matrix acceptance. Alignment
+validation uses `scripts.run_alignment` and the machine TSV contract described in
+`docs/agent-parameter-settings.md`.
 
-Run the manual truth sweep plus the 8-raw validation subset:
+## Daily Workbook / Method Validation
+
+Run the manual truth sweep plus the 8RAW targeted extraction subset:
 
 ```powershell
-uv run python scripts\validation_harness.py `
+.venv\Scripts\python.exe scripts\validation_harness.py `
   --run-id method_dev `
   --output-root output\validation_harness
 ```
 
-Defaults:
+Current defaults:
 
-- `resolver_mode=local_minimum`
+- `resolver_mode=region_first_safe_merge`
 - `parallel_mode=process`
 - `parallel_workers=4`
 - suites: `manual-2raw`, `tissue-8raw`
 - manual sweep grid: `quick`
 
-`manual-2raw` uses the same worker setting, but the quick grid is still mostly
+`manual-2raw` uses the same worker setting, but the quick grid is mostly
 sequential because NoSplit and Split use different target CSVs and are staged as
 single-RAW runs. `parallel_workers=4` matters most for `tissue-8raw` and
 `tissue-85raw`, where each extraction run contains multiple RAW files.
 
-For local-minimum preset calibration, use the focused grid instead of the daily
-quick grid:
+For local-minimum preset calibration, make the resolver mode explicit and use a
+focused grid:
 
 ```powershell
-uv run python scripts\validation_harness.py `
+.venv\Scripts\python.exe scripts\validation_harness.py `
   --suite manual-2raw `
+  --resolver-mode local_minimum `
   --grid calibration-v1 `
   --run-id local_minimum_calibration_v1 `
   --output-root output\validation_harness
 ```
 
-`calibration-v1` keeps the sweep small and targets the current method questions:
-whether the historical `resolver_peak_duration_max=10.0` was too permissive, and whether
-`resolver_min_search_range_min=0.08` should move toward `0.04-0.05` minutes.
-If a candidate is equivalent on clean-matrix manual truth and improves parameter
-semantics, it may justify a preset-only change even without a large metric gain.
-
-After `calibration-v1`, use `calibration-v2` to test the next permissive
-parameters:
-
-```powershell
-uv run python scripts\validation_harness.py `
-  --suite manual-2raw `
-  --grid calibration-v2 `
-  --run-id local_minimum_calibration_v2 `
-  --output-root output\validation_harness
-```
-
-`calibration-v2` focuses on `resolver_peak_duration_min` and
-`resolver_min_relative_height`. The manual 2-raw tier is pure standard material:
-it is the first gate for integration behavior. Within that tier, NoSplit STD
-has higher decision weight than Split STD because its acquisition method is
-closer to the real tissue samples when matrix effects are ignored. Tissue 8-raw
-is the next real-sample smoke test. Urine and other complex matrices are later
-robustness stress tests, not the source of the first clean-model preset.
-
-The first `calibration-v2` run found that positive
-`resolver_min_relative_height` values improved NoSplit STD area agreement, but
-also narrowed tissue candidate regions enough to flip candidate-aligned MS2/NL
-status for several 5-medC rows. After adding strict-NL boundary rescue,
-`resolver_min_relative_height=0.02` kept the 8-raw tissue subset stable with no
-detection, RT, area, NL, or confidence regressions. `0.03` still moved a QC
-8-oxodG row, so the shipped preset uses `0.02`.
+`calibration-v1` keeps the sweep small and targets historical local-minimum
+parameter questions such as peak-duration permissiveness and search-range
+semantics. `calibration-v2` focuses on `resolver_peak_duration_min` and
+`resolver_min_relative_height`. These calibration grids are method-development
+evidence; they are not a replacement for current alignment matrix validation.
 
 ## Inspect Exact Commands
 
-Dry-run prints the exact commands without touching RAW files:
+Dry-run prints exact commands without touching RAW files:
 
 ```powershell
-uv run python scripts\validation_harness.py `
+.venv\Scripts\python.exe scripts\validation_harness.py `
   --suite all `
   --dry-run `
   --confirm-full-run `
@@ -95,12 +81,18 @@ uv run python scripts\validation_harness.py `
   --output-root output\validation_harness
 ```
 
+Use dry-run before any full targeted extraction workbook gate. If the printed
+runner, RAW/DLL path, foreground-run, or heartbeat expectation conflicts with
+`docs/agent-parameter-settings.md`, stop and update the docs or runner before
+launching a long RAW run. The alignment artifact/profile contract in that file
+does not apply to targeted workbook harness suites.
+
 ## Baseline Compare
 
-Create a baseline run once:
+Create a workbook baseline run once:
 
 ```powershell
-uv run python scripts\validation_harness.py `
+.venv\Scripts\python.exe scripts\validation_harness.py `
   --suite tissue-8raw `
   --run-id current `
   --output-root output\validation_baselines
@@ -110,7 +102,7 @@ Compare a later run against that baseline by keeping the same `run-id` and
 pointing `--baseline-root` at the baseline root:
 
 ```powershell
-uv run python scripts\validation_harness.py `
+.venv\Scripts\python.exe scripts\validation_harness.py `
   --suite tissue-8raw `
   --run-id current `
   --output-root output\validation_harness `
@@ -125,135 +117,74 @@ output\validation_baselines\<run-id>\tissue_8raw_<resolver>\xic_results_process_
 
 Workbook comparison uses `scripts\compare_workbooks.py`, which ignores runtime
 metadata such as timestamps and output paths but compares analytical workbook
-sheets.
+sheets. This is a targeted extraction regression check, not the downstream
+alignment matrix contract.
 
-## Untargeted Alignment 8-raw Fast Path
+## Alignment Validation
 
-For untargeted alignment performance work, keep the raw execution settings
-explicit by using the validation fast profile:
+For untargeted alignment validation, downstream handoff, or 85RAW acceptance,
+start from `docs/agent-parameter-settings.md` instead of this harness. The
+current large-run contract is:
 
-```powershell
-uv run python scripts\run_alignment.py `
-  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
-  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
-  --dll-dir "C:\Xcalibur\system\programs" `
-  --output-dir output\alignment\timing_phase0_validation_fast_8raw `
-  --output-level machine `
-  --emit-alignment-cells `
-  --performance-profile validation-fast `
-  --timing-output output\diagnostics\timing_phase0_validation_fast_8raw\alignment_timing.json
+```text
+validation-minimal + production-equivalent + validation-fast + super-window
++ timing heartbeat
 ```
 
-`validation-fast` expands to `raw-workers=8` and `raw-xic-batch-size=64`.
-Explicit `--raw-workers` or `--raw-xic-batch-size` values override the profile.
-The CLI default remains the conservative `1` / `1` execution shape.
+That shape writes the primary machine gate surface:
 
-Experimental owner-family preconsolidation can be tested as an algorithmic
-fast path. This is not an exact-output mode: it collapses identity-compatible
-single-sample owner families before owner-centered backfill, preserves early
-and late RT seed centers for backfill confirmation, recenters consolidated
-rows from accepted present-cell RTs, and keeps loser rows in the review/audit
-surface.
+- `alignment_matrix.tsv`
+- `alignment_review.tsv`
+- `alignment_cells.tsv`
 
-```powershell
-uv run python scripts\run_alignment.py `
-  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
-  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
-  --dll-dir "C:\Xcalibur\system\programs" `
-  --output-dir output\alignment\preconsolidate_seed2_min2_8raw `
-  --output-level machine `
-  --emit-alignment-cells `
-  --performance-profile validation-fast `
-  --preconsolidate-owner-families `
-  --owner-backfill-min-detected-samples 2 `
-  --timing-output output\diagnostics\preconsolidate_seed2_min2_8raw\alignment_timing.json
-```
+It intentionally avoids large `.xlsx`, HTML, owner-edge, status-matrix,
+event-owner, and ambiguous-owner artifacts unless a debug or human-review task
+explicitly asks for them. Lightweight provenance sidecars, such as
+`skipped_evidence_ledger.tsv` and `alignment_run_metadata.json`, may still be
+emitted when the chosen backfill scope needs them.
 
-Always run the strict targeted ISTD benchmark before interpreting this mode as
-a production matrix candidate. On the 8-RAW tissue subset, the seed2/min2 run
-passed the strict DNA ISTD gate and reduced owner-backfill vendor calls versus
-the full-backfill validation-fast baseline, while intentionally changing row
-identity consolidation. On the 85-RAW tissue run, the same mode removed the
-false DRIFT failures after recentering; the remaining `d3-N6-medA`
-AREA_MISMATCH also exists in the full-backfill baseline targeted benchmark.
+Before starting an alignment validation run:
 
-Owner-centered backfill can also be run with the experimental MS1 scan-index
-backend:
+1. Confirm the active discovery batch index and check its sample count.
+2. Confirm RAW and DLL paths with `Test-Path`.
+3. Decide whether existing notes or output artifacts already answer the current
+   decision.
+4. Include `--expected-sample-count 85` for full 85RAW alignment runs.
+5. Run the same launch contract with `--preflight-only` when checking a command
+   shape before a long run. This checks the shared discovery-batch parser,
+   candidate CSV existence, and RAW path existence, but does not load candidate
+   rows or open RAW files. With `--expected-sample-count 85`, the CLI also
+   enforces the canonical 85RAW profile, heartbeat, and local `.venv` runner.
+6. Include both `--timing-output` and `--timing-live-output`.
+7. Run in the foreground from the Codex shell, or get explicit approval for an
+   external terminal / automation.
 
-```powershell
-uv run python scripts\run_alignment.py `
-  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
-  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
-  --dll-dir "C:\Xcalibur\system\programs" `
-  --output-dir output\alignment\ms1_index_fast_8raw `
-  --output-level machine `
-  --emit-alignment-cells `
-  --performance-profile validation-fast `
-  --owner-backfill-xic-backend ms1-index `
-  --timing-output output\diagnostics\ms1_index_fast_8raw\alignment_timing.json
-```
+Older alignment examples that used heavier artifact levels and workbook parity
+were useful during early performance exploration. They should not be copied into
+new 85RAW acceptance runs.
 
-`ms1-index` is an explicit approximate fast mode for owner backfill only. It
-does not replace the default vendor XIC path and must be checked with the
-targeted ISTD benchmark before any production interpretation.
+## Full Targeted Workbook 85RAW Gate
 
-When validating whether the scan-index prefilter is the source of a matrix
-change, run the hybrid mode:
+The `tissue-85raw` harness suite remains available only for full targeted
+extraction workbook release checks:
 
 ```powershell
-uv run python scripts\run_alignment.py `
-  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
-  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
-  --dll-dir "C:\Xcalibur\system\programs" `
-  --output-dir output\alignment\ms1_index_hybrid_8raw `
-  --output-level machine `
-  --emit-alignment-cells `
-  --performance-profile validation-fast `
-  --owner-backfill-xic-backend ms1-index-hybrid `
-  --timing-output output\diagnostics\ms1_index_hybrid_8raw\alignment_timing.json
-```
-
-`ms1-index-hybrid` uses MS1-index traces as a prefilter, but every rescued
-owner-backfill cell that enters the matrix is re-extracted from the vendor XIC
-path before its RT and area are written. It is an equivalence diagnostic and
-may be slower than the raw backend when the prefilter rejects only a small
-fraction of requests.
-
-The 8-raw timing run on the tissue validation subset showed byte-identical
-machine TSV outputs (`alignment_review.tsv`, `alignment_matrix.tsv`, and
-`alignment_cells.tsv`) versus the conservative baseline, with workbook sheet
-values also unchanged. The alignment command wall time reduced from about
-343 seconds to about 44 seconds; `alignment.cluster_owners` reduced from about
-19 seconds to below 1 second through hard-gate group prefiltering.
-
-To separate exact duplicate requests, batchable scan-window reuse, and
-algorithm-level near redundancy, run the request census diagnostic:
-
-```powershell
-uv run python scripts\analyze_xic_request_locality.py `
-  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
-  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
-  --dll-dir "C:\Xcalibur\system\programs" `
-  --alignment-review output\alignment\timing_phase0_8raw\alignment_review.tsv `
-  --alignment-cells output\alignment\timing_phase0_8raw\alignment_cells.tsv `
-  --raw-xic-batch-size 64 `
-  --near-mz-ppm 20 `
-  --near-rt-sec 30 `
-  --output-json output\diagnostics\timing_phase0_8raw\xic_request_census_batch64.json
-```
-
-## Full 85-raw Gate
-
-The full run is intentionally opt-in:
-
-```powershell
-uv run python scripts\validation_harness.py `
+.venv\Scripts\python.exe scripts\validation_harness.py `
   --suite tissue-85raw `
   --confirm-full-run `
-  --run-id full_tissue_gate `
+  --run-id full_tissue_workbook_gate `
   --output-root output\validation_harness
 ```
 
-Do not use the 85-raw suite for routine PR checks. Use it for release gates,
-major scoring/resolver changes, or when the 8-raw subset shows a result that
-needs cohort-level confirmation.
+Do not use this suite for routine PR checks, and do not use it as the alignment
+handoff gate. For alignment, use the canonical foreground command shape in
+`docs/agent-parameter-settings.md`.
+
+## Stop Conditions
+
+- If the 8RAW gate is inconclusive, do not launch 85RAW just to gather more
+  samples. Fix the blocker or redefine the gate first.
+- If a long RAW run lacks a heartbeat sidecar, stop and relaunch only after the
+  command shape is corrected.
+- If a validation task cannot change the next engineering decision, use the
+  smallest confirmation or existing artifact instead of expanding the run.
