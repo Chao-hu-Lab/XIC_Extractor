@@ -45,7 +45,9 @@ Do not spend more Phase 1 effort trying to prove what is already decided:
 Proceed with one of these low-risk Phase 2 directions:
 
 - handoff-spine scaffold / dual-write work (`PeakHypothesis`, `EvidenceVector`,
-  `IntegrationResult`, `AuditTrail`);
+  `IntegrationResult`, `AuditTrail`), using
+  `2026-05-27-handoff-productization-c0-source-of-truth.md` as the current
+  scaffold contract;
 - C5 method-preserving single integration entry;
 - C1a pure baseline relocation if it is kept import-compatible.
 

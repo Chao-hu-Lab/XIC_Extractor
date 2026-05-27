@@ -72,6 +72,11 @@ Both can be right in different cases. A single output row hides that.
 
 `Peak Candidate Table v1` is an optional debug/audit artifact.
 
+Current implementation note: the emitted schema and order are defined by
+`xic_extractor.extraction.peak_candidate_table.PEAK_CANDIDATE_HEADERS`. This
+2026-05-16 spec records the v1 rationale and constraints, not the complete
+current header manifest after later audit fields were appended.
+
 It must:
 
 - preserve default selected peak behavior;
@@ -114,6 +119,11 @@ emit_peak_candidates = false
 When enabled, the file should be written beside existing targeted extraction
 outputs. In a future alignment implementation, the same schema may be written
 beside alignment diagnostics, but this v1 spec is targeted-extraction first.
+
+Current productization contract: `peak_candidates.tsv` is a frozen TSV projection
+of selected `TraceGroup -> PeakHypothesis -> EvidenceVector ->
+IntegrationResult -> AuditTrail` fields into candidate-table columns. It is not
+the canonical domain model and not the downstream production quantitative matrix.
 
 ### Workbook
 

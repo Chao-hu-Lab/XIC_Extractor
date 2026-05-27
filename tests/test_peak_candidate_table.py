@@ -9,10 +9,18 @@ from xic_extractor.extraction.peak_candidate_table import (
     PEAK_CANDIDATE_HEADERS,
     append_peak_candidate_rows,
     build_peak_candidate_rows,
+    build_peak_candidate_rows_from_hypotheses,
     candidate_audit_id,
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.output.peak_candidates import write_peak_candidates_tsv
+from xic_extractor.peak_detection.hypotheses import (
+    AuditTrail,
+    EvidenceVector,
+    IntegrationResult,
+    PeakHypothesis,
+    build_peak_hypotheses,
+)
 from xic_extractor.peak_detection.traces import Trace, targeted_trace_group
 from xic_extractor.peak_scoring import ScoringContext
 from xic_extractor.signal_processing import (
@@ -390,6 +398,169 @@ def test_build_rows_prefers_shared_trace_group_arrays() -> None:
     assert rows[0]["area_baseline_corrected"] == "390.00000"
 
 
+def test_build_rows_from_hypotheses_projects_spine_without_legacy_result() -> None:
+    row = build_peak_candidate_rows_from_hypotheses(
+        sample_name="SampleA",
+        group="Tumor",
+        hypotheses=(
+            PeakHypothesis(
+                hypothesis_id="hypothesis-row-id",
+                trace_group_id="SampleA|Analyte|spine",
+                target_label="Analyte",
+                role="ISTD",
+                istd_pair="Analyte_IS",
+                analysis_mode="targeted",
+                resolver_mode="spine",
+                integration=IntegrationResult(
+                    rt_left_min=8.1,
+                    rt_apex_min=8.3,
+                    rt_right_min=8.5,
+                    raw_apex_rt_min=8.3,
+                    rt_width_min=0.4,
+                    height_raw=100.0,
+                    height_smoothed=95.0,
+                    area_raw_counts_seconds=1234.5,
+                    area_baseline_corrected=999.0,
+                ),
+                evidence=EvidenceVector(
+                    confidence="HIGH",
+                    raw_score=87,
+                    support_labels=("strict_nl_ok",),
+                    reason="spine decision",
+                    ms2_present=True,
+                    nl_match=True,
+                ),
+                audit=AuditTrail(
+                    proposal_sources=("hypothesis_source",),
+                    selected=True,
+                    selection_rank=1,
+                ),
+            ),
+        ),
+    )[0]
+
+    assert row["sample_name"] == "SampleA"
+    assert row["group"] == "Tumor"
+    assert row["candidate_id"] == "hypothesis-row-id"
+    assert row["proposal_sources"] == "hypothesis_source"
+    assert row["selected"] == "TRUE"
+    assert row["selection_rank"] == "1"
+    assert row["area_baseline_corrected"] == "999.00000"
+    assert row["support_labels"] == "strict_nl_ok"
+    assert row["reason"] == "spine decision"
+
+
+def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
+    tmp_path: Path,
+) -> None:
+    selected = _candidate(
+        8.5,
+        left=8.3,
+        right=8.7,
+        area=1234.5,
+        proposal_sources=("legacy_savgol", "centwave_cwt"),
+    )
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=5,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+        candidate_scores=(_score(selected, raw_score=97, confidence="HIGH"),),
+        selection_reference_rt=8.5,
+    )
+    trace = Trace.from_arrays(
+        sample_name="SampleA",
+        mz=258.1085,
+        rt=[8.3, 8.4, 8.5, 8.6, 8.7],
+        intensity=[10.0, 25.0, 50.0, 35.0, 20.0],
+        rt_min=8.3,
+        rt_max=8.7,
+        ppm_tol=20.0,
+        source="synthetic_contract",
+    )
+    trace_group = targeted_trace_group(
+        trace,
+        target_label="Analyte",
+        resolver_mode="arbitrated",
+        expected_rt_min=8.5,
+        role="ISTD",
+        istd_pair="Analyte_IS",
+    )
+    ms2_evidence = {selected: _ms2_evidence(nl_match=True)}
+
+    hypotheses = build_peak_hypotheses(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="ISTD",
+        istd_pair="Analyte_IS",
+        resolver_mode="arbitrated",
+        peak_result=result,
+        candidate_ms2_evidence=ms2_evidence,
+        trace_group=trace_group,
+    )
+    assert len(hypotheses) == 1
+    hypothesis = hypotheses[0]
+    assert hypothesis.trace_group_id == "SampleA|Analyte|arbitrated"
+    assert hypothesis.audit.selected is True
+    assert hypothesis.evidence.raw_score == 97
+    assert hypothesis.evidence.support_labels == ("strict_nl_ok", "shape_clean")
+    assert hypothesis.integration.area_baseline_corrected is not None
+
+    rows = build_peak_candidate_rows(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="ISTD",
+        istd_pair="Analyte_IS",
+        resolver_mode="arbitrated",
+        peak_result=result,
+        candidate_ms2_evidence=ms2_evidence,
+        trace_group=trace_group,
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["sample_name"] == "SampleA"
+    assert row["target_label"] == "Analyte"
+    assert row["role"] == "ISTD"
+    assert row["istd_pair"] == "Analyte_IS"
+    assert row["analysis_mode"] == "targeted"
+    assert row["resolver_mode"] == "arbitrated"
+    assert row["candidate_id"] == candidate_audit_id(
+        sample_name="SampleA",
+        target_label="Analyte",
+        resolver_mode="arbitrated",
+        candidate=selected,
+    )
+    assert row["selected"] == "TRUE"
+    assert row["selection_rank"] == "1"
+    assert row["proposal_sources"] == "legacy_savgol;centwave_cwt"
+    assert row["confidence"] == "HIGH"
+    assert row["raw_score"] == "97"
+    assert row["support_labels"] == "strict_nl_ok;shape_clean"
+    assert row["reason"] == "decision: high"
+    assert row["ms2_present"] == "TRUE"
+    assert row["nl_match"] == "TRUE"
+    assert row["nl_status"] == "OK"
+    assert row["best_ms2_scan_rt_min"] == "8.50000"
+    assert row["apex_ms2_delta_min"] == "0.00000"
+    assert row["rt_left_min"] == "8.30000"
+    assert row["rt_apex_min"] == "8.50000"
+    assert row["rt_right_min"] == "8.70000"
+    assert row["area_raw_counts_seconds"] == "1234.50"
+    assert row["area_baseline_corrected"] != ""
+
+    path = tmp_path / "peak_candidates.tsv"
+    write_peak_candidates_tsv(path, rows)
+
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        read_back = list(csv.DictReader(handle, delimiter="\t"))
+
+    assert len(read_back) == 1
+    for key, value in row.items():
+        assert read_back[0][key] == value
+
+
 def test_append_rows_rescores_same_apex_cwt_audit_support(
     tmp_path: Path,
     monkeypatch,
@@ -494,14 +665,20 @@ def test_write_peak_candidates_tsv_serializes_rows_safely(tmp_path: Path) -> Non
         ),
     )[0]
     row["reason"] = "line1\nline2\twith tab"
+    row["trace_group_id"] = "debug-only-internal-id"
+    row.pop("cap_labels")
 
     write_peak_candidates_tsv(path, [row])
 
     text = path.read_text(encoding="utf-8-sig")
     assert "line1 line2 with tab" in text
     with path.open(newline="", encoding="utf-8-sig") as handle:
-        rows = list(csv.DictReader(handle, delimiter="\t"))
+        reader = csv.DictReader(handle, delimiter="\t")
+        assert reader.fieldnames == list(PEAK_CANDIDATE_HEADERS)
+        assert "trace_group_id" not in reader.fieldnames
+        rows = list(reader)
     assert rows[0]["reason"] == "line1 line2 with tab"
+    assert rows[0]["cap_labels"] == ""
 
 
 def test_disabled_writer_is_noop(tmp_path: Path) -> None:

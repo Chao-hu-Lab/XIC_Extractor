@@ -4,19 +4,23 @@ from collections.abc import Sequence
 from typing import Any
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.extraction.peak_candidate_table import candidate_audit_id
 from xic_extractor.peak_detection.baseline import integrate_linear_edge_baseline
 from xic_extractor.peak_detection.boundaries import (
+    BoundaryCandidateContext,
     BoundaryHypothesis,
     enumerate_boundary_hypotheses,
 )
 from xic_extractor.peak_detection.boundary_scoring import score_boundary_hypothesis
 from xic_extractor.peak_detection.cwt import add_cwt_proposals_for_audit
+from xic_extractor.peak_detection.hypotheses import (
+    PeakHypothesis,
+    build_peak_hypotheses,
+)
 from xic_extractor.peak_detection.interval_selection import (
     WeightedInterval,
     select_weighted_nonoverlap_intervals,
 )
-from xic_extractor.peak_detection.models import PeakCandidate, PeakDetectionResult
+from xic_extractor.peak_detection.models import PeakDetectionResult
 from xic_extractor.peak_detection.trace_quality import trace_continuity_score
 from xic_extractor.peak_detection.traces import TraceGroup
 from xic_extractor.sample_groups import classify_sample_group
@@ -86,38 +90,53 @@ def build_peak_candidate_boundary_rows(
     trace_intensity = (
         trace_group.primary_trace.intensity if trace_group is not None else intensity
     )
-    selected = _selected_candidate(peak_result)
+    hypotheses = build_peak_hypotheses(
+        sample_name=sample_name,
+        target_label=target_label,
+        role=role,
+        istd_pair=istd_pair,
+        resolver_mode=resolver_mode,
+        peak_result=peak_result,
+    )
+    return build_peak_candidate_boundary_rows_from_hypotheses(
+        sample_name=sample_name,
+        target_mz=target_mz,
+        hypotheses=hypotheses,
+        rt=trace_rt,
+        intensity=trace_intensity,
+        group=sample_group,
+    )
+
+
+def build_peak_candidate_boundary_rows_from_hypotheses(
+    *,
+    sample_name: str,
+    target_mz: float | None,
+    hypotheses: tuple[PeakHypothesis, ...],
+    rt: Any,
+    intensity: Any,
+    group: str | None = None,
+) -> list[PeakCandidateBoundaryRow]:
+    sample_group = group or classify_sample_group(sample_name)
     rows: list[PeakCandidateBoundaryRow] = []
-    for candidate in peak_result.candidates:
-        candidate_id = candidate_audit_id(
-            sample_name=sample_name,
-            target_label=target_label,
-            resolver_mode=resolver_mode,
-            candidate=candidate,
-        )
+    for hypothesis in hypotheses:
         boundaries = enumerate_boundary_hypotheses(
-            trace_rt,
-            trace_intensity,
-            candidate,
-            candidate_id=candidate_id,
+            rt,
+            intensity,
+            _boundary_candidate_context_from_hypothesis(hypothesis),
+            candidate_id=hypothesis.hypothesis_id,
         )
         reference = _candidate_interval_reference(boundaries)
         candidate_rows = [
             _row_from_boundary(
                 sample_name=sample_name,
                 group=sample_group,
-                target_label=target_label,
                 target_mz=target_mz,
-                role=role,
-                istd_pair=istd_pair,
-                resolver_mode=resolver_mode,
-                candidate=candidate,
-                candidate_id=candidate_id,
-                selected_candidate=selected is not None and candidate == selected,
+                hypothesis=hypothesis,
                 boundary=boundary,
                 reference=reference,
-                rt=trace_rt,
-                intensity=trace_intensity,
+                rt=rt,
+                intensity=intensity,
             )
             for boundary in boundaries
         ]
@@ -169,14 +188,8 @@ def _row_from_boundary(
     *,
     sample_name: str,
     group: str,
-    target_label: str,
     target_mz: float | None,
-    role: str,
-    istd_pair: str,
-    resolver_mode: str,
-    candidate: PeakCandidate,
-    candidate_id: str,
-    selected_candidate: bool,
+    hypothesis: PeakHypothesis,
     boundary: BoundaryHypothesis,
     reference: BoundaryHypothesis,
     rt: Any,
@@ -203,15 +216,15 @@ def _row_from_boundary(
     return {
         "sample_name": sample_name,
         "group": group,
-        "target_label": target_label,
+        "target_label": hypothesis.target_label,
         "target_mz": _format_optional_float(target_mz),
-        "role": role,
-        "istd_pair": istd_pair,
-        "analysis_mode": "targeted",
-        "resolver_mode": resolver_mode,
-        "candidate_id": candidate_id,
-        "proposal_sources": _join(candidate.proposal_sources),
-        "selected_candidate": "TRUE" if selected_candidate else "FALSE",
+        "role": hypothesis.role,
+        "istd_pair": hypothesis.istd_pair,
+        "analysis_mode": hypothesis.analysis_mode,
+        "resolver_mode": hypothesis.resolver_mode,
+        "candidate_id": hypothesis.hypothesis_id,
+        "proposal_sources": _join(hypothesis.audit.proposal_sources),
+        "selected_candidate": "TRUE" if hypothesis.audit.selected else "FALSE",
         "boundary_id": boundary.boundary_id,
         "boundary_sources": _join(boundary.sources),
         "cwt_audit_filter_reason": _cwt_audit_filter_reason(boundary),
@@ -362,13 +375,16 @@ def _boundaries_overlap(
     return max(first_left, second_left) < min(first_right, second_right)
 
 
-def _selected_candidate(peak_result: PeakDetectionResult) -> PeakCandidate | None:
-    if peak_result.peak is None:
-        return None
-    for candidate in peak_result.candidates:
-        if candidate.peak == peak_result.peak:
-            return candidate
-    return None
+def _boundary_candidate_context_from_hypothesis(
+    hypothesis: PeakHypothesis,
+) -> BoundaryCandidateContext:
+    return BoundaryCandidateContext(
+        selection_apex_rt=hypothesis.integration.rt_apex_min,
+        rt_left_min=hypothesis.integration.rt_left_min,
+        rt_right_min=hypothesis.integration.rt_right_min,
+        cwt_best_scale=hypothesis.evidence.cwt_best_scale,
+        proposal_sources=hypothesis.audit.proposal_sources,
+    )
 
 
 def _candidate_interval_reference(

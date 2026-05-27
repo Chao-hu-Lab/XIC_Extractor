@@ -13,6 +13,7 @@ audit promotion is not enough; [P2c AsLS truth validation](2026-05-26-peak-pipel
 must reach `GO_FOR_LINEAR_EDGE_RETIREMENT`.
 
 **Correction note:** [Phase 1 / Phase 2 design correction](../notes/2026-05-26-phase1-phase2-design-correction-note.md)
+**Current C0 source of truth:** [Handoff productization C0](../notes/2026-05-27-handoff-productization-c0-source-of-truth.md)
 
 This file is the entrypoint for Phase 2 structural cleanup. It is the
 companion to the modernization roadmap. Phase 1 (the modernization overview)
@@ -126,11 +127,11 @@ handoff modernization.
 
 | Milestone | Definition | Current status |
 |---|---|---|
-| M1 TraceGroup wrapper | Trace / ROI / EIC arrays can be passed as a stable trace-group object | Not started |
+| M1 TraceGroup wrapper | Trace / ROI / EIC arrays can be passed as a stable trace-group object | Minimal wrapper exists for targeted/audit paths; not a universal engine |
 | M2 Multi-source hypothesis enumeration | At least two independent proposal sources can emit boundary hypotheses for the same trace | Partial audit-only boundary hypotheses exist |
-| M3 EvidenceVector schema freeze | At least three evidence sources contribute through a documented schema | Partial adapter exists; not authoritative |
+| M3 EvidenceVector schema freeze | At least three evidence sources contribute through a documented schema | Partial targeted adapter exists; not authoritative |
 | M4 Model selection criterion | WIS/AIC/BIC/other criterion selects among hypotheses with a validation target | Not production; WIS is local helper only |
-| M5 End-to-end AuditTrail case | One case runs trace -> hypotheses -> selection -> integration -> audit trail | Partial adapter, not end-to-end authoritative |
+| M5 End-to-end AuditTrail case | One case runs trace -> hypotheses -> selection -> integration -> audit trail | One synthetic targeted scaffold path is contract-tested; not productized |
 
 ## Why Phase 2 Cannot Be Merged Into Phase 1
 
@@ -214,6 +215,11 @@ Phase 2 refactors must satisfy behavioral parity, defined per C-spec:
   (tolerance: less than 0.01 absolute percentage points)
 - identity coherence verdicts unchanged
 - diagnostic TSV outputs unchanged for shadow columns
+
+`alignment_matrix.tsv` is the downstream delivery surface for correction and
+statistics. `peak_candidates.tsv` is a public/generated audit projection surface:
+it must remain parity-stable during cleanup, but it is not the production
+quantitative matrix.
 
 If a C-spec validation fails parity, the refactor is incorrect — fix it
 before landing. Do not loosen the parity threshold to accommodate the

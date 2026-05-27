@@ -18,6 +18,11 @@ and `AuditTrail` as internal peak-detection models and provides an adapter from
 existing `PeakDetectionResult` / `PeakCandidateScore` objects. It does not change
 peak selection, scoring thresholds, output schema, or workbook behavior.
 
+Current productization contract: `peak_candidates.tsv` remains a schema-frozen
+debug/audit projection of this spine. It is not the canonical domain model and
+not the downstream production matrix; `alignment_matrix.tsv` remains the
+downstream delivery surface.
+
 ## Product Contract
 
 This phase must:
