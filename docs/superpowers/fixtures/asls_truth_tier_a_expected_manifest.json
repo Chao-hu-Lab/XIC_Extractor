@@ -10,11 +10,11 @@
   "p2b_semantic_version": "conditional_audit_promotion_2026-05-26",
   "source_inputs": {
     "p2_gate_rows_tsv": {
-      "path": "output/phase1_p2_asls_shadow_validation/diagnostics/p2_asls_shadow_gate/p2_asls_shadow_gate_rows.tsv",
+      "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/source_inputs/p2_asls_shadow_gate_rows.tsv",
       "sha256": "fcdfc55c8730cdc24bb6a91167a2eb0df71b5aa20b09b0e58afd01aafeb102e0"
     },
     "alignment_integration_audit_tsv": {
-      "path": "output/phase1_p2_asls_shadow_validation/alignment/asls_shadow/alignment_cell_integration_audit.tsv",
+      "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/source_inputs/alignment_cell_integration_audit.tsv",
       "sha256": "a59a856f162548fddaeabc0a92f1f41420d5d263deac427d2ff6aa59a8f87a13"
     }
   },
@@ -91,28 +91,13 @@
   "p2b_85raw_acceptance_refs": [
     {
       "artifact": "p2b_85raw_foreground_validation_note",
-      "path": "docs/superpowers/notes/2026-05-26-p2b-85raw-foreground-validation-note.md",
+      "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/acceptance/p2b_85raw_foreground_validation_note.md",
       "sha256": "57a70f105038585b788f9bd4cd1926e126d99b92593ae1262aea1239fbb77bb6"
     },
     {
       "artifact": "p2b_asls_production_promotion_note",
-      "path": "docs/superpowers/notes/2026-05-26-p2b-asls-production-promotion-note.md",
+      "path": "docs/superpowers/fixtures/asls_truth_tier_a_artifacts/acceptance/p2b_asls_production_promotion_note.md",
       "sha256": "61632228fc97e3908abc16e9b10a849710571f0d067fa2e8ca3c85742bbb6587"
-    },
-    {
-      "artifact": "alignment_matrix_tsv",
-      "path": "output/phase1_p2b_85raw_formal_validation/alignment/85raw_validation_minimal_superwindow_foreground/alignment_matrix.tsv",
-      "sha256": "d4e313ccbe7a4fb3d540198a8bab87ed7e8db360b6894451b7b7fc93ee938190"
-    },
-    {
-      "artifact": "alignment_review_tsv",
-      "path": "output/phase1_p2b_85raw_formal_validation/alignment/85raw_validation_minimal_superwindow_foreground/alignment_review.tsv",
-      "sha256": "bd5234dc98b7ed29fe27e1922121e4724f6432bb23aa5718b08b810feac215d7"
-    },
-    {
-      "artifact": "alignment_cells_tsv",
-      "path": "output/phase1_p2b_85raw_formal_validation/alignment/85raw_validation_minimal_superwindow_foreground/alignment_cells.tsv",
-      "sha256": "ffc309a7a249742d8c0cec9dce9063a0f3620d902b7193b13a7d882434683b93"
     }
   ]
 }
