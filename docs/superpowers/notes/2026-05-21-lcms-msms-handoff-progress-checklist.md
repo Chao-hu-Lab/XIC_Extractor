@@ -6,8 +6,10 @@ Date: 2026-05-21
 had been mapped from the original handoff, but its planning direction and
 acceptance rules are superseded by
 `2026-05-27-handoff-productization-c0-source-of-truth.md` and the
-2026-05-26 design correction note. Treat `[x]` entries here as historical
-implementation inventory, not as current product-readiness claims.
+2026-05-26 design correction note. Current phase closeout, legacy retirement
+readiness, and next PR direction are in
+`2026-05-28-handoff-productization-phase-closeout.md`. Treat `[x]` entries here
+as historical implementation inventory, not as current product-readiness claims.
 
 Source handoff:
 

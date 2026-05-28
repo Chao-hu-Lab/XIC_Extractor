@@ -4,6 +4,11 @@
 **Status:** `handoff_spine_scaffold_ready` / `shadow_ready`; scaffold and
 contract only, not product behavior readiness
 
+**Current source of truth:** This note is the historical C0 scaffold rationale.
+Current handoff productization status, legacy retirement readiness, and the next
+PR direction are owned by
+`docs/superpowers/notes/2026-05-28-handoff-productization-phase-closeout.md`.
+
 **Inputs:**
 
 - `C:\Users\user\Downloads\lcms_gcms_peak_pipeline_handoff.md`
@@ -109,6 +114,10 @@ time, pin public TSV parity, and stop when the target requires a semantic field
 the spine cannot yet express.
 
 ## Current Milestone Status
+
+This table is preserved as the C0 scaffold snapshot. For the current phase
+closeout and legacy retirement decision, use
+`2026-05-28-handoff-productization-phase-closeout.md`.
 
 | Milestone | Current status |
 |---|---|
