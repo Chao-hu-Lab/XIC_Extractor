@@ -5,6 +5,7 @@ from dataclasses import replace
 
 from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.matrix_handoff import integration_from_values
 from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.alignment.ownership_models import AmbiguousOwnerRecord
@@ -83,6 +84,16 @@ def _detected_cell(feature: OwnerAlignedFeature, owner) -> AlignedCell:
         source_candidate_id=event.candidate_id,
         source_raw_file=None,
         reason="sample-local MS1 owner with original MS2 evidence",
+        selected_integration=integration_from_values(
+            area_raw_counts_seconds=owner.owner_area,
+            rt_apex_min=owner.owner_apex_rt,
+            raw_apex_rt_min=owner.owner_apex_rt,
+            height_raw=owner.owner_height,
+            height_smoothed=owner.owner_height,
+            rt_left_min=owner.owner_peak_start_rt,
+            rt_right_min=owner.owner_peak_end_rt,
+            boundary_sources=("alignment_owner",),
+        ),
     )
     return with_region_audit(cell, owner.region_audit)
 

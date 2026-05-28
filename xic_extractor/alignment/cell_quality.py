@@ -55,13 +55,13 @@ def decide_cell_quality(
     config: AlignmentConfig,
 ) -> CellQualityDecision:
     if cell.status == "detected":
-        area = _valid_area(cell.area)
+        area = _valid_area(cell.matrix_area)
         if area is None:
             return _decision(cell, "invalid", None, "invalid_area")
         return _decision(cell, "detected_quantifiable", area, "")
 
     if cell.status == "rescued":
-        area = _valid_area(cell.area)
+        area = _valid_area(cell.matrix_area)
         if area is None:
             return _decision(cell, "invalid", None, "invalid_area")
         if not _has_complete_peak(cell):

@@ -9,6 +9,7 @@ from xic_extractor.alignment.cell_quality import (
 )
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 
 def test_detected_cell_requires_positive_finite_area() -> None:
@@ -29,6 +30,38 @@ def test_detected_cell_requires_positive_finite_area() -> None:
         .quality_status
         == "invalid"
     )
+
+
+def test_detected_cell_uses_selected_integration_area_when_present() -> None:
+    config = AlignmentConfig()
+    cell = _cell(
+        "s1",
+        "FAM001",
+        "detected",
+        100.0,
+        selected_integration=_integration(area=250.0),
+    )
+
+    decision = decide_cell_quality(cell, config)
+
+    assert decision.quality_status == "detected_quantifiable"
+    assert decision.matrix_area == 250.0
+
+
+def test_selected_integration_area_is_authoritative_when_invalid() -> None:
+    config = AlignmentConfig()
+    cell = _cell(
+        "s1",
+        "FAM001",
+        "detected",
+        100.0,
+        selected_integration=_integration(area=-1.0),
+    )
+
+    decision = decide_cell_quality(cell, config)
+
+    assert decision.quality_status == "invalid"
+    assert decision.quality_reason == "invalid_area"
 
 
 def test_rescue_requires_complete_peak_and_rt_inside_alignment_window() -> None:
@@ -81,6 +114,7 @@ def _cell(
     peak_start_rt: float | None = 8.45,
     peak_end_rt: float | None = 8.55,
     rt_delta_sec: float | None = 0.0,
+    selected_integration: IntegrationResult | None = None,
 ) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,
@@ -97,4 +131,19 @@ def _cell(
         source_candidate_id=f"{sample_stem}#{cluster_id}",
         source_raw_file=Path(f"{sample_stem}.raw"),
         reason=status,
+        selected_integration=selected_integration,
+    )
+
+
+def _integration(*, area: float) -> IntegrationResult:
+    return IntegrationResult(
+        rt_left_min=8.45,
+        rt_apex_min=8.5,
+        rt_right_min=8.55,
+        raw_apex_rt_min=8.5,
+        rt_width_min=0.1,
+        height_raw=100.0,
+        height_smoothed=100.0,
+        area_raw_counts_seconds=area,
+        boundary_sources=("test",),
     )

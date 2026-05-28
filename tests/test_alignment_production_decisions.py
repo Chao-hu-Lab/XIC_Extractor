@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.production_decisions import build_production_decisions
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 
 def test_detected_and_supported_rescue_write_numeric_values():
@@ -36,6 +37,29 @@ def test_detected_and_supported_rescue_write_numeric_values():
     assert decisions.row("FAM001").primary_evidence == "owner_complete_link"
     assert decisions.row("FAM001").quantifiable_detected_count == 2
     assert decisions.row("FAM001").row_flags == ()
+
+
+def test_production_matrix_value_uses_selected_integration_area_when_present():
+    matrix = _matrix(
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
+        cells=(
+            _cell(
+                "s1",
+                "FAM001",
+                "detected",
+                100.0,
+                selected_integration=_integration(area=150.0),
+            ),
+            _cell("s2", "FAM001", "detected", 95.0),
+        ),
+        sample_order=("s1", "s2"),
+    )
+
+    decisions = build_production_decisions(matrix, AlignmentConfig())
+
+    assert decisions.row("FAM001").include_in_primary_matrix is True
+    assert decisions.cell("FAM001", "s1").matrix_value == 150.0
+    assert decisions.cell("FAM001", "s2").matrix_value == 95.0
 
 
 def test_single_sample_local_owner_does_not_create_primary_identity():
@@ -384,6 +408,7 @@ def _cell(
     peak_end_rt: float | None = 8.6,
     rt_delta_sec: float | None = 0.0,
     source_candidate_id: str | None = None,
+    selected_integration: IntegrationResult | None = None,
 ) -> AlignedCell:
     has_area = area is not None
     return AlignedCell(
@@ -409,6 +434,7 @@ def _cell(
             if status == "duplicate_assigned"
             else status
         ),
+        selected_integration=selected_integration,
     )
 
 
@@ -426,4 +452,18 @@ def _candidate(
         seed_event_count=seed_event_count,
         neutral_loss_mass_error_ppm=nl_ppm,
         ms1_scan_support_score=scan_support,
+    )
+
+
+def _integration(*, area: float) -> IntegrationResult:
+    return IntegrationResult(
+        rt_left_min=8.4,
+        rt_apex_min=8.49,
+        rt_right_min=8.6,
+        raw_apex_rt_min=8.49,
+        rt_width_min=0.2,
+        height_raw=100.0,
+        height_smoothed=100.0,
+        area_raw_counts_seconds=area,
+        boundary_sources=("test",),
     )

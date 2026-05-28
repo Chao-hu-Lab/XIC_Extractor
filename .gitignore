@@ -26,6 +26,7 @@ output/
 !xic_extractor/output/*.py
 local_raw_samples/
 local_validation_raw/
+local_validation_artifacts/
 
 # Superpowers / Claude dev artefacts
 .superpowers/

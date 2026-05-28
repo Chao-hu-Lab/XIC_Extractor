@@ -1,9 +1,10 @@
 # Agent Parameter Settings
 
 本檔只記錄 XIC Extractor 常用、穩定、跨任務會重複踩到的本機設定。任務特定
-artifact，例如某個 Phase 的 `discovery_batch_index.csv`、benchmark summary、
-一次性 gate output、plot/report，不放在這裡；請查當前 spec、plan、
-validation note 或本輪 `output/` index。
+artifact，例如某個 Phase 的 benchmark summary、一次性 gate output、plot/report，
+不放在這裡；請查當前 spec、plan、validation note 或本輪 `output/` index。
+跨 worktree 會重複使用的 accepted validation inputs 例外：必須放在
+`local_validation_artifacts/`，不能依賴某個 `.worktrees/<branch>/output/`。
 
 這份文件是 operational memory，不是一次性備忘錄。當某個 RAW / validation
 命令實際跑通，或某個啟動方式反覆失敗，應把穩定參數形狀與教訓更新到本檔。
@@ -15,6 +16,9 @@ validation note 或本輪 `output/` index。
   command shape、preflight check、以及反覆踩雷的 anti-pattern。
 - 任務特定 output path、phase-specific discovery index、一次性 benchmark 結論
   留在 validation note；本檔只引用該 note 作為 evidence。
+- accepted reusable discovery inputs 若要跨分支使用，先複製到
+  `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\...` 並重寫
+  `discovery_batch_index.csv` 裡的 `candidate_csv` / `review_csv` 絕對路徑。
 - 成功 run 要記錄「可重用的參數形狀」與 evidence note；失敗 run 要記錄
   「不可再用的啟動方式」與替代做法。
 - 若後續 P-spec / C-spec 改變正式驗收形狀，先更新本檔再開長時間 RAW run。
@@ -48,6 +52,8 @@ validation note 或本輪 `output/` index。
 | Thermo RAW validation subset | `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation` | Historical 8RAW validation subset。 |
 | Thermo RawFileReader DLL dir | `C:\Xcalibur\system\programs` | RAW commands 必須使用這個 DLL dir。 |
 | manual 2RAW truth data | `C:\Xcalibur\data\20251219_need process data\XIC test` | Resolver / manual-truth calibration。 |
+| accepted P8b 8RAW discovery input | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\8raw\discovery_batch_index.csv` | Cross-worktree reusable validation input；內部 `candidate_csv` / `review_csv` 已重寫到同一 artifact store。 |
+| accepted P8b 85RAW discovery input | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv` | Cross-worktree reusable validation input；正式 85RAW 前仍需 `--expected-sample-count 85` preflight。 |
 
 實驗性 mzML 路徑不列為常用 setting。即使本機有 mzML，production premise 仍是
 直接讀 `.raw`，不轉檔。只有使用者明確要求 external-reference audit 時才查
@@ -314,10 +320,13 @@ emit the same minimal machine contract and heartbeat shape documented here.
 10. 85RAW 開跑前先檢查 discovery index sample count、candidate CSV path、
     RAW path；8RAW index 不可拿來跑 full tissue validation。正式 alignment
     run 用 `--expected-sample-count 85` 固化 sample-count 檢查。
-11. 不要用 Codex shell 的 background `Start-Process` 跑 85RAW 後就回來輪詢；
+11. 不要把 `.worktrees\<branch>\output\...` 當成 reusable validation input。
+    若只有某個 worktree 有 accepted discovery artifact，先移到
+    `local_validation_artifacts/` 並重寫 index 內部絕對路徑，再跑 preflight。
+12. 不要用 Codex shell 的 background `Start-Process` 跑 85RAW 後就回來輪詢；
     這個模式已反覆失敗。用前景 run 搭配足夠 timeout，或先取得使用者同意
     轉到外部 terminal / automation。
-12. 每次長時間 RAW run 後，若發現新的穩定參數或反覆失敗模式，更新本檔；
+13. 每次長時間 RAW run 後，若發現新的穩定參數或反覆失敗模式，更新本檔；
     不要只把教訓留在聊天紀錄。
-13. PowerShell 語法錯誤、ruff E501、Markdown fence mismatch 這類可重複避免
+14. PowerShell 語法錯誤、ruff E501、Markdown fence mismatch 這類可重複避免
     的錯誤，修完後要把穩定教訓寫回本檔或相關 repo-local contract。

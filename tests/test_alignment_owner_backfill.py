@@ -33,6 +33,9 @@ def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
     assert cell.cluster_id == feature.feature_family_id
     assert cell.status == "rescued"
     assert cell.area is not None and cell.area > 0
+    assert cell.selected_integration is not None
+    assert cell.selected_integration.area_raw_counts_seconds == cell.area
+    assert cell.matrix_area == cell.area
     assert cell.reason == "owner-centered MS1 backfill"
     assert cell.region_candidate_count is not None
     assert cell.region_shadow_status == "evaluated"

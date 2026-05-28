@@ -6,6 +6,7 @@ from openpyxl import load_workbook
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.xlsx_writer import write_alignment_results_xlsx
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 
 def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path):
@@ -117,6 +118,39 @@ def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
     assert workbook["Matrix"]["F2"].value is None
     assert workbook["Matrix"]["G2"].value == 300.0
     assert workbook["Review"]["P2"].value == 1
+
+
+def test_alignment_results_xlsx_projects_selected_integration_matrix_area(
+    tmp_path: Path,
+):
+    matrix = AlignmentMatrix(
+        clusters=(
+            sample_feature("FAM000001", evidence="owner_complete_link;owner_count=2"),
+        ),
+        sample_order=("s1", "s2"),
+        cells=(
+            sample_cell(
+                "s1",
+                "FAM000001",
+                "detected",
+                100.0,
+                selected_integration=sample_integration(area=177.0),
+            ),
+            sample_cell("s2", "FAM000001", "detected", 120.0),
+        ),
+    )
+
+    path = write_alignment_results_xlsx(
+        tmp_path / "alignment_results.xlsx",
+        matrix,
+        metadata={"schema_version": "alignment-results-v1"},
+    )
+
+    workbook = load_workbook(path, data_only=True)
+    assert workbook.sheetnames == ["Matrix", "Review", "Audit", "Metadata"]
+    assert workbook["Matrix"]["E2"].value == 177.0
+    assert workbook["Matrix"]["F2"].value == 120.0
+    assert workbook["Audit"]["K2"].value == 100.0
 
 
 def test_alignment_results_xlsx_excludes_review_only_rows_from_matrix(
@@ -285,6 +319,7 @@ def sample_cell(
     area: float | None,
     *,
     reason: str | None = None,
+    selected_integration: IntegrationResult | None = None,
 ) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample,
@@ -301,4 +336,19 @@ def sample_cell(
         source_candidate_id="s1#6095" if area else None,
         source_raw_file=None,
         reason=reason or status,
+        selected_integration=selected_integration,
+    )
+
+
+def sample_integration(*, area: float) -> IntegrationResult:
+    return IntegrationResult(
+        rt_left_min=12.55,
+        rt_apex_min=12.593,
+        rt_right_min=12.64,
+        raw_apex_rt_min=12.593,
+        rt_width_min=0.09,
+        height_raw=1000.0,
+        height_smoothed=1000.0,
+        area_raw_counts_seconds=area,
+        boundary_sources=("test",),
     )

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 from xic_extractor.peak_detection.integration_audit import CellIntegrationAuditSummary
 
 REVIEW_COLUMNS = [
@@ -312,6 +313,39 @@ def test_write_alignment_matrix_tsv_blanks_missing_and_invalid_areas(tmp_path: P
     assert rows[0]["zero"] == ""
     assert rows[0]["negative"] == ""
     assert rows[0]["nan"] == ""
+
+
+def test_write_alignment_matrix_tsv_projects_selected_integration_area(
+    tmp_path: Path,
+):
+    from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(_cluster(fold_evidence="owner_complete_link;owner_count=2"),),
+        cells=(
+            _cell(
+                "sample-a",
+                "detected",
+                area=10.0,
+                selected_integration=_integration(area=77.7),
+            ),
+            _cell("sample-b", "detected", area=20.0),
+        ),
+        sample_order=("sample-a", "sample-b"),
+    )
+
+    rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
+
+    assert list(rows[0]) == [
+        "feature_family_id",
+        "neutral_loss_tag",
+        "family_center_mz",
+        "family_center_rt",
+        "sample-a",
+        "sample-b",
+    ]
+    assert rows[0]["sample-a"] == "77.7"
+    assert rows[0]["sample-b"] == "20"
 
 
 def test_write_alignment_matrix_tsv_blanks_duplicate_assigned_cells(tmp_path: Path):
@@ -812,6 +846,7 @@ def _cell(
     region: bool = False,
     integration: bool = False,
     backfill_seed: bool = False,
+    selected_integration: IntegrationResult | None = None,
 ) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,
@@ -868,9 +903,24 @@ def _cell(
             if integration
             else None
         ),
+        selected_integration=selected_integration,
         backfill_seed_mz=500.222 if backfill_seed else None,
         backfill_seed_rt=8.55 if backfill_seed else None,
         backfill_request_rt_min=5.55 if backfill_seed else None,
         backfill_request_rt_max=11.55 if backfill_seed else None,
         backfill_request_ppm=20.0 if backfill_seed else None,
+    )
+
+
+def _integration(*, area: float) -> IntegrationResult:
+    return IntegrationResult(
+        rt_left_min=8.4,
+        rt_apex_min=8.49,
+        rt_right_min=8.6,
+        raw_apex_rt_min=8.49,
+        rt_width_min=0.2,
+        height_raw=100.0,
+        height_smoothed=100.0,
+        area_raw_counts_seconds=area,
+        boundary_sources=("test",),
     )
