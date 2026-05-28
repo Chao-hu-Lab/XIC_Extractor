@@ -9,11 +9,20 @@ truth; P6 not triggered
 **Second-pass review session:** 2026-05-24 conversation
 **Sibling overview:** [Peak pipeline cleanup roadmap](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Design correction:** [2026-05-26 Phase 1 / Phase 2 correction](../notes/2026-05-26-phase1-phase2-design-correction-note.md)
+**Current sequencing update:** [2026-05-28 Product priority reset](2026-05-28-product-priority-reset-decision-spec.md)
+and [Tiered backfill machine decision contract](2026-05-28-tiered-backfill-machine-decision-contract-spec.md)
 
 This file is the entrypoint for the next-phase peak-pipeline modernization. The
 detailed contract is split into focused sub-specs so review can separate
 resolver behavior, baseline correction, third-party comparison, audit field
 hygiene, evidence honesty, and chromatogram-level alignment.
+
+Sequencing note: this overview remains the Phase 1 modernization inventory. The
+2026-05-28 product-priority reset makes the next implementation PR the tiered
+backfill machine-decision contract. ASLS / linear-edge quantitative behavior and
+boundary guard remain high-value product moves; they are deferred until after the
+tiered PR so row-role semantics and primary-matrix promotion are explicit before
+quantitative behavior changes are interpreted.
 
 This is Phase 1 of a two-phase plan. This worktree is scoped to Phase 1.
 Phase 1 now has GO / NO-GO notes for the supported scope. Phase 1 changed the

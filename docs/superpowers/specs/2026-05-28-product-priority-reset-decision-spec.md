@@ -1,7 +1,7 @@
 # Product Priority Reset: Qualitative Selection Decision Contract
 
 **Date:** 2026-05-28
-**Status:** decision spec, not implementation
+**Status:** decision + same-PR behavior correction spec
 **Working branch:** `codex/product-priority-reset`
 
 ## Verdict
@@ -12,9 +12,11 @@ progress. The next mainline decision is qualitative selected-peak acceptance:
 > Can the current selected peak, identity, RT explanation, and boundary behavior
 > support the next narrow production-behavior PR?
 
-This spec does not declare product-wide production readiness. It authorizes only
-one next action: build or run a narrow qualitative acceptance gate that resolves
-the decision above as `GO`, `NO_GO`, or `INCONCLUSIVE`.
+This spec does not declare product-wide production readiness. It now authorizes
+one same-PR correction because the first gate pass already resolved to `NO_GO`:
+replace the weak-seed / high-backfill-dependency promotion proxy with a
+cell-evidence-backed untargeted promotion policy, and recalibrate discovery
+evidence scoring only where it feeds that promotion policy.
 
 ## Current State To Preserve
 
@@ -31,6 +33,10 @@ the decision above as `GO`, `NO_GO`, or `INCONCLUSIVE`.
   satisfied.
 - CWT P5a remains audit-only evidence honesty. It must not be treated as a
   production scoring, boundary, or selector source in this reset.
+- The post-gate next action is the tiered backfill machine-decision PR. It must
+  keep normal downstream correction/statistics on the primary-only
+  `alignment_matrix.tsv`, while exposing provisional rows to review/gate
+  diagnostics through a deterministic projection contract.
 
 ## Supersession
 
@@ -44,9 +50,10 @@ cleanup may occur only as explicitly approved non-mainline maintenance that does
 not touch the product-decision write surface and is not counted as Phase2
 progress.
 
-The only current handoff mainline decision is the qualitative selected-peak gate
-defined below. This PR is not merge-ready until that gate returns exactly one
-classification.
+The current handoff mainline decision is still qualitative selected-peak and
+matrix-delivery acceptance. This PR is not merge-ready until the gate returns
+exactly one classification after the cell-evidence-backed promotion correction
+is implemented and reviewed.
 
 ## Mainline Entry Rule
 
@@ -90,8 +97,8 @@ The gate scope is fixed to the current accepted validation surfaces:
   `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv`
 - RAW root: `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R`
 - DLL dir: `C:\Xcalibur\system\programs`
-- Python runtime: `C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe`
-  unless the active worktree has a verified `.venv` junction.
+- Python runtime: `.venv\Scripts\python.exe` from the active worktree, after
+  verifying that `.venv` exists or is a junction to the canonical repo runtime.
 - Machine delivery files: `alignment_matrix.tsv`, `alignment_review.tsv`,
   `alignment_cells.tsv`
 
@@ -147,7 +154,8 @@ Before using an artifact as gate evidence:
 Use the documented validation-minimal surface by default:
 
 ```powershell
-& "C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe" -m scripts.run_alignment `
+Test-Path .venv\Scripts\python.exe
+.venv\Scripts\python.exe -m scripts.run_alignment `
   --discovery-batch-index <accepted-discovery-batch-index.csv> `
   --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
   --dll-dir C:\Xcalibur\system\programs `
@@ -199,6 +207,232 @@ Authoritative references for the first Phase 1 pass:
 
 ## Gate Rules
 
+## Same-PR Behavior Correction: Option B
+
+The first Phase 1 implementation restored primary delivery for the reviewed
+`d3-N6-medA` case, but post-implementation review hardened the trusted-seed
+contract and reclassified the same artifacts as `NO_GO` because several primary
+rows still depended on weak-seed / high-backfill promotion proxies. The next
+change stays in this PR and replaces that proxy with a cell-evidence-backed
+promotion policy.
+
+### Scope Boundary
+
+This correction touches only untargeted discovery / alignment matrix promotion:
+
+- in scope: discovery evidence components that feed untargeted family promotion,
+  single-dR weak-seed / high-backfill-dependency classification, primary matrix
+  promotion reasons, tests, and validation notes;
+- out of scope: targeted extractor peak picking, targeted workbook behavior,
+  targeted `peak_scoring.py` weights, ASLS / linear-edge production promotion,
+  CWT production behavior, resolver defaults, and baseline defaults;
+- targeted evidence may be used only as a benchmark, manual-truth example, or
+  validation oracle. Targeted pass/fail rules must not become untargeted
+  production identity logic.
+
+The manual `TumorBC2289_DNA / d3-5-medC` and
+`TumorBC2290_DNA / d3-5-medC` EIC examples illustrate a DDA-limited MS2 case:
+coherent MS1 / RT / local-apex evidence can support a backfilled cell even when
+MS2 seed-event evidence differs between adjacent samples. They may be cited in
+the validation note, but they are not required code fixtures for this PR.
+
+Targeted peak scoring is a follow-up issue, not part of this PR. The issue
+should be titled `Revisit targeted peak scoring weights with DDA-limited ISTD
+examples` and should evaluate `no_ms2`, `ms2_trace_weak`, RT prior, shape, and
+CWT support using `TumorBC2289_DNA / d3-5-medC`,
+`TumorBC2290_DNA / d3-5-medC`, and any later reviewed ISTD examples.
+
+### Promotion Policy
+
+Backfill execution remains cell-level. The code must not reinterpret owner
+backfill as filling a whole family at once. The promotion gate must distinguish:
+
+- cell-level evidence: each rescued cell's RT, local apex, MS1 shape, scan
+  support, local dominance, and candidate-aligned chemical evidence;
+- row-level risk: family rescue burden, detected / rescued counts, duplicate
+  pressure, weak-seed pressure, and review priority.
+
+Allowed production promotion paths:
+
+- `minimum detected support`: high-backfill promotion requires at least two
+  detected identity cells. A single detected seed can remain visible as a risky
+  provisional row, but cannot be promoted only because owner backfill found local
+  MS1 peaks in other samples;
+- `RT + chemical`: the cell has candidate-aligned fragment, product, or neutral
+  loss evidence in the same selected region;
+- `RT + MS1 shape`: DDA / MS2 evidence is weak or absent, but the rescued cell
+  matches the detected-seed or family shape and has acceptable local apex
+  support;
+- `RT + MS1 continuity`: the selected apex is inside the expected local RT
+  region, local apex support is present, neighboring MS1 interference is below
+  the blocking threshold, and at least one additional MS1 support signal is
+  present: acceptable scan support, trace continuity, selected-peak dominance,
+  or shape similarity tied to detected-seed / family evidence.
+
+Family-level rescue burden no longer hard-blocks production by itself. It may
+emit a warning flag, lower identity confidence, cap promotion confidence, or
+raise review priority. It becomes a hard block only when paired with missing or
+negative cell-level evidence.
+
+Hard blocks:
+
+- `q_detected == 0` / rescue-only row;
+- duplicate claim pressure for the same sample peak;
+- local apex outside the allowed RT region;
+- high neighboring MS1 interference without a supported selected apex;
+- low MS1 assessable coverage that prevents shape / local-apex evaluation;
+- extreme backfill burden with weak or unavailable cell-level support.
+
+The implementation must keep machine-readable reasons, not only PASS / FAIL. The
+required row-level decision surface is `alignment_review.tsv` using its existing
+`identity_reason` and `row_flags` columns unless an approved implementation plan
+explicitly adds a new public schema. Diagnostics or sidecars may contain detailed
+cell evidence, but they cannot be the only place where the production decision
+reason exists. If a sidecar is used, it must be versioned, required by the gate,
+and covered by contract tests.
+
+Canonical `identity_reason` values:
+
+- `cell_evidence_supported_backfill`;
+- `dda_limited_ms2_but_ms1_shape_supported`;
+- `neighboring_ms1_interference_blocked`;
+- `low_ms1_assessable_coverage_blocked`;
+- `rescue_only_blocked`.
+
+Supplemental `row_flags` modifiers:
+
+- `high_backfill_dependency_capped`;
+- preserved existing risk context such as `rescue_heavy` and `weak_seed`.
+
+Reason placement:
+
+- `identity_reason` carries the canonical final production or blocking reason for
+  any row whose decision changes because of this policy. Supported rescued-heavy
+  production rows use `cell_evidence_supported_backfill` or
+  `dda_limited_ms2_but_ms1_shape_supported`. Blocked rows use the matching
+  `_blocked` reason.
+- `row_flags` carries supplemental modifiers and preserved risk context, such as
+  `rescue_heavy`, `weak_seed`, and `high_backfill_dependency_capped`.
+- `primary_evidence` continues to describe the upstream evidence source, such as
+  owner / family evidence. It must not be overloaded with promotion-policy
+  verdicts.
+
+### Discovery Scoring Role
+
+Discovery `evidence_score` remains useful for ranking and summaries. This PR
+must not globally retune total `evidence_score` semantics. Instead, it adds or
+derives promotion-only gate components that prevent total score from becoming
+the only trusted-seed or production-promotion criterion. The gate should consume:
+
+- MS1 presence and local MS1 peak quality;
+- scan support and trace continuity;
+- RT coherence relative to seed / family / local apex;
+- candidate-aligned chemical evidence;
+- DDA-limited support where missing MS2 can be explained by coherent MS1 shape
+  and local apex;
+- neighboring interference or low selected-peak dominance.
+
+Scoring changes are bounded to promotion use:
+
+- owner-backfill cells must emit scan support from the production XIC trace and
+  selected boundary. `trace_quality=owner_backfill` is provenance, not support;
+- seed-event count and product intensity must not act as veto-like authority in
+  DDA-limited cases unless paired with negative cell-level MS1 evidence;
+- MS1 shape, scan support, local apex support, selected-peak dominance, and low
+  interference become gate-readable evidence components;
+- keep total `evidence_score` available for sorting, watch queues, and review
+  priority;
+- avoid changing targeted `peak_scoring.py` or targeted workbook output.
+
+If public TSV schemas cannot safely accept new columns in this PR, use typed
+internal summaries or sidecar diagnostics. Production decisions must still cite
+component reasons in `alignment_review.tsv` rather than only total score. Any
+implementation that changes the emitted `evidence_score` value itself must first
+add a before / after ranking collateral table and an explicit allowed-delta rule;
+the default plan should avoid that global score change.
+
+### Acceptance
+
+8RAW must close first:
+
+- all 13 current `risky_weak_seed_backfill` primary rows are classified by the
+  new policy as supported or blocked;
+- `FAM000264 / d3-N6-medA` passes only through the general cell-evidence-backed
+  policy, not a target or family exception;
+- any newly promoted or newly blocked row appears in a collateral table with its
+  reason and row-level risk flags.
+- `review-only` is not a GO state for these 13 rows. At most three named
+  unresolved rows may return `INCONCLUSIVE_NEEDS_NAMED_MINIMAL_EVIDENCE`; more
+  than three unresolved rows, or a repeated inconclusive after the named minimal
+  check, returns `NO_GO_FIX_SELECTION_OR_BOUNDARY_FIRST`.
+
+85RAW validates generalization:
+
+- all five current 85RAW hardened risky weak-seed rows are classified by the new
+  policy;
+- strict `AREA_MISMATCH` for known quantitative follow-up rows remains a
+  quantitative surface, not a qualitative blocker;
+- every 85RAW production status, identity reason, confidence, or row-flag delta
+  relative to the pre-correction run must be listed in a delta table, or the gate
+  must assert zero delta outside the five named risky rows;
+- any unlisted or unexplained production delta is `NO_GO`. Any listed collateral
+  delta outside the five named risky rows must include family id, old / new
+  status, old / new reason, evidence components, and whether the row was
+  supported by cell-level evidence.
+
+Rollback / `NO_GO` conditions:
+
+- promotion can still occur from total `evidence_score` alone;
+- rescue-only rows enter production;
+- duplicate claim pressure is not blocked or capped;
+- local apex / shape / interference cannot be assessed but the row is promoted;
+- 8RAW passes only because of a target-specific exception;
+- any 85RAW production delta is unlisted or unexplained.
+
+### Required Tests
+
+The implementation plan must include focused tests before RAW validation:
+
+- promotion policy tests proving total `evidence_score` alone cannot promote a
+  weak-seed / high-backfill row;
+- rescued-cell tests proving `RT + local apex + low interference` without MS1
+  shape, scan support, trace continuity, selected-peak dominance, or chemical
+  evidence does not promote;
+- positive DDA-limited tests proving a rescued cell with RT coherence, MS1 shape
+  or continuity, local apex support, and low interference can be promoted with a
+  capped / warning reason;
+- hard-block tests for rescue-only rows, duplicate claim pressure, low MS1
+  assessable coverage, high neighboring interference, and extreme backfill with
+  unavailable cell-level support;
+- discovery evidence tests proving promotion components can change without
+  globally changing emitted total `evidence_score` semantics;
+- output contract tests proving `alignment_review.tsv` carries the required
+  `identity_reason` / `row_flags` values and that any required sidecar, if
+  introduced, has a versioned schema and stable headers;
+- delta-table tests proving newly promoted, newly blocked, and reason-changed
+  rows are listed with old / new status, old / new reason, and evidence
+  components.
+
+Coverage must bind to the production path, not diagnostics alone:
+
+- `tests/test_alignment_matrix_identity.py`, or an explicitly named equivalent,
+  must cover changed `include_in_primary_matrix`, `identity_reason`, confidence,
+  and `row_flags` behavior through `decide_matrix_identity_row()` /
+  `build_matrix_identity_decisions()`;
+- `tests/test_single_dr_production_gate_decision_report.py`, or equivalent,
+  must prove the hardened gate classifies supported, blocked, and capped rows
+  using the same policy as production;
+- `tests/test_discovery_evidence.py`, or equivalent, must prove any new
+  promotion components do not globally change emitted total `evidence_score`
+  semantics unless the implementation explicitly chooses the before / after
+  collateral-table path;
+- TSV writer / output contract tests must prove `alignment_review.tsv` emits the
+  canonical `identity_reason` and supplemental `row_flags` values without adding
+  unexpected columns in the no-new-column mode;
+- any versioned sidecar introduced by the implementation must have schema/header
+  tests and must be required by the gate. Optional diagnostics alone cannot
+  satisfy this contract.
+
 ### `GO`
 
 Return `GO_FOR_NEXT_NARROW_BEHAVIOR_PR` when all row-level qualitative checks
@@ -216,6 +450,8 @@ Both GO states require:
   artifact key;
 - no required row has active wrong-peak, wrong-identity, unexplained RT drift, or
   boundary ownership failure;
+- no required risky weak-seed / high-backfill row remains `review-only` after
+  the allowed named minimal evidence pass;
 - known area shifts are explained by baseline/integration behavior and do not
   contradict selected peak, identity, RT, boundary, or primary matrix delivery;
 - primary machine delivery remains `alignment_matrix.tsv`, `alignment_review.tsv`,
@@ -226,8 +462,11 @@ The stronger `GO_FOR_NEXT_PRODUCT_DECISION_PR` additionally requires:
 
 - the current production behavior change has a foreground 85RAW
   `validation-minimal` run with heartbeat artifacts;
-- single-dR production gate diagnostics show no risky weak-seed, extreme
-  backfill, or duplicate rescue-pressure hard gate candidate;
+- single-dR production gate diagnostics, interpreted under the new
+  cell-evidence-backed policy, show no unsupported weak-seed, unsupported
+  extreme-backfill, or duplicate rescue-pressure hard gate candidate;
+- 85RAW production status, identity reason, confidence, and row-flag deltas are
+  fully listed or asserted zero outside the named risky rows;
 - any remaining strict area benchmark failure is explicitly classified as a
   quantitative follow-up surface, not a qualitative delivery blocker.
 
@@ -280,10 +519,18 @@ Until this decision resolves:
 
 ## Mode Labels For Adjacent Work
 
-- ASLS / linear-edge: next quantitative behavior candidate, but linear-edge
-  retirement remains blocked by its own Tier C / retirement prerequisites.
-- Boundary width: eligible next behavior candidate if the qualitative gate finds
-  row-level ownership failure or over-wide boundaries that affect selection.
+- Tiered backfill machine decision: immediate next product-decision PR after
+  Phase 1b. It should include one-detected-seed provisional retention,
+  deterministic projection from existing review/cell fields, tests, and docs.
+  It must keep `alignment_matrix.tsv` primary-only and make review/gate
+  diagnostics the named consumer for provisional rows.
+- ASLS / linear-edge: high-value quantitative behavior candidate. It is
+  deferred until after the tiered backfill PR so the quantitative PR can focus
+  on area/baseline behavior. Linear-edge retirement remains blocked by its own
+  Tier C / retirement prerequisites.
+- Boundary width: high-value behavior candidate when row-level ownership failure
+  or over-wide boundaries affect selection. It is deferred with ASLS unless a
+  new gate names it as the active blocker.
 - CWT: audit-only under P5a. A real CWT upgrade would be a separate hypothesis
   source decision, not an implicit production input.
 - Phase2 cleanup: deferred as handoff mainline. Method-preserving cleanup may
@@ -292,9 +539,13 @@ Until this decision resolves:
 
 ## Phase Roadmap
 
-This PR is the Phase 1 PR. It must include the decision contract, a short
-roadmap, the Phase 1 implementation plan / goal, and the Phase 1 gate result
-before merge. It must not include Phase 2 behavior changes.
+This PR is the Product Priority Reset Phase 1 PR. Because the first gate pass
+returned `NO_GO` for weak-seed / high-backfill promotion policy, the PR may also
+include the narrow Phase 1b correction defined above. It must include the
+decision contract, short roadmap, implementation plan / goal, reviewed Phase 1b
+behavior correction, and final gate result before merge. It must not include
+unrelated Phase 2 cleanup, ASLS / linear-edge retirement, CWT production
+promotion, resolver-default changes, or targeted picker scoring changes.
 
 ### Phase 1: Qualitative Selection Acceptance Gate
 
@@ -314,16 +565,36 @@ The note may mention why the other classifications do not apply, but the
 If Phase 1 returns `GO`, the gate note must name one recommended next product
 decision or Phase 2 PR target and justify why it follows from the reviewed rows.
 
-### Phase 2: First Production Behavior Move
+### Phase 1b: Same-PR Promotion Policy Correction
 
-Phase 2 is chosen only after Phase 1:
+If Phase 1 returns `NO_GO` only because the weak-seed / high-backfill promotion
+policy is too proxy-driven, implement Option B in this PR:
 
-- If Phase 1 returns `GO`, choose the highest-value behavior decision from the
-  accepted evidence. The expected candidates are ASLS / linear-edge behavior,
-  boundary ownership behavior, or CWT productization if the evidence points
-  there.
-- If Phase 1 returns `NO_GO`, fix the named selector, identity, RT explanation,
-  or boundary failure first.
+- keep owner backfill cell-level;
+- replace family-level rescue burden as a standalone veto with
+  cell-evidence-backed promotion;
+- adjust discovery evidence scoring only where it feeds untargeted promotion;
+- preserve machine-readable reasons and collateral promotion tables;
+- re-run the Phase 1 gate after implementation review.
+
+### Phase 2: Next Product Behavior Move
+
+Phase 2 is chosen only after Phase 1 / Phase 1b closes:
+
+- If the final gate returns `GO`, the next PR is the tiered backfill
+  machine-decision PR.
+- The tiered PR must include the complete narrow scope: one-detected-seed
+  provisional retention, deterministic projection helper, tests, docs, and
+  review/gate diagnostic consumption. It must not add Tier 2 routing, a new
+  sidecar, or a three-pipeline split unless the approved plan explicitly proves
+  the existing projection cannot express the contract.
+- After the tiered PR lands, choose the highest-value remaining behavior
+  decision from the accepted evidence. The expected candidates are ASLS /
+  linear-edge behavior, boundary ownership behavior, CWT productization if the
+  evidence points there, or targeted picker scoring if its follow-up issue is
+  accepted as the next product decision.
+- If the final gate returns `NO_GO`, fix the named selector, identity, RT
+  explanation, boundary, or cell-evidence-backed promotion failure first.
 - If Phase 1 returns `INCONCLUSIVE`, resolve only the named missing evidence and
   re-run the Phase 1 classification. Do not start broad model selection or new
   diagnostic infrastructure.
@@ -347,7 +618,8 @@ decisions; it does not decide them.
 
 ## Next Step
 
-Write the next goal around this decision contract, not around another scaffold:
+Write the next goal around this decision contract and the tiered backfill
+machine-decision PR, not around another scaffold:
 
 1. collect the fixed review rows and artifact freshness evidence;
 2. run only the existing oracles needed to classify those rows;
@@ -355,4 +627,7 @@ Write the next goal around this decision contract, not around another scaffold:
    `GO_FOR_NEXT_PRODUCT_DECISION_PR`,
    `NO_GO_FIX_SELECTION_OR_BOUNDARY_FIRST`, or
    `INCONCLUSIVE_NEEDS_NAMED_MINIMAL_EVIDENCE`;
-4. choose the next behavior PR only after this classification.
+4. if the classification is `GO`, start the Tiered Backfill Machine Decision
+   Contract PR;
+5. keep ASLS / linear-edge quantitative behavior and boundary guard deferred
+   until after the tiered PR unless a new blocker changes priority.

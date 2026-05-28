@@ -1,246 +1,251 @@
 # Qualitative Selection Acceptance Gate Note
 
 **Date:** 2026-05-28
-**Status:** `post_review_no_go`
+**Status:** `phase1b_go_after_owner_backfill_scan_support_fix`
 
-Final Classification: NO_GO_FIX_SELECTION_OR_BOUNDARY_FIRST
+Final Classification: GO_FOR_NEXT_PRODUCT_DECISION_PR
 
 ## Verdict
 
-Phase 1 does not clear the qualitative delivery gate after implementation
-review. The previous blocker was not `d3-N6-medA` RT drift or ASLS/area
-behavior. The blocker was that accepted `d3-N6-medA` evidence did not reach the
-downstream `alignment_matrix.tsv` delivery surface.
+Phase 1b now clears the qualitative selection gate for the current
+production-equivalent alignment path.
 
-The first production fix restored that delivery surface in the current 8RAW and
-85RAW artifacts:
+The earlier `NO_GO` was valid, but the root cause was narrower than the
+backfill concept itself: `owner_backfill` was being used as a support label while
+`owner_backfill.py` did not emit the independent `scan_support_score` that the
+shared promotion policy requires. That made real rescued MS1 peaks look
+unsupported and pushed rows such as `FAM000264 / d3-N6-medA` out of the primary
+matrix.
 
-- `FAM000264` is now `production_family`, `identity_reason=owner_complete_link`,
-  `include_in_primary_matrix=TRUE`.
-- `FAM000264` has `8/8` accepted cells, `3` detected cells, `5` rescued cells,
-  `22` event clusters, and `24` event members.
-- `TumorBC2312_DNA / d3-N6-medA` resolves to `FAM000264` through an equivalent
-  current artifact: the strong discovery candidate `TumorBC2312_DNA#21195`
-  has apex RT `25.4204`, and the primary delivered `FAM000264` cell for
-  `TumorBC2312_DNA` is the same m/z class and apex RT `25.4204`.
-- `NormalBC2312_DNA / d3-N6-medA` resolves directly to primary `FAM000264`.
+The fix is production-path evidence, not a target exception:
 
-`d3-N6-medA` remains a known RT-drift / same-surface case. It must not be reused
-as a qualitative blocker unless a new current run loses identity, local RT
-coherence, selected peak ownership, boundary ownership, or matrix delivery.
+- owner-backfill cells now compute `scan_support_score` from the extracted XIC
+  trace and selected peak boundary;
+- `trace_quality=owner_backfill` still does not count as independent support by
+  itself;
+- high-backfill promotion requires at least two detected identity cells, so a
+  single detected seed cannot promote a mostly backfilled row;
+- supported high-backfill rows are capped at medium confidence and marked with
+  `high_backfill_dependency_capped`.
 
-However, subagent implementation review found that the accepted
-`weak_seed_tolerated` rule was too permissive: it counted a detected seed as
-trusted based on high evidence score and NL ppm while ignoring
-`seed_event_count`. After hardening the rule so trusted seeds must also satisfy
-the existing seed-event threshold, the same committed artifacts reclassify the
-prior `weak_seed_tolerated` rows as risky weak-seed rows:
+This does not declare the whole product production-ready. It means the
+qualitative selected-peak / backfill-promotion blocker is closed, and the next
+PR can move to the next product behavior decision.
 
-- 8RAW: `13` `risky_weak_seed_backfill` primary rows, including `FAM000264`.
-- 85RAW: `5` `risky_weak_seed_backfill` primary rows.
-- `FAM000264`: `risk_classification=risky_weak_seed_backfill`,
-  `seed_quality_status=weak`, `min_evidence_score=58.0`,
-  `min_seed_event_count=1.0`, `max_abs_nl_ppm=11.5175`.
+## Changed Behavior
 
-That means the production behavior cannot be accepted as written. The remaining
-area warnings are not qualitative blockers, but the weak-seed promotion rule is:
+Shared policy owner:
 
-- The 85RAW strict targeted ISTD benchmark still reports `AREA_MISMATCH` for
-  `d4-N6-2HE-dA` and `d3-N6-medA`. Those are known quantitative / baseline /
-  targeted-oracle issues, not evidence that the qualitative delivery row is
-  wrong.
-- Five 85RAW rows that were previously treated as
-  `rescue_heavy;weak_seed_tolerated` become risky weak-seed rows under the
-  hardened review rule.
+`xic_extractor/alignment/promotion_policy.py`
 
-## Fixed Review Manifest
+Production and diagnostic consumers:
 
-| Kind | Sample / scope | Label or control | Gate result |
-| --- | --- | --- | --- |
-| positive ISTD | `BenignfatBC1151_DNA` | `d3-5-hmdC` | PASS: primary `FAM000162` |
-| positive ISTD | `BenignfatBC1055_DNA` | `d3-5-medC` | PASS: primary `FAM000030` |
-| positive ISTD | `BenignfatBC1055_DNA` | `15N5-8-oxodG` | PASS: primary `FAM000563` |
-| positive ISTD | `TumorBC2312_DNA` | `d3-N6-medA` | PASS: primary `FAM000264`, equivalent candidate apex `TumorBC2312_DNA#21195` |
-| positive ISTD | `NormalBC2263_DNA` | `d3-dG-C8-MeIQx` | PASS: primary `FAM001807` |
-| identity decoy aggregate | reviewed controls manifest hash `A08F197E31E5F33C35035AB082488DC9F0B5494075BF6930CF9F4EBA42DE1FC6` | `identity_decoy_specificity` | accepted V0.4 aggregate oracle: `3/3` reviewed decoys rejected, `0` promoted |
-| prior blocker | `NormalBC2312_DNA` | `15N5-8-oxodG` | PASS: primary `FAM000563` |
-| prior warning | `NormalBC2312_DNA` | `d3-N6-medA` | PASS: primary `FAM000264` |
+- `xic_extractor/alignment/matrix_identity.py`
+- `tools/diagnostics/single_dr_production_gate_decision_report.py`
 
-## Per-row Decision Matrix
+Root-cause fix:
 
-Authoritative post-fix resolved row evidence:
+- `xic_extractor/alignment/owner_backfill.py` now emits scan support for both
+  exact and batch owner-backfill paths.
 
-- `output/product_priority_reset_phase1/phase1_review_matrix_resolved.tsv`
-- SHA256:
-  `B38EC06D01714B4AACA6825B1C003C9BB724264689FCD78FBCB8DD2F9AB0CE9D`
-- durable fixture:
-  `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/phase1_review_matrix_resolved_primary_delivery_fix.tsv`
+Review-driven safeguards:
 
-| Row | Current evidence | Gate interpretation |
-| --- | --- | --- |
-| `d3-5-hmdC / BenignfatBC1151_DNA` | selected `FAM000162`, `detected`, RT `9.0256`, primary matrix row present | PASS |
-| `d3-5-medC / BenignfatBC1055_DNA` | selected `FAM000030`, `detected`, RT `12.5593`, primary matrix row present | PASS |
-| `15N5-8-oxodG / BenignfatBC1055_DNA` | selected `FAM000563`, `detected`, RT `16.4283`, primary matrix row present | PASS |
-| `d3-N6-medA / TumorBC2312_DNA` | selected `FAM000264`, `rescued`, RT `25.4204`; equivalent current artifact `TumorBC2312_DNA#21195`; primary matrix row present | PASS |
-| `d3-dG-C8-MeIQx / NormalBC2263_DNA` | selected `FAM001807`, `detected`, RT `40.6203`, primary matrix row present | PASS |
-| `15N5-8-oxodG / NormalBC2312_DNA` | selected `FAM000563`, `detected`, RT `16.5806`, primary matrix row present | PASS |
-| `d3-N6-medA / NormalBC2312_DNA` | selected `FAM000264`, `detected`, RT `26.232`, primary matrix row present | PASS |
-
-Original row-level GO blocker count: 0. Post-review production-rule blocker
-count: 1 named blocker class, `weak_seed_tolerated` promotion is too permissive.
+- `height` is part of `BackfillCellEvidence` and complete-peak evaluation.
+- TSV numeric parsing handles Excel-safe negative numbers such as `'-4.96409`.
+- TSV fallback quantifiable-rescue logic excludes out-of-window `review_rescue`
+  rows when serialized `alignment_cells.tsv` lacks explicit `quality_status`.
+- The single-dR diagnostic includes policy-blocked dR rows outside the primary
+  matrix so demoted rows do not disappear from the gate report.
 
 ## 8RAW Validation
 
-8RAW artifact freshness: GO. Production gate after review: NO-GO. The accepted
-8RAW discovery index has `rows=8`, `stale_refs=0`, and hash
-`6A17FE7FEB58AE2DA1FA0F48150D2303750E8943DAB48C05E50B3DF897E485C9`.
+Run directory:
 
-The foreground validation-minimal run completed at:
+`output\product_priority_reset_phase1b\alignment_8raw_scan_support_fix`
 
-`output/product_priority_reset_phase1/alignment_8raw_primary_delivery_fix`
+Command shape:
 
-Artifacts:
+```powershell
+.venv\Scripts\python.exe -m scripts.run_alignment `
+  --discovery-batch-index C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\8raw\discovery_batch_index.csv `
+  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
+  --dll-dir C:\Xcalibur\system\programs `
+  --output-dir output\product_priority_reset_phase1b\alignment_8raw_scan_support_fix `
+  --expected-sample-count 8 `
+  --output-level validation-minimal `
+  --resolver-mode region_first_safe_merge `
+  --backfill-scope production-equivalent `
+  --audit-evidence-mode none `
+  --performance-profile validation-fast `
+  --owner-backfill-window-strategy super-window `
+  --owner-backfill-superwindow-span-factor 2 `
+  --timing-output output\product_priority_reset_phase1b\alignment_8raw_scan_support_fix\timing.json `
+  --timing-live-output output\product_priority_reset_phase1b\alignment_8raw_scan_support_fix\timing.live.json
+```
+
+Wall-clock: `27.0 s`
 
 | Artifact | Rows | SHA256 |
 | --- | ---: | --- |
-| `alignment_matrix.tsv` | 282 | `49CC57F1AE893B791C4D8CCCDC0E24B874585EA2C8940E9B38958AE48D7B6B9F` |
-| `alignment_review.tsv` | 2395 | `13CB08C033C1954A154BFE8FBA7A87B0F744C19C42E391CF4C436F0549D278D2` |
-| `alignment_cells.tsv` | 19160 | `F16B4E9F5A332E0CA012E97EDDC0E5988F91C6ED988ED2E02A91F8B84909310F` |
+| `alignment_matrix.tsv` | 323 | `FD6F11A03084CCBE3685DB3F3D997497ACE408B18E743D6DA2EB91837E443FC8` |
+| `alignment_review.tsv` | 2395 | `B64F0B5B31ACAC3B5A3A01A7C85D11FA9E6F1C459B19C5AFACBFDA87E94390D2` |
+| `alignment_cells.tsv` | 19160 | `4EDD5846AB77C714AD565BB8BF5C77925B0CE8E441817C75717F3996C3C6C2CA` |
+| `timing.json` | - | `6D89DE0F07A118A554AE7BA29F9579CCCA2CA9BE183A5A2D141A592470350C9E` |
 
-Run shape:
+Single-dR diagnostic:
 
-- `output-level=validation-minimal`
-- `backfill-scope=production-equivalent`
-- `audit-evidence-mode=none`
-- `owner-backfill-window-strategy=super-window`
-- `raw_workers=8`
+`output\product_priority_reset_phase1b\single_dr_gate_8raw_scan_support_fix`
 
-Original focused diagnostics:
+| Metric | Value |
+| --- | ---: |
+| single-dR gate rows | 418 |
+| single-dR primary rows | 323 |
+| strong rows | 173 |
+| weak rows | 106 |
+| supported backfill capped rows | 57 |
+| blocked low-coverage rows | 20 |
+| risky extreme backfill rows | 45 |
+| risky weak-seed rows | 14 |
+| watch duplicate rescue rows | 3 |
+| hard gate candidate primary rows | 0 |
 
-- `single_dr_production_gate_decision_report.py`: `282` single-dR primary rows,
-  `0` risky weak-seed or extreme-backfill primary rows.
-- `targeted_gt_alignment_audit.py` default checkpoint (`5-medC / d3-5-medC`):
-  `PASS 8 / 8`, `SPLIT 0`, `DRIFT 0`, `DUPLICATE 0`, `MISS 0`.
-- `alignment_decision_report.py`: `WARN`, not `FAIL`. The warning load is
-  `rescue_heavy` / `weak_seed_tolerated`; it is a watch surface, not a named
-  qualitative blocker.
+`FAM000264 / d3-N6-medA` current 8RAW status:
 
-Post-review hardened classifier on the same artifact:
+| Family | Primary | Decision | Confidence | Reason | Supported / assessed rescue | Flags |
+| --- | --- | --- | --- | --- | --- | --- |
+| `FAM000264` | `TRUE` | `production_family` | `medium` | `dda_limited_ms2_but_ms1_shape_supported` | `5 / 5` | `rescue_heavy;weak_seed_backfill_dependency;high_backfill_dependency_capped` |
 
-- `282` single-dR primary rows.
-- `13` risky weak-seed rows, `0` risky extreme-backfill rows, `0`
-  `watch_weak_seed_tolerated` rows.
-- `FAM000264` is `risky_weak_seed_backfill`.
-
-## Oracle Status
-
-| Oracle | Status | Evidence |
-| --- | --- | --- |
-| Diagnostic ledger | updated post-fix | `docs/diagnostic-ledger.md` now records that `d3-N6-medA` is not an 8RAW blocker after primary delivery is restored. |
-| Row-level gate matrix | GO | `phase1_review_matrix_resolved_primary_delivery_fix.tsv` records `7/7` reviewed rows as PASS and `GO blocker count: 0`. |
-| Targeted GT default checkpoint | PASS | `5-medC / d3-5-medC` remains `PASS 8 / 8`. |
-| Single-dR gate pressure | NO-GO after review hardening | Original artifacts had watch rows only; the hardened reviewer rule finds 8RAW `13` and 85RAW `5` `risky_weak_seed_backfill` primary rows. |
-| Collateral promotion audit | NO-GO after review hardening | 8RAW promoted 13 `DNA_dR` rows that become risky weak-seed rows under the hardened contract; `FAM000264` is one of them. |
-| Strict targeted ISTD area benchmark | QUANT_FOLLOWUP | 85RAW fails only `AREA_MISMATCH` for known `d4-N6-2HE-dA` and `d3-N6-medA`; not a qualitative delivery blocker. |
-
-## Collateral Promotions
-
-The fix promotes 13 additional `DNA_dR` primary rows relative to the previous
-8RAW run. All 13 carry `row_flags=rescue_heavy;weak_seed_tolerated`.
-
-Durable collateral table:
-
-- `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/collateral_promoted_primary_rows_primary_delivery_fix.csv`
-- SHA256:
-  `9CFD07DBDD067748DEFEA883086894E481E947C157C15727E7BACC6DDCB71296`
-
-This is not acceptable for the 8RAW qualitative gate after review hardening.
-The previous broad `q_detected >= 3` promotion was rejected, and the narrower
-`weak_seed_tolerated` promotion still relied on a trusted-seed definition that
-ignored `seed_event_count`. Under the hardened contract, these rows are risky
-weak-seed rows, not production watch rows.
-
-## 85RAW
-
-85RAW foreground validation completed for this production behavior change.
+## 85RAW Validation
 
 Run directory:
 
-`output/product_priority_reset_phase1/alignment_85raw_primary_delivery_fix`
+`output\product_priority_reset_phase1b\alignment_85raw_scan_support_fix`
 
-Run shape:
+Command shape:
 
-- `output-level=validation-minimal`
-- `backfill-scope=production-equivalent`
-- `audit-evidence-mode=none`
-- `performance-profile=validation-fast`
-- `owner-backfill-window-strategy=super-window`
-- `owner-backfill-superwindow-span-factor=2`
-- foreground run with `timing.json` and `timing.live.json`
+```powershell
+.venv\Scripts\python.exe -m scripts.run_alignment `
+  --discovery-batch-index C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv `
+  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
+  --dll-dir C:\Xcalibur\system\programs `
+  --output-dir output\product_priority_reset_phase1b\alignment_85raw_scan_support_fix `
+  --expected-sample-count 85 `
+  --output-level validation-minimal `
+  --backfill-scope production-equivalent `
+  --audit-evidence-mode none `
+  --performance-profile validation-fast `
+  --owner-backfill-window-strategy super-window `
+  --owner-backfill-superwindow-span-factor 2 `
+  --timing-output output\product_priority_reset_phase1b\alignment_85raw_scan_support_fix\timing.json `
+  --timing-live-output output\product_priority_reset_phase1b\alignment_85raw_scan_support_fix\timing.live.json
+```
 
-Primary artifacts:
+Wall-clock: `692.8 s`
 
 | Artifact | Rows | SHA256 |
 | --- | ---: | --- |
-| `alignment_matrix.tsv` | 597 | `53EC16DA87D7BC3AE02C88120E5FBBD22CB45BB4C7FFCA07F605EE7D9EA8564D` |
-| `alignment_review.tsv` | 21812 | `17C478A04A8B97058AB473702933D0DC38D7ACF237AC56ECF52B69A2B4776E20` |
-| `alignment_cells.tsv` | 1854020 | `FFC309A7A249742D8C0CEC9DCE9063A0F3620D902B7193B13A7D882434683B93` |
-| `timing.json` | - | `A15F7EC0EF42AC52C6FFB8D315F27B867C487157D394D52C4489A8C9AADC9157` |
-| `alignment_run_metadata.json` | - | `FEBBBC775025EDDA1884D65BC507F0EA90C1C74CECFA10215D0F63F993456FDE` |
+| `alignment_matrix.tsv` | 610 | `2AC1ADDF5302477D46BEB46FC1C893877B40DE92AE05E77A7BFCE9D5DC9E5D57` |
+| `alignment_review.tsv` | 21812 | `878CEAAE61BC46E16310994E224C91EF86089455F5AA0A7BB6EAFDB3F696D8E1` |
+| `alignment_cells.tsv` | 1854020 | `7379DCF74910C1B027FB217C50D891ABEA0CD43F95E6DE6E5E86C0C3D0F5299B` |
+| `timing.json` | - | `FA42807CFDCA58156AECF3C99BAD8ACD991E93DAD6834433C3128AAA9DA52F7D` |
 
-Durable summary fixtures:
+Single-dR diagnostic:
 
-- `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/85raw_primary_delivery_fix_summary.tsv`,
-  SHA256 `4CF19B045F850B205E23888F1B3C5A6E3AF1C0BEC0C516E4447B61738CEAC24B`
-- `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/85raw_weak_seed_tolerated_watch_rows.tsv`,
-  SHA256 `E003FDEAC97E1DAE6E0D6AF929CDD7EA3A004BC9873A0340EF8A7B2E099683E4`
+`output\product_priority_reset_phase1b\single_dr_gate_85raw_scan_support_fix`
 
-85RAW diagnostics:
+| Metric | Value |
+| --- | ---: |
+| single-dR gate rows | 858 |
+| single-dR primary rows | 610 |
+| strong rows | 476 |
+| weak rows | 125 |
+| supported backfill capped rows | 19 |
+| blocked low-coverage rows | 69 |
+| risky extreme backfill rows | 118 |
+| risky weak-seed rows | 47 |
+| watch duplicate rescue rows | 4 |
+| hard gate candidate primary rows | 0 |
 
-- Original `single_dr_production_gate_decision_report.py`: `597` single-dR
-  primary rows, `0` risky extreme-backfill rows, `0` risky weak-seed rows, and
-  `0` duplicate rescue-pressure rows.
-- Post-review hardened classifier on the same artifact: `597` single-dR primary
-  rows, `0` risky extreme-backfill rows, `5` risky weak-seed rows, and `0`
-  `watch_weak_seed_tolerated` rows.
-- `alignment_decision_report.py`: `WARN`, not `FAIL`. Warning load is
-  `rescue_heavy` and `rescue_heavy;weak_seed_tolerated`, not a named
-  qualitative blocker.
-- `targeted_istd_benchmark.py`: strict benchmark exits non-zero because
-  `d4-N6-2HE-dA` and `d3-N6-medA` still have known `AREA_MISMATCH`. All active
-  ISTDs have one selected primary family and `85/85` untargeted positives. This
-  result is a quantitative follow-up surface, not a qualitative delivery NO-GO.
+## Delta Fixture
 
-## Subagent Review Resolution
+Delta baselines:
 
-Implementation review is now recorded as a blocking review gate, not only a chat
-summary:
+- 8RAW: `output\product_priority_reset_phase1\alignment_8raw_primary_delivery_fix\alignment_review.tsv`
+- 85RAW: `output\product_priority_reset_phase1\alignment_85raw_primary_delivery_fix\alignment_review.tsv`
 
-- Code/test reviewer: BLOCKING. `trusted_detected_candidate_count >= 2`
-  bypassed weak checks without requiring `seed_event_count`; fixed in code and
-  covered by negative unit tests. This changed the gate outcome to NO-GO.
-- Product/science reviewer: BLOCKING. `GO_FOR_NEXT_PRODUCT_DECISION_PR` was
-  overclaimed because the single-dR gate did not independently count
-  `weak_seed_tolerated` as a watch/risk class; fixed in diagnostics and
-  downgraded to NO-GO.
-- Docs/validation reviewer: BLOCKING. Fixture hashes and phase contract wording
-  were stale; fixed by updating hashes and recording that the PR made a narrow
-  production behavior attempt rather than a docs-only pass.
+| Scope | Delta rows | Promoted rows | Demoted rows | Supported capped primary | Hard-gate primary | Fixture | SHA256 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| 8RAW | 80 | 43 | 2 | 54 | 0 | `docs\superpowers\fixtures\diagnostic_ledger_2026_05_28\phase1b_8raw_policy_delta.tsv` | `A889FEEE29682A12E274B273EF0DEC45BACCD7CBB6166D2BB97A55C6025083C3` |
+| 85RAW | 96 | 17 | 4 | 18 | 0 | `docs\superpowers\fixtures\diagnostic_ledger_2026_05_28\phase1b_85raw_policy_delta.tsv` | `EAA72BD296B4DBA270349583EEB799A9D2C98CC2BB32421D5317CF9C92CD70B2` |
 
-Durable post-review hardening fixture:
+Summary fixture:
 
-- `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/post_review_hardened_single_dr_gate_summary.tsv`,
-  SHA256 `43FE4E4BCFF9DD20CA6B16F183F7A414EE89DCF1657A7E2E3B20559E32DE48E3`
+`docs\superpowers\fixtures\diagnostic_ledger_2026_05_28\phase1b_policy_delta_summary.tsv`
+
+SHA256:
+
+`533C74ABAE7313D2B8A52B3B963A63C2A5E4EF2B5F03905CEAABA35005CEB1BA`
+
+## Verification
+
+Focused tests:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'
+.venv\Scripts\python.exe -m pytest `
+  tests\test_alignment_owner_backfill.py `
+  tests\test_alignment_matrix_identity.py `
+  tests\test_single_dr_production_gate_decision_report.py `
+  tests\test_alignment_production_decisions.py `
+  tests\test_discovery_evidence.py `
+  tests\test_alignment_tsv_writer.py `
+  -q
+```
+
+Result: `102 passed`.
+
+Collateral tests:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'
+.venv\Scripts\python.exe -m pytest `
+  tests\test_alignment_decision_report.py `
+  tests\test_alignment_primary_consolidation.py `
+  tests\test_untargeted_alignment_guardrails.py `
+  -q
+```
+
+Result: `46 passed`.
+
+## Review Resolution
+
+- Implementation-contract review: blocking findings accepted. Fixed `height`
+  parity, review-rescue TSV fallback, diagnostic blocked coverage, and writer
+  header contract tests.
+- Strategy challenge: blocking finding accepted. `owner_backfill` remains a
+  trace-quality label, not independent support.
+- Follow-up root-cause review: accepted. The production path was missing
+  owner-backfill scan support emission, so valid rescued MS1 peaks were being
+  demoted by the corrected policy.
 
 ## Next Action
 
-Do not close this phase as `production_candidate`. The current branch is a
-NO-GO for production behavior as written.
+Proceed to the next product-decision PR. Recommended target:
 
-Recommended next PR target: decide the production identity policy for
-backfill-heavy single-dR families before ASLS / baseline quantitative correction.
-The concrete decision is whether `FAM000264`-style evidence can be promoted by a
-new row-local product signal, by a reviewed targeted-transfer bridge, or should
-remain excluded until boundary / hypothesis-source productization supplies
-stronger detected support. Do not treat `d3-N6-medA` drift or known area
-mismatch as the blocker; the blocker is the weak-seed promotion contract.
+`Tiered Backfill Machine Decision Contract`
+
+Reason: qualitative selection/backfill promotion is no longer the blocker. The
+next blocker is the machine-routing contract between evidence collection,
+provisional retention, and primary matrix promotion. The next PR should include
+the whole narrow tiered scope: one-detected-seed provisional retention,
+deterministic projection from existing review/cell fields, tests, docs, and no
+change to `alignment_matrix.tsv`.
+
+Normal downstream correction/statistics continue to consume the primary-only
+`alignment_matrix.tsv`; provisional rows are consumed by review/gate diagnostics
+and kept out of the quantitative matrix unless a future promotion contract says
+otherwise.
+
+`ASLS / linear-edge quantitative behavior and boundary guard` remains the next
+high-value quantitative behavior candidate after tiered backfill. It is deferred
+so the quantitative PR does not also have to define row-role semantics.
