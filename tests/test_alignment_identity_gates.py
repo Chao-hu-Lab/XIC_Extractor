@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from xic_extractor.alignment.identity_gates import (
     EXTREME_BACKFILL_REASON,
     WEAK_SEED_BACKFILL_REASON,
+    WEAK_SEED_TOLERATED_REASON,
     DetectedSeedRef,
     classify_single_dr_backfill_dependency,
     lookup_seed_candidate,
@@ -77,6 +78,35 @@ def test_adequate_seed_backfill_is_not_a_gate_candidate() -> None:
 
     assert summary.status == "adequate"
     assert reason is None
+
+
+def test_two_trusted_seeds_tolerate_one_weak_seed_with_warning_reason() -> None:
+    summary = summarize_detected_seed_quality(
+        (
+            DetectedSeedRef(sample_stem="S1", source_candidate_id="S1#C1"),
+            DetectedSeedRef(sample_stem="S2", source_candidate_id="S2#C2"),
+            DetectedSeedRef(sample_stem="S3", source_candidate_id="S3#C3"),
+        ),
+        {
+            "S1#C1": _candidate(),
+            "S2#C2": _candidate(),
+            "S3#C3": _candidate(evidence_score=55, nl_ppm=12.0),
+        },
+        enrichment_available=True,
+    )
+
+    reason = classify_single_dr_backfill_dependency(
+        neutral_loss_tag="dR",
+        q_detected=3,
+        q_rescue=6,
+        cell_count=10,
+        seed_quality=summary,
+    )
+
+    assert summary.status == "adequate"
+    assert summary.weak_seed_signal is True
+    assert summary.trusted_detected_candidate_count == 2
+    assert reason == WEAK_SEED_TOLERATED_REASON
 
 
 def test_non_dr_backfill_is_out_of_scope_even_when_extreme() -> None:

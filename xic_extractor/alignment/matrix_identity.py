@@ -13,6 +13,7 @@ from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.identity_gates import (
     EXTREME_BACKFILL_REASON,
     WEAK_SEED_BACKFILL_REASON,
+    WEAK_SEED_TOLERATED_REASON,
     DetectedSeedRef,
     classify_single_dr_backfill_dependency,
     summarize_detected_seed_quality,
@@ -242,6 +243,8 @@ def _row_flags(
         flags.append("high_backfill_dependency")
     if backfill_dependency == WEAK_SEED_BACKFILL_REASON:
         flags.append("weak_seed_backfill_dependency")
+    if backfill_dependency == WEAK_SEED_TOLERATED_REASON:
+        flags.append("weak_seed_tolerated")
     if q_detected == 0 and q_rescue > 0:
         flags.append("rescue_only")
     if duplicate_count > 0:

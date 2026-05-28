@@ -12,6 +12,7 @@ from xic_extractor.evidence_semantics import (
 
 EXTREME_BACKFILL_REASON = "extreme_backfill_dependency"
 WEAK_SEED_BACKFILL_REASON = "weak_seed_backfill_dependency"
+WEAK_SEED_TOLERATED_REASON = "weak_seed_tolerated"
 
 SeedQualityStatus = Literal["unavailable", "missing_lookup", "adequate", "weak"]
 
@@ -37,6 +38,7 @@ class SeedQualitySummary:
     min_seed_event_count: float | None = None
     max_abs_nl_ppm: float | None = None
     min_scan_support_score: float | None = None
+    trusted_detected_candidate_count: int = 0
     looked_up_candidate_count: int = 0
     missing_detected_candidate_count: int = 0
 
@@ -50,9 +52,35 @@ class SeedQualitySummary:
 
     @property
     def weak(self) -> bool:
-        return self.available and (
-            self.missing_detected_candidate_count > 0
+        if not self.available:
+            return False
+        if self.missing_detected_candidate_count > 0:
+            return True
+        if self.trusted_detected_candidate_count >= 2:
+            return False
+        return (
+            (
+                self.min_evidence_score is not None
+                and self.min_evidence_score < _WEAK_SEED_MIN_EVIDENCE_SCORE
+            )
             or (
+                self.min_seed_event_count is not None
+                and self.min_seed_event_count < _WEAK_SEED_MIN_EVENT_COUNT
+            )
+            or (
+                self.max_abs_nl_ppm is not None
+                and self.max_abs_nl_ppm > _WEAK_SEED_MAX_ABS_NL_PPM
+            )
+        )
+
+    @property
+    def weak_seed_signal(self) -> bool:
+        if not self.available:
+            return False
+        if self.missing_detected_candidate_count > 0:
+            return True
+        return (
+            (
                 self.min_evidence_score is not None
                 and self.min_evidence_score < _WEAK_SEED_MIN_EVIDENCE_SCORE
             )
@@ -103,9 +131,11 @@ def classify_single_dr_backfill_dependency(
         q_detected <= _WEAK_SEED_BACKFILL_MAX_DETECTED_SUPPORT
         and rescue_fraction >= _WEAK_SEED_BACKFILL_MIN_RESCUE_FRACTION
         and seed_quality is not None
-        and seed_quality.weak
     ):
-        return WEAK_SEED_BACKFILL_REASON
+        if seed_quality.weak:
+            return WEAK_SEED_BACKFILL_REASON
+        if seed_quality.weak_seed_signal:
+            return WEAK_SEED_TOLERATED_REASON
     return None
 
 
@@ -140,6 +170,9 @@ def summarize_detected_seed_quality(
         min_scan_support_score=_min_common_metric(
             evidence_vectors,
             "scan_support_score",
+        ),
+        trusted_detected_candidate_count=sum(
+            1 for evidence in evidence_vectors if _trusted_detected_seed(evidence)
         ),
         looked_up_candidate_count=len(evidence_vectors),
         missing_detected_candidate_count=missing_count,
@@ -207,6 +240,17 @@ def _max_abs_common_metric(
         if value is not None
     )
     return max(values) if values else None
+
+
+def _trusted_detected_seed(evidence: CommonEvidence) -> bool:
+    return (
+        evidence.evidence_score is not None
+        and evidence.evidence_score >= _WEAK_SEED_MIN_EVIDENCE_SCORE
+        and (
+            evidence.neutral_loss_error_ppm is None
+            or abs(evidence.neutral_loss_error_ppm) <= _WEAK_SEED_MAX_ABS_NL_PPM
+        )
+    )
 
 
 def _number_field(item: Any, key: str) -> float | None:

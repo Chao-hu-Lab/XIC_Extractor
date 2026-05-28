@@ -389,23 +389,48 @@ def _primary_cluster(
         f"owner_complete_link;owner_count={max(2, len(event_cluster_ids))};"
         f"primary_family_consolidated;family_count={len(component)}"
     )
+    updates = {
+        **center,
+        "has_anchor": any(
+            bool(getattr(clusters_by_id[cluster_id], "has_anchor", False))
+            for cluster_id in component
+        ),
+        "event_cluster_ids": event_cluster_ids,
+        "event_member_count": sum(
+            _event_member_count(clusters_by_id[cluster_id]) for cluster_id in component
+        ),
+        "evidence": evidence,
+        "review_only": False,
+    }
+    updates.update(_merged_member_updates(component, clusters_by_id))
     return _clone_cluster(
         cluster,
-        {
-            **center,
-            "has_anchor": any(
-                bool(getattr(clusters_by_id[cluster_id], "has_anchor", False))
-                for cluster_id in component
-            ),
-            "event_cluster_ids": event_cluster_ids,
-            "event_member_count": sum(
-                _event_member_count(clusters_by_id[cluster_id])
-                for cluster_id in component
-            ),
-            "evidence": evidence,
-            "review_only": False,
-        },
+        updates,
     )
+
+
+def _merged_member_updates(
+    component: tuple[str, ...],
+    clusters_by_id: dict[str, Any],
+) -> dict[str, tuple[Any, ...]]:
+    component_clusters = tuple(clusters_by_id[cluster_id] for cluster_id in component)
+    if all(hasattr(cluster, "owners") for cluster in component_clusters):
+        return {
+            "owners": tuple(
+                owner
+                for cluster in component_clusters
+                for owner in tuple(getattr(cluster, "owners"))
+            )
+        }
+    if all(hasattr(cluster, "event_clusters") for cluster in component_clusters):
+        return {
+            "event_clusters": tuple(
+                event_cluster
+                for cluster in component_clusters
+                for event_cluster in tuple(getattr(cluster, "event_clusters"))
+            )
+        }
+    return {}
 
 
 def _loser_cluster(cluster: Any, *, winner_id: str) -> Any:
