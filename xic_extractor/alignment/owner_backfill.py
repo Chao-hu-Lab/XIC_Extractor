@@ -502,7 +502,12 @@ def _backfill_feature_sample(
         peak_end_rt=peak.peak_end,
         rt_delta_sec=(peak.rt - feature.family_center_rt) * 60.0,
         trace_quality="owner_backfill",
-        scan_support_score=None,
+        scan_support_score=_scan_support_score(
+            rt_array,
+            peak_start=peak.peak_start,
+            peak_end=peak.peak_end,
+            scans_target=peak_config.resolver_min_scans,
+        ),
         source_candidate_id=None,
         source_raw_file=None,
         reason="owner-centered MS1 backfill",
@@ -586,7 +591,12 @@ def _backfill_feature_sample_trace(
         peak_end_rt=peak.peak_end,
         rt_delta_sec=(peak.rt - feature.family_center_rt) * 60.0,
         trace_quality="owner_backfill",
-        scan_support_score=None,
+        scan_support_score=_scan_support_score(
+            rt_array,
+            peak_start=peak.peak_start,
+            peak_end=peak.peak_end,
+            scans_target=peak_config.resolver_min_scans,
+        ),
         source_candidate_id=None,
         source_raw_file=None,
         reason="owner-centered MS1 backfill",
@@ -705,3 +715,16 @@ def _validated_trace_arrays(
     ):
         raise ValueError("owner backfill trace arrays must be finite 1D pairs")
     return rt_array, intensity_array
+
+
+def _scan_support_score(
+    rt: NDArray[np.float64],
+    *,
+    peak_start: float,
+    peak_end: float,
+    scans_target: int,
+) -> float:
+    if scans_target <= 0:
+        return 0.0
+    scan_count = int(np.count_nonzero((rt >= peak_start) & (rt <= peak_end)))
+    return min(1.0, scan_count / scans_target)

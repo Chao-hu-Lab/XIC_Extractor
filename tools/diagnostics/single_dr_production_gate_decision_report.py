@@ -23,10 +23,16 @@ from xic_extractor.alignment.identity_gates import (
     WEAK_SEED_TOLERATED_REASON,
     DetectedSeedRef,
     SeedQualitySummary,
-    classify_single_dr_backfill_dependency,
     is_dr_neutral_loss_tag,
     lookup_seed_candidate,
     summarize_detected_seed_quality,
+)
+from xic_extractor.alignment.promotion_policy import (
+    LOW_MS1_COVERAGE_BLOCKED_REASON,
+    NEIGHBOR_INTERFERENCE_BLOCKED_REASON,
+    RESCUE_ONLY_BLOCKED_REASON,
+    classify_backfill_promotion,
+    evidence_from_tsv_rows,
 )
 
 _REVIEW_REQUIRED_COLUMNS = (
@@ -41,6 +47,12 @@ _EXTREME_GATE_ID = "dr_extreme_backfill_dependency"
 _WEAK_SEED_GATE_ID = "dr_weak_seed_backfill_dependency"
 _WEAK_SEED_TOLERATED_GATE_ID = "dr_weak_seed_tolerated_watch"
 _DUPLICATE_GATE_ID = "dr_duplicate_rescue_pressure"
+_POLICY_BLOCK_REASONS = {
+    LOW_MS1_COVERAGE_BLOCKED_REASON,
+    NEIGHBOR_INTERFERENCE_BLOCKED_REASON,
+    RESCUE_ONLY_BLOCKED_REASON,
+    "duplicate_claim_pressure",
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -84,7 +96,7 @@ def build_decision_report(
     families: list[dict[str, Any]] = []
     detected_cells: list[dict[str, Any]] = []
     for review_row in review_rows:
-        if not _is_single_dr_primary(review_row):
+        if not _is_single_dr_gate_row(review_row):
             continue
         family_id = review_row["feature_family_id"]
         family_cells = cells_by_family.get(family_id, ())
@@ -178,15 +190,24 @@ def _classify_family(
     rescue_fraction = q_rescue / denominator
     duplicate_count = _int_value(review_row.get("duplicate_assigned_count", ""))
     row_flags = review_row.get("row_flags", "")
-    dependency = classify_single_dr_backfill_dependency(
-        neutral_loss_tag=review_row.get("neutral_loss_tag", ""),
-        q_detected=q_detected,
-        q_rescue=q_rescue,
-        cell_count=denominator,
+    policy_evidence = evidence_from_tsv_rows(
+        review_row,
+        cells,
         seed_quality=seed_quality,
+        sample_count=denominator,
     )
+    dependency = policy_evidence.backfill_dependency
+    promotion = classify_backfill_promotion(policy_evidence)
 
-    if dependency == EXTREME_BACKFILL_REASON:
+    if promotion.supported:
+        classification = "supported_backfill_capped"
+    elif promotion.reason == NEIGHBOR_INTERFERENCE_BLOCKED_REASON:
+        classification = "blocked_neighboring_ms1_interference"
+    elif promotion.reason == LOW_MS1_COVERAGE_BLOCKED_REASON:
+        classification = "blocked_low_ms1_assessable_coverage"
+    elif promotion.reason == RESCUE_ONLY_BLOCKED_REASON:
+        classification = "blocked_rescue_only"
+    elif dependency == EXTREME_BACKFILL_REASON:
         classification = "risky_extreme_backfill"
     elif dependency == WEAK_SEED_BACKFILL_REASON:
         classification = "risky_weak_seed_backfill"
@@ -212,13 +233,20 @@ def _classify_family(
         "neutral_loss_tag": review_row.get("neutral_loss_tag", ""),
         "risk_classification": classification,
         "rt_context": rt_context or "",
-        "include_in_primary_matrix": True,
+        "include_in_primary_matrix": _is_true(
+            review_row.get("include_in_primary_matrix", ""),
+        ),
         "q_detected": q_detected,
         "q_rescue": q_rescue,
         "sample_count": denominator,
         "rescue_fraction": f"{rescue_fraction:.4f}",
         "duplicate_assigned_count": duplicate_count,
         "row_flags": row_flags,
+        "promotion_state": promotion.state,
+        "promotion_reason": promotion.reason,
+        "promotion_flags": ";".join(promotion.flags),
+        "supported_rescue_count": promotion.supported_rescue_count,
+        "assessed_rescue_count": promotion.assessed_rescue_count,
         "seed_quality_status": seed_quality.status,
         "min_evidence_score": _optional_metric(seed_quality.min_evidence_score),
         "min_seed_event_count": _optional_metric(seed_quality.min_seed_event_count),
@@ -364,6 +392,40 @@ def _gate_candidates(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
             ),
         ),
         _gate_candidate(
+            gate_candidate_id="dr_supported_backfill_capped",
+            rule_description=(
+                "single dR primary rows whose rescue-heavy support is accepted "
+                "only through cell-level evidence and capped confidence"
+            ),
+            families=[
+                row
+                for row in families
+                if row["risk_classification"] == "supported_backfill_capped"
+            ],
+            default_action="keep_warning",
+            false_positive_risk_reason=(
+                "The row is production-supported by cell-level MS1/RT evidence, "
+                "but high backfill dependency remains visible as a capped warning."
+            ),
+        ),
+        _gate_candidate(
+            gate_candidate_id="dr_backfill_policy_blocked",
+            rule_description=(
+                "single dR rows blocked by the shared cell-evidence promotion "
+                "policy"
+            ),
+            families=[
+                row
+                for row in families
+                if str(row["risk_classification"]).startswith("blocked_")
+            ],
+            default_action="implement",
+            false_positive_risk_reason=(
+                "The shared policy could not verify assessable cell-level "
+                "MS1/RT evidence for production backfill."
+            ),
+        ),
+        _gate_candidate(
             gate_candidate_id=_DUPLICATE_GATE_ID,
             rule_description=(
                 "single dR primary rows with duplicate pressure, rescue-heavy "
@@ -408,6 +470,9 @@ def _gate_candidate(
     default_action: str,
     false_positive_risk_reason: str,
 ) -> dict[str, Any]:
+    affected_primary_rows = sum(
+        1 for row in families if row["include_in_primary_matrix"]
+    )
     affected_istd_rows = sum(1 for row in families if row["targeted_istd_labels"])
     affected_known_target_rows = affected_istd_rows
     if not families:
@@ -425,7 +490,7 @@ def _gate_candidate(
     return {
         "gate_candidate_id": gate_candidate_id,
         "rule_description": rule_description,
-        "affected_primary_rows": len(families),
+        "affected_primary_rows": affected_primary_rows,
         "affected_istd_rows": affected_istd_rows,
         "affected_known_target_rows": affected_known_target_rows,
         "affected_rows_by_reason": _affected_rows_by_reason(families),
@@ -468,13 +533,23 @@ def _summary_rows(
     rows = [
         {"metric": "alignment_dir", "value": str(alignment_dir)},
         {"metric": "sample_count", "value": str(sample_count)},
-        {"metric": "single_dr_primary_rows", "value": str(len(families))},
+        {"metric": "single_dr_gate_rows", "value": str(len(families))},
+        {
+            "metric": "single_dr_primary_rows",
+            "value": str(
+                sum(1 for row in families if row["include_in_primary_matrix"]),
+            ),
+        },
     ]
     for key in (
         "strong",
         "weak",
         "risky_extreme_backfill",
         "risky_weak_seed_backfill",
+        "supported_backfill_capped",
+        "blocked_neighboring_ms1_interference",
+        "blocked_low_ms1_assessable_coverage",
+        "blocked_rescue_only",
         "watch_duplicate_rescue",
         "watch_weak_seed_tolerated",
     ):
@@ -508,10 +583,18 @@ def _lookup_candidate_quality(
     )
 
 
-def _is_single_dr_primary(row: Mapping[str, str]) -> bool:
-    if not _is_true(row.get("include_in_primary_matrix", "")):
+def _is_single_dr_gate_row(row: Mapping[str, str]) -> bool:
+    if not is_dr_neutral_loss_tag(row.get("neutral_loss_tag", "")):
         return False
-    return is_dr_neutral_loss_tag(row.get("neutral_loss_tag", ""))
+    if _is_true(row.get("include_in_primary_matrix", "")):
+        return True
+    if row.get("identity_reason", "") in _POLICY_BLOCK_REASONS:
+        return True
+    row_flags = row.get("row_flags", "")
+    return (
+        "high_backfill_dependency" in row_flags
+        or "weak_seed_backfill_dependency" in row_flags
+    )
 
 
 def _cells_by_family(
@@ -537,11 +620,15 @@ def _sample_order(rows: tuple[dict[str, str], ...]) -> tuple[str, ...]:
 
 def _risk_sort_key(classification: str) -> int:
     order = {
+        "blocked_neighboring_ms1_interference": 0,
+        "blocked_low_ms1_assessable_coverage": 1,
+        "blocked_rescue_only": 2,
         "risky_extreme_backfill": 0,
         "risky_weak_seed_backfill": 1,
-        "watch_duplicate_rescue": 2,
-        "weak": 3,
-        "strong": 4,
+        "supported_backfill_capped": 2,
+        "watch_duplicate_rescue": 3,
+        "weak": 4,
+        "strong": 5,
     }
     return order.get(classification, 99)
 

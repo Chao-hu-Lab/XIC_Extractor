@@ -23,7 +23,7 @@ def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
         sample_order=("sample-a", "sample-b"),
         raw_sources={"sample-b": source},
         alignment_config=AlignmentConfig(max_rt_sec=60.0),
-        peak_config=_peak_config(),
+        peak_config=replace(_peak_config(), resolver_min_scans=10),
         emit_region_audit=True,
     )
 
@@ -37,6 +37,8 @@ def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
     assert cell.selected_integration.area_raw_counts_seconds == cell.area
     assert cell.matrix_area == cell.area
     assert cell.reason == "owner-centered MS1 backfill"
+    assert cell.trace_quality == "owner_backfill"
+    assert cell.scan_support_score == 0.5
     assert cell.region_candidate_count is not None
     assert cell.region_shadow_status == "evaluated"
     assert cell.region_local_mixture_diagnostic
@@ -349,7 +351,7 @@ def test_owner_backfill_uses_preconsolidated_seed_centers_and_keeps_best_peak() 
         sample_order=("sample-a", "sample-b"),
         raw_sources={"sample-b": source},
         alignment_config=AlignmentConfig(),
-        peak_config=_peak_config(),
+        peak_config=replace(_peak_config(), resolver_min_scans=10),
         raw_xic_batch_size=64,
     )
 
@@ -358,6 +360,7 @@ def test_owner_backfill_uses_preconsolidated_seed_centers_and_keeps_best_peak() 
     assert cells[0].sample_stem == "sample-b"
     assert cells[0].area is not None and cells[0].area > 0
     assert cells[0].apex_rt == 8.8
+    assert cells[0].scan_support_score == 0.5
     assert cells[0].backfill_seed_mz == 500.0
     assert cells[0].backfill_seed_rt == 8.8
     assert np.isclose(cells[0].backfill_request_rt_min, 5.8)

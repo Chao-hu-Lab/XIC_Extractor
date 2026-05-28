@@ -4,6 +4,11 @@ from types import SimpleNamespace
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.promotion_policy import (
+    CELL_EVIDENCE_SUPPORTED_REASON,
+    DDA_LIMITED_MS2_SHAPE_REASON,
+    HIGH_BACKFILL_CAPPED_FLAG,
+)
 from xic_extractor.alignment.production_decisions import build_production_decisions
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
@@ -107,7 +112,7 @@ def test_rescue_heavy_row_needs_multiple_detected_owners_for_primary_promotion()
     assert decisions.row("FAM001").include_in_primary_matrix is False
 
 
-def test_extreme_backfill_dependency_row_is_excluded_from_primary_matrix():
+def test_extreme_backfill_dependency_row_is_supported_with_capped_warning():
     matrix = _matrix(
         clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
         cells=(
@@ -127,20 +132,17 @@ def test_extreme_backfill_dependency_row_is_excluded_from_primary_matrix():
 
     decisions = build_production_decisions(matrix, AlignmentConfig())
 
-    assert decisions.row("FAM001").include_in_primary_matrix is False
-    assert decisions.row("FAM001").identity_decision == "provisional_discovery"
-    assert decisions.row("FAM001").identity_reason == "extreme_backfill_dependency"
+    assert decisions.row("FAM001").include_in_primary_matrix is True
+    assert decisions.row("FAM001").identity_decision == "production_family"
+    assert decisions.row("FAM001").identity_reason == CELL_EVIDENCE_SUPPORTED_REASON
     assert "high_backfill_dependency" in decisions.row("FAM001").row_flags
-    assert decisions.cell("FAM001", "seed1").write_matrix_value is False
-    assert (
-        decisions.cell("FAM001", "seed1").blank_reason
-        == "missing_row_identity_support"
-    )
-    assert decisions.cell("FAM001", "rescue01").production_status == "review_rescue"
-    assert decisions.cell("FAM001", "rescue01").write_matrix_value is False
+    assert HIGH_BACKFILL_CAPPED_FLAG in decisions.row("FAM001").row_flags
+    assert decisions.cell("FAM001", "seed1").write_matrix_value is True
+    assert decisions.cell("FAM001", "rescue01").production_status == "accepted_rescue"
+    assert decisions.cell("FAM001", "rescue01").write_matrix_value is True
 
 
-def test_weak_seed_backfill_dependency_row_is_excluded_from_primary_matrix():
+def test_weak_seed_backfill_dependency_row_is_supported_by_cell_evidence():
     matrix = _matrix(
         clusters=(
             _feature(
@@ -192,17 +194,14 @@ def test_weak_seed_backfill_dependency_row_is_excluded_from_primary_matrix():
 
     decisions = build_production_decisions(matrix, AlignmentConfig())
 
-    assert decisions.row("FAM001").include_in_primary_matrix is False
-    assert decisions.row("FAM001").identity_decision == "provisional_discovery"
-    assert decisions.row("FAM001").identity_reason == "weak_seed_backfill_dependency"
+    assert decisions.row("FAM001").include_in_primary_matrix is True
+    assert decisions.row("FAM001").identity_decision == "production_family"
+    assert decisions.row("FAM001").identity_reason == DDA_LIMITED_MS2_SHAPE_REASON
     assert "weak_seed_backfill_dependency" in decisions.row("FAM001").row_flags
-    assert decisions.cell("FAM001", "seed1").write_matrix_value is False
-    assert (
-        decisions.cell("FAM001", "seed1").blank_reason
-        == "missing_row_identity_support"
-    )
-    assert decisions.cell("FAM001", "rescue1").production_status == "review_rescue"
-    assert decisions.cell("FAM001", "rescue1").write_matrix_value is False
+    assert HIGH_BACKFILL_CAPPED_FLAG in decisions.row("FAM001").row_flags
+    assert decisions.cell("FAM001", "seed1").write_matrix_value is True
+    assert decisions.cell("FAM001", "rescue1").production_status == "accepted_rescue"
+    assert decisions.cell("FAM001", "rescue1").write_matrix_value is True
 
 
 def test_duplicate_claim_pressure_blocks_unconsolidated_primary_promotion():

@@ -15,11 +15,18 @@ from xic_extractor.alignment.identity_gates import (
     WEAK_SEED_BACKFILL_REASON,
     WEAK_SEED_TOLERATED_REASON,
     DetectedSeedRef,
+    SeedQualitySummary,
     classify_single_dr_backfill_dependency,
     summarize_detected_seed_quality,
 )
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.output_rows import row_id
+from xic_extractor.alignment.promotion_policy import (
+    RESCUE_ONLY_BLOCKED_REASON,
+    BackfillPromotionDecision,
+    classify_backfill_promotion,
+    evidence_from_alignment,
+)
 
 IdentityDecision = Literal[
     "production_family",
@@ -103,7 +110,7 @@ def decide_matrix_identity_row(
         1 for decision in cell_quality if decision.quality_status == "ambiguous_owner"
     )
     cell_count = len(cell_quality)
-    backfill_dependency = _single_dr_backfill_dependency(
+    backfill_dependency, seed_quality = _single_dr_backfill_context(
         cluster,
         q_detected=q_detected,
         q_rescue=q_rescue,
@@ -121,6 +128,20 @@ def decide_matrix_identity_row(
         ambiguous_count=ambiguous_count,
         backfill_dependency=backfill_dependency,
     )
+    policy_evidence = evidence_from_alignment(
+        neutral_loss_tag=str(getattr(cluster, "neutral_loss_tag", "")),
+        primary_evidence=primary_evidence,
+        q_detected=q_detected,
+        q_rescue=q_rescue,
+        duplicate_count=duplicate_count,
+        ambiguous_count=ambiguous_count,
+        backfill_dependency=backfill_dependency,
+        seed_quality=seed_quality,
+        cells=cells,
+        cell_quality=cell_quality,
+    )
+    promotion_policy = classify_backfill_promotion(policy_evidence)
+    flags.extend(promotion_policy.flags)
     include, identity_decision, confidence, reason = _promotion_decision(
         cluster,
         evidence=evidence,
@@ -130,6 +151,7 @@ def decide_matrix_identity_row(
         duplicate_count=duplicate_count,
         ambiguous_count=ambiguous_count,
         backfill_dependency=backfill_dependency,
+        promotion_policy=promotion_policy,
     )
     return MatrixIdentityRowDecision(
         feature_family_id=family_id,
@@ -157,13 +179,14 @@ def _promotion_decision(
     duplicate_count: int,
     ambiguous_count: int,
     backfill_dependency: str | None,
+    promotion_policy: BackfillPromotionDecision,
 ) -> tuple[bool, IdentityDecision, IdentityConfidence, str]:
     if bool(getattr(cluster, "review_only", False)):
         return False, "audit_family", "review", "review_only"
     if _is_consolidation_loser(evidence):
         return False, "audit_family", "review", "family_consolidation_loser"
     if q_detected == 0 and q_rescue > 0:
-        return False, "audit_family", "review", "rescue_only"
+        return False, "audit_family", "review", RESCUE_ONLY_BLOCKED_REASON
     if q_detected == 0 and duplicate_count > 0 and ambiguous_count == 0:
         return False, "audit_family", "review", "duplicate_only"
     if q_detected == 0 and ambiguous_count > 0 and duplicate_count == 0:
@@ -172,6 +195,20 @@ def _promotion_decision(
         return False, "audit_family", "none", "zero_quantifiable_detected"
     if duplicate_count > q_detected:
         return False, "audit_family", "review", "duplicate_claim_pressure"
+    if promotion_policy.blocked:
+        return (
+            False,
+            "provisional_discovery",
+            "review",
+            promotion_policy.reason,
+        )
+    if promotion_policy.supported:
+        return (
+            True,
+            "production_family",
+            "medium",
+            promotion_policy.reason,
+        )
     if backfill_dependency == EXTREME_BACKFILL_REASON:
         return (
             False,
@@ -297,14 +334,14 @@ def _is_consolidation_loser(evidence: str) -> bool:
     )
 
 
-def _single_dr_backfill_dependency(
+def _single_dr_backfill_context(
     cluster: Any,
     *,
     q_detected: int,
     q_rescue: int,
     cell_count: int,
     cells: Sequence[AlignedCell],
-) -> str | None:
+) -> tuple[str | None, SeedQualitySummary]:
     candidates = _seed_candidates_by_id(cluster)
     seed_quality = summarize_detected_seed_quality(
         tuple(
@@ -318,12 +355,15 @@ def _single_dr_backfill_dependency(
         candidates,
         enrichment_available=bool(candidates),
     )
-    return classify_single_dr_backfill_dependency(
-        neutral_loss_tag=str(getattr(cluster, "neutral_loss_tag", "")),
-        q_detected=q_detected,
-        q_rescue=q_rescue,
-        cell_count=cell_count,
-        seed_quality=seed_quality,
+    return (
+        classify_single_dr_backfill_dependency(
+            neutral_loss_tag=str(getattr(cluster, "neutral_loss_tag", "")),
+            q_detected=q_detected,
+            q_rescue=q_rescue,
+            cell_count=cell_count,
+            seed_quality=seed_quality,
+        ),
+        seed_quality,
     )
 
 

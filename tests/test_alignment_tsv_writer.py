@@ -454,7 +454,7 @@ def test_write_alignment_review_tsv_includes_production_decision_columns(
     assert rows[0]["identity_decision"] == "audit_family"
     assert rows[0]["identity_confidence"] == "review"
     assert rows[0]["primary_evidence"] == "none"
-    assert rows[0]["identity_reason"] == "rescue_only"
+    assert rows[0]["identity_reason"] == "rescue_only_blocked"
     assert rows[0]["quantifiable_detected_count"] == "0"
     assert rows[0]["quantifiable_rescue_count"] == "1"
     assert rows[0]["accepted_cell_count"] == "0"
