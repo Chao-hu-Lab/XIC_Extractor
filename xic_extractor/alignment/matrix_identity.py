@@ -195,6 +195,13 @@ def _promotion_decision(
         )
     if primary_evidence in {"owner_complete_link", "cid_nl_only", "owner_identity"}:
         if q_detected >= 2:
+            if backfill_dependency == WEAK_SEED_TOLERATED_REASON:
+                return (
+                    True,
+                    "production_family",
+                    "medium",
+                    "weak_seed_tolerated",
+                )
             return True, "production_family", "high", primary_evidence
         return (
             False,

@@ -30,6 +30,7 @@ _CLEANLINESS_WARNING_FLAGS = (
     "duplicate_claim_pressure",
     "high_backfill_dependency",
     "rescue_heavy",
+    "weak_seed_tolerated",
 )
 
 

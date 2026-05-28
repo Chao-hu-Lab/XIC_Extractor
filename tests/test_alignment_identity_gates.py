@@ -109,6 +109,63 @@ def test_two_trusted_seeds_tolerate_one_weak_seed_with_warning_reason() -> None:
     assert reason == WEAK_SEED_TOLERATED_REASON
 
 
+def test_high_score_seeds_are_not_trusted_without_seed_event_support() -> None:
+    summary = summarize_detected_seed_quality(
+        (
+            DetectedSeedRef(sample_stem="S1", source_candidate_id="S1#C1"),
+            DetectedSeedRef(sample_stem="S2", source_candidate_id="S2#C2"),
+            DetectedSeedRef(sample_stem="S3", source_candidate_id="S3#C3"),
+        ),
+        {
+            "S1#C1": _candidate(seed_event_count=1),
+            "S2#C2": _candidate(seed_event_count=1),
+            "S3#C3": _candidate(evidence_score=55),
+        },
+        enrichment_available=True,
+    )
+
+    reason = classify_single_dr_backfill_dependency(
+        neutral_loss_tag="dR",
+        q_detected=3,
+        q_rescue=6,
+        cell_count=10,
+        seed_quality=summary,
+    )
+
+    assert summary.status == "weak"
+    assert summary.trusted_detected_candidate_count == 0
+    assert reason == WEAK_SEED_BACKFILL_REASON
+
+
+def test_low_scan_support_seed_is_weak_and_not_trusted() -> None:
+    summary = summarize_detected_seed_quality(
+        (
+            DetectedSeedRef(sample_stem="S1", source_candidate_id="S1#C1"),
+            DetectedSeedRef(sample_stem="S2", source_candidate_id="S2#C2"),
+            DetectedSeedRef(sample_stem="S3", source_candidate_id="S3#C3"),
+        ),
+        {
+            "S1#C1": _candidate(scan_support=0.4),
+            "S2#C2": _candidate(),
+            "S3#C3": _candidate(),
+        },
+        enrichment_available=True,
+    )
+
+    reason = classify_single_dr_backfill_dependency(
+        neutral_loss_tag="dR",
+        q_detected=3,
+        q_rescue=6,
+        cell_count=10,
+        seed_quality=summary,
+    )
+
+    assert summary.status == "adequate"
+    assert summary.weak_seed_signal is True
+    assert summary.trusted_detected_candidate_count == 2
+    assert reason == WEAK_SEED_TOLERATED_REASON
+
+
 def test_non_dr_backfill_is_out_of_scope_even_when_extreme() -> None:
     reason = classify_single_dr_backfill_dependency(
         neutral_loss_tag="DNA_R",

@@ -16,6 +16,11 @@ The durable diagnostic memory and rerun policy now live in:
 
 - `docs/diagnostic-ledger.md`
 
+The replacement behavior attempt was folded into the Product Priority Reset
+Phase 1 implementation plan after current row evidence showed a primary delivery
+blocker. Post-implementation review hardened the trusted-seed contract and
+converted the gate outcome to NO-GO rather than accepting the promotion.
+
 ## Current Decision
 
 `d3-N6-medA` is already known as a severe RT-drift / same-surface-explained case.

@@ -20,6 +20,7 @@ from tools.diagnostics.single_dr_gate_decision_writers import write_outputs
 from xic_extractor.alignment.identity_gates import (
     EXTREME_BACKFILL_REASON,
     WEAK_SEED_BACKFILL_REASON,
+    WEAK_SEED_TOLERATED_REASON,
     DetectedSeedRef,
     SeedQualitySummary,
     classify_single_dr_backfill_dependency,
@@ -38,6 +39,7 @@ _CELLS_REQUIRED_COLUMNS = ("feature_family_id", "sample_stem", "status")
 
 _EXTREME_GATE_ID = "dr_extreme_backfill_dependency"
 _WEAK_SEED_GATE_ID = "dr_weak_seed_backfill_dependency"
+_WEAK_SEED_TOLERATED_GATE_ID = "dr_weak_seed_tolerated_watch"
 _DUPLICATE_GATE_ID = "dr_duplicate_rescue_pressure"
 
 
@@ -188,6 +190,8 @@ def _classify_family(
         classification = "risky_extreme_backfill"
     elif dependency == WEAK_SEED_BACKFILL_REASON:
         classification = "risky_weak_seed_backfill"
+    elif dependency == WEAK_SEED_TOLERATED_REASON:
+        classification = "watch_weak_seed_tolerated"
     elif _is_duplicate_rescue_watch(
         q_detected=q_detected,
         q_rescue=q_rescue,
@@ -376,6 +380,23 @@ def _gate_candidates(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "family still competing for row identity."
             ),
         ),
+        _gate_candidate(
+            gate_candidate_id=_WEAK_SEED_TOLERATED_GATE_ID,
+            rule_description=(
+                "single dR primary rows with rescue-heavy support and a "
+                "tolerated weak-seed signal"
+            ),
+            families=[
+                row
+                for row in families
+                if row["risk_classification"] == "watch_weak_seed_tolerated"
+            ],
+            default_action="keep_warning",
+            false_positive_risk_reason=(
+                "The row passes because at least two detected seeds are trusted, "
+                "but a weak seed signal still needs to stay visible."
+            ),
+        ),
     ]
 
 
@@ -455,6 +476,7 @@ def _summary_rows(
         "risky_extreme_backfill",
         "risky_weak_seed_backfill",
         "watch_duplicate_rescue",
+        "watch_weak_seed_tolerated",
     ):
         rows.append(
             {

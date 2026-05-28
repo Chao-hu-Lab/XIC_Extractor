@@ -1,5 +1,11 @@
 # Product Priority Reset Phase 1 Goal
 
+> Post-review correction: this goal began as a docs/validation-only gate, but
+> live evidence identified a narrow primary-delivery production blocker. The PR
+> therefore contains a production behavior attempt plus review hardening. The
+> final classification is allowed to be NO-GO when the hardened production
+> contract rejects that attempt.
+
 ```text
 /goal
 GOAL:
@@ -29,8 +35,10 @@ CONTEXT:
 CONSTRAINTS:
 - Execute the reviewed implementation plan unless live evidence forces a smaller
   safe adjustment that preserves the decision spec.
-- Do not change production code, resolver defaults, baseline behavior, boundary
-  selection, matrix schema, or diagnostic CLIs.
+- Do not change resolver defaults, baseline behavior, boundary selection, or
+  matrix schema. Production code changes are only allowed for a narrow
+  primary-delivery blocker if the gate note records the behavior attempt,
+  collateral rows, implementation-review findings, and final GO/NO-GO outcome.
 - Do not create broad new diagnostics, HTML/XLSX reports, external-tool audits,
   ML/DL scaffolding, or Phase2 cleanup work.
 - Use C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe for RAW /

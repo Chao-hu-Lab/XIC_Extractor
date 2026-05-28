@@ -23,6 +23,7 @@ _WEAK_SEED_BACKFILL_MAX_DETECTED_SUPPORT = 3
 _WEAK_SEED_MIN_EVIDENCE_SCORE = 60
 _WEAK_SEED_MIN_EVENT_COUNT = 2
 _WEAK_SEED_MAX_ABS_NL_PPM = 10.0
+_WEAK_SEED_MIN_SCAN_SUPPORT_SCORE = 0.5
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,10 @@ class SeedQualitySummary:
                 self.max_abs_nl_ppm is not None
                 and self.max_abs_nl_ppm > _WEAK_SEED_MAX_ABS_NL_PPM
             )
+            or (
+                self.min_scan_support_score is not None
+                and self.min_scan_support_score < _WEAK_SEED_MIN_SCAN_SUPPORT_SCORE
+            )
         )
 
     @property
@@ -91,6 +96,10 @@ class SeedQualitySummary:
             or (
                 self.max_abs_nl_ppm is not None
                 and self.max_abs_nl_ppm > _WEAK_SEED_MAX_ABS_NL_PPM
+            )
+            or (
+                self.min_scan_support_score is not None
+                and self.min_scan_support_score < _WEAK_SEED_MIN_SCAN_SUPPORT_SCORE
             )
         )
 
@@ -246,9 +255,15 @@ def _trusted_detected_seed(evidence: CommonEvidence) -> bool:
     return (
         evidence.evidence_score is not None
         and evidence.evidence_score >= _WEAK_SEED_MIN_EVIDENCE_SCORE
+        and evidence.seed_event_count is not None
+        and evidence.seed_event_count >= _WEAK_SEED_MIN_EVENT_COUNT
         and (
             evidence.neutral_loss_error_ppm is None
             or abs(evidence.neutral_loss_error_ppm) <= _WEAK_SEED_MAX_ABS_NL_PPM
+        )
+        and (
+            evidence.scan_support_score is None
+            or evidence.scan_support_score >= _WEAK_SEED_MIN_SCAN_SUPPORT_SCORE
         )
     )
 

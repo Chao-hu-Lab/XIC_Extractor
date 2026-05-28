@@ -1,19 +1,19 @@
 # Qualitative Selection Acceptance Gate Note
 
 **Date:** 2026-05-28
-**Status:** `production_candidate_85raw_validated`
+**Status:** `post_review_no_go`
 
-Final Classification: GO_FOR_NEXT_PRODUCT_DECISION_PR
+Final Classification: NO_GO_FIX_SELECTION_OR_BOUNDARY_FIRST
 
 ## Verdict
 
-Phase 1 now clears the 8RAW and 85RAW qualitative delivery gates. The previous
-blocker was not `d3-N6-medA` RT drift or ASLS/area behavior. The blocker was
-that accepted `d3-N6-medA` evidence did not reach the downstream
-`alignment_matrix.tsv` delivery surface.
+Phase 1 does not clear the qualitative delivery gate after implementation
+review. The previous blocker was not `d3-N6-medA` RT drift or ASLS/area
+behavior. The blocker was that accepted `d3-N6-medA` evidence did not reach the
+downstream `alignment_matrix.tsv` delivery surface.
 
-That delivery blocker is fixed in the current 8RAW run and survived the 85RAW
-watch:
+The first production fix restored that delivery surface in the current 8RAW and
+85RAW artifacts:
 
 - `FAM000264` is now `production_family`, `identity_reason=owner_complete_link`,
   `include_in_primary_matrix=TRUE`.
@@ -29,14 +29,29 @@ watch:
 as a qualitative blocker unless a new current run loses identity, local RT
 coherence, selected peak ownership, boundary ownership, or matrix delivery.
 
-The remaining warnings are not qualitative blockers:
+However, subagent implementation review found that the accepted
+`weak_seed_tolerated` rule was too permissive: it counted a detected seed as
+trusted based on high evidence score and NL ppm while ignoring
+`seed_event_count`. After hardening the rule so trusted seeds must also satisfy
+the existing seed-event threshold, the same committed artifacts reclassify the
+prior `weak_seed_tolerated` rows as risky weak-seed rows:
+
+- 8RAW: `13` `risky_weak_seed_backfill` primary rows, including `FAM000264`.
+- 85RAW: `5` `risky_weak_seed_backfill` primary rows.
+- `FAM000264`: `risk_classification=risky_weak_seed_backfill`,
+  `seed_quality_status=weak`, `min_evidence_score=58.0`,
+  `min_seed_event_count=1.0`, `max_abs_nl_ppm=11.5175`.
+
+That means the production behavior cannot be accepted as written. The remaining
+area warnings are not qualitative blockers, but the weak-seed promotion rule is:
 
 - The 85RAW strict targeted ISTD benchmark still reports `AREA_MISMATCH` for
   `d4-N6-2HE-dA` and `d3-N6-medA`. Those are known quantitative / baseline /
   targeted-oracle issues, not evidence that the qualitative delivery row is
   wrong.
-- Five 85RAW primary rows carry `rescue_heavy;weak_seed_tolerated`. They remain
-  explicit watch rows, with no extreme-backfill or weak-seed hard gate candidate.
+- Five 85RAW rows that were previously treated as
+  `rescue_heavy;weak_seed_tolerated` become risky weak-seed rows under the
+  hardened review rule.
 
 ## Fixed Review Manifest
 
@@ -57,7 +72,7 @@ Authoritative post-fix resolved row evidence:
 
 - `output/product_priority_reset_phase1/phase1_review_matrix_resolved.tsv`
 - SHA256:
-  `84B97ECD198B25911E98641C6F962DE8449EEB99EF2C4164373AE431DFC30F5A`
+  `B38EC06D01714B4AACA6825B1C003C9BB724264689FCD78FBCB8DD2F9AB0CE9D`
 - durable fixture:
   `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/phase1_review_matrix_resolved_primary_delivery_fix.tsv`
 
@@ -71,12 +86,13 @@ Authoritative post-fix resolved row evidence:
 | `15N5-8-oxodG / NormalBC2312_DNA` | selected `FAM000563`, `detected`, RT `16.5806`, primary matrix row present | PASS |
 | `d3-N6-medA / NormalBC2312_DNA` | selected `FAM000264`, `detected`, RT `26.232`, primary matrix row present | PASS |
 
-GO blocker count: 0.
+Original row-level GO blocker count: 0. Post-review production-rule blocker
+count: 1 named blocker class, `weak_seed_tolerated` promotion is too permissive.
 
 ## 8RAW Validation
 
-8RAW delivery freshness: GO. The accepted 8RAW discovery index has `rows=8`,
-`stale_refs=0`, and hash
+8RAW artifact freshness: GO. Production gate after review: NO-GO. The accepted
+8RAW discovery index has `rows=8`, `stale_refs=0`, and hash
 `6A17FE7FEB58AE2DA1FA0F48150D2303750E8943DAB48C05E50B3DF897E485C9`.
 
 The foreground validation-minimal run completed at:
@@ -99,7 +115,7 @@ Run shape:
 - `owner-backfill-window-strategy=super-window`
 - `raw_workers=8`
 
-Focused diagnostics:
+Original focused diagnostics:
 
 - `single_dr_production_gate_decision_report.py`: `282` single-dR primary rows,
   `0` risky weak-seed or extreme-backfill primary rows.
@@ -109,6 +125,13 @@ Focused diagnostics:
   `rescue_heavy` / `weak_seed_tolerated`; it is a watch surface, not a named
   qualitative blocker.
 
+Post-review hardened classifier on the same artifact:
+
+- `282` single-dR primary rows.
+- `13` risky weak-seed rows, `0` risky extreme-backfill rows, `0`
+  `watch_weak_seed_tolerated` rows.
+- `FAM000264` is `risky_weak_seed_backfill`.
+
 ## Oracle Status
 
 | Oracle | Status | Evidence |
@@ -116,8 +139,8 @@ Focused diagnostics:
 | Diagnostic ledger | updated post-fix | `docs/diagnostic-ledger.md` now records that `d3-N6-medA` is not an 8RAW blocker after primary delivery is restored. |
 | Row-level gate matrix | GO | `phase1_review_matrix_resolved_primary_delivery_fix.tsv` records `7/7` reviewed rows as PASS and `GO blocker count: 0`. |
 | Targeted GT default checkpoint | PASS | `5-medC / d3-5-medC` remains `PASS 8 / 8`. |
-| Single-dR gate pressure | PASS with watch rows | 8RAW: `282` single-dR primary rows, `0` risky weak-seed or extreme-backfill rows. 85RAW: `597` single-dR primary rows, `0` risky weak-seed or extreme-backfill rows. |
-| Collateral promotion audit | PASS with watch rows | 8RAW promoted 13 `DNA_dR` rows, all warning-marked. 85RAW has five `rescue_heavy;weak_seed_tolerated` primary rows and no hard gate candidate. |
+| Single-dR gate pressure | NO-GO after review hardening | Original artifacts had watch rows only; the hardened reviewer rule finds 8RAW `13` and 85RAW `5` `risky_weak_seed_backfill` primary rows. |
+| Collateral promotion audit | NO-GO after review hardening | 8RAW promoted 13 `DNA_dR` rows that become risky weak-seed rows under the hardened contract; `FAM000264` is one of them. |
 | Strict targeted ISTD area benchmark | QUANT_FOLLOWUP | 85RAW fails only `AREA_MISMATCH` for known `d4-N6-2HE-dA` and `d3-N6-medA`; not a qualitative delivery blocker. |
 
 ## Collateral Promotions
@@ -131,11 +154,11 @@ Durable collateral table:
 - SHA256:
   `9CFD07DBDD067748DEFEA883086894E481E947C157C15727E7BACC6DDCB71296`
 
-This is acceptable for the 8RAW qualitative gate because the previous broad
-`q_detected >= 3` promotion was rejected, while the current rule requires
-trusted detected seed support and keeps the warning visible. The 85RAW watch is
-now complete and found five primary rows with `rescue_heavy;weak_seed_tolerated`,
-with no risky weak-seed or extreme-backfill hard gate candidate.
+This is not acceptable for the 8RAW qualitative gate after review hardening.
+The previous broad `q_detected >= 3` promotion was rejected, and the narrower
+`weak_seed_tolerated` promotion still relied on a trusted-seed definition that
+ignored `seed_event_count`. Under the hardened contract, these rows are risky
+weak-seed rows, not production watch rows.
 
 ## 85RAW
 
@@ -168,15 +191,18 @@ Primary artifacts:
 Durable summary fixtures:
 
 - `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/85raw_primary_delivery_fix_summary.tsv`,
-  SHA256 `2D77F99F9429BD7EB82A9D69F70D299AB8F76228567EDAD7DCA07FF63D90934B`
+  SHA256 `4CF19B045F850B205E23888F1B3C5A6E3AF1C0BEC0C516E4447B61738CEAC24B`
 - `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/85raw_weak_seed_tolerated_watch_rows.tsv`,
   SHA256 `E003FDEAC97E1DAE6E0D6AF929CDD7EA3A004BC9873A0340EF8A7B2E099683E4`
 
 85RAW diagnostics:
 
-- `single_dr_production_gate_decision_report.py`: `597` single-dR primary rows,
-  `0` risky extreme-backfill rows, `0` risky weak-seed rows, and `0` duplicate
-  rescue-pressure rows.
+- Original `single_dr_production_gate_decision_report.py`: `597` single-dR
+  primary rows, `0` risky extreme-backfill rows, `0` risky weak-seed rows, and
+  `0` duplicate rescue-pressure rows.
+- Post-review hardened classifier on the same artifact: `597` single-dR primary
+  rows, `0` risky extreme-backfill rows, `5` risky weak-seed rows, and `0`
+  `watch_weak_seed_tolerated` rows.
 - `alignment_decision_report.py`: `WARN`, not `FAIL`. Warning load is
   `rescue_heavy` and `rescue_heavy;weak_seed_tolerated`, not a named
   qualitative blocker.
@@ -187,27 +213,34 @@ Durable summary fixtures:
 
 ## Subagent Review Resolution
 
-Prior reviewer concerns that shaped this gate are now resolved in the current
-artifact set:
+Implementation review is now recorded as a blocking review gate, not only a chat
+summary:
 
-- `d3-N6-medA` is separated into known RT-drift context vs actual primary
-  delivery state.
-- The prior sample-only shortcut is replaced with row-local evidence:
-  source-candidate match when available, or a same-sample / same-m/z /
-  same-apex equivalent current artifact when the source candidate is represented
-  as an ambiguous owner row.
-- Collateral promotions are not hidden; the 13-row 8RAW table and five-row 85RAW
-  watch table are durable fixtures.
+- Code/test reviewer: BLOCKING. `trusted_detected_candidate_count >= 2`
+  bypassed weak checks without requiring `seed_event_count`; fixed in code and
+  covered by negative unit tests. This changed the gate outcome to NO-GO.
+- Product/science reviewer: BLOCKING. `GO_FOR_NEXT_PRODUCT_DECISION_PR` was
+  overclaimed because the single-dR gate did not independently count
+  `weak_seed_tolerated` as a watch/risk class; fixed in diagnostics and
+  downgraded to NO-GO.
+- Docs/validation reviewer: BLOCKING. Fixture hashes and phase contract wording
+  were stale; fixed by updating hashes and recording that the PR made a narrow
+  production behavior attempt rather than a docs-only pass.
+
+Durable post-review hardening fixture:
+
+- `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/post_review_hardened_single_dr_gate_summary.tsv`,
+  SHA256 `43FE4E4BCFF9DD20CA6B16F183F7A414EE89DCF1657A7E2E3B20559E32DE48E3`
 
 ## Next Action
 
-Close this phase as `production_candidate` for qualitative selection and move to
-the next product decision. Do not treat `d3-N6-medA` drift or known area mismatch
-as a blocker for this qualitative gate.
+Do not close this phase as `production_candidate`. The current branch is a
+NO-GO for production behavior as written.
 
-Recommended next PR target: ASLS / baseline quantitative correction decision.
-Reason: qualitative delivery is now `production_candidate`, while the remaining
-named failures are strict `AREA_MISMATCH` rows tied to quantitative integration
-behavior. CWT productization should be an explicit product decision when the
-evidence points to boundary or hypothesis-source defects, not another
-scaffold-only detour.
+Recommended next PR target: decide the production identity policy for
+backfill-heavy single-dR families before ASLS / baseline quantitative correction.
+The concrete decision is whether `FAM000264`-style evidence can be promoted by a
+new row-local product signal, by a reviewed targeted-transfer bridge, or should
+remain excluded until boundary / hypothesis-source productization supplies
+stronger detected support. Do not treat `d3-N6-medA` drift or known area
+mismatch as the blocker; the blocker is the weak-seed promotion contract.

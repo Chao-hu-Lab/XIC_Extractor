@@ -86,6 +86,52 @@ def test_weak_seed_rescue_heavy_row_becomes_implement_candidate(
     assert weak_seed["recommended_action"] == "implement"
 
 
+def test_weak_seed_tolerated_row_stays_watch_only(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    output_dir = tmp_path / "diagnostics"
+    discovery_dir = tmp_path / "discovery"
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        (
+            _review_row(
+                "FAM_TOL",
+                q_detected=3,
+                q_rescue=6,
+                row_flags="rescue_heavy;weak_seed_tolerated",
+            ),
+        ),
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        tuple(_cells("FAM_TOL", detected=3, rescued=6, absent=1)),
+    )
+    batch_index = _write_discovery_index(
+        discovery_dir,
+        [
+            _candidate_row("S001", "FAM_TOL_C001", evidence_score="55"),
+            _candidate_row("S002", "FAM_TOL_C002"),
+            _candidate_row("S003", "FAM_TOL_C003"),
+        ],
+    )
+
+    result = report.build_decision_report(
+        alignment_dir=alignment_dir,
+        discovery_batch_index=batch_index,
+    )
+
+    family = result["families"][0]
+    assert family["risk_classification"] == "watch_weak_seed_tolerated"
+    assert family["seed_quality_status"] == "adequate"
+
+    report.write_outputs(output_dir, result)
+    candidates = _read_tsv(output_dir / "single_dr_gate_candidates.tsv")
+    tolerated = _candidate(candidates, "dr_weak_seed_tolerated_watch")
+    assert tolerated["affected_primary_rows"] == "1"
+    assert tolerated["recommended_action"] == "keep_warning"
+
+
 def test_high_detected_rescue_heavy_row_remains_strong(
     tmp_path: Path,
 ) -> None:
@@ -107,6 +153,7 @@ def test_high_detected_rescue_heavy_row_remains_strong(
     }
     assert candidates["dr_extreme_backfill_dependency"]["affected_primary_rows"] == 0
     assert candidates["dr_weak_seed_backfill_dependency"]["affected_primary_rows"] == 0
+    assert candidates["dr_weak_seed_tolerated_watch"]["affected_primary_rows"] == 0
 
 
 def test_duplicate_pressure_low_detected_rescue_heavy_row_is_watch_only(

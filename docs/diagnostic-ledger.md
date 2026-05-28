@@ -83,7 +83,8 @@ Post-fix 8RAW primary-delivery conclusion:
   additional `DNA_dR` rows, all flagged `rescue_heavy;weak_seed_tolerated`, and
   records the collateral table below.
 
-Post-fix 85RAW primary-delivery conclusion:
+Post-fix 85RAW primary-delivery conclusion before implementation-review
+hardening:
 
 - Foreground 85RAW `validation-minimal` completed with the canonical
   production-equivalent, audit-off, validation-fast, super-window, heartbeat
@@ -91,16 +92,21 @@ Post-fix 85RAW primary-delivery conclusion:
 - `alignment_matrix.tsv` contains `597` primary rows. The primary warning
   surface is `376` `rescue_heavy` rows plus `5`
   `rescue_heavy;weak_seed_tolerated` rows.
-- `single_dr_production_gate_decision_report.py` found `0` risky
+- Original `single_dr_production_gate_decision_report.py` found `0` risky
   extreme-backfill rows, `0` risky weak-seed rows, and `0` duplicate
   rescue-pressure rows.
+- After implementation-review hardening of the trusted-seed contract, the same
+  committed artifacts reclassify the prior weak-seed tolerated rows as
+  `risky_weak_seed_backfill`: 8RAW has `13` such primary rows, including
+  `FAM000264`; 85RAW has `5`.
 - `targeted_istd_benchmark.py` still reports strict `AREA_MISMATCH` for
   `d4-N6-2HE-dA` and `d3-N6-medA`. Treat this as a known quantitative /
   baseline follow-up surface, not a qualitative delivery blocker, because all
   active ISTDs have one selected primary family and `85/85` untargeted
   positives.
-- Current qualitative classification is `production_candidate` with five watch
-  rows, not full quantitative production readiness.
+- Current qualitative classification is `NO_GO_FIX_SELECTION_OR_BOUNDARY_FIRST`
+  for the production behavior as written. `d3-N6-medA` drift and area mismatch
+  are not the blocker; the blocker is the weak-seed promotion contract.
 
 Authoritative notes and artifacts:
 
@@ -110,13 +116,14 @@ Authoritative notes and artifacts:
 | Resolver default hotfix / same-surface d3 note | `docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md` |
 | 85RAW super-window acceptance | `docs/superpowers/notes/2026-05-26-p8b-85raw-superwindow-acceptance-note.md` |
 | Product-priority Phase 1 gate | `docs/superpowers/notes/2026-05-28-qualitative-selection-acceptance-gate-note.md` |
-| Current 8RAW resolved matrix snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/phase1_review_matrix_resolved.tsv`, SHA256 `315B6E7053CFFA008724FA491DB143AE879F9C1A3494E10F9A075BC2A53F0938` |
-| Post-fix 8RAW resolved matrix snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/phase1_review_matrix_resolved_primary_delivery_fix.tsv`, SHA256 `84B97ECD198B25911E98641C6F962DE8449EEB99EF2C4164373AE431DFC30F5A` |
+| Current 8RAW resolved matrix snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/phase1_review_matrix_resolved.tsv`, SHA256 `9A63FC81C811CF92925853884837B623878B644A26311799FAF64FA4947548E8` |
+| Post-fix 8RAW resolved matrix snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/phase1_review_matrix_resolved_primary_delivery_fix.tsv`, SHA256 `B38EC06D01714B4AACA6825B1C003C9BB724264689FCD78FBCB8DD2F9AB0CE9D` |
 | Current 8RAW row triage snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/target_derived_review_row_triage.tsv`, SHA256 `73601AE36C879CE827AEA5816F6E690DF023F8DEB59B63F97ED8BBDEE635A3F9` |
 | Post-fix 8RAW row triage snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/target_derived_review_row_triage_primary_delivery_fix.tsv`, SHA256 `73601AE36C879CE827AEA5816F6E690DF023F8DEB59B63F97ED8BBDEE635A3F9` |
 | Post-fix collateral promotion table | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/collateral_promoted_primary_rows_primary_delivery_fix.csv`, SHA256 `9CFD07DBDD067748DEFEA883086894E481E947C157C15727E7BACC6DDCB71296` |
-| Post-fix 85RAW validation summary | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/85raw_primary_delivery_fix_summary.tsv`, SHA256 `2D77F99F9429BD7EB82A9D69F70D299AB8F76228567EDAD7DCA07FF63D90934B` |
+| Post-fix 85RAW validation summary | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/85raw_primary_delivery_fix_summary.tsv`, SHA256 `4CF19B045F850B205E23888F1B3C5A6E3AF1C0BEC0C516E4447B61738CEAC24B` |
 | Post-fix 85RAW weak-seed watch rows | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/85raw_weak_seed_tolerated_watch_rows.tsv`, SHA256 `E003FDEAC97E1DAE6E0D6AF929CDD7EA3A004BC9873A0340EF8A7B2E099683E4` |
+| Post-review hardened single-dR gate summary | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/post_review_hardened_single_dr_gate_summary.tsv`, SHA256 `43FE4E4BCFF9DD20CA6B16F183F7A414EE89DCF1657A7E2E3B20559E32DE48E3` |
 | Current 8RAW diagnostic tool usage snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/diagnostic_tool_usage_current_8raw.tsv` |
 | Current 8RAW targeted GT default checkpoint | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/targeted_gt_alignment_audit_default_5medc_current_8raw_comparison.csv`, SHA256 `DB05B546B99CB9567D7873216906181FB20F57BA021BEFC3A503CC3128BE77D8`; report `targeted_gt_alignment_audit_default_5medc_current_8raw_failure_mode_report.md`, SHA256 `425B5ABD766A86BAF7970ADC6FC2C06F405454CAB3AAAFB066BE52FAA8679C88` |
 | Post-fix 8RAW targeted GT default checkpoint | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/targeted_gt_alignment_audit_default_5medc_primary_delivery_fix_comparison.csv`, SHA256 `DB05B546B99CB9567D7873216906181FB20F57BA021BEFC3A503CC3128BE77D8`; report `targeted_gt_alignment_audit_default_5medc_primary_delivery_fix_failure_mode_report.md`, SHA256 `FFB5EA89BD1DAECA685BBBA2F9BA96D069C934996DD7C5B3A332992B15D76D98` |
@@ -129,10 +136,11 @@ using the ledger.
 Recommended next check:
 
 1. Do not rerun RT drift diagnostics just to re-prove drift.
-2. Do not treat `d3-N6-medA` area shift or absolute RT delta as a blocker when
-   the post-fix primary delivery evidence still holds.
-3. If production behavior changes again, rerun 8RAW validation-minimal first.
-4. Do not rerun 85RAW just to re-prove this fix. Rerun 85RAW only after a new
+2. Do not treat `d3-N6-medA` area shift or absolute RT delta as a blocker.
+3. Do treat the current weak-seed promotion contract as the active blocker until
+   a new reviewed production identity policy replaces it.
+4. If production behavior changes again, rerun 8RAW validation-minimal first.
+5. Do not rerun 85RAW just to re-prove this fix. Rerun 85RAW only after a new
    production behavior change or if a current artifact contradicts the 85RAW
    summary fixture.
 

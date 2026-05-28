@@ -240,9 +240,60 @@ def test_owner_member_events_tolerate_single_weak_seed_when_two_seeds_are_truste
     decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
 
     assert decision.include_in_primary_matrix is True
-    assert decision.identity_reason == "owner_complete_link"
+    assert decision.identity_confidence == "medium"
+    assert decision.primary_evidence == "owner_complete_link"
+    assert decision.identity_reason == "weak_seed_tolerated"
     assert "weak_seed_backfill_dependency" not in decision.row_flags
     assert "weak_seed_tolerated" in decision.row_flags
+
+
+def test_high_score_low_event_seeds_do_not_bypass_weak_seed_gate() -> None:
+    matrix = _matrix(
+        _feature(
+            "FAM001",
+            evidence="owner_complete_link;owner_count=3",
+            members=(
+                _owner("seed1#candidate", seed_event_count=1),
+                _owner("seed2#candidate", seed_event_count=1),
+                _owner("seed3#candidate", evidence_score=55),
+            ),
+        ),
+        (
+            _cell(
+                "seed1",
+                "FAM001",
+                "detected",
+                100.0,
+                source_candidate_id="seed1#candidate",
+            ),
+            _cell(
+                "seed2",
+                "FAM001",
+                "detected",
+                95.0,
+                source_candidate_id="seed2#candidate",
+            ),
+            _cell(
+                "seed3",
+                "FAM001",
+                "detected",
+                90.0,
+                source_candidate_id="seed3#candidate",
+            ),
+            *tuple(
+                _cell(f"rescue{i}", "FAM001", "rescued", 70.0 + i)
+                for i in range(1, 7)
+            ),
+            _cell("absent", "FAM001", "absent", None),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is False
+    assert decision.identity_decision == "provisional_discovery"
+    assert decision.identity_reason == "weak_seed_backfill_dependency"
+    assert "weak_seed_backfill_dependency" in decision.row_flags
 
 
 def test_weak_seed_gate_reads_owner_member_events_when_trusted_support_is_thin() -> None:

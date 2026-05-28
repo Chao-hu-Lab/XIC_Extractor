@@ -10,10 +10,12 @@ classification: `GO_FOR_NEXT_NARROW_BEHAVIOR_PR`,
 `GO_FOR_NEXT_PRODUCT_DECISION_PR`, `NO_GO_FIX_SELECTION_OR_BOUNDARY_FIRST`, or
 `INCONCLUSIVE_NEEDS_NAMED_MINIMAL_EVIDENCE`.
 
-**Architecture:** This is a decision / validation artifact pass, not a behavior
-change. It consumes existing validation notes, stable discovery indexes, and
-existing diagnostic contracts; it writes one gate note and does not create new
-diagnostic infrastructure.
+**Architecture:** This plan started as a decision / validation artifact pass.
+During execution, current row evidence identified a narrow primary-delivery
+production blocker. A behavior attempt is acceptable only when it stays scoped
+to that blocker, records collateral rows, and is followed by implementation
+review. If review hardening invalidates the behavior attempt, the gate outcome
+must be NO-GO rather than papering over the finding.
 
 **Tech Stack:** Markdown specs / notes, PowerShell, Python standard library,
 existing XIC Extractor validation artifacts.
@@ -39,8 +41,10 @@ existing XIC Extractor validation artifacts.
 - Create:
   `docs/superpowers/notes/2026-05-28-qualitative-selection-acceptance-gate-note.md`
 
-Do not modify production code, resolver defaults, baseline behavior, boundary
-selection, matrix schema, or diagnostic CLIs in Phase 1.
+Do not modify resolver defaults, baseline behavior, boundary selection, or
+matrix schema in Phase 1. Production code may be touched only for a narrow
+primary-delivery blocker and only with review hardening, collateral accounting,
+and an explicit final GO/NO-GO gate note.
 
 Use `C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe` for RAW /
 alignment commands unless the active worktree has a verified `.venv` junction.
