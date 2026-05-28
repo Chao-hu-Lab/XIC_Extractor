@@ -58,6 +58,7 @@
 | `output/` | pipeline 執行產物（xlsx / tsv / html） |
 | `tmp_runtime/` | pipeline 與 validation_harness 產生的 pickle 快取 |
 | `.worktrees/` | git worktrees（superpowers/using-git-worktrees skill 建立） |
+| `local_validation_artifacts/` | 跨 worktree 重複使用的本機 accepted validation inputs，例如 discovery index + candidate/review CSV；私人且忽略 |
 | `.superpowers/` | Claude superpowers 工件（brainstorm 快照等） |
 | `.remember/` | Claude 代理記憶日誌 |
 | `local_raw_samples/`、`local_validation_raw/` | 本地測試 RAW 樣本（私人資料） |
@@ -245,6 +246,18 @@ else:
 - **誰建**：手動放入本地 RAW 樣本
 - **何時可清**：依本地驗證需求，無自動規則
 - **規則**：被 `.gitignore` 忽略，避免私人 RAW 資料進入 git
+
+### `local_validation_artifacts/`
+
+- **誰建**：手動或 agent 在 accepted validation input 需要跨 worktree 重用時建立
+- **用途**：保存可重用但不進 git 的 validation inputs，例如
+  `discovery_batch_index.csv` 及其 per-sample `discovery_candidates.csv` /
+  `discovery_review.csv`
+- **規則**：不要指向 `.worktrees/<branch>/output/` 作為長期輸入。搬入本目錄時
+  必須重寫 `discovery_batch_index.csv` 裡的 `candidate_csv` / `review_csv` 到
+  本目錄下的實際路徑，並跑 preflight 檢查 sample count、candidate CSV、RAW path
+- **何時可清**：只有在對應 validation note 已不再需要，或可從 RAW 重新產生時
+- **指令**：依 artifact set 手動刪除；不要一鍵清整個目錄
 
 ### `.superpowers/` `.remember/`
 
