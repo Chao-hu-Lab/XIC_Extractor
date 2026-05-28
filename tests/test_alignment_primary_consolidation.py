@@ -479,7 +479,12 @@ def _event_family_feature(
     )
 
 
-def _owner(feature_family_id: str, sample_stem: str, *, rt: float) -> SampleLocalMS1Owner:
+def _owner(
+    feature_family_id: str,
+    sample_stem: str,
+    *,
+    rt: float,
+) -> SampleLocalMS1Owner:
     return SampleLocalMS1Owner(
         owner_id=f"OWN-{feature_family_id}",
         sample_stem=sample_stem,

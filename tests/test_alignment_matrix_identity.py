@@ -196,7 +196,7 @@ def test_adequate_seed_dr_backfill_dependency_remains_production() -> None:
     assert "rescue_heavy" in decision.row_flags
 
 
-def test_owner_member_events_tolerate_single_weak_seed_when_two_seeds_are_trusted() -> None:
+def test_owner_events_tolerate_single_weak_seed_with_two_trusted() -> None:
     matrix = _matrix(
         _feature(
             "FAM001",
@@ -296,7 +296,7 @@ def test_high_score_low_event_seeds_do_not_bypass_weak_seed_gate() -> None:
     assert "weak_seed_backfill_dependency" in decision.row_flags
 
 
-def test_weak_seed_gate_reads_owner_member_events_when_trusted_support_is_thin() -> None:
+def test_weak_seed_gate_reads_owner_events_when_trusted_support_is_thin() -> None:
     matrix = _matrix(
         _feature(
             "FAM001",
