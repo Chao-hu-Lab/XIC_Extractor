@@ -10,6 +10,11 @@ artifact，例如某個 Phase 的 benchmark summary、一次性 gate output、pl
 命令實際跑通，或某個啟動方式反覆失敗，應把穩定參數形狀與教訓更新到本檔。
 不要只把教訓留在單次 conversation 或 phase note。
 
+跨 worktree 會重複遇到的診斷結論放在
+`docs/diagnostic-ledger.md`。在重跑昂貴 RAW validation 或把已知 target
+重新標成 blocker 前，先讀 ledger；只有 current code 或 artifact freshness
+足以改變結論時才重跑。
+
 維護規則：
 
 - 只固定跨任務會重複使用的 runner、資料根目錄、DLL 目錄、validation tier、
@@ -43,6 +48,19 @@ artifact，例如某個 Phase 的 benchmark summary、一次性 gate output、pl
 - 不要用 bare `python` 跑 RAW validation，即使命令看起來能啟動。
 - 如果 `.venv` 之後補上 pytest，優先用 `.venv\Scripts\python.exe -m pytest`
   讓測試與 RAW runtime 一致。
+- 在 worktree 內跑正式 85RAW 時，`scripts.run_alignment
+  --expected-sample-count 85` 會要求 Python executable 位於該 worktree 的
+  `.venv` 底下。不要用 root repo 的絕對路徑
+  `C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe` 直接啟動
+  worktree 的 85RAW；這會被 canonical guard 拒絕。
+- 若 active worktree 沒有 `.venv`，且 root repo `.venv` 是要共用的 RAW
+  runtime，先確認沒有既有 `.venv` 後建立 junction：
+
+```powershell
+New-Item -ItemType Junction -Path .venv -Target C:\Users\user\Desktop\XIC_Extractor\.venv
+```
+
+  然後使用 `.venv\Scripts\python.exe` 啟動 preflight / validation。
 
 ## Stable Local Paths
 
@@ -54,6 +72,7 @@ artifact，例如某個 Phase 的 benchmark summary、一次性 gate output、pl
 | manual 2RAW truth data | `C:\Xcalibur\data\20251219_need process data\XIC test` | Resolver / manual-truth calibration。 |
 | accepted P8b 8RAW discovery input | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\8raw\discovery_batch_index.csv` | Cross-worktree reusable validation input；內部 `candidate_csv` / `review_csv` 已重寫到同一 artifact store。 |
 | accepted P8b 85RAW discovery input | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv` | Cross-worktree reusable validation input；正式 85RAW 前仍需 `--expected-sample-count 85` preflight。 |
+| targeted GT 8RAW default workbook | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\targeted_gt_workbooks\8raw\xic_results_20260512_1151.xlsx` | SHA256 `788892188C8419C82DC4618C98E160B90AC6C44C38676C53609248AA529889F7`；`targeted_gt_alignment_audit.py` 的 8RAW default positive checkpoint workbook；不要用 85-sample workbook 對 8RAW alignment，否則會產生 off-scope `MISS`。 |
 
 實驗性 mzML 路徑不列為常用 setting。即使本機有 mzML，production premise 仍是
 直接讀 `.raw`，不轉檔。只有使用者明確要求 external-reference audit 時才查
@@ -219,6 +238,7 @@ the active spec or validation note before running alignment.
 | Profile | Status | Reusable parameters | Evidence |
 | --- | --- | --- | --- |
 | 85RAW validation-minimal super-window | Verified foreground run, exit code `0`, wall-clock `620.9 s` | `.venv\Scripts\python.exe`, 85RAW RAW root, `--output-level validation-minimal`, `--backfill-scope production-equivalent`, `--audit-evidence-mode none`, `--performance-profile validation-fast`, `--owner-backfill-window-strategy super-window`, `--owner-backfill-superwindow-span-factor 2`, timing output + live heartbeat | `docs\superpowers\notes\2026-05-26-p8b-85raw-superwindow-acceptance-note.md` |
+| 85RAW primary-delivery validation | Verified foreground run, exit code `0`, wall-clock `596.6 s`; worktree `.venv` junction required before launch | same canonical 85RAW shape plus `--expected-sample-count 85`; output hashes and diagnostics fixed in durable fixtures | `docs\superpowers\notes\2026-05-28-qualitative-selection-acceptance-gate-note.md`; `docs\superpowers\fixtures\diagnostic_ledger_2026_05_28\85raw_primary_delivery_fix_summary.tsv` |
 
 The cited `620.9 s` run predates the `--expected-sample-count 85` guard. The
 guard is a later test-covered launch safety check and should be included in new
@@ -330,3 +350,7 @@ emit the same minimal machine contract and heartbeat shape documented here.
     不要只把教訓留在聊天紀錄。
 14. PowerShell 語法錯誤、ruff E501、Markdown fence mismatch 這類可重複避免
     的錯誤，修完後要把穩定教訓寫回本檔或相關 repo-local contract。
+15. 遇到已知 target 或 failure mode，例如 `d3-N6-medA` RT drift / primary
+    delivery 問題，先讀 `docs/diagnostic-ledger.md`。不要把 ledger 已經
+    解釋過的 RT drift、area mismatch、或 mixed-surface warning 當成新的
+    hard blocker；除非 current artifact 與 ledger 明確矛盾。

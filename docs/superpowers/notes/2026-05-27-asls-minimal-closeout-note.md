@@ -5,6 +5,13 @@
 external-tool audit, 85RAW rerun, or Tier C truth work is required before
 starting method-preserving cleanup or handoff-spine work.
 
+2026-05-28 update: for handoff mainline priority, the next action is superseded
+by `docs/superpowers/specs/2026-05-28-product-priority-reset-decision-spec.md`.
+Method-preserving cleanup remains possible only as explicitly approved
+non-mainline maintenance until `QUAL_SELECTION_READY_FOR_NEXT_BEHAVIOR_PR`
+resolves. This note still governs ASLS closeout facts and linear-edge retirement
+blockers.
+
 ## Closed Scope
 
 - `baseline_integration_method` defaults to `asls`.
