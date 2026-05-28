@@ -211,6 +211,11 @@ def test_family_integration_marks_original_member_peak_as_detected():
     )
 
     assert matrix.cells[0].status == "detected"
+    assert matrix.cells[0].selected_integration is not None
+    assert matrix.cells[0].selected_integration.area_raw_counts_seconds == (
+        matrix.cells[0].area
+    )
+    assert matrix.cells[0].matrix_area == matrix.cells[0].area
     assert matrix.cells[0].reason == (
         "family-centered MS1 integration from original detection"
     )
@@ -238,6 +243,9 @@ def test_family_integration_marks_anchor_backfill_peak_as_rescued():
     cells = {cell.sample_stem: cell for cell in matrix.cells}
     assert cells["s1"].status == "detected"
     assert cells["s2"].status == "rescued"
+    assert cells["s2"].selected_integration is not None
+    assert cells["s2"].selected_integration.area_raw_counts_seconds == cells["s2"].area
+    assert cells["s2"].matrix_area == cells["s2"].area
     assert cells["s2"].reason == "family-centered MS1 backfill"
 
 

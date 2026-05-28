@@ -9,6 +9,10 @@ from numpy.typing import NDArray
 from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.matrix_handoff import (
+    integration_from_peak,
+    integration_from_values,
+)
 from xic_extractor.alignment.models import AlignmentCluster
 from xic_extractor.alignment.trace_context import alignment_trace_group
 from xic_extractor.config import ExtractionConfig
@@ -114,6 +118,16 @@ def _detected_cell(cluster: AlignmentCluster, member: Any) -> AlignedCell:
         source_candidate_id=member.candidate_id,
         source_raw_file=member.raw_file,
         reason="detected candidate",
+        selected_integration=integration_from_values(
+            area_raw_counts_seconds=member.ms1_area,
+            rt_apex_min=apex_rt,
+            raw_apex_rt_min=apex_rt,
+            height_raw=member.ms1_height,
+            height_smoothed=member.ms1_height,
+            rt_left_min=member.ms1_peak_rt_start,
+            rt_right_min=member.ms1_peak_rt_end,
+            boundary_sources=("alignment_cluster_member",),
+        ),
     )
 
 
@@ -227,6 +241,10 @@ def _backfill_anchor_cell(
         source_candidate_id=None,
         source_raw_file=None,
         reason="MS1 peak rescued at cluster center",
+        selected_integration=integration_from_peak(
+            peak,
+            boundary_sources=("alignment_backfill",),
+        ),
     )
     return with_region_audit(cell, region_audit)
 

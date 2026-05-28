@@ -119,6 +119,9 @@ def test_detected_cell_uses_existing_candidate_without_raw_extraction():
     assert cell.cluster_id == "ALN000001"
     assert cell.status == "detected"
     assert cell.area == 123.4
+    assert cell.selected_integration is not None
+    assert cell.selected_integration.area_raw_counts_seconds == 123.4
+    assert cell.matrix_area == 123.4
     assert cell.apex_rt == 5.2
     assert cell.height == 50.0
     assert cell.peak_start_rt == 5.0
@@ -129,6 +132,37 @@ def test_detected_cell_uses_existing_candidate_without_raw_extraction():
     assert cell.source_candidate_id == "sample-a#1"
     assert cell.source_raw_file == Path("sample-a.raw")
     assert cell.reason == "detected candidate"
+
+
+def test_detected_cell_with_incomplete_peak_geometry_uses_named_legacy_fallback():
+    candidate = Candidate(
+        candidate_id="sample-a#1",
+        sample_stem="sample-a",
+        raw_file=Path("sample-a.raw"),
+        ms1_area=123.4,
+        ms1_apex_rt=5.2,
+        ms1_height=None,
+        ms1_peak_rt_start=None,
+        ms1_peak_rt_end=None,
+        ms1_trace_quality="legacy-area-only",
+        ms1_scan_support_score=None,
+    )
+    cluster = _cluster(candidate, has_anchor=True)
+
+    matrix = backfill_alignment_matrix(
+        (cluster,),
+        sample_order=("sample-a",),
+        raw_sources={},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+    )
+
+    cell = matrix.cells[0]
+    assert cell.status == "detected"
+    assert cell.area == 123.4
+    assert cell.selected_integration is None
+    assert cell.matrix_area == 123.4
+    assert cell.matrix_area_source == "legacy_area_fallback"
 
 
 def test_non_anchor_missing_sample_is_unchecked_without_raw_extraction():
@@ -232,6 +266,9 @@ def test_anchor_missing_sample_rescues_peak(monkeypatch):
     rescued = _cell(matrix, cluster_id="ALN000001", sample_stem="sample-b")
     assert rescued.status == "rescued"
     assert rescued.area == 456.7
+    assert rescued.selected_integration is not None
+    assert rescued.selected_integration.area_raw_counts_seconds == rescued.area
+    assert rescued.matrix_area == rescued.area
     assert rescued.apex_rt == 5.1
     assert rescued.height == 88.0
     assert rescued.peak_start_rt == 5.0

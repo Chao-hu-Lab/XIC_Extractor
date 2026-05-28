@@ -7,6 +7,7 @@ from openpyxl import load_workbook
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
 from xic_extractor.alignment.xlsx_writer import write_alignment_results_xlsx
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 FORBIDDEN_PRIMARY_STATUSES = {
     "detected",
@@ -35,7 +36,13 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
         cells=(
             _cell("s1", "FAM001", "detected", 100.0),
             _cell("s2", "FAM001", "rescued", 90.0),
-            _cell("s3", "FAM001", "detected", 110.0),
+            _cell(
+                "s3",
+                "FAM001",
+                "detected",
+                110.0,
+                selected_integration=_integration(area=125.0),
+            ),
             _cell("s1", "FAM_PROVISIONAL", "detected", 85.0),
             _cell("s2", "FAM_PROVISIONAL", "rescued", 75.0),
             _cell("s1", "FAM002", "rescued", 80.0),
@@ -59,7 +66,7 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     assert [row["feature_family_id"] for row in tsv_rows] == ["FAM001"]
     assert tsv_rows[0]["s1"] == "100"
     assert tsv_rows[0]["s2"] == "90"
-    assert tsv_rows[0]["s3"] == "110"
+    assert tsv_rows[0]["s3"] == "125"
     assert FORBIDDEN_PRIMARY_STATUSES.isdisjoint(
         value for row in tsv_rows for value in row.values()
     )
@@ -69,7 +76,7 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     assert [row["feature_family_id"] for row in matrix_rows] == ["FAM001"]
     assert matrix_rows[0]["s1"] == 100.0
     assert matrix_rows[0]["s2"] == 90.0
-    assert matrix_rows[0]["s3"] == 110.0
+    assert matrix_rows[0]["s3"] == 125.0
     assert FORBIDDEN_PRIMARY_STATUSES.isdisjoint(
         str(value)
         for row in matrix_rows
@@ -79,6 +86,10 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
 
     audit_rows = _worksheet_records(workbook["Audit"])
     review_rows = _worksheet_records(workbook["Review"])
+    audit_by_sample = {
+        (row["feature_family_id"], row["sample_stem"]): row for row in audit_rows
+    }
+    assert audit_by_sample[("FAM001", "s3")]["area"] == 110.0
     review_decisions = {
         row["feature_family_id"]: row["identity_decision"] for row in review_rows
     }
@@ -142,6 +153,8 @@ def _cell(
     cluster_id: str,
     status: str,
     area: float | None,
+    *,
+    selected_integration: IntegrationResult | None = None,
 ) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,
@@ -162,6 +175,21 @@ def _cell(
             if status == "duplicate_assigned"
             else status
         ),
+        selected_integration=selected_integration,
+    )
+
+
+def _integration(*, area: float) -> IntegrationResult:
+    return IntegrationResult(
+        rt_left_min=8.4,
+        rt_apex_min=8.49,
+        rt_right_min=8.6,
+        raw_apex_rt_min=8.49,
+        rt_width_min=0.2,
+        height_raw=100.0,
+        height_smoothed=100.0,
+        area_raw_counts_seconds=area,
+        boundary_sources=("test",),
     )
 
 

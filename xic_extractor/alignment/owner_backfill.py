@@ -16,6 +16,7 @@ from xic_extractor.alignment.backfill_scope import (
 from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
+from xic_extractor.alignment.matrix_handoff import integration_from_peak
 from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.alignment.ownership_models import SampleLocalMS1Owner
@@ -505,6 +506,10 @@ def _backfill_feature_sample(
         source_candidate_id=None,
         source_raw_file=None,
         reason="owner-centered MS1 backfill",
+        selected_integration=integration_from_peak(
+            peak,
+            boundary_sources=("owner_backfill",),
+        ),
         backfill_seed_mz=feature.family_center_mz,
         backfill_seed_rt=feature.family_center_rt,
         backfill_request_rt_min=rt_min,
@@ -585,6 +590,10 @@ def _backfill_feature_sample_trace(
         source_candidate_id=None,
         source_raw_file=None,
         reason="owner-centered MS1 backfill",
+        selected_integration=integration_from_peak(
+            peak,
+            boundary_sources=("owner_backfill_batch",),
+        ),
         backfill_seed_mz=request.mz,
         backfill_seed_rt=preferred_rt,
         backfill_request_rt_min=request.rt_min,

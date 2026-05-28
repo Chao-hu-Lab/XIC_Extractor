@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal, Protocol
 
 from xic_extractor.alignment.models import AlignmentCluster
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 from xic_extractor.peak_detection.integration_audit import CellIntegrationAuditSummary
 
 CellStatus = Literal[
@@ -54,11 +55,25 @@ class AlignedCell:
     region_local_mixture_reason: str = ""
     region_review_reason: str = ""
     integration_audit: CellIntegrationAuditSummary | None = None
+    selected_integration: IntegrationResult | None = None
     backfill_seed_mz: float | None = None
     backfill_seed_rt: float | None = None
     backfill_request_rt_min: float | None = None
     backfill_request_rt_max: float | None = None
     backfill_request_ppm: float | None = None
+
+    @property
+    def matrix_area(self) -> float | None:
+        integration = self.selected_integration
+        if integration is not None:
+            return integration.area_raw_counts_seconds
+        return self.area
+
+    @property
+    def matrix_area_source(self) -> str:
+        if self.selected_integration is not None:
+            return "selected_integration"
+        return "legacy_area_fallback"
 
 
 @dataclass(frozen=True)

@@ -12,6 +12,7 @@ from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.feature_family import MS1FeatureFamily
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix, CellStatus
+from xic_extractor.alignment.matrix_handoff import integration_from_peak
 from xic_extractor.alignment.trace_context import alignment_trace_group
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_detection.region_audit import build_peak_region_audit_summary
@@ -163,6 +164,10 @@ def _integrate_family_cell(
         source_candidate_id=None,
         source_raw_file=None,
         reason=reason,
+        selected_integration=integration_from_peak(
+            peak,
+            boundary_sources=("family_integration",),
+        ),
     )
     return with_region_audit(cell, region_audit)
 
