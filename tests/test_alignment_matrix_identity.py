@@ -57,7 +57,7 @@ def test_owner_complete_link_with_two_detected_cells_is_production_family() -> N
     assert decision.quantifiable_detected_count == 2
 
 
-def test_extreme_dr_backfill_dependency_with_cell_evidence_is_capped_production() -> None:
+def test_extreme_dr_backfill_dependency_with_cell_evidence_promotes() -> None:
     matrix = _matrix(
         _feature("FAM001", evidence="owner_complete_link;owner_count=2"),
         (
@@ -82,7 +82,7 @@ def test_extreme_dr_backfill_dependency_with_cell_evidence_is_capped_production(
     assert HIGH_BACKFILL_CAPPED_FLAG in decision.row_flags
 
 
-def test_single_detected_seed_does_not_enter_policy_promotion_even_with_scan_support() -> None:
+def test_single_detected_seed_does_not_enter_policy_promotion() -> None:
     matrix = _matrix(
         _feature("FAM001", evidence="owner_complete_link;owner_count=1"),
         (

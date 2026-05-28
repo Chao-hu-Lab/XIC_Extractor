@@ -185,11 +185,17 @@ class BackfillCellEvidence:
                 self.region_shadow_verdict,
             ),
         ).lower()
-        return self.low_scan_support or any(marker in text for marker in _LOW_COVERAGE_MARKERS)
+        return self.low_scan_support or any(
+            marker in text for marker in _LOW_COVERAGE_MARKERS
+        )
 
     @property
     def additional_ms1_support(self) -> bool:
-        return self.scan_support or self.trace_continuity or self.selected_peak_dominance
+        return (
+            self.scan_support
+            or self.trace_continuity
+            or self.selected_peak_dominance
+        )
 
     @property
     def supported_for_backfill(self) -> bool:
@@ -352,7 +358,10 @@ def classify_backfill_promotion(
             assessed_rescue_count=len(rescued),
         )
 
-    if any(cell.low_assessable_coverage or not cell.local_apex_supported for cell in rescued):
+    if any(
+        cell.low_assessable_coverage or not cell.local_apex_supported
+        for cell in rescued
+    ):
         return BackfillPromotionDecision(
             state="blocked",
             reason=LOW_MS1_COVERAGE_BLOCKED_REASON,
@@ -482,6 +491,8 @@ def _float_value(value: object) -> float | None:
         value = value.strip()
         if value.startswith("'"):
             value = value[1:]
+    if not isinstance(value, (str, int, float)):
+        return None
     try:
         number = float(value)
     except (TypeError, ValueError):

@@ -4,12 +4,12 @@ from types import SimpleNamespace
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.production_decisions import build_production_decisions
 from xic_extractor.alignment.promotion_policy import (
     CELL_EVIDENCE_SUPPORTED_REASON,
     DDA_LIMITED_MS2_SHAPE_REASON,
     HIGH_BACKFILL_CAPPED_FLAG,
 )
-from xic_extractor.alignment.production_decisions import build_production_decisions
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 

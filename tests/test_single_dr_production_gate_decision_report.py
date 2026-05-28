@@ -735,7 +735,9 @@ def _aligned_cell(
         rt_delta_sec=rt_delta_sec,
         trace_quality="clean",
         scan_support_score=0.8,
-        source_candidate_id=f"{sample_stem}#{family_id}" if status == "detected" else None,
+        source_candidate_id=(
+            f"{sample_stem}#{family_id}" if status == "detected" else None
+        ),
         source_raw_file=Path(f"{sample_stem}.raw") if status == "detected" else None,
         reason=status,
     )
