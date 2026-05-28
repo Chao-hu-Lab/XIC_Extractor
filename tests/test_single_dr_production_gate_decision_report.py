@@ -1,11 +1,23 @@
 import csv
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from tools.diagnostics import single_dr_production_gate_decision_report as report
+from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.matrix_identity import build_matrix_identity_decisions
+from xic_extractor.alignment.promotion_policy import (
+    CELL_EVIDENCE_SUPPORTED_REASON,
+    DDA_LIMITED_MS2_SHAPE_REASON,
+)
+from xic_extractor.alignment.tsv_writer import (
+    write_alignment_cells_tsv,
+    write_alignment_review_tsv,
+)
 
 
-def test_extreme_dr_backfill_row_becomes_implement_candidate(
+def test_extreme_dr_backfill_row_becomes_supported_capped_warning(
     tmp_path: Path,
 ) -> None:
     alignment_dir = tmp_path / "alignment"
@@ -30,21 +42,26 @@ def test_extreme_dr_backfill_row_becomes_implement_candidate(
 
     assert code == 0
     families = _read_tsv(output_dir / "single_dr_gate_decision_families.tsv")
-    assert families[0]["risk_classification"] == "risky_extreme_backfill"
+    assert families[0]["risk_classification"] == "supported_backfill_capped"
+    assert families[0]["promotion_state"] == "supported"
+    assert families[0]["promotion_reason"] == CELL_EVIDENCE_SUPPORTED_REASON
     assert families[0]["rescue_fraction"] == "0.8000"
 
     candidates = _read_tsv(output_dir / "single_dr_gate_candidates.tsv")
     extreme = _candidate(candidates, "dr_extreme_backfill_dependency")
-    assert extreme["affected_primary_rows"] == "1"
+    assert extreme["affected_primary_rows"] == "0"
     assert extreme["affected_istd_rows"] == "0"
-    assert extreme["recommended_action"] == "implement"
+    assert extreme["recommended_action"] == "reject"
+    supported = _candidate(candidates, "dr_supported_backfill_capped")
+    assert supported["affected_primary_rows"] == "1"
+    assert supported["recommended_action"] == "keep_warning"
     assert (output_dir / "single_dr_gate_decision_summary.tsv").is_file()
     assert (output_dir / "single_dr_gate_decision_detected_cells.tsv").is_file()
     assert (output_dir / "single_dr_gate_decision.json").is_file()
     assert (output_dir / "single_dr_gate_decision.md").is_file()
 
 
-def test_weak_seed_rescue_heavy_row_becomes_implement_candidate(
+def test_weak_seed_rescue_heavy_row_becomes_supported_capped_warning(
     tmp_path: Path,
 ) -> None:
     alignment_dir = tmp_path / "alignment"
@@ -73,7 +90,9 @@ def test_weak_seed_rescue_heavy_row_becomes_implement_candidate(
     )
 
     family = result["families"][0]
-    assert family["risk_classification"] == "risky_weak_seed_backfill"
+    assert family["risk_classification"] == "supported_backfill_capped"
+    assert family["promotion_state"] == "supported"
+    assert family["promotion_reason"] == DDA_LIMITED_MS2_SHAPE_REASON
     assert family["seed_quality_status"] == "weak"
     assert family["min_evidence_score"] == 55.0
     assert family["min_seed_event_count"] == 1.0
@@ -82,8 +101,190 @@ def test_weak_seed_rescue_heavy_row_becomes_implement_candidate(
     report.write_outputs(output_dir, result)
     candidates = _read_tsv(output_dir / "single_dr_gate_candidates.tsv")
     weak_seed = _candidate(candidates, "dr_weak_seed_backfill_dependency")
-    assert weak_seed["affected_primary_rows"] == "1"
-    assert weak_seed["recommended_action"] == "implement"
+    assert weak_seed["affected_primary_rows"] == "0"
+    assert weak_seed["recommended_action"] == "reject"
+
+
+def test_weak_seed_tolerated_row_is_supported_capped_warning(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    output_dir = tmp_path / "diagnostics"
+    discovery_dir = tmp_path / "discovery"
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        (
+            _review_row(
+                "FAM_TOL",
+                q_detected=3,
+                q_rescue=6,
+                row_flags="rescue_heavy;weak_seed_tolerated",
+            ),
+        ),
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        tuple(_cells("FAM_TOL", detected=3, rescued=6, absent=1)),
+    )
+    batch_index = _write_discovery_index(
+        discovery_dir,
+        [
+            _candidate_row("S001", "FAM_TOL_C001", evidence_score="55"),
+            _candidate_row("S002", "FAM_TOL_C002"),
+            _candidate_row("S003", "FAM_TOL_C003"),
+        ],
+    )
+
+    result = report.build_decision_report(
+        alignment_dir=alignment_dir,
+        discovery_batch_index=batch_index,
+    )
+
+    family = result["families"][0]
+    assert family["risk_classification"] == "supported_backfill_capped"
+    assert family["promotion_state"] == "supported"
+    assert family["promotion_reason"] == DDA_LIMITED_MS2_SHAPE_REASON
+    assert family["seed_quality_status"] == "adequate"
+
+    report.write_outputs(output_dir, result)
+    candidates = _read_tsv(output_dir / "single_dr_gate_candidates.tsv")
+    tolerated = _candidate(candidates, "dr_weak_seed_tolerated_watch")
+    assert tolerated["affected_primary_rows"] == "0"
+    supported = _candidate(candidates, "dr_supported_backfill_capped")
+    assert supported["affected_primary_rows"] == "1"
+
+
+def test_tsv_adapter_excludes_review_rescue_outside_alignment_window(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        (_review_row("FAM_DRIFT", q_detected=2, q_rescue=8),),
+    )
+    cells = _cells("FAM_DRIFT", detected=2, rescued=8)
+    cells.append(
+        {
+            **cells[-1],
+            "sample_stem": "S999",
+            "rt_delta_sec": "-240.0",
+            "area": "500",
+            "reason": "review_rescue_outside_rt_window",
+        },
+    )
+    _write_tsv(alignment_dir / "alignment_cells.tsv", tuple(cells))
+
+    result = report.build_decision_report(alignment_dir=alignment_dir)
+
+    family = result["families"][0]
+    assert family["risk_classification"] == "supported_backfill_capped"
+    assert family["promotion_state"] == "supported"
+    assert family["assessed_rescue_count"] == 8
+
+
+def test_tsv_adapter_requires_height_for_rescue_quantifiable_parity(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        (_review_row("FAM_NO_HEIGHT", q_detected=2, q_rescue=8),),
+    )
+    cells = _cells("FAM_NO_HEIGHT", detected=2, rescued=8)
+    for row in cells:
+        if row["status"] == "rescued":
+            row["height"] = ""
+    _write_tsv(alignment_dir / "alignment_cells.tsv", tuple(cells))
+
+    result = report.build_decision_report(alignment_dir=alignment_dir)
+
+    family = result["families"][0]
+    assert family["risk_classification"] == "blocked_low_ms1_assessable_coverage"
+    assert family["promotion_state"] == "blocked"
+    assert family["assessed_rescue_count"] == 0
+
+
+def test_tsv_diagnostic_reports_neighbor_interference_block(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    output_dir = tmp_path / "diagnostics"
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        (_review_row("FAM_NEIGHBOR", q_detected=2, q_rescue=8),),
+    )
+    cells = _cells("FAM_NEIGHBOR", detected=2, rescued=8)
+    for row in cells:
+        if row["status"] == "rescued":
+            row["region_review_reason"] = "neighboring_ms1_interference"
+    _write_tsv(alignment_dir / "alignment_cells.tsv", tuple(cells))
+
+    result = report.build_decision_report(alignment_dir=alignment_dir)
+    report.write_outputs(output_dir, result)
+
+    family = result["families"][0]
+    assert family["risk_classification"] == "blocked_neighboring_ms1_interference"
+    assert family["promotion_reason"] == "neighboring_ms1_interference_blocked"
+    blocked = _candidate(result["gate_candidates"], "dr_backfill_policy_blocked")
+    assert blocked["affected_primary_rows"] == 1
+
+
+def test_single_dr_family_writer_header_is_stable(tmp_path: Path) -> None:
+    alignment_dir = tmp_path / "alignment"
+    output_dir = tmp_path / "diagnostics"
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        (_review_row("FAM_HEADER", q_detected=2, q_rescue=8),),
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        tuple(_cells("FAM_HEADER", detected=2, rescued=8)),
+    )
+
+    code = report.main(
+        [
+            "--alignment-dir",
+            str(alignment_dir),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert code == 0
+    with (output_dir / "single_dr_gate_decision_families.tsv").open(
+        newline="",
+        encoding="utf-8",
+    ) as handle:
+        assert next(csv.reader(handle, delimiter="\t")) == [
+            "feature_family_id",
+            "neutral_loss_tag",
+            "risk_classification",
+            "rt_context",
+            "include_in_primary_matrix",
+            "q_detected",
+            "q_rescue",
+            "sample_count",
+            "rescue_fraction",
+            "duplicate_assigned_count",
+            "row_flags",
+            "promotion_state",
+            "promotion_reason",
+            "promotion_flags",
+            "supported_rescue_count",
+            "assessed_rescue_count",
+            "seed_quality_status",
+            "min_evidence_score",
+            "min_seed_event_count",
+            "max_abs_nl_ppm",
+            "min_scan_support_score",
+            "missing_detected_candidate_count",
+            "targeted_istd_labels",
+            "targeted_istd_statuses",
+            "family_center_mz",
+            "family_center_rt",
+            "family_product_mz",
+            "family_observed_neutral_loss_da",
+        ]
 
 
 def test_high_detected_rescue_heavy_row_remains_strong(
@@ -107,6 +308,8 @@ def test_high_detected_rescue_heavy_row_remains_strong(
     }
     assert candidates["dr_extreme_backfill_dependency"]["affected_primary_rows"] == 0
     assert candidates["dr_weak_seed_backfill_dependency"]["affected_primary_rows"] == 0
+    assert candidates["dr_weak_seed_tolerated_watch"]["affected_primary_rows"] == 0
+    assert candidates["dr_supported_backfill_capped"]["affected_primary_rows"] == 0
 
 
 def test_duplicate_pressure_low_detected_rescue_heavy_row_is_watch_only(
@@ -261,12 +464,56 @@ def test_istd_impact_blocks_automatic_implement_recommendation(
 
     family = result["families"][0]
     assert family["targeted_istd_labels"] == "d3-N6-medA"
+    assert family["risk_classification"] == "supported_backfill_capped"
     extreme = _candidate(
         result["gate_candidates"],
         "dr_extreme_backfill_dependency",
     )
-    assert extreme["affected_istd_rows"] == 1
-    assert extreme["recommended_action"] == "keep_warning"
+    assert extreme["affected_istd_rows"] == 0
+    supported = _candidate(
+        result["gate_candidates"],
+        "dr_supported_backfill_capped",
+    )
+    assert supported["affected_istd_rows"] == 1
+    assert supported["recommended_action"] == "keep_warning"
+
+
+def test_diagnostic_tsv_adapter_matches_production_policy(tmp_path: Path) -> None:
+    alignment_dir = tmp_path / "alignment"
+    matrix = AlignmentMatrix(
+        clusters=(_alignment_feature("FAM_PARITY"),),
+        cells=(
+            _aligned_cell("seed1", "FAM_PARITY", "detected", 100.0),
+            _aligned_cell("seed2", "FAM_PARITY", "detected", 90.0),
+            _aligned_cell("rescue00", "FAM_PARITY", "rescued", 80.0, rt_delta_sec=-0.5),
+            *tuple(
+                _aligned_cell(f"rescue{i:02d}", "FAM_PARITY", "rescued", 80.0 + i)
+                for i in range(1, 84)
+            ),
+        ),
+        sample_order=(
+            "seed1",
+            "seed2",
+            "rescue00",
+            *(f"rescue{i:02d}" for i in range(1, 84)),
+        ),
+    )
+    production = build_matrix_identity_decisions(matrix, AlignmentConfig()).row(
+        "FAM_PARITY",
+    )
+    write_alignment_review_tsv(
+        alignment_dir / "alignment_review.tsv",
+        matrix,
+        alignment_config=AlignmentConfig(),
+    )
+    write_alignment_cells_tsv(alignment_dir / "alignment_cells.tsv", matrix)
+
+    result = report.build_decision_report(alignment_dir=alignment_dir)
+
+    family = result["families"][0]
+    assert production.identity_reason == CELL_EVIDENCE_SUPPORTED_REASON
+    assert family["promotion_reason"] == production.identity_reason
+    assert family["promotion_flags"] == "high_backfill_dependency_capped"
 
 
 def _review_row(
@@ -319,11 +566,18 @@ def _cells(
                 "status": "detected",
                 "area": "1000",
                 "apex_rt": "8.0",
+                "height": "100",
+                "peak_start_rt": "7.95",
+                "peak_end_rt": "8.05",
+                "rt_delta_sec": "0.0",
+                "trace_quality": "clean",
+                "scan_support_score": "0.8",
                 "source_candidate_id": f"{feature_id}_C{index:03d}",
                 "neutral_loss_tag": "DNA_dR",
                 "family_center_mz": "300.0",
                 "family_center_rt": "8.0",
                 "reason": "",
+                "region_review_reason": "",
             },
         )
     for index in range(detected + 1, detected + rescued + 1):
@@ -334,11 +588,18 @@ def _cells(
                 "status": "rescued",
                 "area": "500",
                 "apex_rt": "8.0",
+                "height": "100",
+                "peak_start_rt": "7.95",
+                "peak_end_rt": "8.05",
+                "rt_delta_sec": "0.0",
+                "trace_quality": "clean",
+                "scan_support_score": "0.8",
                 "source_candidate_id": "",
                 "neutral_loss_tag": "DNA_dR",
                 "family_center_mz": "300.0",
                 "family_center_rt": "8.0",
                 "reason": "owner_backfill",
+                "region_review_reason": "",
             },
         )
     for index in range(detected + rescued + 1, detected + rescued + absent + 1):
@@ -349,11 +610,18 @@ def _cells(
                 "status": "absent",
                 "area": "",
                 "apex_rt": "",
+                "height": "",
+                "peak_start_rt": "",
+                "peak_end_rt": "",
+                "rt_delta_sec": "",
+                "trace_quality": "absent",
+                "scan_support_score": "",
                 "source_candidate_id": "",
                 "neutral_loss_tag": "DNA_dR",
                 "family_center_mz": "300.0",
                 "family_center_rt": "8.0",
                 "reason": "not_found",
+                "region_review_reason": "",
             },
         )
     return rows
@@ -429,3 +697,47 @@ def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle, delimiter="\t"))
+
+
+def _alignment_feature(feature_family_id: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        feature_family_id=feature_family_id,
+        neutral_loss_tag="DNA_dR",
+        family_center_mz=300.0,
+        family_center_rt=8.0,
+        family_product_mz=184.0739,
+        family_observed_neutral_loss_da=116.0474,
+        has_anchor=True,
+        event_cluster_ids=("OWN-s1-000001",),
+        event_member_count=1,
+        evidence="owner_complete_link;owner_count=2",
+        review_only=False,
+    )
+
+
+def _aligned_cell(
+    sample_stem: str,
+    family_id: str,
+    status: str,
+    area: float,
+    *,
+    rt_delta_sec: float = 0.0,
+) -> AlignedCell:
+    return AlignedCell(
+        sample_stem=sample_stem,
+        cluster_id=family_id,
+        status=status,  # type: ignore[arg-type]
+        area=area,
+        apex_rt=8.0,
+        height=100.0,
+        peak_start_rt=7.95,
+        peak_end_rt=8.05,
+        rt_delta_sec=rt_delta_sec,
+        trace_quality="clean",
+        scan_support_score=0.8,
+        source_candidate_id=(
+            f"{sample_stem}#{family_id}" if status == "detected" else None
+        ),
+        source_raw_file=Path(f"{sample_stem}.raw") if status == "detected" else None,
+        reason=status,
+    )

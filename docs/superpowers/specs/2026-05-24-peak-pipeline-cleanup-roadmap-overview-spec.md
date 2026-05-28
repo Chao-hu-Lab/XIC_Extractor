@@ -5,6 +5,11 @@
 cleanup and handoff-spine work may proceed after Phase 1 closeout; C1b
 linear-edge retirement remains blocked
 **Sibling overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
+**2026-05-28 handoff mainline update:** the product-priority reset spec
+(`2026-05-28-product-priority-reset-decision-spec.md`) supersedes this roadmap's
+"next allowed work" wording for handoff mainline selection until
+`QUAL_SELECTION_READY_FOR_NEXT_BEHAVIOR_PR` resolves. Cleanup remains valid as
+historical/product-led input, but must not run as the mainline before that gate.
 **Precondition:** modernization Phase 1 closeout records the supported scope:
 P2b conditional audit promotion, 85RAW primary-delivery validation with known
 exceptions, and no P6 trigger. Method-preserving cleanup may proceed under that

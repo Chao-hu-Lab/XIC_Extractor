@@ -226,6 +226,7 @@ def test_alignment_decision_report_cleanliness_warning_is_warn_not_fail(
     assert payload["verdict"] == "WARN"
     assert payload["cleanliness"]["flag_counts"]["duplicate_claim_pressure"] == 1
     assert payload["cleanliness"]["flag_counts"]["high_backfill_dependency"] == 1
+    assert payload["cleanliness"]["flag_counts"]["weak_seed_tolerated"] == 1
 
 
 def test_alignment_decision_report_missing_review_columns_fails_clearly(
@@ -327,7 +328,11 @@ def _alignment_dir(
 
 
 def _write_review(path: Path, *, clean: bool, feature_id: str = "FAM001") -> None:
-    warning_flags = "" if clean else "duplicate_claim_pressure;high_backfill_dependency"
+    warning_flags = (
+        ""
+        if clean
+        else "duplicate_claim_pressure;high_backfill_dependency;weak_seed_tolerated"
+    )
     rows = (
         _review_row(
             feature_id,

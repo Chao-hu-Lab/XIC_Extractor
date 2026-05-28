@@ -4,7 +4,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.feature_family import MS1FeatureFamily
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.models import AlignmentCluster
+from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
+from xic_extractor.alignment.ownership_models import IdentityEvent, SampleLocalMS1Owner
 from xic_extractor.alignment.primary_consolidation import (
     consolidate_primary_family_rows,
 )
@@ -257,6 +261,140 @@ def test_near_duplicate_rescue_heavy_primary_family_is_demoted_to_audit():
     ] == ["s1", "s2", "s3", "s4"]
 
 
+def test_consolidated_winner_carries_source_family_seed_events():
+    matrix = AlignmentMatrix(
+        clusters=(
+            _owner_feature("FAM001", "s1", rt=8.40),
+            _owner_feature("FAM002", "s2", rt=8.55),
+            _owner_feature("FAM003", "s3", rt=8.70),
+        ),
+        sample_order=(
+            "s1",
+            "s2",
+            "s3",
+            "r1",
+            "r2",
+            "r3",
+            "r4",
+            "r5",
+            "r6",
+        ),
+        cells=(
+            _cell("s1", "FAM001", "detected", 100.0, apex=8.40),
+            _duplicate_cell(
+                "s2", "FAM001", winner="FAM002", original="rescued", apex=8.55
+            ),
+            _duplicate_cell(
+                "s3", "FAM001", winner="FAM003", original="rescued", apex=8.70
+            ),
+            _duplicate_cell(
+                "s1", "FAM002", winner="FAM001", original="rescued", apex=8.40
+            ),
+            _cell("s2", "FAM002", "detected", 200.0, apex=8.55),
+            _duplicate_cell(
+                "s3", "FAM002", winner="FAM003", original="rescued", apex=8.70
+            ),
+            _duplicate_cell(
+                "s1", "FAM003", winner="FAM001", original="rescued", apex=8.40
+            ),
+            _duplicate_cell(
+                "s2", "FAM003", winner="FAM002", original="rescued", apex=8.55
+            ),
+            _cell("s3", "FAM003", "detected", 300.0, apex=8.70),
+            *tuple(
+                _duplicate_cell(
+                    f"r{i}",
+                    "FAM001",
+                    winner="FAM002",
+                    original="rescued",
+                    apex=8.55,
+                    area=50.0 + i,
+                )
+                for i in range(1, 7)
+            ),
+        ),
+    )
+
+    consolidated = consolidate_primary_family_rows(matrix, AlignmentConfig())
+    decisions = build_production_decisions(consolidated, AlignmentConfig())
+    winner = _feature_by_id(consolidated, "FAM002")
+
+    assert tuple(owner.sample_stem for owner in winner.owners) == ("s1", "s2", "s3")
+    assert decisions.row("FAM002").include_in_primary_matrix is True
+    assert decisions.row("FAM002").identity_reason == "owner_complete_link"
+    assert "weak_seed_backfill_dependency" not in decisions.row("FAM002").row_flags
+    assert "weak_seed_tolerated" not in decisions.row("FAM002").row_flags
+
+
+def test_consolidated_ms1_family_winner_carries_source_event_clusters():
+    matrix = AlignmentMatrix(
+        clusters=(
+            _event_family_feature("FAM001", "s1", rt=8.40),
+            _event_family_feature("FAM002", "s2", rt=8.55),
+            _event_family_feature("FAM003", "s3", rt=8.70),
+        ),
+        sample_order=(
+            "s1",
+            "s2",
+            "s3",
+            "r1",
+            "r2",
+            "r3",
+            "r4",
+            "r5",
+            "r6",
+        ),
+        cells=(
+            _cell("s1", "FAM001", "detected", 100.0, apex=8.40),
+            _duplicate_cell(
+                "s2", "FAM001", winner="FAM002", original="rescued", apex=8.55
+            ),
+            _duplicate_cell(
+                "s3", "FAM001", winner="FAM003", original="rescued", apex=8.70
+            ),
+            _duplicate_cell(
+                "s1", "FAM002", winner="FAM001", original="rescued", apex=8.40
+            ),
+            _cell("s2", "FAM002", "detected", 200.0, apex=8.55),
+            _duplicate_cell(
+                "s3", "FAM002", winner="FAM003", original="rescued", apex=8.70
+            ),
+            _duplicate_cell(
+                "s1", "FAM003", winner="FAM001", original="rescued", apex=8.40
+            ),
+            _duplicate_cell(
+                "s2", "FAM003", winner="FAM002", original="rescued", apex=8.55
+            ),
+            _cell("s3", "FAM003", "detected", 300.0, apex=8.70),
+            *tuple(
+                _duplicate_cell(
+                    f"r{i}",
+                    "FAM001",
+                    winner="FAM002",
+                    original="rescued",
+                    apex=8.55,
+                    area=50.0 + i,
+                )
+                for i in range(1, 7)
+            ),
+        ),
+    )
+
+    consolidated = consolidate_primary_family_rows(matrix, AlignmentConfig())
+    decisions = build_production_decisions(consolidated, AlignmentConfig())
+    winner = _feature_by_id(consolidated, "FAM002")
+
+    assert tuple(cluster.cluster_id for cluster in winner.event_clusters) == (
+        "FAM001_EVENT",
+        "FAM002_EVENT",
+        "FAM003_EVENT",
+    )
+    assert winner.event_member_count == 3
+    assert decisions.row("FAM002").include_in_primary_matrix is True
+    assert decisions.row("FAM002").identity_reason == "owner_complete_link"
+    assert "weak_seed_backfill_dependency" not in decisions.row("FAM002").row_flags
+
+
 def _feature(
     feature_family_id: str,
     *,
@@ -278,6 +416,100 @@ def _feature(
         event_member_count=1,
         evidence=evidence,
         review_only=False,
+    )
+
+
+def _owner_feature(feature_family_id: str, sample_stem: str, *, rt: float):
+    return OwnerAlignedFeature(
+        feature_family_id=feature_family_id,
+        neutral_loss_tag="DNA_dR",
+        family_center_mz=500.0,
+        family_center_rt=rt,
+        family_product_mz=384.0,
+        family_observed_neutral_loss_da=116.0,
+        has_anchor=True,
+        owners=(_owner(feature_family_id, sample_stem, rt=rt),),
+        evidence="single_sample_local_owner",
+    )
+
+
+def _event_family_feature(
+    feature_family_id: str,
+    sample_stem: str,
+    *,
+    rt: float,
+) -> MS1FeatureFamily:
+    event_cluster = AlignmentCluster(
+        cluster_id=f"{feature_family_id}_EVENT",
+        neutral_loss_tag="DNA_dR",
+        cluster_center_mz=500.0,
+        cluster_center_rt=rt,
+        cluster_product_mz=384.0,
+        cluster_observed_neutral_loss_da=116.0,
+        has_anchor=True,
+        members=(
+            SimpleNamespace(
+                candidate_id=f"{sample_stem}#{feature_family_id}",
+                sample_stem=sample_stem,
+                neutral_loss_tag="DNA_dR",
+                precursor_mz=500.0,
+                product_mz=384.0,
+                observed_neutral_loss_da=116.0,
+                ms1_apex_rt=rt,
+                best_seed_rt=rt,
+                evidence_score=80,
+                seed_event_count=2,
+                neutral_loss_mass_error_ppm=3.0,
+                ms1_scan_support_score=0.9,
+            ),
+        ),
+    )
+    return MS1FeatureFamily(
+        feature_family_id=feature_family_id,
+        neutral_loss_tag="DNA_dR",
+        family_center_mz=500.0,
+        family_center_rt=rt,
+        family_product_mz=384.0,
+        family_observed_neutral_loss_da=116.0,
+        has_anchor=True,
+        event_clusters=(event_cluster,),
+        event_cluster_ids=(event_cluster.cluster_id,),
+        event_member_count=1,
+        evidence="single_sample_local_owner",
+    )
+
+
+def _owner(
+    feature_family_id: str,
+    sample_stem: str,
+    *,
+    rt: float,
+) -> SampleLocalMS1Owner:
+    return SampleLocalMS1Owner(
+        owner_id=f"OWN-{feature_family_id}",
+        sample_stem=sample_stem,
+        raw_file=f"{sample_stem}.raw",
+        precursor_mz=500.0,
+        owner_apex_rt=rt,
+        owner_peak_start_rt=rt - 0.05,
+        owner_peak_end_rt=rt + 0.05,
+        owner_area=100.0,
+        owner_height=100.0,
+        primary_identity_event=IdentityEvent(
+            candidate_id=f"{sample_stem}#{feature_family_id}",
+            sample_stem=sample_stem,
+            raw_file=f"{sample_stem}.raw",
+            neutral_loss_tag="DNA_dR",
+            precursor_mz=500.0,
+            product_mz=384.0,
+            observed_neutral_loss_da=116.0,
+            seed_rt=rt,
+            evidence_score=80,
+            seed_event_count=2,
+        ),
+        supporting_events=(),
+        identity_conflict=False,
+        assignment_reason="test owner",
     )
 
 

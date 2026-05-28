@@ -4,6 +4,12 @@
 
 Status: `handoff_productization_phase_closed`.
 
+2026-05-28 update: handoff mainline priority is now governed by
+`docs/superpowers/specs/2026-05-28-product-priority-reset-decision-spec.md`.
+The `alignment_matrix_handoff_behavior_spec` next action below has already been
+completed by PR70. Further handoff mainline work must first resolve
+`QUAL_SELECTION_READY_FOR_NEXT_BEHAVIOR_PR`.
+
 The targeted handoff / CSV consumer surfaces remain `production_candidate`.
 That status is limited to the already tested targeted selected-hypothesis
 handoff and targeted CSV numeric projection. It is not a repo-wide readiness

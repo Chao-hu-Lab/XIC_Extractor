@@ -8,6 +8,8 @@ For directory layout, file placement rules, and scratch directory hygiene, see
 [`docs/project-layout.md`](docs/project-layout.md).
 For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
 [`docs/agent-parameter-settings.md`](docs/agent-parameter-settings.md).
+For known diagnostic conclusions that should survive worktrees, see
+[`docs/diagnostic-ledger.md`](docs/diagnostic-ledger.md).
 For repo-local subagent roles, goal usage, and runtime routing, see
 [`docs/agent-subagent-routing.md`](docs/agent-subagent-routing.md).
 Repo-local XIC overlay skills live under [`.codex/skills`](.codex/skills).
@@ -105,6 +107,10 @@ Repo-local XIC overlay skills live under [`.codex/skills`](.codex/skills).
 - Search `tools/diagnostics/INDEX.md`, relevant notes, and existing validation
   outputs before inventing a new workflow. Reuse them unless they cannot answer
   the current phase decision.
+- Search `docs/diagnostic-ledger.md` before rerunning a previously investigated
+  target or failure mode. Do not reclassify a known RT drift, area mismatch, or
+  mixed-surface warning as a new blocker unless current artifacts contradict the
+  ledger.
 - Any `audit_only`, `shadow_only`, or `diagnostic_only` path needs an exit rule:
   promote, kill, externalize, or name the single missing evidence.
 - Do not expand validation when the result cannot change the next action. Use
