@@ -323,6 +323,21 @@ project memory. Apply `.codex/skills/xic-pr-closeout/SKILL.md` for XIC-specific
 readiness labels, validation tiers, downstream handoff, RAW artifacts, and
 merge/history expectations.
 
+Before opening, updating, or marking a PR ready, the main agent must run the
+repo CI-equivalent lint, typecheck, and test gates in the active worktree:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
+```
+
+Any real lint, typecheck, or test failure is a blocker and must be fixed before
+PR. If the sandbox blocks dependency resolution, executable spawn, or DLL
+loading, rerun the same command with appropriate approval rather than replacing
+it with a narrower check. Record the exact commands and results in the closeout
+surface.
+
 ## Acceptance Labels
 
 Validation summaries must keep these separate:

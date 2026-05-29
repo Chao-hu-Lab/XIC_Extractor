@@ -99,6 +99,29 @@ Repo-local XIC overlay skills live under [`.codex/skills`](.codex/skills).
   acceptance criteria and stop conditions. Do not let a plan imply production
   changes when the current phase is only audit, shadow, or validation.
 
+## PR Verification Gate
+
+- Before opening, updating, or marking a PR ready, run the CI-equivalent lint,
+  typecheck, and test commands from `.github/workflows/ci.yml` in the current
+  worktree:
+
+  ```powershell
+  $env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
+  $env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+  $env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
+  ```
+
+- If any command fails because of real lint/type/test errors, fix the root cause
+  and rerun the failed CI-equivalent gate before opening the PR. Do not open the
+  PR with known lint, typecheck, or test failures.
+- If a command fails only because the sandbox blocks dependency resolution,
+  executable spawn, or DLL loading, rerun the same command with appropriate
+  approval. Do not substitute a narrower command unless a reviewed plan explains
+  why the CI-equivalent command is impossible or irrelevant.
+- PR descriptions and closeout notes must list the exact CI-equivalent commands
+  and observed results. Focused tests or RAW validation supplement this gate;
+  they do not replace it.
+
 ## Planning And Evidence Budget
 
 - Before a phase plan or expensive validation run, name the decision it can
