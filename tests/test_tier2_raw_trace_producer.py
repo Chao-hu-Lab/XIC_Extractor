@@ -161,6 +161,31 @@ def test_tier2_trace_producer_marks_raw_seed_trace_failures_inconclusive(
     assert row["neighbor_interference_status"] == "not_assessed"
 
 
+def test_tier2_trace_producer_marks_seed_metric_unavailable_coherence_inconclusive(
+    tmp_path: Path,
+) -> None:
+    rows = build_tier2_trace_evidence_rows(
+        candidate_rows=[_candidate_review_row()],
+        cells_by_family={"FAM001": tuple(_candidate_cell_rows())},
+        source_context=_source_context(tmp_path),
+        raw_manifest_sha256="ABC123",
+        source_expected_sample_count=3,
+        trace_loader=_passing_trace_loader,
+        config=Tier2TraceProducerConfig(scans_target=10, rt_padding_min=0.02),
+        producer_command="pytest fake producer",
+        generated_at_utc="2026-05-29T00:00:00Z",
+        python_executable=".venv\\Scripts\\python.exe",
+        dll_dir="C:\\Xcalibur\\system\\programs",
+    )
+
+    row = rows[0]
+    assert row["evidence_status"] == "inconclusive"
+    assert row["raw_trace_reread_status"] == "inconclusive"
+    assert row["coherence_status"] == "inconclusive"
+    assert "metric_unavailable" in row["challenge_blockers"]
+    assert "tier2_v0_1_diagnostic_only" in row["challenge_blockers"]
+
+
 def test_tier2_trace_producer_uses_contract_status_for_hard_metric_failure(
     tmp_path: Path,
 ) -> None:

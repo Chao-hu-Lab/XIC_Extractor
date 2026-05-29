@@ -165,14 +165,17 @@ def _family_evidence_row(
     _apply_seed_metrics(base, seed_metrics)
     seed_metric_blockers = _trace_metric_blockers(seed_metrics, config)
     if seed_metric_blockers:
-        evidence_status, raw_status = _status_for_trace_metric_blockers(
-            seed_metric_blockers
-        )
+        (
+            evidence_status,
+            raw_status,
+            coherence_status,
+        ) = _status_for_trace_metric_blockers(seed_metric_blockers)
         return _blocked_row(
             base,
             evidence_status,
             raw_status,
             *seed_metric_blockers,
+            coherence_status=coherence_status,
         )
 
     rescue_metrics: list[_TraceMetrics] = []
@@ -507,12 +510,12 @@ def _trace_metric_blockers(
 
 def _status_for_trace_metric_blockers(
     blockers: Sequence[str],
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     if "metric_unavailable" in blockers:
-        return "inconclusive", "inconclusive"
+        return "inconclusive", "inconclusive", "inconclusive"
     if set(blockers) == {"weak_scan_support"}:
-        return "not_supported", "fail"
-    return "blocked", "fail"
+        return "not_supported", "fail", "fail"
+    return "blocked", "fail", "fail"
 
 
 _UNAVAILABLE_BLOCKERS = frozenset(
