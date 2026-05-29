@@ -56,6 +56,133 @@ def test_cli_writes_sidecar_and_summary_without_mutating_matrix(
     assert payload["source_matrix_sha256"] == before_hash
 
 
+def test_cli_accepts_valid_tier2_sidecar(tmp_path: Path) -> None:
+    alignment_dir = _write_alignment_run(tmp_path / "alignment")
+    matrix_path = alignment_dir / "alignment_matrix.tsv"
+    before_hash = _sha256_file(matrix_path)
+    output_dir = tmp_path / "gate"
+    raw_manifest_path = _write_raw_manifest(tmp_path)
+    source_context = gate_cli.source_context_for_artifacts(
+        review_path=alignment_dir / "alignment_review.tsv",
+        cell_path=alignment_dir / "alignment_cells.tsv",
+        matrix_path=matrix_path,
+    )
+    review_rows = _read_tsv(alignment_dir / "alignment_review.tsv")
+    candidate_rows = [
+        row for row in review_rows if gate_cli.is_candidate_gate_scope(row)
+    ]
+    sidecar_path = _write_tier2_sidecar(
+        tmp_path,
+        family_id="FAM_CAND",
+        candidate_rows=candidate_rows,
+        source_context=source_context,
+        raw_manifest_path=raw_manifest_path,
+    )
+
+    code = gate_cli.main(
+        [
+            "--alignment-dir",
+            str(alignment_dir),
+            "--output-dir",
+            str(output_dir),
+            "--tier2-trace-evidence-tsv",
+            str(sidecar_path),
+            "--tier2-raw-manifest-tsv",
+            str(raw_manifest_path),
+        ],
+    )
+
+    assert code == 0
+    assert _sha256_file(matrix_path) == before_hash
+    rows = _read_tsv(output_dir / "alignment_production_candidate_gate.tsv")
+    by_id = {row["feature_family_id"]: row for row in rows}
+    assert by_id["FAM_CAND"]["candidate_gate_status"] == "production_candidate"
+    assert (
+        by_id["FAM_CAND"]["support_components"]
+        == "validated_tier2_trace_evidence"
+    )
+    payload = json.loads(
+        (output_dir / "alignment_production_candidate_gate.json").read_text(
+            encoding="utf-8",
+        ),
+    )
+    assert payload["tier2_trace_evidence_artifact"] == str(sidecar_path)
+    assert payload["tier2_raw_manifest_artifact"] == str(raw_manifest_path)
+    assert payload["tier2_candidate_subset_count"] == 1
+    assert payload["production_candidate_count"] == 1
+    assert payload["production_ready"] is False
+    assert payload["matrix_contract_changed"] is False
+
+
+def test_cli_stale_tier2_hash_emits_machine_readable_blocker(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_run(tmp_path / "alignment")
+    output_dir = tmp_path / "gate"
+    raw_manifest_path = _write_raw_manifest(tmp_path)
+    source_context = gate_cli.source_context_for_artifacts(
+        review_path=alignment_dir / "alignment_review.tsv",
+        cell_path=alignment_dir / "alignment_cells.tsv",
+        matrix_path=alignment_dir / "alignment_matrix.tsv",
+    )
+    review_rows = _read_tsv(alignment_dir / "alignment_review.tsv")
+    candidate_rows = [
+        row for row in review_rows if gate_cli.is_candidate_gate_scope(row)
+    ]
+    sidecar_path = _write_tier2_sidecar(
+        tmp_path,
+        family_id="FAM_CAND",
+        candidate_rows=candidate_rows,
+        source_context=source_context,
+        raw_manifest_path=raw_manifest_path,
+        source_review_sha256="0" * 64,
+    )
+
+    code = gate_cli.main(
+        [
+            "--alignment-dir",
+            str(alignment_dir),
+            "--output-dir",
+            str(output_dir),
+            "--tier2-trace-evidence-tsv",
+            str(sidecar_path),
+            "--tier2-raw-manifest-tsv",
+            str(raw_manifest_path),
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(output_dir / "alignment_production_candidate_gate.tsv")
+    by_id = {row["feature_family_id"]: row for row in rows}
+    assert by_id["FAM_CAND"]["candidate_gate_status"] == "audit"
+    assert "source_hash_mismatch" in by_id["FAM_CAND"]["challenge_blockers"]
+
+
+def test_cli_requires_tier2_sidecar_and_manifest_together(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    alignment_dir = _write_alignment_run(tmp_path / "alignment")
+    sidecar_path = tmp_path / "alignment_tier2_trace_evidence.tsv"
+    sidecar_path.write_text("", encoding="utf-8")
+
+    code = gate_cli.main(
+        [
+            "--alignment-dir",
+            str(alignment_dir),
+            "--tier2-trace-evidence-tsv",
+            str(sidecar_path),
+        ],
+    )
+
+    assert code == 2
+    stderr = capsys.readouterr().err
+    assert (
+        "tier2_trace_evidence_tsv and tier2_raw_manifest_tsv "
+        "must be supplied together"
+    ) in stderr
+
+
 def test_cli_defaults_output_dir_to_alignment_dir(tmp_path: Path) -> None:
     alignment_dir = _write_alignment_run(tmp_path / "alignment")
 
@@ -96,6 +223,78 @@ def test_cli_reports_missing_required_columns(
     stderr = capsys.readouterr().err
     assert "missing required columns" in stderr
     assert "identity_decision" in stderr
+
+
+def _write_raw_manifest(tmp_path: Path) -> Path:
+    path = tmp_path / "alignment_tier2_raw_manifest.tsv"
+    path.write_text(
+        (
+            "sample_stem\traw_file_path\traw_file_size_bytes\t"
+            "raw_file_mtime_utc\traw_reader_runtime\tpython_executable\tdll_dir\n"
+            "S1\tC:\\Xcalibur\\data\\S1.raw\t123\t"
+            "2026-05-29T00:00:00Z\tpythonnet\t.venv\\Scripts\\python.exe\t"
+            "C:\\Xcalibur\\system\\programs\n"
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_tier2_sidecar(
+    tmp_path: Path,
+    *,
+    family_id: str,
+    candidate_rows: list[dict[str, str]],
+    source_context,
+    raw_manifest_path: Path,
+    source_review_sha256: str | None = None,
+) -> Path:
+    subset = gate_cli.tier2_candidate_subset_signature(candidate_rows)
+    row = {
+        "feature_family_id": family_id,
+        "evidence_status": "validated",
+        "support_component": "validated_tier2_trace_evidence",
+        "criteria_version": "tier2_trace_identity_rescued_coherence_v0",
+        "producer_version": "raw_trace_reread_tier2_v0",
+        "raw_trace_reread_status": "pass",
+        "seed_apex_rt": "8.000",
+        "tier2_apex_rt": "8.100",
+        "apex_delta_sec": "6.0",
+        "scan_support_score": "0.80",
+        "trace_scan_count": "8",
+        "boundary_start_rt": "7.950",
+        "boundary_end_rt": "8.050",
+        "boundary_width_sec": "6.0",
+        "neighbor_interference_ratio": "0.10",
+        "rescued_cell_count_checked": "2",
+        "rescued_cell_count_supported": "2",
+        "rescued_apex_rt_span_sec": "6.0",
+        "rescued_boundary_overlap_min": "0.80",
+        "coherence_status": "pass",
+        "challenge_blockers": "",
+        "dependent_context": "",
+        "source_alignment_review_sha256": (
+            source_review_sha256 or source_context.review_sha256
+        ),
+        "source_alignment_cells_sha256": source_context.cell_sha256,
+        "source_raw_manifest_sha256": _sha256_file(raw_manifest_path),
+        "source_candidate_subset_sha256": subset.sha256,
+        "source_candidate_subset_count": str(subset.count),
+        "source_expected_sample_count": "8",
+        "raw_reader_runtime": "pythonnet",
+        "python_executable": ".venv\\Scripts\\python.exe",
+        "dll_dir": "C:\\Xcalibur\\system\\programs",
+        "producer_command": "synthetic-test-fixture",
+        "generated_at_utc": "2026-05-29T00:00:00Z",
+    }
+    columns = list(row)
+    path = tmp_path / "alignment_tier2_trace_evidence.tsv"
+    path.write_text(
+        "\n".join(("\t".join(columns), "\t".join(row[column] for column in columns)))
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
 
 
 def _write_alignment_run(path: Path) -> Path:

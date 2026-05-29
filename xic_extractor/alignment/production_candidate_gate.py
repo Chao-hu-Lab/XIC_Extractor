@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import math
 import re
@@ -54,8 +55,75 @@ _REQUIRED_FLAGS = frozenset({"single_detected_seed", "provisional_retention_cand
 _STRUCTURAL_EXCLUDE_FLAGS = frozenset(
     {"family_consolidation_loser", "duplicate_only", "rescue_only", "zero_present"}
 )
-_INDEPENDENT_TIER2_SUPPORT_COMPONENTS = frozenset(
-    {"validated_tier2_trace_evidence"}
+TIER2_SUPPORT_COMPONENT = "validated_tier2_trace_evidence"
+TIER2_ALLOWED_CRITERIA_VERSIONS = frozenset(
+    {"tier2_trace_identity_rescued_coherence_v0"}
+)
+TIER2_RECOGNIZED_PRODUCER_VERSIONS = frozenset({"raw_trace_reread_tier2_v0"})
+TIER2_TRACE_EVIDENCE_REQUIRED_COLUMNS = (
+    "feature_family_id",
+    "evidence_status",
+    "support_component",
+    "criteria_version",
+    "producer_version",
+    "raw_trace_reread_status",
+    "seed_apex_rt",
+    "tier2_apex_rt",
+    "apex_delta_sec",
+    "scan_support_score",
+    "trace_scan_count",
+    "boundary_start_rt",
+    "boundary_end_rt",
+    "boundary_width_sec",
+    "neighbor_interference_ratio",
+    "rescued_cell_count_checked",
+    "rescued_cell_count_supported",
+    "rescued_apex_rt_span_sec",
+    "rescued_boundary_overlap_min",
+    "coherence_status",
+    "challenge_blockers",
+    "dependent_context",
+    "source_alignment_review_sha256",
+    "source_alignment_cells_sha256",
+    "source_raw_manifest_sha256",
+    "source_candidate_subset_sha256",
+    "source_candidate_subset_count",
+    "source_expected_sample_count",
+    "raw_reader_runtime",
+    "python_executable",
+    "dll_dir",
+    "producer_command",
+    "generated_at_utc",
+)
+TIER2_GATE_JOIN_COLUMNS = (
+    "feature_family_id",
+    "evidence_status",
+    "support_component",
+    "criteria_version",
+    "producer_version",
+    "source_alignment_review_sha256",
+    "source_alignment_cells_sha256",
+    "source_raw_manifest_sha256",
+    "source_candidate_subset_sha256",
+    "source_candidate_subset_count",
+)
+TIER2_RAW_MANIFEST_REQUIRED_COLUMNS = (
+    "sample_stem",
+    "raw_file_path",
+    "raw_file_size_bytes",
+    "raw_file_mtime_utc",
+    "raw_reader_runtime",
+    "python_executable",
+    "dll_dir",
+)
+TIER2_CANDIDATE_SUBSET_FIELDS = (
+    "feature_family_id",
+    "identity_decision",
+    "quantifiable_detected_count",
+    "quantifiable_rescue_count",
+    "duplicate_assigned_count",
+    "ambiguous_ms1_owner_count",
+    "row_flags",
 )
 _INTERFERENCE_MARKERS = ("neighbor", "interference")
 _LOW_COVERAGE_MARKERS = (
@@ -92,6 +160,27 @@ class ProductionCandidateGateDecision:
     source_context: GateSourceContext
 
 
+@dataclass(frozen=True)
+class Tier2CandidateSubsetSignature:
+    sha256: str
+    count: int
+
+
+@dataclass(frozen=True)
+class Tier2TraceEvidence:
+    feature_family_id: str
+    evidence_status: str
+    support_component: str
+    criteria_version: str
+    producer_version: str
+    raw_trace_reread_status: str
+    coherence_status: str
+    challenge_blockers: tuple[str, ...]
+    dependent_context: tuple[str, ...]
+    provenance_blockers: tuple[str, ...]
+    metric_blockers: tuple[str, ...]
+
+
 def source_context_for_artifacts(
     *,
     review_path: Path,
@@ -108,11 +197,61 @@ def source_context_for_artifacts(
     )
 
 
+def tier2_candidate_subset_signature(
+    candidate_rows: Sequence[Mapping[str, object]],
+) -> Tier2CandidateSubsetSignature:
+    normalized_lines = ["\t".join(TIER2_CANDIDATE_SUBSET_FIELDS)]
+    for row in sorted(
+        (_string_row(item) for item in candidate_rows),
+        key=lambda item: item.get("feature_family_id", ""),
+    ):
+        normalized_lines.append(
+            "\t".join(row.get(field, "") for field in TIER2_CANDIDATE_SUBSET_FIELDS)
+        )
+    payload = ("\n".join(normalized_lines) + "\n").encode("utf-8")
+    return Tier2CandidateSubsetSignature(
+        sha256=hashlib.sha256(payload).hexdigest().upper(),
+        count=len(candidate_rows),
+    )
+
+
+def load_tier2_trace_evidence(
+    *,
+    sidecar_path: Path,
+    raw_manifest_path: Path,
+    candidate_rows: Sequence[Mapping[str, object]],
+    source_context: GateSourceContext,
+) -> dict[str, Tier2TraceEvidence]:
+    sidecar_rows = _read_tsv_required(
+        sidecar_path,
+        TIER2_TRACE_EVIDENCE_REQUIRED_COLUMNS,
+    )
+    _read_tsv_required(raw_manifest_path, TIER2_RAW_MANIFEST_REQUIRED_COLUMNS)
+    raw_manifest_sha256 = _sha256_file(raw_manifest_path)
+    subset = tier2_candidate_subset_signature(candidate_rows)
+    evidence_by_family: dict[str, Tier2TraceEvidence] = {}
+    for row in sidecar_rows:
+        evidence = _tier2_evidence_from_row(
+            row,
+            source_context=source_context,
+            raw_manifest_sha256=raw_manifest_sha256,
+            candidate_subset=subset,
+        )
+        if evidence.feature_family_id in evidence_by_family:
+            raise ValueError(
+                "alignment_tier2_trace_evidence.tsv has duplicate "
+                f"feature_family_id: {evidence.feature_family_id}"
+            )
+        evidence_by_family[evidence.feature_family_id] = evidence
+    return evidence_by_family
+
+
 def evaluate_production_candidate_gate(
     review_row: Mapping[str, object],
     cell_rows: Sequence[Mapping[str, object]],
     *,
     source_context: GateSourceContext,
+    tier2_evidence: Tier2TraceEvidence | None = None,
 ) -> ProductionCandidateGateDecision:
     review = _string_row(review_row)
     cells = tuple(_string_row(row) for row in cell_rows)
@@ -151,16 +290,34 @@ def evaluate_production_candidate_gate(
         )
 
     rescued = tuple(row for row in cells if row.get("status") == "rescued")
-    support = _explicit_positive_support(review)
+    support = _tier2_positive_support(
+        tier2_evidence,
+        review_feature_family_id=review.get("feature_family_id", ""),
+    )
     tier2_available = bool(support)
-    dependent = _dependent_context(review, rescued)
-    blockers = _challenge_blockers(rescued)
+    dependent = _ordered_unique(
+        (
+            *_dependent_context(review, rescued),
+            *_tier2_dependent_context(tier2_evidence),
+        )
+    )
+    blockers = _ordered_unique(
+        (
+            *_challenge_blockers(rescued),
+            *_tier2_blockers(
+                tier2_evidence,
+                review_feature_family_id=review.get("feature_family_id", ""),
+            ),
+        )
+    )
     if _int_value(review.get("quantifiable_rescue_count")) and not rescued:
         blockers = _ordered_unique((*blockers, "missing_rescued_cell_evidence"))
-    if not tier2_available:
+    if not tier2_available and tier2_evidence is None:
         blockers = _ordered_unique((*blockers, "missing_positive_tier2_support"))
 
-    if any(blocker != "missing_positive_tier2_support" for blocker in blockers):
+    if tier2_evidence is not None and blockers:
+        status: CandidateGateStatus = "audit"
+    elif any(blocker != "missing_positive_tier2_support" for blocker in blockers):
         status: CandidateGateStatus = "audit"
     elif blockers:
         status = "keep_provisional"
@@ -312,14 +469,6 @@ def _structural_blockers(
     return tuple(blockers)
 
 
-def _explicit_positive_support(review: Mapping[str, str]) -> tuple[str, ...]:
-    return tuple(
-        token
-        for token in _split_tokens(review.get("independent_tier2_support_components"))
-        if token in _INDEPENDENT_TIER2_SUPPORT_COMPONENTS
-    )
-
-
 def _dependent_context(
     review: Mapping[str, str],
     rescued: Sequence[Mapping[str, str]],
@@ -345,6 +494,178 @@ def _dependent_context(
     ):
         context.append("rescued_cell_rt_coherence")
     return tuple(context)
+
+
+def _tier2_evidence_from_row(
+    row: Mapping[str, str],
+    *,
+    source_context: GateSourceContext,
+    raw_manifest_sha256: str,
+    candidate_subset: Tier2CandidateSubsetSignature,
+) -> Tier2TraceEvidence:
+    blockers: list[str] = []
+    if (
+        row.get("source_alignment_review_sha256") != source_context.review_sha256
+        or row.get("source_alignment_cells_sha256") != source_context.cell_sha256
+    ):
+        blockers.append("source_hash_mismatch")
+    if row.get("source_raw_manifest_sha256") != raw_manifest_sha256:
+        blockers.append("raw_manifest_hash_mismatch")
+    if (
+        row.get("source_candidate_subset_sha256") != candidate_subset.sha256
+        or _int_value(row.get("source_candidate_subset_count"))
+        != candidate_subset.count
+    ):
+        blockers.append("candidate_subset_hash_mismatch")
+    criteria_version = row.get("criteria_version", "")
+    producer_version = row.get("producer_version", "")
+    if criteria_version not in TIER2_ALLOWED_CRITERIA_VERSIONS:
+        blockers.append("criteria_version_not_allowlisted")
+    if producer_version not in TIER2_RECOGNIZED_PRODUCER_VERSIONS:
+        blockers.append("producer_version_not_recognized")
+    if (
+        _int_value(row.get("source_expected_sample_count")) is None
+        or _int_value(row.get("source_expected_sample_count")) <= 0
+        or not row.get("raw_reader_runtime", "").strip()
+        or not row.get("python_executable", "").strip()
+        or not row.get("dll_dir", "").strip()
+        or not row.get("producer_command", "").strip()
+        or not row.get("generated_at_utc", "").strip()
+    ):
+        blockers.append("missing_valid_tier2_provenance")
+    return Tier2TraceEvidence(
+        feature_family_id=row.get("feature_family_id", ""),
+        evidence_status=row.get("evidence_status", ""),
+        support_component=row.get("support_component", ""),
+        criteria_version=criteria_version,
+        producer_version=producer_version,
+        raw_trace_reread_status=row.get("raw_trace_reread_status", ""),
+        coherence_status=row.get("coherence_status", ""),
+        challenge_blockers=tuple(sorted(_split_tokens(row.get("challenge_blockers")))),
+        dependent_context=tuple(sorted(_split_tokens(row.get("dependent_context")))),
+        provenance_blockers=tuple(blockers),
+        metric_blockers=_tier2_v0_metric_blockers(row),
+    )
+
+
+def _tier2_v0_metric_blockers(row: Mapping[str, str]) -> tuple[str, ...]:
+    if row.get("evidence_status") != "validated":
+        return ()
+    blockers: list[str] = []
+    trace_scan_count = _int_value(row.get("trace_scan_count"))
+    seed_apex_rt = _float(row.get("seed_apex_rt"))
+    tier2_apex_rt = _float(row.get("tier2_apex_rt"))
+    scan_support_score = _float(row.get("scan_support_score"))
+    apex_delta_sec = _float(row.get("apex_delta_sec"))
+    boundary_start_rt = _float(row.get("boundary_start_rt"))
+    boundary_end_rt = _float(row.get("boundary_end_rt"))
+    boundary_width_sec = _float(row.get("boundary_width_sec"))
+    neighbor_value = row.get("neighbor_interference_ratio")
+    neighbor_interference_ratio = (
+        None if neighbor_value in (None, "") else _float(neighbor_value)
+    )
+    rescued_checked = _int_value(row.get("rescued_cell_count_checked"))
+    rescued_supported = _int_value(row.get("rescued_cell_count_supported"))
+    rescued_apex_span = _float(row.get("rescued_apex_rt_span_sec"))
+    rescued_boundary_overlap_min = _float(row.get("rescued_boundary_overlap_min"))
+    if None in {
+        trace_scan_count,
+        seed_apex_rt,
+        tier2_apex_rt,
+        scan_support_score,
+        apex_delta_sec,
+        boundary_start_rt,
+        boundary_end_rt,
+        boundary_width_sec,
+        rescued_checked,
+        rescued_supported,
+        rescued_apex_span,
+        rescued_boundary_overlap_min,
+    }:
+        blockers.append("metric_unavailable")
+        return tuple(blockers)
+    if neighbor_value not in (None, "") and neighbor_interference_ratio is None:
+        blockers.append("metric_unavailable")
+        return tuple(blockers)
+    if trace_scan_count < 5:
+        blockers.append("metric_unavailable")
+    if scan_support_score < 0.20:
+        blockers.append("low_scan_support")
+    elif scan_support_score < 0.50:
+        blockers.append("weak_scan_support")
+    if apex_delta_sec > 30.0:
+        blockers.append("apex_delta_exceeds_v0_threshold")
+    if boundary_width_sec <= 0.0 or boundary_width_sec > 180.0:
+        blockers.append("boundary_width_out_of_range")
+    if (
+        neighbor_interference_ratio is not None
+        and neighbor_interference_ratio > 0.33
+    ):
+        blockers.append("neighbor_interference")
+    if rescued_checked < 1 or rescued_supported < 1:
+        blockers.append("rescued_cell_support_low")
+    elif rescued_supported / rescued_checked < 0.50:
+        blockers.append("rescued_cell_support_low")
+    if rescued_apex_span > 21.0:
+        blockers.append("rescued_apex_span_wide")
+    if rescued_boundary_overlap_min < 0.50:
+        blockers.append("rescued_boundary_overlap_low")
+    return _ordered_unique(blockers)
+
+
+def _tier2_positive_support(
+    evidence: Tier2TraceEvidence | None,
+    *,
+    review_feature_family_id: str,
+) -> tuple[str, ...]:
+    if evidence is None:
+        return ()
+    if _tier2_blockers(evidence, review_feature_family_id=review_feature_family_id):
+        return ()
+    if evidence.evidence_status != "validated":
+        return ()
+    if evidence.support_component != TIER2_SUPPORT_COMPONENT:
+        return ()
+    if evidence.raw_trace_reread_status != "pass":
+        return ()
+    if evidence.coherence_status != "pass":
+        return ()
+    return (TIER2_SUPPORT_COMPONENT,)
+
+
+def _tier2_blockers(
+    evidence: Tier2TraceEvidence | None,
+    *,
+    review_feature_family_id: str,
+) -> tuple[str, ...]:
+    if evidence is None:
+        return ()
+    blockers = [
+        *evidence.provenance_blockers,
+        *evidence.metric_blockers,
+        *evidence.challenge_blockers,
+    ]
+    if evidence.evidence_status == "validated":
+        if evidence.feature_family_id != review_feature_family_id:
+            blockers.append("tier2_feature_family_id_mismatch")
+        if evidence.support_component != TIER2_SUPPORT_COMPONENT:
+            blockers.append("missing_positive_tier2_support")
+        if evidence.raw_trace_reread_status != "pass":
+            blockers.append("raw_trace_reread_not_pass")
+        if evidence.coherence_status != "pass":
+            blockers.append("rescued_coherence_not_pass")
+    elif evidence.evidence_status in {"blocked", "not_supported", "inconclusive"}:
+        if not blockers:
+            blockers.append(f"tier2_{evidence.evidence_status}")
+    else:
+        blockers.append("tier2_evidence_status_unrecognized")
+    return _ordered_unique(blockers)
+
+
+def _tier2_dependent_context(
+    evidence: Tier2TraceEvidence | None,
+) -> tuple[str, ...]:
+    return evidence.dependent_context if evidence is not None else ()
 
 
 def _challenge_blockers(rescued: Sequence[Mapping[str, str]]) -> tuple[str, ...]:
@@ -398,6 +719,21 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest().upper()
+
+
+def _read_tsv_required(
+    path: Path,
+    required_columns: Sequence[str],
+) -> tuple[dict[str, str], ...]:
+    if not path.exists():
+        raise FileNotFoundError(str(path))
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        fieldnames = tuple(reader.fieldnames or ())
+        missing = [column for column in required_columns if column not in fieldnames]
+        if missing:
+            raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
+        return tuple(dict(row) for row in reader)
 
 
 def _string_row(row: Mapping[str, object]) -> dict[str, str]:

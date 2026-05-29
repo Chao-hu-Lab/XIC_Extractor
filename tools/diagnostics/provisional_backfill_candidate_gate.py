@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections.abc import Mapping, Sequence
@@ -13,9 +14,11 @@ from xic_extractor.alignment.production_candidate_gate import (
     PRODUCTION_CANDIDATE_GATE_COLUMNS,
     evaluate_production_candidate_gate,
     is_candidate_gate_scope,
+    load_tier2_trace_evidence,
     production_candidate_gate_as_row,
     source_context_for_artifacts,
     summarize_gate_decisions,
+    tier2_candidate_subset_signature,
 )
 
 REVIEW_REQUIRED_COLUMNS = (
@@ -56,6 +59,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         outputs = run_gate(
             alignment_dir=args.alignment_dir,
             output_dir=output_dir,
+            tier2_trace_evidence_tsv=args.tier2_trace_evidence_tsv,
+            tier2_raw_manifest_tsv=args.tier2_raw_manifest_tsv,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -65,7 +70,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def run_gate(*, alignment_dir: Path, output_dir: Path) -> dict[str, Path]:
+def run_gate(
+    *,
+    alignment_dir: Path,
+    output_dir: Path,
+    tier2_trace_evidence_tsv: Path | None = None,
+    tier2_raw_manifest_tsv: Path | None = None,
+) -> dict[str, Path]:
     review_path = alignment_dir / "alignment_review.tsv"
     cell_path = alignment_dir / "alignment_cells.tsv"
     matrix_path = alignment_dir / "alignment_matrix.tsv"
@@ -79,11 +90,30 @@ def run_gate(*, alignment_dir: Path, output_dir: Path) -> dict[str, Path]:
     )
     cells_by_family = _cells_by_family(cell_rows)
     candidate_rows = [row for row in review_rows if is_candidate_gate_scope(row)]
+    if bool(tier2_trace_evidence_tsv) != bool(tier2_raw_manifest_tsv):
+        raise ValueError(
+            "tier2_trace_evidence_tsv and tier2_raw_manifest_tsv "
+            "must be supplied together"
+        )
+    tier2_evidence_by_family = (
+        load_tier2_trace_evidence(
+            sidecar_path=tier2_trace_evidence_tsv,
+            raw_manifest_path=tier2_raw_manifest_tsv,
+            candidate_rows=candidate_rows,
+            source_context=source_context,
+        )
+        if tier2_trace_evidence_tsv is not None
+        and tier2_raw_manifest_tsv is not None
+        else {}
+    )
     decisions = [
         evaluate_production_candidate_gate(
             review_row,
             cells_by_family.get(review_row["feature_family_id"], ()),
             source_context=source_context,
+            tier2_evidence=tier2_evidence_by_family.get(
+                review_row["feature_family_id"]
+            ),
         )
         for review_row in candidate_rows
     ]
@@ -108,6 +138,20 @@ def run_gate(*, alignment_dir: Path, output_dir: Path) -> dict[str, Path]:
             "source_matrix_sha256": source_context.matrix_sha256,
         },
     )
+    if tier2_trace_evidence_tsv is not None and tier2_raw_manifest_tsv is not None:
+        candidate_subset = tier2_candidate_subset_signature(candidate_rows)
+        summary.update(
+            {
+                "tier2_trace_evidence_artifact": str(tier2_trace_evidence_tsv),
+                "tier2_trace_evidence_sha256": _sha256_file(
+                    tier2_trace_evidence_tsv
+                ),
+                "tier2_raw_manifest_artifact": str(tier2_raw_manifest_tsv),
+                "tier2_raw_manifest_sha256": _sha256_file(tier2_raw_manifest_tsv),
+                "tier2_candidate_subset_sha256": candidate_subset.sha256,
+                "tier2_candidate_subset_count": candidate_subset.count,
+            },
+        )
     json_path.write_text(
         json.dumps(summary, indent=2, sort_keys=True),
         encoding="utf-8",
@@ -153,7 +197,21 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "alignment_production_candidate_gate.json. Defaults to --alignment-dir."
         ),
     )
+    parser.add_argument(
+        "--tier2-trace-evidence-tsv",
+        type=Path,
+        help="Optional Tier 2 trace evidence sidecar TSV.",
+    )
+    parser.add_argument(
+        "--tier2-raw-manifest-tsv",
+        type=Path,
+        help="Required with --tier2-trace-evidence-tsv; RAW manifest TSV.",
+    )
     return parser.parse_args(argv)
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
 
 
 if __name__ == "__main__":

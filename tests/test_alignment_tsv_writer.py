@@ -502,7 +502,7 @@ def test_one_detected_provisional_retention_stays_out_of_primary_matrix(
     assert matrix_rows == []
 
 
-def test_production_candidate_sidecar_status_does_not_change_matrix_writer(
+def test_direct_tier2_review_token_does_not_change_matrix_writer(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.alignment.production_candidate_gate import (
@@ -559,7 +559,9 @@ def test_production_candidate_sidecar_status_does_not_change_matrix_writer(
         ),
     )
 
-    assert decision.candidate_gate_status == "production_candidate"
+    assert decision.candidate_gate_status == "keep_provisional"
+    assert decision.support_components == ()
+    assert "missing_positive_tier2_support" in decision.challenge_blockers
     assert _read_tsv(matrix_path) == []
 
 
