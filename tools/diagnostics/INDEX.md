@@ -24,7 +24,7 @@
 1. [Phase Gates (P1/P2/P2b/P2c/P7)](#phase-gates-p1p2p2bp2cp7) — 7 tools
 2. [Evidence Consistency](#evidence-consistency) — 2 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 5 tools
+4. [Backfill Reviews](#backfill-reviews) — 6 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 2 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 6 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
@@ -161,10 +161,11 @@ decisions, RT normalization, matrix identity).
 
 ### `analyze_matrix_identity_blast_radius.py`
 
-**Purpose**: Analyze matrix identity blast radius for alignment outputs.
+**Purpose**: Analyze matrix identity blast radius for alignment outputs, including projected machine-decision role/action columns from existing review and cell artifacts.
 **Topic group**: `analyze_matrix_identity_blast_radius.py` (single-file)
-**Originating spec**: `2026-05-14-matrix-identity-consolidation-v2-spec.md`
-**Recent doc**: `plans/2026-05-14-matrix-identity-consolidation-v2-plan.md`
+**Originating spec**: `2026-05-14-matrix-identity-consolidation-v2-spec.md`; machine-decision projection columns from `2026-05-28-tiered-backfill-machine-decision-contract-spec.md`
+**Recent doc**: `plans/2026-05-14-matrix-identity-consolidation-v2-plan.md`; `plans/2026-05-28-tiered-backfill-machine-decision-contract-implementation-plan.md`; `notes/2026-05-28-tiered-backfill-machine-decision-implementation-note.md`
+**Status note**: Machine-decision columns are `diagnostic_only` projection output, not a downstream `alignment_matrix.tsv` contract.
 
 ---
 
@@ -187,9 +188,12 @@ decisions, RT normalization, matrix identity).
 
 ## Backfill Reviews
 
-Three overlapping axes (seed-level / family-level / row-classifier-level)
-plus 2 owner-backfill economics tools. See audit-note Cluster 2 — pending
-spec to decide whether these axes are orthogonal or redundant.
+Three overlapping review axes (seed-level / family-level /
+row-classifier-level), 2 owner-backfill economics tools, and 1
+`diagnostic_only` provisional candidate-gate sidecar. The sidecar is not an
+economics axis; it consumes retained provisional backfill rows to emit
+promotion blockers and source hashes while the existing review/economics axes
+remain pending cleanup per audit-note Cluster 2.
 
 ### `seed_aware_backfill_review.py`
 
@@ -228,6 +232,15 @@ spec to decide whether these axes are orthogonal or redundant.
 **Purpose**: Summarize owner-backfill request cost by final row identity.
 **Topic group**: `owner_backfill_request_economics.py` (single-file)
 **Originating spec**: `2026-05-15-owner-backfill-request-economics-spec.md`
+
+---
+
+### `provisional_backfill_candidate_gate.py`
+
+**Purpose**: Emit a `diagnostic_only` machine sidecar for retained provisional backfill rows, including Tier 2 support components, challenge blockers, and source artifact hashes.
+**Topic group**: `provisional_backfill_candidate_gate.py` + `xic_extractor/alignment/production_candidate_gate.py`
+**Originating spec/plan**: `specs/2026-05-29-provisional-backfill-production-candidate-gate-design.md`; `plans/2026-05-29-provisional-backfill-diagnostic-sidecar-pilot-implementation-plan.md`
+**Status note**: Writes `alignment_production_candidate_gate.tsv`; does not mutate `alignment_review.tsv`, `alignment_matrix.tsv`, workbook schemas, or downstream correction/statistics contracts.
 
 ---
 

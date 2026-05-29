@@ -24,6 +24,7 @@ from xic_extractor.alignment.output_rows import row_id
 from xic_extractor.alignment.promotion_policy import (
     RESCUE_ONLY_BLOCKED_REASON,
     BackfillPromotionDecision,
+    BackfillPromotionEvidence,
     classify_backfill_promotion,
     evidence_from_alignment,
 )
@@ -141,6 +142,18 @@ def decide_matrix_identity_row(
         cell_quality=cell_quality,
     )
     promotion_policy = classify_backfill_promotion(policy_evidence)
+    if _is_provisional_retention_candidate(
+        cluster,
+        evidence=evidence,
+        primary_evidence=primary_evidence,
+        q_detected=q_detected,
+        q_rescue=q_rescue,
+        duplicate_count=duplicate_count,
+        ambiguous_count=ambiguous_count,
+        policy_evidence=policy_evidence,
+    ):
+        flags.append("provisional_retention_candidate")
+        flags.append("skip_expensive_evidence")
     flags.extend(promotion_policy.flags)
     include, identity_decision, confidence, reason = _promotion_decision(
         cluster,
@@ -263,6 +276,39 @@ def _promotion_decision(
     )
 
 
+def _is_provisional_retention_candidate(
+    cluster: Any,
+    *,
+    evidence: str,
+    primary_evidence: str,
+    q_detected: int,
+    q_rescue: int,
+    duplicate_count: int,
+    ambiguous_count: int,
+    policy_evidence: BackfillPromotionEvidence,
+) -> bool:
+    if bool(getattr(cluster, "review_only", False)):
+        return False
+    if _is_consolidation_loser(evidence):
+        return False
+    if primary_evidence in {"none", "single_sample_local_owner"}:
+        return False
+    if q_detected != 1 or q_rescue <= 0:
+        return False
+    if duplicate_count != 0 or ambiguous_count != 0:
+        return False
+    supported_rescue_count = sum(
+        1
+        for cell in policy_evidence.cells
+        if (
+            cell.status == "rescued"
+            and cell.is_rescued_quantifiable
+            and cell.supported_for_backfill
+        )
+    )
+    return supported_rescue_count == q_rescue
+
+
 def _row_flags(
     *,
     cluster: Any,
@@ -277,6 +323,8 @@ def _row_flags(
     flags: list[str] = []
     if primary_evidence == "single_sample_local_owner":
         flags.append("single_sample_local_owner")
+    if q_detected == 1:
+        flags.append("single_detected_seed")
     if _is_consolidation_loser(evidence):
         flags.append("family_consolidation_loser")
     if primary_evidence == "anchored_family" and q_detected == 1:

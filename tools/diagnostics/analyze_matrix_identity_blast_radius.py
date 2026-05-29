@@ -11,6 +11,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.machine_decision import (
+    machine_decision_as_row,
+    project_machine_decision,
+)
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.matrix_identity import build_matrix_identity_decisions
 
@@ -40,6 +44,12 @@ OUTPUT_COLUMNS = (
     "duplicate_assigned_count",
     "ambiguous_ms1_owner_count",
     "row_flags",
+    "matrix_role",
+    "evidence_tier",
+    "support_reasons",
+    "blockers",
+    "confidence",
+    "recommended_action",
     "would_change_to_audit",
     "would_change_to_production",
     "evidence_status",
@@ -108,6 +118,7 @@ def run_blast_radius(
     current_by_family = {
         row.get("feature_family_id", ""): row for row in review_rows
     }
+    cell_rows_by_family = _cell_rows_by_family(cell_rows)
     rows = []
     for family_id in sorted(decisions.rows):
         row_decision = decisions.row(family_id)
@@ -115,6 +126,27 @@ def run_blast_radius(
         current_include = _is_trueish(current_row.get("include_in_primary_matrix"))
         proposed_include = row_decision.include_in_primary_matrix
         benchmark = benchmark_by_family.get(family_id, {})
+        projected_review_row = {
+            "feature_family_id": family_id,
+            "neutral_loss_tag": current_row.get("neutral_loss_tag", ""),
+            "include_in_primary_matrix": proposed_include,
+            "identity_decision": row_decision.identity_decision,
+            "identity_confidence": row_decision.identity_confidence,
+            "identity_reason": row_decision.identity_reason,
+            "primary_evidence": row_decision.primary_evidence,
+            "quantifiable_detected_count": (
+                row_decision.quantifiable_detected_count
+            ),
+            "quantifiable_rescue_count": row_decision.quantifiable_rescue_count,
+            "accepted_rescue_count": row_decision.quantifiable_rescue_count,
+            "duplicate_assigned_count": row_decision.duplicate_assigned_count,
+            "ambiguous_ms1_owner_count": row_decision.ambiguous_ms1_owner_count,
+            "row_flags": ";".join(row_decision.row_flags),
+        }
+        machine_decision = project_machine_decision(
+            projected_review_row,
+            cell_rows_by_family.get(family_id, ()),
+        )
         rows.append(
             {
                 "feature_family_id": family_id,
@@ -134,6 +166,7 @@ def run_blast_radius(
                     row_decision.ambiguous_ms1_owner_count
                 ),
                 "row_flags": ";".join(row_decision.row_flags),
+                **machine_decision_as_row(machine_decision),
                 "would_change_to_audit": current_include and not proposed_include,
                 "would_change_to_production": (
                     not current_include and proposed_include
@@ -171,6 +204,15 @@ def _alignment_matrix_from_tsv(
     return AlignmentMatrix(clusters=clusters, cells=cells, sample_order=sample_order)
 
 
+def _cell_rows_by_family(
+    cell_rows: Sequence[Mapping[str, str]],
+) -> dict[str, tuple[Mapping[str, str], ...]]:
+    grouped: dict[str, list[Mapping[str, str]]] = {}
+    for row in cell_rows:
+        grouped.setdefault(row.get("feature_family_id", ""), []).append(row)
+    return {family_id: tuple(rows) for family_id, rows in grouped.items()}
+
+
 def _cluster_from_review(row: Mapping[str, str]) -> SimpleNamespace:
     evidence = row.get("family_evidence") or row.get("evidence") or ""
     return SimpleNamespace(
@@ -188,7 +230,7 @@ def _cluster_from_review(row: Mapping[str, str]) -> SimpleNamespace:
         ),
         event_member_count=int(_float(row.get("event_member_count")) or 0),
         evidence=evidence,
-        review_only=False,
+        review_only=_is_review_only_row(row, evidence),
     )
 
 
@@ -238,6 +280,16 @@ def _missing_columns(
     return missing
 
 
+def _is_review_only_row(row: Mapping[str, str], evidence: str) -> bool:
+    row_flags = _split_tokens(row.get("row_flags", ""))
+    evidence_tokens = _split_tokens(evidence)
+    return (
+        row.get("identity_reason", "") == "review_only"
+        or "review_only" in row_flags
+        or "review_only" in evidence_tokens
+    )
+
+
 def _incomplete_rows(
     review_rows: Sequence[Mapping[str, str]],
     missing: Sequence[str],
@@ -265,6 +317,12 @@ def _incomplete_rows(
                 "duplicate_assigned_count": "",
                 "ambiguous_ms1_owner_count": "",
                 "row_flags": "",
+                "matrix_role": "",
+                "evidence_tier": "",
+                "support_reasons": "",
+                "blockers": "",
+                "confidence": "",
+                "recommended_action": "",
                 "would_change_to_audit": "",
                 "would_change_to_production": "",
                 "evidence_status": "evidence_incomplete",
@@ -372,6 +430,14 @@ def _float(value: object) -> float | None:
 
 def _is_trueish(value: object) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "t", "yes", "y"}
+
+
+def _split_tokens(value: object) -> set[str]:
+    return {
+        part.strip()
+        for part in str(value or "").replace(",", ";").split(";")
+        if part.strip()
+    }
 
 
 if __name__ == "__main__":

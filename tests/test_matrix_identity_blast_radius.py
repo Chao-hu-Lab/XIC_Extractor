@@ -54,6 +54,108 @@ def test_blast_radius_reports_complete_identity_changes_and_benchmark_join(
     assert payload["would_change_to_audit_count"] == 1
 
 
+def test_blast_radius_projects_one_detected_provisional_action(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_run(
+        tmp_path / "alignment",
+        review_rows=[
+            _review_row("FAM_ONE", "FALSE", "owner_complete_link;owner_count=1"),
+        ],
+        cell_rows=[
+            _cell_row("FAM_ONE", "sample-a", "detected", 100.0),
+            _cell_row(
+                "FAM_ONE",
+                "sample-b",
+                "rescued",
+                90.0,
+                trace_quality="clean",
+                scan_support_score=0.8,
+            ),
+            _cell_row(
+                "FAM_ONE",
+                "sample-c",
+                "rescued",
+                80.0,
+                trace_quality="clean",
+                scan_support_score=0.8,
+            ),
+        ],
+    )
+
+    code = blast.main(
+        [
+            "--alignment-run",
+            str(alignment_dir),
+            "--output-dir",
+            str(tmp_path / "blast"),
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(tmp_path / "blast" / "matrix_identity_blast_radius.tsv")
+    by_id = {row["feature_family_id"]: row for row in rows}
+
+    assert by_id["FAM_ONE"]["identity_decision"] == "provisional_discovery"
+    assert by_id["FAM_ONE"]["matrix_role"] == "provisional"
+    assert by_id["FAM_ONE"]["recommended_action"] == "keep_provisional"
+    assert by_id["FAM_ONE"]["evidence_tier"] == "1"
+    assert "single_detected_seed" in by_id["FAM_ONE"]["blockers"]
+    assert "ms1_backfill_supported" in by_id["FAM_ONE"]["support_reasons"]
+
+
+def test_blast_radius_preserves_review_only_projection(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_run(
+        tmp_path / "alignment",
+        review_rows=[
+            _review_row(
+                "FAM_REVIEW",
+                "FALSE",
+                "owner_complete_link;owner_count=1",
+                identity_reason="review_only",
+            ),
+        ],
+        cell_rows=[
+            _cell_row("FAM_REVIEW", "sample-a", "detected", 100.0),
+            _cell_row(
+                "FAM_REVIEW",
+                "sample-b",
+                "rescued",
+                90.0,
+                trace_quality="clean",
+                scan_support_score=0.8,
+            ),
+            _cell_row(
+                "FAM_REVIEW",
+                "sample-c",
+                "rescued",
+                80.0,
+                trace_quality="clean",
+                scan_support_score=0.8,
+            ),
+        ],
+    )
+
+    code = blast.main(
+        [
+            "--alignment-run",
+            str(alignment_dir),
+            "--output-dir",
+            str(tmp_path / "blast"),
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(tmp_path / "blast" / "matrix_identity_blast_radius.tsv")
+    by_id = {row["feature_family_id"]: row for row in rows}
+
+    assert by_id["FAM_REVIEW"]["identity_reason"] == "review_only"
+    assert by_id["FAM_REVIEW"]["matrix_role"] == "audit"
+    assert by_id["FAM_REVIEW"]["recommended_action"] == "review"
+
+
 def test_blast_radius_missing_peak_columns_outputs_incomplete_summary(
     tmp_path: Path,
 ) -> None:
@@ -145,11 +247,16 @@ def _review_row(
     family_id: str,
     include: str,
     evidence: str,
+    *,
+    identity_reason: str = "",
+    row_flags: str = "",
 ) -> dict[str, object]:
     return {
         "feature_family_id": family_id,
         "include_in_primary_matrix": include,
         "family_evidence": evidence,
+        "identity_reason": identity_reason,
+        "row_flags": row_flags,
         "neutral_loss_tag": "DNA_dR",
         "family_center_mz": 500.0,
         "family_center_rt": 8.5,
@@ -162,6 +269,10 @@ def _cell_row(
     sample: str,
     status: str,
     area: float,
+    *,
+    trace_quality: str = "",
+    scan_support_score: float | None = None,
+    reason: str | None = None,
 ) -> dict[str, object]:
     return {
         "feature_family_id": family_id,
@@ -173,7 +284,9 @@ def _cell_row(
         "peak_start_rt": 8.4,
         "peak_end_rt": 8.6,
         "rt_delta_sec": 0.0,
-        "reason": status,
+        "trace_quality": trace_quality,
+        "scan_support_score": scan_support_score,
+        "reason": reason if reason is not None else status,
     }
 
 
