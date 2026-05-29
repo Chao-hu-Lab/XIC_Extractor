@@ -1,9 +1,20 @@
 # Shared Peak Identity Evidence Explanation Pilot Design
 
 **Date:** 2026-05-29
-**Status:** reviewed draft, blockers patched after xhigh subagent review
+**Status:** restructured after second xhigh re-review, then closed the third
+re-review's blocking token-domain gaps (`max_overfit_risk` value space,
+`oracle_row_id` construction, sentinel-row machine-column enums) and swept the
+nice-to-have orphans (`reviewed_family_all_cells`, `slice` enum, source-axis
+crosswalk, `secondary_gap_tags` closure). V1 is split into Slice 0 (vocabulary
+validation) + Slice 1 (blast-radius); the readiness gating verdict was removed
+in favor of raw readiness facts in `shared_peak_identity_run_facts.tsv`;
+`stale_hash_mismatch` downgraded to warn (oracle SHA retained). Ready to enter
+Slice 0 implementation planning.
 **Readiness label:** `diagnostic_only`
-**Target outcome:** `explanation_ready`
+**Target outcome:** `vocabulary_validated` — V1 emits raw readiness facts; the V2
+spec owns any entry gate. V1 does not compute a gating verdict.
+**Structure:** Slice 0 (hand-validate the seven-family vocabulary) -> Slice 1
+(blast-radius / overfit), gated by Slice 0 holding.
 **Branch:** `codex/shared-peak-identity-evidence`
 
 ## Verdict
@@ -31,10 +42,63 @@ Manual review decides what "looks like the same peak identity" means. 8RAW and
 85RAW outputs check whether that vocabulary overfits the reviewed rows or would
 create broad contradictory explanations.
 
-`explanation_ready` is not allowed when only the manual seed rows are explained.
-If the blast-radius manifest is missing, stale, or too sparse to assess
-non-seed behavior, V1 may emit `partially_explained` or `inconclusive`, but it
-must not unlock V2 label-convergence planning.
+Explaining only the manual seed rows is not sufficient on its own. V1 does not
+emit a single gating verdict; it emits raw readiness facts (how many seed rows
+were explained, whether the vocabulary needed a family-specific exception,
+whether the blast-radius surface was assessed or stale). The V2 spec owns the
+entry gate that reads those facts. V1 must never silently unlock V2
+label-convergence planning (see "Slice Structure and Readiness Facts").
+
+## Slice Structure and Readiness Facts
+
+### Two slices
+
+V1 runs in two slices so the evidence vocabulary is validated before the full
+blast-radius apparatus is built:
+
+- **Slice 0 — vocabulary validation.** Hand-encode the durable oracle for the
+  seven seed families, assemble evidence vectors for the seed rows from existing
+  artifacts, classify each row, and read the explanations. Slice 0 outputs are
+  the oracle, the evidence vectors, the explanations, the run-facts file, and
+  the report only. The decision Slice 0 closes: can the nine explanation classes
+  cover the seed rows without a family-specific exception? If the vocabulary
+  cannot, stop and revise it before building anything else.
+- **Slice 1 — blast-radius / overfit.** Only if Slice 0's vocabulary holds. Add
+  the blast-radius manifest and summary over seed vs non-seed and available
+  8RAW / 85RAW rows. The decision Slice 1 closes: does the vocabulary
+  generalize, or does it overfit the seven seed families?
+
+### Row status vs run-level facts
+
+These are two distinct scopes; do not mix the vocabularies:
+
+- **Per-row `explanation_status`** describes one reviewed cell:
+  `explained`, `partially_explained`, `unexplained`, `inconclusive`.
+- **Run-level readiness facts** describe the whole run and are raw inputs to the
+  V2 gate, not a verdict. V1 does not compute `explanation_ready` /
+  `partial_readiness` / `inconclusive_readiness`; the V2 spec defines its own
+  gate from these facts. The facts live in `shared_peak_identity_run_facts.tsv`
+  (machine-readable) and are echoed in the report.
+
+Required run-level readiness facts:
+
+```text
+seed_rows_total
+seed_rows_explained
+seed_rows_unexplained
+seed_rows_inconclusive
+vocabulary_special_casing_detected
+blast_radius_assessed
+blast_radius_stale_artifact_count
+max_overfit_risk
+```
+
+`vocabulary_special_casing_detected=TRUE` is a Slice 0 stop condition.
+`blast_radius_assessed` uses the `blast_radius_assessment_status` vocabulary
+defined in the enum table; in Slice 0 it is `not_run_slice0`. Stale or
+hash-mismatched
+machine artifacts are counted in `blast_radius_stale_artifact_count` and
+annotated, but they do not force a verdict — V1 has no verdict to force.
 
 ## Roadmap Placement
 
@@ -120,7 +184,7 @@ Required manual label vocabulary:
 | `manual_label` | `pass`, `suspect`, `fail`, `human_unjudgeable` |
 | `manual_label_source` | `direct_eic_ms2_review`, `direct_eic_only_review`, `scope_rule_unmentioned_fail`, `family_all_reviewed_rule`, `derived_from_related_family_context` |
 | `manual_confidence` | `high`, `medium`, `low`, `unjudgeable` |
-| `manual_scope` | `reviewed_cell`, `reviewed_family_all_cells`, `reviewed_family_named_cells_only`, `scope_derived_unmentioned_fail` |
+| `manual_scope` | `reviewed_cell`, `reviewed_family_all_cells`, `reviewed_family_named_cells_only`, `scope_derived_unmentioned_fail`, `family_level_context` |
 
 Required evidence-surface flags:
 
@@ -165,7 +229,7 @@ Required evidence groups:
 | --- | --- | --- |
 | Identity / provenance | `feature_family_id`, `sample_id`, `source_role`, `evidence_source`, `source_artifact`, `source_row_id` | Required. Every fact must have origin. |
 | Manual oracle | `manual_label`, `manual_reason_tags`, `manual_scope`, `manual_review_note` | Required for reviewed rows. |
-| Current machine decision | `machine_current_label`, `machine_source_role`, `machine_blockers`, `machine_reason` | Required when available. |
+| Current machine decision | `machine_current_label`, `source_role` (machine origin), `machine_blockers`, `machine_reason` | Required when available. The evidence vector stores the machine origin as `source_role`; the explanations file projects it as `machine_source_role`. |
 | RT context | `candidate_apex_rt`, `family_reference_rt`, `seed_delta_sec`, `family_consensus_delta_sec`, `matrix_local_delta_sec`, `rt_context_status` | Context, not single hard veto. |
 | Shape context | `shape_status`, `apex_clarity_status`, `single_peak_region_status`, `peak_completeness_status`, `shape_blocker` | Descriptive; thresholds are not product gates in V1. |
 | Boundary context | `seed_rescued_boundary_overlap`, `rescued_pairwise_boundary_overlap_min`, `family_consensus_boundary_overlap`, `boundary_reference_status` | Multiple references retained. |
@@ -183,6 +247,21 @@ All fields that can be unavailable must distinguish:
 - `present`.
 
 Blank numeric fields must not be interpreted as zero support.
+
+The spec carries four availability vocabularies on purpose; they operate at
+different scopes and are not duplicates:
+
+- the six field-level statuses above describe one field in one row;
+- `metric_availability_status` summarizes per evidence-vector row whether the
+  metric fields are complete (it has its own vocabulary, not the six field
+  statuses), and the blast-radius summary's `unavailable_field_count` aggregates
+  rows whose `metric_availability_status` is not `complete`;
+- `artifact_status` describes one source artifact in the manifest;
+- `blast_radius_assessed` (run-level) describes whether the blast-radius surface
+  was assessed for the whole run.
+
+`stale_hash_mismatch` appears in more than one because staleness can be detected
+at row, artifact, and run scope; the carrying column names the scope.
 
 The V1 model name should be distinct from the existing
 `xic_extractor.peak_detection.hypotheses.EvidenceVector`. Use a new V1 contract
@@ -213,7 +292,7 @@ Required classes:
 | `machine_too_permissive_rt_pattern_conflict` | Machine accepts or rescues a cell that manual rejects because RT and pattern conflict, even if shape is normal. |
 | `boundary_reference_ambiguous` | Existing blocker depends on which boundary reference is treated as authority. |
 | `rt_drift_policy_gap` | RT difference exists, but V1 cannot decide whether it is drift, matrix behavior, or true mismatch. |
-| `human_unjudgeable_shape_bad` | Manual review cannot decide because the trace itself is poor. |
+| `human_unjudgeable_shape_bad` | Manual review cannot decide because the trace itself is poor. Applies only to reviewed-cell rows; a `family_level_context` row with `manual_label=human_unjudgeable` is classified as `delta_mass_related_context_only`, not here. |
 | `delta_mass_related_context_only` | A related family / delta-mass pattern may help later, but V1 must not use it as a direct pass/fail rule. |
 | `unexplained_machine_manual_gap` | Available facts cannot explain the disagreement. This is a V1 failure mode that must be counted. |
 
@@ -235,7 +314,10 @@ shared evidence-vector assembler
 manual-vs-machine explanation classifier
         |
         v
-calibration TSV + compact Markdown report + blast-radius summary
+Slice 0: evidence-vector TSV + explanations TSV + run-facts TSV + report
+        |
+        v
+Slice 1 (only if Slice 0 vocabulary holds): blast-radius manifest + summary
 ```
 
 The assembler owns normalization and provenance. The classifier owns
@@ -278,6 +360,49 @@ If more than one machine row matches an oracle row, the explanation row must set
 `machine_match_status=ambiguous_multiple_matches` and list the matched
 `source_row_id` values rather than silently choosing one.
 
+The oracle uses `sample_id`, but most existing machine artifacts (selected,
+rescued, backfill, and cell artifacts) key samples as `sample_stem`; only the
+newer `identity_coherence` module already uses `sample_id`. The assembler owns
+the `sample_stem` <-> `sample_id` normalization and must record the mapping
+basis in provenance. If a sample cannot be reconciled across the two naming
+schemes, the explanation row sets `machine_match_status=missing_required_key`
+rather than guessing.
+
+### Oracle Row Grain
+
+`oracle_row_id` is the primary join key, so its granularity is fixed:
+
+- **Directly reviewed cell:** one row per (`feature_family_id`, `sample_id`).
+  `manual_scope` is `reviewed_cell`, `reviewed_family_named_cells_only`, or
+  `reviewed_family_all_cells` when the review covered every cell of the family
+  (for example `FAM000610` and `FAM002175`, "all reviewed cells"). A family
+  whose cells carry different labels (for example `FAM001227`, where some cells
+  are `pass`, some `suspect`) produces one row per named cell, each with its own
+  `manual_label`.
+- **Scope-rule rows:** "unmentioned cells are fail" is encoded as one row per
+  named unmentioned sample when the sample set is known, or as a single
+  family-scope rule row with `sample_id=__scope_rule__` when the unmentioned set
+  is open-ended. `manual_scope=scope_derived_unmentioned_fail`,
+  `manual_label_source=scope_rule_unmentioned_fail`.
+- **Cross-family context rows:** the `FAM001227` / `FAM001239` delta-mass
+  relationship is recorded once, keyed to the lower-id family
+  (`feature_family_id=FAM001227`), with `related_family_id=FAM001239`,
+  `sample_id=__family_context__`, `manual_scope=family_level_context`,
+  `manual_label_source=derived_from_related_family_context`, and
+  `delta_mass_context=related_family_context_only`. It carries no decision
+  label; `manual_label=human_unjudgeable` signals "context only, not a pass/fail
+  rule".
+
+Reserved `sample_id` sentinels (`__scope_rule__`, `__family_context__`) never
+join to a machine `sample_stem`; the assembler leaves their machine columns
+`not_applicable` (`machine_match_status=not_applicable`,
+`machine_source_role=not_applicable`).
+
+The `oracle_row_id` value is constructed as `<feature_family_id>|<sample_id>`
+(so `FAM001227|QC5`, `FAM001227|__scope_rule__`, `FAM001227|__family_context__`);
+it is stable and unique within a durable oracle version because the grain rules
+above guarantee one row per (`feature_family_id`, `sample_id`).
+
 Sorting is deterministic:
 
 ```text
@@ -290,6 +415,8 @@ Null policy:
 - empty enum field is invalid unless the column is explicitly optional;
 - `not_observed`, `not_assessed`, `not_applicable`, and `unavailable` are
   distinct statuses;
+- non-cell oracle rows use the reserved `sample_id` sentinels `__scope_rule__`
+  and `__family_context__`, which never join to a machine `sample_stem`;
 - boolean fields are serialized as `TRUE` / `FALSE`.
 
 ### Allowed Status / Enum Values
@@ -303,7 +430,8 @@ lists use `;` with no embedded whitespace. Free-text is allowed only in
 | `evidence_source` | `manual_oracle`, `alignment_review`, `alignment_cells`, `tier2_trace_sidecar`, `identity_coherence_sidecar`, `targeted_benchmark_context`, `blast_radius_manifest` |
 | `source_role` | `manual_oracle`, `selected_peak`, `rescued_cell`, `tier2_raw_reread`, `identity_coherence_diagnostic`, `targeted_context`, `blast_radius_context` |
 | `machine_current_label` | `source_passthrough_token`, or `not_available` when no machine source exists |
-| `machine_match_status` | `no_match`, `single_match`, `ambiguous_multiple_matches`, `stale_source`, `missing_required_key` |
+| `machine_source_role` | same tokens as `source_role` excluding `manual_oracle`; `not_available` when no machine source matched; `not_applicable` on sentinel oracle rows |
+| `machine_match_status` | `no_match`, `single_match`, `ambiguous_multiple_matches`, `missing_required_key`, `not_applicable` |
 | `rt_context_status` | `supportive`, `conflicting`, `drift_possible`, `ambiguous`, `not_assessed`, `unavailable` |
 | `shape_status` | `complete`, `acceptable`, `distorted`, `low_intensity_but_coherent`, `noisy_unjudgeable`, `not_assessed`, `unavailable`, `ambiguous` |
 | `apex_clarity_status` | `clear`, `weak`, `ambiguous`, `not_assessed`, `unavailable` |
@@ -318,13 +446,35 @@ lists use `;` with no embedded whitespace. Free-text is allowed only in
 | `fragmentation_observation_status` | `observed`, `not_observed`, `conflicting`, `not_assessed`, `unavailable` |
 | `scan_availability_status` | `sufficient`, `low`, `not_assessed`, `unavailable` |
 | `metric_availability_status` | `complete`, `partial`, `schema_missing`, `artifact_missing`, `stale_hash_mismatch`, `not_assessed` |
+| `blast_radius_assessment_status` (values for the `blast_radius_assessed` run-fact column) | `present_current`, `8raw_not_assessed`, `85raw_not_assessed`, `stale_hash_mismatch`, `manifest_missing`, `not_run_slice0`, `not_assessed` |
+| `scope` (blast-radius summary) | `seed`, `non_seed_same_family`, `all_available_8raw`, `all_available_85raw`, `overall` |
+| `slice` | `slice0`, `slice1` |
+| `max_overfit_risk` (run fact) | same value set as `overfit_risk` (`none`, `low`, `medium`, `high`, `unassessed`); the maximum severity over the Slice 1 summary rows, `unassessed` in Slice 0 |
+| `vocabulary_special_casing_detected`, `generated_from_existing_artifact` | boolean `TRUE` / `FALSE` |
 | `evidence_gap_class` | values from the Required classes table |
-| `secondary_gap_tags` | `semicolon_token_list`; tokens must come from evidence gap classes or manual reason tags |
+| `secondary_gap_tags` | `semicolon_token_list`; tokens must come from the `manual_reason_tags` list below (the primary class is already in `evidence_gap_class`) |
 | `explanation_status` | `explained`, `partially_explained`, `unexplained`, `inconclusive` |
-| `recommended_next_action` | `no_action`, `inspect_manual_eic`, `inspect_ms2_pattern`, `add_shape_metric`, `add_pattern_metric`, `add_opportunity_metric`, `check_boundary_reference`, `check_blast_radius`, `block_v2_until_more_evidence` |
+| `recommended_next_action` | `no_action`, `inspect_manual_eic`, `inspect_ms2_pattern`, `add_shape_metric`, `add_pattern_metric`, `add_opportunity_metric`, `check_boundary_reference`, `check_blast_radius`, `flag_for_v2_gate_review` |
 | `artifact_role` | `manual_oracle_fixture`, `alignment_review`, `alignment_cells`, `tier2_trace_sidecar`, `identity_diagnostic`, `targeted_context`, `blast_radius_context` |
 | `artifact_status` | `present_current`, `present_stale_hash_mismatch`, `missing`, `schema_unsupported`, `not_assessed`, `unavailable` |
 | `manual_reason_tags`, `machine_blockers`, `source_roles_seen`, `source_artifacts`, `available_required_fields`, `missing_required_fields` | `semicolon_token_list` |
+
+### Source / Artifact Vocabulary Crosswalk
+
+`evidence_source`, `source_role`, and `artifact_role` are three axes, not
+duplicates: `artifact_role` is the file class in the manifest, `evidence_source`
+is which artifact a row came from, and `source_role` is the row's semantic
+origin. The intentional spelling differences align as:
+
+| Artifact | `artifact_role` | `evidence_source` | `source_role` |
+| --- | --- | --- | --- |
+| manual oracle fixture | `manual_oracle_fixture` | `manual_oracle` | `manual_oracle` |
+| alignment review | `alignment_review` | `alignment_review` | `selected_peak` |
+| alignment cells | `alignment_cells` | `alignment_cells` | `rescued_cell` |
+| Tier 2 RAW re-read sidecar | `tier2_trace_sidecar` | `tier2_trace_sidecar` | `tier2_raw_reread` |
+| identity coherence sidecar | `identity_diagnostic` | `identity_coherence_sidecar` | `identity_coherence_diagnostic` |
+| targeted benchmark | `targeted_context` | `targeted_benchmark_context` | `targeted_context` |
+| blast-radius manifest | `blast_radius_context` | `blast_radius_manifest` | `blast_radius_context` |
 
 Initial `manual_reason_tags` tokens:
 
@@ -350,7 +500,7 @@ human_unjudgeable
 
 ### Output Schemas
 
-Canonical manual oracle:
+Canonical manual oracle (Slice 0 durable fixture):
 
 ```text
 docs/superpowers/fixtures/shared_peak_identity_manual_oracle_v1.tsv
@@ -380,7 +530,7 @@ manual_review_source
 manual_reviewed_at
 ```
 
-Evidence vectors:
+Evidence vectors (Slice 0):
 
 ```text
 shared_peak_identity_evidence_vectors.tsv
@@ -428,7 +578,7 @@ scan_availability_status
 metric_availability_status
 ```
 
-Explanations:
+Explanations (Slice 0):
 
 ```text
 shared_peak_identity_explanations.tsv
@@ -447,6 +597,7 @@ manual_confidence
 manual_scope
 manual_reason_tags
 machine_current_label
+machine_reason
 machine_match_status
 machine_source_role
 machine_blockers
@@ -459,7 +610,34 @@ source_roles_seen
 source_artifacts
 ```
 
-Blast-radius manifest:
+Run facts (single row, Slice 0 and Slice 1):
+
+```text
+shared_peak_identity_run_facts.tsv
+```
+
+Required columns:
+
+```text
+run_facts_schema_version
+slice
+seed_rows_total
+seed_rows_explained
+seed_rows_unexplained
+seed_rows_inconclusive
+vocabulary_special_casing_detected
+blast_radius_assessed
+blast_radius_stale_artifact_count
+max_overfit_risk
+durable_oracle_path
+durable_oracle_sha256
+```
+
+This file is the durable, machine-readable home for the run-level readiness
+facts and the durable oracle hash. In Slice 0, `slice=slice0`,
+`blast_radius_assessed=not_run_slice0`, and `max_overfit_risk=unassessed`.
+
+Blast-radius manifest (Slice 1):
 
 ```text
 shared_peak_identity_blast_radius_manifest.tsv
@@ -484,7 +662,7 @@ generated_from_existing_artifact
 notes
 ```
 
-Blast-radius summary:
+Blast-radius summary (Slice 1):
 
 ```text
 shared_peak_identity_blast_radius_summary.tsv
@@ -530,23 +708,32 @@ output/shared_peak_identity_evidence_explanation/
   shared_peak_identity_manual_oracle.tsv
   shared_peak_identity_evidence_vectors.tsv
   shared_peak_identity_explanations.tsv
-  shared_peak_identity_blast_radius_manifest.tsv
-  shared_peak_identity_blast_radius_summary.tsv
+  shared_peak_identity_run_facts.tsv
+  shared_peak_identity_blast_radius_manifest.tsv      # Slice 1 only
+  shared_peak_identity_blast_radius_summary.tsv       # Slice 1 only
   shared_peak_identity_explanation_report.md
 ```
 
 The output manual oracle is a generated copy of the durable fixture. It must
-record the durable fixture path and SHA256 in the report or manifest.
+record the durable fixture path and SHA256 in the report or manifest. The
+generated copy is intentionally named without the `_v1` suffix
+(`shared_peak_identity_manual_oracle.tsv`); the durable fixture keeps it
+(`docs/superpowers/fixtures/shared_peak_identity_manual_oracle_v1.tsv`). Do not
+rename the generated copy to match the fixture.
 
-Minimum `shared_peak_identity_explanations.tsv` columns:
+Minimum `shared_peak_identity_explanations.tsv` columns. This is a strict subset
+of the Output Schemas "Required columns" for this file; that block is the source
+of truth and this list only names fields that must never be dropped:
 
 ```text
+oracle_row_id
 feature_family_id
 sample_id
 manual_label
 manual_reason_tags
 manual_scope
 machine_current_label
+machine_match_status
 machine_source_role
 machine_blockers
 evidence_gap_class
@@ -557,9 +744,16 @@ source_roles_seen
 source_artifacts
 ```
 
+`oracle_row_id` is the primary join key and `machine_match_status` carries the
+`ambiguous_multiple_matches` warning, so neither may be omitted even from the
+minimum output.
+
 Minimum report sections:
 
-- verdict: `diagnostic_only / explanation_ready` or why not;
+- run-level readiness facts echoed from `shared_peak_identity_run_facts.tsv`
+  (`seed_rows_explained` vs `seed_rows_total`,
+  `vocabulary_special_casing_detected`, `blast_radius_assessed`,
+  `max_overfit_risk`); V1 states facts, not a gating verdict;
 - manual rows covered and uncovered;
 - disagreements by explanation class;
 - examples where machine is too conservative;
@@ -582,6 +776,15 @@ Minimum report sections:
 - does the explanation vocabulary collapse too many unrelated cases into one
   bucket.
 
+An existing read-only tool,
+`tools/diagnostics/analyze_matrix_identity_blast_radius.py`, already reports
+blast radius for proposed matrix-identity decisions. It answers a different
+question (impact of identity decisions on the primary matrix), so V1 neither
+replaces it nor reuses its output schema. V1 may, however, reuse its
+review/cell parsing helpers instead of re-implementing artifact loading. The
+new `shared_peak_identity_blast_radius_*` outputs measure evidence-class overfit
+across seed vs non-seed rows, not matrix promotion impact.
+
 V1 acceptance must use a pinned blast-radius manifest. The manifest must cover:
 
 - manual seed oracle rows;
@@ -591,10 +794,17 @@ V1 acceptance must use a pinned blast-radius manifest. The manifest must cover:
 - all available 85RAW review/cell rows relevant to the current diagnostic
   surface.
 
-If 85RAW artifacts are unavailable or do not contain the fields required for the
-blast-radius summary, V1 must emit `blast_radius_status=85raw_not_assessed` and
-the maximum readiness is `partially_explained`, not `explanation_ready`. If a
-manifested artifact is stale or hash-mismatched, the result is `inconclusive`.
+If 85RAW artifacts are unavailable or lack the fields required for the
+blast-radius summary, V1 sets `blast_radius_assessed=85raw_not_assessed` in
+`shared_peak_identity_run_facts.tsv` and records it in the report; this is a raw
+fact for the V2 gate, not a verdict V1 computes. `blast_radius_assessed` is
+`present_current` only when both the 8RAW and 85RAW surfaces were assessed and
+no manifested artifact is stale. If a manifested machine artifact is stale or
+hash-mismatched, V1 increments `blast_radius_stale_artifact_count`, annotates the
+artifact in the manifest (`artifact_status=present_stale_hash_mismatch`), and
+warns; it does not stop or emit a verdict. The durable oracle's
+`durable_oracle_sha256` is still recorded so the V2 gate can verify the oracle
+the run was computed against.
 
 New expensive validation is out of scope unless a follow-up plan passes the
 repo RAW preflight rules.
@@ -625,44 +835,59 @@ V1 consequences:
 
 ## V1 Acceptance Criteria
 
-V1 is complete when:
+### Slice 0 (vocabulary validation) is complete when
 
-- the manual oracle records the user-reviewed families above, including
-  `pass`, `suspect`, `fail`, and `human_unjudgeable` where applicable;
-- the durable oracle exists under `docs/superpowers/fixtures/` with schema
-  version, scope, label source, confidence, and reviewed-evidence fields;
-- every reviewed cell receives an `explanation_status` of `explained`,
-  `partially_explained`, or `unexplained`;
+- the durable oracle exists under `docs/superpowers/fixtures/` and records the
+  user-reviewed families above (including `pass`, `suspect`, `fail`, and
+  `human_unjudgeable` where applicable) with schema version, scope, label
+  source, confidence, and reviewed-evidence fields, at the row grain defined in
+  "Oracle Row Grain";
+- every reviewed seed cell receives an `explanation_status` of `explained`,
+  `partially_explained`, `unexplained`, or `inconclusive`;
 - every `unexplained` row names the missing fact that would be needed next;
-- the blast-radius manifest records artifact paths, SHA256 values, row/sample/
-  family counts, schema/version fields, and missing-field counts;
-- the blast-radius summary reports `seed_count`, `non_seed_same_family_count`,
-  `all_available_row_count`, `unavailable_field_count`, `contradictory_count`,
-  `ambiguous_machine_match_count`, and `overfit_risk` by
-  `evidence_gap_class`;
-- missing, stale, or insufficient blast-radius evidence blocks
-  `explanation_ready` and returns `partially_explained` or `inconclusive`;
-- the report separates machine-too-conservative cases from machine-too-
-  permissive cases;
 - the FAM000144 extra rescued-style candidate is explainable as a permissive
   machine failure caused by RT and pattern conflict despite normal shape;
 - FAM001589 is preserved as human-unjudgeable rather than forced into binary
   training data;
 - FAM001227 / FAM001239 delta-mass context is recorded as future context only;
-- no output claims `production_ready`;
-- no primary matrix, workbook schema, or production candidate gate behavior
-  changes;
+- the nine explanation classes cover the seed rows without a family-specific
+  exception, so `vocabulary_special_casing_detected` is `FALSE`.
+
+If `vocabulary_special_casing_detected` is `TRUE`, stop and revise the
+vocabulary before starting Slice 1.
+
+### Slice 1 (blast-radius / overfit) is complete when
+
+- the blast-radius manifest records artifact paths, SHA256 values, row/sample/
+  family counts, schema/version fields, and missing-field counts;
+- the blast-radius summary reports `seed_count`, `non_seed_same_family_count`,
+  `all_available_row_count`, `unavailable_field_count`, `contradictory_count`,
+  `ambiguous_machine_match_count`, and `overfit_risk` by `evidence_gap_class`
+  and `scope`;
+- `shared_peak_identity_run_facts.tsv` records `blast_radius_assessed`,
+  `blast_radius_stale_artifact_count`, and `max_overfit_risk` as raw facts for
+  the V2 gate; V1 emits no gating verdict;
+- the report separates machine-too-conservative cases from machine-too-
+  permissive cases;
 - existing 8RAW / 85RAW artifacts are used only for blast-radius context unless
   a reviewed validation plan explicitly authorizes a rerun.
 
+### Both slices
+
+- no output claims `production_ready`;
+- no primary matrix, workbook schema, or production candidate gate behavior
+  changes.
+
 ## V2 Direction
 
-V2 may begin only after V1 reaches `explanation_ready`.
-
-`partially_explained` is useful but cannot unlock V2. V2 is blocked until the
-seed-row explanations survive pinned non-seed and 8RAW/85RAW blast-radius
-checks, or until a reviewed follow-up explicitly changes the blast-radius
-requirement.
+V2 owns its own entry gate; V1 does not gate V2. The V2 spec reads the V1
+run-level readiness facts (`seed_rows_explained` vs `seed_rows_total`,
+`vocabulary_special_casing_detected`, `blast_radius_assessed`,
+`max_overfit_risk`) and decides whether to begin. As a default, V2 should not
+begin while `vocabulary_special_casing_detected` is `TRUE`, while seed rows
+remain unexplained, or while `blast_radius_assessed` shows the non-seed / 85RAW
+surface was never assessed — but that gate is defined and owned by the V2 spec,
+not asserted here.
 
 V2 target:
 
@@ -694,14 +919,17 @@ Stop before implementation if:
   non-seed behavior;
 - multiple machine rows match an oracle row and cannot be represented without
   silently choosing a candidate;
+- the assembler cannot reconcile oracle `sample_id` with machine-artifact
+  `sample_stem` for a reviewed cell;
 - V1 would require new RAW re-read work before it can explain any manual case;
 - package documentation contradicts a proposed metric's assumed behavior;
 - a proposed explanation class directly implies production promotion;
 - the design starts encoding family-specific exceptions instead of reusable
   evidence facts.
 
-Return `inconclusive` if the artifacts cannot distinguish between missing
-evidence and contradictory evidence.
+If the artifacts cannot distinguish between missing evidence and contradictory
+evidence for a row, set that row's `explanation_status=inconclusive` and record
+it; V1 does not roll this up into a gating verdict.
 
 ## Review Focus
 
