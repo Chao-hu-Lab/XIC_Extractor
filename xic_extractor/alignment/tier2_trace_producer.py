@@ -5,7 +5,6 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from xic_extractor.alignment.production_candidate_gate import (
-    TIER2_SUPPORT_COMPONENT,
     TIER2_TRACE_EVIDENCE_REQUIRED_COLUMNS,
     GateSourceContext,
     tier2_candidate_subset_signature,
@@ -13,8 +12,8 @@ from xic_extractor.alignment.production_candidate_gate import (
 
 TraceLoader = Callable[[str, float, float, float, float], tuple[object, object]]
 
-CRITERIA_VERSION = "tier2_trace_identity_rescued_coherence_v0"
-PRODUCER_VERSION = "raw_trace_reread_tier2_v0"
+CRITERIA_VERSION = "tier2_trace_identity_rescued_coherence_v0_1_diagnostic"
+PRODUCER_VERSION = "raw_trace_reread_tier2_v0_1"
 
 
 @dataclass(frozen=True)
@@ -36,10 +35,15 @@ class _TraceMetrics:
     tier2_apex_rt: float
     apex_delta_sec: float
     scan_support_score: float
+    scan_availability_score: float
     trace_scan_count: int
     boundary_start_rt: float
     boundary_end_rt: float
     boundary_width_sec: float
+    trace_apex_intensity: float
+    trace_baseline_noise: float
+    trace_signal_to_noise_proxy: float
+    trace_apex_prominence_score: float
 
 
 def build_tier2_trace_evidence_rows(
@@ -190,6 +194,18 @@ def _family_evidence_row(
     rescued_supported = len(rescue_metrics)
     apex_span_sec = _rescued_apex_span_sec(seed_metrics, rescue_metrics)
     boundary_overlap_min = _rescued_boundary_overlap_min(seed_metrics, rescue_metrics)
+    seed_rescued_apex_span_sec = _seed_rescued_apex_span_sec(
+        seed_metrics,
+        rescue_metrics,
+    )
+    rescued_only_apex_span_sec = _rescued_only_apex_span_sec(rescue_metrics)
+    rescued_pairwise_boundary_overlap_min = _rescued_pairwise_boundary_overlap_min(
+        rescue_metrics
+    )
+    family_consensus_boundary_overlap_min = _family_consensus_boundary_overlap_min(
+        seed_metrics,
+        rescue_metrics,
+    )
     coherence_blockers = _coherence_blockers(
         rescued_checked=rescued_checked,
         rescued_supported=rescued_supported,
@@ -208,6 +224,21 @@ def _family_evidence_row(
             "rescued_cell_count_supported": str(rescued_supported),
             "rescued_apex_rt_span_sec": _format_float(apex_span_sec),
             "rescued_boundary_overlap_min": _format_float(boundary_overlap_min),
+            "seed_rescued_boundary_overlap_min": _format_float(
+                boundary_overlap_min
+            ),
+            "rescued_pairwise_boundary_overlap_min": _format_float(
+                rescued_pairwise_boundary_overlap_min
+            ),
+            "family_consensus_boundary_overlap_min": _format_float(
+                family_consensus_boundary_overlap_min
+            ),
+            "seed_rescued_apex_span_sec": _format_float(
+                seed_rescued_apex_span_sec
+            ),
+            "rescued_only_apex_span_sec": _format_float(
+                rescued_only_apex_span_sec
+            ),
         }
     )
     if rescue_unavailable_blockers:
@@ -218,26 +249,26 @@ def _family_evidence_row(
             *rescue_unavailable_blockers,
             coherence_status="inconclusive",
         )
-    if coherence_blockers:
-        return _blocked_row(
-            base,
-            "blocked",
-            "pass",
-            *coherence_blockers,
-            *tuple(sorted(set(rescue_blockers))),
-            coherence_status="fail",
-        )
 
     base.update(
         {
-            "evidence_status": "validated",
-            "support_component": TIER2_SUPPORT_COMPONENT,
+            "evidence_status": "inconclusive",
+            "support_component": "",
             "raw_trace_reread_status": "pass",
-            "coherence_status": "pass",
+            "coherence_status": "inconclusive",
+            "challenge_blockers": ";".join(
+                _ordered_tokens(
+                    (
+                        "tier2_v0_1_diagnostic_only",
+                        *coherence_blockers,
+                        *tuple(sorted(set(rescue_blockers))),
+                    )
+                )
+            ),
             "dependent_context": (
                 "neighbor_interference_not_assessed;"
-                "raw_trace_reread_v0;"
-                "rescued_coherence_v0"
+                "raw_trace_reread_v0_1;"
+                "rescued_coherence_v0_1"
             ),
         }
     )
@@ -292,7 +323,13 @@ def _blocked_row(
             "support_component": "",
             "raw_trace_reread_status": raw_trace_reread_status,
             "coherence_status": coherence_status,
-            "challenge_blockers": ";".join(_ordered_tokens(blockers)),
+            "challenge_blockers": ";".join(
+                _ordered_tokens(("tier2_v0_1_diagnostic_only", *blockers))
+            ),
+            "dependent_context": (
+                "neighbor_interference_not_assessed;raw_trace_reread_v0_1"
+            ),
+            "neighbor_interference_status": "not_assessed",
         }
     )
     return _ordered_row(row)
@@ -305,11 +342,24 @@ def _apply_seed_metrics(row: dict[str, str], metrics: _TraceMetrics) -> None:
             "tier2_apex_rt": _format_float(metrics.tier2_apex_rt),
             "apex_delta_sec": _format_float(metrics.apex_delta_sec),
             "scan_support_score": _format_float(metrics.scan_support_score),
+            "scan_availability_score": _format_float(
+                metrics.scan_availability_score
+            ),
             "trace_scan_count": str(metrics.trace_scan_count),
             "boundary_start_rt": _format_float(metrics.boundary_start_rt),
             "boundary_end_rt": _format_float(metrics.boundary_end_rt),
             "boundary_width_sec": _format_float(metrics.boundary_width_sec),
+            "trace_apex_intensity": _format_float(metrics.trace_apex_intensity),
+            "trace_baseline_noise": _format_float(metrics.trace_baseline_noise),
+            "trace_signal_to_noise_proxy": _format_float(
+                metrics.trace_signal_to_noise_proxy
+            ),
+            "trace_apex_prominence_score": _format_float(
+                metrics.trace_apex_prominence_score
+            ),
+            "scan_support_basis": "scan_count_only",
             "neighbor_interference_ratio": "",
+            "neighbor_interference_status": "not_assessed",
         }
     )
 
@@ -364,20 +414,29 @@ def _trace_metrics_for_cell(
     if not region:
         return None, "metric_unavailable"
     apex_rt, apex_intensity = max(region, key=lambda item: item[1])
-    scan_support_score = _scan_support_score(
-        tuple(value for _rt, value in region),
+    region_intensities = tuple(value for _rt, value in region)
+    scan_availability_score = _scan_support_score(
+        region_intensities,
         scans_target=config.scans_target,
+    )
+    context_apex, noise, signal_to_noise, prominence = _trace_context_scores(
+        region_intensities
     )
     return (
         _TraceMetrics(
             cell_apex_rt=cell_apex_rt,
             tier2_apex_rt=apex_rt,
             apex_delta_sec=abs(apex_rt - cell_apex_rt) * 60.0,
-            scan_support_score=scan_support_score,
+            scan_support_score=scan_availability_score,
+            scan_availability_score=scan_availability_score,
             trace_scan_count=len(region),
             boundary_start_rt=boundary_start,
             boundary_end_rt=boundary_end,
             boundary_width_sec=(boundary_end - boundary_start) * 60.0,
+            trace_apex_intensity=max(apex_intensity, context_apex),
+            trace_baseline_noise=noise,
+            trace_signal_to_noise_proxy=signal_to_noise,
+            trace_apex_prominence_score=prominence,
         ),
         "",
     )
@@ -394,6 +453,31 @@ def _scan_support_score(
     if apex <= 0:
         return 0.0
     return min(1.0, len(intensities) / scans_target)
+
+
+def _median(values: Sequence[float]) -> float:
+    ordered = sorted(values)
+    if not ordered:
+        return 0.0
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2.0
+
+
+def _trace_context_scores(
+    intensities: tuple[float, ...],
+) -> tuple[float, float, float, float]:
+    if not intensities:
+        return 0.0, 0.0, 0.0, 0.0
+    apex = max(intensities)
+    baseline = _median(intensities)
+    noise = _median(tuple(abs(value - baseline) for value in intensities))
+    denominator = max(noise, 1.0)
+    signal_to_noise = max(0.0, apex - baseline) / denominator
+    edge_max = max(intensities[0], intensities[-1])
+    prominence = max(0.0, apex - edge_max) / max(abs(apex), 1.0)
+    return apex, noise, signal_to_noise, prominence
 
 
 def _trace_metric_blockers(
@@ -476,6 +560,27 @@ def _rescued_apex_span_sec(
     return (max(apex_values) - min(apex_values)) * 60.0
 
 
+def _seed_rescued_apex_span_sec(
+    seed_metrics: _TraceMetrics,
+    rescue_metrics: Sequence[_TraceMetrics],
+) -> float | None:
+    if not rescue_metrics:
+        return None
+    return max(
+        abs(seed_metrics.tier2_apex_rt - item.tier2_apex_rt) * 60.0
+        for item in rescue_metrics
+    )
+
+
+def _rescued_only_apex_span_sec(
+    rescue_metrics: Sequence[_TraceMetrics],
+) -> float | None:
+    if len(rescue_metrics) < 2:
+        return None
+    apex_values = [item.tier2_apex_rt for item in rescue_metrics]
+    return (max(apex_values) - min(apex_values)) * 60.0
+
+
 def _rescued_boundary_overlap_min(
     seed_metrics: _TraceMetrics,
     rescue_metrics: Sequence[_TraceMetrics],
@@ -485,6 +590,48 @@ def _rescued_boundary_overlap_min(
     return min(
         _boundary_overlap_fraction(seed_metrics, item) for item in rescue_metrics
     )
+
+
+def _rescued_pairwise_boundary_overlap_min(
+    rescue_metrics: Sequence[_TraceMetrics],
+) -> float | None:
+    if len(rescue_metrics) < 2:
+        return None
+    values = [
+        _boundary_overlap_fraction(first, second)
+        for index, first in enumerate(rescue_metrics)
+        for second in rescue_metrics[index + 1 :]
+    ]
+    return min(values) if values else None
+
+
+def _family_consensus_boundary_overlap_min(
+    seed_metrics: _TraceMetrics,
+    rescue_metrics: Sequence[_TraceMetrics],
+) -> float | None:
+    metrics = (seed_metrics, *tuple(rescue_metrics))
+    if len(metrics) < 2:
+        return None
+    consensus_start = _median(tuple(item.boundary_start_rt for item in metrics))
+    consensus_end = _median(tuple(item.boundary_end_rt for item in metrics))
+    if consensus_start >= consensus_end:
+        return 0.0
+    consensus = _TraceMetrics(
+        cell_apex_rt=seed_metrics.cell_apex_rt,
+        tier2_apex_rt=seed_metrics.tier2_apex_rt,
+        apex_delta_sec=seed_metrics.apex_delta_sec,
+        scan_support_score=seed_metrics.scan_support_score,
+        scan_availability_score=seed_metrics.scan_availability_score,
+        trace_scan_count=seed_metrics.trace_scan_count,
+        boundary_start_rt=consensus_start,
+        boundary_end_rt=consensus_end,
+        boundary_width_sec=(consensus_end - consensus_start) * 60.0,
+        trace_apex_intensity=seed_metrics.trace_apex_intensity,
+        trace_baseline_noise=seed_metrics.trace_baseline_noise,
+        trace_signal_to_noise_proxy=seed_metrics.trace_signal_to_noise_proxy,
+        trace_apex_prominence_score=seed_metrics.trace_apex_prominence_score,
+    )
+    return min(_boundary_overlap_fraction(consensus, item) for item in metrics)
 
 
 def _boundary_overlap_fraction(first: _TraceMetrics, second: _TraceMetrics) -> float:

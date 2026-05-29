@@ -7,7 +7,10 @@ import pytest
 
 from xic_extractor.alignment.production_candidate_gate import (
     PRODUCTION_CANDIDATE_GATE_COLUMNS,
+    TIER2_CRITERIA_V0_1,
     TIER2_SUPPORT_COMPONENT,
+    TIER2_TRACE_EVIDENCE_V0_1_COLUMNS,
+    TIER2_TRACE_EVIDENCE_V0_COLUMNS,
     evaluate_production_candidate_gate,
     load_tier2_trace_evidence,
     production_candidate_gate_as_row,
@@ -72,6 +75,26 @@ def test_valid_tier2_sidecar_support_tracks_candidate(tmp_path: Path) -> None:
     assert decision.challenge_blockers == ()
     assert decision.tier2_evidence_available is True
     assert decision.candidate_confidence == "medium"
+
+
+def test_legacy_v0_sidecar_with_v0_columns_still_promotes(
+    tmp_path: Path,
+) -> None:
+    evidence, review_row, source_context = _load_tier2_fixture(
+        tmp_path,
+        sidecar_columns=TIER2_TRACE_EVIDENCE_V0_COLUMNS,
+    )
+
+    decision = evaluate_production_candidate_gate(
+        review_row,
+        _cell_rows(detected=1, rescued=2),
+        source_context=source_context,
+        tier2_evidence=evidence,
+    )
+
+    assert decision.candidate_gate_status == "production_candidate"
+    assert decision.support_components == (TIER2_SUPPORT_COMPONENT,)
+    assert decision.tier2_evidence_available is True
 
 
 def test_retention_candidate_without_positive_tier2_support_stays_provisional(
@@ -639,6 +662,7 @@ def test_tier2_sidecar_missing_v0_metric_column_is_rejected(
         support_component=TIER2_SUPPORT_COMPONENT,
         raw_trace_reread_status="pass",
         coherence_status="pass",
+        sidecar_columns=TIER2_TRACE_EVIDENCE_V0_COLUMNS,
         omitted_columns=("trace_scan_count",),
     )
 
@@ -649,6 +673,138 @@ def test_tier2_sidecar_missing_v0_metric_column_is_rejected(
             candidate_rows=(review_row,),
             source_context=source_context,
         )
+
+
+def test_v0_1_tier2_sidecar_is_diagnostic_only(tmp_path: Path) -> None:
+    evidence, review_row, source_context = _load_tier2_fixture(
+        tmp_path,
+        criteria_version=TIER2_CRITERIA_V0_1,
+        producer_version="raw_trace_reread_tier2_v0_1",
+        evidence_status="inconclusive",
+        support_component="",
+        raw_trace_reread_status="pass",
+        coherence_status="inconclusive",
+        challenge_blockers="tier2_v0_1_diagnostic_only",
+        dependent_context=(
+            "neighbor_interference_not_assessed;"
+            "raw_trace_reread_v0_1;"
+            "rescued_coherence_v0_1"
+        ),
+        row_overrides=_v0_1_row_overrides(),
+        sidecar_columns=TIER2_TRACE_EVIDENCE_V0_1_COLUMNS,
+    )
+
+    decision = evaluate_production_candidate_gate(
+        review_row,
+        _cell_rows(detected=1, rescued=2),
+        source_context=source_context,
+        tier2_evidence=evidence,
+    )
+
+    assert decision.candidate_gate_status == "audit"
+    assert decision.evidence_tier == 1
+    assert decision.support_components == ()
+    assert decision.tier2_evidence_available is False
+    assert "tier2_v0_1_diagnostic_only" in decision.challenge_blockers
+
+
+def test_v0_1_sidecar_missing_new_column_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="trace_apex_intensity"):
+        _load_tier2_fixture(
+            tmp_path,
+            criteria_version=TIER2_CRITERIA_V0_1,
+            producer_version="raw_trace_reread_tier2_v0_1",
+            evidence_status="inconclusive",
+            support_component="",
+            raw_trace_reread_status="pass",
+            coherence_status="inconclusive",
+            row_overrides=_v0_1_row_overrides(),
+            sidecar_columns=TIER2_TRACE_EVIDENCE_V0_1_COLUMNS,
+            omitted_columns=("trace_apex_intensity",),
+        )
+
+
+def test_v0_1_gate_adds_diagnostic_only_blocker_when_row_omits_it(
+    tmp_path: Path,
+) -> None:
+    evidence, review_row, source_context = _load_tier2_fixture(
+        tmp_path,
+        criteria_version=TIER2_CRITERIA_V0_1,
+        producer_version="raw_trace_reread_tier2_v0_1",
+        evidence_status="inconclusive",
+        support_component="",
+        raw_trace_reread_status="pass",
+        coherence_status="inconclusive",
+        challenge_blockers="",
+        dependent_context=(
+            "neighbor_interference_not_assessed;"
+            "raw_trace_reread_v0_1;"
+            "rescued_coherence_v0_1"
+        ),
+        row_overrides=_v0_1_row_overrides(),
+        sidecar_columns=TIER2_TRACE_EVIDENCE_V0_1_COLUMNS,
+    )
+
+    decision = evaluate_production_candidate_gate(
+        review_row,
+        _cell_rows(detected=1, rescued=2),
+        source_context=source_context,
+        tier2_evidence=evidence,
+    )
+
+    assert decision.candidate_gate_status == "audit"
+    assert decision.support_components == ()
+    assert "tier2_v0_1_diagnostic_only" in decision.challenge_blockers
+
+
+def test_v0_1_validated_support_spoof_cannot_promote(tmp_path: Path) -> None:
+    evidence, review_row, source_context = _load_tier2_fixture(
+        tmp_path,
+        criteria_version=TIER2_CRITERIA_V0_1,
+        producer_version="raw_trace_reread_tier2_v0_1",
+        evidence_status="validated",
+        support_component=TIER2_SUPPORT_COMPONENT,
+        raw_trace_reread_status="pass",
+        coherence_status="pass",
+        challenge_blockers="",
+        dependent_context=(
+            "neighbor_interference_not_assessed;"
+            "raw_trace_reread_v0_1;"
+            "rescued_coherence_v0_1"
+        ),
+        row_overrides=_v0_1_row_overrides(),
+        sidecar_columns=TIER2_TRACE_EVIDENCE_V0_1_COLUMNS,
+    )
+
+    decision = evaluate_production_candidate_gate(
+        review_row,
+        _cell_rows(detected=1, rescued=2),
+        source_context=source_context,
+        tier2_evidence=evidence,
+    )
+
+    assert decision.candidate_gate_status == "audit"
+    assert decision.evidence_tier == 1
+    assert decision.support_components == ()
+    assert decision.tier2_evidence_available is False
+    assert "tier2_v0_1_diagnostic_only" in decision.challenge_blockers
+
+
+def _v0_1_row_overrides() -> dict[str, str]:
+    return {
+        "scan_availability_score": "1.0",
+        "trace_apex_intensity": "1000",
+        "trace_baseline_noise": "10",
+        "trace_signal_to_noise_proxy": "20",
+        "trace_apex_prominence_score": "0.75",
+        "scan_support_basis": "scan_count_only",
+        "seed_rescued_boundary_overlap_min": "0.8",
+        "rescued_pairwise_boundary_overlap_min": "0.85",
+        "family_consensus_boundary_overlap_min": "0.82",
+        "seed_rescued_apex_span_sec": "6",
+        "rescued_only_apex_span_sec": "3",
+        "neighbor_interference_status": "not_assessed",
+    }
 
 
 def _load_tier2_fixture(
@@ -669,6 +825,8 @@ def _load_tier2_fixture(
     scan_support_score: str = "0.80",
     row_overrides: dict[str, str] | None = None,
     sidecar_family_id: str = "FAM001",
+    omitted_columns: tuple[str, ...] = (),
+    sidecar_columns: tuple[str, ...] | None = None,
 ):
     review_path, cell_path, matrix_path = _write_sources(tmp_path)
     review_row = _review_row(
@@ -702,6 +860,8 @@ def _load_tier2_fixture(
         source_candidate_subset_count=source_candidate_subset_count,
         scan_support_score=scan_support_score,
         row_overrides=row_overrides,
+        omitted_columns=omitted_columns,
+        sidecar_columns=sidecar_columns,
     )
     evidence_by_family = load_tier2_trace_evidence(
         sidecar_path=sidecar_path,
@@ -750,6 +910,7 @@ def _write_tier2_sidecar(
     scan_support_score: str = "0.80",
     omitted_columns: tuple[str, ...] = (),
     row_overrides: dict[str, str] | None = None,
+    sidecar_columns: tuple[str, ...] | None = None,
 ) -> Path:
     subset = tier2_candidate_subset_signature(review_rows)
     row = {
@@ -797,7 +958,11 @@ def _write_tier2_sidecar(
     }
     if row_overrides:
         row.update(row_overrides)
-    columns = [column for column in row if column not in omitted_columns]
+    columns = [
+        column
+        for column in (sidecar_columns or tuple(row))
+        if column not in omitted_columns
+    ]
     path = tmp_path / "alignment_tier2_trace_evidence.tsv"
     path.write_text(
         "\n".join(("\t".join(columns), "\t".join(row[column] for column in columns)))

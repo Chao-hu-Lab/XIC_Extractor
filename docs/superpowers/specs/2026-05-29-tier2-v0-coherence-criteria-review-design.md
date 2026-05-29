@@ -47,7 +47,7 @@ to prove the criteria are biologically or chromatographically right.
 ## Decision This Phase Can Close
 
 This phase can close whether the current v0 coherence criteria are internally
-coherent enough to remain a `validated_tier2_trace_evidence` gate candidate.
+coherent enough to remain a diagnostic gate-candidate label under review.
 
 It cannot close production promotion, broad 85RAW readiness, or final matrix
 inclusion. Those require a later reviewed plan and separate promotion contract.
@@ -65,6 +65,52 @@ Missing independent evidence:
 - an explicit boundary reference policy for rescued cells;
 - drift-aware interpretation of apex span;
 - a real neighbor-interference computation.
+
+## Pilot Preconditions
+
+The next implementation may proceed only as a `diagnostic_only` sidecar pilot if
+these current 8RAW artifacts are present and unchanged:
+
+| Artifact | Expected SHA256 |
+|---|---|
+| `output\tier2_raw_trace_reread_8raw_current\alignment_tier2_trace_evidence.tsv` | `5B97E80D84397FA6A7924C9B91CFB11AB3B383D9AADA7192F4D5C2C222482DE9` |
+| `output\tier2_raw_trace_reread_8raw_current\alignment_tier2_raw_manifest.tsv` | `66ECF86489C3AAB82D6E9A0BCEDB0B15DBD8F76EED0335167F3581AB99C70C76` |
+| `output\tier2_raw_trace_reread_8raw_current\alignment_tier2_trace_evidence_summary.json` | `8615B65ACE0DFCED3B95502AA39EB2F5F9B5538CEB40657D33062D26A0A2FFA6` |
+| `output\tier2_raw_trace_reread_8raw_current_gate\alignment_production_candidate_gate.tsv` | `36DB78CFC7C6F09D524E5F08E888A579685AB952D0E7D0788BF770ACE2ED36FA` |
+| `output\tier2_raw_trace_reread_8raw_current_gate\alignment_production_candidate_gate.json` | `6915650B1EDB8FED9D3FC0FCC44F2E4DFAE28CA1EEB276C1D9F2C15A2B622E1A` |
+
+Required current baseline:
+
+- expected sample count: `8`;
+- producer rows: `7`;
+- producer statuses: `blocked=4`, `inconclusive=3`, `validated=0`;
+- gate label: `diagnostic_only`;
+- gate result: `row_count=7`, `audit_count=7`,
+  `production_candidate_count=0`, `production_ready=false`;
+- matrix contract: unchanged.
+
+Required v0.1 diagnostic outputs:
+
+- criteria version distinct from `tier2_trace_identity_rescued_coherence_v0`;
+- scan availability columns that remain separate from signal support;
+- signal, local noise, and shape or apex-prominence context columns;
+- `seed_rescued_boundary_overlap_min`,
+  `rescued_pairwise_boundary_overlap_min`, and
+  `family_consensus_boundary_overlap_min`;
+- raw apex span, seed-to-rescued apex span, and rescued-only apex span context;
+- neighbor-interference context that explicitly records
+  `neighbor_interference_not_assessed` until a formal computation exists;
+- row-level status and reason values that can express `blocked`,
+  `inconclusive`, and diagnostic context without implying production support.
+- gate-side `tier2_v0_1_diagnostic_only` blocking behavior that applies to any
+  v0.1 sidecar row independently of row-provided blockers or evidence status.
+
+Hard stop:
+
+Do not run 85RAW from this phase. A later 85RAW run requires a reviewed
+follow-up plan after the v0.1 8RAW diagnostic rerun is `run_ok` and the
+diagnostic gate is `gate_ok` for the specific decision that larger run can
+close.
 
 ## Review Focus
 
@@ -181,9 +227,13 @@ V0.1 should separate observable facts from positive-support facts:
 | Apex span | context or warning unless drift-normalized evidence justifies a hard gate |
 | Neighbor interference | context only until formally computed |
 
-The current criteria version may remain allowlisted for existing diagnostic
-artifacts, but a revised criteria contract should use a new criteria version if
-any positive-support rule changes.
+The current v0 criteria version may remain allowlisted for legacy diagnostic
+sidecar compatibility. Existing v0 sidecar gate behavior may remain as the
+committed diagnostic contract, but it still means `production_ready=false`,
+`matrix_contract_changed=false`, and no primary matrix promotion. No new v0.1
+positive-support consumer should be introduced in this phase. A revised v0.1
+criteria contract must use a new criteria version and stay diagnostic-only
+until a later reviewed promotion contract says otherwise.
 
 ## Evidence Plan
 

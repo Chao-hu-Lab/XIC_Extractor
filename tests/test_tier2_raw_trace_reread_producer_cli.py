@@ -45,20 +45,23 @@ def test_cli_produces_sidecar_manifest_pair_consumed_by_gate(tmp_path: Path) -> 
     summary = json.loads(gate_output["json"].read_text(encoding="utf-8"))
     producer_summary = json.loads(outputs["summary"].read_text(encoding="utf-8"))
 
-    assert rows[0]["candidate_gate_status"] == "production_candidate"
-    assert rows[0]["tier2_evidence_available"] == "TRUE"
+    assert rows[0]["candidate_gate_status"] == "audit"
+    assert rows[0]["tier2_evidence_available"] == "FALSE"
+    assert "tier2_v0_1_diagnostic_only" in rows[0]["challenge_blockers"]
     assert summary["tier2_candidate_subset_count"] == 1
     assert producer_summary["readiness_label"] == "diagnostic_only"
-    assert producer_summary["producer_version"] == "raw_trace_reread_tier2_v0"
+    assert producer_summary["producer_version"] == "raw_trace_reread_tier2_v0_1"
     assert (
         producer_summary["criteria_version"]
-        == "tier2_trace_identity_rescued_coherence_v0"
+        == "tier2_trace_identity_rescued_coherence_v0_1_diagnostic"
     )
     assert producer_summary["source_expected_sample_count"] == 3
     assert producer_summary["candidate_subset_count"] == 1
     assert producer_summary["rows_evaluated"] == 1
-    assert producer_summary["evidence_status_counts"] == {"validated": 1}
-    assert producer_summary["positive_support_count"] == 1
+    assert producer_summary["evidence_status_counts"] == {"inconclusive": 1}
+    assert producer_summary["positive_support_count"] == 0
+    assert producer_summary["validated_count"] == 0
+    assert producer_summary["inconclusive_count"] == 1
 
 
 def test_cli_missing_raw_emits_inconclusive_sidecar_row(tmp_path: Path) -> None:

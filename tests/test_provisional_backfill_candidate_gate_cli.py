@@ -158,6 +158,67 @@ def test_cli_stale_tier2_hash_emits_machine_readable_blocker(
     assert "source_hash_mismatch" in by_id["FAM_CAND"]["challenge_blockers"]
 
 
+def test_cli_consumes_v0_1_sidecar_as_diagnostic_only(tmp_path: Path) -> None:
+    alignment_dir = _write_alignment_run(tmp_path / "alignment")
+    output_dir = tmp_path / "gate"
+    raw_manifest_path = _write_raw_manifest(tmp_path)
+    source_context = gate_cli.source_context_for_artifacts(
+        review_path=alignment_dir / "alignment_review.tsv",
+        cell_path=alignment_dir / "alignment_cells.tsv",
+        matrix_path=alignment_dir / "alignment_matrix.tsv",
+    )
+    review_rows = _read_tsv(alignment_dir / "alignment_review.tsv")
+    candidate_rows = [
+        row for row in review_rows if gate_cli.is_candidate_gate_scope(row)
+    ]
+    sidecar_path = _write_tier2_sidecar(
+        tmp_path,
+        family_id="FAM_CAND",
+        candidate_rows=candidate_rows,
+        source_context=source_context,
+        raw_manifest_path=raw_manifest_path,
+        criteria_version="tier2_trace_identity_rescued_coherence_v0_1_diagnostic",
+        producer_version="raw_trace_reread_tier2_v0_1",
+        evidence_status="inconclusive",
+        support_component="",
+        raw_trace_reread_status="pass",
+        coherence_status="inconclusive",
+        challenge_blockers="",
+        dependent_context=(
+            "neighbor_interference_not_assessed;"
+            "raw_trace_reread_v0_1;"
+            "rescued_coherence_v0_1"
+        ),
+    )
+
+    code = gate_cli.main(
+        [
+            "--alignment-dir",
+            str(alignment_dir),
+            "--output-dir",
+            str(output_dir),
+            "--tier2-trace-evidence-tsv",
+            str(sidecar_path),
+            "--tier2-raw-manifest-tsv",
+            str(raw_manifest_path),
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(output_dir / "alignment_production_candidate_gate.tsv")
+    by_id = {row["feature_family_id"]: row for row in rows}
+    assert by_id["FAM_CAND"]["candidate_gate_status"] == "audit"
+    assert by_id["FAM_CAND"]["support_components"] == ""
+    assert "tier2_v0_1_diagnostic_only" in by_id["FAM_CAND"]["challenge_blockers"]
+    payload = json.loads(
+        (output_dir / "alignment_production_candidate_gate.json").read_text(
+            encoding="utf-8",
+        )
+    )
+    assert payload["production_candidate_count"] == 0
+    assert payload["production_ready"] is False
+
+
 def test_cli_requires_tier2_sidecar_and_manifest_together(
     tmp_path: Path,
     capsys,
@@ -248,15 +309,23 @@ def _write_tier2_sidecar(
     source_context,
     raw_manifest_path: Path,
     source_review_sha256: str | None = None,
+    criteria_version: str = "tier2_trace_identity_rescued_coherence_v0",
+    producer_version: str = "raw_trace_reread_tier2_v0",
+    evidence_status: str = "validated",
+    support_component: str = "validated_tier2_trace_evidence",
+    raw_trace_reread_status: str = "pass",
+    coherence_status: str = "pass",
+    challenge_blockers: str = "",
+    dependent_context: str = "",
 ) -> Path:
     subset = gate_cli.tier2_candidate_subset_signature(candidate_rows)
     row = {
         "feature_family_id": family_id,
-        "evidence_status": "validated",
-        "support_component": "validated_tier2_trace_evidence",
-        "criteria_version": "tier2_trace_identity_rescued_coherence_v0",
-        "producer_version": "raw_trace_reread_tier2_v0",
-        "raw_trace_reread_status": "pass",
+        "evidence_status": evidence_status,
+        "support_component": support_component,
+        "criteria_version": criteria_version,
+        "producer_version": producer_version,
+        "raw_trace_reread_status": raw_trace_reread_status,
         "seed_apex_rt": "8.000",
         "tier2_apex_rt": "8.100",
         "apex_delta_sec": "6.0",
@@ -270,9 +339,9 @@ def _write_tier2_sidecar(
         "rescued_cell_count_supported": "2",
         "rescued_apex_rt_span_sec": "6.0",
         "rescued_boundary_overlap_min": "0.80",
-        "coherence_status": "pass",
-        "challenge_blockers": "",
-        "dependent_context": "",
+        "coherence_status": coherence_status,
+        "challenge_blockers": challenge_blockers,
+        "dependent_context": dependent_context,
         "source_alignment_review_sha256": (
             source_review_sha256 or source_context.review_sha256
         ),
@@ -286,6 +355,18 @@ def _write_tier2_sidecar(
         "dll_dir": "C:\\Xcalibur\\system\\programs",
         "producer_command": "synthetic-test-fixture",
         "generated_at_utc": "2026-05-29T00:00:00Z",
+        "scan_availability_score": "1.0",
+        "trace_apex_intensity": "1000",
+        "trace_baseline_noise": "10",
+        "trace_signal_to_noise_proxy": "20",
+        "trace_apex_prominence_score": "0.75",
+        "scan_support_basis": "scan_count_only",
+        "seed_rescued_boundary_overlap_min": "0.80",
+        "rescued_pairwise_boundary_overlap_min": "0.85",
+        "family_consensus_boundary_overlap_min": "0.82",
+        "seed_rescued_apex_span_sec": "6.0",
+        "rescued_only_apex_span_sec": "3.0",
+        "neighbor_interference_status": "not_assessed",
     }
     columns = list(row)
     path = tmp_path / "alignment_tier2_trace_evidence.tsv"

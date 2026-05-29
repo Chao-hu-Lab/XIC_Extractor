@@ -4,6 +4,7 @@ import csv
 from pathlib import Path
 
 from xic_extractor.alignment.production_candidate_gate import (
+    TIER2_CRITERIA_V0_1,
     TIER2_RAW_MANIFEST_REQUIRED_COLUMNS,
     TIER2_TRACE_EVIDENCE_REQUIRED_COLUMNS,
     GateSourceContext,
@@ -17,7 +18,7 @@ from xic_extractor.alignment.tier2_trace_producer import (
 )
 
 
-def test_tier2_trace_producer_rows_are_consumable_positive_support(
+def test_tier2_trace_producer_rows_are_v0_1_diagnostic_only(
     tmp_path: Path,
 ) -> None:
     review_rows = [_candidate_review_row()]
@@ -48,13 +49,32 @@ def test_tier2_trace_producer_rows_are_consumable_positive_support(
     assert len(rows) == 1
     row = rows[0]
     assert row["feature_family_id"] == "FAM001"
-    assert row["evidence_status"] == "validated"
-    assert row["support_component"] == "validated_tier2_trace_evidence"
+    assert row["criteria_version"] == TIER2_CRITERIA_V0_1
+    assert row["evidence_status"] == "inconclusive"
+    assert row["support_component"] == ""
     assert row["raw_trace_reread_status"] == "pass"
-    assert row["coherence_status"] == "pass"
+    assert row["coherence_status"] == "inconclusive"
+    assert "tier2_v0_1_diagnostic_only" in row["challenge_blockers"]
     assert "neighbor_interference_not_assessed" in row["dependent_context"]
     assert row["source_candidate_subset_sha256"] == subset.sha256
     assert row["source_candidate_subset_count"] == "1"
+    for column in (
+        "scan_availability_score",
+        "trace_apex_intensity",
+        "trace_baseline_noise",
+        "trace_signal_to_noise_proxy",
+        "trace_apex_prominence_score",
+        "scan_support_basis",
+        "seed_rescued_boundary_overlap_min",
+        "rescued_pairwise_boundary_overlap_min",
+        "family_consensus_boundary_overlap_min",
+        "seed_rescued_apex_span_sec",
+        "rescued_only_apex_span_sec",
+        "neighbor_interference_status",
+    ):
+        assert column in row
+    assert row["scan_support_basis"] == "scan_count_only"
+    assert row["neighbor_interference_status"] == "not_assessed"
 
     sidecar_path = tmp_path / "alignment_tier2_trace_evidence.tsv"
     _write_tsv(sidecar_path, rows, TIER2_TRACE_EVIDENCE_REQUIRED_COLUMNS)
@@ -71,9 +91,39 @@ def test_tier2_trace_producer_rows_are_consumable_positive_support(
         tier2_evidence=evidence,
     )
 
-    assert decision.candidate_gate_status == "production_candidate"
-    assert decision.tier2_evidence_available is True
-    assert decision.support_components == ("validated_tier2_trace_evidence",)
+    assert decision.candidate_gate_status == "audit"
+    assert decision.tier2_evidence_available is False
+    assert decision.support_components == ()
+    assert "tier2_v0_1_diagnostic_only" in decision.challenge_blockers
+
+
+def test_tier2_trace_producer_emits_signal_shape_and_reference_views(
+    tmp_path: Path,
+) -> None:
+    rows = build_tier2_trace_evidence_rows(
+        candidate_rows=[_candidate_review_row()],
+        cells_by_family={"FAM001": tuple(_candidate_cell_rows())},
+        source_context=_source_context(tmp_path),
+        raw_manifest_sha256="ABC123",
+        source_expected_sample_count=3,
+        trace_loader=_passing_trace_loader,
+        config=Tier2TraceProducerConfig(ppm_tolerance=20.0, rt_padding_min=0.02),
+        producer_command="pytest fake producer",
+        generated_at_utc="2026-05-29T00:00:00Z",
+        python_executable=".venv\\Scripts\\python.exe",
+        dll_dir="C:\\Xcalibur\\system\\programs",
+    )
+
+    row = rows[0]
+
+    assert float(row["scan_availability_score"]) >= 1.0
+    assert float(row["trace_apex_intensity"]) > 0.0
+    assert float(row["trace_signal_to_noise_proxy"]) >= 0.0
+    assert float(row["trace_apex_prominence_score"]) >= 0.0
+    assert float(row["seed_rescued_boundary_overlap_min"]) > 0.0
+    assert float(row["family_consensus_boundary_overlap_min"]) > 0.0
+    assert float(row["seed_rescued_apex_span_sec"]) >= 0.0
+    assert float(row["rescued_only_apex_span_sec"]) >= 0.0
 
 
 def test_tier2_trace_producer_marks_raw_seed_trace_failures_inconclusive(
@@ -105,6 +155,10 @@ def test_tier2_trace_producer_marks_raw_seed_trace_failures_inconclusive(
     assert row["support_component"] == ""
     assert row["raw_trace_reread_status"] == "inconclusive"
     assert "raw_unavailable" in row["challenge_blockers"]
+    assert "tier2_v0_1_diagnostic_only" in row["challenge_blockers"]
+    assert "neighbor_interference_not_assessed" in row["dependent_context"]
+    assert "raw_trace_reread_v0_1" in row["dependent_context"]
+    assert row["neighbor_interference_status"] == "not_assessed"
 
 
 def test_tier2_trace_producer_uses_contract_status_for_hard_metric_failure(
@@ -129,6 +183,10 @@ def test_tier2_trace_producer_uses_contract_status_for_hard_metric_failure(
     assert row["support_component"] == ""
     assert row["raw_trace_reread_status"] == "fail"
     assert "low_scan_support" in row["challenge_blockers"]
+    assert "tier2_v0_1_diagnostic_only" in row["challenge_blockers"]
+    assert "neighbor_interference_not_assessed" in row["dependent_context"]
+    assert "raw_trace_reread_v0_1" in row["dependent_context"]
+    assert row["neighbor_interference_status"] == "not_assessed"
 
 
 def test_tier2_trace_producer_uses_contract_status_for_rescued_coherence_failure(
@@ -155,9 +213,10 @@ def test_tier2_trace_producer_uses_contract_status_for_rescued_coherence_failure
     )
 
     row = rows[0]
-    assert row["evidence_status"] == "blocked"
+    assert row["evidence_status"] == "inconclusive"
     assert row["raw_trace_reread_status"] == "pass"
-    assert row["coherence_status"] == "fail"
+    assert row["coherence_status"] == "inconclusive"
+    assert "tier2_v0_1_diagnostic_only" in row["challenge_blockers"]
     assert "rescued_apex_span_wide" in row["challenge_blockers"]
 
 

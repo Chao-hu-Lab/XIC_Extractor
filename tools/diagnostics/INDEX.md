@@ -248,8 +248,8 @@ existing review/economics axes remain pending cleanup per audit-note Cluster 2.
 
 **Purpose**: Produce paired `diagnostic_only` Tier 2 RAW trace evidence and RAW manifest sidecars for retained provisional backfill candidates.
 **Topic group**: `tier2_raw_trace_reread_producer.py` + `xic_extractor/alignment/tier2_trace_producer.py` + `xic_extractor/alignment/production_candidate_gate.py`
-**Originating spec/plan**: `specs/2026-05-29-tier2-evidence-producer-provenance-contract-design.md`; follows the sidecar provenance gate checkpoint in `plans/2026-05-29-tier2-sidecar-provenance-gate-checkpoint-plan.md`.
-**Status note**: Uses `.raw` files and Thermo DLLs to recompute seed trace and rescued-cell coherence metrics, writes `alignment_tier2_trace_evidence.tsv` and `alignment_tier2_raw_manifest.tsv`, and remains a diagnostic producer. Positive support is available only when the existing candidate gate validates the paired sidecars; current 8RAW smoke emitted no positive support and surfaced `blocked` / `inconclusive` rows for criteria review.
+**Originating spec/plan**: `specs/2026-05-29-tier2-evidence-producer-provenance-contract-design.md`; follows the sidecar provenance gate checkpoint in `plans/2026-05-29-tier2-sidecar-provenance-gate-checkpoint-plan.md`; v0.1 diagnostic criteria review in `specs/2026-05-29-tier2-v0-coherence-criteria-review-design.md` and `plans/2026-05-29-tier2-v0-coherence-diagnostic-plan.md`.
+**Status note**: Writes diagnostic-only v0.1 Tier 2 RAW trace evidence and RAW manifest sidecars. The v0.1 criteria expose scan availability, signal/noise, shape, boundary-reference, apex-span, and neighbor-interference context, but do not provide positive Tier 2 support or change `alignment_matrix.tsv`. 85RAW is out of scope until a reviewed follow-up plan is approved after a successful v0.1 8RAW diagnostic rerun.
 
 ---
 
