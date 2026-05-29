@@ -19,6 +19,18 @@ and follow-up structure. Then apply the XIC-specific additions below.
 
 Include these when relevant:
 
+- PR CI-equivalent gate before opening, updating, or marking a PR ready:
+
+  ```powershell
+  $env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
+  $env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+  $env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
+  ```
+
+  Treat real lint, typecheck, or test failures as blockers. Fix them and rerun
+  the failed CI-equivalent gate before PR. If the sandbox blocks dependency
+  resolution, executable spawn, or DLL loading, rerun the same command with
+  approval instead of substituting a narrower check.
 - readiness label: `diagnostic_only`, `shadow_ready`, `production_candidate`,
   `production_ready`, or `inconclusive`;
 - validation tier: synthetic, focused tests, 8RAW, 85RAW, targeted benchmark,

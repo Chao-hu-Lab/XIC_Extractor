@@ -464,6 +464,107 @@ def test_write_alignment_review_tsv_includes_production_decision_columns(
     assert rows[0]["row_flags"] == "rescue_only;rescue_only_review"
 
 
+def test_one_detected_provisional_retention_stays_out_of_primary_matrix(
+    tmp_path: Path,
+):
+    from xic_extractor.alignment.tsv_writer import (
+        write_alignment_matrix_tsv,
+        write_alignment_review_tsv,
+    )
+
+    matrix = AlignmentMatrix(
+        clusters=(
+            _cluster(
+                fold_evidence="owner_complete_link;owner_count=1",
+            ),
+        ),
+        cells=(
+            _cell("sample-a", "detected", area=100.0, candidate_id="sample-a#1"),
+            _cell("sample-b", "rescued", area=90.0),
+            _cell("sample-c", "rescued", area=80.0),
+        ),
+        sample_order=("sample-a", "sample-b", "sample-c"),
+    )
+
+    review_rows = _read_tsv(write_alignment_review_tsv(tmp_path / "review.tsv", matrix))
+    matrix_rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
+
+    assert list(review_rows[0]) == REVIEW_COLUMNS
+    assert review_rows[0]["identity_decision"] == "provisional_discovery"
+    assert review_rows[0]["include_in_primary_matrix"] == "FALSE"
+    assert review_rows[0]["quantifiable_detected_count"] == "1"
+    assert review_rows[0]["quantifiable_rescue_count"] == "2"
+    assert set(review_rows[0]["row_flags"].split(";")) >= {
+        "single_detected_seed",
+        "provisional_retention_candidate",
+        "skip_expensive_evidence",
+    }
+    assert matrix_rows == []
+
+
+def test_direct_tier2_review_token_does_not_change_matrix_writer(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.production_candidate_gate import (
+        evaluate_production_candidate_gate,
+        source_context_for_artifacts,
+    )
+    from xic_extractor.alignment.tsv_writer import (
+        write_alignment_cells_tsv,
+        write_alignment_matrix_tsv,
+        write_alignment_review_tsv,
+    )
+
+    matrix = AlignmentMatrix(
+        clusters=(
+            _cluster(
+                fold_evidence="owner_complete_link;owner_count=1",
+            ),
+        ),
+        cells=(
+            _cell("sample-a", "detected", area=100.0, candidate_id="sample-a#1"),
+            _cell("sample-b", "rescued", area=90.0),
+            _cell("sample-c", "rescued", area=80.0),
+        ),
+        sample_order=("sample-a", "sample-b", "sample-c"),
+    )
+    review_path = write_alignment_review_tsv(
+        tmp_path / "alignment_review.tsv",
+        matrix,
+    )
+    cells_path = write_alignment_cells_tsv(
+        tmp_path / "alignment_cells.tsv",
+        matrix,
+    )
+    matrix_path = write_alignment_matrix_tsv(
+        tmp_path / "alignment_matrix.tsv",
+        matrix,
+    )
+    review_rows = _read_tsv(review_path)
+    cell_rows = _read_tsv(cells_path)
+
+    sidecar_review_row = {
+        **review_rows[0],
+        "independent_tier2_support_components": (
+            "validated_tier2_trace_evidence"
+        ),
+    }
+    decision = evaluate_production_candidate_gate(
+        sidecar_review_row,
+        cell_rows,
+        source_context=source_context_for_artifacts(
+            review_path=review_path,
+            cell_path=cells_path,
+            matrix_path=matrix_path,
+        ),
+    )
+
+    assert decision.candidate_gate_status == "keep_provisional"
+    assert decision.support_components == ()
+    assert "missing_positive_tier2_support" in decision.challenge_blockers
+    assert _read_tsv(matrix_path) == []
+
+
 def test_write_alignment_status_matrix_tsv_preserves_duplicate_assigned(
     tmp_path: Path,
 ):

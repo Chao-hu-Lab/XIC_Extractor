@@ -1,7 +1,7 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last generated:** 2026-05-26
-**Total entry-points:** 39
+**Last generated:** 2026-05-29
+**Total entry-points:** 40
 **Total files (incl. helpers):** ~114
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 
@@ -24,7 +24,7 @@
 1. [Phase Gates (P1/P2/P2b/P2c/P7)](#phase-gates-p1p2p2bp2cp7) — 7 tools
 2. [Evidence Consistency](#evidence-consistency) — 2 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 5 tools
+4. [Backfill Reviews](#backfill-reviews) — 7 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 2 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 6 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
@@ -161,10 +161,11 @@ decisions, RT normalization, matrix identity).
 
 ### `analyze_matrix_identity_blast_radius.py`
 
-**Purpose**: Analyze matrix identity blast radius for alignment outputs.
+**Purpose**: Analyze matrix identity blast radius for alignment outputs, including projected machine-decision role/action columns from existing review and cell artifacts.
 **Topic group**: `analyze_matrix_identity_blast_radius.py` (single-file)
-**Originating spec**: `2026-05-14-matrix-identity-consolidation-v2-spec.md`
-**Recent doc**: `plans/2026-05-14-matrix-identity-consolidation-v2-plan.md`
+**Originating spec**: `2026-05-14-matrix-identity-consolidation-v2-spec.md`; machine-decision projection columns from `2026-05-28-tiered-backfill-machine-decision-contract-spec.md`
+**Recent doc**: `plans/2026-05-14-matrix-identity-consolidation-v2-plan.md`; `plans/2026-05-28-tiered-backfill-machine-decision-contract-implementation-plan.md`; `notes/2026-05-28-tiered-backfill-machine-decision-implementation-note.md`
+**Status note**: Machine-decision columns are `diagnostic_only` projection output, not a downstream `alignment_matrix.tsv` contract.
 
 ---
 
@@ -187,9 +188,12 @@ decisions, RT normalization, matrix identity).
 
 ## Backfill Reviews
 
-Three overlapping axes (seed-level / family-level / row-classifier-level)
-plus 2 owner-backfill economics tools. See audit-note Cluster 2 — pending
-spec to decide whether these axes are orthogonal or redundant.
+Three overlapping review axes (seed-level / family-level /
+row-classifier-level), 2 owner-backfill economics tools, 1 Tier 2 RAW trace
+producer, and 1 `diagnostic_only` provisional candidate-gate sidecar. The
+sidecars are not economics axes; they consume retained provisional backfill rows
+to emit RAW-backed evidence, promotion blockers, and source hashes while the
+existing review/economics axes remain pending cleanup per audit-note Cluster 2.
 
 ### `seed_aware_backfill_review.py`
 
@@ -228,6 +232,24 @@ spec to decide whether these axes are orthogonal or redundant.
 **Purpose**: Summarize owner-backfill request cost by final row identity.
 **Topic group**: `owner_backfill_request_economics.py` (single-file)
 **Originating spec**: `2026-05-15-owner-backfill-request-economics-spec.md`
+
+---
+
+### `provisional_backfill_candidate_gate.py`
+
+**Purpose**: Emit a `diagnostic_only` machine sidecar for retained provisional backfill rows, including Tier 2 support components, challenge blockers, and source artifact hashes.
+**Topic group**: `provisional_backfill_candidate_gate.py` + `xic_extractor/alignment/production_candidate_gate.py`
+**Originating spec/plan**: `specs/2026-05-29-provisional-backfill-production-candidate-gate-design.md`; `plans/2026-05-29-provisional-backfill-diagnostic-sidecar-pilot-implementation-plan.md`
+**Status note**: Writes `alignment_production_candidate_gate.tsv`; optional Tier 2 support must come from `--tier2-trace-evidence-tsv` plus `--tier2-raw-manifest-tsv`, not direct `alignment_review.tsv` tokens. Does not mutate `alignment_review.tsv`, `alignment_matrix.tsv`, workbook schemas, or downstream correction/statistics contracts.
+
+---
+
+### `tier2_raw_trace_reread_producer.py`
+
+**Purpose**: Produce paired `diagnostic_only` Tier 2 RAW trace evidence and RAW manifest sidecars for retained provisional backfill candidates.
+**Topic group**: `tier2_raw_trace_reread_producer.py` + `xic_extractor/alignment/tier2_trace_producer.py` + `xic_extractor/alignment/production_candidate_gate.py`
+**Originating spec/plan**: `specs/2026-05-29-tier2-evidence-producer-provenance-contract-design.md`; follows the sidecar provenance gate checkpoint in `plans/2026-05-29-tier2-sidecar-provenance-gate-checkpoint-plan.md`; v0.1 diagnostic criteria review in `specs/2026-05-29-tier2-v0-coherence-criteria-review-design.md` and `plans/2026-05-29-tier2-v0-coherence-diagnostic-plan.md`.
+**Status note**: Writes diagnostic-only v0.1 Tier 2 RAW trace evidence and RAW manifest sidecars. The v0.1 criteria expose scan availability, signal/noise, shape, boundary-reference, apex-span, and neighbor-interference context, but do not provide positive Tier 2 support or change `alignment_matrix.tsv`. 85RAW is out of scope until a reviewed follow-up plan is approved after a successful v0.1 8RAW diagnostic rerun.
 
 ---
 

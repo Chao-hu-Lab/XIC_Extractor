@@ -35,7 +35,10 @@ def test_owner_complete_link_requires_two_detected_identity_cells() -> None:
     assert decision.identity_reason == "insufficient_detected_identity_support"
     assert decision.quantifiable_detected_count == 1
     assert decision.quantifiable_rescue_count == 2
+    assert "single_detected_seed" in decision.row_flags
     assert "rescue_heavy" in decision.row_flags
+    assert "provisional_retention_candidate" in decision.row_flags
+    assert "skip_expensive_evidence" in decision.row_flags
 
 
 def test_owner_complete_link_with_two_detected_cells_is_production_family() -> None:
@@ -99,8 +102,68 @@ def test_single_detected_seed_does_not_enter_policy_promotion() -> None:
     assert decision.include_in_primary_matrix is False
     assert decision.identity_decision == "provisional_discovery"
     assert decision.identity_reason == "extreme_backfill_dependency"
+    assert "single_detected_seed" in decision.row_flags
+    assert "provisional_retention_candidate" in decision.row_flags
+    assert "skip_expensive_evidence" in decision.row_flags
     assert "high_backfill_dependency" in decision.row_flags
     assert HIGH_BACKFILL_CAPPED_FLAG not in decision.row_flags
+
+
+def test_one_detected_area_only_rescue_is_not_provisional_retention_candidate() -> None:
+    matrix = _matrix(
+        _feature("FAM001", evidence="owner_complete_link;owner_count=1"),
+        (
+            _cell("seed1", "FAM001", "detected", 100.0),
+            _cell(
+                "rescue1",
+                "FAM001",
+                "rescued",
+                90.0,
+                trace_quality="owner_backfill",
+                scan_support_score=None,
+            ),
+            _cell(
+                "rescue2",
+                "FAM001",
+                "rescued",
+                80.0,
+                trace_quality="owner_backfill",
+                scan_support_score=None,
+            ),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is False
+    assert decision.identity_decision == "provisional_discovery"
+    assert "single_detected_seed" in decision.row_flags
+    assert "provisional_retention_candidate" not in decision.row_flags
+    assert "skip_expensive_evidence" not in decision.row_flags
+
+
+def test_review_only_one_detected_rescue_is_not_provisional_candidate() -> None:
+    matrix = _matrix(
+        _feature(
+            "FAM001",
+            evidence="owner_complete_link;owner_count=1",
+            review_only=True,
+        ),
+        (
+            _cell("seed1", "FAM001", "detected", 100.0),
+            _cell("rescue1", "FAM001", "rescued", 90.0),
+            _cell("rescue2", "FAM001", "rescued", 80.0),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is False
+    assert decision.identity_decision == "audit_family"
+    assert decision.identity_reason == "review_only"
+    assert "single_detected_seed" in decision.row_flags
+    assert "provisional_retention_candidate" not in decision.row_flags
+    assert "skip_expensive_evidence" not in decision.row_flags
 
 
 def test_high_detected_dr_family_can_still_use_backfill() -> None:
