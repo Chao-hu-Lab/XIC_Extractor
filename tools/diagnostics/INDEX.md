@@ -1,7 +1,7 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last generated:** 2026-05-26
-**Total entry-points:** 39
+**Last generated:** 2026-05-29
+**Total entry-points:** 40
 **Total files (incl. helpers):** ~114
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 
@@ -24,7 +24,7 @@
 1. [Phase Gates (P1/P2/P2b/P2c/P7)](#phase-gates-p1p2p2bp2cp7) — 7 tools
 2. [Evidence Consistency](#evidence-consistency) — 2 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 6 tools
+4. [Backfill Reviews](#backfill-reviews) — 7 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 2 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 6 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
@@ -189,11 +189,11 @@ decisions, RT normalization, matrix identity).
 ## Backfill Reviews
 
 Three overlapping review axes (seed-level / family-level /
-row-classifier-level), 2 owner-backfill economics tools, and 1
-`diagnostic_only` provisional candidate-gate sidecar. The sidecar is not an
-economics axis; it consumes retained provisional backfill rows to emit
-promotion blockers and source hashes while the existing review/economics axes
-remain pending cleanup per audit-note Cluster 2.
+row-classifier-level), 2 owner-backfill economics tools, 1 Tier 2 RAW trace
+producer, and 1 `diagnostic_only` provisional candidate-gate sidecar. The
+sidecars are not economics axes; they consume retained provisional backfill rows
+to emit RAW-backed evidence, promotion blockers, and source hashes while the
+existing review/economics axes remain pending cleanup per audit-note Cluster 2.
 
 ### `seed_aware_backfill_review.py`
 
@@ -241,6 +241,15 @@ remain pending cleanup per audit-note Cluster 2.
 **Topic group**: `provisional_backfill_candidate_gate.py` + `xic_extractor/alignment/production_candidate_gate.py`
 **Originating spec/plan**: `specs/2026-05-29-provisional-backfill-production-candidate-gate-design.md`; `plans/2026-05-29-provisional-backfill-diagnostic-sidecar-pilot-implementation-plan.md`
 **Status note**: Writes `alignment_production_candidate_gate.tsv`; optional Tier 2 support must come from `--tier2-trace-evidence-tsv` plus `--tier2-raw-manifest-tsv`, not direct `alignment_review.tsv` tokens. Does not mutate `alignment_review.tsv`, `alignment_matrix.tsv`, workbook schemas, or downstream correction/statistics contracts.
+
+---
+
+### `tier2_raw_trace_reread_producer.py`
+
+**Purpose**: Produce paired `diagnostic_only` Tier 2 RAW trace evidence and RAW manifest sidecars for retained provisional backfill candidates.
+**Topic group**: `tier2_raw_trace_reread_producer.py` + `xic_extractor/alignment/tier2_trace_producer.py` + `xic_extractor/alignment/production_candidate_gate.py`
+**Originating spec/plan**: `specs/2026-05-29-tier2-evidence-producer-provenance-contract-design.md`; follows the sidecar provenance gate checkpoint in `plans/2026-05-29-tier2-sidecar-provenance-gate-checkpoint-plan.md`.
+**Status note**: Uses `.raw` files and Thermo DLLs to recompute seed trace and rescued-cell coherence metrics, writes `alignment_tier2_trace_evidence.tsv` and `alignment_tier2_raw_manifest.tsv`, and remains a diagnostic producer. Positive support is available only when the existing candidate gate validates the paired sidecars; current 8RAW smoke emitted no positive support and surfaced `blocked` / `inconclusive` rows for criteria review.
 
 ---
 

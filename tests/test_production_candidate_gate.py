@@ -517,6 +517,26 @@ def test_invalid_tier2_sidecar_fields_do_not_promote(
     assert expected_blocker in decision.challenge_blockers
 
 
+def test_blank_tier2_neighbor_interference_requires_not_assessed_context(
+    tmp_path: Path,
+) -> None:
+    evidence, review_row, source_context = _load_tier2_fixture(
+        tmp_path,
+        row_overrides={"neighbor_interference_ratio": "", "dependent_context": ""},
+    )
+
+    decision = evaluate_production_candidate_gate(
+        review_row,
+        _cell_rows(detected=1, rescued=2),
+        source_context=source_context,
+        tier2_evidence=evidence,
+    )
+
+    assert decision.candidate_gate_status == "audit"
+    assert decision.support_components == ()
+    assert "neighbor_interference_unassessed" in decision.challenge_blockers
+
+
 @pytest.mark.parametrize(
     ("row_overrides", "expected_blocker"),
     (

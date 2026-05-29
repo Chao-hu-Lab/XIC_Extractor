@@ -564,6 +564,7 @@ def _tier2_v0_metric_blockers(row: Mapping[str, str]) -> tuple[str, ...]:
     neighbor_interference_ratio = (
         None if neighbor_value in (None, "") else _float(neighbor_value)
     )
+    dependent_context = _split_tokens(row.get("dependent_context"))
     rescued_checked = _int_value(row.get("rescued_cell_count_checked"))
     rescued_supported = _int_value(row.get("rescued_cell_count_supported"))
     rescued_apex_span = _float(row.get("rescued_apex_rt_span_sec"))
@@ -587,6 +588,11 @@ def _tier2_v0_metric_blockers(row: Mapping[str, str]) -> tuple[str, ...]:
     if neighbor_value not in (None, "") and neighbor_interference_ratio is None:
         blockers.append("metric_unavailable")
         return tuple(blockers)
+    if (
+        neighbor_value in (None, "")
+        and "neighbor_interference_not_assessed" not in dependent_context
+    ):
+        blockers.append("neighbor_interference_unassessed")
     if trace_scan_count < 5:
         blockers.append("metric_unavailable")
     if scan_support_score < 0.20:
