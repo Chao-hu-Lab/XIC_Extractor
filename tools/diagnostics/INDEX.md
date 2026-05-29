@@ -1,7 +1,7 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
 **Last generated:** 2026-05-29
-**Total entry-points:** 40
+**Total entry-points:** 41
 **Total files (incl. helpers):** ~114
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 
@@ -22,7 +22,7 @@
 ## Table of Contents
 
 1. [Phase Gates (P1/P2/P2b/P2c/P7)](#phase-gates-p1p2p2bp2cp7) — 7 tools
-2. [Evidence Consistency](#evidence-consistency) — 2 tools
+2. [Evidence Consistency](#evidence-consistency) — 3 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
 4. [Backfill Reviews](#backfill-reviews) — 7 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 2 tools
@@ -125,6 +125,15 @@ different; see `2026-05-26-diagnostic-lifecycle-audit-note.md` Cluster 1.
 **Topic group**: `cross_report_evidence_consistency.py` + `_io`, `_models`, `_analysis`, `_writers` (5 files)
 **Originating spec**: (none found — likely landed alongside post-PR60 cleanup; see `2026-05-24-post-pr60-codebase-cleanup-spec.md` Workstream G context)
 **Duplication note**: Low-level parsing/writing helpers are consolidated through `diagnostic_io.py`; row dataclasses stay separate because the schemas differ.
+
+---
+
+### `shared_peak_identity_explanation.py`
+
+**Purpose**: Write the default Slice 0 `diagnostic_only` shared peak identity explanation outputs from a durable manual oracle plus existing alignment/candidate-gate artifacts; with `--enable-blast-radius`, add Slice 1 blast-radius manifest, summary, run facts, and report sections over existing 8RAW / 85RAW alignment artifacts.
+**Topic group**: `shared_peak_identity_explanation.py` + `xic_extractor/alignment/shared_peak_identity_explanation/*`
+**Originating spec/plan**: `specs/2026-05-29-shared-peak-identity-evidence-explanation-pilot-design.md`; `plans/2026-05-29-shared-peak-identity-slice0-implementation-plan.md`; `plans/2026-05-29-shared-peak-identity-slice1-blast-radius-plan.md`
+**Status note**: Default mode emits only the manual-oracle copy, evidence vectors, explanations, run facts, and Markdown report under `output/shared_peak_identity_evidence_explanation/`; it does not emit Slice 1 files unless `--enable-blast-radius` is passed. Slice 1 writes `shared_peak_identity_blast_radius_manifest.tsv` and `shared_peak_identity_blast_radius_summary.tsv` from existing artifacts only. This diagnostic does not scan RAW files, mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbooks, selected peaks, backfill, Tier 2 support, or downstream contracts, and it must not claim production readiness.
 
 ---
 
