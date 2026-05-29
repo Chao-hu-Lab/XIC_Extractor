@@ -333,10 +333,11 @@ def evaluate_production_candidate_gate(
     if not tier2_available and tier2_evidence is None:
         blockers = _ordered_unique((*blockers, "missing_positive_tier2_support"))
 
+    status: CandidateGateStatus
     if tier2_evidence is not None and blockers:
-        status: CandidateGateStatus = "audit"
+        status = "audit"
     elif any(blocker != "missing_positive_tier2_support" for blocker in blockers):
-        status: CandidateGateStatus = "audit"
+        status = "audit"
     elif blockers:
         status = "keep_provisional"
     else:
@@ -541,9 +542,10 @@ def _tier2_evidence_from_row(
         blockers.append("criteria_version_not_allowlisted")
     if producer_version not in TIER2_RECOGNIZED_PRODUCER_VERSIONS:
         blockers.append("producer_version_not_recognized")
+    source_expected_sample_count = _int_value(row.get("source_expected_sample_count"))
     if (
-        _int_value(row.get("source_expected_sample_count")) is None
-        or _int_value(row.get("source_expected_sample_count")) <= 0
+        source_expected_sample_count is None
+        or source_expected_sample_count <= 0
         or not row.get("raw_reader_runtime", "").strip()
         or not row.get("python_executable", "").strip()
         or not row.get("dll_dir", "").strip()
@@ -587,22 +589,33 @@ def _tier2_v0_metric_blockers(row: Mapping[str, str]) -> tuple[str, ...]:
     rescued_supported = _int_value(row.get("rescued_cell_count_supported"))
     rescued_apex_span = _float(row.get("rescued_apex_rt_span_sec"))
     rescued_boundary_overlap_min = _float(row.get("rescued_boundary_overlap_min"))
-    if None in {
-        trace_scan_count,
-        seed_apex_rt,
-        tier2_apex_rt,
-        scan_support_score,
-        apex_delta_sec,
-        boundary_start_rt,
-        boundary_end_rt,
-        boundary_width_sec,
-        rescued_checked,
-        rescued_supported,
-        rescued_apex_span,
-        rescued_boundary_overlap_min,
-    }:
+    if any(
+        value is None
+        for value in (
+            trace_scan_count,
+            seed_apex_rt,
+            tier2_apex_rt,
+            scan_support_score,
+            apex_delta_sec,
+            boundary_start_rt,
+            boundary_end_rt,
+            boundary_width_sec,
+            rescued_checked,
+            rescued_supported,
+            rescued_apex_span,
+            rescued_boundary_overlap_min,
+        )
+    ):
         blockers.append("metric_unavailable")
         return tuple(blockers)
+    assert trace_scan_count is not None
+    assert scan_support_score is not None
+    assert apex_delta_sec is not None
+    assert boundary_width_sec is not None
+    assert rescued_checked is not None
+    assert rescued_supported is not None
+    assert rescued_apex_span is not None
+    assert rescued_boundary_overlap_min is not None
     if neighbor_value not in (None, "") and neighbor_interference_ratio is None:
         blockers.append("metric_unavailable")
         return tuple(blockers)

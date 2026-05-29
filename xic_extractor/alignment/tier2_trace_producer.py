@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from xic_extractor.alignment.production_candidate_gate import (
@@ -10,7 +10,11 @@ from xic_extractor.alignment.production_candidate_gate import (
     tier2_candidate_subset_signature,
 )
 
-TraceLoader = Callable[[str, float, float, float, float], tuple[object, object]]
+TraceValue = float | int | str
+TraceLoader = Callable[
+    [str, float, float, float, float],
+    tuple[Iterable[TraceValue], Iterable[TraceValue]],
+]
 
 CRITERIA_VERSION = "tier2_trace_identity_rescued_coherence_v0_1_diagnostic"
 PRODUCER_VERSION = "raw_trace_reread_tier2_v0_1"
@@ -399,8 +403,8 @@ def _trace_metrics_for_cell(
         return None, error_blocker
 
     try:
-        rt = tuple(float(value) for value in rt_values)  # type: ignore[union-attr]
-        intensity = tuple(float(value) for value in intensity_values)  # type: ignore[union-attr]
+        rt = tuple(float(value) for value in rt_values)
+        intensity = tuple(float(value) for value in intensity_values)
     except (TypeError, ValueError):
         return None, "metric_unavailable"
     if len(rt) != len(intensity):

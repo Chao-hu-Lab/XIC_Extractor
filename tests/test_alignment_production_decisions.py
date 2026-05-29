@@ -103,7 +103,10 @@ def test_rescue_heavy_row_needs_multiple_detected_owners_for_primary_promotion()
     decisions = build_production_decisions(matrix, AlignmentConfig())
 
     assert set(decisions.row("FAM001").row_flags) == {
+        "single_detected_seed",
         "rescue_heavy",
+        "provisional_retention_candidate",
+        "skip_expensive_evidence",
         "rescue_only_review",
     }
     assert decisions.row("FAM001").accepted_cell_count == 0
@@ -217,7 +220,10 @@ def test_duplicate_claim_pressure_blocks_unconsolidated_primary_promotion():
 
     decisions = build_production_decisions(matrix, AlignmentConfig())
 
-    assert decisions.row("FAM001").row_flags == ("duplicate_claim_pressure",)
+    assert decisions.row("FAM001").row_flags == (
+        "single_detected_seed",
+        "duplicate_claim_pressure",
+    )
     assert decisions.row("FAM001").include_in_primary_matrix is False
 
 
