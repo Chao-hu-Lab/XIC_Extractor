@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -32,8 +31,7 @@ def write_slice0_outputs(
     run_facts: Mapping[str, str],
 ) -> dict[str, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    oracle_copy = output_dir / "shared_peak_identity_manual_oracle.tsv"
-    shutil.copyfile(durable_oracle_path, oracle_copy)
+    oracle_path = output_dir / "shared_peak_identity_manual_oracle.tsv"
     evidence_path = output_dir / "shared_peak_identity_evidence_vectors.tsv"
     explanations_path = output_dir / "shared_peak_identity_explanations.tsv"
     run_facts_path = output_dir / "shared_peak_identity_run_facts.tsv"
@@ -48,7 +46,7 @@ def write_slice0_outputs(
             row.get("matched_source_row_ids", ""),
             valid_source_row_ids,
         )
-    write_tsv(oracle_copy, oracle_rows, ORACLE_COLUMNS, lineterminator="\n")
+    write_tsv(oracle_path, oracle_rows, ORACLE_COLUMNS, lineterminator="\n")
     write_tsv(
         evidence_path,
         evidence_rows,
@@ -67,7 +65,7 @@ def write_slice0_outputs(
         encoding="utf-8",
     )
     return {
-        "oracle": oracle_copy,
+        "oracle": oracle_path,
         "evidence_vectors": evidence_path,
         "explanations": explanations_path,
         "run_facts": run_facts_path,

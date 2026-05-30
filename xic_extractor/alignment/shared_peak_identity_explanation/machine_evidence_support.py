@@ -873,6 +873,7 @@ def _observed_machine_metrics(
             candidate_ms2_row.get("nl_ppm_max"),
         )
     if _has_family_ms2_required_tag(family_ms2_required_tag_row):
+        assert family_ms2_required_tag_row is not None
         metrics.append("family_ms2_required_tag_status=observed_in_family")
         _append_metric(
             metrics,

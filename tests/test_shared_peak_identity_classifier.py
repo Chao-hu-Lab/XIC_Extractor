@@ -2,15 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from xic_extractor.alignment.shared_peak_identity_explanation.assembler import (
-    assemble_evidence_vectors,
-)
 from xic_extractor.alignment.shared_peak_identity_explanation.classifier import (
     build_slice0_run_facts,
     classify_explanations,
-)
-from xic_extractor.alignment.shared_peak_identity_explanation.machine_artifacts import (
-    load_machine_matches,
 )
 from xic_extractor.alignment.shared_peak_identity_explanation.oracle import (
     ManualOracleRow,
@@ -135,19 +129,19 @@ def test_classifier_detects_scope_rule_manual_machine_disagreement() -> None:
 
 
 def _real_evidence(oracle_rows):
-    matches = load_machine_matches(
-        oracle_rows=oracle_rows,
-        alignment_review_tsv=Path(
-            "output/tiered_backfill_candidate_gate_8raw_current/alignment_review.tsv"
-        ),
-        alignment_cells_tsv=Path(
-            "output/tiered_backfill_candidate_gate_8raw_current/alignment_cells.tsv"
-        ),
-        candidate_gate_tsv=Path(
-            "output/tier2_v0_1_coherence_8raw_current_gate/alignment_production_candidate_gate.tsv"
-        ),
-    )
-    return assemble_evidence_vectors(oracle_rows, matches)
+    return [
+        {
+            "oracle_row_id": row.oracle_row_id,
+            "source_role": "rescued_cell",
+            "source_row_id": f"alignment_cells.tsv:{index}",
+            "machine_current_label": "rescued",
+            "machine_reason": "synthetic classifier coverage fixture",
+            "machine_blockers": "",
+            "source_artifact": "synthetic_alignment_cells.tsv",
+        }
+        for index, row in enumerate(oracle_rows, start=1)
+        if row.manual_label == "fail"
+    ]
 
 
 def _manual_row(
