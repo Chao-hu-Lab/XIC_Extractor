@@ -384,6 +384,470 @@ def test_machine_evidence_support_marks_no_missing_machine_basis_sufficient() ->
     assert row["evidence_support_status"] == "machine_observed_sufficient"
 
 
+def test_ms1_pattern_coherence_can_close_formal_pattern_metric() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="pass",
+                evidence_gap_class="machine_too_conservative_shape_or_pattern_unmodeled",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "rt_close;pattern_similar",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "6.04",
+                        "peak_start_rt": "5.90",
+                        "peak_end_rt": "6.20",
+                        "rt_delta_sec": "0.0",
+                        "trace_quality": "owner_backfill",
+                    },
+                ),
+            )
+        },
+        ms1_pattern_coherence_evidence={
+            ("FAM001", "S1"): {
+                "ms1_pattern_status": "supportive",
+                "ms1_pattern_evidence_level": "sample_constellation",
+                "apex_coherence_sec": "3.0",
+                "boundary_overlap_score": "0.82",
+                "shape_correlation_score": "0.91",
+                "relative_pattern_stability_score": "0.77",
+                "local_interference_score": "0.05",
+                "constellation_peak_count": "3",
+                "reference_peak_count": "3",
+                "drift_compatible_status": "compatible",
+                "reason": "unit_test_ms1_constellation",
+                "diagnostic_only": "TRUE",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert row["pattern_basis_status"] == "machine_observed"
+    assert "formal_pattern_metric" not in row["missing_machine_evidence"]
+    assert "ms1_pattern_status=supportive" in row["observed_machine_metrics"]
+    assert row["evidence_support_status"] == "machine_observed_sufficient"
+
+
+def test_ms1_overlay_shape_metric_can_close_formal_shape_metric() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="pass",
+                evidence_gap_class="machine_too_conservative_shape_or_pattern_unmodeled",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "shape_complete;pattern_similar",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "6.04",
+                        "peak_start_rt": "5.90",
+                        "peak_end_rt": "6.20",
+                        "rt_delta_sec": "0.0",
+                        "trace_quality": "owner_backfill",
+                    },
+                ),
+            )
+        },
+        ms1_pattern_coherence_evidence={
+            ("FAM001", "S1"): {
+                "ms1_pattern_status": "supportive",
+                "ms1_pattern_evidence_level": "trace_constellation",
+                "apex_coherence_sec": "3.0",
+                "boundary_overlap_score": "0.82",
+                "shape_correlation_score": "0.94",
+                "relative_pattern_stability_score": "0.77",
+                "local_interference_score": "0.05",
+                "constellation_peak_count": "3",
+                "reference_peak_count": "3",
+                "drift_compatible_status": "compatible",
+                "reason": "family_ms1_overlay_shape_supported",
+                "diagnostic_only": "TRUE",
+                "shape_metric_source": "family_ms1_overlay_raw_trace",
+                "family_ms1_overlay_verdict": "ms1_shape_supports_family_backfill",
+                "local_window_to_global_max_ratio": "0.98",
+                "local_window_apex_delta_sec": "0.6",
+                "global_trace_apex_delta_sec": "1.2",
+                "family_ms1_overlay_trace_data_json": "fam001_overlay_trace_data.json",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert row["shape_basis_status"] == "machine_observed"
+    assert "formal_shape_metric" not in row["missing_machine_evidence"]
+    assert "formal_pattern_metric" not in row["missing_machine_evidence"]
+    assert "ms1_shape_metric_source=family_ms1_overlay_raw_trace" in row[
+        "observed_machine_metrics"
+    ]
+    assert row["evidence_support_status"] == "machine_observed_sufficient"
+
+
+def test_direct_ms1_pattern_shape_score_does_not_close_formal_shape_metric() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="pass",
+                evidence_gap_class="machine_too_conservative_shape_or_pattern_unmodeled",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "shape_complete;pattern_similar",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "6.04",
+                        "peak_start_rt": "5.90",
+                        "peak_end_rt": "6.20",
+                        "rt_delta_sec": "0.0",
+                        "trace_quality": "owner_backfill",
+                    },
+                ),
+            )
+        },
+        ms1_pattern_coherence_evidence={
+            ("FAM001", "S1"): {
+                "ms1_pattern_status": "supportive",
+                "ms1_pattern_evidence_level": "sample_constellation",
+                "apex_coherence_sec": "3.0",
+                "boundary_overlap_score": "0.82",
+                "shape_correlation_score": "0.94",
+                "relative_pattern_stability_score": "0.77",
+                "local_interference_score": "0.05",
+                "constellation_peak_count": "3",
+                "reference_peak_count": "3",
+                "drift_compatible_status": "compatible",
+                "reason": "unit_test_ms1_constellation",
+                "diagnostic_only": "TRUE",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert "formal_shape_metric" in row["missing_machine_evidence"]
+    assert "formal_pattern_metric" not in row["missing_machine_evidence"]
+    assert row["evidence_support_status"] == "machine_observed_partial"
+
+
+def test_raw_ms1_overlay_low_shape_local_peak_is_inconclusive() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="pass",
+                evidence_gap_class="machine_too_conservative_shape_or_pattern_unmodeled",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "shape_complete;pattern_similar",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "6.04",
+                        "peak_start_rt": "5.90",
+                        "peak_end_rt": "6.20",
+                        "rt_delta_sec": "0.0",
+                        "trace_quality": "owner_backfill",
+                    },
+                ),
+            )
+        },
+        ms1_pattern_coherence_evidence={
+            ("FAM001", "S1"): {
+                "ms1_pattern_status": "partial_support",
+                "ms1_pattern_evidence_level": "trace_constellation",
+                "apex_coherence_sec": "3.0",
+                "boundary_overlap_score": "0.82",
+                "shape_correlation_score": "0.16",
+                "relative_pattern_stability_score": "0.77",
+                "local_interference_score": "0.05",
+                "constellation_peak_count": "3",
+                "reference_peak_count": "3",
+                "drift_compatible_status": "compatible",
+                "reason": (
+                    "family_ms1_overlay_shape_metric_inconclusive_apex_or_height"
+                ),
+                "diagnostic_only": "TRUE",
+                "shape_metric_source": "family_ms1_overlay_raw_trace",
+                "family_ms1_overlay_verdict": "ms1_shape_supports_family_backfill",
+                "local_window_to_global_max_ratio": "1",
+                "local_window_apex_delta_sec": "5",
+                "global_trace_apex_delta_sec": "5",
+                "family_ms1_overlay_trace_data_json": "fam001_overlay_trace_data.json",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert "formal_shape_metric" not in row["missing_machine_evidence"]
+    assert "formal_pattern_metric" not in row["missing_machine_evidence"]
+    assert "shape_metric_not_supportive" not in row["missing_machine_evidence"]
+    assert "pattern_metric_not_supportive" not in row["missing_machine_evidence"]
+    assert "shape_metric_inconclusive_apex_or_height" in row[
+        "missing_machine_evidence"
+    ]
+    assert "pattern_metric_inconclusive_apex_or_height" in row[
+        "missing_machine_evidence"
+    ]
+    assert row["evidence_support_status"] == "machine_observed_partial"
+
+
+def test_ms1_pattern_coherence_conflict_fails_closed() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="fail",
+                evidence_gap_class="machine_too_permissive_rt_pattern_conflict",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "pattern_mismatch",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "6.04",
+                        "peak_start_rt": "5.90",
+                        "peak_end_rt": "6.20",
+                        "rt_delta_sec": "0.0",
+                        "trace_quality": "owner_backfill",
+                    },
+                ),
+            )
+        },
+        ms1_pattern_coherence_evidence={
+            ("FAM001", "S1"): {
+                "ms1_pattern_status": "supportive",
+                "ms1_pattern_evidence_level": "sample_constellation",
+                "apex_coherence_sec": "3.0",
+                "boundary_overlap_score": "0.82",
+                "shape_correlation_score": "0.91",
+                "relative_pattern_stability_score": "0.77",
+                "local_interference_score": "0.05",
+                "constellation_peak_count": "3",
+                "reference_peak_count": "3",
+                "drift_compatible_status": "compatible",
+                "reason": "unit_test_ms1_constellation",
+                "diagnostic_only": "TRUE",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert row["pattern_basis_status"] == "machine_observed"
+    assert row["missing_machine_evidence"] == "pattern_metric_not_supportive"
+    assert row["evidence_support_status"] == "machine_observed_conflict"
+
+
+def test_matrix_rt_drift_policy_can_close_drift_possible_blocker() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="suspect",
+                evidence_gap_class="rt_drift_policy_gap",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "rt_drift_possible;pattern_similar",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "6.04",
+                        "peak_start_rt": "5.90",
+                        "peak_end_rt": "6.20",
+                        "rt_delta_sec": "72.0",
+                        "trace_quality": "owner_backfill",
+                    },
+                ),
+            )
+        },
+        ms1_pattern_coherence_evidence={
+            ("FAM001", "S1"): {
+                "ms1_pattern_status": "supportive",
+                "ms1_pattern_evidence_level": "sample_constellation",
+                "apex_coherence_sec": "3.0",
+                "boundary_overlap_score": "0.82",
+                "shape_correlation_score": "0.91",
+                "relative_pattern_stability_score": "0.77",
+                "local_interference_score": "0.05",
+                "constellation_peak_count": "3",
+                "reference_peak_count": "3",
+                "drift_compatible_status": "compatible",
+                "reason": "unit_test_ms1_constellation",
+                "diagnostic_only": "TRUE",
+            }
+        },
+        matrix_rt_drift_policy_evidence={
+            ("FAM001", "S1"): {
+                "matrix_rt_drift_status": "drift_supported",
+                "drift_evidence_level": "sample_istd_aligned",
+                "raw_rt_delta_sec": "72.0",
+                "drift_corrected_delta_sec": "4.0",
+                "matrix_shift_sec": "68.0",
+                "drift_reference_count": "4",
+                "drift_reference_source": "sample_istd_trend",
+                "drift_compatible_status": "compatible",
+                "reason": "unit_test_matrix_drift_policy",
+                "diagnostic_only": "TRUE",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert row["rt_basis_status"] == "machine_observed"
+    assert "matrix_rt_drift_policy" not in row["missing_machine_evidence"]
+    assert "matrix_rt_drift_status=drift_supported" in row[
+        "observed_machine_metrics"
+    ]
+    assert row["evidence_support_status"] == "machine_observed_sufficient"
+
+
+def test_rt_close_policy_can_close_drift_possible_blocker() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="suspect",
+                evidence_gap_class="rt_drift_policy_gap",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "rt_drift_possible;pattern_similar",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "7.96",
+                        "peak_start_rt": "7.20",
+                        "peak_end_rt": "8.80",
+                        "rt_delta_sec": "51.2",
+                        "trace_quality": "owner_backfill",
+                    },
+                ),
+            )
+        },
+        ms1_pattern_coherence_evidence={
+            ("FAM001", "S1"): {
+                "ms1_pattern_status": "supportive",
+                "ms1_pattern_evidence_level": "sample_constellation",
+                "apex_coherence_sec": "3.0",
+                "boundary_overlap_score": "0.82",
+                "shape_correlation_score": "0.91",
+                "relative_pattern_stability_score": "0.77",
+                "local_interference_score": "0.05",
+                "constellation_peak_count": "3",
+                "reference_peak_count": "3",
+                "drift_compatible_status": "compatible",
+                "reason": "unit_test_ms1_constellation",
+                "diagnostic_only": "TRUE",
+            }
+        },
+        matrix_rt_drift_policy_evidence={
+            ("FAM001", "S1"): {
+                "matrix_rt_drift_status": "rt_close",
+                "drift_evidence_level": "family_consensus_aligned",
+                "raw_rt_delta_sec": "51.2",
+                "drift_corrected_delta_sec": "51.2",
+                "matrix_shift_sec": "0",
+                "drift_reference_count": "1",
+                "drift_reference_source": "alignment_cell_rt_delta",
+                "drift_compatible_status": "compatible",
+                "reason": "alignment_rt_within_preferred_window",
+                "diagnostic_only": "TRUE",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert "matrix_rt_drift_policy" not in row["missing_machine_evidence"]
+    assert "matrix_rt_drift_status=rt_close" in row["observed_machine_metrics"]
+    assert row["evidence_support_status"] == "machine_observed_sufficient"
+
+
 def test_machine_evidence_support_keeps_cid_nl_below_sample_ms2_pattern() -> None:
     explanations = [
         {

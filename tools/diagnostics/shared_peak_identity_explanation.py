@@ -10,6 +10,8 @@ from pathlib import Path
 from xic_extractor.alignment.shared_peak_identity_explanation import (
     candidate_ms2_pattern,
     machine_evidence_support,
+    matrix_rt_drift_policy,
+    ms1_pattern_coherence,
 )
 from xic_extractor.alignment.shared_peak_identity_explanation.assembler import (
     assemble_evidence_vectors,
@@ -74,6 +76,35 @@ def main(argv: Sequence[str] | None = None) -> int:
             candidate_ms2_pattern_raw_dll_dir=(
                 args.candidate_ms2_pattern_raw_dll_dir
             ),
+            ms1_pattern_coherence_evidence_tsv=(
+                args.ms1_pattern_coherence_evidence_tsv
+            ),
+            generate_ms1_pattern_coherence_evidence=(
+                args.generate_ms1_pattern_coherence_evidence
+            ),
+            matrix_rt_drift_policy_tsv=args.matrix_rt_drift_policy_tsv,
+            generate_matrix_rt_drift_policy=args.generate_matrix_rt_drift_policy,
+            matrix_rt_drift_policy_owner_edge_tsv=(
+                args.matrix_rt_drift_policy_owner_edge_tsv
+            ),
+            matrix_rt_drift_policy_rt_normalization_families_tsv=(
+                args.matrix_rt_drift_policy_rt_normalization_families_tsv
+            ),
+            matrix_rt_drift_policy_targeted_istd_summary_tsv=(
+                args.matrix_rt_drift_policy_targeted_istd_summary_tsv
+            ),
+            matrix_rt_drift_policy_rt_normalization_leave_one_out_tsv=(
+                args.matrix_rt_drift_policy_rt_normalization_leave_one_out_tsv
+            ),
+            matrix_rt_drift_policy_istd_rt_trend_tsv=(
+                args.matrix_rt_drift_policy_istd_rt_trend_tsv
+            ),
+            matrix_rt_drift_policy_istd_phase_summary_tsv=(
+                args.matrix_rt_drift_policy_istd_phase_summary_tsv
+            ),
+            ms1_pattern_coherence_overlay_trace_data_json=(
+                args.ms1_pattern_coherence_overlay_trace_data_json
+            ),
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -103,6 +134,17 @@ def run_explanation(
     candidate_ms2_pattern_evidence_tsv: Path | None = None,
     candidate_ms2_pattern_batch_index: Path | None = None,
     candidate_ms2_pattern_raw_dll_dir: Path | None = None,
+    ms1_pattern_coherence_evidence_tsv: Path | None = None,
+    generate_ms1_pattern_coherence_evidence: bool = False,
+    matrix_rt_drift_policy_tsv: Path | None = None,
+    generate_matrix_rt_drift_policy: bool = False,
+    matrix_rt_drift_policy_owner_edge_tsv: Path | None = None,
+    matrix_rt_drift_policy_rt_normalization_families_tsv: Path | None = None,
+    matrix_rt_drift_policy_targeted_istd_summary_tsv: Path | None = None,
+    matrix_rt_drift_policy_rt_normalization_leave_one_out_tsv: Path | None = None,
+    matrix_rt_drift_policy_istd_rt_trend_tsv: Path | None = None,
+    matrix_rt_drift_policy_istd_phase_summary_tsv: Path | None = None,
+    ms1_pattern_coherence_overlay_trace_data_json: Sequence[Path] | None = None,
 ) -> Mapping[str, Path | str]:
     optional_artifacts = _parse_optional_blast_radius_artifacts(
         optional_blast_radius_artifacts
@@ -128,10 +170,60 @@ def run_explanation(
             "--candidate-ms2-pattern-batch-index requires "
             "--enable-shadow-label-alignment"
         )
+    if (
+        ms1_pattern_coherence_evidence_tsv
+        and generate_ms1_pattern_coherence_evidence
+    ):
+        raise ValueError(
+            "use either --ms1-pattern-coherence-evidence-tsv or "
+            "--generate-ms1-pattern-coherence-evidence, not both"
+        )
+    if generate_ms1_pattern_coherence_evidence and not enable_shadow_label_alignment:
+        raise ValueError(
+            "--generate-ms1-pattern-coherence-evidence requires "
+            "--enable-shadow-label-alignment"
+        )
     if candidate_ms2_pattern_raw_dll_dir and not candidate_ms2_pattern_batch_index:
         raise ValueError(
             "--candidate-ms2-pattern-raw-dll-dir requires "
             "--candidate-ms2-pattern-batch-index"
+        )
+    if ms1_pattern_coherence_overlay_trace_data_json and (
+        not generate_ms1_pattern_coherence_evidence
+    ):
+        raise ValueError(
+            "--ms1-pattern-coherence-overlay-trace-data-json requires "
+            "--generate-ms1-pattern-coherence-evidence"
+        )
+    matrix_rt_drift_policy_generation_requested = (
+        generate_matrix_rt_drift_policy
+        or matrix_rt_drift_policy_owner_edge_tsv is not None
+        or matrix_rt_drift_policy_rt_normalization_families_tsv is not None
+        or matrix_rt_drift_policy_targeted_istd_summary_tsv is not None
+        or matrix_rt_drift_policy_rt_normalization_leave_one_out_tsv is not None
+        or matrix_rt_drift_policy_istd_rt_trend_tsv is not None
+        or matrix_rt_drift_policy_istd_phase_summary_tsv is not None
+    )
+    if (matrix_rt_drift_policy_targeted_istd_summary_tsv is None) != (
+        matrix_rt_drift_policy_rt_normalization_leave_one_out_tsv is None
+    ):
+        raise ValueError(
+            "targeted ISTD anchor-local trend matrix RT drift evidence requires "
+            "both --matrix-rt-drift-policy-targeted-istd-summary-tsv and "
+            "--matrix-rt-drift-policy-rt-normalization-leave-one-out-tsv"
+        )
+    if matrix_rt_drift_policy_tsv and matrix_rt_drift_policy_generation_requested:
+        raise ValueError(
+            "use either --matrix-rt-drift-policy-tsv or matrix RT drift "
+            "producer inputs, not both"
+        )
+    if (
+        matrix_rt_drift_policy_generation_requested
+        and not enable_shadow_label_alignment
+    ):
+        raise ValueError(
+            "matrix RT drift policy producer inputs require "
+            "--enable-shadow-label-alignment"
         )
     if blast_radius_preflight_only:
         if blast_radius_8raw_run is None or blast_radius_85raw_run is None:
@@ -155,7 +247,7 @@ def run_explanation(
     tier2_trace_evidence = machine_evidence_support.load_tier2_trace_evidence(
         tier2_trace_evidence_tsv
     )
-    generated_candidate_ms2_outputs: dict[str, Path] = {}
+    generated_evidence_outputs: dict[str, Path] = {}
     if candidate_ms2_pattern_batch_index is not None:
         generated_candidate_ms2_path = (
             output_dir / "shared_peak_identity_candidate_ms2_pattern_evidence.tsv"
@@ -175,12 +267,79 @@ def run_explanation(
             ),
         )
         candidate_ms2_pattern_evidence_tsv = generated_candidate_ms2_path
-        generated_candidate_ms2_outputs["candidate_ms2_pattern_evidence"] = (
+        generated_evidence_outputs["candidate_ms2_pattern_evidence"] = (
             generated_candidate_ms2_path
+        )
+    if matrix_rt_drift_policy_generation_requested:
+        generated_matrix_rt_drift_path = (
+            output_dir / "shared_peak_identity_matrix_rt_drift_policy.tsv"
+        )
+        matrix_rt_drift_policy.write_matrix_rt_drift_policy_rows(
+            generated_matrix_rt_drift_path,
+            matrix_rt_drift_policy.build_matrix_rt_drift_policy_rows(
+                alignment_cells_tsv=alignment_cells_tsv,
+                alignment_review_tsv=alignment_review_tsv,
+                owner_edge_evidence_tsv=matrix_rt_drift_policy_owner_edge_tsv,
+                rt_normalization_families_tsv=(
+                    matrix_rt_drift_policy_rt_normalization_families_tsv
+                ),
+                targeted_istd_benchmark_summary_tsv=(
+                    matrix_rt_drift_policy_targeted_istd_summary_tsv
+                ),
+                rt_normalization_leave_one_anchor_out_tsv=(
+                    matrix_rt_drift_policy_rt_normalization_leave_one_out_tsv
+                ),
+                istd_rt_trend_tsv=matrix_rt_drift_policy_istd_rt_trend_tsv,
+                istd_phase_summary_tsv=(
+                    matrix_rt_drift_policy_istd_phase_summary_tsv
+                ),
+                oracle_keys=(
+                    (row.feature_family_id, row.sample_id)
+                    for row in oracle_rows
+                    if not row.is_sentinel
+                ),
+            ),
+        )
+        matrix_rt_drift_policy_tsv = generated_matrix_rt_drift_path
+        generated_evidence_outputs["matrix_rt_drift_policy"] = (
+            generated_matrix_rt_drift_path
+        )
+    if generate_ms1_pattern_coherence_evidence:
+        generated_ms1_pattern_path = (
+            output_dir / "shared_peak_identity_ms1_pattern_coherence_evidence.tsv"
+        )
+        ms1_pattern_coherence.write_ms1_pattern_coherence_rows(
+            generated_ms1_pattern_path,
+            ms1_pattern_coherence.build_ms1_pattern_coherence_rows(
+                alignment_cells_tsv=alignment_cells_tsv,
+                matrix_rt_drift_policy_tsv=matrix_rt_drift_policy_tsv,
+                family_ms1_overlay_trace_data_jsons=(
+                    ms1_pattern_coherence_overlay_trace_data_json or ()
+                ),
+                oracle_keys=(
+                    (row.feature_family_id, row.sample_id)
+                    for row in oracle_rows
+                    if not row.is_sentinel
+                ),
+            ),
+        )
+        ms1_pattern_coherence_evidence_tsv = generated_ms1_pattern_path
+        generated_evidence_outputs["ms1_pattern_coherence_evidence"] = (
+            generated_ms1_pattern_path
         )
     candidate_ms2_pattern_evidence = (
         machine_evidence_support.load_candidate_ms2_pattern_evidence(
             candidate_ms2_pattern_evidence_tsv
+        )
+    )
+    ms1_pattern_coherence_evidence = (
+        machine_evidence_support.load_ms1_pattern_coherence_evidence(
+            ms1_pattern_coherence_evidence_tsv
+        )
+    )
+    matrix_rt_drift_policy_evidence = (
+        machine_evidence_support.load_matrix_rt_drift_policy_evidence(
+            matrix_rt_drift_policy_tsv
         )
     )
     evidence_rows = assemble_evidence_vectors(oracle_rows, matches)
@@ -208,7 +367,9 @@ def run_explanation(
                 cwt_shape_evidence=cwt_shape_evidence,
                 tier2_trace_evidence=tier2_trace_evidence,
                 candidate_ms2_pattern_evidence=candidate_ms2_pattern_evidence,
-                extra_outputs=generated_candidate_ms2_outputs,
+                ms1_pattern_coherence_evidence=ms1_pattern_coherence_evidence,
+                matrix_rt_drift_policy_evidence=matrix_rt_drift_policy_evidence,
+                extra_outputs=generated_evidence_outputs,
             )
         return slice0_outputs
 
@@ -252,7 +413,9 @@ def run_explanation(
             cwt_shape_evidence=cwt_shape_evidence,
             tier2_trace_evidence=tier2_trace_evidence,
             candidate_ms2_pattern_evidence=candidate_ms2_pattern_evidence,
-            extra_outputs=generated_candidate_ms2_outputs,
+            ms1_pattern_coherence_evidence=ms1_pattern_coherence_evidence,
+            matrix_rt_drift_policy_evidence=matrix_rt_drift_policy_evidence,
+            extra_outputs=generated_evidence_outputs,
         )
     return slice1_outputs
 
@@ -267,6 +430,8 @@ def _write_v2_from_current_outputs(
     cwt_shape_evidence: Mapping[tuple[str, str], Mapping[str, str]],
     tier2_trace_evidence: Mapping[str, Mapping[str, str]],
     candidate_ms2_pattern_evidence: Mapping[tuple[str, str], Mapping[str, str]],
+    ms1_pattern_coherence_evidence: Mapping[tuple[str, str], Mapping[str, str]],
+    matrix_rt_drift_policy_evidence: Mapping[tuple[str, str], Mapping[str, str]],
     extra_outputs: Mapping[str, Path] | None = None,
 ) -> Mapping[str, Path | str]:
     shadow_rows = build_shadow_label_rows(explanations)
@@ -279,6 +444,8 @@ def _write_v2_from_current_outputs(
             cwt_shape_evidence=cwt_shape_evidence,
             tier2_trace_evidence=tier2_trace_evidence,
             candidate_ms2_pattern_evidence=candidate_ms2_pattern_evidence,
+            ms1_pattern_coherence_evidence=ms1_pattern_coherence_evidence,
+            matrix_rt_drift_policy_evidence=matrix_rt_drift_policy_evidence,
         )
     )
     readiness_row = build_v2_readiness(
@@ -315,6 +482,34 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--candidate-ms2-pattern-evidence-tsv", type=Path)
     parser.add_argument("--candidate-ms2-pattern-batch-index", type=Path)
     parser.add_argument("--candidate-ms2-pattern-raw-dll-dir", type=Path)
+    parser.add_argument("--ms1-pattern-coherence-evidence-tsv", type=Path)
+    parser.add_argument(
+        "--generate-ms1-pattern-coherence-evidence",
+        action="store_true",
+    )
+    parser.add_argument("--matrix-rt-drift-policy-tsv", type=Path)
+    parser.add_argument("--generate-matrix-rt-drift-policy", action="store_true")
+    parser.add_argument("--matrix-rt-drift-policy-owner-edge-tsv", type=Path)
+    parser.add_argument(
+        "--matrix-rt-drift-policy-rt-normalization-families-tsv",
+        type=Path,
+    )
+    parser.add_argument(
+        "--matrix-rt-drift-policy-targeted-istd-summary-tsv",
+        type=Path,
+    )
+    parser.add_argument(
+        "--matrix-rt-drift-policy-rt-normalization-leave-one-out-tsv",
+        type=Path,
+    )
+    parser.add_argument("--matrix-rt-drift-policy-istd-rt-trend-tsv", type=Path)
+    parser.add_argument("--matrix-rt-drift-policy-istd-phase-summary-tsv", type=Path)
+    parser.add_argument(
+        "--ms1-pattern-coherence-overlay-trace-data-json",
+        action="append",
+        default=[],
+        type=Path,
+    )
     parser.add_argument(
         "--optional-blast-radius-artifact",
         action="append",

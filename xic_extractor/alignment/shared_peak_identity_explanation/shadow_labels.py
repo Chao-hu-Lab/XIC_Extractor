@@ -397,7 +397,9 @@ def _next_action(gate_status: str, machine_evidence: Mapping[str, str]) -> str:
         "formal_pattern_metric" in blockers
         or "candidate_aligned_ms2_pattern" in blockers
     ):
-        return "add_ms2_pattern_metric_then_rerun_v2"
+        return "add_ms1_or_ms2_pattern_metric_then_rerun_v2"
+    if "matrix_rt_drift_policy" in blockers:
+        return "add_matrix_rt_drift_policy_then_rerun_v2"
     if "dda_opportunity_policy" in blockers:
         return "add_dda_opportunity_policy_then_rerun_v2"
     if "shape_metric_not_supportive" in blockers:

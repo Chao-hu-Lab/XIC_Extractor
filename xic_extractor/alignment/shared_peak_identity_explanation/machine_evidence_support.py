@@ -51,11 +51,55 @@ CANDIDATE_MS2_PATTERN_REQUIRED_COLUMNS = (
     "candidate_ms2_pattern_status",
     "candidate_ms2_evidence_level",
 )
+MS1_PATTERN_COHERENCE_REQUIRED_COLUMNS = (
+    "feature_family_id",
+    "sample_stem",
+    "ms1_pattern_status",
+    "ms1_pattern_evidence_level",
+    "apex_coherence_sec",
+    "boundary_overlap_score",
+    "shape_correlation_score",
+    "relative_pattern_stability_score",
+    "local_interference_score",
+    "constellation_peak_count",
+    "reference_peak_count",
+    "drift_compatible_status",
+    "reason",
+    "diagnostic_only",
+)
+MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS = (
+    "feature_family_id",
+    "sample_stem",
+    "matrix_rt_drift_status",
+    "drift_evidence_level",
+    "raw_rt_delta_sec",
+    "drift_corrected_delta_sec",
+    "matrix_shift_sec",
+    "drift_reference_count",
+    "drift_reference_source",
+    "drift_compatible_status",
+    "reason",
+    "diagnostic_only",
+)
 _CANDIDATE_MS2_OBSERVED_LEVELS = frozenset(
     {"sample_candidate_aligned", "sample_boundary_aligned"}
 )
 _CANDIDATE_MS2_SUPPORT_STATUSES = frozenset({"supportive", "partial_support"})
 _CANDIDATE_MS2_CONFLICT_STATUSES = frozenset({"conflict"})
+_MS1_PATTERN_OBSERVED_LEVELS = frozenset(
+    {"sample_constellation", "sample_boundary_constellation", "trace_constellation"}
+)
+_MS1_PATTERN_SUPPORT_STATUSES = frozenset({"supportive", "partial_support"})
+_MS1_PATTERN_CONFLICT_STATUSES = frozenset({"conflict"})
+_MS1_SHAPE_SUPPORT_MIN = 0.50
+_MS1_PATTERN_INCONCLUSIVE_REASONS = frozenset(
+    {"family_ms1_overlay_shape_metric_inconclusive_apex_or_height"}
+)
+_MATRIX_RT_DRIFT_OBSERVED_LEVELS = frozenset(
+    {"matrix_reference_aligned", "sample_istd_aligned", "family_consensus_aligned"}
+)
+_MATRIX_RT_DRIFT_SUPPORT_STATUSES = frozenset({"drift_supported", "rt_close"})
+_MATRIX_RT_DRIFT_CONFLICT_STATUSES = frozenset({"drift_not_supported"})
 
 
 def load_cwt_shape_evidence(
@@ -89,6 +133,30 @@ def load_candidate_ms2_pattern_evidence(
     }
 
 
+def load_ms1_pattern_coherence_evidence(
+    path: Path | None,
+) -> dict[tuple[str, str], Mapping[str, str]]:
+    if path is None:
+        return {}
+    rows = read_tsv_required(path, MS1_PATTERN_COHERENCE_REQUIRED_COLUMNS)
+    return {
+        (row["feature_family_id"], row["sample_stem"]): row
+        for row in rows
+    }
+
+
+def load_matrix_rt_drift_policy_evidence(
+    path: Path | None,
+) -> dict[tuple[str, str], Mapping[str, str]]:
+    if path is None:
+        return {}
+    rows = read_tsv_required(path, MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS)
+    return {
+        (row["feature_family_id"], row["sample_stem"]): row
+        for row in rows
+    }
+
+
 def build_machine_evidence_support_rows(
     *,
     explanations: Sequence[Mapping[str, str]],
@@ -99,11 +167,19 @@ def build_machine_evidence_support_rows(
     candidate_ms2_pattern_evidence: Mapping[
         tuple[str, str], Mapping[str, str]
     ] | None = None,
+    ms1_pattern_coherence_evidence: Mapping[
+        tuple[str, str], Mapping[str, str]
+    ] | None = None,
+    matrix_rt_drift_policy_evidence: Mapping[
+        tuple[str, str], Mapping[str, str]
+    ] | None = None,
 ) -> tuple[dict[str, str], ...]:
     shadow_by_id = {row["oracle_row_id"]: row for row in shadow_rows}
     cwt_shape_evidence = cwt_shape_evidence or {}
     tier2_trace_evidence = tier2_trace_evidence or {}
     candidate_ms2_pattern_evidence = candidate_ms2_pattern_evidence or {}
+    ms1_pattern_coherence_evidence = ms1_pattern_coherence_evidence or {}
+    matrix_rt_drift_policy_evidence = matrix_rt_drift_policy_evidence or {}
     support_rows = [
         _support_row(
             explanation=explanation,
@@ -114,6 +190,12 @@ def build_machine_evidence_support_rows(
             ),
             tier2_row=tier2_trace_evidence.get(explanation["feature_family_id"]),
             candidate_ms2_row=candidate_ms2_pattern_evidence.get(
+                (explanation["feature_family_id"], explanation["sample_id"]),
+            ),
+            ms1_pattern_row=ms1_pattern_coherence_evidence.get(
+                (explanation["feature_family_id"], explanation["sample_id"]),
+            ),
+            matrix_rt_drift_row=matrix_rt_drift_policy_evidence.get(
                 (explanation["feature_family_id"], explanation["sample_id"]),
             ),
         )
@@ -135,6 +217,8 @@ def _support_row(
     cwt_row: Mapping[str, str] | None,
     tier2_row: Mapping[str, str] | None,
     candidate_ms2_row: Mapping[str, str] | None,
+    ms1_pattern_row: Mapping[str, str] | None,
+    matrix_rt_drift_row: Mapping[str, str] | None,
 ) -> dict[str, str]:
     tags = _tags(explanation)
     sample_matches = tuple(match for match in matches if match.sample_level)
@@ -145,6 +229,8 @@ def _support_row(
         cwt_row=cwt_row,
         tier2_row=tier2_row,
         candidate_ms2_row=candidate_ms2_row,
+        ms1_pattern_row=ms1_pattern_row,
+        matrix_rt_drift_row=matrix_rt_drift_row,
     )
     manual_facts = _manual_derived_facts(tags, explanation)
     missing_evidence = _missing_machine_evidence(
@@ -155,6 +241,8 @@ def _support_row(
         cwt_row=cwt_row,
         tier2_row=tier2_row,
         candidate_ms2_row=candidate_ms2_row,
+        ms1_pattern_row=ms1_pattern_row,
+        matrix_rt_drift_row=matrix_rt_drift_row,
     )
     literature_refs = _literature_refs(
         tags=tags,
@@ -179,12 +267,22 @@ def _support_row(
             manual_label=explanation["manual_label"],
             machine_label=explanation["machine_current_label"],
         ),
-        "rt_basis_status": _rt_basis_status(tags, sample_matches),
-        "shape_basis_status": _shape_basis_status(tags, sample_matches, cwt_row),
+        "rt_basis_status": _rt_basis_status(
+            tags,
+            sample_matches,
+            matrix_rt_drift_row,
+        ),
+        "shape_basis_status": _shape_basis_status(
+            tags,
+            sample_matches,
+            cwt_row,
+            ms1_pattern_row,
+        ),
         "pattern_basis_status": _pattern_basis_status(
             tags,
             context_matches,
             candidate_ms2_row,
+            ms1_pattern_row,
         ),
         "opportunity_basis_status": _opportunity_basis_status(
             tags,
@@ -207,6 +305,8 @@ def _support_row(
                 cwt_row=cwt_row,
                 tier2_row=tier2_row,
                 candidate_ms2_row=candidate_ms2_row,
+                ms1_pattern_row=ms1_pattern_row,
+                matrix_rt_drift_row=matrix_rt_drift_row,
             ),
         ),
         "diagnostic_only": "TRUE",
@@ -240,7 +340,10 @@ def _status_label_alignment_status(*, manual_label: str, machine_label: str) -> 
 def _rt_basis_status(
     tags: frozenset[str],
     sample_matches: Sequence[MachineMatch],
+    matrix_rt_drift_row: Mapping[str, str] | None,
 ) -> str:
+    if _has_matrix_rt_drift_metric(matrix_rt_drift_row):
+        return "machine_observed"
     if any(_has_value(match.row.get("apex_rt")) for match in sample_matches) and any(
         _has_value(match.row.get("rt_delta_sec")) for match in sample_matches
     ):
@@ -254,8 +357,9 @@ def _shape_basis_status(
     tags: frozenset[str],
     sample_matches: Sequence[MachineMatch],
     cwt_row: Mapping[str, str] | None,
+    ms1_pattern_row: Mapping[str, str] | None,
 ) -> str:
-    if _has_cwt_metric(cwt_row):
+    if _has_cwt_metric(cwt_row) or _has_ms1_shape_metric(ms1_pattern_row):
         return "machine_observed"
     has_proxy = any(
         _has_value(match.row.get("trace_quality")) for match in sample_matches
@@ -268,8 +372,11 @@ def _pattern_basis_status(
     tags: frozenset[str],
     context_matches: Sequence[MachineMatch],
     candidate_ms2_row: Mapping[str, str] | None,
+    ms1_pattern_row: Mapping[str, str] | None,
 ) -> str:
-    if _has_candidate_ms2_pattern_metric(candidate_ms2_row):
+    if _has_candidate_ms2_pattern_metric(
+        candidate_ms2_row,
+    ) or _has_ms1_pattern_metric(ms1_pattern_row):
         return "machine_observed"
     has_family_proxy = any(
         _has_value(match.row.get("neutral_loss_tag")) for match in context_matches
@@ -335,6 +442,8 @@ def _observed_machine_metrics(
     cwt_row: Mapping[str, str] | None,
     tier2_row: Mapping[str, str] | None,
     candidate_ms2_row: Mapping[str, str] | None,
+    ms1_pattern_row: Mapping[str, str] | None,
+    matrix_rt_drift_row: Mapping[str, str] | None,
 ) -> str:
     metrics: list[str] = []
     if sample_matches:
@@ -455,6 +564,143 @@ def _observed_machine_metrics(
             "candidate_ms2_alignment_source",
             candidate_ms2_row.get("ms2_alignment_source"),
         )
+    if ms1_pattern_row:
+        _append_metric(
+            metrics,
+            "ms1_pattern_status",
+            ms1_pattern_row.get("ms1_pattern_status"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_pattern_evidence_level",
+            ms1_pattern_row.get("ms1_pattern_evidence_level"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_apex_coherence_sec",
+            ms1_pattern_row.get("apex_coherence_sec"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_boundary_overlap_score",
+            ms1_pattern_row.get("boundary_overlap_score"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_shape_correlation_score",
+            ms1_pattern_row.get("shape_correlation_score"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_local_interference_score",
+            ms1_pattern_row.get("local_interference_score"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_drift_compatible_status",
+            ms1_pattern_row.get("drift_compatible_status"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_shape_metric_source",
+            ms1_pattern_row.get("shape_metric_source"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_overlay_verdict",
+            ms1_pattern_row.get("family_ms1_overlay_verdict"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_cell_height",
+            ms1_pattern_row.get("cell_height"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_local_window_max_intensity",
+            ms1_pattern_row.get("local_window_max_intensity"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_trace_max_intensity",
+            ms1_pattern_row.get("trace_max_intensity"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_cell_to_local_window_max_ratio",
+            ms1_pattern_row.get("cell_to_local_window_max_ratio"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_local_window_to_global_max_ratio",
+            ms1_pattern_row.get("local_window_to_global_max_ratio"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_local_window_apex_delta_sec",
+            ms1_pattern_row.get("local_window_apex_delta_sec"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_global_trace_apex_delta_sec",
+            ms1_pattern_row.get("global_trace_apex_delta_sec"),
+        )
+    if matrix_rt_drift_row:
+        _append_metric(
+            metrics,
+            "matrix_rt_drift_status",
+            matrix_rt_drift_row.get("matrix_rt_drift_status"),
+        )
+        _append_metric(
+            metrics,
+            "drift_evidence_level",
+            matrix_rt_drift_row.get("drift_evidence_level"),
+        )
+        _append_metric(
+            metrics,
+            "raw_rt_delta_sec",
+            matrix_rt_drift_row.get("raw_rt_delta_sec"),
+        )
+        _append_metric(
+            metrics,
+            "drift_corrected_delta_sec",
+            matrix_rt_drift_row.get("drift_corrected_delta_sec"),
+        )
+        _append_metric(
+            metrics,
+            "matrix_shift_sec",
+            matrix_rt_drift_row.get("matrix_shift_sec"),
+        )
+        _append_metric(
+            metrics,
+            "drift_reference_count",
+            matrix_rt_drift_row.get("drift_reference_count"),
+        )
+        _append_metric(
+            metrics,
+            "drift_compatible_status",
+            matrix_rt_drift_row.get("drift_compatible_status"),
+        )
+        _append_metric(
+            metrics,
+            "drift_reference_source",
+            matrix_rt_drift_row.get("drift_reference_source"),
+        )
+        _append_metric(
+            metrics,
+            "drift_reference_artifacts",
+            matrix_rt_drift_row.get("drift_reference_artifacts"),
+        )
+        _append_metric(
+            metrics,
+            "istd_trend_injection_order_span",
+            matrix_rt_drift_row.get("istd_trend_injection_order_span"),
+        )
+        _append_metric(
+            metrics,
+            "istd_phase_summary",
+            matrix_rt_drift_row.get("istd_phase_summary"),
+        )
     return ";".join(metrics)
 
 
@@ -488,23 +734,37 @@ def _missing_machine_evidence(
     cwt_row: Mapping[str, str] | None,
     tier2_row: Mapping[str, str] | None,
     candidate_ms2_row: Mapping[str, str] | None,
+    ms1_pattern_row: Mapping[str, str] | None,
+    matrix_rt_drift_row: Mapping[str, str] | None,
 ) -> tuple[str, ...]:
     missing: list[str] = []
     gap_class = explanation.get("evidence_gap_class", "")
-    if tags & _SHAPE_TAGS and not _has_cwt_metric(cwt_row):
+    if (
+        tags & _SHAPE_TAGS
+        and not _has_cwt_metric(cwt_row)
+        and not _has_ms1_shape_metric(ms1_pattern_row)
+    ):
         missing.append("formal_shape_metric")
     if _cwt_conflicts_with_manual(tags, cwt_row):
         missing.append("shape_metric_not_supportive")
+    if _ms1_shape_conflicts_with_manual(tags, ms1_pattern_row):
+        missing.append("shape_metric_not_supportive")
+    if _ms1_shape_inconclusive_with_manual(tags, ms1_pattern_row):
+        missing.append("shape_metric_inconclusive_apex_or_height")
     if (
         tags & _PATTERN_TAGS
         and not _has_candidate_ms2_pattern_metric(candidate_ms2_row)
+        and not _has_ms1_pattern_metric(ms1_pattern_row)
     ):
         missing.append("formal_pattern_metric")
     if tags & _OPPORTUNITY_TAGS:
         if not _has_tier2_trace_metric(tier2_row):
             missing.append("intensity_opportunity_metric")
         missing.append("dda_opportunity_policy")
-    if "rt_drift_possible" in tags:
+    if "rt_drift_possible" in tags and not _matrix_rt_drift_supports_manual(
+        tags,
+        matrix_rt_drift_row,
+    ):
         missing.append("matrix_rt_drift_policy")
     if "rt_too_far" in tags and not _has_rt_preferred_window_conflict(
         sample_matches
@@ -512,10 +772,18 @@ def _missing_machine_evidence(
         missing.append("rt_pattern_conflict_gate")
     if _candidate_ms2_conflicts_with_manual(tags, candidate_ms2_row):
         missing.append("pattern_metric_not_supportive")
+    if _ms1_pattern_conflicts_with_manual(tags, ms1_pattern_row):
+        missing.append("pattern_metric_not_supportive")
+    if _ms1_pattern_inconclusive_with_manual(tags, ms1_pattern_row):
+        missing.append("pattern_metric_inconclusive_apex_or_height")
+    if _matrix_rt_drift_conflicts_with_manual(tags, matrix_rt_drift_row):
+        missing.append("matrix_rt_drift_policy_not_supportive")
     if (
         "pattern_mismatch" in tags
         and not _candidate_ms2_supports_manual(tags, candidate_ms2_row)
+        and not _ms1_pattern_supports_manual(tags, ms1_pattern_row)
         and not _has_candidate_ms2_pattern_metric(candidate_ms2_row)
+        and not _has_ms1_pattern_metric(ms1_pattern_row)
     ):
         missing.append("candidate_aligned_ms2_pattern")
     if (
@@ -537,6 +805,7 @@ def _missing_machine_evidence(
         not context_matches
         and tags & _PATTERN_TAGS
         and not _has_candidate_ms2_pattern_metric(candidate_ms2_row)
+        and not _has_ms1_pattern_metric(ms1_pattern_row)
     ):
         missing.append("family_ms2_pattern_context")
     return _unique(missing)
@@ -595,6 +864,8 @@ def _evidence_support_status(
     if "shape_metric_not_supportive" in missing_evidence:
         return "machine_observed_conflict"
     if "pattern_metric_not_supportive" in missing_evidence:
+        return "machine_observed_conflict"
+    if "matrix_rt_drift_policy_not_supportive" in missing_evidence:
         return "machine_observed_conflict"
     if "manual_scope_policy" in missing_evidence:
         return "blocked_missing_metric"
@@ -720,11 +991,16 @@ def _has_machine_observed_metric(
     cwt_row: Mapping[str, str] | None,
     tier2_row: Mapping[str, str] | None,
     candidate_ms2_row: Mapping[str, str] | None,
+    ms1_pattern_row: Mapping[str, str] | None,
+    matrix_rt_drift_row: Mapping[str, str] | None,
 ) -> bool:
     return (
         _has_cwt_metric(cwt_row)
         or _has_tier2_trace_metric(tier2_row)
         or _has_candidate_ms2_pattern_metric(candidate_ms2_row)
+        or _has_ms1_shape_metric(ms1_pattern_row)
+        or _has_ms1_pattern_metric(ms1_pattern_row)
+        or _has_matrix_rt_drift_metric(matrix_rt_drift_row)
     )
 
 
@@ -754,6 +1030,41 @@ def _has_candidate_ms2_pattern_metric(row: Mapping[str, str] | None) -> bool:
     )
 
 
+def _has_ms1_pattern_metric(row: Mapping[str, str] | None) -> bool:
+    if not row:
+        return False
+    return (
+        row.get("ms1_pattern_evidence_level") in _MS1_PATTERN_OBSERVED_LEVELS
+        and row.get("ms1_pattern_status")
+        in (_MS1_PATTERN_SUPPORT_STATUSES | _MS1_PATTERN_CONFLICT_STATUSES)
+    )
+
+
+def _has_ms1_shape_metric(row: Mapping[str, str] | None) -> bool:
+    if not row:
+        return False
+    return (
+        _has_ms1_pattern_metric(row)
+        and row.get("ms1_pattern_evidence_level") == "trace_constellation"
+        and row.get("shape_metric_source") == "family_ms1_overlay_raw_trace"
+        and _has_value(row.get("family_ms1_overlay_trace_data_json"))
+        and _has_value(row.get("shape_correlation_score"))
+    )
+
+
+def _has_matrix_rt_drift_metric(row: Mapping[str, str] | None) -> bool:
+    if not row:
+        return False
+    return (
+        row.get("drift_evidence_level") in _MATRIX_RT_DRIFT_OBSERVED_LEVELS
+        and row.get("matrix_rt_drift_status")
+        in (
+            _MATRIX_RT_DRIFT_SUPPORT_STATUSES
+            | _MATRIX_RT_DRIFT_CONFLICT_STATUSES
+        )
+    )
+
+
 def _candidate_ms2_supports_manual(
     tags: frozenset[str],
     row: Mapping[str, str] | None,
@@ -770,6 +1081,69 @@ def _candidate_ms2_supports_manual(
     return False
 
 
+def _ms1_pattern_supports_manual(
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if not _has_ms1_pattern_metric(row):
+        return False
+    if row is None:
+        return False
+    if _ms1_pattern_metric_inconclusive(row):
+        return False
+    status = row["ms1_pattern_status"]
+    if "pattern_mismatch" in tags:
+        return status in _MS1_PATTERN_CONFLICT_STATUSES
+    if tags & {"pattern_similar", "pattern_partial"}:
+        return status in _MS1_PATTERN_SUPPORT_STATUSES
+    return False
+
+
+def _ms1_shape_supports_manual(
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if not _has_ms1_shape_metric(row):
+        return False
+    if row is None:
+        return False
+    status = row["ms1_pattern_status"]
+    shape_score = _float_or_none(row.get("shape_correlation_score"))
+    if tags & {"shape_complete", "shape_normal"}:
+        return (
+            status in _MS1_PATTERN_SUPPORT_STATUSES
+            and shape_score is not None
+            and shape_score >= _MS1_SHAPE_SUPPORT_MIN
+        )
+    if "shape_bad" in tags:
+        return (
+            status in _MS1_PATTERN_CONFLICT_STATUSES
+            or (shape_score is not None and shape_score < _MS1_SHAPE_SUPPORT_MIN)
+        )
+    return False
+
+
+def _matrix_rt_drift_supports_manual(
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if not _has_matrix_rt_drift_metric(row):
+        return False
+    if row is None:
+        return False
+    status = row["matrix_rt_drift_status"]
+    if "rt_drift_possible" in tags:
+        return (
+            status in {"drift_supported", "rt_close"}
+            and row.get("drift_compatible_status") == "compatible"
+        )
+    if "rt_close" in tags:
+        return status == "rt_close"
+    if "rt_too_far" in tags:
+        return status in _MATRIX_RT_DRIFT_CONFLICT_STATUSES
+    return False
+
+
 def _candidate_ms2_conflicts_with_manual(
     tags: frozenset[str],
     row: Mapping[str, str] | None,
@@ -783,4 +1157,94 @@ def _candidate_ms2_conflicts_with_manual(
         return status in _CANDIDATE_MS2_SUPPORT_STATUSES
     if tags & {"pattern_similar", "pattern_partial"}:
         return status in _CANDIDATE_MS2_CONFLICT_STATUSES
+    return False
+
+
+def _ms1_pattern_conflicts_with_manual(
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if not _has_ms1_pattern_metric(row):
+        return False
+    if row is None:
+        return False
+    if _ms1_pattern_metric_inconclusive(row):
+        return False
+    status = row["ms1_pattern_status"]
+    if "pattern_mismatch" in tags:
+        return status in _MS1_PATTERN_SUPPORT_STATUSES
+    if tags & {"pattern_similar", "pattern_partial"}:
+        return status in _MS1_PATTERN_CONFLICT_STATUSES
+    return False
+
+
+def _ms1_shape_conflicts_with_manual(
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if not _has_ms1_shape_metric(row):
+        return False
+    if row is None:
+        return False
+    status = row["ms1_pattern_status"]
+    shape_score = _float_or_none(row.get("shape_correlation_score"))
+    if tags & {"shape_complete", "shape_normal"}:
+        return status in _MS1_PATTERN_CONFLICT_STATUSES
+    if "shape_bad" in tags:
+        return (
+            status in _MS1_PATTERN_SUPPORT_STATUSES
+            and shape_score is not None
+            and shape_score >= _MS1_SHAPE_SUPPORT_MIN
+        )
+    return False
+
+
+def _ms1_shape_inconclusive_with_manual(
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    return (
+        bool(tags & _SHAPE_TAGS)
+        and _has_ms1_shape_metric(row)
+        and not _ms1_shape_supports_manual(tags, row)
+        and not _ms1_shape_conflicts_with_manual(tags, row)
+    )
+
+
+def _ms1_pattern_inconclusive_with_manual(
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    return (
+        bool(tags & _PATTERN_TAGS)
+        and _has_ms1_pattern_metric(row)
+        and not _ms1_pattern_supports_manual(tags, row)
+        and not _ms1_pattern_conflicts_with_manual(tags, row)
+    )
+
+
+def _ms1_pattern_metric_inconclusive(row: Mapping[str, str] | None) -> bool:
+    if row is None:
+        return False
+    return bool(
+        _MS1_PATTERN_INCONCLUSIVE_REASONS
+        & set(_split_semicolon(row.get("reason", "")))
+    )
+
+
+def _matrix_rt_drift_conflicts_with_manual(
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if not _has_matrix_rt_drift_metric(row):
+        return False
+    if row is None:
+        return False
+    status = row["matrix_rt_drift_status"]
+    if "rt_drift_possible" in tags:
+        return status in _MATRIX_RT_DRIFT_CONFLICT_STATUSES
+    if "rt_close" in tags:
+        return status in _MATRIX_RT_DRIFT_CONFLICT_STATUSES
+    if "rt_too_far" in tags:
+        return status == "drift_supported"
     return False
