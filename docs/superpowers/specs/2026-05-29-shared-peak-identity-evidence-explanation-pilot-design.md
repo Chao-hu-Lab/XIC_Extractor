@@ -157,7 +157,7 @@ source date. A cleanable `output/` file alone cannot be the canonical oracle.
 
 | Family | Manual judgment seed | Important reasoning |
 | --- | --- | --- |
-| `FAM000144` | `NormalBC2312_DNA` and `BenignfatBC1151_DNA` should be rescued; other cells should not. A possible `TumorBC2312_DNA` candidate is not acceptable. | Accepted cells have the only plausible peak in the RT region, complete shape, and similar pattern. The rejected extra candidate has too much RT difference and pattern mismatch even though shape is normal. Low intensity / DDA stochasticity can explain missing fragmentation for accepted cells. |
+| `FAM000144` | `NormalBC2312_DNA` and `BenignfatBC1151_DNA` should be rescued; other cells should not. A possible `TumorBC2312_DNA` candidate is not acceptable. | Accepted cells have the only plausible peak in the RT region, complete shape, and similar pattern. The rejected extra candidate has too much RT difference and pattern mismatch even though shape is normal. Low intensity / DDA stochasticity can explain missing fragmentation for accepted cells. TumorBC2312 manual review additionally used the nearest / nearby-injection QC MS1 pattern as a drift-context reference, so V2 should treat injection-local QC pattern similarity as RT-drift support context when such provenance is available. |
 | `FAM000610` | All reviewed cells should be rescued. | RT is close, shape is acceptable, and pattern is similar. |
 | `FAM001227` | `QC5`, `NormalBC2263_DNA`, and `TumorBC2312_DNA` are OK; `NormalBC2312_DNA` and `TumorBC2263_DNA` are suspect; unmentioned cells are fail. | The evidence chain needs `pass` versus `suspect`, not only binary rescue. |
 | `FAM001227` / `FAM001239` | Delta-mass-like relationship is important context for a later untargeted method. | They appear to have very similar shape and pattern with m/z difference around 1. This should be recorded as context, not used as the main V1 decision rule. |
@@ -973,6 +973,115 @@ metric that lacks a paper or official-method anchor must stay out of the V2
 gate. It may be recorded as exploratory context, but it must not be used to
 promote a row, reject a row, or close a blocker.
 
+### DeepResearch method synthesis intake
+
+The user-supplied external synthesis
+`Feature Recognition_deepresearch_MLDL_chatgpt_deepresearch.md` is accepted as
+design input for the next V2 evidence-chain checkpoint, not as a product
+authority. The source file remains an external local artifact and is not
+committed. Its strongest usable direction is to separate candidate generation
+from peak-quality judgment:
+
+```text
+alignment / rescue / gap filling candidate recall
+  -> machine-readable peak-quality evidence vector
+  -> shadow label alignment
+  -> separate future product promotion contract
+```
+
+This reinforces the current `diagnostic_only` boundary. V2 should not try to
+replace peak picking, alignment, or rescue with a machine-learning model. The
+near-term path is a MetaClean / NeatMS-style quality layer over existing
+candidate rows: preserve mature candidate generation for recall, then use
+machine-observed peak-quality, pattern, RT-drift, and opportunity evidence to
+explain or demote rows.
+
+For MS1 shape and pattern evidence, the synthesis adds these V2 requirements:
+
+- `formal_shape_metric` must become a feature vector, not a single correlation.
+  Required candidate fields should include local S/N or noise context, FWHM or
+  scan-count width, local prominence or sharpness, bell/Gaussian-like similarity
+  when parameterized, local zigzag/noise behavior, tailing/asymmetry when
+  computable, boundary/margin context, and selected-cell height dominance such
+  as `cell_to_local_window_max_ratio`.
+- RAW-backed trace evidence should keep the current `family_ms1_overlay_*`
+  provenance and may additionally emit a fixed-grid trace segment plus a
+  boundary mask inspired by NeatMS. The fixed-grid representation is an evidence
+  artifact, not a CNN commitment.
+- A supportive MS1 pattern should mean the expected RT region has a coherent
+  local peak, comparable boundary/margin context, and no stronger neighboring
+  interference. Low apex or selected-cell height can remain
+  `inconclusive_opportunity` when local trace shape is present but weak.
+- CWT remains an optional shape observer. It can contribute width/ridge/shape
+  context only after official API semantics and parameter provenance are pinned.
+  It must not become chemical identity evidence.
+
+### V2 Peak-Quality Feature-Vector Contract
+
+The next diagnostic-only checkpoint upgrades the current RAW-backed overlay
+shape metric into a small feature vector over the existing
+`family_ms1_overlay_*` trace-data JSON. This is an optional expansion of
+`shared_peak_identity_ms1_pattern_coherence_evidence.tsv`; it does not add a
+new diagnostic entrypoint and does not change production labels.
+
+Source contract:
+
+- provenance is the existing overlay trace-data JSON path stored in
+  `family_ms1_overlay_trace_data_json`;
+- vector metrics are computed only from per-trace `rt` / `intensity` arrays,
+  selected-cell apex/boundary fields, cell height, local-window maximum, and
+  trace maximum already present in that JSON;
+- no new RAW reread, mzML conversion, ML/DL inference, or product scoring path
+  is part of this checkpoint.
+
+Optional TSV columns:
+
+- `peak_quality_vector_status`: `supportive`, `partial_support`,
+  `inconclusive`, or `not_available`;
+- `peak_quality_vector_basis`: currently
+  `family_ms1_overlay_raw_trace_vector` when the vector is machine-observed;
+- `peak_quality_trace_point_count` and `peak_quality_boundary_point_count`;
+- `peak_quality_signal_to_noise_proxy`;
+- `peak_quality_fwhm_sec`;
+- `peak_quality_sharpness_score`;
+- `peak_quality_zigzag_score`;
+- `peak_quality_tailing_ratio`;
+- `peak_quality_boundary_margin_ratio`;
+- `peak_quality_feature_count`;
+- `peak_quality_vector_reason`.
+
+Consumer contract:
+
+- `formal_shape_metric` may be closed by MS1 overlay evidence only when the row
+  has the existing `trace_constellation` overlay shape basis and a
+  machine-observed `peak_quality_vector_basis`;
+- older overlay JSON without `rt` / `intensity` remains readable, but it is no
+  longer treated as the full V2 evidence chain;
+- weak local height or noisy/ugly trace vectors should become
+  `partial_support` or `inconclusive`, not automatic chemical absence.
+
+For labels and calibration, V2 must treat the current manual rows as a seed
+oracle rather than a training corpus. A later classifier checkpoint may build a
+small stratified oracle, but it must:
+
+- stratify by intensity, RT region/drift phase, matrix, boundary quality,
+  DDA/MS2 opportunity, and failure mode;
+- keep `human_unjudgeable` and borderline rows out of binary training targets;
+- split by sample/raw file or family context rather than random peak rows;
+- report precision/recall/F1 or PR-AUC style evidence and calibration behavior
+  on paired raw-file units, not thousands of pseudo-independent peaks from the
+  same sample.
+
+The synthesis also adds explicit non-goals for the V2 evidence chain:
+
+- no end-to-end ML/DL replacement for current peak picking;
+- no profile-mode PeakBot / 3D point-cloud path unless a future research spec
+  funds annotation, GPU/model maintenance, and benchmark infrastructure;
+- no mzML conversion requirement for the current Thermo RAW-centered product
+  path;
+- no V2 product label promotion from unverified DeepResearch citations, a CNN
+  idea, or a shape-only metric.
+
 The V2 diagnostic must therefore include a machine-evidence provenance sidecar.
 A row cannot be counted as machine-observed sufficient if the decisive shape,
 pattern, opportunity, RT-drift, or scope fact only came from the manual oracle.
@@ -1031,6 +1140,12 @@ mark a row supportive only when `alignment_cells.source_candidate_id` resolves t
 a discovery candidate with observed product / neutral-loss tag evidence. Rescued
 cells without `source_candidate_id` remain `not_available`; this is a deliberate
 fail-closed result, not a negative chemical identity decision.
+Direct discovery-candidate neutral-loss evidence must preserve the established
+targeted contract: `best_ppm <= nl_ppm_warn` maps to `supportive`,
+`nl_ppm_warn < best_ppm <= nl_ppm_max` maps to `partial_support`, and
+`best_ppm > nl_ppm_max` maps to `conflict` only for the MS2/NL sidecar. The
+current targeted DNA defaults are `nl_ppm_warn=20` and `nl_ppm_max=50`; values
+inside the warning band are not chemical absence evidence.
 
 If `--candidate-ms2-pattern-raw-dll-dir` is also provided, the generated producer
 may additionally probe those `source_candidate_id`-missing rows against the
@@ -1039,14 +1154,22 @@ sample RAW file declared in the discovery batch index. This fallback is still
 `neutral_loss.collect_candidate_ms2_evidence`; it does not add a new
 fragmentation rule. A row may become `sample_boundary_aligned` only when the
 MS2 scan is aligned to the cell peak boundary, apex fallback, or boundary-rescue
-window used by that existing helper. `OK` / `WARN` neutral-loss evidence maps to
-`supportive`; `conflict` is reserved for a stricter failure mode where a
+window used by that existing helper. `OK` neutral-loss evidence maps to
+`supportive`; `WARN` maps to `partial_support`. `conflict` is reserved for a
+stricter failure mode where a
 boundary-aligned precursor MS2 trigger exists and the nearest non-matching
 product peak is the spectrum base peak outside the diagnostic product window.
 Other `NL_FAIL` cases, including low-intensity product-below-floor observations,
 stay `not_observed`. No precursor MS2 trigger also maps to `not_observed`. These
 non-supportive cases must not be treated as chemical absence evidence because
 DDA precursor opportunity is known to be incomplete.
+
+RT drift and MS1 pattern evidence may also use injection-local QC context when
+the provenance is explicit: choose the QC sample nearest to, or near, the sample
+in injection order and compare whether its MS1 pattern contains the same local
+peak constellation around the candidate RT. This is a drift-context support
+surface, not a standalone production promotion rule, and must cite the injection
+order / QC source used.
 
 ## V1 Acceptance Criteria
 
@@ -1135,6 +1258,8 @@ V2 may introduce shadow labels such as:
 - `manual_like_pass_candidate`;
 - `manual_like_suspect_candidate`;
 - `manual_like_fail_candidate`;
+- `machine_quality_high_candidate`;
+- `machine_quality_low_or_noisy`;
 - `low_opportunity_supported`;
 - `rt_pattern_conflict_blocked`;
 - `human_unjudgeable_like`.
@@ -1147,6 +1272,7 @@ shared_peak_identity_shadow_alignment_summary.tsv
 shared_peak_identity_v2_readiness.tsv
 shared_peak_identity_machine_evidence_support.tsv
 shared_peak_identity_candidate_ms2_pattern_evidence.tsv  # optional generated producer
+shared_peak_identity_sample_negative_evidence.tsv        # optional sidecar
 shared_peak_identity_v2_report.md
 ```
 
@@ -1160,6 +1286,32 @@ machine evidence blockers.
 V2 must still avoid primary matrix promotion unless a separate promotion
 contract exists. Its success metric should be trend alignment with manual
 `pass` / `suspect` / `fail`, not perfect agreement.
+
+### V2 Non-Delta Evidence Closeout
+
+All non-delta V2 evidence obligations are now explicit diagnostic contracts.
+The FAM001227/FAM001239 delta-mass relationship remains future work and must not
+change current pass/fail shadow labels.
+
+Sample-level negative evidence uses a two-layer contract:
+
+- `negative_evidence_class` is the gate-facing class and must be one of
+  `no_candidate_ms1_evidence`, `pattern_mismatch`, `rt_not_explained`, or
+  `local_peak_not_decisive`.
+- `negative_evidence_detail` preserves narrower review/debug reasons such as
+  `ugly_shape`, `bad_boundary`, `multi_peak_interference`, or
+  `qc_reference_conflict`.
+
+The class boundary is intentional: `pattern_mismatch` means a local peak is
+decidable and clearly unlike the reference pattern; `local_peak_not_decisive`
+means the local region is not suitable for a confident identity call because of
+shape, boundary, interference, or multiple-peak ambiguity.
+
+Missing expected NL/MS2 remains non-dispositive by default. A missing-NL case can
+close the DDA policy blocker only when MS1 identity evidence is supportive, MS1
+intensity is at least `2.5e4`, boundary-aligned RAW MS2 trigger count is at least
+`3`, and the available MS2 trace-strength proxy is `moderate` or `strong`.
+Otherwise it remains opportunity context, not negative identity evidence.
 
 ## Fail-Fast Rules
 

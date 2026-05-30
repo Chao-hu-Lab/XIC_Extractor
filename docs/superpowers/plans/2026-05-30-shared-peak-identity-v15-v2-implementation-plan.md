@@ -31,6 +31,11 @@ Now:
   neutral-loss helper against alignment-cell boundaries; it remains
   `diagnostic_only` and must treat missing DDA/product evidence as
   `not_observed`, not chemical absence.
+- Extend generated MS1 pattern coherence evidence with a diagnostic-only
+  peak-quality feature vector when `family_ms1_overlay_*` trace-data JSON
+  provides RAW-backed `rt` / `intensity` arrays. This is an optional schema
+  expansion of `shared_peak_identity_ms1_pattern_coherence_evidence.tsv`, not a
+  new entrypoint or product scoring rule.
 - Emit V2 row-level labels, summary, readiness, and report from the existing
   diagnostic CLI.
 - Update the diagnostic index and spec wording so old 85RAW freshness is not
@@ -41,7 +46,11 @@ Later:
 
 - Rebuild a fresh 85RAW evidence-chain diagnostic if V2 needs to move from
   `exploratory_only` to `shadow_ready_candidate`.
-- Add machine-only shape / pattern / opportunity metrics.
+- Calibrate the machine-only RAW-backed MS1 peak-quality feature vector against
+  a stratified oracle before attempting V2 product labels. The first implemented
+  vector stays interpretable and diagnostic-only; do not train a CNN/ML model
+  until a stratified oracle exists.
+- Add machine-only pattern / opportunity metrics.
 - Replace proxy provenance with actual machine metrics only after the metric
   implementation cites the relevant LC-MS peak-quality, MS/MS spectral
   similarity, DDA opportunity, or RT-alignment literature.
@@ -80,10 +89,20 @@ Not in scope:
 - If `--candidate-ms2-pattern-raw-dll-dir` is also provided, rows without
   `source_candidate_id` may become `sample_boundary_aligned` only through the
   existing RAW reader / neutral-loss helper and alignment-cell boundary context.
-  `OK` / `WARN` neutral-loss/product observations may be `supportive`; a
-  `conflict` requires a boundary-aligned precursor MS2 trigger plus a decisive
-  non-matching base peak outside the diagnostic product window. Other missing or
-  weak product evidence remains `not_observed`.
+  `OK` neutral-loss/product observations may be `supportive`; `WARN`
+  observations (`nl_ppm_warn < best_ppm <= nl_ppm_max`, currently `20..50 ppm`
+  for the targeted DNA contract) are `partial_support`, not absence. A
+  `conflict` requires either direct/source NL evidence outside `nl_ppm_max` or a
+  boundary-aligned precursor MS2 trigger plus a decisive non-matching base peak
+  outside the diagnostic product window. Other missing or weak product evidence
+  remains `not_observed`.
+- `--generate-ms1-pattern-coherence-evidence` plus
+  `--ms1-pattern-coherence-overlay-trace-data-json` writes optional
+  `peak_quality_*` columns when the overlay JSON includes RAW-backed
+  `rt` / `intensity` vectors. The vector reports trace point count, boundary
+  point count, S/N proxy, FWHM, sharpness, zigzag/noise, tailing, boundary
+  margin, status, basis, and reason. Older overlay JSON without vectors remains
+  readable but does not close the richer formal shape evidence chain.
 - If blast radius is unpinned or unassessed, V2 still writes artifacts but
   reports `v2_gate_status=exploratory_only` and
   `machine_only_labeler_ready=FALSE`.
@@ -113,3 +132,48 @@ V2 sidecar records these literature anchors:
 Any new shape, MS2-pattern, DDA-opportunity, RT-drift, or matrix-behavior rule
 that lacks a paper or official-method anchor stays exploratory and must not
 promote/reject rows or close V2 blockers.
+
+## DeepResearch Intake For Next Checkpoint
+
+The user-supplied external local markdown
+`Feature Recognition_deepresearch_MLDL_chatgpt_deepresearch.md` is now part of
+the design context for the next V2 checkpoint. It remains uncommitted and is not
+a product authority, because its embedded citations still need paper or
+official-doc verification before any rule closes a blocker.
+
+Actionable interpretation:
+
+- Preserve the two-stage strategy: current alignment/rescue/backfill artifacts
+  generate candidates for recall; V2 evidence sidecars judge peak quality and
+  label alignment for precision.
+- Extend `family_ms1_overlay_*` RAW-backed evidence into an interpretable
+  peak-quality vector before considering ML/DL. NeatMS-style fixed-length trace
+  plus boundary mask is a useful artifact shape, but not a model-training
+  commitment.
+- Add a small stratified oracle plan before any classifier work. Stratification
+  must include intensity, RT drift phase, matrix/sample type, boundary quality,
+  MS2/DDA opportunity, and failure mode; `human_unjudgeable` remains a held-out
+  label, not binary training data.
+- Add injection-local QC MS1 pattern context as an RT-drift support surface when
+  a reliable injection-order source is available: compare the reviewed sample
+  against the nearest / nearby-injection QC pattern, carry the QC provenance, and
+  keep the signal diagnostic-only until a later contract defines promotion
+  behavior.
+- Evaluate future classifier-like evidence on paired raw-file/sample units with
+  precision/recall/F1 or PR-AUC/calibration context. Do not count thousands of
+  peaks from one sample as independent proof.
+- Keep profile-mode PeakBot / 3D-MSNet-style work as research-only unless a
+  separate spec funds raw annotation, GPU/model maintenance, and benchmark
+  infrastructure.
+
+The next implementation plan should therefore target:
+
+```text
+diagnostic-only MS1 peak-quality feature-vector sidecar
+```
+
+not:
+
+```text
+V2 product label promotion
+```

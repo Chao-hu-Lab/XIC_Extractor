@@ -163,6 +163,38 @@ FAM000144 now shows the intended distinction:
   the earlier `candidate_aligned_ms2_pattern` blocker for this reviewed fail
   row without using an RT/mz heuristic join.
 
+The follow-up QC-near-injection MS1 pattern trial adds a separate
+`diagnostic_only` sidecar. It is now wired into the V2 machine-evidence support
+contract through `--qc-ms1-pattern-reference-evidence-tsv`, but remains an
+evidence input rather than a product label switch:
+
+- Tool: `tools/diagnostics/qc_ms1_pattern_reference.py`.
+- Source traces:
+  `output/shared_peak_identity_manual_followup/family_ms1_overlay_fam000144_qc_reference/fam000144_qc_reference_trace_data.json`.
+- Sidecar:
+  `output/shared_peak_identity_manual_followup/family_ms1_overlay_fam000144_qc_reference/fam000144_qc_reference_qc_ms1_pattern_reference.tsv`.
+- The naive nearest-QC rule first selected QC3 for `TumorBC2312_DNA`, but QC3
+  had no complete peak in this window. The producer therefore uses the nearest
+  QC with a complete local peak before issuing a decisive status.
+- With that guard, `TumorBC2312_DNA` is flagged `conflict` against
+  `Breast_Cancer_Tissue_pooled_QC5`: target/QC apex separation is `78.3054 sec`,
+  both local windows have complete signal, and pairwise shape similarity is
+  `0.259605`. This matches the manual note that the RT 18.5 signal and the QC5
+  RT 19.5 signal are not the same peak.
+- `NormalBC2312_DNA` and `BenignfatBC1151_DNA` are `partial_support` against
+  QC5: apex separations are `2.3197 sec` and `1.15036 sec`, respectively, but
+  the conservative target-vs-QC shape score did not reach full supportive status.
+- When rerun through
+  `output/shared_peak_identity_evidence_explanation_v2_qc_ms1_reference_trial/`,
+  the QC reference rows appear in `observed_machine_metrics` as
+  `qc_ms1_reference_*` fields. The FAM000144 `TumorBC2312_DNA` row remains
+  `machine_observed_sufficient`; the two pass rows move to
+  `pattern_basis_status=machine_observed` but still carry
+  `dda_opportunity_policy`, so they remain `machine_observed_partial`.
+- The run-level verdict is still `exploratory_only` with
+  `machine_evidence_basis=machine_observed_partial`; this integration improves
+  the evidence chain but does not by itself make V2 product labels ready.
+
 Rows currently counted as machine-observed sufficient:
 
 - FAM000144: TumorBC2312.
@@ -536,6 +568,95 @@ git diff --check
 # exit 0; CRLF warnings only
 ```
 
+## Non-Delta Evidence Chain Closeout Contract
+
+The latest goal explicitly excludes the future `delta_mass_family_model` PR and
+keeps FAM001227/FAM001239-style related-family evidence as context-only.
+
+All other V2 evidence-chain threads now have an explicit diagnostic contract:
+
+- QC-nearby MS1 reference is a machine-observed pattern input through
+  `--qc-ms1-pattern-reference-evidence-tsv`.
+- RAW-backed MS1 overlays can close `formal_shape_metric` only when both trace
+  shape and peak-quality vector provenance are present; low shape correlation
+  with low selected-cell height dominance remains inconclusive rather than
+  negative identity evidence.
+- ISTD / matrix RT drift policy can carry d3-N6-medA injection-order and phase
+  summary provenance, but the anchor-local trend route stays coverage-gated for
+  85RAW-like evidence instead of 8RAW method-smoke subsets.
+- Missing expected NL/MS2 is not a hard negative. A DDA missing-NL case can be
+  marked `dda_missing_nl_policy_status=not_dispositive` only when MS1 identity
+  evidence is supportive, MS1 intensity is at least `2.5e4`, boundary-aligned
+  RAW MS2 trigger count is at least `3`, and the MS2 trace-strength proxy is
+  `moderate` or `strong`.
+- Sample-level negative evidence is no longer a single opaque blocker. The
+  optional `--sample-negative-evidence-tsv` sidecar can close
+  `sample_level_negative_evidence` only when it provides a machine-observed
+  `negative_evidence_class` in:
+  `no_candidate_ms1_evidence`, `pattern_mismatch`, `rt_not_explained`, or
+  `local_peak_not_decisive`. The narrower `negative_evidence_detail` carries
+  review/debug reasons such as `ugly_shape`, `bad_boundary`,
+  `multi_peak_interference`, or `qc_reference_conflict`.
+
+This keeps V2 in `diagnostic_only` mode while making the remaining non-delta
+evidence obligations auditable by machine-readable fields instead of broad
+human-only notes.
+
+Trial output:
+
+- `output/shared_peak_identity_evidence_explanation_v2_non_delta_closeout/shared_peak_identity_machine_evidence_support.tsv`
+- `output/shared_peak_identity_evidence_explanation_v2_non_delta_closeout/shared_peak_identity_v2_readiness.tsv`
+
+The no-RAW rerun remains `exploratory_only` with
+`machine_evidence_basis=machine_observed_partial`. This is expected because no
+sample-negative sidecar has yet supplied machine-observed classes for the three
+scope-derived FAM001227 fail rows, and the current candidate-MS2 artifacts do
+not satisfy the conservative DDA non-dispositive policy for all
+low-opportunity pass rows.
+
+## Evidence-Chain Contract Checkpoint
+
+The next V2 checkpoint has now moved the DeepResearch conclusion from planning
+into a diagnostic-only implementation contract: `formal_shape_metric` is no
+longer allowed to mean only "overlay shape correlation exists." For MS1 overlay
+evidence to count as the richer V2 formal shape chain, the row must now carry:
+
+- `trace_constellation` MS1 pattern evidence;
+- `shape_metric_source=family_ms1_overlay_raw_trace`;
+- `family_ms1_overlay_trace_data_json`;
+- a non-empty `shape_correlation_score`;
+- `peak_quality_vector_basis=family_ms1_overlay_raw_trace_vector`; and
+- `peak_quality_vector_status` of `supportive` or `partial_support`.
+
+The generated MS1 pattern sidecar can now add optional `peak_quality_*` fields
+from the existing overlay `rt` / `intensity` arrays: trace point count, boundary
+point count, S/N proxy, FWHM, sharpness, zigzag/noise, tailing, boundary margin,
+feature count, status, basis, and reason. Older overlay JSON remains readable,
+but it stays below the V2 formal-shape chain because it lacks the raw trace
+vector.
+
+Current verdict remains `diagnostic_only` / `exploratory_only`. This checkpoint
+strengthens the evidence chain for shape and selected-cell quality, but it does
+not close V2 product-label readiness. Remaining blockers are still MS2/DDA
+opportunity policy, stratified oracle/generalization, and calibration of how
+`supportive` vs `partial_support` vector states should influence future labels.
+
+Verification:
+
+```powershell
+python -m pytest tests\test_shared_peak_identity_ms1_pattern_coherence.py tests\test_shared_peak_identity_shadow_labels.py tests\test_shared_peak_identity_cli.py -q
+# 48 passed
+
+python -m pytest tests -q -k shared_peak_identity
+# 114 passed, 2607 deselected
+
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\alignment\shared_peak_identity_explanation\ms1_pattern_coherence.py xic_extractor\alignment\shared_peak_identity_explanation\ms1_peak_quality_vector.py xic_extractor\alignment\shared_peak_identity_explanation\machine_evidence_support.py tests\test_shared_peak_identity_ms1_pattern_coherence.py tests\test_shared_peak_identity_shadow_labels.py tests\test_shared_peak_identity_cli.py
+# All checks passed
+
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+# Success: no issues found in 255 source files
+```
+
 ## Literature Guard
 
 Future metric changes must cite primary literature or official method
@@ -553,6 +674,30 @@ documentation. The current support sidecar uses ref ids for:
   DDA coverage work.
 - RT drift / orthogonal evidence: Prince 2006 OBI-Warp and Sumner 2007 MSI
   chemical-analysis reporting standards.
+
+## Candidate-MS2 Targeted Threshold Correction
+
+The V2 candidate-MS2 producer now preserves the existing targeted neutral-loss
+threshold contract instead of inventing a stricter V2-only rule:
+
+- `best_ppm <= nl_ppm_warn` maps to `candidate_ms2_pattern_status=supportive`.
+- `nl_ppm_warn < best_ppm <= nl_ppm_max` maps to
+  `candidate_ms2_pattern_status=partial_support`.
+- `best_ppm > nl_ppm_max` can support `conflict` for the MS2/NL sidecar.
+
+For the current targeted DNA evidence chain this means `nl_ppm_warn=20` and
+`nl_ppm_max=50`. A neutral-loss observation in the warning band is useful MS2
+evidence with reduced confidence; it must not be reported as missing evidence or
+chemical absence. RAW boundary fallback follows the same mapping: `OK` remains
+`supportive`, `WARN` is `partial_support`, and only decisive non-matching
+boundary-aligned precursor MS2 evidence becomes `conflict`.
+
+The manual FAM000144 TumorBC2312 review also surfaced an RT-drift support
+pattern that is not yet a product rule: choose the QC sample nearest to, or near,
+the sample in injection order and compare whether the local MS1 peak
+constellation around the candidate RT is similar. This should become a
+diagnostic-only injection-local QC reference surface in the next RT-drift/MS1
+pattern checkpoint, with explicit QC sample and injection-order provenance.
 
 ## Interpretation
 
@@ -651,6 +796,91 @@ The d3-specific probe has `machine_observed_sufficient=3`,
 blockers are `shape_metric_inconclusive_apex_or_height` and
 `pattern_metric_inconclusive_apex_or_height`, not missing formal shape evidence
 or shape/pattern-not-supportive conflicts.
+
+## Wrong-Peak And DDA Gate Closeout
+
+Gate: `diagnostic_only`.
+
+This closeout uses the 85RAW mapped representative sidecar under
+`output\shared_peak_identity_v2_85raw_risk_closeout\shared_peak_identity_explanation_85raw_mapped_wrong_peak_dda\`.
+The generated artifacts remain ignored validation output; this note captures the
+tracked contract conclusion.
+
+Two manual-review rules are now represented by the sidecar decision layer:
+
+1. A selected peak may have normal local shape but still be the wrong identity
+   peak if it loses to a family-consensus competing peak.
+2. Missing sample-level NL/PI can only be treated as DDA stochasticity when the
+   family has at least one required NL/PI observation from candidate MS2
+   evidence or existing alignment family context.
+
+FAM011810 / TumorBC2263 is the representative wrong-peak case. The selected
+cell remains at RT `6.55874` min, but the family members and competing later
+peak support the later RT region. The sidecar now emits:
+
+- `ms1_pattern_status=conflict`
+- `reason=family_ms1_overlay_competing_peak_matches_family_consensus`
+- `shape_correlation_score=0.904053`
+- `peak_quality_vector_status=supportive`
+- `evidence_support_status=machine_observed_sufficient`
+
+Interpretation: this is not a "bad shape" fail. It is an identity-pattern fail:
+the selected 6-min peak is shape-normal but family-inconsistent.
+
+The DDA missing-NL/PI gate now has explicit states:
+
+- sample-level tag observed:
+  `dda_missing_nl_policy_status=sample_required_tag_observed`
+- sample tag missing but family-level required tag exists and local opportunity
+  evidence is adequate:
+  `dda_missing_nl_policy_status=not_dispositive`
+- no family-level required tag in candidate MS2 or alignment context:
+  `missing_machine_evidence=family_required_tag_gate` and
+  `dda_missing_nl_policy_status=family_required_tag_not_observed`
+
+The last state is a hard stop for DDA-stochastic rescue. It means "do not route
+this family into extra MS1/RT evidence to rescue missing NL/PI"; it is not a
+request for more sidecar evidence.
+
+The current representative run contains no rows with
+`family_required_tag_gate` after accepting existing alignment family context as
+valid family-level NL/PI evidence. This avoids falsely blocking rows such as
+FAM019990 where the generated RAW candidate row does not observe the tag, but
+the alignment context already records family-level NL/PI evidence.
+
+## DeepResearch Absorption
+
+The user-supplied external local markdown
+`Feature Recognition_deepresearch_MLDL_chatgpt_deepresearch.md` has been
+absorbed as design input for the next Shared Peak Identity V2 evidence-chain
+checkpoint. The source file remains uncommitted.
+
+The practical conclusion is not "add deep learning now." The stronger conclusion
+is that V2 should keep candidate generation and peak-quality judgment separate:
+alignment/rescue/backfill candidates keep recall high, while a diagnostic
+peak-quality evidence vector improves precision and explains manual-vs-machine
+differences.
+
+This changes the next checkpoint in three ways:
+
+- `formal_shape_metric` should expand from "RAW-backed correlation exists" into a
+  machine-readable MS1 peak-quality vector. The first vector should be
+  interpretable: local S/N or noise, FWHM/scan-count width, prominence or
+  sharpness, bell-shape similarity, local zigzag/noise, tailing/asymmetry when
+  available, boundary/margin context, and selected-cell height dominance such as
+  `cell_to_local_window_max_ratio`.
+- RAW-backed `family_ms1_overlay_*` traces should remain the provenance source.
+  A NeatMS-like fixed-length trace plus boundary mask is useful as a diagnostic
+  artifact shape, but it does not imply CNN training or product inference.
+- Before any classifier-like V2 labeler, build a small stratified oracle by
+  intensity, RT drift phase, matrix/sample type, boundary quality, MS2/DDA
+  opportunity, and failure mode. `human_unjudgeable` and borderline rows remain
+  explicit labels, not forced binary truth.
+
+This reinforces the current verdict: PR #76 makes the missing formal shape basis
+observable for d3-style probes, but it does not make V2 product labels ready.
+The remaining evidence gaps are now sharper: richer MS1 peak-quality features,
+MS2/DDA opportunity policy, and generalization evidence over a stratified oracle.
 
 Verification:
 

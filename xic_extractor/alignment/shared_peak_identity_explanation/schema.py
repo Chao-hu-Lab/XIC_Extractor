@@ -16,7 +16,7 @@ SHADOW_ALIGNMENT_SUMMARY_SCHEMA_VERSION = (
 )
 V2_READINESS_SCHEMA_VERSION = "shared_peak_identity_v2_readiness_v1"
 MACHINE_EVIDENCE_SUPPORT_SCHEMA_VERSION = (
-    "shared_peak_identity_machine_evidence_support_v1"
+    "shared_peak_identity_machine_evidence_support_v2"
 )
 
 ORACLE_COLUMNS = (
@@ -241,6 +241,9 @@ MACHINE_EVIDENCE_SUPPORT_COLUMNS = (
     "pattern_basis_status",
     "opportunity_basis_status",
     "scope_basis_status",
+    "negative_evidence_basis_status",
+    "negative_evidence_class",
+    "negative_evidence_detail",
     "observed_machine_metrics",
     "manual_derived_facts",
     "missing_machine_evidence",
@@ -467,6 +470,26 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
             "artifact_missing",
             "stale_hash_mismatch",
             "not_assessed",
+        }
+    ),
+    "negative_evidence_basis_status": frozenset(
+        {
+            "machine_observed",
+            "manual_oracle_derived",
+            "mixed",
+            "not_applicable",
+            "not_available",
+            "inconclusive",
+        }
+    ),
+    "negative_evidence_class": frozenset(
+        {
+            "no_candidate_ms1_evidence",
+            "pattern_mismatch",
+            "rt_not_explained",
+            "local_peak_not_decisive",
+            "not_applicable",
+            "not_available",
         }
     ),
     "slice": frozenset({"slice0", "slice1"}),

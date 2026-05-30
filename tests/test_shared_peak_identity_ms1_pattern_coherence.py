@@ -137,6 +137,8 @@ def test_ms1_pattern_coherence_enriches_raw_overlay_shape_metric(
                     {
                         "sample_stem": "S1",
                         "cell_apex_rt": 10.0,
+                        "cell_start_rt": 9.9,
+                        "cell_end_rt": 10.1,
                         "cell_height": 980.0,
                         "local_window_max_intensity": 1000.0,
                         "trace_max_intensity": 1000.0,
@@ -144,6 +146,8 @@ def test_ms1_pattern_coherence_enriches_raw_overlay_shape_metric(
                         "local_window_to_global_max_ratio": 0.98,
                         "local_window_apex_delta_min": 0.01,
                         "global_trace_apex_delta_min": 0.02,
+                        "rt": [9.7, 9.8, 9.9, 10.0, 10.1, 10.2, 10.3],
+                        "intensity": [10.0, 12.0, 100.0, 1000.0, 120.0, 14.0, 11.0],
                     }
                 ],
             }
@@ -168,6 +172,119 @@ def test_ms1_pattern_coherence_enriches_raw_overlay_shape_metric(
     assert rows[0]["local_window_apex_delta_sec"] == "0.6"
     assert rows[0]["global_trace_apex_delta_sec"] == "1.2"
     assert rows[0]["family_ms1_overlay_trace_data_json"] == str(overlay)
+    assert rows[0]["peak_quality_vector_status"] == "supportive"
+    assert rows[0]["peak_quality_vector_basis"] == (
+        "family_ms1_overlay_raw_trace_vector"
+    )
+    assert rows[0]["peak_quality_trace_point_count"] == "7"
+    assert rows[0]["peak_quality_boundary_point_count"] == "3"
+    assert rows[0]["peak_quality_feature_count"] == "5"
+    assert rows[0]["peak_quality_vector_reason"] == (
+        "raw_trace_peak_quality_vector_supportive"
+    )
+
+
+def test_ms1_pattern_coherence_conflicts_when_selected_peak_loses_to_family_peak(
+    tmp_path: Path,
+) -> None:
+    cells = tmp_path / "alignment_cells.tsv"
+    overlay = tmp_path / "fam001_overlay_trace_data.json"
+    _write_cells(
+        cells,
+        [
+            _cell(
+                "FAM001",
+                "S1",
+                apex_rt="6.56",
+                peak_start_rt="6.26",
+                peak_end_rt="7.72",
+                rt_delta_sec="-39.0",
+            ),
+            _cell("FAM001", "S2", apex_rt="7.96"),
+            _cell("FAM001", "S3", apex_rt="7.98"),
+            _cell("FAM001", "S4", apex_rt="8.01"),
+        ],
+    )
+    overlay.write_text(
+        json.dumps(
+            {
+                "family_id": "FAM001",
+                "rt_min": 5.0,
+                "rt_max": 8.8,
+                "evidence_summary": {
+                    "family_verdict": "ms1_shape_supports_family_backfill"
+                },
+                "traces": [
+                    {
+                        "sample_stem": "S1",
+                        "cell_apex_rt": 6.56,
+                        "cell_start_rt": 6.26,
+                        "cell_end_rt": 7.72,
+                        "cell_height": 2_200_000.0,
+                        "local_window_max_intensity": 2_200_000.0,
+                        "trace_max_intensity": 2_200_000.0,
+                        "apex_aligned_shape_similarity": 0.90,
+                        "local_window_to_global_max_ratio": 1.0,
+                        "local_window_apex_delta_min": 0.0,
+                        "global_trace_apex_delta_min": 0.0,
+                        "rt": [6.40, 6.56, 6.68, 7.70, 7.93, 8.10],
+                        "intensity": [
+                            1_200_000.0,
+                            2_200_000.0,
+                            2_000_000.0,
+                            100_000.0,
+                            780_000.0,
+                            670_000.0,
+                        ],
+                    },
+                    {
+                        "sample_stem": "S2",
+                        "cell_apex_rt": 7.96,
+                        "cell_start_rt": 7.86,
+                        "cell_end_rt": 8.06,
+                        "cell_height": 3_000_000.0,
+                        "local_window_max_intensity": 3_000_000.0,
+                        "trace_max_intensity": 3_000_000.0,
+                        "apex_aligned_shape_similarity": 0.96,
+                        "local_window_to_global_max_ratio": 1.0,
+                        "local_window_apex_delta_min": 0.0,
+                        "global_trace_apex_delta_min": 0.0,
+                        "rt": [7.80, 7.96, 8.10],
+                        "intensity": [100_000.0, 3_000_000.0, 2_600_000.0],
+                    },
+                    {
+                        "sample_stem": "S3",
+                        "cell_apex_rt": 7.98,
+                        "cell_start_rt": 7.88,
+                        "cell_end_rt": 8.08,
+                        "cell_height": 2_800_000.0,
+                        "local_window_max_intensity": 2_800_000.0,
+                        "trace_max_intensity": 2_800_000.0,
+                        "apex_aligned_shape_similarity": 0.96,
+                        "local_window_to_global_max_ratio": 1.0,
+                        "local_window_apex_delta_min": 0.0,
+                        "global_trace_apex_delta_min": 0.0,
+                        "rt": [7.80, 7.98, 8.10],
+                        "intensity": [100_000.0, 2_800_000.0, 2_500_000.0],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rows = ms1_pattern_coherence.build_ms1_pattern_coherence_rows(
+        alignment_cells_tsv=cells,
+        family_ms1_overlay_trace_data_jsons=(overlay,),
+        oracle_keys=(("FAM001", "S1"),),
+    )
+
+    assert rows[0]["ms1_pattern_status"] == "conflict"
+    assert rows[0]["ms1_pattern_evidence_level"] == "trace_constellation"
+    assert rows[0]["reason"] == (
+        "family_ms1_overlay_competing_peak_matches_family_consensus"
+    )
+    assert rows[0]["shape_correlation_score"] == "0.9"
 
 
 def test_ms1_pattern_coherence_keeps_low_shape_with_local_peak_partial(
@@ -237,6 +354,39 @@ def test_ms1_pattern_coherence_conflicts_on_low_local_peak_dominance(
     assert rows[0]["reason"] == (
         "family_ms1_overlay_expected_window_lacks_complete_peak"
     )
+
+
+def test_ms1_pattern_coherence_old_overlay_without_trace_vector_is_not_available(
+    tmp_path: Path,
+) -> None:
+    cells = tmp_path / "alignment_cells.tsv"
+    overlay = tmp_path / "fam001_overlay_trace_data.json"
+    _write_cells(
+        cells,
+        [
+            _cell("FAM001", "S1", rt_delta_sec="0.0"),
+            _cell("FAM001", "S2", rt_delta_sec="1.0"),
+            _cell("FAM001", "S3", rt_delta_sec="-1.0"),
+        ],
+    )
+    _write_overlay(
+        overlay,
+        shape_similarity=0.94,
+        local_window_to_global_max_ratio=1.0,
+        local_window_apex_delta_min=0.01,
+        include_trace_vector=False,
+    )
+
+    rows = ms1_pattern_coherence.build_ms1_pattern_coherence_rows(
+        alignment_cells_tsv=cells,
+        family_ms1_overlay_trace_data_jsons=(overlay,),
+        oracle_keys=(("FAM001", "S1"),),
+    )
+
+    assert rows[0]["shape_metric_source"] == "family_ms1_overlay_raw_trace"
+    assert rows[0]["peak_quality_vector_status"] == "not_available"
+    assert rows[0]["peak_quality_vector_basis"] == ""
+    assert rows[0]["peak_quality_vector_reason"] == "no_raw_trace_vector"
 
 
 def test_ms1_pattern_coherence_does_not_fabricate_absent_cells(
@@ -369,7 +519,32 @@ def _write_overlay(
     local_window_apex_delta_min: float,
     cell_height: float = 300.0,
     local_window_max_intensity: float = 1000.0,
+    include_trace_vector: bool = True,
 ) -> None:
+    trace = {
+        "sample_stem": "S1",
+        "cell_apex_rt": 10.0,
+        "cell_start_rt": 9.9,
+        "cell_end_rt": 10.1,
+        "cell_height": cell_height,
+        "local_window_max_intensity": local_window_max_intensity,
+        "trace_max_intensity": local_window_max_intensity,
+        "apex_aligned_shape_similarity": shape_similarity,
+        "local_window_to_global_max_ratio": local_window_to_global_max_ratio,
+        "local_window_apex_delta_min": local_window_apex_delta_min,
+        "global_trace_apex_delta_min": 0.02,
+    }
+    if include_trace_vector:
+        trace["rt"] = [9.7, 9.8, 9.9, 10.0, 10.1, 10.2, 10.3]
+        trace["intensity"] = [
+            10.0,
+            12.0,
+            cell_height * 0.10,
+            local_window_max_intensity,
+            cell_height * 0.12,
+            14.0,
+            11.0,
+        ]
     path.write_text(
         json.dumps(
             {
@@ -379,21 +554,7 @@ def _write_overlay(
                 "evidence_summary": {
                     "family_verdict": "ms1_shape_supports_family_backfill"
                 },
-                "traces": [
-                    {
-                        "sample_stem": "S1",
-                        "cell_apex_rt": 10.0,
-                        "cell_height": cell_height,
-                        "local_window_max_intensity": local_window_max_intensity,
-                        "trace_max_intensity": local_window_max_intensity,
-                        "apex_aligned_shape_similarity": shape_similarity,
-                        "local_window_to_global_max_ratio": (
-                            local_window_to_global_max_ratio
-                        ),
-                        "local_window_apex_delta_min": local_window_apex_delta_min,
-                        "global_trace_apex_delta_min": 0.02,
-                    }
-                ],
+                "traces": [trace],
             }
         ),
         encoding="utf-8",

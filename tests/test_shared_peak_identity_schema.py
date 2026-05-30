@@ -230,7 +230,7 @@ def test_v2_shadow_label_schema_constants_match_contract() -> None:
     )
     assert (
         MACHINE_EVIDENCE_SUPPORT_SCHEMA_VERSION
-        == "shared_peak_identity_machine_evidence_support_v1"
+        == "shared_peak_identity_machine_evidence_support_v2"
     )
     assert MACHINE_EVIDENCE_SUPPORT_COLUMNS == (
         "machine_evidence_support_schema_version",
@@ -247,6 +247,9 @@ def test_v2_shadow_label_schema_constants_match_contract() -> None:
         "pattern_basis_status",
         "opportunity_basis_status",
         "scope_basis_status",
+        "negative_evidence_basis_status",
+        "negative_evidence_class",
+        "negative_evidence_detail",
         "observed_machine_metrics",
         "manual_derived_facts",
         "missing_machine_evidence",

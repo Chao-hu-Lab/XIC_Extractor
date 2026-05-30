@@ -67,6 +67,25 @@ MS1_PATTERN_COHERENCE_REQUIRED_COLUMNS = (
     "reason",
     "diagnostic_only",
 )
+QC_MS1_PATTERN_REFERENCE_REQUIRED_COLUMNS = (
+    "feature_family_id",
+    "sample_stem",
+    "qc_reference_status",
+    "qc_reference_evidence_level",
+    "target_injection_order",
+    "nearest_qc_sample_stem",
+    "nearest_qc_injection_order",
+    "nearest_qc_injection_order_delta",
+    "target_apex_rt",
+    "nearest_qc_apex_rt",
+    "target_minus_qc_apex_delta_sec",
+    "target_qc_apex_abs_delta_sec",
+    "target_qc_shape_similarity",
+    "target_local_window_to_global_max_ratio",
+    "nearest_qc_local_window_to_global_max_ratio",
+    "reason",
+    "diagnostic_only",
+)
 MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS = (
     "feature_family_id",
     "sample_stem",
@@ -81,6 +100,15 @@ MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS = (
     "reason",
     "diagnostic_only",
 )
+SAMPLE_NEGATIVE_EVIDENCE_REQUIRED_COLUMNS = (
+    "feature_family_id",
+    "sample_stem",
+    "negative_evidence_class",
+    "negative_evidence_detail",
+    "negative_evidence_level",
+    "reason",
+    "diagnostic_only",
+)
 _CANDIDATE_MS2_OBSERVED_LEVELS = frozenset(
     {"sample_candidate_aligned", "sample_boundary_aligned"}
 )
@@ -91,7 +119,16 @@ _MS1_PATTERN_OBSERVED_LEVELS = frozenset(
 )
 _MS1_PATTERN_SUPPORT_STATUSES = frozenset({"supportive", "partial_support"})
 _MS1_PATTERN_CONFLICT_STATUSES = frozenset({"conflict"})
+_QC_MS1_REFERENCE_OBSERVED_LEVELS = frozenset(
+    {"nearest_complete_peak_qc_overlay", "nearest_complete_family_centered_qc_overlay"}
+)
+_QC_MS1_REFERENCE_SUPPORT_STATUSES = frozenset({"supportive", "partial_support"})
+_QC_MS1_REFERENCE_CONFLICT_STATUSES = frozenset({"conflict"})
 _MS1_SHAPE_SUPPORT_MIN = 0.50
+_MS1_PEAK_QUALITY_VECTOR_BASIS = "family_ms1_overlay_raw_trace_vector"
+_MS1_PEAK_QUALITY_VECTOR_OBSERVED_STATUSES = frozenset(
+    {"supportive", "partial_support"}
+)
 _MS1_PATTERN_INCONCLUSIVE_REASONS = frozenset(
     {"family_ms1_overlay_shape_metric_inconclusive_apex_or_height"}
 )
@@ -100,6 +137,18 @@ _MATRIX_RT_DRIFT_OBSERVED_LEVELS = frozenset(
 )
 _MATRIX_RT_DRIFT_SUPPORT_STATUSES = frozenset({"drift_supported", "rt_close"})
 _MATRIX_RT_DRIFT_CONFLICT_STATUSES = frozenset({"drift_not_supported"})
+_SAMPLE_NEGATIVE_EVIDENCE_CLASSES = frozenset(
+    {
+        "no_candidate_ms1_evidence",
+        "pattern_mismatch",
+        "rt_not_explained",
+        "local_peak_not_decisive",
+    }
+)
+_SAMPLE_NEGATIVE_EVIDENCE_OBSERVED_LEVELS = frozenset({"machine_observed"})
+_DDA_NON_DISPOSITIVE_MS1_INTENSITY_MIN = 2.5e4
+_DDA_NON_DISPOSITIVE_TRIGGER_SCAN_MIN = 3
+_DDA_NON_DISPOSITIVE_TRACE_STRENGTHS = frozenset({"moderate", "strong"})
 
 
 def load_cwt_shape_evidence(
@@ -133,6 +182,40 @@ def load_candidate_ms2_pattern_evidence(
     }
 
 
+def _family_ms2_required_tag_by_family(
+    rows_by_key: Mapping[tuple[str, str], Mapping[str, str]],
+) -> dict[str, Mapping[str, str]]:
+    observed: dict[str, Mapping[str, str]] = {}
+    for (family_id, sample_stem), row in rows_by_key.items():
+        if not _has_family_ms2_required_tag(row):
+            continue
+        if family_id and family_id not in observed:
+            observed[family_id] = {
+                **row,
+                "feature_family_id": family_id,
+                "sample_stem": sample_stem,
+            }
+    return observed
+
+
+def _has_family_ms2_required_tag(row: Mapping[str, str] | None) -> bool:
+    if not row:
+        return False
+    if row.get("candidate_ms2_pattern_status") not in _CANDIDATE_MS2_SUPPORT_STATUSES:
+        return False
+    if row.get("candidate_ms2_evidence_level") not in _CANDIDATE_MS2_OBSERVED_LEVELS:
+        return False
+    count_values = (
+        row.get("raw_ms2_strict_nl_scan_count"),
+        row.get("matched_neutral_loss_count"),
+        row.get("source_matched_tag_count"),
+    )
+    return any(
+        (count := _int_or_none(value)) is not None and count >= 1
+        for value in count_values
+    )
+
+
 def load_ms1_pattern_coherence_evidence(
     path: Path | None,
 ) -> dict[tuple[str, str], Mapping[str, str]]:
@@ -145,12 +228,36 @@ def load_ms1_pattern_coherence_evidence(
     }
 
 
+def load_qc_ms1_pattern_reference_evidence(
+    path: Path | None,
+) -> dict[tuple[str, str], Mapping[str, str]]:
+    if path is None:
+        return {}
+    rows = read_tsv_required(path, QC_MS1_PATTERN_REFERENCE_REQUIRED_COLUMNS)
+    return {
+        (row["feature_family_id"], row["sample_stem"]): row
+        for row in rows
+    }
+
+
 def load_matrix_rt_drift_policy_evidence(
     path: Path | None,
 ) -> dict[tuple[str, str], Mapping[str, str]]:
     if path is None:
         return {}
     rows = read_tsv_required(path, MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS)
+    return {
+        (row["feature_family_id"], row["sample_stem"]): row
+        for row in rows
+    }
+
+
+def load_sample_negative_evidence(
+    path: Path | None,
+) -> dict[tuple[str, str], Mapping[str, str]]:
+    if path is None:
+        return {}
+    rows = read_tsv_required(path, SAMPLE_NEGATIVE_EVIDENCE_REQUIRED_COLUMNS)
     return {
         (row["feature_family_id"], row["sample_stem"]): row
         for row in rows
@@ -170,7 +277,13 @@ def build_machine_evidence_support_rows(
     ms1_pattern_coherence_evidence: Mapping[
         tuple[str, str], Mapping[str, str]
     ] | None = None,
+    qc_ms1_pattern_reference_evidence: Mapping[
+        tuple[str, str], Mapping[str, str]
+    ] | None = None,
     matrix_rt_drift_policy_evidence: Mapping[
+        tuple[str, str], Mapping[str, str]
+    ] | None = None,
+    sample_negative_evidence: Mapping[
         tuple[str, str], Mapping[str, str]
     ] | None = None,
 ) -> tuple[dict[str, str], ...]:
@@ -178,8 +291,13 @@ def build_machine_evidence_support_rows(
     cwt_shape_evidence = cwt_shape_evidence or {}
     tier2_trace_evidence = tier2_trace_evidence or {}
     candidate_ms2_pattern_evidence = candidate_ms2_pattern_evidence or {}
+    family_ms2_required_tag = _family_ms2_required_tag_by_family(
+        candidate_ms2_pattern_evidence
+    )
     ms1_pattern_coherence_evidence = ms1_pattern_coherence_evidence or {}
+    qc_ms1_pattern_reference_evidence = qc_ms1_pattern_reference_evidence or {}
     matrix_rt_drift_policy_evidence = matrix_rt_drift_policy_evidence or {}
+    sample_negative_evidence = sample_negative_evidence or {}
     support_rows = [
         _support_row(
             explanation=explanation,
@@ -192,10 +310,19 @@ def build_machine_evidence_support_rows(
             candidate_ms2_row=candidate_ms2_pattern_evidence.get(
                 (explanation["feature_family_id"], explanation["sample_id"]),
             ),
+            family_ms2_required_tag_row=family_ms2_required_tag.get(
+                explanation["feature_family_id"]
+            ),
             ms1_pattern_row=ms1_pattern_coherence_evidence.get(
                 (explanation["feature_family_id"], explanation["sample_id"]),
             ),
+            qc_ms1_reference_row=qc_ms1_pattern_reference_evidence.get(
+                (explanation["feature_family_id"], explanation["sample_id"]),
+            ),
             matrix_rt_drift_row=matrix_rt_drift_policy_evidence.get(
+                (explanation["feature_family_id"], explanation["sample_id"]),
+            ),
+            sample_negative_row=sample_negative_evidence.get(
                 (explanation["feature_family_id"], explanation["sample_id"]),
             ),
         )
@@ -217,8 +344,11 @@ def _support_row(
     cwt_row: Mapping[str, str] | None,
     tier2_row: Mapping[str, str] | None,
     candidate_ms2_row: Mapping[str, str] | None,
+    family_ms2_required_tag_row: Mapping[str, str] | None,
     ms1_pattern_row: Mapping[str, str] | None,
+    qc_ms1_reference_row: Mapping[str, str] | None,
     matrix_rt_drift_row: Mapping[str, str] | None,
+    sample_negative_row: Mapping[str, str] | None,
 ) -> dict[str, str]:
     tags = _tags(explanation)
     sample_matches = tuple(match for match in matches if match.sample_level)
@@ -229,8 +359,12 @@ def _support_row(
         cwt_row=cwt_row,
         tier2_row=tier2_row,
         candidate_ms2_row=candidate_ms2_row,
+        family_ms2_required_tag_row=family_ms2_required_tag_row,
         ms1_pattern_row=ms1_pattern_row,
+        qc_ms1_reference_row=qc_ms1_reference_row,
         matrix_rt_drift_row=matrix_rt_drift_row,
+        sample_negative_row=sample_negative_row,
+        tags=tags,
     )
     manual_facts = _manual_derived_facts(tags, explanation)
     missing_evidence = _missing_machine_evidence(
@@ -241,8 +375,11 @@ def _support_row(
         cwt_row=cwt_row,
         tier2_row=tier2_row,
         candidate_ms2_row=candidate_ms2_row,
+        family_ms2_required_tag_row=family_ms2_required_tag_row,
         ms1_pattern_row=ms1_pattern_row,
+        qc_ms1_reference_row=qc_ms1_reference_row,
         matrix_rt_drift_row=matrix_rt_drift_row,
+        sample_negative_row=sample_negative_row,
     )
     literature_refs = _literature_refs(
         tags=tags,
@@ -282,15 +419,40 @@ def _support_row(
             tags,
             context_matches,
             candidate_ms2_row,
+            family_ms2_required_tag_row,
             ms1_pattern_row,
+            qc_ms1_reference_row,
         ),
         "opportunity_basis_status": _opportunity_basis_status(
             tags,
             sample_matches,
             context_matches,
             tier2_row,
+            candidate_ms2_row,
+            family_ms2_required_tag_row,
+            ms1_pattern_row,
+            qc_ms1_reference_row,
         ),
-        "scope_basis_status": _scope_basis_status(explanation, tags),
+        "scope_basis_status": _scope_basis_status(
+            explanation,
+            tags,
+            sample_negative_row,
+        ),
+        "negative_evidence_basis_status": _negative_evidence_basis_status(
+            explanation,
+            tags,
+            sample_negative_row,
+        ),
+        "negative_evidence_class": _negative_evidence_class(
+            explanation,
+            tags,
+            sample_negative_row,
+        ),
+        "negative_evidence_detail": _negative_evidence_detail(
+            explanation,
+            tags,
+            sample_negative_row,
+        ),
         "observed_machine_metrics": observed_metrics,
         "manual_derived_facts": manual_facts,
         "missing_machine_evidence": ";".join(missing_evidence),
@@ -306,7 +468,9 @@ def _support_row(
                 tier2_row=tier2_row,
                 candidate_ms2_row=candidate_ms2_row,
                 ms1_pattern_row=ms1_pattern_row,
+                qc_ms1_reference_row=qc_ms1_reference_row,
                 matrix_rt_drift_row=matrix_rt_drift_row,
+                sample_negative_row=sample_negative_row,
             ),
         ),
         "diagnostic_only": "TRUE",
@@ -372,11 +536,17 @@ def _pattern_basis_status(
     tags: frozenset[str],
     context_matches: Sequence[MachineMatch],
     candidate_ms2_row: Mapping[str, str] | None,
+    family_ms2_required_tag_row: Mapping[str, str] | None,
     ms1_pattern_row: Mapping[str, str] | None,
+    qc_ms1_reference_row: Mapping[str, str] | None,
 ) -> str:
     if _has_candidate_ms2_pattern_metric(
         candidate_ms2_row,
-    ) or _has_ms1_pattern_metric(ms1_pattern_row):
+    ) or _has_family_ms2_required_tag(
+        family_ms2_required_tag_row,
+    ) or _has_ms1_pattern_metric(
+        ms1_pattern_row
+    ) or _has_qc_ms1_pattern_reference_metric(qc_ms1_reference_row):
         return "machine_observed"
     has_family_proxy = any(
         _has_value(match.row.get("neutral_loss_tag")) for match in context_matches
@@ -392,8 +562,23 @@ def _opportunity_basis_status(
     sample_matches: Sequence[MachineMatch],
     context_matches: Sequence[MachineMatch],
     tier2_row: Mapping[str, str] | None,
+    candidate_ms2_row: Mapping[str, str] | None,
+    family_ms2_required_tag_row: Mapping[str, str] | None,
+    ms1_pattern_row: Mapping[str, str] | None,
+    qc_ms1_reference_row: Mapping[str, str] | None,
 ) -> str:
-    if _has_tier2_trace_metric(tier2_row):
+    if _has_tier2_trace_metric(
+        tier2_row,
+    ) or _has_family_ms2_required_tag(
+        candidate_ms2_row,
+    ) or _dda_non_dispositive_policy_supports_manual(
+        tags,
+        context_matches,
+        candidate_ms2_row,
+        family_ms2_required_tag_row,
+        ms1_pattern_row,
+        qc_ms1_reference_row,
+    ):
         return "machine_observed"
     machine_tokens = _machine_tokens(sample_matches, context_matches)
     has_proxy = any(
@@ -416,13 +601,92 @@ def _opportunity_basis_status(
 def _scope_basis_status(
     explanation: Mapping[str, str],
     tags: frozenset[str],
+    sample_negative_row: Mapping[str, str] | None,
 ) -> str:
+    if _sample_negative_evidence_supports_manual(
+        explanation,
+        tags,
+        sample_negative_row,
+    ):
+        return "machine_observed"
     if (
         explanation.get("manual_scope") == "scope_derived_unmentioned_fail"
         or "scope_derived_unmentioned_fail" in tags
     ):
         return "manual_oracle_derived"
     return "not_applicable"
+
+
+def _negative_evidence_basis_status(
+    explanation: Mapping[str, str],
+    tags: frozenset[str],
+    sample_negative_row: Mapping[str, str] | None,
+) -> str:
+    if _sample_negative_evidence_supports_manual(
+        explanation,
+        tags,
+        sample_negative_row,
+    ):
+        return "machine_observed"
+    if explanation.get("manual_label") in {"fail", "human_unjudgeable"}:
+        inferred = _manual_negative_evidence_class(explanation, tags)
+        if inferred != "not_available":
+            return "manual_oracle_derived"
+        return "not_available"
+    return "not_applicable"
+
+
+def _negative_evidence_class(
+    explanation: Mapping[str, str],
+    tags: frozenset[str],
+    sample_negative_row: Mapping[str, str] | None,
+) -> str:
+    if _has_sample_negative_evidence_metric(sample_negative_row):
+        if sample_negative_row is None:
+            return "not_available"
+        negative_class = sample_negative_row.get("negative_evidence_class", "")
+        if negative_class in _SAMPLE_NEGATIVE_EVIDENCE_CLASSES:
+            return negative_class
+    if explanation.get("manual_label") in {"fail", "human_unjudgeable"}:
+        return _manual_negative_evidence_class(explanation, tags)
+    return "not_applicable"
+
+
+def _negative_evidence_detail(
+    explanation: Mapping[str, str],
+    tags: frozenset[str],
+    sample_negative_row: Mapping[str, str] | None,
+) -> str:
+    if _has_sample_negative_evidence_metric(sample_negative_row):
+        if sample_negative_row is None:
+            return ""
+        return (
+            sample_negative_row.get("negative_evidence_detail")
+            or sample_negative_row.get("reason")
+            or ""
+        )
+    inferred = _manual_negative_evidence_class(explanation, tags)
+    if inferred == "not_available":
+        return ""
+    return "manual_reason_tags:" + ";".join(sorted(tags))
+
+
+def _manual_negative_evidence_class(
+    explanation: Mapping[str, str],
+    tags: frozenset[str],
+) -> str:
+    if "pattern_mismatch" in tags:
+        return "pattern_mismatch"
+    if "rt_too_far" in tags:
+        return "rt_not_explained"
+    if tags & {"shape_bad", "boundary_ambiguous", "human_unjudgeable"}:
+        return "local_peak_not_decisive"
+    if (
+        explanation.get("manual_scope") == "scope_derived_unmentioned_fail"
+        or "scope_derived_unmentioned_fail" in tags
+    ):
+        return "not_available"
+    return "not_available"
 
 
 def _basis_status(*, has_machine_proxy: bool, has_manual: bool) -> str:
@@ -442,8 +706,12 @@ def _observed_machine_metrics(
     cwt_row: Mapping[str, str] | None,
     tier2_row: Mapping[str, str] | None,
     candidate_ms2_row: Mapping[str, str] | None,
+    family_ms2_required_tag_row: Mapping[str, str] | None,
     ms1_pattern_row: Mapping[str, str] | None,
+    qc_ms1_reference_row: Mapping[str, str] | None,
     matrix_rt_drift_row: Mapping[str, str] | None,
+    sample_negative_row: Mapping[str, str] | None,
+    tags: frozenset[str],
 ) -> str:
     metrics: list[str] = []
     if sample_matches:
@@ -564,6 +832,58 @@ def _observed_machine_metrics(
             "candidate_ms2_alignment_source",
             candidate_ms2_row.get("ms2_alignment_source"),
         )
+        _append_metric(
+            metrics,
+            "candidate_ms2_source_neutral_loss_mass_error_ppm",
+            candidate_ms2_row.get("source_neutral_loss_mass_error_ppm"),
+        )
+        _append_metric(
+            metrics,
+            "candidate_ms2_raw_best_loss_ppm",
+            candidate_ms2_row.get("raw_ms2_best_loss_ppm"),
+        )
+        _append_metric(
+            metrics,
+            "candidate_ms2_raw_trigger_scan_count",
+            candidate_ms2_row.get("raw_ms2_trigger_scan_count"),
+        )
+        _append_metric(
+            metrics,
+            "candidate_ms2_raw_strict_nl_scan_count",
+            candidate_ms2_row.get("raw_ms2_strict_nl_scan_count"),
+        )
+        _append_metric(
+            metrics,
+            "candidate_ms2_raw_trace_strength",
+            candidate_ms2_row.get("raw_ms2_trace_strength"),
+        )
+        _append_metric(
+            metrics,
+            "candidate_ms2_raw_absence_reason",
+            candidate_ms2_row.get("raw_ms2_diagnostic_product_absence_reason"),
+        )
+        _append_metric(
+            metrics,
+            "candidate_ms2_nl_ppm_warn",
+            candidate_ms2_row.get("nl_ppm_warn"),
+        )
+        _append_metric(
+            metrics,
+            "candidate_ms2_nl_ppm_max",
+            candidate_ms2_row.get("nl_ppm_max"),
+        )
+    if _has_family_ms2_required_tag(family_ms2_required_tag_row):
+        metrics.append("family_ms2_required_tag_status=observed_in_family")
+        _append_metric(
+            metrics,
+            "family_ms2_required_tag_sample",
+            family_ms2_required_tag_row.get("sample_stem"),
+        )
+        _append_metric(
+            metrics,
+            "family_ms2_required_tag_strict_nl_count",
+            family_ms2_required_tag_row.get("raw_ms2_strict_nl_scan_count"),
+        )
     if ms1_pattern_row:
         _append_metric(
             metrics,
@@ -645,6 +965,109 @@ def _observed_machine_metrics(
             "ms1_global_trace_apex_delta_sec",
             ms1_pattern_row.get("global_trace_apex_delta_sec"),
         )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_vector_status",
+            ms1_pattern_row.get("peak_quality_vector_status"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_vector_basis",
+            ms1_pattern_row.get("peak_quality_vector_basis"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_trace_point_count",
+            ms1_pattern_row.get("peak_quality_trace_point_count"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_boundary_point_count",
+            ms1_pattern_row.get("peak_quality_boundary_point_count"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_signal_to_noise_proxy",
+            ms1_pattern_row.get("peak_quality_signal_to_noise_proxy"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_fwhm_sec",
+            ms1_pattern_row.get("peak_quality_fwhm_sec"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_sharpness_score",
+            ms1_pattern_row.get("peak_quality_sharpness_score"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_zigzag_score",
+            ms1_pattern_row.get("peak_quality_zigzag_score"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_tailing_ratio",
+            ms1_pattern_row.get("peak_quality_tailing_ratio"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_boundary_margin_ratio",
+            ms1_pattern_row.get("peak_quality_boundary_margin_ratio"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_feature_count",
+            ms1_pattern_row.get("peak_quality_feature_count"),
+        )
+        _append_metric(
+            metrics,
+            "ms1_peak_quality_vector_reason",
+            ms1_pattern_row.get("peak_quality_vector_reason"),
+        )
+    if qc_ms1_reference_row:
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_status",
+            qc_ms1_reference_row.get("qc_reference_status"),
+        )
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_evidence_level",
+            qc_ms1_reference_row.get("qc_reference_evidence_level"),
+        )
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_sample",
+            qc_ms1_reference_row.get("nearest_qc_sample_stem"),
+        )
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_injection_order_delta",
+            qc_ms1_reference_row.get("nearest_qc_injection_order_delta"),
+        )
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_apex_abs_delta_sec",
+            qc_ms1_reference_row.get("target_qc_apex_abs_delta_sec"),
+        )
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_shape_similarity",
+            qc_ms1_reference_row.get("target_qc_shape_similarity"),
+        )
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_target_local_ratio",
+            qc_ms1_reference_row.get("target_local_window_to_global_max_ratio"),
+        )
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_qc_local_ratio",
+            qc_ms1_reference_row.get(
+                "nearest_qc_local_window_to_global_max_ratio"
+            ),
+        )
     if matrix_rt_drift_row:
         _append_metric(
             metrics,
@@ -701,6 +1124,37 @@ def _observed_machine_metrics(
             "istd_phase_summary",
             matrix_rt_drift_row.get("istd_phase_summary"),
         )
+    if sample_negative_row:
+        _append_metric(
+            metrics,
+            "sample_negative_evidence_class",
+            sample_negative_row.get("negative_evidence_class"),
+        )
+        _append_metric(
+            metrics,
+            "sample_negative_evidence_level",
+            sample_negative_row.get("negative_evidence_level"),
+        )
+        _append_metric(
+            metrics,
+            "sample_negative_evidence_detail",
+            sample_negative_row.get("negative_evidence_detail"),
+        )
+        _append_metric(
+            metrics,
+            "sample_negative_evidence_reason",
+            sample_negative_row.get("reason"),
+        )
+    dda_status = _dda_non_dispositive_policy_status(
+        tags,
+        context_matches,
+        candidate_ms2_row,
+        family_ms2_required_tag_row,
+        ms1_pattern_row,
+        qc_ms1_reference_row,
+    )
+    if dda_status != "not_applicable":
+        _append_metric(metrics, "dda_missing_nl_policy_status", dda_status)
     return ";".join(metrics)
 
 
@@ -734,8 +1188,11 @@ def _missing_machine_evidence(
     cwt_row: Mapping[str, str] | None,
     tier2_row: Mapping[str, str] | None,
     candidate_ms2_row: Mapping[str, str] | None,
+    family_ms2_required_tag_row: Mapping[str, str] | None,
     ms1_pattern_row: Mapping[str, str] | None,
+    qc_ms1_reference_row: Mapping[str, str] | None,
     matrix_rt_drift_row: Mapping[str, str] | None,
+    sample_negative_row: Mapping[str, str] | None,
 ) -> tuple[str, ...]:
     missing: list[str] = []
     gap_class = explanation.get("evidence_gap_class", "")
@@ -755,41 +1212,78 @@ def _missing_machine_evidence(
         tags & _PATTERN_TAGS
         and not _has_candidate_ms2_pattern_metric(candidate_ms2_row)
         and not _has_ms1_pattern_metric(ms1_pattern_row)
+        and not _has_qc_ms1_pattern_reference_metric(qc_ms1_reference_row)
     ):
         missing.append("formal_pattern_metric")
     if tags & _OPPORTUNITY_TAGS:
         if not _has_tier2_trace_metric(tier2_row):
             missing.append("intensity_opportunity_metric")
-        missing.append("dda_opportunity_policy")
+        dda_status = _dda_non_dispositive_policy_status(
+            tags,
+            context_matches,
+            candidate_ms2_row,
+            family_ms2_required_tag_row,
+            ms1_pattern_row,
+            qc_ms1_reference_row,
+        )
+        if dda_status == "family_required_tag_not_observed":
+            missing.append("family_required_tag_gate")
+        elif dda_status == "policy_evidence_missing":
+            missing.append("dda_opportunity_policy")
     if "rt_drift_possible" in tags and not _matrix_rt_drift_supports_manual(
         tags,
         matrix_rt_drift_row,
     ):
         missing.append("matrix_rt_drift_policy")
-    if "rt_too_far" in tags and not _has_rt_preferred_window_conflict(
-        sample_matches
+    if (
+        "rt_too_far" in tags
+        and not _has_rt_preferred_window_conflict(sample_matches)
+        and not _ms1_pattern_supports_manual(tags, ms1_pattern_row)
+        and not _qc_ms1_pattern_reference_conflicts_with_manual(
+            tags,
+            qc_ms1_reference_row,
+        )
     ):
         missing.append("rt_pattern_conflict_gate")
     if _candidate_ms2_conflicts_with_manual(tags, candidate_ms2_row):
         missing.append("pattern_metric_not_supportive")
     if _ms1_pattern_conflicts_with_manual(tags, ms1_pattern_row):
         missing.append("pattern_metric_not_supportive")
+    if _qc_ms1_pattern_reference_conflicts_with_manual(
+        tags,
+        qc_ms1_reference_row,
+    ):
+        missing.append("pattern_metric_not_supportive")
     if _ms1_pattern_inconclusive_with_manual(tags, ms1_pattern_row):
         missing.append("pattern_metric_inconclusive_apex_or_height")
+    if _qc_ms1_pattern_reference_inconclusive_with_manual(
+        tags,
+        qc_ms1_reference_row,
+    ):
+        missing.append("qc_ms1_pattern_reference_inconclusive")
     if _matrix_rt_drift_conflicts_with_manual(tags, matrix_rt_drift_row):
         missing.append("matrix_rt_drift_policy_not_supportive")
     if (
         "pattern_mismatch" in tags
         and not _candidate_ms2_supports_manual(tags, candidate_ms2_row)
         and not _ms1_pattern_supports_manual(tags, ms1_pattern_row)
+        and not _qc_ms1_pattern_reference_supports_manual(
+            tags,
+            qc_ms1_reference_row,
+        )
         and not _has_candidate_ms2_pattern_metric(candidate_ms2_row)
         and not _has_ms1_pattern_metric(ms1_pattern_row)
+        and not _has_qc_ms1_pattern_reference_metric(qc_ms1_reference_row)
     ):
         missing.append("candidate_aligned_ms2_pattern")
     if (
         explanation.get("manual_scope") == "scope_derived_unmentioned_fail"
         or "scope_derived_unmentioned_fail" in tags
         or gap_class == "machine_too_permissive_scope_rule_conflict"
+    ) and not _sample_negative_evidence_supports_manual(
+        explanation,
+        tags,
+        sample_negative_row,
     ):
         missing.extend(("manual_scope_policy", "sample_level_negative_evidence"))
     if explanation.get("manual_label") == "human_unjudgeable":
@@ -799,13 +1293,18 @@ def _missing_machine_evidence(
     if not sample_matches and explanation.get("manual_label") not in {
         "not_applicable",
         "human_unjudgeable",
-    }:
+    } and not _sample_negative_evidence_supports_manual(
+        explanation,
+        tags,
+        sample_negative_row,
+    ):
         missing.append("sample_level_machine_observation")
     if (
         not context_matches
         and tags & _PATTERN_TAGS
         and not _has_candidate_ms2_pattern_metric(candidate_ms2_row)
         and not _has_ms1_pattern_metric(ms1_pattern_row)
+        and not _has_qc_ms1_pattern_reference_metric(qc_ms1_reference_row)
     ):
         missing.append("family_ms2_pattern_context")
     return _unique(missing)
@@ -866,6 +1365,8 @@ def _evidence_support_status(
     if "pattern_metric_not_supportive" in missing_evidence:
         return "machine_observed_conflict"
     if "matrix_rt_drift_policy_not_supportive" in missing_evidence:
+        return "machine_observed_conflict"
+    if "family_required_tag_gate" in missing_evidence:
         return "machine_observed_conflict"
     if "manual_scope_policy" in missing_evidence:
         return "blocked_missing_metric"
@@ -932,6 +1433,13 @@ def _float_or_none(value: object) -> float | None:
         return None
 
 
+def _int_or_none(value: object) -> int | None:
+    number = _float_or_none(value)
+    if number is None:
+        return None
+    return int(number)
+
+
 def _peak_width_sec(row: Mapping[str, str]) -> str:
     try:
         start = float(str(row.get("peak_start_rt", "")).strip("'"))
@@ -992,7 +1500,9 @@ def _has_machine_observed_metric(
     tier2_row: Mapping[str, str] | None,
     candidate_ms2_row: Mapping[str, str] | None,
     ms1_pattern_row: Mapping[str, str] | None,
+    qc_ms1_reference_row: Mapping[str, str] | None,
     matrix_rt_drift_row: Mapping[str, str] | None,
+    sample_negative_row: Mapping[str, str] | None,
 ) -> bool:
     return (
         _has_cwt_metric(cwt_row)
@@ -1000,7 +1510,9 @@ def _has_machine_observed_metric(
         or _has_candidate_ms2_pattern_metric(candidate_ms2_row)
         or _has_ms1_shape_metric(ms1_pattern_row)
         or _has_ms1_pattern_metric(ms1_pattern_row)
+        or _has_qc_ms1_pattern_reference_metric(qc_ms1_reference_row)
         or _has_matrix_rt_drift_metric(matrix_rt_drift_row)
+        or _has_sample_negative_evidence_metric(sample_negative_row)
     )
 
 
@@ -1040,6 +1552,20 @@ def _has_ms1_pattern_metric(row: Mapping[str, str] | None) -> bool:
     )
 
 
+def _has_qc_ms1_pattern_reference_metric(row: Mapping[str, str] | None) -> bool:
+    if not row:
+        return False
+    return (
+        row.get("qc_reference_evidence_level")
+        in _QC_MS1_REFERENCE_OBSERVED_LEVELS
+        and row.get("qc_reference_status")
+        in (
+            _QC_MS1_REFERENCE_SUPPORT_STATUSES
+            | _QC_MS1_REFERENCE_CONFLICT_STATUSES
+        )
+    )
+
+
 def _has_ms1_shape_metric(row: Mapping[str, str] | None) -> bool:
     if not row:
         return False
@@ -1049,6 +1575,17 @@ def _has_ms1_shape_metric(row: Mapping[str, str] | None) -> bool:
         and row.get("shape_metric_source") == "family_ms1_overlay_raw_trace"
         and _has_value(row.get("family_ms1_overlay_trace_data_json"))
         and _has_value(row.get("shape_correlation_score"))
+        and _has_ms1_peak_quality_vector_metric(row)
+    )
+
+
+def _has_ms1_peak_quality_vector_metric(row: Mapping[str, str] | None) -> bool:
+    if not row:
+        return False
+    return (
+        row.get("peak_quality_vector_basis") == _MS1_PEAK_QUALITY_VECTOR_BASIS
+        and row.get("peak_quality_vector_status")
+        in _MS1_PEAK_QUALITY_VECTOR_OBSERVED_STATUSES
     )
 
 
@@ -1063,6 +1600,153 @@ def _has_matrix_rt_drift_metric(row: Mapping[str, str] | None) -> bool:
             | _MATRIX_RT_DRIFT_CONFLICT_STATUSES
         )
     )
+
+
+def _has_sample_negative_evidence_metric(row: Mapping[str, str] | None) -> bool:
+    if not row:
+        return False
+    return (
+        row.get("negative_evidence_level")
+        in _SAMPLE_NEGATIVE_EVIDENCE_OBSERVED_LEVELS
+        and row.get("negative_evidence_class") in _SAMPLE_NEGATIVE_EVIDENCE_CLASSES
+    )
+
+
+def _sample_negative_evidence_supports_manual(
+    explanation: Mapping[str, str],
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if explanation.get("manual_label") != "fail":
+        return False
+    if not _has_sample_negative_evidence_metric(row):
+        return False
+    if row is None:
+        return False
+    negative_class = row["negative_evidence_class"]
+    if (
+        explanation.get("manual_scope") == "scope_derived_unmentioned_fail"
+        or "scope_derived_unmentioned_fail" in tags
+        or explanation.get("evidence_gap_class")
+        == "machine_too_permissive_scope_rule_conflict"
+    ):
+        return True
+    if "pattern_mismatch" in tags:
+        return negative_class == "pattern_mismatch"
+    if "rt_too_far" in tags:
+        return negative_class == "rt_not_explained"
+    if tags & {"shape_bad", "boundary_ambiguous"}:
+        return negative_class == "local_peak_not_decisive"
+    return negative_class == "no_candidate_ms1_evidence"
+
+
+def _dda_non_dispositive_policy_status(
+    tags: frozenset[str],
+    context_matches: Sequence[MachineMatch],
+    candidate_ms2_row: Mapping[str, str] | None,
+    family_ms2_required_tag_row: Mapping[str, str] | None,
+    ms1_pattern_row: Mapping[str, str] | None,
+    qc_ms1_reference_row: Mapping[str, str] | None,
+) -> str:
+    if "dda_stochastic_missing" not in tags:
+        return "not_applicable"
+    if _has_family_ms2_required_tag(candidate_ms2_row):
+        return "sample_required_tag_observed"
+    if _dda_non_dispositive_policy_supports_manual(
+        tags,
+        context_matches,
+        candidate_ms2_row,
+        family_ms2_required_tag_row,
+        ms1_pattern_row,
+        qc_ms1_reference_row,
+    ):
+        return "not_dispositive"
+    if (
+        candidate_ms2_row
+        and not _has_family_required_tag_or_context(
+            family_ms2_required_tag_row,
+            context_matches,
+        )
+        and candidate_ms2_row.get("candidate_ms2_evidence_level")
+        != "not_available"
+    ):
+        return "family_required_tag_not_observed"
+    return "policy_evidence_missing"
+
+
+def _dda_non_dispositive_policy_supports_manual(
+    tags: frozenset[str],
+    context_matches: Sequence[MachineMatch],
+    candidate_ms2_row: Mapping[str, str] | None,
+    family_ms2_required_tag_row: Mapping[str, str] | None,
+    ms1_pattern_row: Mapping[str, str] | None,
+    qc_ms1_reference_row: Mapping[str, str] | None,
+) -> bool:
+    if "dda_stochastic_missing" not in tags:
+        return False
+    if not candidate_ms2_row:
+        return False
+    if not _has_family_required_tag_or_context(
+        family_ms2_required_tag_row,
+        context_matches,
+    ):
+        return False
+    if candidate_ms2_row.get("candidate_ms2_pattern_status") != "not_observed":
+        return False
+    if (
+        candidate_ms2_row.get("candidate_ms2_evidence_level")
+        != "sample_boundary_no_observed_pattern"
+    ):
+        return False
+    if _int_or_none(candidate_ms2_row.get("raw_ms2_trigger_scan_count")) is None:
+        return False
+    trigger_count = _int_or_none(candidate_ms2_row.get("raw_ms2_trigger_scan_count"))
+    if trigger_count is None or trigger_count < _DDA_NON_DISPOSITIVE_TRIGGER_SCAN_MIN:
+        return False
+    strict_nl_count = _int_or_none(
+        candidate_ms2_row.get("raw_ms2_strict_nl_scan_count")
+    )
+    if strict_nl_count not in {0, None}:
+        return False
+    if (
+        candidate_ms2_row.get("raw_ms2_trace_strength")
+        not in _DDA_NON_DISPOSITIVE_TRACE_STRENGTHS
+    ):
+        return False
+    if not (
+        _ms1_pattern_supports_manual(tags, ms1_pattern_row)
+        or _qc_ms1_pattern_reference_supports_manual(tags, qc_ms1_reference_row)
+    ):
+        return False
+    intensity = _ms1_supporting_intensity(ms1_pattern_row)
+    return (
+        intensity is not None
+        and intensity >= _DDA_NON_DISPOSITIVE_MS1_INTENSITY_MIN
+    )
+
+
+def _has_family_required_tag_or_context(
+    family_ms2_required_tag_row: Mapping[str, str] | None,
+    context_matches: Sequence[MachineMatch],
+) -> bool:
+    return _has_family_ms2_required_tag(
+        family_ms2_required_tag_row,
+    ) or _has_cid_nl_pattern_context(context_matches)
+
+
+def _ms1_supporting_intensity(row: Mapping[str, str] | None) -> float | None:
+    if not row:
+        return None
+    values = [
+        _float_or_none(row.get(field))
+        for field in (
+            "cell_height",
+            "local_window_max_intensity",
+            "trace_max_intensity",
+        )
+    ]
+    finite_values = [value for value in values if value is not None]
+    return max(finite_values) if finite_values else None
 
 
 def _candidate_ms2_supports_manual(
@@ -1099,6 +1783,22 @@ def _ms1_pattern_supports_manual(
     return False
 
 
+def _qc_ms1_pattern_reference_supports_manual(
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if not _has_qc_ms1_pattern_reference_metric(row):
+        return False
+    if row is None:
+        return False
+    status = row["qc_reference_status"]
+    if "pattern_mismatch" in tags:
+        return status in _QC_MS1_REFERENCE_CONFLICT_STATUSES
+    if tags & {"pattern_similar", "pattern_partial"}:
+        return status in _QC_MS1_REFERENCE_SUPPORT_STATUSES
+    return False
+
+
 def _ms1_shape_supports_manual(
     tags: frozenset[str],
     row: Mapping[str, str] | None,
@@ -1110,6 +1810,8 @@ def _ms1_shape_supports_manual(
     status = row["ms1_pattern_status"]
     shape_score = _float_or_none(row.get("shape_correlation_score"))
     if tags & {"shape_complete", "shape_normal"}:
+        if _ms1_conflict_preserves_selected_peak_shape(row):
+            return True
         return (
             status in _MS1_PATTERN_SUPPORT_STATUSES
             and shape_score is not None
@@ -1178,6 +1880,22 @@ def _ms1_pattern_conflicts_with_manual(
     return False
 
 
+def _qc_ms1_pattern_reference_conflicts_with_manual(
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if not _has_qc_ms1_pattern_reference_metric(row):
+        return False
+    if row is None:
+        return False
+    status = row["qc_reference_status"]
+    if "pattern_mismatch" in tags:
+        return status in _QC_MS1_REFERENCE_SUPPORT_STATUSES
+    if tags & {"pattern_similar", "pattern_partial"}:
+        return status in _QC_MS1_REFERENCE_CONFLICT_STATUSES
+    return False
+
+
 def _ms1_shape_conflicts_with_manual(
     tags: frozenset[str],
     row: Mapping[str, str] | None,
@@ -1189,6 +1907,8 @@ def _ms1_shape_conflicts_with_manual(
     status = row["ms1_pattern_status"]
     shape_score = _float_or_none(row.get("shape_correlation_score"))
     if tags & {"shape_complete", "shape_normal"}:
+        if _ms1_conflict_preserves_selected_peak_shape(row):
+            return False
         return status in _MS1_PATTERN_CONFLICT_STATUSES
     if "shape_bad" in tags:
         return (
@@ -1197,6 +1917,16 @@ def _ms1_shape_conflicts_with_manual(
             and shape_score >= _MS1_SHAPE_SUPPORT_MIN
         )
     return False
+
+
+def _ms1_conflict_preserves_selected_peak_shape(row: Mapping[str, str]) -> bool:
+    return (
+        row.get("ms1_pattern_status") in _MS1_PATTERN_CONFLICT_STATUSES
+        and row.get("reason")
+        == "family_ms1_overlay_competing_peak_matches_family_consensus"
+        and (score := _float_or_none(row.get("shape_correlation_score"))) is not None
+        and score >= _MS1_SHAPE_SUPPORT_MIN
+    )
 
 
 def _ms1_shape_inconclusive_with_manual(
@@ -1220,6 +1950,18 @@ def _ms1_pattern_inconclusive_with_manual(
         and _has_ms1_pattern_metric(row)
         and not _ms1_pattern_supports_manual(tags, row)
         and not _ms1_pattern_conflicts_with_manual(tags, row)
+    )
+
+
+def _qc_ms1_pattern_reference_inconclusive_with_manual(
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    return (
+        bool(tags & _PATTERN_TAGS)
+        and _has_qc_ms1_pattern_reference_metric(row)
+        and not _qc_ms1_pattern_reference_supports_manual(tags, row)
+        and not _qc_ms1_pattern_reference_conflicts_with_manual(tags, row)
     )
 
 

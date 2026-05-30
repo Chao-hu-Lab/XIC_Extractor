@@ -281,6 +281,9 @@ def _row_for_key(
         has_ms2_pattern=has_ms2_pattern,
         product_delta_ppm=product_delta,
         observed_loss_delta_ppm=observed_loss_delta,
+        source_neutral_loss_error_ppm=candidate.neutral_loss_mass_error_ppm,
+        nl_ppm_warn=raw_config.nl_ppm_warn,
+        nl_ppm_max=raw_config.nl_ppm_max,
         config=config,
     )
     evidence_level = (
@@ -310,15 +313,23 @@ def _row_for_key(
         ),
         "product_mz_delta_ppm": _format_optional_float(product_delta),
         "observed_loss_delta_ppm": _format_optional_float(observed_loss_delta),
+        "candidate_ms2_similarity_score": _pattern_similarity_score(pattern_status),
         "matched_product_count": "1" if has_ms2_pattern else "0",
         "matched_neutral_loss_count": str(matched_neutral_loss_count),
         "apex_ms2_delta_sec": _apex_ms2_delta_sec(cell, candidate),
         "ms2_alignment_source": _DIRECT_CANDIDATE_PATTERN_SOURCE,
+        "nl_ppm_warn": _format_float(raw_config.nl_ppm_warn),
+        "nl_ppm_max": _format_float(raw_config.nl_ppm_max),
         "reason": _reason(
             has_ms2_pattern=has_ms2_pattern,
             pattern_status=pattern_status,
             product_delta_ppm=product_delta,
             observed_loss_delta_ppm=observed_loss_delta,
+            source_neutral_loss_status=_source_neutral_loss_status(
+                candidate.neutral_loss_mass_error_ppm,
+                nl_ppm_warn=raw_config.nl_ppm_warn,
+                nl_ppm_max=raw_config.nl_ppm_max,
+            ),
         ),
     }
 
@@ -328,20 +339,32 @@ def _pattern_status(
     has_ms2_pattern: bool,
     product_delta_ppm: float | None,
     observed_loss_delta_ppm: float | None,
+    source_neutral_loss_error_ppm: float | None,
+    nl_ppm_warn: float,
+    nl_ppm_max: float,
     config: AlignmentConfig,
 ) -> str:
     if not has_ms2_pattern:
         return "not_observed"
+    source_neutral_loss_status = _source_neutral_loss_status(
+        source_neutral_loss_error_ppm,
+        nl_ppm_warn=nl_ppm_warn,
+        nl_ppm_max=nl_ppm_max,
+    )
+    if source_neutral_loss_status == "NL_FAIL":
+        return "conflict"
     product_conflict = (
         product_delta_ppm is not None
         and abs(product_delta_ppm) > config.product_mz_tolerance_ppm
     )
     loss_conflict = (
         observed_loss_delta_ppm is not None
-        and abs(observed_loss_delta_ppm) > config.observed_loss_tolerance_ppm
+        and abs(observed_loss_delta_ppm) > nl_ppm_max
     )
     if product_conflict or loss_conflict:
         return "conflict"
+    if source_neutral_loss_status == "WARN":
+        return "partial_support"
     if product_delta_ppm is None or observed_loss_delta_ppm is None:
         return "partial_support"
     return "supportive"
@@ -353,14 +376,45 @@ def _reason(
     pattern_status: str,
     product_delta_ppm: float | None,
     observed_loss_delta_ppm: float | None,
+    source_neutral_loss_status: str,
 ) -> str:
     if not has_ms2_pattern:
         return "source_candidate_has_no_matched_ms2_pattern_tags"
     if pattern_status == "conflict":
+        if source_neutral_loss_status == "NL_FAIL":
+            return "source_candidate_neutral_loss_outside_targeted_max_ppm"
         return "source_candidate_ms2_pattern_conflicts_with_family_context"
+    if source_neutral_loss_status == "WARN":
+        return "source_candidate_neutral_loss_warn_band_matches_family_context"
     if product_delta_ppm is None or observed_loss_delta_ppm is None:
         return "source_candidate_ms2_pattern_present_without_complete_family_context"
     return "source_candidate_ms2_pattern_matches_family_context"
+
+
+def _source_neutral_loss_status(
+    neutral_loss_error_ppm: float | None,
+    *,
+    nl_ppm_warn: float,
+    nl_ppm_max: float,
+) -> str:
+    if neutral_loss_error_ppm is None or not math.isfinite(neutral_loss_error_ppm):
+        return "UNKNOWN"
+    abs_error = abs(neutral_loss_error_ppm)
+    if abs_error > nl_ppm_max:
+        return "NL_FAIL"
+    if abs_error > nl_ppm_warn:
+        return "WARN"
+    return "OK"
+
+
+def _pattern_similarity_score(pattern_status: str) -> str:
+    if pattern_status == "supportive":
+        return "1"
+    if pattern_status == "partial_support":
+        return "0.5"
+    if pattern_status == "conflict":
+        return "0"
+    return ""
 
 
 def _raw_boundary_row_for_missing_source(
@@ -414,7 +468,7 @@ def _raw_boundary_row_for_missing_source(
     pattern_status = _raw_pattern_status(evidence)
     evidence_level = (
         "sample_boundary_aligned"
-        if pattern_status in {"supportive", "conflict"}
+        if pattern_status in {"supportive", "partial_support", "conflict"}
         else "sample_boundary_no_observed_pattern"
     )
     return {
@@ -470,8 +524,10 @@ def _raw_boundary_row_for_missing_source(
 
 
 def _raw_pattern_status(evidence: CandidateMS2Evidence) -> str:
-    if evidence.nl_status in {"OK", "WARN"}:
+    if evidence.nl_status == "OK":
         return "supportive"
+    if evidence.nl_status == "WARN":
+        return "partial_support"
     if _has_decisive_nonmatching_base_peak(evidence):
         return "conflict"
     return "not_observed"
@@ -480,6 +536,8 @@ def _raw_pattern_status(evidence: CandidateMS2Evidence) -> str:
 def _raw_reason(evidence: CandidateMS2Evidence, pattern_status: str) -> str:
     if pattern_status == "supportive":
         return "raw_boundary_ms2_pattern_matches_family_context"
+    if pattern_status == "partial_support":
+        return "raw_boundary_ms2_pattern_warn_band_matches_family_context"
     if pattern_status == "conflict":
         if evidence.diagnostic_product_absence_reason:
             return (

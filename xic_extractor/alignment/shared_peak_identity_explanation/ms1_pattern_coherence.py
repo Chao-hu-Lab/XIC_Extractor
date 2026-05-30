@@ -13,6 +13,7 @@ from .machine_evidence_support import (
     MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS,
     MS1_PATTERN_COHERENCE_REQUIRED_COLUMNS,
 )
+from .ms1_peak_quality_vector import build_peak_quality_vector
 
 MS1_PATTERN_COHERENCE_OPTIONAL_COLUMNS = (
     "shape_metric_source",
@@ -25,6 +26,18 @@ MS1_PATTERN_COHERENCE_OPTIONAL_COLUMNS = (
     "local_window_apex_delta_sec",
     "global_trace_apex_delta_sec",
     "family_ms1_overlay_trace_data_json",
+    "peak_quality_vector_status",
+    "peak_quality_vector_basis",
+    "peak_quality_trace_point_count",
+    "peak_quality_boundary_point_count",
+    "peak_quality_signal_to_noise_proxy",
+    "peak_quality_fwhm_sec",
+    "peak_quality_sharpness_score",
+    "peak_quality_zigzag_score",
+    "peak_quality_tailing_ratio",
+    "peak_quality_boundary_margin_ratio",
+    "peak_quality_feature_count",
+    "peak_quality_vector_reason",
 )
 MS1_PATTERN_COHERENCE_COLUMNS = (
     *MS1_PATTERN_COHERENCE_REQUIRED_COLUMNS,
@@ -59,6 +72,9 @@ _HIGH_LOCAL_INTERFERENCE_SCORE = 0.80
 _OVERLAY_SHAPE_SUPPORT_MIN = 0.50
 _OVERLAY_LOCAL_DOMINANCE_MIN = 0.50
 _OVERLAY_LOCAL_APEX_SUPPORT_SEC = 3.0
+_OVERLAY_FAMILY_CONSENSUS_APEX_CONFLICT_SEC = 30.0
+_OVERLAY_COMPETING_PEAK_TO_CONSENSUS_SEC = 15.0
+_OVERLAY_COMPETING_PEAK_TO_SELECTED_MIN_RATIO = 0.25
 
 
 @dataclass(frozen=True)
@@ -108,8 +124,13 @@ class _OverlayMetric:
     local_window_apex_delta_sec: float | None
     global_trace_apex_delta_sec: float | None
     cell_apex_rt: float | None
+    cell_start_rt: float | None
+    cell_end_rt: float | None
     rt_min: float | None
     rt_max: float | None
+    trace_rt: tuple[float, ...]
+    trace_intensity: tuple[float, ...]
+    family_consensus_apex_rt: float | None
     source_json: Path
 
     @property
@@ -284,7 +305,11 @@ def _row_for_key(
         "reason": reason,
     }
     if overlay_metric is not None:
-        row = _with_overlay_metric(row, overlay_metric)
+        row = _with_overlay_metric(
+            row,
+            overlay_metric,
+            matrix_drift_row=matrix_drift_row,
+        )
     return row
 
 
@@ -314,6 +339,18 @@ def _base_row(feature_family_id: str, sample_stem: str) -> dict[str, str]:
         "local_window_apex_delta_sec": "",
         "global_trace_apex_delta_sec": "",
         "family_ms1_overlay_trace_data_json": "",
+        "peak_quality_vector_status": "not_available",
+        "peak_quality_vector_basis": "",
+        "peak_quality_trace_point_count": "0",
+        "peak_quality_boundary_point_count": "0",
+        "peak_quality_signal_to_noise_proxy": "",
+        "peak_quality_fwhm_sec": "",
+        "peak_quality_sharpness_score": "",
+        "peak_quality_zigzag_score": "",
+        "peak_quality_tailing_ratio": "",
+        "peak_quality_boundary_margin_ratio": "",
+        "peak_quality_feature_count": "0",
+        "peak_quality_vector_reason": "",
     }
 
 
@@ -494,9 +531,9 @@ def _overlay_metrics_by_key(
         traces = data.get("traces")
         if not isinstance(traces, list):
             raise ValueError(f"{path}: missing traces array")
-        for trace in traces:
-            if not isinstance(trace, dict):
-                continue
+        parsed_traces = [trace for trace in traces if isinstance(trace, dict)]
+        family_consensus_apex_rt = _family_consensus_apex_rt(parsed_traces)
+        for trace in parsed_traces:
             sample_stem = text_value(trace.get("sample_stem"))
             if not sample_stem:
                 continue
@@ -522,8 +559,13 @@ def _overlay_metrics_by_key(
                     _optional_float(trace.get("global_trace_apex_delta_min"))
                 ),
                 cell_apex_rt=_optional_float(trace.get("cell_apex_rt")),
+                cell_start_rt=_optional_float(trace.get("cell_start_rt")),
+                cell_end_rt=_optional_float(trace.get("cell_end_rt")),
                 rt_min=rt_min,
                 rt_max=rt_max,
+                trace_rt=_optional_float_sequence(trace.get("rt")),
+                trace_intensity=_optional_float_sequence(trace.get("intensity")),
+                family_consensus_apex_rt=family_consensus_apex_rt,
                 source_json=path,
             )
             metrics[(family_id, sample_stem)] = metric
@@ -533,7 +575,15 @@ def _overlay_metrics_by_key(
 def _with_overlay_metric(
     row: Mapping[str, str],
     metric: _OverlayMetric,
+    *,
+    matrix_drift_row: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
+    peak_quality = build_peak_quality_vector(
+        trace_rt=metric.trace_rt,
+        trace_intensity=metric.trace_intensity,
+        cell_start_rt=metric.cell_start_rt,
+        cell_end_rt=metric.cell_end_rt,
+    )
     enriched = {
         **row,
         "shape_correlation_score": _format_float(metric.shape_similarity),
@@ -561,6 +611,26 @@ def _with_overlay_metric(
             metric.global_trace_apex_delta_sec
         ),
         "family_ms1_overlay_trace_data_json": str(metric.source_json),
+        "peak_quality_vector_status": peak_quality.status,
+        "peak_quality_vector_basis": peak_quality.basis,
+        "peak_quality_trace_point_count": str(peak_quality.trace_point_count),
+        "peak_quality_boundary_point_count": str(
+            peak_quality.boundary_point_count
+        ),
+        "peak_quality_signal_to_noise_proxy": _format_float(
+            peak_quality.signal_to_noise_proxy
+        ),
+        "peak_quality_fwhm_sec": _format_float(peak_quality.fwhm_sec),
+        "peak_quality_sharpness_score": _format_float(
+            peak_quality.sharpness_score
+        ),
+        "peak_quality_zigzag_score": _format_float(peak_quality.zigzag_score),
+        "peak_quality_tailing_ratio": _format_float(peak_quality.tailing_ratio),
+        "peak_quality_boundary_margin_ratio": _format_float(
+            peak_quality.boundary_margin_ratio
+        ),
+        "peak_quality_feature_count": str(peak_quality.feature_count),
+        "peak_quality_vector_reason": peak_quality.reason,
     }
     if not metric.cell_apex_inside_trace_window:
         return {
@@ -576,6 +646,16 @@ def _with_overlay_metric(
             "ms1_pattern_status": "conflict",
             "ms1_pattern_evidence_level": "trace_constellation",
             "reason": "family_ms1_overlay_expected_window_lacks_complete_peak",
+        }
+    if _overlay_selected_peak_loses_to_family_consensus(
+        metric,
+        matrix_drift_row=matrix_drift_row,
+    ):
+        return {
+            **enriched,
+            "ms1_pattern_status": "conflict",
+            "ms1_pattern_evidence_level": "trace_constellation",
+            "reason": "family_ms1_overlay_competing_peak_matches_family_consensus",
         }
     if _overlay_supports_shape(metric):
         if enriched.get("drift_compatible_status") == "conflict":
@@ -606,6 +686,87 @@ def _with_overlay_metric(
             "reason": "family_ms1_overlay_shape_metric_inconclusive_apex_or_height",
         }
     return enriched
+
+
+def _family_consensus_apex_rt(traces: Sequence[Mapping[str, object]]) -> float | None:
+    apex_values = [
+        value
+        for trace in traces
+        if (value := _optional_float(trace.get("cell_apex_rt"))) is not None
+    ]
+    if len(apex_values) < _MIN_REFERENCE_PEAKS:
+        return None
+    return statistics.median(apex_values)
+
+
+def _overlay_selected_peak_loses_to_family_consensus(
+    metric: _OverlayMetric,
+    *,
+    matrix_drift_row: Mapping[str, str] | None,
+) -> bool:
+    if _sample_istd_drift_supported(matrix_drift_row):
+        return False
+    if metric.family_consensus_apex_rt is None or metric.cell_apex_rt is None:
+        return False
+    selected_delta_sec = abs(metric.cell_apex_rt - metric.family_consensus_apex_rt) * 60
+    if selected_delta_sec <= _OVERLAY_FAMILY_CONSENSUS_APEX_CONFLICT_SEC:
+        return False
+    if _cell_boundary_contains_rt(metric, metric.family_consensus_apex_rt):
+        return False
+    competing_height = _local_peak_height_near_rt(
+        metric.trace_rt,
+        metric.trace_intensity,
+        target_rt=metric.family_consensus_apex_rt,
+        max_delta_sec=_OVERLAY_COMPETING_PEAK_TO_CONSENSUS_SEC,
+    )
+    selected_height = metric.cell_height or metric.local_window_max_intensity
+    if competing_height is None or selected_height is None or selected_height <= 0:
+        return False
+    return (
+        competing_height / selected_height
+        >= _OVERLAY_COMPETING_PEAK_TO_SELECTED_MIN_RATIO
+    )
+
+
+def _sample_istd_drift_supported(row: Mapping[str, str] | None) -> bool:
+    if not row:
+        return False
+    return (
+        row.get("matrix_rt_drift_status") == "drift_supported"
+        and row.get("drift_evidence_level") == "sample_istd_aligned"
+        and row.get("drift_compatible_status") == "compatible"
+    )
+
+
+def _cell_boundary_contains_rt(metric: _OverlayMetric, rt: float) -> bool:
+    if metric.cell_start_rt is None or metric.cell_end_rt is None:
+        return False
+    return metric.cell_start_rt <= rt <= metric.cell_end_rt
+
+
+def _local_peak_height_near_rt(
+    trace_rt: Sequence[float],
+    trace_intensity: Sequence[float],
+    *,
+    target_rt: float,
+    max_delta_sec: float,
+) -> float | None:
+    if len(trace_rt) != len(trace_intensity) or len(trace_rt) < 3:
+        return None
+    max_delta_min = max_delta_sec / 60.0
+    candidates: list[float] = []
+    for index in range(1, len(trace_rt) - 1):
+        rt = trace_rt[index]
+        if abs(rt - target_rt) > max_delta_min:
+            continue
+        intensity = trace_intensity[index]
+        if intensity >= trace_intensity[index - 1] and intensity >= trace_intensity[
+            index + 1
+        ]:
+            candidates.append(intensity)
+    if not candidates:
+        return None
+    return max(candidates)
 
 
 def _overlay_supports_shape(metric: _OverlayMetric) -> bool:
@@ -679,6 +840,17 @@ def _optional_float(value: object) -> float | None:
         return float(text)
     except ValueError:
         return None
+
+
+def _optional_float_sequence(value: object) -> tuple[float, ...]:
+    if not isinstance(value, list):
+        return ()
+    parsed = []
+    for item in value:
+        parsed_value = _optional_float(item)
+        if parsed_value is not None:
+            parsed.append(parsed_value)
+    return tuple(parsed)
 
 
 def _format_float(value: float | None) -> str:

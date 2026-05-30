@@ -79,6 +79,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             ms1_pattern_coherence_evidence_tsv=(
                 args.ms1_pattern_coherence_evidence_tsv
             ),
+            qc_ms1_pattern_reference_evidence_tsv=(
+                args.qc_ms1_pattern_reference_evidence_tsv
+            ),
+            sample_negative_evidence_tsv=args.sample_negative_evidence_tsv,
             generate_ms1_pattern_coherence_evidence=(
                 args.generate_ms1_pattern_coherence_evidence
             ),
@@ -135,6 +139,8 @@ def run_explanation(
     candidate_ms2_pattern_batch_index: Path | None = None,
     candidate_ms2_pattern_raw_dll_dir: Path | None = None,
     ms1_pattern_coherence_evidence_tsv: Path | None = None,
+    qc_ms1_pattern_reference_evidence_tsv: Path | None = None,
+    sample_negative_evidence_tsv: Path | None = None,
     generate_ms1_pattern_coherence_evidence: bool = False,
     matrix_rt_drift_policy_tsv: Path | None = None,
     generate_matrix_rt_drift_policy: bool = False,
@@ -337,10 +343,18 @@ def run_explanation(
             ms1_pattern_coherence_evidence_tsv
         )
     )
+    qc_ms1_pattern_reference_evidence = (
+        machine_evidence_support.load_qc_ms1_pattern_reference_evidence(
+            qc_ms1_pattern_reference_evidence_tsv
+        )
+    )
     matrix_rt_drift_policy_evidence = (
         machine_evidence_support.load_matrix_rt_drift_policy_evidence(
             matrix_rt_drift_policy_tsv
         )
+    )
+    sample_negative_evidence = machine_evidence_support.load_sample_negative_evidence(
+        sample_negative_evidence_tsv
     )
     evidence_rows = assemble_evidence_vectors(oracle_rows, matches)
     explanations = classify_explanations(oracle_rows, evidence_rows)
@@ -368,7 +382,11 @@ def run_explanation(
                 tier2_trace_evidence=tier2_trace_evidence,
                 candidate_ms2_pattern_evidence=candidate_ms2_pattern_evidence,
                 ms1_pattern_coherence_evidence=ms1_pattern_coherence_evidence,
+                qc_ms1_pattern_reference_evidence=(
+                    qc_ms1_pattern_reference_evidence
+                ),
                 matrix_rt_drift_policy_evidence=matrix_rt_drift_policy_evidence,
+                sample_negative_evidence=sample_negative_evidence,
                 extra_outputs=generated_evidence_outputs,
             )
         return slice0_outputs
@@ -414,7 +432,9 @@ def run_explanation(
             tier2_trace_evidence=tier2_trace_evidence,
             candidate_ms2_pattern_evidence=candidate_ms2_pattern_evidence,
             ms1_pattern_coherence_evidence=ms1_pattern_coherence_evidence,
+            qc_ms1_pattern_reference_evidence=qc_ms1_pattern_reference_evidence,
             matrix_rt_drift_policy_evidence=matrix_rt_drift_policy_evidence,
+            sample_negative_evidence=sample_negative_evidence,
             extra_outputs=generated_evidence_outputs,
         )
     return slice1_outputs
@@ -431,7 +451,11 @@ def _write_v2_from_current_outputs(
     tier2_trace_evidence: Mapping[str, Mapping[str, str]],
     candidate_ms2_pattern_evidence: Mapping[tuple[str, str], Mapping[str, str]],
     ms1_pattern_coherence_evidence: Mapping[tuple[str, str], Mapping[str, str]],
+    qc_ms1_pattern_reference_evidence: Mapping[
+        tuple[str, str], Mapping[str, str]
+    ],
     matrix_rt_drift_policy_evidence: Mapping[tuple[str, str], Mapping[str, str]],
+    sample_negative_evidence: Mapping[tuple[str, str], Mapping[str, str]],
     extra_outputs: Mapping[str, Path] | None = None,
 ) -> Mapping[str, Path | str]:
     shadow_rows = build_shadow_label_rows(explanations)
@@ -445,7 +469,9 @@ def _write_v2_from_current_outputs(
             tier2_trace_evidence=tier2_trace_evidence,
             candidate_ms2_pattern_evidence=candidate_ms2_pattern_evidence,
             ms1_pattern_coherence_evidence=ms1_pattern_coherence_evidence,
+            qc_ms1_pattern_reference_evidence=qc_ms1_pattern_reference_evidence,
             matrix_rt_drift_policy_evidence=matrix_rt_drift_policy_evidence,
+            sample_negative_evidence=sample_negative_evidence,
         )
     )
     readiness_row = build_v2_readiness(
@@ -483,6 +509,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--candidate-ms2-pattern-batch-index", type=Path)
     parser.add_argument("--candidate-ms2-pattern-raw-dll-dir", type=Path)
     parser.add_argument("--ms1-pattern-coherence-evidence-tsv", type=Path)
+    parser.add_argument("--qc-ms1-pattern-reference-evidence-tsv", type=Path)
+    parser.add_argument("--sample-negative-evidence-tsv", type=Path)
     parser.add_argument(
         "--generate-ms1-pattern-coherence-evidence",
         action="store_true",

@@ -385,6 +385,87 @@ def test_cli_accepts_ms1_pattern_and_matrix_rt_drift_sidecars(
     assert "matrix_rt_drift_status=rt_close" in support["observed_machine_metrics"]
 
 
+def test_cli_accepts_qc_ms1_pattern_reference_sidecar(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_cli_fixture(tmp_path)
+
+    assert (
+        main(
+            [
+                "--manual-oracle-tsv",
+                str(fixture["oracle"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--candidate-gate-tsv",
+                str(fixture["gate"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--enable-shadow-label-alignment",
+                "--cwt-shape-evidence-tsv",
+                str(fixture["cwt"]),
+                "--qc-ms1-pattern-reference-evidence-tsv",
+                str(fixture["qc_ms1_reference"]),
+            ]
+        )
+        == 0
+    )
+
+    support = _read_tsv(
+        tmp_path / "out" / "shared_peak_identity_machine_evidence_support.tsv"
+    )[0]
+    assert support["pattern_basis_status"] == "machine_observed"
+    assert "formal_pattern_metric" not in support["missing_machine_evidence"]
+    assert "qc_ms1_reference_status=partial_support" in support[
+        "observed_machine_metrics"
+    ]
+
+
+def test_cli_accepts_sample_negative_evidence_sidecar(tmp_path: Path) -> None:
+    fixture = _write_cli_fixture(tmp_path)
+    _write_oracle(
+        fixture["oracle"],
+        manual_label="fail",
+        manual_scope="scope_derived_unmentioned_fail",
+        manual_reason_tags="scope_derived_unmentioned_fail",
+    )
+
+    assert (
+        main(
+            [
+                "--manual-oracle-tsv",
+                str(fixture["oracle"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--candidate-gate-tsv",
+                str(fixture["gate"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--enable-shadow-label-alignment",
+                "--sample-negative-evidence-tsv",
+                str(fixture["sample_negative"]),
+            ]
+        )
+        == 0
+    )
+
+    support = _read_tsv(
+        tmp_path / "out" / "shared_peak_identity_machine_evidence_support.tsv"
+    )[0]
+    assert support["negative_evidence_basis_status"] == "machine_observed"
+    assert support["negative_evidence_class"] == "local_peak_not_decisive"
+    assert "sample_level_negative_evidence" not in support[
+        "missing_machine_evidence"
+    ]
+    assert "sample_negative_evidence_class=local_peak_not_decisive" in support[
+        "observed_machine_metrics"
+    ]
+
+
 def test_cli_can_generate_ms1_pattern_coherence_evidence(
     tmp_path: Path,
 ) -> None:
@@ -466,6 +547,10 @@ def test_cli_can_generate_ms1_pattern_with_raw_overlay_shape_metrics(
     assert generated_rows[0]["shape_metric_source"] == (
         "family_ms1_overlay_raw_trace"
     )
+    assert generated_rows[0]["peak_quality_vector_status"] == "supportive"
+    assert generated_rows[0]["peak_quality_vector_basis"] == (
+        "family_ms1_overlay_raw_trace_vector"
+    )
     support = _read_tsv(
         output_dir / "shared_peak_identity_machine_evidence_support.tsv"
     )[0]
@@ -474,6 +559,9 @@ def test_cli_can_generate_ms1_pattern_with_raw_overlay_shape_metrics(
     assert "ms1_shape_metric_source=family_ms1_overlay_raw_trace" in support[
         "observed_machine_metrics"
     ]
+    assert "ms1_peak_quality_vector_basis=family_ms1_overlay_raw_trace_vector" in (
+        support["observed_machine_metrics"]
+    )
     assert support["evidence_support_status"] == "machine_observed_sufficient"
 
 
@@ -823,6 +911,8 @@ def _write_cli_fixture(tmp_path: Path) -> dict[str, Path]:
     tier2_trace = inputs / "tier2_trace.tsv"
     candidate_ms2 = inputs / "candidate_ms2.tsv"
     ms1_pattern = inputs / "ms1_pattern.tsv"
+    qc_ms1_reference = inputs / "qc_ms1_reference.tsv"
+    sample_negative = inputs / "sample_negative.tsv"
     matrix_drift = inputs / "matrix_rt_drift.tsv"
     owner_edge = inputs / "owner_edge_evidence.tsv"
     overlay_trace_data = inputs / "fam001_overlay_trace_data.json"
@@ -838,6 +928,8 @@ def _write_cli_fixture(tmp_path: Path) -> dict[str, Path]:
     _write_tier2_trace(tier2_trace)
     _write_candidate_ms2(candidate_ms2)
     _write_ms1_pattern(ms1_pattern)
+    _write_qc_ms1_reference(qc_ms1_reference)
+    _write_sample_negative(sample_negative)
     _write_matrix_rt_drift(matrix_drift)
     _write_owner_edge(owner_edge)
     _write_overlay_trace_data(overlay_trace_data)
@@ -854,6 +946,8 @@ def _write_cli_fixture(tmp_path: Path) -> dict[str, Path]:
         "tier2_trace": tier2_trace,
         "candidate_ms2": candidate_ms2,
         "ms1_pattern": ms1_pattern,
+        "qc_ms1_reference": qc_ms1_reference,
+        "sample_negative": sample_negative,
         "matrix_drift": matrix_drift,
         "owner_edge": owner_edge,
         "overlay_trace_data": overlay_trace_data,
@@ -866,6 +960,8 @@ def _write_cli_fixture(tmp_path: Path) -> dict[str, Path]:
 def _write_oracle(
     path: Path,
     *,
+    manual_label: str = "pass",
+    manual_scope: str = "reviewed_cell",
     manual_reason_tags: str = "shape_complete;pattern_similar",
 ) -> None:
     row = {column: "" for column in ORACLE_COLUMNS}
@@ -875,10 +971,10 @@ def _write_oracle(
             "oracle_row_id": "FAM001|S1",
             "feature_family_id": "FAM001",
             "sample_id": "S1",
-            "manual_label": "pass",
+            "manual_label": manual_label,
             "manual_label_source": "direct_eic_ms2_review",
             "manual_confidence": "high",
-            "manual_scope": "reviewed_cell",
+            "manual_scope": manual_scope,
             "manual_reason_tags": manual_reason_tags,
             "reviewed_eic": "TRUE",
             "reviewed_ms2_pattern": "TRUE",
@@ -1136,6 +1232,78 @@ def _write_ms1_pattern(path: Path) -> None:
     )
 
 
+def _write_sample_negative(path: Path) -> None:
+    _write_tsv(
+        path,
+        (
+            "feature_family_id",
+            "sample_stem",
+            "negative_evidence_class",
+            "negative_evidence_detail",
+            "negative_evidence_level",
+            "reason",
+            "diagnostic_only",
+        ),
+        [
+            {
+                "feature_family_id": "FAM001",
+                "sample_stem": "S1",
+                "negative_evidence_class": "local_peak_not_decisive",
+                "negative_evidence_detail": "ugly_shape",
+                "negative_evidence_level": "machine_observed",
+                "reason": "local_region_not_decisive",
+                "diagnostic_only": "TRUE",
+            }
+        ],
+    )
+
+
+def _write_qc_ms1_reference(path: Path) -> None:
+    _write_tsv(
+        path,
+        (
+            "feature_family_id",
+            "sample_stem",
+            "qc_reference_status",
+            "qc_reference_evidence_level",
+            "target_injection_order",
+            "nearest_qc_sample_stem",
+            "nearest_qc_injection_order",
+            "nearest_qc_injection_order_delta",
+            "target_apex_rt",
+            "nearest_qc_apex_rt",
+            "target_minus_qc_apex_delta_sec",
+            "target_qc_apex_abs_delta_sec",
+            "target_qc_shape_similarity",
+            "target_local_window_to_global_max_ratio",
+            "nearest_qc_local_window_to_global_max_ratio",
+            "reason",
+            "diagnostic_only",
+        ),
+        [
+            {
+                "feature_family_id": "FAM001",
+                "sample_stem": "S1",
+                "qc_reference_status": "partial_support",
+                "qc_reference_evidence_level": "nearest_complete_peak_qc_overlay",
+                "target_injection_order": "10",
+                "nearest_qc_sample_stem": "Breast_Cancer_Tissue_pooled_QC5",
+                "nearest_qc_injection_order": "11",
+                "nearest_qc_injection_order_delta": "1",
+                "target_apex_rt": "1.0",
+                "nearest_qc_apex_rt": "1.01",
+                "target_minus_qc_apex_delta_sec": "-0.6",
+                "target_qc_apex_abs_delta_sec": "0.6",
+                "target_qc_shape_similarity": "0.66",
+                "target_local_window_to_global_max_ratio": "1",
+                "nearest_qc_local_window_to_global_max_ratio": "1",
+                "reason": "unit_test_qc_ms1_reference",
+                "diagnostic_only": "TRUE",
+            }
+        ],
+    )
+
+
 def _write_matrix_rt_drift(path: Path) -> None:
     _write_tsv(
         path,
@@ -1187,10 +1355,17 @@ def _write_overlay_trace_data(path: Path) -> None:
                         "sample_stem": "S1",
                         "status": "rescued",
                         "cell_apex_rt": 1.0,
+                        "cell_start_rt": 0.9,
+                        "cell_end_rt": 1.1,
+                        "cell_height": 980.0,
+                        "local_window_max_intensity": 1000.0,
+                        "trace_max_intensity": 1000.0,
                         "apex_aligned_shape_similarity": 0.94,
                         "local_window_to_global_max_ratio": 0.98,
                         "local_window_apex_delta_min": 0.01,
                         "global_trace_apex_delta_min": 0.02,
+                        "rt": [0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3],
+                        "intensity": [10.0, 12.0, 100.0, 1000.0, 120.0, 14.0, 11.0],
                     }
                 ],
             }

@@ -186,6 +186,161 @@ def test_candidate_ms2_pattern_producer_reports_family_context_conflict(
     )
 
 
+def test_candidate_ms2_pattern_direct_candidate_uses_targeted_warn_band(
+    tmp_path: Path,
+) -> None:
+    cells = tmp_path / "alignment_cells.tsv"
+    review = tmp_path / "alignment_review.tsv"
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    sample_dir = tmp_path / "S1"
+    sample_dir.mkdir()
+    candidates = sample_dir / "discovery_candidates.csv"
+    _write_tsv(
+        cells,
+        (
+            "feature_family_id",
+            "sample_stem",
+            "status",
+            "apex_rt",
+            "peak_start_rt",
+            "peak_end_rt",
+            "source_candidate_id",
+        ),
+        [
+            {
+                "feature_family_id": "FAM001",
+                "sample_stem": "S1",
+                "status": "detected",
+                "apex_rt": "10.02",
+                "peak_start_rt": "9.9",
+                "peak_end_rt": "10.1",
+                "source_candidate_id": "S1#100",
+            }
+        ],
+    )
+    _write_tsv(
+        review,
+        (
+            "feature_family_id",
+            "family_center_mz",
+            "family_product_mz",
+            "family_observed_neutral_loss_da",
+        ),
+        [
+            {
+                "feature_family_id": "FAM001",
+                "family_center_mz": "257.125",
+                "family_product_mz": "141.078",
+                "family_observed_neutral_loss_da": "116.047",
+            }
+        ],
+    )
+    _write_csv(
+        batch_index,
+        ("sample_stem", "raw_file", "candidate_csv"),
+        [
+            {
+                "sample_stem": "S1",
+                "raw_file": "S1.raw",
+                "candidate_csv": str(candidates),
+            }
+        ],
+    )
+    _write_candidate_csv(candidates, neutral_loss_mass_error_ppm="25")
+
+    rows = candidate_ms2_pattern.build_candidate_ms2_pattern_rows(
+        alignment_cells_tsv=cells,
+        alignment_review_tsv=review,
+        discovery_batch_index_csv=batch_index,
+        oracle_keys=(("FAM001", "S1"),),
+    )
+
+    row = rows[0]
+    assert row["candidate_ms2_pattern_status"] == "partial_support"
+    assert row["candidate_ms2_evidence_level"] == "sample_candidate_aligned"
+    assert row["candidate_ms2_similarity_score"] == "0.5"
+    assert row["nl_ppm_warn"] == "20"
+    assert row["nl_ppm_max"] == "50"
+    assert row["reason"] == (
+        "source_candidate_neutral_loss_warn_band_matches_family_context"
+    )
+
+
+def test_candidate_ms2_pattern_direct_candidate_rejects_outside_targeted_max(
+    tmp_path: Path,
+) -> None:
+    cells = tmp_path / "alignment_cells.tsv"
+    review = tmp_path / "alignment_review.tsv"
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    sample_dir = tmp_path / "S1"
+    sample_dir.mkdir()
+    candidates = sample_dir / "discovery_candidates.csv"
+    _write_tsv(
+        cells,
+        (
+            "feature_family_id",
+            "sample_stem",
+            "status",
+            "apex_rt",
+            "peak_start_rt",
+            "peak_end_rt",
+            "source_candidate_id",
+        ),
+        [
+            {
+                "feature_family_id": "FAM001",
+                "sample_stem": "S1",
+                "status": "detected",
+                "apex_rt": "10.02",
+                "peak_start_rt": "9.9",
+                "peak_end_rt": "10.1",
+                "source_candidate_id": "S1#100",
+            }
+        ],
+    )
+    _write_tsv(
+        review,
+        (
+            "feature_family_id",
+            "family_center_mz",
+            "family_product_mz",
+            "family_observed_neutral_loss_da",
+        ),
+        [
+            {
+                "feature_family_id": "FAM001",
+                "family_center_mz": "257.125",
+                "family_product_mz": "141.078",
+                "family_observed_neutral_loss_da": "116.047",
+            }
+        ],
+    )
+    _write_csv(
+        batch_index,
+        ("sample_stem", "raw_file", "candidate_csv"),
+        [
+            {
+                "sample_stem": "S1",
+                "raw_file": "S1.raw",
+                "candidate_csv": str(candidates),
+            }
+        ],
+    )
+    _write_candidate_csv(candidates, neutral_loss_mass_error_ppm="55")
+
+    rows = candidate_ms2_pattern.build_candidate_ms2_pattern_rows(
+        alignment_cells_tsv=cells,
+        alignment_review_tsv=review,
+        discovery_batch_index_csv=batch_index,
+        oracle_keys=(("FAM001", "S1"),),
+    )
+
+    row = rows[0]
+    assert row["candidate_ms2_pattern_status"] == "conflict"
+    assert row["candidate_ms2_similarity_score"] == "0"
+    assert row["reason"] == "source_candidate_neutral_loss_outside_targeted_max_ppm"
+
+
 def test_candidate_ms2_pattern_writer_uses_consumer_required_columns(
     tmp_path: Path,
 ) -> None:
@@ -243,6 +398,45 @@ def test_candidate_ms2_pattern_raw_fallback_supports_source_missing_cell(
     assert row["ms2_alignment_source"] == "raw_boundary_scan"
     assert row["raw_ms2_strict_nl_scan_count"] == "1"
     assert row["reason"] == "raw_boundary_ms2_pattern_matches_family_context"
+
+
+def test_candidate_ms2_pattern_raw_fallback_uses_targeted_warn_band(
+    tmp_path: Path,
+) -> None:
+    cells = tmp_path / "alignment_cells.tsv"
+    review = tmp_path / "alignment_review.tsv"
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    sample_dir = tmp_path / "S1"
+    sample_dir.mkdir()
+    candidates = sample_dir / "discovery_candidates.csv"
+    _write_source_missing_fixture(cells, review, batch_index, candidates)
+    precursor_mz = 257.125
+    neutral_loss_da = 116.047
+    warn_band_observed_loss = neutral_loss_da * (1.0 + 25.0 / 1_000_000.0)
+
+    rows = candidate_ms2_pattern.build_candidate_ms2_pattern_rows(
+        alignment_cells_tsv=cells,
+        alignment_review_tsv=review,
+        discovery_batch_index_csv=batch_index,
+        oracle_keys=(("FAM001", "S1"),),
+        raw_scan_source_factory=lambda _sample: _RawContext(
+            [
+                _scan_event(
+                    precursor_mz=precursor_mz,
+                    rt=10.0,
+                    masses=[precursor_mz - warn_band_observed_loss],
+                    intensities=[100.0],
+                )
+            ]
+        ),
+    )
+
+    row = rows[0]
+    assert row["candidate_ms2_pattern_status"] == "partial_support"
+    assert row["candidate_ms2_evidence_level"] == "sample_boundary_aligned"
+    assert row["candidate_ms2_similarity_score"] == "0.5"
+    assert row["raw_ms2_best_loss_ppm"] == "25"
+    assert row["reason"] == "raw_boundary_ms2_pattern_warn_band_matches_family_context"
 
 
 def test_candidate_ms2_pattern_raw_fallback_reports_boundary_conflict(
@@ -355,7 +549,11 @@ def test_candidate_ms2_pattern_raw_fallback_keeps_no_ms2_as_not_observed(
     assert row["reason"] == "raw_boundary_ms2_not_observed"
 
 
-def _write_candidate_csv(path: Path) -> None:
+def _write_candidate_csv(
+    path: Path,
+    *,
+    neutral_loss_mass_error_ppm: str = "0.5",
+) -> None:
     _write_csv(
         path,
         (
@@ -442,7 +640,7 @@ def _write_candidate_csv(path: Path) -> None:
                 "seed_scan_ids": "100",
                 "neutral_loss_tag": "DNA_dR",
                 "configured_neutral_loss_da": "116.047",
-                "neutral_loss_mass_error_ppm": "0.5",
+                "neutral_loss_mass_error_ppm": neutral_loss_mass_error_ppm,
                 "rt_seed_min": "10.0",
                 "rt_seed_max": "10.0",
                 "ms1_search_rt_min": "9.5",
