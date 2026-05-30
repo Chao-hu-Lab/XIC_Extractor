@@ -12,8 +12,12 @@ from .schema import (
     BLAST_RADIUS_SUMMARY_COLUMNS,
     EVIDENCE_VECTOR_COLUMNS,
     EXPLANATION_COLUMNS,
+    MACHINE_EVIDENCE_SUPPORT_COLUMNS,
     ORACLE_COLUMNS,
     RUN_FACTS_COLUMNS,
+    SHADOW_ALIGNMENT_SUMMARY_COLUMNS,
+    SHADOW_LABEL_COLUMNS,
+    V2_READINESS_COLUMNS,
     validate_source_row_ids,
 )
 
@@ -114,6 +118,64 @@ def write_slice1_outputs(
     }
 
 
+def write_v2_outputs(
+    *,
+    output_dir: Path,
+    prior_outputs: Mapping[str, Path],
+    shadow_rows: Sequence[Mapping[str, str]],
+    summary_rows: Sequence[Mapping[str, str]],
+    readiness_row: Mapping[str, str],
+    machine_evidence_support_rows: Sequence[Mapping[str, str]],
+) -> dict[str, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    shadow_path = output_dir / "shared_peak_identity_shadow_labels.tsv"
+    summary_path = output_dir / "shared_peak_identity_shadow_alignment_summary.tsv"
+    readiness_path = output_dir / "shared_peak_identity_v2_readiness.tsv"
+    support_path = output_dir / "shared_peak_identity_machine_evidence_support.tsv"
+    report_path = output_dir / "shared_peak_identity_v2_report.md"
+    write_tsv(
+        shadow_path,
+        shadow_rows,
+        SHADOW_LABEL_COLUMNS,
+        lineterminator="\n",
+    )
+    write_tsv(
+        summary_path,
+        summary_rows,
+        SHADOW_ALIGNMENT_SUMMARY_COLUMNS,
+        lineterminator="\n",
+    )
+    write_tsv(
+        readiness_path,
+        [readiness_row],
+        V2_READINESS_COLUMNS,
+        lineterminator="\n",
+    )
+    write_tsv(
+        support_path,
+        machine_evidence_support_rows,
+        MACHINE_EVIDENCE_SUPPORT_COLUMNS,
+        lineterminator="\n",
+    )
+    report_path.write_text(
+        render_v2_report(
+            readiness_row=readiness_row,
+            summary_rows=summary_rows,
+            shadow_rows=shadow_rows,
+            machine_evidence_support_rows=machine_evidence_support_rows,
+        ),
+        encoding="utf-8",
+    )
+    return {
+        **dict(prior_outputs),
+        "shadow_labels": shadow_path,
+        "shadow_alignment_summary": summary_path,
+        "v2_readiness": readiness_path,
+        "machine_evidence_support": support_path,
+        "v2_report": report_path,
+    }
+
+
 def render_report(
     *,
     explanation_rows: Sequence[Mapping[str, str]],
@@ -195,6 +257,131 @@ def render_report(
             "Tier 2 support, workbooks, or the primary matrix.",
         ]
     )
+    return "\n".join(lines) + "\n"
+
+
+def render_v2_report(
+    *,
+    readiness_row: Mapping[str, str],
+    summary_rows: Sequence[Mapping[str, str]],
+    shadow_rows: Sequence[Mapping[str, str]],
+    machine_evidence_support_rows: Sequence[Mapping[str, str]],
+) -> str:
+    status_counts = Counter(row["shadow_alignment_status"] for row in shadow_rows)
+    label_counts = Counter(row["shadow_label"] for row in shadow_rows)
+    promotion_gaps = Counter(
+        gap
+        for row in shadow_rows
+        for gap in row.get("required_evidence_to_promote", "").split(";")
+        if gap and gap != "none"
+    )
+    support_counts = Counter(
+        row["evidence_support_status"] for row in machine_evidence_support_rows
+    )
+    basis_counts = Counter(
+        basis
+        for row in machine_evidence_support_rows
+        for basis in (
+            row.get("rt_basis_status", ""),
+            row.get("shape_basis_status", ""),
+            row.get("pattern_basis_status", ""),
+            row.get("opportunity_basis_status", ""),
+            row.get("scope_basis_status", ""),
+        )
+        if basis
+    )
+    lines = [
+        "# Shared Peak Identity V2 Shadow Label Alignment Report",
+        "",
+        "## Decision Summary",
+        "",
+        "- readiness_label: `diagnostic_only`",
+        f"- v2_mode: `{readiness_row['v2_mode']}`",
+        f"- v2_gate_status: `{readiness_row['v2_gate_status']}`",
+        "- machine_only_labeler_ready: "
+        f"`{readiness_row['machine_only_labeler_ready']}`",
+        f"- alignment_fraction: `{readiness_row['alignment_fraction']}`",
+        f"- blast_radius_assessed: `{readiness_row['blast_radius_assessed']}`",
+        f"- max_overfit_risk: `{readiness_row['max_overfit_risk']}`",
+        f"- machine_evidence_basis: `{readiness_row['machine_evidence_basis']}`",
+        "- machine_observed_partial_rows: "
+        f"`{readiness_row['machine_observed_partial_rows']}`",
+        "- machine_observed_conflict_rows: "
+        f"`{readiness_row['machine_observed_conflict_rows']}`",
+        "- machine_evidence_coverage_fraction: "
+        f"`{readiness_row['machine_evidence_coverage_fraction']}`",
+        f"- next_action: `{readiness_row['next_action']}`",
+        "",
+        readiness_row["clear_answer"],
+        "",
+        "This is a shadow diagnostic. It does not mutate selected peaks, "
+        "backfill, workbooks, matrices, or production labels.",
+        "",
+        "## Alignment Counts",
+        "",
+    ]
+    for status, count in sorted(status_counts.items()):
+        lines.append(f"- `{status}`: `{count}`")
+    lines.extend(["", "## Shadow Label Counts", ""])
+    for label, count in sorted(label_counts.items()):
+        lines.append(f"- `{label}`: `{count}`")
+    lines.extend(["", "## Machine Evidence Provenance", ""])
+    if support_counts:
+        for status, count in sorted(support_counts.items()):
+            lines.append(f"- evidence_support_status `{status}`: `{count}`")
+    else:
+        lines.append("- no machine evidence support rows")
+    lines.extend(["", "## Evidence Basis Counts", ""])
+    if basis_counts:
+        for basis, count in sorted(basis_counts.items()):
+            lines.append(f"- `{basis}`: `{count}`")
+    else:
+        lines.append("- none")
+    lines.extend(["", "## Machine Evidence Blockers", ""])
+    blockers = [
+        blocker
+        for blocker in readiness_row.get("machine_evidence_blockers", "").split(";")
+        if blocker
+    ]
+    if blockers:
+        for blocker in blockers:
+            lines.append(f"- `{blocker}`")
+    else:
+        lines.append("- none")
+    lines.extend(["", "## Manual Label Summary", ""])
+    for row in summary_rows:
+        if row["scope"] != "manual_label":
+            continue
+        lines.append(
+            "- "
+            f"`{row['manual_label']}`: rows `{row['row_count']}`, "
+            f"aligned `{row['aligned_count']}`, "
+            f"partial `{row['partial_count']}`, "
+            f"contradicted `{row['contradicted_count']}`, "
+            f"unresolved `{row['unresolved_count']}`"
+        )
+    lines.extend(["", "## Required Evidence To Promote", ""])
+    if promotion_gaps:
+        for gap, count in promotion_gaps.most_common():
+            lines.append(f"- `{gap}`: `{count}`")
+    else:
+        lines.append("- none")
+    lines.extend(["", "## Top Rows To Inspect", ""])
+    review_rows = [
+        row
+        for row in shadow_rows
+        if row["shadow_alignment_status"] in {"contradicted", "unresolved", "partial"}
+    ]
+    if not review_rows:
+        lines.append("- none")
+    else:
+        for row in review_rows[:10]:
+            lines.append(
+                "- "
+                f"`{row['oracle_row_id']}`: "
+                f"{row['shadow_label']} / {row['shadow_alignment_status']} "
+                f"requires `{row['required_evidence_to_promote']}`"
+            )
     return "\n".join(lines) + "\n"
 
 

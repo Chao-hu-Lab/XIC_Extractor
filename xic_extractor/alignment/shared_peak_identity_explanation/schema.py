@@ -10,6 +10,14 @@ BLAST_RADIUS_MANIFEST_SCHEMA_VERSION = (
     "shared_peak_identity_blast_radius_manifest_v1"
 )
 BLAST_RADIUS_SUMMARY_SCHEMA_VERSION = "shared_peak_identity_blast_radius_summary_v1"
+SHADOW_LABEL_SCHEMA_VERSION = "shared_peak_identity_shadow_label_v1"
+SHADOW_ALIGNMENT_SUMMARY_SCHEMA_VERSION = (
+    "shared_peak_identity_shadow_alignment_summary_v1"
+)
+V2_READINESS_SCHEMA_VERSION = "shared_peak_identity_v2_readiness_v1"
+MACHINE_EVIDENCE_SUPPORT_SCHEMA_VERSION = (
+    "shared_peak_identity_machine_evidence_support_v1"
+)
 
 ORACLE_COLUMNS = (
     "oracle_schema_version",
@@ -153,6 +161,92 @@ BLAST_RADIUS_SUMMARY_COLUMNS = (
     "overfit_risk",
     "example_oracle_row_ids",
     "example_feature_family_ids",
+)
+
+SHADOW_LABEL_COLUMNS = (
+    "shadow_label_schema_version",
+    "oracle_row_id",
+    "feature_family_id",
+    "sample_id",
+    "manual_label",
+    "manual_confidence",
+    "machine_current_label",
+    "machine_match_status",
+    "evidence_gap_class",
+    "shadow_label",
+    "shadow_alignment_status",
+    "manual_machine_direction",
+    "evidence_chain_gap",
+    "required_evidence_to_promote",
+    "diagnostic_only",
+)
+
+SHADOW_ALIGNMENT_SUMMARY_COLUMNS = (
+    "shadow_summary_schema_version",
+    "scope",
+    "manual_label",
+    "row_count",
+    "aligned_count",
+    "partial_count",
+    "contradicted_count",
+    "unjudgeable_count",
+    "context_only_count",
+    "unresolved_count",
+    "alignment_fraction",
+    "dominant_gap_classes",
+    "recommended_next_action",
+)
+
+V2_READINESS_COLUMNS = (
+    "v2_readiness_schema_version",
+    "v2_mode",
+    "v2_gate_status",
+    "readiness_label",
+    "seed_rows_total",
+    "shadow_rows_total",
+    "aligned_or_partial_rows",
+    "contradicted_rows",
+    "context_only_rows",
+    "human_unjudgeable_rows",
+    "alignment_fraction",
+    "blast_radius_assessed",
+    "max_overfit_risk",
+    "blast_radius_stale_artifact_count",
+    "semantic_generalization_evidence",
+    "machine_evidence_basis",
+    "machine_evidence_supported_rows",
+    "machine_observed_partial_rows",
+    "machine_observed_conflict_rows",
+    "machine_proxy_only_rows",
+    "manual_oracle_derived_rows",
+    "machine_evidence_coverage_fraction",
+    "machine_evidence_blockers",
+    "machine_only_labeler_ready",
+    "clear_answer",
+    "next_action",
+)
+
+MACHINE_EVIDENCE_SUPPORT_COLUMNS = (
+    "machine_evidence_support_schema_version",
+    "oracle_row_id",
+    "feature_family_id",
+    "sample_id",
+    "manual_label",
+    "machine_current_label",
+    "shadow_label",
+    "shadow_alignment_status",
+    "status_label_alignment_status",
+    "rt_basis_status",
+    "shape_basis_status",
+    "pattern_basis_status",
+    "opportunity_basis_status",
+    "scope_basis_status",
+    "observed_machine_metrics",
+    "manual_derived_facts",
+    "missing_machine_evidence",
+    "literature_support_refs",
+    "evidence_support_status",
+    "diagnostic_only",
 )
 
 MANUAL_REASON_TAGS = frozenset(
@@ -405,6 +499,7 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
             "non_seed_same_family",
             "all_available_8raw",
             "all_available_85raw",
+            "manual_label",
             "overall",
         }
     ),
@@ -430,6 +525,128 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
         {"none", "low", "medium", "high", "unassessed"}
     ),
     "overfit_risk": frozenset({"none", "low", "medium", "high", "unassessed"}),
+    "shadow_label": frozenset(
+        {
+            "manual_like_pass_candidate",
+            "manual_like_suspect_candidate",
+            "manual_like_fail_candidate",
+            "low_opportunity_supported",
+            "rt_pattern_conflict_blocked",
+            "human_unjudgeable_like",
+            "delta_mass_context_only",
+            "unresolved_gap",
+        }
+    ),
+    "shadow_alignment_status": frozenset(
+        {
+            "aligned",
+            "partial",
+            "contradicted",
+            "unjudgeable",
+            "context_only",
+            "unresolved",
+        }
+    ),
+    "manual_machine_direction": frozenset(
+        {
+            "machine_agrees",
+            "machine_too_conservative",
+            "machine_too_permissive",
+            "ambiguous_policy",
+            "context_only",
+            "unresolved",
+        }
+    ),
+    "v2_gate_status": frozenset(
+        {
+            "shadow_ready_candidate",
+            "exploratory_only",
+            "blocked_by_vocabulary",
+            "blocked_by_overfit_risk",
+        }
+    ),
+    "readiness_label": frozenset({"diagnostic_only"}),
+    "v2_mode": frozenset({"shadow_label_alignment"}),
+    "status_label_alignment_status": frozenset(
+        {
+            "proxy_agrees",
+            "proxy_partial",
+            "proxy_contradicts",
+            "not_available",
+            "not_evaluable",
+            "context_only",
+        }
+    ),
+    "rt_basis_status": frozenset(
+        {
+            "machine_observed",
+            "machine_proxy",
+            "manual_oracle_derived",
+            "mixed",
+            "not_available",
+            "not_applicable",
+        }
+    ),
+    "shape_basis_status": frozenset(
+        {
+            "machine_observed",
+            "machine_proxy",
+            "manual_oracle_derived",
+            "mixed",
+            "not_available",
+            "not_applicable",
+        }
+    ),
+    "pattern_basis_status": frozenset(
+        {
+            "machine_observed",
+            "machine_proxy",
+            "manual_oracle_derived",
+            "mixed",
+            "not_available",
+            "not_applicable",
+        }
+    ),
+    "opportunity_basis_status": frozenset(
+        {
+            "machine_observed",
+            "machine_proxy",
+            "manual_oracle_derived",
+            "mixed",
+            "not_available",
+            "not_applicable",
+        }
+    ),
+    "scope_basis_status": frozenset(
+        {
+            "machine_observed",
+            "machine_proxy",
+            "manual_oracle_derived",
+            "mixed",
+            "not_available",
+            "not_applicable",
+        }
+    ),
+    "evidence_support_status": frozenset(
+        {
+            "machine_observed_sufficient",
+            "machine_observed_partial",
+            "machine_observed_conflict",
+            "machine_proxy_only",
+            "manual_derived_only",
+            "blocked_missing_metric",
+            "not_evaluable",
+            "context_only",
+        }
+    ),
+    "machine_evidence_basis": frozenset(
+        {
+            "machine_observed_sufficient",
+            "machine_observed_partial",
+            "machine_proxy_or_manual_derived",
+            "not_assessed",
+        }
+    ),
     "evidence_gap_class": EVIDENCE_GAP_CLASSES,
     "explanation_status": frozenset(
         {"explained", "partially_explained", "unexplained", "inconclusive"}

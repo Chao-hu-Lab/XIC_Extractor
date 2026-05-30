@@ -1,4 +1,4 @@
-"""Write the Slice 0 shared peak identity explanation diagnostic outputs."""
+"""Write shared peak identity explanation and shadow-label diagnostics."""
 
 from __future__ import annotations
 
@@ -7,6 +7,10 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from xic_extractor.alignment.shared_peak_identity_explanation import (
+    candidate_ms2_pattern,
+    machine_evidence_support,
+)
 from xic_extractor.alignment.shared_peak_identity_explanation.assembler import (
     assemble_evidence_vectors,
 )
@@ -25,15 +29,22 @@ from xic_extractor.alignment.shared_peak_identity_explanation.classifier import 
     classify_explanations,
 )
 from xic_extractor.alignment.shared_peak_identity_explanation.machine_artifacts import (
+    MachineMatch,
     load_machine_matches,
 )
 from xic_extractor.alignment.shared_peak_identity_explanation.oracle import (
     load_manual_oracle,
     oracle_rows_as_dicts,
 )
+from xic_extractor.alignment.shared_peak_identity_explanation.shadow_labels import (
+    build_shadow_alignment_summary,
+    build_shadow_label_rows,
+    build_v2_readiness,
+)
 from xic_extractor.alignment.shared_peak_identity_explanation.writers import (
     write_slice0_outputs,
     write_slice1_outputs,
+    write_v2_outputs,
 )
 
 
@@ -53,6 +64,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             blast_radius_85raw_run=args.blast_radius_85raw_run,
             expected_blast_radius_manifest=args.expected_blast_radius_manifest,
             optional_blast_radius_artifacts=args.optional_blast_radius_artifact,
+            enable_shadow_label_alignment=args.enable_shadow_label_alignment,
+            cwt_shape_evidence_tsv=args.cwt_shape_evidence_tsv,
+            tier2_trace_evidence_tsv=args.tier2_trace_evidence_tsv,
+            candidate_ms2_pattern_evidence_tsv=(
+                args.candidate_ms2_pattern_evidence_tsv
+            ),
+            candidate_ms2_pattern_batch_index=args.candidate_ms2_pattern_batch_index,
+            candidate_ms2_pattern_raw_dll_dir=(
+                args.candidate_ms2_pattern_raw_dll_dir
+            ),
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -76,7 +97,13 @@ def run_explanation(
     blast_radius_85raw_run: Path | None = None,
     expected_blast_radius_manifest: Path | None = None,
     optional_blast_radius_artifacts: Sequence[str] | None = None,
-) -> dict[str, Path | str]:
+    enable_shadow_label_alignment: bool = False,
+    cwt_shape_evidence_tsv: Path | None = None,
+    tier2_trace_evidence_tsv: Path | None = None,
+    candidate_ms2_pattern_evidence_tsv: Path | None = None,
+    candidate_ms2_pattern_batch_index: Path | None = None,
+    candidate_ms2_pattern_raw_dll_dir: Path | None = None,
+) -> Mapping[str, Path | str]:
     optional_artifacts = _parse_optional_blast_radius_artifacts(
         optional_blast_radius_artifacts
     )
@@ -91,6 +118,21 @@ def run_explanation(
         raise ValueError("--blast-radius-preflight-only requires --enable-blast-radius")
     if blast_radius_sample_row_limit < 0:
         raise ValueError("--blast-radius-sample-row-limit must be non-negative")
+    if candidate_ms2_pattern_evidence_tsv and candidate_ms2_pattern_batch_index:
+        raise ValueError(
+            "use either --candidate-ms2-pattern-evidence-tsv or "
+            "--candidate-ms2-pattern-batch-index, not both"
+        )
+    if candidate_ms2_pattern_batch_index and not enable_shadow_label_alignment:
+        raise ValueError(
+            "--candidate-ms2-pattern-batch-index requires "
+            "--enable-shadow-label-alignment"
+        )
+    if candidate_ms2_pattern_raw_dll_dir and not candidate_ms2_pattern_batch_index:
+        raise ValueError(
+            "--candidate-ms2-pattern-raw-dll-dir requires "
+            "--candidate-ms2-pattern-batch-index"
+        )
     if blast_radius_preflight_only:
         if blast_radius_8raw_run is None or blast_radius_85raw_run is None:
             raise AssertionError("blast-radius run paths were validated above")
@@ -107,6 +149,40 @@ def run_explanation(
         alignment_cells_tsv=alignment_cells_tsv,
         candidate_gate_tsv=candidate_gate_tsv,
     )
+    cwt_shape_evidence = machine_evidence_support.load_cwt_shape_evidence(
+        cwt_shape_evidence_tsv
+    )
+    tier2_trace_evidence = machine_evidence_support.load_tier2_trace_evidence(
+        tier2_trace_evidence_tsv
+    )
+    generated_candidate_ms2_outputs: dict[str, Path] = {}
+    if candidate_ms2_pattern_batch_index is not None:
+        generated_candidate_ms2_path = (
+            output_dir / "shared_peak_identity_candidate_ms2_pattern_evidence.tsv"
+        )
+        candidate_ms2_pattern.write_candidate_ms2_pattern_rows(
+            generated_candidate_ms2_path,
+            candidate_ms2_pattern.build_candidate_ms2_pattern_rows(
+                alignment_cells_tsv=alignment_cells_tsv,
+                alignment_review_tsv=alignment_review_tsv,
+                discovery_batch_index_csv=candidate_ms2_pattern_batch_index,
+                raw_dll_dir=candidate_ms2_pattern_raw_dll_dir,
+                oracle_keys=(
+                    (row.feature_family_id, row.sample_id)
+                    for row in oracle_rows
+                    if not row.is_sentinel
+                ),
+            ),
+        )
+        candidate_ms2_pattern_evidence_tsv = generated_candidate_ms2_path
+        generated_candidate_ms2_outputs["candidate_ms2_pattern_evidence"] = (
+            generated_candidate_ms2_path
+        )
+    candidate_ms2_pattern_evidence = (
+        machine_evidence_support.load_candidate_ms2_pattern_evidence(
+            candidate_ms2_pattern_evidence_tsv
+        )
+    )
     evidence_rows = assemble_evidence_vectors(oracle_rows, matches)
     explanations = classify_explanations(oracle_rows, evidence_rows)
     run_facts = build_slice0_run_facts(
@@ -122,6 +198,18 @@ def run_explanation(
         run_facts=run_facts,
     )
     if not enable_blast_radius:
+        if enable_shadow_label_alignment:
+            return _write_v2_from_current_outputs(
+                output_dir=output_dir,
+                prior_outputs=slice0_outputs,
+                explanations=explanations,
+                run_facts=run_facts,
+                machine_matches=matches,
+                cwt_shape_evidence=cwt_shape_evidence,
+                tier2_trace_evidence=tier2_trace_evidence,
+                candidate_ms2_pattern_evidence=candidate_ms2_pattern_evidence,
+                extra_outputs=generated_candidate_ms2_outputs,
+            )
         return slice0_outputs
 
     if blast_radius_8raw_run is None or blast_radius_85raw_run is None:
@@ -147,12 +235,64 @@ def run_explanation(
         manifest_rows=manifest_rows,
         summary_rows=summary_rows,
     )
-    return write_slice1_outputs(
+    slice1_outputs = write_slice1_outputs(
         output_dir=output_dir,
         slice0_outputs=slice0_outputs,
         manifest_rows=manifest_rows,
         summary_rows=summary_rows,
         run_facts=slice1_run_facts,
+    )
+    if enable_shadow_label_alignment:
+        return _write_v2_from_current_outputs(
+            output_dir=output_dir,
+            prior_outputs=slice1_outputs,
+            explanations=explanations,
+            run_facts=slice1_run_facts,
+            machine_matches=matches,
+            cwt_shape_evidence=cwt_shape_evidence,
+            tier2_trace_evidence=tier2_trace_evidence,
+            candidate_ms2_pattern_evidence=candidate_ms2_pattern_evidence,
+            extra_outputs=generated_candidate_ms2_outputs,
+        )
+    return slice1_outputs
+
+
+def _write_v2_from_current_outputs(
+    *,
+    output_dir: Path,
+    prior_outputs: Mapping[str, Path],
+    explanations: Sequence[Mapping[str, str]],
+    run_facts: Mapping[str, str],
+    machine_matches: Mapping[str, Sequence[MachineMatch]],
+    cwt_shape_evidence: Mapping[tuple[str, str], Mapping[str, str]],
+    tier2_trace_evidence: Mapping[str, Mapping[str, str]],
+    candidate_ms2_pattern_evidence: Mapping[tuple[str, str], Mapping[str, str]],
+    extra_outputs: Mapping[str, Path] | None = None,
+) -> Mapping[str, Path | str]:
+    shadow_rows = build_shadow_label_rows(explanations)
+    shadow_summary_rows = build_shadow_alignment_summary(shadow_rows)
+    machine_evidence_support_rows = (
+        machine_evidence_support.build_machine_evidence_support_rows(
+            explanations=explanations,
+            shadow_rows=shadow_rows,
+            machine_matches=machine_matches,
+            cwt_shape_evidence=cwt_shape_evidence,
+            tier2_trace_evidence=tier2_trace_evidence,
+            candidate_ms2_pattern_evidence=candidate_ms2_pattern_evidence,
+        )
+    )
+    readiness_row = build_v2_readiness(
+        run_facts=run_facts,
+        shadow_rows=shadow_rows,
+        machine_evidence_support_rows=machine_evidence_support_rows,
+    )
+    return write_v2_outputs(
+        output_dir=output_dir,
+        prior_outputs={**dict(prior_outputs), **dict(extra_outputs or {})},
+        shadow_rows=shadow_rows,
+        summary_rows=shadow_summary_rows,
+        readiness_row=readiness_row,
+        machine_evidence_support_rows=machine_evidence_support_rows,
     )
 
 
@@ -169,6 +309,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--blast-radius-8raw-run", type=Path)
     parser.add_argument("--blast-radius-85raw-run", type=Path)
     parser.add_argument("--expected-blast-radius-manifest", type=Path)
+    parser.add_argument("--enable-shadow-label-alignment", action="store_true")
+    parser.add_argument("--cwt-shape-evidence-tsv", type=Path)
+    parser.add_argument("--tier2-trace-evidence-tsv", type=Path)
+    parser.add_argument("--candidate-ms2-pattern-evidence-tsv", type=Path)
+    parser.add_argument("--candidate-ms2-pattern-batch-index", type=Path)
+    parser.add_argument("--candidate-ms2-pattern-raw-dll-dir", type=Path)
     parser.add_argument(
         "--optional-blast-radius-artifact",
         action="append",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
 from .oracle import ManualOracleRow
@@ -258,7 +258,7 @@ def _next_action(evidence_gap_class: str) -> str:
     }[evidence_gap_class]
 
 
-def _join_unique(values: Sequence[str]) -> str:
+def _join_unique(values: Iterable[str]) -> str:
     tokens: list[str] = []
     for value in values:
         for token in str(value or "").split(";"):

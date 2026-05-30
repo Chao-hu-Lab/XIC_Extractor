@@ -336,10 +336,15 @@ a focused package such as:
 xic_extractor/alignment/shared_peak_identity_explanation/
 ```
 
-The CLI must parse, validate, orchestrate, and write only. It must not scan RAW
-files or recompute domain evidence. If the implementation creates this CLI, the
-same diff must update `tools/diagnostics/INDEX.md` with purpose, topic group,
-originating spec, and outputs.
+The default CLI path must parse, validate, orchestrate, and write existing
+artifact evidence only. Assemblers and writers must not scan RAW files or
+recompute domain evidence. RAW access is allowed only inside an explicitly
+opted-in diagnostic producer such as `--candidate-ms2-pattern-batch-index` plus
+`--candidate-ms2-pattern-raw-dll-dir`, and that producer must reuse the existing
+RAW reader / MS2-NL helper instead of adding a new interpretation model. If the
+implementation creates or changes this CLI, the same diff must update
+`tools/diagnostics/INDEX.md` with purpose, topic group, originating spec, and
+outputs.
 
 Primary join key:
 
@@ -862,6 +867,13 @@ Freshness must have an explicit comparison authority:
   `blast_radius_assessed=present_current`, and the report must name the missing
   freshness evidence.
 
+The expected blast-radius manifest is only a freshness / stale-artifact guard.
+It must not be interpreted as proof that the evidence chain is complete,
+linear, or scientifically validated. If the only available 85RAW artifacts come
+from an older evidence-chain shape, V2 may still run in `exploratory_only` mode
+to expose the gap, but it must not treat that freshness check as a semantic
+generalization gate.
+
 `blast_radius_assessed` is `present_current` only when both the 8RAW and 85RAW
 surfaces were assessed, required fields were available, and every required
 manifest artifact had an expected hash that matched the observed hash. If a
@@ -909,6 +921,132 @@ V1 consequences:
 - Manual oracle loaders must use explicit sheet names if workbook input is
   introduced. `openpyxl(data_only=True)` cached formula behavior must not become
   hidden truth.
+
+## Literature Support And Evidence Boundaries
+
+V2 evidence changes must be literature-backed and must name whether a fact is
+machine-observed, a machine proxy, manual-oracle-derived, or unavailable. The
+current seed-run evidence vectors still project several shape / pattern /
+opportunity facts from the manual oracle. That is acceptable for explaining the
+manual vocabulary, but it is not enough for a machine-only pass/fail labeler.
+
+Primary support used for the next machine-evidence slice:
+
+- **Peak shape / XIC quality:** centWave uses regions of interest plus CWT and
+  chromatographic-domain fitting for high-resolution LC/MS feature detection
+  ([Tautenhahn 2008](https://pubmed.ncbi.nlm.nih.gov/19040729/)). Zhang and
+  Zhao evaluated LC/MS EIC and peak quality metrics including sharpness,
+  Gaussian similarity, SNR, peak significance, triangle area similarity, and
+  zigzag indices, and concluded combined metrics outperform single metrics
+  ([Zhang 2014](https://pubmed.ncbi.nlm.nih.gov/25350128/)). A later
+  manually-calibrated peak-picking study again treats peak quality as an
+  explicit metric problem rather than a visual-only label
+  ([Kumler 2023](https://pmc.ncbi.nlm.nih.gov/articles/PMC10612323/)).
+- **MS2 / neutral-loss pattern:** product ions and neutral losses are valid
+  annotation evidence for substructure or family-level context, while full
+  spectrum similarity remains a stronger but still non-absolute structural
+  relatedness proxy. GNPS molecular networking uses cosine-style spectral
+  similarity
+  ([Watrous 2012](https://pmc.ncbi.nlm.nih.gov/articles/PMC4379709/)), Spec2Vec
+  explicitly warns that cosine-like similarity is imperfect
+  ([Huber 2021](https://pmc.ncbi.nlm.nih.gov/articles/PMC7909622/)), and
+  modified-cosine / neutral-loss alignment behavior depends on molecule class
+  and modification context
+  ([Biesinger 2022](https://doi.org/10.1021/jasms.2c00153)).
+- **DDA opportunity / low abundance:** DDA MS/MS coverage is limited by which
+  precursors are selected during elution; iterative exclusion and
+  target-directed DDA improve coverage, especially for lower-abundance or
+  co-eluting ions
+  ([Koelmel 2017](https://pmc.ncbi.nlm.nih.gov/articles/PMC5408749/),
+  [Analytica Chimica Acta 2017](https://doi.org/10.1016/j.aca.2017.08.044)).
+  Therefore missing DDA evidence remains `not_observed` unless local acquisition
+  opportunity is shown.
+- **RT drift / orthogonal evidence:** OBI-Warp exists because LC-MS RT drift is
+  a real alignment problem, not a simple hard veto
+  ([Prince 2006, via xcms docs](https://sneumann.github.io/xcms/reference/retcor.obiwarp-methods.html)).
+  MSI-style reporting requires orthogonal evidence for strong identification,
+  such as RT plus mass spectrum or accurate mass plus MS/MS
+  ([Sumner 2007](https://pmc.ncbi.nlm.nih.gov/articles/PMC3772505/)).
+
+Any future shape, MS2-pattern, DDA-opportunity, RT-drift, or matrix-behavior
+metric that lacks a paper or official-method anchor must stay out of the V2
+gate. It may be recorded as exploratory context, but it must not be used to
+promote a row, reject a row, or close a blocker.
+
+The V2 diagnostic must therefore include a machine-evidence provenance sidecar.
+A row cannot be counted as machine-observed sufficient if the decisive shape,
+pattern, opportunity, RT-drift, or scope fact only came from the manual oracle.
+Manual oracle tags may define the reviewed vocabulary, but they are not
+evidence by themselves. Once every decisive tag has a machine-observed basis and
+`missing_machine_evidence` is empty, the row may be counted as
+`machine_observed_sufficient` even though the sidecar still records the manual
+tags for auditability.
+Machine proxies such as `trace_quality`, `scan_support_score`, current
+rescued/detected status, and family-level CID product / neutral-loss context may
+explain why the existing pipeline behaved as it did. Family-level pattern
+context is recorded when `neutral_loss_tag`, `family_product_mz`, and
+`family_observed_neutral_loss_da` are present, but it remains context/proxy only.
+It does not by itself close candidate-aligned or sample-level MS2 pattern
+evidence.
+RT deltas outside the alignment preferred window may be recorded as
+machine-observed RT-conflict context, but RT remains contextual evidence rather
+than a chemical identity veto unless an explicit RT exclusion policy is added.
+
+The V2 diagnostic may optionally consume existing CWT shape and Tier2 raw-trace
+sidecars:
+
+```text
+--cwt-shape-evidence-tsv <alignment_tier2_cwt_manual_agreement_probe*.tsv>
+--tier2-trace-evidence-tsv <alignment_tier2_trace_evidence.tsv>
+--candidate-ms2-pattern-evidence-tsv <candidate_aligned_ms2_pattern.tsv>
+--candidate-ms2-pattern-batch-index <discovery_batch_index.csv>
+--candidate-ms2-pattern-raw-dll-dir <thermo_rawfile_reader_dll_dir>
+```
+
+These inputs may upgrade row provenance to `machine_observed_partial` or
+`machine_observed_sufficient` only for rows whose decisive evidence tags are all
+covered by machine-observed fields. They must not mark the machine labeler ready
+while candidate-aligned MS2 / neutral loss pattern evidence, DDA opportunity
+policy, or RT/pattern conflict policy is still missing. Context7's SciPy
+documentation check confirms `find_peaks_cwt` identifies relative maxima across
+CWT scales in a 1-D signal, and `find_peaks` / `peak_widths` report signal peak
+properties. Therefore CWT can support peak-shape evidence only; it is not
+chemical identity evidence. CWT conflicts must be evaluated against manual shape
+tags such as `shape_complete`, `shape_normal`, or `shape_bad`, not against the
+overall manual pass/fail label.
+
+The candidate-aligned MS2 sidecar must be fail-closed. It must be keyed by
+`feature_family_id` plus `sample_stem`; target-label-only, RT/mz-only, or
+unreviewed heuristic joins are not sufficient. Its required input columns are
+`feature_family_id`, `sample_stem`, `candidate_ms2_pattern_status`, and
+`candidate_ms2_evidence_level`. Only `candidate_ms2_evidence_level` values
+`sample_candidate_aligned` or `sample_boundary_aligned` may affect the
+provenance sidecar. A `pattern_mismatch` manual tag is machine-observed only
+when the sidecar reports candidate-level `conflict`; a supportive sidecar value
+against `pattern_mismatch` is a machine-observed conflict, not a closed gap.
+When `--candidate-ms2-pattern-batch-index` is used, the diagnostic may generate
+`shared_peak_identity_candidate_ms2_pattern_evidence.tsv` from the same
+discovery batch index that fed the alignment run. The generated producer may
+mark a row supportive only when `alignment_cells.source_candidate_id` resolves to
+a discovery candidate with observed product / neutral-loss tag evidence. Rescued
+cells without `source_candidate_id` remain `not_available`; this is a deliberate
+fail-closed result, not a negative chemical identity decision.
+
+If `--candidate-ms2-pattern-raw-dll-dir` is also provided, the generated producer
+may additionally probe those `source_candidate_id`-missing rows against the
+sample RAW file declared in the discovery batch index. This fallback is still
+`diagnostic_only` and uses the existing RAW reader plus
+`neutral_loss.collect_candidate_ms2_evidence`; it does not add a new
+fragmentation rule. A row may become `sample_boundary_aligned` only when the
+MS2 scan is aligned to the cell peak boundary, apex fallback, or boundary-rescue
+window used by that existing helper. `OK` / `WARN` neutral-loss evidence maps to
+`supportive`; `conflict` is reserved for a stricter failure mode where a
+boundary-aligned precursor MS2 trigger exists and the nearest non-matching
+product peak is the spectrum base peak outside the diagnostic product window.
+Other `NL_FAIL` cases, including low-intensity product-below-floor observations,
+stay `not_observed`. No precursor MS2 trigger also maps to `not_observed`. These
+non-supportive cases must not be treated as chemical absence evidence because
+DDA precursor opportunity is known to be incomplete.
 
 ## V1 Acceptance Criteria
 
@@ -974,6 +1112,18 @@ remain unexplained, or while `blast_radius_assessed` shows the non-seed / 85RAW
 surface was never assessed — but that gate is defined and owned by the V2 spec,
 not asserted here.
 
+The V1.5 / V2 diagnostic checkpoint relaxes "begin" into two modes:
+
+- `exploratory_only`: V2 may emit shadow-label alignment artifacts over the
+  manual seed rows even when blast-radius freshness or semantic generalization is
+  not current. This mode is allowed because it answers what the machine evidence
+  chain is missing, not because it promotes labels.
+- `shadow_ready_candidate`: V2 may report this only when seed vocabulary holds,
+  the blast-radius facts are current, overfit risk is low, stale artifact count
+  is zero, the seed shadow labels align without contradictions, and the decisive
+  evidence basis is machine-observed rather than manual-oracle-derived or
+  proxy-only.
+
 V2 target:
 
 ```text
@@ -988,6 +1138,24 @@ V2 may introduce shadow labels such as:
 - `low_opportunity_supported`;
 - `rt_pattern_conflict_blocked`;
 - `human_unjudgeable_like`.
+
+V2 output artifacts:
+
+```text
+shared_peak_identity_shadow_labels.tsv
+shared_peak_identity_shadow_alignment_summary.tsv
+shared_peak_identity_v2_readiness.tsv
+shared_peak_identity_machine_evidence_support.tsv
+shared_peak_identity_candidate_ms2_pattern_evidence.tsv  # optional generated producer
+shared_peak_identity_v2_report.md
+```
+
+The readiness artifact owns the clear answer. It must state whether V2 is
+`exploratory_only`, `shadow_ready_candidate`, `blocked_by_vocabulary`, or
+`blocked_by_overfit_risk`, and must include
+`machine_only_labeler_ready=TRUE/FALSE`, `machine_evidence_basis`, row counts
+for machine-observed / proxy-only / manual-derived evidence, and the named
+machine evidence blockers.
 
 V2 must still avoid primary matrix promotion unless a separate promotion
 contract exists. Its success metric should be trend alignment with manual
