@@ -7,6 +7,9 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from xic_extractor.alignment.shared_peak_identity_explanation import (
     product_activation,
 )

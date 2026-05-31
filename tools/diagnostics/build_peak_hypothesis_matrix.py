@@ -7,7 +7,8 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from xic_extractor.alignment.shared_peak_identity_explanation import (
     peak_hypothesis_matrix,

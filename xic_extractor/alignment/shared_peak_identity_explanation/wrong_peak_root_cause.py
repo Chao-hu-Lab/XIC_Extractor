@@ -84,25 +84,18 @@ def build_wrong_peak_root_cause_rows(
     alignment_cell_rows: Sequence[Mapping[str, str]],
     overlay_traces: Mapping[tuple[str, str], OverlayTrace] | None = None,
 ) -> tuple[dict[str, str], ...]:
-    support_by_key = {
-        (row.get("feature_family_id", ""), row.get("sample_id", "")): row
-        for row in machine_evidence_support_rows
-    }
-    cells_by_key = {
-        (row.get("feature_family_id", ""), row.get("sample_stem", "")): row
-        for row in alignment_cell_rows
-    }
+    support_by_key = _index_rows_by_family_sample(machine_evidence_support_rows)
+    cells_by_key = _index_rows_by_family_sample(alignment_cell_rows)
     trace_by_key = overlay_traces or {}
     rows: list[dict[str, str]] = []
     for decision in activation_decision_rows:
         if not _is_wrong_peak_decision(decision):
             continue
         family_id = decision.get("feature_family_id", "")
-        sample_id = decision.get("sample_id", "")
-        key = (family_id, sample_id)
-        support = support_by_key.get(key, {})
-        cell = cells_by_key.get(key, {})
-        trace = trace_by_key.get(key)
+        sample_id = _first_text(decision.get("sample_id"), decision.get("sample_stem"))
+        support = _lookup_family_sample_row(support_by_key, family_id, decision)
+        cell = _lookup_family_sample_row(cells_by_key, family_id, decision)
+        trace = _lookup_family_sample_trace(trace_by_key, family_id, decision)
         metrics = _parse_metrics(
             support.get("observed_machine_metrics", ""),
             decision.get("source_evidence_tokens", ""),
@@ -221,6 +214,52 @@ def build_wrong_peak_root_cause_rows(
     return tuple(
         sorted(rows, key=lambda row: (row["feature_family_id"], row["sample_id"]))
     )
+
+
+def _index_rows_by_family_sample(
+    rows: Sequence[Mapping[str, str]],
+) -> dict[tuple[str, str], Mapping[str, str]]:
+    indexed: dict[tuple[str, str], Mapping[str, str]] = {}
+    for row in rows:
+        family_id = row.get("feature_family_id", "")
+        if not family_id:
+            continue
+        for sample_key in _sample_keys(row):
+            indexed.setdefault((family_id, sample_key), row)
+    return indexed
+
+
+def _lookup_family_sample_row(
+    index: Mapping[tuple[str, str], Mapping[str, str]],
+    family_id: str,
+    row: Mapping[str, str],
+) -> Mapping[str, str]:
+    for sample_key in _sample_keys(row):
+        match = index.get((family_id, sample_key))
+        if match is not None:
+            return match
+    return {}
+
+
+def _lookup_family_sample_trace(
+    index: Mapping[tuple[str, str], OverlayTrace],
+    family_id: str,
+    row: Mapping[str, str],
+) -> OverlayTrace | None:
+    for sample_key in _sample_keys(row):
+        match = index.get((family_id, sample_key))
+        if match is not None:
+            return match
+    return None
+
+
+def _sample_keys(row: Mapping[str, str]) -> tuple[str, ...]:
+    keys: list[str] = []
+    for field in ("sample_id", "sample_stem"):
+        value = row.get(field, "").strip()
+        if value and value not in keys:
+            keys.append(value)
+    return tuple(keys)
 
 
 def _is_wrong_peak_decision(row: Mapping[str, str]) -> bool:

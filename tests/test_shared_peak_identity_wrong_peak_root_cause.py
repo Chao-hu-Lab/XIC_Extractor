@@ -118,6 +118,50 @@ def test_wrong_peak_qc_conflict_reports_low_dominance_candidate() -> None:
     assert row["alternate_peak_rt"] == "18.17"
 
 
+def test_wrong_peak_uses_sample_id_alias_for_alignment_cell_context() -> None:
+    rows = wrong_peak_root_cause.build_wrong_peak_root_cause_rows(
+        activation_decision_rows=[
+            _decision_row(
+                family_id="FAM011810",
+                sample_id="TumorBC2263_DNA",
+                source_tokens=(
+                    "ms1_pattern_reason="
+                    "family_ms1_overlay_competing_peak_matches_family_consensus"
+                ),
+            )
+        ],
+        machine_evidence_support_rows=[
+            _support_row(
+                family_id="FAM011810",
+                sample_id="TumorBC2263_DNA",
+                metrics=(
+                    "ms1_pattern_reason="
+                    "family_ms1_overlay_competing_peak_matches_family_consensus"
+                ),
+            )
+        ],
+        alignment_cell_rows=[
+            {
+                **_cell_row(
+                    family_id="FAM011810",
+                    sample_id="TumorBC2263_DNA",
+                    apex_rt="6.56",
+                    start_rt="6.25",
+                    end_rt="7.72",
+                    rt_delta_sec="'-39",
+                ),
+                "sample_id": "TumorBC2263_DNA",
+                "sample_stem": "",
+            }
+        ],
+    )
+
+    row = rows[0]
+    assert row["selected_cell_status"] == "rescued"
+    assert row["selected_apex_rt"] == "6.56"
+    assert row["selected_peak_start_rt"] == "6.25"
+
+
 def test_wrong_peak_cli_writes_root_cause_tsv(tmp_path: Path) -> None:
     decisions = tmp_path / "activation.tsv"
     support = tmp_path / "support.tsv"
