@@ -95,6 +95,7 @@ def _row_for_rt_mode(
 
 def _selection_decision(row: Mapping[str, str]) -> tuple[str, str, str, str, str]:
     rt_mode_status = text_value(row.get("rt_mode_status"))
+    evidence_level = text_value(row.get("rt_mode_evidence_level"))
     role = text_value(row.get("selected_mode_role"))
     family_class = text_value(row.get("family_mode_class"))
     if rt_mode_status == "not_available":
@@ -128,6 +129,17 @@ def _selection_decision(row: Mapping[str, str]) -> tuple[str, str, str, str, str
             "require_raw_mode_review",
             "raw_mode_review_only",
             "raw_overlay_mode_split_requires_irt_or_tag_review",
+        )
+    if (
+        rt_mode_status == "mode_supported"
+        and evidence_level == "raw_selected_apex_modes"
+    ):
+        return (
+            "raw_mode_review_only",
+            "review_only",
+            "require_raw_mode_review",
+            "raw_mode_review_only",
+            "raw_selected_apex_mode_requires_explicit_mode_hypothesis",
         )
     if rt_mode_status == "mode_conflict":
         return (

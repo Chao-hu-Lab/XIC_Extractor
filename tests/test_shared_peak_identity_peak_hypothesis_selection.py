@@ -113,6 +113,30 @@ def test_peak_hypothesis_keeps_raw_overlay_split_as_review_only() -> None:
     assert row["product_selection_blocker"] == "raw_mode_review_only"
 
 
+def test_peak_hypothesis_keeps_raw_selected_supported_mode_as_review_only() -> None:
+    rows = peak_hypothesis_selection.build_peak_hypothesis_selection_rows(
+        rt_mode_rows=[
+            _rt_mode_row(
+                "FAM001473",
+                "NormalBC2312_DNA",
+                status="mode_supported",
+                mode_id="raw_mode_1_19.27min",
+                role="tag_bearing_core",
+                tag_status="tag_supported",
+                family_class="tag_backed_core_with_outlier_modes",
+                evidence_level="raw_selected_apex_modes",
+            ),
+        ],
+    )
+
+    row = rows[0]
+    assert row["peak_hypothesis_status"] == "raw_mode_review_only"
+    assert row["product_unit_scope"] == "review_only"
+    assert row["product_selection_action"] == "require_raw_mode_review"
+    assert row["product_selection_blocker"] == "raw_mode_review_only"
+    assert row["reason"] == "raw_selected_apex_mode_requires_explicit_mode_hypothesis"
+
+
 def test_peak_hypothesis_writer_matches_machine_support_loader(tmp_path: Path) -> None:
     output = tmp_path / "peak_hypothesis.tsv"
     rows = peak_hypothesis_selection.build_peak_hypothesis_selection_rows(
@@ -146,6 +170,7 @@ def _rt_mode_row(
     role: str,
     tag_status: str,
     family_class: str,
+    evidence_level: str = "irt_selected_apex_modes",
     family_mode_count: str = "3",
     tag_bearing_mode_count: str = "1",
 ) -> dict[str, str]:
@@ -153,7 +178,7 @@ def _rt_mode_row(
         "feature_family_id": family_id,
         "sample_stem": sample_stem,
         "rt_mode_status": status,
-        "rt_mode_evidence_level": "irt_selected_apex_modes",
+        "rt_mode_evidence_level": evidence_level,
         "selected_mode_id": mode_id,
         "selected_mode_role": role,
         "selected_mode_tag_status": tag_status,

@@ -52,6 +52,8 @@ def test_qc_conflict_alone_does_not_block_supported_peak_hypothesis() -> None:
             _support_row(
                 observed_machine_metrics=(
                     "peak_hypothesis_id=FAM001::mode_1;"
+                    "peak_hypothesis_authority_source="
+                    "typed_mode_hypothesis_assignment;"
                     "ms1_pattern_status=supportive;"
                     "qc_ms1_reference_status=conflict"
                 ),
@@ -171,6 +173,8 @@ def test_peak_hypothesis_core_becomes_activation_unit_when_available() -> None:
                 evidence_support_status="machine_observed_sufficient",
                 observed_machine_metrics=(
                     "peak_hypothesis_id=FAM011810::irt_blue_core;"
+                    "peak_hypothesis_authority_source="
+                    "typed_mode_hypothesis_assignment;"
                     "peak_hypothesis_status=product_candidate_core;"
                     "product_selection_action=select_mode_peak_hypothesis;"
                     "ms1_pattern_status=supportive;"
@@ -184,6 +188,36 @@ def test_peak_hypothesis_core_becomes_activation_unit_when_available() -> None:
     assert row["activation_status"] == "auto_activate"
     assert row["peak_hypothesis_id"] == "FAM011810::irt_blue_core"
     assert row["activation_unit_scope"] == "peak_hypothesis"
+
+
+def test_peak_hypothesis_core_without_typed_authority_requires_review() -> None:
+    rows = activation.build_activation_decision_rows(
+        [
+            _support_row(
+                feature_family_id="FAM011810",
+                evidence_support_status="machine_observed_sufficient",
+                observed_machine_metrics=(
+                    "peak_hypothesis_id=FAM011810::legacy_mode_1;"
+                    "peak_hypothesis_status=product_candidate_core;"
+                    "product_selection_action=select_mode_peak_hypothesis;"
+                    "peak_hypothesis_reason="
+                    "selected_mode_is_product_peak_hypothesis_candidate;"
+                    "ms1_pattern_status=supportive;"
+                    "candidate_ms2_pattern_status=supportive"
+                ),
+            ),
+        ],
+    )
+
+    row = rows[0]
+    assert row["activation_status"] == "review_required"
+    assert row["product_effect"] == "review_only"
+    assert row["contract_rule_id"] == (
+        "peak_hypothesis_authority_not_product_facing"
+    )
+    assert row["required_review_reason"] == (
+        "typed_mode_hypothesis_or_locked_oracle_required"
+    )
 
 
 def test_peak_hypothesis_tailing_confounded_requires_review() -> None:
@@ -230,6 +264,28 @@ def test_peak_hypothesis_raw_overlay_split_requires_review() -> None:
     assert row["required_review_reason"] == "raw_mode_review_only"
 
 
+def test_raw_overlay_mode_conflict_requires_review_not_auto_block() -> None:
+    rows = activation.build_activation_decision_rows(
+        [
+            _support_row(
+                evidence_support_status="machine_observed_conflict",
+                observed_machine_metrics=(
+                    "peak_hypothesis_status=raw_mode_review_only;"
+                    "product_selection_action=require_raw_mode_review;"
+                    "product_selection_blocker=raw_mode_review_only;"
+                    "qc_ms1_reference_status=conflict;"
+                    "ms1_pattern_status=conflict"
+                ),
+            ),
+        ],
+    )
+
+    row = rows[0]
+    assert row["activation_status"] == "review_required"
+    assert row["activation_action"] == "require_review"
+    assert row["contract_rule_id"] == "peak_hypothesis_raw_mode_review_only"
+
+
 def test_dda_non_dispositive_only_demotes_confidence() -> None:
     rows = activation.build_activation_decision_rows(
         [
@@ -274,6 +330,8 @@ def test_machine_observed_sufficient_positive_identity_can_activate_pass() -> No
                 evidence_support_status="machine_observed_sufficient",
                 observed_machine_metrics=(
                     "peak_hypothesis_id=FAM001::mode_1;"
+                    "peak_hypothesis_authority_source="
+                    "typed_mode_hypothesis_assignment;"
                     "ms1_pattern_status=supportive;"
                     "candidate_ms2_pattern_status=supportive"
                 ),
@@ -473,7 +531,10 @@ def _support_row(
     if not observed_machine_metrics and evidence_support_status == (
         "machine_observed_sufficient"
     ):
-        observed_machine_metrics = f"peak_hypothesis_id={feature_family_id}::mode_1"
+        observed_machine_metrics = (
+            f"peak_hypothesis_id={feature_family_id}::mode_1;"
+            "peak_hypothesis_authority_source=typed_mode_hypothesis_assignment"
+        )
     return {
         "feature_family_id": feature_family_id,
         "sample_id": sample_id,

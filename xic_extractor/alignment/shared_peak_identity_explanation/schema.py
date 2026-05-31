@@ -1184,6 +1184,7 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
             "unclassified_machine_observed_conflict",
             "machine_observed_sufficient_positive_identity",
             "peak_hypothesis_unit_required",
+            "peak_hypothesis_authority_not_product_facing",
             "insufficient_machine_observed_basis",
             "no_activation_rule_matched",
         }
@@ -1211,11 +1212,17 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
         {
             "none",
             "formal_output_not_requested",
+            "family_projection_present",
+            "raw_mode_review_only",
+            "matrix_construction_blocked",
+            "source_matrix_value_missing",
         }
     ),
     "canonical_row_identity_scope": frozenset(
         {
             "formal_peak_hypothesis_with_family_projections",
+            "formal_peak_hypothesis_identity",
+            "partial_peak_hypothesis_with_family_projections",
             "matrix_construction_peak_hypothesis_with_family_projections",
             "legacy_feature_family_row",
         }

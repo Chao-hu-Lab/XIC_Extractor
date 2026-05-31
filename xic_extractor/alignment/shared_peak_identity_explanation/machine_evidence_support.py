@@ -1332,6 +1332,11 @@ def _observed_machine_metrics(
     if peak_hypothesis_row:
         _append_metric(
             metrics,
+            "peak_hypothesis_authority_source",
+            _peak_hypothesis_authority_source(peak_hypothesis_row),
+        )
+        _append_metric(
+            metrics,
             "peak_hypothesis_status",
             peak_hypothesis_row.get("peak_hypothesis_status"),
         )
@@ -1654,6 +1659,17 @@ def _unique(values: Sequence[str]) -> tuple[str, ...]:
 def _append_metric(metrics: list[str], name: str, value: object) -> None:
     if _has_value(value):
         metrics.append(f"{name}={value}")
+
+
+def _peak_hypothesis_authority_source(row: Mapping[str, str]) -> str:
+    reason = str(row.get("reason") or "")
+    status = row.get("peak_hypothesis_status")
+    action = row.get("product_selection_action")
+    if reason.startswith("typed_mode_hypothesis_assignment_"):
+        return "typed_mode_hypothesis_assignment"
+    if status == "raw_mode_review_only" or action == "require_raw_mode_review":
+        return "raw_or_overlay_review_only"
+    return "legacy_rt_mode_selection"
 
 
 def _has_value(value: object) -> bool:

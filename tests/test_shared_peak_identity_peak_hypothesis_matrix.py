@@ -208,6 +208,239 @@ def test_peak_hypothesis_matrix_expands_overlay_modes_before_output(
     assert assignments["FAM_MULTI::mode_8min"]["candidate_peak_rt"] == "8"
     assert construction.summary_row["expanded_candidate_cell_count"] == "2"
     assert construction.summary_row["projected_cell_count"] == "0"
+    assert construction.summary_row["canonical_row_identity_ready"] == "FALSE"
+    assert construction.summary_row["canonical_row_identity_blockers"] == (
+        "raw_mode_review_only"
+    )
+    assert construction.summary_row["construction_gate_status"] == "diagnostic_only"
+
+
+def test_peak_hypothesis_matrix_infers_overlay_mode_windows_from_apex_clusters(
+    tmp_path: Path,
+) -> None:
+    overlay_json = tmp_path / "fam_multi_inferred_overlay_trace_data.json"
+    trace_rt = [5.8, 6.0, 6.2, 7.8, 8.0, 8.2]
+    trace_intensity = [0, 10, 0, 0, 20, 0]
+    overlay_json.write_text(
+        json.dumps(
+            {
+                "feature_family_id": "FAM_MULTI",
+                "evidence_summary": {
+                    "family_verdict": "ms1_shape_supports_family_backfill",
+                },
+                "rt_min": 5.5,
+                "rt_max": 8.5,
+                "samples": [
+                    {
+                        "sample_stem": "S1",
+                        "cell_apex_rt": 6.0,
+                        "raw_rt": trace_rt,
+                        "intensity": trace_intensity,
+                    },
+                    {
+                        "sample_stem": "S2",
+                        "cell_apex_rt": 6.1,
+                        "raw_rt": trace_rt,
+                        "intensity": trace_intensity,
+                    },
+                    {
+                        "sample_stem": "S3",
+                        "cell_apex_rt": 8.0,
+                        "raw_rt": trace_rt,
+                        "intensity": trace_intensity,
+                    },
+                    {
+                        "sample_stem": "S4",
+                        "cell_apex_rt": 8.1,
+                        "raw_rt": trace_rt,
+                        "intensity": trace_intensity,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    expanded_rows = peak_hypothesis_matrix.load_overlay_peak_candidate_rows(
+        (overlay_json,)
+    )
+
+    sample_1_rows = {
+        row["peak_hypothesis_id"]: row
+        for row in expanded_rows
+        if row["sample_id"] == "S1"
+    }
+    assert set(sample_1_rows) == {
+        "FAM_MULTI::raw_mode_1_6.10min",
+        "FAM_MULTI::raw_mode_2_8.10min",
+    }
+    assert sample_1_rows["FAM_MULTI::raw_mode_1_6.10min"]["candidate_peak_rt"] == "6"
+    assert sample_1_rows["FAM_MULTI::raw_mode_2_8.10min"]["candidate_peak_rt"] == "8"
+    assert sample_1_rows["FAM_MULTI::raw_mode_1_6.10min"][
+        "peak_hypothesis_status"
+    ] == "raw_mode_review_only"
+    assert sample_1_rows["FAM_MULTI::raw_mode_1_6.10min"][
+        "product_selection_blocker"
+    ] == "raw_mode_review_only"
+    assert sample_1_rows["FAM_MULTI::raw_mode_1_6.10min"]["reason"] == (
+        "raw_apex_gap_inferred_mode_window_review_only"
+    )
+
+
+def test_peak_hypothesis_matrix_demotes_overlay_mode_window_product_status(
+    tmp_path: Path,
+) -> None:
+    overlay_json = tmp_path / "fam_typed_overlay_trace_data.json"
+    overlay_json.write_text(
+        json.dumps(
+            {
+                "family_id": "FAM_TYPED",
+                "mode_windows": {
+                    "irt_blue_core": {
+                        "start_rt": 7.8,
+                        "end_rt": 8.2,
+                        "peak_hypothesis_status": "product_candidate_core",
+                        "product_selection_action": "select_mode_peak_hypothesis",
+                        "product_selection_blocker": "none",
+                        "evidence_consistency_status": "consistent",
+                        "split_readiness_status": "peak_hypothesis_ready",
+                        "consistency_blockers": "",
+                        "candidate_value_basis": (
+                            "explicit_mode_hypothesis_raw_overlay_area"
+                        ),
+                        "reason": "typed_irt_mode_hypothesis_window",
+                    }
+                },
+                "samples": [
+                    {
+                        "sample_stem": "S1",
+                        "rt": [7.8, 8.0, 8.2],
+                        "intensity": [0, 20, 0],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    expanded_rows = peak_hypothesis_matrix.load_overlay_peak_candidate_rows(
+        (overlay_json,)
+    )
+
+    assert len(expanded_rows) == 1
+    row = expanded_rows[0]
+    assert row["peak_hypothesis_id"] == "FAM_TYPED::irt_blue_core"
+    assert row["peak_hypothesis_status"] == "raw_mode_review_only"
+    assert row["product_selection_action"] == "require_raw_mode_review"
+    assert row["product_selection_blocker"] == "raw_mode_review_only"
+    assert row["evidence_consistency_status"] == "review_only"
+    assert row["split_readiness_status"] == "review_required"
+    assert row["consistency_blockers"] == (
+        "raw_overlay_mode_window_not_product_authority"
+    )
+    assert row["reason"] == (
+        "typed_irt_mode_hypothesis_window_review_only_product_status_ignored"
+    )
+
+
+def test_peak_hypothesis_selection_takes_precedence_over_overlay_candidates() -> None:
+    construction = peak_hypothesis_matrix.construct_peak_hypothesis_matrix(
+        matrix_header=(
+            "feature_family_id",
+            "neutral_loss_tag",
+            "family_center_mz",
+            "family_center_rt",
+            "S1",
+        ),
+        matrix_rows=[
+            _matrix_row("FAM_PRIORITY", mz="345.1", rt="7.1", S1="999"),
+        ],
+        review_rows=[_review_row("FAM_PRIORITY", mz="345.1", rt="7.1")],
+        cell_rows=[_cell_row("FAM_PRIORITY", "S1", area="999")],
+        peak_hypothesis_selection_rows=[
+            _peak_row("FAM_PRIORITY", "S1", "irt_blue_core"),
+        ],
+        expanded_peak_candidate_rows=[
+            {
+                "feature_family_id": "FAM_PRIORITY",
+                "sample_id": "S1",
+                "peak_hypothesis_id": "FAM_PRIORITY::raw_mode_1_6.10min",
+                "mode_id": "raw_mode_1_6.10min",
+                "candidate_peak_start_rt": "5.8",
+                "candidate_peak_end_rt": "6.2",
+                "candidate_peak_rt": "6.0",
+                "candidate_peak_height": "10",
+                "candidate_area": "2",
+                "candidate_value_source": "unit_test_overlay.json",
+            },
+        ],
+    )
+
+    matrix_rows = {
+        row["peak_hypothesis_id"]: row for row in construction.matrix_rows
+    }
+    assert matrix_rows["FAM_PRIORITY::irt_blue_core"]["S1"] == "999"
+    assert matrix_rows["FAM_PRIORITY::raw_mode_1_6.10min"]["S1"] == "2"
+
+    assignments = {
+        (row["peak_hypothesis_id"], row["construction_assignment_status"])
+        for row in construction.assignment_rows
+    }
+    assert ("FAM_PRIORITY::irt_blue_core", "assigned") in assignments
+    assert ("FAM_PRIORITY::raw_mode_1_6.10min", "expanded_candidate") in assignments
+    assert construction.summary_row["canonical_row_identity_ready"] == "FALSE"
+    assert construction.summary_row["canonical_row_identity_blockers"] == (
+        "raw_mode_review_only"
+    )
+
+
+def test_peak_hypothesis_matrix_does_not_infer_modes_from_review_required_overlay(
+    tmp_path: Path,
+) -> None:
+    overlay_json = tmp_path / "fam_interference_overlay_trace_data.json"
+    overlay_json.write_text(
+        json.dumps(
+            {
+                "family_id": "FAM_INTERFERENCE",
+                "evidence_summary": {
+                    "family_verdict": "review_required_neighboring_ms1_interference",
+                },
+                "traces": [
+                    {
+                        "sample_stem": "S1",
+                        "cell_apex_rt": 6.0,
+                        "rt": [5.8, 6.0, 6.2],
+                        "intensity": [0, 10, 0],
+                    },
+                    {
+                        "sample_stem": "S2",
+                        "cell_apex_rt": 6.1,
+                        "rt": [5.8, 6.0, 6.2],
+                        "intensity": [0, 10, 0],
+                    },
+                    {
+                        "sample_stem": "S3",
+                        "cell_apex_rt": 8.0,
+                        "rt": [7.8, 8.0, 8.2],
+                        "intensity": [0, 20, 0],
+                    },
+                    {
+                        "sample_stem": "S4",
+                        "cell_apex_rt": 8.1,
+                        "rt": [7.8, 8.0, 8.2],
+                        "intensity": [0, 20, 0],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    expanded_rows = peak_hypothesis_matrix.load_overlay_peak_candidate_rows(
+        (overlay_json,)
+    )
+
+    assert expanded_rows == ()
 
 
 def test_peak_hypothesis_matrix_cli_writes_sidecars(tmp_path: Path) -> None:

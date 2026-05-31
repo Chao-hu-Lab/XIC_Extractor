@@ -78,10 +78,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="append",
         default=[],
         help=(
-            "Optional family_ms1_overlay trace-data JSON with mode_windows. "
-            "When present, each mode window with signal is enumerated as an "
-            "expanded PeakHypothesis candidate row before matrix output. "
-            "Repeatable."
+            "Optional family_ms1_overlay trace-data JSON with typed mode_windows. "
+            "Each mode window with signal is enumerated as an expanded "
+            "PeakHypothesis candidate row before matrix output. Untyped or "
+            "raw-inferred windows remain review-only and do not make the "
+            "canonical row identity ready. Repeatable."
         ),
     )
     parser.add_argument("--output-dir", type=Path, required=True)

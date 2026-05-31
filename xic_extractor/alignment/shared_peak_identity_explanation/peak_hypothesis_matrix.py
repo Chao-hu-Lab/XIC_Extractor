@@ -49,6 +49,10 @@ _HARD_PEAK_STATUSES = frozenset(
 )
 _HARD_CONSISTENCY_STATUSES = frozenset({"conflict", "split_required"})
 _PRODUCT_CANDIDATE_STATUS = "product_candidate_core"
+_SUPPORT_FAMILY_VERDICT = "ms1_shape_supports_family_backfill"
+_INFERRED_MODE_GAP_MIN = 0.5
+_INFERRED_MODE_MIN_CLUSTER_SIZE = 2
+_INFERRED_MODE_OUTER_MARGIN_MIN = 0.25
 
 _MATRIX_REQUIRED_COLUMNS = ("feature_family_id",)
 _REVIEW_REQUIRED_COLUMNS = ("feature_family_id",)
@@ -105,6 +109,31 @@ class _ExpandedPeakCandidate:
     peak_height: float
     area: float
     source_artifact: str
+    peak_hypothesis_status: str
+    product_selection_action: str
+    product_selection_blocker: str
+    evidence_consistency_status: str
+    split_readiness_status: str
+    consistency_blockers: str
+    matrix_value_effect: str
+    reason: str
+    candidate_value_basis: str
+
+
+@dataclass(frozen=True)
+class _ModeWindow:
+    mode_id: str
+    start_rt: float
+    end_rt: float
+    peak_hypothesis_status: str = "raw_mode_review_only"
+    product_selection_action: str = "require_raw_mode_review"
+    product_selection_blocker: str = "raw_mode_review_only"
+    evidence_consistency_status: str = "review_only"
+    split_readiness_status: str = "review_required"
+    consistency_blockers: str = "raw_mode_review_only"
+    matrix_value_effect: str = "written"
+    reason: str = "raw_overlay_multi_peak_candidate_enumerated"
+    candidate_value_basis: str = "raw_overlay_window_trapezoid_area"
 
 
 def build_peak_hypothesis_matrix_outputs(
@@ -222,7 +251,10 @@ def construct_peak_hypothesis_matrix(
         peak_hypotheses_by_key,
         sample_columns=sample_columns,
     ):
-        if (family_id, sample_id) in expanded_sample_keys:
+        if (
+            (family_id, sample_id) in expanded_sample_keys
+            and (family_id, sample_id) not in peak_hypotheses_by_key
+        ):
             continue
         matrix_row = matrix_by_family.get(family_id, {})
         review_row = review_by_family.get(family_id, {})
@@ -325,13 +357,17 @@ def load_overlay_peak_candidate_rows(
         payload = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(payload, Mapping):
             raise ValueError(f"overlay trace data must be a JSON object: {path}")
-        family_id = text_value(payload.get("family_id"))
+        family_id = text_value(
+            payload.get("family_id") or payload.get("feature_family_id")
+        )
         if not family_id:
             raise ValueError(f"overlay trace data does not declare family_id: {path}")
+        trace_rows = _overlay_trace_rows(payload)
         mode_windows = _mode_windows(payload.get("mode_windows"))
+        if not mode_windows and _supports_inferred_mode_windows(payload):
+            mode_windows = _infer_mode_windows_from_trace_rows(trace_rows, payload)
         if not mode_windows:
             continue
-        trace_rows = _overlay_trace_rows(payload)
         for trace_row in trace_rows:
             sample_id = text_value(trace_row.get("sample_stem"))
             if not sample_id:
@@ -339,13 +375,11 @@ def load_overlay_peak_candidate_rows(
             rt_values, intensity_values = _numeric_trace(trace_row)
             if not rt_values or not intensity_values:
                 continue
-            for mode_id, (start_rt, end_rt) in mode_windows.items():
+            for mode_window in mode_windows:
                 candidate = _candidate_from_window(
                     family_id=family_id,
                     sample_id=sample_id,
-                    mode_id=mode_id,
-                    start_rt=start_rt,
-                    end_rt=end_rt,
+                    mode_window=mode_window,
                     rt_values=rt_values,
                     intensity_values=intensity_values,
                     source_artifact=str(path),
@@ -356,21 +390,146 @@ def load_overlay_peak_candidate_rows(
     return tuple(rows)
 
 
-def _mode_windows(value: object) -> dict[str, tuple[float, float]]:
+def _mode_windows(value: object) -> tuple[_ModeWindow, ...]:
     if not isinstance(value, Mapping):
-        return {}
-    windows: dict[str, tuple[float, float]] = {}
+        return ()
+    windows: list[_ModeWindow] = []
     for mode_id, bounds in value.items():
+        parsed = _mode_window_from_value(text_value(mode_id), bounds)
+        if parsed is not None:
+            windows.append(parsed)
+    return tuple(windows)
+
+
+def _mode_window_from_value(mode_id: str, value: object) -> _ModeWindow | None:
+    if isinstance(value, Mapping):
+        start_rt = _first_float(
+            value,
+            ("start_rt", "raw_start_rt", "candidate_peak_start_rt", "rt_start"),
+        )
+        end_rt = _first_float(
+            value,
+            ("end_rt", "raw_end_rt", "candidate_peak_end_rt", "rt_end"),
+        )
+        if start_rt is None or end_rt is None or end_rt <= start_rt:
+            return None
+        reason = _default(value.get("reason"), "explicit_mode_hypothesis_window")
+        return _ModeWindow(
+            mode_id=mode_id,
+            start_rt=start_rt,
+            end_rt=end_rt,
+            peak_hypothesis_status="raw_mode_review_only",
+            product_selection_action="require_raw_mode_review",
+            product_selection_blocker="raw_mode_review_only",
+            evidence_consistency_status="review_only",
+            split_readiness_status="review_required",
+            consistency_blockers="raw_overlay_mode_window_not_product_authority",
+            matrix_value_effect=_default(value.get("matrix_value_effect"), "written"),
+            reason=_default(
+                f"{reason}_review_only_product_status_ignored",
+                "explicit_mode_hypothesis_window_review_only",
+            ),
+            candidate_value_basis=_default(
+                value.get("candidate_value_basis"),
+                "explicit_mode_hypothesis_raw_overlay_area",
+            ),
+        )
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        bounds = value
         if not isinstance(bounds, Sequence) or isinstance(bounds, str | bytes):
-            continue
+            return None
         if len(bounds) != 2:
-            continue
+            return None
         start_rt = _float_or_none(bounds[0])
         end_rt = _float_or_none(bounds[1])
         if start_rt is None or end_rt is None or end_rt <= start_rt:
-            continue
-        windows[text_value(mode_id)] = (start_rt, end_rt)
-    return windows
+            return None
+        return _ModeWindow(mode_id=mode_id, start_rt=start_rt, end_rt=end_rt)
+    return None
+
+
+def _supports_inferred_mode_windows(payload: Mapping[str, object]) -> bool:
+    evidence = payload.get("evidence_summary")
+    if not isinstance(evidence, Mapping):
+        return False
+    return text_value(evidence.get("family_verdict")) == _SUPPORT_FAMILY_VERDICT
+
+
+def _infer_mode_windows_from_trace_rows(
+    trace_rows: Sequence[Mapping[str, object]],
+    payload: Mapping[str, object],
+) -> tuple[_ModeWindow, ...]:
+    apex_values = _infer_mode_apex_values(trace_rows)
+    if not apex_values:
+        return ()
+
+    clusters: list[list[float]] = []
+    current: list[float] = []
+    for value in apex_values:
+        if current and value - current[-1] > _INFERRED_MODE_GAP_MIN:
+            clusters.append(current)
+            current = []
+        current.append(value)
+    if current:
+        clusters.append(current)
+
+    clusters = [
+        cluster
+        for cluster in clusters
+        if len(cluster) >= _INFERRED_MODE_MIN_CLUSTER_SIZE
+    ]
+    if len(clusters) <= 1:
+        return ()
+
+    medians = [cluster[len(cluster) // 2] for cluster in clusters]
+    trace_min = _float_or_none(payload.get("rt_min"))
+    trace_max = _float_or_none(payload.get("rt_max"))
+    windows: list[_ModeWindow] = []
+    for index, cluster in enumerate(clusters):
+        median = medians[index]
+        if index == 0:
+            start_rt = min(cluster) - _INFERRED_MODE_OUTER_MARGIN_MIN
+            if trace_min is not None:
+                start_rt = max(trace_min, start_rt)
+        else:
+            start_rt = (medians[index - 1] + median) / 2.0
+
+        if index == len(clusters) - 1:
+            end_rt = max(cluster) + _INFERRED_MODE_OUTER_MARGIN_MIN
+            if trace_max is not None:
+                end_rt = min(trace_max, end_rt)
+        else:
+            end_rt = (median + medians[index + 1]) / 2.0
+
+        if end_rt > start_rt:
+            mode_id = f"raw_mode_{index + 1}_{median:.2f}min"
+            windows.append(
+                _ModeWindow(
+                    mode_id=mode_id,
+                    start_rt=start_rt,
+                    end_rt=end_rt,
+                    reason="raw_apex_gap_inferred_mode_window_review_only",
+                )
+            )
+    return tuple(windows)
+
+
+def _infer_mode_apex_values(
+    trace_rows: Sequence[Mapping[str, object]],
+) -> tuple[float, ...]:
+    for fields in (
+        ("cell_apex_rt", "raw_selected_rt"),
+        ("trace_apex_rt",),
+    ):
+        values = sorted(
+            parsed
+            for row in trace_rows
+            for field in fields
+            if (parsed := _float_or_none(row.get(field))) is not None
+        )
+        if len(values) >= _INFERRED_MODE_MIN_CLUSTER_SIZE:
+            return tuple(values)
+    return ()
 
 
 def _overlay_trace_rows(
@@ -387,7 +546,7 @@ def _overlay_trace_rows(
 def _numeric_trace(
     trace_row: Mapping[str, object],
 ) -> tuple[tuple[float, ...], tuple[float, ...]]:
-    rt_values = _float_values(trace_row.get("rt"))
+    rt_values = _float_values(trace_row.get("rt") or trace_row.get("raw_rt"))
     intensity_values = _float_values(
         trace_row.get("intensity") or trace_row.get("raw_intensity")
     )
@@ -399,9 +558,7 @@ def _candidate_from_window(
     *,
     family_id: str,
     sample_id: str,
-    mode_id: str,
-    start_rt: float,
-    end_rt: float,
+    mode_window: _ModeWindow,
     rt_values: Sequence[float],
     intensity_values: Sequence[float],
     source_artifact: str,
@@ -409,7 +566,7 @@ def _candidate_from_window(
     points = tuple(
         (rt, max(intensity, 0.0))
         for rt, intensity in zip(rt_values, intensity_values, strict=False)
-        if start_rt <= rt <= end_rt
+        if mode_window.start_rt <= rt <= mode_window.end_rt
     )
     if not points:
         return None
@@ -422,14 +579,23 @@ def _candidate_from_window(
     return _ExpandedPeakCandidate(
         feature_family_id=family_id,
         sample_id=sample_id,
-        peak_hypothesis_id=f"{family_id}::{mode_id}",
-        mode_id=mode_id,
-        start_rt=start_rt,
-        end_rt=end_rt,
+        peak_hypothesis_id=f"{family_id}::{mode_window.mode_id}",
+        mode_id=mode_window.mode_id,
+        start_rt=mode_window.start_rt,
+        end_rt=mode_window.end_rt,
         peak_rt=peak_rt,
         peak_height=peak_height,
         area=area,
         source_artifact=source_artifact,
+        peak_hypothesis_status=mode_window.peak_hypothesis_status,
+        product_selection_action=mode_window.product_selection_action,
+        product_selection_blocker=mode_window.product_selection_blocker,
+        evidence_consistency_status=mode_window.evidence_consistency_status,
+        split_readiness_status=mode_window.split_readiness_status,
+        consistency_blockers=mode_window.consistency_blockers,
+        matrix_value_effect=mode_window.matrix_value_effect,
+        reason=mode_window.reason,
+        candidate_value_basis=mode_window.candidate_value_basis,
     )
 
 
@@ -445,6 +611,15 @@ def _expanded_candidate_to_row(candidate: _ExpandedPeakCandidate) -> dict[str, s
         "candidate_peak_height": _format_number(candidate.peak_height),
         "candidate_area": _format_number(candidate.area),
         "candidate_value_source": candidate.source_artifact,
+        "candidate_value_basis": candidate.candidate_value_basis,
+        "peak_hypothesis_status": candidate.peak_hypothesis_status,
+        "product_selection_action": candidate.product_selection_action,
+        "product_selection_blocker": candidate.product_selection_blocker,
+        "evidence_consistency_status": candidate.evidence_consistency_status,
+        "split_readiness_status": candidate.split_readiness_status,
+        "consistency_blockers": candidate.consistency_blockers,
+        "matrix_value_effect": candidate.matrix_value_effect,
+        "reason": candidate.reason,
     }
 
 
@@ -595,16 +770,16 @@ def _expanded_assignment_row(candidate: _ExpandedPeakCandidate) -> dict[str, str
         "candidate_peak_start_rt": _format_number(candidate.start_rt),
         "candidate_peak_end_rt": _format_number(candidate.end_rt),
         "candidate_peak_height": _format_number(candidate.peak_height),
-        "candidate_value_basis": "raw_overlay_window_trapezoid_area",
+        "candidate_value_basis": candidate.candidate_value_basis,
         "candidate_value_source": candidate.source_artifact,
-        "peak_hypothesis_status": "raw_mode_review_only",
-        "product_selection_action": "require_raw_mode_review",
-        "product_selection_blocker": "raw_mode_review_only",
-        "evidence_consistency_status": "review_only",
-        "split_readiness_status": "review_required",
-        "consistency_blockers": "raw_mode_review_only",
-        "matrix_value_effect": "written",
-        "reason": "raw_overlay_multi_peak_candidate_enumerated",
+        "peak_hypothesis_status": candidate.peak_hypothesis_status,
+        "product_selection_action": candidate.product_selection_action,
+        "product_selection_blocker": candidate.product_selection_blocker,
+        "evidence_consistency_status": candidate.evidence_consistency_status,
+        "split_readiness_status": candidate.split_readiness_status,
+        "consistency_blockers": candidate.consistency_blockers,
+        "matrix_value_effect": candidate.matrix_value_effect,
+        "reason": candidate.reason,
         "diagnostic_only": "TRUE",
     }
     validate_row_tokens(row)
@@ -701,6 +876,13 @@ def _summary_row(
     has_projection = family_projection_rows > 0
     hard_blocks = assignment_counts["blocked"]
     missing_source_values = assignment_counts["recorded_no_source_matrix_value"]
+    expanded_candidates = assignment_counts["expanded_candidate"]
+    canonical_blocker = _canonical_row_identity_blocker(
+        family_projection_rows=family_projection_rows,
+        expanded_candidates=expanded_candidates,
+        hard_blocks=hard_blocks,
+        missing_source_values=missing_source_values,
+    )
     row = {
         "peak_hypothesis_matrix_summary_schema_version": (
             PEAK_HYPOTHESIS_MATRIX_SUMMARY_SCHEMA_VERSION
@@ -714,9 +896,7 @@ def _summary_row(
         "explicit_peak_hypothesis_rows": str(explicit_peak_hypothesis_rows),
         "family_projection_rows": str(family_projection_rows),
         "assigned_cell_count": str(assignment_counts["assigned"]),
-        "expanded_candidate_cell_count": str(
-            assignment_counts["expanded_candidate"]
-        ),
+        "expanded_candidate_cell_count": str(expanded_candidates),
         "projected_cell_count": str(assignment_counts["family_projection"]),
         "blocked_cell_count": str(hard_blocks),
         "missing_source_matrix_value_count": str(missing_source_values),
@@ -727,8 +907,10 @@ def _summary_row(
             else "not_applicable"
         ),
         "matrix_row_identity": "peak_hypothesis_id",
-        "canonical_row_identity_ready": "TRUE",
-        "canonical_row_identity_blockers": "none",
+        "canonical_row_identity_ready": (
+            "TRUE" if canonical_blocker == "none" else "FALSE"
+        ),
+        "canonical_row_identity_blockers": canonical_blocker,
         "canonical_row_identity_scope": (
             "matrix_construction_peak_hypothesis_with_family_projections"
         ),
@@ -739,15 +921,53 @@ def _summary_row(
         ),
         "all_family_split_science_ready": (
             "FALSE"
-            if has_projection or hard_blocks or missing_source_values
+            if (
+                has_projection
+                or hard_blocks
+                or missing_source_values
+                or expanded_candidates
+            )
             else "TRUE"
         ),
-        "construction_gate_status": "blocked" if hard_blocks else "construction_ready",
+        "construction_gate_status": _construction_gate_status(
+            expanded_candidates=expanded_candidates,
+            hard_blocks=hard_blocks,
+        ),
         "summary_reason": "peak_hypothesis_assignment_layer_built_before_matrix_output",
         "diagnostic_only": "TRUE",
     }
     validate_row_tokens(row)
     return row
+
+
+def _canonical_row_identity_blocker(
+    *,
+    family_projection_rows: int,
+    expanded_candidates: int,
+    hard_blocks: int,
+    missing_source_values: int,
+) -> str:
+    if family_projection_rows:
+        return "family_projection_present"
+    if expanded_candidates:
+        return "raw_mode_review_only"
+    if hard_blocks:
+        return "matrix_construction_blocked"
+    if missing_source_values:
+        return "source_matrix_value_missing"
+    return "none"
+
+
+def _construction_gate_status(
+    *,
+    expanded_candidates: int,
+    hard_blocks: int,
+) -> str:
+    if hard_blocks:
+        return "blocked"
+    if expanded_candidates:
+        return "diagnostic_only"
+    return "construction_ready"
 
 
 def _read_tsv_with_header(
@@ -834,6 +1054,36 @@ def _expanded_candidates_by_key(
             peak_height=peak_height,
             area=area,
             source_artifact=text_value(row.get("candidate_value_source")),
+            peak_hypothesis_status=_default(
+                row.get("peak_hypothesis_status"),
+                "raw_mode_review_only",
+            ),
+            product_selection_action=_default(
+                row.get("product_selection_action"),
+                "require_raw_mode_review",
+            ),
+            product_selection_blocker=_default(
+                row.get("product_selection_blocker"),
+                "raw_mode_review_only",
+            ),
+            evidence_consistency_status=_default(
+                row.get("evidence_consistency_status"),
+                "review_only",
+            ),
+            split_readiness_status=_default(
+                row.get("split_readiness_status"),
+                "review_required",
+            ),
+            consistency_blockers=text_value(row.get("consistency_blockers")),
+            matrix_value_effect=_default(row.get("matrix_value_effect"), "written"),
+            reason=_default(
+                row.get("reason"),
+                "raw_overlay_multi_peak_candidate_enumerated",
+            ),
+            candidate_value_basis=_default(
+                row.get("candidate_value_basis"),
+                "raw_overlay_window_trapezoid_area",
+            ),
         )
         existing = candidates.get(key)
         if existing is None or candidate.peak_height > existing.peak_height:
@@ -998,6 +1248,14 @@ def _split_semicolon(value: str) -> tuple[str, ...]:
 def _default(value: object, default: str) -> str:
     text = text_value(value)
     return text if text else default
+
+
+def _first_float(row: Mapping[str, object], keys: Sequence[str]) -> float | None:
+    for key in keys:
+        parsed = _float_or_none(row.get(key))
+        if parsed is not None:
+            return parsed
+    return None
 
 
 def _float_or_none(value: object) -> float | None:

@@ -83,6 +83,12 @@ _SHAPE_INCOMPLETE_TOKENS = frozenset(
         "qc_ms1_pattern_reference_inconclusive",
     },
 )
+_PRODUCT_PEAK_HYPOTHESIS_AUTHORITY_SOURCES = frozenset(
+    {
+        "locked_oracle_manifest",
+        "typed_mode_hypothesis_assignment",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -372,39 +378,6 @@ def _activation_decision(row: Mapping[str, str]) -> dict[str, str]:
             ),
         )
 
-    if _has_wrong_peak_block(metrics, missing):
-        return _row(
-            base,
-            status="auto_block",
-            action="block_rescue",
-            label="fail",
-            effect="block_rescue_cell",
-            confidence="high",
-            hard_block=True,
-            rule="wrong_peak_conflict",
-            reason=(
-                "machine-observed MS1/QC pattern points to a different peak "
-                "than the rescued cell"
-            ),
-            review="",
-            tokens=(
-                *_matching(metrics, "ms1_pattern_reason="),
-                *_matching(metrics, "ms1_peak_quality_vector_reason="),
-                *_matching(metrics, "qc_ms1_reference_status="),
-                *_matching(metrics, "rt_mode_status="),
-                *_matching(metrics, "selected_mode_role="),
-                *_matching(metrics, "family_mode_class="),
-                *_matching(metrics, "peak_hypothesis_status="),
-                *_matching(metrics, "product_selection_action="),
-                *_matching(metrics, "product_selection_blocker="),
-                (
-                    "rt_pattern_conflict_gate"
-                    if "rt_pattern_conflict_gate" in missing
-                    else ""
-                ),
-            ),
-        )
-
     if _has_any(metrics, _PEAK_HYPOTHESIS_REVIEW_TOKENS):
         raw_mode_review = _has_any(metrics, _RAW_MODE_REVIEW_TOKENS)
         return _row(
@@ -439,6 +412,39 @@ def _activation_decision(row: Mapping[str, str]) -> dict[str, str]:
                 *_matching(metrics, "product_selection_action="),
                 *_matching(metrics, "product_selection_blocker="),
                 *_matching(metrics, "peak_hypothesis_reason="),
+            ),
+        )
+
+    if _has_wrong_peak_block(metrics, missing):
+        return _row(
+            base,
+            status="auto_block",
+            action="block_rescue",
+            label="fail",
+            effect="block_rescue_cell",
+            confidence="high",
+            hard_block=True,
+            rule="wrong_peak_conflict",
+            reason=(
+                "machine-observed MS1/QC pattern points to a different peak "
+                "than the rescued cell"
+            ),
+            review="",
+            tokens=(
+                *_matching(metrics, "ms1_pattern_reason="),
+                *_matching(metrics, "ms1_peak_quality_vector_reason="),
+                *_matching(metrics, "qc_ms1_reference_status="),
+                *_matching(metrics, "rt_mode_status="),
+                *_matching(metrics, "selected_mode_role="),
+                *_matching(metrics, "family_mode_class="),
+                *_matching(metrics, "peak_hypothesis_status="),
+                *_matching(metrics, "product_selection_action="),
+                *_matching(metrics, "product_selection_blocker="),
+                (
+                    "rt_pattern_conflict_gate"
+                    if "rt_pattern_conflict_gate" in missing
+                    else ""
+                ),
             ),
         )
 
@@ -566,6 +572,29 @@ def _activation_decision(row: Mapping[str, str]) -> dict[str, str]:
                 ),
                 review="peak_hypothesis_id_required_for_auto_activation",
                 tokens=missing,
+            )
+        if not _peak_hypothesis_has_product_authority(metrics):
+            return _row(
+                base,
+                status="review_required",
+                action="require_review",
+                label="unchanged",
+                effect="review_only",
+                confidence="review",
+                hard_block=False,
+                rule="peak_hypothesis_authority_not_product_facing",
+                reason=(
+                    "product activation requires a typed mode-hypothesis "
+                    "assignment or locked oracle manifest; legacy RT-mode "
+                    "selection and raw overlay context stay review-only"
+                ),
+                review="typed_mode_hypothesis_or_locked_oracle_required",
+                tokens=(
+                    *_matching(metrics, "peak_hypothesis_authority_source="),
+                    *_matching(metrics, "peak_hypothesis_status="),
+                    *_matching(metrics, "product_selection_action="),
+                    *_matching(metrics, "peak_hypothesis_reason="),
+                ),
             )
         return _row(
             base,
@@ -719,6 +748,11 @@ def _dda_non_dispositive(metrics: Sequence[str]) -> bool:
         "family_ms2_required_tag_status=observed_in_family" in metrics
         and "candidate_ms2_pattern_status=not_observed" in metrics
     )
+
+
+def _peak_hypothesis_has_product_authority(metrics: Sequence[str]) -> bool:
+    source = _metric_value(metrics, "peak_hypothesis_authority_source=")
+    return source in _PRODUCT_PEAK_HYPOTHESIS_AUTHORITY_SOURCES
 
 
 def _matching(values: Sequence[str], prefix: str) -> tuple[str, ...]:

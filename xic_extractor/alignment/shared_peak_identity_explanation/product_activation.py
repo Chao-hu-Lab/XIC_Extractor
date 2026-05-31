@@ -228,6 +228,14 @@ def apply_activation_to_alignment_outputs(
             "--require-complete-peak-hypothesis-identity requires "
             "--output-mode formal"
         )
+    if (
+        require_complete_peak_hypothesis_identity
+        and summary_row["canonical_row_identity_ready"] != "TRUE"
+    ):
+        raise ValueError(
+            "complete PeakHypothesis identity requires canonical row identity "
+            f"readiness; blockers={summary_row['canonical_row_identity_blockers']}"
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     matrix_path, review_path, cells_path = _activated_output_paths(
@@ -761,16 +769,17 @@ def _summary_row(
         "matrix_row_identity": (
             "peak_hypothesis_id" if output_mode == "formal" else "feature_family_id"
         ),
-        "canonical_row_identity_ready": (
-            "TRUE" if output_mode == "formal" else "FALSE"
+        "canonical_row_identity_ready": _canonical_row_identity_ready(
+            output_mode,
+            formal_matrix_stats,
         ),
-        "canonical_row_identity_blockers": (
-            "none" if output_mode == "formal" else "formal_output_not_requested"
+        "canonical_row_identity_blockers": _canonical_row_identity_blocker(
+            output_mode,
+            formal_matrix_stats,
         ),
-        "canonical_row_identity_scope": (
-            "formal_peak_hypothesis_with_family_projections"
-            if output_mode == "formal"
-            else "legacy_feature_family_row"
+        "canonical_row_identity_scope": _canonical_row_identity_scope(
+            output_mode,
+            formal_matrix_stats,
         ),
         "family_projection_semantics": _family_projection_semantics(
             output_mode,
@@ -813,6 +822,37 @@ def _family_projection_semantics(
     if formal_matrix_stats.family_projection_rows:
         return "projection_not_split_proof"
     return "explicit_hypothesis_only"
+
+
+def _canonical_row_identity_ready(
+    output_mode: str,
+    formal_matrix_stats: FormalMatrixStats,
+) -> str:
+    if output_mode != "formal":
+        return "FALSE"
+    return "FALSE" if formal_matrix_stats.family_projection_rows else "TRUE"
+
+
+def _canonical_row_identity_blocker(
+    output_mode: str,
+    formal_matrix_stats: FormalMatrixStats,
+) -> str:
+    if output_mode != "formal":
+        return "formal_output_not_requested"
+    if formal_matrix_stats.family_projection_rows:
+        return "family_projection_present"
+    return "none"
+
+
+def _canonical_row_identity_scope(
+    output_mode: str,
+    formal_matrix_stats: FormalMatrixStats,
+) -> str:
+    if output_mode != "formal":
+        return "legacy_feature_family_row"
+    if formal_matrix_stats.family_projection_rows:
+        return "partial_peak_hypothesis_with_family_projections"
+    return "formal_peak_hypothesis_identity"
 
 
 def _matrix_value_for_activation(cell: Mapping[str, str] | None) -> str:

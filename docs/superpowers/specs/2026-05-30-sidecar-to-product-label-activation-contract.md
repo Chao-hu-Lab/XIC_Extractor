@@ -28,17 +28,19 @@ every legacy family must be split. When no split, wrong-peak, or mode-level
 evidence exists, the bridge emits a deterministic
 `<feature_family_id>::family_projection` row with
 `row_identity_basis=family_projection_no_split_evidence`. A large number of
-family-projection rows is therefore not a blocker by itself; it means the
+family-projection rows is therefore acceptable for a bridge/projection output,
+but it is a blocker for claiming complete canonical row identity; it means the
 existing family consolidation has no current evidence requiring a finer product
 unit.
 
 The activation application summary makes this scope explicit:
-`canonical_row_identity_scope=formal_peak_hypothesis_with_family_projections`,
+`canonical_row_identity_ready=FALSE`,
+`canonical_row_identity_blockers=family_projection_present`,
+`canonical_row_identity_scope=partial_peak_hypothesis_with_family_projections`,
 `family_projection_semantics=projection_not_split_proof`, and
-`all_family_split_science_ready=FALSE`. In other words, the formal row key is
-ready for this activation bridge, but projection rows must not be cited as proof
-that every unsplit family has been exhaustively tested against all possible RT
-mode / drift / split hypotheses.
+`all_family_split_science_ready=FALSE`. In other words, the formal TSV format
+can be produced, but canonical row identity is not complete until projection
+rows are removed or explicitly excluded from the production scope.
 
 Legacy FH/MZmine RT-row workbooks may be passed as context-only references via
 `--legacy-rt-row-oracle-xlsx`. Those rows can populate
@@ -189,7 +191,10 @@ Hard fail types:
   `--generate-rt-mode-evidence` is enabled from selected-apex mode assignment
   artifacts and/or RAW-backed family MS1 overlay trace JSONs.
 - `shared_peak_identity_peak_hypothesis_selection.tsv` when
-  `--generate-peak-hypothesis-selection` is enabled from RT-mode evidence.
+  `--generate-peak-hypothesis-selection` is enabled from RT-mode evidence. This
+  legacy producer is diagnostic/review-only for activation-facing authority;
+  auto-activation requires a typed mode-hypothesis assignment producer or a
+  locked oracle manifest.
 - `shared_peak_identity_qc_ms1_pattern_reference.tsv` style inputs must preserve
   the distinction between `local_qc_reference_status` and
   `qc_consensus_status`. `qc_reference_policy` records whether the chosen
@@ -275,7 +280,11 @@ between provisional family consolidation and product activation. It consumes
   make mode assignment look worse after iRT normalization.
 - `raw_mode_review_only` stays review-only because raw overlay mode splitting is
   a hypothesis source, not an independent RT drift correction or product
-  retargeting rule.
+  retargeting rule. This review-only state takes precedence over
+  `wrong_peak_conflict`: raw/overlay-only mode evidence may explain why a row is
+  suspicious, but it must not auto-block or auto-activate a product cell until a
+  typed mode assignment or locked oracle manifest supplies product-facing
+  authority.
 
 This checkpoint deliberately does not edit `primary_consolidation.py` yet. It
 turns the FAM011810 lesson into a machine-readable activation input first, so a
@@ -296,6 +305,52 @@ checkpoint. A positive machine row without a `peak_hypothesis_id` is demoted to
 `review_required` with `contract_rule_id=peak_hypothesis_unit_required`, because
 `feature_family_id` is provenance only and must not become an implicit product
 identity unit.
+
+The sentinel acceptance fixture for this boundary is
+`docs/superpowers/fixtures/shared_peak_identity_mode_window_assignment_contract_v0.tsv`.
+`tools/diagnostics/evaluate_mode_window_assignment_contract.py` evaluates it
+against 85RAW sidecars and writes
+`shared_peak_identity_mode_window_assignment_gate.tsv` plus
+`shared_peak_identity_mode_window_assignment_summary.tsv`. Gate v0 is considered
+passing only when the expected `peak_hypothesis_id`, `product_unit_scope`,
+`selected_mode_id`, activation `peak_hypothesis_id`, and
+`activation_unit_scope` also match. Status/action labels alone are not enough,
+because a legacy or raw-overlay producer could otherwise fake the same terminal
+vocabulary without proving that both selection and activation point at the same
+product-facing PeakHypothesis identity. When a fixture row names MS1, QC, RT,
+MS2, or tag evidence in `required_evidence_oracle`, the gate must also receive
+matching sidecar rows; otherwise the row is `not_assessed` rather than silently
+passing.
+The sentinel criteria are:
+
+- typed FAM011810 core rows remain product candidates and the typed wrong-peak
+  row remains blocked;
+- raw/overlay-only rows such as FAM001473, FAM002625, and FAM005937 remain
+  review-only, even when other MS1/QC conflict evidence exists;
+- QC local-vs-consensus and ISTD phase/trend evidence are present as context,
+  not standalone product identity rules;
+- any matrix that still has family projection rows reports
+  `canonical_row_identity_ready=FALSE` with a non-empty blocker.
+
+Current scoped acceptance is the refreshed 85RAW gate output at
+`output/mode_window_assignment_contract_gate_v0_85raw_refreshed/`, not the older
+failed sibling directory. Its summary is accepted only as
+`sentinel_mode_window_assignment_contract_v0`: `10` fixture rows pass, `0` fail,
+and `0` are not assessed. The same summary intentionally keeps
+`canonical_row_identity_ready=FALSE`,
+`canonical_row_identity_blockers=matrix_construction_blocked`, and
+`diagnostic_only=TRUE`; the passing gate therefore closes the typed assignment
+contract, but it is not evidence that product activation or full canonical
+matrix row identity is ready.
+
+The activation refresh artifact at
+`output/mode_window_assignment_contract_gate_v0_85raw_activation_refresh/` is not
+an acceptance artifact for product wiring: its
+`shared_peak_identity_activation_acceptance.tsv` reports
+`acceptance_status=fail` because the current must-not-regress manifest still
+expects several rows that are now held at `review_required` by the raw-mode
+review-only boundary. That failure is deliberate protection, not a blocker for
+the scoped Mode-Window Assignment Gate.
 
 The legacy review vocabulary (`production_family`, `audit_family`) may still
 appear in current matrix/review outputs because it is part of the historical
@@ -364,14 +419,17 @@ Applied to the current 85RAW alignment outputs, the bridge should blank two
 wrong-peak rescue cells and leave the three already-primary auto-activate cells
 unchanged unless the source matrix is missing those values.
 
-The current applied 85RAW formal-output run at
-`output/peak_hypothesis_canonical_matrix_probe_85raw_v3/` reports:
+The applied 85RAW formal-output run at
+`output/peak_hypothesis_canonical_matrix_probe_85raw_v3/` is now a stale
+pre-tightening artifact for canonical readiness wording. If regenerated under
+the current contract, its row-basis distribution should still be interpreted as
+partial:
 
 - `activation_output_mode=formal`
 - `matrix_row_identity=peak_hypothesis_id`
-- `canonical_row_identity_ready=TRUE`
-- `canonical_row_identity_blockers=none`
-- `canonical_row_identity_scope=formal_peak_hypothesis_with_family_projections`
+- `canonical_row_identity_ready=FALSE`
+- `canonical_row_identity_blockers=family_projection_present`
+- `canonical_row_identity_scope=partial_peak_hypothesis_with_family_projections`
 - `family_projection_semantics=projection_not_split_proof`
 - `legacy_rt_row_context_authority=not_applicable`
 - `all_family_split_science_ready=FALSE`

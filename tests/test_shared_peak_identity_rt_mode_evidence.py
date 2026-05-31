@@ -99,6 +99,31 @@ def test_rt_mode_evidence_accepts_multi_family_assignment_artifact(
     assert by_family["FAM002"]["rt_mode_status"] == "mode_supported"
 
 
+def test_rt_mode_evidence_ignores_raw_unknown_modes_in_family_count(
+    tmp_path: Path,
+) -> None:
+    assignments = tmp_path / "mode_assignments.tsv"
+    _write_mode_assignments(
+        assignments,
+        [
+            _assignment("S1", "mode_core", "7.91", "7.95"),
+            _assignment("S2", "raw_unknown", "5.10", "5.20"),
+            _assignment("S3", "outlier_unassigned", "6.10", "6.20"),
+        ],
+    )
+
+    rows = rt_mode_evidence.build_rt_mode_evidence_rows(
+        mode_assignment_tsv=assignments,
+        oracle_keys=(("FAM001", "S1"),),
+        feature_family_id="FAM001",
+    )
+
+    row = rows[0]
+    assert row["rt_mode_status"] == "mode_supported"
+    assert row["family_mode_class"] == "rt_mode_pure"
+    assert row["family_mode_count"] == "1"
+
+
 def test_rt_mode_evidence_can_build_from_overlay_trace_data_json(
     tmp_path: Path,
 ) -> None:

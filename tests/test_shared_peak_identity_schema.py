@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import csv
+from pathlib import Path
+
 import pytest
 
 from xic_extractor.alignment.shared_peak_identity_explanation.schema import (
@@ -410,6 +413,7 @@ def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
     for token in {
         "machine_observed_sufficient_positive_identity",
         "peak_hypothesis_unit_required",
+        "peak_hypothesis_authority_not_product_facing",
         "wrong_peak_conflict",
         "peak_hypothesis_split_required",
     }:
@@ -419,10 +423,19 @@ def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
     validate_token("peak_hypothesis_id", "matrix_row_identity")
     validate_token("TRUE", "canonical_row_identity_ready")
     validate_token("none", "canonical_row_identity_blockers")
+    validate_token("family_projection_present", "canonical_row_identity_blockers")
+    validate_token("raw_mode_review_only", "canonical_row_identity_blockers")
+    validate_token("matrix_construction_blocked", "canonical_row_identity_blockers")
+    validate_token("source_matrix_value_missing", "canonical_row_identity_blockers")
     validate_token(
         "formal_peak_hypothesis_with_family_projections",
         "canonical_row_identity_scope",
     )
+    validate_token(
+        "partial_peak_hypothesis_with_family_projections",
+        "canonical_row_identity_scope",
+    )
+    validate_token("formal_peak_hypothesis_identity", "canonical_row_identity_scope")
     validate_token("projection_not_split_proof", "family_projection_semantics")
     validate_token(
         "context_only_not_identity_authority",
@@ -434,6 +447,48 @@ def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
     validate_token("blanked", "matrix_value_effect")
     validate_token("TRUE", "value_changed")
     validate_token("qc_consensus_with_local_support", "qc_reference_policy")
+
+
+def test_mode_window_assignment_contract_fixture_covers_sentinel_cases() -> None:
+    fixture = (
+        Path("docs")
+        / "superpowers"
+        / "fixtures"
+        / "shared_peak_identity_mode_window_assignment_contract_v0.tsv"
+    )
+    with fixture.open("r", encoding="utf-8-sig", newline="") as handle:
+        rows = tuple(csv.DictReader(handle, delimiter="\t"))
+
+    assert rows
+    assert all(
+        row["contract_schema_version"]
+        == "shared_peak_identity_mode_window_assignment_contract_v0"
+        for row in rows
+    )
+    case_types = {row["sentinel_case_type"] for row in rows}
+    assert {
+        "multi_peak_tag_bearing_core",
+        "multi_peak_non_tag_mode",
+        "tag_conditioned_subwindow",
+        "tailing_confounded",
+        "raw_overlay_authority_leak",
+        "raw_single_mode_with_tag",
+        "qc_local_vs_consensus",
+        "istd_drift_non_parallel",
+    } <= case_types
+    by_sentinel = {row["sentinel_id"]: row for row in rows}
+    assert by_sentinel["FAM011810_green_tumor_wrong_peak"][
+        "expected_peak_hypothesis_status"
+    ] == "cross_mode_rescue_blocked"
+    assert by_sentinel["FAM011810_green_tumor_wrong_peak"][
+        "expected_peak_hypothesis_id"
+    ] == "FAM011810::irt_green_core"
+    assert by_sentinel["FAM011810_green_tumor_wrong_peak"][
+        "expected_product_unit_scope"
+    ] == "sample_cell"
+    assert by_sentinel["FAM011810_green_tumor_wrong_peak"][
+        "expected_activation_unit_scope"
+    ] == "sample_cell"
     validate_token("mixed_conflict", "qc_consensus_status")
     validate_token("local_vs_consensus_conflict", "qc_reference_conflict_status")
 

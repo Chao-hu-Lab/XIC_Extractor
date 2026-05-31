@@ -214,10 +214,10 @@ def test_activation_application_formal_mode_writes_product_contract_names(
     summary = _read_tsv(outputs.summary_tsv)[0]
     assert summary["activation_output_mode"] == "formal"
     assert summary["matrix_row_identity"] == "peak_hypothesis_id"
-    assert summary["canonical_row_identity_ready"] == "TRUE"
-    assert summary["canonical_row_identity_blockers"] == "none"
+    assert summary["canonical_row_identity_ready"] == "FALSE"
+    assert summary["canonical_row_identity_blockers"] == "family_projection_present"
     assert summary["canonical_row_identity_scope"] == (
-        "formal_peak_hypothesis_with_family_projections"
+        "partial_peak_hypothesis_with_family_projections"
     )
     assert summary["family_projection_semantics"] == "projection_not_split_proof"
     assert summary["legacy_rt_row_context_authority"] == "not_applicable"
@@ -267,19 +267,17 @@ def test_activation_application_formal_mode_can_require_peak_hypothesis_identity
 ) -> None:
     fixture = _write_fixture(tmp_path, acceptance_status="pass")
 
-    outputs = product_activation.apply_activation_to_alignment_outputs(
-        activation_decisions_tsv=fixture["decisions"],
-        activation_acceptance_tsv=fixture["acceptance"],
-        alignment_matrix_tsv=fixture["matrix"],
-        alignment_review_tsv=fixture["review"],
-        alignment_cells_tsv=fixture["cells"],
-        output_dir=tmp_path / "formal",
-        output_mode="formal",
-        require_complete_peak_hypothesis_identity=True,
-    )
-
-    summary = _read_tsv(outputs.summary_tsv)[0]
-    assert summary["canonical_row_identity_ready"] == "TRUE"
+    with pytest.raises(ValueError, match="family_projection_present"):
+        product_activation.apply_activation_to_alignment_outputs(
+            activation_decisions_tsv=fixture["decisions"],
+            activation_acceptance_tsv=fixture["acceptance"],
+            alignment_matrix_tsv=fixture["matrix"],
+            alignment_review_tsv=fixture["review"],
+            alignment_cells_tsv=fixture["cells"],
+            output_dir=tmp_path / "formal",
+            output_mode="formal",
+            require_complete_peak_hypothesis_identity=True,
+        )
 
 
 def test_activation_application_formal_mode_keeps_max_area_for_value_conflict(
@@ -390,7 +388,7 @@ def test_activation_application_cli_formal_mode_writes_product_contract_names(
     assert (tmp_path / "formal" / "activation_value_delta.tsv").exists()
 
 
-def test_activation_application_cli_formal_mode_accepts_legacy_context(
+def test_activation_application_cli_formal_mode_rejects_legacy_context_as_complete(
     tmp_path: Path,
 ) -> None:
     fixture = _write_fixture(tmp_path, acceptance_status="pass")
@@ -419,21 +417,7 @@ def test_activation_application_cli_formal_mode_accepts_legacy_context(
                 str(oracle),
             ]
         )
-        == 0
-    )
-
-    matrix_rows = {
-        row["peak_hypothesis_id"]: row
-        for row in _read_tsv(tmp_path / "formal" / "alignment_matrix.tsv")
-    }
-    assert matrix_rows["FAM_BLOCK::family_projection"][
-        "legacy_rt_row_context_id"
-    ] == "mzmine_rtrow_2_mz100.1000_rt7.10min"
-    summary = _read_tsv(tmp_path / "formal" / "activation_application_summary.tsv")[0]
-    assert summary["canonical_row_identity_ready"] == "TRUE"
-    assert summary["legacy_rt_row_context_rows"] == "1"
-    assert summary["legacy_rt_row_context_authority"] == (
-        "context_only_not_identity_authority"
+        == 2
     )
 
 

@@ -30,7 +30,17 @@ _SUPPORTIVE_MS2_STATUSES = frozenset({"supportive", "partial_support"})
 _OBSERVED_MS2_LEVELS = frozenset(
     {"sample_candidate_aligned", "sample_boundary_aligned"}
 )
-_UNKNOWN_MODES = frozenset({"", "unknown", "unassigned", "irt_unknown"})
+_UNKNOWN_MODES = frozenset(
+    {
+        "",
+        "unknown",
+        "unassigned",
+        "irt_unknown",
+        "raw_unknown",
+        "raw_outlier_mode",
+        "outlier_unassigned",
+    }
+)
 _RAW_OVERLAY_MODE_GAP_MIN = 0.5
 _RAW_OVERLAY_MIN_CLUSTER_SIZE = 2
 

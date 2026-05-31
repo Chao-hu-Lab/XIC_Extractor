@@ -605,6 +605,9 @@ def test_cli_can_generate_rt_mode_evidence_from_mode_assignment(
     assert "peak_hypothesis_status=product_candidate_core" in support[
         "observed_machine_metrics"
     ]
+    assert "peak_hypothesis_authority_source=legacy_rt_mode_selection" in support[
+        "observed_machine_metrics"
+    ]
 
 
 def test_cli_can_generate_rt_mode_evidence_from_overlay_trace_data(
@@ -649,7 +652,10 @@ def test_cli_can_generate_rt_mode_evidence_from_overlay_trace_data(
 
     peak_hypothesis_rows = _read_tsv(generated_peak_hypothesis)
     assert peak_hypothesis_rows[0]["peak_hypothesis_status"] == (
-        "product_candidate_core"
+        "raw_mode_review_only"
+    )
+    assert peak_hypothesis_rows[0]["product_selection_action"] == (
+        "require_raw_mode_review"
     )
 
     support = _read_tsv(
@@ -658,9 +664,74 @@ def test_cli_can_generate_rt_mode_evidence_from_overlay_trace_data(
     assert "rt_mode_evidence_level=raw_selected_apex_modes" in support[
         "observed_machine_metrics"
     ]
+    assert "peak_hypothesis_status=raw_mode_review_only" in support[
+        "observed_machine_metrics"
+    ]
+
+
+def test_cli_can_generate_typed_mode_hypothesis_assignment(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_cli_fixture(tmp_path)
+    rt_mode = tmp_path / "rt_mode_evidence.tsv"
+    ms1_pattern = tmp_path / "ms1_pattern.tsv"
+    qc_reference = tmp_path / "qc_reference.tsv"
+    matrix_rt_drift = tmp_path / "matrix_rt_drift.tsv"
+    _write_rt_mode_evidence(rt_mode)
+    _write_ms1_pattern(ms1_pattern)
+    _write_qc_ms1_reference(qc_reference)
+    _write_matrix_rt_drift(matrix_rt_drift)
+
+    assert (
+        main(
+            [
+                "--manual-oracle-tsv",
+                str(fixture["oracle"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--enable-shadow-label-alignment",
+                "--candidate-ms2-pattern-evidence-tsv",
+                str(fixture["candidate_ms2"]),
+                "--rt-mode-evidence-tsv",
+                str(rt_mode),
+                "--ms1-pattern-coherence-evidence-tsv",
+                str(ms1_pattern),
+                "--qc-ms1-pattern-reference-evidence-tsv",
+                str(qc_reference),
+                "--matrix-rt-drift-policy-tsv",
+                str(matrix_rt_drift),
+                "--generate-mode-hypothesis-assignment",
+            ]
+        )
+        == 0
+    )
+
+    output_dir = tmp_path / "out"
+    generated_peak_hypothesis = (
+        output_dir / "shared_peak_identity_peak_hypothesis_selection.tsv"
+    )
+    peak_hypothesis_rows = _read_tsv(generated_peak_hypothesis)
+    assert peak_hypothesis_rows[0]["peak_hypothesis_status"] == (
+        "product_candidate_core"
+    )
+    assert peak_hypothesis_rows[0]["reason"] == (
+        "typed_mode_hypothesis_assignment_supported_by_mode_tag"
+        "_and_sample_required_tag"
+    )
+    support = _read_tsv(
+        output_dir / "shared_peak_identity_machine_evidence_support.tsv"
+    )[0]
     assert "peak_hypothesis_status=product_candidate_core" in support[
         "observed_machine_metrics"
     ]
+    assert (
+        "peak_hypothesis_authority_source=typed_mode_hypothesis_assignment"
+        in support["observed_machine_metrics"]
+    )
 
 
 def test_cli_can_generate_hypothesis_consistency_sidecar(tmp_path: Path) -> None:
@@ -1827,7 +1898,10 @@ def _write_peak_hypothesis_selection(path: Path) -> None:
                 "tag_bearing_mode_count": "1",
                 "product_selection_action": "select_mode_peak_hypothesis",
                 "product_selection_blocker": "none",
-                "reason": "unit_test_peak_hypothesis_selection",
+                "reason": (
+                    "typed_mode_hypothesis_assignment_supported_by_mode_tag"
+                    "_and_sample_required_tag"
+                ),
                 "diagnostic_only": "TRUE",
             }
         ],
