@@ -9,6 +9,8 @@ from xic_extractor.alignment.config import AlignmentConfig
 from .machine_artifacts import MachineMatch
 from .schema import (
     MACHINE_EVIDENCE_SUPPORT_SCHEMA_VERSION,
+    PEAK_HYPOTHESIS_SELECTION_COLUMNS,
+    RT_MODE_EVIDENCE_COLUMNS,
     validate_row_tokens,
 )
 
@@ -109,6 +111,16 @@ SAMPLE_NEGATIVE_EVIDENCE_REQUIRED_COLUMNS = (
     "reason",
     "diagnostic_only",
 )
+RT_MODE_EVIDENCE_REQUIRED_COLUMNS = tuple(
+    column
+    for column in RT_MODE_EVIDENCE_COLUMNS
+    if column != "rt_mode_evidence_schema_version"
+)
+PEAK_HYPOTHESIS_SELECTION_REQUIRED_COLUMNS = tuple(
+    column
+    for column in PEAK_HYPOTHESIS_SELECTION_COLUMNS
+    if column != "peak_hypothesis_selection_schema_version"
+)
 _CANDIDATE_MS2_OBSERVED_LEVELS = frozenset(
     {"sample_candidate_aligned", "sample_boundary_aligned"}
 )
@@ -120,7 +132,7 @@ _MS1_PATTERN_OBSERVED_LEVELS = frozenset(
 _MS1_PATTERN_SUPPORT_STATUSES = frozenset({"supportive", "partial_support"})
 _MS1_PATTERN_CONFLICT_STATUSES = frozenset({"conflict"})
 _QC_MS1_REFERENCE_OBSERVED_LEVELS = frozenset(
-    {"nearest_complete_peak_qc_overlay", "nearest_complete_family_centered_qc_overlay"}
+    {"qc_consensus_with_local_qc_overlay", "qc_consensus_qc_overlay"}
 )
 _QC_MS1_REFERENCE_SUPPORT_STATUSES = frozenset({"supportive", "partial_support"})
 _QC_MS1_REFERENCE_CONFLICT_STATUSES = frozenset({"conflict"})
@@ -146,6 +158,36 @@ _SAMPLE_NEGATIVE_EVIDENCE_CLASSES = frozenset(
     }
 )
 _SAMPLE_NEGATIVE_EVIDENCE_OBSERVED_LEVELS = frozenset({"machine_observed"})
+_RT_MODE_OBSERVED_STATUSES = frozenset(
+    {
+        "mode_supported",
+        "mode_conflict",
+        "mode_split_required",
+        "consolidation_no_go",
+        "tailing_confounded",
+        "raw_mode_review_only",
+    }
+)
+_RT_MODE_SUPPORT_STATUSES = frozenset({"mode_supported", "tailing_confounded"})
+_RT_MODE_CONFLICT_STATUSES = frozenset(
+    {"mode_conflict", "mode_split_required", "consolidation_no_go"}
+)
+_PEAK_HYPOTHESIS_OBSERVED_STATUSES = frozenset(
+    {
+        "product_candidate_core",
+        "cross_mode_rescue_blocked",
+        "mode_split_required",
+        "consolidation_no_go",
+        "tailing_review_only",
+        "raw_mode_review_only",
+    }
+)
+_PEAK_HYPOTHESIS_SUPPORT_STATUSES = frozenset(
+    {"product_candidate_core", "tailing_review_only"}
+)
+_PEAK_HYPOTHESIS_CONFLICT_STATUSES = frozenset(
+    {"cross_mode_rescue_blocked", "mode_split_required", "consolidation_no_go"}
+)
 _DDA_NON_DISPOSITIVE_MS1_INTENSITY_MIN = 2.5e4
 _DDA_NON_DISPOSITIVE_TRIGGER_SCAN_MIN = 3
 _DDA_NON_DISPOSITIVE_TRACE_STRENGTHS = frozenset({"moderate", "strong"})
@@ -264,6 +306,30 @@ def load_sample_negative_evidence(
     }
 
 
+def load_rt_mode_evidence(
+    path: Path | None,
+) -> dict[tuple[str, str], Mapping[str, str]]:
+    if path is None:
+        return {}
+    rows = read_tsv_required(path, RT_MODE_EVIDENCE_REQUIRED_COLUMNS)
+    return {
+        (row["feature_family_id"], row["sample_stem"]): row
+        for row in rows
+    }
+
+
+def load_peak_hypothesis_selection(
+    path: Path | None,
+) -> dict[tuple[str, str], Mapping[str, str]]:
+    if path is None:
+        return {}
+    rows = read_tsv_required(path, PEAK_HYPOTHESIS_SELECTION_REQUIRED_COLUMNS)
+    return {
+        (row["feature_family_id"], row["sample_stem"]): row
+        for row in rows
+    }
+
+
 def build_machine_evidence_support_rows(
     *,
     explanations: Sequence[Mapping[str, str]],
@@ -286,6 +352,10 @@ def build_machine_evidence_support_rows(
     sample_negative_evidence: Mapping[
         tuple[str, str], Mapping[str, str]
     ] | None = None,
+    rt_mode_evidence: Mapping[tuple[str, str], Mapping[str, str]] | None = None,
+    peak_hypothesis_selection: Mapping[
+        tuple[str, str], Mapping[str, str]
+    ] | None = None,
 ) -> tuple[dict[str, str], ...]:
     shadow_by_id = {row["oracle_row_id"]: row for row in shadow_rows}
     cwt_shape_evidence = cwt_shape_evidence or {}
@@ -298,6 +368,8 @@ def build_machine_evidence_support_rows(
     qc_ms1_pattern_reference_evidence = qc_ms1_pattern_reference_evidence or {}
     matrix_rt_drift_policy_evidence = matrix_rt_drift_policy_evidence or {}
     sample_negative_evidence = sample_negative_evidence or {}
+    rt_mode_evidence = rt_mode_evidence or {}
+    peak_hypothesis_selection = peak_hypothesis_selection or {}
     support_rows = [
         _support_row(
             explanation=explanation,
@@ -325,6 +397,12 @@ def build_machine_evidence_support_rows(
             sample_negative_row=sample_negative_evidence.get(
                 (explanation["feature_family_id"], explanation["sample_id"]),
             ),
+            rt_mode_row=rt_mode_evidence.get(
+                (explanation["feature_family_id"], explanation["sample_id"]),
+            ),
+            peak_hypothesis_row=peak_hypothesis_selection.get(
+                (explanation["feature_family_id"], explanation["sample_id"]),
+            ),
         )
         for explanation in explanations
     ]
@@ -349,6 +427,8 @@ def _support_row(
     qc_ms1_reference_row: Mapping[str, str] | None,
     matrix_rt_drift_row: Mapping[str, str] | None,
     sample_negative_row: Mapping[str, str] | None,
+    rt_mode_row: Mapping[str, str] | None,
+    peak_hypothesis_row: Mapping[str, str] | None,
 ) -> dict[str, str]:
     tags = _tags(explanation)
     sample_matches = tuple(match for match in matches if match.sample_level)
@@ -364,6 +444,8 @@ def _support_row(
         qc_ms1_reference_row=qc_ms1_reference_row,
         matrix_rt_drift_row=matrix_rt_drift_row,
         sample_negative_row=sample_negative_row,
+        rt_mode_row=rt_mode_row,
+        peak_hypothesis_row=peak_hypothesis_row,
         tags=tags,
     )
     manual_facts = _manual_derived_facts(tags, explanation)
@@ -380,6 +462,8 @@ def _support_row(
         qc_ms1_reference_row=qc_ms1_reference_row,
         matrix_rt_drift_row=matrix_rt_drift_row,
         sample_negative_row=sample_negative_row,
+        rt_mode_row=rt_mode_row,
+        peak_hypothesis_row=peak_hypothesis_row,
     )
     literature_refs = _literature_refs(
         tags=tags,
@@ -408,6 +492,7 @@ def _support_row(
             tags,
             sample_matches,
             matrix_rt_drift_row,
+            rt_mode_row,
         ),
         "shape_basis_status": _shape_basis_status(
             tags,
@@ -471,6 +556,8 @@ def _support_row(
                 qc_ms1_reference_row=qc_ms1_reference_row,
                 matrix_rt_drift_row=matrix_rt_drift_row,
                 sample_negative_row=sample_negative_row,
+                rt_mode_row=rt_mode_row,
+                peak_hypothesis_row=peak_hypothesis_row,
             ),
         ),
         "diagnostic_only": "TRUE",
@@ -505,8 +592,11 @@ def _rt_basis_status(
     tags: frozenset[str],
     sample_matches: Sequence[MachineMatch],
     matrix_rt_drift_row: Mapping[str, str] | None,
+    rt_mode_row: Mapping[str, str] | None,
 ) -> str:
-    if _has_matrix_rt_drift_metric(matrix_rt_drift_row):
+    if _has_matrix_rt_drift_metric(matrix_rt_drift_row) or _has_rt_mode_metric(
+        rt_mode_row
+    ):
         return "machine_observed"
     if any(_has_value(match.row.get("apex_rt")) for match in sample_matches) and any(
         _has_value(match.row.get("rt_delta_sec")) for match in sample_matches
@@ -569,6 +659,8 @@ def _opportunity_basis_status(
 ) -> str:
     if _has_tier2_trace_metric(
         tier2_row,
+    ) or _has_ms1_intensity_opportunity_metric(
+        ms1_pattern_row,
     ) or _has_family_ms2_required_tag(
         candidate_ms2_row,
     ) or _dda_non_dispositive_policy_supports_manual(
@@ -711,6 +803,8 @@ def _observed_machine_metrics(
     qc_ms1_reference_row: Mapping[str, str] | None,
     matrix_rt_drift_row: Mapping[str, str] | None,
     sample_negative_row: Mapping[str, str] | None,
+    rt_mode_row: Mapping[str, str] | None,
+    peak_hypothesis_row: Mapping[str, str] | None,
     tags: frozenset[str],
 ) -> str:
     metrics: list[str] = []
@@ -946,6 +1040,11 @@ def _observed_machine_metrics(
             "ms1_trace_max_intensity",
             ms1_pattern_row.get("trace_max_intensity"),
         )
+        if _has_ms1_intensity_opportunity_metric(ms1_pattern_row):
+            metrics.append(
+                "ms1_intensity_opportunity_status="
+                "supported_by_raw_overlay_height"
+            )
         _append_metric(
             metrics,
             "ms1_cell_to_local_window_max_ratio",
@@ -1026,6 +1125,11 @@ def _observed_machine_metrics(
             "ms1_peak_quality_vector_reason",
             ms1_pattern_row.get("peak_quality_vector_reason"),
         )
+        _append_metric(
+            metrics,
+            "ms1_pattern_reason",
+            ms1_pattern_row.get("reason"),
+        )
     if qc_ms1_reference_row:
         _append_metric(
             metrics,
@@ -1036,6 +1140,26 @@ def _observed_machine_metrics(
             metrics,
             "qc_ms1_reference_evidence_level",
             qc_ms1_reference_row.get("qc_reference_evidence_level"),
+        )
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_policy",
+            qc_ms1_reference_row.get("qc_reference_policy"),
+        )
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_local_status",
+            qc_ms1_reference_row.get("local_qc_reference_status"),
+        )
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_consensus_status",
+            qc_ms1_reference_row.get("qc_consensus_status"),
+        )
+        _append_metric(
+            metrics,
+            "qc_ms1_reference_conflict_status",
+            qc_ms1_reference_row.get("qc_reference_conflict_status"),
         )
         _append_metric(
             metrics,
@@ -1146,6 +1270,96 @@ def _observed_machine_metrics(
             "sample_negative_evidence_reason",
             sample_negative_row.get("reason"),
         )
+    if rt_mode_row:
+        _append_metric(metrics, "rt_mode_status", rt_mode_row.get("rt_mode_status"))
+        _append_metric(
+            metrics,
+            "rt_mode_evidence_level",
+            rt_mode_row.get("rt_mode_evidence_level"),
+        )
+        _append_metric(metrics, "selected_mode_id", rt_mode_row.get("selected_mode_id"))
+        _append_metric(
+            metrics,
+            "selected_mode_role",
+            rt_mode_row.get("selected_mode_role"),
+        )
+        _append_metric(
+            metrics,
+            "selected_mode_tag_status",
+            rt_mode_row.get("selected_mode_tag_status"),
+        )
+        _append_metric(
+            metrics,
+            "family_mode_class",
+            rt_mode_row.get("family_mode_class"),
+        )
+        _append_metric(
+            metrics,
+            "family_mode_count",
+            rt_mode_row.get("family_mode_count"),
+        )
+        _append_metric(
+            metrics,
+            "tag_bearing_mode_count",
+            rt_mode_row.get("tag_bearing_mode_count"),
+        )
+        _append_metric(
+            metrics,
+            "selected_mode_cell_count",
+            rt_mode_row.get("selected_mode_cell_count"),
+        )
+        _append_metric(
+            metrics,
+            "selected_mode_raw_rt_range_min",
+            rt_mode_row.get("selected_mode_raw_rt_range_min"),
+        )
+        _append_metric(
+            metrics,
+            "selected_mode_normalized_rt_range_min",
+            rt_mode_row.get("selected_mode_normalized_rt_range_min"),
+        )
+        _append_metric(
+            metrics,
+            "family_raw_rt_range_min",
+            rt_mode_row.get("family_raw_rt_range_min"),
+        )
+        _append_metric(
+            metrics,
+            "family_normalized_rt_range_min",
+            rt_mode_row.get("family_normalized_rt_range_min"),
+        )
+        _append_metric(metrics, "rt_mode_reason", rt_mode_row.get("reason"))
+    if peak_hypothesis_row:
+        _append_metric(
+            metrics,
+            "peak_hypothesis_status",
+            peak_hypothesis_row.get("peak_hypothesis_status"),
+        )
+        _append_metric(
+            metrics,
+            "peak_hypothesis_id",
+            peak_hypothesis_row.get("peak_hypothesis_id"),
+        )
+        _append_metric(
+            metrics,
+            "product_unit_scope",
+            peak_hypothesis_row.get("product_unit_scope"),
+        )
+        _append_metric(
+            metrics,
+            "product_selection_action",
+            peak_hypothesis_row.get("product_selection_action"),
+        )
+        _append_metric(
+            metrics,
+            "product_selection_blocker",
+            peak_hypothesis_row.get("product_selection_blocker"),
+        )
+        _append_metric(
+            metrics,
+            "peak_hypothesis_reason",
+            peak_hypothesis_row.get("reason"),
+        )
     dda_status = _dda_non_dispositive_policy_status(
         tags,
         context_matches,
@@ -1194,6 +1408,8 @@ def _missing_machine_evidence(
     qc_ms1_reference_row: Mapping[str, str] | None,
     matrix_rt_drift_row: Mapping[str, str] | None,
     sample_negative_row: Mapping[str, str] | None,
+    rt_mode_row: Mapping[str, str] | None,
+    peak_hypothesis_row: Mapping[str, str] | None,
 ) -> tuple[str, ...]:
     missing: list[str] = []
     gap_class = explanation.get("evidence_gap_class", "")
@@ -1217,7 +1433,10 @@ def _missing_machine_evidence(
     ):
         missing.append("formal_pattern_metric")
     if tags & _OPPORTUNITY_TAGS:
-        if not _has_tier2_trace_metric(tier2_row):
+        if not (
+            _has_tier2_trace_metric(tier2_row)
+            or _has_ms1_intensity_opportunity_metric(ms1_pattern_row)
+        ):
             missing.append("intensity_opportunity_metric")
         dda_status = _dda_non_dispositive_policy_status(
             tags,
@@ -1239,6 +1458,7 @@ def _missing_machine_evidence(
     if (
         "rt_too_far" in tags
         and not _has_rt_preferred_window_conflict(sample_matches)
+        and not _rt_mode_supports_manual(explanation, tags, rt_mode_row)
         and not _ms1_pattern_supports_manual(tags, ms1_pattern_row)
         and not _qc_ms1_pattern_reference_conflicts_with_manual(
             tags,
@@ -1250,9 +1470,13 @@ def _missing_machine_evidence(
         missing.append("pattern_metric_not_supportive")
     if _ms1_pattern_conflicts_with_manual(tags, ms1_pattern_row):
         missing.append("pattern_metric_not_supportive")
-    if _qc_ms1_pattern_reference_conflicts_with_manual(
+    qc_reference_conflicts = _qc_ms1_pattern_reference_conflicts_with_manual(
         tags,
         qc_ms1_reference_row,
+    )
+    if qc_reference_conflicts and not _ms1_pattern_supports_manual(
+        tags,
+        ms1_pattern_row,
     ):
         missing.append("pattern_metric_not_supportive")
     if _ms1_pattern_inconclusive_with_manual(tags, ms1_pattern_row):
@@ -1264,6 +1488,14 @@ def _missing_machine_evidence(
         missing.append("qc_ms1_pattern_reference_inconclusive")
     if _matrix_rt_drift_conflicts_with_manual(tags, matrix_rt_drift_row):
         missing.append("matrix_rt_drift_policy_not_supportive")
+    if _rt_mode_conflicts_with_manual(explanation, tags, rt_mode_row):
+        missing.append("rt_mode_not_supportive")
+    if _peak_hypothesis_conflicts_with_manual(
+        explanation,
+        tags,
+        peak_hypothesis_row,
+    ):
+        missing.append("peak_hypothesis_not_supportive")
     if (
         "pattern_mismatch" in tags
         and not _candidate_ms2_supports_manual(tags, candidate_ms2_row)
@@ -1368,6 +1600,10 @@ def _evidence_support_status(
     if "matrix_rt_drift_policy_not_supportive" in missing_evidence:
         return "machine_observed_conflict"
     if "family_required_tag_gate" in missing_evidence:
+        return "machine_observed_conflict"
+    if "rt_mode_not_supportive" in missing_evidence:
+        return "machine_observed_conflict"
+    if "peak_hypothesis_not_supportive" in missing_evidence:
         return "machine_observed_conflict"
     if "manual_scope_policy" in missing_evidence:
         return "blocked_missing_metric"
@@ -1485,6 +1721,23 @@ def _has_tier2_trace_metric(tier2_row: Mapping[str, str] | None) -> bool:
     )
 
 
+def _has_ms1_intensity_opportunity_metric(
+    ms1_pattern_row: Mapping[str, str] | None,
+) -> bool:
+    intensity = _ms1_supporting_intensity(ms1_pattern_row)
+    if intensity is None or intensity < _DDA_NON_DISPOSITIVE_MS1_INTENSITY_MIN:
+        return False
+    if not ms1_pattern_row:
+        return False
+    return (
+        ms1_pattern_row.get("shape_metric_source") == "family_ms1_overlay_raw_trace"
+        or ms1_pattern_row.get("peak_quality_vector_basis")
+        == _MS1_PEAK_QUALITY_VECTOR_BASIS
+        or ms1_pattern_row.get("ms1_pattern_evidence_level")
+        in _MS1_PATTERN_OBSERVED_LEVELS
+    )
+
+
 def _has_cid_nl_pattern_context(context_matches: Sequence[MachineMatch]) -> bool:
     return any(
         match.evidence_source == "alignment_review"
@@ -1504,6 +1757,8 @@ def _has_machine_observed_metric(
     qc_ms1_reference_row: Mapping[str, str] | None,
     matrix_rt_drift_row: Mapping[str, str] | None,
     sample_negative_row: Mapping[str, str] | None,
+    rt_mode_row: Mapping[str, str] | None,
+    peak_hypothesis_row: Mapping[str, str] | None,
 ) -> bool:
     return (
         _has_cwt_metric(cwt_row)
@@ -1514,6 +1769,8 @@ def _has_machine_observed_metric(
         or _has_qc_ms1_pattern_reference_metric(qc_ms1_reference_row)
         or _has_matrix_rt_drift_metric(matrix_rt_drift_row)
         or _has_sample_negative_evidence_metric(sample_negative_row)
+        or _has_rt_mode_metric(rt_mode_row)
+        or _has_peak_hypothesis_metric(peak_hypothesis_row)
     )
 
 
@@ -1611,6 +1868,69 @@ def _has_sample_negative_evidence_metric(row: Mapping[str, str] | None) -> bool:
         in _SAMPLE_NEGATIVE_EVIDENCE_OBSERVED_LEVELS
         and row.get("negative_evidence_class") in _SAMPLE_NEGATIVE_EVIDENCE_CLASSES
     )
+
+
+def _has_rt_mode_metric(row: Mapping[str, str] | None) -> bool:
+    if not row:
+        return False
+    return row.get("rt_mode_status") in _RT_MODE_OBSERVED_STATUSES
+
+
+def _has_peak_hypothesis_metric(row: Mapping[str, str] | None) -> bool:
+    if not row:
+        return False
+    return row.get("peak_hypothesis_status") in _PEAK_HYPOTHESIS_OBSERVED_STATUSES
+
+
+def _rt_mode_supports_manual(
+    explanation: Mapping[str, str],
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if not _has_rt_mode_metric(row):
+        return False
+    if row is None:
+        return False
+    status = row.get("rt_mode_status")
+    if explanation.get("manual_label") == "fail":
+        return status in _RT_MODE_CONFLICT_STATUSES
+    if tags & {"rt_drift_possible", "rt_close", "pattern_similar", "shape_complete"}:
+        return status in _RT_MODE_SUPPORT_STATUSES
+    return False
+
+
+def _rt_mode_conflicts_with_manual(
+    explanation: Mapping[str, str],
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if not _has_rt_mode_metric(row):
+        return False
+    if row is None:
+        return False
+    status = row.get("rt_mode_status")
+    if explanation.get("manual_label") in {"pass", "suspect"}:
+        return status in _RT_MODE_CONFLICT_STATUSES
+    if explanation.get("manual_label") == "fail":
+        return status in _RT_MODE_SUPPORT_STATUSES and "rt_too_far" in tags
+    return False
+
+
+def _peak_hypothesis_conflicts_with_manual(
+    explanation: Mapping[str, str],
+    tags: frozenset[str],
+    row: Mapping[str, str] | None,
+) -> bool:
+    if not _has_peak_hypothesis_metric(row):
+        return False
+    if row is None:
+        return False
+    status = row.get("peak_hypothesis_status")
+    if explanation.get("manual_label") in {"pass", "suspect"}:
+        return status in _PEAK_HYPOTHESIS_CONFLICT_STATUSES
+    if explanation.get("manual_label") == "fail":
+        return status in _PEAK_HYPOTHESIS_SUPPORT_STATUSES and "rt_too_far" in tags
+    return False
 
 
 def _sample_negative_evidence_supports_manual(
@@ -1712,6 +2032,8 @@ def _dda_non_dispositive_policy_supports_manual(
     if (
         candidate_ms2_row.get("raw_ms2_trace_strength")
         not in _DDA_NON_DISPOSITIVE_TRACE_STRENGTHS
+        and candidate_ms2_row.get("raw_ms2_diagnostic_product_absence_reason")
+        != "product_outside_diagnostic_window"
     ):
         return False
     if not (

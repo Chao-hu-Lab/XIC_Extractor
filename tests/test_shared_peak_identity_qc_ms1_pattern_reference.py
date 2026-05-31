@@ -30,13 +30,16 @@ def test_qc_ms1_pattern_reference_supports_nearest_qc_match(
         },
     )
 
-    assert rows[0]["qc_reference_status"] == "supportive"
+    assert rows[0]["qc_reference_status"] == "partial_support"
     assert rows[0]["qc_reference_evidence_level"] == (
-        "nearest_complete_peak_qc_overlay"
+        "qc_consensus_with_local_qc_overlay"
     )
+    assert rows[0]["qc_reference_policy"] == "qc_consensus_with_local_support"
+    assert rows[0]["local_qc_reference_status"] == "supportive"
+    assert rows[0]["qc_consensus_status"] == "partial_support"
     assert rows[0]["nearest_qc_sample_stem"] == "Breast_Cancer_Tissue_pooled_QC5"
     assert rows[0]["nearest_qc_injection_order_delta"] == "1"
-    assert rows[0]["reason"] == "nearest_qc_ms1_pattern_supported"
+    assert rows[0]["reason"] == "qc_consensus_and_local_qc_support"
 
 
 def test_qc_ms1_pattern_reference_conflicts_when_qc_peak_is_separated(
@@ -60,9 +63,15 @@ def test_qc_ms1_pattern_reference_conflicts_when_qc_peak_is_separated(
         },
     )
 
-    assert rows[0]["qc_reference_status"] == "conflict"
+    assert rows[0]["qc_reference_status"] == "inconclusive"
+    assert rows[0]["qc_reference_evidence_level"] == (
+        "nearest_valid_qc_local_condition_only"
+    )
+    assert rows[0]["local_qc_reference_status"] == "conflict"
+    assert rows[0]["qc_consensus_status"] == "inconclusive"
+    assert rows[0]["qc_reference_conflict_status"] == "consensus_missing"
     assert rows[0]["target_qc_apex_abs_delta_sec"] == "60"
-    assert rows[0]["reason"] == "nearest_qc_peak_separated_from_target_cell"
+    assert rows[0]["reason"] == "local_qc_reference_without_consensus"
 
 
 def test_qc_ms1_pattern_reference_requires_qc_injection_order(
@@ -129,11 +138,12 @@ def test_qc_ms1_pattern_reference_prefers_nearby_complete_qc_peak(
     )
 
     assert rows[0]["nearest_qc_sample_stem"] == "Breast_Cancer_Tissue_pooled_QC5"
-    assert rows[0]["qc_reference_status"] == "conflict"
-    assert rows[0]["reason"] == "nearest_qc_peak_separated_from_target_cell"
+    assert rows[0]["qc_reference_status"] == "inconclusive"
+    assert rows[0]["local_qc_reference_status"] == "conflict"
+    assert rows[0]["reason"] == "local_qc_reference_without_consensus"
 
 
-def test_qc_ms1_pattern_reference_prefers_family_centered_qc_peak(
+def test_qc_ms1_pattern_reference_marks_mixed_qc_consensus_inconclusive(
     tmp_path: Path,
 ) -> None:
     overlay = tmp_path / "fam001_overlay_trace_data.json"
@@ -178,10 +188,11 @@ def test_qc_ms1_pattern_reference_prefers_family_centered_qc_peak(
     )
 
     assert rows[0]["nearest_qc_sample_stem"] == "Breast_Cancer_Tissue_pooled_QC5"
-    assert rows[0]["qc_reference_status"] == "supportive"
-    assert rows[0]["qc_reference_evidence_level"] == (
-        "nearest_complete_family_centered_qc_overlay"
-    )
+    assert rows[0]["local_qc_reference_status"] == "supportive"
+    assert rows[0]["qc_reference_status"] == "inconclusive"
+    assert rows[0]["qc_consensus_status"] == "mixed_conflict"
+    assert rows[0]["qc_reference_policy"] == "qc_consensus_mixed_review"
+    assert rows[0]["qc_reference_conflict_status"] == "consensus_mixed_conflict"
 
 
 def test_qc_ms1_pattern_reference_rejects_blank_raw_trace_qc(
@@ -233,7 +244,8 @@ def test_qc_ms1_pattern_reference_rejects_blank_raw_trace_qc(
     )
 
     assert rows[0]["nearest_qc_sample_stem"] == "Breast_Cancer_Tissue_pooled_QC5"
-    assert rows[0]["qc_reference_status"] == "supportive"
+    assert rows[0]["qc_reference_status"] == "partial_support"
+    assert rows[0]["qc_reference_policy"] == "qc_consensus_with_local_support"
 
 
 def test_qc_ms1_pattern_reference_cli_writes_tsv(tmp_path: Path) -> None:
@@ -268,7 +280,9 @@ def test_qc_ms1_pattern_reference_cli_writes_tsv(tmp_path: Path) -> None:
     )
 
     assert exit_code == 0
-    assert "nearest_qc_ms1_pattern_supported" in output.read_text(encoding="utf-8")
+    output_text = output.read_text(encoding="utf-8")
+    assert "qc_consensus_and_local_qc_support" in output_text
+    assert "qc_reference_policy" in output_text
 
 
 def _write_overlay(

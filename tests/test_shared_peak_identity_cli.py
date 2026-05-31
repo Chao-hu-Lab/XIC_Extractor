@@ -345,6 +345,128 @@ def test_cli_writes_v2_machine_observed_support_with_optional_evidence(
     assert support["missing_machine_evidence"] == ""
 
 
+def test_cli_can_emit_activation_contract_outputs(tmp_path: Path) -> None:
+    fixture = _write_cli_fixture(tmp_path)
+    peak_hypothesis = tmp_path / "peak_hypothesis_selection.tsv"
+    _write_peak_hypothesis_selection(peak_hypothesis)
+
+    assert (
+        main(
+            [
+                "--manual-oracle-tsv",
+                str(fixture["oracle"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--candidate-gate-tsv",
+                str(fixture["gate"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--enable-shadow-label-alignment",
+                "--enable-product-activation-contract",
+                "--activation-must-not-regress-status",
+                "pass",
+                "--cwt-shape-evidence-tsv",
+                str(fixture["cwt"]),
+                "--tier2-trace-evidence-tsv",
+                str(fixture["tier2_trace"]),
+                "--candidate-ms2-pattern-evidence-tsv",
+                str(fixture["candidate_ms2"]),
+                "--peak-hypothesis-selection-tsv",
+                str(peak_hypothesis),
+            ]
+        )
+        == 0
+    )
+
+    output_dir = tmp_path / "out"
+    decisions = _read_tsv(output_dir / "shared_peak_identity_activation_decisions.tsv")
+    acceptance = _read_tsv(
+        output_dir / "shared_peak_identity_activation_acceptance.tsv"
+    )[0]
+    assert decisions[0]["activation_status"] == "auto_activate"
+    assert decisions[0]["activation_action"] == "activate_pass"
+    assert decisions[0]["peak_hypothesis_id"] == "FAM001::mode_1"
+    assert decisions[0]["activation_unit_scope"] == "peak_hypothesis"
+    assert acceptance["acceptance_status"] == "fail"
+    assert "blast_radius_not_current" in acceptance["hard_fail_reasons"]
+    assert acceptance["assessed_rows_basis"] == "activation_decision_rows_fallback"
+
+
+def test_cli_activation_acceptance_uses_85raw_blast_radius_denominator(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_cli_fixture(tmp_path)
+    expected_manifest = tmp_path / "expected_manifest.tsv"
+    must_not_regress = tmp_path / "must_not_regress.tsv"
+    peak_hypothesis = tmp_path / "peak_hypothesis_selection.tsv"
+    _write_peak_hypothesis_selection(peak_hypothesis)
+    _write_expected_manifest(
+        expected_manifest,
+        {
+            "8raw_alignment_review": fixture["eight_raw"] / "alignment_review.tsv",
+            "8raw_alignment_cells": fixture["eight_raw"] / "alignment_cells.tsv",
+            "85raw_alignment_review": fixture["eightyfive_raw"]
+            / "alignment_review.tsv",
+            "85raw_alignment_cells": fixture["eightyfive_raw"]
+            / "alignment_cells.tsv",
+        },
+    )
+    _write_activation_must_not_regress(must_not_regress)
+
+    assert (
+        main(
+            [
+                "--manual-oracle-tsv",
+                str(fixture["oracle"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--candidate-gate-tsv",
+                str(fixture["gate"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--enable-blast-radius",
+                "--blast-radius-8raw-run",
+                str(fixture["eight_raw"]),
+                "--blast-radius-85raw-run",
+                str(fixture["eightyfive_raw"]),
+                "--expected-blast-radius-manifest",
+                str(expected_manifest),
+                "--enable-shadow-label-alignment",
+                "--enable-product-activation-contract",
+                "--activation-must-not-regress-tsv",
+                str(must_not_regress),
+                "--cwt-shape-evidence-tsv",
+                str(fixture["cwt"]),
+                "--tier2-trace-evidence-tsv",
+                str(fixture["tier2_trace"]),
+                "--candidate-ms2-pattern-evidence-tsv",
+                str(fixture["candidate_ms2"]),
+                "--peak-hypothesis-selection-tsv",
+                str(peak_hypothesis),
+            ]
+        )
+        == 0
+    )
+
+    acceptance = _read_tsv(
+        tmp_path / "out" / "shared_peak_identity_activation_acceptance.tsv"
+    )[0]
+    assert acceptance["blast_radius_current"] == "TRUE"
+    assert acceptance["assessed_rows"] == "2"
+    assert (
+        acceptance["assessed_rows_basis"]
+        == "blast_radius_summary:all_available_85raw:assessed_row_count"
+    )
+    assert acceptance["decision_rows_total"] == "1"
+    assert acceptance["must_not_regress_status"] == "pass"
+    assert acceptance["must_not_regress_basis"] == "activation_must_not_regress_tsv"
+    assert acceptance["acceptance_status"] == "pass"
+
+
 def test_cli_accepts_ms1_pattern_and_matrix_rt_drift_sidecars(
     tmp_path: Path,
 ) -> None:
@@ -383,6 +505,205 @@ def test_cli_accepts_ms1_pattern_and_matrix_rt_drift_sidecars(
     assert "formal_pattern_metric" not in support["missing_machine_evidence"]
     assert "ms1_pattern_status=supportive" in support["observed_machine_metrics"]
     assert "matrix_rt_drift_status=rt_close" in support["observed_machine_metrics"]
+
+
+def test_cli_accepts_rt_mode_evidence_sidecar(tmp_path: Path) -> None:
+    fixture = _write_cli_fixture(tmp_path)
+    rt_mode = tmp_path / "rt_mode_evidence.tsv"
+    _write_rt_mode_evidence(rt_mode)
+
+    assert (
+        main(
+            [
+                "--manual-oracle-tsv",
+                str(fixture["oracle"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--enable-shadow-label-alignment",
+                "--rt-mode-evidence-tsv",
+                str(rt_mode),
+            ]
+        )
+        == 0
+    )
+
+    support = _read_tsv(
+        tmp_path / "out" / "shared_peak_identity_machine_evidence_support.tsv"
+    )[0]
+    assert support["rt_basis_status"] == "machine_observed"
+    assert "rt_mode_status=mode_supported" in support["observed_machine_metrics"]
+    assert "family_mode_class=rt_mode_pure" in support["observed_machine_metrics"]
+
+
+def test_cli_can_generate_rt_mode_evidence_from_mode_assignment(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_cli_fixture(tmp_path)
+    mode_assignment = tmp_path / "mode_assignments.tsv"
+    _write_mode_assignments(
+        mode_assignment,
+        [
+            _mode_assignment("S1", "mode_core", "1.00", "1.01", status="detected"),
+            _mode_assignment("S2", "mode_core", "1.02", "1.03"),
+            _mode_assignment("S3", "mode_outlier", "2.00", "2.01"),
+        ],
+    )
+
+    assert (
+        main(
+            [
+                "--manual-oracle-tsv",
+                str(fixture["oracle"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--enable-shadow-label-alignment",
+                "--candidate-ms2-pattern-evidence-tsv",
+                str(fixture["candidate_ms2"]),
+                "--generate-rt-mode-evidence",
+                "--rt-mode-evidence-mode-assignment-tsv",
+                str(mode_assignment),
+                "--rt-mode-evidence-family-id",
+                "FAM001",
+                "--generate-peak-hypothesis-selection",
+            ]
+        )
+        == 0
+    )
+
+    output_dir = tmp_path / "out"
+    generated = output_dir / "shared_peak_identity_rt_mode_evidence.tsv"
+    generated_peak_hypothesis = (
+        output_dir / "shared_peak_identity_peak_hypothesis_selection.tsv"
+    )
+    assert generated.exists()
+    assert generated_peak_hypothesis.exists()
+    generated_rows = _read_tsv(generated)
+    assert generated_rows[0]["rt_mode_status"] == "mode_supported"
+    assert generated_rows[0]["selected_mode_role"] == "tag_bearing_core"
+    peak_hypothesis_rows = _read_tsv(generated_peak_hypothesis)
+    assert peak_hypothesis_rows[0]["peak_hypothesis_status"] == (
+        "product_candidate_core"
+    )
+    assert peak_hypothesis_rows[0]["product_selection_action"] == (
+        "select_mode_peak_hypothesis"
+    )
+    support = _read_tsv(
+        output_dir / "shared_peak_identity_machine_evidence_support.tsv"
+    )[0]
+    assert "rt_mode_status=mode_supported" in support["observed_machine_metrics"]
+    assert "selected_mode_role=tag_bearing_core" in support[
+        "observed_machine_metrics"
+    ]
+    assert "peak_hypothesis_status=product_candidate_core" in support[
+        "observed_machine_metrics"
+    ]
+
+
+def test_cli_can_generate_rt_mode_evidence_from_overlay_trace_data(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_cli_fixture(tmp_path)
+    overlay_trace_data = tmp_path / "overlay_trace_data.json"
+    _write_overlay_trace_data(overlay_trace_data)
+
+    assert (
+        main(
+            [
+                "--manual-oracle-tsv",
+                str(fixture["oracle"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--enable-shadow-label-alignment",
+                "--candidate-ms2-pattern-evidence-tsv",
+                str(fixture["candidate_ms2"]),
+                "--generate-rt-mode-evidence",
+                "--rt-mode-evidence-overlay-trace-data-json",
+                str(overlay_trace_data),
+                "--generate-peak-hypothesis-selection",
+            ]
+        )
+        == 0
+    )
+
+    output_dir = tmp_path / "out"
+    generated = output_dir / "shared_peak_identity_rt_mode_evidence.tsv"
+    generated_peak_hypothesis = (
+        output_dir / "shared_peak_identity_peak_hypothesis_selection.tsv"
+    )
+    generated_rows = _read_tsv(generated)
+    assert generated_rows[0]["rt_mode_status"] == "mode_supported"
+    assert generated_rows[0]["rt_mode_evidence_level"] == "raw_selected_apex_modes"
+    assert generated_rows[0]["selected_mode_role"] == "single_mode"
+
+    peak_hypothesis_rows = _read_tsv(generated_peak_hypothesis)
+    assert peak_hypothesis_rows[0]["peak_hypothesis_status"] == (
+        "product_candidate_core"
+    )
+
+    support = _read_tsv(
+        output_dir / "shared_peak_identity_machine_evidence_support.tsv"
+    )[0]
+    assert "rt_mode_evidence_level=raw_selected_apex_modes" in support[
+        "observed_machine_metrics"
+    ]
+    assert "peak_hypothesis_status=product_candidate_core" in support[
+        "observed_machine_metrics"
+    ]
+
+
+def test_cli_can_generate_hypothesis_consistency_sidecar(tmp_path: Path) -> None:
+    fixture = _write_cli_fixture(tmp_path)
+    peak_hypothesis = tmp_path / "peak_hypothesis_selection.tsv"
+    _write_peak_hypothesis_selection(peak_hypothesis)
+
+    assert (
+        main(
+            [
+                "--manual-oracle-tsv",
+                str(fixture["oracle"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--enable-shadow-label-alignment",
+                "--candidate-ms2-pattern-evidence-tsv",
+                str(fixture["candidate_ms2"]),
+                "--ms1-pattern-coherence-evidence-tsv",
+                str(fixture["ms1_pattern"]),
+                "--qc-ms1-pattern-reference-evidence-tsv",
+                str(fixture["qc_ms1_reference"]),
+                "--matrix-rt-drift-policy-tsv",
+                str(fixture["matrix_drift"]),
+                "--peak-hypothesis-selection-tsv",
+                str(peak_hypothesis),
+                "--generate-hypothesis-consistency",
+            ]
+        )
+        == 0
+    )
+
+    output_dir = tmp_path / "out"
+    rows = _read_tsv(output_dir / "shared_peak_identity_hypothesis_consistency.tsv")
+    summary = _read_tsv(
+        output_dir / "shared_peak_identity_hypothesis_consistency_summary.tsv"
+    )[0]
+    assert rows[0]["evidence_consistency_status"] == "consistent"
+    assert rows[0]["split_readiness_status"] == "peak_hypothesis_ready"
+    assert summary["consistency_gate_status"] == "pass"
 
 
 def test_cli_accepts_qc_ms1_pattern_reference_sidecar(
@@ -870,6 +1191,75 @@ def test_cli_rejects_direct_and_generated_ms1_pattern_coherence(
     )
 
 
+def test_cli_rejects_direct_and_generated_rt_mode_evidence(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_cli_fixture(tmp_path)
+    rt_mode = tmp_path / "rt_mode_evidence.tsv"
+    mode_assignment = tmp_path / "mode_assignments.tsv"
+    _write_rt_mode_evidence(rt_mode)
+    _write_mode_assignments(
+        mode_assignment,
+        [_mode_assignment("S1", "mode_1", "1.00", "1.01")],
+    )
+
+    assert (
+        main(
+            [
+                "--manual-oracle-tsv",
+                str(fixture["oracle"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--enable-shadow-label-alignment",
+                "--rt-mode-evidence-tsv",
+                str(rt_mode),
+                "--generate-rt-mode-evidence",
+                "--rt-mode-evidence-mode-assignment-tsv",
+                str(mode_assignment),
+                "--rt-mode-evidence-family-id",
+                "FAM001",
+            ]
+        )
+        == 2
+    )
+
+
+def test_cli_rejects_direct_and_generated_peak_hypothesis_selection(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_cli_fixture(tmp_path)
+    rt_mode = tmp_path / "rt_mode_evidence.tsv"
+    peak_hypothesis = tmp_path / "peak_hypothesis_selection.tsv"
+    _write_rt_mode_evidence(rt_mode)
+    _write_peak_hypothesis_selection(peak_hypothesis)
+
+    assert (
+        main(
+            [
+                "--manual-oracle-tsv",
+                str(fixture["oracle"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--enable-shadow-label-alignment",
+                "--rt-mode-evidence-tsv",
+                str(rt_mode),
+                "--peak-hypothesis-selection-tsv",
+                str(peak_hypothesis),
+                "--generate-peak-hypothesis-selection",
+            ]
+        )
+        == 2
+    )
+
+
 def test_cli_rejects_candidate_ms2_raw_fallback_without_batch_index(
     tmp_path: Path,
 ) -> None:
@@ -1266,6 +1656,10 @@ def _write_qc_ms1_reference(path: Path) -> None:
             "sample_stem",
             "qc_reference_status",
             "qc_reference_evidence_level",
+            "qc_reference_policy",
+            "local_qc_reference_status",
+            "qc_consensus_status",
+            "qc_reference_conflict_status",
             "target_injection_order",
             "nearest_qc_sample_stem",
             "nearest_qc_injection_order",
@@ -1285,7 +1679,11 @@ def _write_qc_ms1_reference(path: Path) -> None:
                 "feature_family_id": "FAM001",
                 "sample_stem": "S1",
                 "qc_reference_status": "partial_support",
-                "qc_reference_evidence_level": "nearest_complete_peak_qc_overlay",
+                "qc_reference_evidence_level": "qc_consensus_with_local_qc_overlay",
+                "qc_reference_policy": "qc_consensus_with_local_support",
+                "local_qc_reference_status": "supportive",
+                "qc_consensus_status": "partial_support",
+                "qc_reference_conflict_status": "none",
                 "target_injection_order": "10",
                 "nearest_qc_sample_stem": "Breast_Cancer_Tissue_pooled_QC5",
                 "nearest_qc_injection_order": "11",
@@ -1337,6 +1735,135 @@ def _write_matrix_rt_drift(path: Path) -> None:
                 "diagnostic_only": "TRUE",
             }
         ],
+    )
+
+
+def _write_rt_mode_evidence(path: Path) -> None:
+    _write_tsv(
+        path,
+        (
+            "feature_family_id",
+            "sample_stem",
+            "rt_mode_status",
+            "rt_mode_evidence_level",
+            "selected_mode_id",
+            "selected_mode_role",
+            "selected_mode_tag_status",
+            "family_mode_class",
+            "family_mode_count",
+            "tag_bearing_mode_count",
+            "selected_mode_cell_count",
+            "selected_mode_sample_type_counts",
+            "selected_mode_status_counts",
+            "raw_selected_rt",
+            "normalized_selected_rt",
+            "selected_mode_raw_rt_range_min",
+            "selected_mode_normalized_rt_range_min",
+            "family_raw_rt_range_min",
+            "family_normalized_rt_range_min",
+            "reason",
+            "diagnostic_only",
+        ),
+        [
+            {
+                "feature_family_id": "FAM001",
+                "sample_stem": "S1",
+                "rt_mode_status": "mode_supported",
+                "rt_mode_evidence_level": "irt_selected_apex_modes",
+                "selected_mode_id": "mode_1",
+                "selected_mode_role": "single_mode",
+                "selected_mode_tag_status": "tag_supported",
+                "family_mode_class": "rt_mode_pure",
+                "family_mode_count": "1",
+                "tag_bearing_mode_count": "1",
+                "selected_mode_cell_count": "3",
+                "selected_mode_sample_type_counts": "QC:1;Tumor:2",
+                "selected_mode_status_counts": "detected:1;rescued:2",
+                "raw_selected_rt": "1.0",
+                "normalized_selected_rt": "1.01",
+                "selected_mode_raw_rt_range_min": "0.03",
+                "selected_mode_normalized_rt_range_min": "0.02",
+                "family_raw_rt_range_min": "0.03",
+                "family_normalized_rt_range_min": "0.02",
+                "reason": "unit_test_rt_mode",
+                "diagnostic_only": "TRUE",
+            }
+        ],
+    )
+
+
+def _write_peak_hypothesis_selection(path: Path) -> None:
+    _write_tsv(
+        path,
+        (
+            "feature_family_id",
+            "sample_stem",
+            "peak_hypothesis_id",
+            "peak_hypothesis_status",
+            "product_unit_scope",
+            "selected_mode_id",
+            "selected_mode_role",
+            "selected_mode_tag_status",
+            "family_mode_class",
+            "family_mode_count",
+            "tag_bearing_mode_count",
+            "product_selection_action",
+            "product_selection_blocker",
+            "reason",
+            "diagnostic_only",
+        ),
+        [
+            {
+                "feature_family_id": "FAM001",
+                "sample_stem": "S1",
+                "peak_hypothesis_id": "FAM001::mode_1",
+                "peak_hypothesis_status": "product_candidate_core",
+                "product_unit_scope": "mode_level",
+                "selected_mode_id": "mode_1",
+                "selected_mode_role": "single_mode",
+                "selected_mode_tag_status": "tag_supported",
+                "family_mode_class": "rt_mode_pure",
+                "family_mode_count": "1",
+                "tag_bearing_mode_count": "1",
+                "product_selection_action": "select_mode_peak_hypothesis",
+                "product_selection_blocker": "none",
+                "reason": "unit_test_peak_hypothesis_selection",
+                "diagnostic_only": "TRUE",
+            }
+        ],
+    )
+
+
+def _mode_assignment(
+    sample_stem: str,
+    mode_id: str,
+    raw_rt: str,
+    normalized_rt: str,
+    *,
+    status: str = "rescued",
+) -> dict[str, str]:
+    return {
+        "sample_stem": sample_stem,
+        "sample_type": "Tumor",
+        "status": status,
+        "irt_cluster": mode_id,
+        "cell_apex_rt": raw_rt,
+        "norm_apex_rt": normalized_rt,
+    }
+
+
+def _write_mode_assignments(path: Path, rows: list[dict[str, str]]) -> None:
+    _write_tsv(
+        path,
+        (
+            "sample_stem",
+            "sample_type",
+            "status",
+            "irt_cluster",
+            "cell_apex_rt",
+            "norm_apex_rt",
+        ),
+        rows,
     )
 
 
@@ -1742,6 +2269,42 @@ def _write_expected_manifest(path: Path, artifacts: dict[str, Path]) -> None:
         path,
         ("artifact_id", "artifact_role", "expected_artifact_sha256"),
         rows,
+    )
+
+
+def _write_activation_must_not_regress(path: Path) -> None:
+    _write_tsv(
+        path,
+        (
+            "expectation_schema_version",
+            "expectation_id",
+            "feature_family_id",
+            "sample_id",
+            "allowed_activation_statuses",
+            "allowed_contract_rule_ids",
+            "allowed_product_label_candidates",
+            "disallowed_activation_statuses",
+            "disallowed_contract_rule_ids",
+            "expectation_reason",
+        ),
+        [
+            {
+                "expectation_schema_version": (
+                    "shared_peak_identity_activation_must_not_regress_v1"
+                ),
+                "expectation_id": "unit_positive",
+                "feature_family_id": "FAM001",
+                "sample_id": "S1",
+                "allowed_activation_statuses": "auto_activate",
+                "allowed_contract_rule_ids": (
+                    "machine_observed_sufficient_positive_identity"
+                ),
+                "allowed_product_label_candidates": "pass",
+                "disallowed_activation_statuses": "",
+                "disallowed_contract_rule_ids": "",
+                "expectation_reason": "unit fixture positive must remain pass",
+            }
+        ],
     )
 
 

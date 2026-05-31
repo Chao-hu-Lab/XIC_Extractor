@@ -3,14 +3,28 @@ from __future__ import annotations
 import pytest
 
 from xic_extractor.alignment.shared_peak_identity_explanation.schema import (
+    ACTIVATION_DECISION_COLUMNS,
+    ACTIVATION_DECISION_SCHEMA_VERSION,
+    ACTIVATION_VALUE_DELTA_COLUMNS,
+    ACTIVATION_VALUE_DELTA_SCHEMA_VERSION,
     ALLOWED_BY_FIELD,
     BLAST_RADIUS_MANIFEST_COLUMNS,
     BLAST_RADIUS_MANIFEST_SCHEMA_VERSION,
     BLAST_RADIUS_SUMMARY_COLUMNS,
     BLAST_RADIUS_SUMMARY_SCHEMA_VERSION,
+    HYPOTHESIS_CONSISTENCY_COLUMNS,
+    HYPOTHESIS_CONSISTENCY_SCHEMA_VERSION,
+    HYPOTHESIS_CONSISTENCY_SUMMARY_COLUMNS,
+    HYPOTHESIS_CONSISTENCY_SUMMARY_SCHEMA_VERSION,
     MACHINE_EVIDENCE_SUPPORT_COLUMNS,
     MACHINE_EVIDENCE_SUPPORT_SCHEMA_VERSION,
     MANUAL_REASON_TAGS,
+    PEAK_HYPOTHESIS_CELL_ASSIGNMENT_COLUMNS,
+    PEAK_HYPOTHESIS_CELL_ASSIGNMENT_SCHEMA_VERSION,
+    PEAK_HYPOTHESIS_INVENTORY_COLUMNS,
+    PEAK_HYPOTHESIS_INVENTORY_SCHEMA_VERSION,
+    PEAK_HYPOTHESIS_MATRIX_SUMMARY_COLUMNS,
+    PEAK_HYPOTHESIS_MATRIX_SUMMARY_SCHEMA_VERSION,
     SHADOW_ALIGNMENT_SUMMARY_COLUMNS,
     SHADOW_ALIGNMENT_SUMMARY_SCHEMA_VERSION,
     SHADOW_LABEL_COLUMNS,
@@ -349,6 +363,191 @@ def test_v2_shadow_label_tokens_are_allowed() -> None:
         "not_assessed",
     }:
         validate_token(token, "machine_evidence_basis")
+
+
+def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
+    assert (
+        ACTIVATION_DECISION_SCHEMA_VERSION
+        == "shared_peak_identity_activation_decision_v1"
+    )
+    assert ACTIVATION_DECISION_COLUMNS[:6] == (
+        "activation_schema_version",
+        "feature_family_id",
+        "candidate_container_id",
+        "sample_id",
+        "peak_hypothesis_id",
+        "activation_unit_scope",
+    )
+    assert (
+        ACTIVATION_VALUE_DELTA_SCHEMA_VERSION
+        == "shared_peak_identity_activation_value_delta_v1"
+    )
+    assert ACTIVATION_VALUE_DELTA_COLUMNS[:5] == (
+        "activation_value_delta_schema_version",
+        "feature_family_id",
+        "candidate_container_id",
+        "sample_id",
+        "peak_hypothesis_id",
+    )
+
+    for token in {
+        "auto_activate",
+        "auto_block",
+        "confidence_only",
+        "review_required",
+        "no_change",
+        "not_applicable",
+    }:
+        validate_token(token, "activation_status")
+    for token in {
+        "peak_hypothesis",
+        "sample_cell",
+        "candidate_container",
+        "legacy_family_row",
+        "not_applicable",
+    }:
+        validate_token(token, "activation_unit_scope")
+    for token in {
+        "machine_observed_sufficient_positive_identity",
+        "peak_hypothesis_unit_required",
+        "wrong_peak_conflict",
+        "peak_hypothesis_split_required",
+    }:
+        validate_token(token, "contract_rule_id")
+    validate_token("pass", "acceptance_status")
+    validate_token("formal", "activation_output_mode")
+    validate_token("peak_hypothesis_id", "matrix_row_identity")
+    validate_token("TRUE", "canonical_row_identity_ready")
+    validate_token("none", "canonical_row_identity_blockers")
+    validate_token(
+        "formal_peak_hypothesis_with_family_projections",
+        "canonical_row_identity_scope",
+    )
+    validate_token("projection_not_split_proof", "family_projection_semantics")
+    validate_token(
+        "context_only_not_identity_authority",
+        "legacy_rt_row_context_authority",
+    )
+    validate_token("FALSE", "all_family_split_science_ready")
+    validate_token("family_projection_no_split_evidence", "row_identity_basis")
+    validate_token("max_area_pending_baseline", "matrix_value_conflict_policy")
+    validate_token("blanked", "matrix_value_effect")
+    validate_token("TRUE", "value_changed")
+    validate_token("qc_consensus_with_local_support", "qc_reference_policy")
+    validate_token("mixed_conflict", "qc_consensus_status")
+    validate_token("local_vs_consensus_conflict", "qc_reference_conflict_status")
+
+    with pytest.raises(ValueError):
+        validate_token("auto_promote_family", "activation_status")
+    with pytest.raises(ValueError):
+        validate_token("family_identity", "activation_unit_scope")
+    with pytest.raises(ValueError):
+        validate_token("nearest_qc_wins", "qc_reference_policy")
+
+
+def test_hypothesis_consistency_schema_tokens_are_allowed() -> None:
+    assert (
+        HYPOTHESIS_CONSISTENCY_SCHEMA_VERSION
+        == "shared_peak_identity_hypothesis_consistency_v1"
+    )
+    assert HYPOTHESIS_CONSISTENCY_COLUMNS[:8] == (
+        "hypothesis_consistency_schema_version",
+        "feature_family_id",
+        "sample_stem",
+        "peak_hypothesis_id",
+        "peak_hypothesis_status",
+        "product_unit_scope",
+        "product_selection_action",
+        "product_selection_blocker",
+    )
+    assert (
+        HYPOTHESIS_CONSISTENCY_SUMMARY_SCHEMA_VERSION
+        == "shared_peak_identity_hypothesis_consistency_summary_v1"
+    )
+    assert HYPOTHESIS_CONSISTENCY_SUMMARY_COLUMNS[:6] == (
+        "hypothesis_consistency_summary_schema_version",
+        "scope",
+        "row_count",
+        "consistent_count",
+        "conflict_count",
+        "incomplete_count",
+    )
+    validate_token("full_matrix", "scope")
+    validate_token("sidecar_key_union", "scope")
+    validate_token("sample_required_tag_observed", "family_required_tag_status")
+    validate_token("dda_missing_nl_not_dispositive", "ms2_opportunity_status")
+    validate_token("consistent", "evidence_consistency_status")
+    validate_token("peak_hypothesis_ready", "split_readiness_status")
+    validate_token("split_peak_hypothesis", "hypothesis_next_action")
+    validate_token("review_required", "consistency_gate_status")
+    with pytest.raises(ValueError):
+        validate_token("family_identity_ready", "split_readiness_status")
+
+
+def test_peak_hypothesis_matrix_construction_schema_tokens_are_allowed() -> None:
+    assert (
+        PEAK_HYPOTHESIS_INVENTORY_SCHEMA_VERSION
+        == "shared_peak_identity_peak_hypothesis_inventory_v1"
+    )
+    assert PEAK_HYPOTHESIS_INVENTORY_COLUMNS[:6] == (
+        "peak_hypothesis_inventory_schema_version",
+        "peak_hypothesis_id",
+        "feature_family_id",
+        "candidate_container_id",
+        "product_unit_scope",
+        "row_identity_basis",
+    )
+    assert (
+        PEAK_HYPOTHESIS_CELL_ASSIGNMENT_SCHEMA_VERSION
+        == "shared_peak_identity_peak_hypothesis_cell_assignment_v1"
+    )
+    assert PEAK_HYPOTHESIS_CELL_ASSIGNMENT_COLUMNS[:8] == (
+        "peak_hypothesis_cell_assignment_schema_version",
+        "feature_family_id",
+        "candidate_container_id",
+        "sample_id",
+        "peak_hypothesis_id",
+        "construction_assignment_status",
+        "construction_assignment_action",
+        "row_identity_basis",
+    )
+    assert (
+        PEAK_HYPOTHESIS_MATRIX_SUMMARY_SCHEMA_VERSION
+        == "shared_peak_identity_peak_hypothesis_matrix_summary_v1"
+    )
+    assert PEAK_HYPOTHESIS_MATRIX_SUMMARY_COLUMNS[:6] == (
+        "peak_hypothesis_matrix_summary_schema_version",
+        "construction_mode",
+        "source_matrix_rows",
+        "output_matrix_rows",
+        "sample_count",
+        "inventory_rows",
+    )
+    validate_token("peak_hypothesis_assignment", "construction_mode")
+    validate_token("assigned", "construction_assignment_status")
+    validate_token("expanded_candidate", "construction_assignment_status")
+    validate_token("family_projection", "construction_assignment_status")
+    validate_token("blocked", "construction_assignment_status")
+    validate_token(
+        "recorded_no_source_matrix_value",
+        "construction_assignment_status",
+    )
+    validate_token("write_peak_hypothesis_cell", "construction_assignment_action")
+    validate_token(
+        "write_expanded_peak_hypothesis_cell",
+        "construction_assignment_action",
+    )
+    validate_token("skip_blocked_cell", "construction_assignment_action")
+    validate_token(
+        "matrix_construction_peak_hypothesis",
+        "row_identity_basis",
+    )
+    validate_token("source_matrix_value_missing", "matrix_value_effect")
+    validate_token(
+        "matrix_construction_peak_hypothesis_with_family_projections",
+        "canonical_row_identity_scope",
+    )
+    validate_token("construction_ready", "construction_gate_status")
 
 
 def test_slice1_schema_rejects_noncanonical_review_drift_tokens() -> None:
