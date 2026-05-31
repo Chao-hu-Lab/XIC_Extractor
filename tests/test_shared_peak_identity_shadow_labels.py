@@ -427,6 +427,74 @@ def test_dda_missing_nl_policy_can_be_non_dispositive_with_ms1_support() -> None
     ]
 
 
+def test_ms1_overlay_height_closes_intensity_opportunity_without_tier2() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="pass",
+                evidence_gap_class="machine_too_conservative_low_opportunity",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "low_intensity",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "1.0",
+                        "peak_start_rt": "0.9",
+                        "peak_end_rt": "1.1",
+                        "rt_delta_sec": "0.0",
+                        "trace_quality": "owner_backfill",
+                        "scan_support_score": "1",
+                        "reason": "supported",
+                    },
+                ),
+            )
+        },
+        ms1_pattern_coherence_evidence={
+            ("FAM001", "S1"): {
+                "ms1_pattern_status": "supportive",
+                "ms1_pattern_evidence_level": "trace_constellation",
+                "apex_coherence_sec": "1.0",
+                "boundary_overlap_score": "0.9",
+                "shape_correlation_score": "0.95",
+                "relative_pattern_stability_score": "0.9",
+                "local_interference_score": "0.05",
+                "constellation_peak_count": "3",
+                "reference_peak_count": "3",
+                "drift_compatible_status": "compatible",
+                "shape_metric_source": "family_ms1_overlay_raw_trace",
+                "cell_height": "26000",
+                "local_window_max_intensity": "26000",
+                "trace_max_intensity": "26000",
+                "reason": "family_ms1_overlay_shape_supported",
+                "diagnostic_only": "TRUE",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert row["opportunity_basis_status"] == "machine_observed"
+    assert row["evidence_support_status"] == "machine_observed_sufficient"
+    assert "intensity_opportunity_metric" not in row["missing_machine_evidence"]
+    assert (
+        "ms1_intensity_opportunity_status=supported_by_raw_overlay_height"
+        in row["observed_machine_metrics"]
+    )
+
+
 def test_dda_missing_nl_policy_requires_family_level_required_tag() -> None:
     explanations = [
         {
@@ -663,6 +731,97 @@ def test_dda_missing_nl_policy_accepts_existing_family_tag_context() -> None:
     ]
 
 
+def test_dda_missing_nl_policy_accepts_product_outside_diagnostic_window() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="pass",
+                evidence_gap_class="machine_too_conservative_low_opportunity",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": (
+                "rt_close;shape_complete;pattern_similar;low_intensity;"
+                "dda_stochastic_missing"
+            ),
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "1.0",
+                        "peak_start_rt": "0.9",
+                        "peak_end_rt": "1.1",
+                        "rt_delta_sec": "0.0",
+                        "trace_quality": "owner_backfill",
+                        "scan_support_score": "1",
+                        "reason": "supported",
+                    },
+                ),
+                _machine_match(
+                    source_role="selected_peak",
+                    sample_level=False,
+                    row={
+                        "feature_family_id": "FAM001",
+                        "neutral_loss_tag": "DNA_dR",
+                        "family_product_mz": "229.041",
+                        "family_observed_neutral_loss_da": "116.048",
+                    },
+                ),
+            )
+        },
+        candidate_ms2_pattern_evidence={
+            ("FAM001", "S1"): {
+                "candidate_ms2_pattern_status": "not_observed",
+                "candidate_ms2_evidence_level": "sample_boundary_no_observed_pattern",
+                "raw_ms2_trigger_scan_count": "7",
+                "raw_ms2_strict_nl_scan_count": "0",
+                "raw_ms2_trace_strength": "none",
+                "raw_ms2_diagnostic_product_absence_reason": (
+                    "product_outside_diagnostic_window"
+                ),
+            }
+        },
+        ms1_pattern_coherence_evidence={
+            ("FAM001", "S1"): {
+                "ms1_pattern_status": "supportive",
+                "ms1_pattern_evidence_level": "trace_constellation",
+                "apex_coherence_sec": "1.0",
+                "boundary_overlap_score": "0.9",
+                "shape_correlation_score": "0.8",
+                "relative_pattern_stability_score": "0.8",
+                "local_interference_score": "0.05",
+                "constellation_peak_count": "3",
+                "reference_peak_count": "3",
+                "drift_compatible_status": "compatible",
+                "shape_metric_source": "family_ms1_overlay_raw_trace",
+                "cell_height": "26000",
+                "reason": "ms1_pattern_supports_identity",
+                "diagnostic_only": "TRUE",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert "dda_opportunity_policy" not in row["missing_machine_evidence"]
+    assert "candidate_ms2_raw_absence_reason=product_outside_diagnostic_window" in row[
+        "observed_machine_metrics"
+    ]
+    assert "dda_missing_nl_policy_status=not_dispositive" in row[
+        "observed_machine_metrics"
+    ]
+
+
 def test_wrong_peak_conflict_closes_pattern_without_marking_shape_bad() -> None:
     explanations = [
         {
@@ -733,6 +892,11 @@ def test_wrong_peak_conflict_closes_pattern_without_marking_shape_bad() -> None:
     assert "shape_metric_not_supportive" not in row["missing_machine_evidence"]
     assert row["shape_basis_status"] == "machine_observed"
     assert row["pattern_basis_status"] == "machine_observed"
+    assert (
+        "ms1_pattern_reason="
+        "family_ms1_overlay_competing_peak_matches_family_consensus"
+        in row["observed_machine_metrics"]
+    )
 
 
 def test_sample_negative_evidence_sidecar_closes_scope_fail_gap() -> None:
@@ -935,7 +1099,11 @@ def test_qc_ms1_reference_can_close_formal_pattern_metric() -> None:
         qc_ms1_pattern_reference_evidence={
             ("FAM001", "S1"): {
                 "qc_reference_status": "partial_support",
-                "qc_reference_evidence_level": "nearest_complete_peak_qc_overlay",
+                "qc_reference_evidence_level": "qc_consensus_with_local_qc_overlay",
+                "qc_reference_policy": "qc_consensus_with_local_support",
+                "local_qc_reference_status": "supportive",
+                "qc_consensus_status": "partial_support",
+                "qc_reference_conflict_status": "none",
                 "nearest_qc_sample_stem": "Breast_Cancer_Tissue_pooled_QC5",
                 "nearest_qc_injection_order_delta": "2",
                 "target_qc_apex_abs_delta_sec": "2.32",
@@ -953,6 +1121,124 @@ def test_qc_ms1_reference_can_close_formal_pattern_metric() -> None:
         "observed_machine_metrics"
     ]
     assert row["evidence_support_status"] == "machine_observed_sufficient"
+
+
+def test_qc_ms1_reference_conflict_cannot_override_sample_ms1_support() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="pass",
+                evidence_gap_class="machine_too_conservative_shape_or_pattern_unmodeled",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "pattern_partial",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={"status": "rescued"},
+                ),
+            )
+        },
+        ms1_pattern_coherence_evidence={
+            ("FAM001", "S1"): {
+                "ms1_pattern_status": "supportive",
+                "ms1_pattern_evidence_level": "trace_constellation",
+                "apex_coherence_sec": "3.0",
+                "boundary_overlap_score": "0.82",
+                "shape_correlation_score": "0.91",
+                "relative_pattern_stability_score": "0.77",
+                "local_interference_score": "0.05",
+                "constellation_peak_count": "3",
+                "reference_peak_count": "3",
+                "drift_compatible_status": "compatible",
+                "reason": "unit_test_ms1_constellation",
+                "diagnostic_only": "TRUE",
+            }
+        },
+        qc_ms1_pattern_reference_evidence={
+            ("FAM001", "S1"): {
+                "qc_reference_status": "conflict",
+                "qc_reference_evidence_level": "qc_consensus_with_local_qc_overlay",
+                "qc_reference_policy": "qc_consensus_with_local_conflict",
+                "local_qc_reference_status": "conflict",
+                "qc_consensus_status": "conflict",
+                "qc_reference_conflict_status": "none",
+                "nearest_qc_sample_stem": "Breast_Cancer_Tissue_pooled_QC5",
+                "nearest_qc_injection_order_delta": "2",
+                "target_qc_apex_abs_delta_sec": "37.39",
+                "target_qc_shape_similarity": "0.96",
+                "target_local_window_to_global_max_ratio": "1",
+                "nearest_qc_local_window_to_global_max_ratio": "1",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert row["pattern_basis_status"] == "machine_observed"
+    assert "pattern_metric_not_supportive" not in row["missing_machine_evidence"]
+    assert row["evidence_support_status"] == "machine_observed_sufficient"
+    assert "ms1_pattern_status=supportive" in row["observed_machine_metrics"]
+    assert "qc_ms1_reference_status=conflict" in row["observed_machine_metrics"]
+
+
+def test_legacy_nearest_only_qc_reference_stays_context_only() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="pass",
+                evidence_gap_class="machine_too_conservative_shape_or_pattern_unmodeled",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "pattern_similar",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={"status": "rescued"},
+                ),
+            )
+        },
+        qc_ms1_pattern_reference_evidence={
+            ("FAM001", "S1"): {
+                "qc_reference_status": "partial_support",
+                "qc_reference_evidence_level": "nearest_complete_peak_qc_overlay",
+                "nearest_qc_sample_stem": "Breast_Cancer_Tissue_pooled_QC5",
+                "nearest_qc_injection_order_delta": "2",
+                "target_qc_apex_abs_delta_sec": "2.32",
+                "target_qc_shape_similarity": "0.666",
+                "target_local_window_to_global_max_ratio": "1",
+                "nearest_qc_local_window_to_global_max_ratio": "1",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert row["pattern_basis_status"] == "manual_oracle_derived"
+    assert "formal_pattern_metric" in row["missing_machine_evidence"]
+    assert "qc_ms1_reference_status=partial_support" in row[
+        "observed_machine_metrics"
+    ]
 
 
 def test_ms1_overlay_shape_metric_can_close_formal_shape_metric() -> None:
@@ -1383,6 +1669,136 @@ def test_matrix_rt_drift_policy_can_close_drift_possible_blocker() -> None:
     assert row["evidence_support_status"] == "machine_observed_sufficient"
 
 
+def test_rt_mode_conflict_fails_closed_against_manual_pass() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="pass",
+                evidence_gap_class="machine_too_permissive_rt_pattern_conflict",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "shape_complete;pattern_similar;rt_drift_possible",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "6.02",
+                        "peak_start_rt": "5.90",
+                        "peak_end_rt": "6.20",
+                        "rt_delta_sec": "72.0",
+                        "trace_quality": "owner_backfill",
+                    },
+                ),
+            )
+        },
+        rt_mode_evidence={
+            ("FAM001", "S1"): {
+                "rt_mode_status": "mode_conflict",
+                "rt_mode_evidence_level": "irt_selected_apex_modes",
+                "selected_mode_id": "mode_outlier",
+                "selected_mode_role": "non_tag_outlier",
+                "selected_mode_tag_status": "no_tag_observed",
+                "family_mode_class": "tag_backed_core_with_outlier_modes",
+                "family_mode_count": "2",
+                "tag_bearing_mode_count": "1",
+                "selected_mode_cell_count": "1",
+                "selected_mode_sample_type_counts": "Tumor:1",
+                "selected_mode_status_counts": "rescued:1",
+                "raw_selected_rt": "6.02",
+                "normalized_selected_rt": "6.01",
+                "selected_mode_raw_rt_range_min": "0",
+                "selected_mode_normalized_rt_range_min": "0",
+                "family_raw_rt_range_min": "2.0",
+                "family_normalized_rt_range_min": "1.9",
+                "reason": "selected_mode_not_tag_bearing_core",
+                "diagnostic_only": "TRUE",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert row["rt_basis_status"] == "machine_observed"
+    assert "rt_mode_not_supportive" in row["missing_machine_evidence"]
+    assert "rt_mode_status=mode_conflict" in row["observed_machine_metrics"]
+    assert row["evidence_support_status"] == "machine_observed_conflict"
+
+
+def test_peak_hypothesis_selection_fails_closed_against_manual_pass() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM011810|TumorBC2263_DNA",
+                manual_label="pass",
+                evidence_gap_class="machine_too_permissive_rt_pattern_conflict",
+            ),
+            "feature_family_id": "FAM011810",
+            "sample_id": "TumorBC2263_DNA",
+            "manual_reason_tags": "shape_complete;pattern_similar;rt_drift_possible",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM011810|TumorBC2263_DNA": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "6.02",
+                        "peak_start_rt": "5.90",
+                        "peak_end_rt": "6.20",
+                        "rt_delta_sec": "72.0",
+                        "trace_quality": "owner_backfill",
+                    },
+                ),
+            )
+        },
+        peak_hypothesis_selection={
+            ("FAM011810", "TumorBC2263_DNA"): {
+                "peak_hypothesis_id": "FAM011810::irt_green_core",
+                "peak_hypothesis_status": "cross_mode_rescue_blocked",
+                "product_unit_scope": "sample_cell",
+                "selected_mode_id": "irt_green_core",
+                "selected_mode_role": "non_tag_outlier",
+                "selected_mode_tag_status": "no_tag_observed",
+                "family_mode_class": "tag_backed_core_with_outlier_modes",
+                "family_mode_count": "3",
+                "tag_bearing_mode_count": "1",
+                "product_selection_action": "block_cross_mode_rescue",
+                "product_selection_blocker": "cross_mode_rescue",
+                "reason": "selected_cell_belongs_to_non_core_rt_mode",
+                "diagnostic_only": "TRUE",
+            }
+        },
+    )
+
+    row = rows[0]
+    assert "peak_hypothesis_not_supportive" in row["missing_machine_evidence"]
+    assert "peak_hypothesis_status=cross_mode_rescue_blocked" in row[
+        "observed_machine_metrics"
+    ]
+    assert "product_selection_action=block_cross_mode_rescue" in row[
+        "observed_machine_metrics"
+    ]
+    assert row["evidence_support_status"] == "machine_observed_conflict"
+
+
 def test_rt_close_policy_can_close_drift_possible_blocker() -> None:
     explanations = [
         {
@@ -1639,7 +2055,11 @@ def test_qc_ms1_reference_can_close_pattern_mismatch() -> None:
         qc_ms1_pattern_reference_evidence={
             ("FAM001", "S1"): {
                 "qc_reference_status": "conflict",
-                "qc_reference_evidence_level": "nearest_complete_peak_qc_overlay",
+                "qc_reference_evidence_level": "qc_consensus_with_local_qc_overlay",
+                "qc_reference_policy": "qc_consensus_with_local_conflict",
+                "local_qc_reference_status": "conflict",
+                "qc_consensus_status": "conflict",
+                "qc_reference_conflict_status": "none",
                 "nearest_qc_sample_stem": "Breast_Cancer_Tissue_pooled_QC5",
                 "nearest_qc_injection_order_delta": "31",
                 "target_qc_apex_abs_delta_sec": "78.3054",

@@ -8,10 +8,15 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from xic_extractor.alignment.shared_peak_identity_explanation import (
+    activation_contract,
     candidate_ms2_pattern,
+    hypothesis_consistency,
     machine_evidence_support,
     matrix_rt_drift_policy,
+    mode_hypothesis_assignment,
     ms1_pattern_coherence,
+    peak_hypothesis_selection,
+    rt_mode_evidence,
 )
 from xic_extractor.alignment.shared_peak_identity_explanation.assembler import (
     assemble_evidence_vectors,
@@ -44,6 +49,7 @@ from xic_extractor.alignment.shared_peak_identity_explanation.shadow_labels impo
     build_v2_readiness,
 )
 from xic_extractor.alignment.shared_peak_identity_explanation.writers import (
+    write_activation_outputs,
     write_slice0_outputs,
     write_slice1_outputs,
     write_v2_outputs,
@@ -83,6 +89,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.qc_ms1_pattern_reference_evidence_tsv
             ),
             sample_negative_evidence_tsv=args.sample_negative_evidence_tsv,
+            rt_mode_evidence_tsv=args.rt_mode_evidence_tsv,
+            generate_rt_mode_evidence=args.generate_rt_mode_evidence,
+            rt_mode_evidence_mode_assignment_tsv=(
+                args.rt_mode_evidence_mode_assignment_tsv
+            ),
+            rt_mode_evidence_mode_summary_tsv=args.rt_mode_evidence_mode_summary_tsv,
+            rt_mode_evidence_family_id=args.rt_mode_evidence_family_id,
+            rt_mode_evidence_overlay_trace_data_json=(
+                args.rt_mode_evidence_overlay_trace_data_json
+            ),
+            peak_hypothesis_selection_tsv=args.peak_hypothesis_selection_tsv,
+            generate_peak_hypothesis_selection=(
+                args.generate_peak_hypothesis_selection
+            ),
+            generate_mode_hypothesis_assignment=(
+                args.generate_mode_hypothesis_assignment
+            ),
+            generate_hypothesis_consistency=args.generate_hypothesis_consistency,
             generate_ms1_pattern_coherence_evidence=(
                 args.generate_ms1_pattern_coherence_evidence
             ),
@@ -109,6 +133,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             ms1_pattern_coherence_overlay_trace_data_json=(
                 args.ms1_pattern_coherence_overlay_trace_data_json
             ),
+            enable_product_activation_contract=(
+                args.enable_product_activation_contract
+            ),
+            activation_must_not_regress_status=(
+                args.activation_must_not_regress_status
+            ),
+            activation_must_not_regress_tsv=args.activation_must_not_regress_tsv,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -141,6 +172,16 @@ def run_explanation(
     ms1_pattern_coherence_evidence_tsv: Path | None = None,
     qc_ms1_pattern_reference_evidence_tsv: Path | None = None,
     sample_negative_evidence_tsv: Path | None = None,
+    rt_mode_evidence_tsv: Path | None = None,
+    generate_rt_mode_evidence: bool = False,
+    rt_mode_evidence_mode_assignment_tsv: Path | None = None,
+    rt_mode_evidence_mode_summary_tsv: Path | None = None,
+    rt_mode_evidence_family_id: str | None = None,
+    rt_mode_evidence_overlay_trace_data_json: Sequence[Path] | None = None,
+    peak_hypothesis_selection_tsv: Path | None = None,
+    generate_peak_hypothesis_selection: bool = False,
+    generate_mode_hypothesis_assignment: bool = False,
+    generate_hypothesis_consistency: bool = False,
     generate_ms1_pattern_coherence_evidence: bool = False,
     matrix_rt_drift_policy_tsv: Path | None = None,
     generate_matrix_rt_drift_policy: bool = False,
@@ -151,6 +192,9 @@ def run_explanation(
     matrix_rt_drift_policy_istd_rt_trend_tsv: Path | None = None,
     matrix_rt_drift_policy_istd_phase_summary_tsv: Path | None = None,
     ms1_pattern_coherence_overlay_trace_data_json: Sequence[Path] | None = None,
+    enable_product_activation_contract: bool = False,
+    activation_must_not_regress_status: str = "not_assessed",
+    activation_must_not_regress_tsv: Path | None = None,
 ) -> Mapping[str, Path | str]:
     optional_artifacts = _parse_optional_blast_radius_artifacts(
         optional_blast_radius_artifacts
@@ -188,6 +232,92 @@ def run_explanation(
         raise ValueError(
             "--generate-ms1-pattern-coherence-evidence requires "
             "--enable-shadow-label-alignment"
+        )
+    rt_mode_evidence_generation_requested = (
+        generate_rt_mode_evidence
+        or rt_mode_evidence_mode_assignment_tsv is not None
+        or rt_mode_evidence_mode_summary_tsv is not None
+        or rt_mode_evidence_family_id is not None
+        or bool(rt_mode_evidence_overlay_trace_data_json)
+    )
+    if rt_mode_evidence_tsv and rt_mode_evidence_generation_requested:
+        raise ValueError(
+            "use either --rt-mode-evidence-tsv or RT mode evidence producer "
+            "inputs, not both"
+        )
+    if rt_mode_evidence_generation_requested and not enable_shadow_label_alignment:
+        raise ValueError(
+            "RT mode evidence producer inputs require --enable-shadow-label-alignment"
+        )
+    if rt_mode_evidence_generation_requested and (
+        rt_mode_evidence_mode_assignment_tsv is None
+        and not rt_mode_evidence_overlay_trace_data_json
+    ):
+        raise ValueError(
+            "RT mode evidence generation requires "
+            "--rt-mode-evidence-mode-assignment-tsv or "
+            "--rt-mode-evidence-overlay-trace-data-json"
+        )
+    if (
+        rt_mode_evidence_mode_assignment_tsv is None
+        and (
+            rt_mode_evidence_mode_summary_tsv is not None
+            or rt_mode_evidence_family_id is not None
+        )
+    ):
+        raise ValueError(
+            "RT mode summary/family inputs require "
+            "--rt-mode-evidence-mode-assignment-tsv"
+        )
+    peak_selection_generation_count = int(generate_peak_hypothesis_selection) + int(
+        generate_mode_hypothesis_assignment
+    )
+    if peak_hypothesis_selection_tsv and peak_selection_generation_count:
+        raise ValueError(
+            "use either --peak-hypothesis-selection-tsv or "
+            "a PeakHypothesis selection producer, not both"
+        )
+    if peak_selection_generation_count > 1:
+        raise ValueError(
+            "use either --generate-peak-hypothesis-selection or "
+            "--generate-mode-hypothesis-assignment, not both"
+        )
+    if peak_selection_generation_count and not enable_shadow_label_alignment:
+        raise ValueError(
+            "PeakHypothesis selection producer inputs require "
+            "--enable-shadow-label-alignment"
+        )
+    if peak_selection_generation_count and not (
+        rt_mode_evidence_tsv or rt_mode_evidence_generation_requested
+    ):
+        raise ValueError(
+            "PeakHypothesis selection producers require RT mode evidence from "
+            "--rt-mode-evidence-tsv or RT mode evidence producer inputs"
+        )
+    if generate_hypothesis_consistency and not enable_shadow_label_alignment:
+        raise ValueError(
+            "--generate-hypothesis-consistency requires "
+            "--enable-shadow-label-alignment"
+        )
+    if generate_hypothesis_consistency and not (
+        peak_hypothesis_selection_tsv or peak_selection_generation_count
+    ):
+        raise ValueError(
+            "--generate-hypothesis-consistency requires "
+            "--peak-hypothesis-selection-tsv or "
+            "a PeakHypothesis selection producer"
+        )
+    if enable_product_activation_contract and not enable_shadow_label_alignment:
+        raise ValueError(
+            "--enable-product-activation-contract requires "
+            "--enable-shadow-label-alignment"
+        )
+    if activation_must_not_regress_tsv and (
+        activation_must_not_regress_status != "not_assessed"
+    ):
+        raise ValueError(
+            "use either --activation-must-not-regress-tsv or "
+            "--activation-must-not-regress-status, not both"
         )
     if candidate_ms2_pattern_raw_dll_dir and not candidate_ms2_pattern_batch_index:
         raise ValueError(
@@ -231,6 +361,31 @@ def run_explanation(
             "matrix RT drift policy producer inputs require "
             "--enable-shadow-label-alignment"
         )
+    if generate_mode_hypothesis_assignment:
+        if not (
+            candidate_ms2_pattern_evidence_tsv
+            or candidate_ms2_pattern_batch_index is not None
+        ):
+            raise ValueError(
+                "--generate-mode-hypothesis-assignment requires candidate MS2 "
+                "tag/opportunity evidence"
+            )
+        if not (
+            ms1_pattern_coherence_evidence_tsv
+            or generate_ms1_pattern_coherence_evidence
+        ):
+            raise ValueError(
+                "--generate-mode-hypothesis-assignment requires MS1 pattern "
+                "coherence evidence"
+            )
+        if not (
+            matrix_rt_drift_policy_tsv
+            or matrix_rt_drift_policy_generation_requested
+        ):
+            raise ValueError(
+                "--generate-mode-hypothesis-assignment requires matrix RT drift "
+                "policy evidence"
+            )
     if blast_radius_preflight_only:
         if blast_radius_8raw_run is None or blast_radius_85raw_run is None:
             raise AssertionError("blast-radius run paths were validated above")
@@ -276,6 +431,45 @@ def run_explanation(
         generated_evidence_outputs["candidate_ms2_pattern_evidence"] = (
             generated_candidate_ms2_path
         )
+    if rt_mode_evidence_generation_requested:
+        generated_rt_mode_path = (
+            output_dir / "shared_peak_identity_rt_mode_evidence.tsv"
+        )
+        rt_mode_row_groups = []
+        if rt_mode_evidence_mode_assignment_tsv is not None:
+            rt_mode_row_groups.append(
+                rt_mode_evidence.build_rt_mode_evidence_rows(
+                    mode_assignment_tsv=rt_mode_evidence_mode_assignment_tsv,
+                    mode_summary_tsv=rt_mode_evidence_mode_summary_tsv,
+                    feature_family_id=rt_mode_evidence_family_id,
+                    candidate_ms2_pattern_evidence_tsv=(
+                        candidate_ms2_pattern_evidence_tsv
+                    ),
+                    oracle_keys=(
+                        (row.feature_family_id, row.sample_id)
+                        for row in oracle_rows
+                        if not row.is_sentinel
+                    ),
+                )
+            )
+        if rt_mode_evidence_overlay_trace_data_json:
+            rt_mode_row_groups.append(
+                rt_mode_evidence.build_rt_mode_evidence_rows_from_overlay_trace_data(
+                    overlay_trace_data_jsons=rt_mode_evidence_overlay_trace_data_json,
+                    candidate_ms2_pattern_evidence_tsv=candidate_ms2_pattern_evidence_tsv,
+                    oracle_keys=(
+                        (row.feature_family_id, row.sample_id)
+                        for row in oracle_rows
+                        if not row.is_sentinel
+                    ),
+                )
+            )
+        rt_mode_evidence.write_rt_mode_evidence_rows(
+            generated_rt_mode_path,
+            rt_mode_evidence.merge_rt_mode_evidence_rows(*rt_mode_row_groups),
+        )
+        rt_mode_evidence_tsv = generated_rt_mode_path
+        generated_evidence_outputs["rt_mode_evidence"] = generated_rt_mode_path
     if matrix_rt_drift_policy_generation_requested:
         generated_matrix_rt_drift_path = (
             output_dir / "shared_peak_identity_matrix_rt_drift_policy.tsv"
@@ -333,6 +527,61 @@ def run_explanation(
         generated_evidence_outputs["ms1_pattern_coherence_evidence"] = (
             generated_ms1_pattern_path
         )
+    if generate_peak_hypothesis_selection or generate_mode_hypothesis_assignment:
+        if rt_mode_evidence_tsv is None:
+            raise AssertionError("RT mode evidence input was validated above")
+        generated_peak_hypothesis_path = (
+            output_dir / "shared_peak_identity_peak_hypothesis_selection.tsv"
+        )
+        oracle_keys = (
+            (row.feature_family_id, row.sample_id)
+            for row in oracle_rows
+            if not row.is_sentinel
+        )
+        if generate_mode_hypothesis_assignment:
+            mode_hypothesis_assignment.write_mode_hypothesis_assignment_rows(
+                generated_peak_hypothesis_path,
+                mode_hypothesis_assignment.build_mode_hypothesis_assignment_rows(
+                    rt_mode_rows=mode_hypothesis_assignment.load_rt_mode_rows(
+                        rt_mode_evidence_tsv
+                    ),
+                    candidate_ms2_pattern_rows=(
+                        mode_hypothesis_assignment.load_candidate_ms2_pattern_rows(
+                            candidate_ms2_pattern_evidence_tsv
+                        )
+                    ),
+                    ms1_pattern_coherence_rows=(
+                        mode_hypothesis_assignment.load_ms1_pattern_coherence_rows(
+                            ms1_pattern_coherence_evidence_tsv
+                        )
+                    ),
+                    qc_ms1_pattern_reference_rows=(
+                        mode_hypothesis_assignment.load_qc_ms1_pattern_reference_rows(
+                            qc_ms1_pattern_reference_evidence_tsv
+                        )
+                    ),
+                    matrix_rt_drift_policy_rows=(
+                        mode_hypothesis_assignment.load_matrix_rt_drift_policy_rows(
+                            matrix_rt_drift_policy_tsv
+                        )
+                    ),
+                    oracle_keys=oracle_keys,
+                ),
+            )
+        else:
+            peak_hypothesis_selection.write_peak_hypothesis_selection_rows(
+                generated_peak_hypothesis_path,
+                peak_hypothesis_selection.build_peak_hypothesis_selection_rows(
+                    rt_mode_rows=peak_hypothesis_selection.load_rt_mode_rows(
+                        rt_mode_evidence_tsv
+                    ),
+                    oracle_keys=oracle_keys,
+                ),
+            )
+        peak_hypothesis_selection_tsv = generated_peak_hypothesis_path
+        generated_evidence_outputs["peak_hypothesis_selection"] = (
+            generated_peak_hypothesis_path
+        )
     candidate_ms2_pattern_evidence = (
         machine_evidence_support.load_candidate_ms2_pattern_evidence(
             candidate_ms2_pattern_evidence_tsv
@@ -355,6 +604,53 @@ def run_explanation(
     )
     sample_negative_evidence = machine_evidence_support.load_sample_negative_evidence(
         sample_negative_evidence_tsv
+    )
+    rt_mode_evidence_rows = machine_evidence_support.load_rt_mode_evidence(
+        rt_mode_evidence_tsv
+    )
+    peak_hypothesis_selection_rows = (
+        machine_evidence_support.load_peak_hypothesis_selection(
+            peak_hypothesis_selection_tsv
+        )
+    )
+    if generate_hypothesis_consistency:
+        generated_hypothesis_consistency_path = (
+            output_dir / "shared_peak_identity_hypothesis_consistency.tsv"
+        )
+        generated_hypothesis_consistency_summary_path = (
+            output_dir / "shared_peak_identity_hypothesis_consistency_summary.tsv"
+        )
+        hypothesis_consistency_rows = (
+            hypothesis_consistency.build_hypothesis_consistency_rows(
+                peak_hypothesis_selection=peak_hypothesis_selection_rows,
+                ms1_pattern_coherence_evidence=ms1_pattern_coherence_evidence,
+                qc_ms1_pattern_reference_evidence=qc_ms1_pattern_reference_evidence,
+                matrix_rt_drift_policy_evidence=matrix_rt_drift_policy_evidence,
+                candidate_ms2_pattern_evidence=candidate_ms2_pattern_evidence,
+            )
+        )
+        hypothesis_consistency.write_hypothesis_consistency_rows(
+            generated_hypothesis_consistency_path,
+            hypothesis_consistency_rows,
+        )
+        hypothesis_consistency.write_hypothesis_consistency_summary(
+            generated_hypothesis_consistency_summary_path,
+            hypothesis_consistency.build_hypothesis_consistency_summary(
+                hypothesis_consistency_rows,
+            ),
+        )
+        generated_evidence_outputs["hypothesis_consistency"] = (
+            generated_hypothesis_consistency_path
+        )
+        generated_evidence_outputs["hypothesis_consistency_summary"] = (
+            generated_hypothesis_consistency_summary_path
+        )
+    must_not_regress_expectations = (
+        activation_contract.load_must_not_regress_expectations(
+            activation_must_not_regress_tsv
+        )
+        if activation_must_not_regress_tsv is not None
+        else ()
     )
     evidence_rows = assemble_evidence_vectors(oracle_rows, matches)
     explanations = classify_explanations(oracle_rows, evidence_rows)
@@ -387,7 +683,19 @@ def run_explanation(
                 ),
                 matrix_rt_drift_policy_evidence=matrix_rt_drift_policy_evidence,
                 sample_negative_evidence=sample_negative_evidence,
+                rt_mode_evidence=rt_mode_evidence_rows,
+                peak_hypothesis_selection=peak_hypothesis_selection_rows,
                 extra_outputs=generated_evidence_outputs,
+                blast_radius_summary_rows=(),
+                enable_product_activation_contract=(
+                    enable_product_activation_contract
+                ),
+                activation_must_not_regress_status=(
+                    activation_must_not_regress_status
+                ),
+                activation_must_not_regress_expectations=(
+                    must_not_regress_expectations
+                ),
             )
         return slice0_outputs
 
@@ -435,7 +743,15 @@ def run_explanation(
             qc_ms1_pattern_reference_evidence=qc_ms1_pattern_reference_evidence,
             matrix_rt_drift_policy_evidence=matrix_rt_drift_policy_evidence,
             sample_negative_evidence=sample_negative_evidence,
+            rt_mode_evidence=rt_mode_evidence_rows,
+            peak_hypothesis_selection=peak_hypothesis_selection_rows,
             extra_outputs=generated_evidence_outputs,
+            blast_radius_summary_rows=summary_rows,
+            enable_product_activation_contract=enable_product_activation_contract,
+            activation_must_not_regress_status=activation_must_not_regress_status,
+            activation_must_not_regress_expectations=(
+                must_not_regress_expectations
+            ),
         )
     return slice1_outputs
 
@@ -456,7 +772,13 @@ def _write_v2_from_current_outputs(
     ],
     matrix_rt_drift_policy_evidence: Mapping[tuple[str, str], Mapping[str, str]],
     sample_negative_evidence: Mapping[tuple[str, str], Mapping[str, str]],
+    rt_mode_evidence: Mapping[tuple[str, str], Mapping[str, str]],
+    peak_hypothesis_selection: Mapping[tuple[str, str], Mapping[str, str]],
     extra_outputs: Mapping[str, Path] | None = None,
+    blast_radius_summary_rows: Sequence[Mapping[str, str]] = (),
+    enable_product_activation_contract: bool = False,
+    activation_must_not_regress_status: str = "not_assessed",
+    activation_must_not_regress_expectations: Sequence[Mapping[str, str]] = (),
 ) -> Mapping[str, Path | str]:
     shadow_rows = build_shadow_label_rows(explanations)
     shadow_summary_rows = build_shadow_alignment_summary(shadow_rows)
@@ -472,6 +794,8 @@ def _write_v2_from_current_outputs(
             qc_ms1_pattern_reference_evidence=qc_ms1_pattern_reference_evidence,
             matrix_rt_drift_policy_evidence=matrix_rt_drift_policy_evidence,
             sample_negative_evidence=sample_negative_evidence,
+            rt_mode_evidence=rt_mode_evidence,
+            peak_hypothesis_selection=peak_hypothesis_selection,
         )
     )
     readiness_row = build_v2_readiness(
@@ -479,13 +803,50 @@ def _write_v2_from_current_outputs(
         shadow_rows=shadow_rows,
         machine_evidence_support_rows=machine_evidence_support_rows,
     )
-    return write_v2_outputs(
+    outputs = write_v2_outputs(
         output_dir=output_dir,
         prior_outputs={**dict(prior_outputs), **dict(extra_outputs or {})},
         shadow_rows=shadow_rows,
         summary_rows=shadow_summary_rows,
         readiness_row=readiness_row,
         machine_evidence_support_rows=machine_evidence_support_rows,
+    )
+    if not enable_product_activation_contract:
+        return outputs
+    activation_rows = activation_contract.build_activation_decision_rows(
+        machine_evidence_support_rows,
+    )
+    assessed_85raw_rows, assessed_rows_basis = (
+        activation_contract.infer_85raw_assessed_rows(blast_radius_summary_rows)
+    )
+    must_not_regress_basis = "manual_status_flag"
+    must_not_regress_failure_reasons: tuple[str, ...] = ()
+    if activation_must_not_regress_expectations:
+        (
+            activation_must_not_regress_status,
+            must_not_regress_failure_reasons,
+        ) = activation_contract.evaluate_must_not_regress(
+            activation_rows,
+            activation_must_not_regress_expectations,
+        )
+        must_not_regress_basis = "activation_must_not_regress_tsv"
+    acceptance_row = activation_contract.summarize_activation_acceptance(
+        activation_rows,
+        blast_radius_current=(
+            run_facts.get("blast_radius_assessed") == "present_current"
+            and run_facts.get("blast_radius_stale_artifact_count") == "0"
+        ),
+        assessed_85raw_rows=assessed_85raw_rows,
+        assessed_rows_basis=assessed_rows_basis,
+        must_not_regress_status=activation_must_not_regress_status,
+        must_not_regress_basis=must_not_regress_basis,
+        must_not_regress_failure_reasons=must_not_regress_failure_reasons,
+    )
+    return write_activation_outputs(
+        output_dir=output_dir,
+        prior_outputs=outputs,
+        activation_rows=activation_rows,
+        acceptance_row=acceptance_row,
     )
 
 
@@ -503,6 +864,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--blast-radius-85raw-run", type=Path)
     parser.add_argument("--expected-blast-radius-manifest", type=Path)
     parser.add_argument("--enable-shadow-label-alignment", action="store_true")
+    parser.add_argument("--enable-product-activation-contract", action="store_true")
+    parser.add_argument(
+        "--activation-must-not-regress-status",
+        default="not_assessed",
+        choices=("not_assessed", "pass", "fail"),
+    )
+    parser.add_argument("--activation-must-not-regress-tsv", type=Path)
     parser.add_argument("--cwt-shape-evidence-tsv", type=Path)
     parser.add_argument("--tier2-trace-evidence-tsv", type=Path)
     parser.add_argument("--candidate-ms2-pattern-evidence-tsv", type=Path)
@@ -511,6 +879,28 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--ms1-pattern-coherence-evidence-tsv", type=Path)
     parser.add_argument("--qc-ms1-pattern-reference-evidence-tsv", type=Path)
     parser.add_argument("--sample-negative-evidence-tsv", type=Path)
+    parser.add_argument("--rt-mode-evidence-tsv", type=Path)
+    parser.add_argument("--generate-rt-mode-evidence", action="store_true")
+    parser.add_argument("--rt-mode-evidence-mode-assignment-tsv", type=Path)
+    parser.add_argument("--rt-mode-evidence-mode-summary-tsv", type=Path)
+    parser.add_argument("--rt-mode-evidence-family-id")
+    parser.add_argument(
+        "--rt-mode-evidence-overlay-trace-data-json",
+        action="append",
+        type=Path,
+    )
+    parser.add_argument("--peak-hypothesis-selection-tsv", type=Path)
+    parser.add_argument("--generate-peak-hypothesis-selection", action="store_true")
+    parser.add_argument(
+        "--generate-mode-hypothesis-assignment",
+        action="store_true",
+        help=(
+            "Generate shared_peak_identity_peak_hypothesis_selection.tsv from "
+            "typed RT/iRT mode evidence plus candidate MS2 tag/opportunity, "
+            "MS1 pattern, optional QC reference, and matrix RT drift sidecars."
+        ),
+    )
+    parser.add_argument("--generate-hypothesis-consistency", action="store_true")
     parser.add_argument(
         "--generate-ms1-pattern-coherence-evidence",
         action="store_true",

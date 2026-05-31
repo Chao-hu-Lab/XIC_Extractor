@@ -14,6 +14,14 @@ QC_MS1_PATTERN_REFERENCE_COLUMNS = (
     "sample_stem",
     "qc_reference_status",
     "qc_reference_evidence_level",
+    "qc_reference_policy",
+    "local_qc_reference_status",
+    "qc_consensus_status",
+    "qc_consensus_support_count",
+    "qc_consensus_conflict_count",
+    "qc_consensus_inconclusive_count",
+    "qc_consensus_usable_qc_count",
+    "qc_reference_conflict_status",
     "target_injection_order",
     "nearest_qc_sample_stem",
     "nearest_qc_injection_order",
@@ -41,6 +49,8 @@ _APEX_CONFLICT_SEC = 30.0
 _ALIGNMENT_HALF_WINDOW_MIN = 0.30
 _ALIGNMENT_POINTS = 61
 _MIN_CORRELATION_POINTS = 8
+_QC_SUPPORT = frozenset({"supportive", "partial_support"})
+_QC_CONFLICT = frozenset({"conflict"})
 
 
 @dataclass(frozen=True)
@@ -74,6 +84,26 @@ class _TraceMetric:
         return _ratio_or_none(self.cell_height, self.local_window_max_intensity)
 
 
+@dataclass(frozen=True)
+class _QcComparison:
+    metric: _TraceMetric
+    order: int
+    status: str
+    reason: str
+    order_delta: int
+    apex_abs_delta_sec: float | None
+    shape_similarity: float | None
+
+
+@dataclass(frozen=True)
+class _QcConsensus:
+    status: str
+    support_count: int
+    conflict_count: int
+    inconclusive_count: int
+    usable_count: int
+
+
 def build_qc_ms1_pattern_reference_rows(
     *,
     family_ms1_overlay_trace_data_jsons: Sequence[Path],
@@ -81,7 +111,7 @@ def build_qc_ms1_pattern_reference_rows(
     injection_order: Mapping[str, int],
     max_injection_order_delta: int | None = None,
 ) -> tuple[dict[str, str], ...]:
-    """Compare each reviewed sample to the nearest injection-order QC trace."""
+    """Compare each reviewed sample to local QC and QC consensus traces."""
 
     metrics_by_key = _trace_metrics_by_key(family_ms1_overlay_trace_data_jsons)
     metrics_by_family = _metrics_by_family(metrics_by_key.values())
@@ -185,10 +215,23 @@ def _row_for_key(
         family_metrics=family_metrics,
         injection_order=injection_order,
     )
+    comparisons = _qc_comparisons(
+        target=target,
+        target_order=target_order,
+        family_metrics=family_metrics,
+        injection_order=injection_order,
+        max_injection_order_delta=max_injection_order_delta,
+    )
+    consensus = _qc_consensus(comparisons)
     if nearest_qc is None:
         return {
             **base,
             "target_injection_order": str(target_order),
+            "qc_consensus_status": consensus.status,
+            "qc_consensus_support_count": str(consensus.support_count),
+            "qc_consensus_conflict_count": str(consensus.conflict_count),
+            "qc_consensus_inconclusive_count": str(consensus.inconclusive_count),
+            "qc_consensus_usable_qc_count": str(consensus.usable_count),
             "family_ms1_overlay_trace_data_json": str(target.source_json),
             "reason": "nearest_qc_reference_missing",
         }
@@ -205,10 +248,30 @@ def _row_for_key(
         apex_abs_delta_sec=apex_abs_delta_sec,
         shape_similarity=shape_similarity,
     )
+    (
+        final_status,
+        final_reason,
+        reference_policy,
+        conflict_status,
+    ) = _combine_local_and_consensus(
+        local_status=status,
+        local_reason=reason,
+        consensus=consensus,
+    )
     return {
         **base,
-        "qc_reference_status": status,
-        "qc_reference_evidence_level": _qc_reference_evidence_level(qc_metric),
+        "qc_reference_status": final_status,
+        "qc_reference_evidence_level": _qc_reference_evidence_level(
+            reference_policy,
+        ),
+        "qc_reference_policy": reference_policy,
+        "local_qc_reference_status": status,
+        "qc_consensus_status": consensus.status,
+        "qc_consensus_support_count": str(consensus.support_count),
+        "qc_consensus_conflict_count": str(consensus.conflict_count),
+        "qc_consensus_inconclusive_count": str(consensus.inconclusive_count),
+        "qc_consensus_usable_qc_count": str(consensus.usable_count),
+        "qc_reference_conflict_status": conflict_status,
         "target_injection_order": str(target_order),
         "nearest_qc_sample_stem": qc_metric.sample_stem,
         "nearest_qc_injection_order": str(qc_order),
@@ -231,7 +294,7 @@ def _row_for_key(
             qc_metric.cell_to_local_window_max_ratio
         ),
         "family_ms1_overlay_trace_data_json": str(target.source_json),
-        "reason": reason,
+        "reason": final_reason,
     }
 
 
@@ -241,6 +304,14 @@ def _base_row(feature_family_id: str, sample_stem: str) -> dict[str, str]:
         "sample_stem": sample_stem,
         "qc_reference_status": "not_available",
         "qc_reference_evidence_level": "not_available",
+        "qc_reference_policy": "not_available",
+        "local_qc_reference_status": "not_available",
+        "qc_consensus_status": "not_available",
+        "qc_consensus_support_count": "0",
+        "qc_consensus_conflict_count": "0",
+        "qc_consensus_inconclusive_count": "0",
+        "qc_consensus_usable_qc_count": "0",
+        "qc_reference_conflict_status": "none",
         "target_injection_order": "",
         "nearest_qc_sample_stem": "",
         "nearest_qc_injection_order": "",
@@ -297,12 +368,172 @@ def _nearest_qc_trace(
     return metric, order
 
 
-def _qc_reference_evidence_level(metric: _TraceMetric) -> str:
-    if _has_family_centered_qc_signal(metric):
-        return "nearest_complete_family_centered_qc_overlay"
-    if _has_local_signal(metric) and metric.apex_rt is not None:
-        return "nearest_complete_peak_qc_overlay"
-    return "nearest_injection_qc_overlay_unscored"
+def _qc_comparisons(
+    *,
+    target: _TraceMetric,
+    target_order: int,
+    family_metrics: Sequence[_TraceMetric],
+    injection_order: Mapping[str, int],
+    max_injection_order_delta: int | None,
+) -> tuple[_QcComparison, ...]:
+    comparisons: list[_QcComparison] = []
+    for metric in family_metrics:
+        if metric.sample_stem == target.sample_stem or not metric.is_qc:
+            continue
+        order = injection_order.get(metric.sample_stem)
+        if order is None:
+            continue
+        order_delta = abs(order - target_order)
+        apex_delta_sec = _apex_delta_sec(target, metric)
+        apex_abs_delta_sec = (
+            abs(apex_delta_sec) if apex_delta_sec is not None else None
+        )
+        shape_similarity = _apex_aligned_shape_similarity(target, metric)
+        status, reason = _status_and_reason(
+            target=target,
+            qc_metric=metric,
+            order_delta=order_delta,
+            max_injection_order_delta=max_injection_order_delta,
+            apex_abs_delta_sec=apex_abs_delta_sec,
+            shape_similarity=shape_similarity,
+        )
+        comparisons.append(
+            _QcComparison(
+                metric=metric,
+                order=order,
+                status=status,
+                reason=reason,
+                order_delta=order_delta,
+                apex_abs_delta_sec=apex_abs_delta_sec,
+                shape_similarity=shape_similarity,
+            )
+        )
+    return tuple(sorted(comparisons, key=lambda item: item.order_delta))
+
+
+def _qc_consensus(comparisons: Sequence[_QcComparison]) -> _QcConsensus:
+    support_count = sum(1 for item in comparisons if item.status in _QC_SUPPORT)
+    conflict_count = sum(1 for item in comparisons if item.status in _QC_CONFLICT)
+    inconclusive_count = sum(
+        1
+        for item in comparisons
+        if item.status not in _QC_SUPPORT and item.status not in _QC_CONFLICT
+    )
+    usable_count = sum(
+        1
+        for item in comparisons
+        if _has_local_signal(item.metric) and item.metric.apex_rt is not None
+    )
+    if not comparisons:
+        status = "not_available"
+    elif support_count and conflict_count:
+        status = "mixed_conflict"
+    elif support_count >= 2:
+        status = "supportive"
+    elif support_count == 1:
+        status = "partial_support"
+    elif conflict_count >= 2:
+        status = "conflict"
+    else:
+        status = "inconclusive"
+    return _QcConsensus(
+        status=status,
+        support_count=support_count,
+        conflict_count=conflict_count,
+        inconclusive_count=inconclusive_count,
+        usable_count=usable_count,
+    )
+
+
+def _combine_local_and_consensus(
+    *,
+    local_status: str,
+    local_reason: str,
+    consensus: _QcConsensus,
+) -> tuple[str, str, str, str]:
+    if consensus.status in _QC_SUPPORT:
+        if local_status in _QC_CONFLICT:
+            return (
+                "inconclusive",
+                "local_qc_conflicts_with_qc_consensus",
+                "qc_consensus_with_local_conflict",
+                "local_vs_consensus_conflict",
+            )
+        if local_status in _QC_SUPPORT:
+            status = (
+                "supportive"
+                if consensus.status == "supportive"
+                else "partial_support"
+            )
+            return (
+                status,
+                "qc_consensus_and_local_qc_support",
+                "qc_consensus_with_local_support",
+                "none",
+            )
+        return (
+            "partial_support",
+            "qc_consensus_support_local_qc_uninformative",
+            "qc_consensus_fallback_valid_qc",
+            "local_qc_uninformative",
+        )
+    if consensus.status == "conflict":
+        if local_status in _QC_CONFLICT:
+            return (
+                "conflict",
+                "qc_consensus_and_local_qc_conflict",
+                "qc_consensus_with_local_conflict",
+                "none",
+            )
+        if local_status in _QC_SUPPORT:
+            return (
+                "inconclusive",
+                "local_qc_conflicts_with_qc_consensus",
+                "qc_consensus_with_local_conflict",
+                "local_vs_consensus_conflict",
+            )
+        return (
+            "inconclusive",
+            "qc_consensus_conflict_without_local_confirmation",
+            "qc_consensus_conflict_review",
+            "local_qc_uninformative",
+        )
+    if consensus.status == "mixed_conflict":
+        return (
+            "inconclusive",
+            "qc_consensus_mixed_support_and_conflict",
+            "qc_consensus_mixed_review",
+            "consensus_mixed_conflict",
+        )
+    if local_status in _QC_SUPPORT or local_status in _QC_CONFLICT:
+        return (
+            "inconclusive",
+            "local_qc_reference_without_consensus",
+            "nearest_valid_qc_local_condition_only",
+            "consensus_missing",
+        )
+    return (
+        "inconclusive",
+        local_reason,
+        "local_qc_uninformative",
+        "none",
+    )
+
+
+def _qc_reference_evidence_level(reference_policy: str) -> str:
+    if reference_policy == "qc_consensus_with_local_support":
+        return "qc_consensus_with_local_qc_overlay"
+    if reference_policy == "qc_consensus_fallback_valid_qc":
+        return "qc_consensus_qc_overlay"
+    if reference_policy == "qc_consensus_with_local_conflict":
+        return "qc_consensus_with_local_qc_overlay"
+    if reference_policy == "qc_consensus_conflict_review":
+        return "qc_consensus_review_only"
+    if reference_policy == "qc_consensus_mixed_review":
+        return "qc_consensus_mixed"
+    if reference_policy == "nearest_valid_qc_local_condition_only":
+        return "nearest_valid_qc_local_condition_only"
+    return "local_qc_uninformative"
 
 
 def _status_and_reason(
