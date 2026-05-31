@@ -238,6 +238,11 @@ new peaks by itself. Its job is to make the FAM011810 lesson machine-readable:
   wrong-peak/rescue conflicts.
 - `consolidation_no_go` means the current family consolidation is too mixed for
   product promotion/backfill until a split/reconsolidation contract exists.
+  In v0 this hard no-go class is reserved for three-or-more mode families
+  without any tag-bearing core, or for an explicit upstream override. A two-mode
+  family with no observed tag remains `irt_refined_mode_split`: it is blocked
+  from direct family promotion, but still treated as a split/review hypothesis
+  rather than proof that the whole family should be killed.
 - `tailing_confounded` means the family is broad or tailing enough that mode
   assignment is not decisive; it stays review-only.
 - `raw_mode_review_only` means RAW-overlay-only mode splitting saw possible

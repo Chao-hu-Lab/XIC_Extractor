@@ -446,7 +446,10 @@ def _activation_boundary_failures(
     activation: Mapping[str, str] | None,
 ) -> tuple[str, ...]:
     if activation is None:
-        if expected_boundary in {"auto_block_wrong_peak"}:
+        if (
+            expected_boundary in {"auto_block_wrong_peak"}
+            or expected_unit_scope not in {"", "not_applicable"}
+        ):
             return ("activation_decision_not_assessed",)
         return ()
     failures: list[str] = []

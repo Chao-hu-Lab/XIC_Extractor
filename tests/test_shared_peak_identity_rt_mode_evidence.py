@@ -73,6 +73,31 @@ def test_rt_mode_evidence_marks_no_tag_multimodal_family_as_consolidation_no_go(
     assert row["reason"] == "multimodal_family_without_tag_bearing_core"
 
 
+def test_rt_mode_evidence_keeps_two_mode_without_tag_as_split_review(
+    tmp_path: Path,
+) -> None:
+    assignments = tmp_path / "mode_assignments.tsv"
+    _write_mode_assignments(
+        assignments,
+        [
+            _assignment("S1", "mode_early", "5.10", "5.20"),
+            _assignment("S2", "mode_late", "7.90", "7.96"),
+        ],
+    )
+
+    rows = rt_mode_evidence.build_rt_mode_evidence_rows(
+        mode_assignment_tsv=assignments,
+        oracle_keys=(("FAM_TWO_MODE", "S1"),),
+        feature_family_id="FAM_TWO_MODE",
+    )
+
+    row = rows[0]
+    assert row["rt_mode_status"] == "mode_split_required"
+    assert row["family_mode_class"] == "irt_refined_mode_split"
+    assert row["selected_mode_role"] == "split_mode"
+    assert row["reason"] == "multimodal_family_requires_split_before_product_label"
+
+
 def test_rt_mode_evidence_accepts_multi_family_assignment_artifact(
     tmp_path: Path,
 ) -> None:

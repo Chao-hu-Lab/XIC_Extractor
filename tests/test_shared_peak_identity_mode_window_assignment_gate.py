@@ -220,6 +220,46 @@ def test_mode_window_gate_fails_activation_hypothesis_id_mismatch() -> None:
     assert "activation_peak_hypothesis_id_mismatch" in rows[0]["failure_reason"]
 
 
+def test_mode_window_gate_marks_required_activation_sidecar_missing() -> None:
+    rows = mode_window_assignment_gate.build_gate_rows(
+        fixture_rows=[
+            _fixture_row(
+                "FAM011810_blue_normal_candidate",
+                "FAM011810",
+                "NormalBC2312_DNA",
+                "multi_peak_tag_bearing_core",
+                "product_candidate_core",
+                "select_mode_peak_hypothesis",
+                "activation_candidate_only",
+                "partial_until_no_family_projection",
+                required_evidence_oracle="manual_overlay_ms1_qc_rt_ms2",
+            )
+        ],
+        selection_rows=[
+            _selection_row(
+                "FAM011810",
+                "NormalBC2312_DNA",
+                "product_candidate_core",
+                "select_mode_peak_hypothesis",
+            )
+        ],
+        matrix_summary=_matrix_summary(
+            ready="FALSE",
+            blockers="matrix_construction_blocked",
+            family_projection_rows="610",
+        ),
+        qc_reference_rows=[_qc_row("FAM011810", "NormalBC2312_DNA")],
+        rt_drift_rows=[_rt_drift_row("FAM011810", "NormalBC2312_DNA")],
+        ms1_pattern_rows=[_ms1_row("FAM011810", "NormalBC2312_DNA")],
+        candidate_ms2_pattern_rows=[
+            _candidate_ms2_row("FAM011810", "NormalBC2312_DNA")
+        ],
+    )
+
+    assert rows[0]["gate_status"] == "not_assessed"
+    assert "activation_decision_not_assessed" in rows[0]["failure_reason"]
+
+
 def test_mode_window_gate_fails_when_peak_hypothesis_identity_is_missing() -> None:
     rows = mode_window_assignment_gate.build_gate_rows(
         fixture_rows=[
@@ -330,6 +370,7 @@ def test_mode_window_gate_cli_writes_rows_and_summary(tmp_path: Path) -> None:
 
     fixture = tmp_path / "fixture.tsv"
     selection = tmp_path / "selection.tsv"
+    activation = tmp_path / "activation.tsv"
     matrix_summary = tmp_path / "matrix_summary.tsv"
     output_dir = tmp_path / "gate"
     _write_tsv(
@@ -359,6 +400,18 @@ def test_mode_window_gate_cli_writes_rows_and_summary(tmp_path: Path) -> None:
         ],
     )
     _write_tsv(
+        activation,
+        [
+            _activation_row(
+                "FAM011810",
+                "NormalBC2312_DNA",
+                "auto_activate",
+                "",
+                selected_mode_id="irt_blue_core",
+            )
+        ],
+    )
+    _write_tsv(
         matrix_summary,
         [
             _matrix_summary(
@@ -384,6 +437,8 @@ def test_mode_window_gate_cli_writes_rows_and_summary(tmp_path: Path) -> None:
                 str(fixture),
                 "--peak-hypothesis-selection-tsv",
                 str(selection),
+                "--activation-decisions-tsv",
+                str(activation),
                 "--peak-hypothesis-matrix-summary-tsv",
                 str(matrix_summary),
                 "--ms1-pattern-coherence-tsv",
