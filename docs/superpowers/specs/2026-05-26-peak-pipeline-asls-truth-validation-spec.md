@@ -1,7 +1,7 @@
 # P2c - AsLS Truth Validation And Linear-Edge Retirement Gate Spec
 
 **Date:** 2026-05-26
-**Status:** Draft v0.3 - B1/B2 Tier B redesign; 3-reviewer findings resolved
+**Status:** Draft v0.4 - B+C correction; Tier C comparator is linear-edge, not manual integration
 **Overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
 **Cleanup dependency:** [C1b - Linear Edge Baseline Retirement](2026-05-24-peak-pipeline-cleanup-linear-edge-retirement-spec.md)
 **Depends on:** P2 AsLS shadow, P2b conditional audit promotion, P7 validation-cost controls, and 85RAW primary-delivery validation
@@ -13,9 +13,11 @@ the affected area-integration contract.
 
 P2b already shows that the current AsLS audit-promotion path does not break the
 accepted 85RAW primary delivery surface. That is necessary, but it does not
-prove absolute baseline truth. This spec adds a separate truth-validation gate
-and prevents P2b's "linear-edge is not truth" finding from being overread as
-"AsLS is proven truth."
+prove absolute baseline truth. This spec adds a separate baseline-retirement
+gate and prevents P2b's "linear-edge is not truth" finding from being overread
+as "AsLS is proven truth." The gate's comparator is the legacy linear-edge
+baseline on the same trace and boundary, not blinded manual integration or a
+fixed percent area uplift target.
 
 ## Decision Levels
 
@@ -24,8 +26,8 @@ This spec deliberately separates three decisions:
 | Decision | Meaning | Required evidence |
 |---|---|---|
 | `GO_FOR_C1B_PLAN_SYNTHETIC_ONLY` | Engineering may write a C1b plan, but may not delete linear-edge yet. | Tier A guard + locked Tier B1 relevance benchmark pass; Tier B2 stress audit may be unresolved but must be reported |
-| `GO_FOR_LINEAR_EDGE_RETIREMENT` | C1b implementation may retire linear-edge after C1a, C5, and rollback-column deprecation have landed. | Tier A guard + Tier B1 pass + Tier B2 stress safety disposition + nonblank Tier C quantitative/cohort evidence + blank/carryover safety disposition + retirement prerequisite manifest |
-| `REQUIRES_TIER_C` | C1b planning may be supported, but retirement authority is missing real nonblank or safety evidence. | Tier A guard + Tier B1 pass, but missing required Tier C or stress-safety disposition |
+| `GO_FOR_LINEAR_EDGE_RETIREMENT` | C1b implementation may retire linear-edge after C1a, C5, and rollback-column deprecation have landed. | Tier A guard + Tier B1 pass + Tier B2 stress safety disposition + Tier C AsLS-vs-linear-edge baseline evidence + blank/carryover safety disposition or exclusion + retirement prerequisite manifest |
+| `REQUIRES_TIER_C` | C1b planning may be supported, but retirement authority is missing real baseline-evidence or safety evidence. | Tier A guard + Tier B1 pass, but missing required Tier C or stress-safety disposition |
 | `REQUIRES_RETIREMENT_PREREQS` | Scientific evidence is sufficient for retirement review, but C1a/C5/rollback-column prerequisites are not proven. | Tier A guard + Tier B1 pass + required Tier B2/Tier C evidence, but missing satisfied prerequisite manifest |
 | `NO_GO_KEEP_LINEAR_EDGE` | Keep linear-edge available and make C5 method-preserving. | Tier A failure, Tier B1 relevance hard blocker, or retirement-target evidence failure |
 
@@ -36,7 +38,7 @@ as a production-ready or deletion approval.
 
 The project already has useful failure-mode evidence:
 
-- selected ISTD manual/EIC review shows repeated
+- selected ISTD baseline-truth audit plots and metrics show repeated
   `linear_edge_over_subtraction_plausible` behavior;
 - old P2 `PASS` and `FAIL` selected families both show the same dominant
   pattern;
@@ -50,7 +52,8 @@ The project already has useful failure-mode evidence:
 
 This is enough to reject the old strict "linear-edge area is truth" comparator
 and to justify a scoped B1 relevance gate. It is not enough to claim general
-baseline truth or delete linear-edge.
+baseline truth or delete linear-edge without a real AsLS-vs-linear-edge
+baseline-evidence gate and the cleanup prerequisites below.
 
 ## Gate Principle
 
@@ -61,9 +64,10 @@ The gate must answer one practical question:
 > changing RT identity or boundary selection?
 
 The gate does not need to prove AsLS is globally best across all
-chromatography. It must prove that replacing linear-edge for this pipeline's
-selected use case is better supported than keeping linear-edge, and it must
-make the remaining truth limits explicit. Synthetic stress cases may raise
+chromatography, and it must not require a fixed AsLS-vs-linear-edge area uplift
+ratio. It must prove that replacing linear-edge for this pipeline's selected
+use case is better supported than keeping linear-edge, and it must make the
+remaining truth limits explicit. Synthetic stress cases may raise
 retirement-safety questions, but they must not silently override the selected
 ISTD relevance gate.
 
@@ -77,7 +81,7 @@ Required existing artifacts:
 
 | Artifact | Path | Required columns / contents |
 |---|---|---|
-| Truth rows | `output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit_rows.tsv` | `target_label`, `feature_family_id`, `sample_stem`, `raw_area`, `linear_area`, `asls_area`, `asls_raw_pct`, `asls_vs_linear_pct`, `linear_edge_delta_pct`, `outside_background_pct`, `peak_start_rt`, `apex_rt`, `peak_end_rt`, `trace_point_count`, `classification`, `review_reason`, `plot_path`, `rt_identity_status`, `boundary_status` |
+| Truth rows | `output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit_rows.tsv` | `target_label`, `feature_family_id`, `sample_stem`, `status`, `raw_area`, `linear_area`, `asls_area`, `linear_raw_pct`, `asls_raw_pct`, `asls_vs_linear_pct`, `linear_baseline_subtracted_pct`, `asls_baseline_subtracted_pct`, `linear_edge_delta_pct`, `outside_background_pct`, `peak_start_rt`, `apex_rt`, `peak_end_rt`, `trace_point_count`, `classification`, `review_reason`, `plot_path` |
 | Truth summary | `output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit_summary.tsv` | `target_label`, `feature_family_id`, `row_count`, `dominant_classification`, `classification_counts`, `median_linear_baseline_subtracted_pct`, `median_asls_baseline_subtracted_pct`, `median_asls_vs_linear_pct`, `max_asls_vs_linear_pct`, `median_linear_edge_delta_pct`, `median_outside_background_pct`, `review_status`, `plot_path` |
 | Truth JSON | `output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit.json` | machine-readable copy of rows, summary, and input metadata |
 | Truth report | `output/phase1_p2_baseline_truth_audit_all_statuses/baseline_truth_audit.md` | human-readable summary |
@@ -428,8 +432,8 @@ B1 caution signals that do not automatically block C1b planning:
 B1 rows with median relative error above 10% but below the absolute hard cap may
 support C1b planning only when AsLS is still materially better than linear-edge.
 They must set `tier_b1_accuracy_scope=PLANNING_ONLY_REQUIRES_TIER_C` and cannot
-contribute to `GO_FOR_LINEAR_EDGE_RETIREMENT` without passing nonblank Tier C
-truth evidence for the affected morphology.
+contribute to `GO_FOR_LINEAR_EDGE_RETIREMENT` without passing Tier C
+AsLS-vs-linear-edge baseline evidence for the affected morphology.
 
 B2 stress blockers for linear-edge retirement:
 
@@ -448,42 +452,95 @@ These tolerances are initial engineering thresholds. If methodology review
 changes them, the change must happen before the heldout gate run and must
 produce a new `tolerance_profile` version.
 
-## Tier C - Real Ground-Truth Or Cohort Axis
+## Tier C - Real AsLS-vs-Linear-Edge Baseline Evidence Axis
 
-Tier C is required for `GO_FOR_LINEAR_EDGE_RETIREMENT`. A methodology waiver may
-document why Tier C is unavailable and keep the gate planning-only, but it cannot
-turn synthetic-only evidence into retirement authority.
+Tier C is required for `GO_FOR_LINEAR_EDGE_RETIREMENT`. It is a real-data
+baseline-evidence gate, not a manual-integration truth gate. A methodology
+waiver may document why Tier C is unavailable and keep the gate planning-only,
+but it cannot turn synthetic-only evidence into retirement authority.
 
-For `GO_FOR_LINEAR_EDGE_RETIREMENT`, Tier C must include at least one nonblank
-quantitative/cohort axis plus a blank/carryover safety disposition. Blank or
-carryover evidence by itself is supplemental safety evidence, not retirement
-authority.
+For `GO_FOR_LINEAR_EDGE_RETIREMENT`, Tier C must include a current-code
+AsLS-vs-linear-edge baseline audit over real selected traces plus a
+blank/carryover safety disposition or an explicit exclusion/pass-through
+contract. Blank or carryover evidence by itself is supplemental safety evidence,
+not retirement authority.
 
-Accepted nonblank Tier C axes:
+Accepted Tier C axis:
 
-- spike-in recovery across at least 3 concentration levels and at least 5
-  replicates per level, with median recovery between 80% and 120%;
-- concentration-series linearity across at least 5 levels and at least 3
-  replicates per level, with positive slope and R2 >= 0.98;
-- blinded manual integration on at least 30 stratified real rows covering
-  selected ISTDs, high-risk morphology rows, blanks, and relevant external
-  standards/non-ISTD targets when available, with median AsLS-vs-manual
-  relative difference <= 10% and no unreviewed row above 25%;
-- real 85RAW integration-audit cohort review with selected ISTDs, relevant
-  external standards/non-ISTD targets when available, blanks, and high-risk
-  morphology rows, plus at least one quantitative truth comparator:
-  manual-vs-AsLS review under the blinded-manual thresholds above, spike-in or
-  concentration-series evidence under the thresholds above, or an accepted
-  cohort quantitative-drift metric showing no morphology-specific median
-  nonblank drift above 10% and no unreviewed row above 25%. A real 85RAW cohort
-  with only RT/boundary and raw-area-exceedance checks is safety evidence, not
-  nonblank retirement truth.
+- `asls_vs_linear_edge_baseline_audit`: a real cohort generated by
+  `tools/diagnostics/p2_baseline_truth_audit.py` or a schema-compatible
+  successor. It must compare AsLS and linear-edge on the same selected trace and
+  boundary, emit `baseline_truth_audit_rows.tsv`,
+  `baseline_truth_audit_summary.tsv`, `baseline_truth_audit.json`,
+  `baseline_truth_audit.md`, and linked baseline plots. It must cover selected
+  ISTDs, old P2 PASS/FAIL families that moved area, and high-risk morphology
+  rows available in the current validation cohort. Relevant external standards
+  or non-ISTD targets may be included when available, but they are not required
+  to convert this into a manual truth-comparison exercise.
+
+Tier C GO evidence is qualitative-plus-machine-readable:
+
+- summary rows must support `linear_edge_over_subtraction_plausible` or
+  `methods_similar` for the families being used as retirement evidence;
+- any `asls_under_subtraction_plausible`, `mixed_or_review_required`,
+  `not_assessable`, negative-area, or raw-area-exceedance row must have a
+  machine-readable blocker or reviewed disposition;
+- linked plots must show the raw trace, linear-edge baseline, AsLS baseline, and
+  peak start/apex/end markers for the reviewed families;
+- reviewer disposition must reference the plot path and row identifiers
+  (`target_label`, `feature_family_id`, `sample_stem`, RT/window);
+- `median_asls_vs_linear_pct`, `max_asls_vs_linear_pct`, and subtraction
+  percentages are descriptive ranking/context fields only. They must not be
+  converted into a fixed required improvement ratio.
+
+Tier C disposition rollup must be machine-readable. `family_dispositions` must
+use these statuses:
+
+- `PASS_BASELINE_SUPPORTED`: reviewed rows support
+  `linear_edge_over_subtraction_plausible`;
+- `PASS_METHODS_SIMILAR`: all reviewed rows are `methods_similar`, so retirement
+  is not justified by a large area difference but also is not blocked by this
+  family;
+- `REQUIRES_REVIEW`: at least one row is `mixed_or_review_required` or
+  `not_assessable`, or the plot/review record is incomplete;
+- `FAIL`: at least one row has a hard AsLS blocker or reviewed evidence against
+  AsLS baseline plausibility;
+- `INCONCLUSIVE`: required source artifacts, hashes, row identifiers, or plots
+  are missing or stale.
+
+`tier_c_row_blockers` must use a closed enum:
+
+- `asls_under_subtraction_plausible`;
+- `asls_area_exceeds_raw_area`;
+- `asls_negative_nonblank_area`;
+- `mixed_or_review_required`;
+- `not_assessable`;
+- `missing_or_stale_plot`;
+- `missing_row_identifier`;
+- `stale_artifact_hash`;
+- `unsupported_classification`.
+
+`tier_c_baseline_evidence_status` rolls up from dispositions:
+
+- `PASS` only when every retirement-evidence family is
+  `PASS_BASELINE_SUPPORTED` or `PASS_METHODS_SIMILAR`, at least one family is
+  `PASS_BASELINE_SUPPORTED`, no row blocker remains unresolved, and all required
+  plots/hashes are current;
+- `FAIL` when any family disposition is `FAIL` or any hard blocker remains
+  unresolved;
+- `NOT_PROVIDED` when the evidence file is absent;
+- `REQUIRES_REVIEW` family dispositions must not roll up to `PASS`. For
+  `decision_target=linear-edge-retirement`, valid but unresolved review
+  dispositions emit `REQUIRES_TIER_C`; missing, stale, or incomplete review
+  artifacts emit the relevant `INCONCLUSIVE_*` status;
+- malformed, stale, unsupported-enum, or incomplete disposition evidence emits
+  `INCONCLUSIVE_INVALID_INPUT` or the more specific `INCONCLUSIVE_*` status
+  instead of a `PASS`/`FAIL` rollup.
 
 Required supplemental safety disposition:
 
-- blank/carryover behavior on at least 8 real blank or carryover-control rows,
-  with blank area below `max(3 * area_uncertainty, 1% of matched nonblank
-  median area)` for at least 95% of reviewed rows; or
+- blank/carryover behavior on real blank or carryover-control rows when those
+  rows are part of the affected output scope; or
 - a machine-checkable exclusion/pass-through contract proving the affected
   outputs do not consume blank/carryover quantitation for the retirement scope.
 
@@ -492,9 +549,6 @@ plain statement that no blank/carryover controls exist is not enough for
 retirement. It keeps `decision_target=linear-edge-retirement` at
 `REQUIRES_TIER_C` unless the exclusion/pass-through contract above is supplied
 and reviewed.
-
-Tier C strengthens accuracy claims. If nonblank Tier C evidence is unavailable,
-the safe outcome is `GO_FOR_C1B_PLAN_SYNTHETIC_ONLY` at most.
 
 Tier B2 stress results determine which Tier C or safety evidence is required:
 
@@ -511,27 +565,37 @@ Tier C evidence must be provided as
 `docs/superpowers/fixtures/asls_truth_tier_c_evidence.json` or an explicit CLI
 argument to the same schema. Required fields:
 
-- `tier_c_axis`;
+- `tier_c_axis` (`asls_vs_linear_edge_baseline_audit`);
 - `tier_c_status` (`PASS`, `FAIL`, `NOT_PROVIDED`, or `MIXED`); this is an
   aggregate display field only and must not drive c1b-plan decisions by itself;
-- `tier_c_nonblank_status` (`PASS`, `FAIL`, or `NOT_PROVIDED`);
+- `tier_c_baseline_evidence_status` (`PASS`, `FAIL`, or `NOT_PROVIDED`);
 - `blank_safety_status` (`PASS`, `FAIL`, `NOT_PROVIDED`, or
   `NOT_APPLICABLE_WITH_EXCLUSION`);
+- `ratio_metrics_are_descriptive` (`true` required);
+- `fixed_area_uplift_threshold` (`null` required);
+- `baseline_truth_artifacts`, including rows TSV, summary TSV, JSON, Markdown,
+  plot directory, and hashes;
+- `family_dispositions`, with one record per reviewed family containing
+  `target_label`, `feature_family_id`, covered samples, dominant
+  classification, review status, plot path, `family_disposition`,
+  `tier_c_row_blockers`, reviewer disposition, and reason;
+- `affected_outputs`, listing every public output/consumer included in the
+  retirement scope;
+- `blank_control_evidence_status` (`PASS`, `FAIL`, `NOT_PROVIDED`, or
+  `NOT_APPLICABLE_WITH_EXCLUSION`);
+- `blank_rows_absence_proof`, required when blank/carryover controls are not
+  present in the scoped artifacts;
+- `consumer_contract_tests`, required when
+  `blank_safety_status=NOT_APPLICABLE_WITH_EXCLUSION`;
 - `stress_axis_dispositions`, a machine-readable list with one record per
   B2 stress axis. Each record must include `stress_axis`, `status` (`PASS`,
   `FAIL`, `NOT_REQUIRED`, or `NOT_PROVIDED`), `decision_scope`
   (`C1B_RELEVANCE` or `RETIREMENT_ONLY`), evidence refs/hashes, and the
   rationale for `NOT_REQUIRED`;
-- evidence artifact paths and hashes;
-- row/sample/level counts;
-- for `tier_c_axis=real_85raw_cohort`, raw-file count, selected ISTD count,
-  high-risk morphology count, blank/control row count, covered target classes,
-  quantitative truth comparator type, quantitative thresholds, quantitative
-  pass/fail metrics, and any accepted known exclusions;
-- thresholds used and pass/fail metrics;
+- row/sample counts, raw-file count when applicable, selected ISTD count,
+  high-risk morphology count, covered target classes, and known exclusions;
 - reviewer or generator identity;
-- scope of outputs and target classes covered;
-- known exclusions.
+- scope of outputs and target classes covered.
 
 Waiver contract:
 
@@ -543,7 +607,7 @@ include:
 - date and branch/worktree scope;
 - exact decision being waived; waiver cannot by itself authorize
   `GO_FOR_LINEAR_EDGE_RETIREMENT`;
-- waived Tier C axes and why they are unavailable or not required;
+- waived Tier C evidence and why it is unavailable or not required;
 - exact output contracts covered;
 - target classes and sample classes covered;
 - explicit blank/carryover disposition;
@@ -554,7 +618,7 @@ include:
 - statement that C1b may delete linear-edge only after C1a, C5, and rollback
   column deprecation prerequisites are satisfied.
 
-Without valid nonblank Tier C evidence, a Tier A + B1 pass with unresolved or
+Without valid Tier C baseline evidence, a Tier A + B1 pass with unresolved or
 passing B2 stress evidence must emit `REQUIRES_TIER_C`, not
 `GO_FOR_LINEAR_EDGE_RETIREMENT`, even if a waiver file is present. A waiver
 documents why the gate remains planning-only; it is not a retirement substitute.
@@ -584,9 +648,10 @@ or an explicit CLI argument to the same schema. Required fields:
 - affected public contracts reviewed;
 - reviewer identity and date.
 
-If Tier A, B1, B2 stress safety, and nonblank Tier C pass but the prerequisite
-manifest is missing or schema-valid but not satisfied, the gate must emit
-`REQUIRES_RETIREMENT_PREREQS`. Input/freshness outcomes must be separated:
+If Tier A, B1, B2 stress safety, and Tier C baseline evidence pass but the
+prerequisite manifest is missing or schema-valid but not satisfied, the gate
+must emit `REQUIRES_RETIREMENT_PREREQS`. Input/freshness outcomes must be
+separated:
 
 - malformed, unreadable, unsupported-enum, or schema-incompatible supplied
   evidence files emit `INCONCLUSIVE_INVALID_INPUT`;
@@ -628,18 +693,18 @@ Planned CLI:
 - `c1b-plan`: Tier A + Tier B1 can emit
   `GO_FOR_C1B_PLAN_SYNTHETIC_ONLY` when Tier C is absent; Tier B2 is reported as
   stress evidence and cannot by itself emit `NO_GO_KEEP_LINEAR_EDGE`;
-- `linear-edge-retirement`: Tier A + Tier B1 + Tier B2 without passing nonblank
-  Tier C and blank/carryover safety disposition must emit `REQUIRES_TIER_C`,
-  even when a waiver is supplied.
+- `linear-edge-retirement`: Tier A + Tier B1 + Tier B2 without passing Tier C
+  baseline evidence and blank/carryover safety disposition or exclusion must
+  emit `REQUIRES_TIER_C`, even when a waiver is supplied.
 
 Decision rollup rule:
 
 - for `decision_target=c1b-plan`, only Tier A plus `tier_b1_status` may drive
   `benchmark_status=FAIL` or `NO_GO_KEEP_LINEAR_EDGE`; Tier B2, blank safety,
   and retirement-only Tier C stress dispositions must be reported separately;
-- for `decision_target=linear-edge-retirement`, Tier B2 stress status, nonblank
-  Tier C truth, blank safety, and retirement prerequisites participate in the
-  final gate decision.
+- for `decision_target=linear-edge-retirement`, Tier B2 stress status, Tier C
+  baseline evidence, blank safety, and retirement prerequisites participate in
+  the final gate decision.
 
 Exit codes:
 
@@ -733,7 +798,9 @@ Required outputs:
 - `unmapped_observed_pattern_count`;
 - `tier_c_axis`;
 - `tier_c_status`;
-- `tier_c_nonblank_status`;
+- `tier_c_baseline_evidence_status`;
+- `tier_c_row_blocker_count`;
+- `tier_c_review_required_count`;
 - `blank_safety_status`;
 - `stress_axis_disposition_statuses`;
 - `tier_c_evidence_ref`;
@@ -844,8 +911,9 @@ The gate may emit `GO_FOR_C1B_PLAN_SYNTHETIC_ONLY` only when:
 - RT and boundary evidence remains stable on the selected ISTD set;
 - Tier C is missing, not yet reviewed, or only fails retirement-only B2 stress
   axes; invalid supplied Tier C is `INCONCLUSIVE_*`;
-- supplied Tier C evidence must not contain `tier_c_nonblank_status=FAIL` for a
-  B1-relevance/nonblank truth axis covering the selected ISTD scope.
+- supplied Tier C evidence must not contain
+  `tier_c_baseline_evidence_status=FAIL` for a B1-relevance observed morphology
+  covering the selected ISTD scope.
 
 This permits a C1b plan draft only. It does not permit implementation that
 deletes linear-edge.
@@ -857,7 +925,8 @@ The gate may emit `GO_FOR_LINEAR_EDGE_RETIREMENT` only when:
 - all `GO_FOR_C1B_PLAN_SYNTHETIC_ONLY` conditions pass;
 - Tier B2 stress safety is either passing or explicitly resolved by Tier C /
   retirement-safety disposition;
-- at least one nonblank Tier C quantitative/cohort axis passes;
+- Tier C AsLS-vs-linear-edge baseline evidence passes, with ratio metrics marked
+  descriptive and no fixed area uplift threshold;
 - blank/carryover safety disposition is `PASS` or
   `NOT_APPLICABLE_WITH_EXCLUSION`;
 - every B2 stress axis required by the synthetic stress results has `PASS` or
@@ -885,15 +954,17 @@ Tier A or B1 relevance hard blocker is present:
   expansion rather than a pure baseline disagreement;
 - B1 fixture coverage cannot represent a Tier A observed selected-family
   pattern after reviewed fixture revision;
-- a supplied Tier C evidence file has `tier_c_nonblank_status=FAIL` for a
-  B1-relevance/nonblank truth axis covering the selected ISTD scope.
+- a supplied Tier C evidence file has
+  `tier_c_baseline_evidence_status=FAIL` for a B1-relevance observed morphology
+  covering the selected ISTD scope.
 
 For `decision_target=linear-edge-retirement`, the gate also emits
 `NO_GO_KEEP_LINEAR_EDGE` when:
 
 - Tier B2 stress failures remain unresolved after required Tier C or
   retirement-safety evidence is supplied;
-- a supplied Tier C evidence file has `tier_c_nonblank_status=FAIL`;
+- a supplied Tier C evidence file has
+  `tier_c_baseline_evidence_status=FAIL`;
 - a valid Tier C safety-disposition file shows blank/carryover hard failure.
 
 B2 stress failures such as synthetic blank false positives, coelution-only
@@ -909,12 +980,12 @@ fixture lock is valid but the rows used for B1 pass/fail are broader than the
 real Tier A selected-family scope, such as fixed 64-point stress windows being
 used as production-like rows. Use `REQUIRES_TIER_C` when Tier A and B1 pass but
 `decision_target=linear-edge-retirement` and there is no passing Tier C evidence
-with a nonblank quantitative/cohort axis plus B2/blank safety disposition. Use
-`REQUIRES_RETIREMENT_PREREQS` when Tier A, B1, B2/Tier C, and safety evidence
-pass but the retirement prerequisite manifest is missing or schema-valid but not
-satisfied. Use `INCONCLUSIVE_INVALID_INPUT` when a supplied evidence file is
-malformed, unreadable, uses unsupported enum values, or is schema-incompatible.
-Use `INCONCLUSIVE_REGENERATE_TIER_A` for Tier A
+with `tier_c_baseline_evidence_status=PASS` plus B2/blank safety disposition or
+exclusion. Use `REQUIRES_RETIREMENT_PREREQS` when Tier A, B1, B2/Tier C, and
+safety evidence pass but the retirement prerequisite manifest is missing or
+schema-valid but not satisfied. Use `INCONCLUSIVE_INVALID_INPUT` when a supplied
+evidence file is malformed, unreadable, uses unsupported enum values, or is
+schema-incompatible. Use `INCONCLUSIVE_REGENERATE_TIER_A` for Tier A
 freshness/hash/current-code drift. Use `INCONCLUSIVE_FIXTURE_LOCK_CHANGED` for
 fixture-lock hash drift. Use `INCONCLUSIVE_MISSING_P2B_85RAW_ACCEPTANCE` when
 retirement-target evaluation lacks accepted P2b/85RAW output refs.
@@ -975,7 +1046,8 @@ Before deleting linear-edge in implementation:
 
 Stop and request methodology review if:
 
-- the benchmark result contradicts the manual EIC interpretation;
+- the benchmark result contradicts the baseline-truth audit plots or
+  reviewer dispositions;
 - AsLS looks better only because the synthetic fixture is unrealistic;
 - chosen tolerances decide the result rather than trace evidence;
 - heldout results differ materially from calibration results;
