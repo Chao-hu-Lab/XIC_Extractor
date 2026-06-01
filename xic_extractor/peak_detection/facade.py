@@ -239,6 +239,11 @@ def _apply_region_first_safe_merge_if_enabled(
         candidates_result,
         selected_candidate,
         candidate_scores=candidate_scores,
+        baseline_integration_method=getattr(
+            config,
+            "baseline_integration_method",
+            "asls",
+        ),
     )
     return (
         outcome.candidates_result,

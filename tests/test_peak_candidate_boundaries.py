@@ -87,7 +87,7 @@ def test_build_boundary_rows_emits_alternatives_for_each_candidate() -> None:
     }
     assert all(row["baseline_residual_mad"] != "" for row in rows)
     assert all(row["area_uncertainty_noise_source"] != "" for row in rows)
-    assert {row["baseline_type"] for row in rows} == {"linear_edge"}
+    assert {row["baseline_type"] for row in rows} == {"asls"}
     assert all(row["baseline_score"] != "" for row in rows)
     assert all(row["boundary_audit_score"] != "" for row in rows)
     assert all(row["boundary_audit_rank"] != "" for row in rows)

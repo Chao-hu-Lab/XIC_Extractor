@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from tools.diagnostics.asls_truth_validation_inputs import (
+    FAIL,
     NOT_APPLICABLE_WITH_EXCLUSION,
     NOT_PROVIDED,
     NOT_SATISFIED,
@@ -382,179 +383,441 @@ def test_validate_tier_a_requires_p2b_85raw_refs_for_retirement(tmp_path: Path) 
     assert result.status == INCONCLUSIVE_MISSING_P2B_85RAW_ACCEPTANCE
 
 
-def test_validate_tier_c_spike_in_axis_requires_levels_replicates_and_recovery(
+def test_validate_tier_c_baseline_audit_passes_with_reviewed_linear_edge_support(
     tmp_path: Path,
 ) -> None:
-    path = _write_json(
-        tmp_path / "tier_c.json",
-        {
-            "tier_c_axis": "spike_in_recovery",
-            "tier_c_status": "PASS",
-            "level_count": 3,
-            "replicates_per_level": 5,
-            "median_recovery_pct": 105.0,
-            **_evidence_metadata(),
-        },
-    )
-
-    assert validate_tier_c(path).nonblank_status == PASS
-
-    bad = _write_json(
-        tmp_path / "bad_tier_c.json",
-        {
-            "tier_c_axis": "spike_in_recovery",
-            "tier_c_status": "PASS",
-            "level_count": 2,
-            "replicates_per_level": 5,
-            "median_recovery_pct": 105.0,
-            **_evidence_metadata(),
-        },
-    )
-    assert validate_tier_c(bad).status == INCONCLUSIVE_INVALID_INPUT
-
-
-def test_validate_tier_c_linearity_axis_requires_fit_quality(tmp_path: Path) -> None:
-    path = _write_json(
-        tmp_path / "tier_c.json",
-        {
-            "tier_c_axis": "linearity",
-            "tier_c_status": "PASS",
-            "level_count": 5,
-            "replicates_per_level": 3,
-            "slope": 1.5,
-            "r2": 0.99,
-            **_evidence_metadata(),
-        },
-    )
-
-    assert validate_tier_c(path).nonblank_status == PASS
-
-    bad = _write_json(
-        tmp_path / "bad_tier_c.json",
-        {
-            "tier_c_axis": "linearity",
-            "tier_c_status": "PASS",
-            "level_count": 5,
-            "replicates_per_level": 3,
-            "slope": -1.0,
-            "r2": 0.99,
-            **_evidence_metadata(),
-        },
-    )
-    assert validate_tier_c(bad).status == INCONCLUSIVE_INVALID_INPUT
-
-
-def test_validate_tier_c_blank_axis_is_safety_not_nonblank_authority(
-    tmp_path: Path,
-) -> None:
-    path = _write_json(
-        tmp_path / "tier_c.json",
-        {
-            "tier_c_axis": "blank_carryover",
-            "tier_c_status": "PASS",
-            "blank_control_row_count": 8,
-            "blank_below_threshold_pct": 95.0,
-            **_evidence_metadata(),
-        },
-    )
+    path = _write_json(tmp_path / "tier_c.json", _tier_c_baseline_evidence(tmp_path))
 
     result = validate_tier_c(path)
 
     assert result.status == PASS
-    assert result.nonblank_status == NOT_PROVIDED
-    assert result.blank_safety_status == PASS
+    assert result.baseline_evidence_status == PASS
+    assert result.blank_safety_status == NOT_APPLICABLE_WITH_EXCLUSION
+    assert result.stress_axis_gate_status == PASS
+    assert result.axis == "asls_vs_linear_edge_baseline_audit"
+    assert result.row_blocker_count == 0
+    assert result.review_required_count == 0
+    assert result.stress_axis_disposition_statuses == ("blank_carryover=PASS",)
 
 
-def test_validate_tier_c_rejects_no_blank_controls_statement_as_retirement_pass(
+def test_validate_tier_c_resolves_relative_baseline_refs_from_evidence_json(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    data = _make_refs_relative(_tier_c_baseline_evidence(tmp_path), root=tmp_path)
+    baseline_artifacts = data["baseline_truth_artifacts"]
+    assert isinstance(baseline_artifacts, dict)
+    plot_dir = baseline_artifacts["plot_dir"]
+    assert isinstance(plot_dir, str)
+    baseline_artifacts["plot_dir"] = os.path.relpath(plot_dir, tmp_path)
+    family_dispositions = data["family_dispositions"]
+    assert isinstance(family_dispositions, list)
+    for family in family_dispositions:
+        assert isinstance(family, dict)
+        plot_path = family["plot_path"]
+        assert isinstance(plot_path, str)
+        family["plot_path"] = os.path.relpath(plot_path, tmp_path)
+        reviewed_rows = family["reviewed_rows"]
+        assert isinstance(reviewed_rows, list)
+        for reviewed_row in reviewed_rows:
+            assert isinstance(reviewed_row, dict)
+            reviewed_plot = reviewed_row["plot_path"]
+            assert isinstance(reviewed_plot, str)
+            reviewed_row["plot_path"] = os.path.relpath(reviewed_plot, tmp_path)
+    path = _write_json(tmp_path / "tier_c.json", data)
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+
+    monkeypatch.chdir(cwd)
+
+    assert validate_tier_c(path).status == PASS
+
+
+def test_validate_tier_c_rejects_fixed_ratio_threshold_authority(
     tmp_path: Path,
 ) -> None:
-    path = _write_json(
-        tmp_path / "tier_c.json",
-        {
-            "tier_c_axis": "blank_carryover",
-            "tier_c_status": "PASS",
-            "accepted_no_controls_statement": True,
-            "accepted_residual_risk": "No blank controls exist for this dataset.",
-            **_evidence_metadata(),
-        },
-    )
+    data = _tier_c_baseline_evidence(tmp_path)
+    data["ratio_metrics_are_descriptive"] = False
+    data["fixed_area_uplift_threshold"] = 1.25
+    path = _write_json(tmp_path / "tier_c.json", data)
 
     result = validate_tier_c(path)
 
     assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "ratio_metrics_are_descriptive" in result.reasons[0]
 
 
-def test_validate_tier_c_accepts_machine_checkable_blank_exclusion_contract(
+def test_validate_tier_c_review_required_does_not_roll_up_to_pass(
     tmp_path: Path,
 ) -> None:
     path = _write_json(
         tmp_path / "tier_c.json",
-        {
-            "tier_c_axis": "blank_carryover",
-            "tier_c_status": "PASS",
-            "blank_exclusion_contract": {
-                "affected_outputs": ["alignment_matrix.tsv"],
-                "evidence_artifacts": [_hashed_ref(MARKDOWN_REPORT)],
-                "approved": True,
-            },
-            **_evidence_metadata(),
-        },
+        _tier_c_baseline_evidence(
+            tmp_path,
+            baseline_status=NOT_PROVIDED,
+            tier_c_status="MIXED",
+            family_disposition="REQUIRES_REVIEW",
+            row_blockers=["mixed_or_review_required"],
+        ),
     )
 
     result = validate_tier_c(path)
 
-    assert result.blank_safety_status == NOT_APPLICABLE_WITH_EXCLUSION
+    assert result.status == "MIXED"
+    assert result.baseline_evidence_status == NOT_PROVIDED
+    assert result.row_blocker_count == 1
+    assert result.review_required_count == 1
 
 
-def test_validate_tier_c_blinded_manual_axis_requires_review_depth(
+def test_validate_tier_c_hard_asls_blocker_fails_baseline_evidence(
     tmp_path: Path,
 ) -> None:
     path = _write_json(
         tmp_path / "tier_c.json",
-        {
-            "tier_c_axis": "blinded_manual_integration",
-            "tier_c_status": "PASS",
-            "stratified_row_count": 30,
-            "median_relative_difference_pct": 8.0,
-            "unreviewed_above_25pct_count": 0,
-            **_evidence_metadata(),
-        },
+        _tier_c_baseline_evidence(
+            tmp_path,
+            baseline_status=FAIL,
+            tier_c_status=FAIL,
+            family_disposition="FAIL",
+            row_blockers=["asls_area_exceeds_raw_area"],
+        ),
     )
 
-    assert validate_tier_c(path).nonblank_status == PASS
+    result = validate_tier_c(path)
+
+    assert result.status == FAIL
+    assert result.baseline_evidence_status == FAIL
+    assert result.row_blocker_count == 1
 
 
-def test_validate_tier_c_real_85raw_axis_requires_cohort_safety(
+def test_validate_tier_c_pass_family_with_hard_blocker_fails_baseline_evidence(
     tmp_path: Path,
 ) -> None:
     path = _write_json(
         tmp_path / "tier_c.json",
-        {
-            "tier_c_axis": "real_85raw_cohort",
-            "tier_c_status": "PASS",
-            "raw_file_count": 85,
-            "sample_count": 85,
-            "selected_istd_count": 6,
-            "high_risk_morphology_row_count": 30,
-            "blank_control_row_count": 8,
-            "covered_target_classes": ["ISTD"],
-            "known_exclusions": [],
-            "unaccepted_rt_boundary_mismatch_count": 0,
-            "asls_raw_area_exceedance_count": 0,
-            "quantitative_truth_comparator_type": "manual_integration_review",
-            "max_unreviewed_relative_difference_pct": 25.0,
-            "median_nonblank_drift_pct": 10.0,
-            **_evidence_metadata(),
-        },
+        _tier_c_baseline_evidence(
+            tmp_path,
+            family_disposition="PASS_BASELINE_SUPPORTED",
+            row_blockers=["asls_area_exceeds_raw_area"],
+        ),
     )
 
-    assert validate_tier_c(path).nonblank_status == PASS
+    result = validate_tier_c(path)
+
+    assert result.status == FAIL
+    assert result.baseline_evidence_status == FAIL
+    assert result.row_blocker_count == 1
+
+
+def test_validate_tier_c_declared_fail_cannot_be_upgraded_by_family_rollup(
+    tmp_path: Path,
+) -> None:
+    path = _write_json(
+        tmp_path / "tier_c.json",
+        _tier_c_baseline_evidence(tmp_path, baseline_status=FAIL),
+    )
+
+    result = validate_tier_c(path)
+
+    assert result.status == FAIL
+    assert result.baseline_evidence_status == FAIL
+
+
+def test_validate_tier_c_declared_unresolved_cannot_be_upgraded_by_family_rollup(
+    tmp_path: Path,
+) -> None:
+    path = _write_json(
+        tmp_path / "tier_c.json",
+        _tier_c_baseline_evidence(
+            tmp_path,
+            baseline_status=NOT_PROVIDED,
+            tier_c_status="MIXED",
+        ),
+    )
+
+    result = validate_tier_c(path)
+
+    assert result.status == "MIXED"
+    assert result.baseline_evidence_status == NOT_PROVIDED
+
+
+def test_validate_tier_c_rejects_neutral_unknown_axis(tmp_path: Path) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    data["tier_c_axis"] = "external_reference_axis"
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "unsupported tier_c_axis" in result.reasons[0]
+
+
+def test_validate_tier_c_blank_exclusion_requires_contract_tests(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    data["consumer_contract_tests"] = []
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "consumer_contract_tests" in result.reasons[0]
+
+
+def test_validate_tier_c_blank_pass_requires_blank_evidence_refs(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(
+        tmp_path,
+        blank_safety_status=PASS,
+    )
+    data["blank_control_evidence_refs"] = []
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "blank_control_evidence_refs" in result.reasons[0]
+
+
+def test_validate_tier_c_blank_gap_is_not_aggregate_pass(tmp_path: Path) -> None:
+    path = _write_json(
+        tmp_path / "tier_c.json",
+        _tier_c_baseline_evidence(
+            tmp_path,
+            blank_safety_status=NOT_PROVIDED,
+        ),
+    )
+
+    result = validate_tier_c(path)
+
+    assert result.status == "MIXED"
+    assert result.blank_safety_status == NOT_PROVIDED
+
+
+def test_validate_tier_c_rejects_malformed_baseline_rows_artifact(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    rows_ref = data["baseline_truth_artifacts"]["rows_tsv"]
+    rows_path = Path(rows_ref["path"])
+    rows_ref["sha256"] = _artifact_ref(rows_path, "target_label\nISTD-A\n")["sha256"]
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "baseline rows fieldnames" in result.reasons[0]
+
+
+def test_validate_tier_c_rejects_malformed_baseline_json_artifact(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    json_ref = data["baseline_truth_artifacts"]["json"]
+    json_path = Path(json_ref["path"])
+    json_ref["sha256"] = _artifact_ref(json_path, '{"not_families": []}\n')[
+        "sha256"
+    ]
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "baseline JSON families" in result.reasons[0]
+
+
+def test_validate_tier_c_accepts_promoted_tier_a_baseline_row_columns(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    rows_ref = data["baseline_truth_artifacts"]["rows_tsv"]
+    assert isinstance(rows_ref, dict)
+    rows_path = Path(str(rows_ref["path"]))
+    promoted_rows = _baseline_rows_text(_tier_c_fixture_plot_path(data)).replace(
+        "plot_path\n",
+        "plot_path\trt_identity_status\tboundary_status\n",
+    ).replace(
+        "ISTD-A.png\n",
+        "ISTD-A.png\tPASS\taccepted\n",
+    )
+    rows_ref["sha256"] = _artifact_ref(rows_path, promoted_rows)["sha256"]
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == PASS
+    assert result.baseline_evidence_status == PASS
+
+
+def test_validate_tier_c_accepts_p2_audit_summary_rows_json(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    json_ref = data["baseline_truth_artifacts"]["json"]
+    assert isinstance(json_ref, dict)
+    json_path = Path(str(json_ref["path"]))
+    json_ref["sha256"] = _artifact_ref(
+        json_path,
+        _baseline_json_text(Path("plots") / "ISTD-A.png").replace(
+            '"families"',
+            '"summary_rows"',
+            1,
+        ),
+    )["sha256"]
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == PASS
+    assert result.baseline_evidence_status == PASS
+
+
+def test_validate_tier_c_rejects_baseline_rows_with_unexpected_column(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    rows_ref = data["baseline_truth_artifacts"]["rows_tsv"]
+    rows_path = Path(rows_ref["path"])
+    bad_rows = rows_path.read_text(encoding="utf-8").replace(
+        "plot_path\n",
+        "plot_path\tunexpected_column\n",
+    )
+    rows_ref["sha256"] = _artifact_ref(rows_path, bad_rows)["sha256"]
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "baseline rows fieldnames" in result.reasons[0]
+
+
+def test_validate_tier_c_rejects_family_disposition_without_row_link(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    data["family_dispositions"][0]["reviewed_rows"][0]["sample_stem"] = "missing_sample"
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "reviewed row not found" in result.reasons[0]
+
+
+def test_validate_tier_c_rejects_baseline_json_missing_summary_family(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    plot_path = _tier_c_fixture_plot_path(data)
+    summary_ref = data["baseline_truth_artifacts"]["summary_tsv"]
+    assert isinstance(summary_ref, dict)
+    summary_path = Path(str(summary_ref["path"]))
+    summary_ref["sha256"] = _artifact_ref(
+        summary_path,
+        _baseline_summary_text(plot_path)
+        + _second_baseline_summary_row_text(plot_path),
+    )["sha256"]
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "baseline JSON families missing baseline summary family" in result.reasons[0]
+
+
+def test_validate_tier_c_rejects_missing_family_disposition_for_summary_family(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    plot_path = _tier_c_fixture_plot_path(data)
+    summary_ref = data["baseline_truth_artifacts"]["summary_tsv"]
+    json_ref = data["baseline_truth_artifacts"]["json"]
+    assert isinstance(summary_ref, dict)
+    assert isinstance(json_ref, dict)
+    summary_path = Path(str(summary_ref["path"]))
+    json_path = Path(str(json_ref["path"]))
+    summary_ref["sha256"] = _artifact_ref(
+        summary_path,
+        _baseline_summary_text(plot_path)
+        + _second_baseline_summary_row_text(plot_path),
+    )["sha256"]
+    json_ref["sha256"] = _artifact_ref(
+        json_path,
+        _baseline_json_text(plot_path, include_second_family=True),
+    )["sha256"]
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "family_dispositions missing baseline summary family" in result.reasons[0]
+
+
+def test_validate_tier_c_inconclusive_family_is_invalid_input(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(
+        tmp_path,
+        baseline_status=NOT_PROVIDED,
+        tier_c_status="MIXED",
+        family_disposition="INCONCLUSIVE",
+    )
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "family_disposition=INCONCLUSIVE" in result.reasons[0]
+
+
+def test_validate_tier_c_empty_stress_axis_is_not_retirement_ready(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    data["stress_axis_dispositions"] = []
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == "MIXED"
+    assert result.stress_axis_gate_status == NOT_PROVIDED
+
+
+def test_validate_tier_c_stress_axis_pass_requires_evidence_refs(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    data["stress_axis_dispositions"][0]["status"] = PASS
+    data["stress_axis_dispositions"][0]["evidence_artifacts"] = []
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == INCONCLUSIVE_INVALID_INPUT
+    assert "evidence_artifacts" in result.reasons[0]
+
+
+def test_validate_tier_c_stress_axis_not_required_is_not_retirement_ready(
+    tmp_path: Path,
+) -> None:
+    data = _tier_c_baseline_evidence(tmp_path)
+    data["stress_axis_dispositions"][0]["status"] = "NOT_REQUIRED"
+    data["stress_axis_dispositions"][0]["evidence_artifacts"] = []
+    path = _write_json(tmp_path / "tier_c.json", data)
+
+    result = validate_tier_c(path)
+
+    assert result.status == "MIXED"
+    assert result.stress_axis_gate_status == NOT_PROVIDED
+    assert result.stress_axis_disposition_statuses == ("blank_carryover=NOT_REQUIRED",)
 
 
 def test_validate_tier_c_rejects_unsupported_axis(tmp_path: Path) -> None:
     path = _write_json(
         tmp_path / "tier_c.json",
-        {"tier_c_axis": "external_tool_vibes", "tier_c_status": "PASS"},
+        {"tier_c_axis": "external_reference_axis", "tier_c_status": "PASS"},
     )
 
     assert validate_tier_c(path).status == INCONCLUSIVE_INVALID_INPUT
@@ -564,11 +827,8 @@ def test_validate_tier_c_rejects_unverifiable_pass_evidence(tmp_path: Path) -> N
     path = _write_json(
         tmp_path / "tier_c.json",
         {
-            "tier_c_axis": "spike_in_recovery",
+            "tier_c_axis": "asls_vs_linear_edge_baseline_audit",
             "tier_c_status": "PASS",
-            "level_count": 3,
-            "replicates_per_level": 5,
-            "median_recovery_pct": 105.0,
         },
     )
 
@@ -580,71 +840,10 @@ def test_validate_tier_c_rejects_unsupported_axis_even_when_status_fail(
 ) -> None:
     path = _write_json(
         tmp_path / "tier_c.json",
-        {"tier_c_axis": "external_tool_vibes", "tier_c_status": "FAIL"},
+        {"tier_c_axis": "external_reference_axis", "tier_c_status": "FAIL"},
     )
 
     assert validate_tier_c(path).status == INCONCLUSIVE_INVALID_INPUT
-
-
-def test_validate_tier_c_resolves_repo_relative_refs_from_other_cwd(
-    tmp_path: Path,
-) -> None:
-    path = _write_json(
-        tmp_path / "tier_c.json",
-        {
-            "tier_c_axis": "spike_in_recovery",
-            "tier_c_status": "PASS",
-            "level_count": 3,
-            "replicates_per_level": 5,
-            "median_recovery_pct": 105.0,
-            **_evidence_metadata(),
-        },
-    )
-    original_cwd = Path.cwd()
-    try:
-        os.chdir(tmp_path)
-        result = validate_tier_c(path)
-    finally:
-        os.chdir(original_cwd)
-
-    assert result.status == PASS
-
-
-def test_validate_tier_c_does_not_resolve_refs_from_process_cwd(
-    tmp_path: Path,
-) -> None:
-    input_dir = tmp_path / "input"
-    cwd_dir = tmp_path / "cwd"
-    input_dir.mkdir()
-    cwd_dir.mkdir()
-    cwd_only = cwd_dir / "cwd_only.md"
-    cwd_only.write_text(MARKDOWN_REPORT.read_text(encoding="utf-8"), encoding="utf-8")
-    path = _write_json(
-        input_dir / "tier_c.json",
-        {
-            "tier_c_axis": "spike_in_recovery",
-            "tier_c_status": "PASS",
-            "level_count": 3,
-            "replicates_per_level": 5,
-            "median_recovery_pct": 105.0,
-            "evidence_artifacts": [
-                {"path": cwd_only.name, "sha256": sha256_file(cwd_only)}
-            ],
-            "thresholds_used": ["p2c_task4_test_thresholds"],
-            "reviewer_or_generator": "pytest",
-            "output_scope": ["alignment_matrix.tsv"],
-            "target_classes": ["ISTD"],
-            "known_exclusions": [],
-        },
-    )
-    original_cwd = Path.cwd()
-    try:
-        os.chdir(cwd_dir)
-        result = validate_tier_c(path)
-    finally:
-        os.chdir(original_cwd)
-
-    assert result.status == INCONCLUSIVE_INVALID_INPUT
 
 
 def test_validate_tier_c_accepts_not_provided_without_pretending_pass(
@@ -652,13 +851,16 @@ def test_validate_tier_c_accepts_not_provided_without_pretending_pass(
 ) -> None:
     path = _write_json(
         tmp_path / "tier_c.json",
-        {"tier_c_axis": "spike_in_recovery", "tier_c_status": NOT_PROVIDED},
+        {
+            "tier_c_axis": "asls_vs_linear_edge_baseline_audit",
+            "tier_c_status": NOT_PROVIDED,
+        },
     )
 
     result = validate_tier_c(path)
 
     assert result.status == NOT_PROVIDED
-    assert result.nonblank_status == NOT_PROVIDED
+    assert result.baseline_evidence_status == NOT_PROVIDED
     assert result.blank_safety_status == NOT_PROVIDED
 
 
@@ -678,8 +880,10 @@ def test_validate_waiver_requires_owner_scope_and_deletion_statement(
             "output_scope": ["alignment_matrix.tsv"],
             "expiry_or_revalidation_trigger": "2026-12-31",
             "waived_decision": "c1b-plan",
-            "waived_tier_c_axes": ["spike_in_recovery"],
-            "waiver_rationale": "No spike-in series exists for this dataset.",
+            "waived_tier_c_evidence": ["asls_vs_linear_edge_baseline_audit"],
+            "waiver_rationale": (
+                "No baseline evidence audit is approved for this dataset."
+            ),
             "branch_scope": "codex/peak-pipeline-modernization",
             "target_classes": ["ISTD"],
             "sample_classes": ["tissue"],
@@ -710,7 +914,7 @@ def test_validate_waiver_rejects_empty_scope_and_bad_expiry(tmp_path: Path) -> N
             "output_scope": [],
             "expiry_or_revalidation_trigger": "not-a-date",
             "waived_decision": "c1b-plan",
-            "waived_tier_c_axes": [],
+            "waived_tier_c_evidence": [],
             "waiver_rationale": "",
             "branch_scope": "",
             "target_classes": [],
@@ -743,8 +947,10 @@ def test_validate_waiver_rejects_expired_waiver(
             "output_scope": ["alignment_matrix.tsv"],
             "expiry_or_revalidation_trigger": "2026-05-26",
             "waived_decision": "c1b-plan",
-            "waived_tier_c_axes": ["spike_in_recovery"],
-            "waiver_rationale": "No spike-in series exists for this dataset.",
+            "waived_tier_c_evidence": ["asls_vs_linear_edge_baseline_audit"],
+            "waiver_rationale": (
+                "No baseline evidence audit is approved for this dataset."
+            ),
             "branch_scope": "codex/peak-pipeline-modernization",
             "target_classes": ["ISTD"],
             "sample_classes": ["tissue"],
@@ -758,7 +964,7 @@ def test_validate_waiver_rejects_expired_waiver(
     assert validate_waiver(bad).status == INCONCLUSIVE_INVALID_INPUT
 
 
-def test_valid_waiver_does_not_supply_nonblank_tier_c_authority(
+def test_valid_waiver_does_not_supply_baseline_evidence_authority(
     tmp_path: Path,
 ) -> None:
     waiver = _write_json(
@@ -774,8 +980,10 @@ def test_valid_waiver_does_not_supply_nonblank_tier_c_authority(
             "output_scope": ["alignment_matrix.tsv"],
             "expiry_or_revalidation_trigger": "2026-12-31",
             "waived_decision": "linear-edge-retirement",
-            "waived_tier_c_axes": ["spike_in_recovery"],
-            "waiver_rationale": "No spike-in series exists for this dataset.",
+            "waived_tier_c_evidence": ["asls_vs_linear_edge_baseline_audit"],
+            "waiver_rationale": (
+                "No baseline evidence audit is approved for this dataset."
+            ),
             "branch_scope": "codex/peak-pipeline-modernization",
             "target_classes": ["ISTD"],
             "sample_classes": ["tissue"],
@@ -789,7 +997,7 @@ def test_valid_waiver_does_not_supply_nonblank_tier_c_authority(
     result = validate_waiver(waiver)
 
     assert result.waiver_state == VALID
-    assert result.nonblank_tier_c_status == NOT_PROVIDED
+    assert result.baseline_evidence_status == NOT_PROVIDED
 
 
 def test_validate_retirement_prerequisites_rejects_unsupported_status_enum(
@@ -1078,6 +1286,277 @@ def _write_json(path: Path, value: dict[str, object]) -> Path:
     return path
 
 
+def _artifact_ref(path: Path, text: str = "artifact\n") -> dict[str, str]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return {"path": str(path), "sha256": sha256_file(path)}
+
+
+def _make_refs_relative(value: object, *, root: Path) -> object:
+    if isinstance(value, dict):
+        converted = {
+            key: _make_refs_relative(item, root=root) for key, item in value.items()
+        }
+        if "path" in converted and isinstance(converted["path"], str):
+            converted["path"] = os.path.relpath(converted["path"], root)
+        return converted
+    if isinstance(value, list):
+        return [_make_refs_relative(item, root=root) for item in value]
+    return value
+
+
+def _baseline_rows_text(plot_path: Path) -> str:
+    header = (
+        "target_label",
+        "feature_family_id",
+        "sample_stem",
+        "status",
+        "raw_area",
+        "linear_area",
+        "asls_area",
+        "linear_raw_pct",
+        "asls_raw_pct",
+        "asls_vs_linear_pct",
+        "linear_baseline_subtracted_pct",
+        "asls_baseline_subtracted_pct",
+        "linear_edge_delta_pct",
+        "outside_background_pct",
+        "peak_start_rt",
+        "apex_rt",
+        "peak_end_rt",
+        "trace_point_count",
+        "classification",
+        "review_reason",
+        "plot_path",
+    )
+    row = (
+        "ISTD-A",
+        "ISTD-A::100.0::1.20",
+        "sample_001",
+        "PASS",
+        "100.0",
+        "60.0",
+        "95.0",
+        "60.0",
+        "95.0",
+        "58.3",
+        "40.0",
+        "5.0",
+        "35.0",
+        "20.0",
+        "1.10",
+        "1.20",
+        "1.30",
+        "11",
+        "linear_edge_over_subtraction_plausible",
+        "linear edge crosses the shoulder",
+        str(plot_path),
+    )
+    return "\t".join(header) + "\n" + "\t".join(row) + "\n"
+
+
+def _baseline_summary_text(plot_path: Path) -> str:
+    header = (
+        "target_label",
+        "feature_family_id",
+        "row_count",
+        "dominant_classification",
+        "classification_counts",
+        "median_linear_baseline_subtracted_pct",
+        "median_asls_baseline_subtracted_pct",
+        "median_asls_vs_linear_pct",
+        "max_asls_vs_linear_pct",
+        "median_linear_edge_delta_pct",
+        "median_outside_background_pct",
+        "review_status",
+        "plot_path",
+    )
+    row = (
+        "ISTD-A",
+        "ISTD-A::100.0::1.20",
+        "1",
+        "linear_edge_over_subtraction_plausible",
+        '{"linear_edge_over_subtraction_plausible": 1}',
+        "40.0",
+        "5.0",
+        "58.3",
+        "58.3",
+        "35.0",
+        "20.0",
+        "reviewed",
+        str(plot_path),
+    )
+    return "\t".join(header) + "\n" + "\t".join(row) + "\n"
+
+
+def _baseline_json_text(
+    plot_path: Path,
+    *,
+    include_second_family: bool = False,
+) -> str:
+    families = [
+        {
+            "target_label": "ISTD-A",
+            "feature_family_id": "ISTD-A::100.0::1.20",
+            "dominant_classification": "linear_edge_over_subtraction_plausible",
+            "plot_path": str(plot_path),
+        }
+    ]
+    if include_second_family:
+        families.append(
+            {
+                "target_label": "ISTD-B",
+                "feature_family_id": "ISTD-B::200.0::2.20",
+                "dominant_classification": (
+                    "low_outside_background_with_baseline_disagreement"
+                ),
+                "plot_path": str(plot_path),
+            }
+        )
+    return json.dumps(
+        {"families": families}
+    )
+
+
+def _second_baseline_summary_row_text(plot_path: Path) -> str:
+    row = (
+        "ISTD-B",
+        "ISTD-B::200.0::2.20",
+        "1",
+        "low_outside_background_with_baseline_disagreement",
+        '{"low_outside_background_with_baseline_disagreement": 1}',
+        "45.0",
+        "15.0",
+        "35.0",
+        "35.0",
+        "30.0",
+        "12.0",
+        "requires_review",
+        str(plot_path),
+    )
+    return "\t".join(row) + "\n"
+
+
+def _tier_c_fixture_plot_path(data: dict[str, object]) -> Path:
+    families = data["family_dispositions"]
+    assert isinstance(families, list)
+    first_family = families[0]
+    assert isinstance(first_family, dict)
+    return Path(str(first_family["plot_path"]))
+
+
+def _tier_c_baseline_evidence(
+    tmp_path: Path,
+    *,
+    baseline_status: str = PASS,
+    tier_c_status: str = PASS,
+    family_disposition: str = "PASS_BASELINE_SUPPORTED",
+    row_blockers: list[str] | None = None,
+    blank_safety_status: str = NOT_APPLICABLE_WITH_EXCLUSION,
+) -> dict[str, object]:
+    plot_dir = tmp_path / "plots"
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    plot_path = plot_dir / "ISTD-A.png"
+    plot_path.write_text("plot\n", encoding="utf-8")
+    contract_ref = _artifact_ref(tmp_path / "contract_test.txt", "pass\n")
+    stress_ref = _artifact_ref(
+        tmp_path / "stress_axis_evidence.tsv",
+        "stress_axis\tstatus\nblank_carryover\tPASS\n",
+    )
+    blank_refs: list[dict[str, str]] = []
+    blank_absence_proof = ["alignment_matrix.tsv excludes blank quantitation"]
+    contract_tests = [contract_ref]
+    if blank_safety_status == PASS:
+        blank_refs = [
+            _artifact_ref(
+                tmp_path / "blank_control_evidence.tsv",
+                "sample_stem\tblank_status\nblank_001\tPASS\n",
+            )
+        ]
+        blank_absence_proof = []
+        contract_tests = []
+    blockers = [] if row_blockers is None else row_blockers
+    return {
+        "tier_c_axis": "asls_vs_linear_edge_baseline_audit",
+        "tier_c_status": tier_c_status,
+        "tier_c_baseline_evidence_status": baseline_status,
+        "blank_safety_status": blank_safety_status,
+        "ratio_metrics_are_descriptive": True,
+        "fixed_area_uplift_threshold": None,
+        "baseline_truth_artifacts": {
+            "rows_tsv": _artifact_ref(
+                tmp_path / "baseline_truth_audit_rows.tsv",
+                _baseline_rows_text(plot_path),
+            ),
+            "summary_tsv": _artifact_ref(
+                tmp_path / "baseline_truth_audit_summary.tsv",
+                _baseline_summary_text(plot_path),
+            ),
+            "json": _artifact_ref(
+                tmp_path / "baseline_truth_audit.json",
+                _baseline_json_text(plot_path),
+            ),
+            "markdown": _artifact_ref(
+                tmp_path / "baseline_truth_audit.md",
+                "# audit\n",
+            ),
+            "plot_dir": str(plot_dir),
+        },
+        "family_dispositions": [
+            {
+                "target_label": "ISTD-A",
+                "feature_family_id": "ISTD-A::100.0::1.20",
+                "covered_samples": ["sample_001"],
+                "dominant_classification": "linear_edge_over_subtraction_plausible",
+                "review_status": "reviewed",
+                "decision_scope": "C1B_RELEVANCE",
+                "plot_path": str(plot_path),
+                "reviewed_rows": [
+                    {
+                        "target_label": "ISTD-A",
+                        "feature_family_id": "ISTD-A::100.0::1.20",
+                        "sample_stem": "sample_001",
+                        "peak_start_rt": "1.10",
+                        "apex_rt": "1.20",
+                        "peak_end_rt": "1.30",
+                        "plot_path": str(plot_path),
+                    }
+                ],
+                "family_disposition": family_disposition,
+                "tier_c_row_blockers": blockers,
+                "reviewer_disposition": (
+                    "AsLS baseline is more plausible than linear edge."
+                ),
+                "reason": "Linear edge crosses the peak shoulder on the linked plot.",
+            }
+        ],
+        "affected_outputs": ["alignment_matrix.tsv"],
+        "blank_control_evidence_status": blank_safety_status,
+        "blank_control_evidence_refs": blank_refs,
+        "blank_rows_absence_proof": blank_absence_proof,
+        "consumer_contract_tests": contract_tests,
+        "stress_axis_dispositions": [
+                {
+                    "stress_axis": "blank_carryover",
+                    "status": PASS,
+                    "decision_scope": "RETIREMENT_ONLY",
+                    "rationale": "Scoped outputs do not consume blank quantitation.",
+                    "evidence_artifacts": [stress_ref],
+                }
+            ],
+        "row_count": 1,
+        "sample_count": 1,
+        "raw_file_count": 1,
+        "selected_istd_count": 1,
+        "high_risk_morphology_row_count": 1,
+        "covered_target_classes": ["ISTD"],
+        "known_exclusions": [],
+        "reviewer_or_generator": "methodology_owner",
+        "output_scope": ["alignment_matrix.tsv"],
+        "target_classes": ["ISTD"],
+    }
+
+
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     with path.open(encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle, delimiter="\t"))
@@ -1093,17 +1572,6 @@ def _write_tsv(path: Path, rows: list[dict[str, str]]) -> None:
 
 def _hashed_ref(path: Path) -> dict[str, str]:
     return {"path": str(path), "sha256": sha256_file(path)}
-
-
-def _evidence_metadata() -> dict[str, object]:
-    return {
-        "evidence_artifacts": [_hashed_ref(MARKDOWN_REPORT)],
-        "thresholds_used": ["p2c_task4_test_thresholds"],
-        "reviewer_or_generator": "pytest",
-        "output_scope": ["alignment_matrix.tsv"],
-        "target_classes": ["ISTD"],
-        "known_exclusions": [],
-    }
 
 
 _POST_ROLLBACK_SCHEMA_COLUMNS = [

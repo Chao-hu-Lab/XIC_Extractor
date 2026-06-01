@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 import numpy as np
@@ -170,6 +171,9 @@ def test_run_p2_baseline_truth_audit_writes_review_outputs(tmp_path: Path) -> No
     assert outputs.markdown_path.exists()
     assert outputs.json_path.exists()
     assert outputs.plot_dir.exists()
+    payload = json.loads(outputs.json_path.read_text(encoding="utf-8"))
+    assert payload["families"] == payload["summary_rows"]
+    assert payload["families"][0]["target_label"] == "ISTD-A"
 
 
 def test_run_p2_baseline_truth_audit_reads_promoted_asls_schema(

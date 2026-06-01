@@ -12,8 +12,9 @@ deprecated by an approved schema note before implementation starts.
 
 ## Purpose
 
-Retire the linear-edge baseline path. After C5 has migrated every caller
-to the single integration entry and AsLS truth validation has cleared, the
+Retire the linear-edge baseline path. After C5 has migrated production package
+callers to the single integration entry, AsLS truth validation has cleared, and
+diagnostic comparator callers have been migrated or retired, the
 `integrate_linear_edge_baseline` function and the `integrate_with_baseline`
 selector wrapper have no remaining callers and can be deleted.
 
@@ -25,15 +26,20 @@ parity.
 
 ## Why C1b Has to Wait for C5 And AsLS Truth
 
-C5 owns the migration of the four current `integrate_linear_edge_baseline`
-callers (`integration_audit.py`, `region_safe_merge.py`, `hypotheses.py`,
-`peak_candidate_boundaries.py`) onto a single integration entry. Until C5
-lands, the linear-edge function still has callers and cannot be deleted.
+C5 owns the migration of production package
+`integrate_linear_edge_baseline` callers (`integration_audit.py`,
+`region_safe_merge.py`, `hypotheses.py`, `peak_candidate_boundaries.py`) onto a
+single integration entry. Maintained diagnostic comparator tools may still call
+the legacy function after C5; C1b must either migrate those diagnostics to an
+approved comparator interface or retire them before deleting the function.
 
 The 2026-05-26 design correction adds a second blocker: P2b currently proves
-only conditional audit promotion, not baseline truth. Linear-edge deletion
-requires evidence such as spike-in recovery, concentration-series linearity,
-blank behavior, or synthetic known-baseline traces.
+only conditional audit promotion, not retirement authority. Linear-edge deletion
+requires a current-code AsLS-vs-linear-edge baseline evidence gate built from
+`p2_baseline_truth_audit`-style summary rows and plots, plus the required
+blank/carryover safety disposition or exclusion. It does not require manual
+integration as the comparator, and it must not rely on a fixed area-uplift
+ratio.
 
 A third blocker is the temporary P2b rollback audit surface. If
 `alignment_cell_integration_audit.tsv` still emits
@@ -58,8 +64,10 @@ the cumulative output of C1a, C5, and a separate AsLS truth-validation spec:
   by P2)
 - `integrate_with_baseline` selector (added by P2) will dispatch on
   `baseline_method` argument
-- After C5 and truth validation, all production callers will go through
-  `integrate_peak_region`, and the selected method will be AsLS-only
+- After C5 and truth validation, all production package callers will go through
+  the single integration entry, and the selected method will be AsLS-only
+- Maintained diagnostic comparator callers in `tools/diagnostics/` will already
+  be migrated to an approved comparator interface or explicitly retired
 - `BaselineIntegration.baseline_type` field will exist and take only
   `"asls"` in production runs
 - P2b temporary linear-edge rollback columns will already be absent from the
@@ -73,8 +81,10 @@ owner — the precondition chain is broken and C1b should not start.
 ### Step 1 — Delete the linear-edge function
 
 Delete `integrate_linear_edge_baseline` from
-`xic_extractor/peak_detection/baseline.py`. Confirm via grep that no
-caller remains. If any caller is found, hold the deletion and report.
+`xic_extractor/peak_detection/baseline.py`. Confirm via grep that no caller
+remains in `xic_extractor/`, `tools/`, `scripts/`, or tests except expected
+deletion-diff references. If any maintained caller is found, hold the deletion
+and report whether it is production, diagnostic, or test-only.
 
 ### Step 2 — Delete the selector wrapper
 
@@ -130,7 +140,8 @@ Behavioral parity required:
 Restore the deleted functions if any of:
 
 - a caller of `integrate_linear_edge_baseline` or `integrate_with_baseline`
-  is found at refactor time (means C5 missed a site)
+  is found at refactor time (means C5 missed a production site or diagnostic
+  comparator migration/retirement is incomplete)
 - `area_baseline_corrected_linear_edge` or `baseline_score_linear_edge` is still
   emitted by the accepted audit schema
 - hash mismatch on parity TSVs (would be a regression in the AsLS-only

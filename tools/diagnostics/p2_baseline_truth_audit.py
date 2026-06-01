@@ -552,7 +552,10 @@ def _default_trace_loader(
             trace = raw.extract_xic_many(
                 (XICRequest(mz=mz, rt_min=rt_min, rt_max=rt_max, ppm_tol=ppm),)
             )[0]
-        return np.asarray(trace.rt, dtype=float), np.asarray(trace.intensity, dtype=float)
+        return (
+            np.asarray(trace.rt, dtype=float),
+            np.asarray(trace.intensity, dtype=float),
+        )
 
     return load_trace
 
@@ -568,7 +571,9 @@ def _trace_bounds(
         return max(0.0, peak_start_rt - margin_min), peak_end_rt + margin_min
     if apex_rt is not None:
         return max(0.0, apex_rt - margin_min), apex_rt + margin_min
-    raise ValueError("peak_start_rt/peak_end_rt or apex_rt is required for trace extraction")
+    raise ValueError(
+        "peak_start_rt/peak_end_rt or apex_rt is required for trace extraction"
+    )
 
 
 def _build_summary_rows(rows: Sequence[BaselineTruthRow]) -> list[dict[str, object]]:
@@ -632,6 +637,7 @@ def _write_json(path: Path, result: BaselineTruthResult) -> None:
     payload = {
         "row_count": result.row_count,
         "family_count": result.family_count,
+        "families": list(result.summary_rows),
         "summary_rows": list(result.summary_rows),
         "rows": [_row_dict(row) for row in result.rows],
     }
@@ -650,7 +656,9 @@ def _write_markdown(path: Path, result: BaselineTruthResult) -> None:
         f"Rows: {result.row_count}",
         f"Families: {result.family_count}",
         "",
-        "| Target | Family | Dominant classification | Median linear subtraction % | Median AsLS subtraction % | Median outside background % | Review status | Plot |",
+        "| Target | Family | Dominant classification | "
+        "Median linear subtraction % | Median AsLS subtraction % | "
+        "Median outside background % | Review status | Plot |",
         "|---|---|---|---:|---:|---:|---|---|",
     ]
     for row in result.summary_rows:
@@ -759,7 +767,9 @@ def _write_tsv(
         )
         writer.writeheader()
         for row in rows:
-            writer.writerow({field: _format_value(row.get(field)) for field in fieldnames})
+            writer.writerow(
+                {field: _format_value(row.get(field)) for field in fieldnames}
+            )
 
 
 def _read_tsv(path: Path, required_columns: set[str]) -> list[dict[str, str]]:

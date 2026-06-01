@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -169,6 +171,34 @@ def test_integrate_with_baseline_dispatches_supported_methods() -> None:
     assert asls.baseline_type == "asls"
 
 
+def test_integrate_with_baseline_reuses_precomputed_asls_baseline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rt = np.asarray([0.0, 0.1, 0.2, 0.3, 0.4])
+    intensity = np.asarray([10.0, 25.0, 50.0, 35.0, 20.0])
+    baseline = np.full_like(intensity, 10.0)
+
+    def _unexpected_asls(*_args: object, **_kwargs: object) -> np.ndarray:
+        raise AssertionError("precomputed baseline should be reused")
+
+    monkeypatch.setattr(
+        "xic_extractor.peak_detection.baseline.asls_baseline",
+        _unexpected_asls,
+    )
+
+    result = integrate_with_baseline(
+        intensity,
+        rt,
+        0,
+        5,
+        baseline_method="asls",
+        baseline_values=baseline,
+    )
+
+    assert result.baseline_type == "asls"
+    assert result.area_baseline_corrected == pytest.approx(510.0)
+
+
 def test_integrate_with_baseline_rejects_unknown_method() -> None:
     rt = np.asarray([0.0, 0.1, 0.2])
     intensity = np.asarray([10.0, 20.0, 12.0])
@@ -181,6 +211,19 @@ def test_integrate_with_baseline_rejects_unknown_method() -> None:
             3,
             baseline_method="airpls",
         )
+
+
+def test_production_code_uses_selector_for_linear_edge_baseline() -> None:
+    package_root = Path(__file__).resolve().parents[1] / "xic_extractor"
+    offenders: list[str] = []
+    for path in package_root.rglob("*.py"):
+        if path.relative_to(package_root).as_posix() == "peak_detection/baseline.py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "integrate_linear_edge_baseline" in text:
+            offenders.append(path.relative_to(package_root).as_posix())
+
+    assert offenders == []
 
 
 def test_bounded_trace_interval_matches_integration_interval_contract() -> None:

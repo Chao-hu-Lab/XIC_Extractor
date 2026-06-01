@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from typing import cast
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.ms2_selection import selected_candidate_ms2_evidence
 from xic_extractor.extraction.scoring_factory import selected_candidate
 from xic_extractor.extraction.trace_context import targeted_extraction_trace_group
 from xic_extractor.neutral_loss import CandidateMS2Evidence
+from xic_extractor.peak_detection.baseline import BaselineMethod
 from xic_extractor.peak_detection.hypotheses import (
     PeakHypothesis,
     build_peak_hypotheses,
@@ -52,6 +54,10 @@ def build_production_peak_hypotheses(
         rt=rt,
         intensity=intensity,
         trace_group=trace_group,
+        baseline_integration_method=cast(
+            BaselineMethod,
+            getattr(config, "baseline_integration_method", "asls"),
+        ),
     )
     return _with_final_selected_result_evidence(hypotheses, peak_result)
 

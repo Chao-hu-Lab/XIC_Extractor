@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import replace
+from typing import cast
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import CandidateMS2Evidence
+from xic_extractor.peak_detection.baseline import BaselineMethod
 from xic_extractor.peak_detection.cwt import add_cwt_proposals_for_audit
 from xic_extractor.peak_detection.hypotheses import (
     PeakHypothesis,
@@ -199,6 +201,10 @@ def build_peak_candidate_audit_hypotheses(
         rt=rt,
         intensity=intensity,
         trace_group=trace_group,
+        baseline_integration_method=cast(
+            BaselineMethod,
+            config.baseline_integration_method,
+        ),
     )
 
 

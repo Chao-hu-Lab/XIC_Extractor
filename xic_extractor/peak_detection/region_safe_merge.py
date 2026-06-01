@@ -6,7 +6,10 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from xic_extractor.peak_detection.baseline import integrate_linear_edge_baseline
+from xic_extractor.peak_detection.baseline import (
+    BaselineMethod,
+    integrate_with_baseline,
+)
 from xic_extractor.peak_detection.boundaries import (
     BoundaryHypothesis,
     enumerate_boundary_hypotheses,
@@ -64,12 +67,14 @@ def apply_region_first_safe_merge(
     selected_candidate: PeakCandidate,
     *,
     candidate_scores: tuple[PeakCandidateScore, ...] = (),
+    baseline_integration_method: BaselineMethod = "asls",
 ) -> RegionFirstSafeMergeOutcome:
     scored_boundaries = scored_region_boundaries_for_candidates(
         rt_values,
         intensity_values,
         candidates_result.candidates,
         selected_candidate,
+        baseline_integration_method=baseline_integration_method,
     )
     boundary_by_id = {
         scored.boundary.boundary_id: scored.boundary for scored in scored_boundaries
@@ -218,6 +223,8 @@ def scored_region_boundaries_for_candidates(
     intensity_values: np.ndarray,
     candidates: tuple[PeakCandidate, ...],
     selected_candidate: PeakCandidate,
+    *,
+    baseline_integration_method: BaselineMethod = "asls",
 ) -> tuple[_ScoredBoundary, ...]:
     scored: list[_ScoredBoundary] = []
     for index, candidate in enumerate(candidates):
@@ -238,6 +245,7 @@ def scored_region_boundaries_for_candidates(
                 candidate,
                 candidate_id,
                 selected_candidate=candidate == selected_candidate,
+                baseline_integration_method=baseline_integration_method,
             )
             for boundary in boundaries
         )
@@ -298,12 +306,14 @@ def _score_boundary(
     candidate_id: str,
     *,
     selected_candidate: bool,
+    baseline_integration_method: BaselineMethod,
 ) -> _ScoredBoundary:
-    baseline = integrate_linear_edge_baseline(
+    baseline = integrate_with_baseline(
         intensity_values,
         rt_values,
         boundary.left_index,
         boundary.right_index,
+        baseline_method=baseline_integration_method,
     )
     score = score_boundary_hypothesis(
         boundary,

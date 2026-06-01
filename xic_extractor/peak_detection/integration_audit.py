@@ -7,8 +7,7 @@ import numpy as np
 from xic_extractor.peak_detection.baseline import (
     bounded_trace_interval,
     compute_asls_residual_mad,
-    integrate_asls_baseline,
-    integrate_linear_edge_baseline,
+    integrate_with_baseline,
 )
 
 
@@ -68,32 +67,35 @@ def build_cell_integration_audit_summary(
             peak_end_rt,
         )
         asls_baseline_values, residual_mad = compute_asls_residual_mad(intensity)
-        linear_edge = integrate_linear_edge_baseline(
+        linear_edge = integrate_with_baseline(
             intensity,
             rt,
             left_index,
             right_index,
-            uncertainty_baseline_values=asls_baseline_values,
+            baseline_method="linear_edge",
+            baseline_values=asls_baseline_values,
             baseline_residual_mad=residual_mad,
             baseline_residual_mad_source="asls_residual",
         )
         asls = (
-            integrate_asls_baseline(
+            integrate_with_baseline(
                 intensity,
                 rt,
                 left_index,
                 right_index,
+                baseline_method="asls",
                 baseline_values=asls_baseline_values,
             )
             if baseline_audit_method == "asls" and asls_baseline_values is not None
             else None
         )
         if baseline_integration_method == "asls" and asls_baseline_values is not None:
-            asls = integrate_asls_baseline(
+            asls = integrate_with_baseline(
                 intensity,
                 rt,
                 left_index,
                 right_index,
+                baseline_method="asls",
                 baseline_values=asls_baseline_values,
             )
             baseline = asls

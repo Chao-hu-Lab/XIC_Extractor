@@ -1,4 +1,5 @@
 import inspect
+from dataclasses import replace
 
 import numpy as np
 
@@ -122,6 +123,39 @@ def test_selected_hypothesis_uses_final_peak_result_confidence_when_score_is_sta
     assert selected.evidence.reason == (
         "decision: review only, not counted; cap: VERY_LOW"
     )
+
+
+def test_build_production_peak_hypotheses_uses_config_baseline_method(
+    tmp_path,
+) -> None:
+    candidate = _candidate(8.50)
+    rt = np.asarray([8.3, 8.5, 8.7])
+    intensity = np.asarray([10.0, 100.0, 20.0])
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        n_points=3,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(candidate,),
+    )
+
+    selected = handoff_spine_runtime.selected_peak_hypothesis(
+        handoff_spine_runtime.build_production_peak_hypotheses(
+            config=replace(
+                _config(tmp_path),
+                baseline_integration_method="linear_edge",
+            ),
+            sample_name="SampleA",
+            target=_target(),
+            peak_result=peak_result,
+            rt=rt,
+            intensity=intensity,
+        )
+    )
+
+    assert selected is not None
+    assert selected.integration.baseline_type == "linear_edge"
 
 
 def test_production_handoff_runtime_has_no_cwt_audit_dependency() -> None:

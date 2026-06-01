@@ -11,8 +11,9 @@ from xic_extractor.evidence_semantics import (
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.baseline import (
+    BaselineMethod,
     bounded_trace_interval,
-    integrate_linear_edge_baseline,
+    integrate_with_baseline,
 )
 from xic_extractor.peak_detection.models import (
     PeakCandidate,
@@ -158,6 +159,7 @@ def build_peak_hypotheses(
     rt: object | None = None,
     intensity: object | None = None,
     trace_group: TraceGroup | None = None,
+    baseline_integration_method: BaselineMethod = "asls",
 ) -> tuple[PeakHypothesis, ...]:
     selected = _selected_candidate(peak_result)
     score_by_candidate = {
@@ -204,6 +206,7 @@ def build_peak_hypotheses(
                     candidate,
                     rt=trace_rt,
                     intensity=trace_intensity,
+                    baseline_integration_method=baseline_integration_method,
                 ),
                 evidence=_evidence_from_candidate(
                     candidate,
@@ -265,6 +268,7 @@ def _integration_from_candidate(
     *,
     rt: object | None = None,
     intensity: object | None = None,
+    baseline_integration_method: BaselineMethod = "asls",
 ) -> IntegrationResult:
     baseline = None
     raw_scan_indices: tuple[int, ...] = ()
@@ -279,11 +283,12 @@ def _integration_from_candidate(
             len(rt_values),
         )
         raw_scan_indices = tuple(range(bounded_left, bounded_right))
-        baseline = integrate_linear_edge_baseline(
+        baseline = integrate_with_baseline(
             intensity_values,
             rt_values,
             left_index,
             right_index,
+            baseline_method=baseline_integration_method,
         )
     return IntegrationResult(
         rt_left_min=candidate.peak.peak_start,

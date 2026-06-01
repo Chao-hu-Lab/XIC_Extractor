@@ -133,6 +133,32 @@ def test_build_peak_hypotheses_scan_indices_match_bounded_baseline_interval() ->
     )[0]
 
     assert hypothesis.integration.raw_scan_indices == (1, 2)
+    assert hypothesis.integration.baseline_type == "asls"
+
+
+def test_build_peak_hypotheses_can_use_linear_edge_baseline_override() -> None:
+    selected = _candidate(8.5, left=8.0, right=9.0)
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=3,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+    )
+
+    hypothesis = build_peak_hypotheses(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="",
+        resolver_mode="legacy_savgol",
+        peak_result=result,
+        rt=np.asarray([8.0, 8.5, 9.0]),
+        intensity=np.asarray([10.0, 80.0, 20.0]),
+        baseline_integration_method="linear_edge",
+    )[0]
+
     assert hypothesis.integration.baseline_type == "linear_edge"
 
 
@@ -173,7 +199,7 @@ def test_build_peak_hypotheses_accepts_shared_trace_group() -> None:
 
     assert hypothesis.trace_group_id == "SampleA|Analyte|legacy_savgol"
     assert hypothesis.integration.raw_scan_indices == (1, 2)
-    assert hypothesis.integration.baseline_type == "linear_edge"
+    assert hypothesis.integration.baseline_type == "asls"
 
 
 def test_build_peak_hypotheses_returns_empty_without_candidate_intervals() -> None:

@@ -19,7 +19,6 @@ from tools.diagnostics.asls_truth_validation_analysis import (
 )
 from tools.diagnostics.asls_truth_validation_inputs import (
     FAIL,
-    NOT_APPLICABLE_WITH_EXCLUSION,
     NOT_PROVIDED,
     PASS,
     VALID,
@@ -42,12 +41,14 @@ from tools.diagnostics.asls_truth_validation_models import (
     BENCHMARK_STATUS_FAIL,
     BENCHMARK_STATUS_INCONCLUSIVE,
     COVERAGE_FIELDS,
+    GATE_NO_GO,
+    GATE_REQUIRES_RETIREMENT_PREREQS,
+    GATE_REQUIRES_TIER_C,
     GATE_RETIREMENT,
-    INCONCLUSIVE_INVALID_INPUT,
     INCONCLUSIVE_FIXTURE_SCOPE_MISMATCH,
+    INCONCLUSIVE_INVALID_INPUT,
     LEGACY_FIXTURE_CURRENT,
     ROW_FIELDS,
-    ROW_STATUS_HARD_BLOCKER,
     SUMMARY_FIELDS,
     TIER_B2_STATUS_NOT_RUN,
     TIER_B2_STRESS,
@@ -56,7 +57,6 @@ from tools.diagnostics.asls_truth_validation_models import (
 )
 from tools.diagnostics.asls_truth_validation_synthetic import (
     SyntheticComparisonRow,
-    TierBBlockerSummary,
     classify_tier_b_blockers,
     compare_synthetic_trace,
     generate_synthetic_traces,
@@ -130,7 +130,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _run(args: argparse.Namespace, outputs: TruthValidationOutputs) -> dict[str, object]:
+def _run(
+    args: argparse.Namespace,
+    outputs: TruthValidationOutputs,
+) -> dict[str, object]:
     outputs.rows_tsv.parent.mkdir(parents=True, exist_ok=True)
     fixture_manifest = load_fixture_manifest(args.fixture_manifest)
     fixture_lock = load_fixture_lock(args.fixture_lock)
@@ -162,8 +165,9 @@ def _run(args: argparse.Namespace, outputs: TruthValidationOutputs) -> dict[str,
         b2_retirement_blockers=benchmark.b2_retirement_blockers,
         coverage_status=coverage_status,
         tier_c_status=tier_c.status,
-        tier_c_nonblank_status=tier_c.nonblank_status,
-        tier_c_nonblank_decision_scope=tier_c.nonblank_decision_scope,
+        tier_c_baseline_evidence_status=tier_c.baseline_evidence_status,
+        tier_c_c1b_relevance_status=tier_c.c1b_relevance_status,
+        tier_c_stress_axis_gate_status=tier_c.stress_axis_gate_status,
         blank_safety_status=tier_c.blank_safety_status,
         waiver_state=waiver.waiver_state,
         retirement_prereq_status=prereq.status,
@@ -177,7 +181,11 @@ def _run(args: argparse.Namespace, outputs: TruthValidationOutputs) -> dict[str,
         benchmark=benchmark,
         coverage_status=coverage_status,
         tier_c_status=tier_c.status,
-        tier_c_nonblank_status=tier_c.nonblank_status,
+        tier_c_baseline_evidence_status=tier_c.baseline_evidence_status,
+        tier_c_c1b_relevance_status=tier_c.c1b_relevance_status,
+        tier_c_stress_axis_gate_status=tier_c.stress_axis_gate_status,
+        tier_c_row_blocker_count=tier_c.row_blocker_count,
+        tier_c_review_required_count=tier_c.review_required_count,
         blank_safety_status=tier_c.blank_safety_status,
         stress_axis_dispositions=tier_c.stress_axis_disposition_statuses,
         waiver_state=waiver.waiver_state,
@@ -265,8 +273,12 @@ def _run_synthetic_benchmark(
         tier_b2_heldout_row_count=len(b2_heldout),
         production_like_heldout_row_count=len(b1_heldout),
         stress_heldout_row_count=len(b1_adjacent) + len(b2_heldout),
-        blank_false_positive_rate=_rate(row.blank_false_positive for row in blank_rows),
-        blank_not_quantifiable_rate=_rate(row.blank_not_quantifiable for row in blank_rows),
+        blank_false_positive_rate=_rate(
+            row.blank_false_positive for row in blank_rows
+        ),
+        blank_not_quantifiable_rate=_rate(
+            row.blank_not_quantifiable for row in blank_rows
+        ),
         worst_heldout_median_relative_error_pct=_median_relative_error(heldout),
         worst_heldout_p95_relative_error_pct=_p95_relative_error(heldout),
     )
@@ -344,13 +356,17 @@ def _summary_row(
     *,
     args: argparse.Namespace,
     tier_a: TierAValidationResult,
-    tier_a_manifest: TierAManifest,
+    tier_a_manifest: TierAManifest | None,
     fixture_manifest: FixtureManifest,
     fixture_lock: FixtureLock,
     benchmark: SyntheticBenchmarkResult,
     coverage_status: str,
     tier_c_status: str,
-    tier_c_nonblank_status: str,
+    tier_c_baseline_evidence_status: str,
+    tier_c_c1b_relevance_status: str,
+    tier_c_stress_axis_gate_status: str,
+    tier_c_row_blocker_count: int,
+    tier_c_review_required_count: int,
     blank_safety_status: str,
     stress_axis_dispositions: tuple[str, ...],
     waiver_state: str,
@@ -422,7 +438,9 @@ def _summary_row(
         "tier_b2_heldout_row_count": benchmark.tier_b2_heldout_row_count,
         "tier_b1_hard_blocker_count": len(benchmark.b1_hard_blockers),
         "tier_b2_stress_blocker_count": len(benchmark.b2_retirement_blockers),
-        "production_like_heldout_row_count": benchmark.production_like_heldout_row_count,
+        "production_like_heldout_row_count": (
+            benchmark.production_like_heldout_row_count
+        ),
         "stress_heldout_row_count": benchmark.stress_heldout_row_count,
         "hard_blocker_count": len(benchmark.b1_hard_blockers)
         + len(benchmark.b2_retirement_blockers),
@@ -445,7 +463,11 @@ def _summary_row(
         ),
         "tier_c_axis": str(tier_c_object.get("tier_c_axis", "")),
         "tier_c_status": tier_c_status,
-        "tier_c_nonblank_status": tier_c_nonblank_status,
+        "tier_c_baseline_evidence_status": tier_c_baseline_evidence_status,
+        "tier_c_c1b_relevance_status": tier_c_c1b_relevance_status,
+        "tier_c_stress_axis_gate_status": tier_c_stress_axis_gate_status,
+        "tier_c_row_blocker_count": tier_c_row_blocker_count,
+        "tier_c_review_required_count": tier_c_review_required_count,
         "blank_safety_status": blank_safety_status,
         "stress_axis_disposition_statuses": ";".join(stress_axis_dispositions),
         "tier_c_evidence_ref": str(args.tier_c_evidence or ""),
@@ -462,7 +484,9 @@ def _summary_row(
         "c1a_status": str(prereq_object.get("c1a_status", "")),
         "c5_status": str(prereq_object.get("c5_status", "")),
         "rollback_column_status": str(prereq_object.get("rollback_column_status", "")),
-        "retirement_prereq_manifest_hash": _hash_or_empty(args.retirement_prereq_manifest),
+        "retirement_prereq_manifest_hash": _hash_or_empty(
+            args.retirement_prereq_manifest
+        ),
         "worst_heldout_median_relative_error_pct": (
             benchmark.worst_heldout_median_relative_error_pct
         ),
@@ -567,7 +591,10 @@ def _copy_artifacts(args: argparse.Namespace, outputs: TruthValidationOutputs) -
     _copy_if_exists(args.fixture_lock, outputs.fixture_lock_json)
     _copy_if_exists(args.tier_a_manifest, outputs.tier_a_manifest_json)
     if args.p2b_85raw_acceptance_manifest is not None:
-        _copy_if_exists(args.p2b_85raw_acceptance_manifest, outputs.p2b_85raw_acceptance_json)
+        _copy_if_exists(
+            args.p2b_85raw_acceptance_manifest,
+            outputs.p2b_85raw_acceptance_json,
+        )
     if args.tier_c_evidence is not None:
         _copy_if_exists(args.tier_c_evidence, outputs.tier_c_evidence_json)
     if args.methodology_waiver is not None:
@@ -613,12 +640,40 @@ def _write_markdown(path: Path, summary: dict[str, object]) -> None:
         "",
         f"Gate decision: {summary['gate_decision']}",
         f"Decision target: {summary['decision_target']}",
+        f"Readiness status: {summary['readiness_status']}",
         f"Benchmark status: {summary['benchmark_status']}",
-        f"Hard blockers: {summary['hard_blocker_count']}",
+        f"Tier B1 hard blockers: {summary['tier_b1_hard_blocker_count']}",
+        f"Tier B2 stress blockers: {summary['tier_b2_stress_blocker_count']}",
+        f"Tier C baseline evidence: {summary['tier_c_baseline_evidence_status']}",
+        f"Tier C C1b relevance: {summary['tier_c_c1b_relevance_status']}",
+        f"Tier C stress axis gate: {summary['tier_c_stress_axis_gate_status']}",
+        f"Blank safety: {summary['blank_safety_status']}",
+        f"Retirement prerequisite status: {summary['retirement_prereq_status']}",
+        "",
+        f"Next action: {_next_action(summary)}",
         "",
         "Exit 0 is reserved for `GO_FOR_LINEAR_EDGE_RETIREMENT`.",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _next_action(summary: dict[str, object]) -> str:
+    gate_decision = str(summary.get("gate_decision", ""))
+    if gate_decision == GATE_REQUIRES_RETIREMENT_PREREQS:
+        return (
+            "provide a valid retirement prerequisite manifest for landed C1a, "
+            "C5, and rollback-column deprecation."
+        )
+    if gate_decision == GATE_REQUIRES_TIER_C:
+        return (
+            "provide or resolve Tier C baseline, stress-axis, and blank-safety "
+            "evidence."
+        )
+    if gate_decision == GATE_NO_GO:
+        return "keep linear edge and investigate the listed blocker statuses."
+    if gate_decision == GATE_RETIREMENT:
+        return "linear-edge retirement gate is satisfied."
+    return "use the machine-readable summary TSV/JSON to inspect unresolved statuses."
 
 
 def _hash_or_empty(path: Path | None) -> str:
@@ -657,7 +712,9 @@ def _optional_input_objects(args: argparse.Namespace) -> dict[str, dict[str, Any
         ),
         "tier_c_evidence": _optional_json_input(args.tier_c_evidence),
         "methodology_waiver": _optional_json_input(args.methodology_waiver),
-        "retirement_prerequisites": _optional_json_input(args.retirement_prereq_manifest),
+        "retirement_prerequisites": _optional_json_input(
+            args.retirement_prereq_manifest
+        ),
     }
 
 
@@ -817,7 +874,7 @@ def _fallback_summary(
     gate_decision: str,
     error_message: str,
 ) -> dict[str, object]:
-    row = {field: "" for field in SUMMARY_FIELDS}
+    row: dict[str, object] = {field: "" for field in SUMMARY_FIELDS}
     row.update(
         {
             "readiness_status": "diagnostic_only",
@@ -845,7 +902,11 @@ def _fallback_summary(
                 args.p2b_85raw_acceptance_manifest
             ),
             "tier_c_status": NOT_PROVIDED,
-            "tier_c_nonblank_status": NOT_PROVIDED,
+            "tier_c_baseline_evidence_status": NOT_PROVIDED,
+            "tier_c_c1b_relevance_status": NOT_PROVIDED,
+            "tier_c_stress_axis_gate_status": NOT_PROVIDED,
+            "tier_c_row_blocker_count": 0,
+            "tier_c_review_required_count": 0,
             "blank_safety_status": NOT_PROVIDED,
             "tier_c_evidence_ref": str(args.tier_c_evidence or ""),
             "tier_c_evidence_hash": _hash_or_empty(args.tier_c_evidence),
@@ -863,7 +924,11 @@ def _fallback_summary(
 
 
 def _median_relative_error(rows: Sequence[SyntheticComparisonRow]) -> float | None:
-    values = [row.asls_relative_error_pct for row in rows if row.asls_relative_error_pct is not None]
+    values = [
+        row.asls_relative_error_pct
+        for row in rows
+        if row.asls_relative_error_pct is not None
+    ]
     if not values:
         return None
     return float(median(values))
