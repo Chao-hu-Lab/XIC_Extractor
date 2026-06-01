@@ -1,7 +1,7 @@
 # C4 — Peak Scoring Evidence-Decision Design
 
 **Date:** 2026-06-01
-**Status:** Phase 4 design closeout v0.6 — C4-1 scorer-to-successor field map
+**Status:** Phase 4 design closeout v0.7 — evidence-chain successor direction
 **Readiness label:** `diagnostic_only`
 **Supersedes for implementation:** [C4 peak_scoring split spec](2026-05-24-peak-pipeline-cleanup-peak-scoring-split-spec.md)
 **Depends on:** [C3 hypothesis model unification spec](2026-05-24-peak-pipeline-cleanup-hypothesis-model-unification-spec.md)
@@ -29,6 +29,19 @@ priority is fusion-first:
 Phase 4 itself is docs-only. It authorizes no scorer movement and no confidence,
 reason, score, selection, matrix, TSV, or workbook behavior change.
 
+The 2026-06-02 design update narrows the long-term successor target:
+
+- legacy `raw_score`, `confidence`, `cap_labels`, and reason text remain public
+  compatibility projections while existing TSV/CSV/XLSX contracts expose them;
+- future evidence-chain policy must not treat weighted score arithmetic or
+  confidence caps as first-class product semantics;
+- successor migration targets decision/explanation parity first: selected
+  hypothesis, counted/review/not-counted/excluded/ambiguous decision class,
+  typed evidence facts, conflicts, and human-readable reasons;
+- any change to current selected peak, score, confidence, cap labels, reason
+  text, schema, or workbook values remains a behavior change and is out of
+  scope for cleanup-only C4 slices.
+
 ## Fusion-First Decision
 
 C4 uses the same semantic-survival rule as C6: tests and modules protect product
@@ -45,6 +58,11 @@ For every scorer responsibility, future C4 work must choose one disposition:
   to the successor or preserves import/config compatibility.
 - `retire_candidate` - no production, diagnostic, public import, or migration
   value remains; delete with a rollback/verification plan.
+- `legacy_compatibility_projection` - the value remains in public outputs or
+  imports, but it is no longer a future policy target.
+- `successor_decision_semantics` - the invariant belongs to typed evidence,
+  conflict reasons, decision classes, or model-selection explanation rather
+  than scorer weights.
 
 Maintaining both old scorer semantics and new evidence-spine semantics is only a
 temporary migration state.
@@ -70,18 +88,95 @@ is dead; it is proof that every overlapping helper needs a disposition.
 
 | Surface | Current role | C4 contract |
 |---|---|---|
-| `EvidenceScore` in `peak_scoring_evidence.py` | Weighted scoring result: raw score, confidence, support labels, concern labels, caps | Active scoring output today; likely becomes an adapter/projection into `EvidenceVector` if successor policy owns confidence. |
+| `EvidenceScore` in `peak_scoring_evidence.py` | Weighted scoring result: raw score, confidence, support labels, concern labels, caps | Active scoring output today; future role is compatibility/debug projection while decision semantics move to typed evidence and model-selection explanation. |
 | `EvidenceVector` in `peak_detection/hypotheses.py` | Per-hypothesis audit carrier populated from scorer output, candidate fields, and MS2 evidence | Successor audit/evidence carrier. Should absorb still-valid evidence invariants instead of duplicating scorer-specific tests. |
 | `CommonEvidence` / `EvidenceSignalSet` in `evidence_semantics.py` | Cross targeted/discovery/alignment semantic layer and evidence-coherence classifier | Successor shared-evidence semantics. Should own cross-surface evidence meanings, not scoring-weight mechanics. |
 | `ScoringContext` in `peak_scoring.py` | Extraction-time input bundle for the scorer | Legacy input adapter. Candidate for fusion into `TraceGroup` / `EvidenceVector` fact construction once selection policy migration is defined. |
+
+## Successor Evidence-Chain Direction
+
+C4's future target is not a cleaner weighted scorer. It is a role-aware,
+typed-evidence decision layer over `PeakHypothesis` objects.
+
+Decision classes:
+
+| Class | Meaning | Intended output relationship |
+|---|---|---|
+| `accepted` | Evidence chain is coherent enough for the main quantitative result. | Included in primary quantitative outputs. |
+| `review` | A plausible signal exists, but evidence is incomplete, conflicting, or needs operator review. | Preserved with review reason; not silently dropped. |
+| `not_counted` | Evidence is retained, but the result should not contribute to formal quantitation/statistics. | Preserved with not-counted reason. |
+| `excluded` | High-bar rejection: physically implausible, wrong identity, or strongly contradicted by multiple evidence sources. | Excluded with explicit reason. |
+| `ambiguous` | Competing hypotheses cannot be safely resolved. | Preserved as ambiguity, not forced into a winner. |
+
+Legacy `HIGH` / `MEDIUM` / `LOW` / `VERY_LOW` confidence can remain in existing
+outputs as compatibility wording, but successor policy should not define itself
+as raw-score buckets.
+
+### Cap Label Migration
+
+`cap_labels` are legacy compatibility projections. Successor policy should split
+their meaning into typed conflict and routing reasons:
+
+| Legacy cap label | Successor meaning | Default decision pressure |
+|---|---|---|
+| `no_ms2_cap` | Missing MS2 is `not_observed` unless acquisition opportunity and local sensitivity prove it should have been observable. | `review` or `not_counted`, not automatic exclusion. |
+| `nl_fail_cap` | Product/NL conflict when the evidence was observable and candidate-aligned. | `evidence_conflict`; may become `excluded` only with strong opportunity and control evidence. |
+| `rt_window_cap` | Targeted RT conflict. RT alone is contextual evidence, not identity veto. | `review`, `ambiguous`, or `not_counted` with corroborating conflicts. |
+| `trace_quality_cap` | MS1 trace or boundary evidence is unreliable. | `review` or `not_counted`. |
+| `hard_quality_flag_cap` | Local signal quality is too weak or structurally unreliable for counting. | `not_counted` or `review`, depending on supporting evidence. |
+| `zero_area_cap` | No measurable or integratable signal remains after selection/integration. | `not_counted`; `excluded` only when a high-bar impossibility or wrong-identity rule is explicit. |
+| `anchor_mismatch_cap` and related anchor conflicts | Anchor / paired-evidence conflict. | `evidence_conflict`; may become `not_counted` if unresolved. |
+
+### Typed Evidence Ownership
+
+| Evidence family | Successor owner | C4 rule |
+|---|---|---|
+| Local S/N | Typed trace evidence on `EvidenceVector` or a future trace evidence component. | Store baseline method, apex-above-baseline, residual MAD/noise source, local S/N ratio, and quality label. AsLS changes make numeric provenance mandatory. |
+| Shape, width, and noise | One `trace morphology evidence` family. | Merge legacy symmetry, width, noise, continuity, edge recovery, shoulder/merge/split signals, and boundary plausibility into one morphology concept. |
+| CWT | Morphology / boundary-hypothesis evidence source. | Do not describe CWT as merely a score bonus or as standalone identity proof. It can propose or corroborate boundaries, but must be interpreted with other evidence. |
+| MS2/NL | Candidate-aligned identity evidence. | Missing evidence defaults to `not_observed`; negative evidence requires opportunity, sensitivity, and comparable controls. |
+| RT | Targeted, role-aware contextual evidence. | Use mainly for ISTD-paired targeted workflows; do not generalize to untargeted family alignment here. |
+
+### Role-Aware RT Rule
+
+RT evidence in C4 is targeted-workflow evidence, not a universal peak identity
+rule:
+
+- ISTDs are expected to be stable in biological matrices because they are added
+  externally and should act as the main transfer anchor.
+- Clean standards and MixSTD observations describe instrument/library behavior
+  and can support RT reference checks, but they are not biological-sample
+  absence proof unless the biological samples were explicitly spiked or an
+  approved contract says otherwise.
+- Paired analyte/standard and ISTD RTs should be close, but stable-isotope
+  labels, especially deuterium labels, can introduce reproducible
+  compound/method-specific RT offsets. The expected offset direction and
+  tolerance must be learned from current method evidence instead of hard-coded
+  globally.
+- RT alone may trigger `review`, `ambiguous`, or `not_counted`; it should not
+  produce `excluded` without corroborating identity or morphology conflicts.
+
+Reference notes: stable-isotope internal standards are used to compensate matrix
+effects when they co-elute with the monitored compound, while deuterium labels
+can introduce chromatographic isotope-effect RT shifts whose size and direction
+depend on compound and method conditions. See Cerilliant's LC-MS/MS internal
+standard note and recent LC-MS isotope-labeling literature for method-context
+caveats:
+
+- Cerilliant deuterium-labeled internal standard LC-MS/MS note:
+  <https://www.cerilliant.com/news-and-events/poster-article?id=21>
+- Triple labeling metabolomics / deuterium RT-shift discussion:
+  <https://pmc.ncbi.nlm.nih.gov/articles/PMC12240604/>
+- Deuterium-label migration/retention comparison in MS workflows:
+  <https://pmc.ncbi.nlm.nih.gov/articles/PMC7540333/>
 
 ## Semantic-Survival Inventory
 
 | Legacy responsibility | Current owner | Successor candidate | Current disposition | Required C4 decision |
 |---|---|---|---|---|
 | Candidate evidence facts: local S/N, shape, RT prior, MS2/NL, trace quality | `ScoringContext`, severity helpers, `score_candidate(...)` | `EvidenceVector`, `CommonEvidence`, `TraceGroup` fact extraction | `successor_owned` or `semantic_migration_candidate` depending on field | Map each fact to successor field/test before deleting scorer-specific tests. |
-| Weighted score and confidence caps | `EvidenceScore`, `score_evidence(...)`, `_evidence_from_context(...)` | Future hypothesis decision policy, if adopted | `active_policy` today | Keep as production policy until a successor policy reproduces score/confidence/review-only parity. |
-| Candidate selection and tie-breaks | `select_candidate_with_confidence(...)` | Future model selection over `PeakHypothesis` | `active_policy` today | Do not delete until `PeakHypothesis` model selection proves selected-candidate parity. |
+| Weighted score and confidence caps | `EvidenceScore`, `score_evidence(...)`, `_evidence_from_context(...)` | Compatibility projection plus future decision/explanation semantics | `active_policy` today; future `legacy_compatibility_projection` | Keep as production policy today. Future successor must not preserve score/cap mechanics as product truth; migrate toward decision class, conflict reason, not-counted reason, exclusion reason, and explanation parity. |
+| Candidate selection and tie-breaks | `select_candidate_with_confidence(...)` | Future model selection over `PeakHypothesis` | `active_policy` today | Do not delete until `PeakHypothesis` model selection proves selected hypothesis, decision class, and explanation parity. Raw score parity is a compatibility check only, not the future oracle. |
 | Reason and score breakdown projection | `build_evidence_reason(...)`, `score_breakdown_fields(...)` | Public projection from `EvidenceVector` / selected hypothesis | `compatibility_adapter` candidate | Migrate projection tests to successor output; keep exact public text until schema/copy migration is approved. |
 | Public imports from `xic_extractor.peak_scoring` | `peak_scoring.py` module | Compatibility facade | `compatibility_adapter` | Preserve imports during migration; delete facade only with explicit public migration plan. |
 | Legacy implementation-specific tests | `tests/test_peak_scoring*.py`, selection/scoring fixtures | Successor invariant tests | `semantic_migration_candidate` | Port product invariants, then delete tests that only assert old implementation mechanics. |
@@ -113,12 +208,12 @@ Current CodeGraph / `rg` evidence shows a split result:
 
 | Legacy surface | Current consumer evidence | Successor overlap | Concrete decision | Test migration / exit rule |
 |---|---|---|---|---|
-| Evidence fact extraction from `ScoringContext`: local S/N, shape/noise, RT prior, RT centrality, MS2/NL, MS2 trace, CWT support, quality flags | `extraction/scoring_factory.py`, `extraction/jobs.py`, `extraction/serial_backend.py`, `peak_detection/facade.py`; tests in `tests/test_scoring_context.py`, `tests/test_peak_scoring.py` | `EvidenceVector` and `CommonEvidence` already carry many fields after scoring | `semantic_migration_candidate`; do not delete while it is the scoring input adapter | Map each field to `EvidenceVector` / `CommonEvidence` or a future `TraceGroup` fact builder. Port field-level invariants first; then reduce `ScoringContext` tests to adapter coverage. |
-| Weighted score, thresholds, confidence caps, and review-only caps | `score_candidate(...)`, `score_evidence(...)`, `peak_detection/facade.py`, `extraction/peak_candidate_table.py`; tests in `tests/test_peak_scoring_evidence.py` and score/cap sections of `tests/test_peak_scoring.py` | No successor policy reproduces score/confidence/cap parity yet | `active_policy` | Keep. Exit only after a named model-selection policy reproduces raw score, confidence, cap labels, review-only status, and reason parity. |
-| Candidate selection and tie-breaks | `find_peak_and_area(...)` calls `select_candidate_with_confidence(...)`; tests in `tests/test_peak_scoring_selection.py`, `tests/test_signal_processing_selection.py`, `tests/test_scoring_context.py` | `PeakHypothesis` records rank/selected/rejection, but does not select candidates independently | `active_policy` | Keep. Exit only when selected `PeakHypothesis` model selection matches current selected candidate across RT-distance, effective-score, low-scan, dominant-area, paired-prior, and quality-penalty fixtures. |
+| Evidence fact extraction from `ScoringContext`: local S/N, trace morphology, role-aware RT, MS2/NL, MS2 trace, CWT, quality flags | `extraction/scoring_factory.py`, `extraction/jobs.py`, `extraction/serial_backend.py`, `peak_detection/facade.py`; tests in `tests/test_scoring_context.py`, `tests/test_peak_scoring.py` | `EvidenceVector` and `CommonEvidence` already carry many fields after scoring, but local S/N and morphology lack typed successor fields | `semantic_migration_candidate`; do not delete while it is the scoring input adapter | Map each field to `EvidenceVector` / `CommonEvidence` or a future trace evidence component. Port field-level invariants first; then reduce `ScoringContext` tests to adapter coverage. |
+| Weighted score, thresholds, confidence caps, and review-only caps | `score_candidate(...)`, `score_evidence(...)`, `peak_detection/facade.py`, `extraction/peak_candidate_table.py`; tests in `tests/test_peak_scoring_evidence.py` and score/cap sections of `tests/test_peak_scoring.py` | Successor should own decision class, conflict/review/not-counted/exclusion reasons, and explanation; legacy score/cap values remain projected while public outputs expose them | `active_policy` today; future `legacy_compatibility_projection` | Keep current tests as behavior oracle today. Exit to successor only after selected-candidate and decision/explanation parity exists; do not require future raw-score/cap parity except for compatibility outputs. |
+| Candidate selection and tie-breaks | `find_peak_and_area(...)` calls `select_candidate_with_confidence(...)`; tests in `tests/test_peak_scoring_selection.py`, `tests/test_signal_processing_selection.py`, `tests/test_scoring_context.py` | `PeakHypothesis` records rank/selected/rejection, but does not select candidates independently | `active_policy` | Keep. Exit only when model selection over `PeakHypothesis` matches selected candidate or has an approved behavior-change spec, and emits decision class plus explanation parity across RT-distance, low-scan, dominant-area, paired-prior, MS2/NL, morphology, and quality fixtures. |
 | Reason text and `score_breakdown_fields(...)` projection | Candidate table, CSV/XLSX/public output columns, tests in reason-text sections of `tests/test_peak_scoring.py`, `tests/test_peak_candidate_table.py`, `tests/test_csv_writers.py` | `EvidenceVector.reason`, support/concern/cap labels can become source of projection | `compatibility_adapter` candidate | Keep exact text/schema until public output migration is approved. Projection tests may move to successor output tests, but copy/schema parity remains required. |
-| `EvidenceScore` arithmetic helper | `peak_scoring.py` and `tests/test_peak_scoring_evidence.py` | Future policy may absorb or replace it, but no current replacement exists | `active_policy` support utility | Keep as scorer utility. It can move only with score/confidence parity and public import compatibility. |
-| CWT and MS2 trace support labels | `score_candidate(...)`, `EvidenceVector`, candidate table output; tests around `cwt_same_apex_support`, MS2 trace tie-breaks, and "does not override RT distance" | Successor carries CWT/MS2 facts, but CWT is not validated as standalone chemistry authority | `semantic_migration_candidate` with active guardrails | Preserve guardrail tests until C3/CWT evidence-chain work owns "support only with chemical/selection context" and "does not override RT distance" invariants. |
+| `EvidenceScore` arithmetic helper | `peak_scoring.py` and `tests/test_peak_scoring_evidence.py` | Compatibility/debug metric; not future policy target | `active_policy` support utility today | Keep as scorer utility while public outputs expose raw score. Future movement requires public import compatibility and a replacement decision/explanation oracle, not score arithmetic parity as product truth. |
+| CWT and MS2 trace support labels | `score_candidate(...)`, `EvidenceVector`, candidate table output; tests around `cwt_same_apex_support`, MS2 trace tie-breaks, and "does not override RT distance" | Successor carries CWT/MS2 facts; CWT belongs to morphology / boundary-hypothesis evidence | `semantic_migration_candidate` with active guardrails | Preserve guardrail tests until CWT is represented as evidence source plus morphology/boundary facts. Avoid wording that CWT is "support only"; the invariant is that no single evidence source decides identity alone. |
 | Public imports from `xic_extractor.peak_scoring` | Direct imports in extraction, facade, tests, and any external code relying on the public surface | Compatibility facade is the successor shape | `compatibility_adapter` | Keep until an explicit public migration/deprecation plan exists. Import-smoke tests remain while facade exists. |
 
 ### C4-0 Test Retirement Table
@@ -138,46 +233,30 @@ field map and test-retirement plan, not code movement.
 
 ## C4-1 Scorer Fact To Successor Field Map
 
-This is the concrete field map for the next C4 implementation planning slice.
-It separates facts already carried by the successor spine from facts that remain
-scorer-owned policy or are missing a successor home.
+This map separates three things that the old scorer currently mixes:
 
-| Scorer fact / policy | Current scorer source | Successor field today | Current judgment | Required migration action |
+1. public compatibility projection;
+2. typed evidence facts;
+3. production decision policy.
+
+The future successor target is decision/explanation parity, not score/cap
+mechanics parity. Score and cap parity remain cleanup guards only while public
+outputs expose those values.
+
+| Scorer fact / policy | Current scorer source | Successor target | Current judgment | Required migration action |
 |---|---|---|---|---|
-| Selected candidate confidence, raw score, support labels, concern labels, cap labels, reason | `EvidenceScore`, `ScoredCandidate`, `_candidate_score_summary(...)` | `EvidenceVector.confidence`, `raw_score`, `support_labels`, `concern_labels`, `cap_labels`, `reason`; `CommonEvidence.confidence`, `evidence_score`, `reason` | `successor_projection`, not successor policy | Keep scorer as authority. Successor tests may assert projection parity, but deletion requires independent model-selection parity. |
-| Candidate MS1 apex, area, height, boundaries | `PeakCandidate.peak`, selected candidate summary | `CommonEvidence.ms1_apex_rt_min`, `ms1_area`, `ms1_height`, `ms1_peak_rt_start`, `ms1_peak_rt_end`; `IntegrationResult` | `successor_owned` for audit/projection | Move output-facing tests to hypothesis/evidence projection when convenient; no scorer policy migration needed. |
-| MS2 present and strict NL match | `ScoringContext.ms2_present`, `nl_match`, `neutral_loss_required`; `nl_support_severity(...)` | `EvidenceVector.ms2_present`, `nl_match`, `nl_status`, `best_loss_ppm`, product/trigger fields; `CommonEvidence.ms2_present`, `nl_match`, `neutral_loss_error_ppm`; `canonical_support_labels(...)` / `canonical_concern_labels(...)` | Evidence fact is successor-owned; scoring weight/cap remains active policy | Port fact-projection tests to `tests/test_peak_hypotheses.py` / `tests/test_evidence_semantics.py`. Keep `nl_fail_cap`, `no_ms2_cap`, and scoring thresholds in scorer tests until model policy migrates. |
-| MS2 trace strength and sparse-apex fallback guard | `ScoringContext.ms2_trace_strength`, `ms2_alignment_source`, `trigger_scan_count`, `strict_nl_scan_count`; `_is_sparse_apex_fallback_ms2(...)` | `EvidenceVector.ms2_trace_strength`, `ms2_alignment_source`, `trigger_scan_count`, `strict_nl_scan_count`; `CommonEvidence.ms2_trace_strength` | Partially successor-owned; sparse-apex guard remains scorer policy | Add successor projection tests for trace metadata. Keep scorer tests for `sparse_apex_ms2`, strong/moderate/weak score effects, and "does not override RT distance" until selection policy migrates. |
-| RT prior value and paired ISTD tie-break preference | `ScoringContext.rt_prior`, `rt_prior_sigma`, `prefer_rt_prior_tiebreak`; `rt_prior_severity(...)`; `paired_istd_aligned` label | `EvidenceVector.rt_prior_min`; `PeakHypothesis.audit.selection_reference_rt_min`; no sigma/severity/tie-break owner | `active_policy` with incomplete successor fields | Do not delete. If successor owns this later, add `rt_prior_sigma` / severity or explicit model-selection inputs and selected-candidate parity for paired-prior tests. |
-| RT centrality and target-window cap | `ScoringContext.rt_min`, `rt_max`; `rt_centrality_severity(...)`; `rt_window_cap` | Candidate boundaries and integration data exist, but no explicit `EvidenceVector` target-window/cap owner except projected `cap_labels` | `active_policy` | Keep scorer tests. Future migration needs explicit target-window fact fields or a model-selection contract plus unchanged output reason/cap parity. |
-| Local S/N | `local_sn_severity(...)` over `intensity_array`, `apex_index`, `baseline_array`, `residual_mad`, `dirty_matrix` | Only projected labels in `EvidenceVector.support_labels` / `concern_labels`; no numeric local-S/N fact | `semantic_migration_candidate` but missing successor field | Add a successor fact field or typed evidence component before retiring `tests/test_local_sn_*` coverage. Scorer remains authority for score effect. |
-| Shape, width, and noise quality | `half_width_ratio`, `fwhm_ratio`, `symmetry_severity(...)`, `peak_width_severity(...)`, `noise_shape_severity(...)` | `EvidenceVector` has region audit fields and labels, but not half-width/FWHM/noise severity as typed facts | `semantic_migration_candidate` but missing successor field | Decide whether shape belongs to `TraceGroup`, `EvidenceVector`, or a future model-selection feature vector. Port invariants before deleting shape severity tests. |
-| Trace quality flags and ADAP-like soft flags | `trace_quality_severities(...)`, `candidate_quality_penalty(...)`, `candidate_selection_quality_penalty(...)`, `hard_quality_flags(...)` | `EvidenceVector.quality_flags`; `CommonEvidence.trace_quality`; canonical concerns include `trace_quality_review` | Fact projection exists; penalty/cap policy remains scorer-owned | Keep scorer policy tests for selection penalty, hard flag caps, and ADAP-equivalent suppression. Successor can own raw flag projection now. |
-| CWT same-apex support | `_has_same_apex_cwt_support(...)`, `_has_cwt_chemical_support(...)`, legacy CWT presence metrics | `EvidenceVector.cwt_best_scale`, `cwt_ridge_persistence`; support label projection; `EvidenceVector` doc says legacy fields are audit-presence flags only | `semantic_migration_candidate` with active guardrails | C3/CWT evidence-chain work must own the chemistry/shape interpretation before deletion. Keep tests that CWT requires chemical context and cannot override RT-distance selection. |
-| Weighted score arithmetic, thresholds, confidence caps | `score_evidence(...)`, `confidence_from_score(...)`, `apply_confidence_caps(...)`, `_is_review_only_evidence(...)` | Projected into `EvidenceVector` only after scorer runs | `active_policy` | Keep. Exit requires future model-selection policy with exact raw score/confidence/cap/review-only parity or an approved behavior-change spec. |
-| Candidate selection and tie-breaks | `select_candidate_with_confidence(...)`, effective score, RT distance, low-scan/dominant-area demotion, MS2 trace tie-break, quality penalties | `PeakHypothesis.audit.selected`, `selection_rank`, rejection reason are downstream records of the scorer-selected result | `active_policy` | Keep. Future model-selection successor must reproduce selected-candidate parity across `tests/test_peak_scoring_selection.py` before deleting scorer selection tests. |
-| Reason and score breakdown output | `build_evidence_reason(...)`, `score_breakdown_fields(...)` | `EvidenceVector.reason`, labels, caps; candidate table / CSV / XLSX projections | `compatibility_adapter` candidate | May move to a projection module only with exact public text/schema parity. Do not couple projection extraction to selection-policy movement. |
-
-### C4-1 Next Slice Contract
-
-The next C4 implementation slice, if executed, should be docs/test-first and
-bounded:
-
-1. Add or update successor projection tests for facts already carried by
-   `EvidenceVector` / `CommonEvidence`: MS1 geometry, MS2/NL facts, MS2 trace
-   metadata, scorer output labels, and CWT audit-presence fields.
-2. Do not move score arithmetic, confidence caps, RT prior/centrality policy,
-   local S/N computation, shape severity, or candidate selection until a
-   successor owner is named.
-3. Create a temporary scorer-to-successor parity fixture before deleting any
-   scorer test.
-4. Reclassify each migrated test as `successor_projection`,
-   `successor_owned`, `active_policy`, `compatibility_adapter`, or
-   `semantic_migration_candidate`.
-
-Stop if the slice requires changed confidence, reason text, selected candidate,
-cap labels, candidate table columns, CSV/XLSX output, or `PeakHypothesis` audit
-fields. That is a behavior/spec change, not cleanup.
+| Selected candidate `confidence`, `raw_score`, support/concern/cap labels, reason | `EvidenceScore`, `ScoredCandidate`, `_candidate_score_summary(...)` | `EvidenceVector` and `CommonEvidence` projections for existing outputs; future decision class plus explanation | `successor_projection` plus `legacy_compatibility_projection` | Keep scorer as authority today. Future policy should emit decision class and reasons; raw score/cap values are compatibility fields. |
+| Candidate MS1 apex, area, height, boundaries | `PeakCandidate.peak`, selected candidate summary | `CommonEvidence` MS1 fields and `IntegrationResult` | `successor_owned` for audit/projection | Move output-facing tests to hypothesis/evidence projection when convenient; no scorer policy migration needed. |
+| MS2 present and strict NL match | `ScoringContext.ms2_present`, `nl_match`, `neutral_loss_required`; `nl_support_severity(...)` | `EvidenceVector` MS2/NL fields, `CommonEvidence`, and typed identity evidence | Evidence fact is `successor_owned`; old weight/cap is `active_policy` today | Port fact-projection tests to `tests/test_peak_hypotheses.py` / `tests/test_evidence_semantics.py`. Treat missing MS2 as `not_observed` unless opportunity/sensitivity/control evidence proves otherwise. |
+| MS2 trace strength and sparse-apex fallback guard | `ScoringContext.ms2_trace_strength`, `ms2_alignment_source`, `trigger_scan_count`, `strict_nl_scan_count`; `_is_sparse_apex_fallback_ms2(...)` | MS2 trace metadata plus decision explanation | Partially successor-owned; sparse-apex guard remains active policy | Add successor projection tests for trace metadata. Keep scorer tests for sparse-apex, strong/moderate/weak effects, and selection guardrails until model selection migrates. |
+| Targeted RT / paired ISTD evidence | `ScoringContext.rt_prior`, `rt_prior_sigma`, `prefer_rt_prior_tiebreak`; `rt_prior_severity(...)`; `rt_centrality_severity(...)`; `rt_window_cap` | Role-aware targeted RT evidence with ISTD transfer context, method-specific offset, and conflict reason | `semantic_migration_candidate`; active policy today | Do not generalize to untargeted family alignment. Add explicit targeted RT fields before retiring scorer RT tests. RT alone does not exclude. |
+| Local S/N | `local_sn_severity(...)`, `compute_local_sn_cache(...)` over AsLS baseline and residual MAD | Typed trace evidence with baseline provenance | `semantic_migration_candidate` with missing typed field | Add local S/N fact fields: baseline method, apex-above-baseline, residual MAD/noise source, ratio, and quality label. Keep scorer coverage until successor facts exist. |
+| Shape, width, and noise quality | `half_width_ratio`, `fwhm_ratio`, `symmetry_severity(...)`, `peak_width_severity(...)`, `noise_shape_severity(...)` | One `trace morphology evidence` family | `semantic_migration_candidate` with missing typed field | Merge legacy shape/width/noise into morphology evidence before deleting scorer-specific tests. |
+| Trace quality flags and ADAP-like soft flags | `trace_quality_severities(...)`, `candidate_quality_penalty(...)`, `candidate_selection_quality_penalty(...)`, `hard_quality_flags(...)` | Raw quality flag projection plus morphology/quality conflict reasons | Raw projection exists; penalty/cap policy remains active | Keep scorer policy tests for selection penalty, hard flag routing, and ADAP-equivalent suppression. |
+| CWT same-apex support | `_has_same_apex_cwt_support(...)`, `_has_cwt_chemical_support(...)`, legacy CWT presence metrics | Morphology / boundary-hypothesis evidence source | `semantic_migration_candidate` | Preserve guardrail tests until CWT is represented as an evidence source with boundary/morphology semantics. Avoid "support only" wording; no single evidence source decides identity alone. |
+| Weighted score arithmetic, thresholds, and caps | `score_evidence(...)`, confidence thresholds, `apply_confidence_caps(...)`, `_is_review_only_evidence(...)` | Legacy compatibility/debug metric plus typed decision routing reasons | `active_policy` today; not future policy target | Keep current behavior. Exit requires a successor decision/explanation policy or approved behavior-change spec, not raw-score/cap parity as product truth. |
+| Candidate selection and tie-breaks | `select_candidate_with_confidence(...)`, effective score, RT distance, low-scan/dominant-area demotion, MS2 trace tie-break, quality penalties | Model selection over `PeakHypothesis` | `active_policy` | Keep. Future model selection must prove selected hypothesis, decision class, and explanation parity or explicitly document behavior changes. |
+| Reason and score breakdown output | `build_evidence_reason(...)`, `score_breakdown_fields(...)` | Compatibility projection over existing public output fields | `compatibility_adapter` candidate | May move to a projection module only with exact public text/schema parity. Do not couple projection extraction to policy migration. |
 
 ### C4-1 Execution Closeout
 
@@ -188,26 +267,13 @@ Phase 1 added a successor-projection parity test without moving scorer policy:
   metadata, quality flags, RT prior value, CWT audit-presence fields, and
   `CommonEvidence` projection onto the successor evidence spine.
 - No scorer policy, confidence caps, selected-candidate logic, score arithmetic,
-  local S/N, shape severity, RT-window behavior, CSV schema, or workbook output
+  local S/N, trace morphology, RT-window behavior, CSV schema, or workbook output
   moved in this slice.
 - No scorer tests were deleted. Active policy tests remain the authority for
   scorer-owned behavior.
 
-| C4-1 row | Closeout classification | Named test family / missing field |
-|---|---|---|
-| Selected candidate confidence, raw score, support/concern/cap labels, reason | `successor_projection` | Projected by `tests/test_peak_hypotheses.py::test_build_peak_hypotheses_projects_scorer_facts_to_successor_evidence`; public projection still covered by candidate-table / CSV writer tests. Scorer remains authority. |
-| Candidate MS1 apex, area, height, boundaries | `successor_owned` for audit/projection | `tests/test_peak_hypotheses.py::test_build_peak_hypotheses_projects_scorer_facts_to_successor_evidence` and `tests/test_evidence_semantics.py::test_targeted_candidate_projects_to_common_ms1_ms2_evidence`. |
-| MS2 present and strict NL match | Evidence fact is `successor_owned`; score/cap policy is `active_policy` | Projection covered by the new hypothesis test and `tests/test_evidence_semantics.py::test_targeted_candidate_projects_to_common_ms1_ms2_evidence`; `nl_fail_cap`, `no_ms2_cap`, and scoring thresholds remain in scorer tests. |
-| MS2 trace strength and sparse-apex fallback guard | Trace metadata is `successor_projection`; sparse-apex guard remains `active_policy` | Trace metadata covered by the new hypothesis test. Sparse-apex, strong/moderate/weak effects, and "does not override RT distance" remain in `tests/test_peak_scoring.py` and `tests/test_scoring_context.py`. |
-| RT prior value and paired ISTD tie-break preference | `active_policy` with partial projection | `rt_prior_min` projection covered by the new hypothesis test. Missing successor fields remain `rt_prior_sigma`, RT-prior severity, and paired-prior tie-break inputs; keep scorer selection tests. |
-| RT centrality and target-window cap | `active_policy` | Missing successor fields remain explicit target-window/cap facts beyond projected `cap_labels`; keep scorer tests for `rt_window_cap` and RT centrality. |
-| Local S/N | `semantic_migration_candidate` | Only label projection exists today. Missing successor field: numeric local-S/N fact or typed evidence component; keep local-S/N scorer coverage. |
-| Shape, width, and noise quality | `semantic_migration_candidate` | Missing successor fields: half-width/FWHM/noise severity typed facts; keep shape/noise scorer coverage. |
-| Trace quality flags and ADAP-like soft flags | Raw flag projection is `successor_projection`; penalty/cap policy remains `active_policy` | Quality flag projection covered by the new hypothesis test and `CommonEvidence.trace_quality` tests. Penalty, hard caps, and ADAP-equivalent suppression stay in scorer tests. |
-| CWT same-apex support | CWT audit fields are `successor_projection`; chemistry/selection guardrails remain `semantic_migration_candidate` | CWT field/support-label projection covered by the new hypothesis test. Guardrails remain in `tests/test_peak_scoring.py` and C3/CWT evidence-chain work. |
-| Weighted score arithmetic, thresholds, confidence caps | `active_policy` plus `successor_projection` result fields | Projected `raw_score`, `confidence`, and cap labels covered by the new hypothesis test; arithmetic/caps stay in `tests/test_peak_scoring_evidence.py` and `tests/test_peak_scoring.py`. |
-| Candidate selection and tie-breaks | `active_policy` | Keep `tests/test_peak_scoring_selection.py` and `tests/test_signal_processing_selection.py`; successor model-selection parity does not exist yet. |
-| Reason and score breakdown output | `compatibility_adapter` candidate | `EvidenceVector.reason` / `CommonEvidence.reason` projection covered by the new hypothesis test; public text/schema parity remains in candidate-table and CSV writer tests. |
+C4-1 proves projection, not policy ownership. It does not authorize scorer
+deletion or future score/cap parity as the successor goal.
 
 ## Future Slice Contract
 
@@ -215,8 +281,9 @@ Phase 1 added a successor-projection parity test without moving scorer policy:
 |---|---|---|---|---|
 | C4-0 semantic-survival audit | C4 design/spec owner | No code movement; existing scorer and hypothesis imports remain valid. | CodeGraph consumer scan, scorer-to-successor invariant map, and test-retirement table for `tests/test_peak_scoring*.py`, `tests/test_peak_hypotheses.py`, candidate-table tests, and selection tests. | Stop if any proposed deletion lacks successor invariant coverage or public compatibility plan. |
 | C4-A projection boundary | `peak_scoring.py` remains the public owner; optional internal owner is `peak_scoring_projection.py` for pure reason/breakdown formatting only. | `from xic_extractor.peak_scoring import build_evidence_reason, score_breakdown_fields` remains valid, along with current scorer imports. | Exact `reason` strings, `score_breakdown_fields(...)` ordering, support/concern/cap label projection, candidate/boundary TSV scoring columns, CSV/XLSX confidence display. | Stop if projection extraction needs `_is_review_only_evidence(...)`, `_evidence_from_context(...)`, `score_candidate(...)`, candidate selection, or any changed score/confidence/reason text. |
-| C4-B evidence input mapping | Existing `evidence_semantics.py`, `peak_scoring_evidence.py`, and `peak_detection/hypotheses.py` adapters own the mapping; no new evidence product is introduced. | Existing `EvidenceScore`, `EvidenceVector`, `CommonEvidence`, and `EvidenceSignalSet` import paths remain valid. | `tests/test_evidence_semantics.py`, `tests/test_peak_scoring_evidence.py`, `tests/test_peak_hypotheses.py`, candidate-table projection tests, and a named mapping parity fixture before code movement. | Stop if mapping recomputes scoring, creates a fourth evidence model, or treats CWT audit-presence fields as validated CWT scale/ridge quality. |
-| C4-C decision policy boundary | `peak_scoring.py` owns policy until a dedicated policy module is separately justified; public scorer API remains stable. | `score_candidate(...)`, `select_candidate_with_confidence(...)`, severity helpers, `Confidence`, `ScoredCandidate`, and `ScoringContext` imports remain valid. | `tests/test_peak_scoring.py`, `tests/test_peak_scoring_selection.py`, `tests/test_scoring_context.py`, `tests/test_signal_processing_selection.py`, plus selected-candidate/confidence/reason parity. | Stop and write a behavior spec if score, confidence, review-only status, selected candidate, tie-breaks, reason text, or output schema changes. |
+| C4-B typed evidence mapping | Existing `evidence_semantics.py`, `peak_detection/hypotheses.py`, and future trace-evidence components own typed facts; `peak_scoring_evidence.py` remains legacy metric support. | Existing `EvidenceScore`, `EvidenceVector`, `CommonEvidence`, and `EvidenceSignalSet` import paths remain valid. Public score/cap outputs remain compatibility projections. | `tests/test_evidence_semantics.py`, `tests/test_peak_hypotheses.py`, candidate-table projection tests, `tests/test_csv_writers.py`, `tests/test_csv_to_excel.py`, `tests/test_excel_pipeline.py`, `tests/test_peak_candidate_score_calibration_report.py`, plus named fixtures for local S/N provenance, morphology, role-aware RT, MS2/NL, and CWT evidence-source mapping. | Stop if mapping recomputes scoring, creates a fourth evidence model, treats CWT audit-presence as validated quality, or changes public output values. |
+| C4-C decision semantics contract | Future policy targets decision class, evidence conflicts, review/not-counted/exclusion reasons, and model-selection explanation. `peak_scoring.py` owns active policy until that contract exists. | `score_candidate(...)`, `select_candidate_with_confidence(...)`, severity helpers, `Confidence`, `ScoredCandidate`, and `ScoringContext` imports remain valid. | Decision/explanation oracle: selected hypothesis, decision class, counted/review/not-counted/excluded/ambiguous routing, evidence facts/conflicts/reasons, plus compatibility output parity through candidate TSV, CSV, XLSX, score-breakdown CSV/sheet, and diagnostic consumers while old fields remain public. | Stop and write a behavior spec if current score, confidence, review-only status, selected candidate, tie-breaks, reason text, or output schema changes. |
+| C4-D model selection migration | Future `PeakHypothesis` model-selection layer, if approved. | Current scorer public API remains as compatibility facade until replacement is product-ready. | `tests/test_peak_scoring_selection.py`, `tests/test_signal_processing_selection.py`, targeted RT fixtures, morphology fixtures, MS2/NL fixtures, local S/N fixtures, candidate TSV diagnostics, CSV/XLSX score projection, and public-output projection tests. | Stop unless selected-hypothesis parity is proven or behavior changes are explicitly approved. Raw-score parity is not a future policy requirement. |
 
 ## Public API Inventory
 
@@ -236,6 +303,26 @@ Current `rg` shows these public consumers of `xic_extractor.peak_scoring`:
 
 Future implementation must preserve these imports through
 `xic_extractor.peak_scoring` even if internal helpers move elsewhere.
+
+## Legacy Field Versioning Rule
+
+While legacy scorer fields remain public, cleanup slices may not rename, remove,
+deprecate, recompute, or replace these fields without an approved
+behavior/output-schema spec:
+
+- candidate TSV fields such as `confidence`, `raw_score`, `support_labels`,
+  `concern_labels`, `cap_labels`, `reason`, selected/rank/rejection columns, and
+  downstream diagnostic consumers of those fields;
+- `xic_score_breakdown.csv` headers, order, and values;
+- XLSX `XIC Results` confidence/reason display and `Score Breakdown` sheet
+  headers, order, and values;
+- CSV long/wide result confidence/reason/projection values;
+- public imports from `xic_extractor.peak_scoring`.
+
+A future schema migration must either preserve old fields through dual-write /
+compatibility output or explicitly version/remove them with regression tests and
+an approved behavior spec. Decision-class fields can be added only as additive
+surface unless a separate output-schema migration says otherwise.
 
 ## C4-A — Projection Boundary Extraction
 
@@ -330,22 +417,24 @@ extraction and focused tests prove byte-identical reason / breakdown output. If
 the implementation can affect selected peak, score, confidence, reason text, or
 generated TSV values, stop and reclassify the phase as a behavior change.
 
-## C4-B — Evidence Input Mapping
+## C4-B — Typed Evidence Mapping
 
 **Type:** later design / refactor slice
 
-C4-B maps current scorer labels and facts onto the existing evidence-chain
-surfaces without creating a new evidence product.
+C4-B maps current scorer labels and facts onto evidence-chain surfaces without
+creating a fourth evidence model or preserving scorer weights as product truth.
 
 Required decisions before implementation:
 
-- which scorer labels are canonical product evidence labels;
-- which fields belong on `EvidenceVector`;
-- which shared facts belong on `CommonEvidence`;
-- when `EvidenceSignalSet` should be built from scorer labels versus direct
-  common facts;
-- how CWT evidence is represented without treating legacy CWT presence metrics
-  as validated scale or ridge-quality metrics.
+- which legacy labels are compatibility projections only;
+- which facts belong on `EvidenceVector`, `CommonEvidence`, or a future trace
+  evidence component;
+- how local S/N stores AsLS baseline provenance and numeric evidence;
+- how shape, width, noise, continuity, edge recovery, and boundary plausibility
+  become one trace morphology evidence family;
+- how targeted RT evidence stays role-aware and ISTD-paired;
+- how CWT is represented as a morphology / boundary-hypothesis evidence source
+  without treating legacy presence metrics as validated CWT quality.
 
 C4-B may touch evidence mapping and adapter code only after C4-A projection
 behavior is characterized.
@@ -354,25 +443,37 @@ DONE WHEN:
 
 - existing adapters between scorer output, `EvidenceVector`, `CommonEvidence`,
   and `EvidenceSignalSet` are inventoried;
-- exactly one mapping target is selected;
+- each typed evidence family has one owner;
+- compatibility projection fields are explicitly separated from future policy
+  fields;
 - parity tests are named before implementation;
-- the implementation proves no recomputation of scoring and no new evidence
-  model;
+- any slice touching legacy projection fields names candidate TSV, CSV writer,
+  CSV-to-XLSX, Excel pipeline, score-breakdown, and diagnostic-consumer tests
+  before code movement;
+- the implementation proves no recomputation of scoring, no new evidence model,
+  and no output value/schema changes;
 - C3 is not `diagnostic_only`, or the C4-B note explicitly states that the work
   is bridge preparation only and does not claim handoff-spine advancement.
 
-## C4-C — Decision Policy Boundary
+## C4-C — Decision Semantics Boundary
 
 **Type:** later design / refactor slice
 
-C4-C separates decision policy from evidence extraction and projection. It owns
-accepted/review-only decisions, confidence caps, candidate selection, demotion,
-and tie-break behavior.
+C4-C separates decision semantics from evidence extraction and compatibility
+projection. It defines the future policy vocabulary before any implementation:
+
+- decision classes: `accepted`, `review`, `not_counted`, `excluded`,
+  `ambiguous`;
+- conflict/review/not-counted/exclusion reasons replacing caps as future policy;
+- decision/explanation parity as the migration oracle;
+- legacy `raw_score`, `confidence`, and `cap_labels` as compatibility fields
+  while public outputs expose them.
 
 Required characterization before C4-C:
 
-- confidence cap behavior for NL fail, no MS2, anchor mismatch, zero area,
-  RT window, trace quality, and hard quality flags;
+- current cap behavior for NL fail, no MS2, anchor mismatch, zero area,
+  RT window, trace quality, and hard quality flags, mapped to future reason
+  categories;
 - low-scan and dominant strict-NL demotion behavior;
 - RT-prior preference and strict selection RT behavior;
 - MS2 trace tie-break behavior;
@@ -383,14 +484,43 @@ candidate, reason text, or output schema.
 
 DONE WHEN:
 
-- the decision policy owner is named, either staying in `peak_scoring.py` behind
-  clearer helpers or moving to a dedicated policy module;
-- the candidate-selection parity oracle and focused tests are named before
+- the decision semantics owner is named, either staying in `peak_scoring.py`
+  behind clearer helpers or moving to a dedicated policy module;
+- the selected-hypothesis and decision/explanation parity oracle is named before
   implementation;
-- behavior-change stop rules cover score, confidence, review-only semantics,
-  selected candidate, reason text, and output schema;
+- behavior-change stop rules cover current score, confidence, review-only
+  semantics, selected candidate, reason text, and output schema;
 - C3 is not `diagnostic_only`, or the C4-C note explicitly states that no
   handoff-spine advancement is being claimed.
+
+## C4-D — PeakHypothesis Model Selection Migration
+
+**Type:** future behavior or characterization-backed migration slice
+
+C4-D is the first slice that may replace scorer-driven candidate selection with
+model selection over `PeakHypothesis`. It is not cleanup unless it proves current
+selected-candidate and public-output parity.
+
+Required before implementation:
+
+- typed evidence fields from C4-B exist or a reviewed temporary bridge is named;
+- decision semantics from C4-C exist;
+- fixtures cover selected candidate identity, decision class, explanation,
+  local S/N, morphology, role-aware RT, MS2/NL, CWT, low-scan and dominant-area
+  cases, and quality penalties;
+- legacy projection parity includes candidate TSV diagnostics, CSV writers,
+  CSV-to-XLSX, Excel pipeline, and score-breakdown outputs while those fields
+  remain public;
+- public outputs either remain byte/value compatible or an approved behavior
+  spec versions the schema/copy.
+
+DONE WHEN:
+
+- current `select_candidate_with_confidence(...)` remains the oracle until a
+  successor selector matches selected hypothesis and decision/explanation parity;
+- any intentional divergence is documented as behavior change, not cleanup;
+- raw-score parity is used only for compatibility fields while those fields
+  remain public.
 
 ## Done When
 
@@ -398,11 +528,16 @@ C4 design is ready for implementation planning when:
 
 - this design is linked from the old C4 split spec;
 - C4-A / C4-B / C4-C are understood as separate slices;
+- C4-D is explicitly future work and not part of cleanup unless parity-backed;
 - C4-A has an explicit characterization-first gate;
 - C4-A keeps decision policy out of the projection module;
 - C4-A has a dependency-direction rule and import-compatibility smoke;
 - C4-B / C4-C each have an artifact, parity oracle, and exit rule before
   implementation;
+- weighted score and cap mechanics are identified as current compatibility /
+  active-policy surfaces, not future successor policy goals;
+- typed evidence ownership is named for local S/N, trace morphology, CWT,
+  role-aware targeted RT, and MS2/NL;
 - old package-split instructions remain historical and non-executable;
 - no new evidence model is introduced.
 
@@ -414,16 +549,25 @@ Stop and write a separate behavior spec if C4 work requires:
 - changed confidence thresholds or caps;
 - changed review-only semantics;
 - changed selected candidate or tie-break behavior;
-- changed generated TSV/workbook schema or values;
-- promoting, demoting, or deleting CWT evidence behavior.
+- changed candidate TSV, CSV, score-breakdown CSV, XLSX sheet/header/value,
+  workbook schema/value, or downstream diagnostic-consumer schema/value;
+- promoting, demoting, or deleting CWT evidence behavior;
+- changing `raw_score`, `confidence`, `cap_labels`, or reason text in public
+  projections;
+- renaming, removing, deprecating, recomputing, or replacing legacy projection
+  fields without a versioned output-schema/deprecation plan and regression
+  tests;
+- treating clean standards or MixSTD observations as biological-sample absence
+  proof without an explicit experiment/design contract.
 
 ## Open Questions
 
 - C4-A implementation should decide whether `peak_scoring_projection.py` is a
   stable long-term module or an intermediate name. The public import path remains
   `xic_extractor.peak_scoring` either way.
-- C4-B should decide the exact mapping between scorer labels and
-  `CommonEvidence` / `EvidenceSignalSet` after C3 inventory confirms the
-  consumer surfaces.
-- C4-C should decide whether decision policy remains in `peak_scoring.py` behind
-  clearer helper names or moves to a dedicated policy module.
+- C4-B should decide whether typed local S/N and morphology fields live directly
+  on `EvidenceVector` or in a nested trace-evidence component.
+- C4-C should decide whether decision semantics remain in `peak_scoring.py`
+  behind clearer helper names or move to a dedicated policy module.
+- C4-D should decide whether model selection can be cleanup-parity migration or
+  must be written as a behavior-change spec.
