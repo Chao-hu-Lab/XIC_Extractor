@@ -80,12 +80,12 @@ Evidence from the 2026-06-01 scan:
 
 - CodeGraph is initialized and current for this repo: 703 files, 13,817 nodes,
   and 32,639 edges.
-- `tools/diagnostics/INDEX.md` header still says 42 diagnostic entry points
-  and roughly 116 helper files, but the current scan found 48 entry-point
-  headings and 130 Python files. R2 must refresh the index counts before using
-  them as lifecycle evidence.
-- `xic_extractor/diagnostics/` contains only `timing.py`; the package-level
-  diagnostics home is underused.
+- Phase 2 refreshed `tools/diagnostics/INDEX.md` to 48 entry-point headings and
+  130 top-level Python files, counted from the catalog headings and
+  `tools/diagnostics/*.py`.
+- `xic_extractor/diagnostics/` now contains runtime timing helpers plus the
+  package-owned `diagnostic_io.py` shared infrastructure carveout; gate
+  placement remains underused.
 - Several `xic_extractor/alignment/shared_peak_identity_explanation/*` modules
   import `tools.diagnostics.diagnostic_io`. That is acceptable as a temporary
   user-authorized evidence bridge, but long-term shared evidence/IO contracts

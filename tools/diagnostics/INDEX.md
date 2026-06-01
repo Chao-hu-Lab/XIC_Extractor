@@ -1,9 +1,11 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last generated:** 2026-05-30
-**Total entry-points:** 42
-**Total files (incl. helpers):** ~116
+**Last refreshed:** 2026-06-01
+**Total entry-points:** 48
+**Total files (incl. helpers):** 130 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
+**Count method:** top-level `### *.py` entry headings for entry-points;
+top-level `tools/diagnostics/*.py` files for total files.
 
 ---
 
@@ -22,7 +24,7 @@
 ## Table of Contents
 
 1. [Phase Gates (P1/P2/P2b/P2c/P7)](#phase-gates-p1p2p2bp2cp7) — 7 tools
-2. [Evidence Consistency](#evidence-consistency) — 3 tools
+2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
 4. [Backfill Reviews](#backfill-reviews) — 7 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 2 tools
@@ -106,9 +108,10 @@ per the lifecycle spec.
 ## Evidence Consistency
 
 Compare evidence rows produced by parallel pipelines (targeted vs untargeted,
-spine vs cell). The two tools below share low-level diagnostic IO helpers, but
-keep separate row models because their output schemas are intentionally
-different; see `2026-05-26-diagnostic-lifecycle-audit-note.md` Cluster 1.
+spine vs cell) and shared-identity sidecars. The tools below share low-level
+diagnostic IO helpers where their schemas permit it, but keep separate row
+models because their output schemas are intentionally different; see
+`2026-05-26-diagnostic-lifecycle-audit-note.md` Cluster 1.
 
 ### `evidence_spine_consistency.py`
 
