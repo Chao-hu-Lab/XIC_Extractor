@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 GATE_C1B_PLAN = "GO_FOR_C1B_PLAN_SYNTHETIC_ONLY"
 GATE_RETIREMENT = "GO_FOR_LINEAR_EDGE_RETIREMENT"
 GATE_REQUIRES_TIER_C = "REQUIRES_TIER_C"
@@ -57,6 +56,41 @@ TIER_B1_ACCURACY_FAIL = "FAIL"
 
 TIER_B2_STATUS_STRESS_REQUIRES_TIER_C = "STRESS_REQUIRES_TIER_C"
 TIER_B2_STATUS_NOT_RUN = "NOT_RUN"
+
+TIER_C_AXIS_BASELINE_AUDIT = "asls_vs_linear_edge_baseline_audit"
+TIER_C_GATE_PASS = "PASS"
+TIER_C_GATE_FAIL = "FAIL"
+TIER_C_GATE_NOT_PROVIDED = "NOT_PROVIDED"
+
+FAMILY_DISPOSITION_PASS_BASELINE_SUPPORTED = "PASS_BASELINE_SUPPORTED"
+FAMILY_DISPOSITION_PASS_METHODS_SIMILAR = "PASS_METHODS_SIMILAR"
+FAMILY_DISPOSITION_REQUIRES_REVIEW = "REQUIRES_REVIEW"
+FAMILY_DISPOSITION_FAIL = "FAIL"
+FAMILY_DISPOSITION_INCONCLUSIVE = "INCONCLUSIVE"
+
+FAMILY_DISPOSITIONS = frozenset(
+    {
+        FAMILY_DISPOSITION_PASS_BASELINE_SUPPORTED,
+        FAMILY_DISPOSITION_PASS_METHODS_SIMILAR,
+        FAMILY_DISPOSITION_REQUIRES_REVIEW,
+        FAMILY_DISPOSITION_FAIL,
+        FAMILY_DISPOSITION_INCONCLUSIVE,
+    }
+)
+
+TIER_C_ROW_BLOCKERS = frozenset(
+    {
+        "asls_under_subtraction_plausible",
+        "asls_area_exceeds_raw_area",
+        "asls_negative_nonblank_area",
+        "mixed_or_review_required",
+        "not_assessable",
+        "missing_or_stale_plot",
+        "missing_row_identifier",
+        "stale_artifact_hash",
+        "unsupported_classification",
+    }
+)
 
 SUMMARY_FIELDS = (
     "readiness_status",
@@ -112,7 +146,11 @@ SUMMARY_FIELDS = (
     "unmapped_observed_pattern_count",
     "tier_c_axis",
     "tier_c_status",
-    "tier_c_nonblank_status",
+    "tier_c_baseline_evidence_status",
+    "tier_c_c1b_relevance_status",
+    "tier_c_stress_axis_gate_status",
+    "tier_c_row_blocker_count",
+    "tier_c_review_required_count",
     "blank_safety_status",
     "stress_axis_disposition_statuses",
     "tier_c_evidence_ref",
@@ -211,7 +249,9 @@ class TruthValidationOutputs:
                 output_dir / "asls_truth_validation_fixture_manifest.json"
             ),
             fixture_lock_json=output_dir / "asls_truth_validation_fixture_lock.json",
-            tier_a_manifest_json=output_dir / "asls_truth_validation_tier_a_manifest.json",
+            tier_a_manifest_json=(
+                output_dir / "asls_truth_validation_tier_a_manifest.json"
+            ),
             p2b_85raw_acceptance_json=(
                 output_dir / "asls_truth_validation_p2b_85raw_acceptance_manifest.json"
             ),

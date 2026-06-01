@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from xic_extractor.config import ExtractionConfig, Target
-from xic_extractor.peak_detection.baseline import integrate_linear_edge_baseline
+from xic_extractor.peak_detection.baseline import (
+    BaselineMethod,
+    integrate_with_baseline,
+)
 from xic_extractor.peak_detection.boundaries import (
     BoundaryCandidateContext,
     BoundaryHypothesis,
@@ -84,6 +87,7 @@ def build_peak_candidate_boundary_rows(
     trace_group: TraceGroup | None = None,
     target_mz: float | None = None,
     group: str | None = None,
+    baseline_integration_method: BaselineMethod = "asls",
 ) -> list[PeakCandidateBoundaryRow]:
     sample_group = group or classify_sample_group(sample_name)
     trace_rt = trace_group.primary_trace.rt if trace_group is not None else rt
@@ -100,6 +104,7 @@ def build_peak_candidate_boundary_rows(
         rt=trace_rt,
         intensity=trace_intensity,
         trace_group=trace_group,
+        baseline_integration_method=baseline_integration_method,
     )
     return build_peak_candidate_boundary_rows_from_hypotheses(
         sample_name=sample_name,
@@ -108,6 +113,7 @@ def build_peak_candidate_boundary_rows(
         rt=trace_rt,
         intensity=trace_intensity,
         group=sample_group,
+        baseline_integration_method=baseline_integration_method,
     )
 
 
@@ -119,6 +125,7 @@ def build_peak_candidate_boundary_rows_from_hypotheses(
     rt: Any,
     intensity: Any,
     group: str | None = None,
+    baseline_integration_method: BaselineMethod = "asls",
 ) -> list[PeakCandidateBoundaryRow]:
     sample_group = group or classify_sample_group(sample_name)
     rows: list[PeakCandidateBoundaryRow] = []
@@ -140,6 +147,7 @@ def build_peak_candidate_boundary_rows_from_hypotheses(
                 reference=reference,
                 rt=rt,
                 intensity=intensity,
+                baseline_integration_method=baseline_integration_method,
             )
             for boundary in boundaries
         ]
@@ -192,6 +200,10 @@ def append_peak_candidate_boundary_rows(
                 else intensity
             ),
             trace_group=trace_group,
+            baseline_integration_method=cast(
+                BaselineMethod,
+                config.baseline_integration_method,
+            ),
         ),
         rt=rt,
         intensity=intensity,
@@ -225,6 +237,10 @@ def append_peak_candidate_boundary_rows_from_hypotheses(
             rt=trace_rt,
             intensity=trace_intensity,
             group=group,
+            baseline_integration_method=cast(
+                BaselineMethod,
+                config.baseline_integration_method,
+            ),
         )
     )
 
@@ -239,14 +255,16 @@ def _row_from_boundary(
     reference: BoundaryHypothesis,
     rt: Any,
     intensity: Any,
+    baseline_integration_method: BaselineMethod,
 ) -> PeakCandidateBoundaryRow:
     area_delta = boundary.area_raw_counts_seconds - reference.area_raw_counts_seconds
     width_delta = boundary.width_min - reference.width_min
-    baseline = integrate_linear_edge_baseline(
+    baseline = integrate_with_baseline(
         intensity,
         rt,
         boundary.left_index,
         boundary.right_index,
+        baseline_method=baseline_integration_method,
     )
     boundary_score = score_boundary_hypothesis(
         boundary,

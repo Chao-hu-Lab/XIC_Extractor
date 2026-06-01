@@ -12,6 +12,7 @@ from tools.diagnostics.asls_truth_validation_inputs import sha256_file
 from tools.diagnostics.asls_truth_validation_models import (
     GATE_C1B_PLAN,
     GATE_NO_GO,
+    GATE_REQUIRES_RETIREMENT_PREREQS,
     GATE_REQUIRES_TIER_C,
     INCONCLUSIVE_INVALID_INPUT,
     INCONCLUSIVE_MISSING_P2B_85RAW_ACCEPTANCE,
@@ -102,6 +103,34 @@ def test_cli_retirement_target_requires_tier_c_without_optional_evidence(
     assert _summary(output_dir)["gate_decision"] == GATE_REQUIRES_TIER_C
 
 
+def test_cli_markdown_names_retirement_prereq_next_action(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output_dir = tmp_path / "retirement_prereq"
+    _patch_synthetic_pass(monkeypatch)
+    tier_c = _write_tier_c(tmp_path / "tier_c.json")
+
+    exit_code = main(
+        [
+            *_base_args(output_dir),
+            "--decision-target",
+            "linear-edge-retirement",
+            "--tier-c-evidence",
+            str(tier_c),
+        ]
+    )
+
+    assert exit_code == 3
+    assert _summary(output_dir)["gate_decision"] == GATE_REQUIRES_RETIREMENT_PREREQS
+    report = TruthValidationOutputs.from_output_dir(
+        output_dir
+    ).markdown_path.read_text(encoding="utf-8")
+    assert "Tier C stress axis gate: PASS" in report
+    assert "Retirement prerequisite status: NOT_PROVIDED" in report
+    assert "provide a valid retirement prerequisite manifest" in report
+
+
 def test_cli_copies_optional_evidence_when_supplied(
     tmp_path: Path,
     monkeypatch,
@@ -136,7 +165,14 @@ def test_cli_copies_optional_evidence_when_supplied(
     assert outputs.methodology_waiver_json.read_text(encoding="utf-8")
     assert outputs.retirement_prereq_json.read_text(encoding="utf-8")
     summary = _summary(output_dir)
-    assert summary["tier_c_axis"] == "spike_in_recovery"
+    assert summary["tier_c_axis"] == "asls_vs_linear_edge_baseline_audit"
+    assert summary["tier_c_baseline_evidence_status"] == "PASS"
+    assert summary["tier_c_c1b_relevance_status"] == "PASS"
+    assert summary["tier_c_stress_axis_gate_status"] == "PASS"
+    assert summary["tier_c_row_blocker_count"] == "0"
+    assert summary["tier_c_review_required_count"] == "0"
+    retired_status_key = "_".join(("tier", "c", "nonblank", "status"))
+    assert retired_status_key not in summary
     assert summary["methodology_owner"] == "methodology_owner"
     assert summary["waiver_scope"] == "alignment_matrix.tsv"
     assert summary["waiver_expiry_or_revalidation_trigger"] == "2026-12-31"
@@ -147,7 +183,7 @@ def test_cli_copies_optional_evidence_when_supplied(
     assert payload["inputs"]["p2b_85raw_acceptance"]["hash"]
     assert (
         payload["inputs"]["tier_c_evidence"]["object"]["tier_c_axis"]
-        == "spike_in_recovery"
+        == "asls_vs_linear_edge_baseline_audit"
     )
     assert (
         payload["inputs"]["methodology_waiver"]["object"]["methodology_owner"]
@@ -379,21 +415,147 @@ def _json_payload(output_dir: Path) -> dict[str, object]:
 
 
 def _write_tier_c(path: Path) -> Path:
+    plot_dir = path.parent / "plots"
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    plot_path = plot_dir / "ISTD-A.png"
+    plot_path.write_text("plot\n", encoding="utf-8")
+    contract_ref = _hashed_artifact(path.parent / "contract_test.txt", "pass\n")
+    stress_ref = _hashed_artifact(
+        path.parent / "stress_axis_evidence.tsv",
+        "stress_axis\tstatus\nblank_carryover\tPASS\n",
+    )
     return _write_json(
         path,
         {
-            "tier_c_axis": "spike_in_recovery",
+            "tier_c_axis": "asls_vs_linear_edge_baseline_audit",
             "tier_c_status": "PASS",
-            "level_count": 3,
-            "replicates_per_level": 5,
-            "median_recovery_pct": 105.0,
-            "evidence_artifacts": [_hashed_ref(MARKDOWN_REPORT)],
-            "thresholds_used": ["test"],
-            "reviewer_or_generator": "pytest",
+            "tier_c_baseline_evidence_status": "PASS",
+            "blank_safety_status": "NOT_APPLICABLE_WITH_EXCLUSION",
+            "ratio_metrics_are_descriptive": True,
+            "fixed_area_uplift_threshold": None,
+            "baseline_truth_artifacts": {
+                "rows_tsv": _hashed_artifact(
+                    path.parent / "rows.tsv",
+                    _tier_c_rows_text(plot_path),
+                ),
+                "summary_tsv": _hashed_artifact(
+                    path.parent / "summary.tsv",
+                    _tier_c_summary_text(plot_path),
+                ),
+                "json": _hashed_artifact(
+                    path.parent / "audit.json",
+                    _tier_c_audit_json_text(plot_path),
+                ),
+                "markdown": _hashed_artifact(path.parent / "audit.md", "# audit\n"),
+                "plot_dir": str(plot_dir),
+            },
+            "family_dispositions": [
+                {
+                    "target_label": "ISTD-A",
+                    "feature_family_id": "ISTD-A::100.0::1.20",
+                    "covered_samples": ["sample_001"],
+                    "dominant_classification": (
+                        "linear_edge_over_subtraction_plausible"
+                    ),
+                    "review_status": "reviewed",
+                    "decision_scope": "C1B_RELEVANCE",
+                    "plot_path": str(plot_path),
+                    "reviewed_rows": [
+                        {
+                            "target_label": "ISTD-A",
+                            "feature_family_id": "ISTD-A::100.0::1.20",
+                            "sample_stem": "sample_001",
+                            "peak_start_rt": "1.10",
+                            "apex_rt": "1.20",
+                            "peak_end_rt": "1.30",
+                            "plot_path": str(plot_path),
+                        }
+                    ],
+                    "family_disposition": "PASS_BASELINE_SUPPORTED",
+                    "tier_c_row_blockers": [],
+                    "reviewer_disposition": (
+                        "AsLS baseline is more plausible than linear edge."
+                    ),
+                    "reason": "Linear edge crosses the shoulder.",
+                }
+            ],
+            "affected_outputs": ["alignment_matrix.tsv"],
+            "blank_control_evidence_status": "NOT_APPLICABLE_WITH_EXCLUSION",
+            "blank_control_evidence_refs": [],
+            "blank_rows_absence_proof": [
+                "alignment_matrix.tsv excludes blank quantitation"
+            ],
+            "consumer_contract_tests": [contract_ref],
+            "stress_axis_dispositions": [
+                {
+                    "stress_axis": "blank_carryover",
+                    "status": "PASS",
+                    "decision_scope": "RETIREMENT_ONLY",
+                    "rationale": "Scoped outputs do not consume blank quantitation.",
+                    "evidence_artifacts": [stress_ref],
+                }
+            ],
+            "row_count": 1,
+            "sample_count": 1,
+            "raw_file_count": 1,
+            "selected_istd_count": 1,
+            "high_risk_morphology_row_count": 1,
+            "covered_target_classes": ["ISTD"],
+            "known_exclusions": [],
+            "reviewer_or_generator": "methodology_owner",
             "output_scope": ["alignment_matrix.tsv"],
             "target_classes": ["ISTD"],
-            "known_exclusions": [],
         },
+    )
+
+
+def _hashed_artifact(path: Path, text: str) -> dict[str, str]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return {"path": str(path), "sha256": sha256_file(path)}
+
+
+def _tier_c_rows_text(plot_path: Path) -> str:
+    return (
+        "target_label\tfeature_family_id\tsample_stem\tstatus\traw_area\tlinear_area\t"
+        "asls_area\tlinear_raw_pct\tasls_raw_pct\tasls_vs_linear_pct\t"
+        "linear_baseline_subtracted_pct\tasls_baseline_subtracted_pct\t"
+        "linear_edge_delta_pct\toutside_background_pct\tpeak_start_rt\tapex_rt\t"
+        "peak_end_rt\ttrace_point_count\tclassification\treview_reason\tplot_path\n"
+        "ISTD-A\tISTD-A::100.0::1.20\tsample_001\tPASS\t100.0\t60.0\t95.0\t"
+        "60.0\t95.0\t58.3\t40.0\t5.0\t35.0\t20.0\t1.10\t1.20\t1.30\t"
+        "11\tlinear_edge_over_subtraction_plausible\tlinear edge crosses shoulder\t"
+        f"{plot_path}\n"
+    )
+
+
+def _tier_c_summary_text(plot_path: Path) -> str:
+    return (
+        "target_label\tfeature_family_id\trow_count\tdominant_classification\t"
+        "classification_counts\tmedian_linear_baseline_subtracted_pct\t"
+        "median_asls_baseline_subtracted_pct\tmedian_asls_vs_linear_pct\t"
+        "max_asls_vs_linear_pct\tmedian_linear_edge_delta_pct\t"
+        "median_outside_background_pct\treview_status\tplot_path\n"
+        "ISTD-A\tISTD-A::100.0::1.20\t1\tlinear_edge_over_subtraction_plausible\t"
+        "{\"linear_edge_over_subtraction_plausible\": 1}\t40.0\t5.0\t58.3\t"
+        f"58.3\t35.0\t20.0\treviewed\t{plot_path}\n"
+    )
+
+
+def _tier_c_audit_json_text(plot_path: Path) -> str:
+    return json.dumps(
+        {
+            "families": [
+                {
+                    "target_label": "ISTD-A",
+                    "feature_family_id": "ISTD-A::100.0::1.20",
+                    "dominant_classification": (
+                        "linear_edge_over_subtraction_plausible"
+                    ),
+                    "plot_path": str(plot_path),
+                }
+            ]
+        }
     )
 
 
@@ -411,8 +573,10 @@ def _write_waiver(path: Path) -> Path:
             "output_scope": ["alignment_matrix.tsv"],
             "expiry_or_revalidation_trigger": "2026-12-31",
             "waived_decision": "c1b-plan",
-            "waived_tier_c_axes": ["spike_in_recovery"],
-            "waiver_rationale": "No spike-in series exists for this dataset.",
+            "waived_tier_c_evidence": ["asls_vs_linear_edge_baseline_audit"],
+            "waiver_rationale": (
+                "Baseline-evidence audit is waived for this C1B planning fixture."
+            ),
             "branch_scope": "codex/peak-pipeline-modernization",
             "target_classes": ["ISTD"],
             "sample_classes": ["tissue"],

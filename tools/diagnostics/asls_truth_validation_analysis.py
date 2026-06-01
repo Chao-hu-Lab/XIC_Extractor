@@ -12,7 +12,6 @@ from tools.diagnostics.asls_truth_validation_models import (
     INCONCLUSIVE_INVALID_INPUT,
 )
 
-
 INCONCLUSIVE_TIER_B_NOT_PASS = "INCONCLUSIVE_TIER_B_NOT_PASS"
 
 _VALID_DECISION_TARGETS = {"c1b-plan", "linear-edge-retirement"}
@@ -22,7 +21,6 @@ _FAIL = "FAIL"
 _VALID = "VALID"
 _NOT_APPLICABLE_WITH_EXCLUSION = "NOT_APPLICABLE_WITH_EXCLUSION"
 _STRESS_REQUIRES_TIER_C = "STRESS_REQUIRES_TIER_C"
-_C1B_RELEVANCE = "C1B_RELEVANCE"
 
 
 def decide_gate(
@@ -35,8 +33,9 @@ def decide_gate(
     b2_retirement_blockers: tuple[str, ...] = (),
     coverage_status: str,
     tier_c_status: str,
-    tier_c_nonblank_status: str,
-    tier_c_nonblank_decision_scope: str = _C1B_RELEVANCE,
+    tier_c_baseline_evidence_status: str,
+    tier_c_c1b_relevance_status: str,
+    tier_c_stress_axis_gate_status: str,
     blank_safety_status: str,
     waiver_state: str,
     retirement_prereq_status: str,
@@ -51,7 +50,9 @@ def decide_gate(
         tier_b1_status,
         coverage_status,
         tier_c_status,
-        tier_c_nonblank_status,
+        tier_c_baseline_evidence_status,
+        tier_c_c1b_relevance_status,
+        tier_c_stress_axis_gate_status,
         blank_safety_status,
         waiver_state,
         retirement_prereq_status,
@@ -68,9 +69,11 @@ def decide_gate(
         return INCONCLUSIVE_FIXTURE_GAP
     if b1_hard_blockers or tier_b1_status == _FAIL:
         return GATE_NO_GO
-    if tier_c_nonblank_status == _FAIL and (
+    if tier_c_c1b_relevance_status == _FAIL:
+        return GATE_NO_GO
+    if (
         decision_target == "linear-edge-retirement"
-        or tier_c_nonblank_decision_scope == _C1B_RELEVANCE
+        and tier_c_baseline_evidence_status == _FAIL
     ):
         return GATE_NO_GO
     if tier_b1_status != _PASS:
@@ -80,12 +83,19 @@ def decide_gate(
         if tier_b2_status == _FAIL:
             return GATE_NO_GO
         if tier_b2_status == _STRESS_REQUIRES_TIER_C or b2_retirement_blockers:
-            return GATE_REQUIRES_TIER_C
-        if tier_b2_status != _PASS:
+            if tier_c_stress_axis_gate_status == _FAIL:
+                return GATE_NO_GO
+            if tier_c_stress_axis_gate_status != _PASS:
+                return GATE_REQUIRES_TIER_C
+        elif tier_b2_status != _PASS:
             return GATE_REQUIRES_TIER_C
         if tier_c_status != _PASS:
             return GATE_REQUIRES_TIER_C
-        if tier_c_nonblank_status != _PASS:
+        if tier_c_baseline_evidence_status != _PASS:
+            return GATE_REQUIRES_TIER_C
+        if tier_c_stress_axis_gate_status == _FAIL:
+            return GATE_NO_GO
+        if tier_c_stress_axis_gate_status != _PASS:
             return GATE_REQUIRES_TIER_C
         if blank_safety_status == _FAIL:
             return GATE_NO_GO

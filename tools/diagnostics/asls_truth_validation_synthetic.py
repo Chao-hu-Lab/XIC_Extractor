@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from statistics import median
-from typing import Mapping, Sequence
+from typing import Mapping, Sequence, TypeAlias
 
 import numpy as np
+from numpy.typing import NDArray
 
 from tools.diagnostics.asls_truth_validation_manifests import (
     FixtureLock,
@@ -23,12 +24,11 @@ from tools.diagnostics.asls_truth_validation_models import (
     PRODUCTION_LIKE_IN_SCOPE,
     ROW_STATUS_HARD_BLOCKER,
     ROW_STATUS_PASS,
-    TIER_B1_RELEVANCE,
     TIER_B1_ACCURACY_FAIL,
     TIER_B1_ACCURACY_PLANNING_ONLY,
     TIER_B1_ACCURACY_RETIREMENT_ELIGIBLE,
+    TIER_B1_RELEVANCE,
     TIER_B2_STATUS_STRESS_REQUIRES_TIER_C,
-    TIER_B2_STRESS,
 )
 from xic_extractor.peak_detection.baseline import (
     BaselineIntegration,
@@ -37,8 +37,8 @@ from xic_extractor.peak_detection.baseline import (
 )
 from xic_extractor.peak_detection.integration import integrate_area_counts_seconds
 
-
 SYNTHETIC_FIXTURE_LOCK_VALID = BENCHMARK_STATUS_PASS
+FloatArray: TypeAlias = NDArray[np.float64]
 
 
 @dataclass(frozen=True)
@@ -56,11 +56,11 @@ class SyntheticTrace:
     scan_density_stratum: str
     integration_point_count: int
     integration_width_min: float
-    rt_values: np.ndarray
-    intensity_values: np.ndarray
-    true_baseline_values: np.ndarray
-    true_peak_values: np.ndarray
-    nuisance_values: np.ndarray
+    rt_values: FloatArray
+    intensity_values: FloatArray
+    true_baseline_values: FloatArray
+    true_peak_values: FloatArray
+    nuisance_values: FloatArray
     true_area: float
     left_index: int
     right_index: int
@@ -253,7 +253,9 @@ def classify_tier_b_blockers(
         }:
             asls_median_abs = median(asls_abs)
             linear_median_abs = median(linear_abs)
-            true_median = median(row.true_area for row in class_rows if row.true_area > 0)
+            true_median = median(
+                row.true_area for row in class_rows if row.true_area > 0
+            )
             asls_abs_pct = asls_median_abs / true_median * 100.0
             improves_by_20pct = asls_median_abs <= 0.8 * linear_median_abs
             abs_error_below_3pct = asls_abs_pct < 3.0
@@ -303,12 +305,12 @@ def blank_false_positive(
 
 def _trace_from_record(record: FixtureLockRecord) -> SyntheticTrace:
     params = record.parameters
-    n_points = int(params["trace_length_points"])
-    scan_spacing = float(params["scan_spacing_min"])
-    apex_rt = float(params["apex_rt_min"])
+    n_points = _param_int(params, "trace_length_points")
+    scan_spacing = _param_float(params, "scan_spacing_min")
+    apex_rt = _param_float(params, "apex_rt_min")
     center_index = n_points // 2
     start_rt = apex_rt - center_index * scan_spacing
-    rt = start_rt + np.arange(n_points, dtype=float) * scan_spacing
+    rt = start_rt + np.arange(n_points, dtype=np.float64) * scan_spacing
     baseline = _baseline_values(rt, params, apex_rt)
     target_peak, nuisance = _peak_and_nuisance_values(record, rt, apex_rt)
     noise = _deterministic_noise(record, baseline + target_peak + nuisance)
@@ -342,40 +344,40 @@ def _trace_from_record(record: FixtureLockRecord) -> SyntheticTrace:
 
 
 def _baseline_values(
-    rt: np.ndarray,
+    rt: FloatArray,
     params: Mapping[str, object],
     apex_rt: float,
-) -> np.ndarray:
+) -> FloatArray:
     centered_rt = rt - apex_rt
-    baseline = np.full_like(rt, float(params["baseline_intercept"]), dtype=float)
-    baseline += float(params["baseline_slope_per_min"]) * centered_rt
-    hump_amplitude = float(params["hump_amplitude"])
+    baseline = np.full(rt.shape, _param_float(params, "baseline_intercept"))
+    baseline += _param_float(params, "baseline_slope_per_min") * centered_rt
+    hump_amplitude = _param_float(params, "hump_amplitude")
     if hump_amplitude:
-        sigma = float(params["peak_sigma_min"])
-        hump_width = max(float(params["hump_width_sigma"]) * sigma, sigma)
+        sigma = _param_float(params, "peak_sigma_min")
+        hump_width = max(_param_float(params, "hump_width_sigma") * sigma, sigma)
         baseline += hump_amplitude * np.exp(-0.5 * (centered_rt / hump_width) ** 2)
-    dip_fraction = float(params["local_dip_depth_fraction"])
+    dip_fraction = _param_float(params, "local_dip_depth_fraction")
     if dip_fraction:
-        sigma = float(params["peak_sigma_min"])
+        sigma = _param_float(params, "peak_sigma_min")
         dip_center = apex_rt - 1.8 * sigma
         dip_width = max(1.5 * sigma, 1e-9)
-        depth = dip_fraction * max(float(params["peak_height"]), 1.0)
+        depth = dip_fraction * max(_param_float(params, "peak_height"), 1.0)
         baseline -= depth * np.exp(-0.5 * ((rt - dip_center) / dip_width) ** 2)
     return baseline
 
 
 def _peak_and_nuisance_values(
     record: FixtureLockRecord,
-    rt: np.ndarray,
+    rt: FloatArray,
     apex_rt: float,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[FloatArray, FloatArray]:
     params = record.parameters
     formula = record.true_area_formula_version
     if formula == "no_peak_v1":
-        target = np.zeros_like(rt)
+        target = np.zeros_like(rt, dtype=np.float64)
         return target, _blank_nuisance_values(rt, params, apex_rt)
     gaussian = _gaussian_peak(rt, params, apex_rt)
-    nuisance = np.zeros_like(rt)
+    nuisance = np.zeros_like(rt, dtype=np.float64)
     if formula == "symmetric_gaussian_v1":
         target = gaussian
     elif formula == "exponential_tail_gaussian_v1":
@@ -384,8 +386,10 @@ def _peak_and_nuisance_values(
         shoulder = _offset_gaussian(
             rt,
             params,
-            apex_rt + float(params["shoulder_offset_sigma"]) * float(params["peak_sigma_min"]),
-            float(params["shoulder_height_fraction"]),
+            apex_rt
+            + _param_float(params, "shoulder_offset_sigma")
+            * _param_float(params, "peak_sigma_min"),
+            _param_float(params, "shoulder_height_fraction"),
         )
         target = gaussian + shoulder
     elif formula == "gaussian_with_interference_v1":
@@ -393,11 +397,16 @@ def _peak_and_nuisance_values(
         nuisance = _offset_gaussian(
             rt,
             params,
-            apex_rt + float(params["shoulder_offset_sigma"]) * float(params["peak_sigma_min"]),
-            float(params["interference_height_fraction"]),
+            apex_rt
+            + _param_float(params, "shoulder_offset_sigma")
+            * _param_float(params, "peak_sigma_min"),
+            _param_float(params, "interference_height_fraction"),
         )
     elif formula == "clipped_gaussian_v1":
-        clip_at = float(params["clip_fraction"]) * float(params["peak_height"])
+        clip_at = _param_float(params, "clip_fraction") * _param_float(
+            params,
+            "peak_height",
+        )
         target = np.minimum(gaussian, clip_at)
     else:
         raise ValueError(f"unsupported true_area_formula_version: {formula}")
@@ -405,69 +414,94 @@ def _peak_and_nuisance_values(
 
 
 def _gaussian_peak(
-    rt: np.ndarray,
+    rt: FloatArray,
     params: Mapping[str, object],
     apex_rt: float,
-) -> np.ndarray:
-    sigma = max(float(params["peak_sigma_min"]), 1e-9)
-    height = float(params["peak_height"])
+) -> FloatArray:
+    sigma = max(_param_float(params, "peak_sigma_min"), 1e-9)
+    height = _param_float(params, "peak_height")
     return height * np.exp(-0.5 * ((rt - apex_rt) / sigma) ** 2)
 
 
 def _offset_gaussian(
-    rt: np.ndarray,
+    rt: FloatArray,
     params: Mapping[str, object],
     apex_rt: float,
     height_fraction: float,
-) -> np.ndarray:
-    sigma = max(float(params["peak_sigma_min"]), 1e-9)
-    height = float(params["peak_height"]) * height_fraction
+) -> FloatArray:
+    sigma = max(_param_float(params, "peak_sigma_min"), 1e-9)
+    height = _param_float(params, "peak_height") * height_fraction
     return height * np.exp(-0.5 * ((rt - apex_rt) / sigma) ** 2)
 
 
 def _tailing_peak(
-    rt: np.ndarray,
+    rt: FloatArray,
     params: Mapping[str, object],
     apex_rt: float,
-) -> np.ndarray:
-    sigma = max(float(params["peak_sigma_min"]), 1e-9)
-    height = float(params["peak_height"])
-    tail_sigma = max(float(params["tail_factor_sigma"]) * sigma, sigma * 0.2)
+) -> FloatArray:
+    sigma = max(_param_float(params, "peak_sigma_min"), 1e-9)
+    height = _param_float(params, "peak_height")
+    tail_sigma = max(_param_float(params, "tail_factor_sigma") * sigma, sigma * 0.2)
     left = height * np.exp(-0.5 * ((rt - apex_rt) / sigma) ** 2)
     right = height * np.exp(-(rt - apex_rt) / tail_sigma)
     return np.where(rt <= apex_rt, left, right)
 
 
 def _blank_nuisance_values(
-    rt: np.ndarray,
+    rt: FloatArray,
     params: Mapping[str, object],
     apex_rt: float,
-) -> np.ndarray:
-    height = float(params.get("blank_transient_height", 0.0))
+) -> FloatArray:
+    height = _param_float(params, "blank_transient_height", default=0.0)
     if not height:
-        return np.zeros_like(rt)
-    sigma = max(float(params.get("blank_transient_sigma_min", 0.02)), 1e-9)
-    offset = float(params.get("blank_transient_rt_offset_min", 0.0))
+        return np.zeros_like(rt, dtype=np.float64)
+    sigma = max(_param_float(params, "blank_transient_sigma_min", default=0.02), 1e-9)
+    offset = _param_float(params, "blank_transient_rt_offset_min", default=0.0)
     center = apex_rt + offset
     return height * np.exp(-0.5 * ((rt - center) / sigma) ** 2)
 
 
 def _deterministic_noise(
     record: FixtureLockRecord,
-    signal: np.ndarray,
-) -> np.ndarray:
+    signal: FloatArray,
+) -> FloatArray:
     params = record.parameters
-    x = np.arange(len(signal), dtype=float)
+    x = np.arange(len(signal), dtype=np.float64)
     phase = record.replicate_id * 0.61803398875
-    base_noise = float(params["noise_sigma"]) * (
+    base_noise = _param_float(params, "noise_sigma") * (
         0.55 * np.sin(1.73 * x + phase) + 0.25 * np.cos(0.47 * x + phase * 0.5)
     )
     intensity_noise = (
-        float(params["noise_intensity_fraction"])
+        _param_float(params, "noise_intensity_fraction")
         * np.sqrt(np.maximum(signal, 0.0))
         * np.sin(0.91 * x + phase * 1.7)
     )
     return base_noise + intensity_noise
+
+
+def _param_float(
+    params: Mapping[str, object],
+    key: str,
+    *,
+    default: float | None = None,
+) -> float:
+    value = params.get(key, default)
+    if value is None or isinstance(value, bool):
+        raise ValueError(f"{key} must be numeric")
+    if isinstance(value, int | float | str):
+        return float(value)
+    raise ValueError(f"{key} must be numeric")
+
+
+def _param_int(params: Mapping[str, object], key: str) -> int:
+    value = params.get(key)
+    if value is None or isinstance(value, bool):
+        raise ValueError(f"{key} must be an integer")
+    if isinstance(value, int | str):
+        return int(value)
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    raise ValueError(f"{key} must be an integer")
 
 
 def _comparison_row(
@@ -526,7 +560,10 @@ def _comparison_row(
         asls_area=asls_area,
         linear_edge_abs_error=float(linear_error),
         asls_abs_error=float(asls_error),
-        linear_edge_relative_error_pct=_relative_error_pct(linear_error, trace.true_area),
+        linear_edge_relative_error_pct=_relative_error_pct(
+            linear_error,
+            trace.true_area,
+        ),
         asls_relative_error_pct=_relative_error_pct(asls_error, trace.true_area),
         asls_error_over_linear_error=(
             float(asls_error / linear_error) if linear_error > 0 else None

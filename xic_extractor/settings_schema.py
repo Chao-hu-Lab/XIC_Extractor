@@ -105,7 +105,8 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
         "schema or set to asls to emit AsLS comparison columns"
     ),
     "baseline_integration_method": (
-        "Alignment integration-audit baseline method "
+        "Baseline-corrected integration method for hypothesis, boundary, "
+        "region, and alignment audit surfaces "
         "(asls or linear_edge; default asls after P2b conditional audit promotion)"
     ),
     "nl_rt_anchor_search_margin_min": (

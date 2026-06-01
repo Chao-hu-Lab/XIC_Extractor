@@ -14,6 +14,7 @@ from xic_extractor.extraction.peak_candidate_table import (
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.output.peak_candidates import write_peak_candidates_tsv
+from xic_extractor.peak_detection.baseline import integrate_asls_baseline
 from xic_extractor.peak_detection.hypotheses import (
     AuditTrail,
     EvidenceVector,
@@ -350,7 +351,15 @@ def test_build_rows_can_emit_baseline_corrected_audit_area() -> None:
         intensity=np.asarray([10.0, 25.0, 50.0, 35.0, 20.0]),
     )
 
-    assert rows[0]["area_baseline_corrected"] == "390.00000"
+    expected = integrate_asls_baseline(
+        np.asarray([10.0, 25.0, 50.0, 35.0, 20.0]),
+        np.asarray([8.0, 8.1, 8.2, 8.3, 8.4]),
+        0,
+        5,
+    )
+    assert rows[0]["area_baseline_corrected"] == (
+        f"{expected.area_baseline_corrected:.5f}"
+    )
     assert rows[0]["area_uncertainty"] != ""
     assert rows[0]["area_uncertainty_formula_version"] == (
         "baseline_residual_mad_v1"
@@ -395,7 +404,15 @@ def test_build_rows_prefers_shared_trace_group_arrays() -> None:
         ),
     )
 
-    assert rows[0]["area_baseline_corrected"] == "390.00000"
+    expected = integrate_asls_baseline(
+        np.asarray([10.0, 25.0, 50.0, 35.0, 20.0]),
+        np.asarray([8.0, 8.1, 8.2, 8.3, 8.4]),
+        0,
+        5,
+    )
+    assert rows[0]["area_baseline_corrected"] == (
+        f"{expected.area_baseline_corrected:.5f}"
+    )
 
 
 def test_build_rows_from_hypotheses_projects_spine_without_legacy_result() -> None:

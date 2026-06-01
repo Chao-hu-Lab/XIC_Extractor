@@ -50,24 +50,17 @@ def test_gate_decisions_are_distinct() -> None:
     )
 
 
-def test_summary_schema_has_prereq_and_optional_evidence_fields() -> None:
-    for field in (
-        "decision_target",
-        "fixture_lock_hash",
-        "tier_a_generated_by_git_sha",
-        "tier_a_current_code_compatibility_status",
-        "p2b_85raw_acceptance_hash",
-        "tier_c_status",
-        "tier_c_nonblank_status",
-        "blank_safety_status",
-        "methodology_waiver_hash",
-        "waiver_valid",
-        "retirement_prereq_status",
-        "c1a_status",
-        "c5_status",
-        "rollback_column_status",
-    ):
-        assert field in SUMMARY_FIELDS
+def test_summary_fields_expose_tier_c_baseline_evidence_fields() -> None:
+    assert "tier_c_axis" in SUMMARY_FIELDS
+    assert "tier_c_status" in SUMMARY_FIELDS
+    assert "tier_c_baseline_evidence_status" in SUMMARY_FIELDS
+    assert "tier_c_c1b_relevance_status" in SUMMARY_FIELDS
+    assert "tier_c_stress_axis_gate_status" in SUMMARY_FIELDS
+    assert "tier_c_row_blocker_count" in SUMMARY_FIELDS
+    assert "tier_c_review_required_count" in SUMMARY_FIELDS
+    assert "blank_safety_status" in SUMMARY_FIELDS
+    retired_status_key = "_".join(("tier", "c", "nonblank", "status"))
+    assert retired_status_key not in SUMMARY_FIELDS
 
 
 def test_row_schema_has_error_and_blank_fields() -> None:

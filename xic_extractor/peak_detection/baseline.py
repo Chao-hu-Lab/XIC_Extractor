@@ -129,11 +129,33 @@ def integrate_with_baseline(
     right: int,
     *,
     baseline_method: BaselineMethod = "linear_edge",
+    baseline_values: np.ndarray | None = None,
+    uncertainty_baseline_values: np.ndarray | None = None,
+    baseline_residual_mad: float | None = None,
+    baseline_residual_mad_source: str = "asls_residual",
 ) -> BaselineIntegration:
     if baseline_method == "linear_edge":
-        return integrate_linear_edge_baseline(intensity_values, rt_values, left, right)
+        return integrate_linear_edge_baseline(
+            intensity_values,
+            rt_values,
+            left,
+            right,
+            uncertainty_baseline_values=(
+                uncertainty_baseline_values
+                if uncertainty_baseline_values is not None
+                else baseline_values
+            ),
+            baseline_residual_mad=baseline_residual_mad,
+            baseline_residual_mad_source=baseline_residual_mad_source,
+        )
     if baseline_method == "asls":
-        return integrate_asls_baseline(intensity_values, rt_values, left, right)
+        return integrate_asls_baseline(
+            intensity_values,
+            rt_values,
+            left,
+            right,
+            baseline_values=baseline_values,
+        )
     raise ValueError("baseline_method must be 'linear_edge' or 'asls'")
 
 

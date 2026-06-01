@@ -69,7 +69,7 @@ def test_valid_tier_c_fail_blocks_before_requires_tier_c() -> None:
     result = _decide(
         decision_target="linear-edge-retirement",
         tier_c_status=FAIL,
-        tier_c_nonblank_status=FAIL,
+        tier_c_baseline_evidence_status=FAIL,
     )
 
     assert result == GATE_NO_GO
@@ -83,7 +83,7 @@ def test_invalid_optional_evidence_returns_invalid_input() -> None:
         assert exit_code_for_gate(result) == 2
 
 
-def test_valid_waiver_without_nonblank_tier_c_still_requires_tier_c() -> None:
+def test_valid_waiver_without_baseline_evidence_still_requires_tier_c() -> None:
     result = _decide(
         decision_target="linear-edge-retirement",
         waiver_state=VALID,
@@ -92,34 +92,38 @@ def test_valid_waiver_without_nonblank_tier_c_still_requires_tier_c() -> None:
     assert result == GATE_REQUIRES_TIER_C
 
 
-def test_blank_only_tier_c_still_requires_nonblank_tier_c() -> None:
+def test_retirement_requires_baseline_evidence_not_only_blank_safety() -> None:
     result = _decide(
         decision_target="linear-edge-retirement",
+        tier_b2_status=PASS,
         tier_c_status=PASS,
-        tier_c_nonblank_status=NOT_PROVIDED,
+        tier_c_baseline_evidence_status=NOT_PROVIDED,
         blank_safety_status=PASS,
     )
 
     assert result == GATE_REQUIRES_TIER_C
 
 
-def test_nonblank_tier_c_without_blank_safety_requires_tier_c() -> None:
+def test_baseline_evidence_without_blank_safety_requires_tier_c() -> None:
     result = _decide(
         decision_target="linear-edge-retirement",
+        tier_b2_status=PASS,
         tier_c_status=PASS,
-        tier_c_nonblank_status=PASS,
+        tier_c_baseline_evidence_status=PASS,
+        tier_c_stress_axis_gate_status=PASS,
         blank_safety_status=NOT_PROVIDED,
     )
 
     assert result == GATE_REQUIRES_TIER_C
 
 
-def test_nonblank_tier_c_and_blank_safety_require_retirement_prereqs() -> None:
+def test_resolved_tier_c_and_blank_safety_require_retirement_prereqs() -> None:
     result = _decide(
         decision_target="linear-edge-retirement",
         tier_b2_status=PASS,
         tier_c_status=PASS,
-        tier_c_nonblank_status=PASS,
+        tier_c_baseline_evidence_status=PASS,
+        tier_c_stress_axis_gate_status=PASS,
         blank_safety_status=NOT_APPLICABLE_WITH_EXCLUSION,
         retirement_prereq_status=NOT_SATISFIED,
     )
@@ -131,8 +135,9 @@ def test_nonblank_tier_c_and_blank_safety_require_retirement_prereqs() -> None:
 def test_retirement_requires_top_level_tier_c_pass() -> None:
     result = _decide(
         decision_target="linear-edge-retirement",
+        tier_b2_status=PASS,
         tier_c_status=NOT_PROVIDED,
-        tier_c_nonblank_status=PASS,
+        tier_c_baseline_evidence_status=PASS,
         blank_safety_status=PASS,
         retirement_prereq_status=VALID,
     )
@@ -141,12 +146,28 @@ def test_retirement_requires_top_level_tier_c_pass() -> None:
     assert exit_code_for_gate(result) == 3
 
 
+def test_blank_safety_fail_blocks_retirement() -> None:
+    result = _decide(
+        decision_target="linear-edge-retirement",
+        tier_b2_status=PASS,
+        tier_c_status=PASS,
+        tier_c_baseline_evidence_status=PASS,
+        tier_c_c1b_relevance_status=PASS,
+        tier_c_stress_axis_gate_status=PASS,
+        blank_safety_status=FAIL,
+        retirement_prereq_status=VALID,
+    )
+
+    assert result == GATE_NO_GO
+
+
 def test_full_retirement_evidence_is_only_zero_exit_gate() -> None:
     result = _decide(
         decision_target="linear-edge-retirement",
         tier_b2_status=PASS,
         tier_c_status=PASS,
-        tier_c_nonblank_status=PASS,
+        tier_c_baseline_evidence_status=PASS,
+        tier_c_stress_axis_gate_status=PASS,
         blank_safety_status=PASS,
         retirement_prereq_status=VALID,
     )
@@ -188,14 +209,73 @@ def test_b2_inconclusive_blocks_retirement_target() -> None:
     assert exit_code_for_gate(result) == 2
 
 
-def test_retirement_scoped_nonblank_fail_does_not_block_c1b_plan() -> None:
+def test_c1b_plan_allows_retirement_only_tier_c_fail() -> None:
     result = _decide(
+        decision_target="c1b-plan",
         tier_c_status=FAIL,
-        tier_c_nonblank_status=FAIL,
-        tier_c_nonblank_decision_scope="RETIREMENT_ONLY",
+        tier_c_baseline_evidence_status=FAIL,
+        tier_c_c1b_relevance_status=PASS,
     )
 
     assert result == GATE_C1B_PLAN
+
+
+def test_c1b_plan_blocks_b1_relevance_tier_c_fail() -> None:
+    result = _decide(
+        decision_target="c1b-plan",
+        tier_c_status=FAIL,
+        tier_c_baseline_evidence_status=FAIL,
+        tier_c_c1b_relevance_status=FAIL,
+    )
+
+    assert result == GATE_NO_GO
+
+
+def test_valid_but_unresolved_tier_c_review_requires_tier_c() -> None:
+    result = _decide(
+        decision_target="linear-edge-retirement",
+        tier_b2_status=PASS,
+        tier_c_status="MIXED",
+        tier_c_baseline_evidence_status=NOT_PROVIDED,
+        tier_c_c1b_relevance_status=PASS,
+        tier_c_stress_axis_gate_status=PASS,
+        blank_safety_status=NOT_APPLICABLE_WITH_EXCLUSION,
+        retirement_prereq_status=VALID,
+    )
+
+    assert result == GATE_REQUIRES_TIER_C
+    assert exit_code_for_gate(result) == 3
+
+
+def test_retirement_requires_resolved_tier_c_stress_axis() -> None:
+    result = _decide(
+        decision_target="linear-edge-retirement",
+        tier_b2_status=PASS,
+        tier_c_status=PASS,
+        tier_c_baseline_evidence_status=PASS,
+        tier_c_c1b_relevance_status=PASS,
+        tier_c_stress_axis_gate_status=NOT_PROVIDED,
+        blank_safety_status=NOT_APPLICABLE_WITH_EXCLUSION,
+        retirement_prereq_status=VALID,
+    )
+
+    assert result == GATE_REQUIRES_TIER_C
+
+
+def test_tier_c_stress_axis_pass_resolves_b2_retirement_stress_blockers() -> None:
+    result = _decide(
+        decision_target="linear-edge-retirement",
+        tier_b2_status="STRESS_REQUIRES_TIER_C",
+        b2_retirement_blockers=("blank_false_positive",),
+        tier_c_status=PASS,
+        tier_c_baseline_evidence_status=PASS,
+        tier_c_c1b_relevance_status=PASS,
+        tier_c_stress_axis_gate_status=PASS,
+        blank_safety_status=NOT_APPLICABLE_WITH_EXCLUSION,
+        retirement_prereq_status=NOT_SATISFIED,
+    )
+
+    assert result == GATE_REQUIRES_RETIREMENT_PREREQS
 
 
 def test_fixture_coverage_gap_is_inconclusive() -> None:
@@ -227,8 +307,9 @@ def _decide(**overrides: object) -> str:
         "b2_retirement_blockers": (),
         "coverage_status": PASS,
         "tier_c_status": NOT_PROVIDED,
-        "tier_c_nonblank_status": NOT_PROVIDED,
-        "tier_c_nonblank_decision_scope": "C1B_RELEVANCE",
+        "tier_c_baseline_evidence_status": NOT_PROVIDED,
+        "tier_c_c1b_relevance_status": NOT_PROVIDED,
+        "tier_c_stress_axis_gate_status": NOT_PROVIDED,
         "blank_safety_status": NOT_PROVIDED,
         "waiver_state": NOT_PROVIDED,
         "retirement_prereq_status": NOT_PROVIDED,
