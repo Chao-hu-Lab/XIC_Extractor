@@ -501,16 +501,15 @@ with no remaining product contract.
 | IO, backend, and validation adapters: `csv_io.*`, `legacy_io.*`, `raw_sources.*`, `ms1_index_source.*`, `process_backend.*`, `validation_pipeline.*`, `validation_writer.*`, `validation_compare.*` | File IO, RAW/index sources, process payloads, legacy import support, and validation harness outputs. | Evidence-chain semantics may depend on their data, but adapters are not semantic competitors. | Not applicable. Cleanup belongs to adapter/validation specs, not C6 evidence supersession. | `adapter_or_contract`. | `out_of_scope_adapter`; preserve unless a separate adapter cleanup owns it. |
 | Models and public contracts: `models.*`, `matrix.*`, `config.AlignmentConfig`, `output_levels.AlignmentOutputLevel`, package `__init__` exports | Dataclasses, config, matrix containers, output-level contracts, and public imports. | Later evidence may require new fields, but it does not obsolete contracts without migration. | Not applicable without a public contract migration. | `adapter_or_contract` and `structural_input`. | `contract_only`; no renames or field moves in C6. |
 
-### Immediate C6-B Candidate From This Audit
+### Immediate C6-B/C Candidate From This Audit
 
-The first C6-B candidate is not a code cleanup. It is a bounded
-semantic-survival audit across the module-family table above, starting with the
-highest-risk migration candidates: event-first clustering and owner-family
-construction.
+The first C6-B/C execution slices retired event-first clustering/backfill after a
+bounded semantic-survival audit. The remaining C6 candidate is owner-family
+construction and related active owner-first stages, not the retired event-first
+path.
 
 1. List current production, diagnostic, public-import, and test consumers of
-   `cluster_candidates`, event-first matrix construction, and
-   `OwnerAlignedFeature` construction.
+   `OwnerAlignedFeature` construction and owner-family outputs.
 2. Map legacy tests to product invariants: candidate grouping, family grouping,
    edge evidence, winner/demotion behavior, and public compatibility.
 3. Decide which invariants are already owned by `PeakHypothesis` / `TraceGroup`

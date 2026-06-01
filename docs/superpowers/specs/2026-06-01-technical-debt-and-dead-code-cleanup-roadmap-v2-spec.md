@@ -1,7 +1,7 @@
 # Technical Debt and Dead-Code Cleanup Roadmap v2
 
 **Date:** 2026-06-01
-**Status:** Execution closeout v1.7 - selected one-pass retirements completed; C4 projection closeout and C6 event-family cleanup added
+**Status:** Execution closeout v1.8 - C4 projection closeout and C6 event-first retirement completed
 **Related peak-pipeline chapter:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Current peak-pipeline reassessment:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
 **One-goal execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
@@ -418,8 +418,9 @@ Then return to the existing C-specs, but read them through this broader order:
 5. C4 starts with C4-0 semantic-survival audit, not package splitting: decide
    which scorer invariants are successor-owned, active policy, adapter-only, or
    retirement candidates.
-6. C6 starts with semantic-survival audit for event-first clustering and
-   owner-family construction, not generic grouping primitives.
+6. C6 event-first clustering/backfill has completed its semantic-survival audit
+   and retirement. Remaining C6 work starts with owner-family construction and
+   other active owner-first stages, not generic grouping primitives.
 7. C1b was executed after its linear-edge retirement prerequisites passed in the
    one-pass branch. Future cleanup should treat linear-edge as retired, not as a
    pending rollback option.
@@ -530,9 +531,10 @@ or `arbitrated`. If the user chooses one runtime goal, follow the one-goal phase
 contract. Otherwise, read the current-state reassessment first, then choose one
 remaining slice:
 
-- fusion-first semantic-survival audit for the highest-overlap legacy systems:
-  C4 scorer responsibilities, C6 event-first clustering, and C6 owner-family
-  construction;
+- fusion-first semantic-survival audit for the next highest-overlap legacy
+  systems: remaining C4 scorer responsibilities and C6 owner-family
+  construction. C6 event-first clustering/backfill is already retired and should
+  not be reopened without a new product-path spec;
 - C2 follow-up for resolver public-surface contract cleanup, preserving
   `legacy_savgol` and local-minimum internals unless a migration contract says
   otherwise;

@@ -6,8 +6,8 @@ GOAL:
 Complete one focused cleanup PR on `codex/cleanup-retirement-foundation` that
 closes the first executable C4/C6 fusion-first cleanup slice: harden C4 scorer
 successor-projection coverage without moving active scorer policy, and start C6
-event-first alignment retirement by removing private no-use wiring while keeping
-public event-first imports on a deprecate-first compatibility path.
+event-first alignment retirement by removing private no-use wiring and, after
+reviewed no-use evidence, retiring the public event-first imports.
 
 This goal is intentionally not a repo-wide dead-code sweep. It closes only the
 C4/C6 pilot work that the current specs have made mechanically actionable.
@@ -243,15 +243,17 @@ Forbidden work:
   consolidation, owner-family construction, or owner-backfill behavior.
 Done when:
 - Private no-use event-first wiring is removed, and public event-first imports
-  are reduced to explicit deprecate-first compatibility shims with documented
-  exit rules.
-- Public exports and boundary tests reflect the compatibility-shim contract.
+  are either explicit deprecate-first compatibility shims or, after reviewed
+  no-use evidence, removed from the package public API.
+- Public exports and boundary tests reflect the final public-retirement
+  contract.
 - The final no-use audit table has no `unknown` hits and no unreviewed
   `active_consumer` hits for any removed symbol.
 - Event-first implementation-detail tests are removed only when successor or
   active-owner coverage is recorded.
 - The C6 spec records the final classification for every event-first surface:
-  `adapter_only`, `retire_candidate`, `obsolete_implementation_detail`, or
+  `retired_public_event_first_shim`, `retired_event_first_path`,
+  `retired_implementation_detail`, `retired_event_family_helper`, or
   `historical_reference`.
 
 Phase 3 - Closeout, Verification, And PR Readiness
@@ -259,7 +261,8 @@ Purpose:
 - Prove C4/C6 cleanup did not drift into behavior change or unrelated cleanup.
 Done when:
 - Specs/roadmap mention the executed C4/C6 closeout state.
-- No unrelated dirty files remain.
+- No unrelated files are staged for this goal; any pre-existing or out-of-scope
+  dirty files are listed explicitly.
 - Focused tests and CI-equivalent checks have fresh results, or a concrete
   blocker is recorded.
 - Final output can state the readiness label. Expected label is
@@ -272,15 +275,77 @@ DONE WHEN:
 - C4 closeout uses the full classification vocabulary:
   `successor_projection`, `successor_owned`, `active_policy`,
   `compatibility_adapter`, and `semantic_migration_candidate`.
-- C6 event-first private no-use wiring is retired, while public event-first
-  imports stay on an explicit deprecate-first compatibility path with a public
-  migration note and no-use evidence.
+- C6 event-first private no-use wiring and reviewed public event-first imports
+  are retired, with no-use evidence, negative public API tests, and successor /
+  active-owner invariant coverage recorded.
 - Owner-first alignment production behavior, matrix identity, production
   decisions, target CSV output, and scorer selection behavior are unchanged.
 - All changed specs/plans/tests/code align with the C4/C6 fusion-first specs.
 - Each completed implementation phase has one logical commit, unless the phase
   produced no file changes.
-- Worktree has no unrelated dirty files.
+- Worktree has no unrelated staged files for this goal; out-of-scope dirty files
+  are listed in the Phase 3 closeout.
+
+### Phase 3 Execution Closeout
+
+Executed commits:
+
+- `62a6c4f test: harden C4 scorer evidence projection`
+- `5527c2c refactor: retire C6 event-first private wrapper`
+- `4873bee refactor: retire C6 event-family helpers`
+- `f76f6be refactor: retire C6 event-first public shims`
+
+Key closeout decisions:
+
+- C4 scorer policy remains active. The cleanup only added successor-projection
+  coverage and documented which scorer facts are projected, successor-owned,
+  active policy, compatibility adapter candidates, or semantic migration
+  candidates.
+- C6 event-first alignment is retired from code and public package imports:
+  private wrapper, non-public event-family helpers, public `cluster_candidates`,
+  public `backfill_alignment_matrix`, delegated `clustering.py` / `backfill.py`,
+  and their implementation-only tests were removed after CodeGraph MCP impact /
+  caller evidence and implementation-contract review.
+- Owner-first production stages remain in place: sample-local ownership,
+  owner-family construction, backfill scope, owner backfill, owner matrix, claim
+  registry, primary consolidation, matrix identity, production decisions, and
+  writers.
+
+Fresh verification:
+
+- CodeGraph MCP status was healthy, and CodeGraph search returned no code
+  symbols for `cluster_candidates` or `backfill_alignment_matrix`.
+- Final event-first `rg` scan found no active code/script/tool consumer; residual
+  hits are current docs, historical references, and the negative public API test.
+- Focused C4 shard:
+  `uv run pytest -q tests/test_peak_hypotheses.py tests/test_evidence_semantics.py tests/test_peak_scoring.py tests/test_peak_scoring_selection.py tests/test_peak_scoring_evidence.py tests/test_scoring_context.py tests/test_peak_candidate_table.py tests/test_csv_writers.py tests/test_signal_processing_selection.py`
+  -> `191 passed`, with two existing scipy peak-width warnings.
+- Focused C6 shard:
+  `uv run pytest -q tests/test_alignment_boundaries.py tests/test_alignment_config.py tests/test_alignment_ownership.py tests/test_alignment_owner_clustering.py tests/test_alignment_owner_backfill.py tests/test_alignment_owner_matrix.py tests/test_alignment_claim_registry.py tests/test_alignment_primary_consolidation.py tests/test_alignment_matrix_identity.py tests/test_alignment_production_decisions.py tests/test_run_alignment.py tests/test_alignment_pipeline.py tests/test_alignment_pipeline_outputs.py tests/test_alignment_tsv_writer.py tests/test_alignment_xlsx_writer.py tests/test_alignment_pipeline_backends.py tests/test_alignment_process_backend.py tests/test_backfill_scope.py tests/alignment/identity_coherence/test_schema_contract.py`
+  -> `427 passed`.
+- CI-equivalent checks:
+  `uv run ruff check xic_extractor tests` -> passed.
+  `uv run mypy xic_extractor` -> passed, with existing unchecked-body notes.
+  `uv run pytest -v --tb=short -x` -> `2794 passed, 1 skipped`, with existing
+  synthetic peak-width warnings.
+
+Readiness label: cleanup-only / CI-equivalent passed. This is not RAW-backed
+`production_ready`; no extraction, alignment TSV, workbook, or RAW validation run
+was needed because the executed changes are C4 projection coverage plus C6
+event-first retirement, not owner-first behavior changes.
+
+Out-of-scope dirty files still present after this goal slice:
+
+- `.codex/skills/xic-critical-artifact-review/SKILL.md`
+- `AGENTS.md`
+- `docs/agent-subagent-routing.md`
+- `docs/project-layout.md`
+- `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
+- `docs/architecture-contract.md`
+- `docs/lcms-msms-evidence-rules.md`
+
+Those files are not part of the C4/C6 cleanup commits and must be reviewed or
+committed in a separate scope if they are intentional.
 
 VERIFY:
 Run final no-use / contract scans:
@@ -333,7 +398,7 @@ OUTPUT:
 - Changed files by phase.
 - Key decisions: C4 `successor_projection` / `successor_owned` /
   `active_policy` / `compatibility_adapter` /
-  `semantic_migration_candidate` rows; C6 event-first public compatibility
+  `semantic_migration_candidate` rows; C6 event-first public retirement
   decision.
 - Verification commands and results.
 - Whether public imports, target CSVs, alignment TSVs, workbook sheets, or
