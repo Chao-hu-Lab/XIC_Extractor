@@ -1,0 +1,33 @@
+{
+  "c1a_status": "LANDED_VALIDATED",
+  "c5_status": "LANDED_VALIDATED",
+  "rollback_column_status": "DEPRECATED_BY_APPROVED_SCHEMA_NOTE",
+  "c1a_validation_note": {
+    "path": "docs/superpowers/notes/2026-06-01-c1a-baseline-module-consolidation-closeout-note.md",
+    "sha256": "1a0a77a5bbf860b7e13f2498e4c25bc5c665bd464ac357495d6ad311882640b1"
+  },
+  "c5_validation_note": {
+    "path": "docs/superpowers/notes/2026-06-01-c5-single-integration-entry-closeout-note.md",
+    "sha256": "d6d928cef40c1f84cec9d18caf2da8a9718b5a4f544af0c9e856ddcff3724a9b"
+  },
+  "rollback_schema_deprecation_note": {
+    "path": "docs/superpowers/notes/2026-06-01-phase6-rollback-schema-deprecation-note.md",
+    "sha256": "4b53244e2eaba6eba0e9be76f6f4e1e1fa7c2a79efc1f3a852f391632b98bcca"
+  },
+  "post_rollback_audit_schema_artifact": {
+    "path": "docs/superpowers/fixtures/alignment_cell_integration_audit_post_rollback_schema.tsv",
+    "sha256": "1c0b41a4892205925fdc45fa7103cfe84ad30421c4aa17d39b546d4c025b0618"
+  },
+  "post_rollback_absent_columns": [
+    "area_baseline_corrected_linear_edge",
+    "baseline_score_linear_edge"
+  ],
+  "affected_public_contracts_reviewed": [
+    "alignment_cell_integration_audit.tsv",
+    "tools/diagnostics/p2_baseline_truth_audit.py",
+    "tools/diagnostics/p2_asls_shadow_gate.py",
+    "tools/diagnostics/area_integration_uncertainty_audit.py"
+  ],
+  "reviewer_identity": "implementation-contract-reviewer + validation-evidence-reviewer",
+  "review_date": "2026-06-01"
+}
