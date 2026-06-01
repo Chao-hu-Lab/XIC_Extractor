@@ -278,6 +278,10 @@ DONE WHEN:
 - C6 event-first private no-use wiring and reviewed public event-first imports
   are retired, with no-use evidence, negative public API tests, and successor /
   active-owner invariant coverage recorded.
+- C6 active-stage hardening records that `owner_clustering` remains the
+  remaining semantic migration candidate, while `claim_registry` and
+  `primary_consolidation` are `keep_as_stage` product-path arbitration stages
+  protected by writer-visible parity tests.
 - Owner-first alignment production behavior, matrix identity, production
   decisions, target CSV output, and scorer selection behavior are unchanged.
 - All changed specs/plans/tests/code align with the C4/C6 fusion-first specs.
@@ -347,6 +351,32 @@ Out-of-scope dirty files still present after this goal slice:
 Those files are not part of the C4/C6 cleanup commits and must be reviewed or
 committed in a separate scope if they are intentional.
 
+### Phase 4 Extension - C6 Active Stage Contract Hardening
+
+Scope:
+
+- The event-first retirement work is complete; this extension targets the
+  remaining active C6 stages only.
+- `owner_clustering.py` remains a semantic migration candidate because it still
+  constructs the owner-family structural input consumed by the current pipeline,
+  while its concept may later move into a cross-sample hypothesis/family spine.
+- `claim_registry.py` and `primary_consolidation.py` remain product-path stages.
+  They are not superseded by downstream evidence today; they create arbitration
+  and winner/loser state that downstream decisions consume.
+
+Executed hardening:
+
+- `tests/test_alignment_claim_registry.py` now pins duplicate-claim assignment
+  as visible in `alignment_cells.tsv`: status, reason, area, apex, and window
+  fields must stay stable.
+- `tests/test_alignment_primary_consolidation.py` now pins primary
+  consolidation loser audit as visible in `alignment_review.tsv`: loser
+  exclusion, `family_consolidation_loser` flag, loser evidence, and winner
+  consolidation evidence must stay stable.
+- The C6 spec reclassifies claim registry and primary consolidation from
+  open-ended `contract_harden` to `keep_as_stage` / `arbitration_state`. Future
+  changes require a separate behavior spec or parity-backed migration.
+
 VERIFY:
 Run final no-use / contract scans:
 
@@ -399,7 +429,8 @@ OUTPUT:
 - Key decisions: C4 `successor_projection` / `successor_owned` /
   `active_policy` / `compatibility_adapter` /
   `semantic_migration_candidate` rows; C6 event-first public retirement
-  decision.
+  decision; C6 active-stage disposition for `owner_clustering`,
+  `claim_registry`, and `primary_consolidation`.
 - Verification commands and results.
 - Whether public imports, target CSVs, alignment TSVs, workbook sheets, or
   diagnostic schemas changed.

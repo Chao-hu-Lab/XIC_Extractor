@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -324,6 +325,44 @@ def test_consolidated_winner_carries_source_family_seed_events():
     assert "weak_seed_tolerated" not in decisions.row("FAM002").row_flags
 
 
+def test_consolidation_loser_audit_is_review_tsv_visible(tmp_path: Path):
+    from xic_extractor.alignment.tsv_writer import write_alignment_review_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(
+            _feature("FAM001", rt=8.40),
+            _feature("FAM002", rt=8.55),
+        ),
+        sample_order=("s1", "s2"),
+        cells=(
+            _cell("s1", "FAM001", "detected", 100.0, apex=8.40),
+            _duplicate_cell(
+                "s2", "FAM001", winner="FAM002", original="rescued", apex=8.55
+            ),
+            _duplicate_cell(
+                "s1", "FAM002", winner="FAM001", original="rescued", apex=8.40
+            ),
+            _cell("s2", "FAM002", "detected", 200.0, apex=8.55),
+        ),
+    )
+
+    consolidated = consolidate_primary_family_rows(matrix, AlignmentConfig())
+    rows = _review_rows_by_feature(
+        write_alignment_review_tsv(tmp_path / "review.tsv", consolidated),
+    )
+
+    assert rows["FAM001"]["include_in_primary_matrix"] == "FALSE"
+    assert "family_consolidation_loser" in rows["FAM001"]["row_flags"].split(";")
+    assert (
+        "primary_family_consolidation_loser;winner=FAM002"
+        in rows["FAM001"]["family_evidence"]
+    )
+    assert rows["FAM002"]["include_in_primary_matrix"] == "TRUE"
+    assert "primary_family_consolidated;family_count=2" in (
+        rows["FAM002"]["family_evidence"]
+    )
+
+
 def _feature(
     feature_family_id: str,
     *,
@@ -459,3 +498,11 @@ def _feature_by_id(matrix: AlignmentMatrix, feature_id: str):
         for cluster in matrix.clusters
         if cluster.feature_family_id == feature_id
     )
+
+
+def _review_rows_by_feature(path: Path) -> dict[str, dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return {
+            row["feature_family_id"]: row
+            for row in csv.DictReader(handle, delimiter="\t")
+        }
