@@ -18,8 +18,7 @@ import numpy as np
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from xic_extractor.baseline import asls_baseline
-from xic_extractor.peak_detection.baseline import bounded_trace_interval
+from xic_extractor.peak_detection.baseline import asls_baseline, bounded_trace_interval
 
 ROW_FIELDS = (
     "target_label",

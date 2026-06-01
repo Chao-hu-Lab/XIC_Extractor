@@ -9,8 +9,8 @@ from typing import Any, Sequence, cast
 
 import numpy as np
 
-from xic_extractor.baseline import asls_baseline
 from xic_extractor.ms2_trace_evidence import MS2TraceStrength
+from xic_extractor.peak_detection.baseline import asls_baseline
 from xic_extractor.peak_scoring_evidence import (
     ConfidenceCap,
     EvidenceScore,
