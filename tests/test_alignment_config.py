@@ -31,6 +31,72 @@ def test_alignment_public_api_exports_plan2_contract():
     assert "xic_extractor.raw_reader" not in newly_imported
 
 
+def test_event_first_public_imports_are_compatibility_shims():
+    import xic_extractor.alignment as alignment
+
+    assert alignment.cluster_candidates.__module__ == "xic_extractor.alignment"
+    assert alignment.backfill_alignment_matrix.__module__ == "xic_extractor.alignment"
+    assert "Deprecated event-first compatibility shim" in (
+        alignment.cluster_candidates.__doc__ or ""
+    )
+    assert "Deprecated event-first compatibility shim" in (
+        alignment.backfill_alignment_matrix.__doc__ or ""
+    )
+
+
+def test_public_backfill_compatibility_shim_delegates(monkeypatch):
+    import xic_extractor.alignment as alignment
+
+    observed = {}
+    sentinel = object()
+
+    def fake_backfill(
+        clusters,
+        *,
+        sample_order,
+        raw_sources,
+        alignment_config,
+        peak_config,
+        emit_region_audit=False,
+    ):
+        observed.update(
+            {
+                "clusters": clusters,
+                "sample_order": sample_order,
+                "raw_sources": raw_sources,
+                "alignment_config": alignment_config,
+                "peak_config": peak_config,
+                "emit_region_audit": emit_region_audit,
+            },
+        )
+        return sentinel
+
+    monkeypatch.setattr(
+        alignment,
+        "_event_first_backfill_alignment_matrix",
+        fake_backfill,
+    )
+
+    result = alignment.backfill_alignment_matrix(
+        ("cluster",),
+        sample_order=("sample",),
+        raw_sources={"sample": "raw"},
+        alignment_config="alignment-config",
+        peak_config="peak-config",
+        emit_region_audit=True,
+    )
+
+    assert result is sentinel
+    assert observed == {
+        "clusters": ("cluster",),
+        "sample_order": ("sample",),
+        "raw_sources": {"sample": "raw"},
+        "alignment_config": "alignment-config",
+        "peak_config": "peak-config",
+        "emit_region_audit": True,
+    }
+
+
 def test_alignment_modules_do_not_import_pipeline_or_io_boundaries():
     alignment_dir = Path(__file__).parents[1] / "xic_extractor" / "alignment"
     banned_roots = (

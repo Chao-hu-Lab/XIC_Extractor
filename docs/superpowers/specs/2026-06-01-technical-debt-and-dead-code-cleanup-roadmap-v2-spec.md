@@ -1,7 +1,7 @@
 # Technical Debt and Dead-Code Cleanup Roadmap v2
 
 **Date:** 2026-06-01
-**Status:** Execution closeout v1.0 - selected one-pass retirements completed; broad dead-code deletion deferred
+**Status:** Execution closeout v1.6 - selected one-pass retirements completed; C4 projection closeout and C6 deprecate-first shim cleanup added
 **Related peak-pipeline chapter:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Current peak-pipeline reassessment:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
 **One-goal execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
@@ -14,17 +14,39 @@ The original peak-pipeline cleanup roadmap is still useful, but it is not a
 repo-wide technical-debt inventory. Treat it as the peak-pipeline chapter of
 this broader roadmap.
 
-The next cleanup pass should not start by deleting code that merely looks old.
+The next cleanup pass should not start by deleting code that merely looks old,
+but it also must not leave overlapping legacy systems in place indefinitely.
+The project-level cleanup principle is fusion-first modernization:
+
+```text
+new spine absorbs valid legacy concepts
+  -> product invariants move to successor models and tests
+  -> old paths become adapters / diagnostic-only / retired inputs
+  -> implementation-specific legacy tests are deleted
+  -> obsolete implementation is removed
+```
+
 The safer order is:
 
 1. close or isolate in-flight behavior work;
 2. fix package dependency direction where production/package code imports
    tool-only modules;
-3. promote or externalize maintained diagnostics according to lifecycle rules;
-4. deprecate public compatibility modes before deleting them;
-5. split oversized modules only behind characterization tests;
-6. defer deletion unless a future strict retired-state audit is explicitly
-   reopened.
+3. identify semantic overlap between old systems and the newer hypothesis /
+   evidence / handoff spine;
+4. migrate still-valid product invariants and tests into the successor spine;
+5. promote, externalize, or retire maintained diagnostics according to
+   lifecycle rules;
+6. deprecate public compatibility modes before deleting them;
+7. split oversized modules only behind characterization tests;
+8. delete obsolete implementation and implementation-specific tests after the
+   successor coverage and compatibility plan are in place.
+
+C4 and C6 are the first pilot cases for this rule. They should be used to prove
+the cleanup method before broadening it: identify the legacy concept, name the
+newer successor semantics, decide whether the old path is still product policy,
+then migrate tests and consumers before deleting code. After those pilots, run a
+second repo-wide semantic-overlap inventory to find other designs that should be
+merged, reduced to adapters, externalized as diagnostics, or retired.
 
 The 2026-06-01 one-pass cleanup branch used this roadmap as the broader
 cleanup chapter, then executed the explicitly authorized retirement slices for
@@ -32,11 +54,114 @@ cleanup chapter, then executed the explicitly authorized retirement slices for
 not authorize additional behavior changes, broad schema changes, resolver
 default changes, or deletion outside the named retirement phases.
 
-Dead-code deletion is explicitly deferred. The current operating rule is:
-if code is not actively blocking a planned change and still lets the project run,
-do not disturb it merely because it looks old. This roadmap keeps the
-classification vocabulary only to prevent accidental deletion during future
-cleanup.
+Broad unaudited dead-code deletion is explicitly deferred. Active technical-debt
+retirement is not deferred. If code is old but still preserves a unique product
+invariant, keep or migrate it. If code overlaps with a newer, clearer spine,
+make the migration explicit instead of maintaining two semantic systems.
+
+## External Modernization Inputs
+
+External modernization guidance supports this direction, with local adaptation:
+
+- Martin Fowler's Strangler Fig description frames legacy modernization as a
+  gradual movement of behavior from the old system into the new system, not a
+  big-bang rewrite and not permanent dual maintenance:
+  <https://martinfowler.com/bliki/StranglerFigApplication.html>
+- Fowler's Branch by Abstraction describes using an abstraction layer so old and
+  new implementations can coexist during replacement, then deleting the old
+  supplier and possibly the temporary abstraction once migration completes:
+  <https://www.martinfowler.com/bliki/BranchByAbstraction.html>
+- Microsoft Azure's Strangler Fig pattern similarly recommends incrementally
+  replacing functionality, reducing the legacy system's responsibilities, then
+  decommissioning the old system and removing or narrowing the facade:
+  <https://learn.microsoft.com/en-us/azure/architecture/patterns/strangler-fig>
+- Kent C. Dodds' testing guidance is not repo-specific, but it matches the test
+  cleanup rule here: tests that assert implementation details become brittle
+  during refactors, while behavior-oriented tests protect the product contract:
+  <https://kentcdodds.com/blog/testing-implementation-details>
+
+These sources are design inputs, not product authority. XIC cleanup still needs
+repo-local parity, public-surface, and scientific-evidence gates before behavior
+changes.
+
+## Fusion-First Modernization Rule
+
+For any old subsystem that overlaps a newer model, evidence chain, or handoff
+spine, classify the relationship before cleanup:
+
+| Relationship | Meaning | Required action |
+|---|---|---|
+| `unique_invariant` | Old subsystem protects a product invariant the successor does not yet express. | Keep it or migrate the invariant first. Do not delete. |
+| `successor_overlap` | New spine expresses the same or better semantic concept, but consumers/tests still depend on the old path. | Write a migration slice: map invariants, port tests, keep temporary adapters, then retire old implementation. |
+| `adapter_only` | Old path only preserves public import/config/CLI/schema compatibility. | Keep a thin adapter with an exit rule, warning/rejection behavior, and deletion condition. |
+| `diagnostic_only` | Old path only supports investigation or evidence review. | Keep under diagnostic lifecycle, externalize, or retire with replacement evidence. |
+| `obsolete_implementation_detail` | Old tests or helpers assert mechanics no longer tied to product behavior. | Delete after successor invariant coverage or no-contract evidence is recorded. |
+
+Default posture is `successor_overlap`, not `keep forever`, whenever a newer
+spine plausibly covers the same semantics. Preservation requires a named
+independent invariant.
+
+### Test Migration Rule
+
+Legacy tests are not protected assets. They are useful only when they protect a
+current product invariant, public compatibility behavior, or diagnostic contract.
+
+For migration/fusion work:
+
+1. Identify the invariant behind each legacy test.
+2. Port still-valid invariants to successor tests, public output parity tests,
+   or compatibility tests.
+3. Delete tests that only assert legacy implementation mechanics.
+4. Keep compatibility tests only while the compatibility surface exists.
+5. Remove compatibility tests with the shim or public mode when the retirement
+   lands.
+
+## C4/C6 Pilot And Follow-Up Inventory
+
+C4 and C6 are demonstration cases, not one-off exceptions.
+
+- C4 tests whether legacy peak scoring responsibilities should survive as
+  production decision policy, move into `EvidenceVector` / `CommonEvidence` /
+  `PeakHypothesis`, or shrink into compatibility projection.
+- C6 tests whether legacy alignment grouping and owner-family concepts still
+  define product structure, or whether newer trace/hypothesis/evidence-chain
+  semantics have absorbed enough of their job to migrate or retire them.
+
+The first concrete pilot inventory is now captured in:
+
+- [C4 peak scoring evidence-decision design](2026-06-01-c4-peak-scoring-evidence-decision-design.md):
+  scorer evidence projection overlaps the successor spine, but
+  selection/confidence policy remains active. The C4-1 field map now separates
+  successor-owned projection fields from missing successor facts and active
+  scorer policy.
+- [C6 alignment stage semantics design](2026-06-01-c6-alignment-stage-semantics-value-assessment-design.md):
+  event-first alignment is the strongest retirement/compatibility candidate,
+  while owner-first construction, claim arbitration, consolidation, matrix
+  identity, and production projection remain active stages. The C6-EF audit now
+  records no-use evidence for the event-first wrapper and defines a
+  deprecate-first public compatibility path for `cluster_candidates` and
+  `backfill_alignment_matrix`. The first execution slice removed the private
+  `_build_event_first_matrix(...)` wrapper and made the package-level public
+  event-first imports explicit compatibility shims; deeper event-family tests
+  remain for later invariant triage, not as production consumers.
+
+The follow-up inventory should use the same unit of analysis for every candidate
+design:
+
+| Field | Required question |
+|---|---|
+| Legacy design | What old module, mode, helper, config path, or test family are we judging? |
+| Product invariant | What user-visible, scientific, matrix, diagnostic, or public-contract behavior does it protect? |
+| Successor candidate | Which newer model or spine could own the same concept: `Trace`, `TraceGroup`, `PeakHypothesis`, `EvidenceVector`, `IntegrationResult`, model selection, `AuditTrail`, output contract, or diagnostic lifecycle? |
+| Consumer surface | Who still imports, configures, calls, or reads the old path? Include tests only after naming the product behavior they protect. |
+| Relationship | `unique_invariant`, `successor_overlap`, `adapter_only`, `diagnostic_only`, or `obsolete_implementation_detail`. |
+| Migration action | Port invariant, keep active policy, create compatibility adapter, externalize diagnostic, or retire. |
+| Exit rule | The exact test, parity oracle, public migration, or no-consumer evidence that allows deletion or reclassification. |
+
+This inventory is not a dead-code hunt. It is a maintainability pass that asks
+where the project is still carrying two semantic systems for one product job.
+If a legacy design has a real invariant, preserve that invariant. If the newer
+spine already covers it, migrate the invariant and delete the old mechanics.
 
 ## 2026-06-01 Cleanup-Retirement Closeout
 
@@ -157,11 +282,14 @@ Every cleanup candidate must be classified before implementation.
 | `move_only` | Code is useful but lives at the wrong layer or import direction. | Move with compatibility shim and no behavior/schema change. |
 | `split_only` | Code is active but too broad or oversized. | Split after characterization tests pin behavior and public output. |
 | `retire_planned` | Product direction is settled toward retirement, but public config, rollback evidence, selected values, or tests still need a sequenced migration. | Deprecate or gate first; delete only in the PR named by the retirement spec. |
+| `semantic_migration` | A newer model/evidence spine should absorb the old subsystem's valid concepts, but live consumers or tests still depend on the old path. | Port product invariants and tests to the successor, keep temporary adapter if needed, then retire old implementation. |
+| `adapter_only` | The old path only exists for public import/config/CLI/schema compatibility. | Keep thin compatibility behavior with an exit rule; do not add new product behavior here. |
+| `obsolete_test_or_helper` | A test/helper asserts implementation mechanics that no longer correspond to a product invariant. | Delete after successor coverage or no-contract evidence is recorded. |
 | `diagnostic_lifecycle` | Tool belongs to candidate/active/gated/retired diagnostic lifecycle review. | Promote, keep, externalize, or retire according to lifecycle spec. |
 | `blocked_by_product_decision` | Deletion would settle behavior, selected peaks, area values, matrix identity, or downstream contracts. | Do not cleanup until the product decision lands. |
 
 Ambiguous candidates default to `deprecate_first`, `move_only`, or
-`blocked_by_product_decision`, not `delete_now`.
+`semantic_migration`, not `delete_now`.
 
 ## Candidate Inventory
 
@@ -179,6 +307,9 @@ Ambiguous candidates default to `deprecate_first`, `move_only`, or
 | `PeakDetectionResult`, `PeakCandidate`, `PeakResult` | `blocked_by_product_decision` | They still own resolver/scoring/message/fallback behavior. | Migrate one consumer at a time through C3; do not bulk delete. |
 | `peak_candidates.tsv` and boundary projection builders | `split_only` / keep | They are debug/audit projections with frozen headers, not canonical product model. | Keep as externalized projection surfaces. |
 | `alignment_matrix.tsv` owner/backfill path | `blocked_by_product_decision` | It is the downstream correction/statistics delivery surface. | Requires a separate parity/behavior spec before migration. |
+| `peak_scoring.py` legacy scorer responsibilities | `semantic_migration` | `EvidenceVector`, `CommonEvidence`, `TraceGroup`, and `PeakHypothesis` now overlap scorer evidence semantics, but scorer policy still owns confidence, caps, and selection. | Follow C4-0 semantic-survival audit: port valid scorer invariants to successor tests, keep active policy until model-selection parity exists, and delete implementation-specific tests after coverage migrates. |
+| `alignment/clustering.py` event-first grouping | `semantic_migration` | Candidate/event grouping overlaps the newer hypothesis/trace model, while public imports and event-first tests still exist. | Follow C6 semantic-survival audit: map clustering tests to successor invariants, reduce to compatibility/diagnostic role or retire after no-use and parity evidence. |
+| `alignment/owner_clustering.py` owner-family construction | `semantic_migration` | Cross-sample owner-family grouping is conceptually close to future cross-sample hypothesis/family construction, but `OwnerAlignedFeature` still feeds production backfill/matrix stages. | Characterize family-edge/demotion invariants, migrate them into the successor spine when available, and avoid maintaining a permanent parallel family system. |
 | `shared_peak_identity_explanation/*` large modules | `split_only` | Active diagnostic/productization code; size and schema coupling are the debt. | Split behind schema/CLI tests; no product label changes. |
 | `matrix_value_conflict_policy=max_area_pending_baseline` and related shared-identity activation wording | `blocked_by_product_decision` | This is a temporary pre-AsLS conflict policy, not dead code. Changing it would affect matrix values and product labels. | Keep until the baseline/AsLS policy lands, then replace or retire through the activation/baseline behavior spec with machine-readable rollback evidence. |
 | `alignment/process_backend.py` | `split_only` | Process payload, raw-source, and orchestration logic are mixed; spawn/pickle risks are high. | Split only with no-RAW spawn/pickling smoke tests. |
@@ -273,12 +404,16 @@ Acceptance:
 Then return to the existing C-specs, but read them through this broader order:
 
 1. C1a can run early if it is pure relocation plus compatibility re-export.
-2. C3a/C3b remain the key handoff-spine scaffolding before deep scoring splits.
+2. C3a/C3b remain the key handoff-spine scaffolding before deep scoring splits
+   or semantic retirement.
 3. C5 should stay method-preserving until baseline retirement is authorized.
 4. C2 can deprecate or collapse resolver modes only after public config and
    diagnostic fixture migration is explicit.
-5. C4 waits for C3 or a narrow characterization-test slice.
-6. C6 requires golden parity and should remain separate from behavior changes.
+5. C4 starts with C4-0 semantic-survival audit, not package splitting: decide
+   which scorer invariants are successor-owned, active policy, adapter-only, or
+   retirement candidates.
+6. C6 starts with semantic-survival audit for event-first clustering and
+   owner-family construction, not generic grouping primitives.
 7. C1b was executed after its linear-edge retirement prerequisites passed in the
    one-pass branch. Future cleanup should treat linear-edge as retired, not as a
    pending rollback option.
@@ -293,9 +428,10 @@ before executing the remaining C2/C3/C4/C6 instructions. Current interpretation:
 - treat CWT as evidence-chain assessment work, not dead-code deletion;
 - make C3 current-state inventory and small parity-backed migration the next
   handoff-spine cleanup target;
-- rewrite C4 around evidence-decision responsibilities before implementation;
-- run C6 inventory/characterization before extracting generic grouping
-  primitives.
+- rewrite C4 around fusion-first evidence-decision responsibilities before
+  implementation;
+- run C6 semantic-survival inventory before extracting generic grouping
+  primitives or preserving legacy grouping tests.
 
 ### R5 - Oversized Active Module Splits
 
@@ -388,13 +524,16 @@ or `arbitrated`. If the user chooses one runtime goal, follow the one-goal phase
 contract. Otherwise, read the current-state reassessment first, then choose one
 remaining slice:
 
+- fusion-first semantic-survival audit for the highest-overlap legacy systems:
+  C4 scorer responsibilities, C6 event-first clustering, and C6 owner-family
+  construction;
 - C2 follow-up for resolver public-surface contract cleanup, preserving
   `legacy_savgol` and local-minimum internals unless a migration contract says
   otherwise;
 - CWT evidence-role inventory with a pre-registered promote / keep-audit /
   externalize-or-kill gate;
 - C3 handoff-spine current-state inventory plus one parity-backed consumer
-  migration;
+  migration that reduces legacy DTO dependency;
 - a narrow split-only plan for an oversized active module with characterization
   tests;
 - a strict retired-state audit if the user explicitly wants dead-code deletion.

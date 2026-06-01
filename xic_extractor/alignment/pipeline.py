@@ -5,9 +5,6 @@ from contextlib import AbstractContextManager, ExitStack
 from dataclasses import replace
 from pathlib import Path
 
-from xic_extractor.alignment.backfill import (
-    backfill_alignment_matrix,
-)
 from xic_extractor.alignment.backfill_scope import (
     PREDICATE_VERSION,
     REQUEST_PLAN_VERSION,
@@ -27,12 +24,9 @@ from xic_extractor.alignment.edge_scoring import (
     DriftLookupProtocol,
     OwnerEdgeEvidence,
 )
-from xic_extractor.alignment.family_integration import integrate_feature_family_matrix
-from xic_extractor.alignment.feature_family import build_ms1_feature_families
 from xic_extractor.alignment.identity_coherence_adapter import (
     run_identity_coherence_diagnostic,
 )
-from xic_extractor.alignment.matrix import AlignmentMatrix
 from xic_extractor.alignment.ms1_index_source import OwnerBackfillXicBackend
 from xic_extractor.alignment.output_levels import AlignmentOutputLevel
 from xic_extractor.alignment.owner_backfill import (
@@ -493,38 +487,6 @@ def run_alignment(
                 baseline_audit_method=getattr(peak_config, "baseline_audit_method", ""),
             )
         return outputs
-
-
-def _build_event_first_matrix(
-    clusters,
-    *,
-    sample_order,
-    raw_sources,
-    alignment_config: AlignmentConfig,
-    peak_config: ExtractionConfig,
-    emit_region_audit: bool = False,
-) -> AlignmentMatrix:
-    event_matrix = backfill_alignment_matrix(
-        clusters,
-        sample_order=sample_order,
-        raw_sources=raw_sources,
-        alignment_config=alignment_config,
-        peak_config=peak_config,
-        emit_region_audit=emit_region_audit,
-    )
-    families = build_ms1_feature_families(
-        clusters,
-        event_matrix=event_matrix,
-        config=alignment_config,
-    )
-    return integrate_feature_family_matrix(
-        families,
-        sample_order=sample_order,
-        raw_sources=raw_sources,
-        alignment_config=alignment_config,
-        peak_config=peak_config,
-        emit_region_audit=emit_region_audit,
-    )
 
 
 _existing_raw_paths = existing_raw_paths
