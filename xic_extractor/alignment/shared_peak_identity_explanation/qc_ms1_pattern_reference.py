@@ -6,7 +6,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools.diagnostics.diagnostic_io import text_value, write_tsv
+from xic_extractor.diagnostics.diagnostic_io import text_value, write_tsv
 from xic_extractor.sample_groups import classify_sample_group
 
 QC_MS1_PATTERN_REFERENCE_COLUMNS = (

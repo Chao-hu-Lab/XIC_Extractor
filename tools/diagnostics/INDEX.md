@@ -124,7 +124,7 @@ different; see `2026-05-26-diagnostic-lifecycle-audit-note.md` Cluster 1.
 **Purpose**: Compare targeted reliability and peak candidate evidence.
 **Topic group**: `cross_report_evidence_consistency.py` + `_io`, `_models`, `_analysis`, `_writers` (5 files)
 **Originating spec**: (none found — likely landed alongside post-PR60 cleanup; see `2026-05-24-post-pr60-codebase-cleanup-spec.md` Workstream G context)
-**Duplication note**: Low-level parsing/writing helpers are consolidated through `diagnostic_io.py`; row dataclasses stay separate because the schemas differ.
+**Duplication note**: Low-level parsing/writing helpers are consolidated through `xic_extractor/diagnostics/diagnostic_io.py`; `tools/diagnostics/diagnostic_io.py` remains a compatibility shim. Row dataclasses stay separate because the schemas differ.
 
 ---
 
@@ -505,7 +505,7 @@ to be re-run only when the underlying data shape changes.
 
 Not entry-points, but referenced by multiple topic groups:
 
-- `tools/diagnostics/diagnostic_io.py` — shared delimited/TSV read-write, scalar parsing, header validation, label splitting, and value formatting. Cluster 1 and the listed Cluster 3 loaders now reuse this module; use it before adding local `_read_required_tsv`, `_bool_value`, `_optional_float`, `_text`, `_required_indexes`, or `_write_tsv` copies.
+- `xic_extractor/diagnostics/diagnostic_io.py` — package-owned shared delimited/TSV read-write, scalar parsing, header validation, label splitting, and value formatting. `tools/diagnostics/diagnostic_io.py` re-exports it as a compatibility shim for existing diagnostic CLIs. Cluster 1 and the listed Cluster 3 loaders now reuse this helper; use it before adding local `_read_required_tsv`, `_bool_value`, `_optional_float`, `_text`, `_required_indexes`, or `_write_tsv` copies.
 
 ## Maintenance Notes
 

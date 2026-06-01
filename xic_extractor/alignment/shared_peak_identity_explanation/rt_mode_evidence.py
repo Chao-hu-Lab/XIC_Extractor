@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
-from tools.diagnostics.diagnostic_io import (
+from xic_extractor.diagnostics.diagnostic_io import (
     optional_float,
     read_delimited_rows,
     read_tsv_required,

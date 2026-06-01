@@ -94,6 +94,11 @@ A tool must not be split across both `tools/diagnostics/` and
 `xic_extractor/diagnostics/`. Pick one based on whether production code
 imports it.
 
+Schema-neutral shared infrastructure is not itself a diagnostic tool. Helpers
+such as delimited/TSV IO, scalar parsing, and header validation may live in
+`xic_extractor/diagnostics/` when package code depends on them, while
+`tools/diagnostics/` keeps a compatibility shim for existing diagnostic CLIs.
+
 ## Promotion Trigger: CANDIDATE/ACTIVE → GATED
 
 A tool **must** be promoted to `xic_extractor/diagnostics/` when **any** of:
@@ -187,9 +192,10 @@ author must:
 
 Shared infrastructure that **must** be reused, not re-implemented:
 
-- `tools/diagnostics/diagnostic_io.py` for delimited/TSV reads and writes,
-  scalar parsing, required-column/header validation, label splitting, and
-  formatted-value helpers.
+- `xic_extractor/diagnostics/diagnostic_io.py` for delimited/TSV reads and
+  writes, scalar parsing, required-column/header validation, label splitting,
+  and formatted-value helpers. `tools/diagnostics/diagnostic_io.py` is the
+  compatibility shim for existing diagnostic CLIs.
 - A future `tools/diagnostics/_common/` module only if genuinely shared
   `openpyxl` styling, color palettes, or Excel-safe value conversion appear.
   The 8 known re-implementations identified by the 2026-05-26 audit migrated
@@ -226,8 +232,9 @@ Authors of new diagnostic tools include this section in their PR description:
       Purpose, Topic group, Originating spec/plan. If this PR retires or
       renames an entry-point, updated or removed the corresponding block
       and adjusted the Table of Contents tool counts.
-- [ ] Shared helpers reused (`diagnostic_io.py` or successors). Any new
-      helpers extracted live in a `_common/` location, not inside the tool's
+- [ ] Shared helpers reused (`xic_extractor/diagnostics/diagnostic_io.py` or
+      successors; `tools/diagnostics/diagnostic_io.py` remains the shim). Any
+      new helpers extracted live in a `_common/` location, not inside the tool's
       own 5-file group.
 - [ ] If `CANDIDATE`, the originating spec / plan / note is linked. If no
       originating document exists, the tool is treated as a one-off and is

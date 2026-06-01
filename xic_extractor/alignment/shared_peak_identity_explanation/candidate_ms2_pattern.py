@@ -7,13 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from tools.diagnostics.diagnostic_io import read_tsv_required, write_tsv
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.csv_io import (
     DiscoveryBatchInput,
     read_discovery_batch_index,
     read_discovery_candidates_csv,
 )
+from xic_extractor.diagnostics.diagnostic_io import read_tsv_required, write_tsv
 from xic_extractor.discovery.models import DiscoveryCandidate
 from xic_extractor.neutral_loss import (
     CandidateMS2Evidence,

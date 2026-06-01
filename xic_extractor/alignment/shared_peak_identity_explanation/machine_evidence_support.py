@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from tools.diagnostics.diagnostic_io import read_tsv_required
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.diagnostics.diagnostic_io import read_tsv_required
 
 from .machine_artifacts import MachineMatch
 from .schema import (
