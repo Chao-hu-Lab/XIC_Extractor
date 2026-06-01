@@ -35,7 +35,7 @@ The remaining work is different:
   public contract migration needs it;
 - stop treating CWT as a deletion candidate. Its current implementation is only
   limited same-apex proposal/evidence support, but the handoff direction says it
-  should become a real evidence source, not a final integrator;
+  should be tested as a possible evidence source, not a final integrator;
 - keep C3 as the main near-term cleanup spine because it moves the code toward
   `TraceGroup` / `PeakHypothesis` / `EvidenceVector` / `IntegrationResult` /
   `AuditTrail`;
@@ -244,6 +244,15 @@ Pre-registered CWT gate template:
 If this table cannot be filled before the run, do not run RAW validation. Do
 only the inventory and keep CWT `diagnostic_only` / audit-only.
 
+2026-06-01 Phase 2 update:
+
+- [P5 CWT evidence honesty spec](2026-05-24-peak-pipeline-cwt-evidence-honesty-spec.md)
+  now records the current CWT surface inventory and gate.
+- The next tested role is `apex proposal source`.
+- Current classification is `inconclusive_pending_named_evidence`.
+- No RAW run is justified until a controlled comparator, changed-decision
+  schema, and manual EIC review slice exist.
+
 ### C3 - Handoff Spine Unification Remains Mainline
 
 C3 is still important, but the first step should be a current-state consumer
@@ -400,12 +409,10 @@ Implementation phases derived from this spec need their own validation:
 
 ## Open Questions
 
-1. Which CWT evidence role should be tested first: apex proposal, width prior,
-   ridge persistence, or shoulder/coelution support?
-2. Which C3 consumer is the safest first migration under current code:
+1. Which C3 consumer is the safest first migration under current code:
    candidate projection, scoring input, recovery, or alignment audit?
-3. Should C4 keep `xic_extractor.peak_scoring` as a module shim, or should the
+2. Should C4 keep `xic_extractor.peak_scoring` as a module shim, or should the
    redesign choose a different internal package name to avoid module/package
    collision?
-4. Which C6 stage has the best existing oracle for characterization:
+3. Which C6 stage has the best existing oracle for characterization:
    primary consolidation, owner clustering, matrix identity, or folding?

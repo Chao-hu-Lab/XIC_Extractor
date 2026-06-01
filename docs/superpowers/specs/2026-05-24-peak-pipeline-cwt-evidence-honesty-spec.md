@@ -1,9 +1,125 @@
 # P5 — CWT Evidence Honesty Spec
 
 **Date:** 2026-05-24
-**Status:** Audit-only implemented and 8RAW-validated
+**Status:** Audit-only implemented and 8RAW-validated; 2026-06-01
+evidence-role gate added as `inconclusive_pending_named_evidence`
 **Overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
 **Parallel to:** P3, P4
+
+## 2026-06-01 Phase 2 Evidence-Role Gate
+
+Phase 2 does **not** change CWT scoring, proposal generation, selected peaks,
+areas, confidence, reason text, or output schemas. Its job is to make the CWT
+exit rule explicit so `centwave_cwt` does not remain vague audit-only code
+forever.
+
+Current classification:
+
+```text
+inconclusive_pending_named_evidence
+```
+
+Reason:
+
+- CWT currently has useful observability, but its only production-adjacent
+  signal is bounded same-apex support.
+- The legacy numeric fields are not real CWT ridge/scale measurements, so they
+  cannot support a ridge/persistence promotion decision.
+- Existing candidate-table and audit diagnostics can show agreement, nearby
+  support, and far alternatives, but they do not isolate whether CWT apex
+  proposals improve decisions compared with current supported behavior.
+- A new RAW run would not change the next action until the tested role,
+  comparator, changed-row interpretation, and manual EIC review slice are
+  pre-registered.
+
+No RAW validation is justified in Phase 2. CWT remains `diagnostic_only` /
+audit-only until the missing evidence below is prepared.
+
+### Current CWT Surface Inventory
+
+| Surface | Current role | Behavior authority |
+|---|---|---|
+| `xic_extractor/peak_detection/cwt.py` | Produces `centwave_cwt` audit candidates via `scipy.signal.find_peaks_cwt`; merges same-apex provenance into existing candidates. | Audit/proposal only; not a top-level `resolver_mode`. |
+| `PeakCandidate.proposal_sources` | Carries `centwave_cwt` provenance alone or merged with non-CWT sources. | Audit evidence and bounded scoring input. |
+| `PeakCandidate.cwt_best_scale` / `cwt_ridge_persistence` | Legacy positive-finite presence flags copied into candidates. | Not interpretable as CWT scale or ridge metrics. |
+| `EvidenceVector.cwt_best_scale` / `cwt_ridge_persistence` | Mirrors candidate legacy CWT presence flags. | Audit-only until real CWT metrics exist. |
+| `peak_scoring.py` | Adds `cwt_same_apex_support` worth `_CWT_SAME_APEX_SUPPORT_POINTS = 5` only when CWT is merged with a non-CWT source and required chemistry support exists. | Bounded support signal; not final peak authority. |
+| `peak_scoring.py` trace cap interaction | Same-apex CWT support can prevent the multi-flag trace-quality cap when the active trace concerns are not hard blockers. | Existing scoring policy; do not change in Phase 2. |
+| `evidence_semantics.py` | Treats `centwave_cwt` or `cwt_same_apex_support` as shape context for cross-report evidence consistency. | Evidence-label interpretation only. |
+| `peak_candidate_boundaries.tsv` / boundary hypotheses | Can include CWT-derived or CWT-marked boundary audit rows; fake width rows are marked by `cwt_audit_filter_reason`. | Audit row only; does not justify production boundary changes. |
+| `tools/diagnostics/cwt_peak_candidate_audit.py` | Summarizes selected CWT agreement, nearby support, far alternatives, CWT-only rows, and chemistry-conditioned classes. | Human/machine diagnostic surface. |
+
+### Pre-Registered Next Tested Role
+
+The next CWT role to test, if Phase 2 is resumed into an implementation/RAW
+slice, is:
+
+```text
+apex proposal source
+```
+
+Why this role comes first:
+
+- It matches current implemented CWT behavior: CWT already proposes apexes and
+  `tools/diagnostics/cwt_peak_candidate_audit.py` already classifies agreement
+  and far alternatives.
+- It avoids pretending the legacy `cwt_best_scale` and
+  `cwt_ridge_persistence` fields are real ridge/persistence measurements.
+- It can be judged with row-level changed-decision evidence plus manual EIC
+  review of chemically plausible far alternatives.
+
+Roles intentionally not tested first:
+
+- `width prior`: blocked until real CWT width/scale metrics replace legacy
+  width-proxy fields.
+- `ridge/persistence support`: blocked until true ridge tracking exists.
+- `shoulder/coelution proposal support`: plausible, but it needs a curated
+  shoulder/coelution oracle before it can beat the simpler apex-proposal test.
+
+### Gate Table For Apex Proposal Source
+
+| Field | Phase 2 decision |
+|---|---|
+| Tested role | `apex proposal source` only. CWT may propose an apex candidate or same-apex provenance; it must not select, integrate, or demote by itself. |
+| Comparator | Current supported resolver/scoring behavior with existing CWT handling **plus** one controlled comparator that isolates CWT apex-proposal impact. Acceptable comparators: CWT proposal source disabled in candidate/audit generation, or candidate implementation that routes CWT apex proposals through a named evidence-vector field without changing selected output by default. |
+| Artifacts | `peak_candidates.tsv`, `peak_candidate_boundaries.tsv`, `cwt_peak_candidate_audit.tsv/json/md`, `alignment_matrix.tsv`, `alignment_review.tsv`, `alignment_cells.tsv`, and a row-level changed-decision TSV if any selected peak, confidence, reason, or area changes. |
+| Metrics | Candidate groups with selected CWT agreement; selected CWT nearby; far CWT alternatives; chemically plausible far alternatives; changed selected peak count; changed area count; changed confidence/reason count; strict benchmark status; manually reviewed far-alternative count. |
+| Promote condition | CWT apex proposals add independent, row-level useful evidence that improves or explains decisions without degrading strict benchmark, selected peak, area, confidence, reason, or downstream TSV/workbook contracts. Promotion must name exact `EvidenceVector` fields and machine-readable reason labels. |
+| Keep audit-only condition | CWT agreement/far alternatives help review but do not justify a production scoring or selection change. Existing `cwt_peak_candidate_audit` remains the owner surface. |
+| Externalize/kill condition | CWT apex proposals are redundant, misleading, mostly CWT-only noise, or require manual interpretation often enough that keeping them in the main pipeline adds more confusion than evidence. Externalize to a diagnostic CLI or remove the proposal source. |
+| Inconclusive condition | Comparator is missing, artifacts are stale, changed rows cannot be interpreted without manual EIC review, or the tested role is mixed with width/ridge/shoulder logic. |
+
+For a future RAW slice, emitted artifacts alone are not enough for `gate_ok`.
+If changed-decision rows exist but lack manual EIC interpretation, record
+`run_ok=true`, `gate_ok=false`, `production_ready=false`, and
+`inconclusive=true`.
+
+### Missing Evidence Before RAW
+
+Do not run 8RAW/85RAW for CWT until all of the following exist:
+
+1. A controlled comparator that isolates CWT apex-proposal impact from current
+   scoring and safe-merge behavior.
+2. A row-level changed-decision schema naming sample, target, selected apex,
+   nearest CWT apex, RT delta, proposal sources, confidence/reason before/after,
+   area before/after, NL/MS2 support, and manual-review priority.
+3. A manual EIC review slice for chemically plausible far CWT alternatives,
+   preferably capped to the highest-risk rows first.
+4. A stop rule: if the comparator changes no selected outputs and only improves
+   review context, classify `keep_audit_only`; if it changes selected outputs,
+   stop and write a behavior spec before promotion.
+
+No launch command is authorized in Phase 2. A future RAW slice must first write
+a fresh command contract that names:
+
+- the accepted 8RAW discovery or targeted-extraction input;
+- the comparator flag or artifact source that isolates CWT apex proposals;
+- the candidate-table / boundary-table / CWT-audit producer, since an alignment
+  `validation-minimal` run by itself is not enough to generate every CWT gate
+  artifact;
+- expected sample count, output directory, timing sidecars, and stop condition;
+- how `run_ok`, `gate_ok`, `production_ready`, and `inconclusive` will be
+  assigned from emitted artifacts.
 
 ## 2026-05-25 Implementation Note
 
