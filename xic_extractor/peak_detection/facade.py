@@ -30,7 +30,10 @@ from xic_extractor.peak_scoring import (
     score_candidate,
     select_candidate_with_confidence,
 )
-from xic_extractor.settings_schema import ARBITRATED_RESOLVER_RETIRED_MESSAGE
+from xic_extractor.settings_schema import (
+    ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+    RESOLVER_MODES,
+)
 
 
 def find_peak_and_area(
@@ -209,12 +212,15 @@ def find_peak_candidates(
         return find_peak_candidates_local_minimum(rt, intensity, config)
     if resolver_mode == "arbitrated":
         raise ValueError(ARBITRATED_RESOLVER_RETIRED_MESSAGE)
-    return find_peak_candidates_legacy_savgol(
-        rt,
-        intensity,
-        config,
-        peak_min_prominence_ratio=peak_min_prominence_ratio,
-    )
+    if resolver_mode == "legacy_savgol":
+        return find_peak_candidates_legacy_savgol(
+            rt,
+            intensity,
+            config,
+            peak_min_prominence_ratio=peak_min_prominence_ratio,
+        )
+    allowed = ", ".join(RESOLVER_MODES[:-1]) + f", or {RESOLVER_MODES[-1]}"
+    raise ValueError(f"unsupported resolver mode {resolver_mode!r}; must be {allowed}")
 
 
 def _apply_region_first_safe_merge_if_enabled(

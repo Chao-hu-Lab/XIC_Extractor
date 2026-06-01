@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from xic_extractor.config import ConfigError, load_config, migrate_settings_dict
+from xic_extractor.config import (
+    ConfigError,
+    ExtractionConfig,
+    load_config,
+    migrate_settings_dict,
+)
 from xic_extractor.settings_schema import (
     CANONICAL_SETTINGS_DEFAULTS,
     default_parallel_workers,
@@ -310,6 +315,16 @@ def test_load_config_accepts_region_first_safe_merge_resolver_mode(
     assert config.resolver_mode == "region_first_safe_merge"
 
 
+def test_load_config_accepts_legacy_savgol_resolver_mode(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"resolver_mode": "legacy_savgol"})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.resolver_mode == "legacy_savgol"
+
+
 def test_load_config_accepts_zero_local_minimum_floor_values(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     _write_settings(
@@ -441,6 +456,23 @@ def test_canonical_settings_defaults_include_local_minimum_preset() -> None:
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_min"] == "0.0"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_peak_duration_max"] == "2.0"
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_scans"] == "5"
+
+
+def test_extraction_config_default_resolver_mode_is_legacy_compatibility() -> None:
+    config = ExtractionConfig(
+        data_dir=Path("raw"),
+        dll_dir=Path("dll"),
+        output_csv=Path("output/xic_results.csv"),
+        diagnostics_csv=Path("output/xic_diagnostics.csv"),
+        smooth_window=15,
+        smooth_polyorder=3,
+        peak_rel_height=0.95,
+        peak_min_prominence_ratio=0.10,
+        ms2_precursor_tol_da=0.5,
+        nl_min_intensity_ratio=0.01,
+    )
+
+    assert config.resolver_mode == "legacy_savgol"
 
 
 def test_settings_example_includes_parallel_settings() -> None:

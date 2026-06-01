@@ -104,27 +104,25 @@ CodeGraph status at reassessment time:
 - edges: 30,877
 - index status: up to date
 
-Observed current code state:
+Observed current code state after the Phase 1 C2 cleanup:
 
 - `xic_extractor/settings_schema.py` accepts `legacy_savgol`, `local_minimum`,
   and `region_first_safe_merge`; `arbitrated` is outside `RESOLVER_MODES` and
   has a retirement message.
 - `xic_extractor/peak_detection/facade.py` routes `local_minimum` and
   `region_first_safe_merge` through `find_peak_candidates_local_minimum`.
-  `arbitrated` raises the retirement message. Programmatic unknown
-  `resolver_mode` values still fall through to `legacy_savgol`; public config
-  validation blocks this, but the facade fallback is a contract risk.
-- `xic_extractor/configuration/models.py` still gives the public
-  `ExtractionConfig.resolver_mode` dataclass field a programmatic default of
-  `legacy_savgol`.
+  `arbitrated` raises the retirement message. Unsupported programmatic
+  `resolver_mode` values now raise an explicit error instead of falling through
+  to `legacy_savgol`.
+- `xic_extractor/configuration/models.py` keeps the public
+  `ExtractionConfig.resolver_mode` dataclass field at `legacy_savgol` as a
+  tested programmatic compatibility default.
 - `scripts/run_alignment.py` still maps `region_first_safe_merge` back to
   `local_minimum` for production alignment quantification.
 - `scripts/run_discovery.py` still defaults to `local_minimum`.
-- `README.md` still describes `legacy_savgol` as the default user-facing
-  resolver. That is stale relative to `settings_schema.py` defaults, but it
-  may still describe part of the programmatic compatibility surface. A C2
-  follow-up must decide and synchronize this wording instead of silently
-  changing only one surface.
+- `README.md` distinguishes the tracked settings / validation harness default
+  `region_first_safe_merge` from the `legacy_savgol` programmatic compatibility
+  default.
 - `xic_extractor/peak_detection/cwt.py` uses `scipy.signal.find_peaks_cwt` to
   add `centwave_cwt` proposals for audit / proposal support.
 - `xic_extractor/peak_scoring.py` still assigns
@@ -154,13 +152,13 @@ surfaces as synchronized, intentionally divergent, or stale:
 
 | Surface | Current drift / risk | Required next action |
 |---|---|---|
-| `README.md` resolver docs | Still says `legacy_savgol` is the default user-facing resolver. | C2 must decide whether this is stale docs or intentional compatibility wording, then update README or document the exception. |
+| `README.md` resolver docs | Phase 1 synchronized user-facing default wording with settings schema and harness defaults. | Keep this wording aligned if future resolver naming changes. |
 | `settings_schema.py` / `config/settings.example.csv` | Canonical defaults prefer `region_first_safe_merge`; Phase 0 fixes tracked example baseline wording to AsLS-only. | Keep resolver descriptions aligned with accepted values in C2. |
 | Ignored `config/settings.csv` | Machine-local runtime state can drift from tracked templates. | Do not modify in PR by default; mention when local runtime cleanup is optional. |
 | GUI resolver combo | GUI rejects or normalizes retired `arbitrated` and still exposes the surviving resolver modes plus local-minimum controls. | Any resolver policy change needs GUI tests for visible choices and panel behavior. |
-| CLI defaults/coercion | `run_alignment` accepts `region_first_safe_merge` but coerces production extraction to `local_minimum`; `run_discovery` defaults to `local_minimum`. | C2 must preserve or explicitly change this contract with CLI tests. |
-| `ExtractionConfig.resolver_mode` | Programmatic dataclass default remains `legacy_savgol`. | Decide whether to keep compatibility default or change it; add explicit test either way. |
-| `peak_detection.facade.find_peak_candidates` | Unknown programmatic resolver values silently fall through to `legacy_savgol`. | Treat as C2 contract bug candidate; unsupported values should fail explicitly unless a compatibility alias is documented. |
+| CLI defaults/coercion | `run_alignment` accepts `region_first_safe_merge` but coerces production extraction to `local_minimum`; `run_discovery` defaults to `local_minimum`. | Preserve unless a later behavior spec changes the discovery/alignment contract. |
+| `ExtractionConfig.resolver_mode` | Programmatic dataclass default remains `legacy_savgol`. | Kept and tested as compatibility default. |
+| `peak_detection.facade.find_peak_candidates` | Phase 1 changed unknown programmatic resolver values from silent legacy fallback to explicit `ValueError`. | Keep accepted-mode behavior covered by focused tests. |
 | `xic_extractor.signal_processing` | Public compatibility import surface for legacy peak models. | C3 must preserve imports unless a separate breaking-change spec exists. |
 | `xic_extractor.peak_scoring` | Public module import path and reason/confidence contract. | C4 redesign must choose module vs package/shim strategy before moving code. |
 | TSV/workbook outputs | `peak_candidates.tsv`, boundary TSVs, and alignment TSVs are public/generated contract surfaces. | Cleanup must preserve schemas and values unless a behavior spec says otherwise. |
@@ -174,17 +172,17 @@ useful for normal, cleaner peaks. The issue is not that SG is bad; the issue is
 that SG/local-minimum-only selection is insufficient in complex matrix
 conditions.
 
-Next C2 work should be:
+Phase 1 C2 cleanup resolved the public-surface drift items:
 
-1. preserve `legacy_savgol` as an explicit clean-trace / compatibility path or
-   documented non-default mode;
-2. preserve local-minimum internals as boundary/proposal evidence;
-3. decide whether public config should continue exposing all three values or
-   whether old values should become aliases / advanced options;
-4. fix the programmatic facade fallback so unsupported resolver modes fail
-   explicitly instead of silently using `legacy_savgol`;
-5. skip `region_first_safe_merge` renaming unless it is bundled with a real
-   config migration and tests.
+1. `legacy_savgol` is preserved as an explicit clean-trace / compatibility path
+   and the tested programmatic `ExtractionConfig` default.
+2. Local-minimum internals remain boundary/proposal evidence.
+3. Public config continues exposing all three accepted values:
+   `legacy_savgol`, `local_minimum`, and `region_first_safe_merge`.
+4. Unsupported programmatic resolver modes now fail explicitly instead of
+   silently using `legacy_savgol`.
+5. `region_first_safe_merge` naming is left unchanged; renaming still requires a
+   real config migration and tests.
 
 This is a contract cleanup, not a detector deletion phase.
 
@@ -402,17 +400,12 @@ Implementation phases derived from this spec need their own validation:
 
 ## Open Questions
 
-1. Should public config continue exposing `legacy_savgol` as a normal option, or
-   should it become an advanced/compatibility option while remaining callable?
-2. Should the facade fallback for unknown programmatic resolver modes be fixed
-   immediately as a bug, even though validated config already prevents the same
-   state?
-3. Which CWT evidence role should be tested first: apex proposal, width prior,
+1. Which CWT evidence role should be tested first: apex proposal, width prior,
    ridge persistence, or shoulder/coelution support?
-4. Which C3 consumer is the safest first migration under current code:
+2. Which C3 consumer is the safest first migration under current code:
    candidate projection, scoring input, recovery, or alignment audit?
-5. Should C4 keep `xic_extractor.peak_scoring` as a module shim, or should the
+3. Should C4 keep `xic_extractor.peak_scoring` as a module shim, or should the
    redesign choose a different internal package name to avoid module/package
    collision?
-6. Which C6 stage has the best existing oracle for characterization:
+4. Which C6 stage has the best existing oracle for characterization:
    primary consolidation, owner clustering, matrix identity, or folding?
