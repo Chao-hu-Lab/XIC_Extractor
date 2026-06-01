@@ -111,15 +111,7 @@ BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
     "integration_scan_count",
 )
 
-LINEAR_EDGE_ROLLBACK_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
-    "area_baseline_corrected_linear_edge",
-    "baseline_score_linear_edge",
-)
-
-ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
-    *BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
-    *LINEAR_EDGE_ROLLBACK_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
-)
+ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
 
 ASLS_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
     "area_baseline_corrected_asls",
@@ -311,14 +303,7 @@ def write_alignment_cell_integration_audit_tsv(
                 audit.integration_scan_count
             ),
         }
-        if baseline_integration_method == "asls":
-            row["area_baseline_corrected_linear_edge"] = format_value(
-                audit.area_baseline_corrected_linear_edge
-            )
-            row["baseline_score_linear_edge"] = format_value(
-                audit.baseline_score_linear_edge
-            )
-        elif baseline_audit_method == "asls":
+        if baseline_integration_method != "asls" and baseline_audit_method == "asls":
             row["area_baseline_corrected_asls"] = format_value(
                 audit.area_baseline_corrected_asls
             )

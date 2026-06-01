@@ -122,6 +122,57 @@ def test_p2_asls_shadow_gate_reads_promoted_asls_schema(
     assert result.rows[0].asls_area_rsd_pct is not None
 
 
+def test_p2_asls_shadow_gate_reports_missing_post_rollback_comparator(
+    tmp_path: Path,
+) -> None:
+    audit = tmp_path / "alignment_cell_integration_audit.tsv"
+    summary = tmp_path / "targeted_istd_benchmark_summary.tsv"
+    _write_tsv(
+        audit,
+        [
+            {
+                "feature_family_id": "FAM001",
+                "sample_stem": "S1",
+                "status": "detected",
+                "area": "100",
+                "area_baseline_corrected": "78",
+                "baseline_type": "asls",
+                "baseline_score": "0.78",
+            },
+            {
+                "feature_family_id": "FAM001",
+                "sample_stem": "S2",
+                "status": "detected",
+                "area": "110",
+                "area_baseline_corrected": "86",
+                "baseline_type": "asls",
+                "baseline_score": "0.7818",
+            },
+        ],
+    )
+    _write_tsv(
+        summary,
+        [
+            {
+                "target_label": "ISTD-A",
+                "role": "ISTD",
+                "active_tag": "TRUE",
+                "selected_feature_id": "FAM001",
+                "coverage_denominator_count": "2",
+            }
+        ],
+    )
+
+    _outputs, result = run_p2_asls_shadow_gate(
+        alignment_integration_audit_tsv=audit,
+        targeted_istd_benchmark_summary_tsv=summary,
+        output_dir=tmp_path / "gate",
+    )
+
+    assert result.overall_status == "FAIL"
+    assert "baseline_comparison_columns_unavailable" in result.rows[0].failure_reasons
+
+
 def test_p2_asls_shadow_gate_fails_when_asls_exceeds_raw_area(
     tmp_path: Path,
 ) -> None:

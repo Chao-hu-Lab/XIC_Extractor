@@ -478,7 +478,7 @@ backfill candidates.
 **Topic group**: `area_integration_uncertainty_audit.py` + `_io`, `_models`, `_analysis`, `_writers` (5 files)
 **Originating spec**: `2026-05-18-area-integration-uncertainty-audit-gate.md`
 **Recent doc**: `plans/2026-05-25-p4-area-uncertainty-formula-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
-**Schema note**: When promoted AsLS audit rows include `area_baseline_corrected_linear_edge`, baseline-area mismatch checks use that linear-edge-compatible rollback value, not the promoted AsLS value.
+**Schema note**: The current accepted `alignment_cell_integration_audit.tsv` schema no longer emits linear-edge rollback columns. Historical promoted-AsLS rows that still include `area_baseline_corrected_linear_edge` remain readable as legacy comparison input.
 
 ---
 

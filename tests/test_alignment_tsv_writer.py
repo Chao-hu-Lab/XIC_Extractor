@@ -727,11 +727,11 @@ def test_write_alignment_cell_integration_audit_tsv_is_sidecar(
     assert audit[0]["uncertainty_fraction"] == "0.2"
     assert audit[0]["baseline_fraction"] == "0.8"
     assert audit[0]["integration_scan_count"] == "5"
-    assert audit[0]["area_baseline_corrected_linear_edge"] == "7.5"
-    assert audit[0]["baseline_score_linear_edge"] == "0.75"
+    assert "area_baseline_corrected_linear_edge" not in audit[0]
+    assert "baseline_score_linear_edge" not in audit[0]
 
 
-def test_cell_integration_audit_default_schema_uses_asls_with_linear_rollback(
+def test_cell_integration_audit_default_schema_uses_asls_without_linear_rollback(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.alignment.tsv_writer import (
@@ -756,10 +756,27 @@ def test_cell_integration_audit_default_schema_uses_asls_with_linear_rollback(
     assert rows[0]["baseline_type"] == "asls"
     assert rows[0]["area_baseline_corrected"] == "8"
     assert rows[0]["baseline_score"] == "0.8"
-    assert rows[0]["area_baseline_corrected_linear_edge"] == "7.5"
-    assert rows[0]["baseline_score_linear_edge"] == "0.75"
+    assert "area_baseline_corrected_linear_edge" not in rows[0]
+    assert "baseline_score_linear_edge" not in rows[0]
     assert "area_baseline_corrected_asls" not in rows[0]
     assert "baseline_score_asls" not in rows[0]
+
+
+def test_cell_integration_audit_post_rollback_schema_fixture_matches_writer() -> None:
+    from xic_extractor.alignment.tsv_writer import (
+        ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
+    )
+
+    schema_path = Path(
+        "docs/superpowers/fixtures/"
+        "alignment_cell_integration_audit_post_rollback_schema.tsv"
+    )
+    header = schema_path.read_text(encoding="utf-8").splitlines()[0]
+    columns = tuple(header.split("\t"))
+
+    assert columns == ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
+    assert "area_baseline_corrected_linear_edge" not in columns
+    assert "baseline_score_linear_edge" not in columns
 
 
 def test_cell_integration_audit_can_emit_legacy_asls_shadow_for_linear_edge(
@@ -998,8 +1015,6 @@ def _cell(
                 uncertainty_fraction=0.2,
                 baseline_fraction=0.8,
                 integration_scan_count=5,
-                area_baseline_corrected_linear_edge=7.5,
-                baseline_score_linear_edge=0.75,
             )
             if integration
             else None

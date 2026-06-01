@@ -495,6 +495,8 @@ def _linear_and_asls_area(row: Mapping[str, str]) -> tuple[float | None, float |
     reported_area = _optional_float(row.get("area_baseline_corrected"))
     if promoted_linear is not None:
         return promoted_linear, reported_area
+    if row.get("baseline_type", "").strip() == "asls":
+        return None, reported_area
     return reported_area, _optional_float(row.get("area_baseline_corrected_asls"))
 
 

@@ -151,7 +151,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     )
     parser.add_argument("--alignment-integration-audit-tsv", type=Path, required=True)
-    parser.add_argument("--targeted-istd-benchmark-summary-tsv", type=Path, required=True)
+    parser.add_argument(
+        "--targeted-istd-benchmark-summary-tsv",
+        type=Path,
+        required=True,
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--max-rsd-regression-pct", type=float, default=0.3)
     args = parser.parse_args(argv)
@@ -206,6 +210,7 @@ def _build_row(
     linear_areas: list[float] = []
     asls_areas: list[float] = []
     relative_diffs: list[float] = []
+    missing_comparison_count = 0
     diff_gt_5pct_count = 0
     asls_reduced_area_count = 0
     asls_exceeds_raw_area_count = 0
@@ -216,6 +221,7 @@ def _build_row(
         raw_area = _optional_float(row.get("area"))
         linear_area, asls_area = _linear_and_asls_area(row)
         if raw_area is None or linear_area is None or asls_area is None:
+            missing_comparison_count += 1
             continue
         linear_areas.append(linear_area)
         asls_areas.append(asls_area)
@@ -231,9 +237,13 @@ def _build_row(
 
     linear_rsd = _area_rsd_pct(linear_areas)
     asls_rsd = _area_rsd_pct(asls_areas)
-    area_delta = None if linear_rsd is None or asls_rsd is None else asls_rsd - linear_rsd
+    area_delta = (
+        None if linear_rsd is None or asls_rsd is None else asls_rsd - linear_rsd
+    )
     median_abs_relative_diff = median(relative_diffs) if relative_diffs else None
     reasons: list[str] = []
+    if missing_comparison_count and not linear_areas:
+        reasons.append("baseline_comparison_columns_unavailable")
     if len(linear_areas) < 2:
         reasons.append("sample_count_lt_2")
     if len(linear_areas) < target.coverage_denominator_count:
@@ -265,6 +275,8 @@ def _linear_and_asls_area(row: Mapping[str, str]) -> tuple[float | None, float |
     reported_area = _optional_float(row.get("area_baseline_corrected"))
     if promoted_linear is not None:
         return promoted_linear, reported_area
+    if row.get("baseline_type", "").strip() == "asls":
+        return None, reported_area
     return reported_area, _optional_float(row.get("area_baseline_corrected_asls"))
 
 
@@ -323,7 +335,8 @@ def _write_markdown(path: Path, result: P2AslsShadowGateResult) -> None:
         "",
         f"Overall status: {result.overall_status}",
         "",
-        "| Target | Feature | Samples | Area RSD delta pct | Median abs diff pct | Status | Reasons |",
+        "| Target | Feature | Samples | Area RSD delta pct | "
+        "Median abs diff pct | Status | Reasons |",
         "|---|---|---:|---:|---:|---|---|",
     ]
     for row in result.rows:
@@ -355,7 +368,9 @@ def _write_tsv(
         )
         writer.writeheader()
         for row in rows:
-            writer.writerow({field: _format_value(row.get(field)) for field in fieldnames})
+            writer.writerow(
+                {field: _format_value(row.get(field)) for field in fieldnames}
+            )
 
 
 def _read_tsv(path: Path, required_columns: set[str]) -> list[dict[str, str]]:
@@ -390,7 +405,9 @@ def _parse_non_negative_int(value: object) -> int:
     try:
         parsed = int(text)
     except ValueError as exc:
-        raise ValueError(f"coverage_denominator_count must be an integer: {text}") from exc
+        raise ValueError(
+            f"coverage_denominator_count must be an integer: {text}"
+        ) from exc
     if parsed < 0:
         raise ValueError("coverage_denominator_count must be >= 0")
     return parsed

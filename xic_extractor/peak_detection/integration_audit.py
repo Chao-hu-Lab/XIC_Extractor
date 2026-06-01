@@ -26,8 +26,6 @@ class CellIntegrationAuditSummary:
     integration_scan_count: int | None = None
     area_baseline_corrected_asls: float | None = None
     baseline_score_asls: float | None = None
-    area_baseline_corrected_linear_edge: float | None = None
-    baseline_score_linear_edge: float | None = None
 
     @property
     def is_empty(self) -> bool:
@@ -67,16 +65,6 @@ def build_cell_integration_audit_summary(
             peak_end_rt,
         )
         asls_baseline_values, residual_mad = compute_asls_residual_mad(intensity)
-        linear_edge = integrate_with_baseline(
-            intensity,
-            rt,
-            left_index,
-            right_index,
-            baseline_method="linear_edge",
-            baseline_values=asls_baseline_values,
-            baseline_residual_mad=residual_mad,
-            baseline_residual_mad_source="asls_residual",
-        )
         asls = (
             integrate_with_baseline(
                 intensity,
@@ -90,22 +78,40 @@ def build_cell_integration_audit_summary(
             else None
         )
         if baseline_integration_method == "asls" and asls_baseline_values is not None:
-            asls = integrate_with_baseline(
+            if asls is None:
+                asls = integrate_with_baseline(
+                    intensity,
+                    rt,
+                    left_index,
+                    right_index,
+                    baseline_method="asls",
+                    baseline_values=asls_baseline_values,
+                )
+            baseline = asls
+        elif baseline_integration_method == "asls":
+            linear_edge = integrate_with_baseline(
                 intensity,
                 rt,
                 left_index,
                 right_index,
-                baseline_method="asls",
+                baseline_method="linear_edge",
                 baseline_values=asls_baseline_values,
+                baseline_residual_mad=residual_mad,
+                baseline_residual_mad_source="asls_residual",
             )
-            baseline = asls
-            linear_edge_rollback = linear_edge
-        elif baseline_integration_method == "asls":
             baseline = replace(linear_edge, baseline_type="linear_edge_fallback")
-            linear_edge_rollback = None
         else:
+            linear_edge = integrate_with_baseline(
+                intensity,
+                rt,
+                left_index,
+                right_index,
+                baseline_method="linear_edge",
+                baseline_values=asls_baseline_values,
+                baseline_residual_mad=residual_mad,
+                baseline_residual_mad_source="asls_residual",
+            )
             baseline = linear_edge
-            linear_edge_rollback = None
     except (IndexError, TypeError, ValueError, FloatingPointError):
         return EMPTY_INTEGRATION_AUDIT
 
@@ -131,16 +137,6 @@ def build_cell_integration_audit_summary(
             None if asls is None else asls.area_baseline_corrected
         ),
         baseline_score_asls=(None if asls is None else asls.baseline_score),
-        area_baseline_corrected_linear_edge=(
-            None
-            if linear_edge_rollback is None
-            else linear_edge_rollback.area_baseline_corrected
-        ),
-        baseline_score_linear_edge=(
-            None
-            if linear_edge_rollback is None
-            else linear_edge_rollback.baseline_score
-        ),
     )
 
 
