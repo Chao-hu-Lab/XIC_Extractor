@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from xic_extractor.alignment.models import AlignmentCluster
-from xic_extractor.peak_detection.hypotheses import IntegrationResult
 from xic_extractor.peak_detection.integration_audit import CellIntegrationAuditSummary
+
+if TYPE_CHECKING:
+    from xic_extractor.peak_detection.hypotheses import IntegrationResult
+else:
+    IntegrationResult = Any
 
 CellStatus = Literal[
     "detected",

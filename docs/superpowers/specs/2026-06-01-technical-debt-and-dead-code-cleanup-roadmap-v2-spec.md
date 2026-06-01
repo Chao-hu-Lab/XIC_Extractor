@@ -139,14 +139,17 @@ The first concrete pilot inventory is now captured in:
   while owner-first construction, claim arbitration, consolidation, matrix
   identity, and production projection remain active stages. The C6-EF audit now
   records no-use evidence for the event-first wrapper and defines a
-  deprecate-first public compatibility path for `cluster_candidates` and
+  reviewed public-retirement path for `cluster_candidates` and
   `backfill_alignment_matrix`. The first execution slice removed the private
   `_build_event_first_matrix(...)` wrapper and made the package-level public
   event-first imports explicit compatibility shims. The follow-up C6-B slice
   then removed the non-public event-family helper path
   (`feature_family.py`, `family_integration.py`) and its implementation-only
-  tests after invariant triage. Remaining public event-first clustering/backfill
-  shims still require a separate public migration or breaking-change decision.
+  tests after invariant triage. The public-shim slice then removed
+  `clustering.py`, `backfill.py`, the package-level `cluster_candidates` /
+  `backfill_alignment_matrix` exports, and their implementation-only tests after
+  CodeGraph MCP impact/caller checks found no product, script, diagnostic, or
+  package consumer.
 
 The follow-up inventory should use the same unit of analysis for every candidate
 design:
@@ -311,7 +314,7 @@ Ambiguous candidates default to `deprecate_first`, `move_only`, or
 | `peak_candidates.tsv` and boundary projection builders | `split_only` / keep | They are debug/audit projections with frozen headers, not canonical product model. | Keep as externalized projection surfaces. |
 | `alignment_matrix.tsv` owner/backfill path | `blocked_by_product_decision` | It is the downstream correction/statistics delivery surface. | Requires a separate parity/behavior spec before migration. |
 | `peak_scoring.py` legacy scorer responsibilities | `semantic_migration` | `EvidenceVector`, `CommonEvidence`, `TraceGroup`, and `PeakHypothesis` now overlap scorer evidence semantics, but scorer policy still owns confidence, caps, and selection. | Follow C4-0 semantic-survival audit: port valid scorer invariants to successor tests, keep active policy until model-selection parity exists, and delete implementation-specific tests after coverage migrates. |
-| `alignment/clustering.py` event-first grouping | `semantic_migration` | Candidate/event grouping overlaps the newer hypothesis/trace model, while public imports and event-first tests still exist. | Follow C6 semantic-survival audit: map clustering tests to successor invariants, reduce to compatibility/diagnostic role or retire after no-use and parity evidence. |
+| `alignment/clustering.py` and `alignment/backfill.py` event-first grouping/backfill | retired | Candidate/event grouping and event-first matrix backfill were superseded by owner-first and successor evidence concepts; CodeGraph MCP impact/caller checks found only tests/package shims before deletion. | Keep historical docs as rationale only. Reintroduction requires a new product-path spec, public migration note, and owner-first parity oracle. |
 | `alignment/owner_clustering.py` owner-family construction | `semantic_migration` | Cross-sample owner-family grouping is conceptually close to future cross-sample hypothesis/family construction, but `OwnerAlignedFeature` still feeds production backfill/matrix stages. | Characterize family-edge/demotion invariants, migrate them into the successor spine when available, and avoid maintaining a permanent parallel family system. |
 | `shared_peak_identity_explanation/*` large modules | `split_only` | Active diagnostic/productization code; size and schema coupling are the debt. | Split behind schema/CLI tests; no product label changes. |
 | `matrix_value_conflict_policy=max_area_pending_baseline` and related shared-identity activation wording | `blocked_by_product_decision` | This is a temporary pre-AsLS conflict policy, not dead code. Changing it would affect matrix values and product labels. | Keep until the baseline/AsLS policy lands, then replace or retire through the activation/baseline behavior spec with machine-readable rollback evidence. |

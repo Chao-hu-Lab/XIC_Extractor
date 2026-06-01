@@ -44,7 +44,7 @@ CONTEXT:
   `tests/test_evidence_semantics.py`,
   `tests/test_peak_candidate_table.py`,
   `tests/test_csv_writers.py`.
-- C6 code/test surfaces to inspect first:
+- C6 code/test surfaces to inspect first or verify as retired:
   `xic_extractor/alignment/__init__.py`,
   `xic_extractor/alignment/pipeline.py`,
   `xic_extractor/alignment/clustering.py`,
@@ -95,10 +95,11 @@ CONSTRAINTS:
   obsolete by the C4-1 field map.
 - C6 may retire event-first alignment code only after a fresh final no-use check
   confirms no production, script, diagnostic, or package consumer remains.
-- C6 must keep public exports `cluster_candidates` and
-  `backfill_alignment_matrix` on a deprecate-first compatibility path in this
-  PR. Direct public-export removal is out of scope unless the goal is amended
-  with explicit breaking-change approval and reviewed again.
+- C6 public exports `cluster_candidates` and `backfill_alignment_matrix` may be
+  removed only as an explicit public-shim retirement slice after CodeGraph
+  impact/caller evidence shows tests/package-shim consumers only and the slice
+  receives implementation-contract review. This goal is amended to allow that
+  reviewed breaking-change cleanup.
 - C6 must not change the owner-first production chain:
   `build_sample_local_owners(...)`, `cluster_sample_local_owners(...)`,
   `select_backfill_features(...)`, `build_owner_backfill_cells(...)`,
@@ -156,16 +157,18 @@ SECOND-ROUND CONVERGENCE RECORD:
 - Prior xhigh review blockers have been folded into this contract:
   C4 selected confidence/raw score/labels/reason are
   `successor_projection`, not proof that scorer policy is successor-owned; C6
-  public `cluster_candidates` and `backfill_alignment_matrix` imports stay on a
-  deprecate-first compatibility path in this PR.
+  public `cluster_candidates` and `backfill_alignment_matrix` imports started on
+  a deprecate-first compatibility path.
 - Direct public-export removal is not an execution detail. It requires explicit
-  breaking-change approval, goal amendment, and another review pass.
+  breaking-change approval, goal amendment, and another review pass. That
+  amendment is now this public-shim retirement slice.
 - If current code evidence contradicts the C4 field map or C6 no-use audit,
   update the spec and rerun the relevant reviewer before implementation.
 - If C4 projection tests already exist, do not duplicate them; record the named
-  test family in the closeout table. If C6 compatibility shims still need a
-  helper module, keep that helper and classify it as compatibility support
-  rather than deleting it in this PR.
+  test family in the closeout table. If C6 compatibility shims are still kept,
+  keep only the helper module required by that shim and classify it as
+  compatibility support. If the public-shim retirement slice is accepted, delete
+  the helper and its implementation tests instead.
 
 PHASES:
 
@@ -223,9 +226,10 @@ Allowed work:
   `historical_doc`, `current_spec_or_goal`, `migration_note`,
   `implementation_test_to_delete`, or `unknown`.
 - Remove `_build_event_first_matrix(...)` if no callers remain.
-- Keep package-level public imports `cluster_candidates` and
-  `backfill_alignment_matrix` available as compatibility shims during this PR,
-  with a deprecation/migration note and tests that lock the chosen shim behavior.
+- Remove package-level public imports `cluster_candidates` and
+  `backfill_alignment_matrix` only if CodeGraph impact/caller evidence still
+  shows tests/package-shim consumers only and review accepts the breaking-change
+  cleanup. Otherwise keep them as explicit compatibility shims.
 - Delete event-first implementation modules and tests only if they are not
   required by the compatibility shims and invariant triage proves their
   remaining tests are obsolete implementation mechanics or their useful
@@ -316,8 +320,9 @@ Inspect:
 - C4 spec closeout wording does not claim scorer policy is retired.
 - C6 spec closeout wording does not claim owner-first production chain is
   replaced by diagnostics.
-- Public event-first imports remain available unless this goal has been amended
-  with explicit breaking-change approval and reviewed again.
+- Public event-first imports are either still available as compatibility shims
+  or, after the approved amendment, explicitly absent from the package public
+  API with no product/script/diagnostic/package caller remaining.
 - No deleted tests were simply hiding active product behavior.
 
 If any CI-equivalent command cannot run because of sandbox, DLL, dependency,

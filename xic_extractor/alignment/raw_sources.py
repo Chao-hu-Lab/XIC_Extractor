@@ -6,7 +6,9 @@ from pathlib import Path
 from time import perf_counter
 from typing import Protocol
 
-from xic_extractor.alignment.backfill import MS1BackfillSource
+import numpy as np
+from numpy.typing import NDArray
+
 from xic_extractor.alignment.ms1_index_source import (
     OwnerBackfillXicBackend,
     source_for_owner_backfill_backend,
@@ -15,8 +17,14 @@ from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.xic_models import XICTrace
 
 
-class AlignmentRawHandle(MS1BackfillSource, Protocol):
-    pass
+class AlignmentRawHandle(Protocol):
+    def extract_xic(
+        self,
+        mz: float,
+        rt_min: float,
+        rt_max: float,
+        ppm_tol: float,
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]: ...
 
 
 @dataclass
