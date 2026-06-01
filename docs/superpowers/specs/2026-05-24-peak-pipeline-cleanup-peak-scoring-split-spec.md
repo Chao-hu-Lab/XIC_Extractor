@@ -1,30 +1,63 @@
 # C4 — peak_scoring Split Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.2 — ON HOLD until Phase 1 complete
+**Status:** Superseded-for-implementation v0.4 — replaced by evidence-decision
+design; old package-split plan is historical rationale only
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
-**Precondition:** Phase 1 stable, and C3 (hypothesis model unification)
-landed and validated.
+**Current reassessment:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
+**One-goal execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
+**Current C4 design:** [C4 peak scoring evidence-decision design](2026-06-01-c4-peak-scoring-evidence-decision-design.md)
+**Precondition for any future implementation:** Phase 1 stable, C3 has a
+parity-backed migration that actually reduces a legacy DTO dependency, and the
+current C4 evidence-decision design has been accepted. A `diagnostic_only` C3
+closeout does not unlock this implementation.
 
-## Purpose
+## 2026-06-01 Supersession Decision
+
+Do not execute the package split below literally. Current direction is to
+rethink C4 as an evidence-decision architecture:
+
+```text
+evidence extraction
+  -> evidence interpretation / normalization
+  -> decision policy
+  -> reason / audit projection
+```
+
+The required brainstorming rewrite is captured by the current C4 design linked
+above. Future agents should implement from that design, not from the historical
+package layout below. The accepted design settles:
+
+- whether `xic_extractor.peak_scoring` remains a module, becomes a package with
+  a shim, or moves implementation under a different internal package;
+- which responsibilities belong to evidence extraction versus decision policy;
+- which score / confidence / reason outputs must be characterized before code
+  movement;
+- how CWT evidence and C3 handoff-spine fields enter the scorer without
+  duplicating evidence semantics.
+
+## Historical Purpose (Non-Executable)
 
 Split `xic_extractor/peak_scoring.py` (1092 lines mixing scorer, evidence,
 local S/N, severity gates, quality flags, and dataclasses) into a focused
 package.
 
-This refactor introduces no behavioral change. Validation is behavioral
-parity.
+This historical refactor proposal introduces no behavioral change and used
+behavioral parity as its validation framing. It is retained only for current
+state inventory, public API lists, and parity surfaces. It must not be executed
+because the evidence-decision design replaces the package-split framing.
 
-## Why This Spec Has to Wait for C3
+## Historical C3 Dependency Assumption
 
-The split is clean only if `PeakHypothesis` is the single input type and the
-scorer can read from it directly. Today the scorer accepts both legacy and
-hypothesis inputs via adapters, which means a split would either duplicate
-adapter logic across modules or hide it in a shared shim that defeats the
-purpose of splitting.
+The old package-split plan assumed the split is clean only if `PeakHypothesis`
+is the single input type and the scorer can read from it directly. Today the
+scorer accepts both legacy and hypothesis inputs via adapters, which means a
+split would either duplicate adapter logic across modules or hide it in a shared
+shim that defeats the purpose of splitting.
 
-After C3, the scorer reads `PeakHypothesis` only. Each split module then
-imports the hypothesis spine and not the legacy spine.
+A future C4 rewrite must re-check this assumption against the actual C3
+closeout. If C3 ends as inventory-only or `diagnostic_only`, this package split
+remains blocked.
 
 ## Current State
 
@@ -55,12 +88,17 @@ The module imports `asls_baseline`, `MS2TraceStrength`, and types from
 evidence module, not a new target to recreate. After C1 the AsLS import path
 changes; after C3 the input types change.
 
-## Required Change
+## Historical Non-Executable Implementation Sketch
 
-### Target Package Structure
+Everything below this heading is historical. Future agents may reuse the file
+inventory, public import list, and parity surfaces, but must not execute these
+old migration steps. The accepted evidence-decision design only permits future
+implementation from the C4-A / C4-B / C4-C slice contracts.
 
-Convert `peak_scoring.py` into `xic_extractor/peak_scoring/` package with
-the following modules:
+### Historical Target Package Structure
+
+The old proposal converted `peak_scoring.py` into a
+`xic_extractor/peak_scoring/` package with the following modules:
 
 ```text
 xic_extractor/peak_scoring/
@@ -129,7 +167,7 @@ so existing callers do not need to change their import paths.
 If the inventory grep at refactor time finds additional callers, extend
 the re-export list before deleting the legacy `peak_scoring.py` file.
 
-### Migration Order
+### Historical Migration Order - Do Not Execute
 
 1. Create the package directory and empty modules
 2. Move dataclasses (`context.py`, `result.py`) first
@@ -141,11 +179,12 @@ the re-export list before deleting the legacy `peak_scoring.py` file.
 7. Move `score_candidate` main routine to `scorer.py` last, since it
    imports from all the others
 8. Add re-exports in `__init__.py`
-9. Delete the legacy `peak_scoring.py` file
+9. Retire the legacy `peak_scoring.py` file only after public import parity is
+   proven
 
 After each step, run the parity validation. Each step is one PR.
 
-## Validation Contract
+## Historical Parity Surfaces To Reuse
 
 Behavioral parity required at every step:
 
@@ -172,25 +211,12 @@ Behavioral parity required at every step:
 
 ## Open Questions
 
-- The legacy `peak_scoring.py` filename is widely referenced in
-  documentation and notes. After the split, should we keep `peak_scoring.py`
-  as a thin re-export shim, or delete it entirely? Lean toward keeping the
-  shim until 2027 to avoid breaking external references; remove in a later
-  spec.
-- Should `peak_scoring_evidence.py` (already a separate file) move into
-  the new `peak_scoring/evidence/` directory as `peak_scoring/evidence/__init__.py`?
-  Decision deferred to refactor time. Likely yes, for symmetry.
-- Some severity functions consume both `ScoringContext` and the candidate
-  object. After C3 the candidate is a `PeakHypothesis`. Verify the function
-  signatures are clean (single hypothesis input) before splitting; if
-  cross-cutting concerns surface, defer the affected function to a later
-  split sub-PR.
-- The constants (`_SYMMETRY_SOFT_LOW`, `_SN_DIRTY_HARD_THRESHOLD`, etc.)
-  are spread across the file head. Group them by domain (`severities/_constants.py`)
-  or keep them in the function module that uses each? Lean toward keeping
-  them next to the function that uses each.
+- Historical package-layout questions above are superseded. Current open
+  questions live in the evidence-decision design and should be answered per
+  C4-A / C4-B / C4-C, not by reopening a full package split.
 
 ## Acceptance Owner
 
-Engineering owner runs parity validation after each sub-PR. Each sub-PR is
-small and self-contained. Final landing note recorded.
+Engineering owner uses the current C4 evidence-decision design as the
+implementation source. This historical spec stays only as source inventory and
+parity-surface rationale.
