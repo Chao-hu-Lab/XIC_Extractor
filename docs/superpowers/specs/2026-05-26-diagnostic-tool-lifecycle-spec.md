@@ -1,7 +1,8 @@
 # Diagnostic Tool Lifecycle Spec
 
 **Date:** 2026-05-26
-**Status:** Planning - governance rules; no behavior, schema, or method change
+**Status:** Governance rules with 2026-06-01 shared-infrastructure closeout; no
+diagnostic behavior, schema, or method change
 **Worktree:** `codex/peak-pipeline-modernization`
 
 ---
@@ -25,6 +26,22 @@ This spec does NOT:
   behavior,
 - execute any cleanup punch list. Deletions and promotions belong to follow-up
   implementation PRs that cite this spec.
+
+## 2026-06-01 Shared-Infrastructure Closeout
+
+The cleanup-retirement branch completed the dependency-direction cleanup that
+this spec anticipated for schema-neutral shared helpers:
+
+- `xic_extractor/diagnostics/diagnostic_io.py` is the package-owned canonical
+  path for delimited/TSV IO, scalar parsing, header validation, label splitting,
+  and value formatting.
+- `tools/diagnostics/diagnostic_io.py` remains a compatibility shim for
+  existing diagnostic CLIs.
+- This move does not promote a diagnostic gate by itself and does not change any
+  diagnostic schema or scientific method.
+- Future diagnostic tools should reuse the package-owned helper before adding
+  local `_read_required_tsv`, `_optional_float`, `_text`, `_required_indexes`,
+  or `_write_tsv` copies.
 
 ## Problem Statement
 

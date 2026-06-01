@@ -1,13 +1,35 @@
 # C2 — Resolver Collapse Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.3 — DESIGN CORRECTION APPLIED; honest
-resolver-semantics cleanup only
+**Status:** Partial closeout v0.4 — `arbitrated` retired in 2026-06-01
+cleanup-retirement branch; remaining resolver-semantics cleanup only
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Precondition:** Phase 1 conditional blockers are documented, P1's supported
 resolver behavior is described honestly as conservative
 `local_minimum_with_wis_merge_v1`, P5 (CWT evidence honesty) has a GO note, and
 removed public resolver values have an approved migration / deprecation plan.
+
+## 2026-06-01 Implementation Closeout
+
+The cleanup-retirement branch completed the `arbitrated` portion of C2:
+
+- `arbitrated` is no longer in `RESOLVER_MODES`.
+- Config loading, GUI normalization, CLI parsers, validation harnesses, and
+  direct programmatic `resolver_mode="arbitrated"` inputs reject with
+  `arbitrated resolver mode is retired; use region_first_safe_merge`.
+- The `arbitrated` facade branch and private merge helpers were deleted.
+- `_combine_proposal_sources` was preserved because supported recovery logic
+  still uses it.
+- The required one-shot 8RAW comparison did not show `arbitrated` materially
+  outperforming the supported conservative path.
+
+The closeout note is
+`docs/superpowers/notes/2026-06-01-phase8-arbitrated-resolver-retirement-note.md`.
+
+Remaining C2 work is intentionally not completed here: `legacy_savgol` remains
+an accepted mode, `local_minimum` remains accepted, CWT evidence remains a
+proposal/audit surface, and `region_first_safe_merge` remains the public
+compatibility name for conservative local-minimum + WIS/safe-merge behavior.
 
 ## Purpose
 
@@ -33,7 +55,7 @@ source (CWT) that is not a top-level `resolver_mode`:
 |---------------------------|------|----------------|
 | `legacy_savgol` | SG smoothing + prominence | Fallback branch in `facade.py` |
 | `local_minimum` | Local minimum boundary | Routed via the `{local_minimum, region_first_safe_merge}` branch; remains the main production proposal source |
-| `arbitrated` | Merge legacy + local results | **No production caller** |
+| `arbitrated` | Merge legacy + local results | **Retired in 2026-06-01 cleanup-retirement branch** |
 | `region_first_safe_merge` | Compatibility name for local-minimum boundary plus safe-merge/WIS promotion | **Production default after P1; not true region-first v2** |
 
 Plus a **non-dispatched proposal source** (not a `resolver_mode` value, no
@@ -110,6 +132,10 @@ Verify no external caller (other repos, deployment configs, CI scripts) uses
 
 If external callers exist, defer the removal and document the constraint
 under `docs/superpowers/notes/`.
+
+Implementation status: completed in the 2026-06-01 cleanup-retirement branch.
+No external blocker was found in the repo surfaces scanned for the phase, and
+old public inputs now fail fast with the migration message.
 
 ### Step 3 — Convert `legacy_savgol` from resolver_mode to utility
 
@@ -196,7 +222,8 @@ Additional check:
 - before deletion, run a one-shot scan with `resolver_mode=arbitrated` on
   8RAW; result must be either equivalent to or strictly worse than the
   supported conservative run. If `arbitrated` is materially better on any ISTD,
-  the collapse is premature — record findings and defer
+  the collapse is premature — record findings and defer. This check passed for
+  the completed `arbitrated` retirement slice.
 - scan repo configs, examples, scripts, docs, GUI/config surfaces, validation
   harnesses, and known deployment handoff paths for every removed value
   (`arbitrated`, `legacy_savgol`, and optionally `local_minimum`). Each hit
@@ -230,9 +257,10 @@ Restore deleted modes if any of:
 
 ## Open Questions
 
-- Has anyone enabled `arbitrated`, `legacy_savgol`, or `local_minimum` in a
-  downstream config? Repo grep is not sufficient; confirmation from production
-  deployment owners is needed.
+- Has anyone enabled `legacy_savgol` or `local_minimum` in a downstream config?
+  Repo grep is not sufficient; confirmation from production deployment owners
+  is needed before retiring or remapping those values. `arbitrated` is already
+  retired by this branch and old inputs fail fast.
 - Should the public config value eventually be renamed from
   `region_first_safe_merge` to `local_minimum_with_wis_merge_v1`, or should the
   old name remain as a stable compatibility token until true region-first v2 is

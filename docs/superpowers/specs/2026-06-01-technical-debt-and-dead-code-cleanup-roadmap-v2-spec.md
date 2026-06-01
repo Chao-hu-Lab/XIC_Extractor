@@ -1,7 +1,7 @@
 # Technical Debt and Dead-Code Cleanup Roadmap v2
 
 **Date:** 2026-06-01
-**Status:** Draft v0.4 - user-calibrated cleanup sequencing; dead-code deletion deferred
+**Status:** Execution closeout v1.0 - selected one-pass retirements completed; broad dead-code deletion deferred
 **Related peak-pipeline chapter:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Related governance:** [Diagnostic tool lifecycle spec](2026-05-26-diagnostic-tool-lifecycle-spec.md)
 **Mainline constraint:** [Product priority reset decision spec](2026-05-28-product-priority-reset-decision-spec.md)
@@ -24,14 +24,46 @@ The safer order is:
 6. defer deletion unless a future strict retired-state audit is explicitly
    reopened.
 
-This spec does not authorize behavior changes, schema changes, public CLI
-deletions, resolver-default changes, or linear-edge deletion.
+The 2026-06-01 one-pass cleanup branch used this roadmap as the broader
+cleanup chapter, then executed the explicitly authorized retirement slices for
+`linear_edge` and `arbitrated` after their gates passed. This spec still does
+not authorize additional behavior changes, broad schema changes, resolver
+default changes, or deletion outside the named retirement phases.
 
 Dead-code deletion is explicitly deferred. The current operating rule is:
 if code is not actively blocking a planned change and still lets the project run,
 do not disturb it merely because it looks old. This roadmap keeps the
 classification vocabulary only to prevent accidental deletion during future
 cleanup.
+
+## 2026-06-01 Cleanup-Retirement Closeout
+
+The branch `codex/cleanup-retirement-foundation` completed the following scoped
+cleanup/retirement work under
+`docs/superpowers/plans/2026-06-01-cleanup-retirement-one-pass-goal.md`:
+
+- R1 package dependency-direction cleanup: shared diagnostic IO now lives at
+  `xic_extractor/diagnostics/diagnostic_io.py`; `tools/diagnostics/diagnostic_io.py`
+  is a compatibility shim.
+- R2 index/lifecycle refresh: `tools/diagnostics/INDEX.md` records the current
+  entry-point count and shared-infrastructure owner.
+- C1a baseline relocation: `asls_baseline` lives in
+  `xic_extractor/peak_detection/baseline.py`; `xic_extractor/baseline.py`
+  remains a compatibility re-export.
+- C5 integration entry closeout: production integration calls use the
+  consolidated integration path documented by the C5 closeout note.
+- C1b linear-edge retirement: production/config/CLI selector behavior no longer
+  accepts `linear_edge`; old inputs fail with a migration message, the accepted
+  cell-integration audit schema no longer emits linear-edge rollback columns,
+  and historical diagnostics retain only legacy comparison readers.
+- C2 partial resolver collapse: the experimental `arbitrated` resolver mode is
+  retired and rejected with a migration message. `legacy_savgol`,
+  `local_minimum`, and the public `region_first_safe_merge` compatibility name
+  remain accepted pending a separate C2 follow-up.
+
+Broad dead-code deletion, `legacy_savgol` demotion, CWT retirement, resolver
+renaming, C3/C4/C6 structural work, and large active-module splits remain out of
+scope for this closeout.
 
 ## Review Disposition
 
@@ -48,9 +80,10 @@ five ways:
 - R2 must not promote a broad topic group by proximity. Each gate needs its own
   gate id, decision target, exit status/code contract, and frozen schema before
   it moves toward `GATED`.
-- `arbitrated` and `linear_edge` are retirement-directed, not undecided legacy
-  options. They still require migration/gate sequencing before deletion because
-  they touch public config, rollback evidence, selected areas, or tests.
+- `arbitrated` and `linear_edge` were retirement-directed, not undecided legacy
+  options. The one-pass cleanup branch completed their scoped retirements after
+  migration/gate sequencing; remaining references are historical docs,
+  rejection tests, migration messages, or legacy diagnostic readers.
 - Low textual reference count, large file size, old names, and temporary product
   policies are not deletion evidence.
 
@@ -92,10 +125,11 @@ Evidence from the 2026-06-01 scan:
   should not live only under a tool-only namespace.
 - No tracked `scripts/*.ps1` extraction script remains; the old PowerShell
   extraction deletion from the area-support plan is not a current cleanup item.
-- `arbitrated`, `legacy_savgol`, and `linear_edge` are not simple dead code:
-  they have public config/test/diagnostic or retirement-gate semantics. The
-  current product direction is to retire `arbitrated` and `linear_edge`, while
-  keeping useful Savitzky-Golay utility behavior if C2 demotes the resolver mode.
+- `arbitrated`, `legacy_savgol`, and `linear_edge` were not simple dead code:
+  they had public config/test/diagnostic or retirement-gate semantics. The
+  current state is that `arbitrated` and `linear_edge` are retired public inputs,
+  while useful Savitzky-Golay utility behavior remains available if a later C2
+  follow-up demotes the `legacy_savgol` resolver mode.
 - The largest current line-pressure targets include:
   `shared_peak_identity_explanation/machine_evidence_support.py`,
   `shared_peak_identity_explanation/schema.py`,
@@ -133,11 +167,11 @@ Ambiguous candidates default to `deprecate_first`, `move_only`, or
 | `xic_extractor/diagnostics/` package path | `diagnostic_lifecycle` | Only `timing.py` lives there, while the lifecycle spec reserves this namespace for `GATED` diagnostics. | Use this path for gates only, or explicitly carve out schema-neutral shared infrastructure before moving generic IO helpers there. |
 | Phase gate tools such as P1/P2/P2b/P7 evidence gates | `diagnostic_lifecycle` | Lifecycle spec identifies promotion candidates, but several related tools are still `diagnostic_only`, sidecar-only, or human-triggered active tools. | Promote one individually gated group per PR only after it has a gate id, decision target, exit status/code contract, and frozen schema; preserve CLI shims. |
 | Backfill review trio (`seed_aware`, `family_ms1`, `low_ms1_coverage`) | `diagnostic_lifecycle` + `split_only` | They may be orthogonal review axes or redundant views; prior audit says spec first. | Write an axis-semantics spec before consolidation. |
-| `arbitrated` resolver mode | `retire_planned` | It was an experimental resolver and is retirement-directed, but config validation, GUI/tests, CWT/diagnostic fixtures, and docs still mention it. | C2 should remove the public mode after a config migration decision and one-shot scan that preserves any useful behavior as non-arbitrated logic if needed. |
+| `arbitrated` resolver mode | retired in Phase 8 | It was an experimental resolver. The one-shot 8RAW comparison did not show a material advantage over the supported conservative path, and public config/CLI/GUI/tests now reject it with a migration message. | Keep historical docs/tests only as migration evidence; future C2 work should focus on `legacy_savgol`, `local_minimum`, CWT evidence, and resolver naming. |
 | `legacy_savgol` top-level resolver mode | `deprecate_first` / keep utility | The top-level mode is compatibility debt, but SG smoothing/prominence utility behavior may remain useful. | C2 should demote or alias the public mode only after config behavior is approved; do not delete useful SG utility code just because the mode retires. |
 | `region_first_safe_merge` naming | `deprecate_first` | It is the public default name but actually means conservative `local_minimum_with_wis_merge_v1`. | Rename/alias only through C2 with docs and config compatibility. |
-| `integrate_linear_edge_baseline` and selector support | `retire_planned` | Linear-edge retirement direction is accepted, but deletion still depends on C1a, C5, Tier C AsLS-vs-linear-edge evidence, blank/stress safety, and rollback-column deprecation. | Keep behind the selector only as migration/rollback support until C1b prerequisites pass, then delete in the C1b retirement PR. |
-| `xic_extractor/baseline.py` top-level AsLS module | `move_only` | C1a should relocate implementation while keeping compatibility re-export unless breaking change is approved. | Run C1a as pure import relocation. |
+| `integrate_linear_edge_baseline` and selector support | retired in Phase 7 | C1a, C5, Tier C AsLS-vs-linear-edge evidence, blank/stress safety, and rollback-column deprecation were resolved in the one-pass branch. The linear-edge implementation was deleted; the remaining selector is an AsLS-only compatibility guard that rejects `linear_edge`. | Preserve the rejection contract and historical diagnostic readers; do not reintroduce linear-edge production support without a new behavior spec. |
+| `xic_extractor/baseline.py` top-level AsLS module | completed move-only | C1a relocated implementation while keeping compatibility re-export. | Keep as public compatibility shim unless a breaking-change plan removes the top-level import. |
 | `PeakDetectionResult`, `PeakCandidate`, `PeakResult` | `blocked_by_product_decision` | They still own resolver/scoring/message/fallback behavior. | Migrate one consumer at a time through C3; do not bulk delete. |
 | `peak_candidates.tsv` and boundary projection builders | `split_only` / keep | They are debug/audit projections with frozen headers, not canonical product model. | Keep as externalized projection surfaces. |
 | `alignment_matrix.tsv` owner/backfill path | `blocked_by_product_decision` | It is the downstream correction/statistics delivery surface. | Requires a separate parity/behavior spec before migration. |
@@ -241,7 +275,9 @@ Then return to the existing C-specs, but read them through this broader order:
    diagnostic fixture migration is explicit.
 5. C4 waits for C3 or a narrow characterization-test slice.
 6. C6 requires golden parity and should remain separate from behavior changes.
-7. C1b remains last and blocked by linear-edge retirement prerequisites.
+7. C1b was executed after its linear-edge retirement prerequisites passed in the
+   one-pass branch. Future cleanup should treat linear-edge as retired, not as a
+   pending rollback option.
 
 ### R5 - Oversized Active Module Splits
 
@@ -309,8 +345,10 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
 ## Non-Goals
 
 - No resolver default change.
-- No AsLS / linear-edge retirement claim.
-- No deletion of public config values in this spec.
+- No additional AsLS / linear-edge behavior claim beyond the completed Phase 7
+  retirement closeout.
+- No further public config-value deletion beyond the completed `linear_edge`
+  and `arbitrated` retirement inputs.
 - No matrix identity or value migration.
 - No CWT production promotion.
 - No mass deletion of diagnostics based on low textual reference counts.
@@ -318,22 +356,20 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
 
 ## Open Questions
 
-1. Should old resolver config values warn, map to the supported default, or
-   remain accepted silently during the first deprecation PR?
+1. For remaining resolver compatibility values such as `legacy_savgol` and
+   `local_minimum`, should old config values warn, map to the supported default,
+   or remain accepted silently during a future deprecation PR?
 2. Which diagnostic gate should be promoted first after R1, and does it already
    have a gate id, decision target, exit status/code contract, frozen schema, and
    explicit exclusion of diagnostic-only sidecars?
 
 ## Recommended Next Plan
 
-Write an implementation plan for R1 only:
+After this one-pass cleanup PR, the next plan should not re-open `linear_edge`
+or `arbitrated`. Choose one remaining slice:
 
-- target the diagnostic IO dependency direction issue;
-- do not change TSV schemas, CLI flags, or diagnostic semantics;
-- leave all current diagnostic entry points import-compatible;
-- update INDEX/lifecycle wording for the canonical helper path and compatibility
-  shim;
-- run canonical-path `diagnostic_io`, shim compatibility, and
-  shared-peak-identity tests;
-- do not start resolver, linear-edge, scoring, or alignment grouping cleanup in
-  the same PR.
+- C2 follow-up for `legacy_savgol`, CWT evidence, and honest resolver naming;
+- C3 handoff-spine scaffolding;
+- a narrow split-only plan for an oversized active module with characterization
+  tests;
+- a strict retired-state audit if the user explicitly wants dead-code deletion.

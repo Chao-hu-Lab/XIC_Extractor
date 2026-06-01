@@ -54,7 +54,7 @@ per the lifecycle spec.
 
 ### `p2_asls_shadow_gate.py`
 
-**Purpose**: Gate P2 AsLS baseline area against linear-edge integration audit rows for targeted ISTD benchmark selections; supports both legacy AsLS-shadow and promoted AsLS schemas.
+**Purpose**: Gate P2 AsLS baseline area against historical linear-edge integration audit rows for targeted ISTD benchmark selections; supports both legacy AsLS-shadow and promoted AsLS schemas.
 **Topic group**: `p2_asls_shadow_gate.py`
 **Originating spec**: `2026-05-24-peak-pipeline-area-baseline-asls-spec.md`
 **Recent doc**: `plans/2026-05-25-p2-asls-baseline-shadow-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
@@ -63,7 +63,7 @@ per the lifecycle spec.
 
 ### `p2_baseline_truth_audit.py`
 
-**Purpose**: Build a diagnostic-only baseline truth audit for P2/P2b AsLS gate ISTD families; compares linear-edge rollback against promoted AsLS when available.
+**Purpose**: Build a diagnostic-only baseline truth audit for P2/P2b AsLS gate ISTD families; compares historical linear-edge rollback against promoted AsLS when legacy evidence is available.
 **Topic group**: `p2_baseline_truth_audit.py`
 **Originating spec**: `2026-05-24-peak-pipeline-area-baseline-asls-spec.md` (shared with shadow gate)
 **Recent doc**: `plans/2026-05-25-p2-baseline-truth-audit-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
@@ -84,7 +84,7 @@ per the lifecycle spec.
 **Purpose**: Run the P2c AsLS truth-validation gate with Tier A selected-family guard, locked synthetic Tier B1/B2 benchmark, optional Tier C evidence, methodology waiver documentation, retirement prerequisite manifest, and deletion-safe exit codes.
 **Topic group**: `asls_truth_validation.py` + `_models`, `_manifests`, `_synthetic`, `_inputs`, `_analysis` (6 files)
 **Originating spec/plan**: `specs/2026-05-26-peak-pipeline-asls-truth-validation-spec.md`, `plans/2026-05-27-p2c-tier-b-b1-b2-redesign-plan.md`
-**Current gate note**: Exit `0` is reserved for true linear-edge retirement authority. B1 relevance fixtures are the only synthetic layer that can drive `decision_target=c1b-plan`; B2 stress evidence is reported for retirement/Tier C follow-up and must not by itself create a C1b no-go. v1 fixture outputs are non-authoritative under the B1/B2 contract and should be treated as `LEGACY_V1_NON_AUTHORITATIVE` / `INCONCLUSIVE_FIXTURE_SCOPE_MISMATCH`.
+**Current gate note**: Exit `0` was the true linear-edge retirement authority consumed by the 2026-06-01 Phase 6b/Phase 7 closeout. B1 relevance fixtures are the only synthetic layer that can drive `decision_target=c1b-plan`; B2 stress evidence is reported for retirement/Tier C follow-up and must not by itself create a C1b no-go. v1 fixture outputs are non-authoritative under the B1/B2 contract and should be treated as `LEGACY_V1_NON_AUTHORITATIVE` / `INCONCLUSIVE_FIXTURE_SCOPE_MISMATCH`. After Phase 7, any linear-edge references here are historical comparison evidence, not maintained production selector support.
 
 ---
 
