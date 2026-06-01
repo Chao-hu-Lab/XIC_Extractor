@@ -432,13 +432,7 @@ def _cluster_seed_candidates(cluster: Any) -> tuple[Any, ...]:
             for member in members
             for candidate in _seed_candidates_from_member(member)
         )
-    event_clusters = getattr(cluster, "event_clusters", ())
-    return tuple(
-        candidate
-        for event_cluster in event_clusters
-        for member in getattr(event_cluster, "members", ())
-        for candidate in _seed_candidates_from_member(member)
-    )
+    return ()
 
 
 def _seed_candidates_from_member(member: Any) -> tuple[Any, ...]:

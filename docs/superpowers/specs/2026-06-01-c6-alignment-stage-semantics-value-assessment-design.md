@@ -1,7 +1,7 @@
 # C6 - Alignment Stage Semantics And Value Assessment Design
 
 **Date:** 2026-06-01
-**Status:** Phase 5 design closeout v0.8 — C6-EF deprecate-first execution closeout
+**Status:** Phase 5 design closeout v0.9 — C6-B event-family retirement slice
 **Readiness label:** `diagnostic_only`
 **Supersedes for implementation:** [C6 alignment grouping consolidation](2026-05-24-peak-pipeline-cleanup-alignment-grouping-consolidation-spec.md)
 **Execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
@@ -30,13 +30,13 @@ The old `group_by_tolerance`, `eject_and_reattach`, and `tie_break_sort`
 primitive plan is historical rationale only. It must not be implemented as the
 default C6 direction.
 
-Phase 5 selects no C6-B/C implementation slice yet. Current evidence does not
-support broad helper extraction, but it does support a stronger migration
-question: several legacy alignment concepts may have been fused into,
-superseded by, or demoted under the newer `TraceGroup` / `PeakHypothesis` /
-evidence-chain model. The recommended next C6 action is optional C6-B
-semantic-survival audit for one named high-risk module family at a time, with
-an explicit migration or retirement decision.
+Phase 5 does not support broad helper extraction, but it does support bounded
+semantic-survival slices for one named high-risk module family at a time. The
+first executable C6-B slice retired the non-public event-family helper path
+after no-use evidence and invariant triage. Remaining C6-B/C work should stay
+equally narrow: public event-first compatibility shims and their delegated
+clustering/backfill helpers need a later public migration or invariant-port
+slice before removal.
 
 The deeper C6 question is not only "can grouping-like loops be consolidated?"
 It is:
@@ -115,7 +115,7 @@ bucket:
 
 | Stage family | Current consumer evidence | Successor overlap | Concrete decision | Test migration / exit rule |
 |---|---|---|---|---|
-| Event-first candidate clustering: `clustering.cluster_candidates`, `_cluster_candidates_greedy`, `backfill_alignment_matrix`, `build_ms1_feature_families`, `integrate_feature_family_matrix` | CodeGraph/`rg` sees public package shims, tests, and event-first module helpers only; `_build_event_first_matrix(...)` has been removed from code. `build_ms1_feature_families(...)` and `integrate_feature_family_matrix(...)` now have test consumers only. | `PeakHypothesis`, `TraceGroup`, owner-first evidence chain, and PeakHypothesis matrix diagnostics cover richer candidate/trace semantics | `successor_overlap` plus `compatibility_or_alternate_path`; strongest C6 retirement candidate after public shim and invariant triage | Keep public shims until explicit migration. Map neutral-loss strata, complete-link, stable IDs, duplicate peak, and region-audit invariants to owner/hypothesis tests or mark them obsolete; then retire implementation-mechanic tests. |
+| Event-first candidate clustering: `clustering.cluster_candidates`, `_cluster_candidates_greedy`, `backfill_alignment_matrix`; retired event-family helpers `build_ms1_feature_families`, `integrate_feature_family_matrix` | CodeGraph/`rg` sees public package shims, tests, and event-first clustering/backfill helper support only; `_build_event_first_matrix(...)`, `build_ms1_feature_families(...)`, and `integrate_feature_family_matrix(...)` have been removed from code. | `PeakHypothesis`, `TraceGroup`, owner-first evidence chain, and PeakHypothesis matrix diagnostics cover richer candidate/trace semantics | `successor_overlap` plus `compatibility_or_alternate_path`; event-family subpath is now `retired_event_family_helper` | Keep public shims until explicit migration. Remaining clustering/backfill implementation tests need the same invariant triage before the public shim can be retired. |
 | Sample-local ownership: `ownership.build_sample_local_owners` | Called by `run_alignment(...)`, process backend, and ownership tests | `TraceGroup` can express traces, but does not replace sample-local candidate-to-peak ownership or ambiguous-owner records | `keep_as_stage` with possible future semantic migration | Keep tests in `tests/test_alignment_ownership.py`. Future fusion requires a concrete `TraceGroup`/owner contract that preserves unresolved assignments, identity conflicts, XIC request windows, region-audit context, and process-payload behavior. |
 | Owner-family construction: `owner_clustering.cluster_sample_local_owners` and ambiguous review-only features | Called by `run_alignment(...)`, diagnostic probe, and owner-clustering tests | Future cross-sample `TraceGroup` / `PeakHypothesis` family spine may absorb complete-link owner families | `semantic_migration_candidate` but active structural input today | Keep tests now. Before migration, preserve complete-link grouping, drift-prior edges, no same-sample merges, neutral-loss/product conflict splits, impossible m/z rejection, edge evidence sink, and review-only identity-conflict features. Exit only when successor family tests and `alignment_matrix.tsv`/`alignment_cells.tsv` parity exist. |
 | Pre-backfill family consolidation: `pre_backfill_consolidation.*` | Optional `run_alignment(preconsolidate_owner_families=True)` path and tests | Future family spine may absorb pre-backfill identity consolidation | `contract_harden` / optional active path | Keep as optional policy until a successor owns family consolidation. Exit requires flag-path parity and owner-family ID/seed-center behavior parity. |
@@ -130,7 +130,8 @@ bucket:
 | Test family | Current value | Migration action |
 |---|---|---|
 | `tests/test_alignment_clustering.py` public/API tests | Protect public `cluster_candidates` import and event-first clustering mechanics. | First retirement target after no-use proof. Preserve only public compatibility tests during deprecation; port meaningful invariants or delete mechanic-only tests. |
-| `tests/test_alignment_backfill.py`, `tests/test_alignment_feature_family.py`, `tests/test_alignment_family_integration.py` | Protect unused event-first matrix/family helpers plus some reusable region-audit/backfill concepts. | Classify each invariant before deletion. If no event-first consumer remains, migrate only concepts still needed by owner-first or hypothesis matrix diagnostics. |
+| `tests/test_alignment_backfill.py` | Protects the still-exported public `backfill_alignment_matrix` compatibility shim and event-first backfill mechanics. | Keep while public shim delegates to event-first backfill; later split public compatibility tests from implementation-mechanic tests. |
+| `tests/test_alignment_feature_family.py`, `tests/test_alignment_family_integration.py` | Protected non-public event-family helpers with no runtime or public export consumer. | Deleted in C6-B after retained invariants were mapped to owner-family, owner-backfill, claim-registry, primary-consolidation, or obsolete event-family implementation detail. |
 | `tests/test_alignment_ownership.py` | Protects active sample-local owner construction. | Keep. Not a C6 deletion target. |
 | `tests/test_alignment_owner_clustering.py` | Protects active owner-family construction and future migration invariants. | Keep now; later port to cross-sample family/hypothesis tests only after successor family spine exists. |
 | `tests/test_pre_backfill_consolidation.py` | Protects optional pre-backfill identity consolidation. | Keep while flag exists; retire only with flag removal or successor parity. |
@@ -162,8 +163,9 @@ Current CodeGraph / `rg` evidence after Phase 2 execution:
   shim and direct event-first module helper; current hits are tests and shim
   support, not owner-first production callers.
 - `build_ms1_feature_families(...)` and
-  `integrate_feature_family_matrix(...)` currently have test consumers only
-  after `_build_event_first_matrix(...)` removal.
+  `integrate_feature_family_matrix(...)` had test consumers only after
+  `_build_event_first_matrix(...)` removal; the C6-B event-family retirement
+  slice deleted those non-public helpers and their implementation-only tests.
 - `xic_extractor/alignment/__init__.py` still exports public
   `cluster_candidates` and `backfill_alignment_matrix` through explicit
   deprecate-first compatibility shims.
@@ -186,8 +188,8 @@ Current CodeGraph / `rg` evidence after Phase 2 execution:
 | `_cluster_candidates_greedy(...)` | Internal helper behind public `cluster_candidates` | No | `obsolete_implementation_detail` candidate | Delete after public wrapper is retired or reduced to a deprecation shim and after meaningful invariants are migrated. |
 | `_build_event_first_matrix(...)` | Removed from code after no-use proof; remaining references are docs/goal only | No | `historical_reference` after Phase 2 removal | Keep only as migration evidence. Reintroduction would require a new product-path spec and owner-first parity review. |
 | `backfill.backfill_alignment_matrix` internals | Test-covered event-first cell construction and region-audit behavior | Public through package re-export | `adapter_only` until public deprecation; otherwise `retire_candidate` | Preserve only invariants reused by owner-backfill or region-audit contracts. Delete mechanic-only event-first tests after public deprecation. |
-| `feature_family.build_ms1_feature_families` | Tests only after `_build_event_first_matrix(...)` removal | No package-level public export | `retire_candidate` after invariant triage | Migrate only unique family invariants still needed by owner-family or PeakHypothesis matrix diagnostics; otherwise delete tests and implementation. |
-| `family_integration.integrate_feature_family_matrix` | Tests only after `_build_event_first_matrix(...)` removal | No package-level public export | `retire_candidate` after invariant triage | Migrate unique duplicate-peak/region-audit concepts if still needed; otherwise delete with event-first retirement. |
+| `feature_family.build_ms1_feature_families` | Removed after no-use evidence; previous consumers were tests only | No package-level public export | `retired_event_family_helper` | Reintroduction requires a new product-path spec. Owner-family tests already own neutral-loss/product/observed-loss separation and complete-link semantics; event-family shared-subset mechanics were implementation detail. |
+| `family_integration.integrate_feature_family_matrix` | Removed after no-use evidence; previous consumers were tests only | No package-level public export | `retired_event_family_helper` | Reintroduction requires a new product-path spec. Owner-backfill, claim-registry, and primary-consolidation tests own retained region-audit and duplicate-peak semantics. |
 | Historical plans mentioning event-first | Docs only | No active product contract | `historical_reference` | Do not update as active specs except to link to current C6 retirement decision if needed. |
 
 ### Event-First Invariant Triage
@@ -200,8 +202,8 @@ Current CodeGraph / `rg` evidence after Phase 2 execution:
 | Stable IDs and input-order invariance | Public output row identity or successor matrix construction | Keep only if public output depends on it. Event-first internal IDs alone are implementation details. |
 | Same-sample collision winner/ejection/reattach mechanics | Owner-local ownership, claim registry, primary consolidation | Treat as obsolete unless a matching owner-first invariant is missing. |
 | Anchor backfill cell rescue/unchecked/absent behavior | `owner_backfill` / `owner_matrix` | Port only if owner-first tests lack an equivalent. |
-| Region audit receives trace context | `cell_region_audit`, `owner_backfill`, `family_ms1_overlay` diagnostics | Preserve through owner-backfill/diagnostic tests, not event-first path. |
-| Duplicate MS1 peak assignment to nearest/protected family | `claim_registry` and `primary_consolidation` | Keep under claim/consolidation tests if product-relevant; event-first duplicate mechanics are not the authority. |
+| Region audit receives trace context | `cell_region_audit`, `owner_backfill`, `family_ms1_overlay` diagnostics | Preserved through owner-backfill/diagnostic tests; event-family-specific trace-group tests were deleted with the unused helper. |
+| Duplicate MS1 peak assignment to nearest/protected family | `claim_registry` and `primary_consolidation` | Preserved under claim/consolidation tests; event-family duplicate winner mechanics were not product authority. |
 
 ### C6-EF Executed Implementation Slice
 
@@ -263,16 +265,54 @@ Residual no-use scan classification:
 | `xic_extractor/alignment/__init__.py` public `cluster_candidates` / `backfill_alignment_matrix` names | `compatibility_shim` | Keep for this PR with deprecate-first docstrings and shim tests. Removal needs explicit public-contract migration. |
 | `xic_extractor/alignment/clustering.py::cluster_candidates` and `_cluster_candidates_greedy` | `compatibility_shim` support plus future `implementation_test_to_delete` triage | Keep while package shim delegates to event-first clustering; later delete only after public shim retirement or successor invariant migration. |
 | `xic_extractor/alignment/backfill.py::backfill_alignment_matrix` | `compatibility_shim` support plus future `implementation_test_to_delete` triage | Keep while package shim delegates to event-first backfill; later delete only after public shim retirement and region-audit/backfill invariants are ported or declared obsolete. |
-| `xic_extractor/alignment/feature_family.py::build_ms1_feature_families` | `implementation_test_to_delete` candidate | No runtime consumer remains after `_build_event_first_matrix(...)` deletion. Keep temporarily because tests still document untriaged event-family invariants. |
-| `xic_extractor/alignment/family_integration.py::integrate_feature_family_matrix` | `implementation_test_to_delete` candidate | Same as feature-family integration; no runtime consumer remains, but tests require separate invariant triage before deletion. |
+| `xic_extractor/alignment/feature_family.py::build_ms1_feature_families` | `retired_event_family_helper` | Deleted in the C6-B event-family retirement slice after CodeGraph/`rg` showed test-only consumers and retained invariants were mapped to owner-family or obsolete implementation detail. |
+| `xic_extractor/alignment/family_integration.py::integrate_feature_family_matrix` | `retired_event_family_helper` | Deleted in the same C6-B slice after region-audit and duplicate-peak semantics were confirmed under owner-backfill, claim-registry, and primary-consolidation tests. |
 | `tests/test_alignment_config.py` and `tests/test_alignment_boundaries.py` references | `public_contract_test` | Keep to prove package-level public imports remain available as compatibility shims. |
 | `tests/test_alignment_clustering.py` public import tests | `public_contract_test`; deeper greedy tests are `implementation_test_to_delete` candidates | Keep public API tests now; later split public-shim tests from implementation-mechanic tests. |
-| `tests/test_alignment_backfill.py`, `tests/test_alignment_feature_family.py`, `tests/test_alignment_family_integration.py` | `implementation_test_to_delete` candidates | Keep until successor/owner/hypothesis invariant coverage is recorded. No current product consumer is inferred from these tests. |
+| `tests/test_alignment_backfill.py` | `public_compatibility_and_implementation_test` | Keep while public `backfill_alignment_matrix` shim delegates to event-first backfill. Later split public-shim tests from implementation-mechanic tests. |
+| `tests/test_alignment_feature_family.py`, `tests/test_alignment_family_integration.py` | `retired_implementation_tests` | Deleted with their non-public event-family helpers. |
 | `docs/superpowers/specs/2026-06-01-*` and current goal references | `current_spec_or_goal` / `migration_note` | Keep as current contract and evidence record. |
 | `docs/superpowers/plans/2026-05-10*` and `2026-05-11*` references | `historical_doc` | Do not treat as product consumers. |
 
 There are no `unknown` residual hits and no unreviewed `active_consumer` hits
 for the removed `_build_event_first_matrix(...)` symbol.
+
+### C6-B Event-Family Retirement Closeout
+
+The follow-up C6-B slice retired the non-public event-family helper path:
+
+- Deleted `xic_extractor/alignment/feature_family.py`.
+- Deleted `xic_extractor/alignment/family_integration.py`.
+- Deleted `tests/test_alignment_feature_family.py`.
+- Deleted `tests/test_alignment_family_integration.py`.
+- Removed event-family-only `event_clusters` merge/seed-candidate support from
+  `primary_consolidation.py` and `matrix_identity.py`.
+
+This was allowed because CodeGraph / `rg` showed
+`build_ms1_feature_families(...)`, `build_ms1_feature_family(...)`,
+`MS1FeatureFamily`, and `integrate_feature_family_matrix(...)` had no current
+production, script, diagnostic, package-level public export, or compatibility
+shim consumer after `_build_event_first_matrix(...)` was removed. Their only
+live consumers were implementation tests for the now-unused alternate
+event-family path.
+
+Invariant disposition:
+
+| Deleted event-family invariant | Current owner or disposition |
+|---|---|
+| Shared detected overlap and high-subset family folding | Obsolete event-family implementation detail; owner-first grouping uses complete-link owner evidence rather than event-matrix overlap. |
+| MS2 signature/product/observed-loss conflict separation | Covered by `tests/test_alignment_owner_clustering.py` product/observed-loss and neutral-loss separation tests plus identity-coherence fragment tests. |
+| Non-anchor median family center | Obsolete event-family implementation detail; owner-first feature centers come from `OwnerAlignedFeature` construction. |
+| Family-centered missing-sample rescue/unchecked/absent cells | Covered by owner-backfill and owner-matrix tests for owner-centered rescue, unchecked, absent, and output delivery. |
+| Region audit opt-in and trace context | Covered by owner-backfill region-audit tests and diagnostics; event-family-specific `source="family_integration"` is not product authority. |
+| Duplicate MS1 peak assignment to nearest/protected family | Covered by claim-registry and primary-consolidation tests; event-family local duplicate winner mechanics are obsolete. |
+| Primary consolidation propagation of event-family `event_clusters` | Obsolete event-family compatibility branch; owner-first consolidation preserves `owners` and `event_cluster_ids`. |
+
+This slice still does not remove the public event-first compatibility shims:
+`xic_extractor.alignment.cluster_candidates` and
+`xic_extractor.alignment.backfill_alignment_matrix` remain available. Their
+delegated implementation modules, `clustering.py` and `backfill.py`, need a
+separate public-compatibility migration or explicit breaking-change decision.
 
 Do not merge modules just because they all group rows. Each stage must first be
 classified by the product decision it protects:
@@ -419,7 +459,7 @@ with no remaining product contract.
 | Module family / modules | Concept it defines | Downstream evidence relationship | Can evidence-chain replace it now? | Semantic-survival label | C6 disposition |
 | --- | --- | --- | --- | --- | --- |
 | Pipeline orchestration: `pipeline.run_alignment` | Stage ordering, output routing, timing, and side-effect boundaries for the owner-first production path. | Evidence-chain stages run inside this sequence; they do not replace sequence ownership. | No. Supersession is not the right question for `run_alignment`; changing it is orchestration/contract work. | `adapter_or_contract` plus `structural_input`. | `contract_only`; preserve sequence owner. |
-| Event-first grouping path: `clustering.cluster_candidates`, `backfill.backfill_alignment_matrix`, `feature_family.build_ms1_feature_families`, `family_integration.integrate_feature_family_matrix` | Event-first clusters, event-first cells, and alternate feature-family integration. | `PeakHypothesis` / `TraceGroup` and owner-first evidence-chain work now cover much of the old "candidate peak grouping" concept with richer evidence and boundary semantics. Public imports, tests, and possible alternate/diagnostic value remain. | Likely partially superseded, but not deletion-ready. C6-B must prove which invariants are already owned by the successor and migrate/delete legacy tests accordingly. | `compatibility_or_alternate_path`; likely `merged_into_successor`; possible `superseded_candidate` after C6-B. | `semantic_migration_candidate`; audit before cleanup or retirement. |
+| Event-first grouping path: `clustering.cluster_candidates`, `backfill.backfill_alignment_matrix`; retired subpath `feature_family.build_ms1_feature_families`, `family_integration.integrate_feature_family_matrix` | Event-first clusters and event-first cells remain only behind public compatibility shims; alternate feature-family integration has been removed. | `PeakHypothesis` / `TraceGroup` and owner-first evidence-chain work now cover much of the old "candidate peak grouping" concept with richer evidence and boundary semantics. | Partially retired. Public clustering/backfill shims are not deletion-ready until public migration and invariant triage. Non-public event-family helpers were test-only and deleted in C6-B. | `compatibility_or_alternate_path`; event-family subpath is `retired_event_family_helper`; remaining shims may later become `superseded_candidate`. | Keep public shims for now; audit clustering/backfill tests separately before public retirement. |
 | Sample-local ownership: `ownership.build_sample_local_owners`, `ownership_models.*` | Per-sample MS1 owner evidence and ambiguous-owner records. | Downstream family grouping, backfill, diagnostics, and matrix delivery consume ownership records. Later evidence can challenge confidence, not recreate raw owner assignment without this stage. | No. This is a structural input to the owner-first path. | `structural_input` and `candidate_source`. | `keep_as_stage` / `contract_only`; future edits need owner-assignment parity. |
 | Owner-family construction: `owner_clustering.cluster_sample_local_owners`, `pre_backfill_consolidation.*` | Cross-sample owner families, complete-link edge evidence, identity-conflict review families, and pre-backfill family consolidation. | This is conceptually close to cross-sample hypothesis/family construction: if MS1 traces overlap coherently across samples, they become a family candidate. Downstream evidence can demote or block families, but current consumers still need `OwnerAlignedFeature` IDs, owners, evidence labels, and review flags. | Not replaced today, but likely a semantic migration target. A future cross-sample `TraceGroup` / `PeakHypothesis` family spine could absorb this role after parity-backed consumer migration. | `candidate_source` plus `structural_input`; possible future `merged_into_successor`. | `semantic_migration_candidate`; characterize family-edge/demotion invariants, then decide whether to migrate into the successor spine or keep as an internal constructor. |
 | Backfill scope and owner matrix delivery: `backfill_scope.*`, `owner_backfill.*`, `owner_matrix.*`, `owner_area.*` | Which families are backfilled, rescued cell construction, owner matrix rows, and owner-area rollups. | Matrix identity and production projection rely on detected/rescued/absent cell state from this family. Later evidence may classify quality but does not replace cell construction. | No. These are production structural inputs. | `structural_input`. | `keep_as_stage` or `contract_harden`; no shared primitive without cell-status parity. |
@@ -585,7 +625,7 @@ semantic-survival label, and exit rule.
 | Primary family consolidation | `xic_extractor.alignment.primary_consolidation.consolidate_primary_family_rows` | Selects primary rows, demotes losers, and preserves loser audit traceability. | winner/loser consolidation | Existing primary consolidation tests plus `alignment_review.tsv` / loser audit parity. | Generic consolidation could erase winner/loser and near-duplicate demotion semantics. | `contract_harden` / `contract_only` | `arbitration_state` and `structural_input` | Optional C6-B candidate: strengthen winner/loser fixture; no helper extraction now. |
 | Matrix identity decisions | `xic_extractor.alignment.matrix_identity.build_matrix_identity_decisions` | Classifies primary/provisional/audit matrix identity. | matrix identity policy | Matrix identity and production decision tests; matrix/review/cells parity. | Merging with grouping would turn identity policy into tolerance mechanics. | `keep_as_stage` / `contract_only` | `policy_projection` | Preserve; behavior changes require separate spec. |
 | Production decisions | `xic_extractor.alignment.production_decisions.build_production_decisions` | Projects writer-facing row/cell decisions. | writer-facing production projection | Production decision and writer tests; output-level oracle matrix. | Generic output grouping could change public TSV values. | `keep_as_stage` / `contract_only` | `policy_projection` and `public_projection` | Preserve as public projection owner. |
-| Event-first feature family path | `feature_family.build_ms1_feature_families`, `family_integration.integrate_feature_family_matrix` | Maintains alternate/event-first feature-family integration path. | event-family grouping and matrix integration | Missing current product-role note plus event-first parity if touched. | Could be mistaken for dead code or merged into owner-first path without contract. | `contract_harden` / `stage_local_cleanup_only` | `compatibility_or_alternate_path`; possible `superseded_candidate` after audit | Revalidate role before cleanup; no retirement in Phase 5. |
+| Event-first feature family path | `feature_family.build_ms1_feature_families`, `family_integration.integrate_feature_family_matrix` | Former alternate/event-first feature-family integration path. | event-family grouping and matrix integration | C6-B no-use scan plus successor invariant mapping. | Reintroduction would recreate a parallel feature-family system without a product consumer. | `retired_event_family_helper` | obsolete implementation detail after no-use proof | Deleted in C6-B; reintroduction requires a new product-path spec. |
 | Near-duplicate folding | `xic_extractor.alignment.folding.fold_near_duplicate_clusters` | Folds near-duplicate clusters before downstream review. | near-duplicate folding behavior | Folding tests plus near-duplicate row parity if touched. | Shared primitive could alter fold threshold/order semantics. | `contract_harden` / `stage_local_cleanup_only` | `arbitration_state` and `structural_input` | Add threshold/order fixture before local cleanup. |
 | Near-duplicate audit | `xic_extractor.alignment.near_duplicate_audit.count_near_duplicate_pairs` | Diagnostic evidence for near-duplicate behavior. | diagnostic or evidence review | Diagnostic count tests or report parity if touched. | Could be falsely retired as non-production despite validation value. | `keep_as_stage` / `diagnostic_preserve` | `diagnostic_oracle` | Preserve diagnostic evidence; retirement requires no-use evidence. |
 | Identity gates | `xic_extractor.alignment.identity_gates.*` | Applies identity/evidence gate policy using `CommonEvidence`. | identity/evidence gate policy | Identity gate tests and decision parity. | Grouping consolidation would hide evidence policy behind mechanics. | `keep_as_stage` / `contract_only` | `policy_projection` | Preserve; policy changes need behavior spec. |
@@ -609,7 +649,7 @@ CodeGraph snapshot at this update:
 | Module family | Modules / entrypoints | C6-A role | Phase 5 disposition / oracle or out-of-scope reason |
 | --- | --- | --- | --- |
 | Pipeline orchestration | `pipeline.run_alignment` | sequence owner for the current owner-first production path; records where each active stage runs and which output path it can affect | `contract_only`; preserve as sequence owner. Oracle: `tests/test_run_alignment.py`, pipeline output/atomic-write tests, and output-level artifact parity when routing is touched. `_build_event_first_matrix` was removed in Phase 2 and now belongs only to event-first migration history. |
-| Event-first grouping path | `clustering.cluster_candidates`, `backfill.backfill_alignment_matrix`, `feature_family.build_ms1_feature_families`, `family_integration.integrate_feature_family_matrix` | alternate/event-first matrix path; inventory before deciding whether it is compatibility, diagnostic, still product-relevant, or a later retirement candidate | `contract_harden`; no cleanup until event-first product role, consumer/no-use evidence, and row parity are named. Oracle: clustering/backfill/feature-family/family-integration tests plus matrix/cells parity if writer-facing. |
+| Event-first grouping path | `clustering.cluster_candidates`, `backfill.backfill_alignment_matrix`; retired `feature_family.build_ms1_feature_families`, `family_integration.integrate_feature_family_matrix` | public compatibility shims plus delegated event-first clustering/backfill support; event-family matrix integration has been removed | `contract_harden` for remaining public shims; event-family helpers are `retired_event_family_helper`. Oracle for remaining shims: public import tests, clustering/backfill compatibility tests, and explicit public migration before deletion. |
 | Owner-first production path | `ownership.build_sample_local_owners`, `owner_clustering.cluster_sample_local_owners`, `pre_backfill_consolidation.consolidate_pre_backfill_identity_families`, `backfill_scope.select_backfill_features`, `owner_backfill.build_owner_backfill_cells`, `owner_matrix.build_owner_alignment_matrix` | current production path that constructs owner families, selects backfill scope, rescues cells, and builds matrix rows; downstream evidence judges these objects rather than replacing their construction | `keep_as_stage` or `contract_harden` per row above. Oracle: owner/backfill/matrix tests plus `alignment_matrix.tsv` and `alignment_cells.tsv` parity. |
 | Claim and consolidation policy | `claim_registry.apply_ms1_peak_claim_registry`, `primary_consolidation.consolidate_primary_family_rows` | duplicate claim, winner/loser, demotion, and loser audit semantics; not generic grouping and not replaced by downstream duplicate-pressure flags | `contract_harden`; optional C6-B only after winner/loser and claim-assignment fixtures are named. Oracle: claim registry/primary consolidation tests plus review/cells parity. |
 | Matrix identity and production projection | `cell_quality.build_cell_quality_decisions`, `matrix_identity.build_matrix_identity_decisions`, `promotion_policy.classify_backfill_promotion`, `machine_decision.project_machine_decision`, `production_decisions.build_production_decisions`, `production_candidate_gate.evaluate_production_candidate_gate` | production/provisional/audit policy and writer-facing row/cell decisions; C6 can only characterize these, not merge them into grouping helpers | `keep_as_stage` / `contract_only`; policy changes need separate behavior spec. Oracle: matrix identity, production decision, production gate, and public output parity tests. |

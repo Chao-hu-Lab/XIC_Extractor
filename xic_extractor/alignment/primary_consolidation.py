@@ -422,14 +422,6 @@ def _merged_member_updates(
                 for owner in tuple(getattr(cluster, "owners"))
             )
         }
-    if all(hasattr(cluster, "event_clusters") for cluster in component_clusters):
-        return {
-            "event_clusters": tuple(
-                event_cluster
-                for cluster in component_clusters
-                for event_cluster in tuple(getattr(cluster, "event_clusters"))
-            )
-        }
     return {}
 
 

@@ -1,7 +1,7 @@
 # Technical Debt and Dead-Code Cleanup Roadmap v2
 
 **Date:** 2026-06-01
-**Status:** Execution closeout v1.6 - selected one-pass retirements completed; C4 projection closeout and C6 deprecate-first shim cleanup added
+**Status:** Execution closeout v1.7 - selected one-pass retirements completed; C4 projection closeout and C6 event-family cleanup added
 **Related peak-pipeline chapter:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Current peak-pipeline reassessment:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
 **One-goal execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
@@ -142,8 +142,11 @@ The first concrete pilot inventory is now captured in:
   deprecate-first public compatibility path for `cluster_candidates` and
   `backfill_alignment_matrix`. The first execution slice removed the private
   `_build_event_first_matrix(...)` wrapper and made the package-level public
-  event-first imports explicit compatibility shims; deeper event-family tests
-  remain for later invariant triage, not as production consumers.
+  event-first imports explicit compatibility shims. The follow-up C6-B slice
+  then removed the non-public event-family helper path
+  (`feature_family.py`, `family_integration.py`) and its implementation-only
+  tests after invariant triage. Remaining public event-first clustering/backfill
+  shims still require a separate public migration or breaking-change decision.
 
 The follow-up inventory should use the same unit of analysis for every candidate
 design:
