@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from xic_extractor.ms2_trace_evidence import MS2TraceEvidence
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.hypotheses import (
     build_peak_hypotheses,
@@ -109,6 +110,130 @@ def test_hypothesis_selection_reference_comes_from_detection_result() -> None:
     )[0]
 
     assert hypothesis.audit.selection_reference_rt_min is None
+
+
+def test_build_peak_hypotheses_projects_scorer_facts_to_successor_evidence() -> None:
+    selected = _candidate(
+        8.5,
+        left=8.25,
+        right=8.75,
+        area=1234.0,
+        proposal_sources=("legacy_savgol", "centwave_cwt"),
+        quality_flags=("low_trace_continuity",),
+        region_scan_count=8,
+        region_duration_min=0.5,
+        region_edge_ratio=0.82,
+        region_trace_continuity=0.75,
+        cwt_best_scale=4.0,
+        cwt_ridge_persistence=0.6,
+    )
+    score = PeakCandidateScore(
+        candidate=selected,
+        confidence="MEDIUM",
+        reason="decision: medium with trace support",
+        raw_score=73,
+        support_labels=(
+            "strict_nl_ok",
+            "ms2_trace_strong",
+            "cwt_same_apex_support",
+        ),
+        concern_labels=("trace_quality_review",),
+        cap_labels=("rt_window_cap",),
+        prior_rt=8.45,
+        quality_penalty=2,
+    )
+    ms2_evidence = CandidateMS2Evidence(
+        ms2_present=True,
+        nl_match=True,
+        nl_status="OK",
+        trigger_scan_count=3,
+        strict_nl_scan_count=2,
+        best_loss_ppm=1.23,
+        best_scan_rt=8.55,
+        best_product_base_ratio=0.42,
+        alignment_source="boundary_rescue",
+        diagnostic_product_absence_reason="",
+        nearest_product_loss_ppm=4.5,
+        nearest_product_base_ratio=0.18,
+        nearest_product_mz=123.456,
+        trace=MS2TraceEvidence(
+            product_point_count=3,
+            product_apex_rt=8.55,
+            product_apex_delta_min=0.05,
+            product_height=900.0,
+            product_area=180.0,
+            trace_continuity=1.0,
+            strength="strong",
+        ),
+    )
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=20,
+        max_smoothed=3000.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+        candidate_scores=(score,),
+        selection_reference_rt=8.45,
+    )
+
+    hypothesis = build_peak_hypotheses(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="ISTD",
+        resolver_mode="region_first_safe_merge",
+        peak_result=result,
+        candidate_ms2_evidence={selected: ms2_evidence},
+    )[0]
+
+    evidence = hypothesis.evidence
+    assert evidence.confidence == "MEDIUM"
+    assert evidence.raw_score == 73
+    assert evidence.support_labels == (
+        "strict_nl_ok",
+        "ms2_trace_strong",
+        "cwt_same_apex_support",
+    )
+    assert evidence.concern_labels == ("trace_quality_review",)
+    assert evidence.cap_labels == ("rt_window_cap",)
+    assert evidence.reason == "decision: medium with trace support"
+    assert evidence.quality_flags == ("low_trace_continuity",)
+    assert evidence.region_scan_count == 8
+    assert evidence.region_duration_min == 0.5
+    assert evidence.region_edge_ratio == 0.82
+    assert evidence.region_trace_continuity == 0.75
+    assert evidence.ms2_present is True
+    assert evidence.nl_match is True
+    assert evidence.ms2_trace_strength == "strong"
+    assert evidence.nl_status == "OK"
+    assert evidence.best_loss_ppm == 1.23
+    assert evidence.best_ms2_scan_rt_min == 8.55
+    assert evidence.apex_ms2_delta_min == pytest.approx(0.05)
+    assert evidence.best_product_base_ratio == 0.42
+    assert evidence.trigger_scan_count == 3
+    assert evidence.strict_nl_scan_count == 2
+    assert evidence.ms2_alignment_source == "boundary_rescue"
+    assert evidence.nearest_product_loss_ppm == 4.5
+    assert evidence.nearest_product_base_ratio == 0.18
+    assert evidence.nearest_product_mz == 123.456
+    assert evidence.rt_prior_min == 8.45
+    assert evidence.cwt_best_scale == 4.0
+    assert evidence.cwt_ridge_persistence == 0.6
+
+    assert evidence.common is not None
+    assert evidence.common.ms1_apex_rt_min == 8.5
+    assert evidence.common.ms1_area == 1234.0
+    assert evidence.common.ms1_height == 1200.0
+    assert evidence.common.ms1_peak_rt_start == 8.25
+    assert evidence.common.ms1_peak_rt_end == 8.75
+    assert evidence.common.ms2_present is True
+    assert evidence.common.nl_match is True
+    assert evidence.common.ms2_trace_strength == "strong"
+    assert evidence.common.neutral_loss_error_ppm == 1.23
+    assert evidence.common.confidence == "MEDIUM"
+    assert evidence.common.evidence_score == 73
+    assert evidence.common.reason == "decision: medium with trace support"
 
 
 def test_build_peak_hypotheses_scan_indices_match_bounded_baseline_interval() -> None:
@@ -232,6 +357,13 @@ def _candidate(
     right: float | None = None,
     area: float = 1000.0,
     proposal_sources: tuple[str, ...] = ("legacy_savgol",),
+    quality_flags: tuple[str, ...] = (),
+    region_scan_count: int | None = None,
+    region_duration_min: float | None = None,
+    region_edge_ratio: float | None = None,
+    region_trace_continuity: float | None = None,
+    cwt_best_scale: float | None = None,
+    cwt_ridge_persistence: float | None = None,
 ) -> PeakCandidate:
     peak_start = rt - 0.2 if left is None else left
     peak_end = rt + 0.2 if right is None else right
@@ -252,6 +384,13 @@ def _candidate(
         raw_apex_intensity=1200.0,
         raw_apex_index=7,
         prominence=700.0,
+        quality_flags=quality_flags,
+        region_scan_count=region_scan_count,
+        region_duration_min=region_duration_min,
+        region_edge_ratio=region_edge_ratio,
+        region_trace_continuity=region_trace_continuity,
+        cwt_best_scale=cwt_best_scale,
+        cwt_ridge_persistence=cwt_ridge_persistence,
         proposal_sources=proposal_sources,
         source_apex_rank=1,
     )
