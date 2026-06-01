@@ -95,7 +95,7 @@ def test_owner_matrix_carries_detected_owner_region_audit() -> None:
                 raw_area=1000.0,
                 area_baseline_corrected=800.0,
                 area_uncertainty=50.0,
-                baseline_type="linear_edge",
+                baseline_type="asls",
                 baseline_score=0.8,
                 uncertainty_fraction=0.05,
                 baseline_fraction=0.8,

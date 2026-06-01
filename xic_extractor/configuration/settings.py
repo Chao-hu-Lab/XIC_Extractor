@@ -446,13 +446,21 @@ def _validate_settings_ranges(
             settings.get("baseline_audit_method", ""),
             "must be empty or asls",
         )
-    if parsed.baseline_integration_method not in {"asls", "linear_edge"}:
+    if parsed.baseline_integration_method == "linear_edge":
         raise _config_error(
             settings_path,
             None,
             "baseline_integration_method",
             settings.get("baseline_integration_method", ""),
-            "must be asls or linear_edge",
+            "linear_edge is retired; use asls",
+        )
+    if parsed.baseline_integration_method != "asls":
+        raise _config_error(
+            settings_path,
+            None,
+            "baseline_integration_method",
+            settings.get("baseline_integration_method", ""),
+            "must be asls",
         )
     if parsed.parallel_mode not in {"serial", "process"}:
         raise _config_error(

@@ -81,7 +81,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert peak_config.diagnostics_csv == output_dir.resolve() / "xic_diagnostics.csv"
     assert peak_config.resolver_mode == "legacy_savgol"
     assert peak_config.baseline_audit_method == "asls"
-    assert peak_config.baseline_integration_method == "linear_edge"
+    assert peak_config.baseline_integration_method == "asls"
     assert captured["output_level"] == "machine"
     assert captured["emit_alignment_cells"] is True
     assert captured["emit_alignment_integration_audit"] is True
@@ -104,7 +104,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert "Owner edge evidence TSV:" in stdout
 
 
-def test_run_alignment_accepts_baseline_integration_method_override(
+def test_run_alignment_accepts_asls_baseline_integration_method_override(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -149,12 +149,90 @@ def test_run_alignment_accepts_baseline_integration_method_override(
             "--output-dir",
             str(output_dir),
             "--baseline-integration-method",
-            "linear_edge",
+            "asls",
         ]
     )
 
     assert code == 0
-    assert captured["peak_config"].baseline_integration_method == "linear_edge"
+    assert captured["peak_config"].baseline_integration_method == "asls"
+
+
+def test_run_alignment_rejects_retired_linear_edge_baseline_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+
+    def fake_run_alignment(**_kwargs):
+        raise AssertionError("run_alignment should not be called")
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--baseline-integration-method",
+            "linear_edge",
+        ]
+    )
+
+    assert code == 2
+    assert (
+        "linear_edge baseline integration is retired; use asls"
+        in capsys.readouterr().err
+    )
+
+
+def test_run_alignment_rejects_retired_linear_edge_baseline_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    def fake_run_alignment(**_kwargs):
+        raise AssertionError("run_alignment should not be called")
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setenv("BASELINE_INTEGRATION_METHOD", "linear_edge")
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(tmp_path / "alignment"),
+        ]
+    )
+
+    assert code == 2
+    assert (
+        "linear_edge baseline integration is retired; use asls"
+        in capsys.readouterr().err
+    )
 
 
 def test_run_alignment_cli_passes_selected_family_scope(

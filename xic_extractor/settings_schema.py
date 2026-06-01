@@ -107,7 +107,7 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "baseline_integration_method": (
         "Baseline-corrected integration method for hypothesis, boundary, "
         "region, and alignment audit surfaces "
-        "(asls or linear_edge; default asls after P2b conditional audit promotion)"
+        "(asls only; linear_edge is retired)"
     ),
     "nl_rt_anchor_search_margin_min": (
         "NL 錨定搜尋半徑（min）：以 rt_center ±此值搜尋 NL 確認的 MS2 作為 RT anchor"

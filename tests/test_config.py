@@ -374,16 +374,23 @@ def test_load_config_defaults_baseline_integration_method_to_asls(
     assert config.baseline_integration_method == "asls"
 
 
-def test_load_config_accepts_linear_edge_baseline_integration_method(
+def test_load_config_rejects_retired_linear_edge_baseline_integration_method(
     tmp_path: Path,
 ) -> None:
     config_dir = tmp_path / "config"
     _write_settings(config_dir, {"baseline_integration_method": "linear_edge"})
     _write_targets(config_dir)
 
-    config, _ = load_config(config_dir)
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
 
-    assert config.baseline_integration_method == "linear_edge"
+    _assert_error(
+        exc_info,
+        "settings.csv",
+        "baseline_integration_method",
+        "linear_edge",
+    )
+    assert "retired" in str(exc_info.value)
 
 
 def test_load_config_rejects_unknown_baseline_integration_method(

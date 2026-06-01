@@ -1,8 +1,9 @@
 import csv
 import math
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
@@ -779,53 +780,26 @@ def test_cell_integration_audit_post_rollback_schema_fixture_matches_writer() ->
     assert "baseline_score_linear_edge" not in columns
 
 
-def test_cell_integration_audit_can_emit_legacy_asls_shadow_for_linear_edge(
+def test_cell_integration_audit_rejects_retired_linear_edge_writer_method(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.alignment.tsv_writer import (
         write_alignment_cell_integration_audit_tsv,
     )
 
-    cell = _cell("sample-a", "detected", area=10.0, integration=True)
-    cell = replace(
-        cell,
-        integration_audit=CellIntegrationAuditSummary(
-            raw_area=10.0,
-            area_baseline_corrected=7.5,
-            area_uncertainty=2.0,
-            area_uncertainty_formula_version="baseline_residual_mad_v1",
-            baseline_residual_mad=0.5,
-            area_uncertainty_noise_source="asls_residual",
-            baseline_type="linear_edge",
-            baseline_score=0.75,
-            uncertainty_fraction=0.2,
-            baseline_fraction=0.75,
-            integration_scan_count=5,
-            area_baseline_corrected_asls=8.0,
-            baseline_score_asls=0.8,
-        ),
-    )
     matrix = AlignmentMatrix(
         clusters=(_cluster(),),
-        cells=(cell,),
+        cells=(_cell("sample-a", "detected", area=10.0, integration=True),),
         sample_order=("sample-a",),
     )
 
-    rows = _read_tsv(
+    with pytest.raises(ValueError, match="retired; use asls"):
         write_alignment_cell_integration_audit_tsv(
             tmp_path / "alignment_cell_integration_audit.tsv",
             matrix,
             baseline_integration_method="linear_edge",
             baseline_audit_method="asls",
         )
-    )
-
-    assert rows[0]["area_baseline_corrected"] == "7.5"
-    assert rows[0]["baseline_score"] == "0.75"
-    assert rows[0]["area_baseline_corrected_asls"] == "8"
-    assert rows[0]["baseline_score_asls"] == "0.8"
-    assert "area_baseline_corrected_linear_edge" not in rows[0]
-    assert "baseline_score_linear_edge" not in rows[0]
 
 
 def test_write_alignment_owner_backfill_seed_audit_tsv_is_sidecar(

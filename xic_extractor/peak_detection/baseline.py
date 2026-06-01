@@ -9,8 +9,9 @@ from scipy.sparse.linalg import spsolve
 
 from xic_extractor.peak_detection.integration import integrate_area_counts_seconds
 
-BaselineMethod = Literal["linear_edge", "asls"]
+BaselineMethod = Literal["asls"]
 AREA_UNCERTAINTY_FORMULA_VERSION = "baseline_residual_mad_v1"
+LINEAR_EDGE_RETIRED_MESSAGE = "linear_edge baseline integration is retired; use asls"
 
 
 def asls_baseline(
@@ -54,54 +55,6 @@ class BaselineIntegration:
     area_uncertainty_formula_version: str = ""
     baseline_residual_mad: float | None = None
     area_uncertainty_noise_source: str = ""
-
-
-def integrate_linear_edge_baseline(
-    intensity_values: np.ndarray,
-    rt_values: np.ndarray,
-    left: int,
-    right: int,
-    *,
-    uncertainty_baseline_values: np.ndarray | None = None,
-    baseline_residual_mad: float | None = None,
-    baseline_residual_mad_source: str = "asls_residual",
-) -> BaselineIntegration:
-    rt = np.asarray(rt_values, dtype=float)
-    intensity = np.asarray(intensity_values, dtype=float)
-    _validate_trace_arrays(rt, intensity)
-    left_index, right_index = bounded_trace_interval(left, right, len(rt))
-    segment = intensity[left_index:right_index]
-    segment_rt = rt[left_index:right_index]
-    baseline = np.linspace(float(segment[0]), float(segment[-1]), len(segment))
-    corrected = np.maximum(segment - baseline, 0.0)
-    corrected_area = _area_counts_seconds(corrected, segment_rt)
-    raw_area = integrate_area_counts_seconds(intensity, rt, left_index, right_index)
-    residual_mad = baseline_residual_mad
-    noise_source = baseline_residual_mad_source if residual_mad is not None else ""
-    if residual_mad is None:
-        _baseline_values, residual_mad = compute_asls_residual_mad(
-            intensity,
-            baseline_values=uncertainty_baseline_values,
-        )
-        noise_source = "asls_residual" if residual_mad is not None else ""
-    if residual_mad is None:
-        residual_mad = _pre_peak_mad(intensity, left_index)
-        noise_source = "pre_peak_mad" if residual_mad is not None else ""
-    uncertainty = _area_uncertainty_counts_seconds(
-        rt,
-        left_index,
-        right_index,
-        baseline_residual_mad=residual_mad,
-    )
-    return BaselineIntegration(
-        area_baseline_corrected=corrected_area,
-        area_uncertainty=uncertainty,
-        baseline_type="linear_edge",
-        baseline_score=_safe_ratio(corrected_area, raw_area),
-        area_uncertainty_formula_version=AREA_UNCERTAINTY_FORMULA_VERSION,
-        baseline_residual_mad=residual_mad,
-        area_uncertainty_noise_source=noise_source,
-    )
 
 
 def integrate_asls_baseline(
@@ -161,26 +114,13 @@ def integrate_with_baseline(
     left: int,
     right: int,
     *,
-    baseline_method: BaselineMethod = "linear_edge",
+    baseline_method: str = "asls",
     baseline_values: np.ndarray | None = None,
     uncertainty_baseline_values: np.ndarray | None = None,
     baseline_residual_mad: float | None = None,
     baseline_residual_mad_source: str = "asls_residual",
 ) -> BaselineIntegration:
-    if baseline_method == "linear_edge":
-        return integrate_linear_edge_baseline(
-            intensity_values,
-            rt_values,
-            left,
-            right,
-            uncertainty_baseline_values=(
-                uncertainty_baseline_values
-                if uncertainty_baseline_values is not None
-                else baseline_values
-            ),
-            baseline_residual_mad=baseline_residual_mad,
-            baseline_residual_mad_source=baseline_residual_mad_source,
-        )
+    _ = uncertainty_baseline_values, baseline_residual_mad, baseline_residual_mad_source
     if baseline_method == "asls":
         return integrate_asls_baseline(
             intensity_values,
@@ -189,7 +129,9 @@ def integrate_with_baseline(
             right,
             baseline_values=baseline_values,
         )
-    raise ValueError("baseline_method must be 'linear_edge' or 'asls'")
+    if baseline_method == "linear_edge":
+        raise ValueError(LINEAR_EDGE_RETIRED_MESSAGE)
+    raise ValueError("baseline_method must be 'asls'")
 
 
 def _validate_trace_arrays(rt: np.ndarray, intensity: np.ndarray) -> None:

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.hypotheses import (
@@ -136,7 +137,7 @@ def test_build_peak_hypotheses_scan_indices_match_bounded_baseline_interval() ->
     assert hypothesis.integration.baseline_type == "asls"
 
 
-def test_build_peak_hypotheses_can_use_linear_edge_baseline_override() -> None:
+def test_build_peak_hypotheses_rejects_retired_linear_edge_baseline_override() -> None:
     selected = _candidate(8.5, left=8.0, right=9.0)
     result = PeakDetectionResult(
         status="OK",
@@ -147,19 +148,18 @@ def test_build_peak_hypotheses_can_use_linear_edge_baseline_override() -> None:
         candidates=(selected,),
     )
 
-    hypothesis = build_peak_hypotheses(
-        sample_name="SampleA",
-        target_label="Analyte",
-        role="Analyte",
-        istd_pair="",
-        resolver_mode="legacy_savgol",
-        peak_result=result,
-        rt=np.asarray([8.0, 8.5, 9.0]),
-        intensity=np.asarray([10.0, 80.0, 20.0]),
-        baseline_integration_method="linear_edge",
-    )[0]
-
-    assert hypothesis.integration.baseline_type == "linear_edge"
+    with pytest.raises(ValueError, match="retired; use asls"):
+        build_peak_hypotheses(
+            sample_name="SampleA",
+            target_label="Analyte",
+            role="Analyte",
+            istd_pair="",
+            resolver_mode="legacy_savgol",
+            peak_result=result,
+            rt=np.asarray([8.0, 8.5, 9.0]),
+            intensity=np.asarray([10.0, 80.0, 20.0]),
+            baseline_integration_method="linear_edge",
+        )
 
 
 def test_build_peak_hypotheses_accepts_shared_trace_group() -> None:

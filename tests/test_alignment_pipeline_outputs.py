@@ -36,7 +36,7 @@ def test_alignment_metadata_records_baseline_audit_method() -> None:
 
 
 def test_alignment_metadata_records_baseline_integration_method() -> None:
-    peak_config = replace(_peak_config(), baseline_integration_method="linear_edge")
+    peak_config = replace(_peak_config(), baseline_integration_method="asls")
 
     metadata = alignment_metadata(
         discovery_batch_index=Path("batch.csv"),
@@ -47,7 +47,7 @@ def test_alignment_metadata_records_baseline_integration_method() -> None:
         peak_config=peak_config,
     )
 
-    assert metadata["baseline_integration_method"] == "linear_edge"
+    assert metadata["baseline_integration_method"] == "asls"
 
 
 def test_alignment_metadata_records_backfill_scope() -> None:

@@ -565,8 +565,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--baseline-integration-method",
-        choices=("asls", "linear_edge"),
-        help="Alignment integration-audit baseline method.",
+        help="Alignment integration-audit baseline method. Only asls is supported.",
     )
     parser.add_argument("--emit-alignment-backfill-seed-audit", action="store_true")
     parser.add_argument("--emit-alignment-status-matrix", action="store_true")
@@ -873,15 +872,18 @@ def _baseline_audit_method(args: argparse.Namespace) -> str:
 
 def _baseline_integration_method(args: argparse.Namespace) -> str:
     if args.baseline_integration_method:
-        return args.baseline_integration_method
-    if _baseline_audit_method(args) == "asls":
-        return "linear_edge"
+        method = args.baseline_integration_method.strip().lower()
+        if method == "linear_edge":
+            raise ValueError("linear_edge baseline integration is retired; use asls")
+        if method != "asls":
+            raise ValueError("--baseline-integration-method must be asls")
+        return method
     env_method = os.environ.get("BASELINE_INTEGRATION_METHOD", "").strip().lower()
     if env_method in {"", "asls"}:
         return "asls"
     if env_method == "linear_edge":
-        return "linear_edge"
-    raise ValueError("BASELINE_INTEGRATION_METHOD must be asls or linear_edge")
+        raise ValueError("linear_edge baseline integration is retired; use asls")
+    raise ValueError("BASELINE_INTEGRATION_METHOD must be asls")
 
 
 def _peak_config(

@@ -2,6 +2,7 @@ import inspect
 from dataclasses import replace
 
 import numpy as np
+import pytest
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction import handoff_spine_runtime
@@ -140,7 +141,7 @@ def test_build_production_peak_hypotheses_uses_config_baseline_method(
         candidates=(candidate,),
     )
 
-    selected = handoff_spine_runtime.selected_peak_hypothesis(
+    with pytest.raises(ValueError, match="retired; use asls"):
         handoff_spine_runtime.build_production_peak_hypotheses(
             config=replace(
                 _config(tmp_path),
@@ -152,10 +153,6 @@ def test_build_production_peak_hypotheses_uses_config_baseline_method(
             rt=rt,
             intensity=intensity,
         )
-    )
-
-    assert selected is not None
-    assert selected.integration.baseline_type == "linear_edge"
 
 
 def test_production_handoff_runtime_has_no_cwt_audit_dependency() -> None:

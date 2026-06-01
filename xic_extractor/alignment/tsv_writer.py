@@ -16,6 +16,7 @@ from xic_extractor.alignment.output_rows import (
     safe_rate,
 )
 from xic_extractor.alignment.production_decisions import build_production_decisions
+from xic_extractor.peak_detection.baseline import LINEAR_EDGE_RETIRED_MESSAGE
 
 ALIGNMENT_REVIEW_COLUMNS = (
     "feature_family_id",
@@ -112,11 +113,6 @@ BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
 )
 
 ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
-
-ASLS_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
-    "area_baseline_corrected_asls",
-    "baseline_score_asls",
-)
 
 ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS = (
     "feature_family_id",
@@ -252,22 +248,13 @@ def write_alignment_cell_integration_audit_tsv(
     baseline_integration_method: str = "asls",
     baseline_audit_method: str = "",
 ) -> Path:
-    if baseline_integration_method not in {"asls", "linear_edge"}:
-        raise ValueError(
-            "baseline_integration_method must be 'asls' or 'linear_edge'"
-        )
+    if baseline_integration_method == "linear_edge":
+        raise ValueError(LINEAR_EDGE_RETIRED_MESSAGE)
+    if baseline_integration_method != "asls":
+        raise ValueError("baseline_integration_method must be 'asls'")
     if baseline_audit_method not in {"", "asls"}:
         raise ValueError("baseline_audit_method must be empty or 'asls'")
-    columns: tuple[str, ...]
-    if baseline_integration_method == "asls":
-        columns = ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
-    elif baseline_audit_method == "asls":
-        columns = (
-            *BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
-            *ASLS_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
-        )
-    else:
-        columns = BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
+    columns = ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
     clusters_by_id = {row_id(cluster): cluster for cluster in matrix.clusters}
     rows: list[dict[str, object]] = []
     for cell in matrix.cells:
@@ -303,11 +290,6 @@ def write_alignment_cell_integration_audit_tsv(
                 audit.integration_scan_count
             ),
         }
-        if baseline_integration_method != "asls" and baseline_audit_method == "asls":
-            row["area_baseline_corrected_asls"] = format_value(
-                audit.area_baseline_corrected_asls
-            )
-            row["baseline_score_asls"] = format_value(audit.baseline_score_asls)
         rows.append(row)
     return _write_tsv(path, columns, rows)
 

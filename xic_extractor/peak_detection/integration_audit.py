@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 import numpy as np
 
 from xic_extractor.peak_detection.baseline import (
+    LINEAR_EDGE_RETIRED_MESSAGE,
     bounded_trace_interval,
     compute_asls_residual_mad,
     integrate_with_baseline,
@@ -45,8 +46,10 @@ def build_cell_integration_audit_summary(
     baseline_integration_method: str = "asls",
     baseline_audit_method: str = "",
 ) -> CellIntegrationAuditSummary:
-    if baseline_integration_method not in {"asls", "linear_edge"}:
-        raise ValueError("baseline_integration_method must be 'asls' or 'linear_edge'")
+    if baseline_integration_method == "linear_edge":
+        raise ValueError(LINEAR_EDGE_RETIRED_MESSAGE)
+    if baseline_integration_method != "asls":
+        raise ValueError("baseline_integration_method must be 'asls'")
     if baseline_audit_method not in {"", "asls"}:
         raise ValueError("baseline_audit_method must be empty or 'asls'")
     if peak_start_rt is None or peak_end_rt is None or raw_area is None:
@@ -64,7 +67,7 @@ def build_cell_integration_audit_summary(
             peak_start_rt,
             peak_end_rt,
         )
-        asls_baseline_values, residual_mad = compute_asls_residual_mad(intensity)
+        asls_baseline_values, _residual_mad = compute_asls_residual_mad(intensity)
         asls = (
             integrate_with_baseline(
                 intensity,
@@ -77,41 +80,18 @@ def build_cell_integration_audit_summary(
             if baseline_audit_method == "asls" and asls_baseline_values is not None
             else None
         )
-        if baseline_integration_method == "asls" and asls_baseline_values is not None:
-            if asls is None:
-                asls = integrate_with_baseline(
-                    intensity,
-                    rt,
-                    left_index,
-                    right_index,
-                    baseline_method="asls",
-                    baseline_values=asls_baseline_values,
-                )
-            baseline = asls
-        elif baseline_integration_method == "asls":
-            linear_edge = integrate_with_baseline(
+        if asls_baseline_values is None:
+            return EMPTY_INTEGRATION_AUDIT
+        if asls is None:
+            asls = integrate_with_baseline(
                 intensity,
                 rt,
                 left_index,
                 right_index,
-                baseline_method="linear_edge",
+                baseline_method="asls",
                 baseline_values=asls_baseline_values,
-                baseline_residual_mad=residual_mad,
-                baseline_residual_mad_source="asls_residual",
             )
-            baseline = replace(linear_edge, baseline_type="linear_edge_fallback")
-        else:
-            linear_edge = integrate_with_baseline(
-                intensity,
-                rt,
-                left_index,
-                right_index,
-                baseline_method="linear_edge",
-                baseline_values=asls_baseline_values,
-                baseline_residual_mad=residual_mad,
-                baseline_residual_mad_source="asls_residual",
-            )
-            baseline = linear_edge
+        baseline = asls
     except (IndexError, TypeError, ValueError, FloatingPointError):
         return EMPTY_INTEGRATION_AUDIT
 
