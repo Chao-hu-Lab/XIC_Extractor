@@ -2,15 +2,17 @@
 
 本檔案是 XIC Extractor 的**目錄收納規則單一可信來源**。新檔案要放哪、暫存目錄何時可清、哪些路徑被外部約束鎖死，都查這裡。
 
-## § 1 三份規則文件的職責分工
+## § 1 主要規則文件的職責分工
 
 | 文件 | 給誰看 | 內容 |
 |------|--------|------|
 | [`README.md`](../README.md) | 使用者 | 下載、執行、Settings / Targets 欄位說明、輸出格式 |
-| [`AGENTS.md`](../AGENTS.md) | 寫程式碼的人 | 設計原則、所有權地圖、依賴規則、紅旗、重構紀律、測試結構規則、公開契約 |
+| [`AGENTS.md`](../AGENTS.md) | 寫程式碼的人 | 高頻開發 guardrails、canonical references、public contract 摘要 |
+| [`docs/architecture-contract.md`](architecture-contract.md) | 做程式結構調整的人 | 設計原則、所有權地圖、依賴規則、重構紀律、測試結構規則 |
 | **本檔** | 想知道「檔案放哪」的人 | 目錄地圖、外部約束、新檔決策樹、暫存目錄清理規則、命名慣例 |
 
-三份檔案職責不重疊。本檔**不**描述「程式怎麼寫」（那是 AGENTS.md），**不**描述「軟體怎麼用」（那是 README.md）。
+這些檔案職責不重疊。本檔**不**描述「程式怎麼寫」（那是 AGENTS.md 與
+`docs/architecture-contract.md`），**不**描述「軟體怎麼用」（那是 README.md）。
 
 ## § 2 目錄地圖
 
@@ -66,7 +68,7 @@
 
 ### `xic_extractor/` subpackage 分工
 
-由 `AGENTS.md § Ownership Map` 規範。一句話摘要：
+由 `docs/architecture-contract.md § Ownership Map` 規範。一句話摘要：
 
 | Subpackage | 用途 |
 |------------|------|
@@ -79,7 +81,7 @@
 | `diagnostics/` | Audit 與診斷模組 |
 | 根層 `extractor.py` `peak_scoring.py` 等 | Facade 與跨 subpackage 公開介面 |
 
-詳細所有權邊界查 `AGENTS.md § Ownership Map`。
+詳細所有權邊界查 `docs/architecture-contract.md § Ownership Map`。
 
 ## § 3 三道不可動的約束
 
@@ -150,7 +152,7 @@ else:
 │   │   └→ tools/diagnostics/<purpose>.py
 │   └── Domain 邏輯
 │       └→ xic_extractor/<subpackage>/
-│           └─ 不確定哪個 subpackage？查 AGENTS.md § Ownership Map
+│           └─ 不確定哪個 subpackage？查 docs/architecture-contract.md § Ownership Map
 │
 ├── 測試
 │   └→ tests/test_<module>_<behavior>.py
@@ -277,15 +279,15 @@ else:
 | 診斷工具 | `tools/diagnostics/<purpose>.py` | `tools/diagnostics/alignment_decision_report.py` |
 | Subpackage `__init__.py` | 對外公開模組才導出 `__all__`（目前部分缺失，見 § 7） | `xic_extractor/alignment/__init__.py` |
 
-關於「測試為何不鏡像 src 結構」：`AGENTS.md § Test Structure Rules` 明文採用「按 ownership 切，命名 `test_<module>_<behavior>`」的策略，避免 `tests/alignment/test_*.py` vs `xic_extractor/alignment/` 的雙層維護。
+關於「測試為何不鏡像 src 結構」：`docs/architecture-contract.md` 明文採用 flat test layout 與 `tests/test_<module>_<behavior>.py` 命名策略，避免 `tests/alignment/test_*.py` vs `xic_extractor/alignment/` 的雙層維護。
 
 ## § 7 已知內部重構狀態（指向後續工作，不在本檔範圍）
 
-下列問題已被識別但**不屬於目錄收納規則**，由 `AGENTS.md § Current Decomposition Targets` 與既有 spec 接手。
+下列問題已被識別但**不屬於目錄收納規則**，由 `docs/architecture-contract.md § Current Decomposition Targets` 與既有 spec 接手。
 
 - `xic_extractor/alignment/` 內 `_ppm()` 在 10 處重複定義（待抽 utils）
 - `extraction/`、`output/`、`configuration/`、`peak_detection/` 4 個 subpackage 缺 `__all__` 公開 API 宣告
-- `xic_extractor/peak_scoring.py`（1014 行）→ `AGENTS.md § Current Decomposition Targets` 已列名
+- `xic_extractor/peak_scoring.py`（1014 行）→ `docs/architecture-contract.md § Current Decomposition Targets` 已列名
 - `xic_extractor/extractor.py` 與 `xic_extractor/signal_processing.py` 的 facade 化重構（待處理）
 - `xic_extractor/alignment/primary_consolidation.py` 的 characterization-first 拆分（待處理）
 
@@ -309,4 +311,4 @@ else:
 3. 既有暫存目錄被改名或新增 → 更新 § 5
 4. 命名慣例改變 → 更新 § 6
 
-僅內部 subpackage 結構調整（例如 `alignment/` 內檔案移動）→ **不需**更新本檔，由 `AGENTS.md § Ownership Map` 負責。
+僅內部 subpackage 結構調整（例如 `alignment/` 內檔案移動）→ **不需**更新本檔，由 `docs/architecture-contract.md § Ownership Map` 負責。

@@ -1,364 +1,196 @@
 # XIC Extractor Agent Contract
 
-Repo-local rules for communication, code design, domain evidence, and
-maintenance. Global Codex rules still apply. This file should stay short enough
-to influence implementation choices.
+Repo-local rules for communication, validation, domain evidence, and code
+boundaries. Global Codex rules still apply. Keep this file short enough to
+influence every turn; move runbooks, roadmaps, and long contracts into docs.
 
-For directory layout, file placement rules, and scratch directory hygiene, see
-[`docs/project-layout.md`](docs/project-layout.md).
-For stable local Python runners, Thermo RAW/DLL paths, and validation tiers, see
-[`docs/agent-parameter-settings.md`](docs/agent-parameter-settings.md).
-For known diagnostic conclusions that should survive worktrees, see
-[`docs/diagnostic-ledger.md`](docs/diagnostic-ledger.md).
-For repo-local subagent roles, goal usage, and runtime routing, see
-[`docs/agent-subagent-routing.md`](docs/agent-subagent-routing.md).
-Repo-local XIC overlay skills live under [`.codex/skills`](.codex/skills).
+Canonical references:
 
-## Human Communication And Review Surfaces
+- Directory layout and scratch hygiene: [`docs/project-layout.md`](docs/project-layout.md)
+- Python runners, Thermo RAW/DLL paths, validation tiers, and command shapes:
+  [`docs/agent-parameter-settings.md`](docs/agent-parameter-settings.md)
+- Known diagnostic conclusions: [`docs/diagnostic-ledger.md`](docs/diagnostic-ledger.md)
+- Subagent roles, goal usage, and review routing:
+  [`docs/agent-subagent-routing.md`](docs/agent-subagent-routing.md)
+- LC-MS/MS domain evidence contract:
+  [`docs/lcms-msms-evidence-rules.md`](docs/lcms-msms-evidence-rules.md)
+- Architecture and decomposition contract:
+  [`docs/architecture-contract.md`](docs/architecture-contract.md)
+- Repo-local XIC overlay skills: [`.codex/skills`](.codex/skills), only when
+  they add an execution checklist beyond the routing docs.
 
-- Non-trivial task wrap-ups must state a clear current verdict first: what is
-  done, what is still blocked, and what the next recommended step is.
-- Final answers for implementation or validation work should include, in this
-  order when applicable: conclusion, changed files or artifact paths,
-  verification run, remaining risk, and next action.
-- Separate machine artifacts from human review surfaces. TSV/JSON are allowed to
-  be exhaustive; Markdown plans/specs are primarily for agents; human-facing
-  reports should be short, visual or indexed, and decision-oriented.
-- When asking for manual review, provide a compact review index instead of a long
-  raw table. Include the identifiers needed to find the row without extra lookup:
+## Communication And Review Surfaces
+
+- Non-trivial wrap-ups must state the current verdict first: what is done, what
+  is still blocked, and the next recommended step.
+- Use plain language before implementation detail. Say what changed, where,
+  how it was checked, what was skipped, and what risk remains.
+- Final answers for implementation or validation work should include, when
+  applicable: conclusion, changed files or artifact paths, verification run,
+  remaining risk, and next action.
+- Separate machine artifacts from human review surfaces. TSV/JSON may be
+  exhaustive; Markdown specs are mostly for agents; human-facing reports should
+  be short, visual or indexed, and decision-oriented.
+- Manual review requests should include a compact review index with identifiers:
   sample, label or family id, m/z, RT/window, status, reason, and linked
-  artifact path. Link the full TSV/JSON as supporting evidence only.
-- HTML/XLSX reports should summarize the decision, top blockers, and next action
-  before detailed tables. If a table is large, show top-ranked rows and provide a
-  separate full export.
+  artifact path.
 - Worktree or PR closeout should leave an operator-readable handoff: branch/task
-  purpose, current verdict, important artifacts, validation commands/results, and
+  purpose, verdict, important artifacts, validation commands/results, and an
   explicit next-step recommendation.
 
-## Execution Hygiene And Gates
+## Execution Gates
 
-- Before non-trivial edits, confirm the intended worktree, branch, and dirty diff
-  scope. Classify unrelated dirty files, and do not stage, rewrite, or revert
-  them unless explicitly requested.
-- Before running commands that depend on Python environment, Thermo RAW files,
-  DLLs, or common validation data, read `docs/agent-parameter-settings.md` and
-  use its documented paths and runners. Task-specific artifacts belong in the
-  active spec, plan, validation note, or output index, not in the long-lived
-  agent settings file.
-- Treat `docs/agent-parameter-settings.md` as maintained operational memory.
-  After a RAW / validation run establishes a reusable command shape, or after a
-  launch pattern repeatedly fails, update that file with the stable parameters,
-  anti-pattern, and evidence note before repeating the workflow.
-- Keep outputs organized under task-specific `output/` or `docs/superpowers/`
-  paths. Do not drop diagnostic graphs, TSVs, notebooks, or one-off artifacts in
-  the repo root. Every new diagnostic output group should have a summary or
-  index that points to the detailed files.
-- State validation status using explicit gate language: `diagnostic_only`,
-  `shadow_ready`, `production_candidate`, `production_ready`, or `inconclusive`.
-  Tests passing is not the same as production readiness.
-- For extraction, alignment, scoring, and matrix behavior changes, report whether
-  validation used synthetic tests only, 8-RAW, 85-RAW, targeted benchmark, or
-  manual EIC review. If real-data validation was skipped, say why and mark the
-  remaining risk.
-- For long RAW / validation runs, preflight the exact command shape before
-  launch: documented runner, sample set, output level, expected artifacts,
-  heartbeat sidecars, timeout / stop condition, and whether existing artifacts
-  can answer the question without rerunning. If a run stalls or exceeds the
-  expected heartbeat, stop and inspect timing / profiling output instead of
-  relaunching the same command.
+- Before non-trivial edits, confirm intended worktree, branch, and dirty diff
+  scope. Do not stage, rewrite, or revert unrelated user changes.
+- Before Python, RAW, DLL, or validation commands, read
+  `docs/agent-parameter-settings.md` and use documented runners and paths.
+- Keep outputs under task-specific `output/` or `docs/superpowers/` paths. New
+  diagnostic output groups need a summary or index.
+- State validation status explicitly: `diagnostic_only`, `shadow_ready`,
+  `production_candidate`, `production_ready`, or `inconclusive`.
+- Tests passing is not the same as production readiness. For extraction,
+  alignment, scoring, and matrix behavior changes, report whether validation
+  used synthetic tests, 8RAW, 85RAW, targeted benchmark, or manual EIC/MS2
+  review.
+- Do not launch 85RAW or likely long RAW runs through background
+  `Start-Process` from the Codex shell. Use the foreground heartbeat/timing
+  command shapes in `docs/agent-parameter-settings.md`, or get explicit approval
+  for an external terminal or automation.
+- Search `tools/diagnostics/INDEX.md`, relevant notes, and existing validation
+  outputs before inventing a new diagnostic workflow.
+- Search `docs/diagnostic-ledger.md` before rerunning known targets or failure
+  modes.
 - When sandbox, PowerShell syntax, output path, network approval, or RAW runner
-  choice is uncertain, run `python -m scripts.agent_sandbox_doctor --command
-  "<command>"` before launching the expensive or permission-sensitive command.
-- For alignment validation or downstream handoff, prefer
-  `--output-level validation-minimal`: `alignment_matrix.tsv` is the downstream
-  correction/statistics contract, while targeted benchmark diagnostics also need
-  `alignment_review.tsv` and `alignment_cells.tsv`. Do not generate `.xlsx`,
-  HTML, owner-edge, status-matrix, event-owner, or ambiguous-owner artifacts for
-  large validation runs unless a human review or debug task explicitly needs
-  them.
-- Do not run 85-RAW validation by launching a background `Start-Process` from
-  the Codex shell and then returning to poll it. That pattern has repeatedly
-  failed in this environment. Use the foreground command shape documented in
-  `docs/agent-parameter-settings.md` with heartbeat sidecars, or get explicit
-  user approval for an external terminal / automation.
-- The default Codex posture for this repo is `workspace-write` with
-  `on-request` approvals. Use read-only mode for reviewer roles; tester roles
-  may use workspace-write only for verification side effects. Do not switch to
-  `danger-full-access`, `never`, broad writable roots, or persistent execpolicy
-  rules unless a reviewed plan names the exact risk being removed.
+  choice is uncertain, preflight with `python -m scripts.agent_sandbox_doctor`
+  before launching expensive or permission-sensitive commands.
 - Treat `.codex/config.toml`, hooks, execpolicy, and subagent TOML as
-  execution-affecting config. Changes to them need docs/handoff review and a
-  smoke check; prefer passive logging or warning hooks before blocking hooks.
-- Before staging or pushing docs/settings/config changes, scan the diff for
-  secrets, private local paths, absolute machine-specific paths, and accidentally
-  tracked local Codex config. Machine-local paths in
-  `docs/agent-parameter-settings.md` are operational memory for this repo; if
-  the repo or PR target is public, move them to an untracked local override or
-  sanitize them first.
-- Plans should separate `Now`, `Later`, and `Not in scope`, with checkpoint-level
-  acceptance criteria and stop conditions. Do not let a plan imply production
-  changes when the current phase is only audit, shadow, or validation.
+  execution-affecting config. Changes need docs/handoff review and a smoke
+  check.
+- Before staging docs/settings/config changes, scan the diff for secrets,
+  private local paths, absolute machine-specific paths, and accidentally tracked
+  local Codex config.
 
 ## PR Verification Gate
 
-- Before opening, updating, or marking a PR ready, run the CI-equivalent lint,
-  typecheck, and test commands from `.github/workflows/ci.yml` in the current
-  worktree:
+Before opening, updating, or marking a PR ready, run the CI-equivalent commands
+from `.github/workflows/ci.yml` in the current worktree:
 
-  ```powershell
-  $env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
-  $env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
-  $env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
-  ```
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
+```
 
-- If any command fails because of real lint/type/test errors, fix the root cause
-  and rerun the failed CI-equivalent gate before opening the PR. Do not open the
-  PR with known lint, typecheck, or test failures.
-- If a command fails only because the sandbox blocks dependency resolution,
-  executable spawn, or DLL loading, rerun the same command with appropriate
-  approval. Do not substitute a narrower command unless a reviewed plan explains
-  why the CI-equivalent command is impossible or irrelevant.
-- PR descriptions and closeout notes must list the exact CI-equivalent commands
-  and observed results. Focused tests or RAW validation supplement this gate;
-  they do not replace it.
+If a command fails because of real lint/type/test errors, fix the root cause and
+rerun the failed gate. If it fails only because sandbox blocks dependency
+resolution, executable spawn, or DLL loading, rerun the same command with
+approval instead of substituting a narrower check. PR descriptions and closeout
+notes must list exact commands and observed results.
 
-## Planning And Evidence Budget
+## Planning And Review
 
-- Before a phase plan or expensive validation run, name the decision it can
-  close, the strongest existing internal oracle, the missing independent
-  evidence, expected runtime/artifacts, and the fail-fast or inconclusive path.
-- Search `tools/diagnostics/INDEX.md`, relevant notes, and existing validation
-  outputs before inventing a new workflow. Reuse them unless they cannot answer
-  the current phase decision.
-- Search `docs/diagnostic-ledger.md` before rerunning a previously investigated
-  target or failure mode. Do not reclassify a known RT drift, area mismatch, or
-  mixed-surface warning as a new blocker unless current artifacts contradict the
-  ledger.
+- Before phase plans or expensive validation, name the decision the run can
+  close, strongest existing oracle, missing independent evidence, expected
+  runtime/artifacts, and fail-fast or inconclusive path.
 - Any `audit_only`, `shadow_only`, or `diagnostic_only` path needs an exit rule:
   promote, kill, externalize, or name the single missing evidence.
-- Do not expand validation when the result cannot change the next action. Use
-  the smallest confirmation plus rollback guard.
-- Use a goal-shaped contract for long-running, multi-step, or easy-to-drift
-  work. Register an active goal only when the user explicitly asks for one or
-  the current runtime instruction explicitly permits it. A goal contract must
-  have one measurable objective, concrete context to read first, hard
-  constraints, mechanically checkable `DONE WHEN`, fresh `VERIFY`, output
-  expectations, and stop rules. Do not create goals for tiny bug fixes, one-off
-  commands, or commits.
-- Goal contracts for this repo must point to the canonical local surfaces:
-  `AGENTS.md`, `docs/agent-parameter-settings.md`, `docs/agent-subagent-routing.md`,
-  active specs/plans, and existing diagnostics or validation outputs. Mark a
-  goal complete only after checking `DONE WHEN` and `VERIFY`.
+- Do not expand validation when the result cannot change the next action.
+- Use a goal-shaped contract for long-running, multi-step, cross-turn, or
+  repeatedly drifting work. Goal contracts must point to canonical local
+  surfaces, active specs/plans, and existing diagnostics or validation outputs.
+- Non-trivial specs, plans, docs, workflow rules, and implementations need a
+  critical-thinking review angle: strongest assumption, stale-artifact risk,
+  cheaper existing oracle, or condition that would invalidate the path.
+- When the user asks for subagent review, follow
+  `docs/agent-subagent-routing.md`. Do not replace a requested multi-angle review
+  with one generic reviewer unless a runtime limit blocks it and the bypass is
+  reported.
+- Repo-local execution subagents are opt-in. The main agent owns synthesis,
+  edits, final judgment, and verification.
+- Reusable workflows belong in global skills first. Repo-local `.codex/skills/`
+  entries should exist only for XIC-specific checklists that cannot live cleanly
+  in routing docs.
 
-## Product Roadmap Discipline
+## Product And Validation Discipline
 
 - P-specs, C-specs, and implementation plans must state whether they advance
   `Trace` / `TraceGroup`, multi-source `PeakHypothesis`, `EvidenceVector`,
   `IntegrationResult`, model selection, or `AuditTrail`. If they advance none,
-  label them cleanup-only and do not present them as modernization progress.
-- Separate infrastructure existence from product behavior. Diagnostic TSVs,
-  shadow reports, wrappers, and sidecars prove observability, not product
-  usability.
-- Prefer establishing the minimal future spine or dual-write contract before
-  polishing legacy DTOs, resolver names, or scoring split points likely to move
-  during handoff migration.
+  label them cleanup-only.
+- Diagnostic TSVs, shadow reports, wrappers, and sidecars prove observability,
+  not product usability.
+- Prefer establishing the future spine or dual-write contract before polishing
+  legacy DTOs, resolver names, or scoring split points likely to move during
+  handoff migration.
 - CWT, WIS, local minima, curvature, derivative, and region-first logic are
   evidence or hypothesis sources. A phase touching them must declare one mode:
   audit-only, hypothesis enumeration, model-selection calibration, production
   candidate, or retirement.
-
-## Validation Phase Types
-
-- Science phase: require independent domain evidence capable of disproving false
+- Science phases require independent domain evidence capable of disproving false
   confidence. Median RSD alone is not enough.
-- Cleanup phase: require numerical parity against the settled baseline; behavior
+- Cleanup phases require numerical parity against the settled baseline; behavior
   changes relabel the phase.
-- Engineering phase: require characterization parity and maintainability gain;
+- Engineering phases require characterization parity and maintainability gain;
   do not bundle behavior changes.
-- Documentation / diagnostic phase: require consistency and reviewer
+- Documentation and diagnostic phases require consistency and reviewer
   readability; no numerical gate language applies.
 
-## Review Discipline
+## Domain Evidence Guardrails
 
-- Non-trivial specs, plans, docs, and implementations need a review pass with a
-  critical-thinking angle: name the strongest assumption, stale-artifact risk,
-  cheaper existing oracle, or condition that would invalidate the chosen path.
-- Treat repeated syntax failures as operational memory. If PowerShell, ruff,
-  Markdown, or command-shape mistakes recur, update `docs/agent-parameter-settings.md`
-  or the relevant local contract instead of leaving the lesson only in chat.
-- For broad specs, phase plans, workflow rules, or validation strategy changes,
-  use read-only reviewer families only when their findings can change the next
-  action. When the user explicitly asks for subagents to review specs, plans, or
-  goals, follow the critical review routing in
-  `docs/agent-subagent-routing.md`; do not replace a requested multi-angle
-  review with one generic reviewer per artifact.
-  Normal dispatch is capped at two reviewers per artifact; a third reviewer
-  requires genuinely independent surfaces. The main agent owns integration and
-  final judgment; reviewers do not share a write scope.
-- Repo-local subagent definitions live in `.codex/agents/`; phase routing lives
-  in `docs/agent-subagent-routing.md`. Delegate to them explicitly; do not
-  assume custom subagents auto-spawn. If the runtime only exposes a generic
-  reviewer type, paste the intended repo-local role brief into the subagent
-  prompt and name that role in the synthesis.
-- Reusable workflow skills should live in the global skill roots. Repo-local
-  `.codex/skills/` entries should be thin XIC overlays for RAW, validation,
-  artifact, and handoff rules. Use global `goal-execution`,
-  `critical-artifact-review`, and `pr-closeout` first; use `xic-*` skills only
-  for XIC-specific additions. If a named global skill is unavailable, state that
-  explicitly and fall back to `docs/agent-subagent-routing.md` plus the matching
-  XIC overlay instead of recreating a duplicate local workflow.
-- New skills, roles, workflow routes, and diagnostics need a clear adoption
-  reason: a capability, recovery path, decision quality gain, or repeated
-  failure reduction that the existing owner does not provide. Without that
-  differentiation, improve or retire the existing owner instead of adding
-  another entry point.
-- Repo-local execution subagents are opt-in. Use `implementation-worker` only for
-  a small, self-contained slice with an explicit non-overlapping write scope. Use
-  `tester` for clean-context verification or regression reproduction; testers
-  may run commands that write normal cache/log/output side effects, but must not
-  edit, stage, commit, revert, rename, or delete source/docs/config/test files
-  unless a separate implementation task is assigned. Tester reports must include
-  final `git status --short` so verification side effects do not hide source or
-  docs edits.
-- Do not create new repo-local skills unless an existing repo-local or global
-  skill plus this file cannot express the repeated workflow. Prefer improving
-  the existing `.codex/skills/` entry, this contract,
-  `docs/agent-parameter-settings.md`, or the relevant diagnostic index first.
+Full contract: `docs/lcms-msms-evidence-rules.md`.
 
-## Design Principles
+- Prefer evidence chains over single-metric authority. RT, CWT, WIS, iRT, local
+  minima, RT models, shape similarity, product ions, neutral losses, adducts,
+  and in-source fragments are evidence inputs, not silent vetoes.
+- RT is contextual evidence. It must not prove analyte absence or override
+  co-eluting, candidate-aligned MS1/MS2 evidence unless an explicit hard RT
+  exclusion policy exists.
+- Missing DDA MS2/product/NL evidence is `not_observed` by default. Treat it as
+  negative evidence only when acquisition opportunity and comparable controls
+  show it should have been observable.
+- Clean standards can support audit, library, and instrument interpretation, but
+  cannot alone justify production correction of biological matrices.
+- Keep audit and production gates separate. Sparse, extrapolated, or low-coverage
+  evidence stays review-only until a production policy exists.
+- Targeted outputs may be benchmarks or shared low-level evidence, but target
+  labels and targeted pass/fail logic must not leak into untargeted production
+  matrix identity without an approved contract.
 
-- Make logic, dependencies, and data flow obvious.
-- Prefer explicit interfaces over hidden coupling or global context.
-- Keep one reason-to-change per module. Split by responsibility, not by fashion.
-- Keep high-level domain behavior independent from IO, GUI, workbook rendering,
-  process backends, and CLI wrappers.
-- Use orchestration modules to coordinate focused submodules; do not let the
-  orchestrator become the permanent home for every implementation detail.
-- Add abstraction only when it reduces real coupling, duplication, or cognitive
-  load. Avoid both monoliths and many tiny indistinguishable modules.
-- Preserve public contracts unless an approved plan says otherwise.
+## Architecture Guardrails
 
-## LC-MS/MS Evidence Rules
+Full contract: `docs/architecture-contract.md`.
 
-- Treat RT as contextual evidence, not a single hard identity veto. Large,
-  reproducible, or unmodeled RT shifts may trigger ambiguity or confidence
-  demotion, especially when inconsistent with biological ISTD transfer evidence,
-  but RT alone must not prove analyte absence or override co-eluting,
-  candidate-aligned MS1/MS2 evidence unless an explicit hard RT exclusion policy
-  exists.
-- For ISTDs, when a coherent evidence chain exists, such as aligned MS1 peak
-  shape/area plus candidate-aligned NL/product/MS2/trace evidence, do not
-  downgrade only because of RT prior, RT window, or centrality concerns. If this
-  changes, add an explicit contract doc and regression tests.
-- Treat missing DDA MS2/product/NL evidence as `not_observed` by default. Use it
-  as negative evidence only when acquisition opportunity, local sensitivity,
-  precursor selection or scan coverage, and comparable positive controls show
-  that the evidence should have been observable.
-- Product ions, neutral losses, adducts, and in-source fragments are candidate
-  evidence only when co-eluting, boundary-aligned, and assigned to the same
-  precursor or candidate. Shared class fragments or common neutral losses support
-  class or substructure confidence, not analyte-specific proof by themselves.
-- Prefer evidence chains over single-metric authority. CWT, WIS, iRT, local
-  minima, RT models, and shape similarity are evidence inputs; none should
-  silently overrule the selected peak or matrix identity by itself. Any evidence
-  source that changes production behavior needs explicit config or contract,
-  machine-readable reason/status fields, and regression tests.
-- Keep source roles explicit when manifests, method docs, or target registries
-  declare them:
-  - SDO/LEK are dedicated clean standards and are expected only in their own
-    standard samples.
-  - MixSTDs are non-biological clean standards containing ISTDs and external
-    standards.
-  - Non-ISTD MixSTD targets are external standards; do not use them as required
-    biological-sample anchors unless explicitly spiked or validated.
-  - When biological samples receive ISTDs, those ISTDs are the primary transfer
-    evidence for real-matrix RT/response behavior because they share the sample
-    matrix, ion suppression/enhancement, RT drift, and sample-prep context.
-- Clean standards can describe instrument behavior and support authentic
-  reference checks, RT-aware preview, and audit or library work, but cannot alone
-  justify production correction of biological matrices. Calibration-derived
-  production RT/area/scoring/matrix gate changes require current-code biological
-  transfer evidence, row-level coverage or exclusion policy, and machine-readable
-  GO/NO-GO blockers.
-- Keep audit and production gates separate. Extrapolated, sparse, missing, or
-  low-coverage evidence stays review-only until an explicit production policy
-  exists.
-- When manual EIC/MS2 review contradicts a diagnostic label, investigate whether
-  the shared evidence rule, diagnostic wording, or reviewed row is wrong. Fix the
-  shared rule and add regression tests when the diagnostic logic is wrong; do not
-  encode one-off sample or target exceptions as the primary solution.
-- Targeted and untargeted workflows may use different priors and reporting, but
-  shared evidence concepts such as traces, candidates, boundaries, regions,
-  integration audit, and product/NL evidence should use common low-level models
-  when this prevents schema drift. Do not force shared concrete implementations
-  before the semantics match.
-- Targeted outputs may serve as benchmarks, validation evidence, or shared
-  low-level evidence, but must not leak target labels or targeted pass/fail logic
-  into untargeted production matrix identity unless an approved contract says so.
-
-## Architecture And Clean Code Rules
-
-- Keep one reason to change per module. If code mixes setup, parsing, domain
-  logic, diagnostics, rendering, and IO, split it or make the file an explicit
-  orchestration facade.
-- Preserve dependency direction. Domain algorithms may use arrays, config,
-  typed context objects, and small models, but must not import GUI, workbook
-  builders, CLI scripts, process backends, report renderers, or RAW/CSV adapters.
-  IO/rendering/adapters depend inward on domain helpers.
-- Public entry points and compatibility facades should stay thin. Move behavior
-  into focused modules while keeping old imports working when they are public.
-- Treat `tools/diagnostics/` as maintained product code. Diagnostic CLIs should
-  parse, validate, and orchestrate only; reusable loading, classification,
-  models, summaries, plotting, and writers belong in focused modules.
-- Before any PR that adds, removes, or renames a CLI entry-point in
-  `tools/diagnostics/`, read `tools/diagnostics/INDEX.md` and cite which
-  existing entries were considered. Every PR that changes the set of
-  entry-points must update `INDEX.md` in the same diff (Purpose, Topic
-  group, Originating spec/plan for new entries; tombstone for retired
-  ones). Full lifecycle rules live in
-  `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`.
-- Diagnostic writers render TSV/JSON/HTML/XLSX/plots only. They must not
-  recompute domain evidence or re-scan RAW files; pass typed summaries from the
-  code path where trace context already exists.
-- Gate diagnostics must emit machine-readable status/reason fields plus a short
-  human summary with the blocker and next action. Missing inputs, missing
-  columns, stale artifacts, and unsupported schemas should name the expected
-  file/column and how to regenerate or bypass the artifact.
-- Optional diagnostics should use sidecar artifacts. Do not silently change
-  established TSV/workbook schemas unless an approved contract says so.
+- Preserve dependency direction. Domain logic must not import GUI, workbook
+  builders, CLI scripts, process backends, report renderers, or RAW/CSV
+  adapters.
+- Keep public entry points and compatibility facades thin while moving behavior
+  into focused modules.
+- Treat `tools/diagnostics/` as maintained product-adjacent code. CLIs
+  orchestrate; reusable loading, classification, models, summaries, plotting,
+  and writers belong in package modules.
+- Diagnostic writers render only. They must not recompute domain evidence or
+  re-scan RAW files.
 - Shared dataclasses and protocols belong in small model/contract modules when
-  they prevent circular imports or schema drift. Do not create shared concrete
-  implementations before targeted/untargeted semantics actually match.
-- Windows process mode must receive pickleable payloads only. Do not pass nested
-  closures or non-pickleable factories across process boundaries.
-- Move behavior before changing behavior. Do not mix structural refactors with
-  scoring thresholds, peak selection rules, neutral-loss matching, or area
-  integration changes.
-- Add characterization tests before moving behavior that is not already covered.
-  Tests should live in `tests/`, mirror the focused module, and prove behavior
-  or public contracts with small deterministic fixtures before real RAW data.
-- Separate real-data validation from normal unit tests. Use explicit validation
-  scripts or fixture gates for RAW/workbook checks, and use 8-RAW validation for
-  extraction/output refactors that can affect real workbook output.
-- For output changes, pair narrow writer/sheet tests with a workbook or schema
-  contract test. For process-mode changes, add a no-RAW spawn/pickling smoke
-  test before raw-data benchmarking.
-- Line count is a signal, not a hard rule. Pause when a module is near 500 lines
-  and a change adds a responsibility, or near 800 lines and the change is not a
-  local bug fix. Responsibility count matters more than exact length.
+  they prevent circular imports or schema drift.
+- Move behavior before changing behavior. Add characterization tests before
+  moving uncovered behavior.
+- Separate real-data validation from normal unit tests.
 
-## CodeGraph Tooling Preference
+## CodeGraph
 
-- Prefer the `codegraph` CLI for CodeGraph-assisted repository inspection.
-  Treat the CodeGraph MCP tools as a fallback when the CLI is unavailable,
-  insufficient for the specific query, or explicitly requested.
-- For subagent reviews, tell reviewers to avoid CodeGraph MCP by default. They
-  should use `codegraph` CLI, `rg`, and targeted file reads unless MCP access is
-  intentionally part of the task.
+- Prefer the `codegraph` CLI for broad indexed search, status, files, and
+  context-building when it can answer the question cleanly.
+- Use CodeGraph MCP when the query needs capabilities the CLI does not expose or
+  exposes less clearly, especially caller/callee/impact tracing, single-symbol
+  source lookup, or explicit MCP-requested structural context.
+- For subagent reviews, tell reviewers to start with `codegraph` CLI, `rg`, and
+  targeted file reads for simple no-use checks. Allow CodeGraph MCP when the
+  review asks a structural caller/callee/impact question or CLI output is
+  insufficient.
 
 ## Public Contracts
 
-Treat these as public unless a plan explicitly changes them:
+Treat these as public unless an approved plan explicitly changes them:
 
 - CLI commands under `scripts/`
 - `xic_extractor.extractor.run`
@@ -369,28 +201,3 @@ Treat these as public unless a plan explicitly changes them:
 - workbook sheet names, order, hidden states, and columns
 - HTML report path naming
 - run metadata keys
-
-## Current Decomposition Targets
-
-These modules are known maintainability targets:
-
-- `scripts/csv_to_excel.py`: keep as CLI/import wrapper; move workbook logic to
-  `xic_extractor/output/` modules.
-- `xic_extractor/extractor.py`: keep as public extraction facade; move pipeline,
-  backend, pre-pass, target extraction, anchor, drift, and output dispatch logic
-  into `xic_extractor/extraction/`.
-- `xic_extractor/signal_processing.py`: keep as compatibility facade; move
-  models, resolver implementations, selection, recovery, integration, and trace
-  quality into focused peak-detection modules.
-- `xic_extractor/peak_scoring.py`: split scoring models, score component
-  calculations, and selection helpers only after characterization tests pin
-  current confidence/reason outputs.
-- `xic_extractor/alignment/primary_consolidation.py`: add characterization tests
-  before splitting graph construction, winner selection, cell merge, or loser
-  audit helpers.
-
-See:
-
-- `docs/superpowers/specs/2026-05-06-workbook-and-extraction-module-decomposition-spec.md`
-- `docs/superpowers/specs/2026-05-16-module-responsibility-inventory.md`
-- `docs/superpowers/specs/2026-05-16-alignment-module-responsibility-contract.md`

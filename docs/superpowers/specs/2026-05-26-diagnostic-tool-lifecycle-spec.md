@@ -70,8 +70,8 @@ monotonically.
 
 ## Existing Specs This Extends
 
-- `AGENTS.md` Architecture And Clean Code Rules (lines 136-178), especially
-  the rule that `tools/diagnostics/` is maintained product code.
+- `docs/architecture-contract.md`, especially the rule that
+  `tools/diagnostics/` is maintained product-adjacent code.
 - `docs/superpowers/specs/2026-05-16-module-responsibility-inventory.md`
 - `docs/superpowers/specs/2026-05-16-alignment-module-responsibility-contract.md`
 - `docs/superpowers/specs/2026-05-24-post-pr60-codebase-cleanup-spec.md`
