@@ -1,7 +1,7 @@
 # C6 - Alignment Stage Semantics And Value Assessment Design
 
 **Date:** 2026-06-01
-**Status:** Phase 5 design closeout v1.1 — C6 active-stage contract hardening
+**Status:** Phase 5 design closeout v1.2 — C6 owner-family parity mapping
 **Readiness label:** `diagnostic_only`
 **Supersedes for implementation:** [C6 alignment grouping consolidation](2026-05-24-peak-pipeline-cleanup-alignment-grouping-consolidation-spec.md)
 **Execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
@@ -37,7 +37,9 @@ after no-use evidence and invariant triage. The follow-up public-shim slice
 retired the remaining event-first compatibility exports and their delegated
 clustering/backfill helpers. A later active-stage hardening slice pinned
 writer-visible claim assignment and primary loser-audit surfaces without
-changing alignment behavior.
+changing alignment behavior. The owner-family parity-mapping slice then pinned
+the `cluster_sample_local_owners(...)` -> `OwnerAlignedFeature` -> writer path
+before any successor-spine migration.
 
 The deeper C6 question is not only "can grouping-like loops be consolidated?"
 It is:
@@ -514,6 +516,26 @@ remaining C6 semantic migration candidate is owner-family construction, not the
 retired event-first path and not the claim/consolidation policy now pinned as an
 active product stage.
 
+Current CodeGraph-assisted mapping says `OwnerAlignedFeature` is still a real
+handoff DTO:
+
+- `pipeline.run_alignment(...)` creates it through
+  `cluster_sample_local_owners(...)`;
+- `select_backfill_features(...)`, `build_owner_backfill_cells(...)`,
+  `build_owner_alignment_matrix(...)`, process-backfill payloads, and optional
+  pre-backfill consolidation consume it;
+- `TraceGroup` is currently a sample-local trace context, and `PeakHypothesis`
+  is currently a local peak/integration hypothesis. They do not yet represent a
+  cross-sample owner family with stable family ID, owner membership,
+  complete-link edge semantics, review-only identity conflicts, backfill seed
+  centers, and writer-visible matrix/cell/review projection.
+
+Therefore this slice does not migrate `owner_clustering.py`. It pins the smallest
+public oracle for a later migration:
+`test_owner_family_construction_is_writer_visible` proves that owner-family
+construction survives into `alignment_matrix.tsv`, `alignment_cells.tsv`, and
+`alignment_review.tsv`.
+
 1. List current production, diagnostic, public-import, and test consumers of
    `OwnerAlignedFeature` construction and owner-family outputs.
 2. Map legacy tests to product invariants: candidate grouping, family grouping,
@@ -536,6 +558,16 @@ winner/loser policy. `owner_clustering.py` is different: it is still a
 structural input today, but its product concept is close enough to the successor
 hypothesis/family spine that it should be treated as a semantic migration
 candidate rather than a permanent parallel system.
+
+### Owner-Family Successor Mapping
+
+| Owner-family invariant | Current owner-first source | Current writer/public oracle | Successor-spine gap before migration |
+| --- | --- | --- | --- |
+| Stable cross-sample family ID and owner membership | `OwnerAlignedFeature.feature_family_id`, `owners`, `event_cluster_ids`, `event_member_count` | `test_owner_family_construction_is_writer_visible`; `alignment_review.tsv` event fields | Successor needs a cross-sample family/hypothesis object, not only per-sample `TraceGroup` / `PeakHypothesis` IDs. |
+| Complete-link family construction and drift-prior edge evidence | `cluster_sample_local_owners(...)`, `edge_scoring.evaluate_owner_edge(...)` | owner-clustering complete-link, drift-prior, weak-edge, and edge-sink tests | Successor tests must prove pairwise complete-link semantics and emitted edge evidence before replacing this stage. |
+| Hard family split gates | owner-clustering neutral-loss, product-m/z, observed-loss, impossible-m/z, same-sample exclusion checks | owner-clustering conflict/split tests plus matrix/cells parity when construction changes | Successor must preserve split reasons and avoid tolerance-only flattening. |
+| Review-only owner records | `identity_conflict` features and `review_only_features_from_ambiguous_records(...)` | owner-clustering ambiguous/review-only tests; owner-matrix ambiguous cell tests | Successor must carry review-only family/cell semantics without contaminating production matrix rows. |
+| Backfill seed and matrix delivery contract | `OwnerAlignedFeature.family_center_*`, `backfill_seed_centers`, `confirm_local_owners_with_backfill` | owner-backfill, owner-matrix, pre-backfill consolidation tests; writer-visible owner-family test | Successor must prove `alignment_matrix.tsv`, `alignment_cells.tsv`, and `alignment_review.tsv` parity before `OwnerAlignedFeature` becomes adapter-only. |
 
 ## Phase Shape
 
@@ -650,7 +682,7 @@ semantic-survival label, and exit rule.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Candidate event clustering | retired `xic_extractor.alignment.clustering.cluster_candidates` | Former event-first candidate/event grouping and public `cluster_candidates` import surface. Product authority is now superseded by owner-first and successor evidence concepts. | retired candidate/event grouping | CodeGraph MCP impact found tests/package shim only; successor invariants live in owner-family, ownership, identity-coherence, and hypothesis/trace diagnostics. | Reintroducing a generic grouping helper would recreate a parallel legacy candidate system. | `retired` | `retired_event_first_path` | Do not reintroduce without a new product-path spec, public migration note, and parity oracle. |
 | Sample-local owner build | `xic_extractor.alignment.ownership.build_sample_local_owners` | Assigns MS1 trace ownership per sample and emits owner/ambiguous records used by production alignment. | sample-local owner construction | Existing ownership and pipeline backend tests; `event_to_ms1_owner.tsv` and `ambiguous_ms1_owners.tsv` parity when emitted. | Shared grouping would hide RAW-backed ownership and ambiguous-owner semantics. | `keep_as_stage` / `contract_only` | `structural_input` and `candidate_source` | Preserve as named stage; future edits need owner assignment parity. |
-| Owner family grouping | `xic_extractor.alignment.owner_clustering.cluster_sample_local_owners` | Builds cross-sample owner families and edge evidence for owner-first matrix delivery; conceptually this is cross-sample hypothesis/family construction, but current downstream still consumes `OwnerAlignedFeature`. | owner-family grouping | Existing owner-clustering tests cover complete-link grouping, drift-prior edges, same-sample exclusion, neutral-loss/product/observed-loss conflict splits, impossible m/z rejection, edge evidence sink, and review-only identity-conflict features. Successor migration still needs `OwnerAlignedFeature` invariant coverage in cross-sample hypothesis/family tests plus matrix/cells parity. | Complete-link gates and edge evidence could be flattened into tolerance-only grouping, or the module could survive as a parallel family system after the successor spine can own it. | `semantic_migration_candidate` / `contract_only` | `candidate_source` and `structural_input`; possible future `merged_into_successor` | Keep now. Later migration must first port owner-family invariants to the successor spine and prove `alignment_matrix.tsv` / `alignment_cells.tsv` parity. |
+| Owner family grouping | `xic_extractor.alignment.owner_clustering.cluster_sample_local_owners` | Builds cross-sample owner families and edge evidence for owner-first matrix delivery; conceptually this is cross-sample hypothesis/family construction, but current downstream still consumes `OwnerAlignedFeature`. | owner-family grouping | Existing owner-clustering tests cover complete-link grouping, drift-prior edges, same-sample exclusion, neutral-loss/product/observed-loss conflict splits, impossible m/z rejection, edge evidence sink, and review-only identity-conflict features. `test_owner_family_construction_is_writer_visible` pins owner-family projection into `alignment_matrix.tsv`, `alignment_cells.tsv`, and `alignment_review.tsv`. Successor migration still needs cross-sample hypothesis/family tests plus output parity. | Complete-link gates and edge evidence could be flattened into tolerance-only grouping, or the module could survive as a parallel family system after the successor spine can own it. | `semantic_migration_candidate` / `contract_only` | `candidate_source` and `structural_input`; possible future `merged_into_successor` | Keep now. Later migration must first port owner-family invariants to the successor spine and prove `alignment_matrix.tsv` / `alignment_cells.tsv` / `alignment_review.tsv` parity. |
 | Pre-backfill consolidation | `xic_extractor.alignment.pre_backfill_consolidation.consolidate_pre_backfill_identity_families` | Consolidates identity families before backfill scope selection. | identity-family consolidation before backfill | Existing alignment tests plus missing row-level pre/post consolidation fixture. | Generic merge could change which family enters backfill. | `contract_harden` / `stage_local_cleanup_only` | `structural_input` | Add focused consolidation fixture before cleanup; otherwise keep as stage. |
 | Event-first backfill | retired `xic_extractor.alignment.backfill.backfill_alignment_matrix` | Former event-first matrix cell construction for the alternate alignment path. | retired event-first backfill and cell construction | CodeGraph MCP impact found tests/package shim only; owner-backfill / owner-matrix tests cover active cell delivery semantics. | Reintroduction could conflate owner-first and event-first backfill semantics again. | `retired` | `retired_event_first_path` | Do not reintroduce without a new product-path spec and matrix/cells parity oracle. |
 | Owner backfill | `xic_extractor.alignment.owner_backfill.build_owner_backfill_cells` | Rescues owner-family cells and feeds owner matrix delivery. | backfill scope and matrix cell creation | Owner backfill tests, process backend tests, `alignment_cells.tsv` parity. | Generic backfill helper could change detected/rescued/absent labels. | `keep_as_stage` / `contract_only` | `structural_input` | No C6 cleanup now; future edits require cell status parity. |

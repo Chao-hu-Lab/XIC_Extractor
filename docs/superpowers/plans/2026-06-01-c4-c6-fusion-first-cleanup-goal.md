@@ -7,7 +7,9 @@ Complete one focused cleanup PR on `codex/cleanup-retirement-foundation` that
 closes the first executable C4/C6 fusion-first cleanup slice: harden C4 scorer
 successor-projection coverage without moving active scorer policy, and start C6
 event-first alignment retirement by removing private no-use wiring and, after
-reviewed no-use evidence, retiring the public event-first imports.
+reviewed no-use evidence, retiring the public event-first imports. Follow-up
+extensions also harden C6 active-stage contracts and record the owner-family
+successor mapping / parity gap for the next migration decision.
 
 This goal is intentionally not a repo-wide dead-code sweep. It closes only the
 C4/C6 pilot work that the current specs have made mechanically actionable.
@@ -282,6 +284,11 @@ DONE WHEN:
   remaining semantic migration candidate, while `claim_registry` and
   `primary_consolidation` are `keep_as_stage` product-path arbitration stages
   protected by writer-visible parity tests.
+- C6 owner-family parity mapping records that `OwnerAlignedFeature` is still a
+  product handoff DTO consumed by backfill scope, owner backfill, owner matrix,
+  process payloads, and optional pre-backfill consolidation; successor
+  `TraceGroup` / `PeakHypothesis` surfaces do not yet replace cross-sample
+  family construction.
 - Owner-first alignment production behavior, matrix identity, production
   decisions, target CSV output, and scorer selection behavior are unchanged.
 - All changed specs/plans/tests/code align with the C4/C6 fusion-first specs.
@@ -377,6 +384,29 @@ Executed hardening:
   open-ended `contract_harden` to `keep_as_stage` / `arbitration_state`. Future
   changes require a separate behavior spec or parity-backed migration.
 
+### Phase 5 Extension - C6 Owner-Family Parity Mapping
+
+Scope:
+
+- This is still no-behavior-change cleanup groundwork. It does not migrate,
+  rename, or retire `owner_clustering.py` or `OwnerAlignedFeature`.
+- The phase maps owner-family invariants against the successor
+  `TraceGroup` / `PeakHypothesis` spine and records the current gap: successor
+  surfaces are local trace/peak hypotheses, not yet cross-sample family
+  construction with stable family IDs and owner membership.
+
+Executed hardening:
+
+- `tests/test_alignment_owner_clustering.py` now pins the product handoff path:
+  `cluster_sample_local_owners(...)` -> `build_owner_alignment_matrix(...)` ->
+  `alignment_matrix.tsv`, `alignment_cells.tsv`, and `alignment_review.tsv`.
+- The C6 spec now includes an owner-family successor mapping table covering
+  family ID/membership, complete-link edges, hard split gates, review-only
+  records, and backfill/matrix delivery.
+- `owner_clustering.py` remains `semantic_migration_candidate`, not a retirement
+  candidate. Future migration must first port these invariants to successor
+  cross-sample family tests and prove matrix/cells/review parity.
+
 VERIFY:
 Run final no-use / contract scans:
 
@@ -430,7 +460,8 @@ OUTPUT:
   `active_policy` / `compatibility_adapter` /
   `semantic_migration_candidate` rows; C6 event-first public retirement
   decision; C6 active-stage disposition for `owner_clustering`,
-  `claim_registry`, and `primary_consolidation`.
+  `claim_registry`, and `primary_consolidation`; C6 owner-family successor
+  mapping and remaining parity gap.
 - Verification commands and results.
 - Whether public imports, target CSVs, alignment TSVs, workbook sheets, or
   diagnostic schemas changed.

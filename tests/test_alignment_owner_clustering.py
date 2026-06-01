@@ -1,3 +1,6 @@
+import csv
+from pathlib import Path
+
 from xic_extractor.alignment import owner_clustering as owner_clustering_module
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.edge_scoring import evaluate_owner_edge
@@ -5,6 +8,7 @@ from xic_extractor.alignment.owner_clustering import (
     cluster_sample_local_owners,
     review_only_features_from_ambiguous_records,
 )
+from xic_extractor.alignment.owner_matrix import build_owner_alignment_matrix
 from xic_extractor.alignment.ownership_models import (
     AmbiguousOwnerRecord,
     IdentityEvent,
@@ -359,6 +363,71 @@ def test_ambiguous_records_become_review_only_features_without_owners() -> None:
     assert features[0].ambiguous_candidate_ids == ("sample-a#1", "sample-a#2")
 
 
+def test_owner_family_construction_is_writer_visible(tmp_path: Path) -> None:
+    from xic_extractor.alignment.tsv_writer import (
+        write_alignment_cells_tsv,
+        write_alignment_matrix_tsv,
+        write_alignment_review_tsv,
+    )
+
+    features = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "a", apex_rt=8.40),
+            _owner("sample-b", "b", apex_rt=8.60),
+        ),
+        config=AlignmentConfig(identity_rt_candidate_window_sec=180.0),
+    )
+    matrix = build_owner_alignment_matrix(
+        features,
+        sample_order=("sample-a", "sample-b", "sample-c"),
+        ambiguous_by_sample={},
+        rescued_cells=(),
+    )
+
+    matrix_rows = _rows_by_feature(
+        write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix),
+    )
+    cell_rows = _rows_by_feature_sample(
+        write_alignment_cells_tsv(tmp_path / "cells.tsv", matrix),
+    )
+    review_rows = _rows_by_feature(
+        write_alignment_review_tsv(tmp_path / "review.tsv", matrix),
+    )
+
+    assert matrix_rows["FAM000001"]["neutral_loss_tag"] == "NL116"
+    assert matrix_rows["FAM000001"]["family_center_mz"] == "500"
+    assert matrix_rows["FAM000001"]["family_center_rt"] == "8.5"
+    assert matrix_rows["FAM000001"]["sample-a"] == "1000"
+    assert matrix_rows["FAM000001"]["sample-b"] == "1000"
+    assert matrix_rows["FAM000001"]["sample-c"] == ""
+
+    assert len(cell_rows) == 3
+    assert cell_rows[("FAM000001", "sample-a")]["status"] == "detected"
+    assert (
+        cell_rows[("FAM000001", "sample-a")]["source_candidate_id"]
+        == "sample-a#a"
+    )
+    assert (
+        cell_rows[("FAM000001", "sample-a")]["trace_quality"]
+        == "owner_exact_apex_match"
+    )
+    assert cell_rows[("FAM000001", "sample-b")]["status"] == "detected"
+    assert cell_rows[("FAM000001", "sample-c")]["status"] == "absent"
+    assert (
+        cell_rows[("FAM000001", "sample-c")]["reason"]
+        == "no local MS1 owner"
+    )
+
+    assert review_rows["FAM000001"]["event_cluster_count"] == "2"
+    assert review_rows["FAM000001"]["event_cluster_ids"] == (
+        "OWN-sample-a-a;OWN-sample-b-b"
+    )
+    assert review_rows["FAM000001"]["family_evidence"] == (
+        "owner_complete_link;owner_count=2"
+    )
+    assert review_rows["FAM000001"]["include_in_primary_matrix"] == "TRUE"
+
+
 class _DriftLookup:
     source = "targeted_istd_trend"
 
@@ -423,3 +492,19 @@ def _edge_decisions_by_pair(edge_evidence):
         tuple(sorted((edge.left_owner_id, edge.right_owner_id))): edge.decision
         for edge in edge_evidence
     }
+
+
+def _rows_by_feature(path: Path) -> dict[str, dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return {
+            row["feature_family_id"]: row
+            for row in csv.DictReader(handle, delimiter="\t")
+        }
+
+
+def _rows_by_feature_sample(path: Path) -> dict[tuple[str, str], dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return {
+            (row["feature_family_id"], row["sample_stem"]): row
+            for row in csv.DictReader(handle, delimiter="\t")
+        }
