@@ -55,7 +55,7 @@ def test_build_boundary_rows_emits_alternatives_for_each_candidate() -> None:
         target_mz=258.1085,
         role="Analyte",
         istd_pair="ISTD",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=peak_result,
         rt=rt,
         intensity=intensity,
@@ -64,12 +64,12 @@ def test_build_boundary_rows_emits_alternatives_for_each_candidate() -> None:
 
     assert {row["target_label"] for row in rows} == {"Analyte"}
     assert {row["target_mz"] for row in rows} == {"258.10850"}
-    assert {row["resolver_mode"] for row in rows} == {"arbitrated"}
+    assert {row["resolver_mode"] for row in rows} == {"region_first_safe_merge"}
     assert {row["analysis_mode"] for row in rows} == {"targeted"}
     assert {row["selected_candidate"] for row in rows} == {"TRUE", "FALSE"}
     assert {row["candidate_id"] for row in rows} == {
-        "SampleA|Analyte|arbitrated|legacy_savgol|8.30000|8.00000|8.60000",
-        "SampleA|Analyte|arbitrated|local_minimum|8.80000|8.50000|9.00000",
+        "SampleA|Analyte|region_first_safe_merge|legacy_savgol|8.30000|8.00000|8.60000",
+        "SampleA|Analyte|region_first_safe_merge|local_minimum|8.80000|8.50000|9.00000",
     }
     selected_rows = [row for row in rows if row["selected_candidate"] == "TRUE"]
     assert any("candidate_interval" in row["boundary_sources"] for row in selected_rows)
@@ -126,7 +126,7 @@ def test_source_only_cwt_width_boundary_rows_are_marked_legacy_audit() -> None:
         target_mz=258.1085,
         role="Analyte",
         istd_pair="ISTD",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=PeakDetectionResult(
             status="OK",
             peak=candidate.peak,
@@ -176,14 +176,14 @@ def test_build_boundary_rows_prefers_shared_trace_group_arrays() -> None:
         target_mz=258.1085,
         role="Analyte",
         istd_pair="ISTD",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=peak_result,
         rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6]),
         intensity=np.zeros(7),
         trace_group=targeted_trace_group(
             trace,
             target_label="Analyte",
-            resolver_mode="arbitrated",
+            resolver_mode="region_first_safe_merge",
         ),
     )
 
@@ -371,7 +371,7 @@ def test_build_boundary_summary_keeps_only_top_rows_with_review_context() -> Non
         target_mz=258.1085,
         role="Analyte",
         istd_pair="ISTD",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=peak_result,
         rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 9.0]),
         intensity=np.asarray(
@@ -427,7 +427,7 @@ def test_nonoverlap_audit_selects_higher_score_top_boundary_on_overlap() -> None
         target_label="Analyte",
         role="Analyte",
         istd_pair="",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=peak_result,
         rt=np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7]),
         intensity=np.asarray([5.0, 20.0, 80.0, 100.0, 90.0, 60.0, 20.0, 5.0]),

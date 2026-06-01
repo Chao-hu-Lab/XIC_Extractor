@@ -578,6 +578,35 @@ def test_run_alignment_cli_keeps_region_first_safe_merge_out_of_production_mode(
     assert captured["peak_config"].resolver_mode == "local_minimum"
 
 
+def test_run_alignment_rejects_retired_arbitrated_resolver_mode(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_alignment.main(
+            [
+                "--discovery-batch-index",
+                str(batch_index),
+                "--raw-dir",
+                str(raw_dir),
+                "--dll-dir",
+                str(dll_dir),
+                "--resolver-mode",
+                "arbitrated",
+            ],
+        )
+
+    assert exc_info.value.code == 2
+    assert "arbitrated resolver mode is retired" in capsys.readouterr().err
+
+
 def test_run_alignment_cli_accepts_validation_minimal_output_level(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

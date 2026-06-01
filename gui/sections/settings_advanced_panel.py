@@ -130,9 +130,9 @@ def load_advanced_values(
     advanced_controls.injection_order_source_edit.setText(
         settings_values.get("injection_order_source", "")
     )
-    resolver_mode = settings_values.get("resolver_mode", "legacy_savgol")
+    resolver_mode = settings_values.get("resolver_mode", "region_first_safe_merge")
     if resolver_mode not in RESOLVER_MODES:
-        resolver_mode = "legacy_savgol"
+        resolver_mode = "region_first_safe_merge"
     resolver_controls.mode_combo.setCurrentText(resolver_mode)
     resolver_controls.chrom_threshold_spin.setValue(
         _float_value(settings_values, "resolver_chrom_threshold")

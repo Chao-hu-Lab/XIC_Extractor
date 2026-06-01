@@ -283,14 +283,19 @@ def test_load_config_accepts_local_minimum_resolver_settings(tmp_path: Path) -> 
     assert config.resolver_min_scans == 9
 
 
-def test_load_config_accepts_arbitrated_resolver_mode(tmp_path: Path) -> None:
+def test_load_config_rejects_retired_arbitrated_resolver_mode(
+    tmp_path: Path,
+) -> None:
     config_dir = tmp_path / "config"
     _write_settings(config_dir, {"resolver_mode": "arbitrated"})
     _write_targets(config_dir)
 
-    config, _ = load_config(config_dir)
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
 
-    assert config.resolver_mode == "arbitrated"
+    _assert_error(exc_info, "settings.csv", "resolver_mode", "arbitrated")
+    assert "retired" in str(exc_info.value)
+    assert "region_first_safe_merge" in str(exc_info.value)
 
 
 def test_load_config_accepts_region_first_safe_merge_resolver_mode(

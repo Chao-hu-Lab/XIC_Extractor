@@ -187,12 +187,17 @@ def test_resolver_profiles_show_local_controls_for_local_minimum_mode(qtbot) -> 
     assert section._apply_local_minimum_preset_button.isVisible()
 
 
-def test_resolver_profiles_show_both_controls_for_arbitrated_mode(qtbot) -> None:
+def test_resolver_profiles_do_not_offer_retired_arbitrated_mode(qtbot) -> None:
     section = SettingsSection()
     qtbot.addWidget(section)
     section.show()
     section.load({**_canonical_settings(), "resolver_mode": "arbitrated"})
 
+    assert "arbitrated" not in [
+        section._resolver_mode_combo.itemText(index)
+        for index in range(section._resolver_mode_combo.count())
+    ]
+    assert section._resolver_mode_combo.currentText() == "region_first_safe_merge"
     assert section._legacy_resolver_panel.isVisible()
     assert section._local_minimum_resolver_panel.isVisible()
     assert section._smooth_window_spin.isVisible()

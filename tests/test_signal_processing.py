@@ -613,139 +613,26 @@ def test_local_minimum_retains_edge_clipped_region_as_flagged_candidate() -> Non
     assert "low_top_edge_ratio" not in result.candidates[0].quality_flags
 
 
-def test_arbitrated_resolver_keeps_local_candidate_on_legacy_edge_miss() -> None:
+def test_arbitrated_resolver_mode_is_retired() -> None:
     rt = np.linspace(8.0, 8.30, 31)
     intensity = _gaussian(rt, center=7.96, sigma=0.06, height=1500.0) + 5.0
 
-    result = find_peak_candidates(
-        rt,
-        intensity,
-        _config(
-            resolver_mode="arbitrated",
-            resolver_chrom_threshold=0.05,
-            resolver_min_search_range_min=0.04,
-            resolver_min_relative_height=0.05,
-            resolver_min_absolute_height=25.0,
-            resolver_min_ratio_top_edge=1.3,
-            resolver_peak_duration_min=0.03,
-            resolver_peak_duration_max=0.50,
-            resolver_min_scans=5,
-        ),
-    )
-
-    assert result.status == "OK"
-    assert len(result.candidates) == 1
-    assert result.candidates[0].peak.rt == pytest.approx(8.0, abs=0.01)
-    assert "edge_clipped" in result.candidates[0].quality_flags
-
-
-def test_arbitrated_resolver_merges_same_apex_proposal_sources(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from xic_extractor.peak_detection import facade
-
-    legacy = _candidate_for_provenance(
-        8.50,
-        left=8.30,
-        right=8.70,
-        proposal_sources=("legacy_savgol",),
-    )
-    local = _candidate_for_provenance(
-        8.50,
-        left=8.31,
-        right=8.69,
-        proposal_sources=("local_minimum",),
-        region_scan_count=9,
-    )
-    monkeypatch.setattr(
-        facade,
-        "find_peak_candidates_legacy_savgol",
-        lambda *_args, **_kwargs: PeakCandidatesResult(
-            status="OK",
-            candidates=(legacy,),
-            n_points=20,
-            max_smoothed=1200.0,
-            n_prominent_peaks=1,
-        ),
-    )
-    monkeypatch.setattr(
-        facade,
-        "find_peak_candidates_local_minimum",
-        lambda *_args, **_kwargs: PeakCandidatesResult(
-            status="OK",
-            candidates=(local,),
-            n_points=20,
-            max_smoothed=1200.0,
-            n_prominent_peaks=1,
-        ),
-    )
-
-    result = find_peak_candidates(
-        np.asarray([8.0, 8.5, 9.0], dtype=float),
-        np.asarray([1.0, 10.0, 1.0], dtype=float),
-        _config(resolver_mode="arbitrated"),
-    )
-
-    assert len(result.candidates) == 1
-    assert result.candidates[0].proposal_sources == (
-        "legacy_savgol",
-        "local_minimum",
-    )
-    assert result.candidates[0].merge_note == "same_apex_merged"
-    assert result.candidates[0].region_scan_count == 9
-
-
-def test_arbitrated_resolver_keeps_same_apex_boundary_disagreement_separate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from xic_extractor.peak_detection import facade
-
-    legacy = _candidate_for_provenance(
-        8.50,
-        left=8.10,
-        right=8.90,
-        proposal_sources=("legacy_savgol",),
-    )
-    local = _candidate_for_provenance(
-        8.50,
-        left=8.35,
-        right=8.65,
-        proposal_sources=("local_minimum",),
-    )
-    monkeypatch.setattr(
-        facade,
-        "find_peak_candidates_legacy_savgol",
-        lambda *_args, **_kwargs: PeakCandidatesResult(
-            status="OK",
-            candidates=(legacy,),
-            n_points=20,
-            max_smoothed=1200.0,
-            n_prominent_peaks=1,
-        ),
-    )
-    monkeypatch.setattr(
-        facade,
-        "find_peak_candidates_local_minimum",
-        lambda *_args, **_kwargs: PeakCandidatesResult(
-            status="OK",
-            candidates=(local,),
-            n_points=20,
-            max_smoothed=1200.0,
-            n_prominent_peaks=1,
-        ),
-    )
-
-    result = find_peak_candidates(
-        np.asarray([8.0, 8.5, 9.0], dtype=float),
-        np.asarray([1.0, 10.0, 1.0], dtype=float),
-        _config(resolver_mode="arbitrated"),
-    )
-
-    assert len(result.candidates) == 2
-    assert {candidate.proposal_sources for candidate in result.candidates} == {
-        ("legacy_savgol",),
-        ("local_minimum",),
-    }
+    with pytest.raises(ValueError, match="retired; use region_first_safe_merge"):
+        find_peak_candidates(
+            rt,
+            intensity,
+            _config(
+                resolver_mode="arbitrated",
+                resolver_chrom_threshold=0.05,
+                resolver_min_search_range_min=0.04,
+                resolver_min_relative_height=0.05,
+                resolver_min_absolute_height=25.0,
+                resolver_min_ratio_top_edge=1.3,
+                resolver_peak_duration_min=0.03,
+                resolver_peak_duration_max=0.50,
+                resolver_min_scans=5,
+            ),
+        )
 
 
 def test_preferred_rt_recovery_candidate_preserves_provenance(

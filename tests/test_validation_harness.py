@@ -149,6 +149,42 @@ def test_build_validation_specs_rejects_resolver_mode_setting(
         )
 
 
+def test_build_validation_specs_rejects_retired_arbitrated_resolver(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="retired; use region_first_safe_merge"):
+        build_validation_specs(
+            suite_names=("tissue-8raw",),
+            base_dir=Path("C:/repo/XIC_Extractor"),
+            output_root=tmp_path / "validation_harness",
+            run_id="candidate",
+            workers=4,
+            resolver_mode="arbitrated",
+            grid="quick",
+        )
+
+
+def test_validation_harness_cli_rejects_retired_arbitrated_resolver(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "--suite",
+                "tissue-8raw",
+                "--resolver-mode",
+                "arbitrated",
+                "--output-root",
+                str(tmp_path / "validation_harness"),
+                "--dry-run",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "arbitrated resolver mode is retired" in capsys.readouterr().err
+
+
 def test_run_validation_specs_compares_exact_baseline_workbook_paths(
     tmp_path: Path,
 ) -> None:

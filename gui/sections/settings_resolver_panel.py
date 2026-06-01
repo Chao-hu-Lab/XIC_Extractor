@@ -121,12 +121,10 @@ def build_peak_resolver_panel(controls: ResolverControls) -> QWidget:
 def update_resolver_profile_visibility(controls: ResolverControls) -> None:
     resolver_mode = controls.mode_combo.currentText()
     controls.legacy_panel.setVisible(
-        resolver_mode
-        in {"legacy_savgol", "arbitrated", "region_first_safe_merge"}
+        resolver_mode in {"legacy_savgol", "region_first_safe_merge"}
     )
     controls.local_minimum_panel.setVisible(
-        resolver_mode
-        in {"local_minimum", "arbitrated", "region_first_safe_merge"}
+        resolver_mode in {"local_minimum", "region_first_safe_merge"}
     )
 
 

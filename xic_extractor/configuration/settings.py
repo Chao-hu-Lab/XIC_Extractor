@@ -12,7 +12,11 @@ from xic_extractor.configuration.parsing import (
     _parse_optional_path,
     _require_range,
 )
-from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS, RESOLVER_MODES
+from xic_extractor.settings_schema import (
+    ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+    CANONICAL_SETTINGS_DEFAULTS,
+    RESOLVER_MODES,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -312,6 +316,14 @@ def _validate_settings_ranges(
         0.01,
         0.50,
     )
+    if parsed.resolver_mode == "arbitrated":
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_mode",
+            settings["resolver_mode"],
+            ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+        )
     if parsed.resolver_mode not in RESOLVER_MODES:
         raise _config_error(
             settings_path,

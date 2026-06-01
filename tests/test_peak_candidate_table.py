@@ -167,7 +167,7 @@ def test_build_rows_marks_selected_and_rejected_candidates() -> None:
         target_label="Analyte",
         role="Analyte",
         istd_pair="ISTD",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=result,
         candidate_ms2_evidence={
             selected: _ms2_evidence(nl_match=True),
@@ -500,7 +500,7 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
     trace_group = targeted_trace_group(
         trace,
         target_label="Analyte",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         expected_rt_min=8.5,
         role="ISTD",
         istd_pair="Analyte_IS",
@@ -512,14 +512,14 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
         target_label="Analyte",
         role="ISTD",
         istd_pair="Analyte_IS",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=result,
         candidate_ms2_evidence=ms2_evidence,
         trace_group=trace_group,
     )
     assert len(hypotheses) == 1
     hypothesis = hypotheses[0]
-    assert hypothesis.trace_group_id == "SampleA|Analyte|arbitrated"
+    assert hypothesis.trace_group_id == "SampleA|Analyte|region_first_safe_merge"
     assert hypothesis.audit.selected is True
     assert hypothesis.evidence.raw_score == 97
     assert hypothesis.evidence.support_labels == ("strict_nl_ok", "shape_clean")
@@ -530,7 +530,7 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
         target_label="Analyte",
         role="ISTD",
         istd_pair="Analyte_IS",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=result,
         candidate_ms2_evidence=ms2_evidence,
         trace_group=trace_group,
@@ -542,11 +542,11 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
     assert row["role"] == "ISTD"
     assert row["istd_pair"] == "Analyte_IS"
     assert row["analysis_mode"] == "targeted"
-    assert row["resolver_mode"] == "arbitrated"
+    assert row["resolver_mode"] == "region_first_safe_merge"
     assert row["candidate_id"] == candidate_audit_id(
         sample_name="SampleA",
         target_label="Analyte",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         candidate=selected,
     )
     assert row["selected"] == "TRUE"
@@ -718,7 +718,7 @@ def _config(tmp_path: Path) -> ExtractionConfig:
         peak_min_prominence_ratio=0.1,
         ms2_precursor_tol_da=0.5,
         nl_min_intensity_ratio=0.01,
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         emit_peak_candidates=True,
     )
 

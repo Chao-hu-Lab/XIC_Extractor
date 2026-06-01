@@ -38,17 +38,11 @@ def preferred_rt_recovery(
         return None, None
 
     resolver_mode = getattr(config, "resolver_mode", "legacy_savgol")
-    if resolver_mode in {"local_minimum", "arbitrated", "region_first_safe_merge"}:
+    if resolver_mode in {"local_minimum", "region_first_safe_merge"}:
         relaxed_config = relaxed_local_minimum_recovery_config(config)
         if relaxed_config == config:
             return None, None
         relaxed_ratio = None
-        if resolver_mode == "arbitrated":
-            relaxed_ratio = max(
-                PREFERRED_RT_RECOVERY_MIN_PROMINENCE_RATIO,
-                config.peak_min_prominence_ratio
-                * PREFERRED_RT_RECOVERY_PROMINENCE_FRACTION,
-            )
         relaxed_result = candidate_finder(
             rt,
             intensity,

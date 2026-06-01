@@ -65,7 +65,7 @@ def test_build_peak_hypotheses_marks_selected_and_rejected_candidates() -> None:
         target_label="Analyte",
         role="Analyte",
         istd_pair="ISTD",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=result,
         candidate_ms2_evidence={
             selected: _ms2_evidence(nl_match=True),

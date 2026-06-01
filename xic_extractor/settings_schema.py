@@ -9,8 +9,11 @@ def default_parallel_workers() -> int:
 RESOLVER_MODES: tuple[str, ...] = (
     "legacy_savgol",
     "local_minimum",
-    "arbitrated",
     "region_first_safe_merge",
+)
+
+ARBITRATED_RESOLVER_RETIRED_MESSAGE = (
+    "arbitrated resolver mode is retired; use region_first_safe_merge"
 )
 
 
@@ -62,8 +65,8 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
         "Peak prominence 至少為 apex 的比例（越低越寬容，0.05-0.20）"
     ),
     "resolver_mode": (
-        "峰切割演算法（legacy_savgol、local_minimum、arbitrated "
-        "或 region_first_safe_merge）"
+        "峰切割演算法（legacy_savgol、local_minimum "
+        "或 region_first_safe_merge；arbitrated 已退休）"
     ),
     "resolver_chrom_threshold": "Local minimum resolver 低強度剪枝百分位（0-1）",
     "resolver_min_search_range_min": "Local minimum 搜尋 valley 的 RT 視窗（分鐘）",

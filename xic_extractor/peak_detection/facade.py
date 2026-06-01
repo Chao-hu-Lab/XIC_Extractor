@@ -30,8 +30,7 @@ from xic_extractor.peak_scoring import (
     score_candidate,
     select_candidate_with_confidence,
 )
-
-_BOUNDARY_MERGE_TOLERANCE_MIN = 0.02
+from xic_extractor.settings_schema import ARBITRATED_RESOLVER_RETIRED_MESSAGE
 
 
 def find_peak_and_area(
@@ -209,12 +208,7 @@ def find_peak_candidates(
     if resolver_mode in {"local_minimum", "region_first_safe_merge"}:
         return find_peak_candidates_local_minimum(rt, intensity, config)
     if resolver_mode == "arbitrated":
-        return _find_peak_candidates_arbitrated(
-            rt,
-            intensity,
-            config,
-            peak_min_prominence_ratio=peak_min_prominence_ratio,
-        )
+        raise ValueError(ARBITRATED_RESOLVER_RETIRED_MESSAGE)
     return find_peak_candidates_legacy_savgol(
         rt,
         intensity,
@@ -252,101 +246,6 @@ def _apply_region_first_safe_merge_if_enabled(
     )
 
 
-def _find_peak_candidates_arbitrated(
-    rt: np.ndarray,
-    intensity: np.ndarray,
-    config: ExtractionConfig,
-    *,
-    peak_min_prominence_ratio: float | None,
-) -> PeakCandidatesResult:
-    legacy_result = find_peak_candidates_legacy_savgol(
-        rt,
-        intensity,
-        config,
-        peak_min_prominence_ratio=peak_min_prominence_ratio,
-    )
-    local_result = find_peak_candidates_local_minimum(rt, intensity, config)
-    candidates = _merge_resolver_candidates(
-        legacy_result.candidates,
-        local_result.candidates,
-    )
-    if candidates:
-        return PeakCandidatesResult(
-            status="OK",
-            candidates=candidates,
-            n_points=max(legacy_result.n_points, local_result.n_points),
-            max_smoothed=_max_result_smoothed(legacy_result, local_result),
-            n_prominent_peaks=len(candidates),
-        )
-    return _strongest_failure_result(legacy_result, local_result)
-
-
-def _merge_resolver_candidates(
-    legacy_candidates: tuple[PeakCandidate, ...],
-    local_candidates: tuple[PeakCandidate, ...],
-) -> tuple[PeakCandidate, ...]:
-    merged = list(legacy_candidates)
-    for local_candidate in local_candidates:
-        match_index = _matching_merge_index(merged, local_candidate)
-        if match_index is None:
-            merged.append(local_candidate)
-            continue
-        merged[match_index] = _merged_candidate(merged[match_index], local_candidate)
-    return tuple(merged)
-
-
-def _matching_merge_index(
-    candidates: list[PeakCandidate],
-    candidate: PeakCandidate,
-) -> int | None:
-    for index, existing in enumerate(candidates):
-        if existing.selection_apex_index != candidate.selection_apex_index:
-            continue
-        if _material_boundary_disagreement(existing, candidate):
-            continue
-        return index
-    return None
-
-
-def _merged_candidate(
-    first: PeakCandidate,
-    second: PeakCandidate,
-) -> PeakCandidate:
-    richer = first
-    if _candidate_detail_score(second) > _candidate_detail_score(first):
-        richer = second
-    return replace(
-        richer,
-        proposal_sources=_combine_proposal_sources(first, second),
-        source_apex_rank=_source_apex_rank(first, second, richer),
-        merge_note="same_apex_merged",
-    )
-
-
-def _material_boundary_disagreement(
-    first: PeakCandidate,
-    second: PeakCandidate,
-) -> bool:
-    return (
-        abs(first.peak.peak_start - second.peak.peak_start)
-        > _BOUNDARY_MERGE_TOLERANCE_MIN
-        or abs(first.peak.peak_end - second.peak.peak_end)
-        > _BOUNDARY_MERGE_TOLERANCE_MIN
-    )
-
-
-def _candidate_detail_score(candidate: PeakCandidate) -> int:
-    return len(candidate.quality_flags) + sum(
-        value is not None
-        for value in (
-            candidate.region_scan_count,
-            candidate.region_duration_min,
-            candidate.region_edge_ratio,
-            candidate.region_trace_continuity,
-        )
-    )
-
-
 def _combine_proposal_sources(
     first: PeakCandidate,
     second: PeakCandidate,
@@ -357,50 +256,6 @@ def _combine_proposal_sources(
             for source in (*first.proposal_sources, *second.proposal_sources)
             if source
         )
-    )
-
-
-def _source_apex_rank(
-    first: PeakCandidate,
-    second: PeakCandidate,
-    richer: PeakCandidate,
-) -> int | None:
-    if richer.source_apex_rank is not None:
-        return richer.source_apex_rank
-    return first.source_apex_rank or second.source_apex_rank
-
-
-def _max_result_smoothed(
-    first: PeakCandidatesResult,
-    second: PeakCandidatesResult,
-) -> float | None:
-    values = [
-        value
-        for value in (first.max_smoothed, second.max_smoothed)
-        if value is not None
-    ]
-    if not values:
-        return None
-    return max(values)
-
-
-def _strongest_failure_result(
-    legacy_result: PeakCandidatesResult,
-    local_result: PeakCandidatesResult,
-) -> PeakCandidatesResult:
-    status_rank = {
-        "WINDOW_TOO_SHORT": 3,
-        "NO_SIGNAL": 2,
-        "PEAK_NOT_FOUND": 1,
-        "OK": 0,
-    }
-    return max(
-        (legacy_result, local_result),
-        key=lambda result: (
-            status_rank[result.status],
-            result.n_points,
-            result.max_smoothed if result.max_smoothed is not None else 0.0,
-        ),
     )
 
 

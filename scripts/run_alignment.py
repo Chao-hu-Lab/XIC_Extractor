@@ -22,7 +22,11 @@ from xic_extractor.alignment.raw_sources import existing_raw_paths
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.raw_reader import RawReaderError
-from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS, RESOLVER_MODES
+from xic_extractor.settings_schema import (
+    ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+    CANONICAL_SETTINGS_DEFAULTS,
+    RESOLVER_MODES,
+)
 
 _DEFAULT_DRIFT_LOCAL_WINDOW = 40
 _DEFAULT_RAW_WORKERS = 1
@@ -538,7 +542,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--resolver-mode",
-        choices=RESOLVER_MODES,
+        type=_resolver_mode,
         default="region_first_safe_merge",
     )
     parser.add_argument(
@@ -825,6 +829,16 @@ def _positive_int(value: str) -> int:
         raise argparse.ArgumentTypeError("value must be an integer >= 1") from exc
     if parsed < 1:
         raise argparse.ArgumentTypeError("value must be an integer >= 1")
+    return parsed
+
+
+def _resolver_mode(value: str) -> str:
+    parsed = value.strip()
+    if parsed == "arbitrated":
+        raise argparse.ArgumentTypeError(ARBITRATED_RESOLVER_RETIRED_MESSAGE)
+    if parsed not in RESOLVER_MODES:
+        allowed = ", ".join(RESOLVER_MODES[:-1]) + f", or {RESOLVER_MODES[-1]}"
+        raise argparse.ArgumentTypeError(f"resolver-mode must be {allowed}")
     return parsed
 
 

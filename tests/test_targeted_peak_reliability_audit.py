@@ -1204,7 +1204,7 @@ def _peak_candidate(
     return {
         "sample_name": sample,
         "target_label": target,
-        "resolver_mode": "arbitrated",
+        "resolver_mode": "region_first_safe_merge",
         "candidate_id": f"{sample}:{target}",
         "proposal_sources": proposal_sources,
         "rt_apex_min": "10.0",
