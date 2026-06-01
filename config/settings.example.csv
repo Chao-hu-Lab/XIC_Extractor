@@ -21,7 +21,7 @@ keep_intermediate_csv,false,是否保留中間 CSV 檔（除錯用，預設關�
 emit_review_report,false,是否輸出 Review Report HTML（預設關閉）
 emit_peak_candidates,false,是否輸出 Peak Candidate TSV（除錯/審計用，預設關閉）
 baseline_audit_method,,Integration audit baseline shadow method; leave empty for default TSV schema or set to asls to emit AsLS comparison columns
-baseline_integration_method,asls,Alignment integration-audit baseline method (asls or linear_edge)
+baseline_integration_method,asls,Alignment integration-audit baseline method (asls)
 parallel_mode,process,執行後端（serial 或 process；預設 process）
 parallel_workers,11,Process mode worker 數量（>= 1；預設 CPU 核心數 - 1）
 rt_prior_library_path,,developer/debug RT prior library CSV path; leave empty for normal use

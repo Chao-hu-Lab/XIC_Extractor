@@ -3,6 +3,8 @@
 **Date:** 2026-06-01
 **Status:** Execution closeout v1.0 - selected one-pass retirements completed; broad dead-code deletion deferred
 **Related peak-pipeline chapter:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
+**Current peak-pipeline reassessment:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
+**One-goal execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
 **Related governance:** [Diagnostic tool lifecycle spec](2026-05-26-diagnostic-tool-lifecycle-spec.md)
 **Mainline constraint:** [Product priority reset decision spec](2026-05-28-product-priority-reset-decision-spec.md)
 
@@ -63,7 +65,9 @@ cleanup/retirement work under
 
 Broad dead-code deletion, `legacy_savgol` demotion, CWT retirement, resolver
 renaming, C3/C4/C6 structural work, and large active-module splits remain out of
-scope for this closeout.
+scope for this closeout. After user calibration and current-code review, the
+current-state reassessment supersedes any older wording that treats
+`legacy_savgol` or CWT as straightforward deletion targets.
 
 ## Review Disposition
 
@@ -128,8 +132,8 @@ Evidence from the 2026-06-01 scan:
 - `arbitrated`, `legacy_savgol`, and `linear_edge` were not simple dead code:
   they had public config/test/diagnostic or retirement-gate semantics. The
   current state is that `arbitrated` and `linear_edge` are retired public inputs,
-  while useful Savitzky-Golay utility behavior remains available if a later C2
-  follow-up demotes the `legacy_savgol` resolver mode.
+  while `legacy_savgol` remains an accepted clean-trace / compatibility path
+  unless a later public migration contract changes that surface.
 - The largest current line-pressure targets include:
   `shared_peak_identity_explanation/machine_evidence_support.py`,
   `shared_peak_identity_explanation/schema.py`,
@@ -168,7 +172,7 @@ Ambiguous candidates default to `deprecate_first`, `move_only`, or
 | Phase gate tools such as P1/P2/P2b/P7 evidence gates | `diagnostic_lifecycle` | Lifecycle spec identifies promotion candidates, but several related tools are still `diagnostic_only`, sidecar-only, or human-triggered active tools. | Promote one individually gated group per PR only after it has a gate id, decision target, exit status/code contract, and frozen schema; preserve CLI shims. |
 | Backfill review trio (`seed_aware`, `family_ms1`, `low_ms1_coverage`) | `diagnostic_lifecycle` + `split_only` | They may be orthogonal review axes or redundant views; prior audit says spec first. | Write an axis-semantics spec before consolidation. |
 | `arbitrated` resolver mode | retired in Phase 8 | It was an experimental resolver. The one-shot 8RAW comparison did not show a material advantage over the supported conservative path, and public config/CLI/GUI/tests now reject it with a migration message. | Keep historical docs/tests only as migration evidence; future C2 work should focus on `legacy_savgol`, `local_minimum`, CWT evidence, and resolver naming. |
-| `legacy_savgol` top-level resolver mode | `deprecate_first` / keep utility | The top-level mode is compatibility debt, but SG smoothing/prominence utility behavior may remain useful. | C2 should demote or alias the public mode only after config behavior is approved; do not delete useful SG utility code just because the mode retires. |
+| `legacy_savgol` top-level resolver mode | keep / contract cleanup | User calibration says it still performs well for normal clean peaks. The issue is complex-matrix robustness, not that the SG path is dead. | Keep the mode or explicitly classify it as compatibility/advanced through C2; do not demote, alias, or delete it without a public migration contract. |
 | `region_first_safe_merge` naming | `deprecate_first` | It is the public default name but actually means conservative `local_minimum_with_wis_merge_v1`. | Rename/alias only through C2 with docs and config compatibility. |
 | `integrate_linear_edge_baseline` and selector support | retired in Phase 7 | C1a, C5, Tier C AsLS-vs-linear-edge evidence, blank/stress safety, and rollback-column deprecation were resolved in the one-pass branch. The linear-edge implementation was deleted; the remaining selector is an AsLS-only compatibility guard that rejects `linear_edge`. | Preserve the rejection contract and historical diagnostic readers; do not reintroduce linear-edge production support without a new behavior spec. |
 | `xic_extractor/baseline.py` top-level AsLS module | completed move-only | C1a relocated implementation while keeping compatibility re-export. | Keep as public compatibility shim unless a breaking-change plan removes the top-level import. |
@@ -279,6 +283,20 @@ Then return to the existing C-specs, but read them through this broader order:
    one-pass branch. Future cleanup should treat linear-edge as retired, not as a
    pending rollback option.
 
+Use the
+[2026-06-01 current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
+before executing the remaining C2/C3/C4/C6 instructions. Current interpretation:
+
+- keep `legacy_savgol` as a useful clean-trace / compatibility path unless a
+  separate public migration contract changes it;
+- keep local-minimum internals as boundary/proposal evidence;
+- treat CWT as evidence-chain assessment work, not dead-code deletion;
+- make C3 current-state inventory and small parity-backed migration the next
+  handoff-spine cleanup target;
+- rewrite C4 around evidence-decision responsibilities before implementation;
+- run C6 inventory/characterization before extracting generic grouping
+  primitives.
+
 ### R5 - Oversized Active Module Splits
 
 Split active large modules only when the split reduces a named responsibility
@@ -366,10 +384,17 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
 ## Recommended Next Plan
 
 After this one-pass cleanup PR, the next plan should not re-open `linear_edge`
-or `arbitrated`. Choose one remaining slice:
+or `arbitrated`. If the user chooses one runtime goal, follow the one-goal phase
+contract. Otherwise, read the current-state reassessment first, then choose one
+remaining slice:
 
-- C2 follow-up for `legacy_savgol`, CWT evidence, and honest resolver naming;
-- C3 handoff-spine scaffolding;
+- C2 follow-up for resolver public-surface contract cleanup, preserving
+  `legacy_savgol` and local-minimum internals unless a migration contract says
+  otherwise;
+- CWT evidence-role inventory with a pre-registered promote / keep-audit /
+  externalize-or-kill gate;
+- C3 handoff-spine current-state inventory plus one parity-backed consumer
+  migration;
 - a narrow split-only plan for an oversized active module with characterization
   tests;
 - a strict retired-state audit if the user explicitly wants dead-code deletion.
