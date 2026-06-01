@@ -19,6 +19,12 @@ must reach `GO_FOR_LINEAR_EDGE_RETIREMENT`.
 
 **Correction note:** [Phase 1 / Phase 2 design correction](../notes/2026-05-26-phase1-phase2-design-correction-note.md)
 **Current C0 source of truth:** [Handoff productization C0](../notes/2026-05-27-handoff-productization-c0-source-of-truth.md)
+**2026-06-01 repo-wide cleanup update:** this roadmap is now the
+peak-pipeline chapter of the broader
+[Technical debt and dead-code cleanup roadmap v2](2026-06-01-technical-debt-and-dead-code-cleanup-roadmap-v2-spec.md).
+Use the v2 roadmap for repo-wide cleanup sequencing, diagnostic lifecycle,
+dependency-direction cleanup, and dead-code classification. Use this file for
+the C1-C6 peak-pipeline cleanup slices only.
 
 This file is the entrypoint for Phase 2 structural cleanup. It is the
 companion to the modernization roadmap. Phase 1 (the modernization overview)
@@ -157,6 +163,18 @@ review tractable.
 
 ## Corrected Recommended Order
 
+When cleanup is run as part of the repo-wide debt pass, apply the 2026-06-01 v2
+preflight first:
+
+```text
+Close or isolate in-flight behavior work
+  -> R1 dependency-direction cleanup
+  -> R2 diagnostic lifecycle / gate placement
+  -> peak-pipeline C-slices only when the relevant product decision allows them
+```
+
+Within the peak-pipeline chapter, the corrected order remains:
+
 ```text
 Phase 1 conditional blockers resolved
   -> C0  roadmap correction / acceptance rules
@@ -268,8 +286,8 @@ land. That is the cost of doing structural work safely.
 - C6 alignment grouping consolidation is Scope A only in this roadmap.
   Any graph-based or EM-style algorithm upgrade is a separate behavior
   spec after Phase 1 evidence.
-- The `arbitrated` resolver mode has no production caller today. Is that
-  confirmed across all branches / deployments outside this repo? The C2
-  spec lists this as a precondition for removal.
+- The `arbitrated` resolver mode is user-confirmed as an experimental algorithm
+  whose retirement direction is accepted. C2 still needs the public config
+  migration and one-shot scan named by its spec before deletion.
 
 Each C-spec restates the open questions relevant to its scope.
