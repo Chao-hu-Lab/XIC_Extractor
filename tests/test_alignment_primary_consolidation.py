@@ -325,6 +325,22 @@ def test_consolidated_winner_carries_source_family_seed_events():
     assert decisions.row("FAM002").identity_reason == "owner_complete_link"
     assert "weak_seed_backfill_dependency" not in decisions.row("FAM002").row_flags
     assert "weak_seed_tolerated" not in decisions.row("FAM002").row_flags
+    assert winner.consolidation_state == "primary_winner"
+    assert winner.consolidation_source_group_hypothesis_id == (
+        "GROUP-FAM001;GROUP-FAM002;GROUP-FAM003"
+    )
+    winner_cells = {
+        cell.sample_stem: cell
+        for cell in consolidated.cells
+        if cell.cluster_id == "FAM002"
+    }
+    assert winner_cells["s1"].consolidation_state == "moved_to_primary_winner"
+    assert winner_cells["s1"].consolidation_source_group_hypothesis_id == (
+        "GROUP-FAM001"
+    )
+    assert winner_cells["s1"].consolidation_winner_group_hypothesis_id == (
+        "GROUP-FAM002"
+    )
 
 
 def test_consolidation_loser_audit_is_review_tsv_visible(tmp_path: Path):
@@ -359,7 +375,12 @@ def test_consolidation_loser_audit_is_review_tsv_visible(tmp_path: Path):
         "primary_family_consolidation_loser;winner=FAM002"
         in rows["FAM001"]["family_evidence"]
     )
+    assert rows["FAM001"]["consolidation_state"] == "primary_loser"
+    assert rows["FAM001"]["consolidation_winner_group_hypothesis_id"] == (
+        "GROUP-FAM002"
+    )
     assert rows["FAM002"]["include_in_primary_matrix"] == "TRUE"
+    assert rows["FAM002"]["consolidation_state"] == "primary_winner"
     assert "primary_family_consolidated;family_count=2" in (
         rows["FAM002"]["family_evidence"]
     )
@@ -386,6 +407,14 @@ def _feature(
         event_member_count=1,
         evidence=evidence,
         review_only=False,
+        group_hypothesis_id=f"GROUP-{feature_family_id}",
+        public_family_id=feature_family_id,
+        group_construction_role="successor_projection_adapter",
+        group_delivery_role="successor_delivery_protocol",
+        group_membership_source="cross_sample_peak_group_hypothesis",
+        consolidation_state="not_consolidated",
+        consolidation_winner_group_hypothesis_id="",
+        consolidation_source_group_hypothesis_id="",
     )
 
 
@@ -400,6 +429,14 @@ def _owner_feature(feature_family_id: str, sample_stem: str, *, rt: float):
         has_anchor=True,
         owners=(_owner(feature_family_id, sample_stem, rt=rt),),
         evidence="single_sample_local_owner",
+        group_hypothesis_id=f"GROUP-{feature_family_id}",
+        public_family_id=feature_family_id,
+        group_construction_role="successor_constructor",
+        group_delivery_role="owner_aligned_feature_compatibility_facade",
+        group_membership_source="owner_aligned_feature_successor_projection",
+        consolidation_state="not_consolidated",
+        consolidation_winner_group_hypothesis_id="",
+        consolidation_source_group_hypothesis_id="",
     )
 
 
@@ -461,6 +498,24 @@ def _cell(
         source_raw_file=Path(f"{sample_stem}.raw"),
         reason=status,
         selected_integration=_integration(raw_area=area, asls_area=area),
+        group_hypothesis_id=f"GROUP-{cluster_id}",
+        public_family_id=cluster_id,
+        group_construction_role="successor_projection_adapter",
+        group_delivery_role="successor_delivery_protocol",
+        group_membership_source="cross_sample_peak_group_hypothesis",
+        gap_fill_state=(
+            "observed_member" if status == "detected" else "gap_fill_rescued"
+        ),
+        gap_fill_reason=(
+            "local_owner_detected"
+            if status == "detected"
+            else "group_centered_query_detected"
+        ),
+        missing_observation_state=(
+            "observed" if status == "detected" else "queried_and_detected"
+        ),
+        group_claim_state="unclaimed_or_winner",
+        consolidation_state="not_consolidated",
     )
 
 

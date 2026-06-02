@@ -15,6 +15,11 @@ from xic_extractor.alignment.output_rows import (
     production_matrix_area,
     row_id,
 )
+from xic_extractor.alignment.owner_group_delivery import (
+    CROSS_SAMPLE_GROUP_CELL_COLUMNS,
+    GROUP_REVIEW_PROJECTION_COLUMNS,
+    delivery_group_projection,
+)
 from xic_extractor.alignment.production_decisions import (
     ProductionCellDecision,
     ProductionDecisionSet,
@@ -94,6 +99,7 @@ def _write_review_sheet(
         sheet,
         [
             "feature_family_id",
+            *GROUP_REVIEW_PROJECTION_COLUMNS,
             "neutral_loss_tag",
             "detected_count",
             "rescued_count",
@@ -124,10 +130,15 @@ def _write_review_sheet(
         cluster_id = row_id(cluster)
         cells = grouped_cells.get(cluster_id, ())
         row_decision = decisions.row(cluster_id)
+        group_projection = dict(delivery_group_projection(cluster))
         _append_xlsx_row(
             sheet,
             [
                 cluster_id,
+                *[
+                    group_projection[column]
+                    for column in GROUP_REVIEW_PROJECTION_COLUMNS
+                ],
                 cluster.neutral_loss_tag,
                 count_status(cells, "detected"),
                 count_status(cells, "rescued"),
@@ -164,6 +175,7 @@ def _write_audit_sheet(
         sheet,
         [
             "feature_family_id",
+            *CROSS_SAMPLE_GROUP_CELL_COLUMNS,
             "sample_stem",
             "neutral_loss_tag",
             "family_center_mz",
@@ -218,6 +230,7 @@ def _write_audit_sheet(
             sheet,
             [
                 cell.cluster_id,
+                *[getattr(cell, column) for column in CROSS_SAMPLE_GROUP_CELL_COLUMNS],
                 cell.sample_stem,
                 cluster.neutral_loss_tag,
                 _family_center_mz(cluster),

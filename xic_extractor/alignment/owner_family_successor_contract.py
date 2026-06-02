@@ -44,19 +44,20 @@ OWNER_FAMILY_INVARIANTS: tuple[OwnerFamilyInvariant, ...] = (
     "review_only_owner_records",
     "backfill_seed_and_matrix_delivery",
 )
-OWNER_CLUSTERING_C6B_FINAL_DISPOSITION: OwnerClusteringDisposition = (
+OWNER_CLUSTERING_GROUP_MIGRATION_FINAL_DISPOSITION: OwnerClusteringDisposition = (
     "compatibility_adapter_candidate"
 )
-OWNER_CLUSTERING_C6B_REASON = (
-    "C6 migration disposition is compatibility_adapter_candidate: successor "
+OWNER_CLUSTERING_GROUP_MIGRATION_REASON = (
+    "Owner-family migration disposition is compatibility_adapter_candidate: "
+    "successor "
     "cross-sample peak group construction owns complete-link family "
     "construction, hard split gates, review-only construction records, and "
     "delivery metadata; owner_group_delivery.OwnerGroupDeliveryFeature now "
-    "defines the backfill/matrix/process delivery shape, while "
+    "defines the successor-owned backfill/matrix/process delivery shape, while "
     "owner_clustering.py preserves the public OwnerAlignedFeature facade and "
     "concrete dataclass adapter."
 )
-OWNER_CLUSTERING_C6B_EXIT_RULE = (
+OWNER_CLUSTERING_GROUP_MIGRATION_EXIT_RULE = (
     "Do not retire owner_clustering.py or replace OwnerAlignedFeature until "
     "pre-backfill consolidation, diagnostic probes, public adapter tests, and "
     "any remaining concrete-dataclass consumers accept the successor contract "
@@ -126,7 +127,7 @@ def owner_family_successor_mapping(
                 "test_cross_sample_peak_group_hypothesis_projects_owner_membership"
             ),
             exit_rule=(
-                "C6-A1 owns only shadow identity and membership parity. Keep "
+                "Cross-sample group identity owns membership parity. Keep "
                 "owner_clustering.py active until complete-link edge semantics, "
                 "hard split gates, review-only records, and backfill/matrix "
                 "delivery are successor-owned with alignment_matrix.tsv, "
@@ -163,8 +164,8 @@ def owner_family_successor_mapping(
                 "Project owner edge evidence into successor-visible facts "
                 "before using it as migration evidence."
                 if not projected_edge_facts and len(feature.owners) >= 2
-                else "C6-A2 owns only shadow projection of current owner edge "
-                "facts. Complete-link construction policy, hard gates, "
+                else "Cross-sample group evidence owns projection of current "
+                "owner edge facts. Complete-link construction policy, hard gates, "
                 "review-only owner records, and backfill/matrix delivery keep "
                 "their existing live dispositions until later parity proves "
                 "migration."
@@ -252,7 +253,7 @@ def owner_family_successor_mapping(
                 "Successor projection must carry review-only families and "
                 "ambiguous cells without contaminating production matrix rows."
                 if not review_facts
-                else "C6-A3 owns only the review-only shadow fact projection "
+                else "Cross-sample group evidence owns the review-only fact projection "
                 "for this feature. Keep owner_clustering.py active until "
                 "complete-link construction, hard split gates, and "
                 "backfill/matrix delivery are also successor-owned with "
@@ -264,28 +265,30 @@ def owner_family_successor_mapping(
             current_owner=(
                 "CrossSamplePeakGroupHypothesis delivery metadata adapted to "
                 "OwnerGroupDeliveryFeature.family_center_* / "
-                "backfill_seed_centers / confirm_local_owners_with_backfill"
+                "backfill_seed_centers / confirm_local_owners_with_backfill / "
+                "group_hypothesis_id / gap_fill_state"
             ),
             current_state=(
                 f"seed_center_count={len(feature.backfill_seed_centers)};"
                 f"confirm_local_owners_with_backfill="
-                f"{feature.confirm_local_owners_with_backfill}"
+                f"{feature.confirm_local_owners_with_backfill};"
+                f"group_hypothesis_id={peak_group.group_hypothesis_id};"
+                f"public_family_id={peak_group.public_family_id}"
             ),
             successor_surface=(
                 "CrossSamplePeakGroupHypothesis delivery metadata plus "
                 "OwnerGroupDeliveryFeature structural delivery contract"
             ),
-            disposition="compatibility_adapter_candidate",
+            disposition="successor_owned",
             public_oracle=(
                 "tests/test_alignment_owner_family_successor_contract.py::"
-                "test_successor_constructor_matches_owner_adapter_delivery_fields"
+                "test_owner_group_migration_is_adapter_candidate_after_parity"
             ),
             exit_rule=(
-                "Owner-backfill, owner-matrix, and process payloads accept "
-                "OwnerGroupDeliveryFeature now. Keep OwnerAlignedFeature as the "
-                "public concrete adapter until pre-backfill consolidation, "
-                "diagnostic probes, and adapter tests can consume successor "
-                "groups or an explicit delivery adapter with public parity."
+                "Owner-backfill, owner-matrix, process payloads, cells, review, "
+                "and workbook audit surfaces expose successor group and "
+                "gap-fill projection. Keep OwnerAlignedFeature only as the "
+                "public concrete facade until external callers migrate."
             ),
         ),
     )
@@ -294,7 +297,7 @@ def owner_family_successor_mapping(
 def owner_clustering_disposition(
     mappings: tuple[OwnerFamilyInvariantMapping, ...],
 ) -> OwnerClusteringDispositionDecision:
-    """Return the C6-B final owner-clustering migration disposition.
+    """Return the final owner-clustering migration disposition.
 
     This migration evaluator only promotes to adapter when no invariant remains
     an active owner-clustering policy or a successor gap. Retirement still
@@ -316,13 +319,13 @@ def owner_clustering_disposition(
                 "successor gap."
             ),
             blocking_invariants=blocking,
-            exit_rule=OWNER_CLUSTERING_C6B_EXIT_RULE,
+            exit_rule=OWNER_CLUSTERING_GROUP_MIGRATION_EXIT_RULE,
         )
     return OwnerClusteringDispositionDecision(
-        disposition=OWNER_CLUSTERING_C6B_FINAL_DISPOSITION,
-        reason=OWNER_CLUSTERING_C6B_REASON,
+        disposition=OWNER_CLUSTERING_GROUP_MIGRATION_FINAL_DISPOSITION,
+        reason=OWNER_CLUSTERING_GROUP_MIGRATION_REASON,
         blocking_invariants=blocking,
-        exit_rule=OWNER_CLUSTERING_C6B_EXIT_RULE,
+        exit_rule=OWNER_CLUSTERING_GROUP_MIGRATION_EXIT_RULE,
     )
 
 

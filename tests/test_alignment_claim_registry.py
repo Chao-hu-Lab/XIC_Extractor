@@ -34,6 +34,13 @@ def test_claim_registry_marks_duplicate_same_sample_peak_loser() -> None:
     assert cells["FAM000002"].reason == (
         "duplicate MS1 peak claim; winner=FAM000001; original_status=rescued"
     )
+    assert cells["FAM000002"].group_claim_state == "duplicate_loser"
+    assert cells["FAM000002"].claim_winner_group_hypothesis_id == (
+        "GROUP-FAM000001"
+    )
+    assert cells["FAM000002"].claim_source_group_hypothesis_id == (
+        "GROUP-FAM000002"
+    )
 
 
 def test_claim_registry_conflicts_across_neutral_loss_tags() -> None:
@@ -246,10 +253,14 @@ def test_claim_registry_all_review_only_conflicts_have_no_winner() -> None:
     assert cells["FAM000001"].reason == (
         "review-only MS1 peak claim; winner=none; original_status=detected"
     )
+    assert cells["FAM000001"].group_claim_state == "review_only_duplicate_loser"
+    assert cells["FAM000001"].claim_winner_group_hypothesis_id == ""
+    assert cells["FAM000001"].claim_source_group_hypothesis_id == "GROUP-FAM000001"
     assert cells["FAM000002"].status == "duplicate_assigned"
     assert cells["FAM000002"].reason == (
         "review-only MS1 peak claim; winner=none; original_status=rescued"
     )
+    assert cells["FAM000002"].group_claim_state == "review_only_duplicate_loser"
 
 
 def test_claim_registry_duplicate_assignment_is_cells_tsv_visible(
@@ -279,6 +290,13 @@ def test_claim_registry_duplicate_assignment_is_cells_tsv_visible(
     assert rows["FAM000002"]["peak_end_rt"] == "8.6"
     assert rows["FAM000002"]["reason"] == (
         "duplicate MS1 peak claim; winner=FAM000001; original_status=rescued"
+    )
+    assert rows["FAM000002"]["group_claim_state"] == "duplicate_loser"
+    assert rows["FAM000002"]["claim_winner_group_hypothesis_id"] == (
+        "GROUP-FAM000001"
+    )
+    assert rows["FAM000002"]["claim_source_group_hypothesis_id"] == (
+        "GROUP-FAM000002"
     )
 
 
@@ -319,6 +337,14 @@ def _feature(
         ),
         evidence="owner_complete_link",
         review_only=review_only,
+        group_hypothesis_id=f"GROUP-{feature_id}",
+        public_family_id=feature_id,
+        group_construction_role="successor_projection_adapter",
+        group_delivery_role="successor_delivery_protocol",
+        group_membership_source="cross_sample_peak_group_hypothesis",
+        consolidation_state="not_consolidated",
+        consolidation_winner_group_hypothesis_id="",
+        consolidation_source_group_hypothesis_id="",
     )
 
 

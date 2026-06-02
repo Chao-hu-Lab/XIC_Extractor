@@ -26,8 +26,20 @@ def test_pre_backfill_consolidation_merges_identity_compatible_samples() -> None
     }
     assert primary[0].confirm_local_owners_with_backfill is True
     assert primary[0].backfill_seed_centers == ((500.0, 8.0), (500.0, 8.05))
+    assert primary[0].group_construction_role == "pre_backfill_successor_adapter"
+    assert primary[0].group_delivery_role == "pre_backfill_successor_adapter"
+    assert (
+        primary[0].group_membership_source
+        == "pre_backfill_cross_sample_peak_group_projection"
+    )
+    assert primary[0].consolidation_state == "primary_winner"
+    assert primary[0].consolidation_source_group_hypothesis_id == (
+        "FAM000001;FAM000002"
+    )
     assert "pre_backfill_identity_consolidated" in primary[0].evidence
     assert len(losers) == 1
+    assert losers[0].consolidation_state == "primary_loser"
+    assert losers[0].consolidation_winner_group_hypothesis_id == "FAM000001"
     assert "winner=" in losers[0].evidence
 
 

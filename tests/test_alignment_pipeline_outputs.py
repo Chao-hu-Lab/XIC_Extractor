@@ -28,7 +28,26 @@ def test_alignment_metadata_records_baseline_audit_method() -> None:
         peak_config=peak_config,
     )
 
-    assert metadata["schema_version"] == "alignment-results-v2"
+    assert metadata["schema_version"] == "alignment-results-v3"
+    assert (
+        metadata["cross_sample_peak_group_policy"]
+        == "cross_sample_peak_group_hypothesis_v1"
+    )
+    assert metadata["public_family_id_policy"] == "fam_compatibility_id"
+    assert (
+        metadata["group_delivery_policy"]
+        == "owner_group_delivery_successor_projection_v1"
+    )
+    assert metadata["gap_fill_policy"] == "missing_observation_gap_fill_v1"
+    assert (
+        metadata["legacy_owner_backfill_role"]
+        == "owner_backfill_as_gap_fill_materialization"
+    )
+    assert (
+        metadata["pre_backfill_projection_policy"]
+        == "pre_backfill_successor_projection_required_when_enabled"
+    )
+    assert metadata["matrix_value_policy"] == "asls_primary_integration_result"
     assert metadata["baseline_audit_method"] == "asls"
     assert metadata["backfill_scope"] == "full-audit"
     assert metadata["output_scope"] == "full-audit"

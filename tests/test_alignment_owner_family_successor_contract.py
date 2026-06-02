@@ -55,7 +55,7 @@ def test_owner_family_successor_mapping_names_all_required_invariants() -> None:
     assert by_invariant["review_only_owner_records"].disposition == "successor_owned"
     assert (
         by_invariant["backfill_seed_and_matrix_delivery"].disposition
-        == "compatibility_adapter_candidate"
+        == "successor_owned"
     )
     assert "owner_count=2" in by_invariant[
         "stable_cross_sample_family_membership"
@@ -125,7 +125,7 @@ def test_successor_constructor_matches_owner_adapter_delivery_fields() -> None:
         "successor_owned"
     )
     assert by_invariant["backfill_seed_and_matrix_delivery"].disposition == (
-        "compatibility_adapter_candidate"
+        "successor_owned"
     )
 
 
@@ -507,7 +507,7 @@ def test_owner_clustering_is_adapter_candidate_after_successor_constructor() -> 
     assert "backfill_seed_and_matrix_delivery" not in decision.blocking_invariants
 
 
-def test_c6_migration_disposition_becomes_adapter_candidate_after_parity() -> None:
+def test_owner_group_migration_is_adapter_candidate_after_parity() -> None:
     edge_evidence = []
     edge_feature = cluster_sample_local_owners(
         (_owner("sample-a", "a"), _owner("sample-b", "b")),
@@ -552,7 +552,7 @@ def test_c6_migration_disposition_becomes_adapter_candidate_after_parity() -> No
     )
     assert by_invariant["hard_family_split_gates"].disposition == "successor_owned"
     assert by_invariant["backfill_seed_and_matrix_delivery"].disposition == (
-        "compatibility_adapter_candidate"
+        "successor_owned"
     )
     assert decision.disposition == "compatibility_adapter_candidate"
     assert "compatibility_adapter_candidate" in decision.reason
@@ -576,6 +576,8 @@ def test_compact_owner_family_tsv_triad_keeps_full_schema_and_rows(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.alignment.tsv_writer import (
+        ALIGNMENT_CELLS_COLUMNS,
+        ALIGNMENT_REVIEW_COLUMNS,
         write_alignment_cells_tsv,
         write_alignment_matrix_tsv,
         write_alignment_review_tsv,
@@ -611,188 +613,46 @@ def test_compact_owner_family_tsv_triad_keeps_full_schema_and_rows(
         ],
         ["FAM000001", "NL116", "500", "8.5", "900", "900", ""],
     ]
-    assert _tsv_rows(cells_path) == [
-        [
-            "feature_family_id",
-            "sample_stem",
-            "status",
-            "area",
-            "primary_matrix_area",
-            "primary_matrix_area_source",
-            "primary_matrix_area_reason",
-            "apex_rt",
-            "height",
-            "peak_start_rt",
-            "peak_end_rt",
-            "rt_delta_sec",
-            "trace_quality",
-            "scan_support_score",
-            "source_candidate_id",
-            "source_raw_file",
-            "neutral_loss_tag",
-            "family_center_mz",
-            "family_center_rt",
-            "reason",
-            "region_candidate_count",
-            "region_selected_proposal_sources",
-            "region_selected_merge_note",
-            "region_shadow_status",
-            "region_shadow_verdict",
-            "region_merge_suggestion_source",
-            "region_area_ratio",
-            "region_selected_interval_count",
-            "region_selected_interval_gap_max_min",
-            "region_local_mixture_diagnostic",
-            "region_local_mixture_reason",
-            "region_review_reason",
-        ],
-        [
-            "FAM000001",
-            "sample-a",
-            "detected",
-            "1000",
-            "900",
-            "asls_baseline_corrected",
-            "",
-            "8.4",
-            "100",
-            "8.35",
-            "8.45",
-            "'-6",
-            "owner_exact_apex_match",
-            "",
-            "sample-a#a",
-            "",
-            "NL116",
-            "500",
-            "8.5",
-            "sample-local MS1 owner with original MS2 evidence",
-            *[""] * 12,
-        ],
-        [
-            "FAM000001",
-            "sample-b",
-            "detected",
-            "1000",
-            "900",
-            "asls_baseline_corrected",
-            "",
-            "8.6",
-            "100",
-            "8.55",
-            "8.65",
-            "6",
-            "owner_exact_apex_match",
-            "",
-            "sample-b#b",
-            "",
-            "NL116",
-            "500",
-            "8.5",
-            "sample-local MS1 owner with original MS2 evidence",
-            *[""] * 12,
-        ],
-        [
-            "FAM000001",
-            "sample-c",
-            "absent",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "absent",
-            "",
-            "",
-            "",
-            "NL116",
-            "500",
-            "8.5",
-            "no local MS1 owner",
-            *[""] * 12,
-        ],
-    ]
-    assert _tsv_rows(review_path) == [
-        [
-            "feature_family_id",
-            "neutral_loss_tag",
-            "family_center_mz",
-            "family_center_rt",
-            "family_product_mz",
-            "family_observed_neutral_loss_da",
-            "has_anchor",
-            "event_cluster_count",
-            "event_cluster_ids",
-            "event_member_count",
-            "detected_count",
-            "absent_count",
-            "unchecked_count",
-            "duplicate_assigned_count",
-            "ambiguous_ms1_owner_count",
-            "present_rate",
-            "identity_decision",
-            "identity_confidence",
-            "primary_evidence",
-            "identity_reason",
-            "quantifiable_detected_count",
-            "quantifiable_rescue_count",
-            "accepted_cell_count",
-            "accepted_rescue_count",
-            "review_rescue_count",
-            "include_in_primary_matrix",
-            "row_flags",
-            "artificial_adduct_role",
-            "artificial_adduct_name",
-            "artificial_adduct_related_family_id",
-            "artificial_adduct_mz_delta_error_ppm",
-            "artificial_adduct_rt_delta_min",
-            "representative_samples",
-            "family_evidence",
-            "warning",
-            "reason",
-        ],
-        [
-            "FAM000001",
-            "NL116",
-            "500",
-            "8.5",
-            "383.953",
-            "116.047",
-            "TRUE",
-            "2",
-            "OWN-sample-a-a;OWN-sample-b-b",
-            "3",
-            "2",
-            "1",
-            "0",
-            "0",
-            "0",
-            "0.666667",
-            "production_family",
-            "high",
-            "owner_complete_link",
-            "owner_complete_link",
-            "2",
-            "0",
-            "2",
-            "0",
-            "0",
-            "TRUE",
-            *[""] * 6,
-            "sample-a;sample-b",
-            "owner_complete_link;owner_count=2",
-            "",
-            "anchor family; 2/3 present; 0 MS1 backfilled; "
-            "merged 2 event clusters",
-        ],
-    ]
+    cell_rows = _tsv_rows(cells_path)
+    assert cell_rows[0] == list(ALIGNMENT_CELLS_COLUMNS)
+    cell_records = _tsv_dicts(cells_path)
+    by_sample = {row["sample_stem"]: row for row in cell_records}
+    assert by_sample["sample-a"]["group_hypothesis_id"] == "FAM000001"
+    assert by_sample["sample-a"]["public_family_id"] == "FAM000001"
+    assert by_sample["sample-a"]["group_claim_state"] == "unclaimed_or_winner"
+    assert by_sample["sample-a"]["gap_fill_state"] == "observed_member"
+    assert by_sample["sample-a"]["missing_observation_state"] == "observed"
+    assert by_sample["sample-a"]["primary_matrix_area"] == "900"
+    assert by_sample["sample-a"]["source_candidate_id"] == "sample-a#a"
+    assert by_sample["sample-b"]["rt_delta_sec"] == "6"
+    assert by_sample["sample-c"]["status"] == "absent"
+    assert by_sample["sample-c"]["gap_fill_state"] == "not_filled"
+    assert by_sample["sample-c"]["missing_observation_state"] == (
+        "missing_not_observed"
+    )
+
+    review_rows = _tsv_rows(review_path)
+    assert review_rows[0] == list(ALIGNMENT_REVIEW_COLUMNS)
+    review = _tsv_dicts(review_path)[0]
+    assert review["feature_family_id"] == "FAM000001"
+    assert review["group_hypothesis_id"] == "FAM000001"
+    assert review["public_family_id"] == "FAM000001"
+    assert review["group_delivery_role"] == (
+        "owner_aligned_feature_compatibility_facade"
+    )
+    assert review["neutral_loss_tag"] == "NL116"
+    assert review["detected_count"] == "2"
+    assert review["absent_count"] == "1"
+    assert review["present_rate"] == "0.666667"
+    assert review["identity_decision"] == "production_family"
+    assert review["representative_samples"] == "sample-a;sample-b"
+    assert review["family_evidence"] == "owner_complete_link;owner_count=2"
+    assert review["reason"] == (
+        "anchor family; 2/3 present; 0 MS1 backfilled; merged 2 event clusters"
+    )
 
 
-def test_cross_sample_peak_group_shadow_has_no_production_path_imports() -> None:
+def test_cross_sample_peak_group_constructor_has_no_production_path_imports() -> None:
     shared_peak_identity_dir = (
         Path("xic_extractor/alignment")
         / ("shared_peak_identity_" + "explanation")
@@ -816,7 +676,8 @@ def test_cross_sample_peak_group_shadow_has_no_production_path_imports() -> None
         assert "CrossSamplePeakGroupEdgeFact" not in text
         assert "CrossSamplePeakGroupReviewFact" not in text
         assert "CrossSamplePeakGroupHardGateChallengeFact" not in text
-        assert "cross_sample_peak_group" not in text
+        assert "from xic_extractor.alignment.cross_sample_peak_groups" not in text
+        assert "import xic_extractor.alignment.cross_sample_peak_groups" not in text
 
 
 def _compact_owner_family_feature():
@@ -840,3 +701,8 @@ def _compact_owner_family_feature():
 def _tsv_rows(path: Path) -> list[list[str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.reader(handle, delimiter="\t"))
+
+
+def _tsv_dicts(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))

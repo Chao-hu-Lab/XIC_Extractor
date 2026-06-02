@@ -15,11 +15,18 @@ from xic_extractor.alignment.output_rows import (
     row_id,
     safe_rate,
 )
+from xic_extractor.alignment.owner_group_delivery import (
+    CROSS_SAMPLE_GROUP_CELL_COLUMNS,
+    GROUP_BACKFILL_SEED_AUDIT_COLUMNS,
+    GROUP_REVIEW_PROJECTION_COLUMNS,
+    delivery_group_projection,
+)
 from xic_extractor.alignment.production_decisions import build_production_decisions
 from xic_extractor.peak_detection.baseline import LINEAR_EDGE_RETIRED_MESSAGE
 
 ALIGNMENT_REVIEW_COLUMNS = (
     "feature_family_id",
+    *GROUP_REVIEW_PROJECTION_COLUMNS,
     "neutral_loss_tag",
     "family_center_mz",
     "family_center_rt",
@@ -59,6 +66,7 @@ ALIGNMENT_REVIEW_COLUMNS = (
 
 ALIGNMENT_CELLS_COLUMNS = (
     "feature_family_id",
+    *CROSS_SAMPLE_GROUP_CELL_COLUMNS,
     "sample_stem",
     "status",
     "area",
@@ -124,6 +132,7 @@ ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT
 
 ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS = (
     "feature_family_id",
+    *GROUP_BACKFILL_SEED_AUDIT_COLUMNS,
     "sample_stem",
     "status",
     "area",
@@ -208,6 +217,28 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
         rows.append(
             {
                 "feature_family_id": cell.cluster_id,
+                "group_hypothesis_id": cell.group_hypothesis_id,
+                "public_family_id": cell.public_family_id,
+                "group_construction_role": cell.group_construction_role,
+                "group_delivery_role": cell.group_delivery_role,
+                "group_membership_source": cell.group_membership_source,
+                "gap_fill_state": cell.gap_fill_state,
+                "gap_fill_reason": cell.gap_fill_reason,
+                "missing_observation_state": cell.missing_observation_state,
+                "group_claim_state": cell.group_claim_state,
+                "claim_winner_group_hypothesis_id": (
+                    cell.claim_winner_group_hypothesis_id
+                ),
+                "claim_source_group_hypothesis_id": (
+                    cell.claim_source_group_hypothesis_id
+                ),
+                "consolidation_state": cell.consolidation_state,
+                "consolidation_winner_group_hypothesis_id": (
+                    cell.consolidation_winner_group_hypothesis_id
+                ),
+                "consolidation_source_group_hypothesis_id": (
+                    cell.consolidation_source_group_hypothesis_id
+                ),
                 "sample_stem": cell.sample_stem,
                 "status": cell.status,
                 "area": format_value(cell.area),
@@ -323,6 +354,14 @@ def write_alignment_owner_backfill_seed_audit_tsv(
         rows.append(
             {
                 "feature_family_id": cell.cluster_id,
+                "group_hypothesis_id": cell.group_hypothesis_id,
+                "public_family_id": cell.public_family_id,
+                "group_construction_role": cell.group_construction_role,
+                "group_delivery_role": cell.group_delivery_role,
+                "group_membership_source": cell.group_membership_source,
+                "gap_fill_state": cell.gap_fill_state,
+                "gap_fill_reason": cell.gap_fill_reason,
+                "missing_observation_state": cell.missing_observation_state,
                 "sample_stem": cell.sample_stem,
                 "status": cell.status,
                 "area": cell.area,
@@ -398,6 +437,7 @@ def _review_rows(
         rows.append(
             {
                 "feature_family_id": cluster_id,
+                **delivery_group_projection(cluster),
                 "neutral_loss_tag": cluster.neutral_loss_tag,
                 "family_center_mz": _family_center_mz(cluster),
                 "family_center_rt": _family_center_rt(cluster),

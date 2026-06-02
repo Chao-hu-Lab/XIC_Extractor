@@ -41,6 +41,18 @@ def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
     assert cell.matrix_area == cell.selected_integration.area_baseline_corrected
     assert cell.reason == "owner-centered MS1 backfill"
     assert cell.trace_quality == "owner_backfill"
+    assert cell.group_hypothesis_id == "FAM000001"
+    assert cell.public_family_id == "FAM000001"
+    assert cell.group_construction_role == "successor_constructor"
+    assert cell.group_delivery_role == "owner_aligned_feature_compatibility_facade"
+    assert (
+        cell.group_membership_source
+        == "owner_aligned_feature_successor_projection"
+    )
+    assert cell.gap_fill_state == "gap_fill_rescued"
+    assert cell.gap_fill_reason == "group_centered_query_detected"
+    assert cell.missing_observation_state == "queried_and_detected"
+    assert cell.group_claim_state == "unclaimed_or_winner"
     assert cell.scan_support_score == 0.5
     assert cell.region_candidate_count is not None
     assert cell.region_shadow_status == "evaluated"
@@ -74,6 +86,14 @@ def test_owner_backfill_accepts_delivery_contract_feature_without_legacy_dto() -
         backfill_seed_centers=(),
         ambiguous_sample_stem=None,
         ambiguous_candidate_ids=(),
+        group_hypothesis_id="GROUP_CONTRACT",
+        public_family_id="FAM_CONTRACT",
+        group_construction_role="successor_projection_adapter",
+        group_delivery_role="successor_delivery_protocol",
+        group_membership_source="cross_sample_peak_group_hypothesis",
+        consolidation_state="not_consolidated",
+        consolidation_winner_group_hypothesis_id="",
+        consolidation_source_group_hypothesis_id="",
     )
 
     cells = build_owner_backfill_cells(
@@ -87,6 +107,10 @@ def test_owner_backfill_accepts_delivery_contract_feature_without_legacy_dto() -
     assert not isinstance(feature, OwnerAlignedFeature)
     assert len(cells) == 1
     assert cells[0].cluster_id == "FAM_CONTRACT"
+    assert cells[0].group_hypothesis_id == "GROUP_CONTRACT"
+    assert cells[0].public_family_id == "FAM_CONTRACT"
+    assert cells[0].group_delivery_role == "successor_delivery_protocol"
+    assert cells[0].gap_fill_state == "gap_fill_rescued"
     assert cells[0].sample_stem == "sample-b"
     assert source.calls == [(500.0, 7.5, 9.5, 20.0)]
 
@@ -431,7 +455,41 @@ def test_owner_backfill_treats_non_finite_trace_as_unchecked() -> None:
         peak_config=_peak_config(),
     )
 
-    assert cells == ()
+    assert len(cells) == 1
+    cell = cells[0]
+    assert cell.sample_stem == "sample-b"
+    assert cell.status == "unchecked"
+    assert cell.area is None
+    assert cell.trace_quality == "owner_backfill_unassessable"
+    assert cell.gap_fill_state == "not_filled"
+    assert cell.gap_fill_reason == "query_attempt_not_detected"
+    assert cell.missing_observation_state == "missing_unchecked"
+    assert cell.backfill_seed_mz == 500.0
+    assert cell.backfill_seed_rt == 8.5
+    assert np.isclose(cell.backfill_request_rt_min, 5.5)
+    assert np.isclose(cell.backfill_request_rt_max, 11.5)
+
+
+def test_owner_backfill_marks_no_peak_query_as_unchecked_outcome() -> None:
+    source = FakeBackfillSource(
+        rt=np.array([8.4, 8.5, 8.6]),
+        intensity=np.array([0.0, 0.0, 0.0]),
+    )
+
+    cells = build_owner_backfill_cells(
+        (_feature(),),
+        sample_order=("sample-b",),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+    )
+
+    assert len(cells) == 1
+    assert cells[0].status == "unchecked"
+    assert cells[0].trace_quality == "owner_backfill_not_detected"
+    assert cells[0].gap_fill_state == "not_filled"
+    assert cells[0].gap_fill_reason == "query_attempt_not_detected"
+    assert cells[0].missing_observation_state == "missing_unchecked"
 
 
 def test_owner_backfill_uses_batch_source_and_preserves_feature_major_order() -> None:
@@ -584,10 +642,14 @@ def test_owner_backfill_validates_prefilter_hits_with_secondary_source() -> None
         raw_xic_batch_size=64,
     )
 
-    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
-        ("FAM000001", "sample-b"),
+    assert [(cell.cluster_id, cell.sample_stem, cell.status) for cell in cells] == [
+        ("FAM000001", "sample-b", "rescued"),
+        ("FAM000002", "sample-b", "unchecked"),
     ]
     assert cells[0].height == 240.0
+    assert cells[1].gap_fill_state == "not_filled"
+    assert cells[1].gap_fill_reason == "query_attempt_not_detected"
+    assert cells[1].missing_observation_state == "missing_unchecked"
     assert len(prefilter.requests[0]) == 2
     assert len(validator.requests[0]) == 1
     assert validator.requests[0][0].mz == 500.0

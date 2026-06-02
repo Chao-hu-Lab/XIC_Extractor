@@ -195,6 +195,11 @@ def test_owner_backfill_process_accepts_delivery_contract_payload(
     assert len(captured_jobs) == 1
     assert captured_jobs[0].sample_stem == "sample-b"
     assert captured_jobs[0].features == (feature,)
+    assert captured_jobs[0].features[0].group_hypothesis_id == "GROUP_CONTRACT"
+    assert captured_jobs[0].features[0].public_family_id == "FAM_CONTRACT"
+    assert captured_jobs[0].features[0].group_delivery_role == (
+        "successor_delivery_protocol"
+    )
     assert captured_jobs[0].feature_payload_count == 1
 
 
@@ -619,6 +624,14 @@ def _delivery_contract_feature():
         backfill_seed_centers=(),
         ambiguous_sample_stem=None,
         ambiguous_candidate_ids=(),
+        group_hypothesis_id="GROUP_CONTRACT",
+        public_family_id="FAM_CONTRACT",
+        group_construction_role="successor_projection_adapter",
+        group_delivery_role="successor_delivery_protocol",
+        group_membership_source="cross_sample_peak_group_hypothesis",
+        consolidation_state="not_consolidated",
+        consolidation_winner_group_hypothesis_id="",
+        consolidation_source_group_hypothesis_id="",
     )
 
 

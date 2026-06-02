@@ -36,6 +36,28 @@ class OwnerAlignedFeature:
     backfill_seed_centers: tuple[tuple[float, float], ...] = ()
     ambiguous_sample_stem: str | None = None
     ambiguous_candidate_ids: tuple[str, ...] = ()
+    group_hypothesis_id: str = ""
+    public_family_id: str = ""
+    group_construction_role: str = "successor_constructor"
+    group_delivery_role: str = "owner_aligned_feature_compatibility_facade"
+    group_membership_source: str = "owner_aligned_feature_successor_projection"
+    consolidation_state: str = "not_consolidated"
+    consolidation_winner_group_hypothesis_id: str = ""
+    consolidation_source_group_hypothesis_id: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.group_hypothesis_id:
+            object.__setattr__(
+                self,
+                "group_hypothesis_id",
+                self.feature_family_id,
+            )
+        if not self.public_family_id:
+            object.__setattr__(
+                self,
+                "public_family_id",
+                self.feature_family_id,
+            )
 
     @property
     def cluster_id(self) -> str:
@@ -118,4 +140,16 @@ def _feature_from_peak_group_hypothesis(
         backfill_seed_centers=hypothesis.backfill_seed_centers,
         ambiguous_sample_stem=hypothesis.ambiguous_sample_stem,
         ambiguous_candidate_ids=hypothesis.ambiguous_candidate_ids,
+        group_hypothesis_id=hypothesis.group_hypothesis_id,
+        public_family_id=hypothesis.public_family_id,
+        group_construction_role=hypothesis.group_construction_role,
+        group_delivery_role="owner_aligned_feature_compatibility_facade",
+        group_membership_source="owner_aligned_feature_successor_projection",
+        consolidation_state=hypothesis.consolidation_state,
+        consolidation_winner_group_hypothesis_id=(
+            hypothesis.consolidation_winner_group_hypothesis_id
+        ),
+        consolidation_source_group_hypothesis_id=(
+            hypothesis.consolidation_source_group_hypothesis_id
+        ),
     )

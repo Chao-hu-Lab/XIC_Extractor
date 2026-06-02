@@ -73,6 +73,20 @@ class AlignedCell:
     backfill_request_rt_min: float | None = None
     backfill_request_rt_max: float | None = None
     backfill_request_ppm: float | None = None
+    group_hypothesis_id: str = ""
+    public_family_id: str = ""
+    group_construction_role: str = ""
+    group_delivery_role: str = ""
+    group_membership_source: str = ""
+    gap_fill_state: str = ""
+    gap_fill_reason: str = ""
+    missing_observation_state: str = ""
+    group_claim_state: str = ""
+    claim_winner_group_hypothesis_id: str = ""
+    claim_source_group_hypothesis_id: str = ""
+    consolidation_state: str = ""
+    consolidation_winner_group_hypothesis_id: str = ""
+    consolidation_source_group_hypothesis_id: str = ""
 
     @property
     def matrix_area(self) -> float | None:

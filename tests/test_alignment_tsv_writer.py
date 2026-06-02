@@ -7,11 +7,14 @@ import pytest
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.models import AlignmentCluster
+from xic_extractor.alignment.owner_group_delivery import GROUP_REVIEW_PROJECTION_COLUMNS
+from xic_extractor.alignment.tsv_writer import ALIGNMENT_CELLS_COLUMNS
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
 from xic_extractor.peak_detection.integration_audit import CellIntegrationAuditSummary
 
 REVIEW_COLUMNS = [
     "feature_family_id",
+    *GROUP_REVIEW_PROJECTION_COLUMNS,
     "neutral_loss_tag",
     "family_center_mz",
     "family_center_rt",
@@ -70,6 +73,14 @@ def test_write_alignment_review_tsv_columns_counts_rates_and_reason(tmp_path: Pa
     assert list(rows[0]) == REVIEW_COLUMNS
     assert rows[0] == {
         "feature_family_id": "ALN000001",
+        "group_hypothesis_id": "ALN000001",
+        "public_family_id": "ALN000001",
+        "group_construction_role": "successor_constructor",
+        "group_delivery_role": "owner_aligned_feature_compatibility_facade",
+        "group_membership_source": "owner_aligned_feature_successor_projection",
+        "consolidation_state": "not_consolidated",
+        "consolidation_winner_group_hypothesis_id": "",
+        "consolidation_source_group_hypothesis_id": "",
         "neutral_loss_tag": "DNA_dR",
         "family_center_mz": "500.123",
         "family_center_rt": "8.49",
@@ -615,45 +626,7 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
         write_alignment_status_matrix_tsv(tmp_path / "status.tsv", matrix)
     )
 
-    assert list(cells[0]) == [
-        "feature_family_id",
-        "sample_stem",
-        "status",
-        "area",
-        "primary_matrix_area",
-        "primary_matrix_area_source",
-        "primary_matrix_area_reason",
-        "apex_rt",
-        "height",
-        "peak_start_rt",
-        "peak_end_rt",
-        "rt_delta_sec",
-        "trace_quality",
-        "scan_support_score",
-        "source_candidate_id",
-        "source_raw_file",
-        "neutral_loss_tag",
-        "family_center_mz",
-        "family_center_rt",
-        "reason",
-        "region_candidate_count",
-        "region_selected_proposal_sources",
-        "region_selected_merge_note",
-        "region_shadow_status",
-        "region_shadow_verdict",
-        "region_merge_suggestion_source",
-        "region_area_ratio",
-        "region_selected_interval_count",
-        "region_selected_interval_gap_max_min",
-        "region_local_mixture_diagnostic",
-        "region_local_mixture_reason",
-        "region_review_reason",
-        "region_decision_status",
-        "region_decision_class",
-        "region_product_action",
-        "region_promotion_reason",
-        "region_baseline_method",
-    ]
+    assert list(cells[0]) == list(ALIGNMENT_CELLS_COLUMNS)
     assert cells[0]["status"] == "detected"
     assert cells[0]["area"] == "10"
     assert cells[0]["primary_matrix_area"] == "10"

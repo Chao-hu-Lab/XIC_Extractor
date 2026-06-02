@@ -163,7 +163,7 @@ def alignment_metadata(
     skipped_evidence_predicate_version: str = "",
 ) -> dict[str, str]:
     return {
-        "schema_version": "alignment-results-v2",
+        "schema_version": "alignment-results-v3",
         "discovery_batch_index": str(discovery_batch_index),
         "raw_dir": str(raw_dir),
         "dll_dir": str(dll_dir),
@@ -187,6 +187,17 @@ def alignment_metadata(
         "audit_evidence_mode_reason": audit_evidence_mode_reason,
         "scope_warning": scope_warning,
         "skipped_evidence_predicate_version": skipped_evidence_predicate_version,
+        "cross_sample_peak_group_policy": "cross_sample_peak_group_hypothesis_v1",
+        "public_family_id_policy": "fam_compatibility_id",
+        "group_delivery_policy": "owner_group_delivery_successor_projection_v1",
+        "gap_fill_policy": "missing_observation_gap_fill_v1",
+        "legacy_owner_backfill_role": (
+            "owner_backfill_as_gap_fill_materialization"
+        ),
+        "pre_backfill_projection_policy": (
+            "pre_backfill_successor_projection_required_when_enabled"
+        ),
+        "matrix_value_policy": "asls_primary_integration_result",
     }
 
 

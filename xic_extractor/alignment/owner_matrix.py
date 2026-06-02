@@ -10,6 +10,7 @@ from xic_extractor.alignment.owner_area import median_owner_area, positive_finit
 from xic_extractor.alignment.owner_group_delivery import (
     OwnerGroupDeliveryFeature,
     OwnerGroupDeliveryFeatures,
+    delivery_cell_projection,
 )
 from xic_extractor.alignment.ownership_models import AmbiguousOwnerRecord
 
@@ -47,7 +48,7 @@ def build_owner_alignment_matrix(
                 (feature.feature_family_id, sample_stem)
             )
             if rescued is not None:
-                cells.append(rescued)
+                cells.append(_rescued_cell(feature, rescued))
                 continue
             ambiguous_records = ambiguous_by_sample.get(sample_stem, ())
             if ambiguous_records:
@@ -100,6 +101,12 @@ def _detected_cell(feature: OwnerGroupDeliveryFeature, owner) -> AlignedCell:
                 boundary_sources=("alignment_owner_scalar_legacy",),
             )
         ),
+        **delivery_cell_projection(
+            feature,
+            gap_fill_state="observed_member",
+            gap_fill_reason="local_owner_detected",
+            missing_observation_state="observed",
+        ),
     )
     return with_region_audit(cell, owner.region_audit)
 
@@ -122,8 +129,43 @@ def _detected_or_confirmed_cell(
                 f"local_owner_rt={detected.apex_rt}; "
                 f"source_reason={detected.reason}"
             ),
+            **delivery_cell_projection(
+                feature,
+                gap_fill_state="gap_fill_rescued",
+                gap_fill_reason="group_centered_query_detected",
+                missing_observation_state="queried_and_detected",
+            ),
         )
     return detected
+
+
+def _rescued_cell(
+    feature: OwnerGroupDeliveryFeature,
+    rescued: AlignedCell,
+) -> AlignedCell:
+    if rescued.status != "rescued":
+        return replace(
+            rescued,
+            **delivery_cell_projection(
+                feature,
+                gap_fill_state="not_filled",
+                gap_fill_reason=(
+                    rescued.gap_fill_reason or "query_attempt_not_detected"
+                ),
+                missing_observation_state=(
+                    rescued.missing_observation_state or "missing_unchecked"
+                ),
+            ),
+        )
+    return replace(
+        rescued,
+        **delivery_cell_projection(
+            feature,
+            gap_fill_state="gap_fill_rescued",
+            gap_fill_reason="group_centered_query_detected",
+            missing_observation_state="queried_and_detected",
+        ),
+    )
 
 
 def _rescued_supersedes_detected(
@@ -174,6 +216,12 @@ def _ambiguous_cell(
             if not candidate_ids
             else f"checked local MS1 region is ambiguous: {';'.join(candidate_ids)}"
         ),
+        **delivery_cell_projection(
+            feature,
+            gap_fill_state="not_filled",
+            gap_fill_reason="not_requested_ambiguous_owner",
+            missing_observation_state="ambiguous_observation",
+        ),
     )
 
 
@@ -201,6 +249,12 @@ def _feature_ambiguous_cell(
             if not candidate_ids
             else f"checked local MS1 region is ambiguous: {candidate_ids}"
         ),
+        **delivery_cell_projection(
+            feature,
+            gap_fill_state="not_filled",
+            gap_fill_reason="not_requested_ambiguous_owner",
+            missing_observation_state="ambiguous_observation",
+        ),
     )
 
 
@@ -223,4 +277,10 @@ def _absent_cell(
         source_candidate_id=None,
         source_raw_file=None,
         reason="no local MS1 owner",
+        **delivery_cell_projection(
+            feature,
+            gap_fill_state="not_filled",
+            gap_fill_reason="not_requested_no_gap_fill",
+            missing_observation_state="missing_not_observed",
+        ),
     )

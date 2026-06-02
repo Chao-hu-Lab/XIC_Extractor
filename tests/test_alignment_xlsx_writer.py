@@ -5,6 +5,10 @@ import pytest
 from openpyxl import load_workbook
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.owner_group_delivery import (
+    CROSS_SAMPLE_GROUP_CELL_COLUMNS,
+    GROUP_REVIEW_PROJECTION_COLUMNS,
+)
 from xic_extractor.alignment.xlsx_writer import write_alignment_results_xlsx
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
@@ -16,7 +20,7 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
         tmp_path / "alignment_results.xlsx",
         matrix,
         metadata={
-            "schema_version": "alignment-results-v2",
+            "schema_version": "alignment-results-v3",
             "resolver_mode": "local_minimum",
         },
     )
@@ -29,6 +33,7 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
     assert workbook["Matrix"]["G2"].value == 150.0
     assert [cell.value for cell in workbook["Review"][1]] == [
         "feature_family_id",
+        *GROUP_REVIEW_PROJECTION_COLUMNS,
         "neutral_loss_tag",
         "detected_count",
         "rescued_count",
@@ -53,11 +58,13 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
         "artificial_adduct_mz_delta_error_ppm",
         "artificial_adduct_rt_delta_min",
     ]
-    assert workbook["Review"]["C2"].value == 2
-    assert workbook["Review"]["G2"].value == "owner_identity"
-    assert workbook["Review"]["Q2"].value == 1
+    assert _sheet_value(workbook["Review"], "group_hypothesis_id") == "FAM000001"
+    assert _sheet_value(workbook["Review"], "detected_count") == 2
+    assert _sheet_value(workbook["Review"], "primary_evidence") == "owner_identity"
+    assert _sheet_value(workbook["Review"], "ambiguous_ms1_owner_count") == 1
     assert [cell.value for cell in workbook["Audit"][1]] == [
         "feature_family_id",
+        *CROSS_SAMPLE_GROUP_CELL_COLUMNS,
         "sample_stem",
         "neutral_loss_tag",
         "family_center_mz",
@@ -100,7 +107,7 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
     ]
     assert workbook["Metadata"]["A1"].value == "key"
     assert workbook["Metadata"]["A3"].value == "schema_version"
-    assert workbook["Metadata"]["B3"].value == "alignment-results-v2"
+    assert workbook["Metadata"]["B3"].value == "alignment-results-v3"
 
 
 def test_alignment_results_xlsx_audit_projects_region_decision_fields(
@@ -125,16 +132,20 @@ def test_alignment_results_xlsx_audit_projects_region_decision_fields(
     path = write_alignment_results_xlsx(
         tmp_path / "alignment_results.xlsx",
         matrix,
-        metadata={"schema_version": "alignment-results-v2"},
+        metadata={"schema_version": "alignment-results-v3"},
     )
 
     workbook = load_workbook(path, data_only=True)
-    assert workbook["Audit"]["AI2"].value == "evaluated"
-    assert workbook["Audit"]["AJ2"].value == "merge_suggested"
-    assert workbook["Audit"]["AK2"].value == "safe_merge_eligible"
-    assert workbook["Audit"]["AL2"].value == "adjacent_wis_local_minimum_merge"
-    assert workbook["Audit"]["AM2"].value == "asls"
-    assert workbook["Review"]["Y1"].value is None
+    assert _sheet_value(workbook["Audit"], "region_decision_status") == "evaluated"
+    assert _sheet_value(workbook["Audit"], "region_decision_class") == "merge_suggested"
+    assert _sheet_value(workbook["Audit"], "region_product_action") == (
+        "safe_merge_eligible"
+    )
+    assert _sheet_value(workbook["Audit"], "region_promotion_reason") == (
+        "adjacent_wis_local_minimum_merge"
+    )
+    assert _sheet_value(workbook["Audit"], "region_baseline_method") == "asls"
+    assert "region_decision_status" not in _sheet_headers(workbook["Review"])
     assert workbook["Matrix"]["E2"].value == 100.0
 
 
@@ -155,14 +166,14 @@ def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
     path = write_alignment_results_xlsx(
         tmp_path / "alignment_results.xlsx",
         matrix,
-        metadata={"schema_version": "alignment-results-v2"},
+        metadata={"schema_version": "alignment-results-v3"},
     )
 
     workbook = load_workbook(path, data_only=True)
     assert workbook["Matrix"]["E2"].value == 100.0
     assert workbook["Matrix"]["F2"].value is None
     assert workbook["Matrix"]["G2"].value == 300.0
-    assert workbook["Review"]["P2"].value == 1
+    assert _sheet_value(workbook["Review"], "duplicate_assigned_count") == 1
 
 
 def test_alignment_results_xlsx_projects_asls_selected_integration_matrix_area(
@@ -191,14 +202,14 @@ def test_alignment_results_xlsx_projects_asls_selected_integration_matrix_area(
     path = write_alignment_results_xlsx(
         tmp_path / "alignment_results.xlsx",
         matrix,
-        metadata={"schema_version": "alignment-results-v2"},
+        metadata={"schema_version": "alignment-results-v3"},
     )
 
     workbook = load_workbook(path, data_only=True)
     assert workbook.sheetnames == ["Matrix", "Review", "Audit", "Metadata"]
     assert workbook["Matrix"]["E2"].value == 144.0
     assert workbook["Matrix"]["F2"].value == 120.0
-    assert workbook["Audit"]["K2"].value == 100.0
+    assert _sheet_value(workbook["Audit"], "area") == 100.0
 
 
 def test_alignment_results_xlsx_excludes_review_only_rows_from_matrix(
@@ -220,7 +231,7 @@ def test_alignment_results_xlsx_excludes_review_only_rows_from_matrix(
     path = write_alignment_results_xlsx(
         tmp_path / "alignment_results.xlsx",
         matrix,
-        metadata={"schema_version": "alignment-results-v2"},
+        metadata={"schema_version": "alignment-results-v3"},
     )
 
     workbook = load_workbook(path, data_only=True)
@@ -229,8 +240,10 @@ def test_alignment_results_xlsx_excludes_review_only_rows_from_matrix(
     assert workbook["Audit"]["A2"].value == "FAM000001"
     assert workbook["Audit"]["A3"].value == "FAM000001"
     assert workbook["Audit"]["A4"].value == "FAM000002"
-    assert workbook["Audit"]["H4"].value == "review_rescue"
-    assert workbook["Audit"]["J4"].value == "missing_row_identity_support"
+    assert _sheet_value(workbook["Audit"], "rescue_tier", row=4) == "review_rescue"
+    assert _sheet_value(workbook["Audit"], "blank_reason", row=4) == (
+        "missing_row_identity_support"
+    )
 
 
 def test_alignment_results_xlsx_audit_explains_duplicate_blank(
@@ -250,15 +263,15 @@ def test_alignment_results_xlsx_audit_explains_duplicate_blank(
     path = write_alignment_results_xlsx(
         tmp_path / "alignment_results.xlsx",
         matrix,
-        metadata={"schema_version": "alignment-results-v2"},
+        metadata={"schema_version": "alignment-results-v3"},
     )
 
     workbook = load_workbook(path, data_only=True)
     assert workbook["Matrix"]["A2"].value is None
     assert workbook["Audit"]["A2"].value == "FAM000001"
-    assert workbook["Audit"]["F2"].value == "duplicate_assigned"
-    assert workbook["Audit"]["I2"].value is False
-    assert workbook["Audit"]["J2"].value == "duplicate_loser"
+    assert _sheet_value(workbook["Audit"], "raw_status") == "duplicate_assigned"
+    assert _sheet_value(workbook["Audit"], "write_matrix_value") is False
+    assert _sheet_value(workbook["Audit"], "blank_reason") == "duplicate_loser"
 
 
 def test_alignment_results_xlsx_escapes_formula_like_external_strings(
@@ -301,11 +314,11 @@ def test_alignment_results_xlsx_escapes_formula_like_external_strings(
     assert workbook["Matrix"]["A2"].data_type != "f"
     assert workbook["Matrix"]["E1"].value == "'+Sample_A"
     assert workbook["Matrix"]["E1"].data_type != "f"
-    assert workbook["Review"]["B2"].value == "'-DNA_dR"
-    assert workbook["Review"]["B2"].data_type != "f"
-    assert workbook["Audit"]["B2"].value == "'+Sample_A"
-    assert workbook["Audit"]["AN2"].value == "'@audit reason"
-    assert workbook["Audit"]["I2"].value is True
+    assert _sheet_value(workbook["Review"], "neutral_loss_tag") == "'-DNA_dR"
+    assert _sheet_cell(workbook["Review"], "neutral_loss_tag").data_type != "f"
+    assert _sheet_value(workbook["Audit"], "sample_stem") == "'+Sample_A"
+    assert _sheet_value(workbook["Audit"], "reason") == "'@audit reason"
+    assert _sheet_value(workbook["Audit"], "write_matrix_value") is True
     assert workbook["Metadata"]["B2"].value == "'@metadata value"
     assert workbook["Metadata"]["B2"].data_type != "f"
 
@@ -321,8 +334,23 @@ def test_alignment_results_xlsx_rejects_orphan_audit_cell(tmp_path: Path):
         write_alignment_results_xlsx(
             tmp_path / "alignment_results.xlsx",
             matrix,
-            metadata={"schema_version": "alignment-results-v2"},
+            metadata={"schema_version": "alignment-results-v3"},
         )
+
+
+def _sheet_headers(sheet) -> list[str]:
+    return [cell.value for cell in sheet[1]]
+
+
+def _sheet_cell(sheet, column_name: str, *, row: int = 2):
+    return sheet.cell(
+        row=row,
+        column=_sheet_headers(sheet).index(column_name) + 1,
+    )
+
+
+def _sheet_value(sheet, column_name: str, *, row: int = 2):
+    return _sheet_cell(sheet, column_name, row=row).value
 
 
 def sample_alignment_matrix() -> AlignmentMatrix:

@@ -125,12 +125,69 @@ class CrossSamplePeakGroupHypothesis:
     construction_role: CrossSamplePeakGroupConstructionRole = (
         "owner_aligned_feature_shadow"
     )
+    consolidation_state: str = "not_consolidated"
+    consolidation_winner_group_hypothesis_id: str = ""
+    consolidation_source_group_hypothesis_id: str = ""
     edge_facts: tuple[CrossSamplePeakGroupEdgeFact, ...] = ()
     review_facts: tuple[CrossSamplePeakGroupReviewFact, ...] = ()
     hard_gate_challenge_facts: tuple[
         CrossSamplePeakGroupHardGateChallengeFact,
         ...
     ] = ()
+
+    @property
+    def feature_family_id(self) -> str:
+        return self.public_family_id
+
+    @property
+    def cluster_id(self) -> str:
+        return self.public_family_id
+
+    @property
+    def family_center_mz(self) -> float:
+        if self.group_center_mz is None:
+            raise ValueError("cross-sample peak group is missing center m/z")
+        return self.group_center_mz
+
+    @property
+    def family_center_rt(self) -> float:
+        if self.group_center_rt is None:
+            raise ValueError("cross-sample peak group is missing center RT")
+        return self.group_center_rt
+
+    @property
+    def family_product_mz(self) -> float:
+        if self.group_product_mz is None:
+            raise ValueError("cross-sample peak group is missing product m/z")
+        return self.group_product_mz
+
+    @property
+    def family_observed_neutral_loss_da(self) -> float:
+        if self.group_observed_neutral_loss_da is None:
+            raise ValueError("cross-sample peak group is missing observed neutral loss")
+        return self.group_observed_neutral_loss_da
+
+    @property
+    def members(self) -> tuple[SampleLocalMS1Owner, ...]:
+        return self.owners
+
+    @property
+    def event_cluster_ids(self) -> tuple[str, ...]:
+        return self.owner_ids
+
+    @property
+    def group_construction_role(self) -> str:
+        if self.construction_role == "successor_constructor":
+            return "successor_constructor"
+        return "successor_projection_adapter"
+
+    @property
+    def group_delivery_role(self) -> str:
+        return "successor_delivery_protocol"
+
+    @property
+    def group_membership_source(self) -> str:
+        return "cross_sample_peak_group_hypothesis"
 
 
 @dataclass(frozen=True)
