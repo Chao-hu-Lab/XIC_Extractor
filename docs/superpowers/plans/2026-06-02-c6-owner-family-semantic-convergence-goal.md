@@ -1,5 +1,8 @@
 # C6 Owner-Family Semantic Convergence Goal
 
+**Status:** Complete through C6-A1/A2/A3/B/M successor-constructor foundation.
+**Closeout:** [C4 / C6 / Region foundation closeout](../notes/2026-06-02-c4-c6-region-foundation-closeout.md)
+
 ```text
 /goal
 GOAL:
@@ -31,6 +34,7 @@ CONTEXT:
 - Primary spec:
   `docs/superpowers/specs/2026-06-02-c6-cross-sample-peak-group-hypothesis-shadow-contract-design.md`.
 - Parent/background specs:
+  `docs/superpowers/specs/2026-06-02-mature-package-flow-reference-spec.md`,
   `docs/superpowers/specs/2026-06-01-c6-alignment-stage-semantics-value-assessment-design.md`,
   `docs/superpowers/specs/2026-05-11-untargeted-alignment-output-contract.md`,
   `docs/superpowers/specs/2026-06-02-repo-semantic-overlap-inventory-spec.md`,
@@ -48,6 +52,12 @@ CONTEXT:
   `family` / `FAM######` is output compatibility language. The product semantic
   center moves toward a cross-sample peak group hypothesis supported,
   challenged, split, or demoted by evidence.
+- Product-flow correction:
+  mature LC-MS workflows treat cross-sample correspondence/consensus features
+  and gap filling as product stages. C6 convergence is not end-to-end complete
+  until downstream backfill, matrix, claim registry, primary consolidation,
+  writers, and process payloads either consume the successor group contract
+  directly or consume an explicit structural delivery adapter with parity.
 
 CONSTRAINTS:
 - Keep scope to C6 owner-family semantic convergence. Do not reopen event-first
@@ -227,6 +237,10 @@ C6-M execution closeout:
   successor groups or explicit delivery adapters directly, with parity proven
   for `alignment_matrix.tsv`, `alignment_cells.tsv`,
   `alignment_review.tsv`, and `owner_edge_evidence.tsv` when emitted.
+- Mature-flow follow-up: name the next downstream delivery slice that turns
+  backfill into an explicit missing-observation / gap-filling product stage
+  with accepted, review, and rejected rescue states preserved through matrix and
+  audit outputs.
 
 Phase 5 - Closeout And Phase Commit
 Purpose:
@@ -255,6 +269,9 @@ DONE WHEN:
 - `claim_registry.py` and `primary_consolidation.py` remain active arbitration
   stages unless separately approved.
 - Any legacy deletion is deferred to a later parity-backed cleanup goal.
+- The closeout does not claim end-to-end C6 product convergence while
+  downstream consumers still require the concrete `OwnerAlignedFeature` shape;
+  it names the next downstream structural-adapter or successor-consumer slice.
 
 VERIFY:
 Run focused tests by phase. The final C6-B shard is:

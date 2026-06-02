@@ -1,5 +1,8 @@
 # Region-Boundary RB0/RB1 Semantic Convergence Goal
 
+**Status:** Complete for RB0/RB1 semantic-convergence foundation.
+**Closeout:** [C4 / C6 / Region foundation closeout](../notes/2026-06-02-c4-c6-region-foundation-closeout.md)
+
 ```text
 /goal
 GOAL:
@@ -23,6 +26,7 @@ CONTEXT:
   `docs/agent-parameter-settings.md`.
 - Primary specs and notes:
   `docs/superpowers/specs/2026-06-02-region-boundary-decision-owner-design.md`,
+  `docs/superpowers/specs/2026-06-02-mature-package-flow-reference-spec.md`,
   `docs/superpowers/notes/2026-06-02-region-boundary-decision-deep-research-note.md`,
   `docs/superpowers/specs/2026-06-02-repo-semantic-overlap-inventory-spec.md`,
   `docs/superpowers/specs/2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md`.
@@ -53,6 +57,11 @@ CONTEXT:
   behavior under a narrow safe adjacent-WIS merge gate. Boundary hypotheses,
   WIS, CWT proposal evidence, and `RegionSelectionDecision` are mostly
   audit/shadow explanation today.
+- Product-flow correction:
+  mature LC-MS workflows treat boundary/integration/gap-filling decisions as
+  product stages once their gates are accepted. RB0/RB1 are therefore foundation
+  phases only; closeout must name the RB2/RB3 product gate or externalization
+  decision they unlock.
 
 CONSTRAINTS:
 - Keep scope to RB0/RB1 only.
@@ -164,6 +173,9 @@ Purpose:
 Done when:
 - Region-boundary spec records the executed RB0/RB1 closeout and any remaining
   RB2/RB3/RB4 follow-up.
+- The closeout states the mature-flow verdict: RB0/RB1 did not finish region
+  productization; they either unlock a named product-gate spec, externalize the
+  shadow path, or name the missing oracle.
 - No unrelated files are staged for this goal.
 - Focused tests and docs smoke checks have fresh results.
 
@@ -184,6 +196,9 @@ DONE WHEN:
   modes, defaults, and public import return shape must remain unchanged.
 - RB2/RB3/RB4 are listed as follow-up only, with no hidden behavior promotion in
   this goal.
+- RB2/RB3/RB4 follow-up has an exit rule for every shadow verdict class:
+  promote, keep review-only, externalize, retire, or inconclusive with one
+  missing oracle.
 
 VERIFY:
 Run focused tests, split into smaller shards if needed:

@@ -5,6 +5,8 @@
 **Readiness label:** `production_candidate`
 **Parent spec:** [C6 alignment stage semantics and value assessment](2026-06-01-c6-alignment-stage-semantics-value-assessment-design.md)
 **Related contract:** `xic_extractor/alignment/owner_family_successor_contract.py`
+**Product-flow reference:** [Mature package flow reference](2026-06-02-mature-package-flow-reference-spec.md)
+**Closeout note:** [C4 / C6 / Region foundation closeout](../notes/2026-06-02-c4-c6-region-foundation-closeout.md)
 
 ## Verdict
 
@@ -30,6 +32,15 @@ downstream owner-backfill, matrix, claim, primary-consolidation, writer, and
 process-payload consumers, but `owner_clustering.py` is now a compatibility
 adapter candidate rather than the semantic construction owner.
 
+The mature-package flow reference tightens the C6 endpoint: C6 is not complete
+merely because construction can build successor hypotheses internally. The
+end-to-end product flow is complete only when downstream grouping,
+missing-observation query/backfill, matrix, claim registry, consolidation,
+writer, and process-payload consumers either consume the successor group
+contract directly or consume an explicit structural delivery adapter with
+parity. Until then, `OwnerAlignedFeature` is active delivery compatibility, not
+semantic ownership.
+
 ## Product Semantics
 
 ### Terms
@@ -42,7 +53,7 @@ adapter candidate rather than the semantic construction owner.
 | `public_family_id` | Existing `FAM######` row identity used by TSV/XLSX/output contracts. Compatibility ID only. |
 | `OwnerAlignedFeature` | Current active public DTO returned by `cluster_sample_local_owners(...)` and consumed by backfill, matrix, claim, primary consolidation, and writers. It is compatibility delivery language after C6-M, not the semantic construction owner. |
 | `family` | Legacy/output term. Do not use it as the semantic authority for new C6 work. |
-| `backfill` | Current missing-observation query and matrix materialization operation. It is not the C6-A1 focus; later work may rename or absorb it as a missing-observation query adapter. |
+| `backfill` | Current missing-observation query and matrix materialization operation. It is not the C6-A1 focus; later work may rename or absorb it as a stateful gap-filling adapter with accepted/review/rejected rescue semantics. |
 
 ### Ontology Boundary
 

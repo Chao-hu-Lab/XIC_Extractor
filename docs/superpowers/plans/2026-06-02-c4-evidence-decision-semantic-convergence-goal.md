@@ -1,5 +1,8 @@
 # C4 Evidence-Decision Semantic Convergence Goal
 
+**Status:** Complete for C4-A/B/C semantic-convergence foundation.
+**Closeout:** [C4 / C6 / Region foundation closeout](../notes/2026-06-02-c4-c6-region-foundation-closeout.md)
+
 ```text
 /goal
 GOAL:
@@ -23,6 +26,7 @@ CONTEXT:
 - Primary spec:
   `docs/superpowers/specs/2026-06-01-c4-peak-scoring-evidence-decision-design.md`.
 - Related inputs:
+  `docs/superpowers/specs/2026-06-02-mature-package-flow-reference-spec.md`,
   `docs/superpowers/specs/2026-05-24-peak-pipeline-cleanup-hypothesis-model-unification-spec.md`,
   `docs/superpowers/specs/2026-06-02-region-boundary-decision-owner-design.md`,
   `docs/superpowers/specs/2026-06-02-repo-semantic-overlap-inventory-spec.md`,
@@ -54,6 +58,11 @@ CONTEXT:
   severity, and candidate-selection tie-breaks are active product policy today.
   `EvidenceVector` and `CommonEvidence` already project many scorer facts but do
   not yet own candidate selection or decision policy.
+- Product-flow correction:
+  mature LC-MS workflows treat evidence, curation, and matrix routing as product
+  stages when their states are explicit. C4 convergence must therefore end with
+  a named model-selection or decision-semantics successor path, not permanent
+  score projection plus indefinite legacy policy.
 
 CONSTRAINTS:
 - Keep scope to C4 semantic convergence. Do not execute C6 or region-boundary
@@ -207,6 +216,9 @@ Purpose:
 Done when:
 - C4 spec records completed dispositions, tests moved/kept, and remaining
   active-policy surfaces.
+- C4 closeout names the next product decision it unlocks:
+  C4-D selected-hypothesis model selection, public compatibility projection
+  migration, or explicit externalization/retirement of a scorer surface.
 - No unrelated files are staged for this goal.
 - Focused tests and docs smoke checks have fresh results.
 
@@ -228,6 +240,9 @@ DONE WHEN:
   named equivalent. Projection consumers that expose scorer fields in TSV, CSV,
   XLSX, workbook sheets, or diagnostic reports have exact schema/value parity
   when touched.
+- The final closeout does not treat raw-score, confidence-cap, or reason-text
+  parity as the future product oracle. It records those as compatibility
+  projections unless an approved behavior spec says otherwise.
 
 VERIFY:
 Run focused tests, split if needed:

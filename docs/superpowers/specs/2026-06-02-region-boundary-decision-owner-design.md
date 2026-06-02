@@ -8,6 +8,8 @@
 **Related region specs:** [Boundary hypothesis enumeration v1](2026-05-16-boundary-hypothesis-enumeration-v1-spec.md), [Region-first model-selection shadow report v1](2026-05-18-region-first-model-selection-shadow-report-v1-spec.md), [Region-first safe merge promotion v1](2026-05-18-region-first-safe-merge-promotion-v1-spec.md)
 **Related evidence specs:** [CWT evidence honesty](2026-05-24-peak-pipeline-cwt-evidence-honesty-spec.md), [C3 hypothesis model unification](2026-05-24-peak-pipeline-cleanup-hypothesis-model-unification-spec.md), [C4 peak scoring evidence-decision design](2026-06-01-c4-peak-scoring-evidence-decision-design.md)
 **External research input:** [Region-boundary decision deep research note](../notes/2026-06-02-region-boundary-decision-deep-research-note.md)
+**Product-flow reference:** [Mature package flow reference](2026-06-02-mature-package-flow-reference-spec.md)
+**Closeout note:** [C4 / C6 / Region foundation closeout](../notes/2026-06-02-c4-c6-region-foundation-closeout.md)
 
 ## Verdict
 
@@ -41,6 +43,13 @@ make one region-boundary decision contract that:
 
 This design authorizes no selected-peak, area, score, confidence, reason,
 schema, GUI, config, workbook, TSV, or alignment matrix behavior change.
+
+The mature-package flow reference adds one product-direction correction:
+RB0/RB1 are a foundation, not the endpoint. A permanent shadow region decision
+path is not acceptable unless it is explicitly externalized as a maintained
+diagnostic. Future RB2/RB3 work must decide, for each shadow verdict class,
+whether it can promote selected boundaries, remain review-only, retire, or
+externalize with a named oracle.
 
 ## Why This Spec Exists
 

@@ -5,6 +5,7 @@
 **Readiness label:** `diagnostic_only`
 **Current-state input:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
 **Related roadmaps:** [Technical debt and dead-code cleanup roadmap v2](2026-06-01-technical-debt-and-dead-code-cleanup-roadmap-v2-spec.md), [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
+**2026-06-02 foundation closeout:** [C4 / C6 / Region foundation closeout](../notes/2026-06-02-c4-c6-region-foundation-closeout.md)
 
 ## Verdict
 
@@ -32,11 +33,12 @@ Future goal execution reads sources in this order:
 2. `docs/agent-parameter-settings.md`
 3. `docs/agent-subagent-routing.md`
 4. this one-goal phase contract
-5. [current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
-6. [technical-debt roadmap v2](2026-06-01-technical-debt-and-dead-code-cleanup-roadmap-v2-spec.md)
-7. current C4/C6 design updates when the phase reaches those surfaces, if they
+5. [mature package flow reference](2026-06-02-mature-package-flow-reference-spec.md)
+6. [current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
+7. [technical-debt roadmap v2](2026-06-01-technical-debt-and-dead-code-cleanup-roadmap-v2-spec.md)
+8. current C4/C6 design updates when the phase reaches those surfaces, if they
    have landed in the branch
-8. older C2/C3/C4/C6 specs as historical rationale, file lists, and parity
+9. older C2/C3/C4/C6 specs as historical rationale, file lists, and parity
    constraints only
 
 If the old C-spec wording conflicts with this contract, this contract wins for

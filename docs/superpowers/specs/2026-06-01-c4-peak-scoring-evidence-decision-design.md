@@ -6,6 +6,8 @@
 **Supersedes for implementation:** [C4 peak_scoring split spec](2026-05-24-peak-pipeline-cleanup-peak-scoring-split-spec.md)
 **Depends on:** [C3 hypothesis model unification spec](2026-05-24-peak-pipeline-cleanup-hypothesis-model-unification-spec.md)
 **One-goal contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
+**Product-flow reference:** [Mature package flow reference](2026-06-02-mature-package-flow-reference-spec.md)
+**Closeout note:** [C4 / C6 / Region foundation closeout](../notes/2026-06-02-c4-c6-region-foundation-closeout.md)
 
 ## Verdict
 
@@ -41,6 +43,14 @@ The 2026-06-02 design update narrows the long-term successor target:
 - any change to current selected peak, score, confidence, cap labels, reason
   text, schema, or workbook values remains a behavior change and is out of
   scope for cleanup-only C4 slices.
+
+The mature-package flow reference adds one product-direction correction:
+C4 must not stop permanently at projection parity. Projection parity is a
+migration guard. The product endpoint is a decision/model-selection layer over
+selected `PeakHypothesis` objects with typed evidence, conflict/review/
+not-counted/exclusion reasons, and compatibility projection for legacy
+`raw_score`, `confidence`, cap labels, and reason text while those remain
+public.
 
 ## Fusion-First Decision
 
