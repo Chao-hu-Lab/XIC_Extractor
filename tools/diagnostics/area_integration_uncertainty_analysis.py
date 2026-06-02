@@ -61,7 +61,9 @@ def _build_row(
         targeted_baseline_area=None if targeted is None else targeted.baseline_area,
         untargeted_baseline_area=None if alignment is None else alignment.baseline_area,
         baseline_area_ratio=baseline_ratio,
-        baseline_area_method="" if alignment is None else alignment.baseline_area_method,
+        baseline_area_method=(
+            "" if alignment is None else alignment.baseline_area_method
+        ),
         targeted_uncertainty_fraction=(
             None if targeted is None else targeted.uncertainty_fraction
         ),

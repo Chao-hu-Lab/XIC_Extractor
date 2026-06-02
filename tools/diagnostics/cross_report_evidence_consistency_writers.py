@@ -5,7 +5,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
-from tools.diagnostics.diagnostic_io import write_tsv as _write_diagnostic_tsv
 from tools.diagnostics.cross_report_evidence_consistency_models import (
     _ROW_COLUMNS,
     _SUMMARY_COLUMNS,
@@ -13,6 +12,7 @@ from tools.diagnostics.cross_report_evidence_consistency_models import (
     ConsistencyRow,
     CrossReportConsistencyOutputs,
 )
+from tools.diagnostics.diagnostic_io import write_tsv as _write_diagnostic_tsv
 
 
 def _write_outputs(

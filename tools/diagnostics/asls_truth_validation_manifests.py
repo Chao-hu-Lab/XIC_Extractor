@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from tools.diagnostics.asls_truth_validation_models import load_json_object
 from tools.diagnostics.asls_truth_validation_models import (
     DECISION_SCOPE_C1B,
     DECISION_SCOPE_REPORTING,
@@ -23,8 +22,8 @@ from tools.diagnostics.asls_truth_validation_models import (
     TIER_B1_ADJACENT_STRESS,
     TIER_B1_RELEVANCE,
     TIER_B2_STRESS,
+    load_json_object,
 )
-
 
 REQUIRED_FIXTURE_CLASSES = (
     "flat_peak_control",
@@ -368,7 +367,9 @@ def load_fixture_manifest(path: Path) -> FixtureManifest:
         )
         split_policy = _require_text(row, "split_policy", path)
         if split_policy != expected_split_policy:
-            raise ValueError(f"{path}: {class_name} split_policy must state 25 heldout rows")
+            raise ValueError(
+                f"{path}: {class_name} split_policy must state 25 heldout rows"
+            )
         parameter_grid = _require_mapping(row, "parameter_grid", path)
         for key in _REQUIRED_PARAMETER_GRID_KEYS:
             if key not in parameter_grid:
@@ -413,7 +414,9 @@ def load_fixture_manifest(path: Path) -> FixtureManifest:
     fixture_lock_hash = _require_text(data, "fixture_lock_hash", path)
     lock_path = _resolve_manifest_ref(path, fixture_lock_path)
     if not lock_path.exists():
-        raise ValueError(f"{path}: fixture_lock_path does not exist: {fixture_lock_path}")
+        raise ValueError(
+            f"{path}: fixture_lock_path does not exist: {fixture_lock_path}"
+        )
     lock = load_fixture_lock(lock_path)
     if lock.whole_lock_hash != fixture_lock_hash:
         raise ValueError(f"{path}: fixture_lock_hash does not match fixture lock")
@@ -425,7 +428,9 @@ def load_fixture_manifest(path: Path) -> FixtureManifest:
     return FixtureManifest(
         fixture_version=fixture_version,
         tolerance_profile=tolerance_profile,
-        asls_lam=_require_float(_require_mapping(data, "asls_params", path), "lam", path),
+        asls_lam=_require_float(
+            _require_mapping(data, "asls_params", path), "lam", path
+        ),
         asls_p=_require_float(_require_mapping(data, "asls_params", path), "p", path),
         asls_n_iter=_require_positive_int(
             _require_mapping(data, "asls_params", path), "n_iter", path
@@ -604,14 +609,21 @@ def _parse_fixture_lock_record(
     gate_layer = _optional_record_gate_layer(fixture_class, row, legacy, path)
     production_status = _optional_production_bounds_status(row, legacy, path)
     decision_scope = _optional_decision_scope(fixture_class, row, legacy, path)
-    truth_target_type = _optional_record_truth_target_type(fixture_class, row, legacy, path)
+    truth_target_type = _optional_record_truth_target_type(
+        fixture_class, row, legacy, path
+    )
     integration_point_count = int(
         row.get("integration_point_count", max(0, right - left + 1))
     )
     integration_width_min = float(
         row.get(
             "integration_width_min",
-            max(0, right - left) * float(_require_mapping(row, "parameters", path).get("scan_spacing_min", 0.0)),
+            max(0, right - left)
+            * float(
+                _require_mapping(row, "parameters", path).get(
+                    "scan_spacing_min", 0.0
+                )
+            ),
         )
     )
     return FixtureLockRecord(
@@ -664,7 +676,9 @@ def _optional_class_gate_layer(
         else _require_text(row, "default_gate_layer", path)
     )
     if value not in _VALID_GATE_LAYERS:
-        raise ValueError(f"{path}: {class_name} unsupported default_gate_layer {value!r}")
+        raise ValueError(
+            f"{path}: {class_name} unsupported default_gate_layer {value!r}"
+        )
     return value
 
 
@@ -680,7 +694,9 @@ def _optional_truth_target_type(
         else _require_text(row, "truth_target_type", path)
     )
     if value not in _VALID_TRUTH_TARGET_TYPES:
-        raise ValueError(f"{path}: {class_name} unsupported truth_target_type {value!r}")
+        raise ValueError(
+            f"{path}: {class_name} unsupported truth_target_type {value!r}"
+        )
     return value
 
 
@@ -690,7 +706,11 @@ def _optional_stress_role(
     legacy: bool,
     path: Path,
 ) -> str:
-    value = _default_stress_role(class_name) if legacy else _require_text(row, "stress_role", path)
+    value = (
+        _default_stress_role(class_name)
+        if legacy
+        else _require_text(row, "stress_role", path)
+    )
     return value
 
 
@@ -701,13 +721,15 @@ def _optional_allowed_targets(
     path: Path,
 ) -> tuple[str, ...]:
     if legacy:
-        return ("c1b-plan",) if _default_gate_layer(class_name) == TIER_B1_RELEVANCE else (
-            "linear-edge-retirement",
-        )
+        if _default_gate_layer(class_name) == TIER_B1_RELEVANCE:
+            return ("c1b-plan",)
+        return ("linear-edge-retirement",)
     values = _require_sequence(row, "allowed_decision_targets", path)
     targets = tuple(str(value) for value in values)
     if not targets:
-        raise ValueError(f"{path}: {class_name} allowed_decision_targets must not be empty")
+        raise ValueError(
+            f"{path}: {class_name} allowed_decision_targets must not be empty"
+        )
     return targets
 
 
@@ -717,7 +739,11 @@ def _optional_record_gate_layer(
     legacy: bool,
     path: Path,
 ) -> str:
-    value = _default_gate_layer(class_name) if legacy else _require_text(row, "gate_layer", path)
+    value = (
+        _default_gate_layer(class_name)
+        if legacy
+        else _require_text(row, "gate_layer", path)
+    )
     if value not in _VALID_GATE_LAYERS:
         raise ValueError(f"{path}: unsupported gate_layer {value!r}")
     return value
@@ -773,7 +799,9 @@ def _optional_record_truth_target_type(
 
 
 def _default_gate_layer(class_name: str) -> str:
-    return TIER_B1_RELEVANCE if class_name in B1_RELEVANCE_FIXTURE_CLASSES else TIER_B2_STRESS
+    if class_name in B1_RELEVANCE_FIXTURE_CLASSES:
+        return TIER_B1_RELEVANCE
+    return TIER_B2_STRESS
 
 
 def _default_truth_target_type(class_name: str) -> str:
@@ -843,7 +871,9 @@ def _require_split(data: Mapping[str, Any], path: Path) -> str:
     return value
 
 
-def _require_mapping(data: Mapping[str, Any], key: str, path: Path) -> Mapping[str, Any]:
+def _require_mapping(
+    data: Mapping[str, Any], key: str, path: Path
+) -> Mapping[str, Any]:
     value = data.get(key)
     if not isinstance(value, Mapping):
         raise ValueError(f"{path}: {key} must be an object")
