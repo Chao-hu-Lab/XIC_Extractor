@@ -1,12 +1,13 @@
 # C6 - Alignment Stage Semantics And Value Assessment Design
 
 **Date:** 2026-06-01
-**Status:** Phase 5 design closeout v1.2 — C6 owner-family parity mapping
+**Status:** Phase 5 interim implementation snapshot v1.4 — C6-A1 owner-family membership shadow
 **Readiness label:** `diagnostic_only`
 **Supersedes for implementation:** [C6 alignment grouping consolidation](2026-05-24-peak-pipeline-cleanup-alignment-grouping-consolidation-spec.md)
 **Execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
 **Current-state input:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
 **Output contract input:** [Untargeted alignment output contract](2026-05-11-untargeted-alignment-output-contract.md)
+**Follow-up successor design:** [C6 cross-sample peak group hypothesis shadow contract](2026-06-02-c6-cross-sample-peak-group-hypothesis-shadow-contract-design.md)
 
 ## Verdict
 
@@ -568,6 +569,55 @@ candidate rather than a permanent parallel system.
 | Hard family split gates | owner-clustering neutral-loss, product-m/z, observed-loss, impossible-m/z, same-sample exclusion checks | owner-clustering conflict/split tests plus matrix/cells parity when construction changes | Successor must preserve split reasons and avoid tolerance-only flattening. |
 | Review-only owner records | `identity_conflict` features and `review_only_features_from_ambiguous_records(...)` | owner-clustering ambiguous/review-only tests; owner-matrix ambiguous cell tests | Successor must carry review-only family/cell semantics without contaminating production matrix rows. |
 | Backfill seed and matrix delivery contract | `OwnerAlignedFeature.family_center_*`, `backfill_seed_centers`, `confirm_local_owners_with_backfill` | owner-backfill, owner-matrix, pre-backfill consolidation tests; writer-visible owner-family test | Successor must prove `alignment_matrix.tsv`, `alignment_cells.tsv`, and `alignment_review.tsv` parity before `OwnerAlignedFeature` becomes adapter-only. |
+
+### C6 Owner-Family Successor Contract Snapshot
+
+Execution added behavior-neutral internal contract modules:
+`xic_extractor/alignment/cross_sample_peak_groups.py` and
+`xic_extractor/alignment/owner_family_successor_contract.py`.
+
+C6-A1 turns the first invariant group into a machine-checkable shadow
+projection while preserving the remaining blockers:
+
+| Invariant | Current C6 disposition | Why |
+| --- | --- | --- |
+| Stable cross-sample family ID and owner membership | `successor_owned` | C6-A1 adds `CrossSamplePeakGroupHypothesis` as an internal shadow projection that preserves public family ID, owner IDs, flattened event IDs including supporting events, and event member count. This is not production authority. |
+| Complete-link family construction and drift-prior edge evidence | `active_policy` | `cluster_sample_local_owners(...)` and `evaluate_owner_edge(...)` still create the pairwise complete-link policy that downstream outputs consume. |
+| Hard family split gates | `active_policy` | Same-sample, neutral-loss, precursor, product, and observed-loss splits are still construction-time policy, not downstream evidence projection. |
+| Review-only owner records | `active_policy` | `identity_conflict` and ambiguous-owner families still need review-only matrix/cell semantics without contaminating production rows. |
+| Backfill seed and matrix delivery contract | `successor_gap` | Successor spine does not yet prove owner-backfill seed behavior or detected/rescued/ambiguous/absent cell delivery parity. |
+
+C6-A1 interim disposition for `owner_clustering.py`:
+`keep_as_stage`.
+
+C6-B final disposition is still pending. The active execution goal must reach
+C6-B and name exactly one final disposition after A1/A2/A3 evidence has been
+evaluated.
+
+Exit rule:
+
+```text
+Promote only after successor family tests own the blocking invariants and
+alignment_matrix.tsv, alignment_cells.tsv, and alignment_review.tsv parity is
+proven. Until then, owner-family construction is an active owner-first stage,
+not a retirement candidate and not merely a compatibility adapter.
+```
+
+Focused tests:
+
+- `tests/test_alignment_owner_family_successor_contract.py::test_owner_family_successor_mapping_names_all_required_invariants`
+- `tests/test_alignment_owner_family_successor_contract.py::test_cross_sample_peak_group_hypothesis_projects_owner_membership`
+- `tests/test_alignment_owner_family_successor_contract.py::test_owner_family_successor_mapping_keeps_review_only_records_active`
+- `tests/test_alignment_owner_family_successor_contract.py::test_owner_clustering_disposition_keeps_stage_until_successor_parity`
+- `tests/test_alignment_owner_family_successor_contract.py::test_compact_owner_family_tsv_triad_keeps_full_schema_and_rows`
+
+No product wiring changed. The contract module is not called by
+`run_alignment(...)`, writers, claim registry, primary consolidation, or process
+payloads. It exists to prevent future cleanup work from treating owner-family
+construction as obsolete before successor and public-output parity exist. It is
+a migration guard, not a permanent semantic owner; once a successor cross-sample
+family object lands, this contract should be updated or reversed through the
+same public TSV parity gate.
 
 ## Phase Shape
 
