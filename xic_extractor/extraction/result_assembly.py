@@ -5,6 +5,10 @@ from typing import TYPE_CHECKING, Any
 from xic_extractor.config import Target
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.peak_detection.hypotheses import PeakHypothesis
+from xic_extractor.peak_detection.selection_decision import (
+    PeakHypothesisSelectionDecision,
+    selection_decision_from_hypothesis,
+)
 from xic_extractor.peak_scoring import candidate_quality_penalty
 from xic_extractor.signal_processing import PeakCandidate, PeakDetectionResult
 
@@ -21,9 +25,15 @@ def build_extraction_result(
     candidate: PeakCandidate | None,
     scoring_context_builder: Any | None,
     selected_hypothesis: PeakHypothesis | None = None,
+    selection_decision: PeakHypothesisSelectionDecision | None = None,
 ) -> ExtractionResult:
     from xic_extractor import extractor
 
+    resolved_selection_decision = _result_selection_decision(
+        peak_result,
+        selected_hypothesis,
+        selection_decision,
+    )
     quality_penalty = 0
     quality_flags: tuple[str, ...] = ()
     if candidate is not None:
@@ -39,8 +49,8 @@ def build_extraction_result(
         target_label=_result_target_label(target, selected_hypothesis),
         role=_result_role(target, selected_hypothesis),
         istd_pair=_result_istd_pair(target, selected_hypothesis),
-        confidence=_result_confidence(peak_result, selected_hypothesis),
-        reason=_result_reason(peak_result, selected_hypothesis),
+        confidence=_result_confidence(peak_result, resolved_selection_decision),
+        reason=_result_reason(peak_result, resolved_selection_decision),
         severities=peak_result.severities,
         prior_rt=getattr(scoring_context_builder, "rt_prior", None),
         prior_source=getattr(scoring_context_builder, "prior_source", ""),
@@ -48,6 +58,7 @@ def build_extraction_result(
         quality_flags=_result_quality_flags(quality_flags, selected_hypothesis),
         score_breakdown=peak_result.score_breakdown,
         selected_hypothesis=selected_hypothesis,
+        selection_decision=resolved_selection_decision,
     )
 
 
@@ -78,12 +89,27 @@ def _result_istd_pair(
     return target.istd_pair
 
 
-def _result_confidence(
+def _result_selection_decision(
     peak_result: PeakDetectionResult,
     selected_hypothesis: PeakHypothesis | None,
+    selection_decision: PeakHypothesisSelectionDecision | None,
+) -> PeakHypothesisSelectionDecision | None:
+    if selection_decision is not None:
+        return selection_decision
+    if selected_hypothesis is None:
+        return None
+    return selection_decision_from_hypothesis(
+        selected_hypothesis,
+        peak_result=peak_result,
+    )
+
+
+def _result_confidence(
+    peak_result: PeakDetectionResult,
+    selection_decision: PeakHypothesisSelectionDecision | None,
 ) -> str:
-    if selected_hypothesis is not None and selected_hypothesis.evidence.confidence:
-        return selected_hypothesis.evidence.confidence
+    if selection_decision is not None:
+        return selection_decision.projected_confidence
     if peak_result.peak is None:
         return ""
     return peak_result.confidence or "HIGH"
@@ -91,10 +117,10 @@ def _result_confidence(
 
 def _result_reason(
     peak_result: PeakDetectionResult,
-    selected_hypothesis: PeakHypothesis | None,
+    selection_decision: PeakHypothesisSelectionDecision | None,
 ) -> str:
-    if selected_hypothesis is not None and selected_hypothesis.evidence.reason:
-        return selected_hypothesis.evidence.reason
+    if selection_decision is not None:
+        return selection_decision.projected_reason
     return peak_result.reason or ""
 
 

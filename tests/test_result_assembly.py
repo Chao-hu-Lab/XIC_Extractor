@@ -3,6 +3,7 @@ import typing
 import pytest
 
 from xic_extractor.config import Target
+from xic_extractor.evidence_semantics import EvidenceDecisionSemantics
 from xic_extractor.extraction.handoff_spine_runtime import (
     build_production_peak_hypotheses,
     selected_peak_hypothesis,
@@ -21,6 +22,9 @@ from xic_extractor.peak_detection.models import (
     PeakCandidateScore,
     PeakDetectionResult,
     PeakResult,
+)
+from xic_extractor.peak_detection.selection_decision import (
+    PeakHypothesisSelectionDecision,
 )
 
 
@@ -81,6 +85,12 @@ def test_build_extraction_result_preserves_parity_with_selected_hypothesis() -> 
     assert with_hypothesis.quality_penalty == legacy.quality_penalty
     assert with_hypothesis.quality_flags == legacy.quality_flags
     assert with_hypothesis.score_breakdown == legacy.score_breakdown
+    assert with_hypothesis.selection_decision is not None
+    assert (
+        with_hypothesis.confidence
+        == with_hypothesis.selection_decision.projected_confidence
+    )
+    assert with_hypothesis.reason == with_hypothesis.selection_decision.projected_reason
 
 
 def test_build_extraction_result_keeps_high_fallback_without_scoring_confidence(
@@ -116,6 +126,8 @@ def test_build_extraction_result_keeps_high_fallback_without_scoring_confidence(
 
     assert selected is not None
     assert selected.evidence.confidence == ""
+    assert result.selection_decision is not None
+    assert result.selection_decision.projected_confidence == "HIGH"
     assert result.confidence == "HIGH"
     assert result.reason == ""
 
@@ -163,8 +175,54 @@ def test_build_extraction_result_preserves_final_confidence_when_score_is_stale(
 
     assert selected is not None
     assert selected.evidence.confidence == "VERY_LOW"
+    assert result.selection_decision is not None
+    assert result.selection_decision.projected_confidence == "VERY_LOW"
+    assert (
+        result.selection_decision.projected_reason
+        == "decision: review only, not counted; cap: VERY_LOW"
+    )
     assert result.confidence == "VERY_LOW"
     assert result.reason == "decision: review only, not counted; cap: VERY_LOW"
+
+
+def test_build_extraction_result_uses_selection_decision_projection() -> None:
+    peak_result = _peak_result_with_candidate()
+    selected = _selected_hypothesis_with_integration(
+        IntegrationResult(
+            rt_left_min=8.4,
+            rt_apex_min=8.5,
+            rt_right_min=8.6,
+            raw_apex_rt_min=8.5,
+            rt_width_min=0.2,
+            height_raw=1200.0,
+            height_smoothed=1100.0,
+            area_raw_counts_seconds=1234.5,
+        )
+    )
+    decision = PeakHypothesisSelectionDecision(
+        selected_candidate_id=selected.hypothesis_id,
+        trace_group_id=selected.trace_group_id,
+        decision_class="review",
+        projected_confidence="MEDIUM",
+        projected_reason="decision projection",
+        review_reasons=("explicit_decision_projection",),
+        legacy_projection_status="active_policy_remaining",
+    )
+
+    result = build_extraction_result(
+        peak_result=peak_result,
+        nl_result=None,
+        candidate_ms2_evidence=None,
+        target=_target(),
+        candidate=peak_result.candidates[0],
+        scoring_context_builder=None,
+        selected_hypothesis=selected,
+        selection_decision=decision,
+    )
+
+    assert result.selection_decision is decision
+    assert result.confidence == "MEDIUM"
+    assert result.reason == "decision projection"
 
 
 def test_extraction_result_reports_selected_integration_values() -> None:
@@ -204,6 +262,7 @@ def test_extraction_result_runtime_type_hints_are_resolvable() -> None:
     hints = typing.get_type_hints(ExtractionResult)
 
     assert hints["selected_hypothesis"] == PeakHypothesis | None
+    assert hints["selection_decision"] == PeakHypothesisSelectionDecision | None
 
 
 def test_extraction_result_projection_accessors_fall_back_to_legacy_peak() -> None:
@@ -298,7 +357,15 @@ def _selected_hypothesis_with_integration(
         analysis_mode="targeted",
         resolver_mode="local_minimum",
         integration=integration,
-        evidence=EvidenceVector(confidence="LOW", reason="selected spine"),
+        evidence=EvidenceVector(
+            confidence="LOW",
+            reason="selected spine",
+            decision_semantics=EvidenceDecisionSemantics(
+                decision_class="review",
+                review_reasons=("trace_morphology_review",),
+                compatibility_labels=("trace_quality_cap",),
+            ),
+        ),
         audit=AuditTrail(selected=True, selection_rank=1),
     )
 

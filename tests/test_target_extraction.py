@@ -12,6 +12,9 @@ from xic_extractor.peak_detection.models import (
     PeakDetectionResult,
     PeakResult,
 )
+from xic_extractor.peak_detection.selection_decision import (
+    PeakHypothesisSelectionDecision,
+)
 
 
 def test_safe_merge_selected_candidate_builds_missing_ms2_evidence() -> None:
@@ -138,8 +141,12 @@ def test_extract_one_target_passes_selected_hypothesis_to_result_assembly(
     )
 
     selected = captured["selected_hypothesis"]
+    decision = captured["selection_decision"]
     assert isinstance(selected, PeakHypothesis)
+    assert isinstance(decision, PeakHypothesisSelectionDecision)
     assert selected.audit.selected is True
+    assert decision.selected_candidate_id == selected.hypothesis_id
+    assert decision.legacy_projection_status == "active_policy_remaining"
     assert selected.target_label == "Analyte"
     assert isinstance(results["Analyte"], ExtractionResult)
 

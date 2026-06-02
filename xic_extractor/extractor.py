@@ -11,6 +11,9 @@ from xic_extractor.output.messages import (
     DiagnosticRecord,
 )
 from xic_extractor.peak_detection.hypotheses import IntegrationResult, PeakHypothesis
+from xic_extractor.peak_detection.selection_decision import (
+    PeakHypothesisSelectionDecision,
+)
 from xic_extractor.rt_prior_library import LibraryEntry
 
 open_raw = raw_reader.open_raw
@@ -50,6 +53,7 @@ class ExtractionResult:
     quality_flags: tuple[str, ...] = ()
     score_breakdown: tuple[tuple[str, str], ...] = ()
     selected_hypothesis: PeakHypothesis | None = None
+    selection_decision: PeakHypothesisSelectionDecision | None = None
 
     @property
     def peak(self) -> PeakResult | None:

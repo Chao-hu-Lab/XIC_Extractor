@@ -15,6 +15,10 @@ from xic_extractor.peak_detection.hypotheses import (
     build_peak_hypotheses,
 )
 from xic_extractor.peak_detection.models import PeakDetectionResult
+from xic_extractor.peak_detection.selection_decision import (
+    PeakHypothesisSelectionDecision,
+    selection_decision_from_hypothesis,
+)
 from xic_extractor.peak_detection.traces import TraceGroup
 from xic_extractor.signal_processing import PeakCandidate
 
@@ -23,6 +27,7 @@ from xic_extractor.signal_processing import PeakCandidate
 class HandoffPeakSelection:
     candidate_ms2_evidence: CandidateMS2Evidence | None
     selected_hypothesis: PeakHypothesis | None
+    selection_decision: PeakHypothesisSelectionDecision | None
     trace_group: TraceGroup | None
 
 
@@ -115,9 +120,18 @@ def selected_handoff_peak(
         intensity=intensity,
         trace_group=trace_group,
     )
+    selected_hypothesis = selected_peak_hypothesis(hypotheses)
     return HandoffPeakSelection(
         candidate_ms2_evidence=candidate_ms2_evidence,
-        selected_hypothesis=selected_peak_hypothesis(hypotheses),
+        selected_hypothesis=selected_hypothesis,
+        selection_decision=(
+            selection_decision_from_hypothesis(
+                selected_hypothesis,
+                peak_result=peak_result,
+            )
+            if selected_hypothesis is not None
+            else None
+        ),
         trace_group=trace_group,
     )
 

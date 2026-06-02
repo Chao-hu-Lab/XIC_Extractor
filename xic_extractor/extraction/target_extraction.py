@@ -312,6 +312,7 @@ def extract_one_target(
         candidate=candidate,
         scoring_context_builder=scoring_context_builder,
         selected_hypothesis=handoff_peak.selected_hypothesis,
+        selection_decision=handoff_peak.selection_decision,
     )
     results[target.label] = result
     diagnostics.extend(build_diagnostic_records(sample_name, target, result, config))
