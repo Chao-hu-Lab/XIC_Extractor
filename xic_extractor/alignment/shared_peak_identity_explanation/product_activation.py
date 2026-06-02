@@ -7,6 +7,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from xic_extractor.alignment.primary_matrix_area import (
+    ASLS_PRIMARY_MATRIX_AREA_SOURCE,
+    MISSING_ASLS_PRIMARY_AREA,
+)
+
 from .schema import (
     ACTIVATION_APPLICATION_SCHEMA_VERSION,
     ACTIVATION_APPLICATION_SUMMARY_COLUMNS,
@@ -146,7 +151,8 @@ def apply_activation_to_alignment_outputs(
                 )
                 matrix_by_family[family_id] = row
                 families_added.add(family_id)
-            value = _matrix_value_for_activation(cells_by_key.get(key))
+            source_cell = cells_by_key.get(key)
+            value = _matrix_value_for_activation(source_cell)
             previous = row.get(sample_id, "")
             if previous:
                 matrix_effects[key] = "unchanged"
@@ -155,6 +161,8 @@ def apply_activation_to_alignment_outputs(
                 row[sample_id] = value
                 matrix_effects[key] = "written"
                 family_notes.setdefault(family_id, []).append("cell_auto_activated")
+            elif _has_untrusted_primary_or_raw_area(source_cell):
+                matrix_effects[key] = MISSING_ASLS_PRIMARY_AREA
             else:
                 matrix_effects[key] = "no_cell_area_available"
 
@@ -858,7 +866,15 @@ def _canonical_row_identity_scope(
 def _matrix_value_for_activation(cell: Mapping[str, str] | None) -> str:
     if cell is None:
         return ""
-    return cell.get("area", "")
+    if cell.get("primary_matrix_area_source", "") != ASLS_PRIMARY_MATRIX_AREA_SOURCE:
+        return ""
+    return cell.get("primary_matrix_area", "")
+
+
+def _has_untrusted_primary_or_raw_area(cell: Mapping[str, str] | None) -> bool:
+    return cell is not None and bool(
+        cell.get("primary_matrix_area", "") or cell.get("area", "")
+    )
 
 
 def _new_matrix_row(

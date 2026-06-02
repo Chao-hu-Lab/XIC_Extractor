@@ -14,6 +14,7 @@ from xic_extractor.alignment.ownership_models import (
     IdentityEvent,
     SampleLocalMS1Owner,
 )
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 
 def test_owner_clustering_allows_plausible_rt_drift_with_complete_link() -> None:
@@ -397,8 +398,8 @@ def test_owner_family_construction_is_writer_visible(tmp_path: Path) -> None:
     assert matrix_rows["FAM000001"]["neutral_loss_tag"] == "NL116"
     assert matrix_rows["FAM000001"]["family_center_mz"] == "500"
     assert matrix_rows["FAM000001"]["family_center_rt"] == "8.5"
-    assert matrix_rows["FAM000001"]["sample-a"] == "1000"
-    assert matrix_rows["FAM000001"]["sample-b"] == "1000"
+    assert matrix_rows["FAM000001"]["sample-a"] == "900"
+    assert matrix_rows["FAM000001"]["sample-b"] == "900"
     assert matrix_rows["FAM000001"]["sample-c"] == ""
 
     assert len(cell_rows) == 3
@@ -484,6 +485,27 @@ def _owner(
         supporting_events=(),
         identity_conflict=identity_conflict,
         assignment_reason="owner_exact_apex_match",
+        selected_integration=_integration(raw_area=1000.0, asls_area=900.0),
+    )
+
+
+def _integration(
+    *,
+    raw_area: float,
+    asls_area: float,
+) -> IntegrationResult:
+    return IntegrationResult(
+        rt_left_min=8.45,
+        rt_apex_min=8.5,
+        rt_right_min=8.55,
+        raw_apex_rt_min=8.5,
+        rt_width_min=0.1,
+        height_raw=100.0,
+        height_smoothed=100.0,
+        area_raw_counts_seconds=raw_area,
+        area_baseline_corrected=asls_area,
+        baseline_type="asls",
+        boundary_sources=("test_owner",),
     )
 
 

@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from xic_extractor.alignment.models import AlignmentCluster
+from xic_extractor.alignment.primary_matrix_area import (
+    primary_matrix_area_from_integration,
+)
 from xic_extractor.peak_detection.integration_audit import CellIntegrationAuditSummary
 
 if TYPE_CHECKING:
@@ -68,16 +71,18 @@ class AlignedCell:
 
     @property
     def matrix_area(self) -> float | None:
-        integration = self.selected_integration
-        if integration is not None:
-            return integration.area_raw_counts_seconds
-        return self.area
+        return primary_matrix_area_from_integration(self.selected_integration).value
 
     @property
     def matrix_area_source(self) -> str:
-        if self.selected_integration is not None:
-            return "selected_integration"
-        return "legacy_area_fallback"
+        decision = primary_matrix_area_from_integration(self.selected_integration)
+        return decision.source or self.matrix_area_missing_reason
+
+    @property
+    def matrix_area_missing_reason(self) -> str:
+        if self.status not in {"detected", "rescued"}:
+            return ""
+        return primary_matrix_area_from_integration(self.selected_integration).reason
 
 
 @dataclass(frozen=True)

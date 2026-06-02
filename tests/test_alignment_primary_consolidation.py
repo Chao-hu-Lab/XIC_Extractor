@@ -12,6 +12,7 @@ from xic_extractor.alignment.primary_consolidation import (
     consolidate_primary_family_rows,
 )
 from xic_extractor.alignment.production_decisions import build_production_decisions
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 
 def test_consolidation_promotes_one_primary_row_from_duplicate_claim_family():
@@ -143,6 +144,7 @@ def test_consolidation_prefers_stronger_sample_peak_over_weak_detected_peak():
         source_candidate_id=strong.source_candidate_id,
         source_raw_file=strong.source_raw_file,
         reason=strong.reason,
+        selected_integration=_integration(raw_area=1000.0, asls_area=1000.0),
     )
     matrix = AlignmentMatrix(
         clusters=matrix.clusters,
@@ -458,6 +460,7 @@ def _cell(
         source_candidate_id=f"{sample_stem}#{cluster_id}",
         source_raw_file=Path(f"{sample_stem}.raw"),
         reason=status,
+        selected_integration=_integration(raw_area=area, asls_area=area),
     )
 
 
@@ -489,6 +492,23 @@ def _duplicate_cell(
             "duplicate MS1 peak claim; "
             f"winner={winner}; original_status={original}"
         ),
+        selected_integration=source.selected_integration,
+    )
+
+
+def _integration(*, raw_area: float, asls_area: float) -> IntegrationResult:
+    return IntegrationResult(
+        rt_left_min=8.45,
+        rt_apex_min=8.5,
+        rt_right_min=8.55,
+        raw_apex_rt_min=8.5,
+        rt_width_min=0.1,
+        height_raw=100.0,
+        height_smoothed=100.0,
+        area_raw_counts_seconds=raw_area,
+        area_baseline_corrected=asls_area,
+        baseline_type="asls",
+        boundary_sources=("test_primary_consolidation",),
     )
 
 

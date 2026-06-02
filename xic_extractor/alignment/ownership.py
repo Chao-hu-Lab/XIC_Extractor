@@ -10,6 +10,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.matrix_handoff import integration_from_peak_trace
 from xic_extractor.alignment.ownership_models import (
     AmbiguousOwnerRecord,
     IdentityEvent,
@@ -18,6 +19,7 @@ from xic_extractor.alignment.ownership_models import (
 )
 from xic_extractor.alignment.trace_context import alignment_trace_group
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 from xic_extractor.peak_detection.region_audit import (
     PeakRegionAuditSummary,
     build_peak_region_audit_summary,
@@ -46,6 +48,7 @@ class ResolvedPeak:
     area: float
     intensity: float
     region_audit: PeakRegionAuditSummary | None = None
+    selected_integration: IntegrationResult | None = None
 
 
 PeakResolver = Callable[
@@ -71,6 +74,7 @@ class _ResolvedCandidate:
     area: float
     height: float
     region_audit: PeakRegionAuditSummary | None = None
+    selected_integration: IntegrationResult | None = None
 
 
 @dataclass(frozen=True)
@@ -257,6 +261,7 @@ def _resolve_candidate(
             area=peak.area,
             height=peak.intensity,
             region_audit=peak.region_audit,
+            selected_integration=peak.selected_integration,
         ),
         unresolved=None,
     )
@@ -295,6 +300,7 @@ def _resolve_candidate_trace(
             area=peak.area,
             height=peak.intensity,
             region_audit=peak.region_audit,
+            selected_integration=peak.selected_integration,
         ),
         unresolved=None,
     )
@@ -440,6 +446,17 @@ def _default_peak_resolver(
         area=peak.area,
         intensity=peak.intensity,
         region_audit=region_audit,
+        selected_integration=integration_from_peak_trace(
+            peak,
+            rt_array,
+            intensity_array,
+            boundary_sources=("alignment_owner",),
+            baseline_integration_method=getattr(
+                peak_config,
+                "baseline_integration_method",
+                "asls",
+            ),
+        ),
     )
 
 
@@ -511,6 +528,7 @@ def _owners_for_sample(
                 identity_conflict=_identity_conflict(group),
                 assignment_reason="owner_exact_apex_match",
                 region_audit=primary.region_audit,
+                selected_integration=primary.selected_integration,
             ),
         )
         assignments.append(

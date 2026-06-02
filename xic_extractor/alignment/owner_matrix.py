@@ -87,15 +87,18 @@ def _detected_cell(feature: OwnerGroupDeliveryFeature, owner) -> AlignedCell:
         source_candidate_id=event.candidate_id,
         source_raw_file=None,
         reason="sample-local MS1 owner with original MS2 evidence",
-        selected_integration=integration_from_values(
-            area_raw_counts_seconds=owner.owner_area,
-            rt_apex_min=owner.owner_apex_rt,
-            raw_apex_rt_min=owner.owner_apex_rt,
-            height_raw=owner.owner_height,
-            height_smoothed=owner.owner_height,
-            rt_left_min=owner.owner_peak_start_rt,
-            rt_right_min=owner.owner_peak_end_rt,
-            boundary_sources=("alignment_owner",),
+        selected_integration=(
+            getattr(owner, "selected_integration", None)
+            or integration_from_values(
+                area_raw_counts_seconds=owner.owner_area,
+                rt_apex_min=owner.owner_apex_rt,
+                raw_apex_rt_min=owner.owner_apex_rt,
+                height_raw=owner.owner_height,
+                height_smoothed=owner.owner_height,
+                rt_left_min=owner.owner_peak_start_rt,
+                rt_right_min=owner.owner_peak_end_rt,
+                boundary_sources=("alignment_owner_scalar_legacy",),
+            )
         ),
     )
     return with_region_audit(cell, owner.region_audit)

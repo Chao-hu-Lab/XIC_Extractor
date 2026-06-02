@@ -68,6 +68,9 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
         "write_matrix_value",
         "blank_reason",
         "area",
+        "primary_matrix_area",
+        "primary_matrix_area_source",
+        "primary_matrix_area_reason",
         "apex_rt",
         "rt_delta_sec",
         "claim_state",
@@ -120,7 +123,7 @@ def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
     assert workbook["Review"]["P2"].value == 1
 
 
-def test_alignment_results_xlsx_projects_selected_integration_matrix_area(
+def test_alignment_results_xlsx_projects_asls_selected_integration_matrix_area(
     tmp_path: Path,
 ):
     matrix = AlignmentMatrix(
@@ -134,7 +137,10 @@ def test_alignment_results_xlsx_projects_selected_integration_matrix_area(
                 "FAM000001",
                 "detected",
                 100.0,
-                selected_integration=sample_integration(area=177.0),
+                selected_integration=sample_integration(
+                    raw_area=177.0,
+                    asls_area=144.0,
+                ),
             ),
             sample_cell("s2", "FAM000001", "detected", 120.0),
         ),
@@ -148,7 +154,7 @@ def test_alignment_results_xlsx_projects_selected_integration_matrix_area(
 
     workbook = load_workbook(path, data_only=True)
     assert workbook.sheetnames == ["Matrix", "Review", "Audit", "Metadata"]
-    assert workbook["Matrix"]["E2"].value == 177.0
+    assert workbook["Matrix"]["E2"].value == 144.0
     assert workbook["Matrix"]["F2"].value == 120.0
     assert workbook["Audit"]["K2"].value == 100.0
 
@@ -256,7 +262,7 @@ def test_alignment_results_xlsx_escapes_formula_like_external_strings(
     assert workbook["Review"]["B2"].value == "'-DNA_dR"
     assert workbook["Review"]["B2"].data_type != "f"
     assert workbook["Audit"]["B2"].value == "'+Sample_A"
-    assert workbook["Audit"]["AF2"].value == "'@audit reason"
+    assert workbook["Audit"]["AI2"].value == "'@audit reason"
     assert workbook["Audit"]["I2"].value is True
     assert workbook["Metadata"]["B2"].value == "'@metadata value"
     assert workbook["Metadata"]["B2"].data_type != "f"
@@ -321,6 +327,12 @@ def sample_cell(
     reason: str | None = None,
     selected_integration: IntegrationResult | None = None,
 ) -> AlignedCell:
+    if (
+        selected_integration is None
+        and status in {"detected", "rescued"}
+        and _positive_area(area)
+    ):
+        selected_integration = sample_integration(raw_area=area, asls_area=area)
     return AlignedCell(
         sample_stem=sample,
         cluster_id=cluster_id,
@@ -340,7 +352,12 @@ def sample_cell(
     )
 
 
-def sample_integration(*, area: float) -> IntegrationResult:
+def sample_integration(
+    *,
+    raw_area: float,
+    asls_area: float | None,
+    baseline_type: str = "asls",
+) -> IntegrationResult:
     return IntegrationResult(
         rt_left_min=12.55,
         rt_apex_min=12.593,
@@ -349,6 +366,12 @@ def sample_integration(*, area: float) -> IntegrationResult:
         rt_width_min=0.09,
         height_raw=1000.0,
         height_smoothed=1000.0,
-        area_raw_counts_seconds=area,
+        area_raw_counts_seconds=raw_area,
+        area_baseline_corrected=asls_area,
+        baseline_type=baseline_type,
         boundary_sources=("test",),
     )
+
+
+def _positive_area(value: float | None) -> bool:
+    return value is not None and value > 0

@@ -14,6 +14,7 @@ from xic_extractor.alignment.promotion_policy import (
     NEIGHBOR_INTERFERENCE_BLOCKED_REASON,
     RESCUE_ONLY_BLOCKED_REASON,
 )
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 _DEFAULT_SCAN_SUPPORT = object()
 
@@ -776,8 +777,15 @@ def _cell(
     scan_support_score: float | None | object = _DEFAULT_SCAN_SUPPORT,
     rt_delta_sec: float = 0.0,
     region_review_reason: str = "",
+    selected_integration: IntegrationResult | None = None,
 ) -> AlignedCell:
     has_area = area is not None
+    if (
+        selected_integration is None
+        and status in {"detected", "rescued"}
+        and _positive_area(area)
+    ):
+        selected_integration = _integration(raw_area=area, asls_area=area)
     actual_scan_support = (
         (0.8 if has_area else None)
         if scan_support_score is _DEFAULT_SCAN_SUPPORT
@@ -807,6 +815,27 @@ def _cell(
         source_raw_file=Path(f"{sample_stem}.raw") if status == "detected" else None,
         reason=status,
         region_review_reason=region_review_reason,
+        selected_integration=selected_integration,
+    )
+
+
+def _positive_area(value: float | None) -> bool:
+    return value is not None and value > 0
+
+
+def _integration(*, raw_area: float, asls_area: float) -> IntegrationResult:
+    return IntegrationResult(
+        rt_left_min=8.4,
+        rt_apex_min=8.49,
+        rt_right_min=8.6,
+        raw_apex_rt_min=8.49,
+        rt_width_min=0.2,
+        height_raw=100.0,
+        height_smoothed=100.0,
+        area_raw_counts_seconds=raw_area,
+        area_baseline_corrected=asls_area,
+        baseline_type="asls",
+        boundary_sources=("test_fixture",),
     )
 
 

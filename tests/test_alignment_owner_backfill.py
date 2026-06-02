@@ -36,7 +36,9 @@ def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
     assert cell.area is not None and cell.area > 0
     assert cell.selected_integration is not None
     assert cell.selected_integration.area_raw_counts_seconds == cell.area
-    assert cell.matrix_area == cell.area
+    assert cell.selected_integration.baseline_type == "asls"
+    assert cell.selected_integration.area_baseline_corrected is not None
+    assert cell.matrix_area == cell.selected_integration.area_baseline_corrected
     assert cell.reason == "owner-centered MS1 backfill"
     assert cell.trace_quality == "owner_backfill"
     assert cell.scan_support_score == 0.5
@@ -147,6 +149,9 @@ def test_owner_backfill_audit_mode_none_skips_all_heavy_audit(monkeypatch) -> No
     assert len(cells) == 1
     assert calls["region"] == 0
     assert cells[0].region_candidate_count is None
+    assert cells[0].selected_integration is not None
+    assert cells[0].selected_integration.baseline_type == "asls"
+    assert cells[0].matrix_area == cells[0].selected_integration.area_baseline_corrected
 
 
 def test_owner_backfill_region_audit_receives_untargeted_trace_group(

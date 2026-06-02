@@ -316,7 +316,7 @@ def test_write_alignment_matrix_tsv_blanks_missing_and_invalid_areas(tmp_path: P
     assert rows[0]["nan"] == ""
 
 
-def test_write_alignment_matrix_tsv_projects_selected_integration_area(
+def test_write_alignment_matrix_tsv_projects_asls_selected_integration_area(
     tmp_path: Path,
 ):
     from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
@@ -328,7 +328,7 @@ def test_write_alignment_matrix_tsv_projects_selected_integration_area(
                 "sample-a",
                 "detected",
                 area=10.0,
-                selected_integration=_integration(area=77.7),
+                selected_integration=_integration(raw_area=77.7, asls_area=55.5),
             ),
             _cell("sample-b", "detected", area=20.0),
         ),
@@ -345,7 +345,7 @@ def test_write_alignment_matrix_tsv_projects_selected_integration_area(
         "sample-a",
         "sample-b",
     ]
-    assert rows[0]["sample-a"] == "77.7"
+    assert rows[0]["sample-a"] == "55.5"
     assert rows[0]["sample-b"] == "20"
 
 
@@ -620,6 +620,9 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
         "sample_stem",
         "status",
         "area",
+        "primary_matrix_area",
+        "primary_matrix_area_source",
+        "primary_matrix_area_reason",
         "apex_rt",
         "height",
         "peak_start_rt",
@@ -647,6 +650,10 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
         "region_review_reason",
     ]
     assert cells[0]["status"] == "detected"
+    assert cells[0]["area"] == "10"
+    assert cells[0]["primary_matrix_area"] == "10"
+    assert cells[0]["primary_matrix_area_source"] == "asls_baseline_corrected"
+    assert cells[0]["primary_matrix_area_reason"] == ""
     assert cells[0]["source_candidate_id"] == "sample-a#1"
     assert cells[0]["region_candidate_count"] == "2"
     assert cells[0]["region_selected_proposal_sources"] == (
@@ -940,6 +947,12 @@ def _cell(
     backfill_seed: bool = False,
     selected_integration: IntegrationResult | None = None,
 ) -> AlignedCell:
+    if (
+        selected_integration is None
+        and status in {"detected", "rescued"}
+        and _positive_area(area)
+    ):
+        selected_integration = _integration(raw_area=area, asls_area=area)
     return AlignedCell(
         sample_stem=sample_stem,
         cluster_id=cluster_id,
@@ -1002,7 +1015,12 @@ def _cell(
     )
 
 
-def _integration(*, area: float) -> IntegrationResult:
+def _integration(
+    *,
+    raw_area: float,
+    asls_area: float | None,
+    baseline_type: str = "asls",
+) -> IntegrationResult:
     return IntegrationResult(
         rt_left_min=8.4,
         rt_apex_min=8.49,
@@ -1011,6 +1029,18 @@ def _integration(*, area: float) -> IntegrationResult:
         rt_width_min=0.2,
         height_raw=100.0,
         height_smoothed=100.0,
-        area_raw_counts_seconds=area,
+        area_raw_counts_seconds=raw_area,
+        area_baseline_corrected=asls_area,
+        baseline_type=baseline_type,
         boundary_sources=("test",),
+    )
+
+
+def _positive_area(value: float | None) -> bool:
+    return (
+        value is not None
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
     )

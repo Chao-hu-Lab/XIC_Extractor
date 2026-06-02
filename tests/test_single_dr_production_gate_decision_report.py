@@ -15,6 +15,7 @@ from xic_extractor.alignment.tsv_writer import (
     write_alignment_cells_tsv,
     write_alignment_review_tsv,
 )
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 
 def test_extreme_dr_backfill_row_becomes_supported_capped_warning(
@@ -740,4 +741,21 @@ def _aligned_cell(
         ),
         source_raw_file=Path(f"{sample_stem}.raw") if status == "detected" else None,
         reason=status,
+        selected_integration=_integration(raw_area=area, asls_area=area),
+    )
+
+
+def _integration(*, raw_area: float, asls_area: float) -> IntegrationResult:
+    return IntegrationResult(
+        rt_left_min=7.95,
+        rt_apex_min=8.0,
+        rt_right_min=8.05,
+        raw_apex_rt_min=8.0,
+        rt_width_min=0.1,
+        height_raw=100.0,
+        height_smoothed=100.0,
+        area_raw_counts_seconds=raw_area,
+        area_baseline_corrected=asls_area,
+        baseline_type="asls",
+        boundary_sources=("test_single_dr_gate",),
     )

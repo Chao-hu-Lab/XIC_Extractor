@@ -32,36 +32,36 @@ def test_detected_cell_requires_positive_finite_area() -> None:
     )
 
 
-def test_detected_cell_uses_selected_integration_area_when_present() -> None:
+def test_detected_cell_uses_asls_selected_integration_area_when_present() -> None:
     config = AlignmentConfig()
     cell = _cell(
         "s1",
         "FAM001",
         "detected",
         100.0,
-        selected_integration=_integration(area=250.0),
+        selected_integration=_integration(raw_area=250.0, asls_area=200.0),
     )
 
     decision = decide_cell_quality(cell, config)
 
     assert decision.quality_status == "detected_quantifiable"
-    assert decision.matrix_area == 250.0
+    assert decision.matrix_area == 200.0
 
 
-def test_selected_integration_area_is_authoritative_when_invalid() -> None:
+def test_selected_integration_missing_asls_does_not_fall_back_to_raw() -> None:
     config = AlignmentConfig()
     cell = _cell(
         "s1",
         "FAM001",
         "detected",
         100.0,
-        selected_integration=_integration(area=-1.0),
+        selected_integration=_integration(raw_area=250.0, asls_area=None),
     )
 
     decision = decide_cell_quality(cell, config)
 
     assert decision.quality_status == "invalid"
-    assert decision.quality_reason == "invalid_area"
+    assert decision.quality_reason == "missing_asls_primary_area"
 
 
 def test_rescue_requires_complete_peak_and_rt_inside_alignment_window() -> None:
@@ -116,6 +116,12 @@ def _cell(
     rt_delta_sec: float | None = 0.0,
     selected_integration: IntegrationResult | None = None,
 ) -> AlignedCell:
+    if (
+        selected_integration is None
+        and status in {"detected", "rescued"}
+        and _positive_area(area)
+    ):
+        selected_integration = _integration(raw_area=area, asls_area=area)
     return AlignedCell(
         sample_stem=sample_stem,
         cluster_id=cluster_id,
@@ -135,7 +141,12 @@ def _cell(
     )
 
 
-def _integration(*, area: float) -> IntegrationResult:
+def _integration(
+    *,
+    raw_area: float,
+    asls_area: float | None,
+    baseline_type: str = "asls",
+) -> IntegrationResult:
     return IntegrationResult(
         rt_left_min=8.45,
         rt_apex_min=8.5,
@@ -144,6 +155,18 @@ def _integration(*, area: float) -> IntegrationResult:
         rt_width_min=0.1,
         height_raw=100.0,
         height_smoothed=100.0,
-        area_raw_counts_seconds=area,
+        area_raw_counts_seconds=raw_area,
+        area_baseline_corrected=asls_area,
+        baseline_type=baseline_type,
         boundary_sources=("test",),
+    )
+
+
+def _positive_area(value: float | None) -> bool:
+    return (
+        value is not None
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
     )

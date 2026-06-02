@@ -41,7 +41,7 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
                 "FAM001",
                 "detected",
                 110.0,
-                selected_integration=_integration(area=125.0),
+                selected_integration=_integration(raw_area=125.0, asls_area=105.0),
             ),
             _cell("s1", "FAM_PROVISIONAL", "detected", 85.0),
             _cell("s2", "FAM_PROVISIONAL", "rescued", 75.0),
@@ -66,7 +66,7 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     assert [row["feature_family_id"] for row in tsv_rows] == ["FAM001"]
     assert tsv_rows[0]["s1"] == "100"
     assert tsv_rows[0]["s2"] == "90"
-    assert tsv_rows[0]["s3"] == "125"
+    assert tsv_rows[0]["s3"] == "105"
     assert FORBIDDEN_PRIMARY_STATUSES.isdisjoint(
         value for row in tsv_rows for value in row.values()
     )
@@ -76,7 +76,7 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     assert [row["feature_family_id"] for row in matrix_rows] == ["FAM001"]
     assert matrix_rows[0]["s1"] == 100.0
     assert matrix_rows[0]["s2"] == 90.0
-    assert matrix_rows[0]["s3"] == 125.0
+    assert matrix_rows[0]["s3"] == 105.0
     assert FORBIDDEN_PRIMARY_STATUSES.isdisjoint(
         str(value)
         for row in matrix_rows
@@ -90,6 +90,11 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
         (row["feature_family_id"], row["sample_stem"]): row for row in audit_rows
     }
     assert audit_by_sample[("FAM001", "s3")]["area"] == 110.0
+    assert audit_by_sample[("FAM001", "s3")]["primary_matrix_area"] == 105.0
+    assert (
+        audit_by_sample[("FAM001", "s3")]["primary_matrix_area_source"]
+        == "asls_baseline_corrected"
+    )
     review_decisions = {
         row["feature_family_id"]: row["identity_decision"] for row in review_rows
     }
@@ -156,6 +161,13 @@ def _cell(
     *,
     selected_integration: IntegrationResult | None = None,
 ) -> AlignedCell:
+    if (
+        selected_integration is None
+        and status in {"detected", "rescued"}
+        and area is not None
+        and area > 0
+    ):
+        selected_integration = _integration(raw_area=area, asls_area=area)
     return AlignedCell(
         sample_stem=sample_stem,
         cluster_id=cluster_id,
@@ -179,7 +191,12 @@ def _cell(
     )
 
 
-def _integration(*, area: float) -> IntegrationResult:
+def _integration(
+    *,
+    raw_area: float,
+    asls_area: float | None,
+    baseline_type: str = "asls",
+) -> IntegrationResult:
     return IntegrationResult(
         rt_left_min=8.4,
         rt_apex_min=8.49,
@@ -188,7 +205,9 @@ def _integration(*, area: float) -> IntegrationResult:
         rt_width_min=0.2,
         height_raw=100.0,
         height_smoothed=100.0,
-        area_raw_counts_seconds=area,
+        area_raw_counts_seconds=raw_area,
+        area_baseline_corrected=asls_area,
+        baseline_type=baseline_type,
         boundary_sources=("test",),
     )
 

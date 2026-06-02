@@ -123,6 +123,49 @@ def test_activation_application_requires_passing_acceptance(tmp_path: Path) -> N
         )
 
 
+def test_activation_application_does_not_write_raw_area_without_primary_matrix_area(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    raw_cell_rows = _read_tsv(fixture["cells"])
+    downgraded_rows = [
+        {
+            key: value
+            for key, value in row.items()
+            if key not in {"primary_matrix_area", "primary_matrix_area_source"}
+        }
+        for row in raw_cell_rows
+    ]
+    _write_tsv(
+        fixture["cells"],
+        ("feature_family_id", "sample_stem", "status", "area"),
+        downgraded_rows,
+    )
+
+    outputs = product_activation.apply_activation_to_alignment_outputs(
+        activation_decisions_tsv=fixture["decisions"],
+        activation_acceptance_tsv=fixture["acceptance"],
+        alignment_matrix_tsv=fixture["matrix"],
+        alignment_review_tsv=fixture["review"],
+        alignment_cells_tsv=fixture["cells"],
+        output_dir=tmp_path / "out",
+    )
+
+    matrix_rows = {
+        row["feature_family_id"]: row for row in _read_tsv(outputs.matrix_tsv)
+    }
+    assert "FAM_ADD" not in matrix_rows
+
+    delta_rows = {
+        (row["feature_family_id"], row["sample_id"]): row
+        for row in _read_tsv(outputs.value_delta_tsv)
+    }
+    written_delta = delta_rows[("FAM_ADD", "S2")]
+    assert written_delta["source_cell_area"] == "300"
+    assert written_delta["activated_matrix_value"] == ""
+    assert written_delta["matrix_value_effect"] == "missing_asls_primary_area"
+
+
 def test_activation_application_rejects_auto_activate_without_peak_hypothesis(
     tmp_path: Path,
 ) -> None:
@@ -625,43 +668,62 @@ def _write_fixture(tmp_path: Path, *, acceptance_status: str) -> dict[str, Path]
     )
     _write_tsv(
         cells,
-        ("feature_family_id", "sample_stem", "status", "area"),
+        (
+            "feature_family_id",
+            "sample_stem",
+            "status",
+            "area",
+            "primary_matrix_area",
+            "primary_matrix_area_source",
+        ),
         [
             {
                 "feature_family_id": "FAM_BLOCK",
                 "sample_stem": "S1",
                 "status": "detected",
                 "area": "100",
+                "primary_matrix_area": "100",
+                "primary_matrix_area_source": "asls_baseline_corrected",
             },
             {
                 "feature_family_id": "FAM_BLOCK",
                 "sample_stem": "S2",
                 "status": "rescued",
                 "area": "200",
+                "primary_matrix_area": "200",
+                "primary_matrix_area_source": "asls_baseline_corrected",
             },
             {
                 "feature_family_id": "FAM_ADD",
                 "sample_stem": "S2",
                 "status": "rescued",
                 "area": "300",
+                "primary_matrix_area": "300",
+                "primary_matrix_area_source": "asls_baseline_corrected",
             },
             {
                 "feature_family_id": "FAM_KEEP",
                 "sample_stem": "S2",
                 "status": "rescued",
                 "area": "999",
+                "primary_matrix_area": "999",
+                "primary_matrix_area_source": "asls_baseline_corrected",
             },
             {
                 "feature_family_id": "FAM_SPLIT",
                 "sample_stem": "S1",
                 "status": "detected",
                 "area": "111",
+                "primary_matrix_area": "111",
+                "primary_matrix_area_source": "asls_baseline_corrected",
             },
             {
                 "feature_family_id": "FAM_SPLIT",
                 "sample_stem": "S2",
                 "status": "detected",
                 "area": "222",
+                "primary_matrix_area": "222",
+                "primary_matrix_area_source": "asls_baseline_corrected",
             },
         ],
     )

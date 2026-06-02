@@ -52,7 +52,7 @@ def test_owner_matrix_writes_detected_rescued_ambiguous_and_absent_cells() -> No
     assert by_sample["sample-a"].area == 1000.0
     assert by_sample["sample-a"].selected_integration is not None
     assert by_sample["sample-a"].selected_integration.area_raw_counts_seconds == 1000.0
-    assert by_sample["sample-a"].matrix_area == 1000.0
+    assert by_sample["sample-a"].matrix_area == 900.0
     assert by_sample["sample-a"].source_candidate_id == "sample-a#a"
     assert by_sample["sample-b"] is rescued
     assert by_sample["sample-c"].status == "ambiguous_ms1_owner"
