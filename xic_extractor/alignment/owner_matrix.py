@@ -7,7 +7,10 @@ from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.matrix_handoff import integration_from_values
 from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
-from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
+from xic_extractor.alignment.owner_group_delivery import (
+    OwnerGroupDeliveryFeature,
+    OwnerGroupDeliveryFeatures,
+)
 from xic_extractor.alignment.ownership_models import AmbiguousOwnerRecord
 
 _BACKFILL_SUPERSEDES_LOCAL_AREA_RATIO = 3.0
@@ -16,7 +19,7 @@ _BACKFILL_FAMILY_SUPPORT_FRACTION = 0.5
 
 
 def build_owner_alignment_matrix(
-    features: tuple[OwnerAlignedFeature, ...],
+    features: OwnerGroupDeliveryFeatures,
     *,
     sample_order: tuple[str, ...],
     ambiguous_by_sample: Mapping[str, tuple[AmbiguousOwnerRecord, ...]],
@@ -67,7 +70,7 @@ def ambiguous_records_by_sample(
     return {sample: tuple(items) for sample, items in grouped.items()}
 
 
-def _detected_cell(feature: OwnerAlignedFeature, owner) -> AlignedCell:
+def _detected_cell(feature: OwnerGroupDeliveryFeature, owner) -> AlignedCell:
     event = owner.primary_identity_event
     cell = AlignedCell(
         sample_stem=owner.sample_stem,
@@ -99,7 +102,7 @@ def _detected_cell(feature: OwnerAlignedFeature, owner) -> AlignedCell:
 
 
 def _detected_or_confirmed_cell(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     detected: AlignedCell,
     rescued: AlignedCell | None,
 ) -> AlignedCell:
@@ -121,7 +124,7 @@ def _detected_or_confirmed_cell(
 
 
 def _rescued_supersedes_detected(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     detected: AlignedCell,
     rescued: AlignedCell,
 ) -> bool:
@@ -142,7 +145,7 @@ def _rescued_supersedes_detected(
 
 
 def _ambiguous_cell(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     sample_stem: str,
     records: tuple[AmbiguousOwnerRecord, ...],
 ) -> AlignedCell:
@@ -172,7 +175,7 @@ def _ambiguous_cell(
 
 
 def _feature_ambiguous_cell(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     sample_stem: str,
 ) -> AlignedCell:
     candidate_ids = ";".join(feature.ambiguous_candidate_ids)
@@ -198,7 +201,10 @@ def _feature_ambiguous_cell(
     )
 
 
-def _absent_cell(feature: OwnerAlignedFeature, sample_stem: str) -> AlignedCell:
+def _absent_cell(
+    feature: OwnerGroupDeliveryFeature,
+    sample_stem: str,
+) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,
         cluster_id=feature.feature_family_id,

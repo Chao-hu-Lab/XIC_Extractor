@@ -1,4 +1,5 @@
 from dataclasses import replace
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -42,6 +43,49 @@ def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
     assert cell.region_candidate_count is not None
     assert cell.region_shadow_status == "evaluated"
     assert cell.region_local_mixture_diagnostic
+    assert source.calls == [(500.0, 7.5, 9.5, 20.0)]
+
+
+def test_owner_backfill_accepts_delivery_contract_feature_without_legacy_dto() -> None:
+    source = FakeBackfillSource(
+        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
+        intensity=np.array([0.0, 50.0, 120.0, 50.0, 0.0]),
+    )
+    owner = SimpleNamespace(sample_stem="sample-a", owner_area=1000.0)
+    feature = SimpleNamespace(
+        feature_family_id="FAM_CONTRACT",
+        cluster_id="FAM_CONTRACT",
+        neutral_loss_tag="NL116",
+        family_center_mz=500.0,
+        family_center_rt=8.5,
+        family_product_mz=383.9526,
+        family_observed_neutral_loss_da=116.0474,
+        has_anchor=True,
+        owners=(owner,),
+        members=(owner,),
+        event_cluster_ids=("OWN-sample-a-000001",),
+        event_member_count=1,
+        evidence="test_delivery_contract",
+        identity_conflict=False,
+        review_only=False,
+        confirm_local_owners_with_backfill=False,
+        backfill_seed_centers=(),
+        ambiguous_sample_stem=None,
+        ambiguous_candidate_ids=(),
+    )
+
+    cells = build_owner_backfill_cells(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=replace(_peak_config(), resolver_min_scans=10),
+    )
+
+    assert not isinstance(feature, OwnerAlignedFeature)
+    assert len(cells) == 1
+    assert cells[0].cluster_id == "FAM_CONTRACT"
+    assert cells[0].sample_stem == "sample-b"
     assert source.calls == [(500.0, 7.5, 9.5, 20.0)]
 
 

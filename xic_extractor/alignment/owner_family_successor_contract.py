@@ -51,13 +51,16 @@ OWNER_CLUSTERING_C6B_REASON = (
     "C6 migration disposition is compatibility_adapter_candidate: successor "
     "cross-sample peak group construction owns complete-link family "
     "construction, hard split gates, review-only construction records, and "
-    "delivery metadata, while owner_clustering.py preserves the public "
-    "OwnerAlignedFeature facade for downstream matrix/backfill consumers."
+    "delivery metadata; owner_group_delivery.OwnerGroupDeliveryFeature now "
+    "defines the backfill/matrix/process delivery shape, while "
+    "owner_clustering.py preserves the public OwnerAlignedFeature facade and "
+    "concrete dataclass adapter."
 )
 OWNER_CLUSTERING_C6B_EXIT_RULE = (
     "Do not retire owner_clustering.py or replace OwnerAlignedFeature until "
-    "downstream backfill, matrix, claim, primary-consolidation, writer, and "
-    "process payload consumers accept the successor contract directly, with "
+    "pre-backfill consolidation, diagnostic probes, public adapter tests, and "
+    "any remaining concrete-dataclass consumers accept the successor contract "
+    "or an explicit delivery adapter directly, with "
     "public parity proven for alignment_matrix.tsv, alignment_cells.tsv, "
     "alignment_review.tsv, and owner_edge_evidence.tsv when emitted."
 )
@@ -189,7 +192,8 @@ def owner_family_successor_mapping(
             exit_rule=(
                 "The successor constructor owns complete-link membership "
                 "construction, but owner_clustering.py remains the public "
-                "OwnerAlignedFeature adapter until downstream consumers migrate."
+                "OwnerAlignedFeature adapter until concrete adapter consumers "
+                "migrate."
             ),
         ),
         OwnerFamilyInvariantMapping(
@@ -214,8 +218,8 @@ def owner_family_successor_mapping(
             exit_rule=(
                 "The successor constructor owns same-sample, neutral-loss, "
                 "precursor, product, and observed-loss split gates. "
-                "owner_clustering.py remains an adapter until downstream "
-                "delivery no longer requires OwnerAlignedFeature."
+                "owner_clustering.py remains an adapter until concrete "
+                "delivery consumers no longer require OwnerAlignedFeature."
             ),
         ),
         OwnerFamilyInvariantMapping(
@@ -259,8 +263,8 @@ def owner_family_successor_mapping(
             invariant="backfill_seed_and_matrix_delivery",
             current_owner=(
                 "CrossSamplePeakGroupHypothesis delivery metadata adapted to "
-                "OwnerAlignedFeature.family_center_* / backfill_seed_centers / "
-                "confirm_local_owners_with_backfill"
+                "OwnerGroupDeliveryFeature.family_center_* / "
+                "backfill_seed_centers / confirm_local_owners_with_backfill"
             ),
             current_state=(
                 f"seed_center_count={len(feature.backfill_seed_centers)};"
@@ -269,7 +273,7 @@ def owner_family_successor_mapping(
             ),
             successor_surface=(
                 "CrossSamplePeakGroupHypothesis delivery metadata plus "
-                "OwnerAlignedFeature compatibility adapter"
+                "OwnerGroupDeliveryFeature structural delivery contract"
             ),
             disposition="compatibility_adapter_candidate",
             public_oracle=(
@@ -277,10 +281,11 @@ def owner_family_successor_mapping(
                 "test_successor_constructor_matches_owner_adapter_delivery_fields"
             ),
             exit_rule=(
-                "Keep OwnerAlignedFeature as the compatibility delivery DTO "
-                "until owner-backfill, matrix, claim, primary-consolidation, "
-                "writer, and process payload consumers accept successor groups "
-                "directly with public parity."
+                "Owner-backfill, owner-matrix, and process payloads accept "
+                "OwnerGroupDeliveryFeature now. Keep OwnerAlignedFeature as the "
+                "public concrete adapter until pre-backfill consolidation, "
+                "diagnostic probes, and adapter tests can consume successor "
+                "groups or an explicit delivery adapter with public parity."
             ),
         ),
     )
@@ -293,7 +298,8 @@ def owner_clustering_disposition(
 
     This migration evaluator only promotes to adapter when no invariant remains
     an active owner-clustering policy or a successor gap. Retirement still
-    requires downstream consumers to stop depending on ``OwnerAlignedFeature``.
+    requires concrete adapter consumers to stop depending on
+    ``OwnerAlignedFeature``.
     """
 
     blocking = tuple(

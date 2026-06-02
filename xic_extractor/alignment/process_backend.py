@@ -30,7 +30,7 @@ from xic_extractor.alignment.owner_backfill import (
     OwnerBackfillWindowStrategy,
     build_owner_backfill_cells,
 )
-from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
+from xic_extractor.alignment.owner_group_delivery import OwnerGroupDeliveryFeatures
 from xic_extractor.alignment.ownership import (
     OwnershipBuildResult,
     build_sample_local_owners,
@@ -101,7 +101,7 @@ class OwnerBackfillSampleJob:
     sample_stem: str
     raw_path: Path
     dll_dir: Path
-    features: tuple[OwnerAlignedFeature, ...]
+    features: OwnerGroupDeliveryFeatures
     alignment_config: AlignmentConfig
     peak_config: ExtractionConfig
     raw_xic_batch_size: int = 1
@@ -408,7 +408,7 @@ def extract_owner_build_sample_job(
 
 
 def run_owner_backfill_process(
-    features: tuple[OwnerAlignedFeature, ...],
+    features: OwnerGroupDeliveryFeatures,
     *,
     sample_order: tuple[str, ...],
     raw_paths: Mapping[str, Path],

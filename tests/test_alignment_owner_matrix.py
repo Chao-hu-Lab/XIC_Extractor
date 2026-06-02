@@ -1,5 +1,6 @@
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 from tests.test_alignment_owner_backfill import _feature
 from tests.test_alignment_owner_clustering import _owner
@@ -61,6 +62,45 @@ def test_owner_matrix_writes_detected_rescued_ambiguous_and_absent_cells() -> No
     assert by_sample["sample-d"].source_raw_file is None
     assert matrix.clusters == (feature,)
     assert matrix.sample_order == ("sample-a", "sample-b", "sample-c", "sample-d")
+
+
+def test_owner_matrix_accepts_delivery_contract_feature_without_legacy_dto() -> None:
+    owner = _owner("sample-a", "a", apex_rt=8.5)
+    feature = SimpleNamespace(
+        feature_family_id="FAM_CONTRACT",
+        cluster_id="FAM_CONTRACT",
+        neutral_loss_tag="NL116",
+        family_center_mz=500.0,
+        family_center_rt=8.5,
+        family_product_mz=383.9526,
+        family_observed_neutral_loss_da=116.0474,
+        has_anchor=True,
+        owners=(owner,),
+        members=(owner,),
+        event_cluster_ids=(owner.owner_id,),
+        event_member_count=len(owner.all_events),
+        evidence="test_delivery_contract",
+        identity_conflict=False,
+        review_only=False,
+        confirm_local_owners_with_backfill=False,
+        backfill_seed_centers=(),
+        ambiguous_sample_stem=None,
+        ambiguous_candidate_ids=(),
+    )
+
+    matrix = build_owner_alignment_matrix(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        ambiguous_by_sample={},
+        rescued_cells=(),
+    )
+
+    assert not isinstance(feature, OwnerAlignedFeature)
+    assert matrix.clusters == (feature,)
+    by_sample = {cell.sample_stem: cell for cell in matrix.cells}
+    assert by_sample["sample-a"].status == "detected"
+    assert by_sample["sample-a"].cluster_id == "FAM_CONTRACT"
+    assert by_sample["sample-b"].status == "absent"
 
 
 def test_owner_matrix_detected_cell_does_not_invent_raw_path() -> None:

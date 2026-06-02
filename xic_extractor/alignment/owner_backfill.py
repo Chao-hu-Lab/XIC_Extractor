@@ -18,7 +18,10 @@ from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
 from xic_extractor.alignment.matrix_handoff import integration_from_peak
 from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
-from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
+from xic_extractor.alignment.owner_group_delivery import (
+    OwnerGroupDeliveryFeature,
+    OwnerGroupDeliveryFeatures,
+)
 from xic_extractor.alignment.ownership_models import SampleLocalMS1Owner
 from xic_extractor.alignment.trace_context import alignment_trace_group
 from xic_extractor.config import ExtractionConfig
@@ -26,7 +29,7 @@ from xic_extractor.peak_detection.region_audit import build_peak_region_audit_su
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
 
-_RequestItem = tuple[OwnerAlignedFeature, str, XICRequest, float]
+_RequestItem = tuple[OwnerGroupDeliveryFeature, str, XICRequest, float]
 _RequestGroupKey = tuple[str, int | float, int | float]
 _WindowedRequestItem = tuple[_RequestItem, tuple[int, int]]
 OwnerBackfillWindowStrategy = Literal["exact", "super-window"]
@@ -47,7 +50,7 @@ class OwnerBackfillSource(Protocol):
 
 
 def build_owner_backfill_cells(
-    features: tuple[OwnerAlignedFeature, ...],
+    features: OwnerGroupDeliveryFeatures,
     *,
     sample_order: tuple[str, ...],
     raw_sources: Mapping[str, OwnerBackfillSource],
@@ -430,7 +433,7 @@ def _source_retention_time_for_scan(
 
 
 def _backfill_feature_sample(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     sample_stem: str,
     source: OwnerBackfillSource,
     *,
@@ -525,7 +528,7 @@ def _backfill_feature_sample(
 
 
 def _backfill_feature_sample_trace(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     sample_stem: str,
     trace: XICTrace,
     *,
@@ -614,20 +617,20 @@ def _backfill_feature_sample_trace(
 
 
 def _backfill_seed_centers(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
 ) -> tuple[tuple[float, float], ...]:
     return backfill_seed_centers(feature)
 
 
 def _any_detected_owner_can_be_superseded(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     owners: Sequence[SampleLocalMS1Owner] | None,
 ) -> bool:
     return any_detected_owner_can_be_superseded(feature, owners)
 
 
 def _detected_owner_can_be_superseded(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     owner: SampleLocalMS1Owner,
 ) -> bool:
     detected_area = positive_finite(owner.owner_area)

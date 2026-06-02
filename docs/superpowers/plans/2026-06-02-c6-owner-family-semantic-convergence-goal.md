@@ -218,13 +218,15 @@ C6-M execution closeout:
   complete-link construction, hard split gate construction policy, review-only
   construction records, edge evidence projection, and adapter delivery metadata
   are successor-owned or adapter-owned.
-- `OwnerAlignedFeature` remains the active public delivery DTO.
+- `OwnerAlignedFeature` remains the active public concrete adapter. C6-D narrows
+  owner-backfill, owner-matrix, and process payloads to the structural
+  `OwnerGroupDeliveryFeature` contract.
 - Exit rule: do not retire `owner_clustering.py` or replace
-  `OwnerAlignedFeature` until owner-backfill, owner-matrix, claim registry,
-  primary consolidation, writers, and process payload consumers accept
-  successor groups directly, with parity proven for `alignment_matrix.tsv`,
-  `alignment_cells.tsv`, `alignment_review.tsv`, and
-  `owner_edge_evidence.tsv` when emitted.
+  `OwnerAlignedFeature` until pre-backfill consolidation, diagnostic probes,
+  public adapter tests, and remaining concrete-dataclass consumers accept
+  successor groups or explicit delivery adapters directly, with parity proven
+  for `alignment_matrix.tsv`, `alignment_cells.tsv`,
+  `alignment_review.tsv`, and `owner_edge_evidence.tsv` when emitted.
 
 Phase 5 - Closeout And Phase Commit
 Purpose:
