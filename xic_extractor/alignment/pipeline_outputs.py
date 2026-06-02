@@ -163,7 +163,7 @@ def alignment_metadata(
     skipped_evidence_predicate_version: str = "",
 ) -> dict[str, str]:
     return {
-        "schema_version": "alignment-results-v1",
+        "schema_version": "alignment-results-v2",
         "discovery_batch_index": str(discovery_batch_index),
         "raw_dir": str(raw_dir),
         "dll_dir": str(dll_dir),

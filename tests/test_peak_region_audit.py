@@ -56,6 +56,11 @@ def test_peak_region_audit_summarizes_current_envelope() -> None:
     assert summary.candidate_count == 1
     assert summary.selected_proposal_sources == ("local_minimum",)
     assert summary.shadow_status == "evaluated"
+    assert summary.decision_status == "evaluated"
+    assert summary.decision_class == "current_supported"
+    assert summary.product_action == "no_change"
+    assert summary.promotion_reason == ""
+    assert summary.baseline_method == "asls"
     assert summary.local_mixture_diagnostic == "current_single_envelope"
     assert summary.integration_audit is not None
     assert summary.integration_audit.area_baseline_corrected is not None

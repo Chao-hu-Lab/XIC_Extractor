@@ -90,6 +90,11 @@ ALIGNMENT_CELLS_COLUMNS = (
     "region_local_mixture_diagnostic",
     "region_local_mixture_reason",
     "region_review_reason",
+    "region_decision_status",
+    "region_decision_class",
+    "region_product_action",
+    "region_promotion_reason",
+    "region_baseline_method",
 )
 
 BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
@@ -242,6 +247,11 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
                 ),
                 "region_local_mixture_reason": cell.region_local_mixture_reason,
                 "region_review_reason": cell.region_review_reason,
+                "region_decision_status": cell.region_decision_status,
+                "region_decision_class": cell.region_decision_class,
+                "region_product_action": cell.region_product_action,
+                "region_promotion_reason": cell.region_promotion_reason,
+                "region_baseline_method": cell.region_baseline_method,
             }
         )
     return _write_tsv(path, ALIGNMENT_CELLS_COLUMNS, rows)

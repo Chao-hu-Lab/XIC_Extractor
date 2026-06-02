@@ -16,7 +16,7 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
         tmp_path / "alignment_results.xlsx",
         matrix,
         metadata={
-            "schema_version": "alignment-results-v1",
+            "schema_version": "alignment-results-v2",
             "resolver_mode": "local_minimum",
         },
     )
@@ -91,9 +91,51 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
         "artificial_adduct_related_family_id",
         "artificial_adduct_mz_delta_error_ppm",
         "artificial_adduct_rt_delta_min",
+        "region_decision_status",
+        "region_decision_class",
+        "region_product_action",
+        "region_promotion_reason",
+        "region_baseline_method",
         "reason",
     ]
     assert workbook["Metadata"]["A1"].value == "key"
+    assert workbook["Metadata"]["A3"].value == "schema_version"
+    assert workbook["Metadata"]["B3"].value == "alignment-results-v2"
+
+
+def test_alignment_results_xlsx_audit_projects_region_decision_fields(
+    tmp_path: Path,
+):
+    matrix = AlignmentMatrix(
+        clusters=(sample_feature("FAM000001", evidence="owner_identity"),),
+        sample_order=("s1", "s2", "s3"),
+        cells=(
+            sample_cell(
+                "s1",
+                "FAM000001",
+                "detected",
+                100.0,
+                region=True,
+            ),
+            sample_cell("s2", "FAM000001", "ambiguous_ms1_owner", None),
+            sample_cell("s3", "FAM000001", "detected", 150.0),
+        ),
+    )
+
+    path = write_alignment_results_xlsx(
+        tmp_path / "alignment_results.xlsx",
+        matrix,
+        metadata={"schema_version": "alignment-results-v2"},
+    )
+
+    workbook = load_workbook(path, data_only=True)
+    assert workbook["Audit"]["AI2"].value == "evaluated"
+    assert workbook["Audit"]["AJ2"].value == "merge_suggested"
+    assert workbook["Audit"]["AK2"].value == "safe_merge_eligible"
+    assert workbook["Audit"]["AL2"].value == "adjacent_wis_local_minimum_merge"
+    assert workbook["Audit"]["AM2"].value == "asls"
+    assert workbook["Review"]["Y1"].value is None
+    assert workbook["Matrix"]["E2"].value == 100.0
 
 
 def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
@@ -113,7 +155,7 @@ def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
     path = write_alignment_results_xlsx(
         tmp_path / "alignment_results.xlsx",
         matrix,
-        metadata={"schema_version": "alignment-results-v1"},
+        metadata={"schema_version": "alignment-results-v2"},
     )
 
     workbook = load_workbook(path, data_only=True)
@@ -149,7 +191,7 @@ def test_alignment_results_xlsx_projects_asls_selected_integration_matrix_area(
     path = write_alignment_results_xlsx(
         tmp_path / "alignment_results.xlsx",
         matrix,
-        metadata={"schema_version": "alignment-results-v1"},
+        metadata={"schema_version": "alignment-results-v2"},
     )
 
     workbook = load_workbook(path, data_only=True)
@@ -178,7 +220,7 @@ def test_alignment_results_xlsx_excludes_review_only_rows_from_matrix(
     path = write_alignment_results_xlsx(
         tmp_path / "alignment_results.xlsx",
         matrix,
-        metadata={"schema_version": "alignment-results-v1"},
+        metadata={"schema_version": "alignment-results-v2"},
     )
 
     workbook = load_workbook(path, data_only=True)
@@ -208,7 +250,7 @@ def test_alignment_results_xlsx_audit_explains_duplicate_blank(
     path = write_alignment_results_xlsx(
         tmp_path / "alignment_results.xlsx",
         matrix,
-        metadata={"schema_version": "alignment-results-v1"},
+        metadata={"schema_version": "alignment-results-v2"},
     )
 
     workbook = load_workbook(path, data_only=True)
@@ -262,7 +304,7 @@ def test_alignment_results_xlsx_escapes_formula_like_external_strings(
     assert workbook["Review"]["B2"].value == "'-DNA_dR"
     assert workbook["Review"]["B2"].data_type != "f"
     assert workbook["Audit"]["B2"].value == "'+Sample_A"
-    assert workbook["Audit"]["AI2"].value == "'@audit reason"
+    assert workbook["Audit"]["AN2"].value == "'@audit reason"
     assert workbook["Audit"]["I2"].value is True
     assert workbook["Metadata"]["B2"].value == "'@metadata value"
     assert workbook["Metadata"]["B2"].data_type != "f"
@@ -279,7 +321,7 @@ def test_alignment_results_xlsx_rejects_orphan_audit_cell(tmp_path: Path):
         write_alignment_results_xlsx(
             tmp_path / "alignment_results.xlsx",
             matrix,
-            metadata={"schema_version": "alignment-results-v1"},
+            metadata={"schema_version": "alignment-results-v2"},
         )
 
 
@@ -326,6 +368,7 @@ def sample_cell(
     *,
     reason: str | None = None,
     selected_integration: IntegrationResult | None = None,
+    region: bool = False,
 ) -> AlignedCell:
     if (
         selected_integration is None
@@ -348,6 +391,13 @@ def sample_cell(
         source_candidate_id="s1#6095" if area else None,
         source_raw_file=None,
         reason=reason or status,
+        region_decision_status="evaluated" if region else "",
+        region_decision_class="merge_suggested" if region else "",
+        region_product_action="safe_merge_eligible" if region else "",
+        region_promotion_reason=(
+            "adjacent_wis_local_minimum_merge" if region else ""
+        ),
+        region_baseline_method="asls" if region else "",
         selected_integration=selected_integration,
     )
 

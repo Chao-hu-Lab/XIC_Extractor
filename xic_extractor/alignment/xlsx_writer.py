@@ -197,6 +197,11 @@ def _write_audit_sheet(
             "artificial_adduct_related_family_id",
             "artificial_adduct_mz_delta_error_ppm",
             "artificial_adduct_rt_delta_min",
+            "region_decision_status",
+            "region_decision_class",
+            "region_product_action",
+            "region_promotion_reason",
+            "region_baseline_method",
             "reason",
         ],
     )
@@ -246,6 +251,11 @@ def _write_audit_sheet(
                 _optional_attr(cluster, "artificial_adduct_related_family_id"),
                 _optional_attr(cluster, "artificial_adduct_mz_delta_error_ppm"),
                 _optional_attr(cluster, "artificial_adduct_rt_delta_min"),
+                cell.region_decision_status,
+                cell.region_decision_class,
+                cell.region_product_action,
+                cell.region_promotion_reason,
+                cell.region_baseline_method,
                 cell.reason,
             ],
         )

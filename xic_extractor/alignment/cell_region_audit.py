@@ -28,5 +28,10 @@ def with_region_audit(
         region_local_mixture_diagnostic=region_audit.local_mixture_diagnostic,
         region_local_mixture_reason=region_audit.local_mixture_reason,
         region_review_reason=region_audit.review_reason,
+        region_decision_status=region_audit.decision_status,
+        region_decision_class=region_audit.decision_class,
+        region_product_action=region_audit.product_action,
+        region_promotion_reason=region_audit.promotion_reason,
+        region_baseline_method=region_audit.baseline_method,
         integration_audit=region_audit.integration_audit,
     )

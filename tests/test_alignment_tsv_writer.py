@@ -648,6 +648,11 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
         "region_local_mixture_diagnostic",
         "region_local_mixture_reason",
         "region_review_reason",
+        "region_decision_status",
+        "region_decision_class",
+        "region_product_action",
+        "region_promotion_reason",
+        "region_baseline_method",
     ]
     assert cells[0]["status"] == "detected"
     assert cells[0]["area"] == "10"
@@ -660,6 +665,13 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
         "local_minimum;centwave_cwt"
     )
     assert cells[0]["region_local_mixture_diagnostic"] == "one_envelope_supported"
+    assert cells[0]["region_decision_status"] == "evaluated"
+    assert cells[0]["region_decision_class"] == "merge_suggested"
+    assert cells[0]["region_product_action"] == "safe_merge_eligible"
+    assert cells[0]["region_promotion_reason"] == (
+        "adjacent_wis_local_minimum_merge"
+    )
+    assert cells[0]["region_baseline_method"] == "asls"
     assert status[0]["sample-a"] == "detected"
     assert status[0]["sample-b"] == "unchecked"
 
@@ -989,6 +1001,13 @@ def _cell(
             "adjacent intervals support one envelope" if region else ""
         ),
         region_review_reason="same envelope" if region else "",
+        region_decision_status="evaluated" if region else "",
+        region_decision_class="merge_suggested" if region else "",
+        region_product_action="safe_merge_eligible" if region else "",
+        region_promotion_reason=(
+            "adjacent_wis_local_minimum_merge" if region else ""
+        ),
+        region_baseline_method="asls" if region else "",
         integration_audit=(
             CellIntegrationAuditSummary(
                 raw_area=area,

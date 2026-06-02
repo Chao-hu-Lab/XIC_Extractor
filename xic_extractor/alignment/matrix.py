@@ -61,6 +61,11 @@ class AlignedCell:
     region_local_mixture_diagnostic: str = ""
     region_local_mixture_reason: str = ""
     region_review_reason: str = ""
+    region_decision_status: str = ""
+    region_decision_class: str = ""
+    region_product_action: str = ""
+    region_promotion_reason: str = ""
+    region_baseline_method: str = ""
     integration_audit: CellIntegrationAuditSummary | None = None
     selected_integration: IntegrationResult | None = None
     backfill_seed_mz: float | None = None

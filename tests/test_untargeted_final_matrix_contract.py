@@ -59,7 +59,7 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     workbook_path = write_alignment_results_xlsx(
         tmp_path / "alignment_results.xlsx",
         matrix,
-        metadata={"schema_version": "alignment-results-v1"},
+        metadata={"schema_version": "alignment-results-v2"},
     )
 
     tsv_rows = _read_tsv(matrix_tsv)

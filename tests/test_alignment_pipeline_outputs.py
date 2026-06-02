@@ -28,6 +28,7 @@ def test_alignment_metadata_records_baseline_audit_method() -> None:
         peak_config=peak_config,
     )
 
+    assert metadata["schema_version"] == "alignment-results-v2"
     assert metadata["baseline_audit_method"] == "asls"
     assert metadata["backfill_scope"] == "full-audit"
     assert metadata["output_scope"] == "full-audit"

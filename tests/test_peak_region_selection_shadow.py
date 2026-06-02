@@ -53,6 +53,13 @@ def test_shadow_rows_group_boundary_rows_by_target_and_include_review_context() 
     assert row["shadow_area_raw_counts_seconds"] == "180.00"
     assert row["shadow_status"] == "evaluated"
     assert row["shadow_verdict"] == "wider_boundary_preferred"
+    assert row["decision_status"] == "evaluated"
+    assert row["decision_class"] == "wider_boundary_preferred"
+    assert row["product_action"] == "behavior_change_required"
+    assert row["selected_candidate_id"] == "current"
+    assert row["selected_boundary_id"] == "current|candidate"
+    assert row["alternate_boundary_ids"] == "current|wide"
+    assert row["baseline_method"] == "asls"
     assert row["merge_suggestion_source"] == ""
     assert row["area_ratio"] == "1.80000"
     assert row["current_scan_count"] == "5"
@@ -90,6 +97,18 @@ def test_shadow_summary_keeps_human_review_columns() -> None:
         "shadow_area_raw_counts_seconds",
         "shadow_status",
         "shadow_verdict",
+        "decision_status",
+        "decision_class",
+        "product_action",
+        "selected_candidate_id",
+        "selected_boundary_id",
+        "alternate_boundary_ids",
+        "evidence_sources",
+        "support_reasons",
+        "conflict_reasons",
+        "audit_reason",
+        "promotion_reason",
+        "baseline_method",
         "merge_suggestion_source",
         "score_delta",
         "area_ratio",
@@ -150,6 +169,9 @@ def test_malformed_boundary_row_emits_visible_skipped_shadow_row() -> None:
 
     assert rows[0]["shadow_status"] == "skipped_invalid_trace"
     assert rows[0]["shadow_verdict"] == "insufficient_evidence"
+    assert rows[0]["decision_status"] == "skipped_invalid_trace"
+    assert rows[0]["decision_class"] == "insufficient_evidence"
+    assert rows[0]["product_action"] == "review_only"
     assert rows[0]["review_reason"]
 
 

@@ -131,6 +131,11 @@ def test_owner_matrix_carries_detected_owner_region_audit() -> None:
             local_mixture_diagnostic="one_envelope_supported",
             local_mixture_reason="adjacent WIS intervals support one envelope",
             review_reason="same envelope",
+            decision_status="evaluated",
+            decision_class="merge_suggested",
+            product_action="safe_merge_eligible",
+            promotion_reason="adjacent_wis_local_minimum_merge",
+            baseline_method="asls",
             integration_audit=CellIntegrationAuditSummary(
                 raw_area=1000.0,
                 area_baseline_corrected=800.0,
@@ -158,6 +163,11 @@ def test_owner_matrix_carries_detected_owner_region_audit() -> None:
     assert cell.region_selected_proposal_sources == ("local_minimum", "cwt_ridge")
     assert cell.region_shadow_status == "evaluated"
     assert cell.region_shadow_verdict == "merge_suggested"
+    assert cell.region_decision_status == "evaluated"
+    assert cell.region_decision_class == "merge_suggested"
+    assert cell.region_product_action == "safe_merge_eligible"
+    assert cell.region_promotion_reason == "adjacent_wis_local_minimum_merge"
+    assert cell.region_baseline_method == "asls"
     assert cell.region_local_mixture_diagnostic == "one_envelope_supported"
     assert cell.integration_audit is not None
     assert cell.integration_audit.baseline_fraction == 0.8
