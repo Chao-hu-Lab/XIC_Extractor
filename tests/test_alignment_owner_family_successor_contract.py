@@ -2,11 +2,16 @@ import csv
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from tests.test_alignment_owner_clustering import _owner
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.cross_sample_peak_groups import (
+    cross_sample_peak_group_edge_fact_from_owner_edge,
+    cross_sample_peak_group_edge_facts_from_owner_edges,
     cross_sample_peak_group_hypothesis_from_owner_feature,
 )
+from xic_extractor.alignment.edge_scoring import evaluate_owner_edge
 from xic_extractor.alignment.owner_clustering import (
     cluster_sample_local_owners,
     review_only_features_from_ambiguous_records,
@@ -35,6 +40,9 @@ def test_owner_family_successor_mapping_names_all_required_invariants() -> None:
     assert (
         by_invariant["stable_cross_sample_family_membership"].disposition
         == "successor_owned"
+    )
+    assert by_invariant["owner_edge_evidence_projection"].disposition == (
+        "active_policy"
     )
     assert (
         by_invariant["complete_link_edge_semantics"].disposition
@@ -76,6 +84,120 @@ def test_cross_sample_peak_group_hypothesis_projects_owner_membership() -> None:
     assert hypothesis.source == "owner_aligned_feature_shadow"
 
 
+def test_strong_owner_edge_projects_support_fact_and_marks_successor_owned() -> None:
+    edge_evidence = []
+    feature = cluster_sample_local_owners(
+        (_owner("sample-a", "a", apex_rt=8.40), _owner("sample-b", "b", apex_rt=8.60)),
+        config=AlignmentConfig(),
+        edge_evidence_sink=edge_evidence,
+    )[0]
+
+    assert len(edge_evidence) == 1
+    assert edge_evidence[0].decision == "strong_edge"
+
+    facts = cross_sample_peak_group_edge_facts_from_owner_edges(edge_evidence)
+    assert facts == (
+        cross_sample_peak_group_edge_fact_from_owner_edge(edge_evidence[0]),
+    )
+
+    fact = facts[0]
+    assert fact.owner_pair_ids == ("OWN-sample-a-a", "OWN-sample-b-b")
+    assert fact.decision == "strong_edge"
+    assert fact.role == "membership_support"
+    assert fact.failure_reason == ""
+    assert fact.rt_raw_delta_sec == pytest.approx(12.0)
+    assert fact.rt_drift_corrected_delta_sec is None
+    assert fact.drift_prior_source == "none"
+    assert fact.injection_order_gap is None
+    assert fact.score == edge_evidence[0].score
+    assert fact.reason == edge_evidence[0].reason
+    assert fact.source == "owner_edge_evidence_shadow"
+
+    by_invariant = {
+        mapping.invariant: mapping
+        for mapping in owner_family_successor_mapping(
+            feature,
+            edge_evidence=edge_evidence,
+        )
+    }
+
+    edge_mapping = by_invariant["owner_edge_evidence_projection"]
+    assert edge_mapping.disposition == "successor_owned"
+    assert "edge_fact_count=1" in edge_mapping.current_state
+    assert "support_count=1" in edge_mapping.current_state
+    assert "challenge_count=0" in edge_mapping.current_state
+    assert "CrossSamplePeakGroupEdgeFact" in edge_mapping.successor_surface
+    assert by_invariant["complete_link_edge_semantics"].disposition == (
+        "active_policy"
+    )
+
+
+def test_weak_owner_edge_projects_challenge_fact() -> None:
+    edge_evidence = []
+
+    cluster_sample_local_owners(
+        (_owner("sample-a", "a", apex_rt=8.50), _owner("sample-b", "b", apex_rt=9.70)),
+        config=AlignmentConfig(),
+        edge_evidence_sink=edge_evidence,
+    )
+
+    assert len(edge_evidence) == 1
+    assert edge_evidence[0].decision == "weak_edge"
+
+    fact = cross_sample_peak_group_edge_fact_from_owner_edge(edge_evidence[0])
+
+    assert fact.owner_pair_ids == ("OWN-sample-a-a", "OWN-sample-b-b")
+    assert fact.decision == "weak_edge"
+    assert fact.role == "membership_challenge"
+    assert fact.failure_reason == ""
+    assert fact.rt_raw_delta_sec == pytest.approx(72.0)
+    assert fact.score == edge_evidence[0].score
+    assert fact.reason == edge_evidence[0].reason
+
+
+def test_edge_projection_ignores_edges_outside_owner_family() -> None:
+    edge_evidence = []
+    features = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "a", apex_rt=10.00),
+            _owner("sample-b", "b", apex_rt=10.20),
+            _owner("sample-c", "c", apex_rt=11.50),
+        ),
+        config=AlignmentConfig(preferred_rt_sec=30.0, max_rt_sec=120.0),
+        edge_evidence_sink=edge_evidence,
+    )
+
+    family = next(feature for feature in features if len(feature.owners) == 2)
+    hypothesis = cross_sample_peak_group_hypothesis_from_owner_feature(
+        family,
+        edge_evidence=edge_evidence,
+    )
+
+    assert hypothesis.owner_ids == ("OWN-sample-a-a", "OWN-sample-b-b")
+    assert tuple(fact.owner_pair_ids for fact in hypothesis.edge_facts) == (
+        ("OWN-sample-a-a", "OWN-sample-b-b"),
+    )
+
+
+def test_blocked_owner_edge_projects_challenge_fact_without_policy_promotion() -> None:
+    edge = evaluate_owner_edge(
+        _owner("sample-a", "a"),
+        _owner("sample-a", "b"),
+        config=AlignmentConfig(),
+    )
+
+    assert edge.decision == "blocked_edge"
+    assert edge.failure_reason == "same_sample"
+
+    fact = cross_sample_peak_group_edge_fact_from_owner_edge(edge)
+
+    assert fact.decision == "blocked_edge"
+    assert fact.role == "membership_challenge"
+    assert fact.failure_reason == "same_sample"
+    assert fact.construction_policy == "construction_time_hard_gate_observed"
+    assert "blocked: same_sample" in fact.reason
+
+
 def test_owner_family_successor_mapping_keeps_review_only_records_active() -> None:
     feature = review_only_features_from_ambiguous_records(
         (
@@ -106,18 +228,21 @@ def test_owner_family_successor_mapping_keeps_review_only_records_active() -> No
 
 
 def test_owner_clustering_disposition_keeps_stage_until_successor_parity() -> None:
+    edge_evidence = []
     feature = cluster_sample_local_owners(
         (_owner("sample-a", "a"), _owner("sample-b", "b")),
         config=AlignmentConfig(),
+        edge_evidence_sink=edge_evidence,
     )[0]
 
     decision = owner_clustering_disposition(
-        owner_family_successor_mapping(feature),
+        owner_family_successor_mapping(feature, edge_evidence=edge_evidence),
     )
 
     assert decision.disposition == "keep_as_stage"
     assert "successor spine does not yet own" in decision.reason
     assert "stable_cross_sample_family_membership" not in decision.blocking_invariants
+    assert "owner_edge_evidence_projection" not in decision.blocking_invariants
     assert "complete_link_edge_semantics" in decision.blocking_invariants
     assert "hard_family_split_gates" in decision.blocking_invariants
     assert "review_only_owner_records" in decision.blocking_invariants
@@ -333,6 +458,31 @@ def test_compact_owner_family_tsv_triad_keeps_full_schema_and_rows(
             "merged 2 event clusters",
         ],
     ]
+
+
+def test_cross_sample_peak_group_shadow_has_no_production_path_imports() -> None:
+    shared_peak_identity_dir = (
+        Path("xic_extractor/alignment")
+        / ("shared_peak_identity_" + "explanation")
+    )
+    production_paths = [
+        Path("xic_extractor/alignment/__init__.py"),
+        Path("xic_extractor/alignment/pipeline.py"),
+        Path("xic_extractor/alignment/pipeline_outputs.py"),
+        Path("xic_extractor/alignment/process_backend.py"),
+        Path("xic_extractor/alignment/owner_backfill.py"),
+        Path("xic_extractor/alignment/owner_matrix.py"),
+        Path("xic_extractor/alignment/tsv_writer.py"),
+        Path("xic_extractor/alignment/xlsx_writer.py"),
+        Path("xic_extractor/peak_detection/hypotheses.py"),
+        *shared_peak_identity_dir.rglob("*.py"),
+    ]
+
+    for path in production_paths:
+        text = path.read_text(encoding="utf-8")
+        assert "CrossSamplePeakGroupHypothesis" not in text
+        assert "CrossSamplePeakGroupEdgeFact" not in text
+        assert "cross_sample_peak_group" not in text
 
 
 def _compact_owner_family_feature():

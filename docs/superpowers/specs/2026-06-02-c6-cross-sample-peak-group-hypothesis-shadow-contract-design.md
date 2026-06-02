@@ -1,7 +1,7 @@
 # C6 - Cross-Sample Peak Group Hypothesis Shadow Contract Design
 
 **Date:** 2026-06-02
-**Status:** Design draft v0.4 — expanded through C6-B, xhigh reviewed with no blockers
+**Status:** Implementation snapshot v0.5 — C6-A2 edge evidence shadow facts
 **Readiness label:** `diagnostic_only`
 **Parent spec:** [C6 alignment stage semantics and value assessment](2026-06-01-c6-alignment-stage-semantics-value-assessment-design.md)
 **Related contract:** `xic_extractor/alignment/owner_family_successor_contract.py`
@@ -135,6 +135,7 @@ class CrossSamplePeakGroupHypothesis:
     event_ids: tuple[str, ...]
     event_member_count: int
     source: str = "owner_aligned_feature_shadow"
+    edge_facts: tuple[CrossSamplePeakGroupEdgeFact, ...] = ()
 ```
 
 Allowed projection:
@@ -148,6 +149,36 @@ cross_sample_peak_group_hypothesis_from_owner_feature(
 The first version may set `group_hypothesis_id == public_family_id` to preserve
 public parity. It must not use the name `peak_hypothesis_id`. A future semantic
 ID migration must be a separate public-contract decision.
+
+C6-A2 adds a companion shadow edge fact:
+
+```python
+@dataclass(frozen=True)
+class CrossSamplePeakGroupEdgeFact:
+    left_owner_id: str
+    right_owner_id: str
+    owner_pair_ids: tuple[str, str]
+    decision: EdgeDecision
+    role: Literal["membership_support", "membership_challenge"]
+    failure_reason: HardGateFailureReason | Literal[""]
+    rt_raw_delta_sec: float
+    rt_drift_corrected_delta_sec: float | None
+    drift_prior_source: DriftPriorSource
+    injection_order_gap: int | None
+    score: int
+    reason: str
+    construction_policy: Literal[
+        "none",
+        "construction_time_hard_gate_observed",
+    ] = "none"
+    source: str = "owner_edge_evidence_shadow"
+```
+
+Strong edges project to `membership_support`. Weak edges project to
+`membership_challenge`. Blocked edges may project to challenge facts with
+`construction_time_hard_gate_observed`, but this is only a shadow observation of
+the current construction gate. C6-A2 does not promote construction-time hard
+gates into successor production policy.
 
 ## Contract Rules
 
@@ -294,6 +325,31 @@ Done when:
   a shadow fact plus a compatible disposition;
 - matrix/cells/review writer-visible parity still holds for the compact golden
   triad.
+
+C6-A2 implementation closeout:
+
+- `xic_extractor/alignment/cross_sample_peak_groups.py` defines
+  `CrossSamplePeakGroupEdgeFact` and projections from current
+  `OwnerEdgeEvidence`;
+- strong edges are shadow support facts, weak edges are shadow challenge facts,
+  and blocked edges remain construction-gate observations rather than
+  successor production policy;
+- `owner_family_successor_mapping(feature, edge_evidence=...)` marks only
+  `owner_edge_evidence_projection` as `successor_owned` when owner edge
+  evidence was projected into successor edge facts;
+- complete-link family construction remains `active_policy` because A2 does
+  not replace the all-strong-pair grouping rule;
+- hard split gates and review-only owner records remain `active_policy`;
+  backfill seed / matrix delivery remains `successor_gap`;
+- `owner_clustering.py` remains `keep_as_stage` after A2 because complete-link
+  construction, split, review-only, and backfill blockers are still live;
+- C6-B is still pending and must name the final `owner_clustering.py`
+  disposition after C6-A3 evidence is evaluated;
+- evidence:
+  `tests/test_alignment_owner_family_successor_contract.py` covers strong edge
+  support projection, weak edge challenge projection, blocked-edge shadow
+  projection, post-edge-projection disposition blocking, and production-path
+  no-use guards.
 
 ### C6-A3 — Split Gate And Review-Only Semantics
 

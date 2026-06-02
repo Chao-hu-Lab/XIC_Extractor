@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
 from xic_extractor.alignment.cross_sample_peak_groups import (
+    CrossSamplePeakGroupEdgeFact,
+    cross_sample_peak_group_edge_facts_from_owner_edges,
     cross_sample_peak_group_hypothesis_from_owner_feature,
 )
+from xic_extractor.alignment.edge_scoring import OwnerEdgeEvidence
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 
 OwnerFamilyInvariant: TypeAlias = Literal[
     "stable_cross_sample_family_membership",
+    "owner_edge_evidence_projection",
     "complete_link_edge_semantics",
     "hard_family_split_gates",
     "review_only_owner_records",
@@ -32,6 +37,7 @@ OwnerClusteringDisposition: TypeAlias = Literal[
 
 OWNER_FAMILY_INVARIANTS: tuple[OwnerFamilyInvariant, ...] = (
     "stable_cross_sample_family_membership",
+    "owner_edge_evidence_projection",
     "complete_link_edge_semantics",
     "hard_family_split_gates",
     "review_only_owner_records",
@@ -60,6 +66,8 @@ class OwnerClusteringDispositionDecision:
 
 def owner_family_successor_mapping(
     feature: OwnerAlignedFeature,
+    *,
+    edge_evidence: Sequence[OwnerEdgeEvidence] | None = None,
 ) -> tuple[OwnerFamilyInvariantMapping, ...]:
     """Project current owner-family semantics onto the successor-spine contract.
 
@@ -74,7 +82,14 @@ def owner_family_successor_mapping(
         if _feature_has_review_only_state(feature)
         else "review_only_supported_by_stage"
     )
-    peak_group = cross_sample_peak_group_hypothesis_from_owner_feature(feature)
+    projected_edge_facts = cross_sample_peak_group_edge_facts_from_owner_edges(
+        edge_evidence or (),
+        owner_ids=feature.event_cluster_ids,
+    )
+    peak_group = cross_sample_peak_group_hypothesis_from_owner_feature(
+        feature,
+        edge_evidence=edge_evidence or (),
+    )
     return (
         OwnerFamilyInvariantMapping(
             invariant="stable_cross_sample_family_membership",
@@ -103,21 +118,59 @@ def owner_family_successor_mapping(
             ),
         ),
         OwnerFamilyInvariantMapping(
+            invariant="owner_edge_evidence_projection",
+            current_owner=(
+                "owner_clustering.cluster_sample_local_owners / "
+                "edge_scoring.evaluate_owner_edge / edge_evidence_sink"
+            ),
+            current_state=_edge_fact_state(feature, projected_edge_facts),
+            successor_surface=(
+                "CrossSamplePeakGroupEdgeFact shadow projection"
+                if projected_edge_facts
+                else "future_edge_evidence_projection"
+            ),
+            disposition=(
+                "successor_owned" if projected_edge_facts else "active_policy"
+            ),
+            public_oracle=(
+                "tests/test_alignment_owner_clustering.py::"
+                "test_owner_clustering_does_not_bridge_three_owner_complete_link_group"
+                if not projected_edge_facts
+                else "tests/test_alignment_owner_family_successor_contract.py::"
+                "test_strong_owner_edge_projects_support_fact_and_marks_successor_owned"
+            ),
+            exit_rule=(
+                "Project owner edge evidence into successor-visible facts "
+                "before using it as migration evidence."
+                if not projected_edge_facts
+                else "C6-A2 owns only shadow projection of current owner edge "
+                "facts. Complete-link construction policy, hard gates, "
+                "review-only owner records, and backfill/matrix delivery keep "
+                "their existing live dispositions until later parity proves "
+                "migration."
+            ),
+        ),
+        OwnerFamilyInvariantMapping(
             invariant="complete_link_edge_semantics",
             current_owner=(
                 "owner_clustering.cluster_sample_local_owners / "
-                "edge_scoring.evaluate_owner_edge"
+                "all-pairs strong-edge complete-link rule"
             ),
-            current_state=f"family_evidence={feature.evidence}",
-            successor_surface="future_family_edge_evidence",
+            current_state=(
+                f"family_evidence={feature.evidence};"
+                f"shadow_edge_fact_count={len(projected_edge_facts)}"
+            ),
+            successor_surface="future_complete_link_membership_policy",
             disposition="active_policy",
             public_oracle=(
                 "tests/test_alignment_owner_clustering.py::"
                 "test_owner_clustering_does_not_bridge_three_owner_complete_link_group"
             ),
             exit_rule=(
-                "Port complete-link, drift-prior, weak-edge, and edge-sink "
-                "semantics to successor family tests before replacing the stage."
+                "A2 projects edge evidence facts only. Preserve the complete-link "
+                "all-strong-pair grouping policy as active owner-clustering "
+                "policy until successor tests can construct the same families "
+                "and prove matrix/cells/review parity."
             ),
         ),
         OwnerFamilyInvariantMapping(
@@ -237,4 +290,37 @@ def _feature_has_review_only_state(feature: OwnerAlignedFeature) -> bool:
         or feature.identity_conflict
         or feature.ambiguous_sample_stem is not None
         or bool(feature.ambiguous_candidate_ids)
+    )
+
+
+def _edge_fact_state(
+    feature: OwnerAlignedFeature,
+    edge_facts: tuple[CrossSamplePeakGroupEdgeFact, ...],
+) -> str:
+    if not edge_facts:
+        return f"family_evidence={feature.evidence};edge_fact_count=0"
+
+    support_count = sum(
+        1 for fact in edge_facts if fact.role == "membership_support"
+    )
+    challenge_count = sum(
+        1 for fact in edge_facts if fact.role == "membership_challenge"
+    )
+    blocked_count = sum(
+        1 for fact in edge_facts if fact.decision == "blocked_edge"
+    )
+    edge_pairs = ";".join(
+        (
+            f"{fact.owner_pair_ids[0]}|{fact.owner_pair_ids[1]}:"
+            f"{fact.role}:{fact.decision}:{fact.failure_reason or 'none'}"
+        )
+        for fact in edge_facts
+    )
+    return (
+        f"family_evidence={feature.evidence};"
+        f"edge_fact_count={len(edge_facts)};"
+        f"support_count={support_count};"
+        f"challenge_count={challenge_count};"
+        f"blocked_count={blocked_count};"
+        f"edge_pairs={edge_pairs}"
     )
