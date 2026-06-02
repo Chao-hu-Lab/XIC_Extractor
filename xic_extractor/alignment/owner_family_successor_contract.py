@@ -44,6 +44,19 @@ OWNER_FAMILY_INVARIANTS: tuple[OwnerFamilyInvariant, ...] = (
     "review_only_owner_records",
     "backfill_seed_and_matrix_delivery",
 )
+OWNER_CLUSTERING_C6B_FINAL_DISPOSITION: OwnerClusteringDisposition = "keep_as_stage"
+OWNER_CLUSTERING_C6B_REASON = (
+    "C6-B final disposition is keep_as_stage: C6-A1/A2/A3 shadow projection "
+    "evidence is review-only and does not transfer complete-link construction, "
+    "hard split gate construction policy, or backfill/matrix delivery ownership."
+)
+OWNER_CLUSTERING_C6B_EXIT_RULE = (
+    "Do not promote owner_clustering.py to an internal constructor, "
+    "compatibility adapter, or retirement candidate until blocking invariants "
+    "are successor-owned and public parity is proven for alignment_matrix.tsv, "
+    "alignment_cells.tsv, alignment_review.tsv, and owner_edge_evidence.tsv "
+    "when emitted."
+)
 
 
 @dataclass(frozen=True)
@@ -258,48 +271,23 @@ def owner_family_successor_mapping(
 def owner_clustering_disposition(
     mappings: tuple[OwnerFamilyInvariantMapping, ...],
 ) -> OwnerClusteringDispositionDecision:
+    """Return the C6-B final owner-clustering migration disposition.
+
+    This is a phase-closeout snapshot, not a general migration evaluator.
+    Future parity-backed work should replace it before promoting
+    ``owner_clustering.py`` to adapter or retirement status.
+    """
+
     blocking = tuple(
         mapping.invariant
         for mapping in mappings
         if mapping.disposition in {"successor_gap", "active_policy"}
     )
-    if blocking:
-        return OwnerClusteringDispositionDecision(
-            disposition="keep_as_stage",
-            reason=(
-                "The successor spine does not yet own every writer-visible "
-                "owner-family invariant."
-            ),
-            blocking_invariants=blocking,
-            exit_rule=(
-                "Promote only after successor family tests own the blocking "
-                "invariants and alignment_matrix.tsv, alignment_cells.tsv, and "
-                "alignment_review.tsv parity is proven."
-            ),
-        )
-
-    if all(mapping.disposition == "successor_owned" for mapping in mappings):
-        return OwnerClusteringDispositionDecision(
-            disposition="retirement_candidate_after_parity",
-            reason="All owner-family invariants are successor-owned.",
-            blocking_invariants=(),
-            exit_rule=(
-                "Delete or adapt the stage only in a later cleanup goal after "
-                "public writer parity and compatibility migration are proven."
-            ),
-        )
-
     return OwnerClusteringDispositionDecision(
-        disposition="compatibility_adapter_candidate",
-        reason=(
-            "Owner-family invariants have successor coverage but still need "
-            "an old shape."
-        ),
-        blocking_invariants=(),
-        exit_rule=(
-            "Keep a thin adapter until public consumers no longer require "
-            "OwnerAlignedFeature-compatible fields."
-        ),
+        disposition=OWNER_CLUSTERING_C6B_FINAL_DISPOSITION,
+        reason=OWNER_CLUSTERING_C6B_REASON,
+        blocking_invariants=blocking,
+        exit_rule=OWNER_CLUSTERING_C6B_EXIT_RULE,
     )
 
 

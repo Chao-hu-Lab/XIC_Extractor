@@ -342,29 +342,62 @@ def test_owner_clustering_keeps_stage_after_review_fact_projection() -> None:
     assert "backfill_seed_and_matrix_delivery" in decision.blocking_invariants
 
 
-def test_owner_clustering_disposition_keeps_stage_until_successor_parity() -> None:
+def test_c6_b_final_disposition_keeps_stage_after_shadow_evidence() -> None:
     edge_evidence = []
-    feature = cluster_sample_local_owners(
+    edge_feature = cluster_sample_local_owners(
         (_owner("sample-a", "a"), _owner("sample-b", "b")),
         config=AlignmentConfig(),
         edge_evidence_sink=edge_evidence,
     )[0]
+    review_feature = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "conflict", identity_conflict=True),
+            _owner("sample-b", "clean"),
+        ),
+        config=AlignmentConfig(),
+    )[0]
 
-    decision = owner_clustering_disposition(
-        owner_family_successor_mapping(feature, edge_evidence=edge_evidence),
+    a2_mappings = owner_family_successor_mapping(
+        edge_feature,
+        edge_evidence=edge_evidence,
     )
+    a3_review_mapping = next(
+        mapping
+        for mapping in owner_family_successor_mapping(review_feature)
+        if mapping.invariant == "review_only_owner_records"
+    )
+    mappings = tuple(
+        a3_review_mapping
+        if mapping.invariant == "review_only_owner_records"
+        else mapping
+        for mapping in a2_mappings
+    )
+    by_invariant = {mapping.invariant: mapping for mapping in mappings}
+    decision = owner_clustering_disposition(mappings)
 
+    assert by_invariant["stable_cross_sample_family_membership"].disposition == (
+        "successor_owned"
+    )
+    assert by_invariant["owner_edge_evidence_projection"].disposition == (
+        "successor_owned"
+    )
+    assert by_invariant["review_only_owner_records"].disposition == "successor_owned"
     assert decision.disposition == "keep_as_stage"
-    assert "successor spine does not yet own" in decision.reason
+    assert "C6-B final disposition" in decision.reason
+    assert "shadow projection" in decision.reason
     assert "stable_cross_sample_family_membership" not in decision.blocking_invariants
     assert "owner_edge_evidence_projection" not in decision.blocking_invariants
     assert "complete_link_edge_semantics" in decision.blocking_invariants
     assert "hard_family_split_gates" in decision.blocking_invariants
-    assert "review_only_owner_records" in decision.blocking_invariants
+    assert "review_only_owner_records" not in decision.blocking_invariants
     assert "backfill_seed_and_matrix_delivery" in decision.blocking_invariants
     assert "alignment_matrix.tsv" in decision.exit_rule
     assert "alignment_cells.tsv" in decision.exit_rule
     assert "alignment_review.tsv" in decision.exit_rule
+    assert "owner_edge_evidence.tsv" in decision.exit_rule
+    assert "when emitted" in decision.exit_rule
+    assert "Do not promote" in decision.exit_rule
+    assert "successor-owned" in decision.exit_rule
 
 
 def test_compact_owner_family_tsv_triad_keeps_full_schema_and_rows(

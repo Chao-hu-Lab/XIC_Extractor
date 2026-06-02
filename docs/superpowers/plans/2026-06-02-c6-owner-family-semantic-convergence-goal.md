@@ -205,6 +205,17 @@ Done when:
 - `owner_family_successor_contract.py` records which invariants are
   `successor_owned`, still `active_policy`, or still `successor_gap`.
 
+C6-B execution closeout:
+- Final disposition: `owner_clustering.py` stays `keep_as_stage`.
+- Constructor/adaptor experiment was not attempted because C6-A1/A2/A3 only
+  prove shadow projections. Complete-link construction, hard split gate
+  construction policy, and backfill/matrix delivery remain active blockers.
+- `OwnerAlignedFeature` remains the active public delivery DTO.
+- Exit rule: do not promote to constructor, adapter, or retirement until the
+  blocking invariants are successor-owned and parity is proven for
+  `alignment_matrix.tsv`, `alignment_cells.tsv`, `alignment_review.tsv`, and
+  `owner_edge_evidence.tsv` when emitted.
+
 Phase 5 - Closeout And Phase Commit
 Purpose:
 - Prove the C6 owner-family path has one future direction and no production
