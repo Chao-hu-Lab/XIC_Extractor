@@ -235,6 +235,15 @@ def test_build_peak_hypotheses_projects_scorer_facts_to_successor_evidence() -> 
     assert evidence.common.evidence_score == 73
     assert evidence.common.reason == "decision: medium with trace support"
 
+    assert evidence.decision_semantics is not None
+    assert evidence.decision_semantics.decision_class == "review"
+    assert evidence.decision_semantics.support_reasons == (
+        "candidate_aligned_ms2_nl",
+        "cwt_boundary_morphology_context",
+    )
+    assert "targeted_rt_conflict" in evidence.decision_semantics.conflict_reasons
+    assert "targeted_rt_review" in evidence.decision_semantics.review_reasons
+
 
 def test_build_peak_hypotheses_scan_indices_match_bounded_baseline_interval() -> None:
     selected = _candidate(9.8, left=9.8, right=10.2)

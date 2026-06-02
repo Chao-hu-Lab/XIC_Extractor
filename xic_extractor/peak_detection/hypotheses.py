@@ -7,7 +7,10 @@ import numpy as np
 
 from xic_extractor.evidence_semantics import (
     CommonEvidence,
+    EvidenceDecisionSemantics,
+    EvidenceSignalSet,
     common_evidence_from_targeted_candidate,
+    decision_semantics_from_signal_set,
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.baseline import (
@@ -94,6 +97,7 @@ class EvidenceVector:
     boundary_score: float | None = None
     baseline_score: float | None = None
     common: CommonEvidence | None = None
+    decision_semantics: EvidenceDecisionSemantics | None = None
 
 
 @dataclass(frozen=True)
@@ -382,6 +386,20 @@ def _evidence_from_candidate(
         cwt_best_scale=candidate.cwt_best_scale,
         cwt_ridge_persistence=candidate.cwt_ridge_persistence,
         common=common,
+        decision_semantics=decision_semantics_from_signal_set(
+            EvidenceSignalSet(
+                support_labels=score.support_labels if score is not None else (),
+                concern_labels=score.concern_labels if score is not None else (),
+                proposal_sources=candidate.proposal_sources,
+                quality_flags=tuple(str(flag) for flag in candidate.quality_flags),
+                ms2_present=common.ms2_present,
+                nl_match=common.nl_match,
+                raw_score=score.raw_score if score is not None else None,
+                confidence=score.confidence if score is not None else "",
+                cap_labels=score.cap_labels if score is not None else (),
+                reason=score.reason if score is not None else "",
+            )
+        ),
     )
 
 

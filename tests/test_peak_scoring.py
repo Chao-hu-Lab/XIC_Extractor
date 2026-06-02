@@ -18,6 +18,7 @@ from xic_extractor.peak_scoring import (
     peak_width_severity,
     rt_centrality_severity,
     rt_prior_severity,
+    score_breakdown_fields,
     score_candidate,
     select_candidate_with_confidence,
     symmetry_severity,
@@ -44,6 +45,34 @@ from xic_extractor.signal_processing import PeakCandidate, PeakResult
 )
 def test_confidence_from_total(total: int, expected: Confidence) -> None:
     assert confidence_from_total(total) == expected
+
+
+def test_peak_scoring_public_import_surface_is_complete() -> None:
+    expected_names = [
+        "Confidence",
+        "ScoredCandidate",
+        "ScoringContext",
+        "build_evidence_reason",
+        "build_reason",
+        "confidence_from_total",
+        "local_sn_severity",
+        "nl_support_severity",
+        "noise_shape_severity",
+        "peak_width_severity",
+        "rt_centrality_severity",
+        "rt_prior_severity",
+        "score_breakdown_fields",
+        "score_candidate",
+        "select_candidate_with_confidence",
+        "symmetry_severity",
+        "candidate_quality_penalty",
+        "candidate_selection_quality_penalty",
+        "compute_local_sn_cache",
+        "hard_quality_flags",
+    ]
+
+    for name in expected_names:
+        assert hasattr(peak_scoring, name), name
 
 
 def test_reason_all_pass() -> None:
@@ -625,6 +654,31 @@ def test_reason_text_limits_default_evidence_labels() -> None:
         in reason
     )
     assert "poor edge recovery" not in reason
+
+
+def test_score_breakdown_fields_preserves_public_projection_order() -> None:
+    score = EvidenceScore(
+        base_score=50,
+        positive_points=40,
+        negative_points=5,
+        raw_score=85,
+        score_confidence="HIGH",
+        confidence="MEDIUM",
+        support_labels=("strict_nl_ok", "local_sn_strong"),
+        concern_labels=("trace_quality_review",),
+        cap_labels=("trace_quality_cap",),
+    )
+
+    assert score_breakdown_fields(score) == (
+        ("Final Confidence", "MEDIUM"),
+        ("Caps", "trace_quality_cap"),
+        ("Raw Score", "85"),
+        ("Support", "strict_nl_ok; local_sn_strong"),
+        ("Concerns", "trace_quality_review"),
+        ("Base Score", "50"),
+        ("Positive Points", "40"),
+        ("Negative Points", "5"),
+    )
 
 
 def test_score_candidate_no_nl_target_records_no_nl_support() -> None:

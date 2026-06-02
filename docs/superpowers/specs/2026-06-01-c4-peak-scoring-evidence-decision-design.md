@@ -1,7 +1,7 @@
 # C4 — Peak Scoring Evidence-Decision Design
 
 **Date:** 2026-06-01
-**Status:** Phase 4 design closeout v0.7 — evidence-chain successor direction
+**Status:** C4-A/B/C execution closeout v0.8 — evidence-chain successor bridge
 **Readiness label:** `diagnostic_only`
 **Supersedes for implementation:** [C4 peak_scoring split spec](2026-05-24-peak-pipeline-cleanup-peak-scoring-split-spec.md)
 **Depends on:** [C3 hypothesis model unification spec](2026-05-24-peak-pipeline-cleanup-hypothesis-model-unification-spec.md)
@@ -274,6 +274,73 @@ Phase 1 added a successor-projection parity test without moving scorer policy:
 
 C4-1 proves projection, not policy ownership. It does not authorize scorer
 deletion or future score/cap parity as the successor goal.
+
+### C4-A/B/C Execution Closeout
+
+The 2026-06-02 implementation closed the first semantic-convergence slice as a
+cleanup / bridge step. It does not change selected candidates, score arithmetic,
+confidence, cap labels, reason text, TSV/CSV/XLSX values, workbook schemas, or
+public output fields.
+
+Behavior label: no public behavior change.
+
+Implementation decisions:
+
+| Surface | Disposition | Execution result | Exit rule |
+|---|---|---|---|
+| Public imports from `xic_extractor.peak_scoring` | `compatibility_adapter` | Added complete import-smoke coverage for the public scorer surface named by C4-A. | Keep the facade until an approved public migration/deprecation plan exists. |
+| `score_breakdown_fields(...)` ordering and value projection | `legacy_compatibility_projection` | Added exact order/value characterization for the public score-breakdown projection. | May move only behind the same public facade with exact output parity. |
+| `build_evidence_reason(...)` | `legacy_compatibility_projection` plus active-policy boundary | Projection extraction is deferred because the function still calls the review-only policy helper. Moving it now would mix policy and projection. | Extract only pure formatting after review/not-counted status is supplied by a policy owner. |
+| Weighted score, caps, severity helpers, and selector tie-breaks | `active_policy` | Left in `peak_scoring.py`; no scoring or selector code movement. | Future migration requires selected-hypothesis and decision/explanation parity, or an explicit behavior-change spec. |
+| `EvidenceVector` / `CommonEvidence` scorer fact projection | `successor_owned` where fields already exist | Added `EvidenceVector.decision_semantics` as an internal projection over existing scorer/evidence facts. | Public fields stay compatibility projections until output schema migration is approved. |
+| Future decision vocabulary | `successor_decision_semantics` | Added `EvidenceDecisionSemantics` and `decision_semantics_from_signal_set(...)` in `evidence_semantics.py`. | This remains projection only until a model-selection policy is approved. |
+
+Typed evidence ownership after this slice:
+
+| Evidence family | Current owner after closeout | Status |
+|---|---|---|
+| Local S/N with AsLS provenance | `ScoringContext` / `score_candidate(...)` remain active policy; successor bridge sees `local_sn_*` labels. | `semantic_migration_candidate`; numeric baseline method, apex-above-baseline, and residual MAD still need a trace-evidence component before scorer tests can retire. |
+| Trace morphology | `PeakCandidate` region quality fields, quality flags, `CommonEvidence.trace_quality`, and `EvidenceDecisionSemantics` trace conflict/review reasons. | Partially bridged; full successor owner still needs one trace morphology component for shape, width, noise, continuity, edge recovery, shoulder/split/merge, and boundary plausibility. |
+| CWT | Proposal/evidence source projected through `proposal_sources`, `cwt_same_apex_support`, legacy CWT audit-presence fields, and `cwt_boundary_morphology_context`. | Bridged as morphology / boundary context. CWT alone is review-only and is not standalone identity or selection authority. |
+| MS2/NL | `EvidenceVector`, `CommonEvidence`, and `EvidenceDecisionSemantics` candidate-aligned support/conflict reasons. | Successor-owned for projection; active scoring still owns production weighting and caps. |
+| Role-aware targeted RT | Scorer labels/prior fields remain active policy; `EvidenceDecisionSemantics` maps RT support/review/conflict reasons. | Bridged for targeted ISTD/STD semantics only. It is not generalized to untargeted family alignment. |
+
+Decision semantics contract:
+
+- Decision classes are `accepted`, `review`, `not_counted`, `excluded`, and
+  `ambiguous`.
+- Legacy caps are compatibility inputs to typed review/not-counted/conflict
+  reasons; they are not promoted as future score/cap policy, and they do not
+  force `not_counted` unless the current scorer projection already says
+  `VERY_LOW` or `review only`.
+- Missing MS2 maps to `missing_ms2_not_observed` review semantics and only
+  becomes `not_counted` through the current compatibility projection.
+- RT-window conflict maps to targeted RT review/conflict semantics, not
+  automatic exclusion.
+- CWT maps to morphology / boundary context and requires correlated evidence.
+- `excluded` is reserved for explicit high-bar exclusion labels or a later
+  reviewed behavior contract.
+
+Test closeout:
+
+| Gate row | Test coverage |
+|---|---|
+| Complete public import smoke | `tests/test_peak_scoring.py::test_peak_scoring_public_import_surface_is_complete` |
+| Score-breakdown exact projection order | `tests/test_peak_scoring.py::test_score_breakdown_fields_preserves_public_projection_order` |
+| Decision semantics class/reason mapping | `tests/test_evidence_semantics.py::test_decision_semantics_maps_coherent_multievidence_to_accepted`, `test_decision_semantics_maps_no_ms2_cap_to_not_counted_without_exclusion`, `test_decision_semantics_keeps_cwt_as_context_not_standalone_authority`, `test_decision_semantics_keeps_targeted_rt_conflict_as_review_not_exclusion` |
+| Hypothesis successor bridge | `tests/test_peak_hypotheses.py::test_build_peak_hypotheses_projects_scorer_facts_to_successor_evidence` |
+| Public output consumers | Goal focused shard keeps candidate table, CSV, CSV-to-XLSX, Excel, score-calibration report, and signal-selection tests in the verification set. |
+
+Remaining active-policy surfaces:
+
+- `score_candidate(...)`, `_evidence_from_context(...)`,
+  `_is_review_only_evidence(...)`, `select_candidate_with_confidence(...)`,
+  confidence caps, severity helpers, local S/N computation, morphology severity,
+  RT severity, CWT guardrails, and quality penalties remain in
+  `peak_scoring.py`.
+- No legacy scorer tests were deleted. Future cleanup may delete
+  implementation-specific tests only after successor tests protect the same
+  product invariant.
 
 ## Future Slice Contract
 

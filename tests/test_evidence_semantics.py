@@ -12,6 +12,7 @@ from xic_extractor.evidence_semantics import (
     common_evidence_from_aligned_cell,
     common_evidence_from_discovery_candidate,
     common_evidence_from_targeted_candidate,
+    decision_semantics_from_signal_set,
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.signal_processing import (
@@ -214,6 +215,135 @@ def test_consistency_classifier_keeps_no_ms2_distinct_from_nl_dropout() -> None:
         "missing_ms2",
         "hard_nl_conflict",
     )
+
+
+def test_decision_semantics_maps_coherent_multievidence_to_accepted() -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=(
+                "strict_nl_ok",
+                "rt_prior_close",
+                "local_sn_strong",
+                "trace_clean",
+                "cwt_same_apex_support",
+            ),
+            proposal_sources=("legacy_savgol", "centwave_cwt"),
+            ms2_present=True,
+            nl_match=True,
+            raw_score=95,
+            confidence="HIGH",
+            reason="decision: accepted",
+        )
+    )
+
+    assert decision.decision_class == "accepted"
+    assert decision.support_reasons == (
+        "ms1_coherent",
+        "candidate_aligned_ms2_nl",
+        "role_aware_rt_support",
+        "cwt_boundary_morphology_context",
+    )
+    assert decision.conflict_reasons == ()
+    assert decision.not_counted_reasons == ()
+
+
+def test_decision_semantics_maps_no_ms2_cap_to_not_counted_without_exclusion(
+) -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=("local_sn_strong", "shape_clean", "trace_clean"),
+            concern_labels=("no_ms2",),
+            ms2_present=False,
+            nl_match=False,
+            raw_score=55,
+            confidence="LOW",
+            cap_labels=("no_ms2_cap",),
+            reason="decision: review only, not counted",
+        )
+    )
+
+    assert decision.decision_class == "not_counted"
+    assert decision.review_reasons == ("missing_ms2_not_observed",)
+    assert decision.not_counted_reasons == (
+        "legacy_review_only_projection",
+        "missing_ms2_compatibility_cap",
+    )
+    assert decision.exclusion_reasons == ()
+
+
+def test_decision_semantics_does_not_let_accepted_no_ms2_cap_force_not_counted(
+) -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=("local_sn_strong", "shape_clean", "trace_clean"),
+            concern_labels=("no_ms2",),
+            ms2_present=False,
+            nl_match=False,
+            raw_score=55,
+            confidence="LOW",
+            cap_labels=("no_ms2_cap",),
+            reason="decision: accepted",
+        )
+    )
+
+    assert decision.decision_class == "review"
+    assert decision.review_reasons == ("missing_ms2_not_observed",)
+    assert decision.not_counted_reasons == ()
+    assert decision.exclusion_reasons == ()
+
+
+def test_decision_semantics_does_not_let_medium_caps_force_not_counted() -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=("strict_nl_ok", "local_sn_strong", "shape_clean"),
+            concern_labels=("hard_quality_flag",),
+            ms2_present=True,
+            nl_match=True,
+            raw_score=74,
+            confidence="MEDIUM",
+            cap_labels=("hard_quality_flag_cap",),
+            reason="decision: accepted; cap: MEDIUM due to hard quality flag",
+        )
+    )
+
+    assert decision.decision_class == "review"
+    assert "trace_morphology_conflict" in decision.conflict_reasons
+    assert decision.review_reasons == ("trace_morphology_review",)
+    assert decision.not_counted_reasons == ()
+
+
+def test_decision_semantics_keeps_cwt_as_context_not_standalone_authority(
+) -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            proposal_sources=("centwave_cwt",),
+        )
+    )
+
+    assert decision.decision_class == "review"
+    assert decision.support_reasons == ("cwt_boundary_morphology_context",)
+    assert decision.review_reasons == ("cwt_requires_correlated_evidence",)
+
+
+def test_decision_semantics_keeps_targeted_rt_conflict_as_review_not_exclusion(
+) -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=("strict_nl_ok", "local_sn_strong", "shape_clean"),
+            concern_labels=("rt_prior_far",),
+            ms2_present=True,
+            nl_match=True,
+            raw_score=82,
+            confidence="VERY_LOW",
+            cap_labels=("rt_window_cap",),
+            reason="decision: review only, not counted",
+        )
+    )
+
+    assert decision.decision_class == "not_counted"
+    assert "targeted_rt_conflict" in decision.conflict_reasons
+    assert "targeted_rt_review" in decision.review_reasons
+    assert decision.exclusion_reasons == ()
 
 
 def _candidate(
