@@ -1,8 +1,8 @@
-# C6 - Cross-Sample Peak Group Hypothesis Shadow Contract Design
+# C6 - Cross-Sample Peak Group Hypothesis Migration Contract Design
 
 **Date:** 2026-06-02
-**Status:** Implementation snapshot v0.7 — C6-B final `owner_clustering.py` disposition
-**Readiness label:** `diagnostic_only`
+**Status:** Implementation snapshot v0.8 — successor constructor migration
+**Readiness label:** `production_candidate`
 **Parent spec:** [C6 alignment stage semantics and value assessment](2026-06-01-c6-alignment-stage-semantics-value-assessment-design.md)
 **Related contract:** `xic_extractor/alignment/owner_family_successor_contract.py`
 
@@ -18,13 +18,17 @@ these sample-local peak observations may represent the same cross-sample peak,
 and that claim can be supported, challenged, split, or demoted by evidence.
 ```
 
-Therefore the next C6 migration target is a shadow
-`CrossSamplePeakGroupHypothesis` contract, not a `CrossSampleFamily` contract
-and not the existing sample-local `PeakHypothesis` model.
+The first C6 slice introduced a shadow `CrossSamplePeakGroupHypothesis`
+contract. The follow-up C6-M migration now makes that successor contract own
+cross-sample owner-group construction internally. It is still not a
+`CrossSampleFamily` contract and not the existing sample-local
+`PeakHypothesis` model.
 
 `FAM######` remains as a public/output compatibility row ID. It is not the
-domain truth. `OwnerAlignedFeature` remains the active delivery DTO for the
-current owner-first pipeline until successor parity is proven.
+domain truth. `OwnerAlignedFeature` remains the active public delivery DTO for
+downstream owner-backfill, matrix, claim, primary-consolidation, writer, and
+process-payload consumers, but `owner_clustering.py` is now a compatibility
+adapter candidate rather than the semantic construction owner.
 
 ## Product Semantics
 
@@ -32,11 +36,11 @@ current owner-first pipeline until successor parity is proven.
 
 | Term | Meaning |
 | --- | --- |
-| `CrossSamplePeakGroupHypothesis` | A shadow owner-group membership claim that multiple sample-local owners may represent the same matrix-level peak group. |
+| `CrossSamplePeakGroupHypothesis` | The internal successor owner-group membership claim that multiple sample-local owners may represent the same matrix-level peak group. It now owns constructor semantics before adapting back to the public `OwnerAlignedFeature` DTO. |
 | sample-local `PeakHypothesis` | Existing `xic_extractor.peak_detection.hypotheses.PeakHypothesis`. It remains a per-trace/per-sample peak candidate and is not replaced by C6-A1. |
 | shared-peak `peak_hypothesis_id` | Existing diagnostic/product-activation identity in `shared_peak_identity_explanation`. C6-A1 must not write, consume, or redefine it. |
 | `public_family_id` | Existing `FAM######` row identity used by TSV/XLSX/output contracts. Compatibility ID only. |
-| `OwnerAlignedFeature` | Current active DTO produced by `cluster_sample_local_owners(...)` and consumed by backfill, matrix, claim, primary consolidation, and writers. |
+| `OwnerAlignedFeature` | Current active public DTO returned by `cluster_sample_local_owners(...)` and consumed by backfill, matrix, claim, primary consolidation, and writers. It is compatibility delivery language after C6-M, not the semantic construction owner. |
 | `family` | Legacy/output term. Do not use it as the semantic authority for new C6 work. |
 | `backfill` | Current missing-observation query and matrix materialization operation. It is not the C6-A1 focus; later work may rename or absorb it as a missing-observation query adapter. |
 
@@ -264,7 +268,7 @@ Purpose:
 - prove family ID / membership / event parity;
 - add writer-visible parity harness.
 
-Expected disposition after C6-A1:
+Historical disposition after C6-A1, before C6-M:
 
 ```text
 owner_clustering.py = keep_as_stage
@@ -281,7 +285,7 @@ C6-A1 implementation closeout:
   shadow identity and membership parity;
 - complete-link edge semantics, hard split gates, review-only owner records,
   and backfill seed / matrix delivery remain blockers, so
-  `owner_clustering.py` remains `keep_as_stage`;
+  `owner_clustering.py` remains `keep_as_stage` at the C6-A1 checkpoint;
 - evidence: `tests/test_alignment_owner_family_successor_contract.py` covers
   supporting-event projection, membership mapping, disposition blocking, and
   compact TSV triad full-header/full-row parity.
@@ -337,14 +341,17 @@ C6-A2 implementation closeout:
 - `owner_family_successor_mapping(feature, edge_evidence=...)` marks only
   `owner_edge_evidence_projection` as `successor_owned` when owner edge
   evidence was projected into successor edge facts;
-- complete-link family construction remains `active_policy` because A2 does
-  not replace the all-strong-pair grouping rule;
-- hard split gates and review-only owner records remain `active_policy`;
-  backfill seed / matrix delivery remains `successor_gap`;
-- `owner_clustering.py` remains `keep_as_stage` after A2 because complete-link
-  construction, split, review-only, and backfill blockers are still live;
-- C6-B final closeout later names `owner_clustering.py` as `keep_as_stage`
-  after C6-A3 evidence is evaluated;
+- at the C6-A2 checkpoint, complete-link family construction remains
+  `active_policy` because A2 does not replace the all-strong-pair grouping
+  rule;
+- at the C6-A2 checkpoint, hard split gates and review-only owner records
+  remain `active_policy`; backfill seed / matrix delivery remains
+  `successor_gap`;
+- `owner_clustering.py` remains `keep_as_stage` after A2 at that historical
+  checkpoint because complete-link construction, split, review-only, and
+  backfill blockers are still live;
+- C6-M below supersedes this historical checkpoint after constructor parity is
+  proven;
 - evidence:
   `tests/test_alignment_owner_family_successor_contract.py` covers strong edge
   support projection, weak edge challenge projection, blocked-edge shadow
@@ -402,51 +409,53 @@ C6-A3 implementation closeout:
 - blocked `OwnerEdgeEvidence` can project a hard-gate challenge observation,
   preserving the current failure reason vocabulary, but this remains an
   observation of construction-time policy;
-- envelope-only construction gates that do not emit blocked `OwnerEdgeEvidence`
-  remain unprojected `active_policy` blockers after C6-B; a later parity slice
-  must own the construction rule before promotion;
+- at the C6-A3 checkpoint, envelope-only construction gates that do not emit
+  blocked `OwnerEdgeEvidence` remain unprojected `active_policy` blockers; C6-M
+  below supersedes this after constructor parity is proven;
 - `owner_family_successor_mapping(...)` may mark
   `review_only_owner_records` as `successor_owned` only when review-only facts
   are actually projected for a review-only feature;
-- `hard_family_split_gates` remains `active_policy`; C6-A3 does not claim
-  successor ownership of same-sample, neutral-loss, precursor, product, or
-  observed-loss construction gates;
-- `complete_link_edge_semantics` remains `active_policy`, and
-  `backfill_seed_and_matrix_delivery` remains `successor_gap`;
-- `owner_clustering.py` remains `keep_as_stage` after A3 because complete-link
-  construction, hard-gate construction policy, and backfill/matrix delivery
-  still block retirement or adapter promotion;
-- C6-B final closeout keeps `owner_clustering.py` as `keep_as_stage` using the
-  A1/A2/A3 evidence; shadow projections are review evidence, not matrix
-  delivery ownership;
+- at the C6-A3 checkpoint, `hard_family_split_gates` remains `active_policy`;
+  C6-A3 does not claim successor ownership of same-sample, neutral-loss,
+  precursor, product, or observed-loss construction gates;
+- at the C6-A3 checkpoint, `complete_link_edge_semantics` remains
+  `active_policy`, and `backfill_seed_and_matrix_delivery` remains
+  `successor_gap`;
+- `owner_clustering.py` remains `keep_as_stage` after A3 at that historical
+  checkpoint because complete-link construction, hard-gate construction policy,
+  and backfill/matrix delivery still block retirement or adapter promotion;
+- C6-M below supersedes this historical closeout by moving construction into
+  the successor constructor while keeping public delivery as an adapter;
 - evidence:
   `tests/test_alignment_owner_family_successor_contract.py` covers
   identity-conflict review fact projection, ambiguous-owner candidate detail
   projection, blocked-edge hard-gate challenge observations without policy
   promotion, and post-review-fact disposition blocking.
 
-### C6-B — Final Owner-Clustering Disposition
+### C6-M — Successor Constructor Migration
 
 Purpose:
 
-- decide whether owner-family construction can internally build
-  `CrossSamplePeakGroupHypothesis` first and adapt back to
-  `OwnerAlignedFeature`;
-- keep `OwnerAlignedFeature` as the public delivery DTO until a later public
-  migration contract exists;
-- move `owner_clustering.py` from semantic migration candidate to one concrete
-  disposition.
+- make owner-family construction internally build
+  `CrossSamplePeakGroupHypothesis` first;
+- adapt the successor hypothesis back to `OwnerAlignedFeature` so downstream
+  public contracts do not change;
+- move `owner_clustering.py` from active construction owner to one concrete
+  compatibility-adapter disposition.
 
 Final outcome:
 
-- `owner_clustering.py` disposition: `keep_as_stage`;
-- no constructor/adaptor experiment was attempted;
-- reason: C6-A1/A2/A3 prove useful shadow projections, but complete-link
-  construction, hard split gate construction policy, and backfill/matrix
-  delivery remain active blockers;
-- review-only projection remains shadow evidence only; it does not transfer
-  matrix delivery ownership;
-- `OwnerAlignedFeature` remains the active public delivery DTO.
+- `owner_clustering.py` disposition:
+  `compatibility_adapter_candidate`;
+- `cross_sample_peak_groups.construct_cross_sample_peak_group_hypotheses(...)`
+  owns complete-link construction, hard split gates, identity-conflict
+  review-only construction records, ambiguous review-only construction records,
+  and delivery metadata needed to adapt back to `OwnerAlignedFeature`;
+- `owner_clustering.cluster_sample_local_owners(...)` remains the public
+  entrypoint and adapts successor hypotheses back to `OwnerAlignedFeature`;
+- `OwnerAlignedFeature` remains the active public delivery DTO for backfill,
+  matrix, claim registry, primary consolidation, writers, and process payloads;
+- public output behavior is unchanged by focused parity tests.
 
 Forbidden outcomes:
 
@@ -458,10 +467,11 @@ Forbidden outcomes:
 
 Done when:
 
-- C6-B names exactly one disposition for `owner_clustering.py`;
-- constructor/adaptor promotion is not attempted until exact row/value parity is
-  proven for `alignment_matrix.tsv`, `alignment_cells.tsv`, and
-  `alignment_review.tsv`;
+- C6-M names exactly one disposition for `owner_clustering.py`;
+- constructor/adaptor promotion has focused parity for family IDs, owner order,
+  complete-link grouping, hard gates, edge evidence, review-only records,
+  ambiguous records, delivery fields, and compact TSV row/value parity for
+  `alignment_matrix.tsv`, `alignment_cells.tsv`, and `alignment_review.tsv`;
 - `owner_edge_evidence.tsv` row parity is proven when debug or validation output
   emits it;
 - optional pre-backfill consolidation and backfill-scope consumers are covered
@@ -470,28 +480,29 @@ Done when:
 - focused owner-clustering tests still prove complete-link, drift-prior,
   conflict split, review-only, and no-same-sample invariants;
 - `owner_family_successor_contract.py` records which invariants are successor
-  owned, still active policy, or still successor gaps;
+  owned, adapter-only, still active policy, or still successor gaps;
 - legacy cleanup candidates are deferred to a later parity-backed cleanup goal.
 
-C6-B implementation closeout:
+C6-M implementation closeout:
 
-- `owner_family_successor_contract.py` returns the final C6-B disposition
-  `keep_as_stage`;
-- `complete_link_edge_semantics` and `hard_family_split_gates` remain
-  `active_policy`;
-- `backfill_seed_and_matrix_delivery` remains `successor_gap`;
+- `owner_family_successor_contract.py` returns
+  `compatibility_adapter_candidate` when no invariant remains `active_policy`
+  or `successor_gap`;
+- `complete_link_edge_semantics` and `hard_family_split_gates` are
+  `successor_owned`;
+- `backfill_seed_and_matrix_delivery` is
+  `compatibility_adapter_candidate`, meaning successor metadata adapts to the
+  old DTO but downstream consumers have not migrated;
 - `OwnerAlignedFeature` is unchanged and remains the active delivery DTO;
 - public output behavior is unchanged.
 
 Later cleanup candidates:
 
-- successor-owned complete-link family construction with family membership
-  parity;
-- successor-owned hard split gate construction policy for same-sample,
-  neutral-loss, precursor, product, and observed-loss gates;
-- successor-owned backfill seed and matrix delivery before any
-  `OwnerAlignedFeature` adapter/retirement migration;
-- parity for `alignment_matrix.tsv`, `alignment_cells.tsv`,
+- migrate owner-backfill, owner-matrix, claim registry, primary consolidation,
+  writers, and process payloads to consume successor groups directly;
+- only after that downstream migration, consider whether `OwnerAlignedFeature`
+  becomes a thinner public compatibility wrapper or can be retired;
+- keep parity for `alignment_matrix.tsv`, `alignment_cells.tsv`,
   `alignment_review.tsv`, and `owner_edge_evidence.tsv` when emitted.
 
 ## Allowed Implementation Scope By Phase

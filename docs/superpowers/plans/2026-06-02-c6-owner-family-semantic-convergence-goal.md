@@ -4,14 +4,17 @@
 /goal
 GOAL:
 Complete one end-to-end C6 owner-family semantic convergence PR through
-C6-A1, C6-A2, C6-A3, and C6-B:
+C6-A1, C6-A2, C6-A3, C6-B, and the C6-M successor-constructor migration:
 
 1. establish a behavior-neutral `CrossSamplePeakGroupHypothesis` shadow
    contract for cross-sample owner membership;
 2. project current owner-family edge evidence into successor-visible facts;
 3. project split-gate and review-only semantics into successor-visible facts
    without changing live policy disposition;
-4. decide the final C6-B disposition of `owner_clustering.py`.
+4. decide the final C6-B disposition of `owner_clustering.py`;
+5. migrate owner-family construction into the successor cross-sample peak group
+   constructor and keep `owner_clustering.py` as the public compatibility
+   adapter when parity holds.
 
 The finish line is not deletion. The finish line is a parity-backed decision:
 `owner_clustering.py` is either `keep_as_stage`,
@@ -35,9 +38,12 @@ CONTEXT:
   `docs/superpowers/specs/2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md`.
 - Current baseline:
   Event-first alignment is already retired. Owner-first production stages remain
-  active. `owner_clustering.py` still constructs cross-sample owner families and
-  `OwnerAlignedFeature` remains the active delivery DTO consumed by backfill,
-  matrix, claim registry, primary consolidation, and writers.
+  active. After C6-M,
+  `cross_sample_peak_groups.construct_cross_sample_peak_group_hypotheses(...)`
+  owns owner-family construction, while `owner_clustering.py` adapts the
+  successor result back to `OwnerAlignedFeature`. `OwnerAlignedFeature` remains
+  the active delivery DTO consumed by backfill, matrix, claim registry, primary
+  consolidation, and writers.
 - Successor direction:
   `family` / `FAM######` is output compatibility language. The product semantic
   center moves toward a cross-sample peak group hypothesis supported,
@@ -205,15 +211,19 @@ Done when:
 - `owner_family_successor_contract.py` records which invariants are
   `successor_owned`, still `active_policy`, or still `successor_gap`.
 
-C6-B execution closeout:
-- Final disposition: `owner_clustering.py` stays `keep_as_stage`.
-- Constructor/adaptor experiment was not attempted because C6-A1/A2/A3 only
-  prove shadow projections. Complete-link construction, hard split gate
-  construction policy, and backfill/matrix delivery remain active blockers.
+C6-M execution closeout:
+- Final disposition: `owner_clustering.py` is
+  `compatibility_adapter_candidate`.
+- Constructor/adaptor migration was attempted and accepted after focused parity:
+  complete-link construction, hard split gate construction policy, review-only
+  construction records, edge evidence projection, and adapter delivery metadata
+  are successor-owned or adapter-owned.
 - `OwnerAlignedFeature` remains the active public delivery DTO.
-- Exit rule: do not promote to constructor, adapter, or retirement until the
-  blocking invariants are successor-owned and parity is proven for
-  `alignment_matrix.tsv`, `alignment_cells.tsv`, `alignment_review.tsv`, and
+- Exit rule: do not retire `owner_clustering.py` or replace
+  `OwnerAlignedFeature` until owner-backfill, owner-matrix, claim registry,
+  primary consolidation, writers, and process payload consumers accept
+  successor groups directly, with parity proven for `alignment_matrix.tsv`,
+  `alignment_cells.tsv`, `alignment_review.tsv`, and
   `owner_edge_evidence.tsv` when emitted.
 
 Phase 5 - Closeout And Phase Commit
@@ -221,7 +231,7 @@ Purpose:
 - Prove the C6 owner-family path has one future direction and no production
   behavior drift.
 Done when:
-- The C6 spec records A1/A2/A3/B status, invariant mapping, successor gaps,
+- The C6 spec records A1/A2/A3/B/M status, invariant mapping, successor gaps,
   final `owner_clustering.py` disposition, and later cleanup candidates.
 - Phase verification results are fresh.
 - Review blockers are closed.
@@ -229,13 +239,13 @@ Done when:
 - Commit contains only the completed phase scope.
 
 DONE WHEN:
-- C6-B names exactly one disposition for `owner_clustering.py` after C6-A1,
-  C6-A2, and C6-A3 evidence has been evaluated.
-- C6-A1, C6-A2, C6-A3, and C6-B phase gates are complete with fresh
+- C6-M names exactly one disposition for `owner_clustering.py` after successor
+  constructor parity has been evaluated.
+- C6-A1, C6-A2, C6-A3, C6-B, and C6-M phase gates are complete with fresh
   verification.
-- `CrossSamplePeakGroupHypothesis` exists as an internal successor shadow
-  contract with tested membership, edge evidence, and split/review-only
-  projections appropriate to the completed phases.
+- `CrossSamplePeakGroupHypothesis` exists as an internal successor contract with
+  tested membership, edge evidence, split/review-only projections, and
+  successor-owned constructor behavior appropriate to the completed phases.
 - `owner_clustering.py` has one documented C6-B disposition and exit rule:
   `keep_as_stage`, `internal_constructor_candidate`,
   `compatibility_adapter_candidate`, or `retirement_candidate_after_parity`.

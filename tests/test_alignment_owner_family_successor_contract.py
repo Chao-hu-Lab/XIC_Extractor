@@ -4,13 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_alignment_owner_clustering import _owner
+from tests.test_alignment_owner_clustering import _DriftLookup, _owner
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.cross_sample_peak_groups import (
+    construct_cross_sample_peak_group_hypotheses,
     cross_sample_peak_group_edge_fact_from_owner_edge,
     cross_sample_peak_group_edge_facts_from_owner_edges,
     cross_sample_peak_group_hard_gate_challenge_fact_from_owner_edge,
     cross_sample_peak_group_hypothesis_from_owner_feature,
+    review_only_peak_group_hypotheses_from_ambiguous_records,
 )
 from xic_extractor.alignment.edge_scoring import evaluate_owner_edge
 from xic_extractor.alignment.owner_clustering import (
@@ -47,13 +49,13 @@ def test_owner_family_successor_mapping_names_all_required_invariants() -> None:
     )
     assert (
         by_invariant["complete_link_edge_semantics"].disposition
-        == "active_policy"
+        == "successor_owned"
     )
-    assert by_invariant["hard_family_split_gates"].disposition == "active_policy"
-    assert by_invariant["review_only_owner_records"].disposition == "active_policy"
+    assert by_invariant["hard_family_split_gates"].disposition == "successor_owned"
+    assert by_invariant["review_only_owner_records"].disposition == "successor_owned"
     assert (
         by_invariant["backfill_seed_and_matrix_delivery"].disposition
-        == "successor_gap"
+        == "compatibility_adapter_candidate"
     )
     assert "owner_count=2" in by_invariant[
         "stable_cross_sample_family_membership"
@@ -64,6 +66,169 @@ def test_owner_family_successor_mapping_names_all_required_invariants() -> None:
     assert "alignment_matrix.tsv" in by_invariant[
         "stable_cross_sample_family_membership"
     ].exit_rule
+
+
+def test_successor_constructor_matches_owner_adapter_delivery_fields() -> None:
+    owners = (
+        _owner("sample-a", "a", apex_rt=8.40),
+        _owner("sample-b", "b", apex_rt=8.60),
+    )
+    edge_evidence = []
+
+    hypotheses = construct_cross_sample_peak_group_hypotheses(
+        owners,
+        config=AlignmentConfig(identity_rt_candidate_window_sec=180.0),
+        edge_evidence_sink=edge_evidence,
+    )
+    features = cluster_sample_local_owners(
+        owners,
+        config=AlignmentConfig(identity_rt_candidate_window_sec=180.0),
+        edge_evidence_sink=[],
+    )
+
+    assert len(hypotheses) == len(features) == 1
+    hypothesis = hypotheses[0]
+    feature = features[0]
+
+    assert hypothesis.construction_role == "successor_constructor"
+    assert hypothesis.group_hypothesis_id == feature.feature_family_id
+    assert hypothesis.public_family_id == feature.feature_family_id
+    assert hypothesis.owner_ids == feature.event_cluster_ids
+    assert hypothesis.event_ids == tuple(
+        event_id for owner in feature.owners for event_id in owner.event_candidate_ids
+    )
+    assert hypothesis.event_member_count == feature.event_member_count
+    assert hypothesis.neutral_loss_tag == feature.neutral_loss_tag
+    assert hypothesis.group_center_mz == feature.family_center_mz
+    assert hypothesis.group_center_rt == feature.family_center_rt
+    assert hypothesis.group_product_mz == feature.family_product_mz
+    assert (
+        hypothesis.group_observed_neutral_loss_da
+        == feature.family_observed_neutral_loss_da
+    )
+    assert hypothesis.has_anchor == feature.has_anchor
+    assert hypothesis.owners == feature.owners
+    assert hypothesis.evidence == feature.evidence
+    assert len(edge_evidence) == 1
+
+    by_invariant = {
+        mapping.invariant: mapping
+        for mapping in owner_family_successor_mapping(
+            feature,
+            edge_evidence=edge_evidence,
+        )
+    }
+    assert by_invariant["complete_link_edge_semantics"].disposition == (
+        "successor_owned"
+    )
+    assert by_invariant["hard_family_split_gates"].disposition == (
+        "successor_owned"
+    )
+    assert by_invariant["backfill_seed_and_matrix_delivery"].disposition == (
+        "compatibility_adapter_candidate"
+    )
+
+
+def test_successor_constructor_preserves_drift_prior_complete_link() -> None:
+    owners = (
+        _owner("tumor-a", "a", apex_rt=11.5674),
+        _owner("qc-a", "b", apex_rt=12.1813),
+        _owner("qc-b", "c", apex_rt=12.4051),
+        _owner("normal-a", "d", apex_rt=12.6515),
+        _owner("benign-a", "e", apex_rt=12.6673),
+    )
+
+    hypotheses = construct_cross_sample_peak_group_hypotheses(
+        owners,
+        config=AlignmentConfig(identity_rt_candidate_window_sec=180.0),
+        drift_lookup=_DriftLookup(
+            deltas={
+                "tumor-a": -0.35,
+                "qc-a": 0.0,
+                "qc-b": 0.10,
+                "normal-a": 0.35,
+                "benign-a": 0.36,
+            },
+            orders={
+                "tumor-a": 1,
+                "qc-a": 20,
+                "qc-b": 40,
+                "normal-a": 60,
+                "benign-a": 80,
+            },
+        ),
+    )
+
+    assert len(hypotheses) == 1
+    assert len(hypotheses[0].owner_ids) == 5
+    assert hypotheses[0].evidence == "owner_complete_link;owner_count=5"
+
+
+def test_successor_constructor_enforces_hard_split_gates() -> None:
+    hypotheses = construct_cross_sample_peak_group_hypotheses(
+        (
+            _owner("sample-a", "a", product_mz=126.066, observed_loss=116.048),
+            _owner("sample-b", "b", product_mz=126.066, observed_loss=116.500),
+            _owner("sample-c", "c", product_mz=127.000, observed_loss=116.048),
+            _owner("sample-d", "d", neutral_loss_tag="NL141"),
+        ),
+        config=AlignmentConfig(
+            product_mz_tolerance_ppm=20.0,
+            observed_loss_tolerance_ppm=20.0,
+        ),
+    )
+
+    assert [hypothesis.owner_ids for hypothesis in hypotheses] == [
+        ("OWN-sample-a-a",),
+        ("OWN-sample-b-b",),
+        ("OWN-sample-c-c",),
+        ("OWN-sample-d-d",),
+    ]
+
+
+def test_successor_constructor_preserves_review_only_records() -> None:
+    hypotheses = construct_cross_sample_peak_group_hypotheses(
+        (
+            _owner("sample-a", "conflict", identity_conflict=True),
+            _owner("sample-b", "clean"),
+        ),
+        config=AlignmentConfig(),
+    )
+
+    conflict, clean = hypotheses
+    assert conflict.public_family_id == "FAM000001"
+    assert conflict.review_only is True
+    assert conflict.identity_conflict is True
+    assert conflict.evidence == "identity_conflict_review_only"
+    assert clean.public_family_id == "FAM000002"
+    assert clean.review_only is False
+
+
+def test_successor_constructor_preserves_ambiguous_review_only_records() -> None:
+    hypotheses = review_only_peak_group_hypotheses_from_ambiguous_records(
+        (
+            AmbiguousOwnerRecord(
+                ambiguity_id="AMB-sample-a-000001",
+                sample_stem="sample-a",
+                candidate_ids=("sample-a#1", "sample-a#2"),
+                reason="owner_multiplet_ambiguity",
+                neutral_loss_tag="NL116",
+                precursor_mz=500.0,
+                apex_rt=8.5,
+                product_mz=383.9526,
+                observed_neutral_loss_da=116.0474,
+            ),
+        ),
+        start_index=10,
+    )
+
+    assert len(hypotheses) == 1
+    hypothesis = hypotheses[0]
+    assert hypothesis.public_family_id == "FAM000010"
+    assert hypothesis.review_only is True
+    assert hypothesis.owners == ()
+    assert hypothesis.ambiguous_sample_stem == "sample-a"
+    assert hypothesis.ambiguous_candidate_ids == ("sample-a#1", "sample-a#2")
 
 
 def test_cross_sample_peak_group_hypothesis_projects_owner_membership() -> None:
@@ -129,7 +294,7 @@ def test_strong_owner_edge_projects_support_fact_and_marks_successor_owned() -> 
     assert "challenge_count=0" in edge_mapping.current_state
     assert "CrossSamplePeakGroupEdgeFact" in edge_mapping.successor_surface
     assert by_invariant["complete_link_edge_semantics"].disposition == (
-        "active_policy"
+        "successor_owned"
     )
 
 
@@ -275,7 +440,7 @@ def test_ambiguous_review_only_feature_projects_candidate_review_details() -> No
     assert "sample-a#1,sample-a#2" in review_mapping.current_state
 
 
-def test_blocked_edge_projects_hard_gate_observation_without_policy_promotion() -> None:
+def test_blocked_edge_projects_hard_gate_observation() -> None:
     owners = (_owner("sample-a", "a"), _owner("sample-a", "b"))
     edge = evaluate_owner_edge(owners[0], owners[1], config=AlignmentConfig())
     feature = replace(
@@ -315,16 +480,16 @@ def test_blocked_edge_projects_hard_gate_observation_without_policy_promotion() 
         "successor_owned"
     )
     assert by_invariant["complete_link_edge_semantics"].disposition == (
-        "active_policy"
+        "successor_owned"
     )
-    assert by_invariant["hard_family_split_gates"].disposition == "active_policy"
+    assert by_invariant["hard_family_split_gates"].disposition == "successor_owned"
     assert "hard_gate_challenge_fact_count=1" in by_invariant[
         "hard_family_split_gates"
     ].current_state
     assert "same_sample" in by_invariant["hard_family_split_gates"].current_state
 
 
-def test_owner_clustering_keeps_stage_after_review_fact_projection() -> None:
+def test_owner_clustering_is_adapter_candidate_after_successor_constructor() -> None:
     feature = cluster_sample_local_owners(
         (
             _owner("sample-a", "conflict", identity_conflict=True),
@@ -335,14 +500,14 @@ def test_owner_clustering_keeps_stage_after_review_fact_projection() -> None:
 
     decision = owner_clustering_disposition(owner_family_successor_mapping(feature))
 
-    assert decision.disposition == "keep_as_stage"
+    assert decision.disposition == "compatibility_adapter_candidate"
     assert "review_only_owner_records" not in decision.blocking_invariants
-    assert "complete_link_edge_semantics" in decision.blocking_invariants
-    assert "hard_family_split_gates" in decision.blocking_invariants
-    assert "backfill_seed_and_matrix_delivery" in decision.blocking_invariants
+    assert "complete_link_edge_semantics" not in decision.blocking_invariants
+    assert "hard_family_split_gates" not in decision.blocking_invariants
+    assert "backfill_seed_and_matrix_delivery" not in decision.blocking_invariants
 
 
-def test_c6_b_final_disposition_keeps_stage_after_shadow_evidence() -> None:
+def test_c6_migration_disposition_becomes_adapter_candidate_after_parity() -> None:
     edge_evidence = []
     edge_feature = cluster_sample_local_owners(
         (_owner("sample-a", "a"), _owner("sample-b", "b")),
@@ -382,22 +547,29 @@ def test_c6_b_final_disposition_keeps_stage_after_shadow_evidence() -> None:
         "successor_owned"
     )
     assert by_invariant["review_only_owner_records"].disposition == "successor_owned"
-    assert decision.disposition == "keep_as_stage"
-    assert "C6-B final disposition" in decision.reason
-    assert "shadow projection" in decision.reason
+    assert by_invariant["complete_link_edge_semantics"].disposition == (
+        "successor_owned"
+    )
+    assert by_invariant["hard_family_split_gates"].disposition == "successor_owned"
+    assert by_invariant["backfill_seed_and_matrix_delivery"].disposition == (
+        "compatibility_adapter_candidate"
+    )
+    assert decision.disposition == "compatibility_adapter_candidate"
+    assert "compatibility_adapter_candidate" in decision.reason
+    assert "successor cross-sample peak group construction" in decision.reason
     assert "stable_cross_sample_family_membership" not in decision.blocking_invariants
     assert "owner_edge_evidence_projection" not in decision.blocking_invariants
-    assert "complete_link_edge_semantics" in decision.blocking_invariants
-    assert "hard_family_split_gates" in decision.blocking_invariants
+    assert "complete_link_edge_semantics" not in decision.blocking_invariants
+    assert "hard_family_split_gates" not in decision.blocking_invariants
     assert "review_only_owner_records" not in decision.blocking_invariants
-    assert "backfill_seed_and_matrix_delivery" in decision.blocking_invariants
+    assert "backfill_seed_and_matrix_delivery" not in decision.blocking_invariants
     assert "alignment_matrix.tsv" in decision.exit_rule
     assert "alignment_cells.tsv" in decision.exit_rule
     assert "alignment_review.tsv" in decision.exit_rule
     assert "owner_edge_evidence.tsv" in decision.exit_rule
     assert "when emitted" in decision.exit_rule
-    assert "Do not promote" in decision.exit_rule
-    assert "successor-owned" in decision.exit_rule
+    assert "Do not retire" in decision.exit_rule
+    assert "OwnerAlignedFeature" in decision.exit_rule
 
 
 def test_compact_owner_family_tsv_triad_keeps_full_schema_and_rows(

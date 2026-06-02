@@ -44,18 +44,22 @@ OWNER_FAMILY_INVARIANTS: tuple[OwnerFamilyInvariant, ...] = (
     "review_only_owner_records",
     "backfill_seed_and_matrix_delivery",
 )
-OWNER_CLUSTERING_C6B_FINAL_DISPOSITION: OwnerClusteringDisposition = "keep_as_stage"
+OWNER_CLUSTERING_C6B_FINAL_DISPOSITION: OwnerClusteringDisposition = (
+    "compatibility_adapter_candidate"
+)
 OWNER_CLUSTERING_C6B_REASON = (
-    "C6-B final disposition is keep_as_stage: C6-A1/A2/A3 shadow projection "
-    "evidence is review-only and does not transfer complete-link construction, "
-    "hard split gate construction policy, or backfill/matrix delivery ownership."
+    "C6 migration disposition is compatibility_adapter_candidate: successor "
+    "cross-sample peak group construction owns complete-link family "
+    "construction, hard split gates, review-only construction records, and "
+    "delivery metadata, while owner_clustering.py preserves the public "
+    "OwnerAlignedFeature facade for downstream matrix/backfill consumers."
 )
 OWNER_CLUSTERING_C6B_EXIT_RULE = (
-    "Do not promote owner_clustering.py to an internal constructor, "
-    "compatibility adapter, or retirement candidate until blocking invariants "
-    "are successor-owned and public parity is proven for alignment_matrix.tsv, "
-    "alignment_cells.tsv, alignment_review.tsv, and owner_edge_evidence.tsv "
-    "when emitted."
+    "Do not retire owner_clustering.py or replace OwnerAlignedFeature until "
+    "downstream backfill, matrix, claim, primary-consolidation, writer, and "
+    "process payload consumers accept the successor contract directly, with "
+    "public parity proven for alignment_matrix.tsv, alignment_cells.tsv, "
+    "alignment_review.tsv, and owner_edge_evidence.tsv when emitted."
 )
 
 
@@ -136,22 +140,26 @@ def owner_family_successor_mapping(
             successor_surface=(
                 "CrossSamplePeakGroupEdgeFact shadow projection"
                 if projected_edge_facts
-                else "future_edge_evidence_projection"
+                else "successor_constructor_no_edge_required"
             ),
             disposition=(
-                "successor_owned" if projected_edge_facts else "active_policy"
+                "successor_owned"
+                if projected_edge_facts or len(feature.owners) < 2
+                else "active_policy"
             ),
             public_oracle=(
-                "tests/test_alignment_owner_clustering.py::"
-                "test_owner_clustering_does_not_bridge_three_owner_complete_link_group"
+                "tests/test_alignment_owner_family_successor_contract.py::"
+                "test_successor_constructor_matches_owner_adapter_delivery_fields"
                 if not projected_edge_facts
-                else "tests/test_alignment_owner_family_successor_contract.py::"
-                "test_strong_owner_edge_projects_support_fact_and_marks_successor_owned"
+                else (
+                    "tests/test_alignment_owner_family_successor_contract.py::"
+                    "test_strong_owner_edge_projects_support_fact_and_marks_successor_owned"
+                )
             ),
             exit_rule=(
                 "Project owner edge evidence into successor-visible facts "
                 "before using it as migration evidence."
-                if not projected_edge_facts
+                if not projected_edge_facts and len(feature.owners) >= 2
                 else "C6-A2 owns only shadow projection of current owner edge "
                 "facts. Complete-link construction policy, hard gates, "
                 "review-only owner records, and backfill/matrix delivery keep "
@@ -162,53 +170,52 @@ def owner_family_successor_mapping(
         OwnerFamilyInvariantMapping(
             invariant="complete_link_edge_semantics",
             current_owner=(
-                "owner_clustering.cluster_sample_local_owners / "
+                "cross_sample_peak_groups."
+                "construct_cross_sample_peak_group_hypotheses / "
                 "all-pairs strong-edge complete-link rule"
             ),
             current_state=(
                 f"family_evidence={feature.evidence};"
                 f"shadow_edge_fact_count={len(projected_edge_facts)}"
             ),
-            successor_surface="future_complete_link_membership_policy",
-            disposition="active_policy",
+            successor_surface=(
+                "CrossSamplePeakGroupHypothesis successor constructor"
+            ),
+            disposition="successor_owned",
             public_oracle=(
-                "tests/test_alignment_owner_clustering.py::"
-                "test_owner_clustering_does_not_bridge_three_owner_complete_link_group"
+                "tests/test_alignment_owner_family_successor_contract.py::"
+                "test_successor_constructor_matches_owner_adapter_delivery_fields"
             ),
             exit_rule=(
-                "A2 projects edge evidence facts only. Preserve the complete-link "
-                "all-strong-pair grouping policy as active owner-clustering "
-                "policy until successor tests can construct the same families "
-                "and prove matrix/cells/review parity."
+                "The successor constructor owns complete-link membership "
+                "construction, but owner_clustering.py remains the public "
+                "OwnerAlignedFeature adapter until downstream consumers migrate."
             ),
         ),
         OwnerFamilyInvariantMapping(
             invariant="hard_family_split_gates",
-            current_owner="owner_clustering._group_can_pass_hard_gates",
+            current_owner=(
+                "cross_sample_peak_groups.construct_cross_sample_peak_group_hypotheses"
+            ),
             current_state=_hard_gate_challenge_state(
                 feature,
                 hard_gate_challenge_facts,
             ),
             successor_surface=(
-                "CrossSamplePeakGroupHardGateChallengeFact shadow observation"
+                "CrossSamplePeakGroupHypothesis successor constructor"
                 if hard_gate_challenge_facts
-                else "future_family_split_policy"
+                else "successor_family_split_policy"
             ),
-            disposition="active_policy",
+            disposition="successor_owned",
             public_oracle=(
-                "tests/test_alignment_owner_clustering.py::"
-                "test_owner_clustering_rejects_product_or_observed_loss_conflict"
-                if not hard_gate_challenge_facts
-                else "tests/test_alignment_owner_family_successor_contract.py::"
-                "test_blocked_edge_projects_hard_gate_observation_without_policy_promotion"
+                "tests/test_alignment_owner_family_successor_contract.py::"
+                "test_successor_constructor_enforces_hard_split_gates"
             ),
             exit_rule=(
-                "Blocked OwnerEdgeEvidence can expose shadow hard-gate "
-                "observations, but C6-A3 does not own construction-time split "
-                "policy. Preserve same-sample, neutral-loss, precursor, "
-                "product, and observed-loss split gates as active "
-                "owner-clustering policy until successor tests can construct "
-                "the same families and prove matrix/cells/review parity."
+                "The successor constructor owns same-sample, neutral-loss, "
+                "precursor, product, and observed-loss split gates. "
+                "owner_clustering.py remains an adapter until downstream "
+                "delivery no longer requires OwnerAlignedFeature."
             ),
         ),
         OwnerFamilyInvariantMapping(
@@ -221,15 +228,21 @@ def owner_family_successor_mapping(
             successor_surface=(
                 "CrossSamplePeakGroupReviewFact shadow projection"
                 if review_facts
-                else "future_review_only_family_projection"
+                else "successor_constructor_review_policy"
             ),
-            disposition=("successor_owned" if review_facts else "active_policy"),
+            disposition=(
+                "successor_owned"
+                if review_facts or not _feature_has_review_only_state(feature)
+                else "active_policy"
+            ),
             public_oracle=(
-                "tests/test_alignment_owner_clustering.py::"
-                "test_ambiguous_records_become_review_only_features_without_owners"
+                "tests/test_alignment_owner_family_successor_contract.py::"
+                "test_successor_constructor_preserves_review_only_records"
                 if not review_facts
-                else "tests/test_alignment_owner_family_successor_contract.py::"
-                "test_identity_conflict_review_only_feature_projects_review_challenge_fact"
+                else (
+                    "tests/test_alignment_owner_family_successor_contract.py::"
+                    "test_identity_conflict_review_only_feature_projects_review_challenge_fact"
+                )
             ),
             exit_rule=(
                 "Successor projection must carry review-only families and "
@@ -245,6 +258,7 @@ def owner_family_successor_mapping(
         OwnerFamilyInvariantMapping(
             invariant="backfill_seed_and_matrix_delivery",
             current_owner=(
+                "CrossSamplePeakGroupHypothesis delivery metadata adapted to "
                 "OwnerAlignedFeature.family_center_* / backfill_seed_centers / "
                 "confirm_local_owners_with_backfill"
             ),
@@ -253,16 +267,20 @@ def owner_family_successor_mapping(
                 f"confirm_local_owners_with_backfill="
                 f"{feature.confirm_local_owners_with_backfill}"
             ),
-            successor_surface="future_matrix_delivery_adapter",
-            disposition="successor_gap",
+            successor_surface=(
+                "CrossSamplePeakGroupHypothesis delivery metadata plus "
+                "OwnerAlignedFeature compatibility adapter"
+            ),
+            disposition="compatibility_adapter_candidate",
             public_oracle=(
-                "tests/test_alignment_owner_matrix.py::"
-                "test_owner_matrix_uses_backfill_confirmation_for_severe_low_local_owner"
+                "tests/test_alignment_owner_family_successor_contract.py::"
+                "test_successor_constructor_matches_owner_adapter_delivery_fields"
             ),
             exit_rule=(
-                "Successor migration must prove owner-backfill seed behavior, "
-                "detected/rescued/ambiguous/absent cell delivery, and public "
-                "writer parity before OwnerAlignedFeature becomes adapter-only."
+                "Keep OwnerAlignedFeature as the compatibility delivery DTO "
+                "until owner-backfill, matrix, claim, primary-consolidation, "
+                "writer, and process payload consumers accept successor groups "
+                "directly with public parity."
             ),
         ),
     )
@@ -273,9 +291,9 @@ def owner_clustering_disposition(
 ) -> OwnerClusteringDispositionDecision:
     """Return the C6-B final owner-clustering migration disposition.
 
-    This is a phase-closeout snapshot, not a general migration evaluator.
-    Future parity-backed work should replace it before promoting
-    ``owner_clustering.py`` to adapter or retirement status.
+    This migration evaluator only promotes to adapter when no invariant remains
+    an active owner-clustering policy or a successor gap. Retirement still
+    requires downstream consumers to stop depending on ``OwnerAlignedFeature``.
     """
 
     blocking = tuple(
@@ -283,6 +301,17 @@ def owner_clustering_disposition(
         for mapping in mappings
         if mapping.disposition in {"successor_gap", "active_policy"}
     )
+    if blocking:
+        return OwnerClusteringDispositionDecision(
+            disposition="keep_as_stage",
+            reason=(
+                "owner_clustering.py remains keep_as_stage because at least "
+                "one owner-family invariant is still active policy or a "
+                "successor gap."
+            ),
+            blocking_invariants=blocking,
+            exit_rule=OWNER_CLUSTERING_C6B_EXIT_RULE,
+        )
     return OwnerClusteringDispositionDecision(
         disposition=OWNER_CLUSTERING_C6B_FINAL_DISPOSITION,
         reason=OWNER_CLUSTERING_C6B_REASON,
