@@ -196,6 +196,8 @@ def eligibility_for_region_first_safe_merge(
         return SafeMergeEligibility(False, "shadow_verdict_not_merge_suggested")
     if decision.merge_suggestion_source != "adjacent_wis_local_minimum_merge":
         return SafeMergeEligibility(False, "unsupported_merge_suggestion_source")
+    if decision.product_action != "safe_merge_eligible":
+        return SafeMergeEligibility(False, "product_action_not_safe_merge_eligible")
     if (decision.selected_interval_count or 0) < 2:
         return SafeMergeEligibility(False, "selected_interval_count_lt_2")
     gap_max = decision.selected_interval_gap_max_min

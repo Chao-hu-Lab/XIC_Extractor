@@ -8,6 +8,7 @@
 **Execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
 **Related roadmap:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Related debt roadmap:** [Technical debt and dead-code cleanup roadmap v2](2026-06-01-technical-debt-and-dead-code-cleanup-roadmap-v2-spec.md)
+**Related repo-wide inventory:** [Repo semantic-overlap inventory](2026-06-02-repo-semantic-overlap-inventory-spec.md)
 **Related slices:** [C2 resolver collapse](2026-05-24-peak-pipeline-cleanup-resolver-collapse-spec.md), [C3 hypothesis model unification](2026-05-24-peak-pipeline-cleanup-hypothesis-model-unification-spec.md), [C4 peak scoring split](2026-05-24-peak-pipeline-cleanup-peak-scoring-split-spec.md), [C6 alignment grouping consolidation](2026-05-24-peak-pipeline-cleanup-alignment-grouping-consolidation-spec.md)
 
 ## Verdict

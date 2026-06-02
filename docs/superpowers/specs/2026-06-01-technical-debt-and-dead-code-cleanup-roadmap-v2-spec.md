@@ -4,6 +4,7 @@
 **Status:** Execution closeout v1.8 - C4 projection closeout and C6 event-first retirement completed
 **Related peak-pipeline chapter:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Current peak-pipeline reassessment:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
+**Repo-wide semantic-overlap inventory:** [Repo semantic-overlap inventory](2026-06-02-repo-semantic-overlap-inventory-spec.md)
 **One-goal execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
 **Related governance:** [Diagnostic tool lifecycle spec](2026-05-26-diagnostic-tool-lifecycle-spec.md)
 **Mainline constraint:** [Product priority reset decision spec](2026-05-28-product-priority-reset-decision-spec.md)
@@ -118,7 +119,11 @@ For migration/fusion work:
 
 ## C4/C6 Pilot And Follow-Up Inventory
 
-C4 and C6 are demonstration cases, not one-off exceptions.
+C4 and C6 are demonstration cases, not one-off exceptions. The first repo-wide
+follow-up inventory is now captured in
+[Repo semantic-overlap inventory](2026-06-02-repo-semantic-overlap-inventory-spec.md).
+Future cleanup goals should use that document as the current routing index
+before broadening semantic-retirement work outside C4/C6.
 
 - C4 tests whether legacy peak scoring responsibilities should survive as
   production decision policy, move into `EvidenceVector` / `CommonEvidence` /

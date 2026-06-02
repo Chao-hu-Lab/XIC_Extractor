@@ -20,6 +20,13 @@ ShadowVerdict = Literal[
     "merge_suggested",
     "split_supported",
 ]
+ProductAction = Literal[
+    "no_change",
+    "safe_merge_eligible",
+    "review_only",
+    "not_counted_candidate",
+    "behavior_change_required",
+]
 MergeSuggestionSource = Literal[
     "",
     "adjacent_wis_local_minimum_merge",
@@ -81,6 +88,67 @@ class RegionSelectionDecision:
     concern_labels: tuple[str, ...] = ()
     review_reason: str = ""
     merge_suggestion_source: MergeSuggestionSource = ""
+    decision_status: ShadowStatus | str = ""
+    decision_class: ShadowVerdict | str = ""
+    product_action: ProductAction | str = ""
+    selected_candidate_id: str = ""
+    selected_boundary_id: str = ""
+    alternate_boundary_ids: tuple[str, ...] = ()
+    evidence_sources: tuple[str, ...] = ()
+    support_reasons: tuple[str, ...] = ()
+    conflict_reasons: tuple[str, ...] = ()
+    audit_reason: str = ""
+    promotion_reason: str = ""
+    baseline_method: str = "asls"
+
+    def __post_init__(self) -> None:
+        if not self.decision_status:
+            object.__setattr__(self, "decision_status", self.shadow_status)
+        if not self.decision_class:
+            object.__setattr__(self, "decision_class", self.shadow_verdict)
+        if not self.product_action:
+            object.__setattr__(
+                self,
+                "product_action",
+                _product_action_for_decision(
+                    self.shadow_status,
+                    self.shadow_verdict,
+                    self.merge_suggestion_source,
+                ),
+            )
+        if not self.selected_candidate_id:
+            object.__setattr__(
+                self,
+                "selected_candidate_id",
+                self.current_candidate_id,
+            )
+        if not self.selected_boundary_id:
+            object.__setattr__(
+                self,
+                "selected_boundary_id",
+                self.current_boundary_id,
+            )
+        if not self.alternate_boundary_ids:
+            object.__setattr__(
+                self,
+                "alternate_boundary_ids",
+                _alternate_boundary_ids(
+                    self.current_boundary_id,
+                    self.shadow_boundary_id,
+                ),
+            )
+        if not self.support_reasons:
+            object.__setattr__(self, "support_reasons", self.support_labels)
+        if not self.conflict_reasons:
+            object.__setattr__(self, "conflict_reasons", self.concern_labels)
+        if not self.audit_reason:
+            object.__setattr__(self, "audit_reason", self.review_reason)
+        if not self.promotion_reason and self.product_action == "safe_merge_eligible":
+            object.__setattr__(
+                self,
+                "promotion_reason",
+                self.merge_suggestion_source,
+            )
 
 
 def decide_region_selection(
@@ -149,6 +217,7 @@ def decide_region_selection(
         review_reason=(
             "current selected interval is not contradicted by shadow evidence"
         ),
+        evidence_boundaries=boundaries,
     )
 
 
@@ -193,6 +262,7 @@ def _split_supported(
         concern_labels=_combine_labels(
             *(boundary.concern_labels for boundary in selected)
         ),
+        evidence_sources=_decision_sources(*selected),
         review_reason=(
             "weighted non-overlap selected multiple supported intervals over "
             "the current single interval"
@@ -250,6 +320,7 @@ def _adjacent_selected_intervals_merge_suggested(
         concern_labels=_combine_labels(
             *(boundary.concern_labels for boundary in selected)
         ),
+        evidence_sources=_decision_sources(*selected),
         review_reason=(
             "adjacent WIS-selected local-minimum intervals have only small "
             "selected-interval area gain; production must validate the "
@@ -400,8 +471,12 @@ def _decision(
     verdict: ShadowVerdict,
     review_reason: str,
     merge_suggestion_source: MergeSuggestionSource = "",
+    evidence_boundaries: Sequence[RegionBoundaryEvidence] | None = None,
 ) -> RegionSelectionDecision:
     score_delta = shadow.boundary_score - current.boundary_score
+    source_boundaries = (
+        (current, shadow) if evidence_boundaries is None else tuple(evidence_boundaries)
+    )
     return RegionSelectionDecision(
         shadow_status=status,
         shadow_verdict=verdict,
@@ -425,6 +500,7 @@ def _decision(
         shadow_scan_count=shadow.scan_count,
         support_labels=shadow.support_labels,
         concern_labels=shadow.concern_labels,
+        evidence_sources=_decision_sources(*source_boundaries),
         review_reason=review_reason,
         merge_suggestion_source=merge_suggestion_source,
     )
@@ -482,3 +558,47 @@ def _combine_labels(*label_groups: tuple[str, ...]) -> tuple[str, ...]:
             if label and label not in labels:
                 labels.append(label)
     return tuple(labels)
+
+
+def _product_action_for_decision(
+    status: ShadowStatus,
+    verdict: ShadowVerdict,
+    merge_suggestion_source: MergeSuggestionSource,
+) -> ProductAction:
+    if status != "evaluated":
+        return "review_only"
+    if verdict == "current_supported":
+        return "no_change"
+    if (
+        verdict == "merge_suggested"
+        and merge_suggestion_source == "adjacent_wis_local_minimum_merge"
+    ):
+        return "safe_merge_eligible"
+    if verdict == "insufficient_evidence":
+        return "review_only"
+    return "behavior_change_required"
+
+
+def _alternate_boundary_ids(
+    current_boundary_id: str,
+    shadow_boundary_id: str,
+) -> tuple[str, ...]:
+    return tuple(
+        boundary_id
+        for boundary_id in shadow_boundary_id.split(";")
+        if boundary_id and boundary_id != current_boundary_id
+    )
+
+
+def _decision_sources(*boundaries: RegionBoundaryEvidence) -> tuple[str, ...]:
+    sources: list[str] = []
+    for boundary in boundaries:
+        for source in (*boundary.proposal_sources, *boundary.boundary_sources):
+            if source and source not in sources:
+                sources.append(source)
+        if (
+            boundary.nonoverlap_selected
+            and "weighted_interval_selection" not in sources
+        ):
+            sources.append("weighted_interval_selection")
+    return tuple(sources)
