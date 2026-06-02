@@ -1,7 +1,7 @@
 # C6 - Cross-Sample Peak Group Hypothesis Shadow Contract Design
 
 **Date:** 2026-06-02
-**Status:** Implementation snapshot v0.5 — C6-A2 edge evidence shadow facts
+**Status:** Implementation snapshot v0.6 — C6-A3 review-only and hard-gate shadow facts
 **Readiness label:** `diagnostic_only`
 **Parent spec:** [C6 alignment stage semantics and value assessment](2026-06-01-c6-alignment-stage-semantics-value-assessment-design.md)
 **Related contract:** `xic_extractor/alignment/owner_family_successor_contract.py`
@@ -355,12 +355,12 @@ C6-A2 implementation closeout:
 
 Purpose:
 
-- project hard split gate semantics into successor-visible shadow
-  challenge/demotion facts;
+- project hard split gate observations from emitted blocked owner-edge evidence
+  into successor-visible shadow challenge/demotion facts;
 - preserve review-only owner records as hypothesis challenges instead of
   letting them disappear inside `OwnerAlignedFeature`;
-- make neutral-loss/product conflict, observed-loss conflict, impossible m/z,
-  and ambiguous-owner reasons explicit successor facts.
+- make projected blocked-edge conflict reasons and ambiguous-owner reasons
+  explicit successor facts without claiming full construction-gate coverage.
 
 Allowed work:
 
@@ -387,6 +387,42 @@ Done when:
 - successor facts preserve the current reason vocabulary or document the exact
   compatibility mapping;
 - compact TSV parity confirms public output is unchanged.
+
+C6-A3 implementation closeout:
+
+- `xic_extractor/alignment/cross_sample_peak_groups.py` defines
+  `CrossSamplePeakGroupReviewFact` and
+  `CrossSamplePeakGroupHardGateChallengeFact` as internal shadow facts;
+- review-only facts are projected only from current `OwnerAlignedFeature`
+  fields: `review_only`, `identity_conflict`, `ambiguous_sample_stem`,
+  `ambiguous_candidate_ids`, `evidence`, and `feature_family_id`;
+- identity-conflict review-only features project an `identity_conflict`
+  review challenge, and ambiguous-owner review-only features preserve the
+  ambiguous sample stem and candidate IDs;
+- blocked `OwnerEdgeEvidence` can project a hard-gate challenge observation,
+  preserving the current failure reason vocabulary, but this remains an
+  observation of construction-time policy;
+- envelope-only construction gates that do not emit blocked `OwnerEdgeEvidence`
+  remain unprojected `active_policy` blockers until C6-B or a later parity
+  slice owns the construction rule;
+- `owner_family_successor_mapping(...)` may mark
+  `review_only_owner_records` as `successor_owned` only when review-only facts
+  are actually projected for a review-only feature;
+- `hard_family_split_gates` remains `active_policy`; C6-A3 does not claim
+  successor ownership of same-sample, neutral-loss, precursor, product, or
+  observed-loss construction gates;
+- `complete_link_edge_semantics` remains `active_policy`, and
+  `backfill_seed_and_matrix_delivery` remains `successor_gap`;
+- `owner_clustering.py` remains `keep_as_stage` after A3 because complete-link
+  construction, hard-gate construction policy, and backfill/matrix delivery
+  still block retirement or adapter promotion;
+- C6-B is still pending and must name the final `owner_clustering.py`
+  disposition using the A1/A2/A3 evidence;
+- evidence:
+  `tests/test_alignment_owner_family_successor_contract.py` covers
+  identity-conflict review fact projection, ambiguous-owner candidate detail
+  projection, blocked-edge hard-gate challenge observations without policy
+  promotion, and post-review-fact disposition blocking.
 
 ### C6-B — Production Constructor Candidate
 

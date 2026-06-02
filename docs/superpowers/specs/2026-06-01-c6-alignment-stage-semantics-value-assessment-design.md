@@ -1,7 +1,7 @@
 # C6 - Alignment Stage Semantics And Value Assessment Design
 
 **Date:** 2026-06-01
-**Status:** Phase 5 interim implementation snapshot v1.5 — C6-A2 owner-family edge evidence shadow
+**Status:** Phase 5 interim implementation snapshot v1.6 — C6-A3 owner-family review and hard-gate shadow facts
 **Readiness label:** `diagnostic_only`
 **Supersedes for implementation:** [C6 alignment grouping consolidation](2026-05-24-peak-pipeline-cleanup-alignment-grouping-consolidation-spec.md)
 **Execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
@@ -565,9 +565,9 @@ candidate rather than a permanent parallel system.
 | Owner-family invariant | Current owner-first source | Current writer/public oracle | Successor-spine gap before migration |
 | --- | --- | --- | --- |
 | Stable cross-sample family ID and owner membership | `OwnerAlignedFeature.feature_family_id`, `owners`, `event_cluster_ids`, `event_member_count` | `test_owner_family_construction_is_writer_visible`; `alignment_review.tsv` event fields | Successor needs a cross-sample family/hypothesis object, not only per-sample `TraceGroup` / `PeakHypothesis` IDs. |
-| Complete-link family construction and drift-prior edge evidence | `cluster_sample_local_owners(...)`, `edge_scoring.evaluate_owner_edge(...)` | owner-clustering complete-link, drift-prior, weak-edge, and edge-sink tests | C6-A2 now projects emitted edge evidence into shadow support/challenge facts. Replacement still waits for split-gate, review-only, backfill/matrix, and public-output parity. |
-| Hard family split gates | owner-clustering neutral-loss, product-m/z, observed-loss, impossible-m/z, same-sample exclusion checks | owner-clustering conflict/split tests plus matrix/cells parity when construction changes | Successor must preserve split reasons and avoid tolerance-only flattening. |
-| Review-only owner records | `identity_conflict` features and `review_only_features_from_ambiguous_records(...)` | owner-clustering ambiguous/review-only tests; owner-matrix ambiguous cell tests | Successor must carry review-only family/cell semantics without contaminating production matrix rows. |
+| Complete-link family construction and drift-prior edge evidence | `cluster_sample_local_owners(...)`, `edge_scoring.evaluate_owner_edge(...)` | owner-clustering complete-link, drift-prior, weak-edge, and edge-sink tests | C6-A2 projects emitted edge evidence into shadow support/challenge facts, but complete-link construction policy remains active. Replacement still waits for construction-policy, backfill/matrix, and public-output parity. |
+| Hard family split gates | owner-clustering neutral-loss, product-m/z, observed-loss, impossible-m/z, same-sample exclusion checks | owner-clustering conflict/split tests plus matrix/cells parity when construction changes | C6-A3 can expose blocked-edge hard-gate observations from projected `OwnerEdgeEvidence`, but construction-time split gates remain `active_policy`. |
+| Review-only owner records | `identity_conflict` features and `review_only_features_from_ambiguous_records(...)` | owner-clustering ambiguous/review-only tests; owner-matrix ambiguous cell tests | C6-A3 projects review-only shadow facts for identity-conflict and ambiguous-owner features, without changing review-only production behavior or matrix delivery. |
 | Backfill seed and matrix delivery contract | `OwnerAlignedFeature.family_center_*`, `backfill_seed_centers`, `confirm_local_owners_with_backfill` | owner-backfill, owner-matrix, pre-backfill consolidation tests; writer-visible owner-family test | Successor must prove `alignment_matrix.tsv`, `alignment_cells.tsv`, and `alignment_review.tsv` parity before `OwnerAlignedFeature` becomes adapter-only. |
 
 ### C6 Owner-Family Successor Contract Snapshot
@@ -576,26 +576,27 @@ Execution added behavior-neutral internal contract modules:
 `xic_extractor/alignment/cross_sample_peak_groups.py` and
 `xic_extractor/alignment/owner_family_successor_contract.py`.
 
-C6-A1/C6-A2 turn owner membership and emitted edge evidence into
-machine-checkable shadow projections while preserving the remaining blockers:
+C6-A1/C6-A2/C6-A3 turn owner membership, emitted edge evidence, and
+review-only observations into machine-checkable shadow projections while
+preserving the remaining blockers:
 
 | Invariant | Current C6 disposition | Why |
 | --- | --- | --- |
 | Stable cross-sample family ID and owner membership | `successor_owned` | C6-A1 adds `CrossSamplePeakGroupHypothesis` as an internal shadow projection that preserves public family ID, owner IDs, flattened event IDs including supporting events, and event member count. This is not production authority. |
 | Owner edge evidence projection | `successor_owned` only when `owner_family_successor_mapping(feature, edge_evidence=...)` receives projected edge facts | C6-A2 adds `CrossSamplePeakGroupEdgeFact` as an internal shadow projection. Strong edges become support facts, weak edges become challenge facts, and blocked edges stay construction-gate observations rather than successor production policy. |
 | Complete-link family construction | `active_policy` | A2 projects current edge evidence but does not replace the all-strong-pair complete-link grouping rule in `cluster_sample_local_owners(...)`. |
-| Hard family split gates | `active_policy` | Same-sample, neutral-loss, precursor, product, and observed-loss splits are still construction-time policy, not downstream evidence projection. |
-| Review-only owner records | `active_policy` | `identity_conflict` and ambiguous-owner families still need review-only matrix/cell semantics without contaminating production rows. |
+| Hard family split gates | `active_policy` | C6-A3 can expose hard-gate challenge observations only when blocked `OwnerEdgeEvidence` is emitted; envelope-only construction gates remain unprojected active policy. Same-sample, neutral-loss, precursor, product, and observed-loss splits are still construction-time policy. |
+| Review-only owner records | `successor_owned` only when review-only facts are projected for a review-only feature | C6-A3 adds `CrossSamplePeakGroupReviewFact` as an internal shadow projection for `identity_conflict` and ambiguous-owner review records. This is review evidence only, not matrix-delivery ownership. |
 | Backfill seed and matrix delivery contract | `successor_gap` | Successor spine does not yet prove owner-backfill seed behavior or detected/rescued/ambiguous/absent cell delivery parity. |
 
-C6-A2 interim disposition for `owner_clustering.py`:
+C6-A3 interim disposition for `owner_clustering.py`:
 `keep_as_stage`.
 
 C6-B final disposition is still pending. The active execution goal must reach
 C6-B and name exactly one final disposition after A1/A2/A3 evidence has been
-evaluated. After A2, complete-link construction, hard split gates, review-only
-owner records, and backfill/matrix delivery are still enough to keep
-`owner_clustering.py` as the active stage.
+evaluated. After A3, complete-link construction, hard split gates, and
+backfill/matrix delivery are still enough to keep `owner_clustering.py` as the
+active stage.
 
 Exit rule:
 
@@ -613,7 +614,10 @@ Focused tests:
 - `tests/test_alignment_owner_family_successor_contract.py::test_strong_owner_edge_projects_support_fact_and_marks_successor_owned`
 - `tests/test_alignment_owner_family_successor_contract.py::test_weak_owner_edge_projects_challenge_fact`
 - `tests/test_alignment_owner_family_successor_contract.py::test_blocked_owner_edge_projects_challenge_fact_without_policy_promotion`
-- `tests/test_alignment_owner_family_successor_contract.py::test_owner_family_successor_mapping_keeps_review_only_records_active`
+- `tests/test_alignment_owner_family_successor_contract.py::test_identity_conflict_review_only_feature_projects_review_challenge_fact`
+- `tests/test_alignment_owner_family_successor_contract.py::test_ambiguous_review_only_feature_projects_candidate_review_details`
+- `tests/test_alignment_owner_family_successor_contract.py::test_blocked_edge_projects_hard_gate_observation_without_policy_promotion`
+- `tests/test_alignment_owner_family_successor_contract.py::test_owner_clustering_keeps_stage_after_review_fact_projection`
 - `tests/test_alignment_owner_family_successor_contract.py::test_owner_clustering_disposition_keeps_stage_until_successor_parity`
 - `tests/test_alignment_owner_family_successor_contract.py::test_compact_owner_family_tsv_triad_keeps_full_schema_and_rows`
 - `tests/test_alignment_owner_family_successor_contract.py::test_cross_sample_peak_group_shadow_has_no_production_path_imports`

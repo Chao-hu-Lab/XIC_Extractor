@@ -6,7 +6,8 @@ from typing import Literal, TypeAlias
 
 from xic_extractor.alignment.cross_sample_peak_groups import (
     CrossSamplePeakGroupEdgeFact,
-    cross_sample_peak_group_edge_facts_from_owner_edges,
+    CrossSamplePeakGroupHardGateChallengeFact,
+    CrossSamplePeakGroupReviewFact,
     cross_sample_peak_group_hypothesis_from_owner_feature,
 )
 from xic_extractor.alignment.edge_scoring import OwnerEdgeEvidence
@@ -77,19 +78,14 @@ def owner_family_successor_mapping(
     invariants.
     """
 
-    review_state = (
-        "review_only_present"
-        if _feature_has_review_only_state(feature)
-        else "review_only_supported_by_stage"
-    )
-    projected_edge_facts = cross_sample_peak_group_edge_facts_from_owner_edges(
-        edge_evidence or (),
-        owner_ids=feature.event_cluster_ids,
-    )
     peak_group = cross_sample_peak_group_hypothesis_from_owner_feature(
         feature,
         edge_evidence=edge_evidence or (),
     )
+    projected_edge_facts = peak_group.edge_facts
+    review_facts = peak_group.review_facts
+    hard_gate_challenge_facts = peak_group.hard_gate_challenge_facts
+    review_state = _review_fact_state(feature, review_facts)
     return (
         OwnerFamilyInvariantMapping(
             invariant="stable_cross_sample_family_membership",
@@ -176,20 +172,30 @@ def owner_family_successor_mapping(
         OwnerFamilyInvariantMapping(
             invariant="hard_family_split_gates",
             current_owner="owner_clustering._group_can_pass_hard_gates",
-            current_state=(
-                f"neutral_loss_tag={feature.neutral_loss_tag};"
-                f"product_mz={feature.family_product_mz};"
-                f"observed_loss={feature.family_observed_neutral_loss_da}"
+            current_state=_hard_gate_challenge_state(
+                feature,
+                hard_gate_challenge_facts,
             ),
-            successor_surface="future_family_split_policy",
+            successor_surface=(
+                "CrossSamplePeakGroupHardGateChallengeFact shadow observation"
+                if hard_gate_challenge_facts
+                else "future_family_split_policy"
+            ),
             disposition="active_policy",
             public_oracle=(
                 "tests/test_alignment_owner_clustering.py::"
                 "test_owner_clustering_rejects_product_or_observed_loss_conflict"
+                if not hard_gate_challenge_facts
+                else "tests/test_alignment_owner_family_successor_contract.py::"
+                "test_blocked_edge_projects_hard_gate_observation_without_policy_promotion"
             ),
             exit_rule=(
-                "Preserve same-sample, neutral-loss, precursor, product, and "
-                "observed-loss split gates in successor tests before migration."
+                "Blocked OwnerEdgeEvidence can expose shadow hard-gate "
+                "observations, but C6-A3 does not own construction-time split "
+                "policy. Preserve same-sample, neutral-loss, precursor, "
+                "product, and observed-loss split gates as active "
+                "owner-clustering policy until successor tests can construct "
+                "the same families and prove matrix/cells/review parity."
             ),
         ),
         OwnerFamilyInvariantMapping(
@@ -199,15 +205,28 @@ def owner_family_successor_mapping(
                 "ambiguous owner fields"
             ),
             current_state=review_state,
-            successor_surface="future_review_only_family_projection",
-            disposition="active_policy",
+            successor_surface=(
+                "CrossSamplePeakGroupReviewFact shadow projection"
+                if review_facts
+                else "future_review_only_family_projection"
+            ),
+            disposition=("successor_owned" if review_facts else "active_policy"),
             public_oracle=(
                 "tests/test_alignment_owner_clustering.py::"
                 "test_ambiguous_records_become_review_only_features_without_owners"
+                if not review_facts
+                else "tests/test_alignment_owner_family_successor_contract.py::"
+                "test_identity_conflict_review_only_feature_projects_review_challenge_fact"
             ),
             exit_rule=(
                 "Successor projection must carry review-only families and "
                 "ambiguous cells without contaminating production matrix rows."
+                if not review_facts
+                else "C6-A3 owns only the review-only shadow fact projection "
+                "for this feature. Keep owner_clustering.py active until "
+                "complete-link construction, hard split gates, and "
+                "backfill/matrix delivery are also successor-owned with "
+                "public writer parity."
             ),
         ),
         OwnerFamilyInvariantMapping(
@@ -291,6 +310,66 @@ def _feature_has_review_only_state(feature: OwnerAlignedFeature) -> bool:
         or feature.ambiguous_sample_stem is not None
         or bool(feature.ambiguous_candidate_ids)
     )
+
+
+def _review_fact_state(
+    feature: OwnerAlignedFeature,
+    review_facts: tuple[CrossSamplePeakGroupReviewFact, ...],
+) -> str:
+    if not review_facts:
+        state = (
+            "review_only_present"
+            if _feature_has_review_only_state(feature)
+            else "review_only_supported_by_stage"
+        )
+        return f"{state};review_fact_count=0"
+
+    identity_conflict_count = sum(1 for fact in review_facts if fact.identity_conflict)
+    ambiguous_owner_count = sum(
+        1 for fact in review_facts if fact.reason == "ambiguous_owner"
+    )
+    candidate_details = ";".join(
+        (
+            f"{fact.ambiguous_sample_stem or ''}:"
+            f"{','.join(fact.ambiguous_candidate_ids)}"
+        )
+        for fact in review_facts
+        if fact.ambiguous_sample_stem is not None or fact.ambiguous_candidate_ids
+    )
+    evidence = ";".join(fact.evidence for fact in review_facts)
+    return (
+        f"review_fact_count={len(review_facts)};"
+        f"identity_conflict={identity_conflict_count};"
+        f"ambiguous_owner={ambiguous_owner_count};"
+        f"evidence={evidence};"
+        f"ambiguous_candidates={candidate_details}"
+    )
+
+
+def _hard_gate_challenge_state(
+    feature: OwnerAlignedFeature,
+    hard_gate_challenge_facts: tuple[
+        CrossSamplePeakGroupHardGateChallengeFact,
+        ...
+    ],
+) -> str:
+    base = (
+        f"neutral_loss_tag={feature.neutral_loss_tag};"
+        f"product_mz={feature.family_product_mz};"
+        f"observed_loss={feature.family_observed_neutral_loss_da};"
+        f"hard_gate_challenge_fact_count={len(hard_gate_challenge_facts)}"
+    )
+    if not hard_gate_challenge_facts:
+        return base
+
+    challenges = ";".join(
+        (
+            f"{fact.owner_pair_ids[0]}|{fact.owner_pair_ids[1]}:"
+            f"{fact.failure_reason or 'none'}:{fact.reason}"
+        )
+        for fact in hard_gate_challenge_facts
+    )
+    return f"{base};hard_gate_challenges={challenges}"
 
 
 def _edge_fact_state(

@@ -9,6 +9,7 @@ from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.cross_sample_peak_groups import (
     cross_sample_peak_group_edge_fact_from_owner_edge,
     cross_sample_peak_group_edge_facts_from_owner_edges,
+    cross_sample_peak_group_hard_gate_challenge_fact_from_owner_edge,
     cross_sample_peak_group_hypothesis_from_owner_feature,
 )
 from xic_extractor.alignment.edge_scoring import evaluate_owner_edge
@@ -198,7 +199,42 @@ def test_blocked_owner_edge_projects_challenge_fact_without_policy_promotion() -
     assert "blocked: same_sample" in fact.reason
 
 
-def test_owner_family_successor_mapping_keeps_review_only_records_active() -> None:
+def test_identity_conflict_review_only_feature_projects_review_challenge_fact() -> None:
+    feature = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "conflict", identity_conflict=True),
+            _owner("sample-b", "clean"),
+        ),
+        config=AlignmentConfig(),
+    )[0]
+
+    hypothesis = cross_sample_peak_group_hypothesis_from_owner_feature(feature)
+
+    assert len(hypothesis.review_facts) == 1
+    fact = hypothesis.review_facts[0]
+    assert fact.feature_family_id == feature.feature_family_id
+    assert fact.public_family_id == feature.feature_family_id
+    assert fact.review_only is True
+    assert fact.identity_conflict is True
+    assert fact.reason == "identity_conflict"
+    assert fact.evidence == "identity_conflict_review_only"
+    assert fact.ambiguous_sample_stem is None
+    assert fact.ambiguous_candidate_ids == ()
+    assert fact.source == "owner_aligned_feature_review_shadow"
+
+    by_invariant = {
+        mapping.invariant: mapping
+        for mapping in owner_family_successor_mapping(feature)
+    }
+
+    review_mapping = by_invariant["review_only_owner_records"]
+    assert review_mapping.disposition == "successor_owned"
+    assert "review_fact_count=1" in review_mapping.current_state
+    assert "identity_conflict=1" in review_mapping.current_state
+    assert "CrossSamplePeakGroupReviewFact" in review_mapping.successor_surface
+
+
+def test_ambiguous_review_only_feature_projects_candidate_review_details() -> None:
     feature = review_only_features_from_ambiguous_records(
         (
             AmbiguousOwnerRecord(
@@ -216,15 +252,94 @@ def test_owner_family_successor_mapping_keeps_review_only_records_active() -> No
         start_index=1,
     )[0]
 
+    hypothesis = cross_sample_peak_group_hypothesis_from_owner_feature(feature)
+
+    assert len(hypothesis.review_facts) == 1
+    fact = hypothesis.review_facts[0]
+    assert fact.reason == "ambiguous_owner"
+    assert fact.review_only is True
+    assert fact.identity_conflict is False
+    assert fact.ambiguous_sample_stem == "sample-a"
+    assert fact.ambiguous_candidate_ids == ("sample-a#1", "sample-a#2")
+    assert fact.evidence == "ambiguous_ms1_owner_review_only"
+
     by_invariant = {
         mapping.invariant: mapping
         for mapping in owner_family_successor_mapping(feature)
     }
 
     review_mapping = by_invariant["review_only_owner_records"]
-    assert review_mapping.disposition == "active_policy"
-    assert review_mapping.current_state == "review_only_present"
-    assert "ambiguous cells" in review_mapping.exit_rule
+    assert review_mapping.disposition == "successor_owned"
+    assert "review_fact_count=1" in review_mapping.current_state
+    assert "ambiguous_owner=1" in review_mapping.current_state
+    assert "sample-a#1,sample-a#2" in review_mapping.current_state
+
+
+def test_blocked_edge_projects_hard_gate_observation_without_policy_promotion() -> None:
+    owners = (_owner("sample-a", "a"), _owner("sample-a", "b"))
+    edge = evaluate_owner_edge(owners[0], owners[1], config=AlignmentConfig())
+    feature = replace(
+        _compact_owner_family_feature(),
+        feature_family_id="FAM999999",
+        owners=owners,
+        evidence="manual_blocked_edge_shadow_fixture",
+    )
+
+    assert edge.decision == "blocked_edge"
+    assert edge.failure_reason == "same_sample"
+
+    challenge = cross_sample_peak_group_hard_gate_challenge_fact_from_owner_edge(
+        edge,
+    )
+    assert challenge is not None
+    assert challenge.owner_pair_ids == ("OWN-sample-a-a", "OWN-sample-a-b")
+    assert challenge.failure_reason == "same_sample"
+    assert challenge.role == "split_gate_challenge"
+    assert challenge.construction_policy == "construction_time_hard_gate_observed"
+
+    hypothesis = cross_sample_peak_group_hypothesis_from_owner_feature(
+        feature,
+        edge_evidence=(edge,),
+    )
+    assert hypothesis.hard_gate_challenge_facts == (challenge,)
+
+    by_invariant = {
+        mapping.invariant: mapping
+        for mapping in owner_family_successor_mapping(
+            feature,
+            edge_evidence=(edge,),
+        )
+    }
+
+    assert by_invariant["owner_edge_evidence_projection"].disposition == (
+        "successor_owned"
+    )
+    assert by_invariant["complete_link_edge_semantics"].disposition == (
+        "active_policy"
+    )
+    assert by_invariant["hard_family_split_gates"].disposition == "active_policy"
+    assert "hard_gate_challenge_fact_count=1" in by_invariant[
+        "hard_family_split_gates"
+    ].current_state
+    assert "same_sample" in by_invariant["hard_family_split_gates"].current_state
+
+
+def test_owner_clustering_keeps_stage_after_review_fact_projection() -> None:
+    feature = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "conflict", identity_conflict=True),
+            _owner("sample-b", "clean"),
+        ),
+        config=AlignmentConfig(),
+    )[0]
+
+    decision = owner_clustering_disposition(owner_family_successor_mapping(feature))
+
+    assert decision.disposition == "keep_as_stage"
+    assert "review_only_owner_records" not in decision.blocking_invariants
+    assert "complete_link_edge_semantics" in decision.blocking_invariants
+    assert "hard_family_split_gates" in decision.blocking_invariants
+    assert "backfill_seed_and_matrix_delivery" in decision.blocking_invariants
 
 
 def test_owner_clustering_disposition_keeps_stage_until_successor_parity() -> None:
@@ -482,6 +597,8 @@ def test_cross_sample_peak_group_shadow_has_no_production_path_imports() -> None
         text = path.read_text(encoding="utf-8")
         assert "CrossSamplePeakGroupHypothesis" not in text
         assert "CrossSamplePeakGroupEdgeFact" not in text
+        assert "CrossSamplePeakGroupReviewFact" not in text
+        assert "CrossSamplePeakGroupHardGateChallengeFact" not in text
         assert "cross_sample_peak_group" not in text
 
 
