@@ -21,6 +21,7 @@ ISOTOPE_LABEL_TYPES = frozenset(
 PAIRED_RT_RELATIONS = frozenset(
     {"istd_not_later_than_pair", "learned_delta_only", "none"}
 )
+SAMPLE_APPLICABILITIES = frozenset({"all", "rna_containing"})
 
 
 def _read_targets(path: Path) -> list[Target]:
@@ -150,6 +151,14 @@ def _parse_target_row(path: Path, row_number: int, row: dict[str, str]) -> Targe
             values["paired_rt_relation"],
             PAIRED_RT_RELATIONS,
             default="none",
+        ),
+        sample_applicability=_parse_target_metadata_enum(
+            path,
+            row_number,
+            "sample_applicability",
+            values["sample_applicability"],
+            SAMPLE_APPLICABILITIES,
+            default="all",
         ),
     )
 

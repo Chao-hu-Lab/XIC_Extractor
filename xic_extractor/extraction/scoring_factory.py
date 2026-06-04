@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -187,10 +188,18 @@ def compute_shape_metrics(
     values = np.asarray(intensity, dtype=float)
     if len(values) == 0 or apex_index < 0 or apex_index >= len(values):
         return 1.0, None
-    widths, _, left_ips, right_ips = peak_widths(values, [apex_index], rel_height=0.5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        widths, _, left_ips, right_ips = peak_widths(
+            values,
+            [apex_index],
+            rel_height=0.5,
+        )
     if len(widths) == 0:
         return 1.0, None
     fwhm = float(widths[0])
+    if not np.isfinite(fwhm) or fwhm <= 0:
+        return 1.0, None
     left = apex_index - float(left_ips[0])
     right = float(right_ips[0]) - apex_index
     if left <= 0 or right <= 0:

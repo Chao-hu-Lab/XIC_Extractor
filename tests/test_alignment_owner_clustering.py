@@ -385,9 +385,7 @@ def test_owner_family_construction_is_writer_visible(tmp_path: Path) -> None:
         rescued_cells=(),
     )
 
-    matrix_rows = _rows_by_feature(
-        write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix),
-    )
+    matrix_rows = _tsv_rows(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
     cell_rows = _rows_by_feature_sample(
         write_alignment_cells_tsv(tmp_path / "cells.tsv", matrix),
     )
@@ -395,12 +393,13 @@ def test_owner_family_construction_is_writer_visible(tmp_path: Path) -> None:
         write_alignment_review_tsv(tmp_path / "review.tsv", matrix),
     )
 
-    assert matrix_rows["FAM000001"]["neutral_loss_tag"] == "NL116"
-    assert matrix_rows["FAM000001"]["family_center_mz"] == "500"
-    assert matrix_rows["FAM000001"]["family_center_rt"] == "8.5"
-    assert matrix_rows["FAM000001"]["sample-a"] == "900"
-    assert matrix_rows["FAM000001"]["sample-b"] == "900"
-    assert matrix_rows["FAM000001"]["sample-c"] == ""
+    assert len(matrix_rows) == 1
+    assert list(matrix_rows[0]) == ["Mz", "RT", "sample-a", "sample-b", "sample-c"]
+    assert matrix_rows[0]["Mz"] == "500"
+    assert matrix_rows[0]["RT"] == "8.5"
+    assert matrix_rows[0]["sample-a"] == "900"
+    assert matrix_rows[0]["sample-b"] == "900"
+    assert matrix_rows[0]["sample-c"] == ""
 
     assert len(cell_rows) == 3
     assert cell_rows[("FAM000001", "sample-a")]["status"] == "detected"
@@ -522,6 +521,11 @@ def _rows_by_feature(path: Path) -> dict[str, dict[str, str]]:
             row["feature_family_id"]: row
             for row in csv.DictReader(handle, delimiter="\t")
         }
+
+
+def _tsv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
 
 
 def _rows_by_feature_sample(path: Path) -> dict[tuple[str, str], dict[str, str]]:

@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
 **Last refreshed:** 2026-06-03
-**Total entry-points:** 50
-**Total files (incl. helpers):** 132 Python files under `tools/diagnostics/`
+**Total entry-points:** 52
+**Total files (incl. helpers):** 134 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -27,8 +27,8 @@ top-level `tools/diagnostics/*.py` files for total files.
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
 4. [Backfill Reviews](#backfill-reviews) — 7 tools
-5. [Peak / Candidate Audits](#peak--candidate-audits) — 4 tools
-6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 6 tools
+5. [Peak / Candidate Audits](#peak--candidate-audits) — 5 tools
+6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 7 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
 8. [Family / Overlay Visualization](#family--overlay-visualization) — 3 tools
 9. [Area / Region Audits](#area--region-audits) — 2 tools
@@ -389,7 +389,29 @@ existing review/economics axes remain pending cleanup per audit-note Cluster 2.
 **Purpose**: Render `diagnostic_only` selected-envelope boundary review plots from selected-envelope diagnostic rows, showing RAW XIC, AsLS baseline, Gaussian15 morphology overlay, resolver interval, selected envelope, optional manual/expert oracle overlay, and quantitation context in one figure.
 **Topic group**: `selected_envelope_plot_review.py` + `xic_extractor/peak_detection/selected_envelope_*`
 **Originating spec/plan**: `specs/2026-06-03-selected-full-envelope-quantitation-boundary-spec.md`; `plans/2026-06-03-selected-full-envelope-quantitation-boundary-implementation-goal.md`
-**Status note**: Re-reads RAW files for bounded manual/expert review only. It can consume an optional `selected_envelope_boundary_oracle.tsv` / boundary-oracle TSV to draw expert-reviewed RT windows and record selected candidate id plus oracle id/source/status in `selected_envelope_plot_index.tsv`. Gaussian15 is an Xcalibur-like morphology/review trace, not an exact clone of Xcalibur's proprietary smoothing and not a product area source. Plot overlays fail closed unless oracle rows are `expert_reviewed` with manual/expert sources (`manual_overlay`, `expert_overlay`, or `manual_2raw`); targeted workbook control rows remain benchmark-only and are not drawn as boundary truth. It writes PNG/PDF overlays and `selected_envelope_plot_index.tsv`; it does not mutate selected `IntegrationResult`, change targeted workbook/CSV `Area`, or promote selected-envelope behavior by itself.
+**Status note**: Re-reads RAW files for bounded manual/expert review only. It can consume an optional `selected_envelope_boundary_oracle.tsv` / boundary-oracle TSV to draw expert-reviewed RT windows and record selected candidate id plus oracle id/source/status in `selected_envelope_plot_index.tsv`. It can also consume `chrom_peak_segment_review_rows.tsv` from `chrom_peak_segment_candidate_gate.py` to force explicit review-only segment rows into the plot index. Gaussian15 is an Xcalibur-like morphology/review trace, not an exact clone of Xcalibur's proprietary smoothing and not a product area source. Plot overlays fail closed unless oracle rows are `expert_reviewed` with manual/expert sources (`manual_overlay`, `expert_overlay`, or `manual_2raw`); targeted workbook control rows remain benchmark-only and are not drawn as boundary truth. It writes PNG/PDF overlays and `selected_envelope_plot_index.tsv`; it does not mutate selected `IntegrationResult`, change targeted workbook/CSV `Area`, or promote selected-envelope behavior by itself.
+
+---
+
+### `chrom_peak_segment_candidate_gate.py`
+
+**Purpose**: Summarize scored `chrom_peak_segment` candidate adoption from
+`peak_candidates.tsv`, compare selected-row area deltas against a baseline
+candidate TSV, and emit a segment-native gate manifest plus changed-row TSV.
+**Topic group**: `chrom_peak_segment_candidate_gate.py` (single-file)
+**Originating spec/plan**:
+`specs/2026-06-03-selected-full-envelope-quantitation-boundary-spec.md`;
+`notes/2026-06-04-chrom-peak-segment-overlay-evidence.md`
+**Status note**: Writes
+`chrom_peak_segment_gate_manifest.json` and
+`chrom_peak_segment_changed_rows.tsv`, plus
+`chrom_peak_segment_review_rows.tsv`. This is a product-candidate diagnostic
+gate for segment enumeration, not a selected-envelope promotion gate. It reports
+boundary and presence sub-gates separately so area/boundary regressions do not
+get mixed with analyte false-pick or review-only detection policy risk. Manual
+presence review verdicts such as `expected_peak_change`, `blocked`,
+`false_pick`, `inconclusive`, and `needs_followup` keep the presence gate in
+`defer` until the product-selection or review policy is resolved.
 
 ---
 
@@ -442,6 +464,23 @@ existing review/economics axes remain pending cleanup per audit-note Cluster 2.
 **Topic group**: `multi_tag_adduct_audit.py` (single-file)
 **Originating spec**: `2026-05-15-multi-nl-tag-and-artificial-adduct-contract.md`
 **Recent doc**: `plans/2026-05-15-multi-nl-tag-and-artificial-adduct-plan.md`
+
+---
+
+### `build_target_pair_expected_diff_approval_registry.py`
+
+**Purpose**: Convert explicitly user-approved `target_pair_rt_auto_reselection.tsv`
+rows into a durable `model_selection_expected_diff_approval_registry` TSV for
+guarded targeted product mutation.
+**Topic group**: `build_target_pair_expected_diff_approval_registry.py`
+(single-file)
+**Originating spec**:
+`specs/2026-06-03-target-pair-rt-auto-reselection-spec.md`
+**Status note**: Requires repeated `--approved-row SAMPLE::TARGET` inputs and
+fails closed unless each row is a `row_approval_candidate` shadow switch with
+matching runtime `expected_diff_stable_row_id`, selected-candidate RT, and
+paired area ratio `within_reference_range`. It does not auto-approve all watch
+rows and does not recompute candidate evidence.
 
 ---
 

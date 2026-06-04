@@ -248,6 +248,11 @@ def extract_raw_file_job(job: RawFileJob) -> WorkerResult:
             list(job.targets),
             job.raw_path,
             scoring_context_factory=scoring_context_factory,
+            rt_prior_library=(
+                None
+                if job.scoring_inputs is None
+                else job.scoring_inputs.rt_prior_library
+            ),
             model_selection_expected_diff_approvals=(
                 job.model_selection_expected_diff_approvals
             ),

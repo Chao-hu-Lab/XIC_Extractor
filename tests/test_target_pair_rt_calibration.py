@@ -11,6 +11,7 @@ from xic_extractor.target_pair_rt_calibration import (
     TargetPairRTCalibrationRow,
     calibration_rows_from_rt_prior_library,
     load_target_pair_rt_calibration,
+    rt_prior_library_from_target_pair_calibration,
     write_target_pair_rt_calibration_tsv,
 )
 
@@ -155,6 +156,28 @@ def test_rt_prior_library_adapter_writes_calibration_schema(
     assert read_back[0]["target_label"] == "Analyte"
     assert read_back[0]["paired_istd_label"] == "ISTD"
     assert read_back[0]["rt_delta_direction"] == "target_later"
+
+
+def test_rt_prior_library_from_calibration_uses_only_activated_rows() -> None:
+    library = rt_prior_library_from_target_pair_calibration(
+        (
+            _row(
+                target_label="Active",
+                product_transfer_status="row_approved",
+            ),
+            _row(
+                target_label="Blocked",
+                product_transfer_status="not_assessed",
+                activation_block_reason="product_transfer_status:not_assessed",
+            ),
+        )
+    )
+
+    assert set(library) == {("Active", "analyte")}
+    active = library[("Active", "analyte")]
+    assert active.istd_pair == "ISTD"
+    assert active.median_delta_rt == pytest.approx(0.25)
+    assert active.sigma_delta_rt == pytest.approx(0.02)
 
 
 def _row(**overrides: object) -> TargetPairRTCalibrationRow:

@@ -105,6 +105,29 @@ def load_target_pair_rt_calibration(
     return tuple(rows)
 
 
+def rt_prior_library_from_target_pair_calibration(
+    rows: Iterable[TargetPairRTCalibrationRow],
+) -> dict[tuple[str, str], LibraryEntry]:
+    """Expose activated target-pair calibration rows as analyte RT priors."""
+    out: dict[tuple[str, str], LibraryEntry] = {}
+    for row in rows:
+        if row.activation_block_reason:
+            continue
+        out[(row.target_label, "analyte")] = LibraryEntry(
+            config_hash=row.target_config_hash,
+            target_label=row.target_label,
+            role="analyte",
+            istd_pair=row.paired_istd_label,
+            median_delta_rt=row.pair_rt_delta_min,
+            sigma_delta_rt=row.rt_delta_mad_min,
+            median_abs_rt=None,
+            sigma_abs_rt=None,
+            n_samples=row.point_count,
+            updated_at=row.source_artifact,
+        )
+    return out
+
+
 def write_target_pair_rt_calibration_tsv(
     path: Path,
     rows: Sequence[TargetPairRTCalibrationRow],

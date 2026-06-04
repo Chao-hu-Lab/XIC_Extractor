@@ -572,7 +572,7 @@ def test_owner_group_migration_is_adapter_candidate_after_parity() -> None:
     assert "OwnerAlignedFeature" in decision.exit_rule
 
 
-def test_compact_owner_family_tsv_triad_keeps_full_schema_and_rows(
+def test_compact_owner_family_tsv_triad_keeps_primary_and_full_delivery_rows(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.alignment.tsv_writer import (
@@ -603,15 +603,13 @@ def test_compact_owner_family_tsv_triad_keeps_full_schema_and_rows(
 
     assert _tsv_rows(matrix_path) == [
         [
-            "feature_family_id",
-            "neutral_loss_tag",
-            "family_center_mz",
-            "family_center_rt",
+            "Mz",
+            "RT",
             "sample-a",
             "sample-b",
             "sample-c",
         ],
-        ["FAM000001", "NL116", "500", "8.5", "900", "900", ""],
+        ["500", "8.5", "900", "900", ""],
     ]
     cell_rows = _tsv_rows(cells_path)
     assert cell_rows[0] == list(ALIGNMENT_CELLS_COLUMNS)

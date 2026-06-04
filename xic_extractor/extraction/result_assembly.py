@@ -20,6 +20,11 @@ from xic_extractor.peak_detection.targeted_product_projection import (
 )
 from xic_extractor.peak_scoring import candidate_quality_penalty, hard_quality_flags
 from xic_extractor.signal_processing import PeakCandidate, PeakDetectionResult
+from xic_extractor.target_sample_applicability import (
+    TARGET_SAMPLE_APPLICABILITY_RNA_CONTAINING,
+    target_sample_exclusion_reasons,
+    target_sample_is_applicable,
+)
 
 if TYPE_CHECKING:
     from xic_extractor.extractor import ExtractionResult
@@ -36,6 +41,7 @@ def build_extraction_result(
     selected_hypothesis: PeakHypothesis | None = None,
     selection_decision: PeakHypothesisSelectionDecision | None = None,
     model_selection_result: PeakModelSelectionResult | None = None,
+    sample_name: str = "",
 ) -> ExtractionResult:
     from xic_extractor import extractor
 
@@ -76,6 +82,7 @@ def build_extraction_result(
         targeted_product_projection=_targeted_product_projection(
             result,
             target=target,
+            sample_name=sample_name,
         ),
     )
 
@@ -155,25 +162,33 @@ def _targeted_product_projection(
     result: ExtractionResult,
     *,
     target: Target,
+    sample_name: str,
 ) -> TargetedProductProjection:
     semantics = (
         result.selected_hypothesis.evidence.decision_semantics
         if result.selected_hypothesis is not None
         else None
     )
-    support = _projection_support_reasons(result, semantics)
-    conflicts = _projection_conflict_reasons(result, semantics, target=target)
+    support = _projection_support_reasons(result, semantics, target=target)
+    conflicts = _projection_conflict_reasons(
+        result,
+        semantics,
+        target=target,
+        sample_name=sample_name,
+    )
     review = _projection_review_reasons(
         result,
         semantics,
         conflicts,
         target=target,
+        sample_name=sample_name,
     )
     not_counted = _projection_not_counted_reasons(
         result,
         semantics,
         review,
         conflicts,
+        target=target,
     )
     nl_status = result.nl_token or ""
     return build_targeted_product_projection(
@@ -191,6 +206,7 @@ def _targeted_product_projection(
         review_reasons=review,
         conflict_reasons=conflicts,
         not_counted_reasons=not_counted,
+        exclusion_reasons=target_sample_exclusion_reasons(target, sample_name),
         legacy_evidence={
             "confidence": result.confidence,
             "nl_status": nl_status,
@@ -202,15 +218,61 @@ def _targeted_product_projection(
 def _projection_support_reasons(
     result: ExtractionResult,
     semantics: EvidenceDecisionSemantics | None,
+    *,
+    target: Target,
 ) -> tuple[str, ...]:
     reasons: list[str] = []
     if _positive(result.reported_rt) and _positive(result.reported_peak_area):
         reasons.append("ms1_peak_present")
-    if semantics is not None:
-        reasons.extend(semantics.support_reasons)
+    reasons.extend(_projection_support_context(result, semantics, target=target))
     if not hard_quality_flags(result.quality_flags):
         reasons.append("trace_coherent")
     return _unique(reasons)
+
+
+def _projection_support_context(
+    result: ExtractionResult,
+    semantics: EvidenceDecisionSemantics | None,
+    *,
+    target: Target,
+) -> tuple[str, ...]:
+    reasons: list[str] = []
+    if semantics is not None:
+        reasons.extend(semantics.support_reasons)
+    reasons.extend(_approved_expected_diff_support_reasons(result, target=target))
+    if _paired_analyte_has_anchor_supported_peak(result, target):
+        reasons.append("role_aware_rt_support")
+        reasons.append("paired_istd_anchor_support")
+    return _unique(reasons)
+
+
+def _approved_expected_diff_support_reasons(
+    result: ExtractionResult,
+    *,
+    target: Target,
+) -> tuple[str, ...]:
+    model = result.model_selection_result
+    if (
+        model is None
+        or model.selection_status != "expected_diff"
+        or not model.product_switch_allowed
+        or not _positive(result.reported_rt)
+        or not _positive(result.reported_peak_area)
+        or not _rt_inside_target_window(result.reported_rt, target)
+        or result.quality_flags
+    ):
+        return ()
+    evidence_sources = {source.strip().lower() for source in model.evidence_sources}
+    reasons: list[str] = []
+    if "role_aware_rt" in evidence_sources:
+        reasons.append("role_aware_rt_support")
+    if (
+        result.role.upper() == "ANALYTE"
+        and target.istd_pair
+        and "paired_area_ratio" in evidence_sources
+    ):
+        reasons.append("paired_area_ratio_support")
+    return tuple(reasons)
 
 
 def _projection_conflict_reasons(
@@ -218,19 +280,37 @@ def _projection_conflict_reasons(
     semantics: EvidenceDecisionSemantics | None,
     *,
     target: Target,
+    sample_name: str = "",
 ) -> tuple[str, ...]:
     reasons: list[str] = []
-    support_reasons = semantics.support_reasons if semantics is not None else ()
+    support_reasons = _projection_support_context(
+        result,
+        semantics,
+        target=target,
+    )
     if semantics is not None:
         reasons.extend(
             reason
             for reason in semantics.conflict_reasons
             if not _downgrade_nl_conflict_to_istd_review(result, reason)
+            and not _downgrade_nl_conflict_to_paired_analyte_review(
+                result,
+                target,
+                reason,
+                support_reasons,
+            )
             and not _downgrade_rt_conflict_to_istd_review(
                 result,
                 target,
                 reason,
                 support_reasons,
+            )
+            and not _downgrade_rt_conflict_to_rna_containing_target_review(
+                result,
+                target,
+                reason,
+                support_reasons,
+                sample_name,
             )
             and not _downgrade_trace_conflict_to_istd_review(
                 result,
@@ -271,6 +351,23 @@ def _downgrade_nl_conflict_to_istd_review(
     )
 
 
+def _downgrade_nl_conflict_to_paired_analyte_review(
+    result: ExtractionResult,
+    target: Target,
+    reason: str,
+    support_reasons: tuple[str, ...],
+) -> bool:
+    return (
+        reason == "candidate_aligned_ms2_nl_conflict"
+        and result.role.upper() == "ANALYTE"
+        and _paired_analyte_has_pair_supported_peak(
+            result,
+            target,
+            support_reasons,
+        )
+    )
+
+
 def _downgrade_rt_conflict_to_istd_review(
     result: ExtractionResult,
     target: Target,
@@ -283,7 +380,36 @@ def _downgrade_rt_conflict_to_istd_review(
         and _positive(result.reported_rt)
         and _positive(result.reported_peak_area)
         and _rt_inside_target_window(result.reported_rt, target)
-        and "candidate_aligned_ms2_nl" in support_reasons
+        and (
+            "candidate_aligned_ms2_nl" in support_reasons
+            or (
+                result.nl_token in {"NL_FAIL", "NO_MS2"}
+                and "ms1_coherent" in support_reasons
+                and not hard_quality_flags(result.quality_flags)
+            )
+        )
+    )
+
+
+def _downgrade_rt_conflict_to_rna_containing_target_review(
+    result: ExtractionResult,
+    target: Target,
+    reason: str,
+    support_reasons: tuple[str, ...],
+    sample_name: str,
+) -> bool:
+    support = set(support_reasons)
+    return (
+        reason == "targeted_rt_conflict"
+        and result.role.upper() == "ANALYTE"
+        and getattr(target, "sample_applicability", "all")
+        == TARGET_SAMPLE_APPLICABILITY_RNA_CONTAINING
+        and target_sample_is_applicable(target, sample_name)
+        and _positive(result.reported_rt)
+        and _positive(result.reported_peak_area)
+        and _rt_inside_target_window(result.reported_rt, target)
+        and "candidate_aligned_ms2_nl" in support
+        and "ms1_coherent" in support
     )
 
 
@@ -319,10 +445,16 @@ def _downgrade_trace_conflict_to_paired_analyte_review(
             "hard_local_quality_conflict",
             "hard_quality_flag_conflict",
         }
-        and _paired_analyte_has_product_supported_peak(
-            result,
-            target,
-            support_reasons,
+        and (
+            _paired_analyte_has_product_supported_peak(
+                result,
+                target,
+                support_reasons,
+            )
+            or (
+                reason == "trace_morphology_conflict"
+                and _paired_analyte_has_anchor_supported_peak(result, target)
+            )
         )
     )
 
@@ -377,37 +509,138 @@ def _paired_analyte_has_product_supported_peak(
     )
 
 
+def _paired_analyte_has_anchor_supported_peak(
+    result: ExtractionResult,
+    target: Target,
+) -> bool:
+    if (
+        result.role.upper() != "ANALYTE"
+        or not target.istd_pair
+        or not _positive(result.reported_rt)
+        or not _positive(result.reported_peak_area)
+        or not _rt_inside_target_window(result.reported_rt, target)
+        or result.quality_flags
+    ):
+        return False
+    reference_rt = result.peak_result.paired_istd_anchor_rt
+    if reference_rt is None or not math.isfinite(reference_rt):
+        return False
+    return _reported_interval_contains_rt(result, reference_rt)
+
+
+def _paired_analyte_has_pair_supported_peak(
+    result: ExtractionResult,
+    target: Target,
+    support_reasons: tuple[str, ...],
+) -> bool:
+    return _paired_analyte_has_anchor_supported_peak(
+        result,
+        target,
+    ) or _paired_analyte_has_role_or_ratio_supported_peak(
+        result,
+        target,
+        support_reasons,
+    )
+
+
+def _paired_analyte_has_role_or_ratio_supported_peak(
+    result: ExtractionResult,
+    target: Target,
+    support_reasons: tuple[str, ...],
+) -> bool:
+    support = set(support_reasons)
+    return (
+        result.role.upper() == "ANALYTE"
+        and bool(target.istd_pair)
+        and _positive(result.reported_rt)
+        and _positive(result.reported_peak_area)
+        and _rt_inside_target_window(result.reported_rt, target)
+        and not result.quality_flags
+        and "ms1_coherent" in support
+        and bool(
+            support
+            & {
+                "role_aware_rt_support",
+                "paired_area_ratio_support",
+            }
+        )
+    )
+
+
+def _reported_interval_contains_rt(
+    result: ExtractionResult,
+    reference_rt: float,
+) -> bool:
+    start = result.reported_peak_start
+    end = result.reported_peak_end
+    if start is None or end is None:
+        return False
+    return start <= reference_rt <= end
+
+
 def _projection_review_reasons(
     result: ExtractionResult,
     semantics: EvidenceDecisionSemantics | None,
     conflict_reasons: tuple[str, ...],
     *,
     target: Target,
+    sample_name: str = "",
 ) -> tuple[str, ...]:
     reasons: list[str] = []
+    support_reasons = _projection_support_context(
+        result,
+        semantics,
+        target=target,
+    )
     if semantics is not None:
         reasons.extend(semantics.review_reasons)
         if "plausible_nl_dropout_review" in semantics.review_reasons:
             reasons.append("plausible_dda_nl_dropout")
+        if (
+            "candidate_aligned_ms2_nl_conflict" in semantics.conflict_reasons
+            and _paired_analyte_has_pair_supported_peak(
+                result,
+                target,
+                support_reasons,
+            )
+        ):
+            reasons.append("paired_analyte_nl_review")
         if any(
             _downgrade_trace_conflict_to_istd_review(
                 result,
                 target,
                 reason,
-                semantics.support_reasons,
+                support_reasons,
             )
             or _downgrade_trace_conflict_to_paired_analyte_review(
                 result,
                 target,
                 reason,
-                semantics.support_reasons,
+                support_reasons,
             )
             for reason in semantics.conflict_reasons
         ):
             reasons.append("trace_morphology_review")
+        if any(
+            _downgrade_rt_conflict_to_istd_review(
+                result,
+                target,
+                reason,
+                support_reasons,
+            )
+            or _downgrade_rt_conflict_to_rna_containing_target_review(
+                result,
+                target,
+                reason,
+                support_reasons,
+                sample_name,
+            )
+            for reason in semantics.conflict_reasons
+        ):
+            reasons.append("targeted_rt_review")
         has_raw_hard_flags = hard_quality_flags(result.quality_flags)
         if has_raw_hard_flags and _downgrade_quality_flag_to_review(
-            result, target, semantics.support_reasons
+            result, target, support_reasons
         ):
             reasons.append("trace_morphology_review")
     if (
@@ -428,15 +661,27 @@ def _projection_not_counted_reasons(
     semantics: EvidenceDecisionSemantics | None,
     review_reasons: tuple[str, ...],
     conflict_reasons: tuple[str, ...],
+    *,
+    target: Target,
 ) -> tuple[str, ...]:
     reasons: list[str] = []
     if semantics is not None:
         reasons.extend(_typed_not_counted_reasons(semantics.not_counted_reasons))
+    support_reasons = _projection_support_context(
+        result,
+        semantics,
+        target=target,
+    )
     nl_failed = result.nl_token == "NL_FAIL"
     no_ms2 = result.nl_token == "NO_MS2"
-    if nl_failed and result.role.upper() != "ISTD":
+    paired_supported = _paired_analyte_has_pair_supported_peak(
+        result,
+        target,
+        support_reasons,
+    )
+    if nl_failed and result.role.upper() != "ISTD" and not paired_supported:
         reasons.append("analyte_nl_fail_requires_policy")
-    if no_ms2 and result.role.upper() != "ISTD":
+    if no_ms2 and result.role.upper() != "ISTD" and not paired_supported:
         reasons.append("analyte_missing_ms2_requires_policy")
     if nl_failed and result.role.upper() == "ISTD" and not (
         "plausible_dda_nl_dropout" in review_reasons

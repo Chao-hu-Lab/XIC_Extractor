@@ -262,6 +262,99 @@ def test_extraction_result_reports_selected_integration_values() -> None:
     assert result.reported_peak_width == pytest.approx(0.42)
 
 
+def test_extraction_result_projects_approved_expected_diff_successor_values() -> None:
+    peak_result = _peak_result_with_candidate()
+    legacy_middle = _selected_hypothesis_with_integration(
+        IntegrationResult(
+            rt_left_min=16.2,
+            rt_apex_min=16.43,
+            rt_right_min=16.6,
+            raw_apex_rt_min=16.43,
+            rt_width_min=0.4,
+            height_raw=16_000.0,
+            height_smoothed=15_000.0,
+            area_raw_counts_seconds=1_000.0,
+        ),
+        hypothesis_id="BenignfatBC1055_DNA|8-oxodG|legacy-middle",
+        selected=True,
+        selection_rank=1,
+    )
+    successor_right = _selected_hypothesis_with_integration(
+        IntegrationResult(
+            rt_left_min=17.0,
+            rt_apex_min=17.18,
+            rt_right_min=17.35,
+            raw_apex_rt_min=17.18,
+            rt_width_min=0.35,
+            height_raw=125_000.0,
+            height_smoothed=86_000.0,
+            area_raw_counts_seconds=50_000.0,
+        ),
+        hypothesis_id="BenignfatBC1055_DNA|8-oxodG|successor-right",
+        selected=False,
+        selection_rank=2,
+        support_reasons=(
+            "ms1_coherent",
+            "role_aware_rt_support",
+            "paired_area_ratio_support",
+        ),
+    )
+    model_selection = PeakModelSelectionResult(
+        selected_candidate_id=successor_right.hypothesis_id,
+        legacy_selected_candidate_id=legacy_middle.hypothesis_id,
+        stable_row_id=(
+            "model_selection|legacy=BenignfatBC1055_DNA|8-oxodG|legacy-middle"
+            "|successor=BenignfatBC1055_DNA|8-oxodG|successor-right"
+        ),
+        trace_group_id=successor_right.trace_group_id,
+        decision_class="review",
+        selection_status="expected_diff",
+        selection_reasons=("paired_area_ratio_support", "role_aware_rt_support"),
+        legacy_reasons=("legacy_rt_anchor",),
+        diff_reasons=(),
+        public_projection={"confidence": "MEDIUM"},
+        evidence_sources=("ms1_trace", "role_aware_rt", "paired_area_ratio"),
+        compatibility_oracle="legacy_peak_scoring_current_oracle",
+        policy_source="selected_hypothesis_model_selection_v1",
+        product_switch_allowed=True,
+        evidence_comparison_policy="complete_candidate_evidence",
+    )
+    decision = PeakHypothesisSelectionDecision(
+        selected_candidate_id=successor_right.hypothesis_id,
+        trace_group_id=successor_right.trace_group_id,
+        decision_class="review",
+        projected_confidence="MEDIUM",
+        projected_reason="approved expected-diff successor projection",
+        support_reasons=(
+            "ms1_coherent",
+            "role_aware_rt_support",
+            "paired_area_ratio_support",
+        ),
+        review_reasons=("paired_analyte_nl_review",),
+    )
+
+    result = build_extraction_result(
+        peak_result=peak_result,
+        nl_result=NLResult("NL_FAIL", None, 17.18, 1, 0, 1),
+        candidate_ms2_evidence=_ms2_evidence(),
+        target=_target(),
+        candidate=peak_result.candidates[0],
+        scoring_context_builder=None,
+        selected_hypothesis=successor_right,
+        selection_decision=decision,
+        model_selection_result=model_selection,
+    )
+
+    assert result.model_selection_result is model_selection
+    assert result.selected_hypothesis is successor_right
+    assert result.reported_rt == 17.18
+    assert result.reported_peak_area == 50_000.0
+    assert result.reported_peak_start == 17.0
+    assert result.reported_peak_end == 17.35
+    assert result.confidence == "MEDIUM"
+    assert result.reason == "approved expected-diff successor projection"
+
+
 def test_extraction_result_runtime_type_hints_are_resolvable() -> None:
     hints = typing.get_type_hints(ExtractionResult)
 
@@ -450,6 +543,28 @@ def test_istd_trace_conflict_with_product_support_stays_counted(
     assert "trace_morphology_review" in projection.review_reasons
 
 
+def test_istd_rt_conflict_with_nl_dropout_stays_counted_when_ms1_coherent() -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(is_istd=True),
+        support_reasons=("ms1_coherent",),
+        conflict_reasons=("targeted_rt_conflict",),
+        review_reasons=("plausible_nl_dropout_review",),
+        nl_status="NL_FAIL",
+        confidence="VERY_LOW",
+        reason="decision: review only, not counted; cap: VERY_LOW due to nl fail",
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "detected_flagged"
+    assert projection.counted_detection is True
+    assert "targeted_rt_conflict" not in projection.conflict_reasons
+    assert "targeted_rt_review" in projection.review_reasons
+    assert "plausible_dda_nl_dropout" in projection.review_reasons
+    assert "istd_nl_fail_without_dropout_support" not in projection.not_counted_reasons
+    assert "role_aware_istd_expected_present" in projection.support_reasons
+
+
 def test_analyte_trace_conflict_does_not_use_istd_projection_escape() -> None:
     result = _result_with_targeted_projection_semantics(
         target=_target(is_istd=False),
@@ -469,7 +584,7 @@ def test_paired_analyte_anchor_selected_trace_conflict_stays_counted() -> None:
         target=_target(is_istd=False),
         support_reasons=("candidate_aligned_ms2_nl",),
         conflict_reasons=("trace_morphology_conflict",),
-        selection_reference_rt=8.5,
+        paired_istd_anchor_rt=8.5,
     )
 
     projection = result.targeted_product_projection
@@ -485,7 +600,8 @@ def test_paired_analyte_anchor_conflict_blocks_trace_downgrade() -> None:
         target=_target(is_istd=False),
         support_reasons=("candidate_aligned_ms2_nl",),
         conflict_reasons=("anchor_conflict", "trace_morphology_conflict"),
-        selection_reference_rt=8.9,
+        selection_reference_rt=8.5,
+        paired_istd_anchor_rt=8.9,
     )
 
     projection = result.targeted_product_projection
@@ -496,19 +612,143 @@ def test_paired_analyte_anchor_conflict_blocks_trace_downgrade() -> None:
     assert "trace_morphology_review" in projection.review_reasons
 
 
-def test_paired_analyte_anchor_selected_nl_fail_still_requires_policy() -> None:
+def test_paired_analyte_anchor_selected_nl_fail_stays_counted_when_ms1_complete(
+) -> None:
     result = _result_with_targeted_projection_semantics(
         target=_target(is_istd=False),
         support_reasons=(),
         conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
         nl_status="NL_FAIL",
-        selection_reference_rt=8.5,
+        paired_istd_anchor_rt=8.5,
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "detected_flagged"
+    assert projection.counted_detection is True
+    assert "candidate_aligned_ms2_nl_conflict" not in projection.conflict_reasons
+    assert "analyte_nl_fail_requires_policy" not in projection.not_counted_reasons
+    assert "paired_analyte_nl_review" in projection.review_reasons
+    assert "paired_istd_anchor_support" in projection.support_reasons
+
+
+def test_paired_analyte_nl_fail_requires_anchor_inside_selected_interval() -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(is_istd=False),
+        support_reasons=(),
+        conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
+        nl_status="NL_FAIL",
+        paired_istd_anchor_rt=8.9,
     )
 
     projection = result.targeted_product_projection
     assert projection is not None
     assert projection.product_state == "ambiguous"
     assert projection.counted_detection is False
+    assert "candidate_aligned_ms2_nl_conflict" in projection.conflict_reasons
+    assert "analyte_nl_fail_requires_policy" in projection.not_counted_reasons
+
+
+def test_paired_analyte_role_support_downgrades_nl_fail_without_anchor_interval(
+) -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(is_istd=False),
+        support_reasons=("ms1_coherent", "role_aware_rt_support"),
+        conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
+        nl_status="NL_FAIL",
+        paired_istd_anchor_rt=8.9,
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "detected_flagged"
+    assert projection.counted_detection is True
+    assert "candidate_aligned_ms2_nl_conflict" not in projection.conflict_reasons
+    assert "analyte_nl_fail_requires_policy" not in projection.not_counted_reasons
+    assert "paired_analyte_nl_review" in projection.review_reasons
+    assert "role_aware_rt_support" in projection.support_reasons
+    assert "paired_istd_anchor_support" not in projection.support_reasons
+
+
+def test_approved_expected_diff_pair_evidence_downgrades_analyte_nl_fail(
+) -> None:
+    model_selection = PeakModelSelectionResult(
+        selected_candidate_id="SampleA|Analyte|successor-right",
+        legacy_selected_candidate_id="SampleA|Analyte|legacy-middle",
+        stable_row_id=(
+            "model_selection|legacy=SampleA|Analyte|legacy-middle"
+            "|successor=SampleA|Analyte|successor-right"
+        ),
+        trace_group_id="SampleA|Analyte|targeted",
+        decision_class="not_counted",
+        selection_status="expected_diff",
+        selection_reasons=("ms1_coherent",),
+        legacy_reasons=("legacy_rt_anchor",),
+        diff_reasons=(),
+        public_projection={"confidence": "VERY_LOW"},
+        evidence_sources=(
+            "ms1_trace",
+            "chrom_peak_segment_context",
+            "role_aware_rt",
+            "paired_area_ratio",
+        ),
+        compatibility_oracle="legacy_peak_scoring_current_oracle",
+        policy_source="selected_hypothesis_model_selection_v1",
+        product_switch_allowed=True,
+        evidence_comparison_policy="limited_evidence_shadow",
+    )
+    result = _result_with_targeted_projection_semantics(
+        target=_target(is_istd=False),
+        support_reasons=("ms1_coherent",),
+        conflict_reasons=(),
+        nl_status="NL_FAIL",
+        confidence="VERY_LOW",
+        model_selection_result=model_selection,
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "detected_flagged"
+    assert projection.counted_detection is True
+    assert "role_aware_rt_support" in projection.support_reasons
+    assert "paired_area_ratio_support" in projection.support_reasons
+    assert "analyte_nl_fail_requires_policy" not in projection.not_counted_reasons
+
+
+def test_paired_analyte_nl_fail_with_quality_flags_stays_not_counted() -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(is_istd=False),
+        support_reasons=(),
+        conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
+        nl_status="NL_FAIL",
+        paired_istd_anchor_rt=8.5,
+        quality_flags=("low_scan_support",),
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "ambiguous"
+    assert projection.counted_detection is False
+    assert "candidate_aligned_ms2_nl_conflict" in projection.conflict_reasons
+    assert "analyte_nl_fail_requires_policy" in projection.not_counted_reasons
+
+
+def test_paired_analyte_reference_rt_without_istd_anchor_is_not_counted() -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(is_istd=False),
+        support_reasons=(),
+        conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
+        nl_status="NL_FAIL",
+        selection_reference_rt=8.5,
+        paired_istd_anchor_rt=None,
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "ambiguous"
+    assert projection.counted_detection is False
+    assert "candidate_aligned_ms2_nl_conflict" in projection.conflict_reasons
+    assert "paired_istd_anchor_support" not in projection.support_reasons
     assert "analyte_nl_fail_requires_policy" in projection.not_counted_reasons
 
 
@@ -561,11 +801,76 @@ def test_istd_raw_hard_quality_flag_with_product_support_stays_counted() -> None
     assert "trace_morphology_review" in projection.review_reasons
 
 
+def test_rna_containing_strict_nl_target_downgrades_targeted_rt_conflict() -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(sample_applicability="rna_containing"),
+        sample_name="TumorBC2304_DNAandRNA",
+        support_reasons=("ms1_coherent", "candidate_aligned_ms2_nl"),
+        conflict_reasons=("targeted_rt_conflict",),
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "detected_flagged"
+    assert projection.counted_detection is True
+    assert "targeted_rt_conflict" not in projection.conflict_reasons
+    assert "targeted_rt_review" in projection.review_reasons
+
+
+def test_rna_containing_target_is_excluded_in_pure_dna_sample() -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(sample_applicability="rna_containing"),
+        sample_name="TumorBC2306_DNA",
+        support_reasons=("ms1_coherent", "candidate_aligned_ms2_nl"),
+        conflict_reasons=(),
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "excluded"
+    assert projection.counted_detection is False
+    assert "target_sample_applicability:rna_containing" in projection.exclusion_reasons
+
+
+def test_rna_containing_target_stays_eligible_in_dnaandrna_sample() -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(sample_applicability="rna_containing"),
+        sample_name="TumorBC2304_DNAandRNA",
+        support_reasons=("ms1_coherent", "candidate_aligned_ms2_nl"),
+        conflict_reasons=(),
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "detected_clean"
+    assert projection.counted_detection is True
+    assert projection.exclusion_reasons == ()
+
+
+def test_rna_containing_target_stays_eligible_in_rna_sample() -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(sample_applicability="rna_containing"),
+        sample_name="TumorBC2304_RNA",
+        support_reasons=("ms1_coherent", "candidate_aligned_ms2_nl"),
+        conflict_reasons=(),
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "detected_clean"
+    assert projection.counted_detection is True
+    assert projection.exclusion_reasons == ()
+
+
 class _Config:
     resolver_mode = "region_first_safe_merge"
 
 
-def _target(*, is_istd: bool = False) -> Target:
+def _target(
+    *,
+    is_istd: bool = False,
+    sample_applicability: str = "all",
+) -> Target:
     return Target(
         label="ISTD" if is_istd else "Analyte",
         mz=258.1085,
@@ -577,6 +882,7 @@ def _target(*, is_istd: bool = False) -> Target:
         nl_ppm_max=50.0,
         is_istd=is_istd,
         istd_pair="ISTD",
+        sample_applicability=sample_applicability,
     )
 
 
@@ -622,14 +928,18 @@ def _peak_result_with_candidate() -> PeakDetectionResult:
 def _result_with_targeted_projection_semantics(
     *,
     target: Target,
+    sample_name: str = "SampleA",
     support_reasons: tuple[str, ...],
     conflict_reasons: tuple[str, ...],
     confidence: str = "HIGH",
     reason: str = "decision: accepted",
+    review_reasons: tuple[str, ...] = (),
     not_counted_reasons: tuple[str, ...] = (),
     quality_flags: tuple[str, ...] = (),
     nl_status: str = "OK",
     selection_reference_rt: float | None = None,
+    paired_istd_anchor_rt: float | None = None,
+    model_selection_result: PeakModelSelectionResult | None = None,
 ) -> ExtractionResult:
     candidate = _candidate(quality_flags=())
     peak_result = PeakDetectionResult(
@@ -651,10 +961,11 @@ def _result_with_targeted_projection_semantics(
             ),
         ),
         selection_reference_rt=selection_reference_rt,
+        paired_istd_anchor_rt=paired_istd_anchor_rt,
     )
     selected = PeakHypothesis(
-        hypothesis_id=f"SampleA|{target.label}|selected",
-        trace_group_id=f"SampleA|{target.label}|targeted",
+        hypothesis_id=f"{sample_name}|{target.label}|selected",
+        trace_group_id=f"{sample_name}|{target.label}|targeted",
         target_label=target.label,
         role="ISTD" if target.is_istd else "Analyte",
         istd_pair=target.istd_pair,
@@ -677,6 +988,7 @@ def _result_with_targeted_projection_semantics(
             decision_semantics=EvidenceDecisionSemantics(
                 decision_class="ambiguous",
                 support_reasons=support_reasons,
+                review_reasons=review_reasons,
                 conflict_reasons=conflict_reasons,
                 not_counted_reasons=not_counted_reasons,
             ),
@@ -703,14 +1015,21 @@ def _result_with_targeted_projection_semantics(
         candidate=candidate,
         scoring_context_builder=None,
         selected_hypothesis=selected,
+        model_selection_result=model_selection_result,
+        sample_name=sample_name,
     )
 
 
 def _selected_hypothesis_with_integration(
     integration: IntegrationResult,
+    *,
+    hypothesis_id: str = "SampleA|Analyte|selected",
+    selected: bool = True,
+    selection_rank: int = 1,
+    support_reasons: tuple[str, ...] = (),
 ) -> PeakHypothesis:
     return PeakHypothesis(
-        hypothesis_id="SampleA|Analyte|selected",
+        hypothesis_id=hypothesis_id,
         trace_group_id="SampleA|Analyte|targeted",
         target_label="Analyte",
         role="Analyte",
@@ -723,11 +1042,12 @@ def _selected_hypothesis_with_integration(
             reason="selected spine",
             decision_semantics=EvidenceDecisionSemantics(
                 decision_class="review",
+                support_reasons=support_reasons,
                 review_reasons=("trace_morphology_review",),
                 compatibility_labels=("trace_quality_cap",),
             ),
         ),
-        audit=AuditTrail(selected=True, selection_rank=1),
+        audit=AuditTrail(selected=selected, selection_rank=selection_rank),
     )
 
 

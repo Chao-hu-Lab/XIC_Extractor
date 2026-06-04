@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -5,6 +6,7 @@ import pytest
 from scipy.signal import savgol_filter
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.integration import peak_bounds
 from xic_extractor.peak_detection.local_minimum import _local_minimum_regions
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -76,6 +78,15 @@ def test_clean_gaussian_peak_returns_raw_apex_and_area() -> None:
     assert result.peak.area == pytest.approx(expected_area, rel=0.02)
     assert result.n_points == len(rt)
     assert result.n_prominent_peaks == 1
+
+
+def test_peak_bounds_handles_non_peak_apex_without_warning() -> None:
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        left, right = peak_bounds(np.ones(5), 2, 0.95, 5)
+
+    assert captured == []
+    assert (left, right) == (2, 3)
 
 
 def test_two_peak_signal_chooses_highest_smoothed_peak() -> None:

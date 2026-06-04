@@ -17,6 +17,10 @@ if __package__ in {None, ""}:
 
 from xic_extractor.config import Target, load_config
 from xic_extractor.peak_detection.baseline import asls_baseline
+from xic_extractor.peak_detection.chrom_peak_segments import (
+    ChromPeakSegment,
+    enumerate_chrom_peak_segments,
+)
 from xic_extractor.peak_detection.selected_envelope import gaussian15_morphology_trace
 from xic_extractor.peak_detection.selected_envelope_diagnostics import (
     SELECTED_ENVELOPE_DIAGNOSTIC_HEADERS,
@@ -45,6 +49,15 @@ PLOT_INDEX_HEADERS = (
     "envelope_rt_end",
     "quantitation_context_rt_start",
     "quantitation_context_rt_end",
+    "chrom_peak_segment_status",
+    "chrom_peak_segment_count",
+    "selected_chrom_peak_segment_id",
+    "selected_chrom_peak_segment_class",
+    "selected_chrom_peak_segment_rt_start",
+    "selected_chrom_peak_segment_rt_end",
+    "selected_chrom_peak_segment_area_asls",
+    "selected_chrom_peak_segment_stop_reason",
+    "selected_chrom_peak_segment_projection",
     "oracle_row_id",
     "oracle_status",
     "oracle_source",
@@ -70,6 +83,7 @@ class SelectedEnvelopePlotOutputs:
 def run_selected_envelope_plot_review(
     *,
     selected_envelope_diagnostics_tsv: Path,
+    chrom_peak_segment_review_rows_tsv: Path | None = None,
     boundary_oracle_tsv: Path | None = None,
     raw_dir: Path,
     dll_dir: Path,
@@ -80,10 +94,16 @@ def run_selected_envelope_plot_review(
     max_accepted_decrease: int = 2,
 ) -> SelectedEnvelopePlotOutputs:
     rows = _read_tsv(selected_envelope_diagnostics_tsv)
+    chrom_peak_segment_review_rows = (
+        _read_chrom_peak_segment_review_rows(chrom_peak_segment_review_rows_tsv)
+        if chrom_peak_segment_review_rows_tsv is not None
+        else None
+    )
     boundary_oracles = _read_boundary_oracles(boundary_oracle_tsv)
     targets = _targets_by_label(config_dir, raw_dir=raw_dir, dll_dir=dll_dir)
     requests = select_selected_envelope_plot_requests(
         rows,
+        chrom_peak_segment_review_rows=chrom_peak_segment_review_rows,
         max_high_risk=max_high_risk,
         max_accepted_increase=max_accepted_increase,
         max_accepted_decrease=max_accepted_decrease,
@@ -106,6 +126,7 @@ def run_selected_envelope_plot_review(
 def select_selected_envelope_plot_requests(
     rows: Iterable[Mapping[str, str]],
     *,
+    chrom_peak_segment_review_rows: Iterable[Mapping[str, str]] | None = None,
     max_high_risk: int,
     max_accepted_increase: int,
     max_accepted_decrease: int,
@@ -155,12 +176,23 @@ def select_selected_envelope_plot_requests(
         ),
         max_accepted_decrease,
     )
+    if chrom_peak_segment_review_rows is not None:
+        review_rows = _selected_diagnostic_rows_for_chrom_review(
+            materialized,
+            chrom_peak_segment_review_rows,
+        )
+        add(
+            "chrom_peak_segment_review_only",
+            review_rows,
+            len(review_rows),
+        )
     return tuple(requests)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--selected-envelope-diagnostics-tsv", type=Path, required=True)
+    parser.add_argument("--chrom-peak-segment-review-rows-tsv", type=Path)
     parser.add_argument("--boundary-oracle-tsv", type=Path)
     parser.add_argument("--raw-dir", type=Path, required=True)
     parser.add_argument("--dll-dir", type=Path, required=True)
@@ -175,6 +207,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         outputs = run_selected_envelope_plot_review(
             selected_envelope_diagnostics_tsv=(
                 args.selected_envelope_diagnostics_tsv
+            ),
+            chrom_peak_segment_review_rows_tsv=(
+                args.chrom_peak_segment_review_rows_tsv
             ),
             boundary_oracle_tsv=args.boundary_oracle_tsv,
             raw_dir=args.raw_dir,
@@ -219,6 +254,17 @@ def _render_requests(
                 target.ppm_tol,
             )
         baseline = asls_baseline(np.asarray(intensity, dtype=float))
+        chrom_segments = enumerate_chrom_peak_segments(
+            np.asarray(rt, dtype=float),
+            np.asarray(intensity, dtype=float),
+            baseline,
+            quantitation_context_rt_start=context_start,
+            quantitation_context_rt_end=context_end,
+        )
+        selected_chrom_segment = _select_chrom_peak_segment_for_row(
+            row,
+            chrom_segments.segments,
+        )
         boundary_oracle = boundary_oracles.get(
             _required_text(row, "selected_candidate_id")
         )
@@ -234,12 +280,17 @@ def _render_requests(
             intensity=np.asarray(intensity, dtype=float),
             baseline=baseline,
             plot_group=request.plot_group,
+            chrom_peak_segments=chrom_segments.segments,
+            selected_chrom_peak_segment=selected_chrom_segment,
         )
         index_rows.append(
             _plot_index_row(
                 rank=rank,
                 request=request,
                 boundary_oracle=boundary_oracle,
+                chrom_peak_segment_status=chrom_segments.status,
+                chrom_peak_segments=chrom_segments.segments,
+                selected_chrom_peak_segment=selected_chrom_segment,
                 png_path=png_path,
                 pdf_path=pdf_path,
             )
@@ -257,6 +308,8 @@ def write_selected_envelope_boundary_plot(
     intensity: np.ndarray,
     baseline: np.ndarray,
     plot_group: str,
+    chrom_peak_segments: Sequence[ChromPeakSegment] = (),
+    selected_chrom_peak_segment: ChromPeakSegment | None = None,
 ) -> None:
     import matplotlib
 
@@ -297,6 +350,16 @@ def write_selected_envelope_boundary_plot(
     residual_ax.axhline(0.0, color="#94a3b8", linewidth=0.8)
     _draw_windows(ax, row, boundary_oracle=boundary_oracle)
     _draw_windows(residual_ax, row, boundary_oracle=boundary_oracle)
+    _draw_chrom_peak_segments(
+        ax,
+        chrom_peak_segments,
+        selected_chrom_peak_segment=selected_chrom_peak_segment,
+    )
+    _draw_chrom_peak_segments(
+        residual_ax,
+        chrom_peak_segments,
+        selected_chrom_peak_segment=selected_chrom_peak_segment,
+    )
     title = (
         f"{row.get('sample_name', '')} / {row.get('target_label', '')} "
         f"({row.get('role', '')})"
@@ -373,15 +436,64 @@ def _draw_windows(
         )
 
 
+def _draw_chrom_peak_segments(
+    ax: Any,
+    segments: Sequence[ChromPeakSegment],
+    *,
+    selected_chrom_peak_segment: ChromPeakSegment | None,
+) -> None:
+    labeled_any = False
+    labeled_selected = False
+    selected_id = (
+        selected_chrom_peak_segment.segment_id
+        if selected_chrom_peak_segment is not None
+        else ""
+    )
+    for segment in segments:
+        is_selected = bool(selected_id and segment.segment_id == selected_id)
+        color = "#0f766e" if is_selected else "#0891b2"
+        alpha = 0.20 if is_selected else 0.09
+        label = None
+        if is_selected and not labeled_selected:
+            label = "projected chrom segment"
+            labeled_selected = True
+        elif not is_selected and not labeled_any:
+            label = "chrom peak segment"
+            labeled_any = True
+        ax.axvspan(
+            segment.interval.rt_start_min,
+            segment.interval.rt_end_min,
+            color=color,
+            alpha=alpha,
+            label=label,
+        )
+        ax.axvline(
+            segment.apex_rt_min,
+            color=color,
+            linewidth=0.8,
+            linestyle=":",
+            alpha=0.85,
+        )
+
+
 def _plot_index_row(
     *,
     rank: int,
     request: SelectedEnvelopePlotRequest,
     boundary_oracle: BoundaryOracle | None,
+    chrom_peak_segment_status: str = "",
+    chrom_peak_segments: Sequence[ChromPeakSegment] = (),
+    selected_chrom_peak_segment: ChromPeakSegment | None = None,
     png_path: Path,
     pdf_path: Path,
 ) -> dict[str, str]:
     row = request.row
+    chrom_values = _chrom_peak_segment_index_values(
+        row,
+        chrom_peak_segment_status=chrom_peak_segment_status,
+        chrom_peak_segments=chrom_peak_segments,
+        selected_chrom_peak_segment=selected_chrom_peak_segment,
+    )
     values = {
         "plot_rank": str(rank),
         "plot_group": request.plot_group,
@@ -399,6 +511,7 @@ def _plot_index_row(
         "envelope_rt_end": row.get("envelope_rt_end", ""),
         "quantitation_context_rt_start": row.get("quantitation_context_rt_start", ""),
         "quantitation_context_rt_end": row.get("quantitation_context_rt_end", ""),
+        **chrom_values,
         "oracle_row_id": "",
         "oracle_status": "",
         "oracle_source": "",
@@ -418,6 +531,106 @@ def _plot_index_row(
             }
         )
     return {header: values[header] for header in PLOT_INDEX_HEADERS}
+
+
+def _chrom_peak_segment_index_values(
+    row: Mapping[str, str],
+    *,
+    chrom_peak_segment_status: str,
+    chrom_peak_segments: Sequence[ChromPeakSegment],
+    selected_chrom_peak_segment: ChromPeakSegment | None,
+) -> dict[str, str]:
+    values = {
+        "chrom_peak_segment_status": chrom_peak_segment_status,
+        "chrom_peak_segment_count": str(len(chrom_peak_segments)),
+        "selected_chrom_peak_segment_id": "",
+        "selected_chrom_peak_segment_class": "",
+        "selected_chrom_peak_segment_rt_start": "",
+        "selected_chrom_peak_segment_rt_end": "",
+        "selected_chrom_peak_segment_area_asls": "",
+        "selected_chrom_peak_segment_stop_reason": "",
+        "selected_chrom_peak_segment_projection": "",
+    }
+    if selected_chrom_peak_segment is None:
+        return values
+    segment = selected_chrom_peak_segment
+    values.update(
+        {
+            "selected_chrom_peak_segment_id": segment.segment_id,
+            "selected_chrom_peak_segment_class": segment.segment_class,
+            "selected_chrom_peak_segment_rt_start": _format_float(
+                segment.interval.rt_start_min
+            ),
+            "selected_chrom_peak_segment_rt_end": _format_float(
+                segment.interval.rt_end_min
+            ),
+            "selected_chrom_peak_segment_area_asls": _format_float(
+                segment.area_baseline_corrected
+            ),
+            "selected_chrom_peak_segment_stop_reason": segment.boundary_stop_reason,
+            "selected_chrom_peak_segment_projection": (
+                _chrom_peak_segment_projection_basis(row, segment)
+            ),
+        }
+    )
+    return values
+
+
+def _select_chrom_peak_segment_for_row(
+    row: Mapping[str, str],
+    segments: Sequence[ChromPeakSegment],
+) -> ChromPeakSegment | None:
+    if not segments:
+        return None
+    envelope_start = _required_float(row, "envelope_rt_start")
+    envelope_end = _required_float(row, "envelope_rt_end")
+    envelope_left = min(envelope_start, envelope_end)
+    envelope_right = max(envelope_start, envelope_end)
+    envelope_midpoint = (envelope_left + envelope_right) / 2.0
+    overlapping = [
+        (
+            _interval_overlap(
+                envelope_left,
+                envelope_right,
+                segment.interval.rt_start_min,
+                segment.interval.rt_end_min,
+            ),
+            -abs(segment.apex_rt_min - envelope_midpoint),
+            segment,
+        )
+        for segment in segments
+    ]
+    positive_overlaps = [entry for entry in overlapping if entry[0] > 0.0]
+    if positive_overlaps:
+        return max(positive_overlaps, key=lambda entry: (entry[0], entry[1]))[2]
+    return min(
+        segments,
+        key=lambda segment: abs(segment.apex_rt_min - envelope_midpoint),
+    )
+
+
+def _chrom_peak_segment_projection_basis(
+    row: Mapping[str, str],
+    segment: ChromPeakSegment,
+) -> str:
+    envelope_start = _required_float(row, "envelope_rt_start")
+    envelope_end = _required_float(row, "envelope_rt_end")
+    overlap = _interval_overlap(
+        min(envelope_start, envelope_end),
+        max(envelope_start, envelope_end),
+        segment.interval.rt_start_min,
+        segment.interval.rt_end_min,
+    )
+    return "envelope_overlap" if overlap > 0.0 else "nearest_envelope_midpoint"
+
+
+def _interval_overlap(
+    left_start: float,
+    left_end: float,
+    right_start: float,
+    right_end: float,
+) -> float:
+    return max(0.0, min(left_end, right_end) - max(left_start, right_start))
 
 
 def _read_boundary_oracles(
@@ -487,6 +700,13 @@ def _read_tsv(path: Path) -> list[dict[str, str]]:
     )
 
 
+def _read_chrom_peak_segment_review_rows(path: Path) -> list[dict[str, str]]:
+    return _read_tsv_with_required_columns(
+        path,
+        required_columns={"sample_name", "target_label", "role"},
+    )
+
+
 def _read_tsv_with_required_columns(
     path: Path,
     *,
@@ -511,6 +731,41 @@ def _write_tsv(
         writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _selected_diagnostic_rows_for_chrom_review(
+    diagnostic_rows: Sequence[dict[str, str]],
+    review_rows: Iterable[Mapping[str, str]],
+) -> list[dict[str, str]]:
+    by_key: dict[tuple[str, str, str], dict[str, str]] = {}
+    for row in diagnostic_rows:
+        key = _chrom_review_key(row)
+        if key in by_key:
+            raise ValueError(
+                "chrom review diagnostic key is ambiguous: "
+                f"{' / '.join(key)}"
+            )
+        by_key[key] = row
+
+    selected: list[dict[str, str]] = []
+    for review_row in review_rows:
+        key = _chrom_review_key(review_row)
+        diagnostic_row = by_key.get(key)
+        if diagnostic_row is None:
+            raise ValueError(
+                "chrom review row not found in selected-envelope diagnostics: "
+                f"{' / '.join(key)}"
+            )
+        selected.append(diagnostic_row)
+    return selected
+
+
+def _chrom_review_key(row: Mapping[str, str]) -> tuple[str, str, str]:
+    return (
+        row.get("sample_name", ""),
+        row.get("target_label", ""),
+        row.get("role", ""),
+    )
 
 
 def _plot_stem(rank: int, request: SelectedEnvelopePlotRequest) -> str:

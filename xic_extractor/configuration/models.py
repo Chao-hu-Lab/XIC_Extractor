@@ -59,6 +59,7 @@ class Target:
     istd_pair: str
     isotope_label_type: str = "unknown"
     paired_rt_relation: str = "none"
+    sample_applicability: str = "all"
 
 
 class ConfigError(Exception):

@@ -15,6 +15,8 @@ _HARD_LOCAL_CONCERN_LABELS = {
     "rt_centrality_poor",
     "shape_poor",
 }
+_CHROM_PEAK_SEGMENT_SOURCE = "chrom_peak_segment"
+_CWT_PROPOSAL_SOURCE = "centwave_cwt"
 
 EvidenceSource = Literal[
     "targeted_peak",
@@ -228,8 +230,10 @@ def classify_evidence_consistency(signals: EvidenceSignalSet) -> tuple[str, ...]
     labels: list[str] = []
     has_shape_context = (
         "shape_clean" in support
-        or "centwave_cwt" in sources
+        or _CWT_PROPOSAL_SOURCE in sources
+        or _CHROM_PEAK_SEGMENT_SOURCE in sources
         or "cwt_same_apex_support" in support
+        or "chrom_peak_segment_context" in support
     )
     hard_quality_flags = quality_flags - _SOFT_TRACE_QUALITY_FLAGS
     trace_context_ok = "trace_clean" in support or not hard_quality_flags
@@ -284,7 +288,12 @@ def decision_semantics_from_signal_set(
         consistency,
     )
     review_reasons = _decision_review_reasons(concerns, caps, consistency)
-    not_counted_reasons = _decision_not_counted_reasons(signals, caps)
+    not_counted_reasons = _decision_not_counted_reasons(
+        signals,
+        caps,
+        support_reasons=support_reasons,
+        consistency=consistency,
+    )
     exclusion_reasons = _decision_exclusion_reasons(concerns, caps)
     ambiguity_reasons = _decision_ambiguity_reasons(signals, concerns)
 
@@ -295,6 +304,14 @@ def decision_semantics_from_signal_set(
         review_reasons = _append_unique(
             review_reasons,
             "cwt_requires_correlated_evidence",
+        )
+    if (
+        "chrom_peak_segment_context" in support_reasons
+        and len(support_reasons) == 1
+    ):
+        review_reasons = _append_unique(
+            review_reasons,
+            "chrom_peak_segment_requires_correlated_evidence",
         )
 
     if exclusion_reasons:
@@ -337,8 +354,12 @@ def _decision_support_reasons(
         reasons.append("candidate_aligned_ms2_nl")
     if "rt_prior_close" in support or "paired_istd_aligned" in support:
         reasons.append("role_aware_rt_support")
-    if "centwave_cwt" in sources or "cwt_same_apex_support" in support:
+    if "paired_area_ratio_plausible" in support:
+        reasons.append("paired_area_ratio_support")
+    if _CWT_PROPOSAL_SOURCE in sources or "cwt_same_apex_support" in support:
         reasons.append("cwt_boundary_morphology_context")
+    if _CHROM_PEAK_SEGMENT_SOURCE in sources:
+        reasons.append("chrom_peak_segment_context")
     return tuple(reasons)
 
 
@@ -403,12 +424,31 @@ def _decision_review_reasons(
 def _decision_not_counted_reasons(
     signals: EvidenceSignalSet,
     caps: frozenset[str],
+    *,
+    support_reasons: tuple[str, ...],
+    consistency: tuple[str, ...],
 ) -> tuple[str, ...]:
     reasons: list[str] = []
     confidence = signals.confidence.strip().upper()
     reason = signals.reason.strip().lower()
     legacy_review_only = confidence == "VERY_LOW" or "review only" in reason
     if not legacy_review_only:
+        return ()
+    support = set(support_reasons)
+    hard_not_counted_caps = caps & {
+        "no_ms2_cap",
+        "zero_area_cap",
+        "hard_quality_flag_cap",
+    }
+    paired_supported_nl_dropout = (
+        "nl_fail_cap" in caps
+        and "plausible_nl_dropout" in consistency
+        and "ms1_coherent" in support
+        and "role_aware_rt_support" in support
+        and "paired_area_ratio_support" in support
+        and not hard_not_counted_caps
+    )
+    if paired_supported_nl_dropout:
         return ()
     reasons.append("legacy_review_only_projection")
     if "no_ms2_cap" in caps:

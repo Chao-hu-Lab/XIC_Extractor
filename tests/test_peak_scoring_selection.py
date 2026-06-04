@@ -50,6 +50,8 @@ def _score_for_selector(
     raw_score: int,
     *,
     support_labels: tuple[str, ...] = (),
+    concern_labels: tuple[str, ...] = (),
+    cap_labels: tuple[str, ...] = (),
 ) -> EvidenceScore:
     confidence = (
         "HIGH"
@@ -68,8 +70,8 @@ def _score_for_selector(
         score_confidence=confidence,
         confidence=confidence,
         support_labels=support_labels,
-        concern_labels=(),
-        cap_labels=(),
+        concern_labels=concern_labels,
+        cap_labels=cap_labels,
     )
 
 
@@ -535,6 +537,97 @@ def test_selector_keeps_near_prior_tiny_area_when_dominant_alternative_is_too_fa
             selection_rt=26.70,
         )
         is near_tiny_peak
+    )
+
+
+def test_strict_selector_keeps_rt_anchor_without_paired_ratio_plausibility() -> None:
+    near_anchor_peak = _sc(
+        Confidence.HIGH,
+        16.43,
+        16_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=1_600_000.0,
+    )
+    right_complete_peak = _sc(
+        Confidence.HIGH,
+        17.18,
+        125_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=80_000_000.0,
+    )
+    near_anchor_peak = replace(
+        near_anchor_peak,
+        evidence_score=_score_for_selector(
+            105,
+            support_labels=("strict_nl_ok", "rt_prior_close"),
+        ),
+    )
+    right_complete_peak = replace(
+        right_complete_peak,
+        evidence_score=_score_for_selector(
+            125,
+            support_labels=("local_sn_strong", "shape_clean", "trace_clean"),
+        ),
+    )
+
+    assert (
+        select_candidate_with_confidence(
+            [near_anchor_peak, right_complete_peak],
+            selection_rt=16.43,
+            strict_selection_rt=True,
+        )
+        is near_anchor_peak
+    )
+
+
+def test_strict_selector_does_not_product_switch_on_paired_ratio_label() -> None:
+    near_anchor_peak = _sc(
+        Confidence.HIGH,
+        16.43,
+        16_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=1_600_000.0,
+    )
+    right_complete_peak = _sc(
+        Confidence.VERY_LOW,
+        17.18,
+        125_000.0,
+        None,
+        selection_quality_penalty=0.0,
+        area=80_000_000.0,
+    )
+    near_anchor_peak = replace(
+        near_anchor_peak,
+        evidence_score=_score_for_selector(
+            105,
+            support_labels=("strict_nl_ok", "rt_prior_close"),
+        ),
+    )
+    right_complete_peak = replace(
+        right_complete_peak,
+        evidence_score=_score_for_selector(
+            125,
+            support_labels=(
+                "paired_area_ratio_plausible",
+                "local_sn_strong",
+                "shape_clean",
+                "trace_clean",
+            ),
+            concern_labels=("nl_fail",),
+            cap_labels=("nl_fail_cap",),
+        ),
+    )
+
+    assert (
+        select_candidate_with_confidence(
+            [near_anchor_peak, right_complete_peak],
+            selection_rt=16.43,
+            strict_selection_rt=True,
+        )
+        is near_anchor_peak
     )
 
 

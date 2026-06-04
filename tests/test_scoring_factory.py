@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +8,7 @@ from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.scoring_factory import (
     allow_prepass_anchor,
     build_scoring_context_factory,
+    compute_shape_metrics,
     selected_candidate,
 )
 from xic_extractor.rt_prior_library import LibraryEntry
@@ -112,6 +114,16 @@ def test_prepass_anchor_allows_adap_equivalent_legacy_flags() -> None:
 
     assert selected_candidate(peak_result) is candidate
     assert allow_prepass_anchor(peak_result) is True
+
+
+def test_compute_shape_metrics_handles_non_peak_apex_without_warning() -> None:
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        ratio, fwhm = compute_shape_metrics(np.ones(5), 2)
+
+    assert captured == []
+    assert ratio == pytest.approx(1.0)
+    assert fwhm is None
 
 
 def _config(**overrides: object) -> ExtractionConfig:

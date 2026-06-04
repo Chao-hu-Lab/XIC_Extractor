@@ -170,6 +170,31 @@ def expected_diff_approval_for_result(
     return None
 
 
+def expected_diff_approval_for_legacy_selection(
+    result: PeakModelSelectionResult,
+    approvals: ExpectedDiffApprovalRecords | None,
+    *,
+    sample_name: str,
+    target_label: str,
+) -> ExpectedDiffApprovalRecord | None:
+    if approvals is None or not result.legacy_selected_candidate_id:
+        return None
+    for stable_row_id, approval in approvals.items():
+        if approval.stable_row_id != stable_row_id:
+            continue
+        if approval.sample_name != sample_name:
+            continue
+        if approval.target_label != target_label:
+            continue
+        if (
+            approval.legacy_selected_candidate_id
+            != result.legacy_selected_candidate_id
+        ):
+            continue
+        return approval
+    return None
+
+
 def expected_diff_stable_row_id(
     *,
     legacy_selected_candidate_id: str,
@@ -260,7 +285,11 @@ def model_select_peak_hypothesis(
         legacy_reasons=_selection_reasons(legacy_selected),
         diff_reasons=final_diff_reasons,
         public_projection=_public_projection(selected),
-        evidence_sources=_evidence_sources(selected),
+        evidence_sources=_model_selection_evidence_sources(
+            selected,
+            status=status,
+            expected_diff_approval=expected_diff_approval,
+        ),
         compatibility_oracle="legacy_peak_scoring_current_oracle",
         policy_source="selected_hypothesis_model_selection_v1",
         product_switch_allowed=_product_switch_allowed(
@@ -439,7 +468,13 @@ def _evidence_sources(hypothesis: PeakHypothesis) -> tuple[str, ...]:
         or "centwave_cwt" in hypothesis.audit.proposal_sources
     ):
         sources.append("cwt_boundary_morphology_context")
-    if evidence.quality_flags or evidence.region_trace_continuity is not None:
+    if "chrom_peak_segment" in hypothesis.audit.proposal_sources:
+        sources.append("chrom_peak_segment_context")
+    if (
+        evidence.quality_flags
+        or evidence.region_trace_continuity is not None
+        or "chrom_peak_segment" in hypothesis.audit.proposal_sources
+    ):
         sources.append("trace_morphology")
     if (
         evidence.confidence
@@ -450,6 +485,18 @@ def _evidence_sources(hypothesis: PeakHypothesis) -> tuple[str, ...]:
         or evidence.cap_labels
     ):
         sources.append("legacy_compatibility_projection")
+    return tuple(dict.fromkeys(sources))
+
+
+def _model_selection_evidence_sources(
+    selected: PeakHypothesis,
+    *,
+    status: ModelSelectionStatus,
+    expected_diff_approval: ExpectedDiffApprovalRecord | None,
+) -> tuple[str, ...]:
+    sources = list(_evidence_sources(selected))
+    if status == "expected_diff" and expected_diff_approval is not None:
+        sources.extend(expected_diff_approval.evidence_sources)
     return tuple(dict.fromkeys(sources))
 
 

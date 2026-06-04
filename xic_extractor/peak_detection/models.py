@@ -109,3 +109,4 @@ class PeakDetectionResult:
     score_breakdown: tuple[tuple[str, str], ...] = ()
     candidate_scores: tuple[PeakCandidateScore, ...] = ()
     selection_reference_rt: float | None = None
+    paired_istd_anchor_rt: float | None = None

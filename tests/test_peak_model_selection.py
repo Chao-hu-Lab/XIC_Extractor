@@ -318,6 +318,38 @@ def test_approved_non_matrix_expected_diff_can_product_switch() -> None:
     assert result.product_switch_allowed is True
 
 
+def test_approved_expected_diff_projects_approval_evidence_sources() -> None:
+    legacy = _hypothesis("legacy", selected=True, confidence="LOW")
+    successor = _hypothesis("successor", selected=False, confidence="HIGH")
+    approval = ExpectedDiffApprovalRecord(
+        stable_row_id=_stable_row_id(legacy, successor),
+        sample_name="SampleA",
+        target_label="Analyte",
+        legacy_selected_candidate_id=legacy.hypothesis_id,
+        successor_selected_candidate_id=successor.hypothesis_id,
+        public_outputs_touched=(
+            "candidate table selected marker",
+            "confidence",
+            "reason",
+        ),
+        matrix_value_impact="none",
+        evidence_sources=("role_aware_rt", "paired_area_ratio"),
+        evidence_summary="paired context approves the expected difference",
+        validation_tier="synthetic_fixture",
+        reviewer_role="implementation-contract-reviewer",
+        reviewer_verdict="approved",
+        final_label="expected_diff",
+    )
+
+    result = model_select_peak_hypothesis(
+        (legacy, successor),
+        expected_diff_approval=approval,
+    )
+
+    assert "role_aware_rt" in result.evidence_sources
+    assert "paired_area_ratio" in result.evidence_sources
+
+
 def test_expected_diff_approval_lookup_requires_matching_row_and_candidates() -> None:
     legacy = _hypothesis("legacy", selected=True, confidence="LOW")
     successor = _hypothesis("successor", selected=False, confidence="HIGH")

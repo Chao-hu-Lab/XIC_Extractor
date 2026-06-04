@@ -20,6 +20,7 @@ def paired_anchor_mismatch_diagnostic(
     *,
     reference_rt: float | None,
     anchor_rt: float | None,
+    anchor_used: bool = False,
     strict_preferred_rt: bool,
 ) -> DiagnosticRecord | None:
     if (
@@ -30,10 +31,15 @@ def paired_anchor_mismatch_diagnostic(
         return None
 
     peak = peak_result.peak
-    if anchor_rt is not None:
+    if anchor_rt is not None and anchor_used:
         expected_rt = anchor_rt
         anchor_label = "target NL anchor"
         allowed_delta = PAIRED_TARGET_ANCHOR_PEAK_DELTA_MAX_MIN
+        secondary_note = f"; ISTD anchor at {reference_rt:.3f} min"
+    elif anchor_rt is not None:
+        expected_rt = anchor_rt
+        anchor_label = "target RT reference"
+        allowed_delta = PAIRED_FALLBACK_ISTD_PEAK_DELTA_MAX_MIN
         secondary_note = f"; ISTD anchor at {reference_rt:.3f} min"
     else:
         expected_rt = reference_rt

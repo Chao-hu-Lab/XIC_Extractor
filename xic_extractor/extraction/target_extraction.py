@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +24,7 @@ from xic_extractor.extraction.peak_candidate_audit import append_peak_audit_rows
 from xic_extractor.extraction.result_assembly import build_extraction_result
 from xic_extractor.extraction.rt_windows import get_rt_window
 from xic_extractor.extraction.scoring_factory import (
+    allow_prepass_anchor,
     paired_istd_fwhm,
     selected_candidate,
     selected_shape_metrics,
@@ -33,6 +36,7 @@ from xic_extractor.output.messages import (
     istd_confidence_note,
 )
 from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
+from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import PeakCandidate
 
 if TYPE_CHECKING:
@@ -50,6 +54,7 @@ def extract_raw_file_result(
     raw_path: Path,
     *,
     scoring_context_factory: Callable[..., Any] | None = None,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
     model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> RawFileExtractionResult:
     from xic_extractor import extractor
@@ -59,6 +64,7 @@ def extract_raw_file_result(
         targets,
         raw_path,
         scoring_context_factory=scoring_context_factory,
+        rt_prior_library=rt_prior_library,
         model_selection_expected_diff_approvals=model_selection_expected_diff_approvals,
     )
     return extractor.RawFileExtractionResult(
@@ -79,6 +85,7 @@ def process_file(
     precomputed_istd_diagnostics: list[DiagnosticRecord] | None = None,
     precomputed_istd_anchor_rts: dict[str, float] | None = None,
     precomputed_istd_shape_metrics: dict[str, tuple[float, float | None]] | None = None,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
     model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> tuple[FileResult, list[DiagnosticRecord]]:
     from xic_extractor import extractor
@@ -102,12 +109,13 @@ def process_file(
                 for label, result in results.items()
                 if result.peak_result.confidence is not None
             }
+            active_rt_prior_library = dict(rt_prior_library or {})
             if precomputed_istd_anchor_rts is None:
                 istd_anchor_rts: dict[str, float] = {}
                 for target in targets:
                     if not target.is_istd:
                         continue
-                    anchor_rt = extract_one_target(
+                    extract_one_target(
                         raw,
                         config,
                         sample_name,
@@ -128,6 +136,7 @@ def process_file(
                     confidence = results[target.label].peak_result.confidence
                     if confidence is not None:
                         istd_confidence_by_label[target.label] = confidence
+                    anchor_rt = credible_istd_anchor_rt(results.get(target.label))
                     if anchor_rt is not None:
                         istd_anchor_rts[target.label] = anchor_rt
             else:
@@ -151,6 +160,7 @@ def process_file(
                     sample_name,
                     target,
                     reference_rt=reference_rt,
+                    rt_prior_library=active_rt_prior_library,
                     sample_drift=sample_drift,
                     strict_preferred_rt=reference_rt is not None,
                     results=results,
@@ -195,6 +205,7 @@ def extract_one_target(
     target: Target,
     *,
     reference_rt: float | None,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
     sample_drift: float = 0.0,
     strict_preferred_rt: bool = False,
     results: dict[str, ExtractionResult],
@@ -211,8 +222,18 @@ def extract_one_target(
 ) -> float | None:
     from xic_extractor import extractor
 
+    target_reference_rt = paired_target_reference_rt(
+        target,
+        reference_rt=reference_rt,
+        rt_prior_library=rt_prior_library,
+    )
     rt_min, rt_max, anchor_used, anchor_rt = get_rt_window(
-        raw, target, config, reference_rt=reference_rt, sample_drift=sample_drift
+        raw,
+        target,
+        config,
+        reference_rt=reference_rt,
+        target_reference_rt=target_reference_rt,
+        sample_drift=sample_drift,
     )
     rt, intensity = raw.extract_xic(target.mz, rt_min, rt_max, target.ppm_tol)
     nl_result = check_target_nl(raw, target, config)
@@ -282,13 +303,19 @@ def extract_one_target(
         target,
         peak_result,
         reference_rt=reference_rt,
-        anchor_rt=anchor_rt if anchor_used else None,
+        anchor_rt=anchor_rt,
+        anchor_used=anchor_used,
         strict_preferred_rt=strict_preferred_rt,
     )
     if paired_rejection is not None:
         peak_result = apply_anchor_mismatch_penalty(
             peak_result,
             paired_rejection.reason,
+        )
+    if istd_rt_in_this_sample is not None:
+        peak_result = replace(
+            peak_result,
+            paired_istd_anchor_rt=istd_rt_in_this_sample,
         )
     audit_rt = recovery_decision.rt if recovery_decision.rt is not None else rt
     audit_intensity = (
@@ -313,6 +340,7 @@ def extract_one_target(
         rt_min=rt_min,
         rt_max=rt_max,
         expected_rt_min=anchor_rt,
+        paired_istd_anchor_rt=istd_rt_in_this_sample,
         model_selection_expected_diff_approvals=model_selection_expected_diff_approvals,
     )
 
@@ -326,6 +354,7 @@ def extract_one_target(
         selected_hypothesis=handoff_peak.selected_hypothesis,
         selection_decision=handoff_peak.selection_decision,
         model_selection_result=handoff_peak.model_selection_result,
+        sample_name=sample_name,
     )
     results[target.label] = result
     diagnostics.extend(build_diagnostic_records(sample_name, target, result, config))
@@ -364,3 +393,40 @@ def extract_one_target(
         istd_confidence_note=istd_confidence_note,
     )
     return anchor_rt
+
+
+def paired_target_reference_rt(
+    target: Target,
+    *,
+    reference_rt: float | None,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None,
+) -> float | None:
+    if target.is_istd or not target.istd_pair or reference_rt is None:
+        return None
+    library = rt_prior_library or {}
+    entry = library.get((target.label, "analyte"))
+    if (
+        entry is None
+        or entry.istd_pair != target.istd_pair
+        or entry.median_delta_rt is None
+    ):
+        return None
+    return reference_rt + entry.median_delta_rt
+
+
+def credible_istd_anchor_rt(result: ExtractionResult | None) -> float | None:
+    """Return the selected ISTD MS1 RT only when it is credible as a pair anchor."""
+    if result is None:
+        return None
+    if not allow_prepass_anchor(result.peak_result):
+        return None
+    rt = result.reported_rt
+    area = result.reported_peak_area
+    if not _finite_positive(rt) or not _finite_positive(area):
+        return None
+    assert rt is not None
+    return float(rt)
+
+
+def _finite_positive(value: float | None) -> bool:
+    return value is not None and math.isfinite(value) and value > 0

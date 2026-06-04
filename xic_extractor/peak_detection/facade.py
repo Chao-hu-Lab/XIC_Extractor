@@ -4,6 +4,9 @@ from dataclasses import replace
 import numpy as np
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.chrom_peak_candidate_adapter import (
+    chrom_peak_segment_candidates,
+)
 from xic_extractor.peak_detection.legacy_savgol import (
     find_peak_candidates_legacy_savgol,
 )
@@ -47,6 +50,13 @@ def find_peak_and_area(
     istd_confidence_note: str | None = None,
 ) -> PeakDetectionResult:
     candidates_result = find_peak_candidates(rt, intensity, config)
+    if scoring_context_builder is not None:
+        candidates_result = _augment_with_chrom_peak_segment_candidates(
+            rt,
+            intensity,
+            config,
+            candidates_result,
+        )
     chosen_confidence: str | None = None
     chosen_reason: str | None = None
     chosen_severities: tuple[tuple[int, str], ...] = ()
@@ -223,6 +233,99 @@ def find_peak_candidates(
     raise ValueError(f"unsupported resolver mode {resolver_mode!r}; must be {allowed}")
 
 
+def _augment_with_chrom_peak_segment_candidates(
+    rt: np.ndarray,
+    intensity: np.ndarray,
+    config: ExtractionConfig,
+    candidates_result: PeakCandidatesResult,
+) -> PeakCandidatesResult:
+    if getattr(config, "resolver_mode", "legacy_savgol") != "region_first_safe_merge":
+        return candidates_result
+    chrom_candidates = chrom_peak_segment_candidates(rt, intensity, config)
+    if not chrom_candidates:
+        return candidates_result
+    candidates = candidates_result.candidates
+    for candidate in chrom_candidates:
+        candidates = _append_or_merge_chrom_peak_segment_candidate(
+            candidates,
+            candidate,
+        )
+    status = "OK" if candidates else candidates_result.status
+    return replace(
+        candidates_result,
+        status=status,
+        candidates=candidates,
+        n_prominent_peaks=len(candidates),
+    )
+
+
+def _append_or_merge_chrom_peak_segment_candidate(
+    candidates: tuple[PeakCandidate, ...],
+    chrom_candidate: PeakCandidate,
+) -> tuple[PeakCandidate, ...]:
+    merged: list[PeakCandidate] = []
+    replaced = False
+    for candidate in candidates:
+        if _same_chrom_peak_segment_identity(candidate, chrom_candidate):
+            merged.append(_chrom_boundary_upgrade_candidate(candidate, chrom_candidate))
+            replaced = True
+        else:
+            merged.append(candidate)
+    if not replaced:
+        merged.append(chrom_candidate)
+    return tuple(merged)
+
+
+def _same_chrom_peak_segment_identity(
+    candidate: PeakCandidate,
+    chrom_candidate: PeakCandidate,
+) -> bool:
+    if _same_peak_candidate_identity(candidate, chrom_candidate):
+        return True
+    if candidate.selection_apex_index == chrom_candidate.selection_apex_index:
+        return True
+    return abs(candidate.selection_apex_rt - chrom_candidate.selection_apex_rt) <= 1e-9
+
+
+def _chrom_boundary_upgrade_candidate(
+    candidate: PeakCandidate,
+    chrom_candidate: PeakCandidate,
+) -> PeakCandidate:
+    return replace(
+        chrom_candidate,
+        proposal_sources=_combine_proposal_sources(candidate, chrom_candidate),
+        source_apex_rank=(
+            candidate.source_apex_rank
+            if candidate.source_apex_rank is not None
+            else chrom_candidate.source_apex_rank
+        ),
+        cwt_best_scale=(
+            chrom_candidate.cwt_best_scale
+            if chrom_candidate.cwt_best_scale is not None
+            else candidate.cwt_best_scale
+        ),
+        cwt_ridge_persistence=(
+            chrom_candidate.cwt_ridge_persistence
+            if chrom_candidate.cwt_ridge_persistence is not None
+            else candidate.cwt_ridge_persistence
+        ),
+        ms2_evidence_peak_start=(
+            chrom_candidate.ms2_evidence_peak_start
+            if chrom_candidate.ms2_evidence_peak_start is not None
+            else candidate.ms2_evidence_peak_start
+        ),
+        ms2_evidence_peak_end=(
+            chrom_candidate.ms2_evidence_peak_end
+            if chrom_candidate.ms2_evidence_peak_end is not None
+            else candidate.ms2_evidence_peak_end
+        ),
+        merge_note=_combine_merge_note(
+            candidate.merge_note,
+            chrom_candidate.merge_note,
+        ),
+    )
+
+
 def _apply_region_first_safe_merge_if_enabled(
     rt: np.ndarray,
     intensity: np.ndarray,
@@ -263,6 +366,14 @@ def _combine_proposal_sources(
             if source
         )
     )
+
+
+def _combine_merge_note(current: str, note: str) -> str:
+    if not current:
+        return note
+    if not note or note in current.split("; "):
+        return current
+    return f"{current}; {note}"
 
 
 def _score_with_context(

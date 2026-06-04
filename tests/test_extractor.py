@@ -110,7 +110,8 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
     )
     assert len(output.file_results) == 1
     assert all(d.issue == "NL_ANCHOR_FALLBACK" for d in output.diagnostics)
-    assert _read_csv(config.output_csv.with_name("xic_results_long.csv")) == [
+    long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
+    assert [_core_long_row(row) for row in long_rows] == [
         {
             "SampleName": "SampleA",
             "Group": "Other",
@@ -144,6 +145,8 @@ def test_run_writes_success_rows_with_area_columns_and_optional_nl(
             "Reason": "",
         },
     ]
+    assert [row["Counted Detection"] for row in long_rows] == ["TRUE", "TRUE"]
+    assert all(row["Product State"] for row in long_rows)
 
 
 def test_run_wires_candidate_ms2_evidence_into_scoring_context(
@@ -566,6 +569,59 @@ def test_prepass_excludes_flagged_istd_anchor_from_prior_map(
     assert shape_metrics == {}
 
 
+def test_prepass_uses_selected_istd_rt_instead_of_window_anchor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from xic_extractor.extraction.istd_prepass import extract_istd_anchors_only
+    from xic_extractor.extractor import ExtractionResult
+
+    config = _config(tmp_path)
+    raw_path = config.data_dir / "SampleA.raw"
+    raw_path.write_text("", encoding="utf-8")
+    target = _target("ISTD", is_istd=True)
+    monkeypatch.setattr(
+        "xic_extractor.extraction.istd_prepass.open_raw",
+        _open_raw_factory(),
+    )
+
+    def _fake_extract_one_target(
+        raw,
+        config,
+        sample_name,
+        target,
+        *,
+        reference_rt,
+        strict_preferred_rt,
+        results,
+        diagnostics,
+        shape_metrics_by_label,
+        **kwargs,
+    ) -> float | None:
+        results[target.label] = ExtractionResult(
+            peak_result=_ok_peak(9.20, 1500.0, 2000.0),
+            nl=None,
+            target_label=target.label,
+            role="ISTD",
+        )
+        return 9.05
+
+    monkeypatch.setattr(
+        "xic_extractor.extraction.target_extraction.extract_one_target",
+        _fake_extract_one_target,
+    )
+
+    anchors, results, diagnostics, shape_metrics = extract_istd_anchors_only(
+        config,
+        [target],
+        raw_path,
+    )
+
+    assert anchors == {"ISTD": pytest.approx(9.20)}
+    assert results[target.label].reported_rt == pytest.approx(9.20)
+    assert diagnostics == []
+    assert shape_metrics == {}
+
+
 def test_run_reextracts_istd_in_main_pass_to_keep_scoring_metadata(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -662,7 +718,7 @@ def test_run_leaves_confidence_blank_for_nd_rows_with_failed_nl(
     output = _run(config, targets)
 
     long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
-    assert long_rows == [
+    assert [_core_long_row(row) for row in long_rows] == [
         {
             "SampleName": "SampleA",
             "Group": "Other",
@@ -680,6 +736,9 @@ def test_run_leaves_confidence_blank_for_nd_rows_with_failed_nl(
             "Reason": "",
         }
     ]
+    assert long_rows[0]["Product State"] == "not_counted"
+    assert long_rows[0]["Counted Detection"] == "FALSE"
+    assert "missing_positive_ms1_peak" in long_rows[0]["Projection Not Counted Reasons"]
     assert output.file_results[0].results["WithNL"].confidence == ""
 
 
@@ -697,7 +756,7 @@ def test_run_leaves_confidence_blank_for_file_error_rows(
     _run(config, targets)
 
     long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
-    assert long_rows == [
+    assert [_core_long_row(row) for row in long_rows] == [
         {
             "SampleName": "Bad",
             "Group": "Other",
@@ -715,6 +774,9 @@ def test_run_leaves_confidence_blank_for_file_error_rows(
             "Reason": "",
         }
     ]
+    assert long_rows[0]["Product State"] == "excluded"
+    assert long_rows[0]["Counted Detection"] == "FALSE"
+    assert long_rows[0]["Projection Exclusion Reasons"] == "file_error"
 
 
 def test_run_writes_file_error_row_and_continues(
@@ -1496,7 +1558,7 @@ def test_paired_analyte_accepts_peak_close_to_target_anchor_even_if_farther_from
     )
 
 
-def test_paired_analyte_ignores_target_nl_anchor_far_from_istd_anchor(
+def test_paired_analyte_keeps_target_nl_anchor_far_from_istd_anchor(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path)
@@ -1519,7 +1581,7 @@ def test_paired_analyte_ignores_target_nl_anchor_far_from_istd_anchor(
         istd_confidence_note: str | None = None,
     ) -> PeakDetectionResult:
         preferred_rts.append(preferred_rt)
-        peak_rt = 13.70 if len(preferred_rts) == 1 else 13.72
+        peak_rt = 13.70 if len(preferred_rts) == 1 else 15.12
         return _ok_peak(peak_rt, 5000.0, 8000.0)
 
     monkeypatch.setattr("xic_extractor.extractor.open_raw", lambda *_args: raw)
@@ -1547,8 +1609,8 @@ def test_paired_analyte_ignores_target_nl_anchor_far_from_istd_anchor(
 
     _run(config, targets)
 
-    assert preferred_rts == [13.70, 13.70]
-    assert raw.windows[1] == pytest.approx((12.70, 14.70))
+    assert preferred_rts == [13.70, 15.10]
+    assert raw.windows[1] == pytest.approx((14.10, 16.10))
 
 
 def test_paired_analyte_istd_rt_fallback_does_not_force_counted_detection(
@@ -1590,8 +1652,8 @@ def test_paired_analyte_istd_rt_fallback_does_not_force_counted_detection(
 
     long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
     analyte_row = next(row for row in long_rows if row["Target"] == "Analyte")
-    assert analyte_row["RT"] == "13.7200"
-    assert analyte_row["Area"] == "8000.00"
+    assert analyte_row["RT"] == "ND"
+    assert analyte_row["Area"] == "ND"
     assert analyte_row["NL"] == "NL_FAIL"
     assert analyte_row["Product State"] == "not_counted"
     assert analyte_row["Counted Detection"] == "FALSE"
@@ -1600,7 +1662,7 @@ def test_paired_analyte_istd_rt_fallback_does_not_force_counted_detection(
     ]
 
 
-def test_paired_analyte_fallback_keeps_mismatched_istd_anchor_peak_as_very_low(
+def test_paired_analyte_fallback_blanks_not_counted_peak_from_matrix(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path)
@@ -1638,12 +1700,18 @@ def test_paired_analyte_fallback_keeps_mismatched_istd_anchor_peak_as_very_low(
     output = _run(config, targets)
 
     rows = _read_csv(config.output_csv)
-    assert rows[0]["Analyte_RT"] == "14.3100"
-    assert rows[0]["Analyte_Area"] == "8000.00"
+    assert rows[0]["Analyte_RT"] == "ND"
+    assert rows[0]["Analyte_Area"] == "ND"
     long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
     analyte_row = next(row for row in long_rows if row["Target"] == "Analyte")
+    assert analyte_row["RT"] == "ND"
+    assert analyte_row["Area"] == "ND"
     assert analyte_row["Confidence"] == "VERY_LOW"
-    assert "anchor mismatch" in analyte_row["Reason"]
+    assert analyte_row["Product State"] == "not_counted"
+    assert analyte_row["Counted Detection"] == "FALSE"
+    assert "analyte_nl_fail_requires_policy" in analyte_row[
+        "Projection Not Counted Reasons"
+    ]
     assert output.file_results[0].results["Analyte"].confidence == "VERY_LOW"
     diagnostics = _read_csv(config.diagnostics_csv)
     assert any(
@@ -1981,6 +2049,26 @@ class _CwtAuditRaw(_FakeRaw):
 def _read_csv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8-sig") as handle:
         return list(csv.DictReader(handle))
+
+
+def _core_long_row(row: dict[str, str]) -> dict[str, str]:
+    core_headers = (
+        "SampleName",
+        "Group",
+        "Target",
+        "Role",
+        "ISTD Pair",
+        "RT",
+        "Area",
+        "NL",
+        "Int",
+        "PeakStart",
+        "PeakEnd",
+        "PeakWidth",
+        "Confidence",
+        "Reason",
+    )
+    return {header: row[header] for header in core_headers}
 
 
 def _read_tsv(path: Path) -> list[dict[str, str]]:

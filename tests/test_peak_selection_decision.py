@@ -80,6 +80,32 @@ def test_selection_decision_projects_review_and_source_context() -> None:
     assert "trace_morphology" in decision.evidence_sources
 
 
+def test_selection_decision_projects_chrom_segment_source_context() -> None:
+    hypothesis = _hypothesis(
+        evidence=EvidenceVector(
+            confidence="HIGH",
+            support_labels=("local_sn_strong", "trace_clean"),
+            reason="decision: accepted",
+            decision_semantics=EvidenceDecisionSemantics(
+                decision_class="accepted",
+                support_reasons=("ms1_coherent", "chrom_peak_segment_context"),
+                compatibility_labels=(
+                    "local_sn_strong",
+                    "trace_clean",
+                    "chrom_peak_segment",
+                ),
+            ),
+        ),
+        proposal_sources=("local_minimum", "chrom_peak_segment"),
+    )
+
+    decision = selection_decision_from_hypothesis(hypothesis)
+
+    assert decision.decision_class == "accepted"
+    assert "chrom_peak_segment_context" in decision.evidence_sources
+    assert "trace_morphology" in decision.evidence_sources
+
+
 def test_selection_decision_projects_not_counted_and_peak_result_fallback() -> None:
     hypothesis = _hypothesis(
         evidence=EvidenceVector(

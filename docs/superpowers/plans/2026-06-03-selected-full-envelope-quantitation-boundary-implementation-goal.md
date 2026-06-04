@@ -1,12 +1,19 @@
 # Selected Full-Envelope Quantitation Boundary Implementation Goal
 
 **Date:** 2026-06-03
-**Status:** Reviewed; FE0-FE4 foundation exists; executing FE1 OpenMS-first
-policy slice
+**Status:** Reviewed; FE0-FE4 foundation exists; current branch FE4 rerun
+closed as `externalize`; product direction pivoted to `ChromPeakSegment`
+candidate enumeration
 **Readiness target:** `production_candidate` only after the scale gate and
 conditional product-wiring slice pass with manual/expert overlay and changed-row
 evidence. FE0-FE4 are `diagnostic_only` or `shadow_ready`, not product
 promotion.
+**Current gate:** 2026-06-04 current-branch 8RAW rerun wrote
+`output/selected_full_envelope_realdata_preflight/fe4_8raw_selected_envelope_current_branch_20260604/`
+and remains `diagnostic_only` / `externalize`; do not run FE5a or product wiring
+from this state. A scoped `chrom_peak_segment` product-candidate slice now runs
+only in scored `region_first_safe_merge` extraction, and needs a new
+segment-native changed-row gate before any broader promotion.
 **Primary spec:** [Selected full-envelope quantitation boundary spec](../specs/2026-06-03-selected-full-envelope-quantitation-boundary-spec.md)
 **Related specs:** [AsLS primary matrix value policy](../specs/2026-06-02-asls-primary-matrix-value-policy-spec.md), [Region-boundary decision owner design](../specs/2026-06-02-region-boundary-decision-owner-design.md), [Region-boundary public behavior addendum](../specs/2026-06-02-region-boundary-public-behavior-addendum.md)
 
@@ -49,6 +56,11 @@ CONTEXT:
 - Current product gap:
   AsLS is now the primary value source, but selected integrations may still use
   resolver-provided `peak_start` / `peak_end`, which can clip real peak flanks.
+- Current pivot:
+  selected-full-envelope is not the product boundary owner. It remains
+  diagnostic/review evidence. The product candidate spine is
+  `ChromPeakSegment` enumeration before model selection, followed by raw/AsLS
+  integration over the selected segment.
 - Core product direction:
   integrate the selected peak's full baseline-supported envelope over raw/original
   XIC via the existing AsLS `IntegrationResult.area_baseline_corrected`; do not
@@ -116,6 +128,10 @@ CONSTRAINTS:
   equivalent audit provenance for selected-envelope work. Existing
   `region_first_safe_merge` compatibility behavior remains characterized and
   must not be used as fallback authorization for selected-envelope promotion.
+- Do not treat `selected_full_envelope` as the next product-promotion gate. The
+  next boundary gate must be segment-native and evaluate
+  `chrom_peak_segment` candidates directly against resolver intervals, paired
+  RT evidence, raw XIC, and AsLS baseline.
 - Preserve current targeted CSV/workbook `Area` semantics unless a separate
   approved public-output spec changes them. Targeted `Area` is currently raw
   integrated area; alignment primary matrix area is the AsLS-selected product
@@ -407,6 +423,8 @@ Done when:
 
 DONE WHEN:
 - FE0-FE5b are completed or stopped by a named gate decision.
+- If this goal resumes after the 2026-06-04 pivot, stop the old FE5 path and
+  create/execute the segment-native gate instead.
 - Existing AsLS `IntegrationResult.area_baseline_corrected` remains the area
   owner; this goal does not create a parallel baseline formula owner.
 - Selected-envelope boundaries are bounded by named context, baseline-return,

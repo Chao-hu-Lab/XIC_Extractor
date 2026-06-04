@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import cast
@@ -17,6 +18,7 @@ from xic_extractor.peak_detection.hypotheses import (
 from xic_extractor.peak_detection.model_selection import (
     ExpectedDiffApprovalRecords,
     PeakModelSelectionResult,
+    expected_diff_approval_for_legacy_selection,
     expected_diff_approval_for_result,
     model_select_peak_hypothesis,
 )
@@ -27,6 +29,10 @@ from xic_extractor.peak_detection.selection_decision import (
 )
 from xic_extractor.peak_detection.traces import TraceGroup
 from xic_extractor.signal_processing import PeakCandidate
+from xic_extractor.target_sample_applicability import (
+    TARGET_SAMPLE_APPLICABILITY_RNA_CONTAINING,
+    target_sample_is_applicable,
+)
 
 
 @dataclass(frozen=True)
@@ -97,6 +103,7 @@ def selected_handoff_peak(
     rt_min: float,
     rt_max: float,
     expected_rt_min: float | None,
+    paired_istd_anchor_rt: float | None = None,
     model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> HandoffPeakSelection:
     trace_group = (
@@ -133,6 +140,13 @@ def selected_handoff_peak(
         sample_name=sample_name,
         target_label=target.label,
         expected_diff_approvals=model_selection_expected_diff_approvals,
+    )
+    model_selection_result = _targeted_product_switch_policy(
+        model_selection_result,
+        hypotheses=hypotheses,
+        sample_name=sample_name,
+        target=target,
+        paired_istd_anchor_rt=paired_istd_anchor_rt,
     )
     legacy_selected_hypothesis = selected_peak_hypothesis(hypotheses)
     selected_hypothesis = _product_selected_hypothesis(
@@ -173,12 +187,138 @@ def _model_selection_result_for_handoff(
         target_label=target_label,
     )
     if approval is None:
+        approval = expected_diff_approval_for_legacy_selection(
+            shadow_result,
+            expected_diff_approvals,
+            sample_name=sample_name,
+            target_label=target_label,
+        )
+    if approval is None:
         return shadow_result
     return model_select_peak_hypothesis(
         hypotheses,
-        successor_selected_candidate_id=shadow_result.selected_candidate_id,
+        successor_selected_candidate_id=approval.successor_selected_candidate_id,
         expected_diff_approval=approval,
     )
+
+
+def _targeted_product_switch_policy(
+    model_selection_result: PeakModelSelectionResult | None,
+    *,
+    hypotheses: tuple[PeakHypothesis, ...],
+    sample_name: str,
+    target: Target,
+    paired_istd_anchor_rt: float | None,
+) -> PeakModelSelectionResult | None:
+    if _target_applicable_strict_nl_successor_switch(
+        model_selection_result,
+        hypotheses=hypotheses,
+        sample_name=sample_name,
+        target=target,
+    ):
+        assert model_selection_result is not None
+        return replace(
+            model_selection_result,
+            product_switch_allowed=True,
+            evidence_sources=tuple(
+                dict.fromkeys(
+                    (
+                        *model_selection_result.evidence_sources,
+                        "target_applicable_strict_nl_successor",
+                    )
+                )
+            ),
+        )
+    if (
+        model_selection_result is None
+        or not model_selection_result.product_switch_allowed
+        or model_selection_result.selection_status != "expected_diff"
+    ):
+        return model_selection_result
+    if target.is_istd:
+        return model_selection_result
+    if target.istd_pair and _finite_anchor_rt(paired_istd_anchor_rt):
+        return model_selection_result
+    reason = (
+        "paired_istd_not_credible_in_sample"
+        if target.istd_pair
+        else "target_role_not_auto_reselection_eligible"
+    )
+    return replace(
+        model_selection_result,
+        selection_status="blocked_diff",
+        product_switch_allowed=False,
+        diff_reasons=tuple(
+            dict.fromkeys(
+                (
+                    *model_selection_result.diff_reasons,
+                    reason,
+                )
+            )
+        ),
+    )
+
+
+def _target_applicable_strict_nl_successor_switch(
+    model_selection_result: PeakModelSelectionResult | None,
+    *,
+    hypotheses: tuple[PeakHypothesis, ...],
+    sample_name: str,
+    target: Target,
+) -> bool:
+    if (
+        model_selection_result is None
+        or model_selection_result.product_switch_allowed
+        or model_selection_result.selection_status != "expected_diff"
+        or target.is_istd
+        or getattr(target, "sample_applicability", "all")
+        != TARGET_SAMPLE_APPLICABILITY_RNA_CONTAINING
+        or not target_sample_is_applicable(target, sample_name)
+    ):
+        return False
+    selected = _hypothesis_by_id(
+        hypotheses,
+        model_selection_result.selected_candidate_id,
+    )
+    if selected is None:
+        return False
+    if (
+        not math.isfinite(selected.integration.rt_apex_min)
+        or selected.integration.area_raw_counts_seconds <= 0
+    ):
+        return False
+    reasons = _hypothesis_reason_set(selected)
+    return "strict_nl_ok" in reasons or "candidate_aligned_ms2_nl" in reasons
+
+
+def _hypothesis_by_id(
+    hypotheses: tuple[PeakHypothesis, ...],
+    hypothesis_id: str,
+) -> PeakHypothesis | None:
+    for hypothesis in hypotheses:
+        if hypothesis.hypothesis_id == hypothesis_id:
+            return hypothesis
+    return None
+
+
+def _hypothesis_reason_set(hypothesis: PeakHypothesis) -> frozenset[str]:
+    semantics = hypothesis.evidence.decision_semantics
+    reasons: list[str] = [
+        *hypothesis.evidence.support_labels,
+        *hypothesis.evidence.concern_labels,
+        *hypothesis.evidence.cap_labels,
+    ]
+    if semantics is not None:
+        reasons.extend(semantics.support_reasons)
+        reasons.extend(semantics.review_reasons)
+        reasons.extend(semantics.conflict_reasons)
+        reasons.extend(semantics.not_counted_reasons)
+        reasons.extend(semantics.exclusion_reasons)
+    return frozenset(reason for reason in reasons if reason)
+
+
+def _finite_anchor_rt(value: float | None) -> bool:
+    return value is not None and math.isfinite(value)
 
 
 def _product_selected_hypothesis(

@@ -13,6 +13,9 @@ from scripts.compare_workbooks import WorkbookCompareResult, compare_workbooks
 from xic_extractor import extractor
 from xic_extractor.config import ConfigError, load_config
 from xic_extractor.output.excel_pipeline import write_excel_from_run_output
+from xic_extractor.peak_detection.model_selection_approval_registry import (
+    load_expected_diff_approval_registry,
+)
 from xic_extractor.raw_reader import RawReaderError
 
 
@@ -133,7 +136,18 @@ def _run_extraction_once(
         parallel_mode=mode,
         parallel_workers=workers,
     )
-    output = extractor.run(run_config, targets)
+    expected_diff_approvals = (
+        load_expected_diff_approval_registry(
+            run_config.model_selection_expected_diff_approval_registry
+        )
+        if run_config.model_selection_expected_diff_approval_registry is not None
+        else None
+    )
+    output = extractor.run(
+        run_config,
+        targets,
+        model_selection_expected_diff_approvals=expected_diff_approvals,
+    )
     workbook_path = output_dir / f"xic_results_{mode}_w{workers}.xlsx"
     return write_excel_from_run_output(
         run_config,

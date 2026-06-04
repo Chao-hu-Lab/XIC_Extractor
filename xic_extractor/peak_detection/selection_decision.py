@@ -150,9 +150,15 @@ def _evidence_sources(hypothesis: PeakHypothesis) -> tuple[str, ...]:
     ):
         sources.append("cwt_boundary_morphology_context")
     if (
+        "chrom_peak_segment" in hypothesis.audit.proposal_sources
+        or "chrom_peak_segment_context" in reasons
+    ):
+        sources.append("chrom_peak_segment_context")
+    if (
         evidence.quality_flags
         or evidence.region_trace_continuity is not None
         or evidence.region_edge_ratio is not None
+        or "chrom_peak_segment" in hypothesis.audit.proposal_sources
         or any("trace_morphology" in reason for reason in reasons)
     ):
         sources.append("trace_morphology")

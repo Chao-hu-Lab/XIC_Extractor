@@ -14,6 +14,9 @@ from tools.diagnostics.selected_envelope_plot_review import (
     selected_boundary_oracles_by_candidate_id,
     write_selected_envelope_boundary_plot,
 )
+from xic_extractor.peak_detection.chrom_peak_segments import (
+    enumerate_chrom_peak_segments,
+)
 from xic_extractor.peak_detection.selected_envelope_diagnostics import (
     SELECTED_ENVELOPE_DIAGNOSTIC_HEADERS,
 )
@@ -93,6 +96,66 @@ def test_select_selected_envelope_plot_requests_skips_positive_decrease() -> Non
     assert requests == ()
 
 
+def test_select_selected_envelope_plot_requests_adds_chrom_review_rows() -> None:
+    rows = [
+        _diagnostic_row(
+            sample_name="sample-review",
+            target_label="8-oxodG",
+            selected_candidate_id="candidate-review",
+            row_boundary_decision="accept_candidate",
+            area_delta_ratio="0",
+        ),
+        _diagnostic_row(
+            sample_name="sample-other",
+            target_label="8-oxo-Guo",
+            selected_candidate_id="candidate-other",
+            row_boundary_decision="accept_candidate",
+            area_delta_ratio="0",
+        ),
+    ]
+
+    requests = select_selected_envelope_plot_requests(
+        rows,
+        chrom_peak_segment_review_rows=[
+            {
+                "sample_name": "sample-review",
+                "target_label": "8-oxodG",
+                "role": "Analyte",
+            }
+        ],
+        max_high_risk=0,
+        max_accepted_increase=0,
+        max_accepted_decrease=0,
+    )
+
+    assert [request.plot_group for request in requests] == [
+        "chrom_peak_segment_review_only"
+    ]
+    assert requests[0].row["selected_candidate_id"] == "candidate-review"
+
+
+def test_select_plot_requests_fails_on_missing_chrom_review_row() -> None:
+    with pytest.raises(ValueError, match="chrom review row not found"):
+        select_selected_envelope_plot_requests(
+            [
+                _diagnostic_row(
+                    sample_name="sample-a",
+                    target_label="8-oxodG",
+                )
+            ],
+            chrom_peak_segment_review_rows=[
+                {
+                    "sample_name": "missing",
+                    "target_label": "8-oxodG",
+                    "role": "Analyte",
+                }
+            ],
+            max_high_risk=0,
+            max_accepted_increase=0,
+            max_accepted_decrease=0,
+        )
+
+
 def test_write_selected_envelope_boundary_plot_writes_files(tmp_path: Path) -> None:
     row = _diagnostic_row(
         sample_name="sample-a",
@@ -160,6 +223,49 @@ def test_write_selected_envelope_boundary_plot_draws_oracle_overlay(
         plot_group="accepted_area_increase",
     )
 
+    assert png_path.exists()
+    assert pdf_path.exists()
+    assert png_path.stat().st_size > 0
+    assert pdf_path.stat().st_size > 0
+
+
+def test_write_selected_envelope_boundary_plot_draws_chrom_segments(
+    tmp_path: Path,
+) -> None:
+    row = _diagnostic_row(
+        sample_name="sample-a",
+        target_label="5-medC",
+        row_boundary_decision="externalize",
+        boundary_change_class="low_scan",
+        area_delta_ratio="-0.50",
+    )
+    rt = np.linspace(10.0, 14.0, 41)
+    baseline = np.full_like(rt, 10.0)
+    intensity = baseline + 200.0 * np.exp(-((rt - 12.0) ** 2) / 0.08)
+    segments = enumerate_chrom_peak_segments(
+        rt,
+        intensity,
+        baseline,
+        quantitation_context_rt_start=10.0,
+        quantitation_context_rt_end=14.0,
+    ).segments
+    selected_segment = plot_review._select_chrom_peak_segment_for_row(row, segments)
+    png_path = tmp_path / "plot.png"
+    pdf_path = tmp_path / "plot.pdf"
+
+    write_selected_envelope_boundary_plot(
+        png_path=png_path,
+        pdf_path=pdf_path,
+        row=row,
+        rt=rt,
+        intensity=intensity,
+        baseline=baseline,
+        plot_group="high_risk_externalized",
+        chrom_peak_segments=segments,
+        selected_chrom_peak_segment=selected_segment,
+    )
+
+    assert selected_segment is not None
     assert png_path.exists()
     assert pdf_path.exists()
     assert png_path.stat().st_size > 0
@@ -243,6 +349,41 @@ def test_selected_envelope_plot_review_cli_fails_on_missing_columns(
     assert code == 2
 
 
+def test_plot_index_row_records_projected_chrom_segment(tmp_path: Path) -> None:
+    row = _diagnostic_row()
+    rt = np.linspace(10.0, 14.0, 41)
+    baseline = np.full_like(rt, 10.0)
+    intensity = baseline + 200.0 * np.exp(-((rt - 12.0) ** 2) / 0.08)
+    segments = enumerate_chrom_peak_segments(
+        rt,
+        intensity,
+        baseline,
+        quantitation_context_rt_start=10.0,
+        quantitation_context_rt_end=14.0,
+    ).segments
+    selected_segment = plot_review._select_chrom_peak_segment_for_row(row, segments)
+
+    index_row = plot_review._plot_index_row(
+        rank=1,
+        request=plot_review.SelectedEnvelopePlotRequest(
+            row=row,
+            plot_group="accepted_area_increase",
+        ),
+        boundary_oracle=None,
+        chrom_peak_segment_status="OK",
+        chrom_peak_segments=segments,
+        selected_chrom_peak_segment=selected_segment,
+        png_path=tmp_path / "plot.png",
+        pdf_path=tmp_path / "plot.pdf",
+    )
+
+    assert index_row["chrom_peak_segment_status"] == "OK"
+    assert index_row["chrom_peak_segment_count"] == "1"
+    assert index_row["selected_chrom_peak_segment_id"] == "chrom_peak_segment_001"
+    assert index_row["selected_chrom_peak_segment_class"] == "isolated_peak"
+    assert index_row["selected_chrom_peak_segment_projection"] == "envelope_overlap"
+
+
 def test_plot_index_headers_are_stable() -> None:
     assert PLOT_INDEX_HEADERS == (
         "plot_rank",
@@ -261,6 +402,15 @@ def test_plot_index_headers_are_stable() -> None:
         "envelope_rt_end",
         "quantitation_context_rt_start",
         "quantitation_context_rt_end",
+        "chrom_peak_segment_status",
+        "chrom_peak_segment_count",
+        "selected_chrom_peak_segment_id",
+        "selected_chrom_peak_segment_class",
+        "selected_chrom_peak_segment_rt_start",
+        "selected_chrom_peak_segment_rt_end",
+        "selected_chrom_peak_segment_area_asls",
+        "selected_chrom_peak_segment_stop_reason",
+        "selected_chrom_peak_segment_projection",
         "oracle_row_id",
         "oracle_status",
         "oracle_source",

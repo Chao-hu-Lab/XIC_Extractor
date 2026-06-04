@@ -10,6 +10,10 @@ from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
 from xic_extractor.raw_reader import RawReaderError, preflight_raw_reader
 from xic_extractor.rt_prior_library import LibraryEntry, load_library
+from xic_extractor.target_pair_rt_calibration import (
+    load_target_pair_rt_calibration,
+    rt_prior_library_from_target_pair_calibration,
+)
 
 if TYPE_CHECKING:
     from xic_extractor.extractor import RunOutput
@@ -32,7 +36,11 @@ def resolve_rt_prior_library(
     rt_prior_library: dict[tuple[str, str], LibraryEntry] | None,
 ) -> dict[tuple[str, str], LibraryEntry]:
     if config.target_pair_rt_calibration_path is not None:
-        return {}
+        calibration_rows = load_target_pair_rt_calibration(
+            config.target_pair_rt_calibration_path,
+            expected_target_config_hash=config.target_config_hash or None,
+        )
+        return rt_prior_library_from_target_pair_calibration(calibration_rows)
     if rt_prior_library is not None:
         return rt_prior_library
     if config.rt_prior_library_path is None:

@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction import target_extraction
-from xic_extractor.extraction.scoring_factory import allow_prepass_anchor
 from xic_extractor.output.messages import DiagnosticRecord
 from xic_extractor.raw_reader import open_raw
 
@@ -30,7 +29,7 @@ def extract_istd_anchors_only(
             anchors: dict[str, float] = {}
             shape_metrics_by_label: dict[str, tuple[float, float | None]] = {}
             for target in istd_targets:
-                anchor_rt = target_extraction.extract_one_target(
+                target_extraction.extract_one_target(
                     raw,
                     config,
                     raw_path.stem,
@@ -42,11 +41,8 @@ def extract_istd_anchors_only(
                     shape_metrics_by_label=shape_metrics_by_label,
                 )
                 result = results.get(target.label)
-                if (
-                    anchor_rt is not None
-                    and result is not None
-                    and allow_prepass_anchor(result.peak_result)
-                ):
+                anchor_rt = target_extraction.credible_istd_anchor_rt(result)
+                if anchor_rt is not None:
                     anchors[target.label] = anchor_rt
             return anchors, results, diagnostics, shape_metrics_by_label
     except Exception:

@@ -1,8 +1,8 @@
 # Target Pair RT Auto-Reselection Spec
 
 **Date:** 2026-06-03
-**Status:** Draft v0.4 - source-hash schema and gate naming aligned
-**Readiness label:** `phase_1_2_candidate`; Phase 3 is `blocked_until_expected_diff_and_transfer_gate`
+**Status:** Draft v0.7 - row-specific expected-diff approval is production-ready for BC1055/8-oxodG; full candidate-switch promotion still gated
+**Readiness label:** `row_specific_expected_diff_production_ready`; paired-anchor projection is `production_ready` via the targeted evidence-chain alignment spec; broad Phase 3 candidate switching remains `blocked_until_expected_diff_and_transfer_gate`
 **Primary surface:** targeted extraction product selection
 **Related specs:** [Targeted evidence-chain alignment](2026-06-03-targeted-evidence-chain-alignment-spec.md), [Selected full-envelope quantitation boundary](2026-06-03-selected-full-envelope-quantitation-boundary-spec.md), [Mature package flow reference](2026-06-02-mature-package-flow-reference-spec.md), [Peak-scoring tiered design](2026-04-20-peak-scoring-tiered-design.md)
 
@@ -33,8 +33,44 @@ contract. A product candidate switch must be represented as an approved
 product_switch_allowed=True)` before workbook, matrix, or review outputs can use
 the successor candidate.
 
+Expected-diff approvals must reference runtime product candidate IDs:
+`PeakHypothesis.hypothesis_id` values emitted by the product candidate
+enumeration. Review-only overlays, projected plot rows, or
+`peak_candidates.tsv` markers whose proposal-source identity differs from the
+runtime hypothesis may support the evidence summary, but they must not be copied
+as `legacy_selected_candidate_id` or `successor_selected_candidate_id`. If an
+approval points to a successor ID that is not present in the current runtime
+hypotheses, product selection must fail closed.
+
 Without that expected-diff approval, this spec authorizes only shadow proposals,
-blocked reasons, and review artifacts.
+blocked reasons, and review artifacts. With a matching expected-diff approval,
+the only Phase 3-A product behavior now allowed is a role-gated targeted switch:
+ISTD and paired Analyte rows may use the approved successor candidate, while
+unpaired analytes stay on the legacy-selected candidate.
+
+2026-06-04 clarification: targeted product projection can now count a paired
+analyte as `detected_flagged` when the already-selected candidate has complete
+same-sample paired-ISTD anchor support. That anchor must be the paired ISTD's
+credible selected MS1 `reported_rt`, not a window/NL anchor. This is not a
+`target_pair_rt_auto_reselection` candidate switch. A switch from
+legacy-selected candidate to a successor candidate still needs the explicit
+expected-diff approval and calibration gates below.
+
+2026-06-04 production update: the `BenignfatBC1055_DNA / 8-oxodG`
+row-specific expected-diff approval is production-ready after an 8RAW validation
+rerun. The approval registry contains exactly that row, the final workbook uses
+the successor right-side peak (`RT=17.1355`, `Area=1850221.22`), and the
+target-pair review summary reports `product_switch_allowed_true_count=1`,
+`auto_reselected_count=1`, and `product_switch_accepted_count=1`. This promotes
+only that explicit approved row. Other expected-diff or row-approval candidates
+remain shadow/review-only until they receive their own approval evidence.
+
+2026-06-04 public-surface update: product workbooks must present product
+semantics first. `Product State`, `Counted Detection`, `Review State`, and
+projection-backed `Reason` are the visible decision surface. Legacy
+`Confidence`, score, and cap fields are technical audit evidence only; they must
+not drive Review Queue status, Summary visible health metrics, counted
+detection, or row-specific product-switch authority.
 
 ## Why This Spec Exists
 
@@ -320,6 +356,51 @@ The paired ISTD is credible only when all are true:
 Do not auto-reselect simply because another candidate has larger area, smoother
 Gaussian15 morphology, or an NL/MS2 event somewhere else.
 
+Phase 2 shadow diagnostics may promote a different review successor with
+`selection_basis` suffixed by `chrom_morphology_area_ratio` only when all of the
+following are true:
+
+- the row is already an `expected_diff` paired-analyte comparison;
+- the current model-selection successor differs from the legacy candidate;
+- the alternate candidate has `chrom_peak_segment` / Gaussian15 morphology
+  evidence for a complete peak shape;
+- the alternate candidate has no hard morphology contraindication such as
+  `rt_prior_far`, `rt_centrality_poor`, `rt_window_cap`,
+  `trace_quality_cap`, `hard_quality_flag_cap`, `low_scan_support`,
+  `poor_edge_recovery`, `edge_clipped`, `too_short`, or `low_scan_count`;
+- the alternate candidate / paired ISTD area ratio falls inside the
+  leave-one-sample-out target/ISTD reference range;
+- the selected area still comes from raw/AsLS integration over the candidate
+  interval, not from the smoothed Gaussian15 trace.
+
+This is a targeted-only shadow candidate-selection rule. It must not expand
+`parity`, `inconclusive`, or `blocked_diff` rows into new review deltas.
+Untargeted may later learn the same morphology-as-hypothesis strategy, but only
+through its own hypothesis/evidence contract, not by importing targeted
+target/ISTD labels or target-pair area ratios.
+
+Manual review update, 2026-06-04: the first 85RAW
+`chrom_morphology_area_ratio` review gallery produced confirmed false positives:
+plot ranks 1, 3, 5, and 7 selected the wrong peak, while ranks 17 and 18 should
+not select any peak. The durable review oracle is
+`docs/superpowers/fixtures/target_pair_chrom_morphology_area_ratio_manual_oracle_v1.tsv`.
+Therefore `paired_area_ratio_status=within_reference_range` is not a sufficient
+positive gate by itself; the reference range can be too wide and can admit both
+wrong-apex switches and tiny rescue peaks. Product promotion remains blocked
+until this strategy is recalibrated against the manual false-positive oracle and
+the review surface demonstrates fewer wrong-peak/no-peak proposals.
+
+Target/sample applicability update, 2026-06-04: `8-oxo-Guo` is an RNA-standard
+target in this tissue-85RAW context. It should be detectable in RNA-containing
+samples. In the current 85RAW set, the RNA-containing rows are the
+`BC2304`/`BC2286` `DNAandRNA` samples; the other 83 pure DNA samples should not
+be rescued or counted for `8-oxo-Guo` by paired ISTD, Gaussian15 morphology,
+CWT, area ratio, or missing-MS2 reasoning. This is a target applicability hard
+gate, not a score/confidence adjustment. The paired ISTD remains useful for
+interpreting RNA-containing rows, and the `NL R` tag is strong RNA-related
+evidence, but neither must authorize a pure-DNA product detection for the
+RNA-standard analyte.
+
 Auto-reselection can be considered only when the currently selected candidate
 has explicit conflict evidence, such as:
 
@@ -444,7 +525,7 @@ Required fields:
 | `previous_candidate_id` | Candidate id before shadow/product reselection. |
 | `selected_candidate_id` | Proposed or final successor candidate id. |
 | `selection_action` | `none`, `shadow_auto_reselect_proposed`, `auto_reselected`, or `auto_reselect_blocked`. |
-| `selection_basis` | Stable reason, e.g. `paired_rt_calibration_ms1_complete`. |
+| `selection_basis` | Stable reason, e.g. `paired_rt_calibration_ms1_complete`; Phase 2 shadow rows may append `chrom_morphology_area_ratio` when Gaussian15 morphology and paired area-ratio evidence choose a better review successor. |
 | `selection_status` | Model-selection status such as `expected_diff`, `blocked_diff`, or `inconclusive`. |
 | `product_switch_allowed` | Boolean result from the expected-diff gate. |
 | `expected_diff_stable_row_id` | Stable row id for the approval registry when applicable. |
@@ -455,12 +536,21 @@ Required fields:
 | `pair_rt_delta_expected` | Expected `target_rt - istd_rt`. |
 | `pair_rt_delta_observed` | Observed `selected_candidate_rt - paired_istd_rt`. |
 | `pair_rt_delta_error` | Observed minus expected delta. |
+| `paired_area_ratio_observed` | Candidate area divided by same-sample paired ISTD area when applicable. |
+| `paired_area_ratio_reference_n` | Leave-one-sample-out reference count for the target/ISTD area ratio. |
+| `paired_area_ratio_reference_min` | Minimum leave-one-sample-out reference ratio. |
+| `paired_area_ratio_reference_median` | Median leave-one-sample-out reference ratio. |
+| `paired_area_ratio_reference_max` | Maximum leave-one-sample-out reference ratio. |
+| `paired_area_ratio_status` | `within_reference_range`, `outside_reference_range`, `inconclusive`, or missing-data status. |
+| `paired_area_ratio_basis` | Stable basis for the paired area-ratio calculation. |
 | `calibration_source` | Source from calibration artifact. |
 | `calibration_status` | Calibration status used by the decision. |
 | `missing_ms2_explanation` | `not_observed`, `dda_dropout_plausible`, `contradicted`, or blank. |
 | `role_policy` | `istd`, `paired_analyte`, or `unpaired_analyte`. |
 | `gate_decision` | `promote`, `no_go`, `externalize`, or `defer`. |
 | `block_reason` | Stable reason when reselection is blocked. |
+| `false_positive_review_status` | `row_approval_candidate`, `false_positive_review_required`, `product_switch_accepted`, or `not_applicable`. |
+| `false_positive_review_reasons` | Semicolon-separated review reasons such as `paired_area_ratio:outside_reference_range`, `ms2_nl_contradicted`, or `row_specific_expected_diff_required`. |
 
 The old selected candidate must remain inspectable during shadow and changed-row
 review. Product activation may change selected RT/area, but must not erase the
@@ -566,6 +656,31 @@ Done when:
 - Mix STDs-only and config fallback rows cannot produce `auto_reselected`
   without biological-transfer validation or row-specific expected-diff approval.
 
+Implementation update, 2026-06-04:
+
+- Phase 3-A is implemented only as the minimal guarded activation surface:
+  existing `PeakModelSelectionResult(product_switch_allowed=True)` can select the
+  successor targeted hypothesis, but targeted extraction now blocks that product
+  switch for unpaired analytes and paired analytes without same-sample credible
+  paired ISTD RT evidence.
+- `target_pair_rt_auto_reselection.tsv` can now report `selection_action=
+  auto_reselected` and `product_switch_allowed=TRUE`, but only when the row is
+  already product-approved by model selection and the calibration row has product
+  transfer support (`biological_transfer` / `row_approved` and
+  `validated` / `row_approved`).
+- Clean-standard-only, `config_fallback`, non-row-approved Mix STDs,
+  hash-mismatched, non-usable, missing-paired-ISTD, or unpaired rows remain
+  blocked or shadow-only.
+- This does not complete full Phase 3 production readiness. The targeted
+  benchmark, sentinel overlays, changed-row review, and wider RAW gates below
+  still decide whether the policy can be promoted broadly.
+- 2026-06-04 targeted projection validation closed the narrower paired-anchor
+  `detected_flagged` policy: 3RAW sentinel and 85RAW default-target outputs pass
+  in `output/target_pair_rt_production_ready_20260604/full_85raw_after_anchor_source_fix/`.
+  This closes the product-projection gap for already-selected paired analyte
+  candidates, but not the broader candidate-switch gate governed by this
+  auto-reselection spec.
+
 ## Validation And Acceptance
 
 Minimum acceptance before Phase 3 promotion:
@@ -600,6 +715,9 @@ selected-envelope behavior must be judged by boundary/peak evidence and plots.
 Overlay plots and false-positive watch tables are review surfaces. They are not
 the product oracle unless the row also has complete candidate evidence,
 biological-transfer or row-approval support, and an approved expected-diff gate.
+When plot overlays or `peak_candidates.tsv` selected markers disagree with the
+runtime product hypothesis ID, the approval must be authored from the product
+model-selection row ID and may cite the overlay only as supporting evidence.
 
 ## Exit Rules
 

@@ -63,6 +63,7 @@ def run_serial(
             targets,
             raw_path,
             scoring_context_factory=scoring_context_factory,
+            rt_prior_library=rt_prior_library,
             model_selection_expected_diff_approvals=(
                 model_selection_expected_diff_approvals
             ),

@@ -1,8 +1,10 @@
 # Selected Full-Envelope Quantitation Boundary Spec
 
 **Date:** 2026-06-03
-**Status:** Draft v0.2 - OpenMS-first behavior/promotion contract
-**Readiness label:** `diagnostic_only`
+**Status:** Draft v0.4 - selected-full-envelope remains externalized;
+`ChromPeakSegment` is the scoped product-candidate pivot
+**Readiness label:** selected-full-envelope `diagnostic_only`;
+`chrom_peak_segment` candidate slice `production_candidate`
 **Related specs:** [AsLS primary matrix value policy](2026-06-02-asls-primary-matrix-value-policy-spec.md), [Region-boundary decision owner design](2026-06-02-region-boundary-decision-owner-design.md), [Region-boundary public behavior addendum](2026-06-02-region-boundary-public-behavior-addendum.md), [Mature package flow reference](2026-06-02-mature-package-flow-reference-spec.md)
 
 ## Verdict
@@ -10,6 +12,24 @@
 Final quantitative area should be computed over the selected peak's complete
 baseline-supported envelope, not over the narrow discovery/resolver interval
 when that interval clips real peak flanks.
+
+2026-06-04 update: the selected-full-envelope policy is no longer the product
+boundary owner. It remains diagnostic/review evidence. The active product
+candidate direction is now:
+
+```text
+raw XIC / AsLS context
+  -> Gaussian15 morphology evidence
+  -> ChromPeakSegment candidates
+  -> evidence/model selection of the segment
+  -> raw/original XIC integration over selected segment bounds
+  -> AsLS baseline correction
+```
+
+The first scoped wiring is intentionally narrow: scored `region_first_safe_merge`
+extraction can add `chrom_peak_segment` candidates, while unscored resolver
+behavior and direct `find_peak_candidates()` compatibility remain unchanged.
+This is `production_candidate`, not `production_ready`.
 
 This does not authorize integrating every positive residual in the broader RT
 context. The product target is:
@@ -460,6 +480,22 @@ Settled implementation detail:
   candidate envelopes with too few scans or intervals narrower than the resolver
   interval stay diagnostic/review-only, and must not authorize 85RAW scale-up or
   product wiring without a later reviewed 8RAW rerun.
+- the current-branch 2026-06-04 FE4 rerun also closed as `externalize`, not
+  `promote`. It wrote
+  `output/selected_full_envelope_realdata_preflight/fe4_8raw_selected_envelope_current_branch_20260604/`
+  with 95 changed rows, 66 accepted flank-recovery rows, and 29 unresolved
+  blocker rows across `selected_envelope_narrower_than_resolver`,
+  `split_supported_review_required`, and
+  `stronger_context_apex_outside_envelope`. This confirms selected-envelope
+  boundary remains diagnostic/review-only and must not be wired into product
+  matrix behavior yet.
+- `ChromPeakSegment` now exists as the replacement product-candidate spine for
+  this issue. It is enumerated before model selection, projected as
+  `chrom_peak_segment_context`, and uses raw/AsLS area over explicit segment
+  bounds. Same-apex resolver candidates upgrade to the segment boundary while
+  preserving proposal-source evidence. The 8RAW targeted smoke passed and the
+  audit run selected 25 `chrom_peak_segment` rows, but segment-native
+  changed-row gating is still missing.
 
 These must be settled before product promotion:
 
@@ -472,3 +508,5 @@ These must be settled before product promotion:
 - max envelope width policy by workflow;
 - tail-stop rule;
 - whether SavGol comparator is fixture-only or also diagnostic output.
+- the segment-native gate manifest and plot review that replaces
+  selected-full-envelope FE4/FE5 promotion logic.

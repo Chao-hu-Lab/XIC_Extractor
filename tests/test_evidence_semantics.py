@@ -179,6 +179,25 @@ def test_consistency_classifier_allows_cwt_as_shape_context_but_not_chemistry() 
     )
 
 
+def test_consistency_classifier_allows_chrom_segment_as_shape_context_not_chemistry(
+) -> None:
+    labels = classify_evidence_consistency(
+        EvidenceSignalSet(
+            support_labels=("local_sn_strong", "trace_clean"),
+            concern_labels=("nl_fail",),
+            proposal_sources=("chrom_peak_segment", "local_minimum"),
+            ms2_present=True,
+            nl_match=False,
+            raw_score=20,
+        )
+    )
+
+    assert labels == (
+        "ms1_coherent",
+        "plausible_nl_dropout",
+    )
+
+
 def test_consistency_classifier_treats_soft_trace_flags_as_context_warning_with_cwt(
 ) -> None:
     labels = classify_evidence_consistency(
@@ -244,6 +263,62 @@ def test_decision_semantics_maps_coherent_multievidence_to_accepted() -> None:
         "cwt_boundary_morphology_context",
     )
     assert decision.conflict_reasons == ()
+    assert decision.not_counted_reasons == ()
+
+
+def test_decision_semantics_projects_paired_area_ratio_support() -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=(
+                "paired_area_ratio_plausible",
+                "local_sn_strong",
+                "shape_clean",
+                "trace_clean",
+            ),
+            concern_labels=("nl_fail",),
+            ms2_present=True,
+            nl_match=False,
+            raw_score=95,
+            confidence="VERY_LOW",
+            cap_labels=("nl_fail_cap",),
+            reason="decision: review only, not counted",
+        )
+    )
+
+    assert "ms1_coherent" in decision.support_reasons
+    assert "paired_area_ratio_support" in decision.support_reasons
+    assert "role_aware_rt_support" not in decision.support_reasons
+    assert "plausible_nl_dropout_review" in decision.review_reasons
+    assert decision.decision_class == "not_counted"
+    assert decision.not_counted_reasons == ("legacy_review_only_projection",)
+
+
+def test_decision_semantics_counts_paired_ratio_supported_nl_dropout_as_review(
+) -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=(
+                "paired_area_ratio_plausible",
+                "paired_istd_aligned",
+                "local_sn_strong",
+                "shape_clean",
+                "trace_clean",
+            ),
+            concern_labels=("nl_fail",),
+            ms2_present=True,
+            nl_match=False,
+            raw_score=95,
+            confidence="VERY_LOW",
+            cap_labels=("nl_fail_cap",),
+            reason="decision: review only, not counted",
+        )
+    )
+
+    assert decision.decision_class == "review"
+    assert "ms1_coherent" in decision.support_reasons
+    assert "role_aware_rt_support" in decision.support_reasons
+    assert "paired_area_ratio_support" in decision.support_reasons
+    assert "plausible_nl_dropout_review" in decision.review_reasons
     assert decision.not_counted_reasons == ()
 
 
@@ -323,6 +398,21 @@ def test_decision_semantics_keeps_cwt_as_context_not_standalone_authority(
     assert decision.decision_class == "review"
     assert decision.support_reasons == ("cwt_boundary_morphology_context",)
     assert decision.review_reasons == ("cwt_requires_correlated_evidence",)
+
+
+def test_decision_semantics_keeps_chrom_segment_as_context_not_standalone_authority(
+) -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            proposal_sources=("chrom_peak_segment",),
+        )
+    )
+
+    assert decision.decision_class == "review"
+    assert decision.support_reasons == ("chrom_peak_segment_context",)
+    assert decision.review_reasons == (
+        "chrom_peak_segment_requires_correlated_evidence",
+    )
 
 
 def test_decision_semantics_keeps_targeted_rt_conflict_as_review_not_exclusion(

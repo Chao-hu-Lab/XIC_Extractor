@@ -30,6 +30,9 @@ TARGETED_PRODUCT_PROJECTION_HEADERS: tuple[str, ...] = (
     "Legacy Authority Status",
     "Benchmark Eligibility State",
 )
+TARGETED_PRODUCT_VISIBLE_HEADERS: frozenset[str] = frozenset(
+    {"Product State", "Counted Detection", "Review State"}
+)
 
 LONG_COLUMNS: tuple[OutputColumn, ...] = (
     OutputColumn("SampleName"),
@@ -44,10 +47,10 @@ LONG_COLUMNS: tuple[OutputColumn, ...] = (
     OutputColumn("PeakStart", advanced=True),
     OutputColumn("PeakEnd", advanced=True),
     OutputColumn("PeakWidth", advanced=True),
-    OutputColumn("Confidence"),
+    OutputColumn("Confidence", advanced=True),
     OutputColumn("Reason"),
     *(
-        OutputColumn(header, advanced=True)
+        OutputColumn(header, advanced=header not in TARGETED_PRODUCT_VISIBLE_HEADERS)
         for header in TARGETED_PRODUCT_PROJECTION_HEADERS
     ),
 )

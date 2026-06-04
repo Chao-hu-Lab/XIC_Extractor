@@ -176,6 +176,7 @@ _EVIDENCE_REASON_LABELS = {
     "local_sn_strong": "local S/N strong",
     "shape_clean": "shape clean",
     "trace_clean": "trace clean",
+    "paired_area_ratio_plausible": "paired area ratio plausible",
     "nl_fail": "nl fail",
     "no_ms2": "no MS2",
     "rt_prior_far": "rt prior far",

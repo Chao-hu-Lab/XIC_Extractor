@@ -21,6 +21,14 @@ from xic_extractor.output.workbook_styles import (
 )
 from xic_extractor.sample_groups import classify_sample_group
 
+_LEGACY_SUMMARY_HEADERS = {
+    "Confidence HIGH",
+    "Confidence MEDIUM",
+    "Confidence LOW",
+    "Confidence VERY_LOW",
+    "Low Confidence Rows",
+}
+
 
 def _build_summary_sheet(
     ws,
@@ -88,7 +96,12 @@ def _build_summary_sheet(
         14,
     ]
     for col_idx, width in enumerate(widths, start=1):
-        ws.column_dimensions[get_column_letter(col_idx)].width = width
+        letter = get_column_letter(col_idx)
+        header = _SUMMARY_HEADERS[col_idx - 1]
+        ws.column_dimensions[letter].width = width
+        if header in _LEGACY_SUMMARY_HEADERS:
+            ws.column_dimensions[letter].hidden = True
+            ws.column_dimensions[letter].outlineLevel = 1
     ws.auto_filter.ref = (
         f"A1:{get_column_letter(len(_SUMMARY_HEADERS))}"
         f"{max(1, len(_target_summaries(rows)) + 1)}"

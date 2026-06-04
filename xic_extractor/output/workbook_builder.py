@@ -169,10 +169,7 @@ def _print_summary(
                 require_projection=require_projection,
             )
         )
-        note = (
-            " (NL confirmed)" if any(row.get("NL", "") for row in target_rows) else ""
-        )
-        print(f"  {label} detected{note}: {detected}/{len(target_rows)}")
+        print(f"  {label} counted detection: {detected}/{len(target_rows)}")
     for target in _target_summaries(rows):
         label = target["Target"]
         target_rows = [row for row in rows if row.get("Target") == label]

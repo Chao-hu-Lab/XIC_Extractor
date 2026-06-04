@@ -70,6 +70,14 @@ def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_colum
     assert ws.column_dimensions["J"].hidden is True
     assert ws.column_dimensions["K"].hidden is True
     assert ws.column_dimensions["L"].hidden is True
+    assert ws.column_dimensions["M"].hidden is True
+    assert ws.column_dimensions["N"].hidden is not True
+    assert ws["O1"].value == "Product State"
+    assert ws["P1"].value == "Counted Detection"
+    assert ws["Q1"].value == "Review State"
+    assert ws.column_dimensions["O"].hidden is not True
+    assert ws.column_dimensions["P"].hidden is not True
+    assert ws.column_dimensions["Q"].hidden is not True
     assert ws["M2"].value == "HIGH"
     assert ws["N2"].value == "all checks passed"
     last_column = get_column_letter(len(LONG_HEADERS))
@@ -273,6 +281,14 @@ def test_build_summary_sheet_uses_row_based_target_metrics() -> None:
     assert data["Analyte"]["Confidence MEDIUM"] == 1
     assert data["Analyte"]["Confidence LOW"] == 1
     assert data["Analyte"]["Confidence VERY_LOW"] == 0
+    for header in (
+        "Confidence HIGH",
+        "Confidence MEDIUM",
+        "Confidence LOW",
+        "Confidence VERY_LOW",
+    ):
+        col_idx = data["headers"].index(header) + 1
+        assert ws.column_dimensions[get_column_letter(col_idx)].hidden is True
     assert data["ISTD"]["Area / ISTD ratio (paired detected)"] == "—"
 
 
@@ -321,6 +337,8 @@ def test_summary_sheet_includes_target_health_metrics() -> None:
     assert data["Analyte"]["Flagged %"] == "67%"
     assert data["Analyte"]["MS2/NL Flags"] == 2
     assert data["Analyte"]["Low Confidence Rows"] == 1
+    low_conf_col = data["headers"].index("Low Confidence Rows") + 1
+    assert ws.column_dimensions[get_column_letter(low_conf_col)].hidden is True
 
 
 def test_summary_detection_excludes_very_low_and_non_positive_area_rows() -> None:
@@ -614,6 +632,26 @@ def test_build_review_queue_sheet_keeps_empty_queue_readable() -> None:
     assert ws.auto_filter.ref == "A1:K1"
 
 
+def test_review_queue_product_mode_does_not_use_legacy_confidence_as_issue() -> None:
+    rows = [
+        _long_row(
+            "Tumor_1",
+            "Analyte",
+            "9.3",
+            "40000",
+            "OK",
+            confidence="VERY_LOW",
+            reason="decision: detected_clean; support: ms1_peak_present",
+            counted_detection="TRUE",
+            product_state="detected_clean",
+        )
+    ]
+
+    review_rows = _review_queue_rows(rows, [])
+
+    assert review_rows == []
+
+
 def test_targets_sheet_marks_expected_product_as_nominal_reference() -> None:
     wb = Workbook()
     ws = wb.active
@@ -708,6 +746,7 @@ def test_wide_to_long_rows_classifies_qc_from_sample_name_token() -> None:
 
 def test_run_writes_row_based_results_sheet_and_makes_overview_active(
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     config = _config(tmp_path)
     targets = [_target("Analyte")]
@@ -754,6 +793,7 @@ def test_run_writes_row_based_results_sheet_and_makes_overview_active(
     )
 
     excel_path = run(config, targets)
+    stdout = capsys.readouterr().out
 
     wb = load_workbook(excel_path)
     assert wb.sheetnames == [
@@ -779,6 +819,13 @@ def test_run_writes_row_based_results_sheet_and_makes_overview_active(
     assert ws_results["M1"].value == "Confidence"
     assert ws_results["N1"].value == "Reason"
     assert ws_results.column_dimensions["I"].hidden is True
+    assert ws_results.column_dimensions["M"].hidden is True
+    assert ws_results["O1"].value == "Product State"
+    assert ws_results["P1"].value == "Counted Detection"
+    assert ws_results["Q1"].value == "Review State"
+    assert ws_results.column_dimensions["O"].hidden is not True
+    assert ws_results.column_dimensions["P"].hidden is not True
+    assert ws_results.column_dimensions["Q"].hidden is not True
     ws = wb["Diagnostics"]
     assert [ws.cell(row=1, column=i).value for i in range(1, 5)] == [
         "SampleName",
@@ -798,6 +845,8 @@ def test_run_writes_row_based_results_sheet_and_makes_overview_active(
     assert config.output_csv.exists()
     assert config.output_csv.with_name("xic_results_long.csv").exists()
     assert config.diagnostics_csv.exists()
+    assert "Analyte counted detection: 0/1" in stdout
+    assert "NL confirmed" not in stdout
     ws_review = wb["Review Queue"]
     assert ws_review["E2"].value == "Review"
     assert ws_review["F2"].value == "NL support failed"

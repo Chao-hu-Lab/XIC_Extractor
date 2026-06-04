@@ -3,8 +3,11 @@
 **Date:** 2026-06-03
 **Status:** Implemented in current branch; pending PR closeout
 **Validation status:** `production_ready` for scoped targeted product detection
-after focused tests, 2RAW sentinel, 85 tissue RAW default-target extraction gate,
-consumer audit, analyte old-workbook parity audit, and reviewer acceptance.
+after focused tests, full pytest, ruff, mypy, 3RAW sentinel, 85 tissue RAW
+default-target extraction gate, consumer audit, analyte old-workbook parity
+audit, paired-ISTD-anchor changed-row review, counted NL-dropout no-leak review,
+workbook smoke, and reviewer acceptance. This label does not promote broader
+target-pair candidate switching.
 
 Accepted validation artifacts:
 
@@ -15,6 +18,56 @@ Accepted validation artifacts:
 - `analyte_nl_fail_counted_after_selection_anchor_guard.tsv`
 - `consumer_authority_audit.tsv`
 - `targeted_projection_no_leak_audit.tsv`
+- `output/target_pair_rt_production_ready_20260604/default_3raw_after_anchor_source_fix/`
+- `output/target_pair_rt_production_ready_20260604/full_85raw_after_anchor_source_fix/`
+- `full_85raw_after_anchor_source_fix/review/sentinel_assertions.tsv`
+- `full_85raw_after_anchor_source_fix/review/changed_row_review.tsv`
+- `full_85raw_after_anchor_source_fix/review/counted_status_delta_vs_after_projection_fix.tsv`
+- `full_85raw_after_anchor_source_fix/review/target_detection_summary.tsv`
+- `full_85raw_after_anchor_source_fix/review/counted_analyte_nl_dropout_review.tsv`
+- `full_85raw_after_anchor_source_fix/review/production_ready_acceptance_summary.tsv`
+- `full_85raw_after_anchor_source_fix/review/run_provenance.tsv`
+
+2026-06-04 paired-analyte production gate:
+
+- 3RAW sentinel used `config/targets.example.csv` with settings copied
+  unchanged; CLI only overrode `data_dir` and skipped Excel for machine CSV
+  review. The exact 3RAW command, exit code, processed file count, diagnostics
+  count, and assertion target are recorded in
+  `full_85raw_after_anchor_source_fix/review/run_provenance.tsv`.
+- Sentinels all pass in
+  `full_85raw_after_anchor_source_fix/review/sentinel_assertions.tsv`:
+  `TumorBC2258_DNA / d3-N6-medA`, `TumorBC2289_DNA / d3-5-medC`,
+  `TumorBC2263_DNA / 8-oxodG`, and `TumorBC2263_DNA / 15N5-8-oxodG`.
+- 85RAW default-target gate counts every ISTD as detected (`7 targets * 85
+  samples`) with 1190 total rows, 85 samples, and 14 targets in
+  `production_ready_acceptance_summary.tsv`.
+- Counted analyte `NL_FAIL` / `NO_MS2` rows are explicit and bounded: 15 rows
+  are counted, and all are accepted by paired-ISTD-anchor support and/or
+  plausible DDA dropout policy in `counted_analyte_nl_dropout_review.tsv`.
+- The counted analyte dropout review now carries the paired-ISTD anchor
+  provenance required for production readiness: every row that claims
+  `paired_istd_anchor_support` has `anchor_source=selected_istd_reported_rt`,
+  positive paired ISTD RT/area, `paired_istd_counted=TRUE`,
+  `anchor_within_interval=TRUE`, and `anchor_invariant_ok=TRUE`. The aggregate
+  gate records `paired_anchor_invariant_failures=0`.
+- Old workbook numeric RT/area is retained as compatibility evidence, not a hard
+  product gate. The corrected changed-row review forward-fills the old workbook
+  sample/group layout and externalizes 438 old-vs-current review rows, including
+  legacy numeric rows that are now gated by product projection instead of being
+  hard counted. Immediate counted-status delta versus
+  `full_85raw_after_projection_fix` is 8 rows: 4 `TRUE -> FALSE`
+  stricter-anchor/quality losses and 4 `FALSE -> TRUE` evidence-supported gains.
+- Workbook smoke passed with
+  `full_85raw_after_anchor_source_fix/base/output/xic_results_20260604_1012.xlsx`;
+  console/product wording now reports `counted detection`, not `NL confirmed`.
+- Final code gate passed: focused target/product tests, output workbook shard,
+  full pytest (`3043 passed, 1 skipped, 16 warnings`), ruff, and mypy are
+  recorded in `full_85raw_after_anchor_source_fix/review/run_provenance.tsv`.
+- Pair anchor map provenance is product-critical: same-sample paired-ISTD support
+  must come from credible selected ISTD MS1 `reported_rt` with positive area and
+  acceptable selected-candidate quality. Window/NL anchors are evidence for
+  extraction but cannot by themselves satisfy paired-anchor product support.
 
 ## Summary
 
@@ -148,7 +201,12 @@ hard backfill rule. If the paired STD/analyte is absent or has only unsupported
 MS1 evidence, the row remains `not_counted`; do not promote it only because the
 ISTD was stable. Cases like `TumorBC2263_DNA / 8-oxodG` may be rescued only when
 the row-level evidence chain supports the 16-minute candidate rather than a
-distant NL event.
+distant NL event. The current production rule is deliberately narrower than
+"paired ISTD exists": a paired analyte may downgrade `NL_FAIL` / missing-DDA
+conflict to `detected_flagged` only when it has positive MS1 RT/area inside the
+target window, the selected peak interval contains the same-sample ISTD anchor
+RT, and the selected candidate has no quality flags. Rows without that complete
+anchor-supported MS1 interval remain `not_counted` or `ambiguous`.
 
 The shared decision class remains:
 
@@ -163,7 +221,9 @@ semantics:
 
 - `detected_clean`: counted detected row with no product review flag;
 - `detected_flagged`: counted detected row with review evidence that does not
-  invalidate the peak, such as role-aware plausible DDA NL dropout for ISTDs;
+  invalidate the peak, such as role-aware plausible DDA NL dropout for ISTDs or
+  paired-analyte NL dropout when same-sample ISTD anchor support and a complete
+  MS1 interval make the target peak plausible;
 - `not_counted`: peak evidence is insufficient or legacy-compatible review-only
   state remains unresolved;
 - `excluded`: explicit identity or physical exclusion;
@@ -456,8 +516,8 @@ Stop and review before continuing if:
   this spec;
 - implementation cannot add or transport a typed projection without relying on
   free-text `Reason`, `Confidence`, `NL`, or legacy score parsing;
-- more than a small number of analyte rows become counted because of the ISTD
-  dropout policy;
+- counted analyte `NL_FAIL` / `NO_MS2` rows are not listed in an acceptance
+  artifact with paired-anchor or plausible-DDA-dropout policy support;
 - implementation would require untargeted production code to trust targeted
   pass/fail labels.
 
