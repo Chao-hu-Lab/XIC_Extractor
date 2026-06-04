@@ -76,6 +76,11 @@ def build_production_peak_hypotheses(
             BaselineMethod,
             getattr(config, "baseline_integration_method", "asls"),
         ),
+        count_no_ms2_as_detected=getattr(
+            config,
+            "count_no_ms2_as_detected",
+            False,
+        ),
     )
     return _with_final_selected_result_evidence(hypotheses, peak_result)
 

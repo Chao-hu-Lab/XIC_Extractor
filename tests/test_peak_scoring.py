@@ -4,27 +4,27 @@ import numpy as np
 import pytest
 
 from xic_extractor import peak_scoring
+from xic_extractor.peak_detection import (
+    candidate_scoring,
+    scoring_cwt_support,
+    scoring_metrics,
+    scoring_quality,
+    scoring_reason,
+)
+from xic_extractor.peak_detection.candidate_scoring import (
+    score_candidate,
+)
+from xic_extractor.peak_detection.candidate_selection import (
+    select_candidate_with_confidence,
+)
 from xic_extractor.peak_detection.hypotheses import EvidenceVector
-from xic_extractor.peak_scoring import (
+from xic_extractor.peak_detection.scoring_models import (
     Confidence,
     ScoredCandidate,
     ScoringContext,
-    build_evidence_reason,
-    build_reason,
     confidence_from_total,
-    local_sn_severity,
-    nl_support_severity,
-    noise_shape_severity,
-    peak_width_severity,
-    rt_centrality_severity,
-    rt_prior_severity,
-    score_breakdown_fields,
-    score_candidate,
-    select_candidate_with_confidence,
-    symmetry_severity,
 )
 from xic_extractor.peak_scoring_evidence import (
-    EvidenceScore,
     EvidenceSignal,
     score_evidence,
 )
@@ -75,31 +75,38 @@ def test_peak_scoring_public_import_surface_is_complete() -> None:
         assert hasattr(peak_scoring, name), name
 
 
-def test_reason_all_pass() -> None:
+def test_peak_scoring_reexports_successor_selection_models() -> None:
+    assert peak_scoring.Confidence is Confidence
+    assert peak_scoring.ScoredCandidate is ScoredCandidate
+    assert peak_scoring.ScoringContext is ScoringContext
+    assert peak_scoring.score_candidate is candidate_scoring.score_candidate
+    assert peak_scoring.confidence_from_total is confidence_from_total
+    assert peak_scoring.select_candidate_with_confidence is (
+        select_candidate_with_confidence
+    )
+    assert peak_scoring.candidate_quality_penalty is (
+        scoring_quality.candidate_quality_penalty
+    )
+    assert peak_scoring.candidate_selection_quality_penalty is (
+        scoring_quality.candidate_selection_quality_penalty
+    )
+    assert peak_scoring.hard_quality_flags is scoring_quality.hard_quality_flags
+    assert peak_scoring.build_evidence_reason is scoring_reason.build_evidence_reason
+    assert peak_scoring.build_reason is scoring_reason.build_reason
+    assert peak_scoring.score_breakdown_fields is scoring_reason.score_breakdown_fields
+    assert peak_scoring.compute_local_sn_cache is scoring_metrics.compute_local_sn_cache
+    assert peak_scoring.local_sn_severity is scoring_metrics.local_sn_severity
+    assert peak_scoring.nl_support_severity is scoring_metrics.nl_support_severity
+    assert peak_scoring.noise_shape_severity is scoring_metrics.noise_shape_severity
+    assert peak_scoring.peak_width_severity is scoring_metrics.peak_width_severity
     assert (
-        build_reason(
-            [(0, "symmetry"), (0, "local_sn")],
-            istd_confidence_note=None,
-        )
-        == "all checks passed"
+        peak_scoring.rt_centrality_severity
+        is scoring_metrics.rt_centrality_severity
     )
-
-
-def test_reason_lists_concerns_in_severity_order() -> None:
-    reason = build_reason(
-        [(0, "symmetry"), (1, "local_sn"), (2, "nl_support")],
-        istd_confidence_note=None,
-    )
-    assert reason == "concerns: nl_support (major); local_sn (minor)"
-
-
-def test_reason_appends_istd_note() -> None:
-    reason = build_reason(
-        [(0, "symmetry")], istd_confidence_note="ISTD anchor was LOW"
-    )
-    assert "ISTD anchor was LOW" in reason
-    assert reason.startswith("ISTD anchor was LOW") or reason.endswith(
-        "ISTD anchor was LOW"
+    assert peak_scoring.rt_prior_severity is scoring_metrics.rt_prior_severity
+    assert peak_scoring.symmetry_severity is scoring_metrics.symmetry_severity
+    assert peak_scoring._has_same_apex_cwt_support is (
+        scoring_cwt_support.has_same_apex_cwt_support
     )
 
 
@@ -352,24 +359,6 @@ def test_peak_candidate_documents_legacy_cwt_metric_semantics() -> None:
     evidence_vector_doc = " ".join(EvidenceVector.__doc__.split())
     assert "audit-presence flags" in EvidenceVector.__doc__
     assert "not interpretable as CWT scale or ridge metrics" in evidence_vector_doc
-
-
-def test_cwt_same_apex_support_keeps_legacy_positive_finite_guard() -> None:
-    supported = replace(
-        _make_candidate(apex_rt=8.0, apex_intensity=100.0),
-        proposal_sources=("legacy_savgol", "centwave_cwt"),
-        cwt_best_scale=4.0,
-        cwt_ridge_persistence=0.0,
-    )
-    cwt_only = replace(
-        _make_candidate(apex_rt=8.0, apex_intensity=100.0),
-        proposal_sources=("centwave_cwt",),
-        cwt_best_scale=4.0,
-        cwt_ridge_persistence=0.5,
-    )
-
-    assert peak_scoring._has_same_apex_cwt_support(supported) is True
-    assert peak_scoring._has_same_apex_cwt_support(cwt_only) is False
 
 
 def test_cwt_only_candidate_does_not_receive_same_apex_support_bonus() -> None:
@@ -688,67 +677,6 @@ def test_reason_text_leads_with_decision_then_support_concerns_and_caps() -> Non
     assert "concerns:" in scored.reason
     assert "nl fail" in scored.reason
     assert "rt prior far" in scored.reason
-
-
-def test_reason_text_limits_default_evidence_labels() -> None:
-    score = EvidenceScore(
-        base_score=50,
-        positive_points=50,
-        negative_points=90,
-        raw_score=10,
-        score_confidence="VERY_LOW",
-        confidence="VERY_LOW",
-        support_labels=(
-            "strict_nl_ok",
-            "rt_prior_close",
-            "local_sn_strong",
-            "shape_clean",
-        ),
-        concern_labels=(
-            "nl_fail",
-            "rt_prior_far",
-            "anchor_mismatch",
-            "low_trace_continuity",
-            "poor_edge_recovery",
-        ),
-        cap_labels=("nl_fail_cap",),
-    )
-
-    reason = build_evidence_reason(score, istd_confidence_note=None)
-
-    assert reason.startswith("decision: review only, not counted; cap:")
-    assert "support: strict NL OK; RT prior close; local S/N strong" in reason
-    assert "shape clean" not in reason
-    assert (
-        "concerns: nl fail; rt prior far; anchor mismatch; low trace continuity"
-        in reason
-    )
-    assert "poor edge recovery" not in reason
-
-
-def test_score_breakdown_fields_preserves_public_projection_order() -> None:
-    score = EvidenceScore(
-        base_score=50,
-        positive_points=40,
-        negative_points=5,
-        raw_score=85,
-        score_confidence="HIGH",
-        confidence="MEDIUM",
-        support_labels=("strict_nl_ok", "local_sn_strong"),
-        concern_labels=("trace_quality_review",),
-        cap_labels=("trace_quality_cap",),
-    )
-
-    assert score_breakdown_fields(score) == (
-        ("Final Confidence", "MEDIUM"),
-        ("Caps", "trace_quality_cap"),
-        ("Raw Score", "85"),
-        ("Support", "strict_nl_ok; local_sn_strong"),
-        ("Concerns", "trace_quality_review"),
-        ("Base Score", "50"),
-        ("Positive Points", "40"),
-        ("Negative Points", "5"),
-    )
 
 
 def test_score_candidate_no_nl_target_records_no_nl_support() -> None:
@@ -1124,272 +1052,3 @@ def test_score_candidate_does_not_double_penalize_adap_equivalent_legacy_flags(
     assert scored.reason.startswith("decision: accepted")
     assert "cap: MEDIUM due to trace quality" in scored.reason
     assert "concerns: low scan support; poor edge recovery" in scored.reason
-
-
-@pytest.mark.parametrize(
-    ("ratio", "expected"),
-    [
-        (0.3, 1),
-        (0.5, 0),
-        (1.0, 0),
-        (0.6, 0),
-        (1.8, 0),
-        (2.0, 0),
-        (3.0, 1),
-        (0.4, 1),
-        (2.5, 1),
-        (0.2, 2),
-        (4.0, 2),
-    ],
-)
-def test_symmetry_severity(ratio: float, expected: int) -> None:
-    severity, label = symmetry_severity(ratio)
-    assert severity == expected
-    assert label == "symmetry"
-
-
-def test_symmetry_nan_is_major() -> None:
-    severity, label = symmetry_severity(float("nan"))
-    assert severity == 2
-    assert label == "symmetry"
-
-
-def _make_trace(
-    peak_height: float, noise_std: float = 0.05, n: int = 400, seed: int = 0
-) -> np.ndarray:
-    rng = np.random.default_rng(seed)
-    x = np.arange(n)
-    peak = peak_height * np.exp(-((x - n / 2) ** 2) / (2 * 5**2))
-    noise = rng.normal(0.0, noise_std, n)
-    return peak + noise + 1.0
-
-
-def test_local_sn_pass_high_peak() -> None:
-    y = _make_trace(peak_height=10.0, noise_std=0.05)
-    sev, label = local_sn_severity(y, apex_index=200, dirty_matrix=False)
-    assert sev == 0
-    assert label == "local_sn"
-
-
-def test_local_sn_minor_low_peak() -> None:
-    y = _make_trace(peak_height=0.03, noise_std=0.05)
-    sev, _ = local_sn_severity(y, apex_index=200, dirty_matrix=False)
-    assert sev == 1
-
-
-def test_local_sn_major_no_peak() -> None:
-    y = _make_trace(peak_height=0.0, noise_std=0.05)
-    sev, _ = local_sn_severity(y, apex_index=200, dirty_matrix=False)
-    assert sev == 2
-
-
-def test_dirty_matrix_relaxes_threshold() -> None:
-    y = _make_trace(peak_height=0.3, noise_std=0.05)
-    sev_default, _ = local_sn_severity(y, apex_index=200, dirty_matrix=False)
-    sev_dirty, _ = local_sn_severity(y, apex_index=200, dirty_matrix=True)
-    assert sev_dirty <= sev_default
-
-
-def test_local_sn_invalid_trace_is_major() -> None:
-    y = _make_trace(peak_height=10.0)
-    y[200] = np.nan
-    sev, label = local_sn_severity(y, apex_index=200, dirty_matrix=False)
-    assert sev == 2
-    assert label == "local_sn"
-
-
-def test_nl_present_and_match_is_pass() -> None:
-    sev, label = nl_support_severity(ms2_present=True, nl_match=True)
-    assert sev == 0
-    assert label == "nl_support"
-
-
-def test_ms2_present_but_no_nl_match_is_major() -> None:
-    sev, _ = nl_support_severity(ms2_present=True, nl_match=False)
-    assert sev == 2
-
-
-def test_no_ms2_is_minor() -> None:
-    sev, _ = nl_support_severity(ms2_present=False, nl_match=False)
-    assert sev == 1
-
-
-def test_rt_prior_no_prior_skips() -> None:
-    sev, label = rt_prior_severity(observed=10.0, prior=None, sigma=None)
-    assert sev == 0
-    assert label == "rt_prior"
-
-
-def test_rt_prior_within_2sigma_pass() -> None:
-    sev, _ = rt_prior_severity(observed=10.1, prior=10.0, sigma=0.1)
-    assert sev == 0
-
-
-def test_rt_prior_2_to_5_sigma_minor() -> None:
-    sev, _ = rt_prior_severity(observed=10.3, prior=10.0, sigma=0.1)
-    assert sev == 1
-
-
-def test_rt_prior_exactly_2sigma_is_minor() -> None:
-    sev, _ = rt_prior_severity(observed=10.2, prior=10.0, sigma=0.1)
-    assert sev == 1
-
-
-def test_rt_prior_beyond_5_sigma_major() -> None:
-    sev, _ = rt_prior_severity(observed=11.0, prior=10.0, sigma=0.1)
-    assert sev == 2
-
-
-def test_rt_prior_exactly_5sigma_is_major() -> None:
-    sev, _ = rt_prior_severity(observed=10.5, prior=10.0, sigma=0.1)
-    assert sev == 2
-
-
-def test_rt_prior_no_sigma_uses_1min_rule() -> None:
-    sev, _ = rt_prior_severity(observed=10.3, prior=10.0, sigma=None)
-    assert sev == 1
-    sev, _ = rt_prior_severity(observed=11.5, prior=10.0, sigma=None)
-    assert sev == 2
-
-
-def test_rt_prior_no_sigma_exactly_soft_boundary_is_minor() -> None:
-    sev, _ = rt_prior_severity(observed=10.2, prior=10.0, sigma=None)
-    assert sev == 1
-
-
-def test_rt_prior_no_sigma_exactly_hard_boundary_is_major() -> None:
-    sev, _ = rt_prior_severity(observed=11.0, prior=10.0, sigma=None)
-    assert sev == 2
-
-
-@pytest.mark.parametrize(
-    ("observed", "prior", "sigma"),
-    [
-        (float("nan"), 10.0, 0.1),
-        (float("inf"), 10.0, 0.1),
-        (10.0, float("nan"), 0.1),
-        (10.0, float("inf"), 0.1),
-    ],
-)
-def test_rt_prior_non_finite_observed_or_prior_is_major(
-    observed: float, prior: float, sigma: float | None
-) -> None:
-    sev, label = rt_prior_severity(observed=observed, prior=prior, sigma=sigma)
-    assert sev == 2
-    assert label == "rt_prior"
-
-
-def test_rt_prior_non_finite_sigma_falls_back_to_no_sigma_rule() -> None:
-    sev, label = rt_prior_severity(observed=10.3, prior=10.0, sigma=float("nan"))
-    assert sev == 1
-    assert label == "rt_prior"
-
-
-def test_rt_centrality_center_pass() -> None:
-    sev, label = rt_centrality_severity(observed=5.0, rt_min=0.0, rt_max=10.0)
-    assert sev == 0
-    assert label == "rt_centrality"
-
-
-def test_rt_centrality_within_10pct_soft() -> None:
-    sev, _ = rt_centrality_severity(observed=0.8, rt_min=0.0, rt_max=10.0)
-    assert sev == 1
-
-
-def test_rt_centrality_exactly_10pct_passes() -> None:
-    sev, _ = rt_centrality_severity(observed=1.0, rt_min=0.0, rt_max=10.0)
-    assert sev == 0
-
-
-def test_rt_centrality_within_1pct_major() -> None:
-    sev, _ = rt_centrality_severity(observed=0.05, rt_min=0.0, rt_max=10.0)
-    assert sev == 2
-
-
-def test_rt_centrality_exactly_1pct_is_minor() -> None:
-    sev, _ = rt_centrality_severity(observed=0.1, rt_min=0.0, rt_max=10.0)
-    assert sev == 1
-
-
-@pytest.mark.parametrize(
-    ("observed", "rt_min", "rt_max"),
-    [
-        (float("nan"), 0.0, 10.0),
-        (float("inf"), 0.0, 10.0),
-        (5.0, float("nan"), 10.0),
-        (5.0, 0.0, float("nan")),
-        (5.0, 10.0, 0.0),
-    ],
-)
-def test_rt_centrality_non_finite_or_invalid_window_is_major(
-    observed: float, rt_min: float, rt_max: float
-) -> None:
-    sev, label = rt_centrality_severity(
-        observed=observed, rt_min=rt_min, rt_max=rt_max
-    )
-    assert sev == 2
-    assert label == "rt_centrality"
-
-
-def test_noise_shape_smooth_pass() -> None:
-    x = np.linspace(-3, 3, 201)
-    y = np.exp(-x * x)
-    sev, label = noise_shape_severity(y)
-    assert sev == 0
-    assert label == "noise_shape"
-
-
-def test_noise_shape_ragged_minor() -> None:
-    rng = np.random.default_rng(1)
-    y = rng.normal(0, 1, 201)
-    sev, _ = noise_shape_severity(y)
-    assert sev == 1
-
-
-def test_noise_shape_alternating_major() -> None:
-    y = np.tile([0.0, 10.0], 101)[:201]
-    sev, _ = noise_shape_severity(y)
-    assert sev == 2
-
-
-@pytest.mark.parametrize(
-    "y",
-    [
-        np.array([0.0, 1.0, np.nan, 2.0]),
-        np.array([0.0, 1.0, np.inf, 2.0]),
-        np.array([[0.0, 1.0, 2.0], [0.0, 1.0, 2.0]]),
-    ],
-)
-def test_noise_shape_malformed_trace_is_major(y: np.ndarray) -> None:
-    sev, label = noise_shape_severity(y)
-    assert sev == 2
-    assert label == "noise_shape"
-
-
-@pytest.mark.parametrize(
-    ("ratio", "expected"),
-    [
-        (0.3, 1),
-        (0.5, 0),
-        (1.0, 0),
-        (0.7, 0),
-        (1.4, 0),
-        (2.0, 0),
-        (3.0, 1),
-        (0.4, 1),
-        (2.5, 1),
-        (0.2, 2),
-        (4.0, 2),
-        (None, 0),
-    ],
-)
-def test_peak_width_severity(ratio: float | None, expected: int) -> None:
-    sev, label = peak_width_severity(ratio)
-    assert sev == expected
-    assert label == "peak_width"
-
-
-def test_peak_width_nan_is_major() -> None:
-    sev, label = peak_width_severity(float("nan"))
-    assert sev == 2
-    assert label == "peak_width"

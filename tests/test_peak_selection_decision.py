@@ -106,15 +106,17 @@ def test_selection_decision_projects_chrom_segment_source_context() -> None:
     assert "trace_morphology" in decision.evidence_sources
 
 
-def test_selection_decision_projects_not_counted_and_peak_result_fallback() -> None:
+def test_selection_decision_marks_successor_owned_no_ms2_policy() -> None:
     hypothesis = _hypothesis(
         evidence=EvidenceVector(
+            confidence="VERY_LOW",
+            reason="decision: review only, not counted",
             cap_labels=("no_ms2_cap",),
             decision_semantics=EvidenceDecisionSemantics(
                 decision_class="not_counted",
                 review_reasons=("missing_ms2_not_observed",),
                 not_counted_reasons=(
-                    "legacy_review_only_projection",
+                    "missing_ms2_policy_not_counted",
                     "missing_ms2_compatibility_cap",
                 ),
                 compatibility_labels=("no_ms2_cap",),
@@ -144,9 +146,11 @@ def test_selection_decision_projects_not_counted_and_peak_result_fallback() -> N
     assert decision.projected_confidence == "VERY_LOW"
     assert decision.projected_reason == "decision: review only, not counted"
     assert decision.not_counted_reasons == (
-        "legacy_review_only_projection",
+        "missing_ms2_policy_not_counted",
         "missing_ms2_compatibility_cap",
     )
+    assert decision.legacy_projection_status == "successor_owned"
+    assert decision.compatibility_oracle == "successor_evidence_decision_semantics"
     assert "candidate_aligned_ms2_nl" in decision.evidence_sources
 
 

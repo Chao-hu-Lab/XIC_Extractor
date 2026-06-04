@@ -1,10 +1,12 @@
 from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
-from xic_extractor.peak_scoring import (
+from xic_extractor.peak_detection.candidate_selection import (
+    select_candidate_with_confidence,
+)
+from xic_extractor.peak_detection.scoring_models import (
     Confidence,
     ScoredCandidate,
-    select_candidate_with_confidence,
 )
 from xic_extractor.peak_scoring_evidence import EvidenceScore
 

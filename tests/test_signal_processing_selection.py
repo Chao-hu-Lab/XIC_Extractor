@@ -8,7 +8,7 @@ from xic_extractor.peak_detection.facade import (
     _append_or_merge_chrom_peak_segment_candidate,
 )
 from xic_extractor.peak_detection.models import PeakCandidate, PeakResult
-from xic_extractor.peak_scoring import ScoringContext
+from xic_extractor.peak_detection.scoring_models import ScoringContext
 from xic_extractor.signal_processing import find_peak_and_area
 
 
@@ -174,7 +174,10 @@ def test_region_first_scored_selection_can_choose_chrom_segment_candidate(
         )
 
     def _score_candidate(candidate, ctx, prior_rt, istd_confidence_note=None):
-        from xic_extractor.peak_scoring import Confidence, ScoredCandidate
+        from xic_extractor.peak_detection.scoring_models import (
+            Confidence,
+            ScoredCandidate,
+        )
 
         confidence = (
             Confidence.HIGH
@@ -571,7 +574,10 @@ def test_scored_recovery_candidate_must_win_scored_comparison(
         )
 
     def _score_candidate(candidate, ctx, prior_rt, istd_confidence_note=None):
-        from xic_extractor.peak_scoring import Confidence, ScoredCandidate
+        from xic_extractor.peak_detection.scoring_models import (
+            Confidence,
+            ScoredCandidate,
+        )
 
         confidence = (
             Confidence.HIGH
@@ -684,7 +690,10 @@ def test_find_peak_and_area_passes_context_prior_into_scoring(
 
     def _score_candidate(candidate, ctx, prior_rt, istd_confidence_note=None):
         observed_prior_rts.append(prior_rt)
-        from xic_extractor.peak_scoring import Confidence, ScoredCandidate
+        from xic_extractor.peak_detection.scoring_models import (
+            Confidence,
+            ScoredCandidate,
+        )
 
         return ScoredCandidate(
             candidate=candidate,

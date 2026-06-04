@@ -23,8 +23,8 @@ from xic_extractor.peak_detection.hypotheses import (
     PeakHypothesis,
     build_peak_hypotheses,
 )
+from xic_extractor.peak_detection.scoring_models import ScoringContext
 from xic_extractor.peak_detection.traces import Trace, targeted_trace_group
-from xic_extractor.peak_scoring import ScoringContext
 from xic_extractor.signal_processing import (
     PeakCandidate,
     PeakCandidateScore,

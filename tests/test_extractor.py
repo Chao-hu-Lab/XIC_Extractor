@@ -1309,7 +1309,7 @@ def test_istd_wider_recovery_shape_metrics_use_recovered_trace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from xic_extractor.extraction.target_extraction import process_file
-    from xic_extractor.peak_scoring import ScoringContext
+    from xic_extractor.peak_detection.scoring_models import ScoringContext
 
     config = _config(tmp_path)
     raw_path = config.data_dir / "SampleA.raw"

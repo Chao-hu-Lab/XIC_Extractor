@@ -7,6 +7,7 @@ from typing import cast
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.baseline import BaselineMethod
+from xic_extractor.peak_detection.candidate_scoring import score_candidate
 from xic_extractor.peak_detection.cwt import add_cwt_proposals_for_audit
 from xic_extractor.peak_detection.hypotheses import (
     PeakHypothesis,
@@ -18,8 +19,11 @@ from xic_extractor.peak_detection.models import (
     PeakCandidateScore,
     PeakDetectionResult,
 )
+from xic_extractor.peak_detection.scoring_models import (
+    ScoredCandidate,
+    ScoringContext,
+)
 from xic_extractor.peak_detection.traces import TraceGroup
-from xic_extractor.peak_scoring import ScoredCandidate, ScoringContext, score_candidate
 from xic_extractor.sample_groups import classify_sample_group
 
 PeakCandidateTableRow = dict[str, str]

@@ -98,6 +98,56 @@ def test_selected_peak_hypothesis_returns_none_without_selected_candidate(
     assert handoff_spine_runtime.selected_peak_hypothesis(hypotheses) is None
 
 
+def test_build_production_peak_hypotheses_passes_no_ms2_detection_policy(
+    tmp_path,
+) -> None:
+    candidate = _candidate(8.50)
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        n_points=11,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(candidate,),
+        candidate_scores=(
+            _score(
+                candidate,
+                confidence="LOW",
+                concern_labels=("no_ms2",),
+                cap_labels=("no_ms2_cap",),
+            ),
+        ),
+    )
+
+    hypothesis = handoff_spine_runtime.selected_peak_hypothesis(
+        handoff_spine_runtime.build_production_peak_hypotheses(
+            config=replace(_config(tmp_path), count_no_ms2_as_detected=True),
+            sample_name="SampleA",
+            target=_target(),
+            peak_result=peak_result,
+            selected_candidate_ms2_evidence=CandidateMS2Evidence(
+                ms2_present=False,
+                nl_match=False,
+                nl_status="NO_MS2",
+                trigger_scan_count=0,
+                strict_nl_scan_count=0,
+                best_loss_ppm=None,
+                best_scan_rt=None,
+                best_product_base_ratio=None,
+                alignment_source="none",
+            ),
+        )
+    )
+
+    assert hypothesis is not None
+    assert hypothesis.evidence.decision_semantics is not None
+    assert hypothesis.evidence.decision_semantics.decision_class == "review"
+    assert hypothesis.evidence.decision_semantics.review_reasons == (
+        "missing_ms2_not_observed",
+    )
+    assert hypothesis.evidence.decision_semantics.not_counted_reasons == ()
+
+
 def test_selected_hypothesis_uses_final_peak_result_confidence_when_score_is_stale(
     tmp_path,
 ) -> None:

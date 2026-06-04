@@ -333,20 +333,21 @@ def test_decision_semantics_maps_no_ms2_cap_to_not_counted_without_exclusion(
             raw_score=55,
             confidence="LOW",
             cap_labels=("no_ms2_cap",),
-            reason="decision: review only, not counted",
+            reason="decision: accepted",
+            count_no_ms2_as_detected=False,
         )
     )
 
     assert decision.decision_class == "not_counted"
     assert decision.review_reasons == ("missing_ms2_not_observed",)
     assert decision.not_counted_reasons == (
-        "legacy_review_only_projection",
+        "missing_ms2_policy_not_counted",
         "missing_ms2_compatibility_cap",
     )
     assert decision.exclusion_reasons == ()
 
 
-def test_decision_semantics_does_not_let_accepted_no_ms2_cap_force_not_counted(
+def test_decision_semantics_honors_count_no_ms2_as_detected_policy(
 ) -> None:
     decision = decision_semantics_from_signal_set(
         EvidenceSignalSet(
@@ -357,7 +358,8 @@ def test_decision_semantics_does_not_let_accepted_no_ms2_cap_force_not_counted(
             raw_score=55,
             confidence="LOW",
             cap_labels=("no_ms2_cap",),
-            reason="decision: accepted",
+            reason="decision: review only, not counted",
+            count_no_ms2_as_detected=True,
         )
     )
 

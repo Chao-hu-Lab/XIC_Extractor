@@ -10,7 +10,10 @@ from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.scoring_factory import build_scoring_context_factory
 from xic_extractor.ms2_trace_evidence import MS2TraceEvidence
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
-from xic_extractor.peak_scoring import score_candidate, select_candidate_with_confidence
+from xic_extractor.peak_detection.candidate_scoring import score_candidate
+from xic_extractor.peak_detection.candidate_selection import (
+    select_candidate_with_confidence,
+)
 from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import find_peak_and_area
 
@@ -311,7 +314,10 @@ def test_scoring_context_caches_asls_inputs_per_xic(
         call_count += 1
         return np.zeros_like(values)
 
-    monkeypatch.setattr("xic_extractor.peak_scoring.asls_baseline", _fake_asls)
+    monkeypatch.setattr(
+        "xic_extractor.peak_detection.scoring_metrics.asls_baseline",
+        _fake_asls,
+    )
 
     rt = np.linspace(9.6, 10.4, 401)
     intensity = 300 * np.exp(-((rt - 10.00) / 0.03) ** 2)

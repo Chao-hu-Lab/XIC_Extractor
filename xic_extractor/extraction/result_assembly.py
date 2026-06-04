@@ -9,6 +9,10 @@ from xic_extractor.evidence_semantics import EvidenceDecisionSemantics
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.peak_detection.hypotheses import PeakHypothesis
 from xic_extractor.peak_detection.model_selection import PeakModelSelectionResult
+from xic_extractor.peak_detection.scoring_quality import (
+    candidate_quality_penalty,
+    hard_quality_flags,
+)
 from xic_extractor.peak_detection.selection_decision import (
     PeakHypothesisSelectionDecision,
     selection_decision_from_hypothesis,
@@ -18,7 +22,6 @@ from xic_extractor.peak_detection.targeted_product_projection import (
     TargetedProductProjection,
     build_targeted_product_projection,
 )
-from xic_extractor.peak_scoring import candidate_quality_penalty, hard_quality_flags
 from xic_extractor.signal_processing import PeakCandidate, PeakDetectionResult
 from xic_extractor.target_sample_applicability import (
     TARGET_SAMPLE_APPLICABILITY_RNA_CONTAINING,

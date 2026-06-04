@@ -4,6 +4,10 @@ from dataclasses import replace
 import numpy as np
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.candidate_scoring import score_candidate
+from xic_extractor.peak_detection.candidate_selection import (
+    select_candidate_with_confidence,
+)
 from xic_extractor.peak_detection.chrom_peak_candidate_adapter import (
     chrom_peak_segment_candidates,
 )
@@ -23,15 +27,11 @@ from xic_extractor.peak_detection.recovery import preferred_rt_recovery
 from xic_extractor.peak_detection.region_safe_merge import (
     apply_region_first_safe_merge,
 )
+from xic_extractor.peak_detection.scoring_models import ScoringContext
+from xic_extractor.peak_detection.scoring_reason import score_breakdown_fields
 from xic_extractor.peak_detection.selection import (
     select_candidate,
     selection_rt_for_scored_candidates,
-)
-from xic_extractor.peak_scoring import (
-    ScoringContext,
-    score_breakdown_fields,
-    score_candidate,
-    select_candidate_with_confidence,
 )
 from xic_extractor.settings_schema import (
     ARBITRATED_RESOLVER_RETIRED_MESSAGE,

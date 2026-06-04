@@ -7,9 +7,12 @@ from xic_extractor.evidence_semantics import DecisionClass
 from xic_extractor.peak_detection.hypotheses import PeakHypothesis
 from xic_extractor.peak_detection.models import PeakDetectionResult
 
-LegacyProjectionStatus = Literal["active_policy_remaining"]
+LegacyProjectionStatus = Literal["active_policy_remaining", "successor_owned"]
 SelectionDecisionPolicySource = Literal["selected_hypothesis_decision_v1"]
-SelectionDecisionCompatibilityOracle = Literal["legacy_peak_scoring_current_oracle"]
+SelectionDecisionCompatibilityOracle = Literal[
+    "legacy_peak_scoring_current_oracle",
+    "successor_evidence_decision_semantics",
+]
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,10 @@ def selection_decision_from_hypothesis(
         ambiguity_reasons = semantics.ambiguity_reasons
         compatibility_labels = semantics.compatibility_labels
 
+    legacy_projection_status, compatibility_oracle = _ownership_markers(
+        not_counted_reasons
+    )
+
     return PeakHypothesisSelectionDecision(
         selected_candidate_id=hypothesis.hypothesis_id,
         trace_group_id=hypothesis.trace_group_id,
@@ -82,6 +89,8 @@ def selection_decision_from_hypothesis(
         ambiguity_reasons=ambiguity_reasons,
         compatibility_labels=compatibility_labels,
         evidence_sources=_evidence_sources(hypothesis),
+        legacy_projection_status=legacy_projection_status,
+        compatibility_oracle=compatibility_oracle,
     )
 
 
@@ -110,6 +119,14 @@ def _legacy_compatibility_labels(
             )
         )
     )
+
+
+def _ownership_markers(
+    not_counted_reasons: tuple[str, ...],
+) -> tuple[LegacyProjectionStatus, SelectionDecisionCompatibilityOracle]:
+    if "missing_ms2_policy_not_counted" in not_counted_reasons:
+        return "successor_owned", "successor_evidence_decision_semantics"
+    return "active_policy_remaining", "legacy_peak_scoring_current_oracle"
 
 
 def _evidence_sources(hypothesis: PeakHypothesis) -> tuple[str, ...]:

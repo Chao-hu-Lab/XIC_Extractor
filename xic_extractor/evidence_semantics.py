@@ -79,6 +79,7 @@ class EvidenceSignalSet:
     cap_labels: tuple[str, ...] = ()
     reason: str = ""
     rejection_reason: str = ""
+    count_no_ms2_as_detected: bool = False
 
 
 def common_evidence_from_targeted_candidate(
@@ -432,14 +433,13 @@ def _decision_not_counted_reasons(
     confidence = signals.confidence.strip().upper()
     reason = signals.reason.strip().lower()
     legacy_review_only = confidence == "VERY_LOW" or "review only" in reason
-    if not legacy_review_only:
-        return ()
     support = set(support_reasons)
-    hard_not_counted_caps = caps & {
-        "no_ms2_cap",
-        "zero_area_cap",
-        "hard_quality_flag_cap",
-    }
+    missing_ms2_policy_not_counted = (
+        "no_ms2_cap" in caps and not signals.count_no_ms2_as_detected
+    )
+    hard_not_counted_caps = caps & {"zero_area_cap", "hard_quality_flag_cap"}
+    if missing_ms2_policy_not_counted:
+        hard_not_counted_caps = hard_not_counted_caps | {"no_ms2_cap"}
     paired_supported_nl_dropout = (
         "nl_fail_cap" in caps
         and "plausible_nl_dropout" in consistency
@@ -450,13 +450,23 @@ def _decision_not_counted_reasons(
     )
     if paired_supported_nl_dropout:
         return ()
-    reasons.append("legacy_review_only_projection")
-    if "no_ms2_cap" in caps:
+
+    if missing_ms2_policy_not_counted:
+        reasons.append("missing_ms2_policy_not_counted")
         reasons.append("missing_ms2_compatibility_cap")
-    if "zero_area_cap" in caps:
-        reasons.append("zero_area_compatibility_cap")
-    if "hard_quality_flag_cap" in caps:
-        reasons.append("hard_quality_flag_compatibility_cap")
+
+    legacy_not_counted_allowed = legacy_review_only and (
+        "no_ms2_cap" not in caps
+        or not signals.count_no_ms2_as_detected
+        or bool(caps - {"no_ms2_cap"})
+    )
+    if legacy_not_counted_allowed:
+        if not reasons or caps & {"zero_area_cap", "hard_quality_flag_cap"}:
+            reasons.append("legacy_review_only_projection")
+        if "zero_area_cap" in caps:
+            reasons.append("zero_area_compatibility_cap")
+        if "hard_quality_flag_cap" in caps:
+            reasons.append("hard_quality_flag_compatibility_cap")
     return tuple(dict.fromkeys(reasons))
 
 

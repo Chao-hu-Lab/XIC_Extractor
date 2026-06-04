@@ -164,6 +164,7 @@ def build_peak_hypotheses(
     intensity: object | None = None,
     trace_group: TraceGroup | None = None,
     baseline_integration_method: BaselineMethod = "asls",
+    count_no_ms2_as_detected: bool = False,
 ) -> tuple[PeakHypothesis, ...]:
     selected = _selected_candidate(peak_result)
     score_by_candidate = {
@@ -217,6 +218,7 @@ def build_peak_hypotheses(
                     score,
                     evidence,
                     target_label=target_label,
+                    count_no_ms2_as_detected=count_no_ms2_as_detected,
                 ),
                 audit=AuditTrail(
                     proposal_sources=candidate.proposal_sources,
@@ -328,6 +330,7 @@ def _evidence_from_candidate(
     evidence: CandidateMS2Evidence | None,
     *,
     target_label: str,
+    count_no_ms2_as_detected: bool = False,
 ) -> EvidenceVector:
     common = common_evidence_from_targeted_candidate(
         candidate,
@@ -398,6 +401,7 @@ def _evidence_from_candidate(
                 confidence=score.confidence if score is not None else "",
                 cap_labels=score.cap_labels if score is not None else (),
                 reason=score.reason if score is not None else "",
+                count_no_ms2_as_detected=count_no_ms2_as_detected,
             )
         ),
     )
