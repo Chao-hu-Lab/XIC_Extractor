@@ -10,6 +10,7 @@ from xic_extractor.extraction.istd_prepass import extract_istd_anchors_only
 from xic_extractor.extraction.scoring_factory import build_scoring_context_factory
 from xic_extractor.extraction.target_extraction import extract_raw_file_result
 from xic_extractor.output.messages import DiagnosticRecord
+from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
 from xic_extractor.rt_prior_library import LibraryEntry
 
 if TYPE_CHECKING:
@@ -25,6 +26,7 @@ def run_serial(
     rt_prior_library: dict[tuple[str, str], LibraryEntry],
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
+    model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> RunOutput:
     from xic_extractor import extractor
 
@@ -61,6 +63,9 @@ def run_serial(
             targets,
             raw_path,
             scoring_context_factory=scoring_context_factory,
+            model_selection_expected_diff_approvals=(
+                model_selection_expected_diff_approvals
+            ),
         )
         file_results.append(raw_result.file_result)
         diagnostics.extend(raw_result.diagnostics)

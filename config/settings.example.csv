@@ -25,3 +25,4 @@ baseline_integration_method,asls,Alignment integration-audit baseline method (as
 parallel_mode,process,執行後端（serial 或 process；預設 process）
 parallel_workers,11,Process mode worker 數量（>= 1；預設 CPU 核心數 - 1）
 rt_prior_library_path,,developer/debug RT prior library CSV path; leave empty for normal use
+target_pair_rt_calibration_path,,target pair RT calibration TSV path for shadow auto-reselection diagnostics; leave empty to disable

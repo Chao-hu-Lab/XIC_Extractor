@@ -519,6 +519,139 @@ def test_peak_hypothesis_matrix_cli_writes_sidecars(tmp_path: Path) -> None:
     assert (tmp_path / "out" / "peak_hypothesis_matrix_summary.tsv").exists()
 
 
+def test_peak_hypothesis_matrix_cli_can_require_complete_identity(
+    tmp_path: Path,
+) -> None:
+    matrix = tmp_path / "alignment_matrix.tsv"
+    review = tmp_path / "alignment_review.tsv"
+    cells = tmp_path / "alignment_cells.tsv"
+    peak_selection = tmp_path / "shared_peak_identity_peak_hypothesis_selection.tsv"
+    _write_tsv(
+        matrix,
+        (
+            "feature_family_id",
+            "neutral_loss_tag",
+            "family_center_mz",
+            "family_center_rt",
+            "S1",
+        ),
+        [_matrix_row("FAM_SPLIT", mz="400.4", rt="10.4", S1="111")],
+    )
+    _write_tsv(
+        review,
+        (
+            "feature_family_id",
+            "neutral_loss_tag",
+            "family_center_mz",
+            "family_center_rt",
+        ),
+        [_review_row("FAM_SPLIT", mz="400.4", rt="10.4")],
+    )
+    _write_tsv(
+        cells,
+        ("feature_family_id", "sample_stem", "status", "area"),
+        [_cell_row("FAM_SPLIT", "S1", area="111")],
+    )
+    _write_tsv(
+        peak_selection,
+        _PEAK_SELECTION_FIELDS,
+        [_peak_row("FAM_SPLIT", "S1", "blue")],
+    )
+
+    assert (
+        main(
+            [
+                "--alignment-matrix-tsv",
+                str(matrix),
+                "--alignment-review-tsv",
+                str(review),
+                "--alignment-cells-tsv",
+                str(cells),
+                "--peak-hypothesis-selection-tsv",
+                str(peak_selection),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--require-complete-peak-hypothesis-identity",
+            ]
+        )
+        == 0
+    )
+
+
+def test_peak_hypothesis_matrix_cli_rejects_family_projection_as_complete(
+    tmp_path: Path,
+) -> None:
+    matrix = tmp_path / "alignment_matrix.tsv"
+    review = tmp_path / "alignment_review.tsv"
+    cells = tmp_path / "alignment_cells.tsv"
+    peak_selection = tmp_path / "shared_peak_identity_peak_hypothesis_selection.tsv"
+    _write_tsv(
+        matrix,
+        (
+            "feature_family_id",
+            "neutral_loss_tag",
+            "family_center_mz",
+            "family_center_rt",
+            "S1",
+        ),
+        [_matrix_row("FAM_PROJECT", mz="500.5", rt="11.5", S1="50")],
+    )
+    _write_tsv(
+        review,
+        (
+            "feature_family_id",
+            "neutral_loss_tag",
+            "family_center_mz",
+            "family_center_rt",
+        ),
+        [_review_row("FAM_PROJECT", mz="500.5", rt="11.5")],
+    )
+    _write_tsv(
+        cells,
+        ("feature_family_id", "sample_stem", "status", "area"),
+        [_cell_row("FAM_PROJECT", "S1", area="50")],
+    )
+    _write_tsv(peak_selection, _PEAK_SELECTION_FIELDS, [])
+
+    assert (
+        main(
+            [
+                "--alignment-matrix-tsv",
+                str(matrix),
+                "--alignment-review-tsv",
+                str(review),
+                "--alignment-cells-tsv",
+                str(cells),
+                "--peak-hypothesis-selection-tsv",
+                str(peak_selection),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--require-complete-peak-hypothesis-identity",
+            ]
+        )
+        == 2
+    )
+
+
+_PEAK_SELECTION_FIELDS = (
+    "feature_family_id",
+    "sample_stem",
+    "peak_hypothesis_id",
+    "peak_hypothesis_status",
+    "product_unit_scope",
+    "selected_mode_id",
+    "selected_mode_role",
+    "selected_mode_tag_status",
+    "family_mode_class",
+    "family_mode_count",
+    "tag_bearing_mode_count",
+    "product_selection_action",
+    "product_selection_blocker",
+    "reason",
+    "diagnostic_only",
+)
+
+
 def _matrix_row(
     family_id: str,
     *,

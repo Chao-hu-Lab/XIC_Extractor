@@ -11,7 +11,6 @@ from xic_extractor.alignment.output_rows import (
     count_status,
     escape_excel_formula,
     format_value,
-    production_matrix_area,
     row_id,
     safe_rate,
 )
@@ -20,6 +19,11 @@ from xic_extractor.alignment.owner_group_delivery import (
     GROUP_BACKFILL_SEED_AUDIT_COLUMNS,
     GROUP_REVIEW_PROJECTION_COLUMNS,
     delivery_group_projection,
+)
+from xic_extractor.alignment.product_matrix import (
+    ALIGNMENT_MATRIX_IDENTITY_COLUMNS,
+    formatted_identity_rows,
+    product_matrix_tsv_rows,
 )
 from xic_extractor.alignment.production_decisions import build_production_decisions
 from xic_extractor.peak_detection.baseline import LINEAR_EDGE_RETIRED_MESSAGE
@@ -173,40 +177,25 @@ def write_alignment_matrix_tsv(
     *,
     alignment_config: AlignmentConfig | None = None,
 ) -> Path:
-    columns = (
-        "feature_family_id",
-        "neutral_loss_tag",
-        "family_center_mz",
-        "family_center_rt",
-        *matrix.sample_order,
+    columns = ("Mz", "RT", *matrix.sample_order)
+    return _write_tsv(
+        path,
+        columns,
+        product_matrix_tsv_rows(matrix, alignment_config=alignment_config),
     )
-    rows: list[dict[str, object]] = []
-    grouped_cells = cells_by_cluster(matrix)
-    decisions = build_production_decisions(
-        matrix,
-        alignment_config or AlignmentConfig(),
+
+
+def write_alignment_matrix_identity_tsv(
+    path: Path,
+    matrix: AlignmentMatrix,
+    *,
+    alignment_config: AlignmentConfig | None = None,
+) -> Path:
+    return _write_tsv(
+        path,
+        ALIGNMENT_MATRIX_IDENTITY_COLUMNS,
+        formatted_identity_rows(matrix, alignment_config=alignment_config),
     )
-    for cluster in matrix.clusters:
-        cluster_id = row_id(cluster)
-        row_decision = decisions.row(cluster_id)
-        if not row_decision.include_in_primary_matrix:
-            continue
-        cells = grouped_cells.get(cluster_id, ())
-        cells_by_sample = {cell.sample_stem: cell for cell in cells}
-        row: dict[str, object] = {
-            "feature_family_id": cluster_id,
-            "neutral_loss_tag": cluster.neutral_loss_tag,
-            "family_center_mz": format_value(_family_center_mz(cluster)),
-            "family_center_rt": format_value(_family_center_rt(cluster)),
-        }
-        for sample_stem in matrix.sample_order:
-            cell = cells_by_sample.get(sample_stem)
-            decision = (
-                decisions.cell(cluster_id, sample_stem) if cell is not None else None
-            )
-            row[sample_stem] = production_matrix_area(decision)
-        rows.append(row)
-    return _write_tsv(path, columns, rows)
 
 
 def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:

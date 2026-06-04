@@ -25,6 +25,7 @@ def _canonical_settings() -> dict[str, str]:
         "rolling_window_size": "5",
         "dirty_matrix_mode": "false",
         "rt_prior_library_path": "",
+        "model_selection_expected_diff_approval_registry": "",
         "emit_score_breakdown": "false",
         "emit_review_report": "false",
         "emit_peak_candidates": "false",

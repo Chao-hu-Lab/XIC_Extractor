@@ -14,6 +14,12 @@ from xic_extractor.peak_detection.hypotheses import (
     PeakHypothesis,
     build_peak_hypotheses,
 )
+from xic_extractor.peak_detection.model_selection import (
+    ExpectedDiffApprovalRecords,
+    PeakModelSelectionResult,
+    expected_diff_approval_for_result,
+    model_select_peak_hypothesis,
+)
 from xic_extractor.peak_detection.models import PeakDetectionResult
 from xic_extractor.peak_detection.selection_decision import (
     PeakHypothesisSelectionDecision,
@@ -29,6 +35,7 @@ class HandoffPeakSelection:
     selected_hypothesis: PeakHypothesis | None
     selection_decision: PeakHypothesisSelectionDecision | None
     trace_group: TraceGroup | None
+    model_selection_result: PeakModelSelectionResult | None = None
 
 
 def build_production_peak_hypotheses(
@@ -90,6 +97,7 @@ def selected_handoff_peak(
     rt_min: float,
     rt_max: float,
     expected_rt_min: float | None,
+    model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> HandoffPeakSelection:
     trace_group = (
         targeted_extraction_trace_group(
@@ -120,7 +128,18 @@ def selected_handoff_peak(
         intensity=intensity,
         trace_group=trace_group,
     )
-    selected_hypothesis = selected_peak_hypothesis(hypotheses)
+    model_selection_result = _model_selection_result_for_handoff(
+        hypotheses,
+        sample_name=sample_name,
+        target_label=target.label,
+        expected_diff_approvals=model_selection_expected_diff_approvals,
+    )
+    legacy_selected_hypothesis = selected_peak_hypothesis(hypotheses)
+    selected_hypothesis = _product_selected_hypothesis(
+        hypotheses,
+        model_selection_result,
+        legacy_selected_hypothesis,
+    )
     return HandoffPeakSelection(
         candidate_ms2_evidence=candidate_ms2_evidence,
         selected_hypothesis=selected_hypothesis,
@@ -133,7 +152,49 @@ def selected_handoff_peak(
             else None
         ),
         trace_group=trace_group,
+        model_selection_result=model_selection_result,
     )
+
+
+def _model_selection_result_for_handoff(
+    hypotheses: tuple[PeakHypothesis, ...],
+    *,
+    sample_name: str,
+    target_label: str,
+    expected_diff_approvals: ExpectedDiffApprovalRecords | None,
+) -> PeakModelSelectionResult | None:
+    if not hypotheses:
+        return None
+    shadow_result = model_select_peak_hypothesis(hypotheses)
+    approval = expected_diff_approval_for_result(
+        shadow_result,
+        expected_diff_approvals,
+        sample_name=sample_name,
+        target_label=target_label,
+    )
+    if approval is None:
+        return shadow_result
+    return model_select_peak_hypothesis(
+        hypotheses,
+        successor_selected_candidate_id=shadow_result.selected_candidate_id,
+        expected_diff_approval=approval,
+    )
+
+
+def _product_selected_hypothesis(
+    hypotheses: tuple[PeakHypothesis, ...],
+    model_selection_result: PeakModelSelectionResult | None,
+    legacy_selected_hypothesis: PeakHypothesis | None,
+) -> PeakHypothesis | None:
+    if (
+        model_selection_result is None
+        or not model_selection_result.product_switch_allowed
+    ):
+        return legacy_selected_hypothesis
+    for hypothesis in hypotheses:
+        if hypothesis.hypothesis_id == model_selection_result.selected_candidate_id:
+            return hypothesis
+    return legacy_selected_hypothesis
 
 
 def _with_final_selected_result_evidence(

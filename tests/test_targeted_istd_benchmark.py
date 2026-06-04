@@ -7,6 +7,14 @@ from pathlib import Path
 from openpyxl import Workbook
 
 from tools.diagnostics import targeted_istd_benchmark as benchmark
+from tools.diagnostics.targeted_istd_benchmark_models import (
+    TargetedPoint,
+    TargetedReliabilityPoint,
+)
+from tools.diagnostics.targeted_istd_benchmark_summary import (
+    _benchmark_points,
+    _reliability_summary,
+)
 
 
 def test_benchmark_classifies_pass_miss_split_and_inactive_tag(tmp_path: Path):
@@ -58,6 +66,91 @@ def test_benchmark_classifies_pass_miss_split_and_inactive_tag(tmp_path: Path):
     assert by_label["split_istd"].failure_modes == ("SPLIT",)
     assert by_label["rna_istd"].active_tag is False
     assert by_label["rna_istd"].failure_modes == ("FALSE_POSITIVE_TAG",)
+
+
+def test_benchmark_reads_clean_product_matrix_identity_sidecar(tmp_path: Path):
+    targeted = tmp_path / "targeted.xlsx"
+    alignment = tmp_path / "alignment"
+    _write_targeted_workbook(
+        targeted,
+        targets=[_target("pass_istd", 100.0, 10.0, 11.0, 50.0, 116.0474)],
+        samples=("S1", "S2", "S3", "S4"),
+    )
+    _write_clean_alignment_run(
+        alignment,
+        review_rows=[_review_row("FAM_PASS", 100.0, 10.5, 50.0, 116.0474, True)],
+        identity_rows=[_identity_row("FAM_PASS", 1, 100.0, 10.5)],
+        matrix_rows=[
+            {
+                "Mz": "100.0000",
+                "RT": "10.5000",
+                "S1": "100.0",
+                "S2": "1000.0",
+                "S3": "10000.0",
+                "S4": "100000.0",
+            },
+        ],
+        cell_rows=[
+            _cell_row("FAM_PASS", "S1", 10.50, 100.0),
+            _cell_row("FAM_PASS", "S2", 10.51, 1000.0),
+            _cell_row("FAM_PASS", "S3", 10.52, 10000.0),
+            _cell_row("FAM_PASS", "S4", 10.53, 100000.0),
+        ],
+    )
+
+    _outputs, summaries = benchmark.run_targeted_istd_benchmark(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=tmp_path / "benchmark",
+    )
+
+    assert summaries[0].status == "PASS"
+    assert summaries[0].selected_feature_id == "FAM_PASS"
+    assert summaries[0].paired_area_n == 4
+
+
+def test_review_positive_reliability_never_enters_clean_benchmark_points() -> None:
+    points = (
+        TargetedPoint("S1", "d3-A", "ISTD", 9.0, 100.0, "OK", "HIGH", ""),
+        TargetedPoint(
+            "S2",
+            "d3-A",
+            "ISTD",
+            9.1,
+            110.0,
+            "NL_FAIL",
+            "VERY_LOW",
+            "",
+        ),
+    )
+    reliability = {
+        ("S1", "d3-A"): TargetedReliabilityPoint(
+            "S1",
+            "d3-A",
+            "benchmark_eligible",
+        ),
+        ("S2", "d3-A"): TargetedReliabilityPoint(
+            "S2",
+            "d3-A",
+            "targeted_review_positive",
+            ("plausible_nl_dropout",),
+        ),
+    }
+
+    reliability_summary = _reliability_summary(
+        points,
+        reliability=reliability,
+        strict_targeted_reliability=False,
+    )
+    benchmark_points = _benchmark_points(
+        points,
+        reliability=reliability,
+        strict_targeted_reliability=False,
+    )
+
+    assert [point.sample_stem for point in reliability_summary.clean_points] == ["S1"]
+    assert reliability_summary.review_positive_count == 1
+    assert [point.sample_stem for point in benchmark_points] == ["S1"]
 
 
 def test_benchmark_treats_selected_r_tag_istd_as_active_when_configured(
@@ -667,6 +760,26 @@ def _write_alignment_run(
     _write_tsv(path / "alignment_cells.tsv", cell_rows, CELL_COLUMNS)
 
 
+def _write_clean_alignment_run(
+    path: Path,
+    *,
+    review_rows: list[dict[str, object]],
+    identity_rows: list[dict[str, object]],
+    matrix_rows: list[dict[str, object]],
+    cell_rows: list[dict[str, object]],
+    samples: tuple[str, ...] = ("S1", "S2", "S3", "S4"),
+) -> None:
+    path.mkdir(parents=True)
+    _write_tsv(path / "alignment_review.tsv", review_rows, REVIEW_COLUMNS)
+    _write_tsv(path / "alignment_matrix.tsv", matrix_rows, ("Mz", "RT", *samples))
+    _write_tsv(
+        path / "alignment_matrix_identity.tsv",
+        identity_rows,
+        IDENTITY_COLUMNS,
+    )
+    _write_tsv(path / "alignment_cells.tsv", cell_rows, CELL_COLUMNS)
+
+
 REVIEW_COLUMNS = (
     "feature_family_id",
     "neutral_loss_tag",
@@ -687,6 +800,28 @@ CELL_COLUMNS = (
 )
 
 
+IDENTITY_COLUMNS = (
+    "identity_schema_version",
+    "matrix_row_index",
+    "Mz",
+    "RT",
+    "peak_hypothesis_id",
+    "row_identity_basis",
+    "split_evaluation_status",
+    "projection_status",
+    "source_feature_family_ids",
+    "source_feature_family_count",
+    "center_mz_basis",
+    "center_rt_basis",
+    "center_weight_basis",
+    "accepted_cell_count",
+    "accepted_sample_count",
+    "evidence_status",
+    "parent_peak_hypothesis_id",
+    "child_peak_hypothesis_ids",
+)
+
+
 def _review_row(
     family_id: str,
     mz: float,
@@ -703,6 +838,36 @@ def _review_row(
         "family_product_mz": product,
         "family_observed_neutral_loss_da": nl,
         "include_in_primary_matrix": str(primary).upper(),
+    }
+
+
+def _identity_row(
+    family_id: str,
+    matrix_row_index: int,
+    mz: float,
+    rt: float,
+) -> dict[str, object]:
+    return {
+        "identity_schema_version": (
+            "untargeted_peak_hypothesis_matrix_identity_v1"
+        ),
+        "matrix_row_index": matrix_row_index,
+        "Mz": mz,
+        "RT": rt,
+        "peak_hypothesis_id": f"PH_{family_id}",
+        "row_identity_basis": "no_split_peak_hypothesis",
+        "split_evaluation_status": "complete_no_product_ready_split",
+        "projection_status": "not_projection",
+        "source_feature_family_ids": family_id,
+        "source_feature_family_count": 1,
+        "center_mz_basis": "accepted_cells",
+        "center_rt_basis": "accepted_cells",
+        "center_weight_basis": "accepted_cell_area",
+        "accepted_cell_count": 4,
+        "accepted_sample_count": 4,
+        "evidence_status": "product_matrix_identity_complete",
+        "parent_peak_hypothesis_id": "",
+        "child_peak_hypothesis_ids": "",
     }
 
 

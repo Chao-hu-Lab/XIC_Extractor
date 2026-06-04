@@ -16,6 +16,11 @@ TARGET_FIELDS = (
     "is_istd",
     "istd_pair",
 )
+OPTIONAL_TARGET_METADATA_FIELDS = (
+    "isotope_label_type",
+    "paired_rt_relation",
+)
+TARGET_WRITE_FIELDS = (*TARGET_FIELDS, *OPTIONAL_TARGET_METADATA_FIELDS)
 _REQUIRED_SETTING_FIELDS = ("key", "value")
 
 

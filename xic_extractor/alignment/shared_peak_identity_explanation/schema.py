@@ -26,7 +26,7 @@ ACTIVATION_MUST_NOT_REGRESS_SCHEMA_VERSION = (
     "shared_peak_identity_activation_must_not_regress_v1"
 )
 ACTIVATION_APPLICATION_SCHEMA_VERSION = (
-    "shared_peak_identity_activation_application_v1"
+    "shared_peak_identity_activation_application_v2"
 )
 WRONG_PEAK_ROOT_CAUSE_SCHEMA_VERSION = (
     "shared_peak_identity_wrong_peak_root_cause_v1"
@@ -371,6 +371,8 @@ ACTIVATION_APPLICATION_SUMMARY_COLUMNS = (
     "all_family_split_science_ready",
     "legacy_rt_row_context_rows",
     "family_projection_rows",
+    "family_projection_rows_excluded",
+    "family_projection_cells_excluded",
     "matrix_value_conflict_cells",
     "matrix_value_conflict_policy",
     "auto_activate_count",
@@ -1213,6 +1215,7 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
             "none",
             "formal_output_not_requested",
             "family_projection_present",
+            "family_projection_excluded_incomplete_scope",
             "raw_mode_review_only",
             "matrix_construction_blocked",
             "source_matrix_value_missing",
@@ -1222,6 +1225,8 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
         {
             "formal_peak_hypothesis_with_family_projections",
             "formal_peak_hypothesis_identity",
+            "canonical_peak_hypothesis_rows_only",
+            "partial_canonical_peak_hypothesis_rows_only",
             "partial_peak_hypothesis_with_family_projections",
             "matrix_construction_peak_hypothesis_with_family_projections",
             "legacy_feature_family_row",
@@ -1231,6 +1236,7 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
         {
             "projection_not_split_proof",
             "explicit_hypothesis_only",
+            "excluded_from_canonical_output",
             "not_applicable",
         }
     ),

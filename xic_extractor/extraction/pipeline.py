@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.output_dispatch import write_outputs
 from xic_extractor.injection_rolling import read_injection_order
+from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
 from xic_extractor.raw_reader import RawReaderError, preflight_raw_reader
 from xic_extractor.rt_prior_library import LibraryEntry, load_library
 
@@ -30,6 +31,8 @@ def resolve_rt_prior_library(
     config: ExtractionConfig,
     rt_prior_library: dict[tuple[str, str], LibraryEntry] | None,
 ) -> dict[tuple[str, str], LibraryEntry]:
+    if config.target_pair_rt_calibration_path is not None:
+        return {}
     if rt_prior_library is not None:
         return rt_prior_library
     if config.rt_prior_library_path is None:
@@ -53,6 +56,7 @@ def run_pipeline(
     should_stop: Callable[[], bool] | None = None,
     injection_order: dict[str, int] | None = None,
     rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
+    model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> RunOutput:
     reader_errors = preflight_raw_reader(config.dll_dir)
     if reader_errors:
@@ -77,6 +81,9 @@ def run_pipeline(
             should_stop=should_stop,
             injection_order=scoring_injection_order,
             rt_prior_library=resolved_rt_prior_library,
+            model_selection_expected_diff_approvals=(
+                model_selection_expected_diff_approvals
+            ),
         )
     else:
         from xic_extractor.extraction.serial_backend import run_serial
@@ -89,6 +96,9 @@ def run_pipeline(
             should_stop=should_stop,
             injection_order=scoring_injection_order,
             rt_prior_library=resolved_rt_prior_library,
+            model_selection_expected_diff_approvals=(
+                model_selection_expected_diff_approvals
+            ),
         )
 
     write_outputs(config, targets, output)

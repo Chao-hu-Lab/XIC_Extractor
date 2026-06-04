@@ -111,6 +111,29 @@ ProductionCellDecision.matrix_value =
 
 `selected_integration.area_raw_counts_seconds` remains audit evidence.
 
+### Quantitation Context Rule
+
+The selected integration must be computed from a quantitation context window,
+not from the already-resolved discovery candidate boundary.
+
+Discovery candidate `ms1_peak_rt_start/end` is evidence about a candidate peak,
+but it is not a safe final integration window. A candidate boundary can be
+clipped by seed placement, DDA trigger timing, or local-minimum preselection.
+If the final matrix reuses that narrow interval as the full trace context, AsLS
+can treat real peak signal as baseline and underestimate area.
+
+Owner candidate re-resolution therefore uses the candidate boundary only as an
+anchor for a wider quantitation context. The context should stay narrower than
+the old broad `seed_rt +/- max_rt_sec` fallback that previously over-merged
+unrelated regions, but it must include enough pre/post peak margin for AsLS and
+boundary proposals to see the full chromatographic envelope.
+
+CWT, safe-merge, local minima, derivative, and region-first evidence are
+proposal or model-selection inputs inside that context. None of them alone is a
+hard product truth source. The product value is the accepted selected
+integration after evidence/model selection, with AsLS as the primary baseline
+method.
+
 ### Missing AsLS Rule
 
 If a detected or rescued cell has a selected integration but no valid AsLS

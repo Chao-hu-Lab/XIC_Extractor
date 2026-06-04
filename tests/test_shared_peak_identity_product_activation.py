@@ -323,6 +323,67 @@ def test_activation_application_formal_mode_can_require_peak_hypothesis_identity
         )
 
 
+def test_activation_application_formal_mode_excludes_projections_as_partial(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+
+    outputs = product_activation.apply_activation_to_alignment_outputs(
+        activation_decisions_tsv=fixture["decisions"],
+        activation_acceptance_tsv=fixture["acceptance"],
+        alignment_matrix_tsv=fixture["matrix"],
+        alignment_review_tsv=fixture["review"],
+        alignment_cells_tsv=fixture["cells"],
+        output_dir=tmp_path / "formal",
+        output_mode="formal",
+        exclude_family_projections=True,
+    )
+
+    matrix_rows = {
+        row["peak_hypothesis_id"]: row for row in _read_tsv(outputs.matrix_tsv)
+    }
+    assert "FAM_BLOCK::family_projection" not in matrix_rows
+    assert matrix_rows["FAM_ADD::mode_1"]["S2"] == "300"
+    assert matrix_rows["FAM_KEEP::mode_1"]["S2"] == "777"
+    assert matrix_rows["FAM_SPLIT::blue"]["S1"] == "111"
+    assert matrix_rows["FAM_SPLIT::green"]["S2"] == "222"
+
+    summary = _read_tsv(outputs.summary_tsv)[0]
+    assert summary["canonical_row_identity_ready"] == "FALSE"
+    assert summary["canonical_row_identity_blockers"] == (
+        "family_projection_excluded_incomplete_scope"
+    )
+    assert summary["canonical_row_identity_scope"] == (
+        "partial_canonical_peak_hypothesis_rows_only"
+    )
+    assert summary["family_projection_semantics"] == (
+        "excluded_from_canonical_output"
+    )
+    assert summary["family_projection_rows"] == "0"
+    assert summary["family_projection_rows_excluded"] == "1"
+    assert summary["family_projection_cells_excluded"] == "1"
+    assert summary["all_family_split_science_ready"] == "FALSE"
+
+
+def test_activation_application_formal_mode_refuses_excluded_projections_as_complete(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+
+    with pytest.raises(ValueError, match="family_projection_excluded_incomplete_scope"):
+        product_activation.apply_activation_to_alignment_outputs(
+            activation_decisions_tsv=fixture["decisions"],
+            activation_acceptance_tsv=fixture["acceptance"],
+            alignment_matrix_tsv=fixture["matrix"],
+            alignment_review_tsv=fixture["review"],
+            alignment_cells_tsv=fixture["cells"],
+            output_dir=tmp_path / "formal",
+            output_mode="formal",
+            exclude_family_projections=True,
+            require_complete_peak_hypothesis_identity=True,
+        )
+
+
 def test_activation_application_formal_mode_keeps_max_area_for_value_conflict(
     tmp_path: Path,
 ) -> None:
@@ -458,6 +519,76 @@ def test_activation_application_cli_formal_mode_rejects_legacy_context_as_comple
                 "--require-complete-peak-hypothesis-identity",
                 "--legacy-rt-row-oracle-xlsx",
                 str(oracle),
+            ]
+        )
+        == 2
+    )
+
+
+def test_activation_application_cli_excludes_projections_as_partial(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+
+    assert (
+        main(
+            [
+                "--activation-decisions-tsv",
+                str(fixture["decisions"]),
+                "--activation-acceptance-tsv",
+                str(fixture["acceptance"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--output-dir",
+                str(tmp_path / "formal"),
+                "--output-mode",
+                "formal",
+                "--exclude-family-projections",
+            ]
+        )
+        == 0
+    )
+
+    matrix_rows = {
+        row["peak_hypothesis_id"]: row
+        for row in _read_tsv(tmp_path / "formal" / "alignment_matrix.tsv")
+    }
+    assert "FAM_BLOCK::family_projection" not in matrix_rows
+    summary = _read_tsv(
+        tmp_path / "formal" / "activation_application_summary.tsv"
+    )[0]
+    assert summary["canonical_row_identity_ready"] == "FALSE"
+    assert summary["family_projection_rows_excluded"] == "1"
+
+
+def test_activation_application_cli_refuses_excluded_projections_as_complete(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+
+    assert (
+        main(
+            [
+                "--activation-decisions-tsv",
+                str(fixture["decisions"]),
+                "--activation-acceptance-tsv",
+                str(fixture["acceptance"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--output-dir",
+                str(tmp_path / "formal"),
+                "--output-mode",
+                "formal",
+                "--exclude-family-projections",
+                "--require-complete-peak-hypothesis-identity",
             ]
         )
         == 2

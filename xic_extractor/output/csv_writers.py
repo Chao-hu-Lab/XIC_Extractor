@@ -10,6 +10,10 @@ from xic_extractor.output.schema import (
     LONG_HEADERS,
     MS1_SUFFIXES,
     SCORE_BREAKDOWN_HEADERS,
+    TARGETED_PRODUCT_PROJECTION_HEADERS,
+)
+from xic_extractor.peak_detection.targeted_product_projection import (
+    TargetedProductProjection,
 )
 from xic_extractor.sample_groups import classify_sample_group
 from xic_extractor.signal_processing import PeakDetectionResult
@@ -89,6 +93,9 @@ class ExtractionResultLike(Protocol):
 
     @property
     def total_severity(self) -> int: ...
+
+    @property
+    def targeted_product_projection(self) -> TargetedProductProjection | None: ...
 
 
 class FileResultLike(Protocol):
@@ -186,10 +193,12 @@ def _long_output_rows(
             "PeakWidth": "",
             "Confidence": "",
             "Reason": "",
+            **{header: "" for header in TARGETED_PRODUCT_PROJECTION_HEADERS},
         }
         if file_result.error is not None:
             _set_long_ms1_values(row, "ERROR")
             row["NL"] = "ERROR" if target.neutral_loss_da is not None else ""
+            row.update(_error_projection_fields())
         else:
             result = file_result.results[target.label]
             _set_long_peak_values(row, result)
@@ -198,6 +207,7 @@ def _long_output_rows(
             )
             row["Confidence"] = result.confidence
             row["Reason"] = result.reason
+            row.update(_projection_fields(result.targeted_product_projection))
         rows.append(row)
     return rows
 
@@ -240,8 +250,25 @@ def _score_breakdown_rows(
                     if is_accepted_result_detection(
                         result,
                         count_no_ms2_as_detected,
+                        require_projection=True,
                     )
                     else "FALSE"
+                ),
+                "Product State": _projection_text(
+                    result.targeted_product_projection,
+                    "product_state",
+                ),
+                "Review State": _projection_text(
+                    result.targeted_product_projection,
+                    "review_state",
+                ),
+                "Projection Reason": _projection_text(
+                    result.targeted_product_projection,
+                    "projection_reason",
+                ),
+                "Legacy Authority Status": _projection_text(
+                    result.targeted_product_projection,
+                    "legacy_authority_status",
                 ),
                 "Caps": weighted_fields.get("Caps", ""),
                 "Raw Score": weighted_fields.get("Raw Score", ""),
@@ -274,6 +301,58 @@ def _score_breakdown_rows(
             }
         )
     return rows
+
+
+def _projection_fields(
+    projection: TargetedProductProjection | None,
+) -> dict[str, str]:
+    if projection is None:
+        return {header: "" for header in TARGETED_PRODUCT_PROJECTION_HEADERS}
+    return {
+        "Product State": projection.product_state,
+        "Counted Detection": "TRUE" if projection.counted_detection else "FALSE",
+        "Review State": projection.review_state,
+        "Projection Reason": projection.projection_reason,
+        "Projection Support Reasons": _join_reasons(projection.support_reasons),
+        "Projection Review Reasons": _join_reasons(projection.review_reasons),
+        "Projection Conflict Reasons": _join_reasons(projection.conflict_reasons),
+        "Projection Not Counted Reasons": _join_reasons(
+            projection.not_counted_reasons
+        ),
+        "Projection Exclusion Reasons": _join_reasons(projection.exclusion_reasons),
+        "Legacy Authority Status": projection.legacy_authority_status,
+        "Benchmark Eligibility State": projection.benchmark_eligibility_state,
+    }
+
+
+def _error_projection_fields() -> dict[str, str]:
+    return {
+        "Product State": "excluded",
+        "Counted Detection": "FALSE",
+        "Review State": "review_required",
+        "Projection Reason": "decision: excluded; excluded: file_error",
+        "Projection Support Reasons": "",
+        "Projection Review Reasons": "",
+        "Projection Conflict Reasons": "",
+        "Projection Not Counted Reasons": "",
+        "Projection Exclusion Reasons": "file_error",
+        "Legacy Authority Status": "retired",
+        "Benchmark Eligibility State": "",
+    }
+
+
+def _projection_text(
+    projection: TargetedProductProjection | None,
+    field_name: str,
+) -> str:
+    if projection is None:
+        return ""
+    value = getattr(projection, field_name)
+    return str(value)
+
+
+def _join_reasons(reasons: tuple[str, ...]) -> str:
+    return "; ".join(reasons)
 
 
 def _format_optional_severity(value: int | None) -> str:

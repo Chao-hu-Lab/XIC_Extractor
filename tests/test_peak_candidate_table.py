@@ -11,6 +11,7 @@ from xic_extractor.extraction.peak_candidate_table import (
     build_peak_candidate_rows,
     build_peak_candidate_rows_from_hypotheses,
     candidate_audit_id,
+    with_product_selected_marker,
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.output.peak_candidates import write_peak_candidates_tsv
@@ -467,6 +468,65 @@ def test_build_rows_from_hypotheses_projects_spine_without_legacy_result() -> No
     assert row["reason"] == "spine decision"
 
 
+def test_product_selected_marker_replaces_legacy_selected_candidate() -> None:
+    legacy = _candidate_table_hypothesis("legacy", selected=True, rank=1)
+    successor = _candidate_table_hypothesis("successor", selected=False, rank=2)
+
+    rows = build_peak_candidate_rows_from_hypotheses(
+        sample_name="SampleA",
+        hypotheses=with_product_selected_marker(
+            (legacy, successor),
+            successor.hypothesis_id,
+        ),
+    )
+
+    selected_by_id = {row["candidate_id"]: row["selected"] for row in rows}
+    rank_by_id = {row["candidate_id"]: row["selection_rank"] for row in rows}
+    assert selected_by_id == {"legacy": "FALSE", "successor": "TRUE"}
+    assert rank_by_id["legacy"] == ""
+    assert rank_by_id["successor"] == "1"
+
+
+def test_product_selected_marker_projects_across_cwt_audit_id_change() -> None:
+    legacy = _candidate_table_hypothesis("legacy", selected=True, rank=1)
+    successor = replace(
+        _candidate_table_hypothesis("successor", selected=False, rank=2),
+        integration=IntegrationResult(
+            rt_left_min=8.6,
+            rt_apex_min=8.7,
+            rt_right_min=8.8,
+            raw_apex_rt_min=8.7,
+            rt_width_min=0.2,
+            height_raw=1200.0,
+            height_smoothed=1100.0,
+            area_raw_counts_seconds=4321.0,
+        ),
+    )
+    cwt_merged_successor = replace(
+        successor,
+        hypothesis_id="successor-with-cwt-audit",
+        audit=replace(
+            successor.audit,
+            proposal_sources=("legacy_savgol", "centwave_cwt"),
+        ),
+    )
+
+    rows = build_peak_candidate_rows_from_hypotheses(
+        sample_name="SampleA",
+        hypotheses=with_product_selected_marker(
+            (legacy, cwt_merged_successor),
+            successor.hypothesis_id,
+            selected_hypothesis=successor,
+        ),
+    )
+
+    selected_by_id = {row["candidate_id"]: row["selected"] for row in rows}
+    assert selected_by_id == {
+        "legacy": "FALSE",
+        "successor-with-cwt-audit": "TRUE",
+    }
+
+
 def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
     tmp_path: Path,
 ) -> None:
@@ -825,6 +885,35 @@ def _candidate(
             safe_merge_promotion_selected_interval_gap_max_min
         ),
         safe_merge_rejection_reason=safe_merge_rejection_reason,
+    )
+
+
+def _candidate_table_hypothesis(
+    hypothesis_id: str,
+    *,
+    selected: bool,
+    rank: int,
+) -> PeakHypothesis:
+    return PeakHypothesis(
+        hypothesis_id=hypothesis_id,
+        trace_group_id="SampleA|Analyte|trace",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="",
+        analysis_mode="targeted",
+        resolver_mode="region_first_safe_merge",
+        integration=IntegrationResult(
+            rt_left_min=8.4,
+            rt_apex_min=8.5,
+            rt_right_min=8.6,
+            raw_apex_rt_min=8.5,
+            rt_width_min=0.2,
+            height_raw=1200.0,
+            height_smoothed=1100.0,
+            area_raw_counts_seconds=1234.0,
+        ),
+        evidence=EvidenceVector(confidence="HIGH", reason="decision: accepted"),
+        audit=AuditTrail(selected=selected, selection_rank=rank),
     )
 
 

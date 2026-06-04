@@ -40,6 +40,8 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "rolling_window_size": "5",
     "dirty_matrix_mode": "false",
     "rt_prior_library_path": "",
+    "target_pair_rt_calibration_path": "",
+    "model_selection_expected_diff_approval_registry": "",
     "emit_score_breakdown": "false",
     "emit_review_report": "false",
     "emit_peak_candidates": "false",
@@ -98,6 +100,14 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "dirty_matrix_mode": "髒基質模式（放寬 S/N、收緊峰形；尿液等複雜基質用）",
     "rt_prior_library_path": (
         "developer/debug RT prior library CSV path; leave empty for normal use"
+    ),
+    "target_pair_rt_calibration_path": (
+        "target pair RT calibration TSV path for shadow auto-reselection "
+        "diagnostics; leave empty to disable"
+    ),
+    "model_selection_expected_diff_approval_registry": (
+        "Durable expected-diff approval registry TSV for selected-hypothesis "
+        "model selection; leave empty unless approved real-data evidence exists"
     ),
     "emit_score_breakdown": "是否輸出 Score Breakdown sheet（預設關閉）",
     "emit_review_report": "是否輸出 Review Report HTML（預設關閉）",

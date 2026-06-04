@@ -9,6 +9,7 @@ import pytest
 
 from xic_extractor.config import ConfigError, ExtractionConfig, Target
 from xic_extractor.extractor import DiagnosticRecord, RunOutput
+from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecord
 from xic_extractor.raw_reader import RawReaderError
 
 
@@ -295,6 +296,85 @@ def test_cli_preserves_loaded_parallel_settings_when_overrides_are_omitted(
     assert "Excel skipped" in capsys.readouterr().out
 
 
+def test_cli_loads_model_selection_expected_diff_approval_registry(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    module = _module()
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    registry_path = tmp_path / "expected_diff_approvals.tsv"
+    registry_path.write_text("stub\n", encoding="utf-8")
+    approval = _expected_diff_approval()
+    calls: dict[str, object] = {}
+
+    def _load_approvals(path: Path):
+        calls["approval_registry_path"] = path
+        return {approval.stable_row_id: approval}
+
+    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+    monkeypatch.setattr(
+        module,
+        "load_expected_diff_approval_registry",
+        _load_approvals,
+    )
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: calls.setdefault("excel", True),
+        raising=False,
+    )
+
+    exit_code = module.main(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--skip-excel",
+            "--model-selection-expected-diff-approvals",
+            str(registry_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls["approval_registry_path"] == registry_path.resolve()
+    assert calls["model_selection_expected_diff_approvals"] == {
+        approval.stable_row_id: approval
+    }
+    assert "Excel skipped" in capsys.readouterr().out
+
+
+def test_cli_reports_missing_model_selection_expected_diff_approval_registry(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    module = _module()
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    missing_path = tmp_path / "missing_approvals.tsv"
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+
+    exit_code = module.main(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--skip-excel",
+            "--model-selection-expected-diff-approvals",
+            str(missing_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "approval registry file not found" in captured.err
+    assert "run_config" not in calls
+
+
 def test_cli_accepts_excel_flag_for_compatibility(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
@@ -408,9 +488,17 @@ def _module():
 
 
 def _fake_run(calls: dict[str, object]):
-    def _run(config, targets, progress_callback=None):
+    def _run(
+        config,
+        targets,
+        progress_callback=None,
+        model_selection_expected_diff_approvals=None,
+    ):
         calls["run_config"] = config
         calls["run_targets"] = targets
+        calls["model_selection_expected_diff_approvals"] = (
+            model_selection_expected_diff_approvals
+        )
         if progress_callback is not None:
             progress_callback(1, 2, "SampleA.raw")
         output = RunOutput(
@@ -431,6 +519,24 @@ def _fake_run(calls: dict[str, object]):
         return output
 
     return _run
+
+
+def _expected_diff_approval() -> ExpectedDiffApprovalRecord:
+    return ExpectedDiffApprovalRecord(
+        stable_row_id="SampleA|Analyte|legacy|successor",
+        sample_name="SampleA",
+        target_label="Analyte",
+        legacy_selected_candidate_id="legacy",
+        successor_selected_candidate_id="successor",
+        final_label="expected_diff",
+        reviewer_verdict="approved",
+        validation_tier="targeted_benchmark",
+        public_outputs_touched=("peak_candidate_table",),
+        matrix_value_impact="none",
+        evidence_sources=("rt",),
+        evidence_summary="reviewed",
+        reviewer_role="domain_reviewer",
+    )
 
 
 def _config(tmp_path: Path) -> ExtractionConfig:

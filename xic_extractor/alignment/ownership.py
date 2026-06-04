@@ -27,7 +27,7 @@ from xic_extractor.peak_detection.region_audit import (
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
 
-_OWNER_PEAK_WINDOW_PADDING_MIN = 0.10
+_OWNER_QUANTITATION_CONTEXT_PADDING_MIN = 0.40
 
 
 class OwnershipXICSource(Protocol):
@@ -745,9 +745,13 @@ def _candidate_resolution_rt_window(
             or (ms1_apex is not None and _contains_rt(peak_start, peak_end, ms1_apex))
         )
     ):
+        padding_min = min(
+            _OWNER_QUANTITATION_CONTEXT_PADDING_MIN,
+            config.max_rt_sec / 60.0,
+        )
         return (
-            peak_start - _OWNER_PEAK_WINDOW_PADDING_MIN,
-            peak_end + _OWNER_PEAK_WINDOW_PADDING_MIN,
+            max(0.0, peak_start - padding_min),
+            peak_end + padding_min,
         )
 
     search_start = _finite_attr(candidate, "ms1_search_rt_min")

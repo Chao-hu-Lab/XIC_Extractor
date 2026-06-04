@@ -26,6 +26,9 @@ from tools.diagnostics.diagnostic_io import (
     required_indexes as _required_indexes,
 )
 from tools.diagnostics.diagnostic_io import (
+    split_semicolon_labels as _split_semicolon_labels,
+)
+from tools.diagnostics.diagnostic_io import (
     text_value as _text,
 )
 from tools.diagnostics.targeted_istd_benchmark_models import (
@@ -218,6 +221,15 @@ def read_alignment_review(path: Path) -> tuple[AlignmentFeature, ...]:
 
 def read_alignment_matrix(path: Path) -> AlignmentMatrixData:
     rows = list(read_tsv_required(path, ()))
+    if rows and "feature_family_id" not in rows[0]:
+        return _read_clean_alignment_matrix(path, rows)
+    return _read_legacy_alignment_matrix(path, rows)
+
+
+def _read_legacy_alignment_matrix(
+    path: Path,
+    rows: list[dict[str, str]],
+) -> AlignmentMatrixData:
     _require_fields(rows, ("feature_family_id",), path)
     metadata_columns = {
         "feature_family_id",
@@ -245,6 +257,74 @@ def read_alignment_matrix(path: Path) -> AlignmentMatrixData:
         areas_by_family=matrix,
         sample_stems=normalized_samples,
     )
+
+
+def _read_clean_alignment_matrix(
+    path: Path,
+    rows: list[dict[str, str]],
+) -> AlignmentMatrixData:
+    _require_fields(rows, ("Mz", "RT"), path)
+    identity_path = path.with_name("alignment_matrix_identity.tsv")
+    identity_rows = list(read_tsv_required(identity_path, ()))
+    _require_fields(
+        identity_rows,
+        ("matrix_row_index", "source_feature_family_ids"),
+        identity_path,
+    )
+    identity_by_index = _matrix_identity_by_index(identity_path, identity_rows)
+    metadata_columns = {"Mz", "RT"}
+    fieldnames = set(rows[0])
+    sample_columns = sorted(fieldnames - metadata_columns)
+    matrix: dict[str, dict[str, float]] = {}
+    normalized_samples = frozenset(
+        _normalize_sample_id(sample) for sample in sample_columns
+    )
+    for row_index, row in enumerate(rows, start=1):
+        family_ids = identity_by_index.get(row_index)
+        if family_ids is None:
+            raise ValueError(
+                f"{identity_path} is missing matrix_row_index {row_index}"
+            )
+        values: dict[str, float] = {}
+        for sample in sample_columns:
+            area = _float_value(row.get(sample))
+            if area is not None and area > 0:
+                values[_normalize_sample_id(sample)] = area
+        for family_id in family_ids:
+            matrix[family_id] = dict(values)
+    return AlignmentMatrixData(
+        areas_by_family=matrix,
+        sample_stems=normalized_samples,
+    )
+
+
+def _matrix_identity_by_index(
+    path: Path,
+    rows: list[dict[str, str]],
+) -> dict[int, tuple[str, ...]]:
+    identity_by_index: dict[int, tuple[str, ...]] = {}
+    for row_number, row in enumerate(rows, start=2):
+        index_text = _text(row.get("matrix_row_index"))
+        try:
+            matrix_row_index = int(index_text)
+        except ValueError as exc:
+            raise ValueError(
+                f"{path} row {row_number} has invalid matrix_row_index: "
+                f"{index_text!r}"
+            ) from exc
+        if matrix_row_index in identity_by_index:
+            raise ValueError(
+                f"{path} has duplicate matrix_row_index {matrix_row_index}"
+            )
+        family_ids = tuple(
+            _split_semicolon_labels(row.get("source_feature_family_ids"))
+        )
+        if not family_ids:
+            raise ValueError(
+                f"{path} row {row_number} is missing source_feature_family_ids"
+            )
+        identity_by_index[matrix_row_index] = family_ids
+    return identity_by_index
 
 
 def _is_primary_review_row(row: Mapping[str, str]) -> bool:

@@ -2,13 +2,17 @@ import logging
 from pathlib import Path
 
 from xic_extractor.configuration.csv_io import _config_input_path, _read_settings
-from xic_extractor.configuration.hashing import _compute_config_hash
+from xic_extractor.configuration.hashing import (
+    _compute_config_hash,
+    compute_target_config_hash,
+)
 from xic_extractor.configuration.models import ExtractionConfig, Target
 from xic_extractor.configuration.settings import (
     _validate_settings,
     migrate_settings_dict,
 )
 from xic_extractor.configuration.targets import _read_targets
+from xic_extractor.target_pair_rt_calibration import load_target_pair_rt_calibration
 
 LOGGER = logging.getLogger(__name__)
 
@@ -36,4 +40,16 @@ def load_config(
     )
     config = _validate_settings(migrated, settings_path, output_dir, config_hash)
     targets = _read_targets(targets_path)
+    target_config_hash = compute_target_config_hash(targets_path)
+    config = ExtractionConfig(
+        **{
+            **config.__dict__,
+            "target_config_hash": target_config_hash,
+        }
+    )
+    if config.target_pair_rt_calibration_path is not None:
+        load_target_pair_rt_calibration(
+            config.target_pair_rt_calibration_path,
+            expected_target_config_hash=target_config_hash,
+        )
     return config, targets

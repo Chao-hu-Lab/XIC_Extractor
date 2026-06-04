@@ -12,6 +12,36 @@ activation decision sidecar first, then an explicit product output mode may
 consume only `auto_activate` / `auto_block` rows after the 85RAW acceptance gate
 passes.
 
+Root-cause status after the canonical-row probe: the current untargeted product
+pipeline is not yet a full PeakHypothesis matrix pipeline. `scripts/run_alignment`
+still builds the primary `alignment_matrix.tsv` through
+`build_owner_alignment_matrix`, `apply_ms1_peak_claim_registry`, and
+`consolidate_primary_family_rows`; that path projects cross-sample group
+hypotheses back through `feature_family_id` for the public matrix surface. The
+separate `build_peak_hypothesis_matrix.py` path is still `diagnostic_only`, and
+the existing 85RAW `shared_peak_identity_peak_hypothesis_selection.tsv` artifacts
+cover only the 11-row benchmark/typed-mode scope. Therefore a projection-heavy
+formal matrix is expected until either the full untargeted hypothesis selection
+coverage is generated or the product pipeline is rewired to construct the matrix
+from PeakHypothesis assignments end to end.
+
+Current no-RAW audit evidence:
+`output/untargeted_hypothesis_product_path_audit_20260603/` was rebuilt from the
+existing 85RAW AsLS alignment TSVs plus
+`output/typed_mode_hypothesis_assignment_smoke_85raw/shared_peak_identity_peak_hypothesis_selection.tsv`.
+The input selection sidecar has 11 rows. The resulting
+`peak_hypothesis_matrix_summary.tsv` reports `source_matrix_rows=610`,
+`output_matrix_rows=611`, `explicit_peak_hypothesis_rows=4`,
+`family_projection_rows=610`, `projected_cell_count=39091`,
+`canonical_row_identity_ready=FALSE`,
+`canonical_row_identity_blockers=family_projection_present`,
+`construction_gate_status=blocked`, and `diagnostic_only=TRUE`. This is the
+current proof that the product path has not yet been converted to a full
+untargeted PeakHypothesis matrix. Running the same construction command with
+`--require-complete-peak-hypothesis-identity` now fails with
+`blockers=family_projection_present`; this gate is the current stop condition
+for promotion.
+
 The explicit bridge is
 `tools/diagnostics/apply_shared_peak_identity_activation.py`. It consumes a
 passing activation sidecar and writes product TSVs. `--output-mode formal`
@@ -40,7 +70,19 @@ The activation application summary makes this scope explicit:
 `family_projection_semantics=projection_not_split_proof`, and
 `all_family_split_science_ready=FALSE`. In other words, the formal TSV format
 can be produced, but canonical row identity is not complete until projection
-rows are removed or explicitly excluded from the production scope.
+rows are replaced by explicit hypothesis assignments through a broader matrix
+construction path. Simply excluding projection rows only narrows the output
+scope; it does not complete the full matrix.
+
+The bridge also supports a stricter formal output via
+`--exclude-family-projections`. This emits only rows with explicit
+`peak_hypothesis_id` support and reports skipped unresolved projections in
+`family_projection_rows_excluded` and `family_projection_cells_excluded`. This is
+a projection-free partial output for the emitted rows, not proof that the full
+legacy family matrix has been completely split into hypotheses. It therefore
+keeps `canonical_row_identity_ready=FALSE` when any projection rows were
+excluded, and `--require-complete-peak-hypothesis-identity` must reject that
+partial scope.
 
 Legacy FH/MZmine RT-row workbooks may be passed as context-only references via
 `--legacy-rt-row-oracle-xlsx`. Those rows can populate
@@ -246,9 +288,12 @@ new peaks by itself. Its job is to make the FAM011810 lesson machine-readable:
 - `tailing_confounded` means the family is broad or tailing enough that mode
   assignment is not decisive; it stays review-only.
 - `raw_mode_review_only` means RAW-overlay-only mode splitting saw possible
-  multimodality, but lacks enough independent iRT/tag support to block product
-  activation. It must stay review-only so drift or low-intensity cases such as
-  FAM001658 are not hard-failed by raw RT clustering alone.
+  multimodality. It is not product authority by itself: raw RT clustering alone
+  must not auto-activate or hard-fail drift/low-intensity cases such as
+  FAM001658. It also must not mask stronger direct evidence. If the same row has
+  a named `wrong_peak_conflict`, the direct block fires. If the same row has
+  machine-observed MS1 shape/pattern plus candidate-aligned MS2/NL support and a
+  `peak_hypothesis_id`, it may auto-activate as a positive evidence-chain row.
 
 The sidecar may contribute `rt_basis_status=machine_observed` and may trigger
 the activation `wrong_peak_conflict` rule, but it does not replace MS1
@@ -283,13 +328,14 @@ between provisional family consolidation and product activation. It consumes
   families.
 - `tailing_review_only` stays review-only because broad/tailing peak shape can
   make mode assignment look worse after iRT normalization.
-- `raw_mode_review_only` stays review-only because raw overlay mode splitting is
-  a hypothesis source, not an independent RT drift correction or product
-  retargeting rule. This review-only state takes precedence over
-  `wrong_peak_conflict`: raw/overlay-only mode evidence may explain why a row is
-  suspicious, but it must not auto-block or auto-activate a product cell until a
-  typed mode assignment or locked oracle manifest supplies product-facing
-  authority.
+- `raw_mode_review_only` is a hypothesis-source warning, not an independent RT
+  drift correction or product retargeting rule. It blocks product activation
+  only when the rest of the evidence chain is incomplete. It does not take
+  precedence over named direct evidence: `wrong_peak_conflict` can still
+  auto-block, and a complete machine-observed MS1 + candidate-aligned MS2/NL row
+  with a `peak_hypothesis_id` can still auto-activate. This keeps raw/overlay
+  mode evidence from becoming a permanent veto while still preventing raw RT
+  clustering alone from changing product labels.
 
 This checkpoint deliberately does not edit `primary_consolidation.py` yet. It
 turns the FAM011810 lesson into a machine-readable activation input first, so a
@@ -330,8 +376,10 @@ The sentinel criteria are:
 
 - typed FAM011810 core rows remain product candidates and the typed wrong-peak
   row remains blocked;
-- raw/overlay-only rows such as FAM001473, FAM002625, and FAM005937 remain
-  review-only, even when other MS1/QC conflict evidence exists;
+- raw/overlay-only rows remain review-only only when their direct product
+  evidence is incomplete; FAM001473/TumorBC2312 remains a direct wrong-peak
+  block, while FAM002625 and FAM005937 may auto-activate when candidate-aligned
+  MS1/MS2 evidence is complete;
 - QC local-vs-consensus and ISTD phase/trend evidence are present as context,
   not standalone product identity rules;
 - any matrix that still has family projection rows reports
@@ -348,14 +396,14 @@ and `0` are not assessed. The same summary intentionally keeps
 contract, but it is not evidence that product activation or full canonical
 matrix row identity is ready.
 
-The activation refresh artifact at
-`output/mode_window_assignment_contract_gate_v0_85raw_activation_refresh/` is not
-an acceptance artifact for product wiring: its
-`shared_peak_identity_activation_acceptance.tsv` reports
-`acceptance_status=fail` because the current must-not-regress manifest still
-expects several rows that are now held at `review_required` by the raw-mode
-review-only boundary. That failure is deliberate protection, not a blocker for
-the scoped Mode-Window Assignment Gate.
+The old activation refresh artifact at
+`output/mode_window_assignment_contract_gate_v0_85raw_activation_refresh/`
+captured the pre-recheck state where raw-mode review-only semantics masked
+direct `wrong_peak_conflict` and complete positive MS1/MS2 evidence. That older
+`shared_peak_identity_activation_acceptance.tsv` is therefore stale for product
+activation acceptance, although its
+`shared_peak_identity_machine_evidence_support.tsv` remains a useful no-RAW
+input for recomputing the activation contract.
 
 The legacy review vocabulary (`production_family`, `audit_family`) may still
 appear in current matrix/review outputs because it is part of the historical
@@ -394,12 +442,15 @@ This sidecar is `diagnostic_only`. It must not rewrite selected peaks, mutate
 activation decisions, or fill a blocked product cell until a separate retarget
 contract defines candidate scoring, blast-radius rules, and regression gates.
 
-## Current 85RAW Representative Run
+## Current 85RAW Representative Recheck
 
-The diagnostic run at
-`output/sidecar_to_product_label_activation_85raw/` uses the current 85RAW
-blast-radius artifacts and the wrong-peak / DDA policy sidecars. Its activation
-acceptance sidecar reports:
+The no-RAW recheck at
+`output/untargeted_activation_contract_recheck_20260603/` recomputes activation
+decisions from the current 85RAW activation-refresh
+`shared_peak_identity_machine_evidence_support.tsv`, the durable
+`docs/superpowers/fixtures/shared_peak_identity_activation_must_not_regress_v1.tsv`
+fixture, and the current activation contract. Its activation acceptance sidecar
+reports:
 
 - `blast_radius_current=TRUE`
 - `activation_decision_scope=manual_oracle_seed_rows`
@@ -409,26 +460,32 @@ acceptance sidecar reports:
 - `product_affecting_rows=5`
 - `auto_activate_count=3`
 - `auto_block_count=2`
-- `review_required_count=5`
+- `confidence_only_count=1`
+- `review_required_count=4`
 - `must_not_regress_basis=activation_must_not_regress_tsv`
 - `acceptance_status=pass`
 
 The two direct blocks are wrong-peak conflicts, including
-`FAM011810 / TumorBC2263_DNA`. The three direct activations are the rows where
-machine-observed RT, shape, and pattern are sufficient. This run supports the
-activation contract, while the separate V2 readiness sidecar still correctly
-reports `diagnostic_only` because it is an evidence-readiness sidecar, not the
-formal product-output application artifact.
+`FAM001473 / TumorBC2312_DNA` and `FAM011810 / TumorBC2263_DNA`. The three
+direct activations are `FAM002625 / TumorBC2263_DNA` and the two FAM005937
+representatives where machine-observed MS1 shape/pattern and candidate-aligned
+MS2/NL evidence are complete. `FAM019990 / TumorBC2312_DNA` is
+`confidence_only` because DDA missingness is non-dispositive but
+candidate-aligned MS2/NL support is not observed in that sample. This recheck
+supports the activation contract, while the separate V2 readiness sidecar still
+correctly reports `diagnostic_only` because it is an evidence-readiness sidecar,
+not the formal product-output application artifact.
 
 Applied to the current 85RAW alignment outputs, the bridge should blank two
 wrong-peak rescue cells and leave the three already-primary auto-activate cells
 unchanged unless the source matrix is missing those values.
 
-The applied 85RAW formal-output run at
-`output/peak_hypothesis_canonical_matrix_probe_85raw_v3/` is now a stale
-pre-tightening artifact for canonical readiness wording. If regenerated under
-the current contract, its row-basis distribution should still be interpreted as
-partial:
+The applied no-RAW formal-output probe at
+`output/untargeted_activation_contract_recheck_20260603/formal_product_probe/`
+uses the passing activation sidecars above and the existing
+`output/asls_primary_matrix_value_85raw_validation/` AsLS
+production-equivalent alignment TSVs. Its
+`activation_application_summary.tsv` reports:
 
 - `activation_output_mode=formal`
 - `matrix_row_identity=peak_hypothesis_id`
@@ -439,18 +496,52 @@ partial:
 - `legacy_rt_row_context_authority=not_applicable`
 - `all_family_split_science_ready=FALSE`
 - `input_matrix_rows=610`
-- `output_matrix_rows=613`
+- `output_matrix_rows=612`
 - `family_projection_rows=610`
 - `legacy_rt_row_context_rows=0`
 - `matrix_cells_blanked=2`
 - `matrix_cells_written=0`
-- row-basis distribution: `activation_peak_hypothesis=3` and
-  `family_projection_no_split_evidence=610`
+- `auto_activate_count=3`
+- `auto_block_count=2`
 
-The matching context-only MZmine workbook probe at
-`output/peak_hypothesis_canonical_matrix_probe_85raw_with_mzmine_context_v3/`
-keeps the same row-basis distribution and reports
-`legacy_rt_row_context_rows=418` and
-`legacy_rt_row_context_authority=context_only_not_identity_authority`. This
-confirms the legacy RT-row workbook is being retained as context without
-changing product row identity.
+The two blanked cells are `FAM001473 / TumorBC2312_DNA` and
+`FAM011810 / TumorBC2263_DNA`. The three auto-activate rows are not raw-area
+rewrites: `activation_value_delta.tsv` records `matrix_value_effect=unchanged`
+for `FAM002625 / TumorBC2263_DNA` and the two FAM005937 rows because their
+source matrix already has AsLS primary values. The probe therefore closes the
+activation-application behavior for this 11-row benchmark, while row identity
+still remains partial until family projections are replaced by explicit
+hypothesis assignments through a product matrix-construction contract.
+
+The applied canonical-only formal probe at
+`output/untargeted_activation_contract_recheck_20260603/formal_canonical_only_probe/`
+uses the same passing activation sidecars with
+`--output-mode formal --exclude-family-projections`. Its
+`activation_application_summary.tsv` reports:
+
+- `activation_output_mode=formal`
+- `matrix_row_identity=peak_hypothesis_id`
+- `canonical_row_identity_ready=FALSE`
+- `canonical_row_identity_blockers=family_projection_excluded_incomplete_scope`
+- `canonical_row_identity_scope=partial_canonical_peak_hypothesis_rows_only`
+- `family_projection_semantics=excluded_from_canonical_output`
+- `all_family_split_science_ready=FALSE`
+- `input_matrix_rows=610`
+- `output_matrix_rows=2`
+- `family_projection_rows=0`
+- `family_projection_rows_excluded=610`
+- `family_projection_cells_excluded=39089`
+- `matrix_cells_blanked=2`
+- `matrix_cells_written=0`
+- `auto_activate_count=3`
+- `auto_block_count=2`
+
+The emitted canonical rows are `FAM002625::raw_mode_1` and
+`FAM005937::raw_mode_1_14.34min`. No emitted matrix row contains
+`family_projection`. This proves the activation-backed canonical row surface can
+be projection-free in a partial output, but it also quantifies the remaining
+unresolved projection backlog: most of the current matrix still needs a broader
+hypothesis-construction path before the full downstream matrix can be both
+complete and canonical. Running the same command with
+`--require-complete-peak-hypothesis-identity` must fail while excluded projection
+rows remain.

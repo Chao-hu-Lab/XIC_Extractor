@@ -57,6 +57,18 @@ _DEFAULT_PPM = "20"
 _DEFAULT_NL_PPM_WARN = "20"
 _DEFAULT_NL_PPM_MAX = "50"
 _TARGETS_TABLE_MIN_HEIGHT = 260
+_VISIBLE_TARGET_FIELDS = {
+    "label",
+    "mz",
+    "rt_min",
+    "rt_max",
+    "ppm_tol",
+    "neutral_loss_da",
+    "nl_ppm_warn",
+    "nl_ppm_max",
+    "is_istd",
+    "istd_pair",
+}
 
 
 class _NoScrollComboBox(QComboBox):
@@ -173,8 +185,7 @@ class TargetsSection(QWidget):
             assert istd_cb is not None
             is_istd = "true" if istd_cb.isChecked() else "false"
 
-            result.append(
-                {
+            visible_values = {
                     "label": self._table.item(row, _COL_LABEL).text().strip(),
                     "mz": self._table.item(row, _COL_MZ).text().strip(),
                     "rt_min": self._table.item(row, _COL_RT_MIN).text().strip(),
@@ -186,8 +197,11 @@ class TargetsSection(QWidget):
                     "nl_ppm_max": meta.get("nl_ppm_max", _DEFAULT_NL_PPM_MAX),
                     "is_istd": is_istd,
                     "istd_pair": self._table.item(row, _COL_PAIR).text().strip(),
-                }
-            )
+            }
+            hidden_values = {
+                key: value for key, value in meta.items() if key not in visible_values
+            }
+            result.append({**hidden_values, **visible_values})
         return result
 
     def set_enabled(self, enabled: bool) -> None:
@@ -199,6 +213,11 @@ class TargetsSection(QWidget):
         self._table.insertRow(row)
         self._row_meta.append(
             {
+                key: str(value)
+                for key, value in target.items()
+                if key not in _VISIBLE_TARGET_FIELDS
+            }
+            | {
                 "nl_ppm_warn": target.get("nl_ppm_warn", _DEFAULT_NL_PPM_WARN),
                 "nl_ppm_max": target.get("nl_ppm_max", _DEFAULT_NL_PPM_MAX),
             }

@@ -29,6 +29,8 @@ def _canonical_settings() -> dict[str, str]:
         "rolling_window_size": "5",
         "dirty_matrix_mode": "false",
         "rt_prior_library_path": "",
+        "target_pair_rt_calibration_path": "",
+        "model_selection_expected_diff_approval_registry": "",
         "emit_score_breakdown": "false",
         "emit_review_report": "false",
         "emit_peak_candidates": "false",
@@ -76,6 +78,7 @@ def test_advanced_section_contains_required_flags(qtbot) -> None:
         "count_no_ms2_as_detected",
         "rolling_window_size",
         "rt_prior_library_path",
+        "target_pair_rt_calibration_path",
         "injection_order_source",
         "resolver_mode",
         "resolver_chrom_threshold",
@@ -104,6 +107,18 @@ def test_rt_prior_library_gui_label_marks_developer_debug(qtbot) -> None:
 
     assert "RT prior library" in text
     assert "developer/debug" in text
+
+
+def test_target_pair_rt_calibration_gui_label_marks_shadow(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.load(_canonical_settings())
+
+    labels = section.findChildren(QLabel)
+    text = "\n".join(label.text() for label in labels)
+
+    assert "Target pair RT calibration" in text
+    assert "shadow" in text
 
 
 def test_advanced_section_uses_compact_rows_for_related_controls(qtbot) -> None:
@@ -357,6 +372,9 @@ def test_advanced_section_edits_round_trip_through_get_values(qtbot) -> None:
     section._count_no_ms2_checkbox.setChecked(False)
     section._rolling_window_size_spin.setValue(9)
     section._rt_prior_library_path_edit.setText("C:\\data\\rt_prior.csv")
+    section._target_pair_rt_calibration_path_edit.setText(
+        "C:\\data\\target_pair_rt_calibration.tsv"
+    )
     section._injection_order_source_edit.setText("C:\\data\\sample_order.csv")
     section._resolver_mode_combo.setCurrentText("local_minimum")
     section._resolver_min_absolute_height_spin.setValue(80.0)
@@ -374,6 +392,9 @@ def test_advanced_section_edits_round_trip_through_get_values(qtbot) -> None:
     assert values["count_no_ms2_as_detected"] == "false"
     assert values["rolling_window_size"] == "9"
     assert values["rt_prior_library_path"] == "C:\\data\\rt_prior.csv"
+    assert values["target_pair_rt_calibration_path"] == (
+        "C:\\data\\target_pair_rt_calibration.tsv"
+    )
     assert values["injection_order_source"] == "C:\\data\\sample_order.csv"
     assert values["resolver_mode"] == "local_minimum"
     assert values["resolver_min_absolute_height"] == "80"

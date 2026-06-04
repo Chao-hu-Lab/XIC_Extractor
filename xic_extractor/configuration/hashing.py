@@ -13,6 +13,11 @@ def compute_config_hash(targets_csv: Path, settings_csv: Path) -> str:
     return digest.hexdigest()[:8]
 
 
+def compute_target_config_hash(targets_csv: Path) -> str:
+    """SHA-256[:8] hex of target CSV byte content only."""
+    return hashlib.sha256(targets_csv.read_bytes()).hexdigest()[:8]
+
+
 def _compute_config_hash(
     targets_path: Path,
     settings_path: Path,

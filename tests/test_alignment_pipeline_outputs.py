@@ -132,6 +132,7 @@ def test_validation_minimal_outputs_keep_gate_artifacts_without_debug_surfaces(
     )
 
     assert outputs.matrix_tsv == tmp_path / "alignment_matrix.tsv"
+    assert outputs.matrix_identity_tsv == tmp_path / "alignment_matrix_identity.tsv"
     assert outputs.review_tsv == tmp_path / "alignment_review.tsv"
     assert outputs.cells_tsv == tmp_path / "alignment_cells.tsv"
     assert outputs.workbook is None
@@ -180,7 +181,12 @@ def test_pipeline_debug_flags_write_optional_outputs(
         == tmp_path / "out" / "alignment_owner_backfill_seed_audit.tsv"
     )
     assert outputs.status_matrix_tsv == tmp_path / "out" / "alignment_matrix_status.tsv"
+    assert (
+        outputs.matrix_identity_tsv
+        == tmp_path / "out" / "alignment_matrix_identity.tsv"
+    )
     assert outputs.cells_tsv.exists()
+    assert outputs.matrix_identity_tsv.exists()
     assert outputs.integration_audit_tsv.exists()
     assert outputs.backfill_seed_audit_tsv.exists()
     assert outputs.status_matrix_tsv.exists()
@@ -415,8 +421,16 @@ def test_run_alignment_production_level_writes_xlsx_and_html_only(
     )
 
     names = sorted(path.name for path in (tmp_path / "out").iterdir())
-    assert names == ["alignment_results.xlsx", "review_report.html"]
+    assert names == [
+        "alignment_matrix_identity.tsv",
+        "alignment_results.xlsx",
+        "review_report.html",
+    ]
     assert outputs.workbook == tmp_path / "out" / "alignment_results.xlsx"
+    assert (
+        outputs.matrix_identity_tsv
+        == tmp_path / "out" / "alignment_matrix_identity.tsv"
+    )
     assert outputs.review_html == tmp_path / "out" / "review_report.html"
     assert outputs.matrix_tsv is None
     assert outputs.review_tsv is None
@@ -432,6 +446,7 @@ def test_run_alignment_debug_level_writes_machine_and_debug_artifacts(
     assert names == [
         "alignment_cells.tsv",
         "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
         "alignment_matrix_status.tsv",
         "alignment_results.xlsx",
         "alignment_review.tsv",
@@ -472,9 +487,14 @@ def test_run_alignment_validation_minimal_writes_machine_gate_surface_only(
     assert names == [
         "alignment_cells.tsv",
         "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
     ]
     assert outputs.matrix_tsv == tmp_path / "out" / "alignment_matrix.tsv"
+    assert (
+        outputs.matrix_identity_tsv
+        == tmp_path / "out" / "alignment_matrix_identity.tsv"
+    )
     assert outputs.review_tsv == tmp_path / "out" / "alignment_review.tsv"
     assert outputs.cells_tsv == tmp_path / "out" / "alignment_cells.tsv"
     assert outputs.workbook is None
@@ -598,6 +618,7 @@ def test_run_alignment_default_stays_machine_until_owner_validation_acceptance(
     names = sorted(path.name for path in (tmp_path / "out").iterdir())
     assert names == [
         "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
         "alignment_results.xlsx",
         "alignment_review.tsv",
         "review_report.html",

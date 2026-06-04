@@ -37,12 +37,14 @@ def write_review_report(
     review_rows: list[dict[str, str]],
     count_no_ms2_as_detected: bool,
     injection_order: dict[str, int] | None = None,
+    require_projection: bool = False,
 ) -> Path:
     metrics = build_review_metrics(
         rows,
         diagnostics=diagnostics,
         review_rows=review_rows,
         count_no_ms2_as_detected=count_no_ms2_as_detected,
+        require_projection=require_projection,
     )
     samples = _ordered_values(rows, "SampleName")
     targets = _targets_by_detection(metrics)

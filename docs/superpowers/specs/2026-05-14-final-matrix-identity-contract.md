@@ -1,5 +1,15 @@
 # Final Matrix Identity Contract
 
+## Superseded Direction
+
+This document is superseded for final-matrix row identity by
+`2026-06-03-full-untarget-peak-hypothesis-final-matrix-contract.md`.
+
+The historical `production_family` contract remains useful context for why the
+primary matrix must stay clean and old-pipeline-shaped, but the product row
+semantics now move to `PeakHypothesis`. Do not use this document to justify
+family-projection or family-row identity as final matrix product behavior.
+
 ## Goal
 
 Keep the final untargeted matrix clean enough for quantitative comparison while

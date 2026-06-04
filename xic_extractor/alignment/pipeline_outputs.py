@@ -29,6 +29,7 @@ from xic_extractor.alignment.ownership import OwnershipBuildResult
 from xic_extractor.alignment.tsv_writer import (
     write_alignment_cell_integration_audit_tsv,
     write_alignment_cells_tsv,
+    write_alignment_matrix_identity_tsv,
     write_alignment_matrix_tsv,
     write_alignment_owner_backfill_seed_audit_tsv,
     write_alignment_review_tsv,
@@ -44,6 +45,7 @@ class AlignmentRunOutputs:
     review_html: Path | None = None
     review_tsv: Path | None = None
     matrix_tsv: Path | None = None
+    matrix_identity_tsv: Path | None = None
     cells_tsv: Path | None = None
     integration_audit_tsv: Path | None = None
     backfill_seed_audit_tsv: Path | None = None
@@ -90,6 +92,11 @@ def output_paths(
         matrix_tsv=(
             output_dir / "alignment_matrix.tsv"
             if "alignment_matrix.tsv" in artifacts
+            else None
+        ),
+        matrix_identity_tsv=(
+            output_dir / "alignment_matrix_identity.tsv"
+            if "alignment_matrix_identity.tsv" in artifacts
             else None
         ),
         cells_tsv=(
@@ -238,6 +245,17 @@ def write_outputs_atomic(
             (
                 outputs.matrix_tsv,
                 lambda path: write_alignment_matrix_tsv(
+                    path,
+                    matrix,
+                    alignment_config=alignment_config,
+                ),
+            ),
+        )
+    if outputs.matrix_identity_tsv is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.matrix_identity_tsv,
+                lambda path: write_alignment_matrix_identity_tsv(
                     path,
                     matrix,
                     alignment_config=alignment_config,

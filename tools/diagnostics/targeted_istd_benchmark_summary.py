@@ -44,7 +44,7 @@ def _summarize_target(
     )
     benchmark_points = (
         reliability_summary.clean_points
-        if strict_targeted_reliability
+        if reliability
         else positives
     )
     targeted_mean_rt = _mean(point.rt for point in benchmark_points)
@@ -164,12 +164,12 @@ def _benchmark_points(
     reliability: Mapping[tuple[str, str], TargetedReliabilityPoint],
     strict_targeted_reliability: bool,
 ) -> tuple[TargetedPoint, ...]:
-    if not strict_targeted_reliability:
+    if not reliability:
         return points
     return _reliability_summary(
         points,
         reliability=reliability,
-        strict_targeted_reliability=True,
+        strict_targeted_reliability=strict_targeted_reliability,
     ).clean_points
 
 
@@ -214,13 +214,9 @@ def _reliability_summary(
                 review_positive_detail_reasons.extend(
                     _review_positive_detail_reasons(record)
                 )
-                if not strict_targeted_reliability:
-                    clean.append(point)
         elif record.reliability_state == "targeted_review":
             if point.positive:
                 review_count += 1
-                if not strict_targeted_reliability:
-                    clean.append(point)
         elif record.reliability_state == "targeted_negative":
             negative_count += 1
     return _ReliabilitySummary(

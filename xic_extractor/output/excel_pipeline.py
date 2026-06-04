@@ -33,6 +33,7 @@ def write_excel_from_run_output(
         score_breakdown=score_breakdown,
         output_path=output_path,
         report_writer=write_review_report,
+        require_projection=True,
     )
 
 

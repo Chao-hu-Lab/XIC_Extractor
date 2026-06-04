@@ -29,10 +29,42 @@ contract, machine-readable reason/status fields, and regression tests.
 - For ISTDs, when a coherent evidence chain exists, such as aligned MS1 peak
   shape/area plus candidate-aligned NL/product/MS2/trace evidence, do not
   downgrade only because of RT prior, RT window, or centrality concerns.
+- Legacy morphology, shape, or trace-quality labels must not become hard
+  product vetoes for ISTDs when finite positive RT/area, candidate-aligned
+  product/NL/MS2 support, and role-aware RT context support the same selected
+  peak. Keep the label visible as review evidence instead.
 - If this changes, add an explicit contract doc and regression tests.
 - When biological samples receive ISTDs, those ISTDs are the primary transfer
   evidence for real-matrix RT/response behavior because they share the sample
   matrix, ion suppression/enhancement, RT drift, and sample-prep context.
+
+## Targeted Analyte / STD Pair Evidence
+
+- For targeted analytes or STDs with an ISTD pair, anchor-guided selection must
+  prefer a complete candidate peak near the ISTD-informed or product/NL-informed
+  reference over a random small nearest peak.
+- In paired targeted mode, the paired ISTD RT is the primary biological-matrix
+  transfer anchor. A target-specific NL/product anchor may support the paired
+  analyte/STD candidate only when it is close to the paired ISTD RT. A distant
+  target-specific NL/product anchor must not move the extraction window away
+  from the ISTD-supported RT region by itself, because that silently converts a
+  random DDA/NL event into peak identity authority.
+- ISTD-centered fallback opens the candidate search/review window only. It must
+  not hard-backfill a missing paired STD/analyte into a counted detection; the
+  selected row still needs the analyte/STD product policy to project as counted.
+- Legacy morphology, shape, trace-quality, or `VERY_LOW` labels are review
+  evidence, not direct product authority, when the selected analyte peak has
+  finite positive RT/area, candidate-aligned product/NL/MS2 support, targeted
+  anchor selection context, and no anchor, RT, or NL/product conflict.
+- Analyte `NL_FAIL` and `NO_MS2` remain not-counted unless a separate approved
+  analyte policy exists. Pair evidence must not silently convert missing or
+  failed product evidence into a counted detection.
+- Avoid encoding fixed RT-delta constants as product truth without current
+  biological-matrix validation. If a distance threshold becomes production
+  policy, it needs its own contract, artifact, and regression tests.
+- Treat legacy scoring thresholds as calibration-sensitive heuristics. They may
+  rank or annotate candidates, but they must not by themselves create a hard
+  targeted detection or absence decision.
 
 ## Missing MS2 / Product / Neutral-Loss Evidence
 
@@ -89,3 +121,23 @@ policy, and machine-readable GO/NO-GO blockers.
 - Targeted outputs may serve as benchmarks, validation evidence, or shared
   low-level evidence, but must not leak target labels or targeted pass/fail logic
   into untargeted production matrix identity unless an approved contract says so.
+- Lessons learned from targeted validation should feed back into untargeted
+  evidence calibration at the rule level: candidate completeness, anchor-aware
+  RT context, candidate-aligned product/NL evidence, morphology review semantics,
+  and legacy-score retirement. Do not copy targeted labels or per-row fixes into
+  untargeted identity.
+- Untargeted behavior should be optimized against known table-level outcomes as
+  a global consistency problem, not a patch queue. A targeted-backed correction
+  must name the shared evidence rule it changes, the known cases it improves,
+  and the guard cases that prove it did not merely overfit one target/sample.
+- In untargeted shared-identity activation, RAW-overlay or raw-mode grouping is a
+  hypothesis source, not a permanent veto. It must not change product labels by
+  itself, but it also must not mask a named wrong-peak conflict or a complete
+  positive evidence chain with machine-observed MS1 shape/pattern and
+  candidate-aligned MS2/NL support.
+- `family_projection` rows are unresolved projection rows, not canonical
+  identity proof. A canonical-only matrix surface may exclude them and report
+  excluded row/cell counts, but that exclusion remains incomplete scope and must
+  not pass a complete row-identity gate. The full legacy family matrix is
+  canonical only after projection rows are replaced by explicit PeakHypothesis
+  assignments or a reviewed product contract says those rows are out of scope.

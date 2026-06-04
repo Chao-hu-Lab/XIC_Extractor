@@ -75,10 +75,18 @@ def build_advanced_section(
         file_browse_button_factory(controls.rt_prior_library_path_edit), 3, 2
     )
 
-    layout.addWidget(QLabel("Injection order source"), 4, 0)
-    layout.addWidget(controls.injection_order_source_edit, 4, 1)
+    layout.addWidget(QLabel("Target pair RT calibration (shadow)"), 4, 0)
+    layout.addWidget(controls.target_pair_rt_calibration_path_edit, 4, 1)
     layout.addWidget(
-        file_browse_button_factory(controls.injection_order_source_edit), 4, 2
+        file_browse_button_factory(controls.target_pair_rt_calibration_path_edit),
+        4,
+        2,
+    )
+
+    layout.addWidget(QLabel("Injection order source"), 5, 0)
+    layout.addWidget(controls.injection_order_source_edit, 5, 1)
+    layout.addWidget(
+        file_browse_button_factory(controls.injection_order_source_edit), 5, 2
     )
 
     nl_layout = QHBoxLayout()
@@ -94,8 +102,8 @@ def build_advanced_section(
         _LabeledSpin("NL fallback", controls.nl_fallback_half_window_min_spin)
     )
     nl_layout.addStretch()
-    layout.addWidget(QLabel("NL RT windows"), 5, 0)
-    layout.addLayout(nl_layout, 5, 1, 1, 2)
+    layout.addWidget(QLabel("NL RT windows"), 6, 0)
+    layout.addLayout(nl_layout, 6, 1, 1, 2)
 
     layout.setColumnStretch(1, 1)
     section.add_row(body)
@@ -126,6 +134,9 @@ def load_advanced_values(
     )
     advanced_controls.rt_prior_library_path_edit.setText(
         settings_values.get("rt_prior_library_path", "")
+    )
+    advanced_controls.target_pair_rt_calibration_path_edit.setText(
+        settings_values.get("target_pair_rt_calibration_path", "")
     )
     advanced_controls.injection_order_source_edit.setText(
         settings_values.get("injection_order_source", "")

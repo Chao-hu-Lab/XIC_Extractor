@@ -27,10 +27,16 @@ def test_alignment_results_xlsx_has_matrix_review_metadata_sheets(tmp_path: Path
 
     workbook = load_workbook(path, data_only=True)
     assert workbook.sheetnames == ["Matrix", "Review", "Audit", "Metadata"]
-    assert workbook["Matrix"]["A1"].value == "feature_family_id"
-    assert workbook["Matrix"]["E2"].value == 100.0
-    assert workbook["Matrix"]["F2"].value is None
-    assert workbook["Matrix"]["G2"].value == 150.0
+    assert [cell.value for cell in workbook["Matrix"][1]] == [
+        "Mz",
+        "RT",
+        "s1",
+        "s2",
+        "s3",
+    ]
+    assert workbook["Matrix"]["C2"].value == 100.0
+    assert workbook["Matrix"]["D2"].value is None
+    assert workbook["Matrix"]["E2"].value == 150.0
     assert [cell.value for cell in workbook["Review"][1]] == [
         "feature_family_id",
         *GROUP_REVIEW_PROJECTION_COLUMNS,
@@ -146,7 +152,7 @@ def test_alignment_results_xlsx_audit_projects_region_decision_fields(
     )
     assert _sheet_value(workbook["Audit"], "region_baseline_method") == "asls"
     assert "region_decision_status" not in _sheet_headers(workbook["Review"])
-    assert workbook["Matrix"]["E2"].value == 100.0
+    assert workbook["Matrix"]["C2"].value == 100.0
 
 
 def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
@@ -170,9 +176,9 @@ def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
     )
 
     workbook = load_workbook(path, data_only=True)
-    assert workbook["Matrix"]["E2"].value == 100.0
-    assert workbook["Matrix"]["F2"].value is None
-    assert workbook["Matrix"]["G2"].value == 300.0
+    assert workbook["Matrix"]["C2"].value == 100.0
+    assert workbook["Matrix"]["D2"].value is None
+    assert workbook["Matrix"]["E2"].value == 300.0
     assert _sheet_value(workbook["Review"], "duplicate_assigned_count") == 1
 
 
@@ -207,8 +213,8 @@ def test_alignment_results_xlsx_projects_asls_selected_integration_matrix_area(
 
     workbook = load_workbook(path, data_only=True)
     assert workbook.sheetnames == ["Matrix", "Review", "Audit", "Metadata"]
-    assert workbook["Matrix"]["E2"].value == 144.0
-    assert workbook["Matrix"]["F2"].value == 120.0
+    assert workbook["Matrix"]["C2"].value == 144.0
+    assert workbook["Matrix"]["D2"].value == 120.0
     assert _sheet_value(workbook["Audit"], "area") == 100.0
 
 
@@ -235,8 +241,12 @@ def test_alignment_results_xlsx_excludes_review_only_rows_from_matrix(
     )
 
     workbook = load_workbook(path, data_only=True)
-    assert workbook["Matrix"]["A2"].value == "FAM000001"
-    assert workbook["Matrix"]["A3"].value is None
+    matrix_rows = _worksheet_records(workbook["Matrix"])
+    assert len(matrix_rows) == 1
+    assert matrix_rows[0]["Mz"] == 242.114
+    assert matrix_rows[0]["RT"] == 12.593
+    assert matrix_rows[0]["s1"] == 100.0
+    assert matrix_rows[0]["s2"] == 110.0
     assert workbook["Audit"]["A2"].value == "FAM000001"
     assert workbook["Audit"]["A3"].value == "FAM000001"
     assert workbook["Audit"]["A4"].value == "FAM000002"
@@ -310,10 +320,8 @@ def test_alignment_results_xlsx_escapes_formula_like_external_strings(
     )
 
     workbook = load_workbook(path, data_only=False)
-    assert workbook["Matrix"]["A2"].value == "'=FAM000001"
-    assert workbook["Matrix"]["A2"].data_type != "f"
-    assert workbook["Matrix"]["E1"].value == "'+Sample_A"
-    assert workbook["Matrix"]["E1"].data_type != "f"
+    assert workbook["Matrix"]["C1"].value == "'+Sample_A"
+    assert workbook["Matrix"]["C1"].data_type != "f"
     assert _sheet_value(workbook["Review"], "neutral_loss_tag") == "'-DNA_dR"
     assert _sheet_cell(workbook["Review"], "neutral_loss_tag").data_type != "f"
     assert _sheet_value(workbook["Audit"], "sample_stem") == "'+Sample_A"
@@ -351,6 +359,16 @@ def _sheet_cell(sheet, column_name: str, *, row: int = 2):
 
 def _sheet_value(sheet, column_name: str, *, row: int = 2):
     return _sheet_cell(sheet, column_name, row=row).value
+
+
+def _worksheet_records(sheet) -> list[dict[str, object]]:
+    rows = list(sheet.iter_rows(values_only=True))
+    headers = [str(value) for value in rows[0]]
+    return [
+        dict(zip(headers, row))
+        for row in rows[1:]
+        if any(value is not None for value in row)
+    ]
 
 
 def sample_alignment_matrix() -> AlignmentMatrix:

@@ -157,6 +157,81 @@ def build_peak_candidate_rows_from_hypotheses(
     ]
 
 
+def with_product_selected_marker(
+    hypotheses: tuple[PeakHypothesis, ...],
+    selected_candidate_id: str | None,
+    *,
+    selected_hypothesis: PeakHypothesis | None = None,
+) -> tuple[PeakHypothesis, ...]:
+    selected_hypothesis_id = _product_selected_marker_hypothesis_id(
+        hypotheses,
+        selected_candidate_id,
+        selected_hypothesis=selected_hypothesis,
+    )
+    if selected_hypothesis_id is None:
+        return hypotheses
+    updated: list[PeakHypothesis] = []
+    for hypothesis in hypotheses:
+        selected = hypothesis.hypothesis_id == selected_hypothesis_id
+        selection_rank = 1 if selected else hypothesis.audit.selection_rank
+        if not selected and selection_rank == 1:
+            selection_rank = None
+        updated.append(
+            replace(
+                hypothesis,
+                audit=replace(
+                    hypothesis.audit,
+                    selected=selected,
+                    selection_rank=selection_rank,
+                ),
+            )
+        )
+    return tuple(updated)
+
+
+def _product_selected_marker_hypothesis_id(
+    hypotheses: tuple[PeakHypothesis, ...],
+    selected_candidate_id: str | None,
+    *,
+    selected_hypothesis: PeakHypothesis | None,
+) -> str | None:
+    if selected_candidate_id is not None:
+        for hypothesis in hypotheses:
+            if hypothesis.hypothesis_id == selected_candidate_id:
+                return selected_candidate_id
+    if selected_hypothesis is None:
+        return None
+
+    selected_key = _selected_marker_projection_key(selected_hypothesis)
+    matches = [
+        hypothesis
+        for hypothesis in hypotheses
+        if _selected_marker_projection_key(hypothesis) == selected_key
+    ]
+    if len(matches) != 1:
+        return None
+    return matches[0].hypothesis_id
+
+
+def _selected_marker_projection_key(
+    hypothesis: PeakHypothesis,
+) -> tuple[str, str, str, str, str, str, str, str, str, str, str]:
+    integration = hypothesis.integration
+    return (
+        hypothesis.trace_group_id,
+        hypothesis.target_label,
+        hypothesis.role,
+        hypothesis.istd_pair,
+        hypothesis.analysis_mode,
+        hypothesis.resolver_mode,
+        _format_float(integration.rt_left_min),
+        _format_float(integration.rt_apex_min),
+        _format_float(integration.rt_right_min),
+        _format_float(integration.raw_apex_rt_min),
+        _format_float(integration.area_raw_counts_seconds),
+    )
+
+
 def build_peak_candidate_audit_hypotheses(
     *,
     config: ExtractionConfig,

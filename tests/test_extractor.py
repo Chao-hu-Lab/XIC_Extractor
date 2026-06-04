@@ -235,6 +235,7 @@ def test_run_does_not_write_intermediate_csv_by_default(
     assert not config.diagnostics_csv.exists()
     assert not config.output_csv.with_name("peak_candidates.tsv").exists()
     assert not config.output_csv.with_name("peak_candidate_boundaries.tsv").exists()
+    assert not config.output_csv.with_name("selected_envelope_diagnostics.tsv").exists()
     assert not config.output_csv.with_name(
         "peak_candidate_boundary_summary.tsv"
     ).exists()
@@ -297,6 +298,17 @@ def test_run_writes_peak_candidate_table_when_enabled(
     assert {row["target_mz"] for row in boundary_summary_rows} == {"258.10850"}
     assert all(row["top_boundary_id"] for row in boundary_summary_rows)
     assert all(row["nonoverlap_selected"] for row in boundary_summary_rows)
+
+    selected_envelope_rows = _read_tsv(
+        config.output_csv.with_name("selected_envelope_diagnostics.tsv")
+    )
+    assert selected_envelope_rows
+    assert {row["target_label"] for row in selected_envelope_rows} == {"NoNL"}
+    assert all(row["selected_candidate_id"] for row in selected_envelope_rows)
+    assert all(
+        row["legacy_resolver_provenance"] == config.resolver_mode
+        for row in selected_envelope_rows
+    )
 
 
 def test_targeted_extraction_passes_trace_group_to_peak_audit(
@@ -1482,6 +1494,110 @@ def test_paired_analyte_accepts_peak_close_to_target_anchor_even_if_farther_from
         record["Target"] == "Analyte" and record["Issue"] == "ANCHOR_RT_MISMATCH"
         for record in diagnostics
     )
+
+
+def test_paired_analyte_ignores_target_nl_anchor_far_from_istd_anchor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [
+        _target("Analyte", istd_pair="ISTD"),
+        _target("ISTD", is_istd=True),
+    ]
+    raw = _RecordingRaw()
+    preferred_rts: list[float | None] = []
+
+    def _fake_find_peak_and_area(
+        rt: np.ndarray,
+        intensity: np.ndarray,
+        config: ExtractionConfig,
+        *,
+        preferred_rt: float | None = None,
+        strict_preferred_rt: bool = False,
+        scoring_context_builder: object | None = None,
+        istd_confidence_note: str | None = None,
+    ) -> PeakDetectionResult:
+        preferred_rts.append(preferred_rt)
+        peak_rt = 13.70 if len(preferred_rts) == 1 else 13.72
+        return _ok_peak(peak_rt, 5000.0, 8000.0)
+
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", lambda *_args: raw)
+    monkeypatch.setattr(
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_nl_anchor_rt",
+        _anchor_sequence([13.70, 15.10]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _fake_find_peak_and_area,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.check_nl",
+        _nl_sequence(
+            [
+                NLResult("OK", 1.0, 13.70, 1, 0, 1),
+                NLResult("NL_FAIL", None, None, 1, 0, 1),
+            ]
+        ),
+    )
+
+    _run(config, targets)
+
+    assert preferred_rts == [13.70, 13.70]
+    assert raw.windows[1] == pytest.approx((12.70, 14.70))
+
+
+def test_paired_analyte_istd_rt_fallback_does_not_force_counted_detection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path)
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [
+        _target("Analyte", istd_pair="ISTD"),
+        _target("ISTD", is_istd=True),
+    ]
+
+    monkeypatch.setattr("xic_extractor.extractor.open_raw", _open_raw_factory())
+    monkeypatch.setattr(
+        "xic_extractor.extraction.istd_prepass.extract_istd_anchors_only",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_nl_anchor_rt",
+        _anchor_sequence([13.70, None]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        _peak_sequence(
+            [_ok_peak(13.70, 2000.0, 3000.0), _ok_peak(13.72, 5000.0, 8000.0)]
+        ),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.check_nl",
+        _nl_sequence(
+            [
+                NLResult("OK", 1.0, 13.70, 1, 0, 1),
+                NLResult("NL_FAIL", None, None, 1, 0, 1),
+            ]
+        ),
+    )
+
+    _run(config, targets)
+
+    long_rows = _read_csv(config.output_csv.with_name("xic_results_long.csv"))
+    analyte_row = next(row for row in long_rows if row["Target"] == "Analyte")
+    assert analyte_row["RT"] == "13.7200"
+    assert analyte_row["Area"] == "8000.00"
+    assert analyte_row["NL"] == "NL_FAIL"
+    assert analyte_row["Product State"] == "not_counted"
+    assert analyte_row["Counted Detection"] == "FALSE"
+    assert "analyte_nl_fail_requires_policy" in analyte_row[
+        "Projection Not Counted Reasons"
+    ]
 
 
 def test_paired_analyte_fallback_keeps_mismatched_istd_anchor_peak_as_very_low(

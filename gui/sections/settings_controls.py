@@ -41,6 +41,7 @@ class AdvancedControls:
     count_no_ms2_checkbox: QCheckBox
     rolling_window_size_spin: QSpinBox
     rt_prior_library_path_edit: QLineEdit
+    target_pair_rt_calibration_path_edit: QLineEdit
     injection_order_source_edit: QLineEdit
     nl_rt_anchor_search_margin_min_spin: QDoubleSpinBox
     nl_rt_anchor_half_window_min_spin: QDoubleSpinBox

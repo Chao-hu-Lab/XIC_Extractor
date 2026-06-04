@@ -5,7 +5,10 @@ from types import SimpleNamespace
 from openpyxl import load_workbook
 
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
-from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
+from xic_extractor.alignment.tsv_writer import (
+    write_alignment_matrix_identity_tsv,
+    write_alignment_matrix_tsv,
+)
 from xic_extractor.alignment.xlsx_writer import write_alignment_results_xlsx
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
@@ -63,7 +66,8 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     )
 
     tsv_rows = _read_tsv(matrix_tsv)
-    assert [row["feature_family_id"] for row in tsv_rows] == ["FAM001"]
+    assert list(tsv_rows[0]) == ["Mz", "RT", "s1", "s2", "s3"]
+    assert [(row["Mz"], row["RT"]) for row in tsv_rows] == [("500.123", "8.49")]
     assert tsv_rows[0]["s1"] == "100"
     assert tsv_rows[0]["s2"] == "90"
     assert tsv_rows[0]["s3"] == "105"
@@ -73,7 +77,8 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
 
     workbook = load_workbook(workbook_path, data_only=True)
     matrix_rows = _worksheet_records(workbook["Matrix"])
-    assert [row["feature_family_id"] for row in matrix_rows] == ["FAM001"]
+    assert list(matrix_rows[0]) == ["Mz", "RT", "s1", "s2", "s3"]
+    assert [(row["Mz"], row["RT"]) for row in matrix_rows] == [(500.123, 8.49)]
     assert matrix_rows[0]["s1"] == 100.0
     assert matrix_rows[0]["s2"] == 90.0
     assert matrix_rows[0]["s3"] == 105.0
@@ -107,6 +112,23 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     assert "missing_row_identity_support" in audit_blank_reasons
     assert "duplicate_loser" in audit_blank_reasons
     assert "ambiguous_ms1_owner" in audit_blank_reasons
+
+    identity_rows = _read_tsv(
+        write_alignment_matrix_identity_tsv(
+            tmp_path / "alignment_matrix_identity.tsv",
+            matrix,
+        )
+    )
+    assert len(identity_rows) == len(tsv_rows)
+    assert identity_rows[0]["matrix_row_index"] == "1"
+    assert identity_rows[0]["peak_hypothesis_id"] == "FAM001"
+    assert identity_rows[0]["source_feature_family_ids"] == "FAM001"
+    assert identity_rows[0]["row_identity_basis"] == "no_split_peak_hypothesis"
+    assert (
+        identity_rows[0]["split_evaluation_status"]
+        == "complete_no_product_ready_split"
+    )
+    assert identity_rows[0]["projection_status"] == "not_projection"
 
 
 def test_istd_fixture_records_explicit_matching_fields():

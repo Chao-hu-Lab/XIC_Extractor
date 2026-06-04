@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-01
-**Total entry-points:** 48
-**Total files (incl. helpers):** 130 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-03
+**Total entry-points:** 50
+**Total files (incl. helpers):** 132 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -27,7 +27,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
 4. [Backfill Reviews](#backfill-reviews) — 7 tools
-5. [Peak / Candidate Audits](#peak--candidate-audits) — 2 tools
+5. [Peak / Candidate Audits](#peak--candidate-audits) — 4 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 6 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
 8. [Family / Overlay Visualization](#family--overlay-visualization) — 3 tools
@@ -154,7 +154,45 @@ models because their output schemas are intentionally different; see
 **Purpose**: Apply accepted `shared_peak_identity_activation_*` sidecars to alignment product outputs.
 **Topic group**: `shared_peak_identity_explanation.py` + `xic_extractor/alignment/shared_peak_identity_explanation/product_activation.py`
 **Originating spec/plan**: `specs/2026-05-30-sidecar-to-product-label-activation-contract.md`
-**Status note**: This is the explicit sidecar-to-product bridge. It requires `activation_acceptance_status=pass` by default. `--output-mode activated-copy` writes `alignment_matrix_activated.tsv`, `alignment_review_activated.tsv`, and `alignment_cells_activated.tsv`; `--output-mode formal` writes the formal downstream contract files `alignment_matrix.tsv`, `alignment_review.tsv`, and `alignment_cells.tsv` in the requested output directory. Formal matrix output uses `peak_hypothesis_id` as row identity and keeps `feature_family_id` as provenance; rows without split/wrong-peak/mode evidence use `<feature_family_id>::family_projection` with `row_identity_basis=family_projection_no_split_evidence`, which is a blocker for complete canonical row-identity readiness. The application summary discloses this limited claim with `canonical_row_identity_ready=FALSE`, `canonical_row_identity_blockers=family_projection_present`, `canonical_row_identity_scope=partial_peak_hypothesis_with_family_projections`, `family_projection_semantics=projection_not_split_proof`, and `all_family_split_science_ready=FALSE`, so projection rows are not misread as exhaustive split-science proof. Optional `--legacy-rt-row-oracle-xlsx` adds context-only `legacy_rt_row_context_id` hints from a legacy MZmine RT-row workbook but does not mint product identities; matching outputs report `legacy_rt_row_context_authority=context_only_not_identity_authority`. Both modes also write `activation_application_summary.tsv` and `activation_value_delta.tsv`. Existing matrix values are preserved; only missing `auto_activate` cells are written, while `auto_block` cells can be blanked or family promotion can be blocked. `activation_value_delta.tsv` records original value, activated value, source cell area, effect, and `value_changed` for review. If multiple provenance rows share one formal hypothesis/sample value, the temporary pre-AsLS policy records the conflict and keeps the larger numeric value. Formal mode refuses to overwrite source alignment TSVs unless `--allow-overwrite-source` is passed. `--require-complete-peak-hypothesis-identity` now fails when family projections remain. The `--allow-non-passing-acceptance` flag is a diagnostic override only and must not be used for product claims.
+**Status note**: This is the explicit sidecar-to-product bridge. It requires
+`activation_acceptance_status=pass` by default. `--output-mode activated-copy`
+writes `alignment_matrix_activated.tsv`, `alignment_review_activated.tsv`, and
+`alignment_cells_activated.tsv`; `--output-mode formal` writes the formal
+downstream contract files `alignment_matrix.tsv`, `alignment_review.tsv`, and
+`alignment_cells.tsv` in the requested output directory. Formal matrix output
+uses `peak_hypothesis_id` as row identity and keeps `feature_family_id` as
+provenance. By default, rows without split/wrong-peak/mode evidence use
+`<feature_family_id>::family_projection` with
+`row_identity_basis=family_projection_no_split_evidence`; this is a blocker for
+complete canonical row-identity readiness and is disclosed by
+`canonical_row_identity_ready=FALSE`,
+`canonical_row_identity_blockers=family_projection_present`,
+`canonical_row_identity_scope=partial_peak_hypothesis_with_family_projections`,
+`family_projection_semantics=projection_not_split_proof`, and
+`all_family_split_science_ready=FALSE`. `--exclude-family-projections` is formal
+mode only: it emits only explicit `peak_hypothesis_id` rows, reports skipped
+unresolved projections in `family_projection_rows_excluded` and
+`family_projection_cells_excluded`, and keeps
+`canonical_row_identity_ready=FALSE` with
+`canonical_row_identity_blockers=family_projection_excluded_incomplete_scope`
+when projection rows were excluded. It cannot be combined with
+`--require-complete-peak-hypothesis-identity` to certify completeness; that gate
+must fail while excluded projection rows remain. This exclusion is not proof that
+the full legacy family matrix has been completely split. Optional
+`--legacy-rt-row-oracle-xlsx` adds
+context-only `legacy_rt_row_context_id` hints from a legacy MZmine RT-row
+workbook but does not mint product identities; matching outputs report
+`legacy_rt_row_context_authority=context_only_not_identity_authority`. Both
+modes also write `activation_application_summary.tsv` and
+`activation_value_delta.tsv`. Existing matrix values are preserved; only missing
+`auto_activate` cells are written, while `auto_block` cells can be blanked or
+family promotion can be blocked. `activation_value_delta.tsv` records original
+value, activated value, source cell area, effect, and `value_changed` for
+review. If multiple provenance rows share one formal hypothesis/sample value,
+the temporary pre-AsLS policy records the conflict and keeps the larger numeric
+value. Formal mode refuses to overwrite source alignment TSVs unless
+`--allow-overwrite-source` is passed. `--allow-non-passing-acceptance` is a
+diagnostic override only and must not be used for product claims.
 
 ---
 
@@ -181,7 +219,7 @@ models because their output schemas are intentionally different; see
 **Purpose**: Build a diagnostic PeakHypothesis-assigned `alignment_matrix.tsv` before product activation by consuming source alignment TSVs plus `shared_peak_identity_peak_hypothesis_selection.tsv`, optional `shared_peak_identity_hypothesis_consistency.tsv`, and optional RAW-backed `family_ms1_overlay_*` trace-data JSONs with mode windows.
 **Topic group**: `shared_peak_identity_explanation.py` + `xic_extractor/alignment/shared_peak_identity_explanation/peak_hypothesis_matrix.py`
 **Originating spec/plan**: `specs/2026-05-30-sidecar-to-product-label-activation-contract.md`
-**Status note**: This is the first matrix-construction boundary for mode-aware identity. It writes `alignment_matrix.tsv`, `peak_hypothesis_inventory.tsv`, `peak_hypothesis_cell_assignments.tsv`, and `peak_hypothesis_matrix_summary.tsv` in a separate output directory. The matrix row identity is `peak_hypothesis_id`; explicit product-candidate modes use `row_identity_basis=matrix_construction_peak_hypothesis`, unresolved legacy cells use `<feature_family_id>::family_projection` with `row_identity_basis=family_projection_no_split_evidence`, and hard split/wrong-peak consistency blockers are recorded in assignments but not written to the matrix. When `--overlay-trace-data-json` is supplied, each declared `mode_windows` peak with RAW trace signal is enumerated as an expanded candidate row before matrix output, so two peaks from the same `feature_family_id` can both enter the matrix as independent `peak_hypothesis_id` rows instead of competing through retarget. Any product-status fields embedded in overlay JSON `mode_windows` are ignored and demoted to `raw_mode_review_only`; only typed PeakHypothesis selection rows can supply product-facing authority. Untyped mode windows and raw-apex inferred windows are review-only expanded candidates: they use `construction_assignment_status=expanded_candidate`, default to `candidate_value_basis=raw_overlay_window_trapezoid_area`, set `canonical_row_identity_ready=FALSE` with `canonical_row_identity_blockers=raw_mode_review_only`, and must not be treated as product-ready row identity until a typed mode-hypothesis contract supplies explicit iRT/manual/tag-confirmed status. Family projection rows set `canonical_row_identity_blockers=family_projection_present`; they are acceptable bridge rows but not proof of complete canonical identity. Cells with source `alignment_cells.tsv` area but no source matrix value are recorded as candidate context only (`matrix_value_effect=source_matrix_value_missing`) until quantification/baseline policy is wired. This tool is `diagnostic_only`: it proves that split/wrong-peak separation can happen before matrix output, but it does not mutate source alignment artifacts or claim all-family split-science readiness.
+**Status note**: This is the first matrix-construction boundary for mode-aware identity. It writes `alignment_matrix.tsv`, `peak_hypothesis_inventory.tsv`, `peak_hypothesis_cell_assignments.tsv`, and `peak_hypothesis_matrix_summary.tsv` in a separate output directory. The matrix row identity is `peak_hypothesis_id`; explicit product-candidate modes use `row_identity_basis=matrix_construction_peak_hypothesis`, unresolved legacy cells use `<feature_family_id>::family_projection` with `row_identity_basis=family_projection_no_split_evidence`, and hard split/wrong-peak consistency blockers are recorded in assignments but not written to the matrix. When `--overlay-trace-data-json` is supplied, each declared `mode_windows` peak with RAW trace signal is enumerated as an expanded candidate row before matrix output, so two peaks from the same `feature_family_id` can both enter the matrix as independent `peak_hypothesis_id` rows instead of competing through retarget. Any product-status fields embedded in overlay JSON `mode_windows` are ignored and demoted to `raw_mode_review_only`; only typed PeakHypothesis selection rows can supply product-facing authority. Untyped mode windows and raw-apex inferred windows are review-only expanded candidates: they use `construction_assignment_status=expanded_candidate`, default to `candidate_value_basis=raw_overlay_window_trapezoid_area`, set `canonical_row_identity_ready=FALSE` with `canonical_row_identity_blockers=raw_mode_review_only`, and must not be treated as product-ready row identity until a typed mode-hypothesis contract supplies explicit iRT/manual/tag-confirmed status. Family projection rows set `canonical_row_identity_blockers=family_projection_present`; they are acceptable bridge rows but not proof of complete canonical identity. Cells with source `alignment_cells.tsv` area but no source matrix value are recorded as candidate context only (`matrix_value_effect=source_matrix_value_missing`) until quantification/baseline policy is wired. `--require-complete-peak-hypothesis-identity` now fails unless the summary reports `canonical_row_identity_ready=TRUE`, so projection-heavy diagnostic outputs cannot be mistaken for promotion-ready matrices. This tool is `diagnostic_only`: it proves that split/wrong-peak separation can happen before matrix output, but it does not mutate source alignment artifacts or claim all-family split-science readiness.
 
 ---
 
@@ -334,6 +372,24 @@ existing review/economics axes remain pending cleanup per audit-note Cluster 2.
 **Purpose**: Audit peak candidate scoring against newer evidence labels without changing production selection.
 **Topic group**: `peak_candidate_score_calibration_report.py` + `_io`, `_models`, `_analysis`, `_writers` (5 files)
 **Originating spec**: `2026-05-16-peak-candidate-table-v1-spec.md`
+
+---
+
+### `selected_envelope_review_queue.py`
+
+**Purpose**: Build `diagnostic_only` selected-envelope changed-row and boundary-oracle review queue artifacts from `selected_envelope_diagnostics.tsv`.
+**Topic group**: `selected_envelope_review_queue.py` + `xic_extractor/peak_detection/selected_envelope_*`
+**Originating spec/plan**: `specs/2026-06-03-selected-full-envelope-quantitation-boundary-spec.md`; `plans/2026-06-03-selected-full-envelope-quantitation-boundary-implementation-goal.md`
+**Status note**: Writes `selected_envelope_changed_rows.tsv`, `selected_envelope_oracle_review_queue.tsv`, `selected_envelope_diagnostic_manifest.tsv`, and `selected_envelope_review_queue.json` under an explicit output directory. This tool only packages the audit sidecar for manual/expert boundary review; it does not run RAW files, mutate selected `IntegrationResult`, change targeted workbook/CSV `Area`, or authorize FE4/8RAW by itself.
+
+---
+
+### `selected_envelope_plot_review.py`
+
+**Purpose**: Render `diagnostic_only` selected-envelope boundary review plots from selected-envelope diagnostic rows, showing RAW XIC, AsLS baseline, Gaussian15 morphology overlay, resolver interval, selected envelope, optional manual/expert oracle overlay, and quantitation context in one figure.
+**Topic group**: `selected_envelope_plot_review.py` + `xic_extractor/peak_detection/selected_envelope_*`
+**Originating spec/plan**: `specs/2026-06-03-selected-full-envelope-quantitation-boundary-spec.md`; `plans/2026-06-03-selected-full-envelope-quantitation-boundary-implementation-goal.md`
+**Status note**: Re-reads RAW files for bounded manual/expert review only. It can consume an optional `selected_envelope_boundary_oracle.tsv` / boundary-oracle TSV to draw expert-reviewed RT windows and record selected candidate id plus oracle id/source/status in `selected_envelope_plot_index.tsv`. Gaussian15 is an Xcalibur-like morphology/review trace, not an exact clone of Xcalibur's proprietary smoothing and not a product area source. Plot overlays fail closed unless oracle rows are `expert_reviewed` with manual/expert sources (`manual_overlay`, `expert_overlay`, or `manual_2raw`); targeted workbook control rows remain benchmark-only and are not drawn as boundary truth. It writes PNG/PDF overlays and `selected_envelope_plot_index.tsv`; it does not mutate selected `IntegrationResult`, change targeted workbook/CSV `Area`, or promote selected-envelope behavior by itself.
 
 ---
 

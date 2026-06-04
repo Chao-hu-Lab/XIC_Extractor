@@ -2,7 +2,9 @@ import csv
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 
 import scripts.csv_to_excel as csv_to_excel
 from scripts.csv_to_excel import (
@@ -16,6 +18,8 @@ from scripts.csv_to_excel import (
     run,
 )
 from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.output.detection import MissingTargetedProductProjectionError
+from xic_extractor.output.schema import LONG_HEADERS
 
 
 def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_columns(
@@ -68,7 +72,8 @@ def test_build_data_sheet_uses_row_based_compact_view_with_hidden_advanced_colum
     assert ws.column_dimensions["L"].hidden is True
     assert ws["M2"].value == "HIGH"
     assert ws["N2"].value == "all checks passed"
-    assert ws.auto_filter.ref == "A1:N6"
+    last_column = get_column_letter(len(LONG_HEADERS))
+    assert ws.auto_filter.ref == f"A1:{last_column}6"
 
 
 def test_data_sheet_merges_repeated_sample_and_group_cells() -> None:
@@ -195,7 +200,7 @@ def test_overview_explains_detected_and_flagged_rates() -> None:
     assert "Diagnostics is a hidden technical log" in joined
     assert "HTML Review Report is for visual batch QA" in joined
     assert "Flagged % is review workload" in joined
-    assert "NL_FAIL rows are review evidence, not counted detections" in joined
+    assert "NL_FAIL rows are review evidence; counted detection follows" in joined
     assert "detected-but-flagged" not in joined
     assert "Score Breakdown is a technical audit sheet" in joined
 
@@ -724,7 +729,17 @@ def test_run_writes_row_based_results_sheet_and_makes_overview_active(
     )
     _write_csv(
         config.output_csv.with_name("xic_results_long.csv"),
-        [_long_row("Tumor_1", "Analyte", "ND", "ND", "NL_FAIL")],
+        [
+            _long_row(
+                "Tumor_1",
+                "Analyte",
+                "ND",
+                "ND",
+                "NL_FAIL",
+                counted_detection="FALSE",
+                product_state="not_counted",
+            )
+        ],
     )
     _write_csv(
         config.diagnostics_csv,
@@ -787,6 +802,48 @@ def test_run_writes_row_based_results_sheet_and_makes_overview_active(
     assert ws_review["E2"].value == "Review"
     assert ws_review["F2"].value == "NL support failed"
     assert ws_review["K2"].value == "NL_FAIL"
+
+
+def test_run_blocks_product_long_results_without_projection_fields(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    config.output_csv.parent.mkdir(parents=True)
+    _write_csv(
+        config.output_csv.with_name("xic_results_long.csv"),
+        [_long_row("Tumor_1", "Analyte", "9.1", "10000", "OK")],
+    )
+    _write_empty_diagnostics_csv(config.diagnostics_csv)
+
+    with pytest.raises(MissingTargetedProductProjectionError):
+        run(config, targets)
+
+
+def test_run_blocks_inconsistent_product_projection_fields(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    config.output_csv.parent.mkdir(parents=True)
+    _write_csv(
+        config.output_csv.with_name("xic_results_long.csv"),
+        [
+            _long_row(
+                "Tumor_1",
+                "Analyte",
+                "9.1",
+                "10000",
+                "OK",
+                counted_detection="TRUE",
+                product_state="not_counted",
+            )
+        ],
+    )
+    _write_empty_diagnostics_csv(config.diagnostics_csv)
+
+    with pytest.raises(MissingTargetedProductProjectionError):
+        run(config, targets)
 
 
 def test_run_hides_diagnostics_as_technical_log(tmp_path: Path) -> None:
@@ -860,6 +917,8 @@ def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
                 "OK",
                 confidence="MEDIUM",
                 reason="concerns: local_sn (minor)",
+                counted_detection="TRUE",
+                product_state="detected_clean",
             )
         ],
     )
@@ -934,7 +993,17 @@ def test_run_emits_review_report_when_enabled(tmp_path: Path) -> None:
     config.output_csv.parent.mkdir(parents=True)
     _write_csv(
         config.output_csv.with_name("xic_results_long.csv"),
-        [_long_row("Tumor_1", "Analyte", "9.1", "10000", "OK")],
+        [
+            _long_row(
+                "Tumor_1",
+                "Analyte",
+                "9.1",
+                "10000",
+                "OK",
+                counted_detection="TRUE",
+                product_state="detected_clean",
+            )
+        ],
     )
     _write_empty_diagnostics_csv(config.diagnostics_csv)
 
@@ -984,7 +1053,17 @@ def test_workbook_sheet_tabs_signal_review_and_technical_roles(tmp_path: Path) -
     config.output_csv.parent.mkdir(parents=True)
     _write_csv(
         config.output_csv.with_name("xic_results_long.csv"),
-        [_long_row("Tumor_1", "Analyte", "ND", "ND", "NL_FAIL")],
+        [
+            _long_row(
+                "Tumor_1",
+                "Analyte",
+                "ND",
+                "ND",
+                "NL_FAIL",
+                counted_detection="FALSE",
+                product_state="not_counted",
+            )
+        ],
     )
     _write_csv(
         config.output_csv.with_name("xic_score_breakdown.csv"),
@@ -1119,8 +1198,10 @@ def _long_row(
     istd_pair: str = "",
     confidence: str = "HIGH",
     reason: str = "all checks passed",
+    counted_detection: str | None = None,
+    product_state: str = "",
 ) -> dict[str, str]:
-    return {
+    row = {
         "SampleName": sample_name,
         "Group": "Tumor" if sample_name.startswith("Tumor") else "QC",
         "Target": target,
@@ -1136,6 +1217,23 @@ def _long_row(
         "Confidence": confidence,
         "Reason": reason,
     }
+    if counted_detection is not None:
+        row.update(
+            {
+                "Product State": product_state,
+                "Counted Detection": counted_detection,
+                "Review State": "none",
+                "Projection Reason": product_state or "legacy_test_projection",
+                "Projection Support Reasons": "",
+                "Projection Review Reasons": "",
+                "Projection Conflict Reasons": "",
+                "Projection Not Counted Reasons": "",
+                "Projection Exclusion Reasons": "",
+                "Legacy Authority Status": "evidence_only",
+                "Benchmark Eligibility State": "",
+            }
+        )
+    return row
 
 
 def _wide_row(sample_name: str, targets: list[Target]) -> dict[str, str]:

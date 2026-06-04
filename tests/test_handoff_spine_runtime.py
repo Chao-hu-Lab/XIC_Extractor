@@ -7,6 +7,10 @@ import pytest
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction import handoff_spine_runtime
 from xic_extractor.neutral_loss import CandidateMS2Evidence
+from xic_extractor.peak_detection.model_selection import (
+    ExpectedDiffApprovalRecord,
+    expected_diff_stable_row_id,
+)
 from xic_extractor.peak_detection.models import (
     PeakCandidate,
     PeakCandidateScore,
@@ -126,6 +130,276 @@ def test_selected_hypothesis_uses_final_peak_result_confidence_when_score_is_sta
     )
 
 
+def test_selected_handoff_peak_uses_model_selection_gate_for_selected_hypothesis(
+    tmp_path,
+) -> None:
+    candidate = _candidate(8.50)
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        n_points=11,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(candidate,),
+        confidence="HIGH",
+        reason="decision: accepted",
+        candidate_scores=(_score(candidate, confidence="HIGH"),),
+    )
+
+    handoff = handoff_spine_runtime.selected_handoff_peak(
+        config=replace(_config(tmp_path), emit_peak_candidates=True),
+        sample_name="SampleA",
+        target=_target(),
+        peak_result=peak_result,
+        candidate=candidate,
+        candidate_ms2_cache={},
+        candidate_ms2_builder=lambda _candidate: None,
+        rt=np.asarray([8.3, 8.5, 8.7]),
+        intensity=np.asarray([10.0, 100.0, 20.0]),
+        rt_min=8.0,
+        rt_max=9.0,
+        expected_rt_min=8.5,
+    )
+
+    assert handoff.model_selection_result is not None
+    assert handoff.selected_hypothesis is not None
+    assert handoff.selection_decision is not None
+    assert handoff.model_selection_result.selection_status == "parity"
+    assert handoff.model_selection_result.product_switch_allowed is True
+    assert (
+        handoff.selected_hypothesis.hypothesis_id
+        == handoff.model_selection_result.selected_candidate_id
+    )
+    assert (
+        handoff.selection_decision.selected_candidate_id
+        == handoff.model_selection_result.selected_candidate_id
+    )
+
+
+def test_selected_handoff_peak_falls_back_on_unapproved_successor_diff(
+    tmp_path,
+) -> None:
+    legacy_selected = _candidate(8.50)
+    successor_candidate = _candidate(8.55, area=1400.0)
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=legacy_selected.peak,
+        n_points=11,
+        max_smoothed=1200.0,
+        n_prominent_peaks=2,
+        candidates=(legacy_selected, successor_candidate),
+        confidence="LOW",
+        reason="decision: review",
+        candidate_scores=(
+            _score(legacy_selected, confidence="LOW"),
+            _score(successor_candidate, confidence="HIGH"),
+        ),
+    )
+
+    handoff = handoff_spine_runtime.selected_handoff_peak(
+        config=replace(_config(tmp_path), emit_peak_candidates=True),
+        sample_name="SampleA",
+        target=_target(),
+        peak_result=peak_result,
+        candidate=legacy_selected,
+        candidate_ms2_cache={},
+        candidate_ms2_builder=lambda _candidate: None,
+        rt=np.asarray([8.3, 8.5, 8.55, 8.7]),
+        intensity=np.asarray([10.0, 80.0, 100.0, 20.0]),
+        rt_min=8.0,
+        rt_max=9.0,
+        expected_rt_min=8.5,
+    )
+
+    assert handoff.model_selection_result is not None
+    assert handoff.selected_hypothesis is not None
+    assert handoff.selection_decision is not None
+    assert handoff.model_selection_result.selection_status == "expected_diff"
+    assert handoff.model_selection_result.product_switch_allowed is False
+    assert handoff.selected_hypothesis.audit.selected is True
+    assert (
+        handoff.selected_hypothesis.hypothesis_id
+        == handoff.model_selection_result.legacy_selected_candidate_id
+    )
+    assert (
+        handoff.model_selection_result.selected_candidate_id
+        != handoff.selected_hypothesis.hypothesis_id
+    )
+    assert (
+        handoff.selection_decision.selected_candidate_id
+        == handoff.selected_hypothesis.hypothesis_id
+    )
+
+
+def test_selected_handoff_peak_switches_on_approved_expected_diff(
+    tmp_path,
+) -> None:
+    legacy_selected = _candidate(8.50)
+    successor_candidate = _candidate(8.55)
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=legacy_selected.peak,
+        n_points=11,
+        max_smoothed=1200.0,
+        n_prominent_peaks=2,
+        candidates=(legacy_selected, successor_candidate),
+        confidence="LOW",
+        reason="decision: review",
+        candidate_scores=(
+            _score(legacy_selected, confidence="LOW"),
+            _score(successor_candidate, confidence="HIGH"),
+        ),
+    )
+    approval = ExpectedDiffApprovalRecord(
+        stable_row_id=expected_diff_stable_row_id(
+            legacy_selected_candidate_id=(
+                "SampleA|Analyte|region_first_safe_merge||8.50000|8.40000|8.60000"
+            ),
+            successor_selected_candidate_id=(
+                "SampleA|Analyte|region_first_safe_merge||8.55000|8.45000|8.65000"
+            ),
+        ),
+        sample_name="SampleA",
+        target_label="Analyte",
+        legacy_selected_candidate_id=(
+            "SampleA|Analyte|region_first_safe_merge||8.50000|8.40000|8.60000"
+        ),
+        successor_selected_candidate_id=(
+            "SampleA|Analyte|region_first_safe_merge||8.55000|8.45000|8.65000"
+        ),
+        public_outputs_touched=(
+            "candidate table selected marker",
+            "selected rt",
+            "area",
+            "boundary",
+            "confidence",
+            "reason",
+            "final matrix value",
+        ),
+        matrix_value_impact="area_value_changed",
+        evidence_sources=("ms1_trace", "trace_morphology"),
+        evidence_summary="successor candidate has stronger evidence-chain support",
+        validation_tier="targeted_benchmark",
+        reviewer_role="implementation-contract-reviewer",
+        reviewer_verdict="approved",
+        final_label="expected_diff",
+    )
+
+    handoff = handoff_spine_runtime.selected_handoff_peak(
+        config=replace(_config(tmp_path), emit_peak_candidates=True),
+        sample_name="SampleA",
+        target=_target(),
+        peak_result=peak_result,
+        candidate=legacy_selected,
+        candidate_ms2_cache={},
+        candidate_ms2_builder=lambda _candidate: None,
+        rt=np.asarray([8.3, 8.5, 8.55, 8.7]),
+        intensity=np.asarray([10.0, 80.0, 100.0, 20.0]),
+        rt_min=8.0,
+        rt_max=9.0,
+        expected_rt_min=8.5,
+        model_selection_expected_diff_approvals={
+            approval.stable_row_id: approval
+        },
+    )
+
+    assert handoff.model_selection_result is not None
+    assert handoff.selected_hypothesis is not None
+    assert handoff.selection_decision is not None
+    assert handoff.model_selection_result.selection_status == "expected_diff"
+    assert handoff.model_selection_result.diff_reasons == ()
+    assert handoff.model_selection_result.product_switch_allowed is True
+    assert (
+        handoff.selected_hypothesis.hypothesis_id
+        == approval.successor_selected_candidate_id
+    )
+    assert (
+        handoff.selection_decision.selected_candidate_id
+        == approval.successor_selected_candidate_id
+    )
+
+
+def test_selected_handoff_peak_ignores_wrong_expected_diff_approval(
+    tmp_path,
+) -> None:
+    legacy_selected = _candidate(8.50)
+    successor_candidate = _candidate(8.55, area=1400.0)
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=legacy_selected.peak,
+        n_points=11,
+        max_smoothed=1200.0,
+        n_prominent_peaks=2,
+        candidates=(legacy_selected, successor_candidate),
+        confidence="LOW",
+        reason="decision: review",
+        candidate_scores=(
+            _score(legacy_selected, confidence="LOW"),
+            _score(successor_candidate, confidence="HIGH"),
+        ),
+    )
+    approval = ExpectedDiffApprovalRecord(
+        stable_row_id=expected_diff_stable_row_id(
+            legacy_selected_candidate_id=(
+                "SampleA|Analyte|region_first_safe_merge||8.50000|8.40000|8.60000"
+            ),
+            successor_selected_candidate_id=(
+                "SampleA|Analyte|region_first_safe_merge||8.55000|8.45000|8.65000"
+            ),
+        ),
+        sample_name="OtherSample",
+        target_label="Analyte",
+        legacy_selected_candidate_id=(
+            "SampleA|Analyte|region_first_safe_merge||8.50000|8.40000|8.60000"
+        ),
+        successor_selected_candidate_id=(
+            "SampleA|Analyte|region_first_safe_merge||8.55000|8.45000|8.65000"
+        ),
+        public_outputs_touched=(
+            "candidate table selected marker",
+            "selected rt",
+            "area",
+            "boundary",
+            "confidence",
+            "reason",
+            "final matrix value",
+        ),
+        matrix_value_impact="area_value_changed",
+        evidence_sources=("ms1_trace", "trace_morphology"),
+        evidence_summary="successor candidate has stronger evidence-chain support",
+        validation_tier="targeted_benchmark",
+        reviewer_role="implementation-contract-reviewer",
+        reviewer_verdict="approved",
+        final_label="expected_diff",
+    )
+
+    handoff = handoff_spine_runtime.selected_handoff_peak(
+        config=replace(_config(tmp_path), emit_peak_candidates=True),
+        sample_name="SampleA",
+        target=_target(),
+        peak_result=peak_result,
+        candidate=legacy_selected,
+        candidate_ms2_cache={},
+        candidate_ms2_builder=lambda _candidate: None,
+        rt=np.asarray([8.3, 8.5, 8.55, 8.7]),
+        intensity=np.asarray([10.0, 80.0, 100.0, 20.0]),
+        rt_min=8.0,
+        rt_max=9.0,
+        expected_rt_min=8.5,
+        model_selection_expected_diff_approvals={
+            approval.stable_row_id: approval
+        },
+    )
+
+    assert handoff.model_selection_result is not None
+    assert handoff.selected_hypothesis is not None
+    assert handoff.model_selection_result.product_switch_allowed is False
+    assert (
+        handoff.selected_hypothesis.hypothesis_id
+        == handoff.model_selection_result.legacy_selected_candidate_id
+    )
+
+
 def test_build_production_peak_hypotheses_uses_config_baseline_method(
     tmp_path,
 ) -> None:
@@ -195,12 +469,12 @@ def _target() -> Target:
     )
 
 
-def _candidate(rt: float) -> PeakCandidate:
+def _candidate(rt: float, *, area: float = 1234.5) -> PeakCandidate:
     peak = PeakResult(
         rt=rt,
         intensity=1200.0,
         intensity_smoothed=1100.0,
-        area=1234.5,
+        area=area,
         peak_start=rt - 0.1,
         peak_end=rt + 0.1,
     )

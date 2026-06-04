@@ -13,18 +13,21 @@ AlignmentOutputLevel = Literal[
 _ARTIFACTS: dict[AlignmentOutputLevel, tuple[str, ...]] = {
     "production": (
         "alignment_results.xlsx",
+        "alignment_matrix_identity.tsv",
         "review_report.html",
     ),
     "machine": (
         "alignment_results.xlsx",
         "review_report.html",
         "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
     ),
     "debug": (
         "alignment_results.xlsx",
         "review_report.html",
         "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
         "alignment_cells.tsv",
         "alignment_matrix_status.tsv",
@@ -36,6 +39,7 @@ _ARTIFACTS: dict[AlignmentOutputLevel, tuple[str, ...]] = {
         "alignment_results.xlsx",
         "review_report.html",
         "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
         "alignment_cells.tsv",
         "alignment_matrix_status.tsv",
@@ -45,6 +49,7 @@ _ARTIFACTS: dict[AlignmentOutputLevel, tuple[str, ...]] = {
     ),
     "validation-minimal": (
         "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
         "alignment_cells.tsv",
     ),

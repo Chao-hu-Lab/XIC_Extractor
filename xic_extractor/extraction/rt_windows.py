@@ -7,6 +7,9 @@ from typing import Any
 import numpy as np
 
 from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.extraction.anchors import (
+    PAIRED_TARGET_NL_ANCHOR_REFERENCE_DELTA_MAX_MIN,
+)
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -49,11 +52,38 @@ def get_rt_window(
         reference_rt=reference_rt,
     )
     if anchor_rt is not None:
+        if _paired_target_anchor_is_too_far_from_reference(
+            anchor_rt,
+            reference_rt=reference_rt,
+        ):
+            assert reference_rt is not None
+            half = config.nl_rt_anchor_half_window_min
+            return (
+                max(0.0, reference_rt - half),
+                reference_rt + half,
+                False,
+                reference_rt,
+            )
         half = config.nl_rt_anchor_half_window_min
         return max(0.0, anchor_rt - half), anchor_rt + half, True, anchor_rt
 
     half = config.nl_fallback_half_window_min
+    if reference_rt is not None:
+        return max(0.0, reference_rt - half), reference_rt + half, False, reference_rt
     return max(0.0, rt_center - half), rt_center + half, False, None
+
+
+def _paired_target_anchor_is_too_far_from_reference(
+    anchor_rt: float,
+    *,
+    reference_rt: float | None,
+) -> bool:
+    if reference_rt is None:
+        return False
+    return (
+        abs(anchor_rt - reference_rt)
+        > PAIRED_TARGET_NL_ANCHOR_REFERENCE_DELTA_MAX_MIN
+    )
 
 
 def recover_istd_peak_with_wider_anchor_window(

@@ -31,6 +31,8 @@ class ExtractionConfig:
     rolling_window_size: int = 5
     dirty_matrix_mode: bool = False
     rt_prior_library_path: Path | None = None
+    target_pair_rt_calibration_path: Path | None = None
+    model_selection_expected_diff_approval_registry: Path | None = None
     emit_score_breakdown: bool = False
     emit_review_report: bool = False
     emit_peak_candidates: bool = False
@@ -40,6 +42,7 @@ class ExtractionConfig:
     parallel_mode: str = "serial"
     parallel_workers: int = 1
     config_hash: str = ""
+    target_config_hash: str = ""
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,8 @@ class Target:
     nl_ppm_max: float | None
     is_istd: bool
     istd_pair: str
+    isotope_label_type: str = "unknown"
+    paired_rt_relation: str = "none"
 
 
 class ConfigError(Exception):

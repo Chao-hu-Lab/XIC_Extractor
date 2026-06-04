@@ -28,6 +28,9 @@ _LABEL_PEAK_WIDTH = "peak_width"
 _CWT_PROPOSAL_SOURCE = "centwave_cwt"
 _CWT_SAME_APEX_SUPPORT_POINTS = 5
 
+# These thresholds are scoring/selection heuristics, not product-presence
+# authority. Promotion to a hard detection policy needs a contract and
+# biological-matrix validation artifact.
 _SYMMETRY_SOFT_LOW, _SYMMETRY_SOFT_HIGH = 0.5, 2.0
 _SYMMETRY_HARD_LOW, _SYMMETRY_HARD_HIGH = 0.3, 3.0
 _SN_SOFT_THRESHOLD = 3.0
@@ -319,10 +322,16 @@ def select_candidate_with_confidence(
         )
         if strict_selection_rt and selection_rt is not None:
             return (
+                float(
+                    _anchor_selection_completeness_rank(
+                        scored_candidate,
+                        selection_rt=selection_rt,
+                    )
+                ),
                 distance,
                 float(confidence_rank),
                 selection_quality_penalty,
-                0.0,
+                -_ms2_trace_selection_tiebreak(scored_candidate),
                 -candidate.selection_apex_intensity,
             )
         if (
@@ -538,6 +547,42 @@ def _has_dominant_strict_nl_alternative(
 def _has_candidate_flag(scored_candidate: ScoredCandidate, flag: str) -> bool:
     flags = getattr(scored_candidate.candidate, "quality_flags", ())
     return flag in {str(candidate_flag) for candidate_flag in flags}
+
+
+def _anchor_selection_completeness_rank(
+    scored_candidate: ScoredCandidate,
+    *,
+    selection_rt: float,
+) -> int:
+    complete_enough = (
+        scored_candidate.confidence is not Confidence.VERY_LOW
+        and not any(
+            _has_candidate_flag(scored_candidate, flag)
+            for flag in ("low_scan_support", "too_short", "low_scan_count")
+        )
+    )
+    if complete_enough and _candidate_contains_rt(scored_candidate, selection_rt):
+        return 0
+    return 1
+
+
+def _candidate_contains_rt(
+    scored_candidate: ScoredCandidate,
+    selection_rt: float,
+) -> bool:
+    peak = getattr(scored_candidate.candidate, "peak", None)
+    if peak is None:
+        return False
+    peak_start = getattr(peak, "peak_start", None)
+    peak_end = getattr(peak, "peak_end", None)
+    if peak_start is None or peak_end is None:
+        return False
+    try:
+        start = float(peak_start)
+        end = float(peak_end)
+    except (TypeError, ValueError):
+        return False
+    return start <= selection_rt <= end
 
 
 def _has_evidence_support(scored_candidate: ScoredCandidate, label: str) -> bool:

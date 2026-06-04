@@ -9,6 +9,7 @@ from xic_extractor.alignment.output_levels import (
 def test_production_output_level_artifacts_are_xlsx_and_html_only():
     assert artifact_names_for_output_level("production") == (
         "alignment_results.xlsx",
+        "alignment_matrix_identity.tsv",
         "review_report.html",
     )
 
@@ -18,6 +19,7 @@ def test_machine_output_level_adds_review_and_matrix_tsv():
         "alignment_results.xlsx",
         "review_report.html",
         "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
     )
 
@@ -27,6 +29,7 @@ def test_debug_output_level_adds_cell_status_and_owner_debug_tsvs():
         "alignment_results.xlsx",
         "review_report.html",
         "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
         "alignment_cells.tsv",
         "alignment_matrix_status.tsv",
@@ -41,6 +44,7 @@ def test_validation_output_level_adds_owner_edge_evidence_tsv():
         "alignment_results.xlsx",
         "review_report.html",
         "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
         "alignment_cells.tsv",
         "alignment_matrix_status.tsv",
@@ -53,6 +57,7 @@ def test_validation_output_level_adds_owner_edge_evidence_tsv():
 def test_validation_minimal_output_level_is_machine_gate_surface_only():
     assert artifact_names_for_output_level("validation-minimal") == (
         "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
         "alignment_cells.tsv",
     )

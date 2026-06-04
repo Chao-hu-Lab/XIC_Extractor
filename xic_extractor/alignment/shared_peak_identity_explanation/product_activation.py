@@ -49,6 +49,8 @@ class FormalMatrixStats:
     family_projection_rows: int = 0
     legacy_rt_row_context_rows: int = 0
     matrix_value_conflict_cells: int = 0
+    family_projection_rows_excluded: int = 0
+    family_projection_cells_excluded: int = 0
 
 
 def apply_activation_to_alignment_outputs(
@@ -66,8 +68,11 @@ def apply_activation_to_alignment_outputs(
     legacy_rt_row_oracle_mz_ppm: float = 20.0,
     legacy_rt_row_oracle_rt_tolerance_min: float = 1.0,
     require_complete_peak_hypothesis_identity: bool = False,
+    exclude_family_projections: bool = False,
 ) -> ActivationApplicationOutputs:
     _validate_output_mode(output_mode)
+    if exclude_family_projections and output_mode != "formal":
+        raise ValueError("--exclude-family-projections requires --output-mode formal")
     decisions = _read_tsv(activation_decisions_tsv)
     _validate_decisions_for_product_application(decisions)
     acceptance_rows = _read_tsv(activation_acceptance_tsv)
@@ -186,6 +191,7 @@ def apply_activation_to_alignment_outputs(
                 legacy_rt_row_oracle_rt_tolerance_min=(
                     legacy_rt_row_oracle_rt_tolerance_min
                 ),
+                include_family_projections=not exclude_family_projections,
             )
         )
     else:
@@ -359,9 +365,12 @@ def _peak_hypothesis_matrix_rows(
     legacy_rt_row_oracle: Sequence[LegacyRtRowReference],
     legacy_rt_row_oracle_mz_ppm: float,
     legacy_rt_row_oracle_rt_tolerance_min: float,
+    include_family_projections: bool = True,
 ) -> tuple[list[dict[str, str]], FormalMatrixStats]:
     rows_by_hypothesis: dict[str, dict[str, str]] = {}
     family_projection_ids: set[str] = set()
+    excluded_family_projection_ids: set[str] = set()
+    excluded_family_projection_cells = 0
     legacy_rt_row_context_row_ids: set[str] = set()
     matrix_value_conflict_cells = 0
     for family_id in sorted(matrix_by_family):
@@ -376,13 +385,18 @@ def _peak_hypothesis_matrix_rows(
             row_identity_basis = "activation_peak_hypothesis"
             candidate_container_id = decision.get("candidate_container_id", family_id)
             if not peak_hypothesis_id:
+                projection_id = _legacy_projection_hypothesis_id(family_id)
+                if not include_family_projections:
+                    excluded_family_projection_ids.add(projection_id)
+                    excluded_family_projection_cells += 1
+                    continue
                 legacy_reference = _match_legacy_rt_row_reference(
                     review_row,
                     legacy_rt_row_oracle,
                     mz_ppm=legacy_rt_row_oracle_mz_ppm,
                     rt_tolerance_min=legacy_rt_row_oracle_rt_tolerance_min,
                 )
-                peak_hypothesis_id = _legacy_projection_hypothesis_id(family_id)
+                peak_hypothesis_id = projection_id
                 row_identity_basis = "family_projection_no_split_evidence"
                 family_projection_ids.add(peak_hypothesis_id)
                 legacy_rt_row_context_id = ""
@@ -422,6 +436,8 @@ def _peak_hypothesis_matrix_rows(
             family_projection_rows=len(family_projection_ids),
             legacy_rt_row_context_rows=len(legacy_rt_row_context_row_ids),
             matrix_value_conflict_cells=matrix_value_conflict_cells,
+            family_projection_rows_excluded=len(excluded_family_projection_ids),
+            family_projection_cells_excluded=excluded_family_projection_cells,
         ),
     )
 
@@ -803,6 +819,12 @@ def _summary_row(
             formal_matrix_stats.legacy_rt_row_context_rows
         ),
         "family_projection_rows": str(formal_matrix_stats.family_projection_rows),
+        "family_projection_rows_excluded": str(
+            formal_matrix_stats.family_projection_rows_excluded
+        ),
+        "family_projection_cells_excluded": str(
+            formal_matrix_stats.family_projection_cells_excluded
+        ),
         "matrix_value_conflict_cells": str(
             formal_matrix_stats.matrix_value_conflict_cells
         ),
@@ -829,6 +851,8 @@ def _family_projection_semantics(
         return "not_applicable"
     if formal_matrix_stats.family_projection_rows:
         return "projection_not_split_proof"
+    if formal_matrix_stats.family_projection_rows_excluded:
+        return "excluded_from_canonical_output"
     return "explicit_hypothesis_only"
 
 
@@ -838,7 +862,12 @@ def _canonical_row_identity_ready(
 ) -> str:
     if output_mode != "formal":
         return "FALSE"
-    return "FALSE" if formal_matrix_stats.family_projection_rows else "TRUE"
+    if (
+        formal_matrix_stats.family_projection_rows
+        or formal_matrix_stats.family_projection_rows_excluded
+    ):
+        return "FALSE"
+    return "TRUE"
 
 
 def _canonical_row_identity_blocker(
@@ -849,6 +878,8 @@ def _canonical_row_identity_blocker(
         return "formal_output_not_requested"
     if formal_matrix_stats.family_projection_rows:
         return "family_projection_present"
+    if formal_matrix_stats.family_projection_rows_excluded:
+        return "family_projection_excluded_incomplete_scope"
     return "none"
 
 
@@ -860,6 +891,8 @@ def _canonical_row_identity_scope(
         return "legacy_feature_family_row"
     if formal_matrix_stats.family_projection_rows:
         return "partial_peak_hypothesis_with_family_projections"
+    if formal_matrix_stats.family_projection_rows_excluded:
+        return "partial_canonical_peak_hypothesis_rows_only"
     return "formal_peak_hypothesis_identity"
 
 

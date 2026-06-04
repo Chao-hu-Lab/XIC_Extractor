@@ -32,6 +32,7 @@ from xic_extractor.output.messages import (
     build_diagnostic_records,
     istd_confidence_note,
 )
+from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
 from xic_extractor.signal_processing import PeakCandidate
 
 if TYPE_CHECKING:
@@ -49,6 +50,7 @@ def extract_raw_file_result(
     raw_path: Path,
     *,
     scoring_context_factory: Callable[..., Any] | None = None,
+    model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> RawFileExtractionResult:
     from xic_extractor import extractor
 
@@ -57,6 +59,7 @@ def extract_raw_file_result(
         targets,
         raw_path,
         scoring_context_factory=scoring_context_factory,
+        model_selection_expected_diff_approvals=model_selection_expected_diff_approvals,
     )
     return extractor.RawFileExtractionResult(
         raw_index=raw_index,
@@ -76,15 +79,18 @@ def process_file(
     precomputed_istd_diagnostics: list[DiagnosticRecord] | None = None,
     precomputed_istd_anchor_rts: dict[str, float] | None = None,
     precomputed_istd_shape_metrics: dict[str, tuple[float, float | None]] | None = None,
+    model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> tuple[FileResult, list[DiagnosticRecord]]:
     from xic_extractor import extractor
 
     sample_name = raw_path.stem
+    approval_records = model_selection_expected_diff_approvals
     try:
         with extractor.open_raw(raw_path, config.dll_dir) as raw:
-            results: dict[str, ExtractionResult] = dict(precomputed_istd_results or {})
+            results = dict(precomputed_istd_results or {})
             peak_candidate_rows: list[dict[str, str]] = []
             peak_candidate_boundary_rows: list[dict[str, str]] = []
+            selected_envelope_diagnostic_rows: list[dict[str, str]] = []
             diagnostics: list[DiagnosticRecord] = list(
                 precomputed_istd_diagnostics or []
             )
@@ -112,7 +118,11 @@ def process_file(
                         diagnostics=diagnostics,
                         peak_candidate_rows=peak_candidate_rows,
                         peak_candidate_boundary_rows=peak_candidate_boundary_rows,
+                        selected_envelope_diagnostic_rows=(
+                            selected_envelope_diagnostic_rows
+                        ),
                         scoring_context_factory=scoring_context_factory,
+                        model_selection_expected_diff_approvals=approval_records,
                         shape_metrics_by_label=istd_shape_metrics_by_label,
                     )
                     confidence = results[target.label].peak_result.confidence
@@ -147,7 +157,11 @@ def process_file(
                     diagnostics=diagnostics,
                     peak_candidate_rows=peak_candidate_rows,
                     peak_candidate_boundary_rows=peak_candidate_boundary_rows,
+                    selected_envelope_diagnostic_rows=(
+                        selected_envelope_diagnostic_rows
+                    ),
                     scoring_context_factory=scoring_context_factory,
+                    model_selection_expected_diff_approvals=approval_records,
                     istd_confidence_note=istd_confidence_note(
                         istd_confidence_by_label.get(target.istd_pair)
                     ),
@@ -162,18 +176,14 @@ def process_file(
                 results=results,
                 peak_candidate_rows=peak_candidate_rows,
                 peak_candidate_boundary_rows=peak_candidate_boundary_rows,
+                selected_envelope_diagnostic_rows=selected_envelope_diagnostic_rows,
             ), diagnostics
     except Exception as exc:
         reason = f"Failed to open .raw: {type(exc).__name__}: {exc}"
         return (
             extractor.FileResult(sample_name=sample_name, results={}, error=reason),
             [
-                DiagnosticRecord(
-                    sample_name=sample_name,
-                    target_label="",
-                    issue="FILE_ERROR",
-                    reason=reason,
-                )
+                DiagnosticRecord(sample_name, "", "FILE_ERROR", reason)
             ],
         )
 
@@ -191,11 +201,13 @@ def extract_one_target(
     diagnostics: list[DiagnosticRecord],
     peak_candidate_rows: list[dict[str, str]] | None = None,
     peak_candidate_boundary_rows: list[dict[str, str]] | None = None,
+    selected_envelope_diagnostic_rows: list[dict[str, str]] | None = None,
     scoring_context_factory: Callable[..., Any] | None = None,
     istd_confidence_note: str | None = None,
     istd_rt_in_this_sample: float | None = None,
     paired_istd_fwhm: float | None = None,
     shape_metrics_by_label: dict[str, tuple[float, float | None]] | None = None,
+    model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> float | None:
     from xic_extractor import extractor
 
@@ -270,7 +282,7 @@ def extract_one_target(
         target,
         peak_result,
         reference_rt=reference_rt,
-        anchor_rt=anchor_rt,
+        anchor_rt=anchor_rt if anchor_used else None,
         strict_preferred_rt=strict_preferred_rt,
     )
     if paired_rejection is not None:
@@ -284,8 +296,7 @@ def extract_one_target(
         if recovery_decision.intensity is not None
         else intensity
     )
-    shape_intensity = audit_intensity
-    shape_metrics = selected_shape_metrics(shape_intensity, peak_result)
+    shape_metrics = selected_shape_metrics(audit_intensity, peak_result)
     candidate = selected_candidate(peak_result)
     if shape_metrics_by_label is not None and shape_metrics is not None:
         shape_metrics_by_label[target.label] = shape_metrics
@@ -302,6 +313,7 @@ def extract_one_target(
         rt_min=rt_min,
         rt_max=rt_max,
         expected_rt_min=anchor_rt,
+        model_selection_expected_diff_approvals=model_selection_expected_diff_approvals,
     )
 
     result = build_extraction_result(
@@ -313,15 +325,20 @@ def extract_one_target(
         scoring_context_builder=scoring_context_builder,
         selected_hypothesis=handoff_peak.selected_hypothesis,
         selection_decision=handoff_peak.selection_decision,
+        model_selection_result=handoff_peak.model_selection_result,
     )
     results[target.label] = result
     diagnostics.extend(build_diagnostic_records(sample_name, target, result, config))
     if paired_rejection is not None:
         diagnostics.append(paired_rejection)
     append_anchor_window_diagnostics(
-        diagnostics, sample_name, target, config, peak_result,
+        diagnostics,
+        sample_name,
+        target,
+        config,
+        peak_result,
         anchor_used=anchor_used,
-        anchor_rt=anchor_rt,
+        anchor_rt=anchor_rt if anchor_used else None,
         rt_min=rt_min,
         rt_max=rt_max,
         nl_result=result.nl,
@@ -330,13 +347,19 @@ def extract_one_target(
     append_peak_audit_rows(
         peak_candidate_rows=peak_candidate_rows,
         peak_candidate_boundary_rows=peak_candidate_boundary_rows,
+        selected_envelope_diagnostic_rows=selected_envelope_diagnostic_rows,
         config=config,
         sample_name=sample_name,
         target=target,
         peak_result=peak_result,
         candidate_ms2_builder=_cached_candidate_ms2_builder,
-        rt=audit_rt, intensity=audit_intensity,
+        rt=audit_rt,
+        intensity=audit_intensity,
         trace_group=handoff_peak.trace_group,
+        product_selected_candidate_id=getattr(
+            handoff_peak.selected_hypothesis, "hypothesis_id", None
+        ),
+        product_selected_hypothesis=handoff_peak.selected_hypothesis,
         scoring_context_builder=scoring_context_builder,
         istd_confidence_note=istd_confidence_note,
     )

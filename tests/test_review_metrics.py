@@ -1,6 +1,9 @@
 import pytest
 
-from xic_extractor.output.detection import is_accepted_row_detection
+from xic_extractor.output.detection import (
+    MissingTargetedProductProjectionError,
+    is_accepted_row_detection,
+)
 from xic_extractor.output.review_metrics import build_review_metrics
 
 
@@ -202,6 +205,54 @@ def test_review_metrics_do_not_count_nl_fail_or_very_low_as_detected() -> None:
     assert metrics.heatmap[("A", "S4")] == "not-detected"
 
 
+def test_review_metrics_count_projection_detected_flagged_row() -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "A",
+            "RT": "1.0",
+            "Area": "100",
+            "NL": "NL_FAIL",
+            "Confidence": "VERY_LOW",
+            "Product State": "detected_flagged",
+            "Counted Detection": "TRUE",
+            "Review State": "flagged",
+        },
+    ]
+
+    metrics = build_review_metrics(
+        rows,
+        diagnostics=[],
+        review_rows=[{"Priority": "1", "Sample": "S1", "Target": "A"}],
+        count_no_ms2_as_detected=False,
+    )
+
+    assert metrics.targets["A"].detected == 1
+    assert metrics.heatmap[("A", "S1")] == "flagged-detected"
+
+
+def test_review_metrics_product_mode_requires_counted_detection() -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "A",
+            "RT": "1.0",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+        },
+    ]
+
+    with pytest.raises(MissingTargetedProductProjectionError):
+        build_review_metrics(
+            rows,
+            diagnostics=[],
+            review_rows=[],
+            count_no_ms2_as_detected=False,
+            require_projection=True,
+        )
+
+
 @pytest.mark.parametrize(
     ("row", "count_no_ms2_as_detected", "expected"),
     [
@@ -250,6 +301,17 @@ def test_review_metrics_do_not_count_nl_fail_or_very_low_as_detected() -> None:
             False,
             False,
         ),
+        (
+            {
+                "RT": "1.0",
+                "Area": "100",
+                "NL": "NL_FAIL",
+                "Confidence": "VERY_LOW",
+                "Counted Detection": "TRUE",
+            },
+            False,
+            True,
+        ),
     ],
 )
 def test_accepted_detection_decision_table(
@@ -258,3 +320,10 @@ def test_accepted_detection_decision_table(
     expected: bool,
 ) -> None:
     assert is_accepted_row_detection(row, count_no_ms2_as_detected) is expected
+
+
+def test_accepted_detection_product_mode_rejects_missing_projection() -> None:
+    row = {"RT": "1.0", "Area": "100", "NL": "OK", "Confidence": "HIGH"}
+
+    with pytest.raises(MissingTargetedProductProjectionError):
+        is_accepted_row_detection(row, False, require_projection=True)

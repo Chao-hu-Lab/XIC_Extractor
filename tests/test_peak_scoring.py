@@ -563,6 +563,76 @@ def test_cwt_support_does_not_override_selection_rt_distance() -> None:
     assert selected is near_prior
 
 
+def test_strict_selection_rt_ignores_nearest_very_low_noise_peak() -> None:
+    nearest_noise = ScoredCandidate(
+        candidate=_make_candidate(apex_rt=9.0, apex_intensity=50),
+        severities=(),
+        confidence=Confidence.VERY_LOW,
+        reason="random low-support peak",
+        prior_rt=9.0,
+        evidence_score=score_evidence(
+            positive=[],
+            negative=[EvidenceSignal("local_sn_poor", 25)],
+            base_score=100,
+        ),
+    )
+    nearest_complete_peak = ScoredCandidate(
+        candidate=_make_candidate(apex_rt=9.08, apex_intensity=500),
+        severities=(),
+        confidence=Confidence.HIGH,
+        reason="complete MS1 peak",
+        prior_rt=9.0,
+        evidence_score=score_evidence(
+            positive=[EvidenceSignal("strict_nl_ok", 30)],
+            negative=[],
+            base_score=100,
+        ),
+    )
+
+    selected = select_candidate_with_confidence(
+        [nearest_noise, nearest_complete_peak],
+        selection_rt=9.0,
+        strict_selection_rt=True,
+    )
+
+    assert selected is nearest_complete_peak
+
+
+def test_strict_selection_rt_does_not_escape_to_far_complete_peak() -> None:
+    nearest_noise = ScoredCandidate(
+        candidate=_make_candidate(apex_rt=9.0, apex_intensity=50),
+        severities=(),
+        confidence=Confidence.VERY_LOW,
+        reason="random low-support peak",
+        prior_rt=9.0,
+        evidence_score=score_evidence(
+            positive=[],
+            negative=[EvidenceSignal("local_sn_poor", 25)],
+            base_score=100,
+        ),
+    )
+    far_complete_peak = ScoredCandidate(
+        candidate=_make_candidate(apex_rt=9.8, apex_intensity=500),
+        severities=(),
+        confidence=Confidence.HIGH,
+        reason="complete but far MS1 peak",
+        prior_rt=9.0,
+        evidence_score=score_evidence(
+            positive=[EvidenceSignal("strict_nl_ok", 30)],
+            negative=[],
+            base_score=100,
+        ),
+    )
+
+    selected = select_candidate_with_confidence(
+        [nearest_noise, far_complete_peak],
+        selection_rt=9.0,
+        strict_selection_rt=True,
+    )
+
+    assert selected is nearest_noise
+
+
 def test_score_candidate_nl_fail_caps_confidence_to_very_low() -> None:
     cand = _make_candidate(apex_rt=10.0, apex_intensity=1000)
     x = np.linspace(9, 11, 201)

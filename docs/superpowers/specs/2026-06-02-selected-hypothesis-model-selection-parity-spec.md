@@ -201,6 +201,24 @@ Required `ExpectedDiffApprovalRecord` fields:
 | `reviewer_verdict` | `approved`, `blocked`, or `inconclusive`. |
 | `final_label` | `expected_diff`, `blocked_diff`, or `inconclusive`. |
 
+Durable registry ingestion:
+
+- `settings.csv` may provide
+  `model_selection_expected_diff_approval_registry`; `scripts/run_extraction.py`
+  may override it with `--model-selection-expected-diff-approvals`.
+- The registry is a TSV projection of `ExpectedDiffApprovalRecord`, keyed by
+  `stable_row_id`.
+- Durable registry rows must be approved `expected_diff` rows. Missing files,
+  blocked, inconclusive, unvalidated, duplicate, or incomplete rows must be
+  rejected at load time.
+- Matrix-affecting durable rows must not use `synthetic_fixture`; they need
+  `targeted_benchmark`, `8raw`, or `manual_eic_ms2_review`.
+- Registry ingestion is not sufficient for product switch by itself. Loaded rows
+  still pass through the runtime approval matcher and model-selection gate, so
+  sample, target, legacy candidate id, successor candidate id, stable row id,
+  public-output impact, and matrix impact are rechecked against the current
+  run.
+
 Tests must prove:
 
 - `blocked_diff` and `inconclusive` always set `product_switch_allowed=False`;
@@ -273,6 +291,10 @@ Expected-diff candidates include:
   selection reasons;
 - role-aware ISTD/STD RT evidence supports a different candidate than legacy RT
   distance alone;
+- targeted validation exposes a shared evidence-rule problem that should also
+  change untargeted model selection, such as wrong-peak selection, legacy score
+  authority, morphology-as-veto behavior, or candidate-aligned product/NL
+  attribution;
 - MS2 trace, neutral-loss evidence, local S/N, morphology, and CWT context agree
   against the legacy selection;
 - AsLS baseline changes local S/N enough that the legacy score is no longer the
@@ -282,6 +304,8 @@ Expected-diff must not be used for:
 
 - unexplained mismatches;
 - broad threshold tuning without row-level evidence;
+- copying targeted labels, targeted pass/fail states, or sample-specific fixes
+  into untargeted matrix identity;
 - CWT-only promotion;
 - MS2/NL-driven promotion when non-selected candidates lack complete candidate
   evidence;

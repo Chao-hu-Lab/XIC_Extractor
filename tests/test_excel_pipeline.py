@@ -11,6 +11,9 @@ from xic_extractor.extractor import (
     RunOutput,
 )
 from xic_extractor.neutral_loss import NLResult
+from xic_extractor.peak_detection.targeted_product_projection import (
+    TargetedProductProjection,
+)
 from xic_extractor.signal_processing import (
     PeakCandidate,
     PeakDetectionResult,
@@ -339,6 +342,16 @@ def _run_output(*, with_diagnostics: bool) -> RunOutput:
         quality_penalty=1,
         quality_flags=("too_broad",),
         score_breakdown=peak_result.score_breakdown,
+        targeted_product_projection=TargetedProductProjection(
+            product_state="detected_flagged",
+            counted_detection=True,
+            review_state="flagged",
+            projection_reason="decision: detected_flagged; review: local_sn_minor",
+            support_reasons=("ms1_peak_present",),
+            review_reasons=("local_sn_minor",),
+            legacy_evidence={"confidence": "LOW"},
+            legacy_authority_status="evidence_only",
+        ),
     )
     diagnostics = []
     if with_diagnostics:

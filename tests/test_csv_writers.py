@@ -20,11 +20,15 @@ from xic_extractor.output.csv_writers import (
     write_score_breakdown_csv,
     write_wide_csv,
 )
+from xic_extractor.output.schema import TARGETED_PRODUCT_PROJECTION_HEADERS
 from xic_extractor.peak_detection.hypotheses import (
     AuditTrail,
     EvidenceVector,
     IntegrationResult,
     PeakHypothesis,
+)
+from xic_extractor.peak_detection.targeted_product_projection import (
+    TargetedProductProjection,
 )
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -107,6 +111,16 @@ def _result(*, nl: NLResult | None = None) -> ExtractionResult:
         prior_source="",
         quality_penalty=1,
         quality_flags=("too_broad",),
+        targeted_product_projection=TargetedProductProjection(
+            product_state="detected_flagged",
+            counted_detection=True,
+            review_state="flagged",
+            projection_reason="decision: detected_flagged; review: local_sn_minor",
+            support_reasons=("ms1_peak_present",),
+            review_reasons=("local_sn_minor",),
+            legacy_evidence={"confidence": "LOW"},
+            legacy_authority_status="evidence_only",
+        ),
     )
 
 
@@ -195,6 +209,17 @@ def test_write_wide_and_long_csv(tmp_path: Path) -> None:
         "PeakWidth": "0.3000",
         "Confidence": "LOW",
         "Reason": "concerns: local_sn (minor)",
+        "Product State": "detected_flagged",
+        "Counted Detection": "TRUE",
+        "Review State": "flagged",
+        "Projection Reason": "decision: detected_flagged; review: local_sn_minor",
+        "Projection Support Reasons": "ms1_peak_present",
+        "Projection Review Reasons": "local_sn_minor",
+        "Projection Conflict Reasons": "",
+        "Projection Not Counted Reasons": "",
+        "Projection Exclusion Reasons": "",
+        "Legacy Authority Status": "evidence_only",
+        "Benchmark Eligibility State": "",
     }
 
 
@@ -258,6 +283,43 @@ def test_score_breakdown_csv_includes_weighted_evidence_fields(tmp_path: Path) -
     assert breakdown["Detection Counted"] == "TRUE"
     assert breakdown["Support"] == "strict_nl_ok; local_sn_strong"
     assert breakdown["Concerns"] == ""
+
+
+def test_long_and_score_breakdown_rows_use_targeted_product_projection(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    target = _target("WithNL")
+    result = replace(
+        _result(nl=NLResult("NL_FAIL", 125.0, None, 1, 0, 1)),
+        confidence="VERY_LOW",
+        targeted_product_projection=TargetedProductProjection(
+            product_state="detected_flagged",
+            counted_detection=True,
+            review_state="flagged",
+            projection_reason=(
+                "decision: detected_flagged; review: plausible_dda_nl_dropout"
+            ),
+            support_reasons=("ms1_peak_present",),
+            review_reasons=("plausible_dda_nl_dropout",),
+            legacy_evidence={"confidence": "VERY_LOW", "nl_status": "NL_FAIL"},
+            legacy_authority_status="evidence_only",
+        ),
+    )
+    file_result = FileResult(sample_name="SampleA", results={"WithNL": result})
+
+    long_row = _long_output_rows(file_result, [target])[0]
+    write_score_breakdown_csv(config, [file_result])
+
+    assert long_row["NL"] == "NL_FAIL"
+    assert long_row["Confidence"] == "VERY_LOW"
+    assert long_row["Product State"] == "detected_flagged"
+    assert long_row["Counted Detection"] == "TRUE"
+    assert long_row["Projection Review Reasons"] == "plausible_dda_nl_dropout"
+    breakdown = _read_csv(config.output_csv.with_name("xic_score_breakdown.csv"))[0]
+    assert breakdown["Detection Counted"] == "TRUE"
+    assert breakdown["Product State"] == "detected_flagged"
+    assert breakdown["Projection Reason"].startswith("decision: detected_flagged")
 
 
 def test_score_breakdown_csv_can_emit_ms2_trace_labels_without_schema_change(
@@ -327,10 +389,14 @@ def test_csv_rows_preserve_values_with_runtime_selected_hypothesis() -> None:
         fallback_file,
         [target],
     )
-    assert _long_output_rows(selected_file, [target]) == _long_output_rows(
-        fallback_file,
-        [target],
-    )
+    selected_long = _long_output_rows(selected_file, [target])[0]
+    fallback_long = _long_output_rows(fallback_file, [target])[0]
+    for header, fallback_value in fallback_long.items():
+        if header in TARGETED_PRODUCT_PROJECTION_HEADERS:
+            continue
+        assert selected_long[header] == fallback_value
+    assert selected_long["Product State"]
+    assert selected_long["Counted Detection"] in {"TRUE", "FALSE"}
 
 
 def test_csv_rows_project_selected_integration_values_when_present() -> None:

@@ -9,6 +9,9 @@ from pathlib import Path
 from xic_extractor import extractor
 from xic_extractor.config import ConfigError, ExtractionConfig, load_config
 from xic_extractor.output.excel_pipeline import write_excel_from_run_output
+from xic_extractor.peak_detection.model_selection_approval_registry import (
+    load_expected_diff_approval_registry,
+)
 from xic_extractor.raw_reader import RawReaderError
 
 
@@ -39,11 +42,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.skip_excel
             else config
         )
+        approval_registry_path = (
+            args.model_selection_expected_diff_approvals.resolve()
+            if args.model_selection_expected_diff_approvals is not None
+            else run_config.model_selection_expected_diff_approval_registry
+        )
+        try:
+            model_selection_expected_diff_approvals = (
+                load_expected_diff_approval_registry(approval_registry_path)
+                if approval_registry_path is not None
+                else None
+            )
+        except ValueError as exc:
+            raise ConfigError(str(exc)) from exc
 
         output = extractor.run(
             run_config,
             targets,
             progress_callback=_print_progress,
+            model_selection_expected_diff_approvals=(
+                model_selection_expected_diff_approvals
+            ),
         )
     except (ConfigError, RawReaderError) as exc:
         print(str(exc), file=sys.stderr)
@@ -102,6 +121,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=_positive_int,
         default=None,
         help="Override settings.csv parallel_workers.",
+    )
+    parser.add_argument(
+        "--model-selection-expected-diff-approvals",
+        type=Path,
+        default=None,
+        help=(
+            "Override settings.csv model_selection_expected_diff_approval_registry "
+            "with a durable expected-diff approval TSV."
+        ),
     )
     return parser.parse_args(argv)
 

@@ -95,6 +95,7 @@ class SettingsSection(QWidget):
         self._dirty_matrix_mode_checkbox = QCheckBox("啟用 dirty matrix mode")
         self._rolling_window_size_spin = QSpinBox()
         self._rt_prior_library_path_edit = QLineEdit()
+        self._target_pair_rt_calibration_path_edit = QLineEdit()
         self._injection_order_source_edit = QLineEdit()
         self._resolver_mode_combo = QComboBox()
         self._resolver_chrom_threshold_spin = QDoubleSpinBox()
@@ -148,6 +149,9 @@ class SettingsSection(QWidget):
             count_no_ms2_checkbox=self._count_no_ms2_checkbox,
             rolling_window_size_spin=self._rolling_window_size_spin,
             rt_prior_library_path_edit=self._rt_prior_library_path_edit,
+            target_pair_rt_calibration_path_edit=(
+                self._target_pair_rt_calibration_path_edit
+            ),
             injection_order_source_edit=self._injection_order_source_edit,
             nl_rt_anchor_search_margin_min_spin=(
                 self._nl_rt_anchor_search_margin_min_spin
@@ -235,6 +239,7 @@ class SettingsSection(QWidget):
             QSignalBlocker(self._dirty_matrix_mode_checkbox),
             QSignalBlocker(self._rolling_window_size_spin),
             QSignalBlocker(self._rt_prior_library_path_edit),
+            QSignalBlocker(self._target_pair_rt_calibration_path_edit),
             QSignalBlocker(self._injection_order_source_edit),
             QSignalBlocker(self._resolver_mode_combo),
             QSignalBlocker(self._resolver_chrom_threshold_spin),
@@ -343,6 +348,9 @@ class SettingsSection(QWidget):
                 ),
                 "rt_prior_library_path": (
                     self._rt_prior_library_path_edit.text().strip()
+                ),
+                "target_pair_rt_calibration_path": (
+                    self._target_pair_rt_calibration_path_edit.text().strip()
                 ),
                 "injection_order_source": (
                     self._injection_order_source_edit.text().strip()
@@ -515,6 +523,7 @@ class SettingsSection(QWidget):
             checkbox.stateChanged.connect(lambda _: self._set_dirty(True))
         for line_edit in (
             self._rt_prior_library_path_edit,
+            self._target_pair_rt_calibration_path_edit,
             self._injection_order_source_edit,
         ):
             line_edit.textChanged.connect(lambda _: self._set_dirty(True))

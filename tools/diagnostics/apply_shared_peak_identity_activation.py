@@ -36,6 +36,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             require_complete_peak_hypothesis_identity=(
                 args.require_complete_peak_hypothesis_identity
             ),
+            exclude_family_projections=args.exclude_family_projections,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -106,8 +107,19 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help=(
             "Fail unless formal output can emit peak_hypothesis_id as the "
-            "matrix row identity. Family projections are allowed when no split "
-            "evidence exists."
+            "matrix row identity without unresolved family projection rows."
+        ),
+    )
+    parser.add_argument(
+        "--exclude-family-projections",
+        action="store_true",
+        help=(
+            "Formal mode only. Exclude unresolved family projection rows from "
+            "the emitted matrix and report excluded row/cell counts in the "
+            "application summary. Excluded rows keep canonical readiness "
+            "blocked; this flag cannot satisfy "
+            "--require-complete-peak-hypothesis-identity while exclusions "
+            "remain."
         ),
     )
     return parser.parse_args(argv)

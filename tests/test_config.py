@@ -6,12 +6,18 @@ import pytest
 from xic_extractor.config import (
     ConfigError,
     ExtractionConfig,
+    compute_target_config_hash,
     load_config,
     migrate_settings_dict,
 )
 from xic_extractor.settings_schema import (
     CANONICAL_SETTINGS_DEFAULTS,
     default_parallel_workers,
+)
+from xic_extractor.target_pair_rt_calibration import (
+    TARGET_PAIR_RT_CALIBRATION_SCHEMA_VERSION,
+    TargetPairRTCalibrationRow,
+    write_target_pair_rt_calibration_tsv,
 )
 
 SETTINGS_FIELDS = ["key", "value", "description"]
@@ -128,8 +134,14 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.parallel_workers == default_parallel_workers()
     assert config.baseline_audit_method == ""
     assert config.emit_peak_candidates is False
+    assert config.target_pair_rt_calibration_path is None
+    assert config.target_config_hash == compute_target_config_hash(
+        config_dir / "targets.csv"
+    )
     assert targets[0].label == "Analyte"
     assert targets[0].neutral_loss_da == pytest.approx(116.0474)
+    assert targets[0].isotope_label_type == "unknown"
+    assert targets[0].paired_rt_relation == "none"
 
 
 def test_load_config_hash_reflects_settings_overrides(tmp_path: Path) -> None:
@@ -372,6 +384,187 @@ def test_load_config_accepts_emit_peak_candidates_setting(tmp_path: Path) -> Non
     assert config.emit_peak_candidates is True
 
 
+def test_load_config_accepts_target_pair_rt_calibration_path(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    calibration = tmp_path / "target_pair_rt_calibration.tsv"
+    _write_settings(
+        config_dir,
+        {"target_pair_rt_calibration_path": str(calibration)},
+    )
+    _write_targets(config_dir)
+    _write_calibration(calibration, config_dir / "targets.csv")
+
+    config, _ = load_config(config_dir)
+
+    assert config.target_pair_rt_calibration_path == calibration
+
+
+def test_load_config_validates_pair_rt_calibration_when_shadow_output_off(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    calibration = tmp_path / "target_pair_rt_calibration.tsv"
+    _write_settings(
+        config_dir,
+        {
+            "target_pair_rt_calibration_path": str(calibration),
+            "emit_peak_candidates": "false",
+        },
+    )
+    _write_targets(config_dir)
+    calibration.write_text(
+        "schema_version\ttarget_label\nv\tAnalyte\n",
+        encoding="utf-8-sig",
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "missing required column target_config_hash")
+
+
+def test_load_config_rejects_missing_target_pair_rt_calibration_file(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    calibration = tmp_path / "missing_target_pair_rt_calibration.tsv"
+    _write_settings(
+        config_dir,
+        {"target_pair_rt_calibration_path": str(calibration)},
+    )
+    _write_targets(config_dir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "file is missing")
+
+
+def test_load_config_rejects_duplicate_target_pair_rt_calibration_rows(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    calibration = tmp_path / "target_pair_rt_calibration.tsv"
+    _write_settings(
+        config_dir,
+        {"target_pair_rt_calibration_path": str(calibration)},
+    )
+    _write_targets(config_dir)
+    _write_calibration(calibration, config_dir / "targets.csv", duplicate=True)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "duplicate (target_label, paired_istd_label)")
+
+
+def test_load_config_parses_optional_target_pair_rt_metadata(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir)
+    _write_targets_with_optional_metadata(
+        config_dir,
+        [
+            _target_row(
+                label="Analyte",
+                istd_pair="ISTD",
+                paired_rt_relation="istd_not_later_than_pair",
+            ),
+            _target_row(
+                label="ISTD",
+                is_istd="true",
+                isotope_label_type="deuterated",
+            ),
+        ],
+    )
+
+    _, targets = load_config(config_dir)
+    by_label = {target.label: target for target in targets}
+
+    assert by_label["Analyte"].isotope_label_type == "unknown"
+    assert by_label["Analyte"].paired_rt_relation == "istd_not_later_than_pair"
+    assert by_label["ISTD"].isotope_label_type == "deuterated"
+    assert by_label["ISTD"].paired_rt_relation == "none"
+
+
+def test_load_config_rejects_invalid_target_pair_rt_metadata_enum(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir)
+    _write_targets_with_optional_metadata(
+        config_dir,
+        [_target_row(isotope_label_type="regex_guess")],
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(exc_info, "targets.csv", "isotope_label_type", "regex_guess")
+
+
+def test_load_config_rejects_istd_relation_on_non_deuterated_pair(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir)
+    _write_targets_with_optional_metadata(
+        config_dir,
+        [
+            _target_row(
+                label="Analyte",
+                istd_pair="ISTD",
+                paired_rt_relation="istd_not_later_than_pair",
+            ),
+            _target_row(
+                label="ISTD",
+                is_istd="true",
+                isotope_label_type="heavy_non_deuterium",
+            ),
+        ],
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(
+        exc_info,
+        "targets.csv",
+        "paired_rt_relation",
+        "requires paired ISTD isotope_label_type=deuterated",
+    )
+
+
+def test_load_config_rejects_istd_owned_paired_rt_relation(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir)
+    _write_targets_with_optional_metadata(
+        config_dir,
+        [
+            _target_row(
+                label="ISTD",
+                is_istd="true",
+                paired_rt_relation="learned_delta_only",
+            )
+        ],
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_dir)
+
+    _assert_error(
+        exc_info,
+        "targets.csv",
+        "paired_rt_relation",
+        "is_istd=true targets must leave paired_rt_relation blank",
+    )
+
+
 def test_load_config_accepts_asls_baseline_audit_method(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     _write_settings(config_dir, {"baseline_audit_method": "asls"})
@@ -505,6 +698,27 @@ def test_settings_example_includes_peak_candidates_setting() -> None:
     assert rows["emit_peak_candidates"] == "false"
 
 
+def test_settings_example_includes_target_pair_rt_calibration_setting() -> None:
+    example_path = Path("config/settings.example.csv")
+
+    with example_path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = {row["key"]: row["value"] for row in csv.DictReader(handle)}
+
+    assert rows["target_pair_rt_calibration_path"] == ""
+
+
+def test_targets_example_includes_optional_target_pair_rt_metadata() -> None:
+    example_path = Path("config/targets.example.csv")
+
+    with example_path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = {row["label"]: row for row in csv.DictReader(handle)}
+
+    assert rows["d3-5-medC"]["isotope_label_type"] == "deuterated"
+    assert rows["5-medC"]["paired_rt_relation"] == "istd_not_later_than_pair"
+    assert rows["15N5-8-oxodG"]["isotope_label_type"] == "heavy_non_deuterium"
+    assert rows["8-oxodG"]["paired_rt_relation"] == "learned_delta_only"
+
+
 def test_settings_example_includes_local_minimum_preset() -> None:
     example_path = Path("config/settings.example.csv")
 
@@ -599,6 +813,55 @@ def test_load_config_rejects_unknown_parallel_mode(tmp_path: Path) -> None:
         load_config(config_dir)
 
     _assert_error(exc_info, "settings.csv", "parallel_mode", "thread")
+
+
+def _write_targets_with_optional_metadata(
+    config_dir: Path,
+    rows: list[dict[str, str]],
+) -> None:
+    fieldnames = [
+        *TARGET_FIELDS,
+        "isotope_label_type",
+        "paired_rt_relation",
+    ]
+    config_dir.mkdir(parents=True, exist_ok=True)
+    with (config_dir / "targets.csv").open(
+        "w", newline="", encoding="utf-8-sig"
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field, "") for field in fieldnames})
+
+
+def _write_calibration(
+    path: Path,
+    targets_path: Path,
+    *,
+    duplicate: bool = False,
+) -> None:
+    row = TargetPairRTCalibrationRow(
+        schema_version=TARGET_PAIR_RT_CALIBRATION_SCHEMA_VERSION,
+        target_config_hash=compute_target_config_hash(targets_path),
+        source_artifact="mixstds.tsv",
+        source_hash="sourcehash",
+        source_hash_status="present",
+        target_label="Analyte",
+        paired_istd_label="ISTD",
+        pair_rt_delta_min=0.25,
+        delta_source="mixstds_clean_standard",
+        point_count=6,
+        rt_delta_median_min=0.25,
+        rt_delta_mad_min=0.02,
+        rt_delta_direction="target_later",
+        isotope_label_type="deuterated",
+        paired_rt_relation="istd_not_later_than_pair",
+        calibration_status="usable",
+        calibration_level="clean_standard_only",
+        product_transfer_status="not_assessed",
+    )
+    rows = [row, row] if duplicate else [row]
+    write_target_pair_rt_calibration_tsv(path, rows)
 
 
 def test_load_config_rejects_peak_duration_min_above_max(tmp_path: Path) -> None:

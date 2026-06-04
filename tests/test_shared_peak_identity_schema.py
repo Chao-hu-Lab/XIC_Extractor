@@ -424,6 +424,10 @@ def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
     validate_token("TRUE", "canonical_row_identity_ready")
     validate_token("none", "canonical_row_identity_blockers")
     validate_token("family_projection_present", "canonical_row_identity_blockers")
+    validate_token(
+        "family_projection_excluded_incomplete_scope",
+        "canonical_row_identity_blockers",
+    )
     validate_token("raw_mode_review_only", "canonical_row_identity_blockers")
     validate_token("matrix_construction_blocked", "canonical_row_identity_blockers")
     validate_token("source_matrix_value_missing", "canonical_row_identity_blockers")
@@ -436,7 +440,19 @@ def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
         "canonical_row_identity_scope",
     )
     validate_token("formal_peak_hypothesis_identity", "canonical_row_identity_scope")
+    validate_token(
+        "canonical_peak_hypothesis_rows_only",
+        "canonical_row_identity_scope",
+    )
+    validate_token(
+        "partial_canonical_peak_hypothesis_rows_only",
+        "canonical_row_identity_scope",
+    )
     validate_token("projection_not_split_proof", "family_projection_semantics")
+    validate_token(
+        "excluded_from_canonical_output",
+        "family_projection_semantics",
+    )
     validate_token(
         "context_only_not_identity_authority",
         "legacy_rt_row_context_authority",

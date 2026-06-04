@@ -150,6 +150,7 @@ def build_peak_hypothesis_matrix_outputs(
     hypothesis_consistency_tsv: Path | None = None,
     overlay_trace_data_jsons: Sequence[Path] = (),
     allow_overwrite_source: bool = False,
+    require_complete_peak_hypothesis_identity: bool = False,
 ) -> PeakHypothesisMatrixOutputs:
     matrix_header, matrix_rows = _read_tsv_with_header(
         alignment_matrix_tsv,
@@ -180,6 +181,15 @@ def build_peak_hypothesis_matrix_outputs(
         hypothesis_consistency_rows=consistency_rows,
         expanded_peak_candidate_rows=expanded_candidates,
     )
+    if (
+        require_complete_peak_hypothesis_identity
+        and construction.summary_row["canonical_row_identity_ready"] != "TRUE"
+    ):
+        raise ValueError(
+            "complete PeakHypothesis identity requires canonical row identity "
+            "readiness; blockers="
+            f"{construction.summary_row['canonical_row_identity_blockers']}"
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     matrix_path = output_dir / "alignment_matrix.tsv"

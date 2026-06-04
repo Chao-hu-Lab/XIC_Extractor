@@ -17,6 +17,20 @@ MS1_SUFFIXES: tuple[str, ...] = (
     "PeakWidth",
 )
 
+TARGETED_PRODUCT_PROJECTION_HEADERS: tuple[str, ...] = (
+    "Product State",
+    "Counted Detection",
+    "Review State",
+    "Projection Reason",
+    "Projection Support Reasons",
+    "Projection Review Reasons",
+    "Projection Conflict Reasons",
+    "Projection Not Counted Reasons",
+    "Projection Exclusion Reasons",
+    "Legacy Authority Status",
+    "Benchmark Eligibility State",
+)
+
 LONG_COLUMNS: tuple[OutputColumn, ...] = (
     OutputColumn("SampleName"),
     OutputColumn("Group"),
@@ -32,6 +46,10 @@ LONG_COLUMNS: tuple[OutputColumn, ...] = (
     OutputColumn("PeakWidth", advanced=True),
     OutputColumn("Confidence"),
     OutputColumn("Reason"),
+    *(
+        OutputColumn(header, advanced=True)
+        for header in TARGETED_PRODUCT_PROJECTION_HEADERS
+    ),
 )
 LONG_HEADERS: tuple[str, ...] = tuple(column.name for column in LONG_COLUMNS)
 LONG_ADVANCED_HEADERS: frozenset[str] = frozenset(
@@ -50,6 +68,10 @@ SCORE_BREAKDOWN_HEADERS: tuple[str, ...] = (
     "Target",
     "Final Confidence",
     "Detection Counted",
+    "Product State",
+    "Review State",
+    "Projection Reason",
+    "Legacy Authority Status",
     "Caps",
     "Raw Score",
     "Support",

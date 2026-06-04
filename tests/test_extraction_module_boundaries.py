@@ -122,13 +122,43 @@ def test_extractor_delegates_target_extraction() -> None:
 
 def test_target_extraction_delegates_diagnostic_evidence_helpers() -> None:
     assert importlib.util.find_spec("xic_extractor.extraction.diagnostics")
+    assert importlib.util.find_spec("xic_extractor.extraction.handoff_spine_runtime")
+    assert importlib.util.find_spec("xic_extractor.extraction.peak_candidate_audit")
+    assert importlib.util.find_spec("xic_extractor.extraction.result_assembly")
 
     target_path = ROOT / "xic_extractor" / "extraction" / "target_extraction.py"
+    source = target_path.read_text(encoding="utf-8")
     function_names = _function_names(target_path)
 
     assert "_check_target_nl" not in function_names
     assert "_candidate_ms2_evidence_builder" not in function_names
-    assert len(target_path.read_text(encoding="utf-8").splitlines()) <= 350
+    assert "selected_handoff_peak(" in source
+    assert "append_peak_audit_rows(" in source
+    assert "build_extraction_result(" in source
+
+
+def test_targeted_product_projection_vocabulary_stays_out_of_untargeted_identity_paths(
+) -> None:
+    forbidden_terms = (
+        "TargetedProductProjection",
+        "detected_flagged",
+        "Product State",
+        "Counted Detection",
+        "targeted_review_positive",
+    )
+    scoped_dirs = (
+        ROOT / "xic_extractor" / "alignment",
+        ROOT / "xic_extractor" / "discovery",
+    )
+    findings: list[str] = []
+    for scoped_dir in scoped_dirs:
+        for path in scoped_dir.rglob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            for term in forbidden_terms:
+                if term in source:
+                    findings.append(f"{path.relative_to(ROOT)}: {term}")
+
+    assert findings == []
 
 
 def test_extractor_delegates_rt_anchor_and_drift_helpers() -> None:

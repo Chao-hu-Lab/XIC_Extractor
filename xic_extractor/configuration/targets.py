@@ -1,7 +1,11 @@
 import logging
 from pathlib import Path
 
-from xic_extractor.configuration.csv_io import TARGET_FIELDS, _read_target_rows
+from xic_extractor.configuration.csv_io import (
+    OPTIONAL_TARGET_METADATA_FIELDS,
+    TARGET_FIELDS,
+    _read_target_rows,
+)
 from xic_extractor.configuration.models import Target
 from xic_extractor.configuration.parsing import (
     _config_error,
@@ -10,6 +14,13 @@ from xic_extractor.configuration.parsing import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+ISOTOPE_LABEL_TYPES = frozenset(
+    {"deuterated", "heavy_non_deuterium", "unknown"}
+)
+PAIRED_RT_RELATIONS = frozenset(
+    {"istd_not_later_than_pair", "learned_delta_only", "none"}
+)
 
 
 def _read_targets(path: Path) -> list[Target]:
@@ -37,7 +48,23 @@ def _read_targets(path: Path) -> list[Target]:
                 target.istd_pair,
                 "is_istd=true targets must not set istd_pair",
             )
+        if target.is_istd and target.paired_rt_relation != "none":
+            raise _config_error(
+                path,
+                row_number,
+                "paired_rt_relation",
+                target.paired_rt_relation,
+                "is_istd=true targets must leave paired_rt_relation blank",
+            )
         if not target.istd_pair:
+            if target.paired_rt_relation != "none":
+                raise _config_error(
+                    path,
+                    row_number,
+                    "paired_rt_relation",
+                    target.paired_rt_relation,
+                    "requires istd_pair",
+                )
             continue
         pair = by_label.get(target.istd_pair)
         if pair is None or not pair.is_istd:
@@ -48,12 +75,26 @@ def _read_targets(path: Path) -> list[Target]:
                 target.istd_pair,
                 "must reference a target with is_istd=true",
             )
+        if (
+            target.paired_rt_relation == "istd_not_later_than_pair"
+            and pair.isotope_label_type != "deuterated"
+        ):
+            raise _config_error(
+                path,
+                row_number,
+                "paired_rt_relation",
+                target.paired_rt_relation,
+                "requires paired ISTD isotope_label_type=deuterated",
+            )
 
     return targets
 
 
 def _parse_target_row(path: Path, row_number: int, row: dict[str, str]) -> Target:
-    values = {field: str(row.get(field, "")).strip() for field in TARGET_FIELDS}
+    values = {
+        field: str(row.get(field, "")).strip()
+        for field in (*TARGET_FIELDS, *OPTIONAL_TARGET_METADATA_FIELDS)
+    }
     label = values["label"]
     if not label:
         raise _config_error(path, row_number, "label", label, "must not be empty")
@@ -94,6 +135,22 @@ def _parse_target_row(path: Path, row_number: int, row: dict[str, str]) -> Targe
         nl_ppm_max=nl_ppm_max,
         is_istd=is_istd,
         istd_pair=values["istd_pair"],
+        isotope_label_type=_parse_target_metadata_enum(
+            path,
+            row_number,
+            "isotope_label_type",
+            values["isotope_label_type"],
+            ISOTOPE_LABEL_TYPES,
+            default="unknown",
+        ),
+        paired_rt_relation=_parse_target_metadata_enum(
+            path,
+            row_number,
+            "paired_rt_relation",
+            values["paired_rt_relation"],
+            PAIRED_RT_RELATIONS,
+            default="none",
+        ),
     )
 
 
@@ -142,3 +199,26 @@ def _parse_neutral_loss(
         )
 
     return neutral_loss_da, nl_ppm_warn, nl_ppm_max
+
+
+def _parse_target_metadata_enum(
+    path: Path,
+    row_number: int,
+    field: str,
+    value: str,
+    allowed: frozenset[str],
+    *,
+    default: str,
+) -> str:
+    normalized = value.strip().lower()
+    if normalized == "":
+        return default
+    if normalized not in allowed:
+        raise _config_error(
+            path,
+            row_number,
+            field,
+            value,
+            f"must be one of {', '.join(sorted(allowed))} or blank",
+        )
+    return normalized

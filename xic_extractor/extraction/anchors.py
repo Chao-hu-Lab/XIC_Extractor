@@ -7,6 +7,7 @@ from xic_extractor.output.messages import DiagnosticRecord
 from xic_extractor.signal_processing import PeakDetectionResult
 
 PAIRED_TARGET_ANCHOR_PEAK_DELTA_MAX_MIN: float = 0.25
+PAIRED_TARGET_NL_ANCHOR_REFERENCE_DELTA_MAX_MIN: float = 0.5
 PAIRED_FALLBACK_ISTD_PEAK_DELTA_MAX_MIN: float = 0.5
 ANCHOR_PEAK_DELTA_WARN_MIN: float = 0.5
 ANCHOR_MISMATCH_EVIDENCE_POINTS: int = 45

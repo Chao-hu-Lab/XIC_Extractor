@@ -52,6 +52,8 @@ class _ParsedSettings:
     rolling_window_size: int
     dirty_matrix_mode: bool
     rt_prior_library_path: Path | None
+    target_pair_rt_calibration_path: Path | None
+    model_selection_expected_diff_approval_registry: Path | None
     emit_score_breakdown: bool
     emit_review_report: bool
     emit_peak_candidates: bool
@@ -240,6 +242,12 @@ def _parse_settings_values(
         ),
         rt_prior_library_path=_parse_optional_path(
             settings.get("rt_prior_library_path", "")
+        ),
+        target_pair_rt_calibration_path=_parse_optional_path(
+            settings.get("target_pair_rt_calibration_path", "")
+        ),
+        model_selection_expected_diff_approval_registry=_parse_optional_path(
+            settings.get("model_selection_expected_diff_approval_registry", "")
         ),
         emit_score_breakdown=_parse_bool(
             settings_path,
@@ -523,6 +531,10 @@ def _build_config(
         rolling_window_size=parsed.rolling_window_size,
         dirty_matrix_mode=parsed.dirty_matrix_mode,
         rt_prior_library_path=parsed.rt_prior_library_path,
+        target_pair_rt_calibration_path=parsed.target_pair_rt_calibration_path,
+        model_selection_expected_diff_approval_registry=(
+            parsed.model_selection_expected_diff_approval_registry
+        ),
         emit_score_breakdown=parsed.emit_score_breakdown,
         emit_review_report=parsed.emit_review_report,
         emit_peak_candidates=parsed.emit_peak_candidates,

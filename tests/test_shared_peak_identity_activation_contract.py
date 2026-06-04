@@ -264,7 +264,7 @@ def test_peak_hypothesis_raw_overlay_split_requires_review() -> None:
     assert row["required_review_reason"] == "raw_mode_review_only"
 
 
-def test_raw_overlay_mode_conflict_requires_review_not_auto_block() -> None:
+def test_raw_overlay_wrong_peak_conflict_blocks_before_review_only_boundary() -> None:
     rows = activation.build_activation_decision_rows(
         [
             _support_row(
@@ -281,9 +281,57 @@ def test_raw_overlay_mode_conflict_requires_review_not_auto_block() -> None:
     )
 
     row = rows[0]
-    assert row["activation_status"] == "review_required"
-    assert row["activation_action"] == "require_review"
-    assert row["contract_rule_id"] == "peak_hypothesis_raw_mode_review_only"
+    assert row["activation_status"] == "auto_block"
+    assert row["activation_action"] == "block_rescue"
+    assert row["contract_rule_id"] == "wrong_peak_conflict"
+
+
+def test_raw_overlay_positive_with_candidate_aligned_ms1_ms2_can_activate() -> None:
+    rows = activation.build_activation_decision_rows(
+        [
+            _support_row(
+                evidence_support_status="machine_observed_sufficient",
+                observed_machine_metrics=(
+                    "peak_hypothesis_id=FAM001::raw_mode_1;"
+                    "peak_hypothesis_authority_source=raw_or_overlay_review_only;"
+                    "peak_hypothesis_status=raw_mode_review_only;"
+                    "product_selection_action=require_raw_mode_review;"
+                    "product_selection_blocker=raw_mode_review_only;"
+                    "ms1_pattern_status=supportive;"
+                    "candidate_ms2_pattern_status=supportive"
+                ),
+            ),
+        ],
+    )
+
+    row = rows[0]
+    assert row["activation_status"] == "auto_activate"
+    assert row["contract_rule_id"] == "machine_observed_sufficient_positive_identity"
+    assert row["activation_unit_scope"] == "peak_hypothesis"
+
+
+def test_raw_overlay_positive_without_candidate_ms2_stays_confidence_only() -> None:
+    rows = activation.build_activation_decision_rows(
+        [
+            _support_row(
+                evidence_support_status="machine_observed_sufficient",
+                observed_machine_metrics=(
+                    "peak_hypothesis_id=FAM001::raw_mode_1;"
+                    "peak_hypothesis_authority_source=raw_or_overlay_review_only;"
+                    "peak_hypothesis_status=raw_mode_review_only;"
+                    "product_selection_action=require_raw_mode_review;"
+                    "product_selection_blocker=raw_mode_review_only;"
+                    "ms1_pattern_status=supportive;"
+                    "candidate_ms2_pattern_status=not_observed;"
+                    "dda_missing_nl_policy_status=not_dispositive"
+                ),
+            ),
+        ],
+    )
+
+    row = rows[0]
+    assert row["activation_status"] == "confidence_only"
+    assert row["contract_rule_id"] == "dda_missing_nl_not_dispositive"
 
 
 def test_dda_non_dispositive_only_demotes_confidence() -> None:
@@ -465,6 +513,100 @@ def test_must_not_regress_expectations_pass_expected_rows() -> None:
     assert failures == ()
 
 
+def test_raw_mode_benchmark_representatives_pass_must_not_regress() -> None:
+    decision_rows = activation.build_activation_decision_rows(
+        [
+            _support_row(
+                feature_family_id="FAM001473",
+                sample_id="TumorBC2312_DNA",
+                evidence_support_status="machine_observed_conflict",
+                observed_machine_metrics=(
+                    "peak_hypothesis_id=FAM001473::raw_mode_1;"
+                    "peak_hypothesis_status=raw_mode_review_only;"
+                    "product_selection_action=require_raw_mode_review;"
+                    "product_selection_blocker=raw_mode_review_only;"
+                    "qc_ms1_reference_status=conflict;"
+                    "ms1_pattern_status=conflict"
+                ),
+                missing_machine_evidence="pattern_metric_not_supportive",
+            ),
+            _raw_overlay_positive_row("FAM002625", "TumorBC2263_DNA"),
+            _raw_overlay_positive_row("FAM005937", "BenignfatBC1055_DNA"),
+            _raw_overlay_positive_row("FAM005937", "BenignfatBC1151_DNA"),
+            _support_row(
+                feature_family_id="FAM019990",
+                sample_id="TumorBC2312_DNA",
+                observed_machine_metrics=(
+                    "peak_hypothesis_id=FAM019990::raw_mode_1;"
+                    "peak_hypothesis_status=raw_mode_review_only;"
+                    "product_selection_action=require_raw_mode_review;"
+                    "product_selection_blocker=raw_mode_review_only;"
+                    "ms1_pattern_status=supportive;"
+                    "candidate_ms2_pattern_status=not_observed;"
+                    "dda_missing_nl_policy_status=not_dispositive"
+                ),
+            ),
+        ],
+    )
+
+    status, failures = activation.evaluate_must_not_regress(
+        decision_rows,
+        [
+            {
+                "expectation_id": "FAM000144_mapped_tumor_wrong_peak_block",
+                "feature_family_id": "FAM001473",
+                "sample_id": "TumorBC2312_DNA",
+                "allowed_activation_statuses": "auto_block",
+                "allowed_contract_rule_ids": "wrong_peak_conflict",
+                "allowed_product_label_candidates": "fail",
+            },
+            {
+                "expectation_id": "d3_n6_meda_mapped_tumor_pass",
+                "feature_family_id": "FAM002625",
+                "sample_id": "TumorBC2263_DNA",
+                "allowed_activation_statuses": "auto_activate",
+                "allowed_contract_rule_ids": (
+                    "machine_observed_sufficient_positive_identity"
+                ),
+                "allowed_product_label_candidates": "pass",
+            },
+            {
+                "expectation_id": "FAM000610_mapped_benign1055_pass",
+                "feature_family_id": "FAM005937",
+                "sample_id": "BenignfatBC1055_DNA",
+                "allowed_activation_statuses": "auto_activate",
+                "allowed_contract_rule_ids": (
+                    "machine_observed_sufficient_positive_identity"
+                ),
+                "allowed_product_label_candidates": "pass",
+            },
+            {
+                "expectation_id": "FAM000610_mapped_benign1151_pass",
+                "feature_family_id": "FAM005937",
+                "sample_id": "BenignfatBC1151_DNA",
+                "allowed_activation_statuses": "auto_activate",
+                "allowed_contract_rule_ids": (
+                    "machine_observed_sufficient_positive_identity"
+                ),
+                "allowed_product_label_candidates": "pass",
+            },
+            {
+                "expectation_id": "FAM001658_mapped_low_intensity_not_hard_fail",
+                "feature_family_id": "FAM019990",
+                "sample_id": "TumorBC2312_DNA",
+                "allowed_activation_statuses": (
+                    "review_required;auto_activate;confidence_only"
+                ),
+                "allowed_product_label_candidates": "unchanged;pass",
+                "disallowed_activation_statuses": "auto_block",
+            },
+        ],
+    )
+
+    assert status == "pass"
+    assert failures == ()
+
+
 def test_must_not_regress_expectations_report_failures() -> None:
     decision_rows = activation.build_activation_decision_rows(
         [_support_row(feature_family_id="FAM001", sample_id="S1")],
@@ -510,6 +652,23 @@ def test_activation_acceptance_fails_when_product_affecting_rows_exceed_threshol
 
     assert summary["acceptance_status"] == "fail"
     assert "product_affecting_rows_exceed_threshold" in summary["hard_fail_reasons"]
+
+
+def _raw_overlay_positive_row(feature_family_id: str, sample_id: str) -> dict[str, str]:
+    return _support_row(
+        feature_family_id=feature_family_id,
+        sample_id=sample_id,
+        evidence_support_status="machine_observed_sufficient",
+        observed_machine_metrics=(
+            f"peak_hypothesis_id={feature_family_id}::raw_mode_1;"
+            "peak_hypothesis_authority_source=raw_or_overlay_review_only;"
+            "peak_hypothesis_status=raw_mode_review_only;"
+            "product_selection_action=require_raw_mode_review;"
+            "product_selection_blocker=raw_mode_review_only;"
+            "ms1_pattern_status=supportive;"
+            "candidate_ms2_pattern_status=supportive"
+        ),
+    )
 
 
 def _support_row(
