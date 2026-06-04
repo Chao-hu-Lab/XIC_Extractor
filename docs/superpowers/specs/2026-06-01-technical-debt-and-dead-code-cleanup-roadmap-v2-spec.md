@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-01
 **Status:** Execution closeout v1.8 - C4 projection closeout and C6 event-first retirement completed
+**Current control map:** [Cleanup current truth map](2026-06-04-cleanup-current-truth-map.md)
 **Related peak-pipeline chapter:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Current peak-pipeline reassessment:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
 **Repo-wide semantic-overlap inventory:** [Repo semantic-overlap inventory](2026-06-02-repo-semantic-overlap-inventory-spec.md)

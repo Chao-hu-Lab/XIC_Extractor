@@ -111,6 +111,34 @@ notes must list exact commands and observed results.
   entries should exist only for XIC-specific checklists that cannot live cleanly
   in routing docs.
 
+### Legacy Owner Transformation Policy
+
+- The project direction is explicit transformation: successor modules absorb the
+  useful capability and product invariants of legacy owners, fix the legacy pain
+  points, then retire or reduce the legacy owner to a thin compatibility adapter.
+- When the user explicitly asks to absorb a legacy owner into an existing
+  successor model, do not stop at another shadow/report/spec layer if a bounded
+  ownership-transfer slice can be named.
+- A valid ownership-transfer slice names: current owner, successor owner,
+  public surface, preserved invariant, expected product diff or parity oracle,
+  and the focused tests that prove it.
+- After those are named, prefer implementing one narrow transfer over creating a
+  new broad plan. Review gates should close the decision and then unblock
+  execution; they should not become an indefinite replacement for migration.
+- Tests protect product invariants, not old module shapes. When a successor owns
+  an invariant, migrate the test to the successor surface or delete the
+  legacy-specific test. Keep legacy tests only for public compatibility,
+  explicit rejection/migration behavior, or parity during an active transition.
+- Do not preserve a legacy owner merely because tests exist. First classify what
+  the tests protect: product invariant, compatibility contract, diagnostic
+  evidence, or obsolete implementation detail.
+- Keep public safety rules: if selected peak, selected area, confidence, reason,
+  matrix identity, workbook schema, TSV schema, or config behavior would change,
+  require an expected-diff contract and focused output tests before promotion.
+- `audit_only`, `shadow_only`, and `diagnostic_only` artifacts must still name an
+  exit rule, but for owner-migration work the exit rule should include the
+  smallest next production or adapter transfer, not only the missing evidence.
+
 ## Product And Validation Discipline
 
 - P-specs, C-specs, and implementation plans must state whether they advance

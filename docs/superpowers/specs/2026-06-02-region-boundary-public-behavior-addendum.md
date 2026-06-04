@@ -5,8 +5,8 @@
 [C4 / C6 / Region Public Behavior Retirement Productization Design](2026-06-02-public-behavior-retirement-productization-design.md)
 **Base design:**
 [Region-Boundary Decision Owner Design](2026-06-02-region-boundary-decision-owner-design.md)
-**Status:** Draft v0.2 after initial xhigh blocker review; implementation not
-started
+**Status:** Draft v0.3 - Phase 1 disposition and exit-evidence table locked;
+implementation must still be verified against this contract
 **Behavior label:** public behavior change
 
 ## Objective
@@ -28,6 +28,26 @@ Phase 1 is deliberately narrow:
 
 This addendum does not approve a new boundary oracle, CWT-only promotion,
 neighbor-apex switching, split handling, or wider-boundary promotion.
+
+## Launch Contract Closure
+
+This addendum closes the Phase 1 launch-contract questions from the parent
+productization design:
+
+- `region_first_safe_merge` remains a public compatibility token in Phase 1.
+  Its implementation is a narrow adapter over `RegionSelectionDecision`, not a
+  separate product-rule family.
+- `RegionSelectionDecision` is the source of product-facing region decision
+  fields.
+- Existing `shadow_status`, `shadow_verdict`, and safe-merge provenance fields
+  remain compatibility/audit projections.
+- Each verdict class below has an explicit Phase 1 disposition and exit
+  evidence.
+
+Implementation may continue only inside this disposition table. Any row that
+cannot be represented by the table fails closed to `behavior_change_required`
+or `review_only`; it must not silently promote a boundary, apex, area, score, or
+matrix value.
 
 ## Product Owner Decision
 
@@ -98,20 +118,26 @@ when region decision fields are available.
 
 ## Verdict Exit Table
 
-| `decision_status` / `decision_class` | Phase 1 product action | Public behavior |
-|---|---|---|
-| non-`evaluated` statuses with `insufficient_evidence` | `review_only` | Do not promote or switch boundaries. Emit skipped reason and unchanged selected boundary when a selected boundary exists. `not_counted_candidate` is reserved for future no-candidate policy and is not introduced by Phase 1. |
-| `evaluated` / `current_supported` | `no_change` | Keep the selected boundary and emit explicit support that the current interval was evaluated and accepted. |
-| `evaluated` / `merge_suggested` with `adjacent_wis_local_minimum_merge` | `safe_merge_eligible` | Extraction may promote only after the continuous-envelope safe gates pass. If the final safe-merge check rejects the envelope, the selected boundary remains unchanged and `safe_merge_rejection_reason` records the blocker. |
-| `evaluated` / `merge_suggested` without adjacent-WIS source | `behavior_change_required` | Do not auto-promote in Phase 1. Emit behavior-change-required state and conflict reason. |
-| `evaluated` / `wider_boundary_preferred` | `behavior_change_required` | Do not silently retain as if no concern exists. Emit review/behavior-change-required state; no automatic boundary widening. |
-| `evaluated` / `neighbor_apex_preferred` | `behavior_change_required` | Do not auto-switch apex without a named identity oracle. Emit review/behavior-change-required state. |
-| `evaluated` / `split_supported` | `behavior_change_required` | Treat as mixed/compound interval evidence. Emit review/behavior-change-required state; no single promoted boundary in Phase 1. |
+| Current `shadow_status` / `shadow_verdict` | Current Phase 1 `product_action` | Product disposition for Phase 1 | Required exit evidence |
+|---|---|---|---|
+| non-`evaluated` status / `insufficient_evidence` or skipped decision | `review_only` | Do not promote, switch boundaries, switch apex, or alter selected area. Keep the current selected boundary when one exists. `not_counted_candidate` is reserved for a future no-candidate policy and is not introduced by Phase 1. | Machine-readable skipped status, skipped reason, unchanged selected candidate/boundary ids, and unchanged public selected RT/area fields. |
+| `evaluated` / `current_supported` | `no_change` | Product decision accepts the current selected boundary. Keep selected apex, bounds, area, confidence, and reason unchanged. | Public projection proves the current boundary was evaluated and explicitly supported, not merely retained because no alternate won. Support reasons must come from `RegionSelectionDecision`. |
+| `evaluated` / `merge_suggested` with `merge_suggestion_source=adjacent_wis_local_minimum_merge` | `safe_merge_eligible` | This is the only Phase 1 class eligible to change selected bounds or selected area in extraction. `region_first_safe_merge` is only the compatibility route into this product action. | `RegionSelectionDecision.product_action == "safe_merge_eligible"` plus existing safe gates: selected interval count, interval gap, area ratio, apex delta, continuous-envelope eligibility, and `baseline_method == "asls"`. If a later gate rejects, selected output stays unchanged and `safe_merge_rejection_reason` names the blocker. |
+| `evaluated` / `merge_suggested` without `adjacent_wis_local_minimum_merge` | `behavior_change_required` | Do not auto-promote. Expose the row as behavior-change-required review evidence or leave it as diagnostic-only until a stronger oracle exists. | Conflict reason names the unsupported merge source or missing safe gate. No selected-boundary, selected-area, confidence, reason, matrix, TSV schema, or workbook schema change is allowed from this class. |
+| `evaluated` / `wider_boundary_preferred` | `behavior_change_required` | Do not widen boundaries in Phase 1. The product output must not look like the concern was ignored; it must carry behavior-change-required review state. | Changed-row note and validation-evidence review are required before any future automatic widening. Phase 1 evidence is only projection parity: unchanged selected boundary plus explicit conflict reason. |
+| `evaluated` / `neighbor_apex_preferred` | `behavior_change_required` | Do not switch apex in Phase 1. Neighbor-apex evidence remains review-only unless a future apex identity oracle is approved. | Apex identity oracle, changed-row contract, and public projection tests are required before future promotion. Phase 1 must prove unchanged selected apex and explicit conflict reason. |
+| `evaluated` / `split_supported` | `behavior_change_required` | Treat as mixed or compound interval evidence. Do not collapse it into a single promoted boundary in Phase 1. | Split/mixed-peak oracle, downstream matrix policy, and expected changed rows are required before future promotion. Phase 1 must prove unchanged selected boundary/area and explicit conflict reason. |
+| Any future or unrecognized evaluated verdict class | `behavior_change_required` unless a reviewed addendum says otherwise | Fail closed. New verdict vocabulary is not product authority by default. | New row in this table, output-contract tests, and reviewer-approved public behavior addendum before promotion. |
 
 The only Phase 1 class allowed to change selected bounds or selected area in
 extraction is the existing adjacent-WIS safe-merge class after all safe gates
 pass. Alignment Phase 1 does not use this class to promote matrix numeric
 values.
+
+The exit evidence must be produced from `RegionSelectionDecision` fields or
+direct adapters that carry those fields. Tests may compare legacy
+`shadow_verdict` columns for compatibility, but they must not prove Phase 1
+product behavior by recomputing the decision from legacy columns in writers.
 
 ## Public Surface Contract
 

@@ -3,6 +3,7 @@
 **Date:** 2026-06-01
 **Status:** Draft v0.1 - current-state reassessment before next cleanup goal
 **Readiness label:** `diagnostic_only`
+**Current control map:** [Cleanup current truth map](2026-06-04-cleanup-current-truth-map.md)
 **Current repo sources:** [Handoff productization C0 source of truth](../notes/2026-05-27-handoff-productization-c0-source-of-truth.md), `docs/superpowers/notes/2026-05-28-handoff-productization-phase-closeout.md`, [Product priority reset decision spec](2026-05-28-product-priority-reset-decision-spec.md)
 **Historical handoff input:** user-provided `lcms_gcms_peak_pipeline_handoff.md`
 **Execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
