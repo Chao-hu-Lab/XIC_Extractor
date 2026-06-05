@@ -146,9 +146,15 @@ def test_shadow_rows_include_leave_one_out_paired_area_ratio_evidence() -> None:
     assert row["paired_area_ratio_reference_min"] == "0.40000"
     assert row["paired_area_ratio_reference_median"] == "0.50000"
     assert row["paired_area_ratio_reference_max"] == "0.60000"
-    assert row["paired_area_ratio_status"] == "within_reference_range"
+    assert row["paired_area_ratio_status"] == "within_robust_range"
     assert row["paired_area_ratio_basis"] == (
-        "leave_one_sample_out_counted_area_over_istd_area"
+        "leave_one_sample_out_median_plus_minus_3_scaled_mad_area_over_istd_area"
+    )
+    assert row["paired_area_ratio_robust_status"] == "within_robust_range"
+    assert row["paired_area_ratio_robust_reference_median"] == "0.50000"
+    assert row["paired_area_ratio_robust_reference_mad"] == "0.10000"
+    assert row["paired_area_ratio_robust_basis"] == (
+        "leave_one_sample_out_median_plus_minus_3_scaled_mad_area_over_istd_area"
     )
     assert row["false_positive_review_status"] == "row_approval_candidate"
     assert row["false_positive_review_reasons"] == (
@@ -156,11 +162,79 @@ def test_shadow_rows_include_leave_one_out_paired_area_ratio_evidence() -> None:
     )
 
     summary = summarize_target_pair_rt_auto_reselection_rows(rows)
-    assert summary["paired_area_ratio_within_reference_count"] == "3"
-    assert summary["paired_area_ratio_outside_reference_count"] == "1"
+    assert summary["paired_area_ratio_within_active_count"] == "4"
+    assert summary["paired_area_ratio_outside_active_count"] == "0"
     assert summary["paired_area_ratio_inconclusive_count"] == "0"
     assert summary["false_positive_review_required_count"] == "0"
     assert summary["row_approval_candidate_count"] == "1"
+
+
+def test_shadow_rows_expose_minmax_vs_robust_area_ratio_conflict() -> None:
+    targets = [_target("8-oxodG", istd_pair="15N5-8-oxodG"), _istd()]
+    files = [
+        _file_result(
+            sample_name="Sample_DNA",
+            target_label="8-oxodG",
+            paired_label="15N5-8-oxodG",
+            model=_model_result(
+                legacy_selected_candidate_id="sample",
+                selected_candidate_id="sample",
+                selection_status="parity",
+            ),
+            target_area=600_000.0,
+            paired_area=100_000.0,
+            peak_candidate_rows=[],
+        ),
+        _file_result(
+            sample_name="RefA_DNA",
+            target_label="8-oxodG",
+            paired_label="15N5-8-oxodG",
+            model=_model_result(
+                legacy_selected_candidate_id="ref-a",
+                selected_candidate_id="ref-a",
+                selection_status="parity",
+            ),
+            target_area=40_000.0,
+            paired_area=100_000.0,
+            peak_candidate_rows=[],
+        ),
+        _file_result(
+            sample_name="RefB_DNA",
+            target_label="8-oxodG",
+            paired_label="15N5-8-oxodG",
+            model=_model_result(
+                legacy_selected_candidate_id="ref-b",
+                selected_candidate_id="ref-b",
+                selection_status="parity",
+            ),
+            target_area=50_000.0,
+            paired_area=100_000.0,
+            peak_candidate_rows=[],
+        ),
+        _file_result(
+            sample_name="RefC_DNA",
+            target_label="8-oxodG",
+            paired_label="15N5-8-oxodG",
+            model=_model_result(
+                legacy_selected_candidate_id="ref-c",
+                selected_candidate_id="ref-c",
+                selection_status="parity",
+            ),
+            target_area=1_000_000.0,
+            paired_area=100_000.0,
+            peak_candidate_rows=[],
+        ),
+    ]
+
+    rows = build_target_pair_rt_auto_reselection_rows(
+        files,
+        targets=targets,
+        calibration_rows=[_calibration(target_label="8-oxodG")],
+    )
+
+    row = next(row for row in rows if row["sample_name"] == "Sample_DNA")
+    assert row["paired_area_ratio_status"] == "outside_robust_range"
+    assert row["paired_area_ratio_robust_status"] == "outside_robust_range"
 
 
 def test_shadow_rows_prefer_chrom_morphology_candidate_with_pair_area_support() -> None:
@@ -254,7 +328,7 @@ def test_shadow_rows_prefer_chrom_morphology_candidate_with_pair_area_support() 
     assert row["selected_candidate_id"] == "chrom-gaussian15-main"
     assert row["selected_candidate_rt"] == "17.10000"
     assert row["paired_area_ratio_observed"] == "0.50000"
-    assert row["paired_area_ratio_status"] == "within_reference_range"
+    assert row["paired_area_ratio_status"] == "within_robust_range"
     assert "chrom_morphology_area_ratio" in row["selection_basis"]
 
 
@@ -416,17 +490,17 @@ def test_shadow_rows_mark_paired_area_ratio_outside_run_reference() -> None:
 
     row = next(row for row in rows if row["sample_name"] == "BenignfatBC1055_DNA")
     assert row["paired_area_ratio_observed"] == "0.02000"
-    assert row["paired_area_ratio_status"] == "outside_reference_range"
+    assert row["paired_area_ratio_status"] == "outside_robust_range"
     assert row["false_positive_review_status"] == (
         "false_positive_review_required"
     )
-    assert "paired_area_ratio:outside_reference_range" in (
+    assert "paired_area_ratio:outside_robust_range" in (
         row["false_positive_review_reasons"]
     )
 
     summary = summarize_target_pair_rt_auto_reselection_rows(rows)
     assert summary["false_positive_review_required_count"] == "1"
-    assert "paired_area_ratio:outside_reference_range" in (
+    assert "paired_area_ratio:outside_robust_range" in (
         summary["false_positive_strata"]
     )
 
@@ -507,7 +581,7 @@ def test_shadow_rows_treat_ms2_nl_contradiction_as_review_not_hard_veto() -> Non
     )
 
     row = next(row for row in rows if row["sample_name"] == "BenignfatBC1055_DNA")
-    assert row["paired_area_ratio_status"] == "within_reference_range"
+    assert row["paired_area_ratio_status"] == "within_robust_range"
     assert row["missing_ms2_explanation"] == "contradicted"
     assert row["false_positive_review_status"] == "row_approval_candidate"
     assert row["false_positive_review_reasons"] == (
@@ -725,7 +799,7 @@ def test_shadow_rows_block_paired_rt_delta_conflict_when_ms2_is_not_confirmatory
     )
 
     row = next(row for row in rows if row["sample_name"] == "BenignfatBC0980_DNA")
-    assert row["paired_area_ratio_status"] == "within_reference_range"
+    assert row["paired_area_ratio_status"] == "within_robust_range"
     assert abs(float(row["pair_rt_delta_error"])) > 0.25
     assert row["false_positive_review_status"] == "false_positive_review_required"
     assert "paired_rt_delta:outside_expected" in row["false_positive_review_reasons"]

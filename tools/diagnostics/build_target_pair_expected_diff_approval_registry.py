@@ -146,10 +146,10 @@ def _validate_row_approval_candidate(row: Mapping[str, str]) -> None:
         )
     if row.get("selection_status") != "expected_diff":
         raise ValueError(f"{label}: approval requires selection_status=expected_diff")
-    if row.get("paired_area_ratio_status") != "within_reference_range":
+    if row.get("paired_area_ratio_status") != "within_robust_range":
         raise ValueError(
             f"{label}: approval requires paired_area_ratio_status="
-            "within_reference_range"
+            "within_robust_range"
         )
     if not row.get("selected_candidate_rt", "").strip():
         raise ValueError(f"{label}: approval requires selected_candidate_rt")

@@ -384,11 +384,13 @@ Manual review update, 2026-06-04: the first 85RAW
 plot ranks 1, 3, 5, and 7 selected the wrong peak, while ranks 17 and 18 should
 not select any peak. The durable review oracle is
 `docs/superpowers/fixtures/target_pair_chrom_morphology_area_ratio_manual_oracle_v1.tsv`.
-Therefore `paired_area_ratio_status=within_reference_range` is not a sufficient
-positive gate by itself; the reference range can be too wide and can admit both
-wrong-apex switches and tiny rescue peaks. Product promotion remains blocked
-until this strategy is recalibrated against the manual false-positive oracle and
-the review surface demonstrates fewer wrong-peak/no-peak proposals.
+Therefore the old min/max `paired_area_ratio_status=within_reference_range`
+was not a sufficient positive gate by itself; that reference range can be too
+wide and can admit both wrong-apex switches and tiny rescue peaks. Active
+paired-area support now uses the robust leave-one-out median +/- 3 scaled MAD
+projection (`within_robust_range` / `outside_robust_range`). Product switching
+still remains blocked unless the expected-diff registry and row-level
+manual/review oracle accept the changed row.
 
 Target/sample applicability update, 2026-06-04: `8-oxo-Guo` is an RNA-standard
 target in this tissue-85RAW context. It should be detectable in RNA-containing
@@ -541,8 +543,14 @@ Required fields:
 | `paired_area_ratio_reference_min` | Minimum counted leave-one-sample-out reference ratio. |
 | `paired_area_ratio_reference_median` | Median counted leave-one-sample-out reference ratio. |
 | `paired_area_ratio_reference_max` | Maximum counted leave-one-sample-out reference ratio. |
-| `paired_area_ratio_status` | `within_reference_range`, `outside_reference_range`, `inconclusive`, or missing-data status. |
-| `paired_area_ratio_basis` | Stable basis for the paired area-ratio calculation; active product projection uses `leave_one_sample_out_counted_area_over_istd_area`. |
+| `paired_area_ratio_status` | Active robust status: `within_robust_range`, `outside_robust_range`, `inconclusive`, or missing-data status. |
+| `paired_area_ratio_basis` | Stable basis for the active paired area-ratio calculation: `leave_one_sample_out_median_plus_minus_3_scaled_mad_area_over_istd_area`. |
+| `paired_area_ratio_robust_status` | Same active robust comparator status, retained under the robust-prefixed field for schema compatibility. |
+| `paired_area_ratio_robust_reference_min` | Active median-minus-3-scaled-MAD lower bound for the target/ISTD area ratio. |
+| `paired_area_ratio_robust_reference_median` | Active robust reference median for the target/ISTD area ratio. |
+| `paired_area_ratio_robust_reference_max` | Active median-plus-3-scaled-MAD upper bound for the target/ISTD area ratio. |
+| `paired_area_ratio_robust_reference_mad` | Active median absolute deviation before scaled-MAD multiplication. |
+| `paired_area_ratio_robust_basis` | Stable basis for the robust comparator; matches the active paired area-ratio basis. |
 | `calibration_source` | Source from calibration artifact. |
 | `calibration_status` | Calibration status used by the decision. |
 | `missing_ms2_explanation` | `not_observed`, `dda_dropout_plausible`, `contradicted`, or blank. |
@@ -550,7 +558,7 @@ Required fields:
 | `gate_decision` | `promote`, `no_go`, `externalize`, or `defer`. |
 | `block_reason` | Stable reason when reselection is blocked. |
 | `false_positive_review_status` | `row_approval_candidate`, `false_positive_review_required`, `product_switch_accepted`, or `not_applicable`. |
-| `false_positive_review_reasons` | Semicolon-separated review reasons such as `paired_area_ratio:outside_reference_range`, `ms2_nl_contradicted`, or `row_specific_expected_diff_required`. |
+| `false_positive_review_reasons` | Semicolon-separated review reasons such as `paired_area_ratio:outside_robust_range`, `ms2_nl_contradicted`, or `row_specific_expected_diff_required`. |
 
 The old selected candidate must remain inspectable during shadow and changed-row
 review. Product activation may change selected RT/area, but must not erase the

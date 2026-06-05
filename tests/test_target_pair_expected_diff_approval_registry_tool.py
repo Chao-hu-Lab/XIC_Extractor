@@ -49,7 +49,7 @@ def test_build_expected_diff_approval_registry_from_explicit_row() -> None:
             "evidence_summary": (
                 "Manual EIC review approved target-pair expected-diff switch. "
                 "RT 16.38663 -> 17.13547. Paired ISTD RT 16.42828. "
-                "Paired area ratio 0.49834 (within_reference_range). "
+                "Paired area ratio 0.49834 (within_robust_range). "
                 "MS2/NL state recorded as contradicted, not standalone authority. "
                 "Review reasons: ms2_nl_contradicted;"
                 "row_specific_expected_diff_required."
@@ -193,7 +193,7 @@ def _review_row(
         "selected_candidate_rt": "17.13547",
         "paired_istd_rt": "16.42828",
         "paired_area_ratio_observed": "0.49834",
-        "paired_area_ratio_status": "within_reference_range",
+        "paired_area_ratio_status": "within_robust_range",
         "missing_ms2_explanation": "contradicted",
         "false_positive_review_status": false_positive_review_status,
         "false_positive_review_reasons": (

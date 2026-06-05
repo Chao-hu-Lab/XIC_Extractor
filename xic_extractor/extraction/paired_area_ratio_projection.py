@@ -16,10 +16,16 @@ if TYPE_CHECKING:
     from xic_extractor.extractor import ExtractionResult, RunOutput
 
 MIN_PAIRED_AREA_RATIO_REFERENCE_POINTS = 3
-PAIRED_AREA_RATIO_BASIS = "leave_one_sample_out_counted_area_over_istd_area"
+PAIRED_AREA_RATIO_REFERENCE_BASIS = "leave_one_sample_out_counted_area_over_istd_area"
+PAIRED_AREA_RATIO_BASIS = (
+    "leave_one_sample_out_median_plus_minus_3_scaled_mad_area_over_istd_area"
+)
+PAIRED_AREA_RATIO_ROBUST_BASIS = PAIRED_AREA_RATIO_BASIS
 PAIRED_ISTD_RT_SUPPORT_MAX_DELTA_MIN = 1.0
 PAIRED_AREA_RATIO_SUPPORT_REASON = "paired_area_ratio_support"
 PAIRED_ISTD_RT_SUPPORT_REASON = "paired_istd_rt_within_1min_support"
+_SCALED_MAD_FACTOR = 1.4826
+_ROBUST_MAD_WINDOW_MULTIPLIER = 3.0
 
 
 @dataclass(frozen=True)
@@ -37,10 +43,16 @@ class PairedAreaRatioAssessment:
     reference_median: float | None = None
     reference_max: float | None = None
     basis: str = ""
+    robust_status: str = ""
+    robust_reference_min: float | None = None
+    robust_reference_median: float | None = None
+    robust_reference_max: float | None = None
+    robust_reference_mad: float | None = None
+    robust_basis: str = ""
 
     @property
     def within_reference(self) -> bool:
-        return self.status == "within_reference_range"
+        return self.status == "within_robust_range"
 
 
 def apply_paired_area_ratio_projection(
@@ -169,23 +181,44 @@ def assess_paired_area_ratio(
             observed_ratio=observed,
             reference_n=len(reference),
             basis=PAIRED_AREA_RATIO_BASIS,
+            robust_status="inconclusive",
+            robust_basis=PAIRED_AREA_RATIO_ROBUST_BASIS,
         )
-    ordered = sorted(reference)
+    return assess_paired_area_ratio_values(
+        observed_ratio=observed,
+        reference_ratios=reference,
+    )
+
+
+def assess_paired_area_ratio_values(
+    *,
+    observed_ratio: float,
+    reference_ratios: Sequence[float],
+) -> PairedAreaRatioAssessment:
+    ordered = sorted(reference_ratios)
     ref_min = ordered[0]
     ref_max = ordered[-1]
+    reference_median = _median(ordered)
+    robust_median, robust_mad, robust_min, robust_max = _robust_ratio_window(ordered)
     status = (
-        "within_reference_range"
-        if ref_min <= observed <= ref_max
-        else "outside_reference_range"
+        "within_robust_range"
+        if robust_min <= observed_ratio <= robust_max
+        else "outside_robust_range"
     )
     return PairedAreaRatioAssessment(
         status=status,
-        observed_ratio=observed,
-        reference_n=len(reference),
+        observed_ratio=observed_ratio,
+        reference_n=len(reference_ratios),
         reference_min=ref_min,
-        reference_median=_median(ordered),
+        reference_median=reference_median,
         reference_max=ref_max,
         basis=PAIRED_AREA_RATIO_BASIS,
+        robust_status=status,
+        robust_reference_min=robust_min,
+        robust_reference_median=robust_median,
+        robust_reference_max=robust_max,
+        robust_reference_mad=robust_mad,
+        robust_basis=PAIRED_AREA_RATIO_ROBUST_BASIS,
     )
 
 
@@ -322,3 +355,10 @@ def _median(values: Sequence[float]) -> float:
     if len(ordered) % 2:
         return ordered[midpoint]
     return (ordered[midpoint - 1] + ordered[midpoint]) / 2.0
+
+
+def _robust_ratio_window(values: Sequence[float]) -> tuple[float, float, float, float]:
+    median = _median(values)
+    mad = _median(tuple(abs(value - median) for value in values))
+    half_width = _ROBUST_MAD_WINDOW_MULTIPLIER * _SCALED_MAD_FACTOR * mad
+    return median, mad, median - half_width, median + half_width

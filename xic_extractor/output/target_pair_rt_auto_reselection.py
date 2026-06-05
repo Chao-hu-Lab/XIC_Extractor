@@ -11,6 +11,8 @@ from xic_extractor.config import Target
 from xic_extractor.extraction.paired_area_ratio_projection import (
     MIN_PAIRED_AREA_RATIO_REFERENCE_POINTS,
     PAIRED_AREA_RATIO_BASIS,
+    PAIRED_AREA_RATIO_ROBUST_BASIS,
+    assess_paired_area_ratio_values,
 )
 from xic_extractor.peak_detection.model_selection import expected_diff_stable_row_id
 from xic_extractor.target_pair_rt_calibration import (
@@ -46,6 +48,12 @@ TARGET_PAIR_RT_AUTO_RESELECTION_HEADERS = (
     "paired_area_ratio_reference_max",
     "paired_area_ratio_status",
     "paired_area_ratio_basis",
+    "paired_area_ratio_robust_status",
+    "paired_area_ratio_robust_reference_min",
+    "paired_area_ratio_robust_reference_median",
+    "paired_area_ratio_robust_reference_max",
+    "paired_area_ratio_robust_reference_mad",
+    "paired_area_ratio_robust_basis",
     "calibration_source",
     "calibration_status",
     "missing_ms2_explanation",
@@ -66,8 +74,8 @@ TARGET_PAIR_RT_AUTO_RESELECTION_SUMMARY_HEADERS = (
     "false_positive_strata",
     "product_switch_allowed_true_count",
     "auto_reselected_count",
-    "paired_area_ratio_within_reference_count",
-    "paired_area_ratio_outside_reference_count",
+    "paired_area_ratio_within_active_count",
+    "paired_area_ratio_outside_active_count",
     "paired_area_ratio_inconclusive_count",
     "false_positive_review_required_count",
     "row_approval_candidate_count",
@@ -86,6 +94,7 @@ _PRODUCT_CALIBRATION_LEVELS = frozenset({"biological_transfer", "row_approved"})
 _PRODUCT_TRANSFER_STATUSES = frozenset({"validated", "row_approved"})
 _MIN_PAIRED_AREA_RATIO_REFERENCE_POINTS = MIN_PAIRED_AREA_RATIO_REFERENCE_POINTS
 _PAIRED_AREA_RATIO_BASIS = PAIRED_AREA_RATIO_BASIS
+_PAIRED_AREA_RATIO_ROBUST_BASIS = PAIRED_AREA_RATIO_ROBUST_BASIS
 _PAIR_RT_DELTA_REVIEW_TOLERANCE_MIN = 0.75
 
 
@@ -244,15 +253,15 @@ def summarize_target_pair_rt_auto_reselection_rows(
     auto_reselected = sum(
         1 for row in rows if row.get("selection_action") == "auto_reselected"
     )
-    area_ratio_within_reference = sum(
+    area_ratio_within_active = sum(
         1
         for row in rows
-        if row.get("paired_area_ratio_status") == "within_reference_range"
+        if row.get("paired_area_ratio_status") == "within_robust_range"
     )
-    area_ratio_outside_reference = sum(
+    area_ratio_outside_active = sum(
         1
         for row in rows
-        if row.get("paired_area_ratio_status") == "outside_reference_range"
+        if row.get("paired_area_ratio_status") == "outside_robust_range"
     )
     area_ratio_inconclusive = sum(
         1
@@ -310,12 +319,8 @@ def summarize_target_pair_rt_auto_reselection_rows(
             )
         ),
         "auto_reselected_count": str(auto_reselected),
-        "paired_area_ratio_within_reference_count": str(
-            area_ratio_within_reference
-        ),
-        "paired_area_ratio_outside_reference_count": str(
-            area_ratio_outside_reference
-        ),
+        "paired_area_ratio_within_active_count": str(area_ratio_within_active),
+        "paired_area_ratio_outside_active_count": str(area_ratio_outside_active),
         "paired_area_ratio_inconclusive_count": str(area_ratio_inconclusive),
         "false_positive_review_required_count": str(
             false_positive_review_required
@@ -553,6 +558,12 @@ def _paired_area_ratio_fields(
         "paired_area_ratio_reference_max": "",
         "paired_area_ratio_status": "not_applicable",
         "paired_area_ratio_basis": "",
+        "paired_area_ratio_robust_status": "",
+        "paired_area_ratio_robust_reference_min": "",
+        "paired_area_ratio_robust_reference_median": "",
+        "paired_area_ratio_robust_reference_max": "",
+        "paired_area_ratio_robust_reference_mad": "",
+        "paired_area_ratio_robust_basis": "",
     }
     if target.is_istd or not target.istd_pair:
         return empty
@@ -584,26 +595,44 @@ def _paired_area_ratio_fields(
         "paired_area_ratio_observed": _format_optional_float(observed),
         "paired_area_ratio_reference_n": str(len(reference)),
         "paired_area_ratio_basis": _PAIRED_AREA_RATIO_BASIS,
+        "paired_area_ratio_robust_basis": _PAIRED_AREA_RATIO_ROBUST_BASIS,
     }
     if len(reference) < _MIN_PAIRED_AREA_RATIO_REFERENCE_POINTS:
-        return {**common, "paired_area_ratio_status": "inconclusive"}
+        return {
+            **common,
+            "paired_area_ratio_status": "inconclusive",
+            "paired_area_ratio_robust_status": "inconclusive",
+        }
 
-    sorted_reference = sorted(reference)
-    ref_min = sorted_reference[0]
-    ref_max = sorted_reference[-1]
-    status = (
-        "within_reference_range"
-        if ref_min <= observed <= ref_max
-        else "outside_reference_range"
+    assessment = assess_paired_area_ratio_values(
+        observed_ratio=observed,
+        reference_ratios=reference,
     )
     return {
         **common,
-        "paired_area_ratio_reference_min": _format_optional_float(ref_min),
-        "paired_area_ratio_reference_median": _format_optional_float(
-            _median(sorted_reference)
+        "paired_area_ratio_reference_min": _format_optional_float(
+            assessment.reference_min
         ),
-        "paired_area_ratio_reference_max": _format_optional_float(ref_max),
-        "paired_area_ratio_status": status,
+        "paired_area_ratio_reference_median": _format_optional_float(
+            assessment.reference_median
+        ),
+        "paired_area_ratio_reference_max": _format_optional_float(
+            assessment.reference_max
+        ),
+        "paired_area_ratio_status": assessment.status,
+        "paired_area_ratio_robust_status": assessment.robust_status,
+        "paired_area_ratio_robust_reference_min": _format_optional_float(
+            assessment.robust_reference_min
+        ),
+        "paired_area_ratio_robust_reference_median": _format_optional_float(
+            assessment.robust_reference_median
+        ),
+        "paired_area_ratio_robust_reference_max": _format_optional_float(
+            assessment.robust_reference_max
+        ),
+        "paired_area_ratio_robust_reference_mad": _format_optional_float(
+            assessment.robust_reference_mad
+        ),
     }
 
 
@@ -751,7 +780,7 @@ def _false_positive_review(
             hard_reasons.append(reason)
     if row.get("selected_candidate_rt", "") == "":
         hard_reasons.append("selected_candidate_lookup_missing")
-    if area_ratio_status != "within_reference_range":
+    if area_ratio_status != "within_robust_range":
         hard_reasons.append(
             f"paired_area_ratio:{area_ratio_status or 'not_assessed'}"
         )

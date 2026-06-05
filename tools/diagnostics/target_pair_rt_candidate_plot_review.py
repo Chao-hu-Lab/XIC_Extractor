@@ -209,10 +209,10 @@ def select_target_pair_plot_requests(
     outside_area_ratio = [
         row
         for row in candidate_rows
-        if row.get("paired_area_ratio_status", "") == "outside_reference_range"
+        if row.get("paired_area_ratio_status", "") == "outside_robust_range"
     ]
     add(
-        "paired_area_ratio_outside_reference",
+        "paired_area_ratio_outside_active",
         sorted(outside_area_ratio, key=_abs_pair_rt_delta_error, reverse=True),
         max_outside_area_ratio,
     )
@@ -823,8 +823,8 @@ def _plot_group_for_row(row: Mapping[str, str]) -> str:
         == "false_positive_review_required"
     ):
         return "false_positive_review_required"
-    if row.get("paired_area_ratio_status", "") == "outside_reference_range":
-        return "paired_area_ratio_outside_reference"
+    if row.get("paired_area_ratio_status", "") == "outside_robust_range":
+        return "paired_area_ratio_outside_active"
     return "row_approval_candidate"
 
 

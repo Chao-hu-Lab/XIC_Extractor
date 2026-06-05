@@ -1,8 +1,16 @@
+from types import SimpleNamespace
+
+import pytest
+
 from xic_extractor.config import Target
 from xic_extractor.evidence_semantics import EvidenceDecisionSemantics
 from xic_extractor.extraction.paired_area_ratio_projection import (
     PAIRED_AREA_RATIO_BASIS,
+    PAIRED_AREA_RATIO_REFERENCE_BASIS,
+    PAIRED_AREA_RATIO_ROBUST_BASIS,
+    PairedAreaRatioReferencePoint,
     apply_paired_area_ratio_projection,
+    assess_paired_area_ratio,
 )
 from xic_extractor.extraction.result_assembly import build_extraction_result
 from xic_extractor.extractor import FileResult, RunOutput
@@ -76,6 +84,26 @@ def test_run_level_area_ratio_outside_reference_stays_not_counted() -> None:
     assert "analyte_nl_fail_requires_policy" in projected.not_counted_reasons
 
 
+def test_area_ratio_inside_minmax_outside_robust_stays_not_counted() -> None:
+    output = RunOutput(
+        file_results=[
+            _file_result("SampleA", target_area=600_000.0, nl_status="NL_FAIL"),
+            _file_result("RefA", target_area=40_000.0, nl_status="OK"),
+            _file_result("RefB", target_area=50_000.0, nl_status="OK"),
+            _file_result("RefC", target_area=1_000_000.0, nl_status="OK"),
+        ],
+        diagnostics=[],
+    )
+
+    apply_paired_area_ratio_projection(output, targets=[_target(), _istd()])
+
+    projected = output.file_results[0].results["Analyte"].targeted_product_projection
+    assert projected is not None
+    assert projected.counted_detection is False
+    assert "paired_area_ratio_support" not in projected.support_reasons
+    assert "analyte_nl_fail_requires_policy" in projected.not_counted_reasons
+
+
 def test_run_level_area_ratio_reference_requires_three_other_samples() -> None:
     output = RunOutput(
         file_results=[
@@ -120,10 +148,41 @@ def test_run_level_area_ratio_does_not_override_selected_envelope_guard() -> Non
     assert "paired_area_ratio_support" not in projected.support_reasons
 
 
-def test_area_ratio_basis_documents_counted_leave_one_out_reference() -> None:
-    assert PAIRED_AREA_RATIO_BASIS == (
+def test_area_ratio_basis_documents_counted_leave_one_out_robust_gate() -> None:
+    assert PAIRED_AREA_RATIO_REFERENCE_BASIS == (
         "leave_one_sample_out_counted_area_over_istd_area"
     )
+    assert PAIRED_AREA_RATIO_BASIS == (
+        "leave_one_sample_out_median_plus_minus_3_scaled_mad_area_over_istd_area"
+    )
+    assert PAIRED_AREA_RATIO_ROBUST_BASIS == (
+        "leave_one_sample_out_median_plus_minus_3_scaled_mad_area_over_istd_area"
+    )
+
+
+def test_area_ratio_assessment_reports_robust_shadow_conflict() -> None:
+    assessment = assess_paired_area_ratio(
+        SimpleNamespace(reported_peak_area=600_000.0),
+        target=_target(),
+        sample_name="SampleA",
+        paired_istd_result=SimpleNamespace(reported_peak_area=100_000.0),
+        references={
+            ("Analyte", "ISTD"): (
+                PairedAreaRatioReferencePoint("RefA", 0.4),
+                PairedAreaRatioReferencePoint("RefB", 0.5),
+                PairedAreaRatioReferencePoint("RefC", 10.0),
+            )
+        },
+    )
+
+    assert assessment.status == "outside_robust_range"
+    assert assessment.within_reference is False
+    assert assessment.robust_status == "outside_robust_range"
+    assert assessment.robust_reference_median == pytest.approx(0.5)
+    assert assessment.robust_reference_mad == pytest.approx(0.1)
+    assert assessment.robust_reference_min == pytest.approx(0.05522, abs=1e-5)
+    assert assessment.robust_reference_max == pytest.approx(0.94478, abs=1e-5)
+    assert assessment.robust_basis == PAIRED_AREA_RATIO_ROBUST_BASIS
 
 
 def _target() -> Target:
