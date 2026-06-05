@@ -1208,7 +1208,9 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
     "acceptance_status": frozenset({"pass", "fail"}),
     "application_status": frozenset({"applied"}),
     "activation_output_mode": frozenset({"activated-copy", "formal"}),
-    "matrix_row_identity": frozenset({"feature_family_id", "peak_hypothesis_id"}),
+    "matrix_row_identity": frozenset(
+        {"feature_family_id", "peak_hypothesis_id", "mz_rt_sample_columns"}
+    ),
     "canonical_row_identity_ready": frozenset({"TRUE", "FALSE"}),
     "canonical_row_identity_blockers": frozenset(
         {
@@ -1228,7 +1230,9 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
             "canonical_peak_hypothesis_rows_only",
             "partial_canonical_peak_hypothesis_rows_only",
             "partial_peak_hypothesis_with_family_projections",
+            "partial_peak_hypothesis_sidecar_with_family_projections",
             "matrix_construction_peak_hypothesis_with_family_projections",
+            "formal_peak_hypothesis_identity_sidecar",
             "legacy_feature_family_row",
         }
     ),

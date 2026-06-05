@@ -477,6 +477,35 @@ def test_activation_formal_accepts_public_mz_rt_matrix_with_identity_sidecar(
     assert summary["canonical_row_identity_ready"] == "TRUE"
 
 
+def test_activation_formal_rejects_public_identity_sidecar_with_legacy_basis(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    public_matrix = _write_public_mz_rt_matrix_fixture(tmp_path, fixture)
+    identity = _write_alignment_matrix_identity_fixture(tmp_path)
+    identity_rows = _read_tsv(identity)
+    identity_rows[0]["row_identity_basis"] = "matrix_construction_peak_hypothesis"
+    _write_tsv(identity, _header(identity), identity_rows)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "public Mz/RT matrix identity row requires product "
+            "row_identity_basis"
+        ),
+    ):
+        product_activation.apply_activation_to_alignment_outputs(
+            activation_decisions_tsv=fixture["decisions"],
+            activation_acceptance_tsv=fixture["acceptance"],
+            alignment_matrix_tsv=public_matrix,
+            alignment_matrix_identity_tsv=identity,
+            alignment_review_tsv=fixture["review"],
+            alignment_cells_tsv=fixture["cells"],
+            output_dir=tmp_path / "formal",
+            output_mode="formal",
+        )
+
+
 def test_activation_formal_uses_rt_mode_evidence_for_split_hypothesis_rt(
     tmp_path: Path,
 ) -> None:

@@ -192,8 +192,9 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--require-complete-peak-hypothesis-identity",
         action="store_true",
         help=(
-            "Fail unless formal output can emit peak_hypothesis_id as the "
-            "matrix row identity without unresolved family projection rows."
+            "Fail unless formal output can emit a complete PeakHypothesis "
+            "identity sidecar for every Mz/RT/sample matrix row without "
+            "unresolved family projection rows."
         ),
     )
     parser.add_argument(

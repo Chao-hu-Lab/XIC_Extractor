@@ -51,12 +51,14 @@ writes the formal downstream contract names: `alignment_matrix.tsv`,
 surface. Formal mode refuses to overwrite source alignment artifacts unless an
 operator explicitly passes `--allow-overwrite-source`.
 
-Formal matrix identity is now `peak_hypothesis_id`. `feature_family_id` is
-retained as provenance and as the current candidate-container id, but it is no
-longer treated as the product identity key in formal output. This does not mean
-every legacy family must be split. When no split, wrong-peak, or mode-level
-evidence exists, the bridge emits a deterministic
-`<feature_family_id>::family_projection` row with
+Formal public matrix identity is now the downstream `Mz` / `RT` / sample-column
+shape. `peak_hypothesis_id` lives in sidecars: `activation_hypothesis_identity.tsv`
+for row/sample provenance and `alignment_matrix_identity.tsv` for public matrix
+row identity metadata. `feature_family_id` is retained as provenance and as the
+current candidate-container id, but it is no longer treated as the product
+identity key in formal output. This does not mean every legacy family must be
+split. When no split, wrong-peak, or mode-level evidence exists, the bridge emits
+a deterministic `<feature_family_id>::family_projection` sidecar row with
 `row_identity_basis=family_projection_no_split_evidence`. A large number of
 family-projection rows is therefore acceptable for a bridge/projection output,
 but it is a blocker for claiming complete canonical row identity; it means the
@@ -66,7 +68,7 @@ unit.
 The activation application summary makes this scope explicit:
 `canonical_row_identity_ready=FALSE`,
 `canonical_row_identity_blockers=family_projection_present`,
-`canonical_row_identity_scope=partial_peak_hypothesis_with_family_projections`,
+`canonical_row_identity_scope=partial_peak_hypothesis_sidecar_with_family_projections`,
 `family_projection_semantics=projection_not_split_proof`, and
 `all_family_split_science_ready=FALSE`. In other words, the formal TSV format
 can be produced, but canonical row identity is not complete until projection
@@ -252,9 +254,10 @@ Hard fail types:
   contract files. Formal mode preserves the source public TSV headers for
   `alignment_review.tsv` and `alignment_cells.tsv`; activation audit fields stay
   in activation sidecars so downstream readers do not silently receive a wider
-  schema. `alignment_matrix.tsv` uses `peak_hypothesis_id` as the formal row
-  identity, keeps `feature_family_id` as provenance, and discloses
-  `row_identity_basis` plus optional `legacy_rt_row_context_id`.
+  schema. `alignment_matrix.tsv` uses the public `Mz` / `RT` / sample-column
+  contract; `peak_hypothesis_id`, `feature_family_id` provenance,
+  `row_identity_basis`, and optional `legacy_rt_row_context_id` are disclosed in
+  the formal identity sidecars.
 - Both modes emit `activation_application_summary.tsv` and
   `activation_value_delta.tsv`.
   `activation_value_delta.tsv` is the human/product-review surface for
@@ -299,6 +302,16 @@ The sidecar may contribute `rt_basis_status=machine_observed` and may trigger
 the activation `wrong_peak_conflict` rule, but it does not replace MS1
 shape/pattern evidence, candidate-MS2 tag evidence, or the matrix RT drift
 policy.
+
+When formal activation receives `--rt-mode-evidence-tsv`, only typed rows with
+`rt_mode_status=mode_supported` and `rt_mode_evidence_level` equal to
+`irt_selected_apex_modes` or `mode_assignment_summary` may provide a public
+matrix RT center. The center uses the matching `raw_selected_rt` values because
+the public matrix coordinate is raw RT in minutes; iRT/normalized RT is the mode
+assignment evidence, not the downstream coordinate. RAW-overlay-only
+`raw_selected_apex_modes` rows remain `raw_mode_review_only` and cannot provide
+product RT-center authority. The chosen basis is disclosed in
+`alignment_matrix_identity.tsv:center_rt_basis`.
 
 ## PeakHypothesis Selection Boundary
 
@@ -480,18 +493,25 @@ Applied to the current 85RAW alignment outputs, the bridge should blank two
 wrong-peak rescue cells and leave the three already-primary auto-activate cells
 unchanged unless the source matrix is missing those values.
 
-The applied no-RAW formal-output probe at
+The historical applied no-RAW formal-output probe at
 `output/untargeted_activation_contract_recheck_20260603/formal_product_probe/`
 uses the passing activation sidecars above and the existing
 `output/asls_primary_matrix_value_85raw_validation/` AsLS
-production-equivalent alignment TSVs. Its
-`activation_application_summary.tsv` reports:
+production-equivalent alignment TSVs. It predates the `Mz` / `RT` /
+sample-column public matrix plus formal identity-sidecar contract, so it is
+stale for row-identity token semantics and should be treated only as historical
+blanking/application behavior evidence until rerun. The current formal bridge is
+expected to report `matrix_row_identity=mz_rt_sample_columns` and
+`canonical_row_identity_scope=partial_peak_hypothesis_sidecar_with_family_projections`
+for the same projection-heavy scope. The historical
+`activation_application_summary.tsv` reported:
 
 - `activation_output_mode=formal`
-- `matrix_row_identity=peak_hypothesis_id`
+- `matrix_row_identity=peak_hypothesis_id` (historical stale token)
 - `canonical_row_identity_ready=FALSE`
 - `canonical_row_identity_blockers=family_projection_present`
 - `canonical_row_identity_scope=partial_peak_hypothesis_with_family_projections`
+  (historical stale token)
 - `family_projection_semantics=projection_not_split_proof`
 - `legacy_rt_row_context_authority=not_applicable`
 - `all_family_split_science_ready=FALSE`
@@ -513,14 +533,15 @@ activation-application behavior for this 11-row benchmark, while row identity
 still remains partial until family projections are replaced by explicit
 hypothesis assignments through a product matrix-construction contract.
 
-The applied canonical-only formal probe at
+The historical applied canonical-only formal probe at
 `output/untargeted_activation_contract_recheck_20260603/formal_canonical_only_probe/`
 uses the same passing activation sidecars with
-`--output-mode formal --exclude-family-projections`. Its
-`activation_application_summary.tsv` reports:
+`--output-mode formal --exclude-family-projections`. It is also stale for
+row-identity token semantics until rerun under the sidecar bridge. Its
+historical `activation_application_summary.tsv` reported:
 
 - `activation_output_mode=formal`
-- `matrix_row_identity=peak_hypothesis_id`
+- `matrix_row_identity=peak_hypothesis_id` (historical stale token)
 - `canonical_row_identity_ready=FALSE`
 - `canonical_row_identity_blockers=family_projection_excluded_incomplete_scope`
 - `canonical_row_identity_scope=partial_canonical_peak_hypothesis_rows_only`

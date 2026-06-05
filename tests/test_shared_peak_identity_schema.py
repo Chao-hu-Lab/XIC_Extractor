@@ -421,6 +421,7 @@ def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
     validate_token("pass", "acceptance_status")
     validate_token("formal", "activation_output_mode")
     validate_token("peak_hypothesis_id", "matrix_row_identity")
+    validate_token("mz_rt_sample_columns", "matrix_row_identity")
     validate_token("TRUE", "canonical_row_identity_ready")
     validate_token("none", "canonical_row_identity_blockers")
     validate_token("family_projection_present", "canonical_row_identity_blockers")
@@ -439,7 +440,15 @@ def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
         "partial_peak_hypothesis_with_family_projections",
         "canonical_row_identity_scope",
     )
+    validate_token(
+        "partial_peak_hypothesis_sidecar_with_family_projections",
+        "canonical_row_identity_scope",
+    )
     validate_token("formal_peak_hypothesis_identity", "canonical_row_identity_scope")
+    validate_token(
+        "formal_peak_hypothesis_identity_sidecar",
+        "canonical_row_identity_scope",
+    )
     validate_token(
         "canonical_peak_hypothesis_rows_only",
         "canonical_row_identity_scope",

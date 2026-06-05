@@ -392,6 +392,9 @@ _META = frozenset(
     {"feature_family_id", "neutral_loss_tag", "family_center_mz", "family_center_rt"}
 )
 _PUBLIC_MATRIX_META = frozenset({"Mz", "RT"})
+_PUBLIC_PRODUCT_ROW_IDENTITY_BASIS = frozenset(
+    {"no_split_peak_hypothesis", "split_peak_hypothesis"}
+)
 _INPUT_PEAK_HYPOTHESIS_ID = "_input_peak_hypothesis_id"
 _INPUT_ROW_IDENTITY_BASIS = "_input_row_identity_basis"
 _INPUT_LEGACY_RT_ROW_CONTEXT_ID = "_input_legacy_rt_row_context_id"
@@ -509,6 +512,7 @@ def _public_matrix_rows_by_family(
                 f"{index}"
             )
         _validate_identity_coordinate(index, matrix_row, identity)
+        _validate_public_identity_basis(identity, index)
         family_id = _single_source_family_id(identity, index)
         review_row = review_by_family.get(family_id, {})
         row = {
@@ -526,6 +530,19 @@ def _public_matrix_rows_by_family(
         row.update({sample: matrix_row.get(sample, "") for sample in sample_columns})
         rows_by_family[family_id] = row
     return rows_by_family
+
+
+def _validate_public_identity_basis(
+    identity: Mapping[str, str],
+    row_index: int,
+) -> None:
+    row_identity_basis = identity.get("row_identity_basis", "")
+    if row_identity_basis in _PUBLIC_PRODUCT_ROW_IDENTITY_BASIS:
+        return
+    raise ValueError(
+        "public Mz/RT matrix identity row requires product row_identity_basis "
+        f"at matrix_row_index {row_index}; got {row_identity_basis or '<blank>'}"
+    )
 
 
 def _positive_row_index(value: str) -> int:
@@ -745,7 +762,9 @@ def _split_evaluation_status(row_identity_basis: str) -> str:
 def _evidence_status(row_identity_basis: str) -> str:
     if row_identity_basis == "split_peak_hypothesis":
         return "product_matrix_split_identity_complete"
-    return "product_matrix_identity_complete"
+    if row_identity_basis == "no_split_peak_hypothesis":
+        return "product_matrix_identity_complete"
+    return "product_matrix_identity_incomplete"
 
 
 def _parent_peak_hypothesis_id(
