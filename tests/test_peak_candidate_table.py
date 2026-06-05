@@ -677,6 +677,43 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
         assert read_back[0][key] == value
 
 
+def test_hypothesis_integration_uses_configured_ms1_morphology_window() -> None:
+    selected = _candidate(
+        8.5,
+        left=8.1,
+        right=8.9,
+        area=1234.5,
+        proposal_sources=("legacy_savgol",),
+    )
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=9,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+        selection_reference_rt=8.5,
+    )
+
+    hypotheses = build_peak_hypotheses(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="ISTD",
+        istd_pair="Analyte_IS",
+        resolver_mode="region_first_safe_merge",
+        peak_result=result,
+        rt=np.linspace(8.1, 8.9, 9),
+        intensity=np.array([10.0, 18.0, 35.0, 80.0, 120.0, 80.0, 35.0, 18.0, 10.0]),
+        ms1_morphology_smoothing_window_points=7,
+    )
+
+    integration = hypotheses[0].integration
+    assert integration.ms1_morphology_trace_method == "gaussian_15"
+    assert integration.ms1_morphology_trace_window_points == 7
+    assert integration.ms1_morphology_trace_effective_points == 7
+    assert integration.area_ms1_morphology is not None
+
+
 def test_append_rows_rescores_same_apex_cwt_audit_support(
     tmp_path: Path,
     monkeypatch,

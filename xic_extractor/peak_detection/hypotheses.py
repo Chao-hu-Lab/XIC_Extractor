@@ -31,6 +31,7 @@ from xic_extractor.peak_detection.models import (
     PeakDetectionResult,
 )
 from xic_extractor.peak_detection.ms1_morphology import (
+    DEFAULT_GAUSSIAN15_WINDOW_POINTS,
     MS1_MORPHOLOGY_AREA_SOURCE,
     gaussian15_positive_asls_residual_metrics,
 )
@@ -192,6 +193,9 @@ def build_peak_hypotheses(
     trace_group: TraceGroup | None = None,
     baseline_integration_method: BaselineMethod = "asls",
     count_no_ms2_as_detected: bool = False,
+    ms1_morphology_smoothing_window_points: int = (
+        DEFAULT_GAUSSIAN15_WINDOW_POINTS
+    ),
 ) -> tuple[PeakHypothesis, ...]:
     selected = _selected_candidate(peak_result)
     score_by_candidate = {
@@ -239,6 +243,9 @@ def build_peak_hypotheses(
                     rt=trace_rt,
                     intensity=trace_intensity,
                     baseline_integration_method=baseline_integration_method,
+                    ms1_morphology_smoothing_window_points=(
+                        ms1_morphology_smoothing_window_points
+                    ),
                 ),
                 evidence=_evidence_from_candidate(
                     candidate,
@@ -302,6 +309,9 @@ def _integration_from_candidate(
     rt: object | None = None,
     intensity: object | None = None,
     baseline_integration_method: BaselineMethod = "asls",
+    ms1_morphology_smoothing_window_points: int = (
+        DEFAULT_GAUSSIAN15_WINDOW_POINTS
+    ),
 ) -> IntegrationResult:
     baseline = None
     morphology_metrics = None
@@ -337,6 +347,7 @@ def _integration_from_candidate(
                 baseline_values,
                 bounded_left,
                 bounded_right,
+                window_points=ms1_morphology_smoothing_window_points,
             )
     return IntegrationResult(
         rt_left_min=candidate.peak.peak_start,

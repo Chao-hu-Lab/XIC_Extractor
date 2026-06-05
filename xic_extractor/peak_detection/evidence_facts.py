@@ -227,17 +227,18 @@ def _signal_set_from_facts(
         concerns.append("no_ms2")
         caps.append("no_ms2_cap")
 
+    rt_support_emitted = False
     if facts.rt.rt_prior_status == "close":
         support.append("rt_prior_close")
-        if facts.rt.prefer_rt_prior_tiebreak:
-            support.append("paired_istd_aligned")
+        rt_support_emitted = True
     elif facts.rt.rt_prior_status == "borderline":
         concerns.append("rt_prior_borderline")
     elif facts.rt.rt_prior_status == "far":
         concerns.append("rt_prior_far")
 
     if facts.rt.paired_istd_status == "close":
-        support.append("paired_istd_rt_close")
+        if not rt_support_emitted:
+            support.append("paired_istd_rt_close")
     elif facts.rt.paired_istd_status == "far":
         concerns.append("anchor_mismatch")
         caps.append("anchor_mismatch_cap")

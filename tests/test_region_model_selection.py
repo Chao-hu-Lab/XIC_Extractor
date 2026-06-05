@@ -1,5 +1,8 @@
+import pytest
+
 from xic_extractor.peak_detection.region_model_selection import (
     RegionBoundaryEvidence,
+    RegionSelectionDecision,
     decide_region_selection,
 )
 
@@ -315,6 +318,29 @@ def test_adjacent_wis_merge_rejects_zero_area_current_boundary() -> None:
 
     assert decision.shadow_verdict != "merge_suggested"
     assert decision.merge_suggestion_source == ""
+
+
+@pytest.mark.parametrize(
+    ("verdict", "merge_source"),
+    [
+        ("wider_boundary_preferred", ""),
+        ("neighbor_apex_preferred", ""),
+        ("split_supported", ""),
+        ("merge_suggested", "same_apex_wider_boundary_merge"),
+    ],
+)
+def test_non_safe_region_verdicts_stay_behavior_change_required(
+    verdict: str,
+    merge_source: str,
+) -> None:
+    decision = RegionSelectionDecision(
+        shadow_status="evaluated",
+        shadow_verdict=verdict,  # type: ignore[arg-type]
+        merge_suggestion_source=merge_source,  # type: ignore[arg-type]
+    )
+
+    assert decision.product_action == "behavior_change_required"
+    assert decision.product_action != "safe_merge_eligible"
 
 
 def test_same_apex_wider_boundary_merge_is_not_adjacent_wis_source() -> None:

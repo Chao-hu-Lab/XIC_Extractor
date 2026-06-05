@@ -14,6 +14,9 @@ from xic_extractor.peak_detection.integration import (
     raw_apex_index,
 )
 from xic_extractor.peak_detection.models import PeakCandidate, PeakResult
+from xic_extractor.peak_detection.ms1_morphology import (
+    configured_morphology_window_points,
+)
 
 _PRODUCT_SEGMENT_CLASSES = {"isolated_peak", "separate_peak"}
 _PROPOSAL_SOURCE = "chrom_peak_segment"
@@ -67,7 +70,7 @@ def _policy_from_config(config: ExtractionConfig) -> ChromPeakSegmentPolicy:
             0.0,
         ),
         morphology_trace_method="gaussian_15",
-        morphology_trace_window_points=15,
+        morphology_trace_window_points=configured_morphology_window_points(config),
     )
 
 

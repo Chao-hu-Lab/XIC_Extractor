@@ -38,9 +38,14 @@ from xic_extractor.output.messages import (
 from xic_extractor.peak_detection.chrom_peak_segment_projection import (
     chrom_peak_segment_promoted_hypothesis_from_hypothesis,
 )
+from xic_extractor.peak_detection.chrom_peak_segments import ChromPeakSegmentPolicy
 from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
+from xic_extractor.peak_detection.ms1_morphology import (
+    configured_morphology_window_points,
+)
 from xic_extractor.peak_detection.selected_envelope import (
     SelectedEnvelopeBoundaryEvaluation,
+    SelectedEnvelopePolicy,
 )
 from xic_extractor.peak_detection.selected_envelope_projection import (
     selected_envelope_promoted_hypothesis_from_hypothesis,
@@ -376,6 +381,7 @@ def extract_one_target(
             fallback_start=rt_min,
             fallback_end=rt_max,
         )
+        morphology_window_points = configured_morphology_window_points(config)
         try:
             promoted_hypothesis, selected_envelope_evaluation = (
                 selected_envelope_promoted_hypothesis_from_hypothesis(
@@ -384,6 +390,9 @@ def extract_one_target(
                     intensity_values=guard_intensity,
                     quantitation_context_rt_start=context_rt_start,
                     quantitation_context_rt_end=context_rt_end,
+                    policy=SelectedEnvelopePolicy(
+                        morphology_trace_window_points=morphology_window_points,
+                    ),
                 )
             )
         except ValueError:
@@ -397,6 +406,9 @@ def extract_one_target(
                     quantitation_context_rt_start=context_rt_start,
                     quantitation_context_rt_end=context_rt_end,
                     selected_envelope_evaluation=selected_envelope_evaluation,
+                    policy=ChromPeakSegmentPolicy(
+                        morphology_trace_window_points=morphology_window_points,
+                    ),
                 )
             )
         except ValueError:

@@ -353,10 +353,12 @@ def _decision_support_reasons(
         reasons.append("ms1_coherent")
     if "strict_nl_ok" in support or "nl_match" in support:
         reasons.append("candidate_aligned_ms2_nl")
-    if "rt_prior_close" in support or "paired_istd_aligned" in support:
+    if (
+        "rt_prior_close" in support
+        or "paired_istd_aligned" in support
+        or "paired_istd_rt_close" in support
+    ):
         reasons.append("role_aware_rt_support")
-    if "paired_istd_rt_close" in support:
-        reasons.append("paired_istd_rt_support")
     if "paired_area_ratio_plausible" in support:
         reasons.append("paired_area_ratio_support")
     if _CWT_PROPOSAL_SOURCE in sources or "cwt_same_apex_support" in support:

@@ -7,7 +7,10 @@ import numpy as np
 from scipy.signal import find_peaks
 
 from xic_extractor.peak_detection.baseline import integrate_with_baseline
-from xic_extractor.peak_detection.ms1_morphology import gaussian15_morphology_trace
+from xic_extractor.peak_detection.ms1_morphology import (
+    DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+    gaussian15_morphology_trace,
+)
 from xic_extractor.peak_detection.selected_envelope import TraceInterval
 
 ChromPeakSegmentStatus = Literal[
@@ -34,7 +37,7 @@ class ChromPeakSegmentPolicy:
     baseline_return_min_residual: float = 1.0
     clear_valley_max_fraction: float = 0.30
     morphology_trace_method: str = "gaussian_15"
-    morphology_trace_window_points: int = 15
+    morphology_trace_window_points: int = DEFAULT_GAUSSIAN15_WINDOW_POINTS
 
     def baseline_return_threshold(self, apex_residual: float) -> float:
         return max(

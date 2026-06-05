@@ -9,9 +9,9 @@ from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.injection_rolling import rolling_median_rt
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.peak_detection.ms1_morphology import (
-    DEFAULT_GAUSSIAN15_WINDOW_POINTS,
     MS1_MORPHOLOGY_AREA_SOURCE,
     MS1_MORPHOLOGY_TRACE_METHOD,
+    configured_morphology_window_points,
     gaussian15_positive_asls_residual_trace,
 )
 from xic_extractor.peak_detection.scoring_metrics import compute_local_sn_cache
@@ -83,6 +83,7 @@ def build_scoring_context_factory(
         rt_values = np.asarray(rt, dtype=float)
         intensity_values = np.asarray(intensity, dtype=float)
         baseline_array, residual_mad = compute_local_sn_cache(intensity_values)
+        morphology_window_points = configured_morphology_window_points(config)
         active_intensity_values = intensity_values
         active_baseline_array = baseline_array
         active_trace_source = "raw"
@@ -93,11 +94,12 @@ def build_scoring_context_factory(
                 active_intensity_values = gaussian15_positive_asls_residual_trace(
                     intensity_values,
                     baseline_array,
+                    window_points=morphology_window_points,
                 )
                 active_baseline_array = np.zeros_like(active_intensity_values)
                 active_trace_source = MS1_MORPHOLOGY_AREA_SOURCE
                 morphology_trace_method = MS1_MORPHOLOGY_TRACE_METHOD
-                morphology_trace_window_points = DEFAULT_GAUSSIAN15_WINDOW_POINTS
+                morphology_trace_window_points = morphology_window_points
             except (TypeError, ValueError, FloatingPointError):
                 active_intensity_values = intensity_values
                 active_baseline_array = baseline_array

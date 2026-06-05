@@ -331,6 +331,125 @@ def test_extract_one_target_promotes_selected_envelope_boundary_to_result_assemb
     assert "chrom_peak_segment" in selected.integration.boundary_sources
 
 
+def test_extract_one_target_passes_configured_ms1_window_to_boundary_policies(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config = ExtractionConfig(
+        data_dir=tmp_path,
+        dll_dir=tmp_path,
+        output_csv=tmp_path / "xic_results.csv",
+        diagnostics_csv=tmp_path / "diagnostics.csv",
+        smooth_window=15,
+        smooth_polyorder=3,
+        ms1_morphology_smoothing_window_points=21,
+        peak_rel_height=0.95,
+        peak_min_prominence_ratio=0.1,
+        ms2_precursor_tol_da=0.5,
+        nl_min_intensity_ratio=0.01,
+        emit_peak_candidates=False,
+        resolver_mode="region_first_safe_merge",
+    )
+    target = Target(
+        label="Analyte",
+        mz=258.1085,
+        rt_min=8.0,
+        rt_max=8.8,
+        ppm_tol=20.0,
+        neutral_loss_da=None,
+        nl_ppm_warn=None,
+        nl_ppm_max=None,
+        is_istd=False,
+        istd_pair="ISTD",
+    )
+    candidate = _candidate(rt=8.4, peak_start=8.1, peak_end=8.7)
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        n_points=9,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(candidate,),
+    )
+    captured_windows: dict[str, int] = {}
+
+    class _Raw:
+        def extract_xic(self, *_args, **_kwargs):
+            return (
+                np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8]),
+                np.asarray(
+                    [10.0, 10.0, 12.0, 20.0, 60.0, 20.0, 12.0, 10.0, 10.0]
+                ),
+            )
+
+    def _raise_after_capturing_selected_envelope(*_args, **kwargs):
+        captured_windows["selected_envelope"] = (
+            kwargs["policy"].morphology_trace_window_points
+        )
+        raise ValueError("captured")
+
+    def _raise_after_capturing_chrom_segment(*_args, **kwargs):
+        captured_windows["chrom_segment"] = (
+            kwargs["policy"].morphology_trace_window_points
+        )
+        raise ValueError("captured")
+
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        lambda *_args, **_kwargs: peak_result,
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "check_target_nl",
+        lambda *_args, **_kwargs: NLResult("NO_MS2", None, None, 0, 0, 0),
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "recover_istd_anchor_peak_if_needed",
+        lambda peak_result, **_kwargs: IstdAnchorRecoveryDecision(peak_result),
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "append_peak_audit_rows",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "selected_envelope_promoted_hypothesis_from_hypothesis",
+        _raise_after_capturing_selected_envelope,
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "chrom_peak_segment_promoted_hypothesis_from_hypothesis",
+        _raise_after_capturing_chrom_segment,
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "build_extraction_result",
+        lambda **kwargs: ExtractionResult(
+            peak_result=kwargs["peak_result"],
+            nl=kwargs["nl_result"],
+            target_label=kwargs["target"].label,
+        ),
+    )
+
+    target_extraction.extract_one_target(
+        _Raw(),
+        config,
+        "SampleA",
+        target,
+        reference_rt=None,
+        results={},
+        diagnostics=[],
+        istd_rt_in_this_sample=8.4,
+    )
+
+    assert captured_windows == {
+        "selected_envelope": 21,
+        "chrom_segment": 21,
+    }
+
+
 def test_extract_one_target_uses_chrom_segment_before_selected_envelope_cap(
     tmp_path,
     monkeypatch,

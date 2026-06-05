@@ -19,6 +19,9 @@ from xic_extractor.peak_detection.models import (
     PeakCandidateScore,
     PeakDetectionResult,
 )
+from xic_extractor.peak_detection.ms1_morphology import (
+    configured_morphology_window_points,
+)
 from xic_extractor.peak_detection.scoring_models import (
     ScoredCandidate,
     ScoringContext,
@@ -293,6 +296,9 @@ def build_peak_candidate_audit_hypotheses(
         rt=rt,
         intensity=intensity,
         trace_group=trace_group,
+        ms1_morphology_smoothing_window_points=(
+            configured_morphology_window_points(config)
+        ),
         baseline_integration_method=cast(
             BaselineMethod,
             config.baseline_integration_method,

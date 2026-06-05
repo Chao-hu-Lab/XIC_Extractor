@@ -23,6 +23,9 @@ from xic_extractor.peak_detection.model_selection import (
     model_select_peak_hypothesis,
 )
 from xic_extractor.peak_detection.models import PeakDetectionResult
+from xic_extractor.peak_detection.ms1_morphology import (
+    configured_morphology_window_points,
+)
 from xic_extractor.peak_detection.selection_decision import (
     PeakHypothesisSelectionDecision,
     selection_decision_from_hypothesis,
@@ -80,6 +83,9 @@ def build_production_peak_hypotheses(
             config,
             "count_no_ms2_as_detected",
             False,
+        ),
+        ms1_morphology_smoothing_window_points=(
+            configured_morphology_window_points(config)
         ),
     )
     return _with_final_selected_result_evidence(hypotheses, peak_result)

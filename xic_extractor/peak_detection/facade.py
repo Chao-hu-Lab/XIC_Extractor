@@ -44,6 +44,7 @@ from xic_extractor.peak_detection.selection import (
 )
 from xic_extractor.settings_schema import (
     ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+    CANONICAL_RESOLVER_MODE,
     RESOLVER_MODES,
 )
 
@@ -238,7 +239,7 @@ def find_peak_candidates(
     *,
     peak_min_prominence_ratio: float | None = None,
 ) -> PeakCandidatesResult:
-    resolver_mode = getattr(config, "resolver_mode", "legacy_savgol")
+    resolver_mode = getattr(config, "resolver_mode", CANONICAL_RESOLVER_MODE)
     if resolver_mode in {"local_minimum", "region_first_safe_merge"}:
         return find_peak_candidates_local_minimum(rt, intensity, config)
     if resolver_mode == "arbitrated":
@@ -260,7 +261,8 @@ def _augment_with_chrom_peak_segment_candidates(
     config: ExtractionConfig,
     candidates_result: PeakCandidatesResult,
 ) -> PeakCandidatesResult:
-    if getattr(config, "resolver_mode", "legacy_savgol") != "region_first_safe_merge":
+    resolver_mode = getattr(config, "resolver_mode", CANONICAL_RESOLVER_MODE)
+    if resolver_mode != CANONICAL_RESOLVER_MODE:
         return candidates_result
     chrom_candidates = chrom_peak_segment_candidates(rt, intensity, config)
     if not chrom_candidates:
@@ -355,7 +357,8 @@ def _apply_region_first_safe_merge_if_enabled(
     selected_candidate: PeakCandidate,
     candidate_scores: tuple[PeakCandidateScore, ...],
 ) -> tuple[PeakCandidatesResult, PeakCandidate, tuple[PeakCandidateScore, ...]]:
-    if getattr(config, "resolver_mode", "legacy_savgol") != "region_first_safe_merge":
+    resolver_mode = getattr(config, "resolver_mode", CANONICAL_RESOLVER_MODE)
+    if resolver_mode != CANONICAL_RESOLVER_MODE:
         return candidates_result, selected_candidate, candidate_scores
     outcome = apply_region_first_safe_merge(
         rt,

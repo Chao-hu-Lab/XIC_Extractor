@@ -5,6 +5,7 @@ import numpy as np
 
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_detection.models import PeakCandidate, PeakCandidatesResult
+from xic_extractor.settings_schema import CANONICAL_RESOLVER_MODE
 
 PREFERRED_RT_RECOVERY_PROMINENCE_FRACTION: float = 0.2
 PREFERRED_RT_RECOVERY_MIN_PROMINENCE_RATIO: float = 0.01
@@ -37,7 +38,7 @@ def preferred_rt_recovery(
     ):
         return None, None
 
-    resolver_mode = getattr(config, "resolver_mode", "legacy_savgol")
+    resolver_mode = getattr(config, "resolver_mode", CANONICAL_RESOLVER_MODE)
     if resolver_mode in {"local_minimum", "region_first_safe_merge"}:
         relaxed_config = relaxed_local_minimum_recovery_config(config)
         if relaxed_config == config:

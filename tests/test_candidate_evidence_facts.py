@@ -183,6 +183,45 @@ def test_paired_istd_anchor_delta_is_typed_rt_evidence() -> None:
     assert facts.rt.paired_istd_status == "close"
 
 
+def test_paired_istd_anchor_projects_one_role_aware_rt_support_reason() -> None:
+    candidate = _candidate(8.5, proposal_sources=("local_minimum",))
+    ctx = ScoringContext(
+        rt_array=np.asarray([8.3, 8.4, 8.5, 8.6, 8.7]),
+        intensity_array=np.asarray([100.0, 500.0, 1000.0, 520.0, 120.0]),
+        apex_index=2,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=8.5,
+        rt_prior_sigma=0.1,
+        rt_min=8.0,
+        rt_max=9.0,
+        dirty_matrix=False,
+        baseline_array=np.asarray([80.0, 90.0, 95.0, 90.0, 85.0]),
+        residual_mad=5.0,
+        prefer_rt_prior_tiebreak=True,
+    )
+    facts = build_candidate_evidence_facts(
+        candidate,
+        ctx,
+        role="Analyte",
+        istd_pair="ISTD",
+        paired_istd_anchor_rt_min=8.45,
+    )
+
+    semantics = decision_semantics_from_candidate_facts(facts)
+
+    assert facts.rt.rt_prior_status == "close"
+    assert facts.rt.paired_istd_status == "close"
+    assert semantics.support_reasons.count("role_aware_rt_support") == 1
+    assert "paired_istd_rt_support" not in semantics.support_reasons
+    assert not {
+        "paired_istd_aligned",
+        "paired_istd_rt_close",
+    }.intersection(semantics.compatibility_labels)
+
+
 def test_nl_fail_with_paired_istd_rt_mismatch_is_not_counted() -> None:
     candidate = _candidate(11.25, proposal_sources=("local_minimum",))
     ctx = ScoringContext(

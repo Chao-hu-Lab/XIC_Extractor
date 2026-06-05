@@ -54,6 +54,30 @@ def test_istd_context_uses_rolling_median_prior() -> None:
     assert np.all(ctx.baseline_array == 0.0)
 
 
+def test_scoring_context_uses_configured_ms1_morphology_smoothing_window() -> None:
+    factory = build_scoring_context_factory(
+        config=_config(ms1_morphology_smoothing_window_points=7),
+        injection_order={},
+        istd_rts_by_sample={},
+        rt_prior_library={},
+    )
+
+    builder = factory(
+        target=_target(label="ISTD-A", is_istd=True, istd_pair=""),
+        sample_name="S2",
+        rt=np.linspace(9.7, 10.3, 9),
+        intensity=np.array([0.0, 1.0, 4.0, 7.0, 10.0, 7.0, 4.0, 1.0, 0.0]),
+        istd_rt_in_this_sample=None,
+        paired_istd_fwhm=None,
+        nl_result=None,
+    )
+
+    ctx = builder(SimpleNamespace(selection_apex_index=4))
+
+    assert ctx.morphology_trace_method == MS1_MORPHOLOGY_TRACE_METHOD
+    assert ctx.morphology_trace_window_points == 7
+
+
 def test_analyte_context_uses_delta_rt_library_and_shape_ratio() -> None:
     library = {
         ("Analyte-A", "analyte"): LibraryEntry(

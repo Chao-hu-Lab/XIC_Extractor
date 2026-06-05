@@ -742,6 +742,9 @@ def test_wide_to_long_rows_classifies_qc_from_sample_name_token() -> None:
     assert long_rows[0]["Group"] == "QC"
     assert long_rows[1]["Group"] == "Other"
     assert long_rows[2]["Group"] == "QC"
+    assert long_rows[0]["Confidence"] == ""
+    assert long_rows[0]["Reason"] == "legacy_wide_csv_no_product_projection"
+    assert long_rows[0]["Legacy Authority Status"] == "legacy_projection_only"
 
 
 def test_run_writes_row_based_results_sheet_and_makes_overview_active(
@@ -902,6 +905,20 @@ def test_run_hides_diagnostics_as_technical_log(tmp_path: Path) -> None:
         config.output_csv,
         [_wide_row("S1", [_target("Analyte")])],
     )
+    _write_csv(
+        config.output_csv.with_name("xic_results_long.csv"),
+        [
+            _long_row(
+                "S1",
+                "Analyte",
+                "9.1",
+                "10000",
+                "OK",
+                counted_detection="TRUE",
+                product_state="detected_clean",
+            )
+        ],
+    )
     _write_empty_diagnostics_csv(config.diagnostics_csv)
 
     out = run(config, [_target("Analyte")])
@@ -911,7 +928,7 @@ def test_run_hides_diagnostics_as_technical_log(tmp_path: Path) -> None:
     assert wb["Review Queue"].sheet_state == "visible"
 
 
-def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
+def test_run_blocks_legacy_wide_csv_without_product_projection(
     tmp_path: Path,
 ) -> None:
     config = _config(tmp_path)
@@ -934,21 +951,8 @@ def test_run_can_build_long_results_from_legacy_wide_csv_when_needed(
     )
     _write_empty_diagnostics_csv(config.diagnostics_csv)
 
-    excel_path = run(config, targets)
-
-    wb = load_workbook(excel_path)
-    assert wb.sheetnames == [
-        "Overview",
-        "Review Queue",
-        "XIC Results",
-        "Summary",
-        "Targets",
-        "Diagnostics",
-        "Run Metadata",
-    ]
-    assert wb.active.title == "Overview"
-    assert wb["XIC Results"]["C2"].value == "Analyte"
-    assert wb["Diagnostics"].auto_filter.ref == "A1:D1"
+    with pytest.raises(MissingTargetedProductProjectionError):
+        run(config, targets)
 
 
 def test_run_emits_score_breakdown_sheet_when_enabled(tmp_path: Path) -> None:
@@ -1078,6 +1082,20 @@ def test_run_passes_injection_order_to_review_report(
     )
     config.output_csv.parent.mkdir(parents=True, exist_ok=True)
     _write_csv(config.output_csv, [_wide_row("S1", [_target("Analyte")])])
+    _write_csv(
+        config.output_csv.with_name("xic_results_long.csv"),
+        [
+            _long_row(
+                "S1",
+                "Analyte",
+                "9.1",
+                "10000",
+                "OK",
+                counted_detection="TRUE",
+                product_state="detected_clean",
+            )
+        ],
+    )
     _write_empty_diagnostics_csv(config.diagnostics_csv)
     calls = {}
 
