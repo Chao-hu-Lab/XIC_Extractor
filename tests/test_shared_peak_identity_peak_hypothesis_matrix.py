@@ -74,7 +74,7 @@ def test_peak_hypothesis_matrix_splits_family_before_output() -> None:
     assert matrix_rows["FAM_SPLIT::blue"]["S2"] == ""
     assert matrix_rows["FAM_SPLIT::green"]["S1"] == ""
     assert matrix_rows["FAM_SPLIT::green"]["S2"] == "222"
-    assert matrix_rows["FAM_PROJECT::family_projection"]["S1"] == "50"
+    assert "FAM_PROJECT::family_projection" not in matrix_rows
     assert "FAM_BLOCK::wrong" not in matrix_rows
 
     assignments = {
@@ -109,41 +109,36 @@ def test_peak_hypothesis_matrix_splits_family_before_output() -> None:
     assert summary["construction_gate_status"] == "blocked"
 
 
-def test_peak_hypothesis_matrix_keeps_max_area_for_conflicting_cells() -> None:
-    construction = peak_hypothesis_matrix.construct_peak_hypothesis_matrix(
-        matrix_header=(
-            "feature_family_id",
-            "family_center_mz",
-            "family_center_rt",
-            "S1",
-        ),
-        matrix_rows=[
-            _matrix_row("FAM_A", mz="100", rt="5", S1="10"),
-            _matrix_row("FAM_B", mz="100", rt="5", S1="30"),
-        ],
-        review_rows=[
-            _review_row("FAM_A", mz="100", rt="5"),
-            _review_row("FAM_B", mz="100", rt="5"),
-        ],
-        cell_rows=[
-            _cell_row("FAM_A", "S1", area="10"),
-            _cell_row("FAM_B", "S1", area="30"),
-        ],
-        peak_hypothesis_selection_rows=[
-            _peak_row("FAM_A", "S1", "shared"),
-            _peak_row("FAM_B", "S1", "shared", peak_id="FAM_A::shared"),
-        ],
-    )
-
-    matrix_rows = {
-        row["peak_hypothesis_id"]: row for row in construction.matrix_rows
-    }
-    assert matrix_rows["FAM_A::shared"]["feature_family_id"] == "FAM_A;FAM_B"
-    assert matrix_rows["FAM_A::shared"]["S1"] == "30"
-    assert construction.summary_row["matrix_value_conflict_cells"] == "1"
-    assert construction.summary_row["matrix_value_conflict_policy"] == (
-        "max_area_pending_baseline"
-    )
+def test_peak_hypothesis_matrix_rejects_multi_family_hypothesis_collapse() -> None:
+    try:
+        peak_hypothesis_matrix.construct_peak_hypothesis_matrix(
+            matrix_header=(
+                "feature_family_id",
+                "family_center_mz",
+                "family_center_rt",
+                "S1",
+            ),
+            matrix_rows=[
+                _matrix_row("FAM_A", mz="100", rt="5", S1="10"),
+                _matrix_row("FAM_B", mz="100", rt="5", S1="30"),
+            ],
+            review_rows=[
+                _review_row("FAM_A", mz="100", rt="5"),
+                _review_row("FAM_B", mz="100", rt="5"),
+            ],
+            cell_rows=[
+                _cell_row("FAM_A", "S1", area="10"),
+                _cell_row("FAM_B", "S1", area="30"),
+            ],
+            peak_hypothesis_selection_rows=[
+                _peak_row("FAM_A", "S1", "shared"),
+                _peak_row("FAM_B", "S1", "shared", peak_id="FAM_A::shared"),
+            ],
+        )
+    except ValueError as exc:
+        assert "requires exactly one source_feature_family_id" in str(exc)
+    else:
+        raise AssertionError("expected multi-family PeakHypothesis collapse guard")
 
 
 def test_peak_hypothesis_matrix_expands_overlay_modes_before_output(

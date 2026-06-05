@@ -35,12 +35,12 @@ The input selection sidecar has 11 rows. The resulting
 `family_projection_rows=610`, `projected_cell_count=39091`,
 `canonical_row_identity_ready=FALSE`,
 `canonical_row_identity_blockers=family_projection_present`,
-`construction_gate_status=blocked`, and `diagnostic_only=TRUE`. This is the
-current proof that the product path has not yet been converted to a full
-untargeted PeakHypothesis matrix. Running the same construction command with
-`--require-complete-peak-hypothesis-identity` now fails with
-`blockers=family_projection_present`; this gate is the current stop condition
-for promotion.
+`construction_gate_status=blocked`, and `diagnostic_only=TRUE`. This historical
+diagnostic construction artifact proves that the product path had not yet been
+converted to a full untargeted PeakHypothesis matrix. In the current formal
+activation bridge, unresolved projection rows are excluded by default and
+reported as `family_projection_excluded_incomplete_scope`; including projection
+rows now requires explicit diagnostic opt-in.
 
 The explicit bridge is
 `tools/diagnostics/apply_shared_peak_identity_activation.py`. It consumes a
@@ -57,28 +57,29 @@ for row/sample provenance and `alignment_matrix_identity.tsv` for public matrix
 row identity metadata. `feature_family_id` is retained as provenance and as the
 current candidate-container id, but it is no longer treated as the product
 identity key in formal output. This does not mean every legacy family must be
-split. When no split, wrong-peak, or mode-level evidence exists, the bridge emits
-a deterministic `<feature_family_id>::family_projection` sidecar row with
-`row_identity_basis=family_projection_no_split_evidence`. A large number of
-family-projection rows is therefore acceptable for a bridge/projection output,
-but it is a blocker for claiming complete canonical row identity; it means the
+split. When no split, wrong-peak, or mode-level evidence exists, the bridge now
+excludes the unresolved `<feature_family_id>::family_projection` rows from
+formal product-shaped outputs by default and reports their skipped row/cell
+scope separately. A large number of excluded projections is acceptable only as a
+partial bridge state; it blocks complete canonical row identity and means the
 existing family consolidation has no current evidence requiring a finer product
 unit.
 
 The activation application summary makes this scope explicit:
 `canonical_row_identity_ready=FALSE`,
-`canonical_row_identity_blockers=family_projection_present`,
-`canonical_row_identity_scope=partial_peak_hypothesis_sidecar_with_family_projections`,
-`family_projection_semantics=projection_not_split_proof`, and
+`canonical_row_identity_blockers=family_projection_excluded_incomplete_scope`,
+`canonical_row_identity_scope=partial_canonical_peak_hypothesis_rows_only`,
+`family_projection_semantics=excluded_from_canonical_output`, and
 `all_family_split_science_ready=FALSE`. In other words, the formal TSV format
 can be produced, but canonical row identity is not complete until projection
 rows are replaced by explicit hypothesis assignments through a broader matrix
 construction path. Simply excluding projection rows only narrows the output
 scope; it does not complete the full matrix.
 
-The bridge also supports a stricter formal output via
-`--exclude-family-projections`. This emits only rows with explicit
-`peak_hypothesis_id` support and reports skipped unresolved projections in
+The bridge defaults to the stricter formal output that excludes unresolved
+projection rows. `--exclude-family-projections` remains as a compatibility flag,
+but can be omitted. This emits only rows with explicit `peak_hypothesis_id`
+support and reports skipped unresolved projections in
 `family_projection_rows_excluded` and `family_projection_cells_excluded`. This is
 a projection-free partial output for the emitted rows, not proof that the full
 legacy family matrix has been completely split into hypotheses. It therefore
@@ -501,9 +502,11 @@ production-equivalent alignment TSVs. It predates the `Mz` / `RT` /
 sample-column public matrix plus formal identity-sidecar contract, so it is
 stale for row-identity token semantics and should be treated only as historical
 blanking/application behavior evidence until rerun. The current formal bridge is
-expected to report `matrix_row_identity=mz_rt_sample_columns` and
-`canonical_row_identity_scope=partial_peak_hypothesis_sidecar_with_family_projections`
-for the same projection-heavy scope. The historical
+expected to report `matrix_row_identity=mz_rt_sample_columns`,
+`canonical_row_identity_scope=partial_canonical_peak_hypothesis_rows_only`, and
+`canonical_row_identity_blockers=family_projection_excluded_incomplete_scope`
+for the same projection-heavy scope unless `--include-family-projections` is
+explicitly requested for diagnostic review. The historical
 `activation_application_summary.tsv` reported:
 
 - `activation_output_mode=formal`
@@ -536,8 +539,9 @@ hypothesis assignments through a product matrix-construction contract.
 The historical applied canonical-only formal probe at
 `output/untargeted_activation_contract_recheck_20260603/formal_canonical_only_probe/`
 uses the same passing activation sidecars with
-`--output-mode formal --exclude-family-projections`. It is also stale for
-row-identity token semantics until rerun under the sidecar bridge. Its
+`--output-mode formal --exclude-family-projections` (the exclusion flag is now
+the default and kept only for compatibility). It is also stale for row-identity
+token semantics until rerun under the sidecar bridge. Its
 historical `activation_application_summary.tsv` reported:
 
 - `activation_output_mode=formal`

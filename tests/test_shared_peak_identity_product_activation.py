@@ -336,18 +336,20 @@ def test_activation_application_formal_mode_writes_product_contract_names(
     assert identity_rows["FAM_SPLIT::green"]["row_identity_basis"] == (
         "split_peak_hypothesis"
     )
-    assert identity_rows["FAM_BLOCK::family_projection"][
-        "row_identity_basis"
-    ] == "family_projection_no_split_evidence"
+    assert "FAM_BLOCK::family_projection" not in identity_rows
     summary = _read_tsv(outputs.summary_tsv)[0]
     assert summary["activation_output_mode"] == "formal"
     assert summary["matrix_row_identity"] == "mz_rt_sample_columns"
     assert summary["canonical_row_identity_ready"] == "FALSE"
-    assert summary["canonical_row_identity_blockers"] == "family_projection_present"
-    assert summary["canonical_row_identity_scope"] == (
-        "partial_peak_hypothesis_sidecar_with_family_projections"
+    assert summary["canonical_row_identity_blockers"] == (
+        "family_projection_excluded_incomplete_scope"
     )
-    assert summary["family_projection_semantics"] == "projection_not_split_proof"
+    assert summary["canonical_row_identity_scope"] == (
+        "partial_canonical_peak_hypothesis_rows_only"
+    )
+    assert summary["family_projection_semantics"] == (
+        "excluded_from_canonical_output"
+    )
     assert summary["legacy_rt_row_context_authority"] == "not_applicable"
     assert summary["all_family_split_science_ready"] == "FALSE"
 
@@ -477,6 +479,54 @@ def test_activation_formal_accepts_public_mz_rt_matrix_with_identity_sidecar(
     assert summary["canonical_row_identity_ready"] == "TRUE"
 
 
+def test_activation_formal_preserves_public_split_rows_sharing_source_family(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    _write_tsv(fixture["decisions"], _header(fixture["decisions"]), [])
+    public_matrix = _write_public_split_mz_rt_matrix_fixture(tmp_path, fixture)
+    identity = _write_split_alignment_matrix_identity_fixture(tmp_path)
+
+    outputs = product_activation.apply_activation_to_alignment_outputs(
+        activation_decisions_tsv=fixture["decisions"],
+        activation_acceptance_tsv=fixture["acceptance"],
+        alignment_matrix_tsv=public_matrix,
+        alignment_matrix_identity_tsv=identity,
+        alignment_review_tsv=fixture["review"],
+        alignment_cells_tsv=fixture["cells"],
+        output_dir=tmp_path / "formal",
+        output_mode="formal",
+    )
+
+    identity_rows = {
+        row["peak_hypothesis_id"]: row
+        for row in _read_tsv(outputs.hypothesis_identity_tsv)
+    }
+    assert identity_rows["FAM_SPLIT::blue"]["feature_family_id"] == "FAM_SPLIT"
+    assert identity_rows["FAM_SPLIT::blue"]["S1"] == "111"
+    assert identity_rows["FAM_SPLIT::blue"]["S2"] == ""
+    assert identity_rows["FAM_SPLIT::green"]["feature_family_id"] == "FAM_SPLIT"
+    assert identity_rows["FAM_SPLIT::green"]["S1"] == ""
+    assert identity_rows["FAM_SPLIT::green"]["S2"] == "222"
+
+    matrix_identity_by_peak = {
+        row["peak_hypothesis_id"]: row
+        for row in _read_tsv(outputs.matrix_identity_tsv)
+    }
+    assert matrix_identity_by_peak["FAM_SPLIT::blue"][
+        "source_feature_family_ids"
+    ] == "FAM_SPLIT"
+    assert matrix_identity_by_peak["FAM_SPLIT::green"][
+        "source_feature_family_ids"
+    ] == "FAM_SPLIT"
+
+    review_rows = {
+        row["feature_family_id"]: row for row in _read_tsv(outputs.review_tsv)
+    }
+    assert review_rows["FAM_SPLIT"]["include_in_primary_matrix"] == "TRUE"
+    assert review_rows["FAM_SPLIT"]["accepted_cell_count"] == "2"
+
+
 def test_activation_formal_rejects_public_identity_sidecar_with_legacy_basis(
     tmp_path: Path,
 ) -> None:
@@ -499,6 +549,79 @@ def test_activation_formal_rejects_public_identity_sidecar_with_legacy_basis(
             activation_acceptance_tsv=fixture["acceptance"],
             alignment_matrix_tsv=public_matrix,
             alignment_matrix_identity_tsv=identity,
+            alignment_review_tsv=fixture["review"],
+            alignment_cells_tsv=fixture["cells"],
+            output_dir=tmp_path / "formal",
+            output_mode="formal",
+        )
+
+
+def test_activation_formal_rejects_multi_family_hypothesis_collapse(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    decision_rows = _read_tsv(fixture["decisions"])
+    decision_rows.append(
+        {
+            "feature_family_id": "FAM_OTHER",
+            "sample_id": "S1",
+            "activation_status": "auto_activate",
+            "activation_action": "activate_pass",
+            "product_label_candidate": "pass",
+            "product_effect": "accept_label_or_rescue",
+            "contract_rule_id": "machine_observed_sufficient_positive_identity",
+            "peak_hypothesis_id": "FAM_ADD::mode_1",
+            "activation_unit_scope": "peak_hypothesis",
+            "activation_reason": "bad shared hypothesis id",
+        }
+    )
+    _write_tsv(fixture["decisions"], _header(fixture["decisions"]), decision_rows)
+    matrix_rows = _read_tsv(fixture["matrix"])
+    matrix_rows.append(
+        {
+            "feature_family_id": "FAM_OTHER",
+            "neutral_loss_tag": "DNA_dR",
+            "family_center_mz": "201.2",
+            "family_center_rt": "8.25",
+            "S1": "444",
+            "S2": "",
+        }
+    )
+    _write_tsv(fixture["matrix"], _header(fixture["matrix"]), matrix_rows)
+    review_rows = _read_tsv(fixture["review"])
+    review_rows.append(
+        {
+            "feature_family_id": "FAM_OTHER",
+            "neutral_loss_tag": "DNA_dR",
+            "family_center_mz": "201.2",
+            "family_center_rt": "8.25",
+            "identity_decision": "provisional_discovery",
+            "identity_confidence": "review",
+            "identity_reason": "insufficient_detected_identity_support",
+            "accepted_cell_count": "0",
+            "accepted_rescue_count": "0",
+            "include_in_primary_matrix": "FALSE",
+        }
+    )
+    _write_tsv(fixture["review"], _header(fixture["review"]), review_rows)
+    cell_rows = _read_tsv(fixture["cells"])
+    cell_rows.append(
+        {
+            "feature_family_id": "FAM_OTHER",
+            "sample_stem": "S1",
+            "status": "detected",
+            "area": "444",
+            "primary_matrix_area": "444",
+            "primary_matrix_area_source": "gaussian15_positive_asls_residual",
+        }
+    )
+    _write_tsv(fixture["cells"], _header(fixture["cells"]), cell_rows)
+
+    with pytest.raises(ValueError, match="exactly one source_feature_family_id"):
+        product_activation.apply_activation_to_alignment_outputs(
+            activation_decisions_tsv=fixture["decisions"],
+            activation_acceptance_tsv=fixture["acceptance"],
+            alignment_matrix_tsv=fixture["matrix"],
             alignment_review_tsv=fixture["review"],
             alignment_cells_tsv=fixture["cells"],
             output_dir=tmp_path / "formal",
@@ -545,10 +668,7 @@ def test_activation_formal_uses_rt_mode_evidence_for_split_hypothesis_rt(
         "activation_rt_mode_area_weighted_raw_selected_rt"
     )
     assert matrix_identity_by_peak["FAM_SPLIT::green"]["RT"] == "10.9"
-    assert matrix_identity_by_peak["FAM_BLOCK::family_projection"]["RT"] == "7.1"
-    assert matrix_identity_by_peak["FAM_BLOCK::family_projection"][
-        "center_rt_basis"
-    ] == "activation_hypothesis_family_center_rt"
+    assert "FAM_BLOCK::family_projection" not in matrix_identity_by_peak
 
 
 def test_activation_formal_ignores_raw_overlay_rt_mode_for_product_rt(
@@ -584,7 +704,7 @@ def test_activation_formal_ignores_raw_overlay_rt_mode_for_product_rt(
     )
 
 
-def test_activation_application_formal_mode_uses_legacy_rt_row_oracle(
+def test_activation_application_formal_mode_can_include_projection_legacy_rt_row_oracle(
     tmp_path: Path,
 ) -> None:
     fixture = _write_fixture(tmp_path, acceptance_status="pass")
@@ -600,6 +720,7 @@ def test_activation_application_formal_mode_uses_legacy_rt_row_oracle(
         output_dir=tmp_path / "formal",
         output_mode="formal",
         legacy_rt_row_oracle_xlsx=oracle,
+        exclude_family_projections=False,
     )
 
     assert outputs.hypothesis_identity_tsv is not None
@@ -629,7 +750,7 @@ def test_activation_application_formal_mode_can_require_peak_hypothesis_identity
 ) -> None:
     fixture = _write_fixture(tmp_path, acceptance_status="pass")
 
-    with pytest.raises(ValueError, match="family_projection_present"):
+    with pytest.raises(ValueError, match="family_projection_excluded_incomplete_scope"):
         product_activation.apply_activation_to_alignment_outputs(
             activation_decisions_tsv=fixture["decisions"],
             activation_acceptance_tsv=fixture["acceptance"],
@@ -642,7 +763,7 @@ def test_activation_application_formal_mode_can_require_peak_hypothesis_identity
         )
 
 
-def test_activation_application_formal_mode_excludes_projections_as_partial(
+def test_activation_application_formal_mode_excludes_projections_by_default(
     tmp_path: Path,
 ) -> None:
     fixture = _write_fixture(tmp_path, acceptance_status="pass")
@@ -655,7 +776,6 @@ def test_activation_application_formal_mode_excludes_projections_as_partial(
         alignment_cells_tsv=fixture["cells"],
         output_dir=tmp_path / "formal",
         output_mode="formal",
-        exclude_family_projections=True,
     )
 
     assert outputs.hypothesis_identity_tsv is not None
@@ -705,7 +825,7 @@ def test_activation_application_formal_mode_refuses_excluded_projections_as_comp
         )
 
 
-def test_activation_application_formal_mode_keeps_max_area_for_value_conflict(
+def test_activation_application_formal_mode_rejects_cross_family_value_conflict(
     tmp_path: Path,
 ) -> None:
     fixture = _write_fixture(tmp_path, acceptance_status="pass")
@@ -715,28 +835,16 @@ def test_activation_application_formal_mode_keeps_max_area_for_value_conflict(
             row["peak_hypothesis_id"] = "FAM_KEEP::mode_1"
     _write_tsv(fixture["decisions"], tuple(decisions[0]), decisions)
 
-    outputs = product_activation.apply_activation_to_alignment_outputs(
-        activation_decisions_tsv=fixture["decisions"],
-        activation_acceptance_tsv=fixture["acceptance"],
-        alignment_matrix_tsv=fixture["matrix"],
-        alignment_review_tsv=fixture["review"],
-        alignment_cells_tsv=fixture["cells"],
-        output_dir=tmp_path / "formal",
-        output_mode="formal",
-    )
-
-    assert outputs.hypothesis_identity_tsv is not None
-    identity_rows = {
-        row["peak_hypothesis_id"]: row
-        for row in _read_tsv(outputs.hypothesis_identity_tsv)
-    }
-    assert identity_rows["FAM_KEEP::mode_1"]["feature_family_id"] == (
-        "FAM_ADD;FAM_KEEP"
-    )
-    assert identity_rows["FAM_KEEP::mode_1"]["S2"] == "777"
-    summary = _read_tsv(outputs.summary_tsv)[0]
-    assert summary["matrix_value_conflict_cells"] == "1"
-    assert summary["matrix_value_conflict_policy"] == "max_area_pending_baseline"
+    with pytest.raises(ValueError, match="exactly one source_feature_family_id"):
+        product_activation.apply_activation_to_alignment_outputs(
+            activation_decisions_tsv=fixture["decisions"],
+            activation_acceptance_tsv=fixture["acceptance"],
+            alignment_matrix_tsv=fixture["matrix"],
+            alignment_review_tsv=fixture["review"],
+            alignment_cells_tsv=fixture["cells"],
+            output_dir=tmp_path / "formal",
+            output_mode="formal",
+        )
 
 
 def test_activation_application_formal_mode_refuses_source_overwrite(
@@ -978,7 +1086,7 @@ def test_activation_application_cli_formal_mode_rejects_legacy_context_as_comple
     )
 
 
-def test_activation_application_cli_excludes_projections_as_partial(
+def test_activation_application_cli_excludes_projections_by_default(
     tmp_path: Path,
 ) -> None:
     fixture = _write_fixture(tmp_path, acceptance_status="pass")
@@ -1000,7 +1108,6 @@ def test_activation_application_cli_excludes_projections_as_partial(
                 str(tmp_path / "formal"),
                 "--output-mode",
                 "formal",
-                "--exclude-family-projections",
             ]
         )
         == 0
@@ -1018,6 +1125,50 @@ def test_activation_application_cli_excludes_projections_as_partial(
     )[0]
     assert summary["canonical_row_identity_ready"] == "FALSE"
     assert summary["family_projection_rows_excluded"] == "1"
+
+
+def test_activation_application_cli_can_include_projections_for_diagnostics(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+
+    assert (
+        main(
+            [
+                "--activation-decisions-tsv",
+                str(fixture["decisions"]),
+                "--activation-acceptance-tsv",
+                str(fixture["acceptance"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--output-dir",
+                str(tmp_path / "formal"),
+                "--output-mode",
+                "formal",
+                "--include-family-projections",
+            ]
+        )
+        == 0
+    )
+
+    identity_rows = {
+        row["peak_hypothesis_id"]: row
+        for row in _read_tsv(
+            tmp_path / "formal" / "activation_hypothesis_identity.tsv"
+        )
+    }
+    assert identity_rows["FAM_BLOCK::family_projection"][
+        "row_identity_basis"
+    ] == "family_projection_no_split_evidence"
+    summary = _read_tsv(
+        tmp_path / "formal" / "activation_application_summary.tsv"
+    )[0]
+    assert summary["canonical_row_identity_blockers"] == "family_projection_present"
+    assert summary["family_projection_rows"] == "1"
 
 
 def test_activation_application_cli_refuses_excluded_projections_as_complete(
@@ -1408,6 +1559,47 @@ def _write_public_mz_rt_matrix_fixture(
     return matrix
 
 
+def _write_public_split_mz_rt_matrix_fixture(
+    tmp_path: Path,
+    fixture: dict[str, Path],
+) -> Path:
+    matrix = tmp_path / "public_split_alignment_matrix.tsv"
+    source_rows = {
+        row["feature_family_id"]: row for row in _read_tsv(fixture["matrix"])
+    }
+    _write_tsv(
+        matrix,
+        ("Mz", "RT", "S1", "S2"),
+        [
+            {
+                "Mz": source_rows["FAM_BLOCK"]["family_center_mz"],
+                "RT": "7.15",
+                "S1": source_rows["FAM_BLOCK"]["S1"],
+                "S2": source_rows["FAM_BLOCK"]["S2"],
+            },
+            {
+                "Mz": source_rows["FAM_KEEP"]["family_center_mz"],
+                "RT": "9.35",
+                "S1": source_rows["FAM_KEEP"]["S1"],
+                "S2": source_rows["FAM_KEEP"]["S2"],
+            },
+            {
+                "Mz": source_rows["FAM_SPLIT"]["family_center_mz"],
+                "RT": "10.45",
+                "S1": source_rows["FAM_SPLIT"]["S1"],
+                "S2": "",
+            },
+            {
+                "Mz": source_rows["FAM_SPLIT"]["family_center_mz"],
+                "RT": "10.95",
+                "S1": "",
+                "S2": source_rows["FAM_SPLIT"]["S2"],
+            },
+        ],
+    )
+    return matrix
+
+
 def _write_alignment_matrix_identity_fixture(tmp_path: Path) -> Path:
     identity = tmp_path / "alignment_matrix_identity.tsv"
     _write_tsv(
@@ -1446,6 +1638,61 @@ def _write_alignment_matrix_identity_fixture(tmp_path: Path) -> Path:
                 "RT": "10.45",
                 "peak_hypothesis_id": "FAM_SPLIT",
                 "row_identity_basis": "no_split_peak_hypothesis",
+                "source_feature_family_ids": "FAM_SPLIT",
+                "source_feature_family_count": "1",
+            },
+        ],
+    )
+    return identity
+
+
+def _write_split_alignment_matrix_identity_fixture(tmp_path: Path) -> Path:
+    identity = tmp_path / "split_alignment_matrix_identity.tsv"
+    _write_tsv(
+        identity,
+        (
+            "matrix_row_index",
+            "Mz",
+            "RT",
+            "peak_hypothesis_id",
+            "row_identity_basis",
+            "source_feature_family_ids",
+            "source_feature_family_count",
+        ),
+        [
+            {
+                "matrix_row_index": "1",
+                "Mz": "100.1",
+                "RT": "7.15",
+                "peak_hypothesis_id": "FAM_BLOCK",
+                "row_identity_basis": "no_split_peak_hypothesis",
+                "source_feature_family_ids": "FAM_BLOCK",
+                "source_feature_family_count": "1",
+            },
+            {
+                "matrix_row_index": "2",
+                "Mz": "300.3",
+                "RT": "9.35",
+                "peak_hypothesis_id": "FAM_KEEP",
+                "row_identity_basis": "no_split_peak_hypothesis",
+                "source_feature_family_ids": "FAM_KEEP",
+                "source_feature_family_count": "1",
+            },
+            {
+                "matrix_row_index": "3",
+                "Mz": "400.4",
+                "RT": "10.45",
+                "peak_hypothesis_id": "FAM_SPLIT::blue",
+                "row_identity_basis": "split_peak_hypothesis",
+                "source_feature_family_ids": "FAM_SPLIT",
+                "source_feature_family_count": "1",
+            },
+            {
+                "matrix_row_index": "4",
+                "Mz": "400.4",
+                "RT": "10.95",
+                "peak_hypothesis_id": "FAM_SPLIT::green",
+                "row_identity_basis": "split_peak_hypothesis",
                 "source_feature_family_ids": "FAM_SPLIT",
                 "source_feature_family_count": "1",
             },

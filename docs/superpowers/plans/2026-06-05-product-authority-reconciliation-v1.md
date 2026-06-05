@@ -64,6 +64,23 @@ scan-rate-aware/configured smoothing policy.
 Downstream final matrices must stay in `Mz` / `RT` / sample-column form.
 `peak_hypothesis_id` is the internal product identity for split-aware evidence
 and gate application, but it belongs in an identity/provenance sidecar rather
-than replacing the public matrix schema. `feature_family_id` is explicitly
-retired as a product row owner because family-level grouping can merge distinct
-MS1 peaks and distort matrix truth.
+than replacing the public matrix schema. For no-split successor groups the
+product identity comes from `group_hypothesis_id`; `feature_family_id` is
+explicitly retired as a product row owner because family-level grouping can
+merge distinct MS1 peaks and distort matrix truth.
+
+Main product writer correction: explicit child `PeakHypothesis` rows supplied by
+the alignment matrix object are emitted as independent public `Mz` / `RT` /
+sample rows with matching `alignment_matrix_identity.tsv` rows only when each
+child has a non-empty `peak_hypothesis_id`, exactly one
+`source_feature_family_id`, and the children form a total/unique assignment of
+the parent accepted product cells. Attempts to collapse multiple families into
+the same `peak_hypothesis_id` now fail closed in both the main writer and the
+formal activation bridge.
+
+Formal activation bridge correction: public `Mz` / `RT` matrices with an
+identity sidecar are reloaded by product `peak_hypothesis_id`, not by
+`feature_family_id`, so two split rows can share one source family without
+overwriting each other. Unresolved `family_projection` rows are excluded from
+formal product-shaped outputs by default and are available only through explicit
+diagnostic opt-in.

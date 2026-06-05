@@ -135,6 +135,77 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     assert identity_rows[0]["projection_status"] == "not_projection"
 
 
+def test_identity_sidecar_uses_group_hypothesis_as_product_identity(
+    tmp_path: Path,
+) -> None:
+    matrix = AlignmentMatrix(
+        clusters=(
+            _feature(
+                "FAM001",
+                evidence="owner_complete_link;owner_count=2",
+                group_hypothesis_id="PH001",
+                public_family_id="FAM001",
+            ),
+        ),
+        sample_order=("s1", "s2"),
+        cells=(
+            _cell("s1", "FAM001", "detected", 100.0),
+            _cell("s2", "FAM001", "detected", 110.0),
+        ),
+    )
+
+    matrix_rows = _read_tsv(
+        write_alignment_matrix_tsv(tmp_path / "alignment_matrix.tsv", matrix),
+    )
+    identity_rows = _read_tsv(
+        write_alignment_matrix_identity_tsv(
+            tmp_path / "alignment_matrix_identity.tsv",
+            matrix,
+        ),
+    )
+
+    assert list(matrix_rows[0]) == ["Mz", "RT", "s1", "s2"]
+    assert "peak_hypothesis_id" not in matrix_rows[0]
+    assert identity_rows[0]["peak_hypothesis_id"] == "PH001"
+    assert identity_rows[0]["source_feature_family_ids"] == "FAM001"
+
+
+def test_product_writer_rejects_no_split_multi_family_hypothesis_collapse(
+    tmp_path: Path,
+) -> None:
+    matrix = AlignmentMatrix(
+        clusters=(
+            _feature(
+                "FAM001",
+                evidence="owner_complete_link;owner_count=2",
+                group_hypothesis_id="PH_SHARED",
+            ),
+            _feature(
+                "FAM002",
+                evidence="owner_complete_link;owner_count=2",
+                group_hypothesis_id="PH_SHARED",
+            ),
+        ),
+        sample_order=("s1", "s2", "s3", "s4"),
+        cells=(
+            _cell("s1", "FAM001", "detected", 100.0),
+            _cell("s2", "FAM001", "detected", 110.0),
+            _cell("s3", "FAM002", "detected", 120.0),
+            _cell("s4", "FAM002", "detected", 130.0),
+        ),
+    )
+
+    try:
+        write_alignment_matrix_identity_tsv(
+            tmp_path / "alignment_matrix_identity.tsv",
+            matrix,
+        )
+    except ValueError as exc:
+        assert "cannot collapse multiple source families" in str(exc)
+    else:
+        raise AssertionError("expected multi-family PeakHypothesis collapse guard")
+
+
 def test_istd_fixture_records_explicit_matching_fields():
     fixture = Path(
         "tests/fixtures/untargeted_alignment/istd_false_missing_fixture.csv",
@@ -163,6 +234,8 @@ def _feature(
     *,
     evidence: str,
     has_anchor: bool = True,
+    group_hypothesis_id: str = "",
+    public_family_id: str = "",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         feature_family_id=feature_family_id,
@@ -176,6 +249,8 @@ def _feature(
         event_member_count=1,
         evidence=evidence,
         review_only=False,
+        group_hypothesis_id=group_hypothesis_id,
+        public_family_id=public_family_id or feature_family_id,
     )
 
 

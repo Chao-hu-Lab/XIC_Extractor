@@ -2,7 +2,15 @@
 
 ## Status
 
-Product-direction contract. Implementation is pending.
+Product writer contract active; full upstream split construction remains
+incomplete. The main product writers now emit clean `Mz` / `RT` / sample-column
+matrix rows with `alignment_matrix_identity.tsv` sidecar rows, can expand
+explicit `PeakHypothesis` child rows when supplied with complete provenance and
+a total/unique accepted-cell partition, and fail closed on unresolved
+projections, incomplete split identity, or multi-family row collapse. No-split
+rows use the successor `group_hypothesis_id` as the product identity when it is
+available; `feature_family_id` remains source provenance. This does not by
+itself prove all-family split science readiness or `production_ready` status.
 
 This spec supersedes the final-matrix row-identity direction in
 `2026-05-14-final-matrix-identity-contract.md`. The older contract kept
@@ -35,11 +43,10 @@ semantics anymore.
 migration diagnostics, bridge outputs, or audit artifacts that explicitly report
 the matrix as incomplete for canonical row identity.
 
-This is a deliberate public behavior change from the current writer contract.
-Current product outputs still expose family-based headers such as
-`feature_family_id`, `neutral_loss_tag`, `family_center_mz`, and
-`family_center_rt`. Those headers must move out of the primary `Matrix` surface
-and into sidecars/review surfaces when this contract is implemented.
+This is a deliberate public behavior change from the retired writer contract.
+The active product writers keep family-based fields such as `feature_family_id`,
+`neutral_loss_tag`, `family_center_mz`, and `family_center_rt` out of the primary
+`Matrix` surface and place identity/provenance in sidecars/review surfaces.
 
 ## Product Surface
 
@@ -76,7 +83,9 @@ No-split case:
 
 - If complete split evaluation finds no product-ready split, the old family and
   the new hypothesis are semantically equivalent for product output.
-- The internal `peak_hypothesis_id` may reuse the old `feature_family_id`.
+- The internal `peak_hypothesis_id` is the successor `group_hypothesis_id` when
+  available, and may reuse the old `feature_family_id` only when no successor
+  group id exists.
 - No synthetic suffix such as `::singleton` is required.
 - The displayed matrix still uses only `Mz` and `RT`, not the id.
 
@@ -98,6 +107,8 @@ Split case:
 - If product-ready evidence supports multiple peaks inside the previous family
   region, the parent unsplit hypothesis is replaced by explicit split
   hypotheses.
+- Each explicit split child must carry a non-empty `peak_hypothesis_id` and
+  exactly one `source_feature_family_id`.
 - The product matrix must not keep a parent aggregate row beside its split
   children.
 - Each sample cell is written to one accepted hypothesis row only.
@@ -107,8 +118,9 @@ Projection case:
 
 - A row whose identity is only `<feature_family_id>::family_projection` is an
   unresolved migration row.
-- Projection rows are acceptable in diagnostic or bridge output only when the
-  artifact clearly reports incomplete canonical row identity.
+- Projection rows are acceptable only in explicit diagnostic opt-in artifacts.
+  Bridge/formal product-shaped outputs must exclude them by default and report
+  the excluded projection scope separately.
 - Projection rows must block product promotion and complete identity gates.
 
 ## Evidence And Split Rules
@@ -282,6 +294,8 @@ true:
 - Complete identity is claimed after simply excluding unresolved projections.
 - A split family keeps both the parent aggregate row and split child rows in the
   product matrix.
+- A product row lists more than one `source_feature_family_id`; this is treated
+  as multi-family collapse, not as a valid PeakHypothesis.
 - A sample cell contributes value to more than one product hypothesis row for
   the same source peak.
 - Review-only or raw-overlay-only candidates write values into the product
@@ -315,8 +329,10 @@ Observed summary:
 - `construction_gate_status=blocked`
 - `diagnostic_only=TRUE`
 
-This proves the existing product path is still mostly a legacy
-family-projection bridge, not a complete PeakHypothesis final matrix.
+This historical diagnostic construction snapshot proved the then-existing path
+was still mostly a legacy family-projection bridge, not a complete
+PeakHypothesis final matrix. Current formal activation output excludes
+unresolved projections by default and reports the excluded scope separately.
 
 The formal canonical-only probe can emit only explicit hypothesis rows after
 excluding projections, but that output remains incomplete:

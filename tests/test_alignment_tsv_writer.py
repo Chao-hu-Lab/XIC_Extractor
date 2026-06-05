@@ -584,6 +584,90 @@ def test_write_alignment_matrix_identity_tsv_records_split_hypothesis(
     assert rows[0]["child_peak_hypothesis_ids"] == ""
 
 
+def test_write_alignment_matrix_uses_explicit_peak_hypotheses_as_rows(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import (
+        write_alignment_matrix_identity_tsv,
+        write_alignment_matrix_tsv,
+    )
+
+    parent = SimpleNamespace(
+        feature_family_id="FAM_PARENT",
+        neutral_loss_tag="DNA_dR",
+        family_center_mz=500.123,
+        family_center_rt=8.49,
+        family_product_mz=384.076,
+        family_observed_neutral_loss_da=116.047,
+        has_anchor=True,
+        event_cluster_ids=("FAM_PARENT",),
+        event_member_count=2,
+        evidence="owner_complete_link;owner_count=2",
+        child_peak_hypothesis_ids=("FAM_PARENT::early", "FAM_PARENT::late"),
+        peak_hypotheses=(
+            SimpleNamespace(
+                peak_hypothesis_id="FAM_PARENT::early",
+                row_identity_basis="split_peak_hypothesis",
+                split_evaluation_status="complete_product_ready_split",
+                projection_status="not_projection",
+                source_feature_family_ids=("FAM_PARENT",),
+                parent_peak_hypothesis_id="FAM_PARENT",
+                sample_stems=("sample-a",),
+                center_mz_basis="peak_hypothesis_accepted_cells",
+                center_rt_basis="peak_hypothesis_accepted_cells",
+            ),
+            SimpleNamespace(
+                peak_hypothesis_id="FAM_PARENT::late",
+                row_identity_basis="split_peak_hypothesis",
+                split_evaluation_status="complete_product_ready_split",
+                projection_status="not_projection",
+                source_feature_family_ids=("FAM_PARENT",),
+                parent_peak_hypothesis_id="FAM_PARENT",
+                sample_stems=("sample-b",),
+                center_mz_basis="peak_hypothesis_accepted_cells",
+                center_rt_basis="peak_hypothesis_accepted_cells",
+            ),
+        ),
+    )
+    matrix = AlignmentMatrix(
+        clusters=(parent,),
+        cells=(
+            _cell("sample-a", "detected", cluster_id="FAM_PARENT", area=100.0),
+            _cell("sample-b", "detected", cluster_id="FAM_PARENT", area=110.0),
+        ),
+        sample_order=("sample-a", "sample-b"),
+    )
+
+    matrix_rows = _read_tsv(write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix))
+    identity_rows = _read_tsv(
+        write_alignment_matrix_identity_tsv(
+            tmp_path / "alignment_matrix_identity.tsv",
+            matrix,
+        )
+    )
+
+    assert list(matrix_rows[0]) == ["Mz", "RT", "sample-a", "sample-b"]
+    assert [(row["sample-a"], row["sample-b"]) for row in matrix_rows] == [
+        ("100", ""),
+        ("", "110"),
+    ]
+    assert [row["peak_hypothesis_id"] for row in identity_rows] == [
+        "FAM_PARENT::early",
+        "FAM_PARENT::late",
+    ]
+    assert [row["row_identity_basis"] for row in identity_rows] == [
+        "split_peak_hypothesis",
+        "split_peak_hypothesis",
+    ]
+    assert {row["source_feature_family_ids"] for row in identity_rows} == {
+        "FAM_PARENT",
+    }
+    assert {row["parent_peak_hypothesis_id"] for row in identity_rows} == {
+        "FAM_PARENT",
+    }
+    assert all(row["child_peak_hypothesis_ids"] == "" for row in identity_rows)
+
+
 def test_write_alignment_matrix_rejects_parent_aggregate_product_row(
     tmp_path: Path,
 ) -> None:
@@ -613,6 +697,151 @@ def test_write_alignment_matrix_rejects_parent_aggregate_product_row(
     )
 
     with pytest.raises(ValueError, match="parent aggregate"):
+        write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix)
+
+
+def test_write_alignment_matrix_rejects_split_hypothesis_without_identity(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
+
+    parent = SimpleNamespace(
+        feature_family_id="FAM_PARENT",
+        neutral_loss_tag="DNA_dR",
+        family_center_mz=500.123,
+        family_center_rt=8.49,
+        family_product_mz=384.076,
+        family_observed_neutral_loss_da=116.047,
+        has_anchor=True,
+        event_cluster_ids=("FAM_PARENT",),
+        event_member_count=2,
+        evidence="owner_complete_link;owner_count=2",
+        child_peak_hypothesis_ids=("FAM_PARENT::early",),
+        peak_hypotheses=(
+            SimpleNamespace(
+                peak_hypothesis_id="",
+                row_identity_basis="split_peak_hypothesis",
+                split_evaluation_status="complete_product_ready_split",
+                projection_status="not_projection",
+                source_feature_family_ids=("FAM_PARENT",),
+                parent_peak_hypothesis_id="FAM_PARENT",
+                sample_stems=("sample-a",),
+            ),
+        ),
+    )
+    matrix = AlignmentMatrix(
+        clusters=(parent,),
+        cells=(
+            _cell("sample-a", "detected", cluster_id="FAM_PARENT", area=100.0),
+            _cell("sample-b", "detected", cluster_id="FAM_PARENT", area=110.0),
+        ),
+        sample_order=("sample-a", "sample-b"),
+    )
+
+    with pytest.raises(ValueError, match="requires peak_hypothesis_id"):
+        write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix)
+
+
+def test_write_alignment_matrix_rejects_duplicate_split_hypothesis_id(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
+
+    matrix = _split_writer_matrix(
+        (
+            _split_hypothesis("FAM_PARENT::same", ("sample-a",)),
+            _split_hypothesis("FAM_PARENT::same", ("sample-b",)),
+        )
+    )
+
+    with pytest.raises(ValueError, match="duplicate product peak_hypothesis_id"):
+        write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix)
+
+
+def test_write_alignment_matrix_rejects_overlapping_split_sample_claims(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
+
+    matrix = _split_writer_matrix(
+        (
+            _split_hypothesis("FAM_PARENT::early", ("sample-a",)),
+            _split_hypothesis("FAM_PARENT::late", ("sample-a", "sample-b")),
+        )
+    )
+
+    with pytest.raises(ValueError, match="claimed by multiple peak_hypothesis_id"):
+        write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix)
+
+
+def test_write_alignment_matrix_rejects_unassigned_split_product_cell(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
+
+    matrix = _split_writer_matrix(
+        (
+            _split_hypothesis("FAM_PARENT::early", ("sample-a",)),
+        )
+    )
+
+    with pytest.raises(ValueError, match="not assigned to split hypothesis"):
+        write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix)
+
+
+def test_write_alignment_matrix_rejects_split_hypothesis_missing_source_family(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
+
+    matrix = _split_writer_matrix(
+        (
+            _split_hypothesis(
+                "FAM_PARENT::early",
+                ("sample-a",),
+                source_feature_family_ids=None,
+            ),
+            _split_hypothesis(
+                "FAM_PARENT::late",
+                ("sample-b",),
+                source_feature_family_ids=None,
+            ),
+        )
+    )
+
+    with pytest.raises(ValueError, match="requires source_feature_family_ids"):
+        write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix)
+
+
+def test_write_alignment_matrix_rejects_multi_family_product_identity(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
+
+    matrix = AlignmentMatrix(
+        clusters=(
+            SimpleNamespace(
+                feature_family_id="PH_COLLAPSED",
+                neutral_loss_tag="DNA_dR",
+                family_center_mz=500.123,
+                family_center_rt=8.49,
+                family_product_mz=384.076,
+                family_observed_neutral_loss_da=116.047,
+                has_anchor=True,
+                event_cluster_ids=("PH_COLLAPSED",),
+                event_member_count=2,
+                evidence="owner_complete_link;owner_count=2",
+                source_feature_family_ids=("FAM_A", "FAM_B"),
+            ),
+        ),
+        cells=(
+            _cell("sample-a", "detected", cluster_id="PH_COLLAPSED", area=100.0),
+            _cell("sample-b", "detected", cluster_id="PH_COLLAPSED", area=110.0),
+        ),
+        sample_order=("sample-a", "sample-b"),
+    )
+
+    with pytest.raises(ValueError, match="exactly one source_feature_family_id"):
         write_alignment_matrix_tsv(tmp_path / "matrix.tsv", matrix)
 
 
@@ -1127,6 +1356,56 @@ def _cluster(
         folded_sample_fill_count=folded_sample_fill_count,
         fold_evidence=fold_evidence,
     )
+
+
+def _split_writer_matrix(
+    peak_hypotheses: tuple[SimpleNamespace, ...],
+) -> AlignmentMatrix:
+    parent = SimpleNamespace(
+        feature_family_id="FAM_PARENT",
+        neutral_loss_tag="DNA_dR",
+        family_center_mz=500.123,
+        family_center_rt=8.49,
+        family_product_mz=384.076,
+        family_observed_neutral_loss_da=116.047,
+        has_anchor=True,
+        event_cluster_ids=("FAM_PARENT",),
+        event_member_count=2,
+        evidence="owner_complete_link;owner_count=2",
+        child_peak_hypothesis_ids=tuple(
+            hypothesis.peak_hypothesis_id
+            for hypothesis in peak_hypotheses
+            if getattr(hypothesis, "peak_hypothesis_id", "")
+        ),
+        peak_hypotheses=peak_hypotheses,
+    )
+    return AlignmentMatrix(
+        clusters=(parent,),
+        cells=(
+            _cell("sample-a", "detected", cluster_id="FAM_PARENT", area=100.0),
+            _cell("sample-b", "detected", cluster_id="FAM_PARENT", area=110.0),
+        ),
+        sample_order=("sample-a", "sample-b"),
+    )
+
+
+def _split_hypothesis(
+    peak_hypothesis_id: str,
+    sample_stems: tuple[str, ...],
+    *,
+    source_feature_family_ids: tuple[str, ...] | None = ("FAM_PARENT",),
+) -> SimpleNamespace:
+    values: dict[str, object] = {
+        "peak_hypothesis_id": peak_hypothesis_id,
+        "row_identity_basis": "split_peak_hypothesis",
+        "split_evaluation_status": "complete_product_ready_split",
+        "projection_status": "not_projection",
+        "parent_peak_hypothesis_id": "FAM_PARENT",
+        "sample_stems": sample_stems,
+    }
+    if source_feature_family_ids is not None:
+        values["source_feature_family_ids"] = source_feature_family_ids
+    return SimpleNamespace(**values)
 
 
 def _cell(

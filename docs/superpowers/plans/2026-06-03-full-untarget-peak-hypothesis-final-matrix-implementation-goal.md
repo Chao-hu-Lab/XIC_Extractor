@@ -54,11 +54,15 @@ CONTEXT:
   `tests/test_shared_peak_identity_product_activation.py`
   `tests/test_shared_peak_identity_schema.py`
   `tests/test_shared_peak_identity_mode_window_assignment_gate.py`
-- Current known blocker evidence:
+- Historical known blocker evidence from the 2026-06-03 diagnostic construction
+  audit:
   `output/untargeted_hypothesis_product_path_audit_20260603/` reports
   `canonical_row_identity_ready=FALSE`,
   `canonical_row_identity_blockers=family_projection_present`,
   `family_projection_rows=610`, and `projected_cell_count=39091`.
+- Current formal activation outputs exclude unresolved projections by default
+  and should report `family_projection_excluded_incomplete_scope` unless
+  `--include-family-projections` is explicitly requested for diagnostics.
 
 CONSTRAINTS:
 - Do not relabel unresolved `family_projection` rows as no-split hypotheses.

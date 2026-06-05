@@ -295,6 +295,13 @@ def construct_peak_hypothesis_matrix(
 
         if not decision.write_matrix_value:
             continue
+        if decision.row_identity_basis == "family_projection_no_split_evidence":
+            continue
+        _reject_multi_family_hypothesis_collapse(
+            rows_by_hypothesis.get(decision.peak_hypothesis_id),
+            peak_hypothesis_id=decision.peak_hypothesis_id,
+            family_id=family_id,
+        )
         output_row = rows_by_hypothesis.setdefault(
             decision.peak_hypothesis_id,
             _new_matrix_row(
@@ -317,6 +324,11 @@ def construct_peak_hypothesis_matrix(
     for candidate in expanded_candidates:
         assignment_row = _expanded_assignment_row(candidate)
         assignment_rows.append(assignment_row)
+        _reject_multi_family_hypothesis_collapse(
+            rows_by_hypothesis.get(candidate.peak_hypothesis_id),
+            peak_hypothesis_id=candidate.peak_hypothesis_id,
+            family_id=candidate.feature_family_id,
+        )
         output_row = rows_by_hypothesis.setdefault(
             candidate.peak_hypothesis_id,
             _new_matrix_row(
@@ -703,6 +715,28 @@ def _assignment_decision(
         matrix_value_effect="written",
         write_matrix_value=True,
         reason="no_product_candidate_peak_hypothesis_available_before_matrix_output",
+    )
+
+
+def _reject_multi_family_hypothesis_collapse(
+    existing_row: Mapping[str, str] | None,
+    *,
+    peak_hypothesis_id: str,
+    family_id: str,
+) -> None:
+    if existing_row is None:
+        return
+    source_ids = tuple(
+        part.strip()
+        for part in existing_row.get("feature_family_id", "").split(";")
+        if part.strip()
+    )
+    if not source_ids or family_id in source_ids:
+        return
+    collapsed_ids = ";".join((*source_ids, family_id))
+    raise ValueError(
+        f"{peak_hypothesis_id}: peak hypothesis matrix row requires exactly one "
+        f"source_feature_family_id, got {collapsed_ids}"
     )
 
 

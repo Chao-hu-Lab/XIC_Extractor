@@ -184,26 +184,20 @@ RT, MS1 pattern/QC, and MS2/NL opportunity facts from the same activation
 output. Missing sidecars do not invent support; stale cells without projection
 columns remain fail-closed for gate/report consumers. Formal activation keeps
 `feature_family_id` as provenance/debug only and treats `peak_hypothesis_id` as
-the internal product identity sidecar. By default, rows without
-split/wrong-peak/mode evidence use
-`<feature_family_id>::family_projection` with
-`row_identity_basis=family_projection_no_split_evidence`; this is a blocker for
-complete canonical row-identity readiness and is disclosed by
-`canonical_row_identity_ready=FALSE`,
-`canonical_row_identity_blockers=family_projection_present`,
-`canonical_row_identity_scope=partial_peak_hypothesis_sidecar_with_family_projections`,
-`family_projection_semantics=projection_not_split_proof`, and
-`all_family_split_science_ready=FALSE`. `--exclude-family-projections` is formal
-mode only: it emits only explicit `peak_hypothesis_id` identity sidecar rows,
-reports skipped
-unresolved projections in `family_projection_rows_excluded` and
-`family_projection_cells_excluded`, and keeps
+the internal product identity sidecar. By default, unresolved rows without
+split/wrong-peak/mode evidence are excluded from emitted `alignment_matrix.tsv`
+and reported in `family_projection_rows_excluded` /
+`family_projection_cells_excluded`. These exclusions keep
 `canonical_row_identity_ready=FALSE` with
-`canonical_row_identity_blockers=family_projection_excluded_incomplete_scope`
-when projection rows were excluded. It cannot be combined with
-`--require-complete-peak-hypothesis-identity` to certify completeness; that gate
-must fail while excluded projection rows remain. This exclusion is not proof that
-the full legacy family matrix has been completely split. Optional
+`canonical_row_identity_blockers=family_projection_excluded_incomplete_scope`;
+projection-free emitted rows are not proof that the full legacy family matrix has
+been completely split. `--exclude-family-projections` is the formal-mode default
+and remains as a compatibility flag. `--include-family-projections` is
+diagnostic-only opt-in: it writes `<feature_family_id>::family_projection` rows
+with `row_identity_basis=family_projection_no_split_evidence`, reports
+`canonical_row_identity_blockers=family_projection_present`, and must not be
+handed to downstream as a product matrix. `--require-complete-peak-hypothesis-identity`
+must fail while included or excluded projection rows remain. Optional
 `--legacy-rt-row-oracle-xlsx` adds
 context-only `legacy_rt_row_context_id` hints from a legacy MZmine RT-row
 workbook but does not mint product identities; matching outputs report

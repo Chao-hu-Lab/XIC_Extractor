@@ -197,16 +197,27 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "unresolved family projection rows."
         ),
     )
-    parser.add_argument(
+    projection_group = parser.add_mutually_exclusive_group()
+    projection_group.add_argument(
         "--exclude-family-projections",
+        dest="exclude_family_projections",
         action="store_true",
+        default=True,
         help=(
-            "Formal mode only. Exclude unresolved family projection rows from "
-            "the emitted matrix and report excluded row/cell counts in the "
-            "application summary. Excluded rows keep canonical readiness "
-            "blocked; this flag cannot satisfy "
-            "--require-complete-peak-hypothesis-identity while exclusions "
-            "remain."
+            "Formal mode default. Exclude unresolved family projection rows "
+            "from emitted alignment_matrix.tsv and report excluded row/cell "
+            "counts in the application summary. Excluded rows keep canonical "
+            "readiness blocked."
+        ),
+    )
+    projection_group.add_argument(
+        "--include-family-projections",
+        dest="exclude_family_projections",
+        action="store_false",
+        help=(
+            "Diagnostic legacy mode only. Include unresolved family projection "
+            "rows in formal outputs for review; these rows block canonical "
+            "readiness and must not be handed to downstream as product matrix."
         ),
     )
     return parser.parse_args(argv)
