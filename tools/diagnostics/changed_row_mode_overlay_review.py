@@ -30,6 +30,7 @@ from tools.diagnostics.family_ms1_overlay_rendering_styles import (
 )
 from xic_extractor.alignment.shared_peak_identity_explanation import (
     machine_evidence_support,
+    ms1_peak_modes,
     peak_hypothesis_selection,
     rt_mode_evidence,
 )
@@ -58,8 +59,15 @@ IDENTITY_REQUIRED_COLUMNS = (
 MODE_GAP_MIN = 0.5
 MIN_MODE_CLUSTER_SIZE = 2
 SHAPE_STRONG_MIN = 0.80
+ALIGNMENT_CENTER_MODE_DELTA_SEC = 30.0
 MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS = (
     machine_evidence_support.MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS
+)
+ALIGNMENT_CELL_REQUIRED_COLUMNS = (
+    "feature_family_id",
+    "sample_stem",
+    "apex_rt",
+    "rt_delta_sec",
 )
 MS1_PATTERN_COHERENCE_REQUIRED_COLUMNS = (
     machine_evidence_support.MS1_PATTERN_COHERENCE_REQUIRED_COLUMNS
@@ -93,6 +101,13 @@ SAMPLE_REVIEW_COLUMNS = (
     "product_selection_action",
     "product_selection_blocker",
     "global_trace_mode_id",
+    "alignment_mode_id",
+    "alignment_mode_source",
+    "alignment_apex_delta_sec",
+    "alignment_mode_status",
+    "display_mode_id",
+    "mode_review_basis",
+    "gaussian15_trace_mode_ids",
     "mode_review_warning",
     "trace_data_json",
     "original_png_path",
@@ -137,6 +152,10 @@ FAMILY_SUMMARY_COLUMNS = (
     "peak_hypothesis_status_counts",
     "selected_mode_counts",
     "global_trace_mode_counts",
+    "alignment_mode_counts",
+    "mode_review_basis",
+    "gaussian15_trace_mode_counts",
+    "gaussian15_trace_mode_windows",
     "mode_review_verdict",
     "mode_review_warning",
     "changed_row_reason",
@@ -147,6 +166,7 @@ FAMILY_SUMMARY_COLUMNS = (
     "original_png_path",
     "original_pdf_path",
     "mode_plot_png_path",
+    "mode_aligned_plot_png_path",
 )
 
 SIMILARITY_FAMILY_SUMMARY_COLUMNS = (
@@ -195,6 +215,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             active_alignment_matrix_identity_tsv=args.active_alignment_matrix_identity_tsv,
             candidate_ms2_pattern_evidence_tsv=args.candidate_ms2_pattern_evidence_tsv,
             matrix_rt_drift_policy_tsv=args.matrix_rt_drift_policy_tsv,
+            alignment_cells_tsv=args.alignment_cells_tsv,
             ms1_pattern_coherence_tsv=args.ms1_pattern_coherence_tsv,
             output_dir=args.output_dir,
             render_plots=not args.no_plots,
@@ -214,6 +235,7 @@ def run_changed_row_mode_overlay_review(
     active_alignment_matrix_identity_tsv: Path | None = None,
     candidate_ms2_pattern_evidence_tsv: Path | None = None,
     matrix_rt_drift_policy_tsv: Path | None = None,
+    alignment_cells_tsv: Path | None = None,
     ms1_pattern_coherence_tsv: Path | None = None,
     output_dir: Path,
     render_plots: bool = True,
@@ -261,10 +283,31 @@ def run_changed_row_mode_overlay_review(
 
     rt_rows_by_key = _rows_by_key(rt_mode_rows)
     hypothesis_rows_by_key = _rows_by_key(peak_hypothesis_rows)
+    matrix_rt_drift_rows = _optional_rows_by_key(
+        matrix_rt_drift_policy_tsv,
+        MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS,
+    )
+    alignment_cell_rows = _optional_rows_by_key(
+        alignment_cells_tsv,
+        ALIGNMENT_CELL_REQUIRED_COLUMNS,
+    )
     global_mode_ids_by_family = {
         item.family_id: _global_trace_mode_ids(item.traces) for item in trace_data
     }
+    alignment_modes_by_family = {
+        item.family_id: _alignment_mode_assignments(
+            family_id=item.family_id,
+            traces=item.traces,
+            alignment_cell_rows=alignment_cell_rows,
+            matrix_rt_drift_rows=matrix_rt_drift_rows,
+        )
+        for item in trace_data
+    }
+    gaussian15_modes_by_family = {
+        item.family_id: _gaussian15_trace_mode_windows(item) for item in trace_data
+    }
     mode_plot_paths: dict[str, Path] = {}
+    mode_aligned_plot_paths: dict[str, Path] = {}
     sample_rows = _sample_review_rows(
         trace_data=trace_data,
         rt_rows_by_key=rt_rows_by_key,
@@ -272,17 +315,27 @@ def run_changed_row_mode_overlay_review(
         baseline_identity=baseline_identity,
         active_identity=active_identity,
         global_mode_ids_by_family=global_mode_ids_by_family,
+        alignment_modes_by_family=alignment_modes_by_family,
+        gaussian15_modes_by_family=gaussian15_modes_by_family,
         output_dir=output_dir,
     )
     if render_plots:
         for item in trace_data:
+            family_sample_rows = [
+                row
+                for row in sample_rows
+                if row["feature_family_id"] == item.family_id
+            ]
             mode_plot_paths[item.family_id] = _render_mode_plot(
                 trace_data=item,
-                sample_rows=[
-                    row
-                    for row in sample_rows
-                    if row["feature_family_id"] == item.family_id
-                ],
+                sample_rows=family_sample_rows,
+                gaussian15_modes=gaussian15_modes_by_family.get(item.family_id, ()),
+                output_dir=output_dir,
+            )
+            mode_aligned_plot_paths[item.family_id] = _render_mode_aligned_plot(
+                trace_data=item,
+                sample_rows=family_sample_rows,
+                gaussian15_modes=gaussian15_modes_by_family.get(item.family_id, ()),
                 output_dir=output_dir,
             )
     sample_rows = [
@@ -294,10 +347,6 @@ def run_changed_row_mode_overlay_review(
         }
         for row in sample_rows
     ]
-    matrix_rt_drift_rows = _optional_rows_by_key(
-        matrix_rt_drift_policy_tsv,
-        MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS,
-    )
     ms1_pattern_rows = _optional_rows_by_key(
         ms1_pattern_coherence_tsv,
         MS1_PATTERN_COHERENCE_REQUIRED_COLUMNS,
@@ -316,6 +365,8 @@ def run_changed_row_mode_overlay_review(
         baseline_identity=baseline_identity,
         active_identity=active_identity,
         mode_plot_paths=mode_plot_paths,
+        mode_aligned_plot_paths=mode_aligned_plot_paths,
+        gaussian15_modes_by_family=gaussian15_modes_by_family,
     )
 
     sample_review_tsv = output_dir / "changed_row_mode_sample_review.tsv"
@@ -426,6 +477,11 @@ def _sample_review_rows(
     baseline_identity: Mapping[str, tuple[Mapping[str, str], ...]],
     active_identity: Mapping[str, tuple[Mapping[str, str], ...]] | None,
     global_mode_ids_by_family: Mapping[str, Mapping[str, str]],
+    alignment_modes_by_family: Mapping[str, Mapping[str, Mapping[str, str]]],
+    gaussian15_modes_by_family: Mapping[
+        str,
+        Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
+    ],
     output_dir: Path,
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
@@ -443,6 +499,8 @@ def _sample_review_rows(
             active_identity_supplied=active_identity is not None,
         )
         global_modes = global_mode_ids_by_family.get(family_id, {})
+        alignment_modes = alignment_modes_by_family.get(family_id, {})
+        gaussian15_modes = gaussian15_modes_by_family.get(family_id, ())
         for trace in item.traces:
             sample_stem = text_value(trace.get("sample_stem"))
             if not sample_stem:
@@ -450,10 +508,24 @@ def _sample_review_rows(
             key = (family_id, sample_stem)
             rt_row = rt_rows_by_key.get(key, {})
             hypothesis_row = hypothesis_rows_by_key.get(key, {})
+            alignment_row = alignment_modes.get(sample_stem, {})
+            display_mode_id = _display_mode_id(
+                alignment_row=alignment_row,
+                raw_mode_id=text_value(rt_row.get("selected_mode_id")),
+            )
+            mode_basis = _mode_review_basis(alignment_row)
+            gaussian15_trace_modes = _gaussian15_trace_mode_ids(
+                trace=trace,
+                gaussian15_modes=gaussian15_modes,
+            )
             warning = _sample_mode_warning(
                 rt_row=rt_row,
                 global_mode_id=global_modes.get(sample_stem, ""),
                 global_mode_count=len(set(global_modes.values())),
+                alignment_mode_id=text_value(alignment_row.get("alignment_mode_id")),
+                alignment_mode_count=_alignment_mode_count(alignment_modes),
+                mode_basis=mode_basis,
+                gaussian15_trace_mode_ids=gaussian15_trace_modes,
             )
             rows.append(
                 {
@@ -502,6 +574,21 @@ def _sample_review_rows(
                         hypothesis_row.get("product_selection_blocker"),
                     ),
                     "global_trace_mode_id": global_modes.get(sample_stem, ""),
+                    "alignment_mode_id": text_value(
+                        alignment_row.get("alignment_mode_id"),
+                    ),
+                    "alignment_mode_source": text_value(
+                        alignment_row.get("alignment_mode_source"),
+                    ),
+                    "alignment_apex_delta_sec": text_value(
+                        alignment_row.get("alignment_apex_delta_sec"),
+                    ),
+                    "alignment_mode_status": text_value(
+                        alignment_row.get("alignment_mode_status"),
+                    ),
+                    "display_mode_id": display_mode_id,
+                    "mode_review_basis": mode_basis,
+                    "gaussian15_trace_mode_ids": gaussian15_trace_modes,
                     "mode_review_warning": warning,
                     "trace_data_json": str(item.path),
                     "original_png_path": _resolve_optional_artifact(
@@ -522,6 +609,11 @@ def _family_summary_rows(
     baseline_identity: Mapping[str, tuple[Mapping[str, str], ...]],
     active_identity: Mapping[str, tuple[Mapping[str, str], ...]] | None,
     mode_plot_paths: Mapping[str, Path],
+    mode_aligned_plot_paths: Mapping[str, Path],
+    gaussian15_modes_by_family: Mapping[
+        str,
+        Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
+    ],
 ) -> list[dict[str, str]]:
     samples_by_family: dict[str, list[Mapping[str, str]]] = defaultdict(list)
     for row in sample_rows:
@@ -536,6 +628,7 @@ def _family_summary_rows(
             if active_identity is not None
             else ()
         )
+        gaussian15_modes = gaussian15_modes_by_family.get(family_id, ())
         changed_row = changed_by_family.get(family_id, {})
         rows.append(
             {
@@ -568,6 +661,18 @@ def _family_summary_rows(
                 "global_trace_mode_counts": _counts_text(
                     row.get("global_trace_mode_id") for row in family_sample_rows
                 ),
+                "alignment_mode_counts": _counts_text(
+                    row.get("alignment_mode_id") for row in family_sample_rows
+                ),
+                "mode_review_basis": _dominant_text(
+                    row.get("mode_review_basis") for row in family_sample_rows
+                ),
+                "gaussian15_trace_mode_counts": _counts_text(
+                    mode.mode_id for mode in gaussian15_modes
+                ),
+                "gaussian15_trace_mode_windows": _gaussian15_mode_windows_text(
+                    gaussian15_modes,
+                ),
                 "mode_review_verdict": _family_mode_verdict(family_sample_rows),
                 "mode_review_warning": _family_mode_warning(
                     family_sample_rows=family_sample_rows,
@@ -587,6 +692,9 @@ def _family_summary_rows(
                     base_dir=item.path.parent,
                 ),
                 "mode_plot_png_path": str(mode_plot_paths.get(family_id, "")),
+                "mode_aligned_plot_png_path": str(
+                    mode_aligned_plot_paths.get(family_id, ""),
+                ),
             }
         )
     return rows
@@ -981,40 +1089,190 @@ def _global_trace_mode_ids(
     return _cluster_modes(values, prefix="global_trace_mode")
 
 
+def _gaussian15_trace_mode_windows(
+    trace_data: TraceData,
+) -> tuple[ms1_peak_modes.Gaussian15PeakModeWindow, ...]:
+    return ms1_peak_modes.infer_gaussian15_peak_mode_windows(
+        trace_data.traces,
+        rt_min=optional_float(trace_data.payload.get("rt_min")),
+        rt_max=optional_float(trace_data.payload.get("rt_max")),
+    )
+
+
+def _gaussian15_trace_mode_ids(
+    *,
+    trace: Mapping[str, Any],
+    gaussian15_modes: Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
+) -> str:
+    mode_ids = [
+        mode.mode_id
+        for mode in gaussian15_modes
+        if ms1_peak_modes.trace_has_gaussian15_peak_in_window(
+            trace,
+            start_rt=mode.start_rt,
+            end_rt=mode.end_rt,
+        )
+    ]
+    return ";".join(mode_ids)
+
+
+def _family_gaussian15_trace_modes(rows: Sequence[Mapping[str, str]]) -> set[str]:
+    return {
+        mode_id
+        for row in rows
+        for mode_id in _split_semicolon_values(row.get("gaussian15_trace_mode_ids"))
+    }
+
+
+def _gaussian15_mode_windows_text(
+    modes: Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
+) -> str:
+    return ";".join(
+        (
+            f"{mode.mode_id}="
+            f"{mode.start_rt:.4f}-{mode.end_rt:.4f}"
+            f"|peaks={mode.trace_peak_count}"
+            f"|detected={mode.detected_seed_count}"
+        )
+        for mode in modes
+    )
+
+
+def _alignment_mode_assignments(
+    *,
+    family_id: str,
+    traces: Sequence[Mapping[str, Any]],
+    alignment_cell_rows: Mapping[tuple[str, str], Mapping[str, str]],
+    matrix_rt_drift_rows: Mapping[tuple[str, str], Mapping[str, str]],
+) -> dict[str, dict[str, str]]:
+    details: dict[str, dict[str, str]] = {}
+    cluster_values: dict[str, float | None] = {}
+    for trace in traces:
+        sample = text_value(trace.get("sample_stem"))
+        if not sample:
+            continue
+        key = (family_id, sample)
+        detail = _alignment_mode_detail(
+            trace=trace,
+            alignment_cell=alignment_cell_rows.get(key, {}),
+            drift_row=matrix_rt_drift_rows.get(key, {}),
+        )
+        details[sample] = detail
+        delta_sec = _numeric_float(detail.get("alignment_apex_delta_sec"))
+        if delta_sec is not None and detail.get("alignment_mode_status") in {
+            "alignment_cell_supported",
+            "drift_supported",
+            "rt_close",
+        }:
+            cluster_values[sample] = delta_sec / 60.0
+    mode_ids = _alignment_delta_mode_ids(cluster_values)
+    for sample, mode_id in mode_ids.items():
+        details.setdefault(sample, {})["alignment_mode_id"] = mode_id
+    for sample, detail in details.items():
+        detail.setdefault("alignment_mode_id", "")
+        if not detail["alignment_mode_id"] and detail.get("alignment_mode_status"):
+            detail["alignment_mode_id"] = "alignment_unassigned"
+    return details
+
+
+def _alignment_delta_mode_ids(
+    values: Mapping[str, float | None],
+) -> dict[str, str]:
+    finite = {
+        sample: delta_min
+        for sample, delta_min in values.items()
+        if delta_min is not None
+    }
+    if (
+        finite
+        and max(abs(delta_min) * 60.0 for delta_min in finite.values())
+        <= ALIGNMENT_CENTER_MODE_DELTA_SEC
+    ):
+        return {sample: "alignment_mode_1" for sample in finite}
+    return _cluster_modes(finite, prefix="alignment_mode")
+
+
+def _alignment_mode_detail(
+    *,
+    trace: Mapping[str, Any],
+    alignment_cell: Mapping[str, str],
+    drift_row: Mapping[str, str],
+) -> dict[str, str]:
+    drift_status = text_value(drift_row.get("matrix_rt_drift_status"))
+    drift_compatible = text_value(drift_row.get("drift_compatible_status"))
+    signed_delta = _signed_alignment_delta_sec(alignment_cell, trace)
+    if (
+        drift_status in {"rt_close", "drift_supported"}
+        and drift_compatible != "conflict"
+    ):
+        corrected_delta = _numeric_float(drift_row.get("drift_corrected_delta_sec"))
+        if corrected_delta is not None:
+            sign = _delta_sign(signed_delta)
+            return {
+                "alignment_mode_source": "matrix_rt_drift_policy",
+                "alignment_apex_delta_sec": _float_text(sign * abs(corrected_delta)),
+                "alignment_mode_status": drift_status,
+            }
+    if drift_status == "drift_not_supported" or drift_compatible == "conflict":
+        return {
+            "alignment_mode_source": "matrix_rt_drift_policy",
+            "alignment_apex_delta_sec": "",
+            "alignment_mode_status": "drift_conflict",
+        }
+    if signed_delta is not None:
+        return {
+            "alignment_mode_source": "alignment_cell_delta",
+            "alignment_apex_delta_sec": _float_text(signed_delta),
+            "alignment_mode_status": "alignment_cell_supported",
+        }
+    if drift_status:
+        return {
+            "alignment_mode_source": "matrix_rt_drift_policy",
+            "alignment_apex_delta_sec": "",
+            "alignment_mode_status": "drift_inconclusive",
+        }
+    return {
+        "alignment_mode_source": "raw_overlay_only",
+        "alignment_apex_delta_sec": "",
+        "alignment_mode_status": "not_available",
+    }
+
+
+def _signed_alignment_delta_sec(
+    alignment_cell: Mapping[str, str],
+    trace: Mapping[str, Any],
+) -> float | None:
+    cell_delta = _numeric_float(alignment_cell.get("rt_delta_sec"))
+    if cell_delta is not None:
+        return cell_delta
+    apex_rt = _numeric_float(alignment_cell.get("apex_rt"))
+    center_rt = _numeric_float(trace.get("family_center_rt"))
+    if apex_rt is not None and center_rt is not None:
+        return (apex_rt - center_rt) * 60.0
+    return None
+
+
+def _delta_sign(value: float | None) -> float:
+    if value is None or value >= 0:
+        return 1.0
+    return -1.0
+
+
 def _cluster_modes(
     values: Mapping[str, float | None],
     *,
     prefix: str,
 ) -> dict[str, str]:
-    indexed = sorted(
+    indexed = tuple(
         (sample, value) for sample, value in values.items() if value is not None
     )
-    indexed.sort(key=lambda item: item[1])
-    if not indexed:
-        return {}
-    clusters: list[list[tuple[str, float]]] = []
-    current: list[tuple[str, float]] = []
-    for item in indexed:
-        if current and item[1] - current[-1][1] > MODE_GAP_MIN:
-            clusters.append(current)
-            current = []
-        current.append(item)
-    if current:
-        clusters.append(current)
-    if len(clusters) == 1:
-        return {sample: f"{prefix}_1" for sample, _value in indexed}
-    mode_ids: dict[str, str] = {}
-    mode_number = 0
-    for cluster in clusters:
-        if len(cluster) < MIN_MODE_CLUSTER_SIZE:
-            mode_id = f"{prefix}_outlier"
-        else:
-            mode_number += 1
-            median = cluster[len(cluster) // 2][1]
-            mode_id = f"{prefix}_{mode_number}_{median:.2f}min"
-        for sample, _value in cluster:
-            mode_ids[sample] = mode_id
-    return mode_ids
+    mode_ids = rt_mode_evidence.cluster_raw_overlay_rt_modes(
+        indexed,
+        prefix=prefix,
+        outlier_mode_id=f"{prefix}_outlier",
+        min_cluster_size=MIN_MODE_CLUSTER_SIZE,
+    )
+    return {str(sample): mode_id for sample, mode_id in mode_ids.items()}
 
 
 def _family_mode_verdict(rows: Sequence[Mapping[str, str]]) -> str:
@@ -1030,6 +1288,21 @@ def _family_mode_verdict(rows: Sequence[Mapping[str, str]]) -> str:
         for row in rows
         if text_value(row.get("global_trace_mode_id"))
     }
+    alignment_modes = {
+        text_value(row.get("alignment_mode_id"))
+        for row in rows
+        if _alignment_row_is_supported(row)
+        and text_value(row.get("alignment_mode_id"))
+        and text_value(row.get("alignment_mode_id")) != "alignment_unassigned"
+    }
+    alignment_supported_count = sum(
+        1 for row in rows if _alignment_row_is_supported(row)
+    )
+    gaussian15_modes = _family_gaussian15_trace_modes(rows)
+    if len(gaussian15_modes) > 1:
+        return "review_required_gaussian15_trace_multipeak"
+    if alignment_supported_count == len(rows) and len(alignment_modes) == 1:
+        return "single_mode_supported_alignment_review_only"
     if statuses & {"mode_conflict", "consolidation_no_go", "mode_split_required"}:
         return "block_or_split_required"
     if (
@@ -1053,8 +1326,14 @@ def _sample_mode_warning(
     rt_row: Mapping[str, str],
     global_mode_id: str,
     global_mode_count: int,
+    alignment_mode_id: str,
+    alignment_mode_count: int,
+    mode_basis: str,
+    gaussian15_trace_mode_ids: str,
 ) -> str:
     warnings = []
+    if len(_split_semicolon_values(gaussian15_trace_mode_ids)) > 1:
+        warnings.append("gaussian15_trace_multipeak")
     if text_value(rt_row.get("rt_mode_evidence_level")) == "raw_selected_apex_modes":
         warnings.append("raw_overlay_mode_review_only")
     if text_value(rt_row.get("rt_mode_status")) in {
@@ -1064,8 +1343,25 @@ def _sample_mode_warning(
         "mode_split_required",
     }:
         warnings.append(text_value(rt_row.get("rt_mode_status")))
-    if global_mode_count > 1 and global_mode_id:
+    if (
+        global_mode_count > 1
+        and global_mode_id
+        and not (
+            alignment_mode_count == 1
+            and alignment_mode_id
+            and mode_basis in {"alignment_cell_delta", "matrix_rt_drift_policy"}
+        )
+    ):
         warnings.append("global_trace_apex_multimodal")
+    if (
+        global_mode_count > 1
+        and alignment_mode_count == 1
+        and alignment_mode_id
+        and mode_basis in {"alignment_cell_delta", "matrix_rt_drift_policy"}
+    ):
+        warnings.append("raw_multimodal_but_alignment_single")
+    if mode_basis == "raw_overlay":
+        warnings.append("alignment_not_supplied_raw_only")
     return ";".join(dict.fromkeys(warnings))
 
 
@@ -1087,14 +1383,85 @@ def _family_mode_warning(
         for row in family_sample_rows
         if text_value(row.get("global_trace_mode_id"))
     }
-    if len(global_modes) > 1:
+    alignment_modes = {
+        text_value(row.get("alignment_mode_id"))
+        for row in family_sample_rows
+        if _alignment_row_is_supported(row)
+        and text_value(row.get("alignment_mode_id"))
+        and text_value(row.get("alignment_mode_id")) != "alignment_unassigned"
+    }
+    alignment_supported_count = sum(
+        1 for row in family_sample_rows if _alignment_row_is_supported(row)
+    )
+    if (
+        len(global_modes) > 1
+        and alignment_supported_count == len(family_sample_rows)
+        and len(alignment_modes) == 1
+    ):
+        warnings.append("raw_multimodal_but_alignment_single")
+    elif len(global_modes) > 1:
         warnings.append("global_trace_apex_multimodal")
     if any(
         text_value(row.get("rt_mode_evidence_level")) == "raw_selected_apex_modes"
         for row in family_sample_rows
     ):
         warnings.append("raw_overlay_mode_is_review_only_not_irt")
+    if alignment_supported_count == 0:
+        warnings.append("alignment_not_supplied_raw_only")
+    if len(_family_gaussian15_trace_modes(family_sample_rows)) > 1:
+        warnings.append("gaussian15_trace_multipeak")
     return ";".join(warnings)
+
+
+def _display_mode_id(
+    *,
+    alignment_row: Mapping[str, str],
+    raw_mode_id: str,
+) -> str:
+    alignment_mode = text_value(alignment_row.get("alignment_mode_id"))
+    if (
+        alignment_mode
+        and alignment_mode != "alignment_unassigned"
+        and _alignment_status_is_supported(
+            text_value(alignment_row.get("alignment_mode_status"))
+        )
+    ):
+        return alignment_mode
+    return raw_mode_id
+
+
+def _display_mode_from_row(row: Mapping[str, str]) -> str:
+    return text_value(row.get("display_mode_id")) or "unassigned"
+
+
+def _mode_review_basis(alignment_row: Mapping[str, str]) -> str:
+    if not _alignment_status_is_supported(
+        text_value(alignment_row.get("alignment_mode_status"))
+    ):
+        return "raw_overlay"
+    source = text_value(alignment_row.get("alignment_mode_source"))
+    if source in {"alignment_cell_delta", "matrix_rt_drift_policy"}:
+        return source
+    return "raw_overlay"
+
+
+def _alignment_mode_count(rows: Mapping[str, Mapping[str, str]]) -> int:
+    modes = {
+        text_value(row.get("alignment_mode_id"))
+        for row in rows.values()
+        if _alignment_status_is_supported(text_value(row.get("alignment_mode_status")))
+        and text_value(row.get("alignment_mode_id"))
+        and text_value(row.get("alignment_mode_id")) != "alignment_unassigned"
+    }
+    return len(modes)
+
+
+def _alignment_row_is_supported(row: Mapping[str, str]) -> bool:
+    return _alignment_status_is_supported(text_value(row.get("alignment_mode_status")))
+
+
+def _alignment_status_is_supported(status: str) -> bool:
+    return status in {"alignment_cell_supported", "drift_supported", "rt_close"}
 
 
 def _active_identity_status(
@@ -1116,6 +1483,7 @@ def _render_mode_plot(
     *,
     trace_data: TraceData,
     sample_rows: Sequence[Mapping[str, str]],
+    gaussian15_modes: Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
     output_dir: Path,
 ) -> Path:
     import matplotlib
@@ -1127,10 +1495,11 @@ def _render_mode_plot(
     png_path = output_dir / f"{trace_data.family_id.lower()}_mode_overlay.png"
     modes = sorted(
         {
-            text_value(row.get("selected_mode_id")) or "unassigned"
+            text_value(row.get("display_mode_id")) or "unassigned"
             for row in sample_rows
         }
     )
+    mode_basis = _dominant_text(row.get("mode_review_basis") for row in sample_rows)
     colors = _mode_colors(modes)
     fig, (ax_trace, ax_apex) = plt.subplots(
         2,
@@ -1142,14 +1511,13 @@ def _render_mode_plot(
     for trace in trace_data.traces:
         sample = text_value(trace.get("sample_stem"))
         row = by_sample.get(sample, {})
-        mode_id = text_value(row.get("selected_mode_id")) or "unassigned"
         rt = _float_list(trace.get("rt"))
         intensity = _float_list(trace.get("intensity"))
         if not rt or not intensity:
             continue
         limit = min(len(rt), len(intensity))
         plot_intensity = _smoothed_plot_intensity(intensity[:limit])
-        color = colors.get(mode_id, "#666666")
+        color = colors.get(_display_mode_from_row(row), "#666666")
         ax_trace.plot(
             rt[:limit],
             plot_intensity,
@@ -1182,9 +1550,28 @@ def _render_mode_plot(
             linewidth=1.0,
             alpha=0.75,
         )
+    mode_span_colors = _mode_colors([mode.mode_id for mode in gaussian15_modes])
+    for mode in gaussian15_modes:
+        ax_trace.axvspan(
+            mode.start_rt,
+            mode.end_rt,
+            color=mode_span_colors.get(mode.mode_id, "#bbbbbb"),
+            alpha=0.12,
+        )
+        ax_trace.text(
+            mode.apex_rt,
+            0.98,
+            mode.mode_id,
+            transform=ax_trace.get_xaxis_transform(),
+            rotation=90,
+            va="top",
+            ha="center",
+            fontsize=7,
+            color=mode_span_colors.get(mode.mode_id, "#555555"),
+        )
     ax_trace.set_title(
         f"{trace_data.family_id} mode-colored MS1 overlay "
-        f"({len(sample_rows)} cells)",
+        f"({len(sample_rows)} cells; basis={mode_basis or 'raw_overlay'})",
     )
     ax_trace.set_xlabel("Retention time (min)")
     ax_trace.set_ylabel("Intensity")
@@ -1205,7 +1592,7 @@ def _render_mode_plot(
     )
     y_positions = list(range(len(ordered)))
     for y_pos, row in zip(y_positions, ordered, strict=True):
-        mode_id = text_value(row.get("selected_mode_id")) or "unassigned"
+        mode_id = _display_mode_from_row(row)
         color = colors.get(mode_id, "#666666")
         selected_rt = optional_float(row.get("cell_apex_rt"))
         trace_rt = optional_float(row.get("trace_apex_rt"))
@@ -1223,9 +1610,129 @@ def _render_mode_plot(
             )
     ax_apex.set_yticks(y_positions)
     ax_apex.set_yticklabels([row["sample_stem"] for row in ordered], fontsize=7)
-    ax_apex.set_xlabel("Apex RT (circle=selected cell, x=global trace apex)")
+    ax_apex.set_xlabel(
+        "Apex RT (circle=selected cell, x=global trace apex; color=display mode)"
+    )
     ax_apex.set_ylabel("Sample")
     ax_apex.grid(axis="x", alpha=0.2)
+    fig.savefig(png_path, dpi=180, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return png_path
+
+
+def _plot_alignment_rt(
+    *,
+    trace: Mapping[str, Any],
+    mode_id: str,
+    gaussian15_modes: Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
+) -> float | None:
+    mode = next((item for item in gaussian15_modes if item.mode_id == mode_id), None)
+    if mode is None:
+        return optional_float(trace.get("cell_apex_rt"))
+    peaks = [
+        peak
+        for peak in ms1_peak_modes.gaussian15_peak_observations(trace)
+        if mode.start_rt <= peak.apex_rt <= mode.end_rt
+    ]
+    if not peaks:
+        return None
+    return max(peaks, key=lambda peak: peak.height).apex_rt
+
+
+def _render_mode_aligned_plot(
+    *,
+    trace_data: TraceData,
+    sample_rows: Sequence[Mapping[str, str]],
+    gaussian15_modes: Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
+    output_dir: Path,
+) -> Path:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    by_sample = {row["sample_stem"]: row for row in sample_rows}
+    png_path = output_dir / f"{trace_data.family_id.lower()}_mode_aligned_overlay.png"
+    mode_ids = [mode.mode_id for mode in gaussian15_modes]
+    rows_by_mode: dict[str, list[Mapping[str, str]]] = defaultdict(list)
+    if gaussian15_modes:
+        for row in sample_rows:
+            row_modes = _split_semicolon_values(row.get("gaussian15_trace_mode_ids"))
+            for mode_id in row_modes:
+                rows_by_mode[mode_id].append(row)
+    else:
+        for row in sample_rows:
+            rows_by_mode[_display_mode_from_row(row)].append(row)
+        mode_ids = sorted(rows_by_mode) or ["unassigned"]
+    modes = tuple(mode_ids)
+    fig_height = max(3.6, 2.6 * len(modes))
+    fig, axes = plt.subplots(
+        len(modes),
+        1,
+        figsize=(12, fig_height),
+        squeeze=False,
+        constrained_layout=True,
+    )
+    for axis_row, mode_id in zip(axes, modes, strict=True):
+        ax = axis_row[0]
+        mode_rows = rows_by_mode.get(mode_id, [])
+        mode_samples = {row["sample_stem"] for row in mode_rows}
+        detected_count = 0
+        plotted_count = 0
+        for trace in trace_data.traces:
+            sample = text_value(trace.get("sample_stem"))
+            if sample not in mode_samples:
+                continue
+            selected_rt = _plot_alignment_rt(
+                trace=trace,
+                mode_id=mode_id,
+                gaussian15_modes=gaussian15_modes,
+            )
+            rt = _float_list(trace.get("rt"))
+            intensity = _float_list(trace.get("intensity"))
+            if selected_rt is None or not rt or not intensity:
+                continue
+            limit = min(len(rt), len(intensity))
+            if limit < 2:
+                continue
+            smoothed = np.asarray(
+                _smoothed_plot_intensity(intensity[:limit]),
+                dtype=float,
+            )
+            max_intensity = float(np.max(smoothed)) if smoothed.size else 0.0
+            if max_intensity <= 0:
+                continue
+            relative_rt = np.asarray(rt[:limit], dtype=float) - selected_rt
+            row = by_sample.get(sample, {})
+            is_detected = text_value(row.get("cell_status")) == "detected"
+            detected_count += 1 if is_detected else 0
+            color = "#005f73" if is_detected else "#c75b12"
+            alpha = 0.86 if is_detected else 0.52
+            line_width = 1.5 if is_detected else 1.0
+            ax.plot(
+                relative_rt,
+                smoothed / max_intensity,
+                color=color,
+                alpha=alpha,
+                lw=line_width,
+            )
+            plotted_count += 1
+        ax.axvline(0.0, color="black", lw=1.0, ls="--", alpha=0.65)
+        ax.set_xlim(-APEX_ALIGN_HALF_WINDOW_MIN, APEX_ALIGN_HALF_WINDOW_MIN)
+        ax.set_ylim(-0.03, 1.08)
+        ax.set_ylabel("Scaled MS1")
+        ax.grid(True, alpha=0.2)
+        ax.set_title(
+            f"{mode_id}: apex-aligned Gaussian15 MS1 traces "
+            f"(n={plotted_count}, detected={detected_count})",
+            fontsize=10,
+        )
+    axes[-1][0].set_xlabel("RT relative to selected apex (min)")
+    fig.suptitle(
+        f"{trace_data.family_id} mode-level aligned MS1 overlays",
+        fontsize=12,
+    )
     fig.savefig(png_path, dpi=180, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return png_path
@@ -1315,9 +1822,10 @@ def _write_review_gallery(
                 "<h1>Changed-row mode-aware overlay review</h1>",
                 (
                     "<p class=\"note\">Family ID is provenance here. The review "
-                    "surface pivots on raw selected-apex mode evidence and "
-                    "PeakHypothesis projection. Raw overlay modes are review-only, "
-                    "not typed iRT authority.</p>"
+                    "surface shows raw selected-apex modes plus an optional "
+                    "alignment-aware display mode from alignment cells or matrix "
+                    "RT drift policy. Raw overlay modes are review-only, not typed "
+                    "iRT authority.</p>"
                 ),
                 f"<p class=\"links\">{links}</p>",
                 _gallery_overview_html(similarity_rows),
@@ -1340,6 +1848,10 @@ def _family_html_block(
 ) -> str:
     family = html.escape(row["feature_family_id"])
     mode_plot = _image_html(row.get("mode_plot_png_path"), html_dir=html_dir)
+    mode_aligned_plot = _image_html(
+        row.get("mode_aligned_plot_png_path"),
+        html_dir=html_dir,
+    )
     original_plot = _image_html(row.get("original_png_path"), html_dir=html_dir)
     warning = html.escape(row.get("mode_review_warning", ""))
     sample_table = _sample_table_html(sample_rows, similarity_rows=similarity_rows)
@@ -1381,14 +1893,17 @@ def _family_html_block(
                 "<figcaption>Mode-colored diagnostic</figcaption>"
                 f"{mode_plot}</figure>"
             ),
-            "</section>",
-            "<details class=\"context-panel\">",
-            "<summary>Legacy family overlay context</summary>",
             (
-                "<figure><figcaption>Original family overlay</figcaption>"
+                "<figure class=\"primary-plot\">"
+                "<figcaption>Mode-level aligned MS1 overlays</figcaption>"
+                f"{mode_aligned_plot}</figure>"
+            ),
+            (
+                "<figure class=\"primary-plot\">"
+                "<figcaption>Original family MS1 overlay</figcaption>"
                 f"{original_plot}</figure>"
             ),
-            "</details>",
+            "</section>",
             "<details class=\"context-panel\" open>",
             "<summary>Sample evidence table</summary>",
             sample_table,
@@ -1403,6 +1918,9 @@ def _family_html_block(
             _fact("mode count", row.get("family_mode_count")),
             _fact("selected modes", row.get("selected_mode_counts")),
             _fact("global apex modes", row.get("global_trace_mode_counts")),
+            _fact("alignment modes", row.get("alignment_mode_counts")),
+            _fact("review basis", row.get("mode_review_basis")),
+            _fact("mode aligned plot", row.get("mode_aligned_plot_png_path")),
             _fact("quick review badges", badge_counts),
             _fact("warning", warning),
             "</dl>",
@@ -1421,7 +1939,7 @@ def _sample_table_html(
     ordered = sorted(
         rows,
         key=lambda row: (
-            row.get("selected_mode_id", ""),
+            row.get("display_mode_id", ""),
             optional_float(row.get("cell_apex_rt")) or math.inf,
             row.get("sample_stem", ""),
         ),
@@ -1430,8 +1948,11 @@ def _sample_table_html(
         "sample",
         "cell RT",
         "trace RT",
-        "selected mode",
+        "raw mode",
         "global mode",
+        "display mode",
+        "basis",
+        "alignment delta",
         "quick badge",
         "shape similarity",
         "quick score",
@@ -1452,6 +1973,9 @@ def _sample_table_html(
             _table_cell(row.get("trace_apex_rt", "")),
             _table_cell(row.get("selected_mode_id", "")),
             _table_cell(row.get("global_trace_mode_id", "")),
+            _table_cell(row.get("display_mode_id", "")),
+            _table_cell(row.get("mode_review_basis", "")),
+            _table_cell(row.get("alignment_apex_delta_sec", "")),
             _table_cell(_badge_html(badge), "badge-cell", raw_html=True),
             _table_cell(
                 _metric_html(
@@ -1650,6 +2174,9 @@ h1 {
   overflow-wrap: anywhere;
 }
 .plots {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
   margin-top: 10px;
 }
 figure {
@@ -1936,6 +2463,13 @@ def _split_identity_list(value: object) -> tuple[str, ...]:
     return tuple(part.strip() for part in normalized.split(";") if part.strip())
 
 
+def _split_semicolon_values(value: object) -> tuple[str, ...]:
+    raw = text_value(value)
+    if not raw:
+        return ()
+    return tuple(part.strip() for part in raw.split(";") if part.strip())
+
+
 def _counts_text(values: Iterable[object]) -> str:
     counts = Counter(text_value(value) for value in values if text_value(value))
     return ";".join(f"{key}:{counts[key]}" for key in sorted(counts))
@@ -1978,10 +2512,16 @@ def _median_float(values: Iterable[object]) -> float | None:
 
 
 def _float_text(value: object) -> str:
-    parsed = optional_float(value)
+    parsed = _numeric_float(value)
     if parsed is None:
         return ""
     return f"{parsed:.6g}"
+
+
+def _numeric_float(value: object) -> float | None:
+    if isinstance(value, str):
+        return optional_float(value.strip().lstrip("'"))
+    return optional_float(value)
 
 
 def _float_list(value: object) -> list[float]:
@@ -2003,6 +2543,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--active-alignment-matrix-identity-tsv", type=Path)
     parser.add_argument("--candidate-ms2-pattern-evidence-tsv", type=Path)
     parser.add_argument("--matrix-rt-drift-policy-tsv", type=Path)
+    parser.add_argument("--alignment-cells-tsv", type=Path)
     parser.add_argument("--ms1-pattern-coherence-tsv", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(

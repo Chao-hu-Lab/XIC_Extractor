@@ -106,6 +106,9 @@ def test_mode_overlay_review_marks_removed_no_split_multimodal_family(
     assert "Family ID is provenance here" in html
     assert "removed_by_active_gate" in html
     assert "FAM001::raw_mode_" in html
+    assert "Mode-level aligned MS1 overlays" in html
+    assert "Original family MS1 overlay" in html
+    assert "Legacy family overlay context" not in html
 
 
 def test_mode_overlay_review_keeps_single_mode_as_supported_but_review_only(
@@ -158,12 +161,276 @@ def test_mode_overlay_review_keeps_single_mode_as_supported_but_review_only(
     )
     assert family_rows[0]["active_identity_status"] == "active_identity_not_supplied"
     assert family_rows[0]["mode_review_warning"] == (
-        "raw_overlay_mode_is_review_only_not_irt"
+        "raw_overlay_mode_is_review_only_not_irt;alignment_not_supplied_raw_only"
     )
     sample_rows = _read_tsv(outputs.sample_review_tsv)
     assert {row["peak_hypothesis_status"] for row in sample_rows} == {
         "raw_mode_review_only"
     }
+
+
+def test_mode_overlay_review_splits_clear_subhalf_minute_double_peak(
+    tmp_path: Path,
+) -> None:
+    overlay_dir = tmp_path / "overlay"
+    overlay_dir.mkdir()
+    trace_json = overlay_dir / "fam_double_trace_data.json"
+    _write_trace_data(
+        trace_json,
+        family_id="FAM_DOUBLE",
+        traces=[
+            _trace("QC3", cell_apex_rt=8.4299, trace_apex_rt=8.4299),
+            _trace("QC5", cell_apex_rt=8.4604, trace_apex_rt=8.4604),
+            _trace("TumorA", cell_apex_rt=8.5700, trace_apex_rt=8.5700),
+            _trace("BenignA", cell_apex_rt=9.0015, trace_apex_rt=9.0015),
+            _trace("BenignB", cell_apex_rt=9.0256, trace_apex_rt=9.0256),
+            _trace("NormalA", cell_apex_rt=9.0289, trace_apex_rt=9.0289),
+            _trace("NormalB", cell_apex_rt=9.0417, trace_apex_rt=9.0417),
+            _trace("TumorB", cell_apex_rt=9.0466, trace_apex_rt=9.0466),
+        ],
+    )
+    overlay_summary = tmp_path / "overlay_summary.tsv"
+    _write_tsv(
+        overlay_summary,
+        [
+            {
+                "rank": "1",
+                "feature_family_id": "FAM_DOUBLE",
+                "status": "success",
+                "family_verdict": "ms1_shape_supports_family_backfill",
+                "png_path": "",
+                "pdf_path": "",
+                "trace_data_json": str(trace_json),
+            }
+        ],
+        review.OVERLAY_SUMMARY_REQUIRED_COLUMNS,
+    )
+    changed_bundle = tmp_path / "changed.tsv"
+    _write_tsv(
+        changed_bundle,
+        [{"stable_row_id": "FAM_DOUBLE"}],
+        review.CHANGED_ROW_REQUIRED_COLUMNS,
+    )
+
+    outputs = review.run_changed_row_mode_overlay_review(
+        changed_row_bundle_tsv=changed_bundle,
+        overlay_batch_summary_tsv=overlay_summary,
+        output_dir=tmp_path / "review",
+        render_plots=False,
+    )
+
+    family_rows = _read_tsv(outputs.family_summary_tsv)
+    assert family_rows[0]["family_mode_count"] == "2"
+    assert family_rows[0]["mode_review_verdict"] == (
+        "review_required_raw_multimodal_family"
+    )
+    sample_rows = _read_tsv(outputs.sample_review_tsv)
+    modes = {row["selected_mode_id"] for row in sample_rows}
+    assert len(modes) == 2
+
+
+def test_mode_overlay_review_uses_alignment_delta_when_raw_modes_split(
+    tmp_path: Path,
+) -> None:
+    overlay_dir = tmp_path / "overlay"
+    overlay_dir.mkdir()
+    trace_json = overlay_dir / "fam_aligned_trace_data.json"
+    _write_trace_data(
+        trace_json,
+        family_id="FAM_ALIGNED",
+        traces=[
+            _trace("QC3", cell_apex_rt=8.4299, trace_apex_rt=8.4299),
+            _trace("QC5", cell_apex_rt=8.4604, trace_apex_rt=8.4604),
+            _trace("TumorA", cell_apex_rt=8.5700, trace_apex_rt=8.5700),
+            _trace("BenignA", cell_apex_rt=9.0015, trace_apex_rt=9.0015),
+            _trace("BenignB", cell_apex_rt=9.0256, trace_apex_rt=9.0256),
+            _trace("NormalA", cell_apex_rt=9.0289, trace_apex_rt=9.0289),
+            _trace("NormalB", cell_apex_rt=9.0417, trace_apex_rt=9.0417),
+            _trace("TumorB", cell_apex_rt=9.0466, trace_apex_rt=9.0466),
+        ],
+    )
+    overlay_summary = tmp_path / "overlay_summary.tsv"
+    _write_tsv(
+        overlay_summary,
+        [
+            {
+                "rank": "1",
+                "feature_family_id": "FAM_ALIGNED",
+                "status": "success",
+                "family_verdict": "ms1_shape_supports_family_backfill",
+                "png_path": "",
+                "pdf_path": "",
+                "trace_data_json": str(trace_json),
+            }
+        ],
+        review.OVERLAY_SUMMARY_REQUIRED_COLUMNS,
+    )
+    changed_bundle = tmp_path / "changed.tsv"
+    _write_tsv(
+        changed_bundle,
+        [{"stable_row_id": "FAM_ALIGNED"}],
+        review.CHANGED_ROW_REQUIRED_COLUMNS,
+    )
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    _write_tsv(
+        alignment_cells,
+        [
+            _alignment_cell("QC3", 8.4299, -23.7),
+            _alignment_cell("QC5", 8.4604, -21.9),
+            _alignment_cell("TumorA", 8.5700, -15.3),
+            _alignment_cell("BenignA", 9.0015, 10.6),
+            _alignment_cell("BenignB", 9.0256, 12.0),
+            _alignment_cell("NormalA", 9.0289, 12.2),
+            _alignment_cell("NormalB", 9.0417, 13.0),
+            _alignment_cell("TumorB", 9.0466, 13.3),
+        ],
+        review.ALIGNMENT_CELL_REQUIRED_COLUMNS,
+    )
+
+    outputs = review.run_changed_row_mode_overlay_review(
+        changed_row_bundle_tsv=changed_bundle,
+        overlay_batch_summary_tsv=overlay_summary,
+        alignment_cells_tsv=alignment_cells,
+        output_dir=tmp_path / "review",
+        render_plots=False,
+    )
+
+    family_rows = _read_tsv(outputs.family_summary_tsv)
+    assert family_rows[0]["family_mode_count"] == "2"
+    assert family_rows[0]["alignment_mode_counts"].startswith("alignment_mode_1:")
+    assert family_rows[0]["mode_review_basis"] == "alignment_cell_delta"
+    assert family_rows[0]["mode_review_verdict"] == (
+        "single_mode_supported_alignment_review_only"
+    )
+    assert "raw_multimodal_but_alignment_single" in family_rows[0][
+        "mode_review_warning"
+    ]
+
+    sample_rows = _read_tsv(outputs.sample_review_tsv)
+    assert {row["selected_mode_id"] for row in sample_rows} != {
+        row["display_mode_id"] for row in sample_rows
+    }
+    assert {row["display_mode_id"] for row in sample_rows} == {"alignment_mode_1"}
+    assert {row["mode_review_basis"] for row in sample_rows} == {
+        "alignment_cell_delta"
+    }
+
+
+def test_mode_overlay_review_flags_gaussian15_trace_multipeak_when_alignment_single(
+    tmp_path: Path,
+) -> None:
+    overlay_dir = tmp_path / "overlay"
+    overlay_dir.mkdir()
+    trace_json = overlay_dir / "fam_gaussian_multi_trace_data.json"
+    profile = [
+        0.0,
+        0.0,
+        0.0,
+        2.0,
+        8.0,
+        30.0,
+        75.0,
+        100.0,
+        75.0,
+        30.0,
+        8.0,
+        2.0,
+        0.0,
+        0.0,
+        5.0,
+        20.0,
+        60.0,
+        85.0,
+        60.0,
+        20.0,
+        5.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ]
+    _write_trace_data(
+        trace_json,
+        family_id="FAM_GAUSSIAN_MULTI",
+        traces=[
+            _trace_with_profile(
+                "DetectedA",
+                cell_apex_rt=8.3,
+                trace_apex_rt=8.3,
+                intensities=profile,
+                status="detected",
+            ),
+            _trace_with_profile(
+                "DetectedB",
+                cell_apex_rt=8.3,
+                trace_apex_rt=8.3,
+                intensities=profile,
+                status="detected",
+            ),
+            _trace_with_profile(
+                "RescueA",
+                cell_apex_rt=8.3,
+                trace_apex_rt=8.3,
+                intensities=profile,
+            ),
+        ],
+    )
+    overlay_summary = tmp_path / "overlay_summary.tsv"
+    _write_tsv(
+        overlay_summary,
+        [
+            {
+                "rank": "1",
+                "feature_family_id": "FAM_GAUSSIAN_MULTI",
+                "status": "success",
+                "family_verdict": "review_required_neighboring_ms1_interference",
+                "png_path": "",
+                "pdf_path": "",
+                "trace_data_json": str(trace_json),
+            }
+        ],
+        review.OVERLAY_SUMMARY_REQUIRED_COLUMNS,
+    )
+    changed_bundle = tmp_path / "changed.tsv"
+    _write_tsv(
+        changed_bundle,
+        [{"stable_row_id": "FAM_GAUSSIAN_MULTI"}],
+        review.CHANGED_ROW_REQUIRED_COLUMNS,
+    )
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    _write_tsv(
+        alignment_cells,
+        [
+            {
+                "feature_family_id": "FAM_GAUSSIAN_MULTI",
+                "sample_stem": sample,
+                "apex_rt": "8.3",
+                "rt_delta_sec": "0",
+            }
+            for sample in ("DetectedA", "DetectedB", "RescueA")
+        ],
+        review.ALIGNMENT_CELL_REQUIRED_COLUMNS,
+    )
+
+    outputs = review.run_changed_row_mode_overlay_review(
+        changed_row_bundle_tsv=changed_bundle,
+        overlay_batch_summary_tsv=overlay_summary,
+        alignment_cells_tsv=alignment_cells,
+        output_dir=tmp_path / "review",
+        render_plots=False,
+    )
+
+    family_rows = _read_tsv(outputs.family_summary_tsv)
+    assert family_rows[0]["mode_review_verdict"] == (
+        "review_required_gaussian15_trace_multipeak"
+    )
+    assert "gaussian15_trace_multipeak" in family_rows[0]["mode_review_warning"]
+    sample_rows = _read_tsv(outputs.sample_review_tsv)
+    assert {row["display_mode_id"] for row in sample_rows} == {"alignment_mode_1"}
 
 
 def test_similarity_panel_combines_gaussian_shape_drift_and_apex_badges(
@@ -269,7 +536,8 @@ def test_similarity_panel_combines_gaussian_shape_drift_and_apex_badges(
     assert "global median quick score" in html
     assert "median shape similarity" in html
     assert "median quick score" in html
-    assert "Legacy family overlay context" in html
+    assert "Mode-level aligned MS1 overlays" in html
+    assert "Original family MS1 overlay" in html
     assert "Sample evidence table" in html
     assert "shape similarity" in html
     assert "quick score" in html
@@ -359,6 +627,15 @@ def _drift_row(
         ),
         "reason": "unit_test",
         "diagnostic_only": "TRUE",
+    }
+
+
+def _alignment_cell(sample: str, apex_rt: float, rt_delta_sec: float) -> dict[str, str]:
+    return {
+        "feature_family_id": "FAM_ALIGNED",
+        "sample_stem": sample,
+        "apex_rt": str(apex_rt),
+        "rt_delta_sec": str(rt_delta_sec),
     }
 
 

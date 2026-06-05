@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from pathlib import Path
 
 from tools.diagnostics.build_peak_hypothesis_matrix import main
@@ -156,6 +157,15 @@ def test_peak_hypothesis_matrix_expands_overlay_modes_before_output(
                 "samples": [
                     {
                         "sample_stem": "S1",
+                        "status": "detected",
+                        "cell_apex_rt": 6.0,
+                        "rt": [5.8, 6.0, 6.2, 7.8, 8.0, 8.2],
+                        "intensity": [0, 10, 0, 0, 20, 0],
+                    },
+                    {
+                        "sample_stem": "S2",
+                        "status": "detected",
+                        "cell_apex_rt": 8.0,
                         "rt": [5.8, 6.0, 6.2, 7.8, 8.0, 8.2],
                         "intensity": [0, 10, 0, 0, 20, 0],
                     }
@@ -175,12 +185,16 @@ def test_peak_hypothesis_matrix_expands_overlay_modes_before_output(
             "family_center_mz",
             "family_center_rt",
             "S1",
+            "S2",
         ),
         matrix_rows=[
-            _matrix_row("FAM_MULTI", mz="345.1", rt="7.1", S1="999"),
+            _matrix_row("FAM_MULTI", mz="345.1", rt="7.1", S1="999", S2="888"),
         ],
         review_rows=[_review_row("FAM_MULTI", mz="345.1", rt="7.1")],
-        cell_rows=[_cell_row("FAM_MULTI", "S1", area="999")],
+        cell_rows=[
+            _cell_row("FAM_MULTI", "S1", area="999"),
+            _cell_row("FAM_MULTI", "S2", area="888"),
+        ],
         peak_hypothesis_selection_rows=[],
         expanded_peak_candidate_rows=expanded_rows,
     )
@@ -193,7 +207,7 @@ def test_peak_hypothesis_matrix_expands_overlay_modes_before_output(
         "FAM_MULTI::mode_8min",
     }
     assert matrix_rows["FAM_MULTI::mode_6min"]["S1"] == "2"
-    assert matrix_rows["FAM_MULTI::mode_8min"]["S1"] == "4"
+    assert matrix_rows["FAM_MULTI::mode_8min"]["S2"] == "4"
     assignments = {
         row["peak_hypothesis_id"]: row for row in construction.assignment_rows
     }
@@ -201,7 +215,7 @@ def test_peak_hypothesis_matrix_expands_overlay_modes_before_output(
         "construction_assignment_status"
     ] == "expanded_candidate"
     assert assignments["FAM_MULTI::mode_8min"]["candidate_peak_rt"] == "8"
-    assert construction.summary_row["expanded_candidate_cell_count"] == "2"
+    assert construction.summary_row["expanded_candidate_cell_count"] == "4"
     assert construction.summary_row["projected_cell_count"] == "0"
     assert construction.summary_row["canonical_row_identity_ready"] == "FALSE"
     assert construction.summary_row["canonical_row_identity_blockers"] == (
@@ -215,7 +229,8 @@ def test_peak_hypothesis_matrix_infers_overlay_mode_windows_from_apex_clusters(
 ) -> None:
     overlay_json = tmp_path / "fam_multi_inferred_overlay_trace_data.json"
     trace_rt = [5.8, 6.0, 6.2, 7.8, 8.0, 8.2]
-    trace_intensity = [0, 10, 0, 0, 20, 0]
+    early_intensity = [0, 10, 0, 0, 0, 0]
+    late_intensity = [0, 0, 0, 0, 20, 0]
     overlay_json.write_text(
         json.dumps(
             {
@@ -228,27 +243,31 @@ def test_peak_hypothesis_matrix_infers_overlay_mode_windows_from_apex_clusters(
                 "samples": [
                     {
                         "sample_stem": "S1",
+                        "status": "detected",
                         "cell_apex_rt": 6.0,
                         "raw_rt": trace_rt,
-                        "intensity": trace_intensity,
+                        "intensity": early_intensity,
                     },
                     {
                         "sample_stem": "S2",
+                        "status": "rescued",
                         "cell_apex_rt": 6.1,
                         "raw_rt": trace_rt,
-                        "intensity": trace_intensity,
+                        "intensity": early_intensity,
                     },
                     {
                         "sample_stem": "S3",
+                        "status": "detected",
                         "cell_apex_rt": 8.0,
                         "raw_rt": trace_rt,
-                        "intensity": trace_intensity,
+                        "intensity": late_intensity,
                     },
                     {
                         "sample_stem": "S4",
+                        "status": "rescued",
                         "cell_apex_rt": 8.1,
                         "raw_rt": trace_rt,
-                        "intensity": trace_intensity,
+                        "intensity": late_intensity,
                     },
                 ],
             }
@@ -265,12 +284,11 @@ def test_peak_hypothesis_matrix_infers_overlay_mode_windows_from_apex_clusters(
         for row in expanded_rows
         if row["sample_id"] == "S1"
     }
-    assert set(sample_1_rows) == {
+    assert {row["peak_hypothesis_id"] for row in expanded_rows} == {
         "FAM_MULTI::raw_mode_1_6.10min",
         "FAM_MULTI::raw_mode_2_8.10min",
     }
     assert sample_1_rows["FAM_MULTI::raw_mode_1_6.10min"]["candidate_peak_rt"] == "6"
-    assert sample_1_rows["FAM_MULTI::raw_mode_2_8.10min"]["candidate_peak_rt"] == "8"
     assert sample_1_rows["FAM_MULTI::raw_mode_1_6.10min"][
         "peak_hypothesis_status"
     ] == "raw_mode_review_only"
@@ -280,6 +298,245 @@ def test_peak_hypothesis_matrix_infers_overlay_mode_windows_from_apex_clusters(
     assert sample_1_rows["FAM_MULTI::raw_mode_1_6.10min"]["reason"] == (
         "raw_apex_gap_inferred_mode_window_review_only"
     )
+
+
+def test_peak_hypothesis_matrix_does_not_expand_backfill_only_overlay_mode(
+    tmp_path: Path,
+) -> None:
+    overlay_json = tmp_path / "fam_backfill_only_mode_trace_data.json"
+    trace_rt = [5.8, 6.0, 6.2, 7.8, 8.0, 8.2]
+    early_intensity = [0, 10, 0, 0, 0, 0]
+    late_intensity = [0, 0, 0, 0, 20, 0]
+    overlay_json.write_text(
+        json.dumps(
+            {
+                "feature_family_id": "FAM_BACKFILL_ONLY",
+                "evidence_summary": {
+                    "family_verdict": "ms1_shape_supports_family_backfill",
+                },
+                "rt_min": 5.5,
+                "rt_max": 8.5,
+                "samples": [
+                    {
+                        "sample_stem": "DetectedSeed",
+                        "status": "detected",
+                        "cell_apex_rt": 6.0,
+                        "raw_rt": trace_rt,
+                        "intensity": early_intensity,
+                    },
+                    {
+                        "sample_stem": "DetectedSeed2",
+                        "status": "detected",
+                        "cell_apex_rt": 6.1,
+                        "raw_rt": trace_rt,
+                        "intensity": early_intensity,
+                    },
+                    {
+                        "sample_stem": "RescueA",
+                        "status": "rescued",
+                        "cell_apex_rt": 8.0,
+                        "raw_rt": trace_rt,
+                        "intensity": late_intensity,
+                    },
+                    {
+                        "sample_stem": "RescueB",
+                        "status": "rescued",
+                        "cell_apex_rt": 8.1,
+                        "raw_rt": trace_rt,
+                        "intensity": late_intensity,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    expanded_rows = peak_hypothesis_matrix.load_overlay_peak_candidate_rows(
+        (overlay_json,)
+    )
+
+    assert {
+        row["peak_hypothesis_id"].split("::", 1)[1] for row in expanded_rows
+    } == {"raw_mode_1_6.10min"}
+    assert "raw_mode_2_8.10min" not in {
+        row["peak_hypothesis_id"].split("::", 1)[1] for row in expanded_rows
+    }
+
+
+def test_peak_hypothesis_matrix_infers_gaussian15_trace_peak_modes(
+    tmp_path: Path,
+) -> None:
+    overlay_json = tmp_path / "fam_gaussian_multipeak_trace_data.json"
+    trace_rt = [5.4 + index * 0.1 for index in range(37)]
+    double_peak = _double_peak_profile(trace_rt, early_rt=6.1, late_rt=8.0)
+    overlay_json.write_text(
+        json.dumps(
+            {
+                "feature_family_id": "FAM_GAUSSIAN_MULTI",
+                "evidence_summary": {
+                    "family_verdict": "review_required_neighboring_ms1_interference",
+                },
+                "rt_min": 5.4,
+                "rt_max": 9.0,
+                "samples": [
+                    {
+                        "sample_stem": "DetectedA",
+                        "status": "detected",
+                        "cell_apex_rt": 7.0,
+                        "raw_rt": trace_rt,
+                        "intensity": double_peak,
+                    },
+                    {
+                        "sample_stem": "DetectedB",
+                        "status": "detected",
+                        "cell_apex_rt": 7.0,
+                        "raw_rt": trace_rt,
+                        "intensity": double_peak,
+                    },
+                    {
+                        "sample_stem": "RescueA",
+                        "status": "rescued",
+                        "cell_apex_rt": 7.0,
+                        "raw_rt": trace_rt,
+                        "intensity": double_peak,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    expanded_rows = peak_hypothesis_matrix.load_overlay_peak_candidate_rows(
+        (overlay_json,)
+    )
+
+    mode_ids = {
+        row["peak_hypothesis_id"].split("::", 1)[1] for row in expanded_rows
+    }
+    assert mode_ids == {
+        "gaussian15_mode_1_6.10min",
+        "gaussian15_mode_2_8.00min",
+    }
+    detected_rows = {
+        (row["sample_id"], row["mode_id"])
+        for row in expanded_rows
+        if row["sample_id"].startswith("Detected")
+    }
+    assert ("DetectedA", "gaussian15_mode_1_6.10min") in detected_rows
+    assert ("DetectedA", "gaussian15_mode_2_8.00min") in detected_rows
+
+
+def test_peak_hypothesis_matrix_filters_gaussian15_backfill_only_mode(
+    tmp_path: Path,
+) -> None:
+    overlay_json = tmp_path / "fam_gaussian_backfill_only_trace_data.json"
+    trace_rt = [5.4 + index * 0.1 for index in range(37)]
+    early_only = _single_peak_profile(trace_rt, apex_rt=6.1)
+    rescued_double_peak = _double_peak_profile(trace_rt, early_rt=6.1, late_rt=8.0)
+    overlay_json.write_text(
+        json.dumps(
+            {
+                "feature_family_id": "FAM_GAUSSIAN_BACKFILL_ONLY",
+                "evidence_summary": {
+                    "family_verdict": "review_required_neighboring_ms1_interference",
+                },
+                "rt_min": 5.4,
+                "rt_max": 9.0,
+                "samples": [
+                    {
+                        "sample_stem": "DetectedA",
+                        "status": "detected",
+                        "cell_apex_rt": 6.1,
+                        "raw_rt": trace_rt,
+                        "intensity": early_only,
+                    },
+                    {
+                        "sample_stem": "DetectedB",
+                        "status": "detected",
+                        "cell_apex_rt": 6.1,
+                        "raw_rt": trace_rt,
+                        "intensity": early_only,
+                    },
+                    {
+                        "sample_stem": "RescueA",
+                        "status": "rescued",
+                        "cell_apex_rt": 8.0,
+                        "raw_rt": trace_rt,
+                        "intensity": rescued_double_peak,
+                    },
+                    {
+                        "sample_stem": "RescueB",
+                        "status": "rescued",
+                        "cell_apex_rt": 8.0,
+                        "raw_rt": trace_rt,
+                        "intensity": rescued_double_peak,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    expanded_rows = peak_hypothesis_matrix.load_overlay_peak_candidate_rows(
+        (overlay_json,)
+    )
+
+    assert {
+        row["peak_hypothesis_id"].split("::", 1)[1] for row in expanded_rows
+    } == {"gaussian15_mode_1_6.10min"}
+
+
+def test_peak_hypothesis_matrix_ignores_truncated_gaussian15_edge_modes(
+    tmp_path: Path,
+) -> None:
+    overlay_json = tmp_path / "fam_gaussian_edge_trace_data.json"
+    trace_rt = [5.4 + index * 0.1 for index in range(37)]
+    edge_plus_double_peak = [
+        160.0 * _gaussian_value(rt, 5.5, sigma=0.12)
+        + 100.0 * _gaussian_value(rt, 6.3, sigma=0.16)
+        + 85.0 * _gaussian_value(rt, 8.0, sigma=0.16)
+        for rt in trace_rt
+    ]
+    overlay_json.write_text(
+        json.dumps(
+            {
+                "feature_family_id": "FAM_GAUSSIAN_EDGE",
+                "evidence_summary": {
+                    "family_verdict": "review_required_neighboring_ms1_interference",
+                },
+                "rt_min": 5.4,
+                "rt_max": 9.0,
+                "samples": [
+                    {
+                        "sample_stem": "DetectedA",
+                        "status": "detected",
+                        "cell_apex_rt": 7.0,
+                        "raw_rt": trace_rt,
+                        "intensity": edge_plus_double_peak,
+                    },
+                    {
+                        "sample_stem": "DetectedB",
+                        "status": "detected",
+                        "cell_apex_rt": 7.0,
+                        "raw_rt": trace_rt,
+                        "intensity": edge_plus_double_peak,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    expanded_rows = peak_hypothesis_matrix.load_overlay_peak_candidate_rows(
+        (overlay_json,)
+    )
+
+    assert {
+        row["peak_hypothesis_id"].split("::", 1)[1] for row in expanded_rows
+    } == {
+        "gaussian15_mode_1_6.30min",
+        "gaussian15_mode_2_8.00min",
+    }
 
 
 def test_peak_hypothesis_matrix_demotes_overlay_mode_window_product_status(
@@ -309,6 +566,8 @@ def test_peak_hypothesis_matrix_demotes_overlay_mode_window_product_status(
                 "samples": [
                     {
                         "sample_stem": "S1",
+                        "status": "detected",
+                        "cell_apex_rt": 8.0,
                         "rt": [7.8, 8.0, 8.2],
                         "intensity": [0, 20, 0],
                     }
@@ -686,6 +945,27 @@ def _cell_row(
         "status": status,
         "area": area,
     }
+
+
+def _single_peak_profile(rt_values: list[float], *, apex_rt: float) -> list[float]:
+    return [100.0 * _gaussian_value(rt, apex_rt, sigma=0.16) for rt in rt_values]
+
+
+def _double_peak_profile(
+    rt_values: list[float],
+    *,
+    early_rt: float,
+    late_rt: float,
+) -> list[float]:
+    return [
+        100.0 * _gaussian_value(rt, early_rt, sigma=0.16)
+        + 85.0 * _gaussian_value(rt, late_rt, sigma=0.16)
+        for rt in rt_values
+    ]
+
+
+def _gaussian_value(rt: float, apex_rt: float, *, sigma: float) -> float:
+    return math.exp(-0.5 * ((rt - apex_rt) / sigma) ** 2)
 
 
 def _peak_row(

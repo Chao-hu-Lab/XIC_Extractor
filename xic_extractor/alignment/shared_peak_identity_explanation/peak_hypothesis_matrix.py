@@ -14,6 +14,7 @@ from xic_extractor.diagnostics.diagnostic_io import (
     write_tsv,
 )
 
+from . import ms1_peak_modes
 from .schema import (
     HYPOTHESIS_CONSISTENCY_COLUMNS,
     PEAK_HYPOTHESIS_CELL_ASSIGNMENT_COLUMNS,
@@ -54,6 +55,12 @@ _HARD_PEAK_STATUSES = frozenset(
 _HARD_CONSISTENCY_STATUSES = frozenset({"conflict", "split_required"})
 _PRODUCT_CANDIDATE_STATUS = "product_candidate_core"
 _SUPPORT_FAMILY_VERDICT = "ms1_shape_supports_family_backfill"
+_GAUSSIAN15_TRACE_MODE_VERDICTS = frozenset(
+    {
+        "ms1_shape_supports_family_backfill",
+        "review_required_neighboring_ms1_interference",
+    }
+)
 _INFERRED_MODE_GAP_MIN = 0.5
 _INFERRED_MODE_MIN_CLUSTER_SIZE = 2
 _INFERRED_MODE_OUTER_MARGIN_MIN = 0.25
@@ -390,8 +397,14 @@ def load_overlay_peak_candidate_rows(
             raise ValueError(f"overlay trace data does not declare family_id: {path}")
         trace_rows = _overlay_trace_rows(payload)
         mode_windows = _mode_windows(payload.get("mode_windows"))
+        if not mode_windows and _supports_gaussian15_trace_mode_windows(payload):
+            mode_windows = _infer_gaussian15_mode_windows_from_trace_rows(
+                trace_rows,
+                payload,
+            )
         if not mode_windows and _supports_inferred_mode_windows(payload):
             mode_windows = _infer_mode_windows_from_trace_rows(trace_rows, payload)
+        mode_windows = _mode_windows_with_detected_seed(mode_windows, trace_rows)
         if not mode_windows:
             continue
         for trace_row in trace_rows:
@@ -474,11 +487,81 @@ def _mode_window_from_value(mode_id: str, value: object) -> _ModeWindow | None:
     return None
 
 
+def _mode_windows_with_detected_seed(
+    mode_windows: Sequence[_ModeWindow],
+    trace_rows: Sequence[Mapping[str, object]],
+) -> tuple[_ModeWindow, ...]:
+    return tuple(
+        mode_window
+        for mode_window in mode_windows
+        if _mode_window_has_detected_seed(mode_window, trace_rows)
+    )
+
+
+def _mode_window_has_detected_seed(
+    mode_window: _ModeWindow,
+    trace_rows: Sequence[Mapping[str, object]],
+) -> bool:
+    if ms1_peak_modes.detected_seed_has_gaussian15_peak_in_window(
+        trace_rows,
+        start_rt=mode_window.start_rt,
+        end_rt=mode_window.end_rt,
+    ):
+        return True
+    for trace_row in trace_rows:
+        if not _trace_is_detected_seed(trace_row):
+            continue
+        apex_rt = _first_float(
+            trace_row,
+            ("cell_apex_rt", "raw_selected_rt", "trace_apex_rt"),
+        )
+        if apex_rt is None:
+            continue
+        if mode_window.start_rt <= apex_rt <= mode_window.end_rt:
+            return True
+    return False
+
+
+def _trace_is_detected_seed(trace_row: Mapping[str, object]) -> bool:
+    return (
+        text_value(trace_row.get("status")) == "detected"
+        or text_value(trace_row.get("group")) == "detected_seed"
+    )
+
+
 def _supports_inferred_mode_windows(payload: Mapping[str, object]) -> bool:
     evidence = payload.get("evidence_summary")
     if not isinstance(evidence, Mapping):
         return False
     return text_value(evidence.get("family_verdict")) == _SUPPORT_FAMILY_VERDICT
+
+
+def _supports_gaussian15_trace_mode_windows(payload: Mapping[str, object]) -> bool:
+    evidence = payload.get("evidence_summary")
+    if not isinstance(evidence, Mapping):
+        return False
+    return text_value(evidence.get("family_verdict")) in _GAUSSIAN15_TRACE_MODE_VERDICTS
+
+
+def _infer_gaussian15_mode_windows_from_trace_rows(
+    trace_rows: Sequence[Mapping[str, object]],
+    payload: Mapping[str, object],
+) -> tuple[_ModeWindow, ...]:
+    windows = ms1_peak_modes.infer_gaussian15_peak_mode_windows(
+        trace_rows,
+        rt_min=_float_or_none(payload.get("rt_min")),
+        rt_max=_float_or_none(payload.get("rt_max")),
+    )
+    return tuple(
+        _ModeWindow(
+            mode_id=window.mode_id,
+            start_rt=window.start_rt,
+            end_rt=window.end_rt,
+            reason="gaussian15_trace_multipeak_mode_window_review_only",
+            candidate_value_basis="gaussian15_trace_mode_window_area",
+        )
+        for window in windows
+    )
 
 
 def _infer_mode_windows_from_trace_rows(
