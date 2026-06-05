@@ -43,6 +43,7 @@ def test_new_keys_present() -> None:
         "emit_peak_candidates": "false",
         "keep_intermediate_csv": "false",
         "model_selection_expected_diff_approval_registry": "",
+        "ms1_morphology_smoothing_window_points": "15",
     }.items():
         assert CANONICAL_SETTINGS_DEFAULTS[key] == default
 
@@ -59,6 +60,7 @@ def test_new_settings_are_in_canonical_defaults_and_descriptions() -> None:
         "emit_peak_candidates",
         "keep_intermediate_csv",
         "model_selection_expected_diff_approval_registry",
+        "ms1_morphology_smoothing_window_points",
     ):
         assert CANONICAL_SETTINGS_DESCRIPTIONS[key]
     assert "fallback" in CANONICAL_SETTINGS_DESCRIPTIONS["injection_order_source"]
@@ -70,6 +72,9 @@ def test_new_settings_are_in_canonical_defaults_and_descriptions() -> None:
     ]
     assert "expected-diff" in CANONICAL_SETTINGS_DESCRIPTIONS[
         "model_selection_expected_diff_approval_registry"
+    ]
+    assert "Gaussian15" in CANONICAL_SETTINGS_DESCRIPTIONS[
+        "ms1_morphology_smoothing_window_points"
     ]
 
 
@@ -88,6 +93,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
         "dll_dir": str(dll_dir),
         "smooth_window": "15",
         "smooth_polyorder": "3",
+        "ms1_morphology_smoothing_window_points": "21",
         "peak_rel_height": "0.95",
         "peak_min_prominence_ratio": "0.10",
         "ms2_precursor_tol_da": "0.5",
@@ -145,6 +151,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
     assert config.emit_review_report is True
     assert config.emit_peak_candidates is True
     assert config.keep_intermediate_csv is True
+    assert config.ms1_morphology_smoothing_window_points == 21
     assert config.config_hash == compute_config_hash(targets_path, settings_path)
     assert config.target_config_hash == compute_target_config_hash(targets_path)
 

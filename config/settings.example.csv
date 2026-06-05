@@ -3,6 +3,7 @@ data_dir,C:/your/data/folder,資料來源資料夾（換批次只改這裡）
 dll_dir,C:\Xcalibur\system\programs,Xcalibur DLL 路徑（通常不需更改）
 smooth_window,15,Savitzky-Golay 平滑視窗長度（必須為奇數，建議 9-21）
 smooth_polyorder,3,Savitzky-Golay 多項式階數（通常 2-4）
+ms1_morphology_smoothing_window_points,15,MS1 morphology Gaussian15 smoothing 視窗點數（必須為奇數；預設 15）
 peak_rel_height,0.95,Peak 邊界的相對高度（0.95 = 積分到 apex 的 5%，範圍 0.5-0.99）
 peak_min_prominence_ratio,0.1,Peak prominence 至少為 apex 的比例（越低越寬容，0.05-0.20）
 resolver_mode,region_first_safe_merge,峰切割演算法（legacy_savgol、local_minimum 或 region_first_safe_merge；arbitrated 已退休）

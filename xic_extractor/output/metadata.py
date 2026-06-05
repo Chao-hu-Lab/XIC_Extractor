@@ -22,6 +22,10 @@ def build_metadata_rows(config: ExtractionConfig) -> list[tuple[str, object]]:
         ("resolver_mode", config.resolver_mode),
         ("smooth_window", config.smooth_window),
         ("smooth_polyorder", config.smooth_polyorder),
+        (
+            "ms1_morphology_smoothing_window_points",
+            config.ms1_morphology_smoothing_window_points,
+        ),
         ("peak_min_prominence_ratio", config.peak_min_prominence_ratio),
         ("nl_min_intensity_ratio", config.nl_min_intensity_ratio),
         ("ms2_precursor_tol_da", config.ms2_precursor_tol_da),

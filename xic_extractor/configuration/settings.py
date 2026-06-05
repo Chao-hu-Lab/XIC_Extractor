@@ -31,6 +31,7 @@ class _ParsedSettings:
     dll_dir: Path
     smooth_window: int
     smooth_polyorder: int
+    ms1_morphology_smoothing_window_points: int
     peak_rel_height: float
     peak_min_prominence_ratio: float
     resolver_mode: str
@@ -127,6 +128,16 @@ def _parse_settings_values(
             None,
             "smooth_polyorder",
             _setting_value(settings, settings_path, "smooth_polyorder"),
+        ),
+        ms1_morphology_smoothing_window_points=_parse_int(
+            settings_path,
+            None,
+            "ms1_morphology_smoothing_window_points",
+            _setting_value(
+                settings,
+                settings_path,
+                "ms1_morphology_smoothing_window_points",
+            ),
         ),
         peak_rel_height=_parse_float(
             settings_path,
@@ -307,6 +318,17 @@ def _validate_settings_ranges(
             "smooth_polyorder",
             settings["smooth_polyorder"],
             "must be >= 1 and < smooth_window",
+        )
+    if (
+        parsed.ms1_morphology_smoothing_window_points < 3
+        or parsed.ms1_morphology_smoothing_window_points % 2 == 0
+    ):
+        raise _config_error(
+            settings_path,
+            None,
+            "ms1_morphology_smoothing_window_points",
+            settings["ms1_morphology_smoothing_window_points"],
+            "must be odd and >= 3",
         )
     _require_range(
         settings_path,
@@ -510,6 +532,9 @@ def _build_config(
         diagnostics_csv=output_dir / "xic_diagnostics.csv",
         smooth_window=parsed.smooth_window,
         smooth_polyorder=parsed.smooth_polyorder,
+        ms1_morphology_smoothing_window_points=(
+            parsed.ms1_morphology_smoothing_window_points
+        ),
         peak_rel_height=parsed.peak_rel_height,
         peak_min_prominence_ratio=parsed.peak_min_prominence_ratio,
         resolver_mode=parsed.resolver_mode,

@@ -916,6 +916,9 @@ def _peak_config(
         diagnostics_csv=output_dir / "xic_diagnostics.csv",
         smooth_window=int(defaults["smooth_window"]),
         smooth_polyorder=int(defaults["smooth_polyorder"]),
+        ms1_morphology_smoothing_window_points=int(
+            defaults["ms1_morphology_smoothing_window_points"]
+        ),
         peak_rel_height=float(defaults["peak_rel_height"]),
         peak_min_prominence_ratio=float(defaults["peak_min_prominence_ratio"]),
         ms2_precursor_tol_da=float(defaults["ms2_precursor_tol_da"]),

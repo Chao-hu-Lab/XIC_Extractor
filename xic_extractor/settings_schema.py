@@ -11,6 +11,7 @@ RESOLVER_MODES: tuple[str, ...] = (
     "local_minimum",
     "region_first_safe_merge",
 )
+CANONICAL_RESOLVER_MODE = "region_first_safe_merge"
 
 ARBITRATED_RESOLVER_RETIRED_MESSAGE = (
     "arbitrated resolver mode is retired; use region_first_safe_merge"
@@ -22,9 +23,10 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "dll_dir": "C:\\Xcalibur\\system\\programs",
     "smooth_window": "15",
     "smooth_polyorder": "3",
+    "ms1_morphology_smoothing_window_points": "15",
     "peak_rel_height": "0.95",
     "peak_min_prominence_ratio": "0.10",
-    "resolver_mode": "region_first_safe_merge",
+    "resolver_mode": CANONICAL_RESOLVER_MODE,
     "resolver_chrom_threshold": "0.05",
     "resolver_min_search_range_min": "0.08",
     "resolver_min_relative_height": "0.02",
@@ -60,6 +62,9 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "dll_dir": "Xcalibur DLL 路徑（通常不需更改）",
     "smooth_window": "Savitzky-Golay 平滑視窗長度（必須為奇數，建議 9-21）",
     "smooth_polyorder": "Savitzky-Golay 多項式階數（通常 2-4）",
+    "ms1_morphology_smoothing_window_points": (
+        "MS1 morphology Gaussian15 smoothing 視窗點數（必須為奇數；預設 15）"
+    ),
     "peak_rel_height": (
         "Peak 邊界的相對高度（0.95 = 積分到 apex 的 5%，範圍 0.5-0.99）"
     ),

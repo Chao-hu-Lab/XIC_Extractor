@@ -120,6 +120,7 @@ def test_load_config_derives_output_paths_and_creates_output_dir(
     assert config.output_csv.parent.exists()
     assert config.smooth_window == 15
     assert config.smooth_polyorder == 3
+    assert config.ms1_morphology_smoothing_window_points == 15
     assert config.count_no_ms2_as_detected is False
     assert config.resolver_mode == "region_first_safe_merge"
     assert config.resolver_chrom_threshold == pytest.approx(0.05)
@@ -325,6 +326,18 @@ def test_load_config_accepts_region_first_safe_merge_resolver_mode(
     config, _ = load_config(config_dir)
 
     assert config.resolver_mode == "region_first_safe_merge"
+
+
+def test_load_config_accepts_ms1_morphology_smoothing_window_points(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    _write_settings(config_dir, {"ms1_morphology_smoothing_window_points": "21"})
+    _write_targets(config_dir)
+
+    config, _ = load_config(config_dir)
+
+    assert config.ms1_morphology_smoothing_window_points == 21
 
 
 def test_load_config_accepts_legacy_savgol_resolver_mode(tmp_path: Path) -> None:
@@ -675,6 +688,7 @@ def test_canonical_settings_defaults_include_parallel_settings() -> None:
     )
     assert CANONICAL_SETTINGS_DEFAULTS["baseline_audit_method"] == ""
     assert CANONICAL_SETTINGS_DEFAULTS["baseline_integration_method"] == "asls"
+    assert CANONICAL_SETTINGS_DEFAULTS["ms1_morphology_smoothing_window_points"] == "15"
 
 
 def test_canonical_settings_defaults_include_local_minimum_preset() -> None:
@@ -689,7 +703,7 @@ def test_canonical_settings_defaults_include_local_minimum_preset() -> None:
     assert CANONICAL_SETTINGS_DEFAULTS["resolver_min_scans"] == "5"
 
 
-def test_extraction_config_default_resolver_mode_is_legacy_compatibility() -> None:
+def test_extraction_config_default_resolver_mode_matches_canonical_settings() -> None:
     config = ExtractionConfig(
         data_dir=Path("raw"),
         dll_dir=Path("dll"),
@@ -703,7 +717,7 @@ def test_extraction_config_default_resolver_mode_is_legacy_compatibility() -> No
         nl_min_intensity_ratio=0.01,
     )
 
-    assert config.resolver_mode == "legacy_savgol"
+    assert config.resolver_mode == CANONICAL_SETTINGS_DEFAULTS["resolver_mode"]
 
 
 def test_settings_example_includes_parallel_settings() -> None:
@@ -716,6 +730,7 @@ def test_settings_example_includes_parallel_settings() -> None:
     assert int(rows["parallel_workers"]) >= 1
     assert rows["baseline_audit_method"] == ""
     assert rows["baseline_integration_method"] == "asls"
+    assert rows["ms1_morphology_smoothing_window_points"] == "15"
 
 
 def test_settings_example_includes_review_report_setting() -> None:
@@ -790,6 +805,8 @@ def test_settings_example_documents_region_first_safe_merge_mode() -> None:
     [
         ("smooth_window", "14"),
         ("smooth_polyorder", "15"),
+        ("ms1_morphology_smoothing_window_points", "14"),
+        ("ms1_morphology_smoothing_window_points", "1"),
         ("peak_rel_height", "0.49"),
         ("peak_rel_height", "1.00"),
         ("peak_min_prominence_ratio", "0.00"),

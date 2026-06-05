@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from xic_extractor.settings_schema import CANONICAL_RESOLVER_MODE
+
 
 @dataclass(frozen=True)
 class ExtractionConfig:
@@ -14,7 +16,8 @@ class ExtractionConfig:
     peak_min_prominence_ratio: float
     ms2_precursor_tol_da: float
     nl_min_intensity_ratio: float
-    resolver_mode: str = "legacy_savgol"
+    ms1_morphology_smoothing_window_points: int = 15
+    resolver_mode: str = CANONICAL_RESOLVER_MODE
     resolver_chrom_threshold: float = 0.05
     resolver_min_search_range_min: float = 0.08
     resolver_min_relative_height: float = 0.02

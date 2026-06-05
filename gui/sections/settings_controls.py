@@ -19,6 +19,7 @@ class ResolverControls:
     apply_local_minimum_preset_button: QPushButton
     smooth_window_spin: QSpinBox
     smooth_polyorder_spin: QSpinBox
+    ms1_morphology_smoothing_window_spin: QSpinBox
     peak_rel_height_spin: QDoubleSpinBox
     peak_min_prominence_ratio_spin: QDoubleSpinBox
     chrom_threshold_spin: QDoubleSpinBox

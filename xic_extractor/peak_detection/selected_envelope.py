@@ -7,6 +7,7 @@ import numpy as np
 
 from xic_extractor.peak_detection.baseline import integrate_with_baseline
 from xic_extractor.peak_detection.ms1_morphology import (
+    DEFAULT_GAUSSIAN15_WINDOW_POINTS,
     gaussian15_morphology_trace,
     morphology_trace_effective_points,
     positive_residual_area,
@@ -43,7 +44,7 @@ class SelectedEnvelopePolicy:
     baseline_return_fraction: float = 0.02
     baseline_return_min_residual: float = 1.0
     morphology_trace_method: str = "gaussian_15"
-    morphology_trace_window_points: int = 15
+    morphology_trace_window_points: int = DEFAULT_GAUSSIAN15_WINDOW_POINTS
     sustained_baseline_return_scan_count: int = 2
     internal_dip_bridge_max_scan_count: int = 1
     max_envelope_width_min: float = 10.0
