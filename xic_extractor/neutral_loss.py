@@ -81,6 +81,14 @@ class CandidateMS2Evidence:
     nearest_product_base_ratio: float | None = None
     nearest_product_mz: float | None = None
     trace: MS2TraceEvidence = field(default_factory=empty_ms2_trace_evidence)
+    ms1_peak_group_source: str = ""
+    ms1_peak_group_rt_min: float | None = None
+    ms1_peak_group_rt_max: float | None = None
+    ms1_peak_group_trigger_scan_count: int | None = None
+    ms1_peak_group_strict_nl_scan_count: int | None = None
+    ms1_peak_group_strict_nl_event_count: int | None = None
+    outside_ms1_peak_group_trigger_scan_count: int | None = None
+    outside_ms1_peak_group_strict_nl_scan_count: int | None = None
 
     def to_token(self) -> str:
         if self.nl_status == "WARN" and self.best_loss_ppm is not None:
@@ -222,6 +230,9 @@ def collect_candidate_ms2_evidence(
     nl_ppm_max: float,
     ms2_precursor_tol_da: float,
     nl_min_intensity_ratio: float,
+    ms1_peak_group_rt_min: float | None = None,
+    ms1_peak_group_rt_max: float | None = None,
+    ms1_peak_group_source: str = "",
 ) -> CandidateMS2Evidence:
     peak = getattr(candidate, "peak")
     evidence_peak_start = getattr(candidate, "ms2_evidence_peak_start", None)
@@ -237,11 +248,19 @@ def collect_candidate_ms2_evidence(
         else getattr(peak, "peak_end")
     )
     apex_rt = float(getattr(candidate, "selection_apex_rt"))
-    boundary_rescue_margin = _candidate_ms2_boundary_rescue_margin(
-        peak_start, peak_end
+    scoped_peak_group = _valid_ms1_peak_group_scope(
+        ms1_peak_group_rt_min,
+        ms1_peak_group_rt_max,
     )
-    rt_min = max(0.0, min(peak_start, apex_rt) - boundary_rescue_margin)
-    rt_max = max(peak_end, apex_rt) + boundary_rescue_margin
+    primary_start = (
+        scoped_peak_group[0] if scoped_peak_group is not None else peak_start
+    )
+    primary_end = scoped_peak_group[1] if scoped_peak_group is not None else peak_end
+    boundary_rescue_margin = _candidate_ms2_boundary_rescue_margin(
+        primary_start, primary_end
+    )
+    rt_min = max(0.0, min(primary_start, apex_rt) - boundary_rescue_margin)
+    rt_max = max(primary_end, apex_rt) + boundary_rescue_margin
     diagnostic_ppm = max(3.0 * nl_ppm_max, NL_DIAGNOSTIC_PPM_FLOOR)
 
     trigger_scan_count = 0
@@ -252,6 +271,8 @@ def collect_candidate_ms2_evidence(
     product_trace_points: list[MS2TracePoint] = []
     region_trigger_seen = False
     fallback_trigger_seen = False
+    outside_peak_group_trigger_scan_count = 0
+    outside_peak_group_strict_nl_scan_count = 0
 
     for event in raw.iter_ms2_scans(rt_min, rt_max):
         if event.parse_error is not None or event.scan is None:
@@ -260,31 +281,34 @@ def collect_candidate_ms2_evidence(
         if abs(scan.precursor_mz - precursor_mz) > ms2_precursor_tol_da:
             continue
 
-        inside_region = peak_start <= scan.rt <= peak_end
+        inside_candidate_region = peak_start <= scan.rt <= peak_end
+        inside_peak_group = (
+            scoped_peak_group is not None
+            and scoped_peak_group[0] <= scan.rt <= scoped_peak_group[1]
+        )
+        inside_region = (
+            inside_peak_group
+            if scoped_peak_group is not None
+            else inside_candidate_region
+        )
         near_apex = abs(scan.rt - apex_rt) <= _CANDIDATE_MS2_APEX_FALLBACK_MIN
         inside_boundary_rescue = (
-            peak_start - boundary_rescue_margin
+            primary_start - boundary_rescue_margin
             <= scan.rt
-            <= peak_end + boundary_rescue_margin
+            <= primary_end + boundary_rescue_margin
         )
-        if not inside_region and not near_apex and not inside_boundary_rescue:
+        near_apex_aligned = near_apex and scoped_peak_group is None
+        if not inside_region and not near_apex_aligned and not inside_boundary_rescue:
             continue
 
-        primary_aligned = inside_region or near_apex
+        primary_aligned = inside_region or near_apex_aligned
         source: CandidateMS2AlignmentSource
         if inside_region:
             source = "region"
-        elif near_apex:
+        elif near_apex_aligned:
             source = "apex_fallback"
         else:
             source = "boundary_rescue"
-
-        if primary_aligned:
-            trigger_scan_count += 1
-            region_trigger_seen = region_trigger_seen or inside_region
-            fallback_trigger_seen = fallback_trigger_seen or (
-                not inside_region and near_apex
-            )
 
         probe = _best_product_probe(
             scan,
@@ -297,6 +321,23 @@ def collect_candidate_ms2_evidence(
         if _is_better_product_probe(probe, best_probe):
             best_probe = probe
         evidence = probe.evidence
+
+        if scoped_peak_group is not None and not inside_peak_group:
+            outside_peak_group_trigger_scan_count += 1
+            if (
+                evidence is not None
+                and evidence.observed_loss_error_ppm <= nl_ppm_max
+            ):
+                outside_peak_group_strict_nl_scan_count += 1
+            continue
+
+        if primary_aligned:
+            trigger_scan_count += 1
+            region_trigger_seen = region_trigger_seen or inside_region
+            fallback_trigger_seen = fallback_trigger_seen or (
+                not inside_region and near_apex_aligned
+            )
+
         if evidence is None:
             continue
         strict_nl_match = evidence.observed_loss_error_ppm <= nl_ppm_max
@@ -328,6 +369,12 @@ def collect_candidate_ms2_evidence(
     absence_reason = ""
     if best_evidence is None and best_probe is not None:
         absence_reason = best_probe.absence_reason
+        if (
+            not absence_reason
+            and outside_peak_group_strict_nl_scan_count > 0
+            and scoped_peak_group is not None
+        ):
+            absence_reason = "strict_nl_outside_ms1_peak_group"
     nl_status = _classify_nl_result(
         matched_scan_count=trigger_scan_count,
         best_ppm=best_loss_ppm,
@@ -343,6 +390,13 @@ def collect_candidate_ms2_evidence(
         alignment_source = "apex_fallback"
     else:
         alignment_source = "none"
+    ms1_peak_group_strict_nl_event_count = (
+        None
+        if scoped_peak_group is None
+        else 1
+        if strict_nl_scan_count > 0
+        else 0
+    )
 
     return CandidateMS2Evidence(
         ms2_present=trigger_scan_count > 0,
@@ -383,7 +437,50 @@ def collect_candidate_ms2_evidence(
             candidate_apex_rt=apex_rt,
             trigger_scan_count=trigger_scan_count,
         ),
+        ms1_peak_group_source=(
+            str(ms1_peak_group_source or "ms1_peak_group")
+            if scoped_peak_group is not None
+            else ""
+        ),
+        ms1_peak_group_rt_min=(
+            scoped_peak_group[0] if scoped_peak_group is not None else None
+        ),
+        ms1_peak_group_rt_max=(
+            scoped_peak_group[1] if scoped_peak_group is not None else None
+        ),
+        ms1_peak_group_trigger_scan_count=(
+            trigger_scan_count if scoped_peak_group is not None else None
+        ),
+        ms1_peak_group_strict_nl_scan_count=(
+            strict_nl_scan_count if scoped_peak_group is not None else None
+        ),
+        ms1_peak_group_strict_nl_event_count=ms1_peak_group_strict_nl_event_count,
+        outside_ms1_peak_group_trigger_scan_count=(
+            outside_peak_group_trigger_scan_count
+            if scoped_peak_group is not None
+            else None
+        ),
+        outside_ms1_peak_group_strict_nl_scan_count=(
+            outside_peak_group_strict_nl_scan_count
+            if scoped_peak_group is not None
+            else None
+        ),
     )
+
+
+def _valid_ms1_peak_group_scope(
+    rt_min: float | None,
+    rt_max: float | None,
+) -> tuple[float, float] | None:
+    if rt_min is None or rt_max is None:
+        return None
+    start = float(rt_min)
+    end = float(rt_max)
+    if not (np.isfinite(start) and np.isfinite(end)):
+        return None
+    if start >= end:
+        return None
+    return start, end
 
 
 def _candidate_ms2_boundary_rescue_margin(peak_start: float, peak_end: float) -> float:

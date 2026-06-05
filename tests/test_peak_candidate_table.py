@@ -94,6 +94,17 @@ _NL_DIAGNOSTIC_HEADERS = (
     "best_product_base_ratio",
     "trigger_scan_count",
     "strict_nl_scan_count",
+)
+
+_MS1_PEAK_GROUP_MS2_HEADERS = (
+    "ms1_peak_group_source",
+    "ms1_peak_group_rt_min",
+    "ms1_peak_group_rt_max",
+    "ms1_peak_group_trigger_scan_count",
+    "ms1_peak_group_strict_nl_scan_count",
+    "ms1_peak_group_strict_nl_event_count",
+    "outside_ms1_peak_group_trigger_scan_count",
+    "outside_ms1_peak_group_strict_nl_scan_count",
     "ms2_alignment_source",
     "diagnostic_product_absence_reason",
     "nearest_product_loss_ppm",
@@ -118,7 +129,11 @@ def test_peak_candidate_headers_append_nl_diagnostics_without_reordering() -> No
     nl_start = len(_PRE_NL_DIAGNOSTIC_HEADERS)
     nl_end = nl_start + len(_NL_DIAGNOSTIC_HEADERS)
     assert PEAK_CANDIDATE_HEADERS[nl_start:nl_end] == _NL_DIAGNOSTIC_HEADERS
-    assert PEAK_CANDIDATE_HEADERS[nl_end:] == (
+    ms1_group_end = nl_end + len(_MS1_PEAK_GROUP_MS2_HEADERS)
+    assert PEAK_CANDIDATE_HEADERS[nl_end:ms1_group_end] == (
+        _MS1_PEAK_GROUP_MS2_HEADERS
+    )
+    assert PEAK_CANDIDATE_HEADERS[ms1_group_end:] == (
         _SAFE_MERGE_PROVENANCE_HEADERS
     )
 
@@ -193,6 +208,14 @@ def test_build_rows_marks_selected_and_rejected_candidates() -> None:
     assert rows[0]["best_product_base_ratio"] == "0.30000"
     assert rows[0]["trigger_scan_count"] == "1"
     assert rows[0]["strict_nl_scan_count"] == "1"
+    assert rows[0]["ms1_peak_group_source"] == "gaussian15_ms1_peak_group"
+    assert rows[0]["ms1_peak_group_rt_min"] == "8.40000"
+    assert rows[0]["ms1_peak_group_rt_max"] == "8.60000"
+    assert rows[0]["ms1_peak_group_trigger_scan_count"] == "1"
+    assert rows[0]["ms1_peak_group_strict_nl_scan_count"] == "1"
+    assert rows[0]["ms1_peak_group_strict_nl_event_count"] == "1"
+    assert rows[0]["outside_ms1_peak_group_trigger_scan_count"] == "0"
+    assert rows[0]["outside_ms1_peak_group_strict_nl_scan_count"] == "0"
     assert rows[0]["ms2_alignment_source"] == "region"
     assert rows[0]["diagnostic_product_absence_reason"] == ""
     assert rows[0]["nearest_product_loss_ppm"] == "1.00000"
@@ -965,4 +988,12 @@ def _ms2_evidence(*, nl_match: bool) -> CandidateMS2Evidence:
         nearest_product_loss_ppm=1.0 if nl_match else None,
         nearest_product_base_ratio=0.3 if nl_match else None,
         nearest_product_mz=151.0 if nl_match else None,
+        ms1_peak_group_source="gaussian15_ms1_peak_group",
+        ms1_peak_group_rt_min=8.4,
+        ms1_peak_group_rt_max=8.6,
+        ms1_peak_group_trigger_scan_count=1,
+        ms1_peak_group_strict_nl_scan_count=1 if nl_match else 0,
+        ms1_peak_group_strict_nl_event_count=1 if nl_match else 0,
+        outside_ms1_peak_group_trigger_scan_count=0,
+        outside_ms1_peak_group_strict_nl_scan_count=0,
     )

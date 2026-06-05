@@ -87,6 +87,14 @@ PEAK_CANDIDATE_HEADERS = (
     "best_product_base_ratio",
     "trigger_scan_count",
     "strict_nl_scan_count",
+    "ms1_peak_group_source",
+    "ms1_peak_group_rt_min",
+    "ms1_peak_group_rt_max",
+    "ms1_peak_group_trigger_scan_count",
+    "ms1_peak_group_strict_nl_scan_count",
+    "ms1_peak_group_strict_nl_event_count",
+    "outside_ms1_peak_group_trigger_scan_count",
+    "outside_ms1_peak_group_strict_nl_scan_count",
     "ms2_alignment_source",
     "diagnostic_product_absence_reason",
     "nearest_product_loss_ppm",
@@ -401,6 +409,28 @@ def _row_from_hypothesis(
         ),
         "strict_nl_scan_count": _format_optional_int(
             hypothesis.evidence.strict_nl_scan_count
+        ),
+        "ms1_peak_group_source": hypothesis.evidence.ms1_peak_group_source,
+        "ms1_peak_group_rt_min": _format_optional_float(
+            hypothesis.evidence.ms1_peak_group_rt_min
+        ),
+        "ms1_peak_group_rt_max": _format_optional_float(
+            hypothesis.evidence.ms1_peak_group_rt_max
+        ),
+        "ms1_peak_group_trigger_scan_count": _format_optional_int(
+            hypothesis.evidence.ms1_peak_group_trigger_scan_count
+        ),
+        "ms1_peak_group_strict_nl_scan_count": _format_optional_int(
+            hypothesis.evidence.ms1_peak_group_strict_nl_scan_count
+        ),
+        "ms1_peak_group_strict_nl_event_count": _format_optional_int(
+            hypothesis.evidence.ms1_peak_group_strict_nl_event_count
+        ),
+        "outside_ms1_peak_group_trigger_scan_count": _format_optional_int(
+            hypothesis.evidence.outside_ms1_peak_group_trigger_scan_count
+        ),
+        "outside_ms1_peak_group_strict_nl_scan_count": _format_optional_int(
+            hypothesis.evidence.outside_ms1_peak_group_strict_nl_scan_count
         ),
         "ms2_alignment_source": hypothesis.evidence.ms2_alignment_source,
         "diagnostic_product_absence_reason": (

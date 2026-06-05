@@ -145,6 +145,46 @@ def build_scoring_context_factory(
                 if candidate_ms2 is not None
                 else None
             )
+            ms1_peak_group_source = (
+                candidate_ms2.ms1_peak_group_source
+                if candidate_ms2 is not None
+                else ""
+            )
+            ms1_peak_group_rt_min = (
+                candidate_ms2.ms1_peak_group_rt_min
+                if candidate_ms2 is not None
+                else None
+            )
+            ms1_peak_group_rt_max = (
+                candidate_ms2.ms1_peak_group_rt_max
+                if candidate_ms2 is not None
+                else None
+            )
+            ms1_peak_group_trigger_scan_count = (
+                candidate_ms2.ms1_peak_group_trigger_scan_count
+                if candidate_ms2 is not None
+                else None
+            )
+            ms1_peak_group_strict_nl_scan_count = (
+                candidate_ms2.ms1_peak_group_strict_nl_scan_count
+                if candidate_ms2 is not None
+                else None
+            )
+            ms1_peak_group_strict_nl_event_count = (
+                candidate_ms2.ms1_peak_group_strict_nl_event_count
+                if candidate_ms2 is not None
+                else None
+            )
+            outside_ms1_peak_group_trigger_scan_count = (
+                candidate_ms2.outside_ms1_peak_group_trigger_scan_count
+                if candidate_ms2 is not None
+                else None
+            )
+            outside_ms1_peak_group_strict_nl_scan_count = (
+                candidate_ms2.outside_ms1_peak_group_strict_nl_scan_count
+                if candidate_ms2 is not None
+                else None
+            )
             half_width_ratio, fwhm = compute_shape_metrics(
                 active_intensity_values,
                 candidate.selection_apex_index,
@@ -176,6 +216,24 @@ def build_scoring_context_factory(
                 ms2_alignment_source=ms2_alignment_source,
                 trigger_scan_count=trigger_scan_count,
                 strict_nl_scan_count=strict_nl_scan_count,
+                ms1_peak_group_source=ms1_peak_group_source,
+                ms1_peak_group_rt_min=ms1_peak_group_rt_min,
+                ms1_peak_group_rt_max=ms1_peak_group_rt_max,
+                ms1_peak_group_trigger_scan_count=(
+                    ms1_peak_group_trigger_scan_count
+                ),
+                ms1_peak_group_strict_nl_scan_count=(
+                    ms1_peak_group_strict_nl_scan_count
+                ),
+                ms1_peak_group_strict_nl_event_count=(
+                    ms1_peak_group_strict_nl_event_count
+                ),
+                outside_ms1_peak_group_trigger_scan_count=(
+                    outside_ms1_peak_group_trigger_scan_count
+                ),
+                outside_ms1_peak_group_strict_nl_scan_count=(
+                    outside_ms1_peak_group_strict_nl_scan_count
+                ),
                 baseline_array=active_baseline_array,
                 residual_mad=residual_mad,
                 prefer_rt_prior_tiebreak=prefer_rt_prior_tiebreak,

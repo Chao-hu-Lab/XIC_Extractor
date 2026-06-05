@@ -75,6 +75,49 @@ def test_build_candidate_evidence_facts_from_scoring_context() -> None:
     assert facts.boundary.cwt_best_scale == 4.0
 
 
+def test_candidate_evidence_facts_preserve_gaussian15_ms1_peak_group_scope() -> None:
+    candidate = _candidate(8.5, proposal_sources=("chrom_peak_segment",))
+    ctx = ScoringContext(
+        rt_array=np.asarray([8.3, 8.4, 8.5, 8.6, 8.7]),
+        intensity_array=np.asarray([100.0, 500.0, 1000.0, 520.0, 120.0]),
+        apex_index=2,
+        half_width_ratio=1.0,
+        fwhm_ratio=1.0,
+        ms2_present=True,
+        nl_match=True,
+        rt_prior=8.5,
+        rt_prior_sigma=0.1,
+        rt_min=8.0,
+        rt_max=9.0,
+        dirty_matrix=False,
+        ms2_trace_strength="strong",
+        ms2_alignment_source="region",
+        trigger_scan_count=2,
+        strict_nl_scan_count=2,
+        ms1_peak_group_source="gaussian15_ms1_peak_group",
+        ms1_peak_group_rt_min=8.4,
+        ms1_peak_group_rt_max=8.6,
+        ms1_peak_group_trigger_scan_count=2,
+        ms1_peak_group_strict_nl_scan_count=2,
+        ms1_peak_group_strict_nl_event_count=1,
+        outside_ms1_peak_group_trigger_scan_count=1,
+        outside_ms1_peak_group_strict_nl_scan_count=1,
+        baseline_array=np.asarray([80.0, 90.0, 95.0, 90.0, 85.0]),
+        residual_mad=5.0,
+    )
+
+    facts = build_candidate_evidence_facts(candidate, ctx, role="Analyte")
+
+    assert facts.chemical.ms1_peak_group_source == "gaussian15_ms1_peak_group"
+    assert facts.chemical.ms1_peak_group_rt_min == 8.4
+    assert facts.chemical.ms1_peak_group_rt_max == 8.6
+    assert facts.chemical.ms1_peak_group_trigger_scan_count == 2
+    assert facts.chemical.ms1_peak_group_strict_nl_scan_count == 2
+    assert facts.chemical.ms1_peak_group_strict_nl_event_count == 1
+    assert facts.chemical.outside_ms1_peak_group_trigger_scan_count == 1
+    assert facts.chemical.outside_ms1_peak_group_strict_nl_scan_count == 1
+
+
 def test_candidate_facts_drive_semantics_and_projection_without_score_labels() -> None:
     rt = np.asarray([8.3, 8.4, 8.5, 8.6, 8.7])
     intensity = np.asarray([100.0, 500.0, 1000.0, 520.0, 120.0])

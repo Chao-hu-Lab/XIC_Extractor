@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-03
-**Total entry-points:** 52
-**Total files (incl. helpers):** 134 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-05
+**Total entry-points:** 53
+**Total files (incl. helpers):** 135 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -27,7 +27,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
 4. [Backfill Reviews](#backfill-reviews) — 7 tools
-5. [Peak / Candidate Audits](#peak--candidate-audits) — 5 tools
+5. [Peak / Candidate Audits](#peak--candidate-audits) — 6 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 7 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
 8. [Family / Overlay Visualization](#family--overlay-visualization) — 3 tools
@@ -420,6 +420,29 @@ boundary gate in `defer`, while
 not-counted policy evidence are diagnostic non-presence rows and do not require a
 manual presence verdict. These rows are review comments / promotion blockers,
 not formal boundary+area oracle rows.
+
+---
+
+### `ms1_peak_group_nl_scope_gate.py`
+
+**Purpose**: Gate selected `chrom_peak_segment` candidate MS2/NL evidence so
+strict neutral-loss support must belong to the same Gaussian15 MS1 peak group,
+not merely the same target or candidate window.
+**Topic group**: `ms1_peak_group_nl_scope_gate.py` (single-file)
+**Originating note**: 2026-06-05 Gaussian15 MS1 peak-group MS2/NL ownership
+production-readiness follow-up.
+**Status note**: Consumes `peak_candidates.tsv` rows with
+`ms1_peak_group_*` and `outside_ms1_peak_group_*` diagnostics, writes
+`ms1_peak_group_nl_scope_gate_manifest.json` plus
+`ms1_peak_group_nl_scope_review_rows.tsv` and the non-blocking
+`ms1_peak_group_nl_scope_context_rows.tsv`. It fails closed when a selected
+chrom peak segment lacks Gaussian15 MS1 peak-group scope, uses an unexpected
+group source, has a selected apex outside the group bounds, or appears to borrow
+active strict NL support from outside that selected group. Repeated DDA/NL scans
+inside the same selected group are counted as multiple scans but one
+chromatographic support event; outside strict-NL observations with valid
+in-group support are listed for review context only. This gate does not mutate
+workbook, matrix, or candidate-selection outputs.
 
 ---
 

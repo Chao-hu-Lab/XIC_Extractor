@@ -240,6 +240,14 @@ def test_scoring_context_copies_candidate_ms2_trace_strength() -> None:
             best_scan_rt=10.1,
             best_product_base_ratio=0.5,
             alignment_source="region",
+            ms1_peak_group_source="gaussian15_ms1_peak_group",
+            ms1_peak_group_rt_min=10.0,
+            ms1_peak_group_rt_max=10.2,
+            ms1_peak_group_trigger_scan_count=2,
+            ms1_peak_group_strict_nl_scan_count=2,
+            ms1_peak_group_strict_nl_event_count=1,
+            outside_ms1_peak_group_trigger_scan_count=1,
+            outside_ms1_peak_group_strict_nl_scan_count=0,
             trace=MS2TraceEvidence(
                 product_point_count=2,
                 product_apex_rt=10.1,
@@ -258,6 +266,14 @@ def test_scoring_context_copies_candidate_ms2_trace_strength() -> None:
     assert ctx.ms2_alignment_source == "region"
     assert ctx.trigger_scan_count == 2
     assert ctx.strict_nl_scan_count == 2
+    assert ctx.ms1_peak_group_source == "gaussian15_ms1_peak_group"
+    assert ctx.ms1_peak_group_rt_min == 10.0
+    assert ctx.ms1_peak_group_rt_max == 10.2
+    assert ctx.ms1_peak_group_trigger_scan_count == 2
+    assert ctx.ms1_peak_group_strict_nl_scan_count == 2
+    assert ctx.ms1_peak_group_strict_nl_event_count == 1
+    assert ctx.outside_ms1_peak_group_trigger_scan_count == 1
+    assert ctx.outside_ms1_peak_group_strict_nl_scan_count == 0
 
 
 def test_strict_nl_candidate_beats_candidate_with_trigger_but_failed_nl() -> None:

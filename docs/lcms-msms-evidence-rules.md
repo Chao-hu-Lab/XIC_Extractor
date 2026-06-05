@@ -93,6 +93,11 @@ contract, machine-readable reason/status fields, and regression tests.
   tag is missing or failed, analyte rescue must rely on coherent MS1 peak
   evidence plus paired ISTD RT and paired area-ratio support. Paired RT alone is
   review evidence, not counted-detection authority.
+- When a Gaussian15/ChromPeakSegment MS1 peak group is available, targeted
+  MS2/NL evidence must be scoped to that selected MS1 peak group before it can
+  support the candidate. Strict NL scans outside the selected Gaussian15 MS1
+  group are diagnostic/conflict context for another chromatographic event, not
+  active support for the current candidate.
 - Active paired area-ratio support is a run-level typed projection from
   `xic_extractor.extraction.paired_area_ratio_projection`. Its reference range
   is leave-one-sample-out target area / paired ISTD area from counted target
@@ -121,6 +126,9 @@ contract, machine-readable reason/status fields, and regression tests.
 - Product ions, neutral losses, adducts, and in-source fragments are candidate
   evidence only when co-eluting, boundary-aligned, and assigned to the same
   precursor or candidate.
+- Repeated DDA/NL triggers inside one selected Gaussian15 MS1 peak group are one
+  chromatographic support event with multiple scans. They may improve trace
+  diagnostics, but must not be treated as multiple independent MS1 peak supports.
 - Shared class fragments or common neutral losses support class or substructure
   confidence, not analyte-specific proof by themselves.
 

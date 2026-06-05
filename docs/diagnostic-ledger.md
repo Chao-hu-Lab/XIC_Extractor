@@ -68,6 +68,38 @@ Do not rerun 85RAW just to re-prove ASLS fallback retirement. Rerun only after
 a new production behavior change, a new target/default validation contract, or a
 current artifact contradicts the closeout facts above.
 
+### 2026-06-05 Gaussian15 MS1 Peak-Group NL Scope
+
+Verdict: `production_ready` for targeted candidate MS2/NL evidence ownership
+under Gaussian15 MS1 peak-group scope. Selected `chrom_peak_segment` candidates
+must not borrow active strict NL support from a different Gaussian15 MS1 peak
+group. Outside-group strict NL stays diagnostic context.
+
+Durable closeout:
+`docs/superpowers/notes/2026-06-05-gaussian15-ms1-peak-group-nl-scope-production-ready-closeout.md`
+
+Current 8RAW targeted gate:
+`output/gaussian15_ms1_peak_group_nl_scope_8raw_20260605/nl_peak_group_scope_8raw/ms1_peak_group_nl_scope_gate/ms1_peak_group_nl_scope_gate_manifest.json`
+
+Current 85RAW targeted gate:
+`output/gaussian15_ms1_peak_group_nl_scope_85raw_20260605/nl_peak_group_scope_85raw/ms1_peak_group_nl_scope_gate/ms1_peak_group_nl_scope_gate_manifest.json`
+
+Key facts:
+
+- 8RAW: `gate_decision=promote`, `selected_chrom_count=80`,
+  `borrowed_strict_nl_support_rows=0`, `review_row_count=0`,
+  `context_row_count=15`.
+- 85RAW: `gate_decision=promote`, `selected_chrom_count=811`,
+  `borrowed_strict_nl_support_rows=0`, `review_row_count=0`,
+  `context_row_count=156`.
+- The gate also requires `ms1_peak_group_source=gaussian15_ms1_peak_group` and
+  selected apex inside the group bounds.
+
+Do not rerun 85RAW just to re-prove this scoped NL ownership behavior. Rerun
+only after current code changes targeted candidate MS2/NL evidence ownership,
+chrom peak segment selection, candidate-table projection, or the cited artifacts
+are stale or contradictory.
+
 ### d3-N6-medA
 
 **Current classification:** known RT-drift / same-surface case; not a standalone

@@ -105,6 +105,14 @@ class EvidenceVector:
     best_product_base_ratio: float | None = None
     trigger_scan_count: int | None = None
     strict_nl_scan_count: int | None = None
+    ms1_peak_group_source: str = ""
+    ms1_peak_group_rt_min: float | None = None
+    ms1_peak_group_rt_max: float | None = None
+    ms1_peak_group_trigger_scan_count: int | None = None
+    ms1_peak_group_strict_nl_scan_count: int | None = None
+    ms1_peak_group_strict_nl_event_count: int | None = None
+    outside_ms1_peak_group_trigger_scan_count: int | None = None
+    outside_ms1_peak_group_strict_nl_scan_count: int | None = None
     ms2_alignment_source: str = ""
     diagnostic_product_absence_reason: str = ""
     nearest_product_loss_ppm: float | None = None
@@ -457,6 +465,40 @@ def _evidence_from_candidate(
         ),
         strict_nl_scan_count=(
             evidence.strict_nl_scan_count if evidence is not None else None
+        ),
+        ms1_peak_group_source=(
+            evidence.ms1_peak_group_source if evidence is not None else ""
+        ),
+        ms1_peak_group_rt_min=(
+            evidence.ms1_peak_group_rt_min if evidence is not None else None
+        ),
+        ms1_peak_group_rt_max=(
+            evidence.ms1_peak_group_rt_max if evidence is not None else None
+        ),
+        ms1_peak_group_trigger_scan_count=(
+            evidence.ms1_peak_group_trigger_scan_count
+            if evidence is not None
+            else None
+        ),
+        ms1_peak_group_strict_nl_scan_count=(
+            evidence.ms1_peak_group_strict_nl_scan_count
+            if evidence is not None
+            else None
+        ),
+        ms1_peak_group_strict_nl_event_count=(
+            evidence.ms1_peak_group_strict_nl_event_count
+            if evidence is not None
+            else None
+        ),
+        outside_ms1_peak_group_trigger_scan_count=(
+            evidence.outside_ms1_peak_group_trigger_scan_count
+            if evidence is not None
+            else None
+        ),
+        outside_ms1_peak_group_strict_nl_scan_count=(
+            evidence.outside_ms1_peak_group_strict_nl_scan_count
+            if evidence is not None
+            else None
         ),
         ms2_alignment_source=evidence.alignment_source if evidence is not None else "",
         diagnostic_product_absence_reason=(

@@ -62,6 +62,14 @@ class ScoringContext:
     ms2_alignment_source: str | None = None
     trigger_scan_count: int | None = None
     strict_nl_scan_count: int | None = None
+    ms1_peak_group_source: str = ""
+    ms1_peak_group_rt_min: float | None = None
+    ms1_peak_group_rt_max: float | None = None
+    ms1_peak_group_trigger_scan_count: int | None = None
+    ms1_peak_group_strict_nl_scan_count: int | None = None
+    ms1_peak_group_strict_nl_event_count: int | None = None
+    outside_ms1_peak_group_trigger_scan_count: int | None = None
+    outside_ms1_peak_group_strict_nl_scan_count: int | None = None
     baseline_array: np.ndarray | None = None
     residual_mad: float | None = None
     prefer_rt_prior_tiebreak: bool = False

@@ -66,6 +66,14 @@ class ChemicalEvidenceFacts:
     ms2_rt_delta_min: float | None = None
     trigger_scan_count: int | None = None
     strict_nl_scan_count: int | None = None
+    ms1_peak_group_source: str = ""
+    ms1_peak_group_rt_min: float | None = None
+    ms1_peak_group_rt_max: float | None = None
+    ms1_peak_group_trigger_scan_count: int | None = None
+    ms1_peak_group_strict_nl_scan_count: int | None = None
+    ms1_peak_group_strict_nl_event_count: int | None = None
+    outside_ms1_peak_group_trigger_scan_count: int | None = None
+    outside_ms1_peak_group_strict_nl_scan_count: int | None = None
     alignment_source: str = ""
     product_absence_reason: str = ""
     acquisition_opportunity: AcquisitionOpportunity = "not_observed"
@@ -404,6 +412,40 @@ def _chemical_facts(candidate: Any, ctx: Any) -> ChemicalEvidenceFacts:
         ),
         trigger_scan_count=getattr(ctx, "trigger_scan_count", None),
         strict_nl_scan_count=getattr(ctx, "strict_nl_scan_count", None),
+        ms1_peak_group_source=str(
+            getattr(ctx, "ms1_peak_group_source", "") or ""
+        ),
+        ms1_peak_group_rt_min=_optional_float(
+            getattr(ctx, "ms1_peak_group_rt_min", None)
+        ),
+        ms1_peak_group_rt_max=_optional_float(
+            getattr(ctx, "ms1_peak_group_rt_max", None)
+        ),
+        ms1_peak_group_trigger_scan_count=getattr(
+            ctx,
+            "ms1_peak_group_trigger_scan_count",
+            None,
+        ),
+        ms1_peak_group_strict_nl_scan_count=getattr(
+            ctx,
+            "ms1_peak_group_strict_nl_scan_count",
+            None,
+        ),
+        ms1_peak_group_strict_nl_event_count=getattr(
+            ctx,
+            "ms1_peak_group_strict_nl_event_count",
+            None,
+        ),
+        outside_ms1_peak_group_trigger_scan_count=getattr(
+            ctx,
+            "outside_ms1_peak_group_trigger_scan_count",
+            None,
+        ),
+        outside_ms1_peak_group_strict_nl_scan_count=getattr(
+            ctx,
+            "outside_ms1_peak_group_strict_nl_scan_count",
+            None,
+        ),
         alignment_source=str(getattr(ctx, "ms2_alignment_source", "") or ""),
         product_absence_reason=str(
             getattr(ctx, "diagnostic_product_absence_reason", "") or ""

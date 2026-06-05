@@ -472,6 +472,106 @@ def test_candidate_evidence_reports_strict_nl_match() -> None:
     assert evidence.best_product_base_ratio == pytest.approx(1.0)
 
 
+def test_candidate_evidence_scopes_strict_nl_to_gaussian15_ms1_peak_group() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.1,
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 5.0)],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(
+        raw,
+        candidate,
+        ms1_peak_group_rt_min=8.0,
+        ms1_peak_group_rt_max=8.2,
+        ms1_peak_group_source="gaussian15_ms1_peak_group",
+    )
+
+    assert evidence.nl_status == "OK"
+    assert evidence.ms1_peak_group_source == "gaussian15_ms1_peak_group"
+    assert evidence.ms1_peak_group_rt_min == pytest.approx(8.0)
+    assert evidence.ms1_peak_group_rt_max == pytest.approx(8.2)
+    assert evidence.ms1_peak_group_trigger_scan_count == 1
+    assert evidence.ms1_peak_group_strict_nl_scan_count == 1
+    assert evidence.ms1_peak_group_strict_nl_event_count == 1
+    assert evidence.outside_ms1_peak_group_trigger_scan_count == 0
+    assert evidence.outside_ms1_peak_group_strict_nl_scan_count == 0
+
+
+def test_candidate_evidence_rejects_strict_nl_outside_gaussian15_group() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.29,
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 5.0)],
+                intensities=[100.0],
+            )
+        ]
+    )
+
+    evidence = _candidate_evidence(
+        raw,
+        candidate,
+        ms1_peak_group_rt_min=8.0,
+        ms1_peak_group_rt_max=8.2,
+        ms1_peak_group_source="gaussian15_ms1_peak_group",
+    )
+
+    assert evidence.ms2_present is False
+    assert evidence.nl_match is False
+    assert evidence.nl_status == "NO_MS2"
+    assert evidence.trigger_scan_count == 0
+    assert evidence.strict_nl_scan_count == 0
+    assert evidence.ms1_peak_group_trigger_scan_count == 0
+    assert evidence.ms1_peak_group_strict_nl_scan_count == 0
+    assert evidence.ms1_peak_group_strict_nl_event_count == 0
+    assert evidence.outside_ms1_peak_group_trigger_scan_count == 1
+    assert evidence.outside_ms1_peak_group_strict_nl_scan_count == 1
+    assert evidence.diagnostic_product_absence_reason == (
+        "strict_nl_outside_ms1_peak_group"
+    )
+
+
+def test_repeated_strict_nl_inside_gaussian15_group_is_one_peak_group_event() -> None:
+    candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.05,
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 5.0)],
+                intensities=[100.0],
+            ),
+            _scan_event(
+                precursor_mz=PRECURSOR_MZ,
+                rt=8.10,
+                masses=[_product_for_loss_ppm(PRECURSOR_MZ, 4.0)],
+                intensities=[200.0],
+            ),
+        ]
+    )
+
+    evidence = _candidate_evidence(
+        raw,
+        candidate,
+        ms1_peak_group_rt_min=8.0,
+        ms1_peak_group_rt_max=8.2,
+        ms1_peak_group_source="gaussian15_ms1_peak_group",
+    )
+
+    assert evidence.strict_nl_scan_count == 2
+    assert evidence.ms1_peak_group_strict_nl_scan_count == 2
+    assert evidence.ms1_peak_group_strict_nl_event_count == 1
+
+
 def test_candidate_evidence_populates_strict_nl_product_trace() -> None:
     candidate = _candidate(peak_start=8.0, peak_end=8.2, apex_rt=8.1)
     raw = _FakeRaw(
@@ -736,7 +836,14 @@ def _anchor(raw: "_FakeRaw", reference_rt: float | None = None) -> float | None:
     )
 
 
-def _candidate_evidence(raw: "_FakeRaw", candidate: "_FakeCandidate"):
+def _candidate_evidence(
+    raw: "_FakeRaw",
+    candidate: "_FakeCandidate",
+    *,
+    ms1_peak_group_rt_min: float | None = None,
+    ms1_peak_group_rt_max: float | None = None,
+    ms1_peak_group_source: str = "",
+):
     return neutral_loss_module.collect_candidate_ms2_evidence(
         raw,
         candidate=candidate,
@@ -746,6 +853,9 @@ def _candidate_evidence(raw: "_FakeRaw", candidate: "_FakeCandidate"):
         nl_ppm_max=20.0,
         ms2_precursor_tol_da=0.5,
         nl_min_intensity_ratio=0.05,
+        ms1_peak_group_rt_min=ms1_peak_group_rt_min,
+        ms1_peak_group_rt_max=ms1_peak_group_rt_max,
+        ms1_peak_group_source=ms1_peak_group_source,
     )
 
 
