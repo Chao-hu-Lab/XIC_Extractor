@@ -17,6 +17,9 @@ from xic_extractor.peak_detection.models import (
 from xic_extractor.peak_detection.selection_decision import (
     PeakHypothesisSelectionDecision,
 )
+from xic_extractor.peak_detection.targeted_product_projection import (
+    TargetedProductProjection,
+)
 from xic_extractor.rt_prior_library import LibraryEntry
 
 
@@ -84,6 +87,26 @@ def test_credible_istd_anchor_rt_rejects_missing_or_hard_quality_peak() -> None:
         )
         is None
     )
+
+
+def test_credible_istd_anchor_rt_rejects_not_counted_projection() -> None:
+    candidate = _candidate(rt=9.2)
+    result = ExtractionResult(
+        peak_result=_peak_result(candidate),
+        nl=None,
+        target_label="ISTD",
+        role="ISTD",
+        targeted_product_projection=TargetedProductProjection(
+            product_state="not_counted",
+            counted_detection=False,
+            review_state="review_required",
+            projection_reason=(
+                "decision: not_counted; not_counted: selected_envelope_boundary_defer"
+            ),
+        ),
+    )
+
+    assert target_extraction.credible_istd_anchor_rt(result) is None
 
 
 def test_extract_one_target_passes_selected_hypothesis_to_result_assembly(
@@ -196,6 +219,399 @@ def test_extract_one_target_passes_selected_hypothesis_to_result_assembly(
     assert selected.target_label == "Analyte"
     assert captured["peak_result"].paired_istd_anchor_rt == 8.55
     assert isinstance(results["Analyte"], ExtractionResult)
+
+
+def test_extract_one_target_promotes_selected_envelope_boundary_to_result_assembly(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config = ExtractionConfig(
+        data_dir=tmp_path,
+        dll_dir=tmp_path,
+        output_csv=tmp_path / "xic_results.csv",
+        diagnostics_csv=tmp_path / "diagnostics.csv",
+        smooth_window=15,
+        smooth_polyorder=3,
+        peak_rel_height=0.95,
+        peak_min_prominence_ratio=0.1,
+        ms2_precursor_tol_da=0.5,
+        nl_min_intensity_ratio=0.01,
+        emit_peak_candidates=False,
+        resolver_mode="region_first_safe_merge",
+    )
+    target = Target(
+        label="Analyte",
+        mz=258.1085,
+        rt_min=8.0,
+        rt_max=8.8,
+        ppm_tol=20.0,
+        neutral_loss_da=None,
+        nl_ppm_warn=None,
+        nl_ppm_max=None,
+        is_istd=False,
+        istd_pair="ISTD",
+    )
+    candidate = _candidate(
+        rt=8.4,
+        peak_start=8.1,
+        peak_end=8.7,
+    )
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        n_points=9,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(candidate,),
+    )
+    captured: dict[str, object] = {}
+
+    class _Raw:
+        def extract_xic(self, *_args, **_kwargs):
+            return (
+                np.asarray([8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8]),
+                np.asarray([10.0, 10.0, 12.0, 20.0, 60.0, 20.0, 12.0, 10.0, 10.0]),
+            )
+
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        lambda *_args, **_kwargs: peak_result,
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "check_target_nl",
+        lambda *_args, **_kwargs: NLResult("NO_MS2", None, None, 0, 0, 0),
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "recover_istd_anchor_peak_if_needed",
+        lambda peak_result, **_kwargs: IstdAnchorRecoveryDecision(peak_result),
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "append_peak_audit_rows",
+        lambda **_kwargs: None,
+    )
+
+    def _fake_build_extraction_result(**kwargs):
+        captured.update(kwargs)
+        return ExtractionResult(
+            peak_result=kwargs["peak_result"],
+            nl=kwargs["nl_result"],
+            target_label=kwargs["target"].label,
+        )
+
+    monkeypatch.setattr(
+        target_extraction,
+        "build_extraction_result",
+        _fake_build_extraction_result,
+    )
+
+    results: dict[str, ExtractionResult] = {}
+    diagnostics = []
+    target_extraction.extract_one_target(
+        _Raw(),
+        config,
+        "SampleA",
+        target,
+        reference_rt=None,
+        results=results,
+        diagnostics=diagnostics,
+        istd_rt_in_this_sample=8.4,
+    )
+
+    selected = captured["selected_hypothesis"]
+    assert isinstance(selected, PeakHypothesis)
+    assert selected.integration.integration_method == "chrom_peak_segment_gaussian15"
+    assert selected.integration.rt_left_min == pytest.approx(8.2)
+    assert selected.integration.rt_right_min == pytest.approx(8.6)
+    assert selected.integration.ms1_morphology_area_source == (
+        "gaussian15_positive_asls_residual"
+    )
+    assert "chrom_peak_segment" in selected.integration.boundary_sources
+
+
+def test_extract_one_target_uses_chrom_segment_before_selected_envelope_cap(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config = ExtractionConfig(
+        data_dir=tmp_path,
+        dll_dir=tmp_path,
+        output_csv=tmp_path / "xic_results.csv",
+        diagnostics_csv=tmp_path / "diagnostics.csv",
+        smooth_window=15,
+        smooth_polyorder=3,
+        peak_rel_height=0.95,
+        peak_min_prominence_ratio=0.1,
+        ms2_precursor_tol_da=0.5,
+        nl_min_intensity_ratio=0.01,
+        emit_peak_candidates=False,
+        resolver_mode="region_first_safe_merge",
+    )
+    target = Target(
+        label="Analyte",
+        mz=258.1085,
+        rt_min=8.0,
+        rt_max=8.5,
+        ppm_tol=20.0,
+        neutral_loss_da=None,
+        nl_ppm_warn=None,
+        nl_ppm_max=None,
+        is_istd=False,
+        istd_pair="ISTD",
+    )
+    candidate = _candidate(
+        rt=8.4,
+        peak_start=8.3,
+        peak_end=8.5,
+    )
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        n_points=13,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(candidate,),
+    )
+    captured: dict[str, object] = {}
+
+    class _Raw:
+        def extract_xic(self, *_args, **_kwargs):
+            return (
+                np.asarray(
+                    [
+                        8.0,
+                        8.1,
+                        8.2,
+                        8.3,
+                        8.4,
+                        8.5,
+                        8.6,
+                        8.7,
+                        8.8,
+                        8.9,
+                        9.0,
+                        9.1,
+                        9.2,
+                    ]
+                ),
+                np.asarray(
+                    [
+                        10.0,
+                        10.0,
+                        12.0,
+                        20.0,
+                        60.0,
+                        20.0,
+                        12.0,
+                        10.0,
+                        10.0,
+                        55.0,
+                        90.0,
+                        55.0,
+                        10.0,
+                    ]
+                ),
+            )
+
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        lambda *_args, **_kwargs: peak_result,
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "check_target_nl",
+        lambda *_args, **_kwargs: NLResult("NO_MS2", None, None, 0, 0, 0),
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "recover_istd_anchor_peak_if_needed",
+        lambda peak_result, **_kwargs: IstdAnchorRecoveryDecision(peak_result),
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "append_peak_audit_rows",
+        lambda **_kwargs: None,
+    )
+
+    def _fake_build_extraction_result(**kwargs):
+        captured.update(kwargs)
+        return ExtractionResult(
+            peak_result=kwargs["peak_result"],
+            nl=kwargs["nl_result"],
+            target_label=kwargs["target"].label,
+        )
+
+    monkeypatch.setattr(
+        target_extraction,
+        "build_extraction_result",
+        _fake_build_extraction_result,
+    )
+
+    results: dict[str, ExtractionResult] = {}
+    diagnostics = []
+    target_extraction.extract_one_target(
+        _Raw(),
+        config,
+        "SampleA",
+        target,
+        reference_rt=None,
+        results=results,
+        diagnostics=diagnostics,
+        istd_rt_in_this_sample=8.4,
+    )
+
+    selected = captured["selected_hypothesis"]
+    decision = captured["selection_decision"]
+    assert isinstance(selected, PeakHypothesis)
+    assert isinstance(decision, PeakHypothesisSelectionDecision)
+    assert selected.integration.integration_method == "chrom_peak_segment_gaussian15"
+    assert decision.projected_confidence != "VERY_LOW"
+    assert "selected_envelope_boundary_externalize" not in decision.not_counted_reasons
+
+
+def test_extract_one_target_caps_non_accept_selected_envelope_boundary(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config = ExtractionConfig(
+        data_dir=tmp_path,
+        dll_dir=tmp_path,
+        output_csv=tmp_path / "xic_results.csv",
+        diagnostics_csv=tmp_path / "diagnostics.csv",
+        smooth_window=15,
+        smooth_polyorder=3,
+        peak_rel_height=0.95,
+        peak_min_prominence_ratio=0.1,
+        ms2_precursor_tol_da=0.5,
+        nl_min_intensity_ratio=0.01,
+        emit_peak_candidates=False,
+        resolver_mode="region_first_safe_merge",
+    )
+    target = Target(
+        label="Analyte",
+        mz=258.1085,
+        rt_min=8.0,
+        rt_max=8.5,
+        ppm_tol=20.0,
+        neutral_loss_da=None,
+        nl_ppm_warn=None,
+        nl_ppm_max=None,
+        is_istd=False,
+        istd_pair="ISTD",
+    )
+    candidate = _candidate(
+        rt=8.4,
+        peak_start=8.3,
+        peak_end=8.5,
+    )
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        n_points=13,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(candidate,),
+    )
+    captured: dict[str, object] = {}
+
+    class _Raw:
+        def extract_xic(self, *_args, **_kwargs):
+            return (
+                np.asarray(
+                    [
+                        8.0,
+                        8.1,
+                        8.2,
+                        8.3,
+                        8.4,
+                        8.5,
+                        8.6,
+                        8.7,
+                        8.8,
+                        8.9,
+                        9.0,
+                        9.1,
+                        9.2,
+                    ]
+                ),
+                np.asarray(
+                    [
+                        10.0,
+                        10.0,
+                        12.0,
+                        20.0,
+                        60.0,
+                        20.0,
+                        12.0,
+                        10.0,
+                        10.0,
+                        55.0,
+                        90.0,
+                        55.0,
+                        10.0,
+                    ]
+                ),
+            )
+
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_peak_and_area",
+        lambda *_args, **_kwargs: peak_result,
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "check_target_nl",
+        lambda *_args, **_kwargs: NLResult("NO_MS2", None, None, 0, 0, 0),
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "recover_istd_anchor_peak_if_needed",
+        lambda peak_result, **_kwargs: IstdAnchorRecoveryDecision(peak_result),
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "append_peak_audit_rows",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        target_extraction,
+        "chrom_peak_segment_promoted_hypothesis_from_hypothesis",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("disabled")),
+    )
+
+    def _fake_build_extraction_result(**kwargs):
+        captured.update(kwargs)
+        return ExtractionResult(
+            peak_result=kwargs["peak_result"],
+            nl=kwargs["nl_result"],
+            target_label=kwargs["target"].label,
+        )
+
+    monkeypatch.setattr(
+        target_extraction,
+        "build_extraction_result",
+        _fake_build_extraction_result,
+    )
+
+    results: dict[str, ExtractionResult] = {}
+    diagnostics = []
+    target_extraction.extract_one_target(
+        _Raw(),
+        config,
+        "SampleA",
+        target,
+        reference_rt=None,
+        results=results,
+        diagnostics=diagnostics,
+        istd_rt_in_this_sample=8.4,
+    )
+
+    decision = captured["selection_decision"]
+    assert isinstance(decision, PeakHypothesisSelectionDecision)
+    assert decision.projected_confidence == "VERY_LOW"
+    assert "selected_envelope_context_apex_conflict" in decision.review_reasons
+    assert "selected_envelope_boundary_externalize" in decision.not_counted_reasons
 
 
 def test_paired_analyte_fallback_window_uses_target_region_not_istd_rt(
@@ -338,6 +754,53 @@ def test_distant_target_nl_anchor_falls_back_to_target_reference_not_istd_rt(
     assert anchor_rt == pytest.approx(16.45)
 
 
+def test_distant_target_nl_anchor_falls_back_to_paired_istd_inside_target_window(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    config = ExtractionConfig(
+        data_dir=tmp_path,
+        dll_dir=tmp_path,
+        output_csv=tmp_path / "xic_results.csv",
+        diagnostics_csv=tmp_path / "diagnostics.csv",
+        smooth_window=15,
+        smooth_polyorder=3,
+        peak_rel_height=0.95,
+        peak_min_prominence_ratio=0.1,
+        ms2_precursor_tol_da=0.5,
+        nl_min_intensity_ratio=0.01,
+        nl_fallback_half_window_min=0.4,
+    )
+    target = Target(
+        label="Analyte",
+        mz=258.1085,
+        rt_min=16.0,
+        rt_max=18.0,
+        ppm_tol=20.0,
+        neutral_loss_da=116.0474,
+        nl_ppm_warn=20.0,
+        nl_ppm_max=50.0,
+        is_istd=False,
+        istd_pair="ISTD",
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extractor.find_nl_anchor_rt",
+        lambda *_args, **_kwargs: 18.20,
+    )
+
+    rt_min, rt_max, anchor_used, anchor_rt = get_rt_window(
+        object(),
+        target,
+        config,
+        reference_rt=16.40,
+        target_reference_rt=None,
+    )
+
+    assert (rt_min, rt_max) == pytest.approx((16.0, 16.8))
+    assert anchor_used is False
+    assert anchor_rt == pytest.approx(16.40)
+
+
 def test_paired_target_reference_rt_uses_active_pair_delta() -> None:
     target = Target(
         label="Analyte",
@@ -379,6 +842,8 @@ def _candidate(
     *,
     rt: float = 10.0,
     area: float = 1000.0,
+    peak_start: float | None = None,
+    peak_end: float | None = None,
     quality_flags: tuple[str, ...] = (),
     merge_note: str = "",
 ) -> PeakCandidate:
@@ -388,8 +853,8 @@ def _candidate(
             intensity=100.0,
             intensity_smoothed=100.0,
             area=area,
-            peak_start=rt - 0.1,
-            peak_end=rt + 0.1,
+            peak_start=rt - 0.1 if peak_start is None else peak_start,
+            peak_end=rt + 0.1 if peak_end is None else peak_end,
         ),
         selection_apex_rt=rt,
         selection_apex_intensity=100.0,

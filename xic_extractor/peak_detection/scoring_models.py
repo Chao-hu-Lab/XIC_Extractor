@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from xic_extractor.ms2_trace_evidence import MS2TraceStrength
 from xic_extractor.peak_scoring_evidence import EvidenceScore
+
+if TYPE_CHECKING:
+    from xic_extractor.peak_detection.evidence_facts import CandidateEvidenceFacts
 
 
 class Confidence(Enum):
@@ -36,6 +39,7 @@ class ScoredCandidate:
     selection_quality_penalty: float | None = None
     prefer_rt_prior_tiebreak: bool = False
     evidence_score: EvidenceScore | None = None
+    evidence_facts: CandidateEvidenceFacts | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +65,9 @@ class ScoringContext:
     baseline_array: np.ndarray | None = None
     residual_mad: float | None = None
     prefer_rt_prior_tiebreak: bool = False
+    active_trace_source: str = ""
+    morphology_trace_method: str = ""
+    morphology_trace_window_points: int | None = None
 
 
 def confidence_from_total(total_severity: int) -> Confidence:

@@ -51,6 +51,11 @@ PEAK_CANDIDATE_HEADERS = (
     "prominence",
     "area_raw_counts_seconds",
     "area_baseline_corrected",
+    "area_ms1_morphology",
+    "ms1_morphology_area_source",
+    "ms1_morphology_trace_method",
+    "ms1_morphology_trace_window_points",
+    "ms1_morphology_trace_effective_points",
     "area_uncertainty",
     "area_uncertainty_formula_version",
     "baseline_residual_mad",
@@ -324,6 +329,19 @@ def _row_from_hypothesis(
         ),
         "area_baseline_corrected": _format_optional_float(
             hypothesis.integration.area_baseline_corrected
+        ),
+        "area_ms1_morphology": _format_optional_float(
+            hypothesis.integration.area_ms1_morphology
+        ),
+        "ms1_morphology_area_source": hypothesis.integration.ms1_morphology_area_source,
+        "ms1_morphology_trace_method": (
+            hypothesis.integration.ms1_morphology_trace_method
+        ),
+        "ms1_morphology_trace_window_points": _format_optional_int(
+            hypothesis.integration.ms1_morphology_trace_window_points
+        ),
+        "ms1_morphology_trace_effective_points": _format_optional_int(
+            hypothesis.integration.ms1_morphology_trace_effective_points
         ),
         "area_uncertainty": _format_optional_float(
             hypothesis.integration.area_uncertainty

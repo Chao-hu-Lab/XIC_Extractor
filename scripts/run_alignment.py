@@ -33,7 +33,7 @@ _DEFAULT_RAW_WORKERS = 1
 _DEFAULT_RAW_XIC_BATCH_SIZE = 1
 _PERFORMANCE_PROFILES = {
     "validation-fast": {
-        "raw_workers": 8,
+        "raw_workers": 11,
         "raw_xic_batch_size": 64,
     },
 }
@@ -398,7 +398,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         choices=tuple(_PERFORMANCE_PROFILES),
         help=(
             "Named alignment execution profile. 'validation-fast' uses the "
-            "8-RAW-equivalent fast path: raw-workers=8 and "
+            "local RAW validation fast path: raw-workers=11 and "
             "raw-xic-batch-size=64. Explicit raw flags override profile values."
         ),
     )

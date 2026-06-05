@@ -2,7 +2,7 @@
 
 質譜分析 XIC（Extracted Ion Chromatogram）提取與報告工具。
 
-XIC Extractor 會從 Thermo Xcalibur `.raw` 檔案批次提取多目標化合物的 MS1 XIC，寫出 apex RT、raw apex intensity、raw integrated area、peak boundary，並做 MS2 neutral-loss confirmation、peak confidence scoring 與 diagnostics 報告。
+XIC Extractor 會從 Thermo Xcalibur `.raw` 檔案批次提取多目標化合物的 MS1 XIC，寫出 apex RT、raw apex intensity、Gaussian15-smoothed positive AsLS residual area、peak boundary，並做 MS2 neutral-loss confirmation、peak confidence scoring 與 diagnostics 報告。
 
 ---
 
@@ -156,7 +156,7 @@ Legacy wide-format export。每列是一個 sample，每個 target 會輸出：
 | --- | --- |
 | `{label}_RT` | smoothed peak apex 的 RT（分鐘） |
 | `{label}_Int` | apex scan 的 raw intensity |
-| `{label}_Area` | 主要定量指標；使用 raw intensity 在 scipy peak boundary 內積分 |
+| `{label}_Area` | 主要定量指標；使用 Gaussian15-smoothed positive AsLS residual 在 selected boundary 內積分 |
 | `{label}_PeakStart` / `{label}_PeakEnd` | peak integration boundary，主要供診斷使用 |
 | `{label}_NL` | `OK`、`WARN_12.3ppm`、`NL_FAIL` 或 `NO_MS2`；無 NL target 不會有 `_NL` 欄位 |
 

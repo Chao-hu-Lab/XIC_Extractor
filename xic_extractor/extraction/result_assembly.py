@@ -90,6 +90,40 @@ def build_extraction_result(
     )
 
 
+def reproject_extraction_result(
+    result: ExtractionResult,
+    *,
+    target: Target,
+    sample_name: str,
+    selection_decision: PeakHypothesisSelectionDecision | None = None,
+) -> ExtractionResult:
+    resolved_selection_decision = (
+        selection_decision
+        if selection_decision is not None
+        else result.selection_decision
+    )
+    updated = replace(
+        result,
+        selection_decision=resolved_selection_decision,
+        confidence=_result_confidence(
+            result.peak_result,
+            resolved_selection_decision,
+        ),
+        reason=_result_reason(
+            result.peak_result,
+            resolved_selection_decision,
+        ),
+    )
+    return replace(
+        updated,
+        targeted_product_projection=_targeted_product_projection(
+            updated,
+            target=target,
+            sample_name=sample_name,
+        ),
+    )
+
+
 def _result_target_label(
     target: Target,
     selected_hypothesis: PeakHypothesis | None,
@@ -172,27 +206,84 @@ def _targeted_product_projection(
         if result.selected_hypothesis is not None
         else None
     )
+    selection_decision = result.selection_decision
     support = _projection_support_reasons(result, semantics, target=target)
+    if selection_decision is not None:
+        support = _merge_reasons(
+            support,
+            _selection_reason_overlay(
+                selection_decision,
+                semantics,
+                "support_reasons",
+            ),
+        )
     conflicts = _projection_conflict_reasons(
         result,
         semantics,
         target=target,
         sample_name=sample_name,
+        support_reasons=support,
     )
+    if selection_decision is not None:
+        conflicts = _merge_reasons(
+            conflicts,
+            _selection_reason_overlay(
+                selection_decision,
+                semantics,
+                "conflict_reasons",
+            ),
+            _selection_reason_overlay(
+                selection_decision,
+                semantics,
+                "ambiguity_reasons",
+            ),
+        )
     review = _projection_review_reasons(
         result,
         semantics,
         conflicts,
         target=target,
         sample_name=sample_name,
+        support_reasons=support,
     )
+    if selection_decision is not None:
+        review = _merge_reasons(
+            review,
+            _selection_reason_overlay(
+                selection_decision,
+                semantics,
+                "review_reasons",
+            ),
+        )
     not_counted = _projection_not_counted_reasons(
         result,
         semantics,
         review,
         conflicts,
         target=target,
+        support_reasons=support,
     )
+    if selection_decision is not None:
+        not_counted = _merge_reasons(
+            not_counted,
+            _typed_not_counted_reasons(
+                _selection_reason_overlay(
+                    selection_decision,
+                    semantics,
+                    "not_counted_reasons",
+                )
+            ),
+        )
+    exclusions = target_sample_exclusion_reasons(target, sample_name)
+    if selection_decision is not None:
+        exclusions = _merge_reasons(
+            exclusions,
+            _selection_reason_overlay(
+                selection_decision,
+                semantics,
+                "exclusion_reasons",
+            ),
+        )
     nl_status = result.nl_token or ""
     return build_targeted_product_projection(
         TargetedPriorContext(
@@ -209,7 +300,7 @@ def _targeted_product_projection(
         review_reasons=review,
         conflict_reasons=conflicts,
         not_counted_reasons=not_counted,
-        exclusion_reasons=target_sample_exclusion_reasons(target, sample_name),
+        exclusion_reasons=exclusions,
         legacy_evidence={
             "confidence": result.confidence,
             "nl_status": nl_status,
@@ -283,14 +374,10 @@ def _projection_conflict_reasons(
     semantics: EvidenceDecisionSemantics | None,
     *,
     target: Target,
+    support_reasons: tuple[str, ...],
     sample_name: str = "",
 ) -> tuple[str, ...]:
     reasons: list[str] = []
-    support_reasons = _projection_support_context(
-        result,
-        semantics,
-        target=target,
-    )
     if semantics is not None:
         reasons.extend(
             reason
@@ -363,7 +450,7 @@ def _downgrade_nl_conflict_to_paired_analyte_review(
     return (
         reason == "candidate_aligned_ms2_nl_conflict"
         and result.role.upper() == "ANALYTE"
-        and _paired_analyte_has_pair_supported_peak(
+        and _paired_analyte_has_nl_dropout_supported_peak(
             result,
             target,
             support_reasons,
@@ -546,6 +633,30 @@ def _paired_analyte_has_pair_supported_peak(
     )
 
 
+def _paired_analyte_has_nl_dropout_supported_peak(
+    result: ExtractionResult,
+    target: Target,
+    support_reasons: tuple[str, ...],
+) -> bool:
+    support = set(support_reasons)
+    return (
+        _paired_analyte_has_role_or_ratio_supported_peak(
+            result,
+            target,
+            support_reasons,
+        )
+        and "paired_area_ratio_support" in support
+        and bool(
+            support
+            & {
+                "role_aware_rt_support",
+                "paired_istd_anchor_support",
+                "paired_istd_rt_within_1min_support",
+            }
+        )
+    )
+
+
 def _paired_analyte_has_role_or_ratio_supported_peak(
     result: ExtractionResult,
     target: Target,
@@ -587,14 +698,10 @@ def _projection_review_reasons(
     conflict_reasons: tuple[str, ...],
     *,
     target: Target,
+    support_reasons: tuple[str, ...],
     sample_name: str = "",
 ) -> tuple[str, ...]:
     reasons: list[str] = []
-    support_reasons = _projection_support_context(
-        result,
-        semantics,
-        target=target,
-    )
     if semantics is not None:
         reasons.extend(semantics.review_reasons)
         if "plausible_nl_dropout_review" in semantics.review_reasons:
@@ -666,18 +773,14 @@ def _projection_not_counted_reasons(
     conflict_reasons: tuple[str, ...],
     *,
     target: Target,
+    support_reasons: tuple[str, ...],
 ) -> tuple[str, ...]:
     reasons: list[str] = []
     if semantics is not None:
         reasons.extend(_typed_not_counted_reasons(semantics.not_counted_reasons))
-    support_reasons = _projection_support_context(
-        result,
-        semantics,
-        target=target,
-    )
     nl_failed = result.nl_token == "NL_FAIL"
     no_ms2 = result.nl_token == "NO_MS2"
-    paired_supported = _paired_analyte_has_pair_supported_peak(
+    paired_supported = _paired_analyte_has_nl_dropout_supported_peak(
         result,
         target,
         support_reasons,
@@ -716,3 +819,28 @@ def _rt_inside_target_window(rt: float | None, target: Target) -> bool:
 
 def _unique(reasons: list[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(reason for reason in reasons if reason))
+
+
+def _selection_reason_overlay(
+    decision: PeakHypothesisSelectionDecision,
+    semantics: EvidenceDecisionSemantics | None,
+    field_name: str,
+) -> tuple[str, ...]:
+    existing = () if semantics is None else getattr(semantics, field_name)
+    existing_set = set(existing)
+    return tuple(
+        reason
+        for reason in getattr(decision, field_name)
+        if reason and reason not in existing_set
+    )
+
+
+def _merge_reasons(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(
+            reason
+            for group in groups
+            for reason in group
+            if reason
+        )
+    )

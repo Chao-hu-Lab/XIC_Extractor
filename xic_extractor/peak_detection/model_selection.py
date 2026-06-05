@@ -332,11 +332,10 @@ def _successor_selection_key(hypothesis: PeakHypothesis) -> tuple[float, ...]:
     reasons = _selection_reasons(hypothesis)
     return (
         float(_DECISION_CLASS_RANK[_decision_class(hypothesis)]),
-        float(_CONFIDENCE_RANK.get(hypothesis.evidence.confidence, 4)),
         float(_blocking_reason_count(hypothesis)),
-        -float(len(hypothesis.evidence.support_labels)),
+        float(_CONFIDENCE_RANK.get(_projected_confidence(hypothesis), 4)),
         -float(len(reasons)),
-        -float(hypothesis.evidence.raw_score if hypothesis.evidence.raw_score else 0),
+        float(_chemical_evidence_rank(hypothesis)),
         _selection_reference_distance(hypothesis),
         float(
             hypothesis.audit.selection_rank
@@ -429,10 +428,35 @@ def _decision_class(hypothesis: PeakHypothesis) -> DecisionClass:
 
 def _public_projection(hypothesis: PeakHypothesis) -> dict[str, str]:
     return {
-        "confidence": hypothesis.evidence.confidence,
-        "reason": hypothesis.evidence.reason,
+        "confidence": _projected_confidence(hypothesis),
+        "reason": _projected_reason(hypothesis),
         "compatibility_labels": ";".join(_compatibility_labels(hypothesis)),
     }
+
+
+def _projected_confidence(hypothesis: PeakHypothesis) -> str:
+    return hypothesis.evidence.projected_confidence or hypothesis.evidence.confidence
+
+
+def _projected_reason(hypothesis: PeakHypothesis) -> str:
+    return hypothesis.evidence.projected_reason or hypothesis.evidence.reason
+
+
+def _chemical_evidence_rank(hypothesis: PeakHypothesis) -> int:
+    facts = hypothesis.evidence.evidence_facts
+    if facts is None:
+        if hypothesis.evidence.ms2_present and hypothesis.evidence.nl_match:
+            return 0
+        if hypothesis.evidence.ms2_present and hypothesis.evidence.nl_match is False:
+            return 3
+        return 2
+    if not facts.chemical.neutral_loss_required:
+        return 1
+    if facts.chemical.ms2_present and facts.chemical.nl_match:
+        return 0
+    if facts.chemical.ms2_present and facts.chemical.nl_match is False:
+        return 3
+    return 2
 
 
 def _compatibility_labels(hypothesis: PeakHypothesis) -> tuple[str, ...]:
@@ -476,6 +500,12 @@ def _evidence_sources(hypothesis: PeakHypothesis) -> tuple[str, ...]:
         or "chrom_peak_segment" in hypothesis.audit.proposal_sources
     ):
         sources.append("trace_morphology")
+    if (
+        evidence.evidence_facts is not None
+        or evidence.projected_confidence
+        or evidence.projected_reason
+    ):
+        sources.append("typed_candidate_evidence_facts")
     if (
         evidence.confidence
         or evidence.reason
@@ -618,9 +648,9 @@ def _actual_public_output_impacts(
         impacts.append("area")
     if _actual_boundary_changed(selected=selected, legacy_selected=legacy_selected):
         impacts.append("boundary")
-    if selected.evidence.confidence != legacy_selected.evidence.confidence:
+    if _projected_confidence(selected) != _projected_confidence(legacy_selected):
         impacts.append("confidence")
-    if selected.evidence.reason != legacy_selected.evidence.reason:
+    if _projected_reason(selected) != _projected_reason(legacy_selected):
         impacts.append("reason")
     return tuple(dict.fromkeys(impacts))
 

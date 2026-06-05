@@ -525,6 +525,76 @@ def test_selected_envelope_diagnostics_skip_without_exactly_one_selected_hypothe
     assert rows == []
 
 
+def test_selected_envelope_diagnostics_prefer_product_selected_hypothesis_boundary(
+    tmp_path,
+) -> None:
+    config = ExtractionConfig(
+        data_dir=tmp_path,
+        dll_dir=tmp_path,
+        output_csv=tmp_path / "xic_results.csv",
+        diagnostics_csv=tmp_path / "diagnostics.csv",
+        smooth_window=15,
+        smooth_polyorder=3,
+        peak_rel_height=0.95,
+        peak_min_prominence_ratio=0.10,
+        ms2_precursor_tol_da=0.5,
+        nl_min_intensity_ratio=0.01,
+        emit_peak_candidates=True,
+    )
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=_candidate(5.0).peak,
+        n_points=11,
+        max_smoothed=100.0,
+        n_prominent_peaks=1,
+        candidates=(_candidate(5.0),),
+    )
+    rt = np.arange(11, dtype=float)
+    intensity = np.asarray([10, 10, 12, 20, 40, 60, 40, 20, 12, 10, 10], dtype=float)
+    hypotheses = build_peak_hypotheses(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="",
+        resolver_mode=config.resolver_mode,
+        peak_result=peak_result,
+        rt=rt,
+        intensity=intensity,
+    )
+    product_selected_hypothesis = replace(
+        hypotheses[0],
+        integration=replace(
+            hypotheses[0].integration,
+            rt_left_min=4.0,
+            rt_right_min=8.0,
+            rt_width_min=4.0,
+        ),
+    )
+    unselected = tuple(
+        replace(
+            hypothesis,
+            audit=replace(hypothesis.audit, selected=False, selection_rank=None),
+        )
+        for hypothesis in hypotheses
+    )
+    rows: list[dict[str, str]] = []
+
+    append_selected_envelope_diagnostic_rows_from_hypotheses(
+        rows,
+        config,
+        "SampleA",
+        unselected,
+        rt=rt,
+        intensity=intensity,
+        product_selected_hypothesis=product_selected_hypothesis,
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["selected_candidate_id"] == product_selected_hypothesis.hypothesis_id
+    assert rows[0]["resolver_rt_start"] == "4.00000"
+    assert rows[0]["resolver_rt_end"] == "8.00000"
+
+
 def test_selected_envelope_diagnostics_reject_malformed_selected_trace(
     tmp_path,
 ) -> None:

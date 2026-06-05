@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from xic_extractor.alignment.primary_matrix_area import (
-    ASLS_PRIMARY_MATRIX_AREA_SOURCE,
     MISSING_ASLS_PRIMARY_AREA,
+    MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE,
 )
 
 from .schema import (
@@ -19,6 +19,12 @@ from .schema import (
     ACTIVATION_REVIEW_AUDIT_COLUMNS,
     ACTIVATION_VALUE_DELTA_COLUMNS,
     ACTIVATION_VALUE_DELTA_SCHEMA_VERSION,
+)
+
+ACTIVE_PRIMARY_MATRIX_AREA_SOURCES = frozenset(
+    (
+        MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE,
+    )
 )
 
 
@@ -899,7 +905,10 @@ def _canonical_row_identity_scope(
 def _matrix_value_for_activation(cell: Mapping[str, str] | None) -> str:
     if cell is None:
         return ""
-    if cell.get("primary_matrix_area_source", "") != ASLS_PRIMARY_MATRIX_AREA_SOURCE:
+    if (
+        cell.get("primary_matrix_area_source", "")
+        not in ACTIVE_PRIMARY_MATRIX_AREA_SOURCES
+    ):
         return ""
     return cell.get("primary_matrix_area", "")
 

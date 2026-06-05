@@ -182,6 +182,17 @@ candidate source:
   proposal-source evidence is preserved.
 - `chrom_peak_segment` is projected as `chrom_peak_segment_context` in evidence
   semantics. It is boundary morphology context, not standalone authority.
+- 2026-06-05 continuation: segment-native projection now owns active boundary
+  promotion when a `ChromPeakSegment` contains the selected apex. It writes
+  `chrom_peak_segment_gaussian15` integration with Gaussian15 positive AsLS
+  residual area. `selected_full_envelope` remains diagnostic/fallback evidence
+  rather than the primary product boundary owner.
+- 2026-06-05 paired-reference continuation: paired targeted analytes now keep
+  an ISTD-inside-target-window fallback reference when no learned delta RT is
+  available, so a target MS2/NL anchor cannot shrink candidate search away from
+  the ISTD-supported Gaussian15/ChromPeakSegment region by itself. In 8RAW this
+  moved `TumorBC2263_DNA | 8-oxodG` selection back to the 16.642 min segment
+  while preserving `not_counted` product status because NL evidence still fails.
 
 Exit rule:
 

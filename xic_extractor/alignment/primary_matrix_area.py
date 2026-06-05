@@ -4,8 +4,12 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-MISSING_ASLS_PRIMARY_AREA = "missing_asls_primary_area"
+from xic_extractor.peak_detection.ms1_morphology import MS1_MORPHOLOGY_AREA_SOURCE
+
+MISSING_MS1_MORPHOLOGY_AREA = "missing_ms1_morphology_area"
+MISSING_ASLS_PRIMARY_AREA = MISSING_MS1_MORPHOLOGY_AREA
 ASLS_PRIMARY_MATRIX_AREA_SOURCE = "asls_baseline_corrected"
+MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE = MS1_MORPHOLOGY_AREA_SOURCE
 
 
 @dataclass(frozen=True)
@@ -22,25 +26,38 @@ def primary_matrix_area_from_integration(
         return PrimaryMatrixAreaDecision(
             value=None,
             source="",
-            reason=MISSING_ASLS_PRIMARY_AREA,
+            reason=MISSING_MS1_MORPHOLOGY_AREA,
         )
+    if (
+        getattr(integration, "ms1_morphology_area_source", "")
+        == MS1_MORPHOLOGY_AREA_SOURCE
+    ):
+        morphology_area = _valid_area(
+            getattr(integration, "area_ms1_morphology", None)
+        )
+        if morphology_area is not None:
+            return PrimaryMatrixAreaDecision(
+                value=morphology_area,
+                source=MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE,
+                reason="",
+            )
     if getattr(integration, "baseline_type", "") != "asls":
         return PrimaryMatrixAreaDecision(
             value=None,
             source="",
-            reason=MISSING_ASLS_PRIMARY_AREA,
+            reason=MISSING_MS1_MORPHOLOGY_AREA,
         )
     area = _valid_area(getattr(integration, "area_baseline_corrected", None))
     if area is None:
         return PrimaryMatrixAreaDecision(
             value=None,
             source="",
-            reason=MISSING_ASLS_PRIMARY_AREA,
+            reason=MISSING_MS1_MORPHOLOGY_AREA,
         )
     return PrimaryMatrixAreaDecision(
-        value=area,
-        source=ASLS_PRIMARY_MATRIX_AREA_SOURCE,
-        reason="",
+        value=None,
+        source="",
+        reason=MISSING_MS1_MORPHOLOGY_AREA,
     )
 
 

@@ -6,6 +6,11 @@ from typing import Literal
 import numpy as np
 
 from xic_extractor.peak_detection.baseline import integrate_with_baseline
+from xic_extractor.peak_detection.ms1_morphology import (
+    gaussian15_morphology_trace,
+    morphology_trace_effective_points,
+    positive_residual_area,
+)
 
 SelectedBoundaryMode = Literal[
     "resolver_interval",
@@ -409,16 +414,16 @@ def evaluate_selected_envelope_boundary(
                 active_policy.morphology_trace_window_points
             ),
             morphology_trace_effective_points=morphology_effective_points,
-            selected_boundary_mode="review_only",
+            selected_boundary_mode="selected_full_envelope",
             legacy_resolver_provenance=legacy_resolver_provenance,
-            boundary_change_class="overmerge_rejected",
+            boundary_change_class="resolver_overwide_narrowed",
             boundary_evidence_sources=evidence_sources
-            + ("resolver_interval_conflict",),
-            boundary_stop_reason="selected_envelope_narrower_than_resolver",
+            + ("resolver_interval_narrowing",),
+            boundary_stop_reason="baseline_return_reached",
             asls_area_old_interval=old_area,
             asls_area_selected_envelope=envelope_area,
             area_delta_ratio=delta_ratio,
-            row_boundary_decision="externalize",
+            row_boundary_decision="accept_candidate",
             gaussian15_area_old_interval_shadow=shadow_old_area,
             gaussian15_area_selected_envelope_shadow=shadow_envelope_area,
             gaussian15_area_delta_ratio_shadow=shadow_delta_ratio,
@@ -535,52 +540,15 @@ def _morphology_trace(
     return residual.copy()
 
 
-def gaussian15_morphology_trace(
-    residual: np.ndarray,
-    *,
-    window_points: int = 15,
-) -> np.ndarray:
-    """Return the Xcalibur-like Gaussian15 morphology trace for review/boundary use."""
-    values = np.asarray(residual, dtype=float)
-    if values.ndim != 1:
-        raise ValueError("residual must be one-dimensional")
-    window = _odd_window_points(len(values), window_points)
-    if window <= 1:
-        return values.copy()
-    kernel = _gaussian_kernel(window)
-    return np.convolve(values, kernel, mode="same")
-
-
 def _morphology_trace_effective_points(
     trace_length: int,
     policy: SelectedEnvelopePolicy,
 ) -> int:
-    if trace_length <= 0:
-        return 0
-    if policy.morphology_trace_method not in {"gaussian_15", "smooth_15"}:
-        return 1
-
-    return _odd_window_points(trace_length, policy.morphology_trace_window_points)
-
-
-def _odd_window_points(trace_length: int, requested_window_points: int) -> int:
-    if trace_length <= 0:
-        return 0
-    if requested_window_points <= 1 or trace_length < requested_window_points:
-        return 1
-
-    window = min(requested_window_points, trace_length)
-    if window % 2 == 0:
-        window -= 1
-    return max(window, 1)
-
-
-def _gaussian_kernel(window_points: int) -> np.ndarray:
-    center = (window_points - 1) / 2.0
-    sigma = window_points / 6.0
-    positions = np.arange(window_points, dtype=float) - center
-    kernel = np.exp(-0.5 * (positions / sigma) ** 2)
-    return kernel / float(np.sum(kernel))
+    return morphology_trace_effective_points(
+        trace_length,
+        method=policy.morphology_trace_method,
+        window_points=policy.morphology_trace_window_points,
+    )
 
 
 def _expand_to_baseline_return(
@@ -756,9 +724,12 @@ def _positive_residual_area(
     residual: np.ndarray,
     interval: TraceInterval,
 ) -> float:
-    segment = np.maximum(residual[interval.start_index : interval.end_index], 0.0)
-    segment_rt = rt[interval.start_index : interval.end_index]
-    return float(np.trapezoid(segment, segment_rt)) * 60.0
+    return positive_residual_area(
+        rt,
+        residual,
+        interval.start_index,
+        interval.end_index,
+    )
 
 
 def _blocked_evaluation(

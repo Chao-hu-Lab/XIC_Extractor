@@ -5,11 +5,15 @@ import math
 import numpy as np
 
 from xic_extractor.peak_detection.baseline import (
+    asls_baseline,
     bounded_trace_interval,
     integrate_with_baseline,
 )
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
 from xic_extractor.peak_detection.models import PeakResult
+from xic_extractor.peak_detection.ms1_morphology import (
+    gaussian15_positive_asls_residual_metrics,
+)
 
 
 def integration_from_peak(
@@ -56,12 +60,29 @@ def integration_from_peak_trace(
             peak.peak_start,
             peak.peak_end,
         )
+        baseline_values = (
+            asls_baseline(intensity)
+            if baseline_integration_method == "asls"
+            else None
+        )
         baseline = integrate_with_baseline(
             intensity,
             rt,
             left_index,
             right_index,
             baseline_method=baseline_integration_method,
+            baseline_values=baseline_values,
+        )
+        morphology_metrics = (
+            gaussian15_positive_asls_residual_metrics(
+                rt,
+                intensity,
+                baseline_values,
+                left_index,
+                right_index,
+            )
+            if baseline_values is not None
+            else None
         )
     except (IndexError, TypeError, ValueError, FloatingPointError):
         return integration
@@ -82,6 +103,27 @@ def integration_from_peak_trace(
         area_uncertainty_noise_source=baseline.area_uncertainty_noise_source,
         baseline_type=baseline.baseline_type,
         baseline_score=baseline.baseline_score,
+        area_ms1_morphology=(
+            morphology_metrics.area_positive_asls_residual
+            if morphology_metrics is not None
+            else None
+        ),
+        ms1_morphology_area_source=(
+            morphology_metrics.area_source if morphology_metrics is not None else ""
+        ),
+        ms1_morphology_trace_method=(
+            morphology_metrics.trace_method if morphology_metrics is not None else ""
+        ),
+        ms1_morphology_trace_window_points=(
+            morphology_metrics.trace_window_points
+            if morphology_metrics is not None
+            else None
+        ),
+        ms1_morphology_trace_effective_points=(
+            morphology_metrics.trace_effective_points
+            if morphology_metrics is not None
+            else None
+        ),
     )
 
 
@@ -103,6 +145,11 @@ def integration_from_values(
     area_uncertainty_noise_source: str = "",
     baseline_type: str = "",
     baseline_score: object | None = None,
+    area_ms1_morphology: object | None = None,
+    ms1_morphology_area_source: str = "",
+    ms1_morphology_trace_method: str = "",
+    ms1_morphology_trace_window_points: object | None = None,
+    ms1_morphology_trace_effective_points: object | None = None,
 ) -> IntegrationResult | None:
     values = (
         area_raw_counts_seconds,
@@ -140,6 +187,15 @@ def integration_from_values(
         area_uncertainty_noise_source=area_uncertainty_noise_source,
         baseline_type=baseline_type,
         baseline_score=_finite(baseline_score),
+        area_ms1_morphology=_finite(area_ms1_morphology),
+        ms1_morphology_area_source=ms1_morphology_area_source,
+        ms1_morphology_trace_method=ms1_morphology_trace_method,
+        ms1_morphology_trace_window_points=_finite_int(
+            ms1_morphology_trace_window_points
+        ),
+        ms1_morphology_trace_effective_points=_finite_int(
+            ms1_morphology_trace_effective_points
+        ),
     )
 
 
@@ -149,6 +205,13 @@ def _finite(value: object) -> float | None:
     if not math.isfinite(value):
         return None
     return float(value)
+
+
+def _finite_int(value: object) -> int | None:
+    number = _finite(value)
+    if number is None:
+        return None
+    return int(number)
 
 
 def _bounded_indices_for_rt_window(

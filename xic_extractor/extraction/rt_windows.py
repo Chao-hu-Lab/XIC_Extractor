@@ -41,8 +41,19 @@ def get_rt_window(
         return target.rt_min, target.rt_max, False, None
 
     rt_center = (target.rt_min + target.rt_max) / 2.0 + sample_drift
+    paired_reference_rt = _paired_reference_inside_target_window(
+        target,
+        reference_rt=reference_rt,
+    )
     fallback_reference_rt = (
-        target_reference_rt if target_reference_rt is not None else rt_center
+        target_reference_rt
+        if target_reference_rt is not None
+        else paired_reference_rt
+        if paired_reference_rt is not None
+        else rt_center
+    )
+    anchor_reference_rt = (
+        target_reference_rt if target_reference_rt is not None else paired_reference_rt
     )
     anchor_rt = extractor.find_nl_anchor_rt(
         raw,
@@ -53,12 +64,12 @@ def get_rt_window(
         nl_ppm_max=target.nl_ppm_max,
         ms2_precursor_tol_da=config.ms2_precursor_tol_da,
         nl_min_intensity_ratio=config.nl_min_intensity_ratio,
-        reference_rt=target_reference_rt,
+        reference_rt=anchor_reference_rt,
     )
     if anchor_rt is not None:
         if _paired_target_anchor_is_too_far_from_reference(
             anchor_rt,
-            reference_rt=target_reference_rt,
+            reference_rt=anchor_reference_rt,
         ):
             half = config.nl_fallback_half_window_min
             return (
@@ -79,6 +90,18 @@ def get_rt_window(
             fallback_reference_rt,
         )
     return max(0.0, rt_center - half), rt_center + half, False, None
+
+
+def _paired_reference_inside_target_window(
+    target: Target,
+    *,
+    reference_rt: float | None,
+) -> float | None:
+    if target.is_istd or not target.istd_pair or reference_rt is None:
+        return None
+    if target.rt_min <= reference_rt <= target.rt_max:
+        return reference_rt
+    return None
 
 
 def _paired_target_anchor_is_too_far_from_reference(

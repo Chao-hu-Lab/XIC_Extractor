@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.output_dispatch import write_outputs
+from xic_extractor.extraction.paired_area_ratio_projection import (
+    apply_paired_area_ratio_projection,
+)
 from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
 from xic_extractor.raw_reader import RawReaderError, preflight_raw_reader
@@ -109,5 +112,6 @@ def run_pipeline(
             ),
         )
 
+    output = apply_paired_area_ratio_projection(output, targets=targets)
     write_outputs(config, targets, output)
     return output

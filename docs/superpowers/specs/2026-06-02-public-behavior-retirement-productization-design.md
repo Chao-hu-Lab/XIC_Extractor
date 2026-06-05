@@ -158,7 +158,8 @@ This order follows the mature-flow reference:
 
 1. Region settles single-trace boundary/area decision ownership first.
 2. C6 then migrates cross-sample grouping and missing-observation delivery while
-   using the settled AsLS primary matrix value policy for numeric values.
+   using the settled MS1 morphology / primary matrix area policy for numeric
+   values.
 3. C4 moves selected-hypothesis confidence/reason ownership last, after the
    cross-sample delivery spine is less dependent on legacy scorer wording.
 
@@ -175,7 +176,7 @@ conditions.
 | Phase | Concrete successor product owner | Public diff owner | Legacy disposition required before implementation | Exit rule |
 |---|---|---|---|---|
 | Region | Existing `RegionSelectionDecision` with `decision_status`, `decision_class`, `product_action`, `selected_candidate_id`, `selected_boundary_id`, `support_reasons`, `conflict_reasons`, and `baseline_method`. | `find_peak_and_area(...)`, candidate/region TSVs, extraction workbook, resolver config/GUI/CLI, downstream alignment outputs when areas propagate. | `region_first_safe_merge` becomes a compatibility token or narrow adapter inside `RegionSelectionDecision`; `legacy_savgol` and `local_minimum` become proposal/resolver compatibility inputs, not independent final-authority systems. | Region addendum lists every current `shadow_verdict/product_action` class as promote, no-change, review-only, externalized diagnostic, or retired. |
-| C6 | Existing `CrossSamplePeakGroupHypothesis` owns group identity, group membership, same-sample exclusion, drift-edge facts, review-only facts, missing-observation / gap-fill state, and successor-visible provenance. | `alignment_cells.tsv`, `alignment_review.tsv`, `alignment_matrix.tsv` row/group identity, workbook review/audit/metadata, process payloads, `FAM######` compatibility IDs, successor group IDs. Numeric sample-cell value remains AsLS-primary and is not owned by C6. | `OwnerAlignedFeature` may remain only as a delivery adapter sourced from successor hypotheses. Claim registry, owner matrix, primary consolidation, backfill, and writers must either consume successor groups directly or be explicitly named adapters. | C6 addendum separates group/gap-fill ownership from AsLS primary matrix value ownership and proves every downstream consumer is successor-owned or adapter-owned. |
+| C6 | Existing `CrossSamplePeakGroupHypothesis` owns group identity, group membership, same-sample exclusion, drift-edge facts, review-only facts, missing-observation / gap-fill state, and successor-visible provenance. | `alignment_cells.tsv`, `alignment_review.tsv`, `alignment_matrix.tsv` row/group identity, workbook review/audit/metadata, process payloads, `FAM######` compatibility IDs, successor group IDs. Numeric sample-cell value remains owned by the MS1 morphology / primary matrix area policy and is not owned by C6. | `OwnerAlignedFeature` may remain only as a delivery adapter sourced from successor hypotheses. Claim registry, owner matrix, primary consolidation, backfill, and writers must either consume successor groups directly or be explicitly named adapters. | C6 addendum separates group/gap-fill ownership from numeric primary matrix value ownership and proves every downstream consumer is successor-owned or adapter-owned. |
 | C4 | New concrete `PeakHypothesisSelectionDecision` product surface, backed by `EvidenceVector.decision_semantics` / `CommonEvidence`, with selected candidate, decision class, confidence projection, reason projection, support reasons, and conflict reasons. | Candidate selection, `confidence`, `reason`, score/calibration report projection, candidate TSV, CSV/XLSX/workbook fields, and any target/discovery public output that exposes support or concern text. | `peak_scoring.py` remains only a compatibility facade or diagnostic support module after the phase; raw score/cap cannot remain final product authority. | C4 addendum proves selected-candidate and public-projection behavior by decision oracle or names expected changed rows; raw-score parity is not the product oracle. |
 
 ## Phase 1 - Region / Boundary Productization
@@ -247,11 +248,13 @@ review-only facts, missing-observation / gap-fill state, and successor-visible
 cell provenance.
 
 C6 does not own the numeric primary matrix value. Quantitative cell values stay
-under the AsLS primary matrix value policy:
+under the MS1 morphology / primary matrix area policy:
 
 ```text
-selected IntegrationResult.area_baseline_corrected
-where IntegrationResult.baseline_type == "asls"
+prefer IntegrationResult.area_ms1_morphology
+where IntegrationResult.ms1_morphology_area_source
+    == "gaussian15_positive_asls_residual";
+fallback to AsLS only for legacy integrations without typed morphology facts
 ```
 
 `OwnerAlignedFeature` may remain only as:
@@ -272,8 +275,8 @@ both.
   and provenance may change only when the successor grouping or gap-fill policy
   names the expected diff.
 - `alignment_matrix.tsv` and workbook `Matrix` numeric sample-cell values may
-  change only as a consequence of selected integration / AsLS primary value
-  policy, not because C6 redefines the numeric value owner.
+  change only as a consequence of selected integration / MS1 morphology primary
+  value policy, not because C6 redefines the numeric value owner.
 - Claim registry, owner matrix, primary consolidation, backfill, debug writers,
   TSV/XLSX writers, and process payloads must either consume successor groups
   directly or be marked as explicit delivery adapters.

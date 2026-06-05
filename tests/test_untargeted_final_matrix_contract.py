@@ -44,7 +44,11 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
                 "FAM001",
                 "detected",
                 110.0,
-                selected_integration=_integration(raw_area=125.0, asls_area=105.0),
+                selected_integration=_integration(
+                    raw_area=125.0,
+                    asls_area=105.0,
+                    morphology_area=115.0,
+                ),
             ),
             _cell("s1", "FAM_PROVISIONAL", "detected", 85.0),
             _cell("s2", "FAM_PROVISIONAL", "rescued", 75.0),
@@ -70,7 +74,7 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     assert [(row["Mz"], row["RT"]) for row in tsv_rows] == [("500.123", "8.49")]
     assert tsv_rows[0]["s1"] == "100"
     assert tsv_rows[0]["s2"] == "90"
-    assert tsv_rows[0]["s3"] == "105"
+    assert tsv_rows[0]["s3"] == "115"
     assert FORBIDDEN_PRIMARY_STATUSES.isdisjoint(
         value for row in tsv_rows for value in row.values()
     )
@@ -81,7 +85,7 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
     assert [(row["Mz"], row["RT"]) for row in matrix_rows] == [(500.123, 8.49)]
     assert matrix_rows[0]["s1"] == 100.0
     assert matrix_rows[0]["s2"] == 90.0
-    assert matrix_rows[0]["s3"] == 105.0
+    assert matrix_rows[0]["s3"] == 115.0
     assert FORBIDDEN_PRIMARY_STATUSES.isdisjoint(
         str(value)
         for row in matrix_rows
@@ -95,10 +99,10 @@ def test_primary_outputs_hide_status_strings_and_keep_audit_reasons(
         (row["feature_family_id"], row["sample_stem"]): row for row in audit_rows
     }
     assert audit_by_sample[("FAM001", "s3")]["area"] == 110.0
-    assert audit_by_sample[("FAM001", "s3")]["primary_matrix_area"] == 105.0
+    assert audit_by_sample[("FAM001", "s3")]["primary_matrix_area"] == 115.0
     assert (
         audit_by_sample[("FAM001", "s3")]["primary_matrix_area_source"]
-        == "asls_baseline_corrected"
+        == "gaussian15_positive_asls_residual"
     )
     review_decisions = {
         row["feature_family_id"]: row["identity_decision"] for row in review_rows
@@ -189,7 +193,11 @@ def _cell(
         and area is not None
         and area > 0
     ):
-        selected_integration = _integration(raw_area=area, asls_area=area)
+        selected_integration = _integration(
+            raw_area=area,
+            asls_area=area,
+            morphology_area=area,
+        )
     return AlignedCell(
         sample_stem=sample_stem,
         cluster_id=cluster_id,
@@ -218,6 +226,7 @@ def _integration(
     raw_area: float,
     asls_area: float | None,
     baseline_type: str = "asls",
+    morphology_area: float | None = None,
 ) -> IntegrationResult:
     return IntegrationResult(
         rt_left_min=8.4,
@@ -231,6 +240,12 @@ def _integration(
         area_baseline_corrected=asls_area,
         baseline_type=baseline_type,
         boundary_sources=("test",),
+        area_ms1_morphology=morphology_area,
+        ms1_morphology_area_source=(
+            "gaussian15_positive_asls_residual"
+            if morphology_area is not None
+            else ""
+        ),
     )
 
 

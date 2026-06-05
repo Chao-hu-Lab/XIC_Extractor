@@ -109,6 +109,33 @@ def test_activation_application_blanks_wrong_peak_and_writes_auto_activation(
     assert kept_delta["value_changed"] == "FALSE"
 
 
+def test_activation_application_accepts_ms1_morphology_primary_area_source(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    cell_rows = _read_tsv(fixture["cells"])
+    for row in cell_rows:
+        if row["feature_family_id"] == "FAM_ADD" and row["sample_stem"] == "S2":
+            row["primary_matrix_area_source"] = (
+                "gaussian15_positive_asls_residual"
+            )
+    _write_tsv(fixture["cells"], tuple(cell_rows[0]), cell_rows)
+
+    outputs = product_activation.apply_activation_to_alignment_outputs(
+        activation_decisions_tsv=fixture["decisions"],
+        activation_acceptance_tsv=fixture["acceptance"],
+        alignment_matrix_tsv=fixture["matrix"],
+        alignment_review_tsv=fixture["review"],
+        alignment_cells_tsv=fixture["cells"],
+        output_dir=tmp_path / "out",
+    )
+
+    matrix_rows = {
+        row["feature_family_id"]: row for row in _read_tsv(outputs.matrix_tsv)
+    }
+    assert matrix_rows["FAM_ADD"]["S2"] == "300"
+
+
 def test_activation_application_requires_passing_acceptance(tmp_path: Path) -> None:
     fixture = _write_fixture(tmp_path, acceptance_status="fail")
 
@@ -163,7 +190,41 @@ def test_activation_application_does_not_write_raw_area_without_primary_matrix_a
     written_delta = delta_rows[("FAM_ADD", "S2")]
     assert written_delta["source_cell_area"] == "300"
     assert written_delta["activated_matrix_value"] == ""
-    assert written_delta["matrix_value_effect"] == "missing_asls_primary_area"
+    assert written_delta["matrix_value_effect"] == "missing_ms1_morphology_area"
+
+
+def test_activation_application_rejects_asls_legacy_primary_area_source(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    cell_rows = _read_tsv(fixture["cells"])
+    for row in cell_rows:
+        if row["feature_family_id"] == "FAM_ADD" and row["sample_stem"] == "S2":
+            row["primary_matrix_area_source"] = "asls_baseline_corrected"
+    _write_tsv(fixture["cells"], tuple(cell_rows[0]), cell_rows)
+
+    outputs = product_activation.apply_activation_to_alignment_outputs(
+        activation_decisions_tsv=fixture["decisions"],
+        activation_acceptance_tsv=fixture["acceptance"],
+        alignment_matrix_tsv=fixture["matrix"],
+        alignment_review_tsv=fixture["review"],
+        alignment_cells_tsv=fixture["cells"],
+        output_dir=tmp_path / "out",
+    )
+
+    matrix_rows = {
+        row["feature_family_id"]: row for row in _read_tsv(outputs.matrix_tsv)
+    }
+    assert "FAM_ADD" not in matrix_rows
+
+    delta_rows = {
+        (row["feature_family_id"], row["sample_id"]): row
+        for row in _read_tsv(outputs.value_delta_tsv)
+    }
+    written_delta = delta_rows[("FAM_ADD", "S2")]
+    assert written_delta["source_cell_area"] == "300"
+    assert written_delta["activated_matrix_value"] == ""
+    assert written_delta["matrix_value_effect"] == "missing_ms1_morphology_area"
 
 
 def test_activation_application_rejects_auto_activate_without_peak_hypothesis(
@@ -814,7 +875,7 @@ def _write_fixture(tmp_path: Path, *, acceptance_status: str) -> dict[str, Path]
                 "status": "detected",
                 "area": "100",
                 "primary_matrix_area": "100",
-                "primary_matrix_area_source": "asls_baseline_corrected",
+                "primary_matrix_area_source": "gaussian15_positive_asls_residual",
             },
             {
                 "feature_family_id": "FAM_BLOCK",
@@ -822,7 +883,7 @@ def _write_fixture(tmp_path: Path, *, acceptance_status: str) -> dict[str, Path]
                 "status": "rescued",
                 "area": "200",
                 "primary_matrix_area": "200",
-                "primary_matrix_area_source": "asls_baseline_corrected",
+                "primary_matrix_area_source": "gaussian15_positive_asls_residual",
             },
             {
                 "feature_family_id": "FAM_ADD",
@@ -830,7 +891,7 @@ def _write_fixture(tmp_path: Path, *, acceptance_status: str) -> dict[str, Path]
                 "status": "rescued",
                 "area": "300",
                 "primary_matrix_area": "300",
-                "primary_matrix_area_source": "asls_baseline_corrected",
+                "primary_matrix_area_source": "gaussian15_positive_asls_residual",
             },
             {
                 "feature_family_id": "FAM_KEEP",
@@ -838,7 +899,7 @@ def _write_fixture(tmp_path: Path, *, acceptance_status: str) -> dict[str, Path]
                 "status": "rescued",
                 "area": "999",
                 "primary_matrix_area": "999",
-                "primary_matrix_area_source": "asls_baseline_corrected",
+                "primary_matrix_area_source": "gaussian15_positive_asls_residual",
             },
             {
                 "feature_family_id": "FAM_SPLIT",
@@ -846,7 +907,7 @@ def _write_fixture(tmp_path: Path, *, acceptance_status: str) -> dict[str, Path]
                 "status": "detected",
                 "area": "111",
                 "primary_matrix_area": "111",
-                "primary_matrix_area_source": "asls_baseline_corrected",
+                "primary_matrix_area_source": "gaussian15_positive_asls_residual",
             },
             {
                 "feature_family_id": "FAM_SPLIT",
@@ -854,7 +915,7 @@ def _write_fixture(tmp_path: Path, *, acceptance_status: str) -> dict[str, Path]
                 "status": "detected",
                 "area": "222",
                 "primary_matrix_area": "222",
-                "primary_matrix_area_source": "asls_baseline_corrected",
+                "primary_matrix_area_source": "gaussian15_positive_asls_residual",
             },
         ],
     )

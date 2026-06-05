@@ -1,13 +1,26 @@
 # AsLS Primary Matrix Value Policy Spec
 
 **Date:** 2026-06-02
-**Status:** Implemented v0.2 - behavior/output contract for current PR
-**Readiness label:** `production_ready` for primary matrix value delivery after focused tests, 8RAW, and 85RAW closeout
+**Status:** Superseded for current product behavior by Gaussian15 MS1 morphology
+policy
+**Readiness label:** Historical `production_ready` for the 2026-06-02
+AsLS-vs-raw matrix transition only; not current product authority for final area
 **Product-flow reference:** [Mature package flow reference](2026-06-02-mature-package-flow-reference-spec.md)
 **Supersedes for final-matrix value policy:** historical final-matrix language in [P2b AsLS promotion](2026-05-24-peak-pipeline-area-baseline-asls-promotion-spec.md)
+**Current authority:** [LC-MS/MS evidence rules](../../lcms-msms-evidence-rules.md)
 **Human-facing companion:** [Raw to final matrix product story](../reports/2026-06-02-raw-to-final-matrix-product-story.html)
 **8RAW closeout:** [AsLS primary matrix value 8RAW closeout](../notes/2026-06-02-asls-primary-matrix-value-8raw-closeout.md)
 **85RAW closeout:** [AsLS primary matrix value 85RAW closeout](../notes/2026-06-02-asls-primary-matrix-value-85raw-closeout.md)
+
+> Current-state note, 2026-06-05: this spec is retained as historical evidence
+> for retiring raw/linear-edge final matrix values. It must not be used to
+> reassert `asls_baseline_corrected` as the active product area owner. Current
+> v2 owner-retirement policy goes further: if typed Gaussian15 morphology area
+> is missing, the product primary area is missing rather than falling back to
+> AsLS.
+> targeted and untargeted product behavior prefers
+> `gaussian15_positive_asls_residual` when typed MS1 morphology facts exist;
+> AsLS baseline-corrected area remains a compatibility/audit field only.
 
 ## Verdict
 
@@ -15,27 +28,26 @@
 linear-edge-compatible, or otherwise legacy-baseline area as the primary
 quantitative value.
 
-The implemented v0.1 product behavior makes the primary matrix value:
+The historical v0.1 product behavior made the primary matrix value:
 
 ```text
 selected IntegrationResult.area_baseline_corrected
 where IntegrationResult.baseline_type == "asls"
 ```
 
-The existing primary matrix schema can stay unchanged at first: feature rows and
-sample columns remain the downstream contract. The values in those sample cells
-change to AsLS-corrected selected integration area.
+Current product behavior keeps the same primary matrix schema but now prefers
+typed Gaussian15-smoothed positive AsLS residual area when available. The older
+AsLS-corrected selected integration area remains fallback for legacy
+integrations that do not yet carry morphology facts.
 
 Raw selected area remains useful as audit evidence. It must be named as raw or
 historical; it must not be the main matrix value, unnamed fallback, or rollback
 product path.
 
-This spec now describes the implemented v0.2 behavior/output contract. The
-8RAW and 85RAW closeouts support `production_ready` for primary matrix value
-delivery/source semantics. That readiness label does not claim every
-independent absolute baseline-truth axis, such as spike-in recovery,
-concentration-series linearity, blank/carryover behavior, or synthetic
-known-area validation.
+This spec now describes a superseded implemented v0.2 behavior/output contract.
+The 8RAW and 85RAW closeouts support only the historical decision that raw or
+linear-edge values must not be the primary matrix value. They do not prove the
+current Gaussian15 morphology product area policy.
 
 ## Why This Spec Exists
 
@@ -144,12 +156,12 @@ be equivalent to:
 
 ```text
 quality_status = invalid or review_rescue
-blank_reason = missing_asls_primary_area
+blank_reason = missing_ms1_morphology_area
 write_matrix_value = false
 ```
 
 The public blank/review reason must be machine-readable as
-`missing_asls_primary_area` wherever production cell decisions, activation
+`missing_ms1_morphology_area` wherever production cell decisions, activation
 deltas, or audit/review outputs explain why a detected/rescued cell did not
 write a primary value. It may appear as `blank_reason`, `quality_reason`,
 `matrix_value_effect`, or an equivalent public reason field depending on the
@@ -232,7 +244,7 @@ but the policy should support them:
 | Field | Meaning |
 |---|---|
 | `primary_matrix_area` | Value actually written to Matrix / `alignment_matrix.tsv`. |
-| `primary_matrix_area_source` | Expected value: `asls_baseline_corrected`. |
+| `primary_matrix_area_source` | Current expected value when typed morphology facts exist: `gaussian15_positive_asls_residual`; historical fallback `asls_baseline_corrected` is compatibility/debug only and must not write product area. |
 | `primary_matrix_baseline_type` | Expected value: `asls` for written cells. |
 | `area_raw_counts_seconds` | Raw trapezoid selected integration area; audit only. |
 | `area_baseline_corrected` | AsLS-corrected selected integration area. |
@@ -349,7 +361,7 @@ Known public bypasses that must be handled in this phase:
   fields.
 - `product_activation` must not use `alignment_cells.tsv:area` to auto-write a
   primary matrix value. It must use an AsLS primary value field or emit a
-  blank/review effect such as `missing_asls_primary_area`.
+  blank/review effect such as `missing_ms1_morphology_area`.
 
 ### AP5 - Validation
 
@@ -371,10 +383,13 @@ Minimum validation:
   on the changed code path, with a closeout that reports row inclusion stability
   and matrix value-source status.
 
-85RAW validation is the production-ready gate for the primary matrix value
-delivery/source contract. It must show that nonblank matrix cells are backed by
-`primary_matrix_area_source=asls_baseline_corrected` and that missing-AsLS cells
-do not fall back to raw `area`.
+For the superseded AsLS transition, 85RAW validation was the production-ready
+gate for the primary matrix value delivery/source contract. For current
+Gaussian15 morphology promotion, this historical gate is insufficient: the run
+must show that nonblank matrix cells prefer
+`primary_matrix_area_source=gaussian15_positive_asls_residual` when typed
+morphology facts exist, and that missing morphology/AsLS cells do not fall back
+to raw `area`.
 
 ## Test Migration Requirements
 
@@ -413,7 +428,7 @@ At least one test must prove missing AsLS does not fall back:
 raw area = 125
 area_baseline_corrected = None
 matrix sample cell = blank
-blank_reason = missing_asls_primary_area
+blank_reason = missing_ms1_morphology_area
 ```
 
 ## Compatibility And Migration

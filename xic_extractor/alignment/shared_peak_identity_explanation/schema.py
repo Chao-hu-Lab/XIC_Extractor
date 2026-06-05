@@ -1265,7 +1265,7 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
             "block_no_existing_matrix_value",
             "no_cell_area_available",
             "source_matrix_value_missing",
-            "missing_asls_primary_area",
+            "missing_ms1_morphology_area",
         }
     ),
     "value_changed": frozenset({"TRUE", "FALSE"}),

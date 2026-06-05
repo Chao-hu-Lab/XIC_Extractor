@@ -237,7 +237,7 @@ Metadata must include these exact keys and values:
 | `gap_fill_policy` | `missing_observation_gap_fill_v1` |
 | `legacy_owner_backfill_role` | `owner_backfill_as_gap_fill_materialization` |
 | `pre_backfill_projection_policy` | `pre_backfill_successor_projection_required_when_enabled` |
-| `matrix_value_policy` | `asls_primary_integration_result` |
+| `matrix_value_policy` | `gaussian15_positive_asls_residual_primary` |
 
 ## Gap-Fill / Missing-Observation Semantics
 

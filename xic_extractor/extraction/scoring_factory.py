@@ -8,6 +8,12 @@ from scipy.signal import peak_widths
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.injection_rolling import rolling_median_rt
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
+from xic_extractor.peak_detection.ms1_morphology import (
+    DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+    MS1_MORPHOLOGY_AREA_SOURCE,
+    MS1_MORPHOLOGY_TRACE_METHOD,
+    gaussian15_positive_asls_residual_trace,
+)
 from xic_extractor.peak_detection.scoring_metrics import compute_local_sn_cache
 from xic_extractor.peak_detection.scoring_models import ScoringContext
 from xic_extractor.peak_detection.scoring_quality import hard_quality_flags
@@ -77,6 +83,24 @@ def build_scoring_context_factory(
         rt_values = np.asarray(rt, dtype=float)
         intensity_values = np.asarray(intensity, dtype=float)
         baseline_array, residual_mad = compute_local_sn_cache(intensity_values)
+        active_intensity_values = intensity_values
+        active_baseline_array = baseline_array
+        active_trace_source = "raw"
+        morphology_trace_method = ""
+        morphology_trace_window_points: int | None = None
+        if baseline_array is not None:
+            try:
+                active_intensity_values = gaussian15_positive_asls_residual_trace(
+                    intensity_values,
+                    baseline_array,
+                )
+                active_baseline_array = np.zeros_like(active_intensity_values)
+                active_trace_source = MS1_MORPHOLOGY_AREA_SOURCE
+                morphology_trace_method = MS1_MORPHOLOGY_TRACE_METHOD
+                morphology_trace_window_points = DEFAULT_GAUSSIAN15_WINDOW_POINTS
+            except (TypeError, ValueError, FloatingPointError):
+                active_intensity_values = intensity_values
+                active_baseline_array = baseline_array
         target_window_ms2_present = (
             nl_result is not None and nl_result.matched_scan_count > 0
         )
@@ -122,7 +146,7 @@ def build_scoring_context_factory(
                 else None
             )
             half_width_ratio, fwhm = compute_shape_metrics(
-                intensity_values,
+                active_intensity_values,
                 candidate.selection_apex_index,
             )
             fwhm_ratio: float | None = None
@@ -135,7 +159,7 @@ def build_scoring_context_factory(
                 fwhm_ratio = fwhm / paired_istd_fwhm
             return ScoringContext(
                 rt_array=rt_values,
-                intensity_array=intensity_values,
+                intensity_array=active_intensity_values,
                 apex_index=candidate.selection_apex_index,
                 half_width_ratio=half_width_ratio,
                 fwhm_ratio=fwhm_ratio,
@@ -152,9 +176,12 @@ def build_scoring_context_factory(
                 ms2_alignment_source=ms2_alignment_source,
                 trigger_scan_count=trigger_scan_count,
                 strict_nl_scan_count=strict_nl_scan_count,
-                baseline_array=baseline_array,
+                baseline_array=active_baseline_array,
                 residual_mad=residual_mad,
                 prefer_rt_prior_tiebreak=prefer_rt_prior_tiebreak,
+                active_trace_source=active_trace_source,
+                morphology_trace_method=morphology_trace_method,
+                morphology_trace_window_points=morphology_trace_window_points,
             )
 
         setattr(builder, "rt_prior", rt_prior)

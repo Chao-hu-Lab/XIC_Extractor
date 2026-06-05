@@ -111,19 +111,15 @@ def selected_handoff_peak(
     paired_istd_anchor_rt: float | None = None,
     model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> HandoffPeakSelection:
-    trace_group = (
-        targeted_extraction_trace_group(
-            sample_name=sample_name,
-            target=target,
-            config=config,
-            rt=rt,
-            intensity=intensity,
-            rt_min=rt_min,
-            rt_max=rt_max,
-            expected_rt_min=expected_rt_min,
-        )
-        if config.emit_peak_candidates
-        else None
+    trace_group = targeted_extraction_trace_group(
+        sample_name=sample_name,
+        target=target,
+        config=config,
+        rt=rt,
+        intensity=intensity,
+        rt_min=rt_min,
+        rt_max=rt_max,
+        expected_rt_min=expected_rt_min,
     )
     candidate_ms2_evidence = selected_candidate_ms2_evidence(
         candidate,
@@ -289,11 +285,18 @@ def _target_applicable_strict_nl_successor_switch(
         return False
     if (
         not math.isfinite(selected.integration.rt_apex_min)
-        or selected.integration.area_raw_counts_seconds <= 0
+        or _active_integration_area(selected.integration) <= 0
     ):
         return False
     reasons = _hypothesis_reason_set(selected)
     return "strict_nl_ok" in reasons or "candidate_aligned_ms2_nl" in reasons
+
+
+def _active_integration_area(integration: object) -> float:
+    morphology_area = getattr(integration, "area_ms1_morphology", None)
+    if morphology_area is not None:
+        return float(morphology_area)
+    return float(getattr(integration, "area_raw_counts_seconds", 0.0))
 
 
 def _hypothesis_by_id(

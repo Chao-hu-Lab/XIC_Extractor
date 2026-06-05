@@ -103,6 +103,7 @@ def append_peak_audit_rows(
         rt=rt,
         intensity=intensity,
         trace_group=trace_group,
+        product_selected_hypothesis=product_selected_hypothesis,
     )
 
 
@@ -115,14 +116,18 @@ def append_selected_envelope_diagnostic_rows_from_hypotheses(
     rt: Any,
     intensity: Any,
     trace_group: TraceGroup | None = None,
+    product_selected_hypothesis: PeakHypothesis | None = None,
 ) -> None:
     if not config.emit_peak_candidates or rows is None:
         return
-    selected_hypotheses = tuple(
-        hypothesis for hypothesis in hypotheses if hypothesis.audit.selected
-    )
-    if len(selected_hypotheses) != 1:
-        return
+    selected_hypothesis = product_selected_hypothesis
+    if selected_hypothesis is None:
+        selected_hypotheses = tuple(
+            hypothesis for hypothesis in hypotheses if hypothesis.audit.selected
+        )
+        if len(selected_hypotheses) != 1:
+            return
+        selected_hypothesis = selected_hypotheses[0]
     trace_rt = trace_group.primary_trace.rt if trace_group is not None else rt
     trace_intensity = (
         trace_group.primary_trace.intensity if trace_group is not None else intensity
@@ -131,7 +136,7 @@ def append_selected_envelope_diagnostic_rows_from_hypotheses(
     rows.append(
         selected_envelope_diagnostic_row_from_hypothesis(
             sample_name=sample_name,
-            hypothesis=selected_hypotheses[0],
+            hypothesis=selected_hypothesis,
             rt_values=trace_rt,
             intensity_values=trace_intensity,
             quantitation_context_rt_start=context_start,

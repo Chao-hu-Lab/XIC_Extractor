@@ -6,10 +6,16 @@ import numpy as np
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_detection.candidate_scoring import score_candidate
 from xic_extractor.peak_detection.candidate_selection import (
-    select_candidate_with_confidence,
+    select_candidate_by_evidence,
 )
 from xic_extractor.peak_detection.chrom_peak_candidate_adapter import (
     chrom_peak_segment_candidates,
+)
+from xic_extractor.peak_detection.evidence_facts import (
+    build_candidate_evidence_facts,
+    decision_semantics_from_candidate_facts,
+    projected_confidence_from_candidate_facts,
+    projected_reason_from_candidate_facts,
 )
 from xic_extractor.peak_detection.legacy_savgol import (
     find_peak_candidates_legacy_savgol,
@@ -27,7 +33,10 @@ from xic_extractor.peak_detection.recovery import preferred_rt_recovery
 from xic_extractor.peak_detection.region_safe_merge import (
     apply_region_first_safe_merge,
 )
-from xic_extractor.peak_detection.scoring_models import ScoringContext
+from xic_extractor.peak_detection.scoring_models import (
+    ScoringContext,
+    confidence_from_value,
+)
 from xic_extractor.peak_detection.scoring_reason import score_breakdown_fields
 from xic_extractor.peak_detection.selection import (
     select_candidate,
@@ -48,6 +57,9 @@ def find_peak_and_area(
     strict_preferred_rt: bool = False,
     scoring_context_builder: Callable[[PeakCandidate], ScoringContext] | None = None,
     istd_confidence_note: str | None = None,
+    evidence_role: str = "",
+    istd_pair: str = "",
+    paired_istd_anchor_rt: float | None = None,
 ) -> PeakDetectionResult:
     candidates_result = find_peak_candidates(rt, intensity, config)
     if scoring_context_builder is not None:
@@ -104,6 +116,9 @@ def find_peak_and_area(
                     candidate,
                     scoring_context_builder(candidate),
                     istd_confidence_note=istd_confidence_note,
+                    evidence_role=evidence_role,
+                    istd_pair=istd_pair,
+                    paired_istd_anchor_rt=paired_istd_anchor_rt,
                 )
                 for candidate in all_candidates
             ]
@@ -111,7 +126,7 @@ def find_peak_and_area(
                 _candidate_score_summary(scored_candidate)
                 for scored_candidate in scored_candidates
             )
-            chosen = select_candidate_with_confidence(
+            chosen = select_candidate_by_evidence(
                 scored_candidates,
                 selection_rt=selection_rt,
                 strict_selection_rt=strict_preferred_rt,
@@ -149,6 +164,7 @@ def find_peak_and_area(
             score_breakdown=chosen_score_breakdown,
             candidate_scores=candidate_scores,
             selection_reference_rt=selection_rt,
+            paired_istd_anchor_rt=paired_istd_anchor_rt,
         )
 
     recovery_candidate, recovery_result = preferred_rt_recovery(
@@ -170,6 +186,9 @@ def find_peak_and_area(
                 recovery_candidate,
                 scoring_context_builder(recovery_candidate),
                 istd_confidence_note=istd_confidence_note,
+                evidence_role=evidence_role,
+                istd_pair=istd_pair,
+                paired_istd_anchor_rt=paired_istd_anchor_rt,
             )
             candidate_scores = (_candidate_score_summary(scored_recovery),)
             recovery_result, recovery_candidate, candidate_scores = (
@@ -191,6 +210,7 @@ def find_peak_and_area(
                 score_breakdown=score_breakdown_fields(scored_recovery.evidence_score),
                 candidate_scores=candidate_scores,
                 selection_reference_rt=preferred_rt,
+                paired_istd_anchor_rt=paired_istd_anchor_rt,
             )
         recovery_result, recovery_candidate, candidate_scores = (
             _apply_region_first_safe_merge_if_enabled(
@@ -206,6 +226,7 @@ def find_peak_and_area(
             recovery_result,
             recovery_candidate,
             selection_reference_rt=preferred_rt,
+            paired_istd_anchor_rt=paired_istd_anchor_rt,
         )
     return _detection_failure(candidates_result)
 
@@ -381,12 +402,44 @@ def _score_with_context(
     context: ScoringContext,
     *,
     istd_confidence_note: str | None,
+    evidence_role: str = "",
+    istd_pair: str = "",
+    paired_istd_anchor_rt: float | None = None,
 ):
-    return score_candidate(
+    scored = score_candidate(
         candidate,
         context,
         prior_rt=context.rt_prior,
         istd_confidence_note=istd_confidence_note,
+    )
+    if (
+        scored.evidence_facts is not None
+        and not evidence_role
+        and not istd_pair
+        and paired_istd_anchor_rt is None
+    ):
+        return scored
+    evidence_facts = build_candidate_evidence_facts(
+        candidate,
+        context,
+        role=evidence_role,
+        istd_pair=istd_pair,
+        paired_istd_anchor_rt_min=paired_istd_anchor_rt,
+    )
+    semantics = decision_semantics_from_candidate_facts(
+        evidence_facts,
+        count_no_ms2_as_detected=context.count_no_ms2_as_detected,
+    )
+    reason = projected_reason_from_candidate_facts(evidence_facts, semantics)
+    if istd_confidence_note:
+        reason = f"{reason}; {istd_confidence_note}"
+    return replace(
+        scored,
+        confidence=confidence_from_value(
+            projected_confidence_from_candidate_facts(evidence_facts, semantics)
+        ),
+        reason=reason,
+        evidence_facts=evidence_facts,
     )
 
 
@@ -408,6 +461,7 @@ def _candidate_score_summary(scored_candidate) -> PeakCandidateScore:
         quality_penalty=scored_candidate.quality_penalty,
         selection_quality_penalty=scored_candidate.selection_quality_penalty,
         severities=scored_candidate.severities,
+        evidence_facts=scored_candidate.evidence_facts,
     )
 
 
@@ -421,6 +475,7 @@ def _detection_success(
     score_breakdown: tuple[tuple[str, str], ...] = (),
     candidate_scores: tuple[PeakCandidateScore, ...] = (),
     selection_reference_rt: float | None = None,
+    paired_istd_anchor_rt: float | None = None,
 ) -> PeakDetectionResult:
     return PeakDetectionResult(
         status="OK",
@@ -435,6 +490,7 @@ def _detection_success(
         score_breakdown=score_breakdown,
         candidate_scores=candidate_scores,
         selection_reference_rt=selection_reference_rt,
+        paired_istd_anchor_rt=paired_istd_anchor_rt,
     )
 
 

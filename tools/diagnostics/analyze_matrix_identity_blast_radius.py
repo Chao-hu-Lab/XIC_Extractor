@@ -18,7 +18,7 @@ from xic_extractor.alignment.machine_decision import (
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.matrix_identity import build_matrix_identity_decisions
 from xic_extractor.alignment.primary_matrix_area import (
-    ASLS_PRIMARY_MATRIX_AREA_SOURCE,
+    MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE,
 )
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
@@ -281,7 +281,10 @@ def _integration_from_cell_row(
     start: float | None,
     end: float | None,
 ) -> IntegrationResult | None:
-    if row.get("primary_matrix_area_source", "") != ASLS_PRIMARY_MATRIX_AREA_SOURCE:
+    if (
+        row.get("primary_matrix_area_source", "")
+        != MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE
+    ):
         return None
     primary_area = _float(row.get("primary_matrix_area"))
     if (
@@ -301,8 +304,8 @@ def _integration_from_cell_row(
         height_raw=_float(row.get("height")) or 1.0,
         height_smoothed=_float(row.get("height")) or 1.0,
         area_raw_counts_seconds=raw_area,
-        area_baseline_corrected=primary_area,
-        baseline_type="asls",
+        area_ms1_morphology=primary_area,
+        ms1_morphology_area_source=MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE,
         boundary_sources=("alignment_cells_tsv",),
     )
 

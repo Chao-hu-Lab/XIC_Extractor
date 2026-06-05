@@ -906,7 +906,7 @@ def test_run_alignment_cli_validation_fast_profile_sets_raw_execution(
     )
 
     assert code == 0
-    assert captured["raw_workers"] == 8
+    assert captured["raw_workers"] == 11
     assert captured["raw_xic_batch_size"] == 64
 
 

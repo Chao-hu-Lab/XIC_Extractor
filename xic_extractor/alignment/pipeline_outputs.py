@@ -204,7 +204,7 @@ def alignment_metadata(
         "pre_backfill_projection_policy": (
             "pre_backfill_successor_projection_required_when_enabled"
         ),
-        "matrix_value_policy": "asls_primary_integration_result",
+        "matrix_value_policy": "gaussian15_positive_asls_residual_primary",
     }
 
 

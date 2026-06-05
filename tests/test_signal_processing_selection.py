@@ -434,10 +434,9 @@ def test_local_minimum_flagged_candidate_scores_lower_confidence() -> None:
 
     assert result.status == "OK"
     assert result.peak is not None
-    assert result.confidence == "MEDIUM"
+    assert result.confidence == "LOW"
     assert result.reason is not None
-    assert "weak candidate" in result.reason
-    assert "too_broad" in result.reason
+    assert "hard_local_quality_conflict" in result.reason
 
 
 def test_recovery_path_preserves_scoring_metadata() -> None:
@@ -550,7 +549,7 @@ def test_scored_selection_ignores_tiny_preferred_rt_anchor_peak() -> None:
     assert result.peak.rt == pytest.approx(10.25, abs=0.02)
 
 
-def test_scored_recovery_candidate_must_win_scored_comparison(
+def test_typed_recovery_selection_ignores_legacy_confidence_monkeypatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rt = np.linspace(8.0, 10.0, 401)
@@ -607,8 +606,7 @@ def test_scored_recovery_candidate_must_win_scored_comparison(
 
     assert result.status == "OK"
     assert result.peak is not None
-    assert result.peak.rt == pytest.approx(8.48, abs=0.02)
-    assert result.confidence == "HIGH"
+    assert result.peak.rt == pytest.approx(9.03, abs=0.02)
 
 
 def test_recovery_candidate_uses_single_scored_selection_pass(
@@ -645,7 +643,7 @@ def test_recovery_candidate_uses_single_scored_selection_pass(
         )
 
     monkeypatch.setattr(
-        "xic_extractor.peak_detection.facade.select_candidate_with_confidence",
+        "xic_extractor.peak_detection.facade.select_candidate_by_evidence",
         _select_once,
     )
 
@@ -720,3 +718,55 @@ def test_find_peak_and_area_passes_context_prior_into_scoring(
     assert result.status == "OK"
     assert observed_prior_rts
     assert set(observed_prior_rts) == {10.25}
+
+
+def test_find_peak_and_area_uses_paired_istd_anchor_in_typed_evidence() -> None:
+    rt = np.linspace(9.8, 11.6, 901)
+    y = 80 * np.exp(-((rt - 10.20) / 0.03) ** 2)
+    y += 1000 * np.exp(-((rt - 11.25) / 0.04) ** 2)
+    y += 2.0
+
+    def ctx_builder(candidate) -> ScoringContext:
+        return ScoringContext(
+            rt_array=rt,
+            intensity_array=y,
+            apex_index=candidate.selection_apex_index,
+            half_width_ratio=1.0,
+            fwhm_ratio=1.0,
+            ms2_present=True,
+            nl_match=False,
+            rt_prior=None,
+            rt_prior_sigma=None,
+            rt_min=9.8,
+            rt_max=11.6,
+            dirty_matrix=False,
+            ms2_trace_strength="weak",
+            trigger_scan_count=1,
+            strict_nl_scan_count=0,
+        )
+
+    config = _cfg()
+    config = config.__class__(**{**config.__dict__, "resolver_mode": "local_minimum"})
+
+    result = find_peak_and_area(
+        rt,
+        y,
+        config,
+        scoring_context_builder=ctx_builder,
+        evidence_role="Analyte",
+        istd_pair="ISTD",
+        paired_istd_anchor_rt=10.0,
+    )
+
+    assert result.status == "OK"
+    assert result.peak is not None
+    assert result.peak.rt == pytest.approx(10.20, abs=0.03)
+    assert result.paired_istd_anchor_rt == 10.0
+    far_score = max(
+        result.candidate_scores,
+        key=lambda score: score.candidate.selection_apex_rt,
+    )
+    assert far_score.evidence_facts is not None
+    assert far_score.evidence_facts.rt.paired_istd_status == "far"
+    assert far_score.confidence == "VERY_LOW"
+    assert "paired_istd_rt_mismatch_policy" in far_score.reason

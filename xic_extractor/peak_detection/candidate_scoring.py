@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from xic_extractor.peak_detection.evidence_facts import (
+    build_candidate_evidence_facts,
+    decision_semantics_from_candidate_facts,
+    projected_confidence_from_candidate_facts,
+    projected_reason_from_candidate_facts,
+)
 from xic_extractor.peak_detection.scoring_cwt_support import (
     CWT_SAME_APEX_SUPPORT_POINTS,
     has_same_apex_cwt_support,
@@ -84,13 +90,27 @@ def score_candidate(
         quality_penalty,
     )
     evidence_score = score_evidence(positive=positive, negative=negative, caps=caps)
-    confidence = confidence_from_value(evidence_score.confidence)
-    reason = build_evidence_reason(
+    evidence_facts = build_candidate_evidence_facts(candidate, ctx)
+    semantics = decision_semantics_from_candidate_facts(
+        evidence_facts,
+        count_no_ms2_as_detected=ctx.count_no_ms2_as_detected,
+    )
+    confidence = confidence_from_value(
+        projected_confidence_from_candidate_facts(evidence_facts, semantics)
+    )
+    reason = projected_reason_from_candidate_facts(evidence_facts, semantics)
+    legacy_reason = build_evidence_reason(
         evidence_score,
         istd_confidence_note,
         extra_notes=quality_notes,
         count_no_ms2_as_detected=ctx.count_no_ms2_as_detected,
     )
+    if quality_notes:
+        reason = f"{reason}; {'; '.join(quality_notes)}"
+    if istd_confidence_note:
+        reason = f"{reason}; {istd_confidence_note}"
+    if not reason:
+        reason = legacy_reason
     return ScoredCandidate(
         candidate=candidate,
         severities=tuple(severities),
@@ -101,6 +121,7 @@ def score_candidate(
         selection_quality_penalty=selection_quality_penalty,
         prefer_rt_prior_tiebreak=ctx.prefer_rt_prior_tiebreak,
         evidence_score=evidence_score,
+        evidence_facts=evidence_facts,
     )
 
 

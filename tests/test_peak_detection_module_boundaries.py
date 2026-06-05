@@ -232,7 +232,8 @@ def test_peak_detection_facade_owns_public_peak_flow() -> None:
 
     facade_source = facade_path.read_text(encoding="utf-8")
     assert "preferred_rt_recovery" in facade_source
-    assert "select_candidate_with_confidence" in facade_source
+    assert "select_candidate_by_evidence" in facade_source
+    assert "select_candidate_with_confidence" not in facade_source
     assert "savgol_filter" not in facade_source
     assert "find_peaks" not in facade_source
 

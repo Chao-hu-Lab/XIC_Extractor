@@ -537,12 +537,12 @@ Required fields:
 | `pair_rt_delta_observed` | Observed `selected_candidate_rt - paired_istd_rt`. |
 | `pair_rt_delta_error` | Observed minus expected delta. |
 | `paired_area_ratio_observed` | Candidate area divided by same-sample paired ISTD area when applicable. |
-| `paired_area_ratio_reference_n` | Leave-one-sample-out reference count for the target/ISTD area ratio. |
-| `paired_area_ratio_reference_min` | Minimum leave-one-sample-out reference ratio. |
-| `paired_area_ratio_reference_median` | Median leave-one-sample-out reference ratio. |
-| `paired_area_ratio_reference_max` | Maximum leave-one-sample-out reference ratio. |
+| `paired_area_ratio_reference_n` | Leave-one-sample-out reference count for the target/ISTD area ratio, seeded from counted target detections only. |
+| `paired_area_ratio_reference_min` | Minimum counted leave-one-sample-out reference ratio. |
+| `paired_area_ratio_reference_median` | Median counted leave-one-sample-out reference ratio. |
+| `paired_area_ratio_reference_max` | Maximum counted leave-one-sample-out reference ratio. |
 | `paired_area_ratio_status` | `within_reference_range`, `outside_reference_range`, `inconclusive`, or missing-data status. |
-| `paired_area_ratio_basis` | Stable basis for the paired area-ratio calculation. |
+| `paired_area_ratio_basis` | Stable basis for the paired area-ratio calculation; active product projection uses `leave_one_sample_out_counted_area_over_istd_area`. |
 | `calibration_source` | Source from calibration artifact. |
 | `calibration_status` | Calibration status used by the decision. |
 | `missing_ms2_explanation` | `not_observed`, `dda_dropout_plausible`, `contradicted`, or blank. |

@@ -1,7 +1,7 @@
 # Diagnostic Ledger And Rerun Policy
 
 **Status:** maintained repo-local diagnostic memory
-**Last updated:** 2026-05-28
+**Last updated:** 2026-06-05
 
 This ledger records diagnostic conclusions that should survive branch and
 worktree changes. Use it before rerunning expensive RAW validation or treating a
@@ -38,6 +38,35 @@ known, where the evidence lives, and when a rerun is justified.
 | RAW-capable Python | `C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe` |
 
 ## Known Diagnostic Conclusions
+
+### 2026-06-05 Gaussian15 MS1 Morphology Primary Area Owner
+
+Verdict: `production_ready` for the Gaussian15 MS1 morphology ownership
+transition. Active primary matrix area now requires
+`primary_matrix_area_source=gaussian15_positive_asls_residual`; historical
+`asls_baseline_corrected` is compatibility/debug-only and must not write product
+area. Missing typed morphology facts fail closed as
+`missing_ms1_morphology_area`.
+
+Durable closeout:
+`docs/superpowers/notes/2026-06-05-gaussian15-ms1-morphology-production-ready-closeout.md`
+
+Current 85RAW foreground gate:
+`output/gaussian15_ms1_morphology_85raw_20260605/alignment_validation_minimal_no_asls_fallback/`
+
+Key facts:
+
+- `matrix_value_policy=gaussian15_positive_asls_residual_primary`
+- `primary_matrix_area_nonblank_count=1546489`
+- `non_gaussian_source_with_area=0`
+- `asls_source_with_area=0`
+- `raw_source_with_area=0`
+- `matrix_sample_count=85`
+- `matrix_row_count=614`
+
+Do not rerun 85RAW just to re-prove ASLS fallback retirement. Rerun only after
+a new production behavior change, a new target/default validation contract, or a
+current artifact contradicts the closeout facts above.
 
 ### d3-N6-medA
 

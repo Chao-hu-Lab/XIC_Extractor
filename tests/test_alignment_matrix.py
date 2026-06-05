@@ -111,8 +111,8 @@ def test_aligned_cell_selected_integration_is_pickleable_for_process_mode():
     restored = pickle.loads(pickle.dumps(cell))
 
     assert restored.selected_integration == cell.selected_integration
-    assert restored.matrix_area == 200.0
-    assert restored.matrix_area_source == "asls_baseline_corrected"
+    assert restored.matrix_area is None
+    assert restored.matrix_area_source == "missing_ms1_morphology_area"
 
 
 def test_aligned_cell_matrix_area_source_names_missing_asls():
@@ -134,4 +134,4 @@ def test_aligned_cell_matrix_area_source_names_missing_asls():
     )
 
     assert cell.matrix_area is None
-    assert cell.matrix_area_source == "missing_asls_primary_area"
+    assert cell.matrix_area_source == "missing_ms1_morphology_area"

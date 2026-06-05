@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from xic_extractor.config import Target
+from xic_extractor.extraction.paired_area_ratio_projection import (
+    MIN_PAIRED_AREA_RATIO_REFERENCE_POINTS,
+    PAIRED_AREA_RATIO_BASIS,
+)
 from xic_extractor.peak_detection.model_selection import expected_diff_stable_row_id
 from xic_extractor.target_pair_rt_calibration import (
     TargetPairRTCalibrationRow,
@@ -80,8 +84,8 @@ _ALLOWED_SELECTION_ACTIONS = frozenset(
 )
 _PRODUCT_CALIBRATION_LEVELS = frozenset({"biological_transfer", "row_approved"})
 _PRODUCT_TRANSFER_STATUSES = frozenset({"validated", "row_approved"})
-_MIN_PAIRED_AREA_RATIO_REFERENCE_POINTS = 3
-_PAIRED_AREA_RATIO_BASIS = "leave_one_sample_out_reported_area_over_istd_area"
+_MIN_PAIRED_AREA_RATIO_REFERENCE_POINTS = MIN_PAIRED_AREA_RATIO_REFERENCE_POINTS
+_PAIRED_AREA_RATIO_BASIS = PAIRED_AREA_RATIO_BASIS
 _PAIR_RT_DELTA_REVIEW_TOLERANCE_MIN = 0.75
 
 
@@ -507,6 +511,10 @@ def _paired_area_ratio_reference(
                 continue
             result = file_result.results.get(target.label)
             paired_istd_result = file_result.results.get(target.istd_pair)
+            if not _target_counted_detection(
+                result
+            ) or not _credible_paired_istd_result(paired_istd_result):
+                continue
             area = _optional_float(getattr(result, "reported_peak_area", None))
             paired_area = _optional_float(
                 getattr(paired_istd_result, "reported_peak_area", None)
@@ -926,13 +934,16 @@ def _candidate_area(
 ) -> float | None:
     row = lookup.get((target_label, candidate_id))
     if row is not None:
-        parsed = _optional_float(row.get("area_raw_counts_seconds", ""))
+        parsed = _candidate_row_area(row)
         if parsed is not None:
             return parsed
     return _optional_float(fallback)
 
 
 def _candidate_row_area(row: Mapping[str, str]) -> float | None:
+    morphology_area = _optional_float(row.get("area_ms1_morphology", ""))
+    if morphology_area is not None:
+        return morphology_area
     return _optional_float(row.get("area_raw_counts_seconds", ""))
 
 

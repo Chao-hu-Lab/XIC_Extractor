@@ -32,23 +32,27 @@ def test_detected_cell_requires_positive_finite_area() -> None:
     )
 
 
-def test_detected_cell_uses_asls_selected_integration_area_when_present() -> None:
+def test_detected_cell_uses_ms1_morphology_area_when_present() -> None:
     config = AlignmentConfig()
     cell = _cell(
         "s1",
         "FAM001",
         "detected",
         100.0,
-        selected_integration=_integration(raw_area=250.0, asls_area=200.0),
+        selected_integration=_integration(
+            raw_area=250.0,
+            asls_area=200.0,
+            morphology_area=210.0,
+        ),
     )
 
     decision = decide_cell_quality(cell, config)
 
     assert decision.quality_status == "detected_quantifiable"
-    assert decision.matrix_area == 200.0
+    assert decision.matrix_area == 210.0
 
 
-def test_selected_integration_missing_asls_does_not_fall_back_to_raw() -> None:
+def test_missing_ms1_morphology_does_not_fall_back_to_asls_or_raw() -> None:
     config = AlignmentConfig()
     cell = _cell(
         "s1",
@@ -61,7 +65,7 @@ def test_selected_integration_missing_asls_does_not_fall_back_to_raw() -> None:
     decision = decide_cell_quality(cell, config)
 
     assert decision.quality_status == "invalid"
-    assert decision.quality_reason == "missing_asls_primary_area"
+    assert decision.quality_reason == "missing_ms1_morphology_area"
 
 
 def test_rescue_requires_complete_peak_and_rt_inside_alignment_window() -> None:
@@ -121,7 +125,11 @@ def _cell(
         and status in {"detected", "rescued"}
         and _positive_area(area)
     ):
-        selected_integration = _integration(raw_area=area, asls_area=area)
+        selected_integration = _integration(
+            raw_area=area,
+            asls_area=area,
+            morphology_area=area,
+        )
     return AlignedCell(
         sample_stem=sample_stem,
         cluster_id=cluster_id,
@@ -146,6 +154,7 @@ def _integration(
     raw_area: float,
     asls_area: float | None,
     baseline_type: str = "asls",
+    morphology_area: float | None = None,
 ) -> IntegrationResult:
     return IntegrationResult(
         rt_left_min=8.45,
@@ -159,6 +168,12 @@ def _integration(
         area_baseline_corrected=asls_area,
         baseline_type=baseline_type,
         boundary_sources=("test",),
+        area_ms1_morphology=morphology_area,
+        ms1_morphology_area_source=(
+            "gaussian15_positive_asls_residual"
+            if morphology_area is not None
+            else ""
+        ),
     )
 
 

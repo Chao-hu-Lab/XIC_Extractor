@@ -72,15 +72,28 @@ def selection_decision_from_hypothesis(
         compatibility_labels = semantics.compatibility_labels
 
     legacy_projection_status, compatibility_oracle = _ownership_markers(
-        not_counted_reasons
+        not_counted_reasons,
+        has_typed_projection=bool(
+            evidence.evidence_facts is not None
+            or evidence.projected_confidence
+            or evidence.projected_reason
+        ),
     )
 
     return PeakHypothesisSelectionDecision(
         selected_candidate_id=hypothesis.hypothesis_id,
         trace_group_id=hypothesis.trace_group_id,
         decision_class=decision_class,
-        projected_confidence=evidence.confidence or fallback_confidence,
-        projected_reason=evidence.reason or fallback_reason,
+        projected_confidence=(
+            evidence.projected_confidence
+            or evidence.confidence
+            or fallback_confidence
+        ),
+        projected_reason=(
+            evidence.projected_reason
+            or evidence.reason
+            or fallback_reason
+        ),
         support_reasons=support_reasons,
         conflict_reasons=conflict_reasons,
         review_reasons=review_reasons,
@@ -123,8 +136,10 @@ def _legacy_compatibility_labels(
 
 def _ownership_markers(
     not_counted_reasons: tuple[str, ...],
+    *,
+    has_typed_projection: bool = False,
 ) -> tuple[LegacyProjectionStatus, SelectionDecisionCompatibilityOracle]:
-    if "missing_ms2_policy_not_counted" in not_counted_reasons:
+    if has_typed_projection or "missing_ms2_policy_not_counted" in not_counted_reasons:
         return "successor_owned", "successor_evidence_decision_semantics"
     return "active_policy_remaining", "legacy_peak_scoring_current_oracle"
 
@@ -179,6 +194,12 @@ def _evidence_sources(hypothesis: PeakHypothesis) -> tuple[str, ...]:
         or any("trace_morphology" in reason for reason in reasons)
     ):
         sources.append("trace_morphology")
+    if (
+        evidence.evidence_facts is not None
+        or evidence.projected_confidence
+        or evidence.projected_reason
+    ):
+        sources.append("typed_candidate_evidence_facts")
     if (
         evidence.confidence
         or evidence.reason

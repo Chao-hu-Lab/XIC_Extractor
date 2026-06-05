@@ -12,7 +12,12 @@ from xic_extractor.ms2_trace_evidence import MS2TraceEvidence
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.peak_detection.candidate_scoring import score_candidate
 from xic_extractor.peak_detection.candidate_selection import (
-    select_candidate_with_confidence,
+    select_candidate_by_evidence,
+)
+from xic_extractor.peak_detection.ms1_morphology import (
+    DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+    MS1_MORPHOLOGY_AREA_SOURCE,
+    MS1_MORPHOLOGY_TRACE_METHOD,
 )
 from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import find_peak_and_area
@@ -42,6 +47,11 @@ def test_istd_context_uses_rolling_median_prior() -> None:
     assert ctx.rt_prior_sigma is None
     assert ctx.dirty_matrix is False
     assert ctx.prefer_rt_prior_tiebreak is False
+    assert ctx.active_trace_source == MS1_MORPHOLOGY_AREA_SOURCE
+    assert ctx.morphology_trace_method == MS1_MORPHOLOGY_TRACE_METHOD
+    assert ctx.morphology_trace_window_points == DEFAULT_GAUSSIAN15_WINDOW_POINTS
+    assert ctx.baseline_array is not None
+    assert np.all(ctx.baseline_array == 0.0)
 
 
 def test_analyte_context_uses_delta_rt_library_and_shape_ratio() -> None:
@@ -299,7 +309,7 @@ def test_strict_nl_candidate_beats_candidate_with_trigger_but_failed_nl() -> Non
         ),
     ]
 
-    selected = select_candidate_with_confidence(scored)
+    selected = select_candidate_by_evidence(scored)
 
     assert selected.candidate is candidate_with_nl
 

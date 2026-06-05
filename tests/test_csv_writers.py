@@ -387,6 +387,36 @@ def test_long_row_reason_prefers_projection_over_legacy_not_counted_text() -> No
     assert "not counted" not in long_row["Reason"]
 
 
+def test_long_row_confidence_follows_not_counted_projection() -> None:
+    target = _target("WithNL")
+    result = replace(
+        _result(nl=NLResult("OK", 125.0, 0.5, 1, 1, 1)),
+        confidence="HIGH",
+        reason="decision: accepted",
+        targeted_product_projection=TargetedProductProjection(
+            product_state="not_counted",
+            counted_detection=False,
+            review_state="review_required",
+            projection_reason=(
+                "decision: not_counted; "
+                "not_counted: missing_positive_ms1_peak"
+            ),
+            support_reasons=("candidate_aligned_ms2_nl",),
+            not_counted_reasons=("missing_positive_ms1_peak",),
+            legacy_evidence={"confidence": "HIGH", "nl_status": "OK"},
+            legacy_authority_status="evidence_only",
+        ),
+    )
+    file_result = FileResult(sample_name="SampleA", results={"WithNL": result})
+
+    long_row = _long_output_rows(file_result, [target])[0]
+
+    assert long_row["Product State"] == "not_counted"
+    assert long_row["Counted Detection"] == "FALSE"
+    assert long_row["Confidence"] == "VERY_LOW"
+    assert long_row["Reason"].startswith("decision: not_counted")
+
+
 def test_score_breakdown_csv_can_emit_ms2_trace_labels_without_schema_change(
     tmp_path: Path,
 ) -> None:

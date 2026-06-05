@@ -1,8 +1,9 @@
 # AsLS Primary Matrix Value Policy Goal
 
 **Date:** 2026-06-02
-**Status:** Complete
-**Readiness target:** `production_ready` for primary matrix value delivery
+**Status:** Complete; superseded for current product area owner
+**Readiness target:** Historical `production_ready` for the AsLS-vs-raw primary
+matrix value transition only
 **Primary spec:** [AsLS primary matrix value policy](../specs/2026-06-02-asls-primary-matrix-value-policy-spec.md)
 **8RAW closeout:** [AsLS primary matrix value 8RAW closeout](../notes/2026-06-02-asls-primary-matrix-value-8raw-closeout.md)
 **85RAW closeout:** [AsLS primary matrix value 85RAW closeout](../notes/2026-06-02-asls-primary-matrix-value-85raw-closeout.md)
@@ -12,6 +13,13 @@
 Complete AP0-AP3 for AsLS primary matrix value policy so the final matrix
 primary quantitative value is AsLS-corrected selected integration area, not raw
 selected area, legacy `cell.area`, or any retired linear-edge-compatible value.
+
+Current-state note, 2026-06-05: this completed goal remains useful historical
+evidence that raw/linear-edge areas were retired from the primary matrix. It is
+not the current area-owner goal. Current targeted and untargeted product behavior
+prefers Gaussian15-smoothed positive AsLS residual area
+(`gaussian15_positive_asls_residual`) when typed MS1 morphology facts exist; see
+`docs/lcms-msms-evidence-rules.md`.
 
 ## CONTEXT TO READ FIRST
 
@@ -48,7 +56,7 @@ selected area, legacy `cell.area`, or any retired linear-edge-compatible value.
 - Add or update focused tests proving current fixture assumptions are migrated:
   raw selected integration is not the product matrix value.
 - Pin missing-AsLS behavior as blank/review with
-  `missing_asls_primary_area`.
+  `missing_ms1_morphology_area`.
 
 ### AP1 - Selector
 
@@ -80,7 +88,7 @@ selected area, legacy `cell.area`, or any retired linear-edge-compatible value.
   with `baseline_type == "asls"`.
 - Raw selected area is audit-only.
 - Missing AsLS does not fall back to raw selected area or `cell.area`.
-- `missing_asls_primary_area` is observable in production/audit/activation
+- `missing_ms1_morphology_area` is observable in production/audit/activation
   reason surfaces where a value is blanked for this reason.
 - `alignment_matrix.tsv` and workbook `Matrix` shape remain stable.
 - `product_activation` no longer writes raw `alignment_cells.tsv:area` into a
@@ -130,20 +138,24 @@ Additional closeout findings:
   fixtures provide AsLS selected integrations.
 - Updated `matrix_identity_blast_radius` TSV loader to reconstruct AsLS
   `IntegrationResult` only from `primary_matrix_area` with source
-  `asls_baseline_corrected`; raw `alignment_cells.tsv:area` remains audit-only.
+  `gaussian15_positive_asls_residual`; historical `asls_baseline_corrected`
+  remains compatibility/debug-only. Raw `alignment_cells.tsv:area` remains
+  audit-only.
 
-Final delivery decision:
+Historical final delivery decision:
 
 - `production_ready` for primary matrix value delivery/source semantics
+- superseded by the 2026-06-05 Gaussian15 morphology promotion goal for current
+  product area ownership
 - this is not an absolute baseline-truth claim for spike-in, linearity, blank
   subtraction, carryover, or synthetic known-area validation
 - matrix written cells: `2350`
 - written-cell source mismatches: `0`
-- `missing_asls_primary_area` cells: `2` rescued cells, both blank in Matrix
+- Historical `missing_asls_primary_area` cells: `2` rescued cells, both blank in Matrix
 - 85RAW matrix written cells: `39094`
 - 85RAW written-cell source mismatches: `0`
 - 85RAW written-cell value mismatches: `0`
-- 85RAW `missing_asls_primary_area` cells: `25` rescued cells, all blank in
+- Historical 85RAW `missing_asls_primary_area` cells: `25` rescued cells, all blank in
   Matrix
 
 ## STOP RULES

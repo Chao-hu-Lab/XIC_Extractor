@@ -280,7 +280,7 @@ def _cell_row(
         "status": status,
         "area": area,
         "primary_matrix_area": area,
-        "primary_matrix_area_source": "asls_baseline_corrected",
+        "primary_matrix_area_source": "gaussian15_positive_asls_residual",
         "primary_matrix_area_reason": "",
         "apex_rt": 8.5,
         "height": 100.0,

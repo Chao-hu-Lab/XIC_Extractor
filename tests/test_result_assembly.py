@@ -1,5 +1,6 @@
 import typing
 
+import numpy as np
 import pytest
 
 from xic_extractor.config import Target
@@ -11,6 +12,10 @@ from xic_extractor.extraction.handoff_spine_runtime import (
 from xic_extractor.extraction.result_assembly import build_extraction_result
 from xic_extractor.extractor import ExtractionResult
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
+from xic_extractor.peak_detection.evidence_facts import (
+    CandidateEvidenceFacts,
+    build_candidate_evidence_facts,
+)
 from xic_extractor.peak_detection.hypotheses import (
     AuditTrail,
     EvidenceVector,
@@ -24,6 +29,7 @@ from xic_extractor.peak_detection.models import (
     PeakDetectionResult,
     PeakResult,
 )
+from xic_extractor.peak_detection.scoring_models import ScoringContext
 from xic_extractor.peak_detection.selection_decision import (
     PeakHypothesisSelectionDecision,
 )
@@ -136,10 +142,11 @@ def test_build_extraction_result_keeps_high_fallback_without_scoring_confidence(
     assert result.reason == ""
 
 
-def test_build_extraction_result_preserves_final_confidence_when_score_is_stale(
+def test_build_extraction_result_uses_typed_projection_when_final_confidence_is_stale(
 ) -> None:
     target = _target()
-    candidate = _candidate()
+    candidate = _candidate(quality_flags=())
+    typed_facts = _clean_typed_facts(candidate)
     peak_result = PeakDetectionResult(
         status="OK",
         peak=candidate.peak,
@@ -155,6 +162,7 @@ def test_build_extraction_result_preserves_final_confidence_when_score_is_stale(
                 confidence="HIGH",
                 reason="decision: detected",
                 raw_score=95,
+                evidence_facts=typed_facts,
             ),
         ),
     )
@@ -180,13 +188,17 @@ def test_build_extraction_result_preserves_final_confidence_when_score_is_stale(
     assert selected is not None
     assert selected.evidence.confidence == "VERY_LOW"
     assert result.selection_decision is not None
-    assert result.selection_decision.projected_confidence == "VERY_LOW"
+    assert result.selection_decision.projected_confidence == "HIGH"
     assert (
         result.selection_decision.projected_reason
-        == "decision: review only, not counted; cap: VERY_LOW"
+        == "decision: accepted; evidence: ms1_coherent; candidate_aligned_ms2_nl; "
+        "role_aware_rt_support"
     )
-    assert result.confidence == "VERY_LOW"
-    assert result.reason == "decision: review only, not counted; cap: VERY_LOW"
+    assert result.confidence == "HIGH"
+    assert result.reason == (
+        "decision: accepted; evidence: ms1_coherent; candidate_aligned_ms2_nl; "
+        "role_aware_rt_support"
+    )
 
 
 def test_build_extraction_result_uses_selection_decision_projection() -> None:
@@ -210,6 +222,10 @@ def test_build_extraction_result_uses_selection_decision_projection() -> None:
         projected_confidence="MEDIUM",
         projected_reason="decision projection",
         review_reasons=("explicit_decision_projection",),
+        not_counted_reasons=(
+            "selected_envelope_boundary_defer",
+            "legacy_review_only_projection",
+        ),
         legacy_projection_status="active_policy_remaining",
     )
 
@@ -227,6 +243,17 @@ def test_build_extraction_result_uses_selection_decision_projection() -> None:
     assert result.selection_decision is decision
     assert result.confidence == "MEDIUM"
     assert result.reason == "decision projection"
+    assert result.targeted_product_projection is not None
+    assert result.targeted_product_projection.product_state == "not_counted"
+    assert result.targeted_product_projection.counted_detection is False
+    assert (
+        "selected_envelope_boundary_defer"
+        in result.targeted_product_projection.not_counted_reasons
+    )
+    assert (
+        "legacy_review_only_projection"
+        not in result.targeted_product_projection.not_counted_reasons
+    )
 
 
 def test_extraction_result_reports_selected_integration_values() -> None:
@@ -260,6 +287,36 @@ def test_extraction_result_reports_selected_integration_values() -> None:
     assert result.reported_peak_start == 8.7
     assert result.reported_peak_end == 9.3
     assert result.reported_peak_width == pytest.approx(0.42)
+
+
+def test_extraction_result_reports_ms1_morphology_area_when_available() -> None:
+    peak_result = _peak_result_with_candidate()
+    selected = _selected_hypothesis_with_integration(
+        IntegrationResult(
+            rt_left_min=8.7,
+            rt_apex_min=8.95,
+            rt_right_min=9.3,
+            raw_apex_rt_min=8.96,
+            rt_width_min=0.42,
+            height_raw=765.0,
+            height_smoothed=700.0,
+            area_raw_counts_seconds=4567.89,
+            area_ms1_morphology=4321.0,
+            ms1_morphology_area_source="gaussian15_positive_asls_residual",
+        )
+    )
+
+    result = build_extraction_result(
+        peak_result=peak_result,
+        nl_result=None,
+        candidate_ms2_evidence=None,
+        target=_target(),
+        candidate=peak_result.candidates[0],
+        scoring_context_builder=None,
+        selected_hypothesis=selected,
+    )
+
+    assert result.reported_peak_area == pytest.approx(4321.0)
 
 
 def test_extraction_result_projects_approved_expected_diff_successor_values() -> None:
@@ -612,11 +669,30 @@ def test_paired_analyte_anchor_conflict_blocks_trace_downgrade() -> None:
     assert "trace_morphology_review" in projection.review_reasons
 
 
-def test_paired_analyte_anchor_selected_nl_fail_stays_counted_when_ms1_complete(
+def test_paired_analyte_anchor_selected_nl_fail_requires_area_ratio_support(
 ) -> None:
     result = _result_with_targeted_projection_semantics(
         target=_target(is_istd=False),
         support_reasons=(),
+        conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
+        nl_status="NL_FAIL",
+        paired_istd_anchor_rt=8.5,
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "ambiguous"
+    assert projection.counted_detection is False
+    assert "candidate_aligned_ms2_nl_conflict" in projection.conflict_reasons
+    assert "analyte_nl_fail_requires_policy" in projection.not_counted_reasons
+    assert "paired_istd_anchor_support" in projection.support_reasons
+
+
+def test_paired_analyte_anchor_and_area_ratio_downgrades_nl_fail_to_review(
+) -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(is_istd=False),
+        support_reasons=("ms1_coherent", "paired_area_ratio_support"),
         conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
         nl_status="NL_FAIL",
         paired_istd_anchor_rt=8.5,
@@ -630,6 +706,7 @@ def test_paired_analyte_anchor_selected_nl_fail_stays_counted_when_ms1_complete(
     assert "analyte_nl_fail_requires_policy" not in projection.not_counted_reasons
     assert "paired_analyte_nl_review" in projection.review_reasons
     assert "paired_istd_anchor_support" in projection.support_reasons
+    assert "paired_area_ratio_support" in projection.support_reasons
 
 
 def test_paired_analyte_nl_fail_requires_anchor_inside_selected_interval() -> None:
@@ -653,7 +730,11 @@ def test_paired_analyte_role_support_downgrades_nl_fail_without_anchor_interval(
 ) -> None:
     result = _result_with_targeted_projection_semantics(
         target=_target(is_istd=False),
-        support_reasons=("ms1_coherent", "role_aware_rt_support"),
+        support_reasons=(
+            "ms1_coherent",
+            "role_aware_rt_support",
+            "paired_area_ratio_support",
+        ),
         conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
         nl_status="NL_FAIL",
         paired_istd_anchor_rt=8.9,
@@ -667,6 +748,28 @@ def test_paired_analyte_role_support_downgrades_nl_fail_without_anchor_interval(
     assert "analyte_nl_fail_requires_policy" not in projection.not_counted_reasons
     assert "paired_analyte_nl_review" in projection.review_reasons
     assert "role_aware_rt_support" in projection.support_reasons
+    assert "paired_area_ratio_support" in projection.support_reasons
+    assert "paired_istd_anchor_support" not in projection.support_reasons
+
+
+def test_paired_analyte_role_support_without_area_ratio_keeps_nl_fail_not_counted(
+) -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(is_istd=False),
+        support_reasons=("ms1_coherent", "role_aware_rt_support"),
+        conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
+        nl_status="NL_FAIL",
+        paired_istd_anchor_rt=8.9,
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "ambiguous"
+    assert projection.counted_detection is False
+    assert "candidate_aligned_ms2_nl_conflict" in projection.conflict_reasons
+    assert "analyte_nl_fail_requires_policy" in projection.not_counted_reasons
+    assert "role_aware_rt_support" in projection.support_reasons
+    assert "paired_area_ratio_support" not in projection.support_reasons
     assert "paired_istd_anchor_support" not in projection.support_reasons
 
 
@@ -905,6 +1008,28 @@ def _candidate(quality_flags: tuple[str, ...] = ("too_broad",)) -> PeakCandidate
         raw_apex_index=1,
         prominence=700.0,
         quality_flags=quality_flags,
+    )
+
+
+def _clean_typed_facts(candidate: PeakCandidate) -> CandidateEvidenceFacts:
+    rt_array = np.linspace(8.0, 9.0, 201)
+    intensity_array = 1200.0 * np.exp(-((rt_array - 8.5) / 0.05) ** 2) + 5.0
+    return build_candidate_evidence_facts(
+        candidate,
+        ScoringContext(
+            rt_array=rt_array,
+            intensity_array=intensity_array,
+            apex_index=100,
+            half_width_ratio=1.0,
+            fwhm_ratio=1.0,
+            ms2_present=True,
+            nl_match=True,
+            rt_prior=8.5,
+            rt_prior_sigma=0.1,
+            rt_min=8.0,
+            rt_max=9.0,
+            dirty_matrix=False,
+        ),
     )
 
 

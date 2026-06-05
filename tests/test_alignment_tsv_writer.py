@@ -327,7 +327,7 @@ def test_write_alignment_matrix_tsv_blanks_missing_and_invalid_areas(tmp_path: P
     assert rows[0]["nan"] == ""
 
 
-def test_write_alignment_matrix_tsv_projects_asls_selected_integration_area(
+def test_write_alignment_matrix_tsv_prefers_ms1_morphology_area(
     tmp_path: Path,
 ):
     from xic_extractor.alignment.tsv_writer import write_alignment_matrix_tsv
@@ -339,7 +339,11 @@ def test_write_alignment_matrix_tsv_projects_asls_selected_integration_area(
                 "sample-a",
                 "detected",
                 area=10.0,
-                selected_integration=_integration(raw_area=77.7, asls_area=55.5),
+                selected_integration=_integration(
+                    raw_area=77.7,
+                    asls_area=55.5,
+                    morphology_area=66.6,
+                ),
             ),
             _cell("sample-b", "detected", area=20.0),
         ),
@@ -354,7 +358,7 @@ def test_write_alignment_matrix_tsv_projects_asls_selected_integration_area(
         "sample-a",
         "sample-b",
     ]
-    assert rows[0]["sample-a"] == "55.5"
+    assert rows[0]["sample-a"] == "66.6"
     assert rows[0]["sample-b"] == "20"
 
 
@@ -833,7 +837,10 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
     assert cells[0]["status"] == "detected"
     assert cells[0]["area"] == "10"
     assert cells[0]["primary_matrix_area"] == "10"
-    assert cells[0]["primary_matrix_area_source"] == "asls_baseline_corrected"
+    assert (
+        cells[0]["primary_matrix_area_source"]
+        == "gaussian15_positive_asls_residual"
+    )
     assert cells[0]["primary_matrix_area_reason"] == ""
     assert cells[0]["source_candidate_id"] == "sample-a#1"
     assert cells[0]["region_candidate_count"] == "2"
@@ -1140,7 +1147,11 @@ def _cell(
         and status in {"detected", "rescued"}
         and _positive_area(area)
     ):
-        selected_integration = _integration(raw_area=area, asls_area=area)
+        selected_integration = _integration(
+            raw_area=area,
+            asls_area=area,
+            morphology_area=area,
+        )
     return AlignedCell(
         sample_stem=sample_stem,
         cluster_id=cluster_id,
@@ -1215,6 +1226,7 @@ def _integration(
     raw_area: float,
     asls_area: float | None,
     baseline_type: str = "asls",
+    morphology_area: float | None = None,
 ) -> IntegrationResult:
     return IntegrationResult(
         rt_left_min=8.4,
@@ -1228,6 +1240,12 @@ def _integration(
         area_baseline_corrected=asls_area,
         baseline_type=baseline_type,
         boundary_sources=("test",),
+        area_ms1_morphology=morphology_area,
+        ms1_morphology_area_source=(
+            "gaussian15_positive_asls_residual"
+            if morphology_area is not None
+            else ""
+        ),
     )
 
 

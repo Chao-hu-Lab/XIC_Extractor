@@ -389,7 +389,7 @@ existing review/economics axes remain pending cleanup per audit-note Cluster 2.
 **Purpose**: Render `diagnostic_only` selected-envelope boundary review plots from selected-envelope diagnostic rows, showing RAW XIC, AsLS baseline, Gaussian15 morphology overlay, resolver interval, selected envelope, optional manual/expert oracle overlay, and quantitation context in one figure.
 **Topic group**: `selected_envelope_plot_review.py` + `xic_extractor/peak_detection/selected_envelope_*`
 **Originating spec/plan**: `specs/2026-06-03-selected-full-envelope-quantitation-boundary-spec.md`; `plans/2026-06-03-selected-full-envelope-quantitation-boundary-implementation-goal.md`
-**Status note**: Re-reads RAW files for bounded manual/expert review only. It can consume an optional `selected_envelope_boundary_oracle.tsv` / boundary-oracle TSV to draw expert-reviewed RT windows and record selected candidate id plus oracle id/source/status in `selected_envelope_plot_index.tsv`. It can also consume `chrom_peak_segment_review_rows.tsv` from `chrom_peak_segment_candidate_gate.py` to force explicit review-only segment rows into the plot index. Gaussian15 is an Xcalibur-like morphology/review trace, not an exact clone of Xcalibur's proprietary smoothing and not a product area source. Plot overlays fail closed unless oracle rows are `expert_reviewed` with manual/expert sources (`manual_overlay`, `expert_overlay`, or `manual_2raw`); targeted workbook control rows remain benchmark-only and are not drawn as boundary truth. It writes PNG/PDF overlays and `selected_envelope_plot_index.tsv`; it does not mutate selected `IntegrationResult`, change targeted workbook/CSV `Area`, or promote selected-envelope behavior by itself.
+**Status note**: Re-reads RAW files for bounded manual/expert review only. It can consume an optional `selected_envelope_boundary_oracle.tsv` / boundary-oracle TSV to draw expert-reviewed RT windows and record selected candidate id plus oracle id/source/status in `selected_envelope_plot_index.tsv`. It can also consume `chrom_peak_segment_review_rows.tsv` from `chrom_peak_segment_candidate_gate.py` to force explicit review-only segment rows into the plot index. Gaussian15-smoothed positive AsLS residual is now the active MS1 morphology/final area source; the plot overlay is only a renderer of that evidence and not an exact clone of Xcalibur's proprietary smoothing. Active boundary promotion is owned by segment-native package logic: normal rows use the selected-apex segment, while selected-envelope `context_apex_conflict` rows may switch to the dominant Gaussian15 peak group inside the reviewed envelope and extend its Gaussian tail without crossing the next independent segment. This plotter renders selected-envelope and segment evidence only. Plot overlays fail closed unless oracle rows are `expert_reviewed` with manual/expert sources (`manual_overlay`, `expert_overlay`, or `manual_2raw`); targeted workbook control rows remain benchmark-only and are not drawn as boundary truth. It writes PNG/PDF overlays and `selected_envelope_plot_index.tsv`; it does not mutate selected `IntegrationResult`, change targeted workbook/CSV `Area`, or promote selected-envelope behavior by itself.
 
 ---
 
@@ -411,7 +411,15 @@ boundary and presence sub-gates separately so area/boundary regressions do not
 get mixed with analyte false-pick or review-only detection policy risk. Manual
 presence review verdicts such as `expected_peak_change`, `blocked`,
 `false_pick`, `inconclusive`, and `needs_followup` keep the presence gate in
-`defer` until the product-selection or review policy is resolved.
+`defer` until the product-selection or review policy is resolved. Optional
+`--manual-selected-envelope-review-tsv` rows are matched by
+`selected_candidate_id`; `extend_right_boundary_before_promotion` keeps the
+boundary gate in `defer`, while
+`select_alternate_or_keep_not_counted_until_rerun` keeps the presence gate in
+`defer`. Typed `decision: not_counted` review-only rows with explicit
+not-counted policy evidence are diagnostic non-presence rows and do not require a
+manual presence verdict. These rows are review comments / promotion blockers,
+not formal boundary+area oracle rows.
 
 ---
 
@@ -479,8 +487,12 @@ guarded targeted product mutation.
 **Status note**: Requires repeated `--approved-row SAMPLE::TARGET` inputs and
 fails closed unless each row is a `row_approval_candidate` shadow switch with
 matching runtime `expected_diff_stable_row_id`, selected-candidate RT, and
-paired area ratio `within_reference_range`. It does not auto-approve all watch
-rows and does not recompute candidate evidence.
+paired area ratio `within_reference_range`. The paired-area ratio basis is the
+active counted leave-one-out target/ISTD reference owned by
+`xic_extractor.extraction.paired_area_ratio_projection`; the diagnostic writer
+renders that product evidence and must not reintroduce all-reported-area
+authority. It does not auto-approve all watch rows and does not recompute
+candidate evidence.
 
 ---
 

@@ -355,6 +355,8 @@ def _decision_support_reasons(
         reasons.append("candidate_aligned_ms2_nl")
     if "rt_prior_close" in support or "paired_istd_aligned" in support:
         reasons.append("role_aware_rt_support")
+    if "paired_istd_rt_close" in support:
+        reasons.append("paired_istd_rt_support")
     if "paired_area_ratio_plausible" in support:
         reasons.append("paired_area_ratio_support")
     if _CWT_PROPOSAL_SOURCE in sources or "cwt_same_apex_support" in support:
@@ -419,6 +421,8 @@ def _decision_review_reasons(
         reasons.append("targeted_rt_review")
     if caps & {"trace_quality_cap", "hard_quality_flag_cap"}:
         reasons.append("trace_morphology_review")
+    if caps & {"anchor_mismatch_cap"} or "anchor_mismatch" in concerns:
+        reasons.append("paired_istd_rt_review")
     return tuple(reasons)
 
 
@@ -438,8 +442,14 @@ def _decision_not_counted_reasons(
         "no_ms2_cap" in caps and not signals.count_no_ms2_as_detected
     )
     hard_not_counted_caps = caps & {"zero_area_cap", "hard_quality_flag_cap"}
+    strict_nl_supported = "candidate_aligned_ms2_nl" in support
+    anchor_mismatch_policy_not_counted = (
+        "anchor_mismatch_cap" in caps and not strict_nl_supported
+    )
     if missing_ms2_policy_not_counted:
         hard_not_counted_caps = hard_not_counted_caps | {"no_ms2_cap"}
+    if anchor_mismatch_policy_not_counted:
+        hard_not_counted_caps = hard_not_counted_caps | {"anchor_mismatch_cap"}
     paired_supported_nl_dropout = (
         "nl_fail_cap" in caps
         and "plausible_nl_dropout" in consistency
@@ -454,6 +464,9 @@ def _decision_not_counted_reasons(
     if missing_ms2_policy_not_counted:
         reasons.append("missing_ms2_policy_not_counted")
         reasons.append("missing_ms2_compatibility_cap")
+    if anchor_mismatch_policy_not_counted:
+        reasons.append("paired_istd_rt_mismatch_policy")
+        reasons.append("paired_istd_rt_mismatch_cap")
 
     legacy_not_counted_allowed = legacy_review_only and (
         "no_ms2_cap" not in caps
@@ -467,6 +480,8 @@ def _decision_not_counted_reasons(
             reasons.append("zero_area_compatibility_cap")
         if "hard_quality_flag_cap" in caps:
             reasons.append("hard_quality_flag_compatibility_cap")
+        if "anchor_mismatch_cap" in caps:
+            reasons.append("anchor_mismatch_compatibility_cap")
     return tuple(dict.fromkeys(reasons))
 
 

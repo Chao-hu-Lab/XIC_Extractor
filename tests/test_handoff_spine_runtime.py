@@ -226,6 +226,45 @@ def test_selected_handoff_peak_uses_model_selection_gate_for_selected_hypothesis
     )
 
 
+def test_selected_handoff_peak_keeps_trace_group_without_candidate_table_output(
+    tmp_path,
+) -> None:
+    candidate = _candidate(8.50)
+    peak_result = PeakDetectionResult(
+        status="OK",
+        peak=candidate.peak,
+        n_points=11,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(candidate,),
+        confidence="HIGH",
+        reason="decision: accepted",
+        candidate_scores=(_score(candidate, confidence="HIGH"),),
+    )
+    rt = np.asarray([8.3, 8.5, 8.7, 9.2])
+    handoff = handoff_spine_runtime.selected_handoff_peak(
+        config=replace(_config(tmp_path), emit_peak_candidates=False),
+        sample_name="SampleA",
+        target=_target(),
+        peak_result=peak_result,
+        candidate=candidate,
+        candidate_ms2_cache={},
+        candidate_ms2_builder=lambda _candidate: None,
+        rt=rt,
+        intensity=np.asarray([10.0, 100.0, 20.0, 15.0]),
+        rt_min=8.0,
+        rt_max=9.0,
+        expected_rt_min=8.5,
+    )
+
+    assert handoff.trace_group is not None
+    assert handoff.trace_group.primary_trace.rt[-1] == pytest.approx(9.2)
+    assert handoff.selected_hypothesis is not None
+    assert (
+        handoff.selected_hypothesis.trace_group_id == handoff.trace_group.trace_group_id
+    )
+
+
 def test_selected_handoff_peak_falls_back_on_unapproved_successor_diff(
     tmp_path,
 ) -> None:

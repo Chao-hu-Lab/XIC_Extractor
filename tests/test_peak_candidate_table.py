@@ -55,6 +55,11 @@ _PRE_NL_DIAGNOSTIC_HEADERS = (
     "prominence",
     "area_raw_counts_seconds",
     "area_baseline_corrected",
+    "area_ms1_morphology",
+    "ms1_morphology_area_source",
+    "ms1_morphology_trace_method",
+    "ms1_morphology_trace_window_points",
+    "ms1_morphology_trace_effective_points",
     "area_uncertainty",
     "area_uncertainty_formula_version",
     "baseline_residual_mad",
@@ -361,6 +366,14 @@ def test_build_rows_can_emit_baseline_corrected_audit_area() -> None:
     assert rows[0]["area_baseline_corrected"] == (
         f"{expected.area_baseline_corrected:.5f}"
     )
+    assert rows[0]["area_ms1_morphology"] != ""
+    assert (
+        rows[0]["ms1_morphology_area_source"]
+        == "gaussian15_positive_asls_residual"
+    )
+    assert rows[0]["ms1_morphology_trace_method"] == "gaussian_15"
+    assert rows[0]["ms1_morphology_trace_window_points"] == "15"
+    assert rows[0]["ms1_morphology_trace_effective_points"] != ""
     assert rows[0]["area_uncertainty"] != ""
     assert rows[0]["area_uncertainty_formula_version"] == (
         "baseline_residual_mad_v1"
@@ -414,6 +427,7 @@ def test_build_rows_prefers_shared_trace_group_arrays() -> None:
     assert rows[0]["area_baseline_corrected"] == (
         f"{expected.area_baseline_corrected:.5f}"
     )
+    assert rows[0]["area_ms1_morphology"] != ""
 
 
 def test_build_rows_from_hypotheses_projects_spine_without_legacy_result() -> None:
@@ -464,6 +478,7 @@ def test_build_rows_from_hypotheses_projects_spine_without_legacy_result() -> No
     assert row["selected"] == "TRUE"
     assert row["selection_rank"] == "1"
     assert row["area_baseline_corrected"] == "999.00000"
+    assert row["area_ms1_morphology"] == ""
     assert row["support_labels"] == "strict_nl_ok"
     assert row["reason"] == "spine decision"
 
@@ -626,6 +641,7 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
     assert row["rt_right_min"] == "8.70000"
     assert row["area_raw_counts_seconds"] == "1234.50"
     assert row["area_baseline_corrected"] != ""
+    assert row["area_ms1_morphology"] != ""
 
     path = tmp_path / "peak_candidates.tsv"
     write_peak_candidates_tsv(path, rows)

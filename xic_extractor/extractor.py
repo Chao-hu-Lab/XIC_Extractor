@@ -108,6 +108,8 @@ class ExtractionResult:
     def reported_peak_area(self) -> float | None:
         integration = self._selected_integration
         if integration is not None:
+            if integration.area_ms1_morphology is not None:
+                return integration.area_ms1_morphology
             return integration.area_raw_counts_seconds
         peak = self.peak
         return None if peak is None else peak.area

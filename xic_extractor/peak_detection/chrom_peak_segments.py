@@ -7,10 +7,8 @@ import numpy as np
 from scipy.signal import find_peaks
 
 from xic_extractor.peak_detection.baseline import integrate_with_baseline
-from xic_extractor.peak_detection.selected_envelope import (
-    TraceInterval,
-    gaussian15_morphology_trace,
-)
+from xic_extractor.peak_detection.ms1_morphology import gaussian15_morphology_trace
+from xic_extractor.peak_detection.selected_envelope import TraceInterval
 
 ChromPeakSegmentStatus = Literal[
     "OK",

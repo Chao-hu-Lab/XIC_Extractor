@@ -41,7 +41,10 @@ LONG_COLUMNS: tuple[OutputColumn, ...] = (
     OutputColumn("Role"),
     OutputColumn("ISTD Pair"),
     OutputColumn("RT", description="smoothed peak apex RT (min)"),
-    OutputColumn("Area", description="raw integrated area"),
+    OutputColumn(
+        "Area",
+        description="Gaussian15-smoothed positive AsLS residual area",
+    ),
     OutputColumn("NL"),
     OutputColumn("Int", advanced=True, description="raw apex intensity"),
     OutputColumn("PeakStart", advanced=True),

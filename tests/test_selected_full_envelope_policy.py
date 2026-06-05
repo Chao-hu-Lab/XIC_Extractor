@@ -341,7 +341,7 @@ def test_selected_envelope_below_min_scan_count_is_not_promoted() -> None:
     assert result.selected_envelope_interval.scan_count == 1
 
 
-def test_selected_envelope_narrower_than_resolver_is_review_only() -> None:
+def test_selected_envelope_narrower_than_resolver_is_active_boundary() -> None:
     result = _evaluate(
         [0, 0, 2, 10, 50, 10, 2, 0, 0],
         apex_rt=4.0,
@@ -349,11 +349,11 @@ def test_selected_envelope_narrower_than_resolver_is_review_only() -> None:
         resolver_end=7.0,
     )
 
-    assert result.selected_boundary_mode == "review_only"
-    assert result.boundary_change_class == "overmerge_rejected"
-    assert result.row_boundary_decision == "externalize"
-    assert result.boundary_stop_reason == "selected_envelope_narrower_than_resolver"
-    assert "resolver_interval_conflict" in result.boundary_evidence_sources
+    assert result.selected_boundary_mode == "selected_full_envelope"
+    assert result.boundary_change_class == "resolver_overwide_narrowed"
+    assert result.row_boundary_decision == "accept_candidate"
+    assert result.boundary_stop_reason == "baseline_return_reached"
+    assert "resolver_interval_narrowing" in result.boundary_evidence_sources
 
 
 def test_stronger_context_apex_outside_envelope_is_not_promoted() -> None:

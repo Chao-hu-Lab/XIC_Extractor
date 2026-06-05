@@ -307,29 +307,32 @@ Current state from existing specs:
 
 Mature-flow correction:
 
-- a final matrix cannot have AsLS as the accepted integration method while an
-  unnamed legacy/raw or linear-edge-compatible value remains the product value;
-- the primary matrix should use AsLS-corrected selected integration area, or use
-  an approved schema where AsLS is still clearly the primary product value;
-- any non-AsLS value is diagnostic/rollback only and needs an exit rule.
+- a final matrix cannot have Gaussian15/AsLS evidence available while an unnamed
+  legacy/raw or linear-edge-compatible value remains the product value;
+- the primary matrix should prefer Gaussian15-smoothed positive AsLS residual
+  area when typed MS1 morphology facts exist, with AsLS baseline-corrected area
+  retained as compatibility/audit fallback;
+- any raw or linear-edge-compatible value is diagnostic/rollback only and needs
+  an exit rule.
 
 Next behavior/output spec:
 
 ```text
-AsLS primary matrix quantitative value policy
+MS1 morphology primary matrix quantitative value policy
 ```
 
 See [AsLS primary matrix value policy](2026-06-02-asls-primary-matrix-value-policy-spec.md).
-It defines how AsLS-corrected area becomes the primary
-`alignment_matrix.tsv` value, which companion audit/uncertainty fields are
-allowed, and how any historical rollback value is named so it cannot be
-mistaken for product quantitation.
+That historical spec is superseded for current product behavior but still
+records why raw and linear-edge values were retired. Current authority is
+`docs/lcms-msms-evidence-rules.md`, where Gaussian15-smoothed positive AsLS
+residual area owns user-facing/final matrix area when typed morphology facts
+exist.
 
 ## Updated Goal Ordering
 
 This reference changes the preferred order for future end-to-end work:
 
-1. **AsLS primary matrix value policy**
+1. **MS1 morphology primary matrix value policy**
    - because quantitation is the product endpoint;
    - behavior/output spec required.
 2. **Region boundary product gate**

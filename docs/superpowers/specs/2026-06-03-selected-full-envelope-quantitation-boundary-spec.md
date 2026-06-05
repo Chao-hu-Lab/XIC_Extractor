@@ -54,14 +54,16 @@ carryover, or noise.
 
 ## Why This Spec Exists
 
-The AsLS primary matrix policy retired linear-edge area as the product value
-source, but current selected integrations can still inherit the resolver's
-selected `peak_start` / `peak_end`.
+The AsLS primary matrix policy retired raw/linear-edge area as the product value
+source. The current MS1 morphology policy goes further: when typed morphology
+facts exist, user-facing and final matrix area prefer Gaussian15-smoothed
+positive AsLS residual area. Boundary selection still matters because selected
+integrations can inherit an overly narrow resolver `peak_start` / `peak_end`.
 
 That leaves one product gap:
 
 ```text
-AsLS baseline is correct enough,
+Gaussian15 morphology area/shape is the active endpoint,
 but the RT segment fed into integration may be too narrow.
 ```
 

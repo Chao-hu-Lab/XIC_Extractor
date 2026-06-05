@@ -10,6 +10,7 @@ from xic_extractor.peak_detection.hypotheses import (
 from xic_extractor.peak_detection.selected_envelope_projection import (
     selected_envelope_diagnostic_row_from_hypothesis,
     selected_envelope_evaluation_from_hypothesis,
+    selected_envelope_promoted_hypothesis_from_hypothesis,
 )
 
 
@@ -142,6 +143,67 @@ def test_selected_envelope_projection_rejects_non_finite_context_intensity() -> 
             quantitation_context_rt_start=0.0,
             quantitation_context_rt_end=3.0,
         )
+
+
+def test_selected_envelope_projection_promotes_narrowed_active_integration() -> None:
+    residual = np.asarray([0, 0, 2, 10, 50, 10, 2, 0, 0], dtype=float)
+    rt = np.arange(float(len(residual)), dtype=float)
+    intensity = residual + 10.0
+    hypothesis = _hypothesis(
+        rt_left_min=1.0,
+        rt_apex_min=4.0,
+        rt_right_min=7.0,
+    )
+
+    promoted, evaluation = selected_envelope_promoted_hypothesis_from_hypothesis(
+        hypothesis,
+        rt_values=rt,
+        intensity_values=intensity,
+        quantitation_context_rt_start=0.0,
+        quantitation_context_rt_end=8.0,
+    )
+
+    assert evaluation.row_boundary_decision == "accept_candidate"
+    assert evaluation.boundary_change_class == "resolver_overwide_narrowed"
+    assert promoted is not hypothesis
+    assert promoted.integration.rt_left_min == pytest.approx(2.0)
+    assert promoted.integration.rt_right_min == pytest.approx(6.0)
+    assert promoted.integration.rt_width_min == pytest.approx(4.0)
+    assert promoted.integration.integration_method == "selected_envelope_gaussian15"
+    assert promoted.integration.raw_scan_indices == (2, 3, 4, 5, 6)
+    assert promoted.integration.area_ms1_morphology is not None
+    assert promoted.integration.ms1_morphology_area_source == (
+        "gaussian15_positive_asls_residual"
+    )
+    assert "resolver_overwide_narrowed" in promoted.integration.boundary_sources
+
+
+def test_selected_envelope_projection_keeps_original_for_conflict() -> None:
+    residual = np.asarray(
+        [0, 0, 2, 10, 50, 10, 2, 0, 0, 45, 80, 45, 0],
+        dtype=float,
+    )
+    rt = np.arange(float(len(residual)), dtype=float)
+    intensity = residual + 10.0
+    hypothesis = _hypothesis(
+        rt_left_min=3.0,
+        rt_apex_min=4.0,
+        rt_right_min=5.0,
+    )
+
+    promoted, evaluation = selected_envelope_promoted_hypothesis_from_hypothesis(
+        hypothesis,
+        rt_values=rt,
+        intensity_values=intensity,
+        quantitation_context_rt_start=0.0,
+        quantitation_context_rt_end=12.0,
+    )
+
+    assert evaluation.row_boundary_decision == "externalize"
+    assert evaluation.boundary_change_class == "context_apex_conflict"
+    assert promoted is hypothesis
+    assert promoted.integration.rt_left_min == pytest.approx(3.0)
+    assert promoted.integration.rt_right_min == pytest.approx(5.0)
 
 
 def _hypothesis(

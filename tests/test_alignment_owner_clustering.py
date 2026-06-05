@@ -484,7 +484,11 @@ def _owner(
         supporting_events=(),
         identity_conflict=identity_conflict,
         assignment_reason="owner_exact_apex_match",
-        selected_integration=_integration(raw_area=1000.0, asls_area=900.0),
+        selected_integration=_integration(
+            raw_area=1000.0,
+            asls_area=900.0,
+            morphology_area=900.0,
+        ),
     )
 
 
@@ -492,6 +496,7 @@ def _integration(
     *,
     raw_area: float,
     asls_area: float,
+    morphology_area: float,
 ) -> IntegrationResult:
     return IntegrationResult(
         rt_left_min=8.45,
@@ -505,6 +510,8 @@ def _integration(
         area_baseline_corrected=asls_area,
         baseline_type="asls",
         boundary_sources=("test_owner",),
+        area_ms1_morphology=morphology_area,
+        ms1_morphology_area_source="gaussian15_positive_asls_residual",
     )
 
 

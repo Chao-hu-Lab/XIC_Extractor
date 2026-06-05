@@ -88,7 +88,8 @@ def test_shadow_rows_include_leave_one_out_paired_area_ratio_evidence() -> None:
                     "8-oxodG",
                     "successor-right",
                     "17.18000",
-                    area="50_000.0",
+                    area="10_000.0",
+                    morphology_area="50_000.0",
                 ),
             ],
         ),
@@ -147,7 +148,7 @@ def test_shadow_rows_include_leave_one_out_paired_area_ratio_evidence() -> None:
     assert row["paired_area_ratio_reference_max"] == "0.60000"
     assert row["paired_area_ratio_status"] == "within_reference_range"
     assert row["paired_area_ratio_basis"] == (
-        "leave_one_sample_out_reported_area_over_istd_area"
+        "leave_one_sample_out_counted_area_over_istd_area"
     )
     assert row["false_positive_review_status"] == "row_approval_candidate"
     assert row["false_positive_review_reasons"] == (
@@ -1313,6 +1314,7 @@ def _candidate_row(
     rt_apex_min: str,
     *,
     area: str = "",
+    morphology_area: str = "",
     proposal_sources: str = "",
     support_labels: str = "",
     concern_labels: str = "",
@@ -1324,6 +1326,7 @@ def _candidate_row(
         "candidate_id": candidate_id,
         "rt_apex_min": rt_apex_min,
         "area_raw_counts_seconds": area,
+        "area_ms1_morphology": morphology_area,
         "proposal_sources": proposal_sources,
         "support_labels": support_labels,
         "concern_labels": concern_labels,

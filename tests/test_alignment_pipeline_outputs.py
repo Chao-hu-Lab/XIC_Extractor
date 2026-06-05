@@ -47,7 +47,10 @@ def test_alignment_metadata_records_baseline_audit_method() -> None:
         metadata["pre_backfill_projection_policy"]
         == "pre_backfill_successor_projection_required_when_enabled"
     )
-    assert metadata["matrix_value_policy"] == "asls_primary_integration_result"
+    assert (
+        metadata["matrix_value_policy"]
+        == "gaussian15_positive_asls_residual_primary"
+    )
     assert metadata["baseline_audit_method"] == "asls"
     assert metadata["backfill_scope"] == "full-audit"
     assert metadata["output_scope"] == "full-audit"

@@ -35,7 +35,20 @@ from xic_extractor.output.messages import (
     build_diagnostic_records,
     istd_confidence_note,
 )
+from xic_extractor.peak_detection.chrom_peak_segment_projection import (
+    chrom_peak_segment_promoted_hypothesis_from_hypothesis,
+)
 from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
+from xic_extractor.peak_detection.selected_envelope import (
+    SelectedEnvelopeBoundaryEvaluation,
+)
+from xic_extractor.peak_detection.selected_envelope_projection import (
+    selected_envelope_promoted_hypothesis_from_hypothesis,
+)
+from xic_extractor.peak_detection.selection_decision import (
+    PeakHypothesisSelectionDecision,
+    selection_decision_from_hypothesis,
+)
 from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import PeakCandidate
 
@@ -272,6 +285,9 @@ def extract_one_target(
             strict_preferred_rt=strict_preferred_rt,
             scoring_context_builder=scoring_context_builder,
             istd_confidence_note=istd_confidence_note,
+            evidence_role="ISTD" if target.is_istd else "Analyte",
+            istd_pair=target.istd_pair,
+            paired_istd_anchor_rt=istd_rt_in_this_sample,
         )
     else:
         peak_result = extractor.find_peak_and_area(
@@ -280,6 +296,9 @@ def extract_one_target(
             config,
             preferred_rt=anchor_rt,
             strict_preferred_rt=strict_preferred_rt,
+            evidence_role="ISTD" if target.is_istd else "Analyte",
+            istd_pair=target.istd_pair,
+            paired_istd_anchor_rt=istd_rt_in_this_sample,
         )
     recovery_decision = recover_istd_anchor_peak_if_needed(
         peak_result,
@@ -343,6 +362,73 @@ def extract_one_target(
         paired_istd_anchor_rt=istd_rt_in_this_sample,
         model_selection_expected_diff_approvals=model_selection_expected_diff_approvals,
     )
+    if handoff_peak.selected_hypothesis is not None:
+        selected_envelope_evaluation = None
+        chrom_segment_boundary_accepted = False
+        guard_rt = audit_rt
+        guard_intensity = audit_intensity
+        if handoff_peak.trace_group is not None:
+            guard_trace = handoff_peak.trace_group.primary_trace
+            guard_rt = guard_trace.rt
+            guard_intensity = guard_trace.intensity
+        context_rt_start, context_rt_end = _trace_rt_bounds(
+            guard_rt,
+            fallback_start=rt_min,
+            fallback_end=rt_max,
+        )
+        try:
+            promoted_hypothesis, selected_envelope_evaluation = (
+                selected_envelope_promoted_hypothesis_from_hypothesis(
+                    handoff_peak.selected_hypothesis,
+                    rt_values=guard_rt,
+                    intensity_values=guard_intensity,
+                    quantitation_context_rt_start=context_rt_start,
+                    quantitation_context_rt_end=context_rt_end,
+                )
+            )
+        except ValueError:
+            promoted_hypothesis = handoff_peak.selected_hypothesis
+        try:
+            chrom_promoted_hypothesis, chrom_segment_projection = (
+                chrom_peak_segment_promoted_hypothesis_from_hypothesis(
+                    handoff_peak.selected_hypothesis,
+                    rt_values=guard_rt,
+                    intensity_values=guard_intensity,
+                    quantitation_context_rt_start=context_rt_start,
+                    quantitation_context_rt_end=context_rt_end,
+                    selected_envelope_evaluation=selected_envelope_evaluation,
+                )
+            )
+        except ValueError:
+            chrom_promoted_hypothesis = handoff_peak.selected_hypothesis
+            chrom_segment_projection = None
+        if (
+            chrom_segment_projection is not None
+            and chrom_segment_projection.accepted
+        ):
+            promoted_hypothesis = chrom_promoted_hypothesis
+            chrom_segment_boundary_accepted = True
+        if promoted_hypothesis is not handoff_peak.selected_hypothesis:
+            handoff_peak = replace(
+                handoff_peak,
+                selected_hypothesis=promoted_hypothesis,
+                selection_decision=selection_decision_from_hypothesis(
+                    promoted_hypothesis,
+                    peak_result=peak_result,
+                ),
+            )
+        if (
+            selected_envelope_evaluation is not None
+            and handoff_peak.selection_decision is not None
+            and not chrom_segment_boundary_accepted
+        ):
+            handoff_peak = replace(
+                handoff_peak,
+                selection_decision=_selected_envelope_guarded_decision(
+                    handoff_peak.selection_decision,
+                    selected_envelope_evaluation,
+                ),
+            )
 
     result = build_extraction_result(
         peak_result=peak_result,
@@ -418,6 +504,9 @@ def credible_istd_anchor_rt(result: ExtractionResult | None) -> float | None:
     """Return the selected ISTD MS1 RT only when it is credible as a pair anchor."""
     if result is None:
         return None
+    projection = result.targeted_product_projection
+    if projection is not None and not projection.counted_detection:
+        return None
     if not allow_prepass_anchor(result.peak_result):
         return None
     rt = result.reported_rt
@@ -430,3 +519,52 @@ def credible_istd_anchor_rt(result: ExtractionResult | None) -> float | None:
 
 def _finite_positive(value: float | None) -> bool:
     return value is not None and math.isfinite(value) and value > 0
+
+
+def _trace_rt_bounds(
+    rt_values: Any,
+    *,
+    fallback_start: float,
+    fallback_end: float,
+) -> tuple[float, float]:
+    try:
+        values = [float(value) for value in rt_values]
+    except (TypeError, ValueError):
+        values = []
+    finite_values = [value for value in values if math.isfinite(value)]
+    if len(finite_values) >= 2:
+        return min(finite_values), max(finite_values)
+    return min(float(fallback_start), float(fallback_end)), max(
+        float(fallback_start),
+        float(fallback_end),
+    )
+
+
+def _selected_envelope_guarded_decision(
+    decision: PeakHypothesisSelectionDecision,
+    evaluation: SelectedEnvelopeBoundaryEvaluation,
+) -> PeakHypothesisSelectionDecision:
+    if evaluation.row_boundary_decision == "accept_candidate":
+        return decision
+    guard = f"selected_envelope_{evaluation.boundary_change_class}"
+    not_counted = (
+        f"selected_envelope_boundary_{evaluation.row_boundary_decision}"
+    )
+    projected_reason = (
+        f"decision: not_counted; not_counted: {not_counted}; "
+        f"review: {guard}"
+    )
+    return replace(
+        decision,
+        projected_confidence="VERY_LOW",
+        projected_reason=projected_reason,
+        review_reasons=_append_unique(decision.review_reasons, guard),
+        not_counted_reasons=_append_unique(
+            decision.not_counted_reasons,
+            not_counted,
+        ),
+    )
+
+
+def _append_unique(values: tuple[str, ...], value: str) -> tuple[str, ...]:
+    return tuple(dict.fromkeys((*values, value)))

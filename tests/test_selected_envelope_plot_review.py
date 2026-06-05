@@ -14,9 +14,12 @@ from tools.diagnostics.selected_envelope_plot_review import (
     selected_boundary_oracles_by_candidate_id,
     write_selected_envelope_boundary_plot,
 )
+from xic_extractor.configuration.models import Target
 from xic_extractor.peak_detection.chrom_peak_segments import (
+    ChromPeakSegment,
     enumerate_chrom_peak_segments,
 )
+from xic_extractor.peak_detection.selected_envelope import TraceInterval
 from xic_extractor.peak_detection.selected_envelope_diagnostics import (
     SELECTED_ENVELOPE_DIAGNOSTIC_HEADERS,
 )
@@ -381,7 +384,98 @@ def test_plot_index_row_records_projected_chrom_segment(tmp_path: Path) -> None:
     assert index_row["chrom_peak_segment_count"] == "1"
     assert index_row["selected_chrom_peak_segment_id"] == "chrom_peak_segment_001"
     assert index_row["selected_chrom_peak_segment_class"] == "isolated_peak"
-    assert index_row["selected_chrom_peak_segment_projection"] == "envelope_overlap"
+    assert (
+        index_row["selected_chrom_peak_segment_projection"]
+        == "resolver_midpoint_contains"
+    )
+
+
+def test_review_gallery_html_marks_active_interval_and_escapes(
+    tmp_path: Path,
+) -> None:
+    gallery_dir = tmp_path / "review"
+    plot_path = gallery_dir / "plots" / "plot.png"
+    plot_path.parent.mkdir(parents=True)
+    plot_path.write_bytes(b"fake-png")
+    row = {header: "" for header in PLOT_INDEX_HEADERS}
+    row.update(
+        {
+            "plot_rank": "1",
+            "plot_group": "high_risk_externalized",
+            "sample_name": "<sample-a>",
+            "target_label": "8-oxodG",
+            "role": "Analyte",
+            "row_boundary_decision": "externalize",
+            "boundary_change_class": "context_apex_conflict",
+            "resolver_rt_start": "16.06619",
+            "resolver_rt_end": "17.17301",
+            "envelope_rt_start": "15.37481",
+            "envelope_rt_end": "17.20159",
+            "png_path": str(plot_path),
+        }
+    )
+    gallery_path = gallery_dir / "review_gallery.html"
+
+    plot_review._write_review_gallery_html(
+        gallery_path,
+        [row],
+        index_tsv=gallery_dir / "selected_envelope_plot_index.tsv",
+    )
+
+    html_text = gallery_path.read_text(encoding="utf-8")
+    assert "green = ACTIVE selected/product interval" in html_text
+    assert "&lt;sample-a&gt;" in html_text
+    assert 'src="plots/plot.png"' in html_text
+    assert "16.06619-17.17301" in html_text
+
+
+def test_select_chrom_peak_segment_prefers_selected_apex_over_wide_envelope() -> None:
+    row = _diagnostic_row(
+        selected_candidate_id=(
+            "sample|8-oxodG|region_first_safe_merge|local_minimum|"
+            "16.36568|16.21219|16.40116"
+        )
+    )
+    row["resolver_rt_start"] = "16.21219"
+    row["resolver_rt_end"] = "16.40116"
+    row["envelope_rt_start"] = "15.29182"
+    row["envelope_rt_end"] = "17.20159"
+    segments = (
+        _segment("chrom_peak_segment_001", 15.29182, 16.06619, apex=15.86155),
+        _segment("chrom_peak_segment_002", 16.06619, 16.60743, apex=16.50198),
+        _segment("chrom_peak_segment_003", 16.60743, 17.10889, apex=16.88434),
+    )
+
+    selected_segment = plot_review._select_chrom_peak_segment_for_row(row, segments)
+
+    assert selected_segment is not None
+    assert selected_segment.segment_id == "chrom_peak_segment_002"
+    assert (
+        plot_review._chrom_peak_segment_projection_basis(row, selected_segment)
+        == "selected_apex_contains"
+    )
+
+
+def test_plot_extraction_bounds_include_target_window() -> None:
+    row = _diagnostic_row()
+    row["quantitation_context_rt_start"] = "17.34502"
+    row["quantitation_context_rt_end"] = "19.28695"
+    target = Target(
+        label="8-oxodG",
+        mz=284.0989,
+        rt_min=16.0,
+        rt_max=18.0,
+        ppm_tol=20.0,
+        neutral_loss_da=116.0474,
+        nl_ppm_warn=20.0,
+        nl_ppm_max=50.0,
+        is_istd=False,
+        istd_pair="15N5-8-oxodG",
+    )
+
+    bounds = plot_review._plot_extraction_bounds(row, target)
+
+    assert bounds == pytest.approx((16.0, 19.28695))
 
 
 def test_plot_index_headers_are_stable() -> None:
@@ -463,3 +557,31 @@ def _write_tsv(path: Path, rows: list[dict[str, str]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]), delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _segment(
+    segment_id: str,
+    start: float,
+    end: float,
+    *,
+    apex: float,
+) -> ChromPeakSegment:
+    return ChromPeakSegment(
+        segment_id=segment_id,
+        interval=TraceInterval(
+            start_index=0,
+            end_index=1,
+            rt_start_min=start,
+            rt_end_min=end,
+            scan_count=3,
+        ),
+        apex_index=0,
+        apex_rt_min=apex,
+        raw_apex_residual=100.0,
+        morphology_apex_residual=100.0,
+        area_baseline_corrected=1000.0,
+        morphology_area_shadow=1000.0,
+        segment_class="separate_peak",
+        boundary_stop_reason="baseline_valley_split",
+        evidence_sources=("morphology_trace",),
+    )

@@ -205,7 +205,7 @@ def _long_output_rows(
             row["NL"] = (
                 result.nl_token or "" if target.neutral_loss_da is not None else ""
             )
-            row["Confidence"] = result.confidence
+            row["Confidence"] = _display_confidence(result)
             row["Reason"] = _display_reason(result)
             row.update(_projection_fields(result.targeted_product_projection))
         rows.append(row)
@@ -330,6 +330,17 @@ def _display_reason(result: ExtractionResultLike) -> str:
     if projection is not None and projection.projection_reason:
         return projection.projection_reason
     return result.reason
+
+
+def _display_confidence(result: ExtractionResultLike) -> str:
+    projection = result.targeted_product_projection
+    if projection is not None and projection.product_state in {
+        "ambiguous",
+        "excluded",
+        "not_counted",
+    }:
+        return "VERY_LOW"
+    return result.confidence
 
 
 def _error_projection_fields() -> dict[str, str]:

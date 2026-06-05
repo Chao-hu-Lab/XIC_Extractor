@@ -182,7 +182,7 @@ def test_alignment_results_xlsx_blanks_duplicate_assigned_matrix_area(
     assert _sheet_value(workbook["Review"], "duplicate_assigned_count") == 1
 
 
-def test_alignment_results_xlsx_projects_asls_selected_integration_matrix_area(
+def test_alignment_results_xlsx_prefers_ms1_morphology_area(
     tmp_path: Path,
 ):
     matrix = AlignmentMatrix(
@@ -199,6 +199,7 @@ def test_alignment_results_xlsx_projects_asls_selected_integration_matrix_area(
                 selected_integration=sample_integration(
                     raw_area=177.0,
                     asls_area=144.0,
+                    morphology_area=155.0,
                 ),
             ),
             sample_cell("s2", "FAM000001", "detected", 120.0),
@@ -213,7 +214,7 @@ def test_alignment_results_xlsx_projects_asls_selected_integration_matrix_area(
 
     workbook = load_workbook(path, data_only=True)
     assert workbook.sheetnames == ["Matrix", "Review", "Audit", "Metadata"]
-    assert workbook["Matrix"]["C2"].value == 144.0
+    assert workbook["Matrix"]["C2"].value == 155.0
     assert workbook["Matrix"]["D2"].value == 120.0
     assert _sheet_value(workbook["Audit"], "area") == 100.0
 
@@ -421,7 +422,11 @@ def sample_cell(
         and status in {"detected", "rescued"}
         and _positive_area(area)
     ):
-        selected_integration = sample_integration(raw_area=area, asls_area=area)
+        selected_integration = sample_integration(
+            raw_area=area,
+            asls_area=area,
+            morphology_area=area,
+        )
     return AlignedCell(
         sample_stem=sample,
         cluster_id=cluster_id,
@@ -453,6 +458,7 @@ def sample_integration(
     raw_area: float,
     asls_area: float | None,
     baseline_type: str = "asls",
+    morphology_area: float | None = None,
 ) -> IntegrationResult:
     return IntegrationResult(
         rt_left_min=12.55,
@@ -466,6 +472,12 @@ def sample_integration(
         area_baseline_corrected=asls_area,
         baseline_type=baseline_type,
         boundary_sources=("test",),
+        area_ms1_morphology=morphology_area,
+        ms1_morphology_area_source=(
+            "gaussian15_positive_asls_residual"
+            if morphology_area is not None
+            else ""
+        ),
     )
 
 

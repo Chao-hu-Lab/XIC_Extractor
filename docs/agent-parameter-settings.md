@@ -174,6 +174,7 @@ timing heartbeat`:
   --backfill-scope production-equivalent `
   --audit-evidence-mode none `
   --performance-profile validation-fast `
+  --raw-workers 11 `
   --owner-backfill-window-strategy super-window `
   --owner-backfill-superwindow-span-factor 2 `
   --timing-output <task-specific-output-dir>\timing.json `
@@ -211,6 +212,7 @@ candidate CSV rows or opening RAW files:
   --backfill-scope production-equivalent `
   --audit-evidence-mode none `
   --performance-profile validation-fast `
+  --raw-workers 11 `
   --owner-backfill-window-strategy super-window `
   --owner-backfill-superwindow-span-factor 2 `
   --timing-output <task-specific-output-dir>\timing.json `
@@ -237,7 +239,7 @@ the active spec or validation note before running alignment.
 
 | Profile | Status | Reusable parameters | Evidence |
 | --- | --- | --- | --- |
-| 85RAW validation-minimal super-window | Verified foreground run, exit code `0`, wall-clock `620.9 s` | `.venv\Scripts\python.exe`, 85RAW RAW root, `--output-level validation-minimal`, `--backfill-scope production-equivalent`, `--audit-evidence-mode none`, `--performance-profile validation-fast`, `--owner-backfill-window-strategy super-window`, `--owner-backfill-superwindow-span-factor 2`, timing output + live heartbeat | `docs\superpowers\notes\2026-05-26-p8b-85raw-superwindow-acceptance-note.md` |
+| 85RAW validation-minimal super-window | Verified foreground run, exit code `0`, wall-clock `620.9 s` | `.venv\Scripts\python.exe`, 85RAW RAW root, `--output-level validation-minimal`, `--backfill-scope production-equivalent`, `--audit-evidence-mode none`, `--performance-profile validation-fast`, `--raw-workers 11`, `--owner-backfill-window-strategy super-window`, `--owner-backfill-superwindow-span-factor 2`, timing output + live heartbeat | `docs\superpowers\notes\2026-05-26-p8b-85raw-superwindow-acceptance-note.md` |
 | 85RAW primary-delivery validation | Verified foreground run, exit code `0`, wall-clock `596.6 s`; worktree `.venv` junction required before launch | same canonical 85RAW shape plus `--expected-sample-count 85`; output hashes and diagnostics fixed in durable fixtures | `docs\superpowers\notes\2026-05-28-qualitative-selection-acceptance-gate-note.md`; `docs\superpowers\fixtures\diagnostic_ledger_2026_05_28\85raw_primary_delivery_fix_summary.tsv` |
 
 The cited `620.9 s` run predates the `--expected-sample-count 85` guard. The
@@ -245,7 +247,8 @@ guard is a later test-covered launch safety check and should be included in new
 85RAW commands, but it is not part of that historical runtime evidence.
 
 Do not treat `--performance-profile validation-fast` alone as the full 85RAW
-validation profile. It only sets RAW worker count and XIC batch size; the formal
+validation profile. It sets RAW worker count and XIC batch size, and new 85RAW
+commands should pin `--raw-workers 11` explicitly for this machine. The formal
 85RAW shape also needs output thinning, production-equivalent backfill,
 audit-evidence cutoff, super-window, and heartbeat output.
 
@@ -334,7 +337,8 @@ emit the same minimal machine contract and heartbeat shape documented here.
    沒有 heartbeat artifact 就不要宣稱已完成可審計 profiling。
 8. validation / downstream handoff 預設用 `--output-level validation-minimal`。
    `.xlsx` 和 HTML 不是正式交付契約；只有明確需要人工檢視或 debug 時才產生。
-9. 85RAW 正式驗收預設加 `--performance-profile validation-fast` 與
+9. 85RAW 正式驗收預設加 `--performance-profile validation-fast`,
+   `--raw-workers 11` 與
    `--owner-backfill-window-strategy super-window`。如果刻意不用，必須在
    validation note 說明原因。
 10. 85RAW 開跑前先檢查 discovery index sample count、candidate CSV path、

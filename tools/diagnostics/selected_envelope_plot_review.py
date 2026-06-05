@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -67,6 +68,15 @@ PLOT_INDEX_HEADERS = (
     "pdf_path",
 )
 
+_TARGET_WINDOW_COLOR = "#f59e0b"
+_CONTEXT_WINDOW_COLOR = "#64748b"
+_RESOLVER_INTERVAL_COLOR = "#16a34a"
+_RESOLVER_BOUNDARY_COLOR = "#15803d"
+_SELECTED_ENVELOPE_COLOR = "#f97316"
+_MANUAL_ORACLE_COLOR = "#7c3aed"
+_CHROM_SEGMENT_COLOR = "#0ea5e9"
+_SELECTED_CHROM_SEGMENT_COLOR = "#e11d48"
+
 
 @dataclass(frozen=True)
 class SelectedEnvelopePlotRequest:
@@ -78,6 +88,7 @@ class SelectedEnvelopePlotRequest:
 class SelectedEnvelopePlotOutputs:
     index_tsv: Path
     plot_dir: Path
+    gallery_html: Path
 
 
 def run_selected_envelope_plot_review(
@@ -120,7 +131,13 @@ def run_selected_envelope_plot_review(
     )
     index_tsv = output_dir / "selected_envelope_plot_index.tsv"
     _write_tsv(index_tsv, PLOT_INDEX_HEADERS, index_rows)
-    return SelectedEnvelopePlotOutputs(index_tsv=index_tsv, plot_dir=plot_dir)
+    gallery_html = output_dir / "review_gallery.html"
+    _write_review_gallery_html(gallery_html, index_rows, index_tsv=index_tsv)
+    return SelectedEnvelopePlotOutputs(
+        index_tsv=index_tsv,
+        plot_dir=plot_dir,
+        gallery_html=gallery_html,
+    )
 
 
 def select_selected_envelope_plot_requests(
@@ -225,6 +242,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     print(f"Plot index TSV: {outputs.index_tsv}")
     print(f"Plot directory: {outputs.plot_dir}")
+    print(f"Review gallery HTML: {outputs.gallery_html}")
     return 0
 
 
@@ -244,13 +262,20 @@ def _render_requests(
         raw_path = raw_dir / f"{_required_text(row, 'sample_name')}.raw"
         if not raw_path.is_file():
             raise ValueError(f"{raw_path}: RAW file does not exist")
-        context_start = _required_float(row, "quantitation_context_rt_start")
-        context_end = _required_float(row, "quantitation_context_rt_end")
+        plot_row = {
+            **row,
+            "target_rt_start": _format_float(target.rt_min),
+            "target_rt_end": _format_float(target.rt_max),
+        }
+        extraction_start, extraction_end = _plot_extraction_bounds(
+            row,
+            target,
+        )
         with open_raw(raw_path, dll_dir) as raw:
             rt, intensity = raw.extract_xic(
                 target.mz,
-                context_start,
-                context_end,
+                extraction_start,
+                extraction_end,
                 target.ppm_tol,
             )
         baseline = asls_baseline(np.asarray(intensity, dtype=float))
@@ -258,11 +283,11 @@ def _render_requests(
             np.asarray(rt, dtype=float),
             np.asarray(intensity, dtype=float),
             baseline,
-            quantitation_context_rt_start=context_start,
-            quantitation_context_rt_end=context_end,
+            quantitation_context_rt_start=extraction_start,
+            quantitation_context_rt_end=extraction_end,
         )
         selected_chrom_segment = _select_chrom_peak_segment_for_row(
-            row,
+            plot_row,
             chrom_segments.segments,
         )
         boundary_oracle = boundary_oracles.get(
@@ -274,7 +299,7 @@ def _render_requests(
         write_selected_envelope_boundary_plot(
             png_path=png_path,
             pdf_path=pdf_path,
-            row=row,
+            row=plot_row,
             boundary_oracle=boundary_oracle,
             rt=np.asarray(rt, dtype=float),
             intensity=np.asarray(intensity, dtype=float),
@@ -399,39 +424,74 @@ def _draw_windows(
     *,
     boundary_oracle: BoundaryOracle | None,
 ) -> None:
+    target_start = _optional_float(row, "target_rt_start")
+    target_end = _optional_float(row, "target_rt_end")
     resolver_start = _required_float(row, "resolver_rt_start")
     resolver_end = _required_float(row, "resolver_rt_end")
     envelope_start = _required_float(row, "envelope_rt_start")
     envelope_end = _required_float(row, "envelope_rt_end")
     context_start = _required_float(row, "quantitation_context_rt_start")
     context_end = _required_float(row, "quantitation_context_rt_end")
+    if target_start is not None and target_end is not None:
+        ax.axvspan(
+            min(target_start, target_end),
+            max(target_start, target_end),
+            facecolor=_TARGET_WINDOW_COLOR,
+            alpha=0.10,
+            zorder=0,
+            label="target RT window",
+        )
     ax.axvspan(
         context_start,
         context_end,
-        color="#e2e8f0",
-        alpha=0.20,
+        facecolor=_CONTEXT_WINDOW_COLOR,
+        alpha=0.07,
+        zorder=0,
         label="quantitation context",
     )
     ax.axvspan(
         resolver_start,
         resolver_end,
-        color="#ef4444",
-        alpha=0.22,
-        label="resolver interval",
+        facecolor=_RESOLVER_INTERVAL_COLOR,
+        edgecolor=_RESOLVER_INTERVAL_COLOR,
+        linewidth=2.2,
+        alpha=0.24,
+        zorder=10,
+        label="ACTIVE selected/product interval",
+    )
+    ax.axvline(
+        resolver_start,
+        color=_RESOLVER_BOUNDARY_COLOR,
+        linewidth=2.8,
+        alpha=0.96,
+        zorder=12,
+    )
+    ax.axvline(
+        resolver_end,
+        color=_RESOLVER_BOUNDARY_COLOR,
+        linewidth=2.8,
+        alpha=0.96,
+        zorder=12,
     )
     ax.axvspan(
         envelope_start,
         envelope_end,
-        color="#22c55e",
-        alpha=0.24,
-        label="selected envelope",
+        facecolor=_SELECTED_ENVELOPE_COLOR,
+        edgecolor=_SELECTED_ENVELOPE_COLOR,
+        linewidth=1.0,
+        alpha=0.14,
+        zorder=2,
+        label="selected envelope (legacy)",
     )
     if boundary_oracle is not None:
         ax.axvspan(
             boundary_oracle.rt_start_min,
             boundary_oracle.rt_end_min,
-            color="#a855f7",
-            alpha=0.28,
+            facecolor=_MANUAL_ORACLE_COLOR,
+            edgecolor=_MANUAL_ORACLE_COLOR,
+            linewidth=1.3,
+            alpha=0.24,
+            zorder=7,
             label="manual/expert oracle",
         )
 
@@ -451,11 +511,16 @@ def _draw_chrom_peak_segments(
     )
     for segment in segments:
         is_selected = bool(selected_id and segment.segment_id == selected_id)
-        color = "#0f766e" if is_selected else "#0891b2"
-        alpha = 0.20 if is_selected else 0.09
+        color = (
+            _SELECTED_CHROM_SEGMENT_COLOR
+            if is_selected
+            else _CHROM_SEGMENT_COLOR
+        )
+        alpha = 0.36 if is_selected else 0.07
+        zorder = 8 if is_selected else 3
         label = None
         if is_selected and not labeled_selected:
-            label = "projected chrom segment"
+            label = "selected chrom segment"
             labeled_selected = True
         elif not is_selected and not labeled_any:
             label = "chrom peak segment"
@@ -463,16 +528,35 @@ def _draw_chrom_peak_segments(
         ax.axvspan(
             segment.interval.rt_start_min,
             segment.interval.rt_end_min,
-            color=color,
+            facecolor=color,
+            edgecolor=color if is_selected else "none",
+            linewidth=1.8 if is_selected else 0.0,
             alpha=alpha,
             label=label,
+            zorder=zorder,
         )
+        if is_selected:
+            ax.axvline(
+                segment.interval.rt_start_min,
+                color=color,
+                linewidth=1.4,
+                alpha=0.95,
+                zorder=zorder + 1,
+            )
+            ax.axvline(
+                segment.interval.rt_end_min,
+                color=color,
+                linewidth=1.4,
+                alpha=0.95,
+                zorder=zorder + 1,
+            )
         ax.axvline(
             segment.apex_rt_min,
             color=color,
-            linewidth=0.8,
+            linewidth=1.2 if is_selected else 0.7,
             linestyle=":",
-            alpha=0.85,
+            alpha=0.95 if is_selected else 0.70,
+            zorder=zorder + 1,
         )
 
 
@@ -582,6 +666,36 @@ def _select_chrom_peak_segment_for_row(
 ) -> ChromPeakSegment | None:
     if not segments:
         return None
+    resolver_midpoint = _optional_interval_midpoint(
+        row,
+        "resolver_rt_start",
+        "resolver_rt_end",
+    )
+    if resolver_midpoint is not None:
+        resolver_start = _required_float(row, "resolver_rt_start")
+        resolver_end = _required_float(row, "resolver_rt_end")
+        overlapping = _segments_overlapping_rt_interval(
+            segments,
+            min(resolver_start, resolver_end),
+            max(resolver_start, resolver_end),
+        )
+        if overlapping:
+            return max(
+                overlapping,
+                key=lambda segment: (
+                    segment.morphology_area_shadow,
+                    _interval_overlap(
+                        min(resolver_start, resolver_end),
+                        max(resolver_start, resolver_end),
+                        segment.interval.rt_start_min,
+                        segment.interval.rt_end_min,
+                    ),
+                ),
+            )
+        return _segment_for_reference_rt(segments, resolver_midpoint)
+    selected_apex_rt = _selected_candidate_apex_rt(row)
+    if selected_apex_rt is not None:
+        return _segment_for_reference_rt(segments, selected_apex_rt)
     envelope_start = _required_float(row, "envelope_rt_start")
     envelope_end = _required_float(row, "envelope_rt_end")
     envelope_left = min(envelope_start, envelope_end)
@@ -609,10 +723,42 @@ def _select_chrom_peak_segment_for_row(
     )
 
 
+def _segments_overlapping_rt_interval(
+    segments: Sequence[ChromPeakSegment],
+    start: float,
+    end: float,
+) -> tuple[ChromPeakSegment, ...]:
+    return tuple(
+        segment
+        for segment in segments
+        if _interval_overlap(
+            start,
+            end,
+            segment.interval.rt_start_min,
+            segment.interval.rt_end_min,
+        )
+        > 0.0
+    )
+
+
 def _chrom_peak_segment_projection_basis(
     row: Mapping[str, str],
     segment: ChromPeakSegment,
 ) -> str:
+    selected_apex_rt = _selected_candidate_apex_rt(row)
+    if selected_apex_rt is not None:
+        if _segment_contains_rt(segment, selected_apex_rt):
+            return "selected_apex_contains"
+        return "nearest_selected_apex"
+    resolver_midpoint = _optional_interval_midpoint(
+        row,
+        "resolver_rt_start",
+        "resolver_rt_end",
+    )
+    if resolver_midpoint is not None:
+        if _segment_contains_rt(segment, resolver_midpoint):
+            return "resolver_midpoint_contains"
+        return "nearest_resolver_midpoint"
     envelope_start = _required_float(row, "envelope_rt_start")
     envelope_end = _required_float(row, "envelope_rt_end")
     overlap = _interval_overlap(
@@ -622,6 +768,49 @@ def _chrom_peak_segment_projection_basis(
         segment.interval.rt_end_min,
     )
     return "envelope_overlap" if overlap > 0.0 else "nearest_envelope_midpoint"
+
+
+def _selected_candidate_apex_rt(row: Mapping[str, str]) -> float | None:
+    candidate_id = row.get("selected_candidate_id", "")
+    fields = candidate_id.split("|")
+    if len(fields) < 3:
+        return None
+    try:
+        float(fields[-2])
+        float(fields[-1])
+        return float(fields[-3])
+    except ValueError:
+        return None
+
+
+def _optional_interval_midpoint(
+    row: Mapping[str, str],
+    start_field: str,
+    end_field: str,
+) -> float | None:
+    try:
+        start = float(row.get(start_field, "") or "")
+        end = float(row.get(end_field, "") or "")
+    except ValueError:
+        return None
+    return (min(start, end) + max(start, end)) / 2.0
+
+
+def _segment_for_reference_rt(
+    segments: Sequence[ChromPeakSegment],
+    reference_rt: float,
+) -> ChromPeakSegment:
+    containing = [
+        segment for segment in segments if _segment_contains_rt(segment, reference_rt)
+    ]
+    candidates = containing or list(segments)
+    return min(candidates, key=lambda segment: abs(segment.apex_rt_min - reference_rt))
+
+
+def _segment_contains_rt(segment: ChromPeakSegment, reference_rt: float) -> bool:
+    left = min(segment.interval.rt_start_min, segment.interval.rt_end_min)
+    right = max(segment.interval.rt_start_min, segment.interval.rt_end_min)
+    return left <= reference_rt <= right
 
 
 def _interval_overlap(
@@ -693,6 +882,17 @@ def _target_for_row(row: Mapping[str, str], targets: Mapping[str, Target]) -> Ta
     return target
 
 
+def _plot_extraction_bounds(
+    row: Mapping[str, str],
+    target: Target,
+) -> tuple[float, float]:
+    context_start = _required_float(row, "quantitation_context_rt_start")
+    context_end = _required_float(row, "quantitation_context_rt_end")
+    left = min(context_start, context_end, target.rt_min, target.rt_max)
+    right = max(context_start, context_end, target.rt_min, target.rt_max)
+    return left, right
+
+
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     return _read_tsv_with_required_columns(
         path,
@@ -731,6 +931,196 @@ def _write_tsv(
         writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _write_review_gallery_html(
+    path: Path,
+    rows: Iterable[Mapping[str, str]],
+    *,
+    index_tsv: Path,
+) -> None:
+    materialized = [dict(row) for row in rows]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "<!doctype html>",
+        '<html lang="en">',
+        "<head>",
+        '<meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        "<title>Selected Envelope Boundary Review</title>",
+        "<style>",
+        (
+            "body{font-family:Arial,sans-serif;margin:0;"
+            "background:#f8fafc;color:#0f172a}"
+        ),
+        "main{max-width:1180px;margin:0 auto;padding:28px 20px 40px}",
+        "h1{font-size:28px;margin:0 0 8px}",
+        "p{line-height:1.5}",
+        ".meta{color:#475569;margin:0 0 18px}",
+        ".legend{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 22px}",
+        (
+            ".key{display:inline-flex;align-items:center;gap:8px;"
+            "background:#fff;border:1px solid #cbd5e1;"
+            "border-radius:8px;padding:7px 10px;font-size:13px}"
+        ),
+        (
+            ".swatch{display:inline-block;width:18px;height:12px;"
+            "border-radius:2px;border:2px solid currentColor}"
+        ),
+        (
+            ".active{color:#16a34a;background:#dcfce7}"
+            ".envelope{color:#f97316;background:#ffedd5}"
+            ".selected-chrom{color:#e11d48;background:#ffe4e6}"
+            ".chrom{color:#0ea5e9;background:#e0f2fe}"
+            ".target{color:#f59e0b;background:#fef3c7}"
+            ".oracle{color:#7c3aed;background:#ede9fe}"
+        ),
+        (
+            "article{background:#fff;border:1px solid #cbd5e1;"
+            "border-radius:10px;margin:18px 0;padding:16px;"
+            "box-shadow:0 1px 2px rgba(15,23,42,.06)}"
+        ),
+        "article h2{font-size:18px;margin:0 0 10px}",
+        (
+            "img{display:block;max-width:100%;height:auto;"
+            "border:1px solid #cbd5e1;border-radius:8px;background:#fff}"
+        ),
+        (
+            ".facts{display:grid;"
+            "grid-template-columns:repeat(auto-fit,minmax(180px,1fr));"
+            "gap:8px;margin:12px 0 0}"
+        ),
+        (
+            ".fact{background:#f8fafc;border:1px solid #e2e8f0;"
+            "border-radius:8px;padding:8px}"
+        ),
+        ".label{display:block;color:#64748b;font-size:12px;margin-bottom:4px}",
+        ".value{font-size:13px;overflow-wrap:anywhere}",
+        "a{color:#2563eb}",
+        "</style>",
+        "</head>",
+        "<body>",
+        "<main>",
+        "<h1>Selected Envelope Boundary Review</h1>",
+        (
+            '<p class="meta">'
+            f"plot_count={len(materialized)} | index_tsv="
+            f"{_html_link(index_tsv, label=str(index_tsv), gallery_path=path)}"
+            "</p>"
+        ),
+        "<div class=\"legend\" aria-label=\"plot legend\">",
+        _legend_item(
+            "active",
+            "green = ACTIVE selected/product interval; dark green lines = final edges",
+        ),
+        _legend_item("envelope", "orange = selected envelope legacy/debug"),
+        _legend_item("selected-chrom", "red = selected chrom segment"),
+        _legend_item("chrom", "light blue = other chrom peak segments"),
+        _legend_item("target", "amber = target RT window"),
+        _legend_item("oracle", "purple = manual/expert oracle when present"),
+        "</div>",
+    ]
+    if not materialized:
+        lines.append("<p>No plots were selected for review.</p>")
+    for row in materialized:
+        lines.extend(_gallery_article(row, gallery_path=path))
+    lines.extend(["</main>", "</body>", "</html>"])
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _gallery_article(row: Mapping[str, str], *, gallery_path: Path) -> list[str]:
+    png_path = row.get("png_path", "")
+    pdf_path = row.get("pdf_path", "")
+    title = (
+        f"{row.get('plot_rank', '')}. {row.get('sample_name', '')} | "
+        f"{row.get('target_label', '')} | {row.get('role', '')}"
+    )
+    image_src = _relative_gallery_path(png_path, gallery_path)
+    pdf_link = _html_link(pdf_path, label="PDF", gallery_path=gallery_path)
+    facts = {
+        "group": row.get("plot_group", ""),
+        "decision": row.get("row_boundary_decision", ""),
+        "boundary": row.get("boundary_change_class", ""),
+        "stop": row.get("boundary_stop_reason", ""),
+        "area_delta": row.get("area_delta_ratio", ""),
+        "active_interval": _interval_text(row, "resolver_rt_start", "resolver_rt_end"),
+        "legacy_envelope": _interval_text(row, "envelope_rt_start", "envelope_rt_end"),
+        "chrom_segment": _interval_text(
+            row,
+            "selected_chrom_peak_segment_rt_start",
+            "selected_chrom_peak_segment_rt_end",
+        ),
+        "chrom_projection": row.get("selected_chrom_peak_segment_projection", ""),
+        "oracle": _interval_text(row, "oracle_rt_start", "oracle_rt_end"),
+    }
+    lines = [
+        "<article>",
+        f"<h2>{html.escape(title)}</h2>",
+    ]
+    if image_src:
+        lines.append(
+            f'<a href="{html.escape(image_src, quote=True)}">'
+            f'<img src="{html.escape(image_src, quote=True)}" '
+            f'alt="{html.escape(title, quote=True)}">'
+            "</a>"
+        )
+    else:
+        lines.append("<p>Plot image path is missing.</p>")
+    if pdf_link:
+        lines.append(f"<p>{pdf_link}</p>")
+    lines.append('<div class="facts">')
+    for label, value in facts.items():
+        lines.append(
+            '<div class="fact">'
+            f'<span class="label">{html.escape(label)}</span>'
+            f'<span class="value">{html.escape(value)}</span>'
+            "</div>"
+        )
+    lines.extend(["</div>", "</article>"])
+    return lines
+
+
+def _legend_item(css_class: str, text: str) -> str:
+    return (
+        f'<span class="key"><span class="swatch {css_class}"></span>'
+        f"{html.escape(text)}</span>"
+    )
+
+
+def _html_link(path_value: str | Path, *, label: str, gallery_path: Path) -> str:
+    href = _relative_gallery_path(str(path_value), gallery_path)
+    if not href:
+        return ""
+    return (
+        f'<a href="{html.escape(href, quote=True)}">'
+        f"{html.escape(label)}</a>"
+    )
+
+
+def _relative_gallery_path(path_value: str, gallery_path: Path) -> str:
+    value = path_value.strip()
+    if not value:
+        return ""
+    candidate = Path(value)
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    try:
+        relative = candidate.resolve().relative_to(gallery_path.parent.resolve())
+        return relative.as_posix()
+    except ValueError:
+        return candidate.resolve().as_posix()
+
+
+def _interval_text(
+    row: Mapping[str, str],
+    start_field: str,
+    end_field: str,
+) -> str:
+    start = row.get(start_field, "").strip()
+    end = row.get(end_field, "").strip()
+    if not start and not end:
+        return ""
+    return f"{start}-{end}"
 
 
 def _selected_diagnostic_rows_for_chrom_review(
@@ -814,6 +1204,16 @@ def _required_float(row: Mapping[str, str], field: str) -> float:
         return float(value)
     except ValueError as exc:
         raise ValueError(f"{field} must be numeric") from exc
+
+
+def _optional_float(row: Mapping[str, str], field: str) -> float | None:
+    value = row.get(field, "").strip()
+    if not value:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
 
 
 def _format_float(value: float) -> str:

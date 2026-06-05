@@ -14,6 +14,30 @@ selected peak or matrix identity by itself.
 Any evidence source that changes production behavior needs explicit config or
 contract, machine-readable reason/status fields, and regression tests.
 
+## MS1 Morphology And Area Owner
+
+- The active MS1 morphology trace for peak shape, noise-shape, paired area-ratio
+  review, and user-facing/final matrix area is Gaussian15-smoothed positive AsLS
+  residual (`gaussian15_positive_asls_residual`).
+- Raw trapezoid area and AsLS baseline-corrected area remain compatibility and
+  audit evidence. They may be printed, compared, or used as fallback for legacy
+  integrations that do not yet carry morphology facts, but they must not outrank
+  typed morphology facts when those facts exist.
+- Gaussian15 morphology improves boundary readability and MS1 shape/pattern
+  evidence. It is not identity authority by itself: paired RT, target window,
+  product/NL/MS2 acquisition opportunity, and untargeted identity-coherence
+  guards still decide whether a candidate is accepted, not counted, ambiguous,
+  or excluded.
+- For accepted candidates, `ChromPeakSegment` is the active chromatographic
+  boundary owner when a Gaussian15 morphology segment contains the selected
+  apex. It can replace an over-wide legacy resolver interval with an explicit
+  segment boundary and Gaussian15 positive AsLS residual area.
+- `selected_full_envelope` remains a diagnostic/fallback boundary source. It may
+  promote only when no segment-native boundary is available; its
+  split/neighbor-apex, stronger context-apex, blank-like, edge/tail, width,
+  scan-count, and low-S/N guards remain fail-closed review or externalization
+  paths.
+
 ## RT And Identity
 
 - Treat RT as contextual evidence, not a single hard identity veto.
@@ -49,6 +73,11 @@ contract, machine-readable reason/status fields, and regression tests.
   target-specific NL/product anchor must not move the extraction window away
   from the ISTD-supported RT region by itself, because that silently converts a
   random DDA/NL event into peak identity authority.
+- When no learned analyte-vs-ISTD delta RT is available, a paired ISTD RT that
+  falls inside the target's configured RT window is the fallback target reference
+  for candidate search. This keeps Gaussian15/ChromPeakSegment MS1 candidates in
+  scope before any MS2/NL-triggered window narrowing is allowed to influence
+  selection.
 - ISTD-centered fallback opens the candidate search/review window only. It must
   not hard-backfill a missing paired STD/analyte into a counted detection; the
   selected row still needs the analyte/STD product policy to project as counted.
@@ -56,11 +85,25 @@ contract, machine-readable reason/status fields, and regression tests.
   evidence, not direct product authority, when the selected analyte peak has
   finite positive RT/area, candidate-aligned product/NL/MS2 support, targeted
   anchor selection context, and no anchor, RT, or NL/product conflict.
-- Analyte `NL_FAIL` and `NO_MS2` remain not-counted unless a separate approved
-  analyte policy exists. Pair evidence must not silently convert missing or
-  failed product evidence into a counted detection.
-- Avoid encoding fixed RT-delta constants as product truth without current
-  biological-matrix validation. If a distance threshold becomes production
+- Analyte `NL_FAIL` and `NO_MS2` remain not-counted unless the active paired
+  analyte rescue policy has all required support. Pair evidence must not
+  silently convert missing or failed product evidence into a counted detection.
+- DDA MS2 trigger without the key target NL/product tag is acquisition
+  opportunity evidence, not analyte identity support. When the key NL/product
+  tag is missing or failed, analyte rescue must rely on coherent MS1 peak
+  evidence plus paired ISTD RT and paired area-ratio support. Paired RT alone is
+  review evidence, not counted-detection authority.
+- Active paired area-ratio support is a run-level typed projection from
+  `xic_extractor.extraction.paired_area_ratio_projection`. Its reference range
+  is leave-one-sample-out target area / paired ISTD area from counted target
+  detections only, using the Gaussian15 morphology area when available. Reported
+  but not-counted target rows do not seed the reference range.
+- In paired biological-matrix analyte review, candidates more than 1.0 min from
+  the paired ISTD RT are treated as paired-RT mismatches unless strict
+  candidate-aligned NL/product evidence justifies review. Without strict
+  NL/product support, that mismatch is a not-counted policy cap.
+- Avoid adding more fixed RT-delta constants as product truth without current
+  biological-matrix validation. If another distance threshold becomes production
   policy, it needs its own contract, artifact, and regression tests.
 - Treat legacy scoring thresholds as calibration-sensitive heuristics. They may
   rank or annotate candidates, but they must not by themselves create a hard

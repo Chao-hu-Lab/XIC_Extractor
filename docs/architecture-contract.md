@@ -47,6 +47,20 @@ If a change appears to fit multiple rows, keep the low-level domain behavior in
 the package that owns the concept and put only orchestration at the caller. Do
 not add a new package just to avoid choosing an existing owner.
 
+Boundary ownership note:
+
+- `ChromPeakSegment` / segment-native projection owns active Gaussian15
+  chromatographic boundary promotion for selected peaks.
+- `selected_full_envelope` owns diagnostic and fallback envelope evidence. It
+  must not remain a permanent product gate when a segment-native boundary is
+  available.
+- Targeted extraction may orchestrate both, but boundary selection logic belongs
+  in `xic_extractor/peak_detection/`.
+- `xic_extractor/extraction/rt_windows.py` owns paired-target candidate-search
+  windowing. It may use a target-specific MS2/NL anchor as support, but paired
+  ISTD fallback references must be resolved before `peak_detection` enumerates
+  Gaussian15/ChromPeakSegment candidates.
+
 ## Diagnostics Contract
 
 Treat `tools/diagnostics/` as maintained product-adjacent code.
