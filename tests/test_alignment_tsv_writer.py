@@ -713,10 +713,10 @@ def test_one_detected_provisional_retention_stays_out_of_primary_matrix(
     assert review_rows[0]["include_in_primary_matrix"] == "FALSE"
     assert review_rows[0]["quantifiable_detected_count"] == "1"
     assert review_rows[0]["quantifiable_rescue_count"] == "2"
-    assert set(review_rows[0]["row_flags"].split(";")) >= {
+    assert set(review_rows[0]["row_flags"].split(";")) == {
         "single_detected_seed",
-        "provisional_retention_candidate",
-        "skip_expensive_evidence",
+        "rescue_heavy",
+        "rescue_only_review",
     }
     assert matrix_rows == []
 
@@ -778,9 +778,9 @@ def test_direct_tier2_review_token_does_not_change_matrix_writer(
         ),
     )
 
-    assert decision.candidate_gate_status == "keep_provisional"
+    assert decision.candidate_gate_status == "audit"
     assert decision.support_components == ()
-    assert "missing_positive_tier2_support" in decision.challenge_blockers
+    assert decision.challenge_blockers == ("not_retention_candidate",)
     assert _read_tsv(matrix_path) == []
 
 

@@ -90,6 +90,22 @@ ALIGNMENT_CELLS_COLUMNS = (
     "family_center_mz",
     "family_center_rt",
     "reason",
+    "backfill_ms1_pattern_status",
+    "backfill_ms1_pattern_evidence_level",
+    "backfill_qc_reference_status",
+    "backfill_qc_reference_evidence_level",
+    "backfill_matrix_rt_drift_status",
+    "backfill_drift_evidence_level",
+    "backfill_drift_compatible_status",
+    "backfill_drift_corrected_delta_sec",
+    "backfill_candidate_ms2_pattern_status",
+    "backfill_candidate_ms2_evidence_level",
+    "backfill_ms2_trigger_scan_count",
+    "backfill_strict_nl_scan_count",
+    "backfill_ms2_trace_strength",
+    "backfill_dda_missing_nl_policy_status",
+    "backfill_family_ms2_required_tag_status",
+    "backfill_evidence_reason",
     "region_candidate_count",
     "region_selected_proposal_sources",
     "region_selected_merge_note",
@@ -247,6 +263,44 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
                 "family_center_mz": format_value(_family_center_mz(cluster)),
                 "family_center_rt": format_value(_family_center_rt(cluster)),
                 "reason": cell.reason,
+                "backfill_ms1_pattern_status": cell.backfill_ms1_pattern_status,
+                "backfill_ms1_pattern_evidence_level": (
+                    cell.backfill_ms1_pattern_evidence_level
+                ),
+                "backfill_qc_reference_status": cell.backfill_qc_reference_status,
+                "backfill_qc_reference_evidence_level": (
+                    cell.backfill_qc_reference_evidence_level
+                ),
+                "backfill_matrix_rt_drift_status": (
+                    cell.backfill_matrix_rt_drift_status
+                ),
+                "backfill_drift_evidence_level": cell.backfill_drift_evidence_level,
+                "backfill_drift_compatible_status": (
+                    cell.backfill_drift_compatible_status
+                ),
+                "backfill_drift_corrected_delta_sec": format_value(
+                    cell.backfill_drift_corrected_delta_sec
+                ),
+                "backfill_candidate_ms2_pattern_status": (
+                    cell.backfill_candidate_ms2_pattern_status
+                ),
+                "backfill_candidate_ms2_evidence_level": (
+                    cell.backfill_candidate_ms2_evidence_level
+                ),
+                "backfill_ms2_trigger_scan_count": format_value(
+                    cell.backfill_ms2_trigger_scan_count
+                ),
+                "backfill_strict_nl_scan_count": format_value(
+                    cell.backfill_strict_nl_scan_count
+                ),
+                "backfill_ms2_trace_strength": cell.backfill_ms2_trace_strength,
+                "backfill_dda_missing_nl_policy_status": (
+                    cell.backfill_dda_missing_nl_policy_status
+                ),
+                "backfill_family_ms2_required_tag_status": (
+                    cell.backfill_family_ms2_required_tag_status
+                ),
+                "backfill_evidence_reason": cell.backfill_evidence_reason,
                 "region_candidate_count": format_value(cell.region_candidate_count),
                 "region_selected_proposal_sources": ";".join(
                     cell.region_selected_proposal_sources

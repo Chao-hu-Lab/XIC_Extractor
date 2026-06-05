@@ -18,7 +18,9 @@ contract, machine-readable reason/status fields, and regression tests.
 
 - The active MS1 morphology trace for peak shape, noise-shape, paired area-ratio
   review, and user-facing/final matrix area is Gaussian15-smoothed positive AsLS
-  residual (`gaussian15_positive_asls_residual`).
+  residual (`gaussian15_positive_asls_residual`) by default. The smoothing
+  window is configurable through `ms1_morphology_smoothing_window_points`, with
+  default `15`.
 - Raw trapezoid area and AsLS baseline-corrected area remain compatibility and
   audit evidence. They may be printed, compared, or used as fallback for legacy
   integrations that do not yet carry morphology facts, but they must not outrank
@@ -28,6 +30,14 @@ contract, machine-readable reason/status fields, and regression tests.
   product/NL/MS2 acquisition opportunity, and untargeted identity-coherence
   guards still decide whether a candidate is accepted, not counted, ambiguous,
   or excluded.
+- Gaussian-smoothed positive AsLS residual area is the current product area
+  owner, with configured window provenance recorded in metadata and candidate
+  rows. The default 15-point smoothing is scan-rate sensitive, and non-default
+  windows must be treated as method parameters. Production-ready claims across
+  batches must include a `gaussian15_area_pressure_audit.py` review of
+  raw-vs-Gaussian area ratios and estimated smoothing duration. This audit is
+  observational only; it must not mutate selected boundaries, selected area,
+  confidence, presence, workbook output, or matrix values.
 - For accepted candidates, `ChromPeakSegment` is the active chromatographic
   boundary owner when a Gaussian15 morphology segment contains the selected
   apex. It can replace an over-wide legacy resolver interval with an explicit
@@ -48,6 +58,27 @@ contract, machine-readable reason/status fields, and regression tests.
   candidate-aligned MS1/MS2 evidence unless an explicit hard RT exclusion policy
   exists.
 
+## Untargeted Backfill Evidence Gate
+
+- Owner backfill may enumerate rescued cells for review, plotting, and
+  diagnostics, but high-risk rescue promotion must not rely on broad-window
+  membership, `owner_backfill` trace labels, local apex presence, or scan support
+  alone.
+- A rescued cell can support high/weak backfill-dependent matrix promotion only
+  when the typed backfill projection explains all three evidence groups:
+  preferred-RT proximity or compatible drift/iRT correction; machine-observed
+  MS1 pattern or QC pattern support; and candidate-aligned MS2/NL support or an
+  explicit DDA-missing-NL non-dispositive context with family-level required tag
+  support.
+- Scan support and trace quality remain assessability/coverage evidence. They
+  may block low-quality rescue, but they are not independent identity evidence.
+- Candidate-aligned MS2 conflict, MS1/QC pattern conflict, or unexplained RT
+  outside the preferred RT band keeps the rescue review-only even if the peak is
+  quantifiable inside the broader owner-backfill query window.
+- Pre-backfill consolidation remains a separate high-risk identity-row problem.
+  Do not use the backfill evidence gate as proof that a 180 sec consolidation
+  row is chemically valid.
+
 ## ISTD Evidence
 
 - For ISTDs, when a coherent evidence chain exists, such as aligned MS1 peak
@@ -61,6 +92,11 @@ contract, machine-readable reason/status fields, and regression tests.
 - When biological samples receive ISTDs, those ISTDs are the primary transfer
   evidence for real-matrix RT/response behavior because they share the sample
   matrix, ion suppression/enhancement, RT drift, and sample-prep context.
+- RT prior support and paired ISTD RT support are one role-aware RT evidence
+  group when they describe the same selected candidate. They may remain visible
+  as separate typed facts, but product projection must not count
+  `rt_prior_close`, `paired_istd_aligned`, and `paired_istd_rt_close` as three
+  independent physical observations.
 
 ## Targeted Analyte / STD Pair Evidence
 
@@ -99,10 +135,12 @@ contract, machine-readable reason/status fields, and regression tests.
   group are diagnostic/conflict context for another chromatographic event, not
   active support for the current candidate.
 - Active paired area-ratio support is a run-level typed projection from
-  `xic_extractor.extraction.paired_area_ratio_projection`. Its reference range
-  is leave-one-sample-out target area / paired ISTD area from counted target
-  detections only, using the Gaussian15 morphology area when available. Reported
-  but not-counted target rows do not seed the reference range.
+  `xic_extractor.extraction.paired_area_ratio_projection`. Its active reference
+  range is leave-one-sample-out median +/- 3 scaled MAD target area / paired
+  ISTD area from counted target detections only, using the Gaussian15 morphology
+  area when available. The old leave-one-out min/max range is retained as a
+  reference/debug projection only. Reported but not-counted target rows do not
+  seed the active range.
 - In paired biological-matrix analyte review, candidates more than 1.0 min from
   the paired ISTD RT are treated as paired-RT mismatches unless strict
   candidate-aligned NL/product evidence justifies review. Without strict
@@ -161,6 +199,12 @@ policy, and machine-readable GO/NO-GO blockers.
   the shared evidence rule, diagnostic wording, or reviewed row is wrong.
 - Fix the shared rule and add regression tests when diagnostic logic is wrong;
   do not encode one-off sample or target exceptions as the primary solution.
+- Region-selection verdicts other than the existing adjacent-WIS
+  `safe_merge_eligible` class are not product authority. `wider_boundary_preferred`,
+  `neighbor_apex_preferred`, and `split_supported` remain
+  `behavior_change_required` until a future oracle and public behavior addendum
+  promote or retire them. `area_integration_uncertainty` outputs remain
+  diagnostic/review evidence unless a future contract names a specific gate.
 
 ## Targeted And Untargeted Boundary
 

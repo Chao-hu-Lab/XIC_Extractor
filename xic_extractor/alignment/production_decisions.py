@@ -14,6 +14,13 @@ from xic_extractor.alignment.matrix_identity import (
     build_matrix_identity_decisions,
 )
 from xic_extractor.alignment.output_rows import cells_by_cluster, row_id
+from xic_extractor.alignment.promotion_policy import (
+    BACKFILL_CELL_EVIDENCE_REQUIRED_FLAG,
+    LOW_MS1_COVERAGE_BLOCKED_REASON,
+    MISSING_BACKFILL_EVIDENCE_BLOCKED_REASON,
+    NEIGHBOR_INTERFERENCE_BLOCKED_REASON,
+    cell_evidence_from_aligned,
+)
 
 ProductionStatus = Literal[
     "detected",
@@ -136,6 +143,15 @@ def _cell_decision(
                 "review_rescue",
                 "missing_row_identity_support",
             )
+        if BACKFILL_CELL_EVIDENCE_REQUIRED_FLAG in identity_row.row_flags:
+            backfill_evidence = cell_evidence_from_aligned(cell, quality)
+            if not backfill_evidence.supported_for_backfill:
+                return _blank(
+                    cell,
+                    "review_rescue",
+                    "review_rescue",
+                    _backfill_cell_blank_reason(backfill_evidence),
+                )
         return ProductionCellDecision(
             feature_family_id=cell.cluster_id,
             sample_stem=cell.sample_stem,
@@ -169,6 +185,15 @@ def _cell_decision(
             quality.quality_reason,
         )
     return _blank(cell, "blank", "", quality.quality_reason)
+
+
+def _backfill_cell_blank_reason(backfill_evidence: object) -> str:
+    if getattr(backfill_evidence, "high_neighbor_interference", False):
+        return NEIGHBOR_INTERFERENCE_BLOCKED_REASON
+    if getattr(backfill_evidence, "low_assessable_coverage", False):
+        return LOW_MS1_COVERAGE_BLOCKED_REASON
+    reason = str(getattr(backfill_evidence, "backfill_identity_block_reason", ""))
+    return reason or MISSING_BACKFILL_EVIDENCE_BLOCKED_REASON
 
 
 def _row_decision(

@@ -10,8 +10,7 @@ from xic_extractor.alignment.promotion_policy import (
     CELL_EVIDENCE_SUPPORTED_REASON,
     DDA_LIMITED_MS2_SHAPE_REASON,
     HIGH_BACKFILL_CAPPED_FLAG,
-    LOW_MS1_COVERAGE_BLOCKED_REASON,
-    NEIGHBOR_INTERFERENCE_BLOCKED_REASON,
+    PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON,
     RESCUE_ONLY_BLOCKED_REASON,
 )
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
@@ -86,6 +85,39 @@ def test_extreme_dr_backfill_dependency_with_cell_evidence_promotes() -> None:
     assert HIGH_BACKFILL_CAPPED_FLAG in decision.row_flags
 
 
+def test_scan_support_only_high_backfill_retains_seed_identity() -> None:
+    matrix = _matrix(
+        _feature("FAM001", evidence="owner_complete_link;owner_count=2"),
+        (
+            _cell("seed1", "FAM001", "detected", 100.0),
+            _cell("seed2", "FAM001", "detected", 95.0),
+            *tuple(
+                _cell(
+                    f"rescue{i:02d}",
+                    "FAM001",
+                    "rescued",
+                    80.0 + i,
+                    backfill_evidence=False,
+                )
+                for i in range(1, 84)
+            ),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is True
+    assert decision.identity_decision == "production_family"
+    assert decision.identity_confidence == "review"
+    assert (
+        decision.identity_reason
+        == PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON
+    )
+    assert "backfill_cell_evidence_required" in decision.row_flags
+    assert "backfill_rescue_review_only" in decision.row_flags
+    assert "missing_independent_backfill_identity_evidence" in decision.row_flags
+
+
 def test_single_detected_seed_does_not_enter_policy_promotion() -> None:
     matrix = _matrix(
         _feature("FAM001", evidence="owner_complete_link;owner_count=1"),
@@ -122,6 +154,7 @@ def test_one_detected_area_only_rescue_is_not_provisional_retention_candidate() 
                 90.0,
                 trace_quality="owner_backfill",
                 scan_support_score=None,
+                backfill_evidence=False,
             ),
             _cell(
                 "rescue2",
@@ -130,6 +163,7 @@ def test_one_detected_area_only_rescue_is_not_provisional_retention_candidate() 
                 80.0,
                 trace_quality="owner_backfill",
                 scan_support_score=None,
+                backfill_evidence=False,
             ),
         ),
     )
@@ -286,6 +320,7 @@ def test_known_drift_within_alignment_window_does_not_demote_family() -> None:
                 trace_quality="owner_backfill",
                 scan_support_score=0.8,
                 rt_delta_sec=-120.0,
+                backfill_drift_supported=True,
             ),
             *tuple(
                 _cell(
@@ -306,6 +341,64 @@ def test_known_drift_within_alignment_window_does_not_demote_family() -> None:
     assert decision.include_in_primary_matrix is True
     assert decision.identity_reason == DDA_LIMITED_MS2_SHAPE_REASON
     assert HIGH_BACKFILL_CAPPED_FLAG in decision.row_flags
+
+
+def test_unexplained_rt_delta_beyond_preferred_blocks_backfill_promotion() -> None:
+    matrix = _matrix(
+        _feature(
+            "FAM001",
+            evidence="owner_complete_link;owner_count=3",
+            members=(
+                _candidate("seed1#candidate", evidence_score=55),
+                _candidate("seed2#candidate", seed_event_count=1),
+                _candidate("seed3#candidate", nl_ppm=12.0),
+            ),
+        ),
+        (
+            _cell(
+                "seed1",
+                "FAM001",
+                "detected",
+                100.0,
+                source_candidate_id="seed1#candidate",
+            ),
+            _cell(
+                "seed2",
+                "FAM001",
+                "detected",
+                95.0,
+                source_candidate_id="seed2#candidate",
+            ),
+            _cell(
+                "seed3",
+                "FAM001",
+                "detected",
+                90.0,
+                source_candidate_id="seed3#candidate",
+            ),
+            *tuple(
+                _cell(
+                    f"rescue{i}",
+                    "FAM001",
+                    "rescued",
+                    70.0 + i,
+                    rt_delta_sec=120.0,
+                )
+                for i in range(1, 7)
+            ),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is True
+    assert decision.identity_confidence == "review"
+    assert (
+        decision.identity_reason
+        == PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON
+    )
+    assert "backfill_cell_evidence_required" in decision.row_flags
+    assert "missing_independent_backfill_identity_evidence" in decision.row_flags
 
 
 def test_adequate_seed_dr_backfill_dependency_remains_production() -> None:
@@ -451,6 +544,7 @@ def test_high_score_low_event_seeds_do_not_bypass_weak_seed_gate() -> None:
                     70.0 + i,
                     trace_quality="review",
                     scan_support_score=None,
+                    backfill_evidence=False,
                 )
                 for i in range(1, 7)
             ),
@@ -460,10 +554,15 @@ def test_high_score_low_event_seeds_do_not_bypass_weak_seed_gate() -> None:
 
     decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
 
-    assert decision.include_in_primary_matrix is False
-    assert decision.identity_decision == "provisional_discovery"
-    assert decision.identity_reason == LOW_MS1_COVERAGE_BLOCKED_REASON
+    assert decision.include_in_primary_matrix is True
+    assert decision.identity_decision == "production_family"
+    assert decision.identity_confidence == "review"
+    assert (
+        decision.identity_reason
+        == PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON
+    )
     assert "weak_seed_backfill_dependency" in decision.row_flags
+    assert "backfill_cell_evidence_required" in decision.row_flags
 
 
 def test_weak_seed_gate_reads_owner_events_when_trusted_support_is_thin() -> None:
@@ -530,6 +629,7 @@ def test_rt_local_apex_low_interference_alone_does_not_promote() -> None:
                     80.0 + i,
                     trace_quality="review",
                     scan_support_score=None,
+                    backfill_evidence=False,
                 )
                 for i in range(1, 84)
             ),
@@ -538,8 +638,14 @@ def test_rt_local_apex_low_interference_alone_does_not_promote() -> None:
 
     decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
 
-    assert decision.include_in_primary_matrix is False
-    assert decision.identity_reason == LOW_MS1_COVERAGE_BLOCKED_REASON
+    assert decision.include_in_primary_matrix is True
+    assert decision.identity_confidence == "review"
+    assert (
+        decision.identity_reason
+        == PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON
+    )
+    assert "backfill_cell_evidence_required" in decision.row_flags
+    assert "missing_independent_backfill_identity_evidence" in decision.row_flags
 
 
 def test_owner_backfill_label_without_independent_support_does_not_promote() -> None:
@@ -559,6 +665,7 @@ def test_owner_backfill_label_without_independent_support_does_not_promote() -> 
                     80.0 + i,
                     trace_quality="owner_backfill",
                     scan_support_score=None,
+                    backfill_evidence=False,
                 )
                 for i in range(1, 84)
             ),
@@ -567,8 +674,14 @@ def test_owner_backfill_label_without_independent_support_does_not_promote() -> 
 
     decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
 
-    assert decision.include_in_primary_matrix is False
-    assert decision.identity_reason == LOW_MS1_COVERAGE_BLOCKED_REASON
+    assert decision.include_in_primary_matrix is True
+    assert decision.identity_confidence == "review"
+    assert (
+        decision.identity_reason
+        == PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON
+    )
+    assert "backfill_cell_evidence_required" in decision.row_flags
+    assert "missing_independent_backfill_identity_evidence" in decision.row_flags
 
 
 def test_neighboring_ms1_interference_blocks_backfill_promotion() -> None:
@@ -592,8 +705,14 @@ def test_neighboring_ms1_interference_blocks_backfill_promotion() -> None:
 
     decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
 
-    assert decision.include_in_primary_matrix is False
-    assert decision.identity_reason == NEIGHBOR_INTERFERENCE_BLOCKED_REASON
+    assert decision.include_in_primary_matrix is True
+    assert decision.identity_confidence == "review"
+    assert (
+        decision.identity_reason
+        == PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON
+    )
+    assert "backfill_cell_evidence_required" in decision.row_flags
+    assert "neighboring_ms1_interference" in decision.row_flags
 
 
 def test_single_sample_local_owner_is_audit_even_with_rescue() -> None:
@@ -777,6 +896,8 @@ def _cell(
     scan_support_score: float | None | object = _DEFAULT_SCAN_SUPPORT,
     rt_delta_sec: float = 0.0,
     region_review_reason: str = "",
+    backfill_evidence: bool = True,
+    backfill_drift_supported: bool = False,
     selected_integration: IntegrationResult | None = None,
 ) -> AlignedCell:
     has_area = area is not None
@@ -816,6 +937,11 @@ def _cell(
         reason=status,
         region_review_reason=region_review_reason,
         selected_integration=selected_integration,
+        **_backfill_evidence_fields(
+            status=status,
+            enabled=backfill_evidence,
+            drift_supported=backfill_drift_supported,
+        ),
     )
 
 
@@ -836,7 +962,43 @@ def _integration(*, raw_area: float, asls_area: float) -> IntegrationResult:
         area_baseline_corrected=asls_area,
         baseline_type="asls",
         boundary_sources=("test_fixture",),
+        area_ms1_morphology=asls_area,
+        ms1_morphology_area_source=(
+            "gaussian15_positive_asls_residual" if asls_area is not None else ""
+        ),
     )
+
+
+def _backfill_evidence_fields(
+    *,
+    status: str,
+    enabled: bool,
+    drift_supported: bool,
+) -> dict[str, object]:
+    if status != "rescued" or not enabled:
+        return {}
+    fields: dict[str, object] = {
+        "backfill_ms1_pattern_status": "supportive",
+        "backfill_ms1_pattern_evidence_level": "sample_constellation",
+        "backfill_qc_reference_status": "supportive",
+        "backfill_qc_reference_evidence_level": "qc_consensus_with_local_qc_overlay",
+        "backfill_candidate_ms2_pattern_status": "partial_support",
+        "backfill_candidate_ms2_evidence_level": "sample_candidate_aligned",
+        "backfill_ms2_trigger_scan_count": 3,
+        "backfill_strict_nl_scan_count": 1,
+        "backfill_ms2_trace_strength": "moderate",
+        "backfill_evidence_reason": "unit_test_supported_backfill_evidence",
+    }
+    if drift_supported:
+        fields.update(
+            {
+                "backfill_matrix_rt_drift_status": "drift_supported",
+                "backfill_drift_evidence_level": "sample_istd_aligned",
+                "backfill_drift_compatible_status": "compatible",
+                "backfill_drift_corrected_delta_sec": 4.0,
+            }
+        )
+    return fields
 
 
 def _candidate(

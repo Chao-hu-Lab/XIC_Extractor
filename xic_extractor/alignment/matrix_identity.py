@@ -22,11 +22,15 @@ from xic_extractor.alignment.identity_gates import (
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.output_rows import row_id
 from xic_extractor.alignment.promotion_policy import (
+    BACKFILL_CELL_EVIDENCE_REQUIRED_FLAG,
+    BACKFILL_RESCUE_REVIEW_ONLY_FLAG,
+    PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON,
     RESCUE_ONLY_BLOCKED_REASON,
     BackfillPromotionDecision,
     BackfillPromotionEvidence,
     classify_backfill_promotion,
     evidence_from_alignment,
+    is_backfill_cell_only_block_reason,
 )
 
 IdentityDecision = Literal[
@@ -154,6 +158,13 @@ def decide_matrix_identity_row(
     ):
         flags.append("provisional_retention_candidate")
         flags.append("skip_expensive_evidence")
+    rescue_cell_only_block = (
+        promotion_policy.blocked
+        and is_backfill_cell_only_block_reason(promotion_policy.reason)
+    )
+    if rescue_cell_only_block:
+        flags.append(BACKFILL_CELL_EVIDENCE_REQUIRED_FLAG)
+        flags.append(BACKFILL_RESCUE_REVIEW_ONLY_FLAG)
     flags.extend(promotion_policy.flags)
     include, identity_decision, confidence, reason = _promotion_decision(
         cluster,
@@ -208,7 +219,11 @@ def _promotion_decision(
         return False, "audit_family", "none", "zero_quantifiable_detected"
     if duplicate_count > q_detected:
         return False, "audit_family", "review", "duplicate_claim_pressure"
-    if promotion_policy.blocked:
+    rescue_cell_only_block = (
+        promotion_policy.blocked
+        and is_backfill_cell_only_block_reason(promotion_policy.reason)
+    )
+    if promotion_policy.blocked and not rescue_cell_only_block:
         return (
             False,
             "provisional_discovery",
@@ -222,14 +237,20 @@ def _promotion_decision(
             "medium",
             promotion_policy.reason,
         )
-    if backfill_dependency == EXTREME_BACKFILL_REASON:
+    if (
+        backfill_dependency == EXTREME_BACKFILL_REASON
+        and not rescue_cell_only_block
+    ):
         return (
             False,
             "provisional_discovery",
             "review",
             "extreme_backfill_dependency",
         )
-    if backfill_dependency == WEAK_SEED_BACKFILL_REASON:
+    if (
+        backfill_dependency == WEAK_SEED_BACKFILL_REASON
+        and not rescue_cell_only_block
+    ):
         return (
             False,
             "provisional_discovery",
@@ -245,6 +266,13 @@ def _promotion_decision(
         )
     if primary_evidence in {"owner_complete_link", "cid_nl_only", "owner_identity"}:
         if q_detected >= 2:
+            if rescue_cell_only_block:
+                return (
+                    True,
+                    "production_family",
+                    "review",
+                    PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON,
+                )
             if backfill_dependency == WEAK_SEED_TOLERATED_REASON:
                 return (
                     True,
@@ -258,8 +286,15 @@ def _promotion_decision(
             "provisional_discovery",
             "review",
             "insufficient_detected_identity_support",
-        )
+            )
     if primary_evidence == "multi_sample_detected":
+        if rescue_cell_only_block:
+            return (
+                True,
+                "production_family",
+                "review",
+                PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON,
+            )
         return True, "production_family", "medium", "multi_sample_detected"
     if primary_evidence == "anchored_family":
         return (

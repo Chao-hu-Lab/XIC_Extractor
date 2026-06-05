@@ -8,6 +8,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from xic_extractor.alignment.shared_peak_identity_explanation.schema import (
+    ACTIVATION_DECISION_COLUMNS,
+)
+
 _SUMMARY_COLUMNS = ("metric", "value")
 _FAMILY_COLUMNS = (
     "feature_family_id",
@@ -63,6 +67,25 @@ _GATE_CANDIDATE_COLUMNS = (
     "recommended_action",
     "recommendation_reason",
 )
+_CHANGED_ROW_BUNDLE_COLUMNS = (
+    "stable_row_id",
+    "sample",
+    "target",
+    "legacy_candidate_id",
+    "successor_candidate_id",
+    "selected_rt",
+    "area",
+    "boundary",
+    "confidence",
+    "reason",
+    "presence_impact",
+    "typed_facts_completeness",
+    "retired_legacy_inputs",
+    "ms2_nl_opportunity_status",
+    "rt_istd_rationale",
+    "evidence_tier",
+    "reviewer_verdict",
+)
 
 
 def write_outputs(output_dir: Path, result: Mapping[str, Any]) -> None:
@@ -86,6 +109,16 @@ def write_outputs(output_dir: Path, result: Mapping[str, Any]) -> None:
         output_dir / "single_dr_gate_candidates.tsv",
         result["gate_candidates"],
         fieldnames=_GATE_CANDIDATE_COLUMNS,
+    )
+    _write_tsv(
+        output_dir / "single_dr_gate_activation_decisions.tsv",
+        result["activation_decisions"],
+        fieldnames=ACTIVATION_DECISION_COLUMNS,
+    )
+    _write_tsv(
+        output_dir / "single_dr_gate_changed_row_bundle.tsv",
+        result["changed_row_bundle"],
+        fieldnames=_CHANGED_ROW_BUNDLE_COLUMNS,
     )
     (output_dir / "single_dr_gate_decision.json").write_text(
         json.dumps(result, indent=2, sort_keys=True),

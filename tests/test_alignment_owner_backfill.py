@@ -13,10 +13,7 @@ from xic_extractor.peak_detection.region_audit import PeakRegionAuditSummary
 
 
 def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
-    source = FakeBackfillSource(
-        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
-        intensity=np.array([0.0, 50.0, 120.0, 50.0, 0.0]),
-    )
+    source = _dense_peak_source(center=8.50, height=120.0)
     feature = _feature()
 
     cells = build_owner_backfill_cells(
@@ -54,7 +51,7 @@ def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
     assert cell.gap_fill_reason == "group_centered_query_detected"
     assert cell.missing_observation_state == "queried_and_detected"
     assert cell.group_claim_state == "unclaimed_or_winner"
-    assert cell.scan_support_score == 0.5
+    assert cell.scan_support_score == 0.9
     assert cell.region_candidate_count is not None
     assert cell.region_shadow_status == "evaluated"
     assert cell.region_local_mixture_diagnostic
@@ -62,10 +59,7 @@ def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
 
 
 def test_owner_backfill_accepts_delivery_contract_feature_without_legacy_dto() -> None:
-    source = FakeBackfillSource(
-        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
-        intensity=np.array([0.0, 50.0, 120.0, 50.0, 0.0]),
-    )
+    source = _dense_peak_source(center=8.50, height=120.0)
     owner = SimpleNamespace(sample_stem="sample-a", owner_area=1000.0)
     feature = SimpleNamespace(
         feature_family_id="FAM_CONTRACT",
@@ -398,16 +392,13 @@ def test_owner_backfill_uses_preconsolidated_seed_centers_and_keeps_best_peak() 
                 center = (request.rt_min + request.rt_max) / 2.0
                 self.centers.append(center)
                 intensity = 300.0 if round(center, 1) == 8.8 else 100.0
+                scale = np.array(
+                    [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 0.75, 0.5, 0.25, 0.1, 0.0],
+                )
                 traces.append(
                     XICTrace.from_arrays(
-                        [
-                            center - 0.10,
-                            center - 0.01,
-                            center,
-                            center + 0.01,
-                            center + 0.10,
-                        ],
-                        [0.0, intensity / 2.0, intensity, intensity / 2.0, 0.0],
+                        np.linspace(center - 0.10, center + 0.10, 11),
+                        intensity * scale,
                     )
                 )
             return tuple(traces)
@@ -435,7 +426,7 @@ def test_owner_backfill_uses_preconsolidated_seed_centers_and_keeps_best_peak() 
     assert cells[0].sample_stem == "sample-b"
     assert cells[0].area is not None and cells[0].area > 0
     assert cells[0].apex_rt == 8.8
-    assert cells[0].scan_support_score == 0.5
+    assert cells[0].scan_support_score == 0.9
     assert cells[0].backfill_seed_mz == 500.0
     assert cells[0].backfill_seed_rt == 8.8
     assert np.isclose(cells[0].backfill_request_rt_min, 5.8)
@@ -953,6 +944,16 @@ class FakeBackfillSource:
     def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
         self.calls.append((mz, rt_min, rt_max, ppm_tol))
         return self.rt, self.intensity
+
+
+def _dense_peak_source(*, center: float, height: float) -> FakeBackfillSource:
+    scale = np.array(
+        [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 0.75, 0.5, 0.25, 0.1, 0.0],
+    )
+    return FakeBackfillSource(
+        rt=np.linspace(center - 0.10, center + 0.10, 11),
+        intensity=height * scale,
+    )
 
 
 def _feature(

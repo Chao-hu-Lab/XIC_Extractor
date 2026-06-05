@@ -290,8 +290,14 @@ def test_activation_application_formal_mode_writes_product_contract_names(
     assert outputs.matrix_tsv == tmp_path / "formal" / "alignment_matrix.tsv"
     assert outputs.review_tsv == tmp_path / "formal" / "alignment_review.tsv"
     assert outputs.cells_tsv == tmp_path / "formal" / "alignment_cells.tsv"
+    assert (
+        outputs.hypothesis_identity_tsv
+        == tmp_path / "formal" / "activation_hypothesis_identity.tsv"
+    )
     assert not (tmp_path / "formal" / "alignment_matrix_activated.tsv").exists()
-    assert _header(outputs.matrix_tsv)[:8] == (
+    assert _header(outputs.matrix_tsv) == ("Mz", "RT", "S1", "S2")
+    assert outputs.hypothesis_identity_tsv is not None
+    assert _header(outputs.hypothesis_identity_tsv)[:8] == (
         "peak_hypothesis_id",
         "feature_family_id",
         "candidate_container_id",
@@ -303,29 +309,117 @@ def test_activation_application_formal_mode_writes_product_contract_names(
     )
     assert _header(outputs.review_tsv) == _header(fixture["review"])
     assert _header(outputs.cells_tsv) == _header(fixture["cells"])
-    matrix_rows = {
-        row["peak_hypothesis_id"]: row for row in _read_tsv(outputs.matrix_tsv)
+    matrix_rows = _read_tsv(outputs.matrix_tsv)
+    assert all("peak_hypothesis_id" not in row for row in matrix_rows)
+    identity_rows = {
+        row["peak_hypothesis_id"]: row
+        for row in _read_tsv(outputs.hypothesis_identity_tsv)
     }
-    assert matrix_rows["FAM_ADD::mode_1"]["S2"] == "300"
-    assert matrix_rows["FAM_KEEP::mode_1"]["S2"] == "777"
-    assert matrix_rows["FAM_SPLIT::blue"]["S1"] == "111"
-    assert matrix_rows["FAM_SPLIT::blue"]["S2"] == ""
-    assert matrix_rows["FAM_SPLIT::green"]["S1"] == ""
-    assert matrix_rows["FAM_SPLIT::green"]["S2"] == "222"
-    assert matrix_rows["FAM_BLOCK::family_projection"][
+    assert identity_rows["FAM_ADD::mode_1"]["S2"] == "300"
+    assert identity_rows["FAM_KEEP::mode_1"]["S2"] == "777"
+    assert identity_rows["FAM_SPLIT::blue"]["S1"] == "111"
+    assert identity_rows["FAM_SPLIT::blue"]["S2"] == ""
+    assert identity_rows["FAM_SPLIT::green"]["S1"] == ""
+    assert identity_rows["FAM_SPLIT::green"]["S2"] == "222"
+    assert identity_rows["FAM_BLOCK::family_projection"][
         "row_identity_basis"
     ] == "family_projection_no_split_evidence"
     summary = _read_tsv(outputs.summary_tsv)[0]
     assert summary["activation_output_mode"] == "formal"
-    assert summary["matrix_row_identity"] == "peak_hypothesis_id"
+    assert summary["matrix_row_identity"] == "mz_rt_sample_columns"
     assert summary["canonical_row_identity_ready"] == "FALSE"
     assert summary["canonical_row_identity_blockers"] == "family_projection_present"
     assert summary["canonical_row_identity_scope"] == (
-        "partial_peak_hypothesis_with_family_projections"
+        "partial_peak_hypothesis_sidecar_with_family_projections"
     )
     assert summary["family_projection_semantics"] == "projection_not_split_proof"
     assert summary["legacy_rt_row_context_authority"] == "not_applicable"
     assert summary["all_family_split_science_ready"] == "FALSE"
+
+
+def test_activation_formal_accepts_public_mz_rt_matrix_with_identity_sidecar(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    public_matrix = _write_public_mz_rt_matrix_fixture(tmp_path, fixture)
+    identity = _write_alignment_matrix_identity_fixture(tmp_path)
+
+    outputs = product_activation.apply_activation_to_alignment_outputs(
+        activation_decisions_tsv=fixture["decisions"],
+        activation_acceptance_tsv=fixture["acceptance"],
+        alignment_matrix_tsv=public_matrix,
+        alignment_matrix_identity_tsv=identity,
+        alignment_review_tsv=fixture["review"],
+        alignment_cells_tsv=fixture["cells"],
+        output_dir=tmp_path / "formal",
+        output_mode="formal",
+    )
+
+    assert _header(outputs.matrix_tsv) == ("Mz", "RT", "S1", "S2")
+    matrix_rows = _read_tsv(outputs.matrix_tsv)
+    assert all("feature_family_id" not in row for row in matrix_rows)
+    assert all("peak_hypothesis_id" not in row for row in matrix_rows)
+    assert {
+        (row["Mz"], row["RT"], row["S1"], row["S2"])
+        for row in matrix_rows
+    } == {
+        ("100.1", "7.15", "100", ""),
+        ("200.2", "8.2", "", "300"),
+        ("300.3", "9.35", "", "777"),
+        ("400.4", "10.45", "111", ""),
+        ("400.4", "10.45", "", "222"),
+    }
+
+    assert outputs.hypothesis_identity_tsv is not None
+    identity_rows = {
+        row["peak_hypothesis_id"]: row
+        for row in _read_tsv(outputs.hypothesis_identity_tsv)
+    }
+    assert identity_rows["FAM_BLOCK"]["row_identity_basis"] == (
+        "no_split_peak_hypothesis"
+    )
+    assert identity_rows["FAM_BLOCK"]["feature_family_id"] == "FAM_BLOCK"
+    assert identity_rows["FAM_BLOCK"]["S2"] == ""
+    assert identity_rows["FAM_ADD::mode_1"]["S2"] == "300"
+    assert identity_rows["FAM_KEEP::mode_1"]["S2"] == "777"
+    assert identity_rows["FAM_SPLIT::blue"]["S1"] == "111"
+    assert identity_rows["FAM_SPLIT::green"]["S2"] == "222"
+
+    assert outputs.matrix_identity_tsv == tmp_path / "formal" / (
+        "alignment_matrix_identity.tsv"
+    )
+    matrix_identity_rows = _read_tsv(outputs.matrix_identity_tsv)
+    assert [row["matrix_row_index"] for row in matrix_identity_rows] == [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+    ]
+    assert [
+        (row["Mz"], row["RT"])
+        for row in matrix_identity_rows
+    ] == [
+        (row["Mz"], row["RT"])
+        for row in matrix_rows
+    ]
+    matrix_identity_by_peak = {
+        row["peak_hypothesis_id"]: row for row in matrix_identity_rows
+    }
+    assert matrix_identity_by_peak["FAM_BLOCK"]["source_feature_family_ids"] == (
+        "FAM_BLOCK"
+    )
+    assert matrix_identity_by_peak["FAM_ADD::mode_1"][
+        "source_feature_family_ids"
+    ] == "FAM_ADD"
+    assert matrix_identity_by_peak["FAM_SPLIT::blue"][
+        "source_feature_family_ids"
+    ] == "FAM_SPLIT"
+
+    summary = _read_tsv(outputs.summary_tsv)[0]
+    assert summary["matrix_row_identity"] == "mz_rt_sample_columns"
+    assert summary["canonical_row_identity_blockers"] == "none"
+    assert summary["canonical_row_identity_ready"] == "TRUE"
 
 
 def test_activation_application_formal_mode_uses_legacy_rt_row_oracle(
@@ -346,10 +440,12 @@ def test_activation_application_formal_mode_uses_legacy_rt_row_oracle(
         legacy_rt_row_oracle_xlsx=oracle,
     )
 
-    matrix_rows = {
-        row["peak_hypothesis_id"]: row for row in _read_tsv(outputs.matrix_tsv)
+    assert outputs.hypothesis_identity_tsv is not None
+    identity_rows = {
+        row["peak_hypothesis_id"]: row
+        for row in _read_tsv(outputs.hypothesis_identity_tsv)
     }
-    row = matrix_rows["FAM_BLOCK::family_projection"]
+    row = identity_rows["FAM_BLOCK::family_projection"]
     assert row["feature_family_id"] == "FAM_BLOCK"
     assert row["row_identity_basis"] == "family_projection_no_split_evidence"
     assert row["legacy_rt_row_context_id"] == (
@@ -400,14 +496,16 @@ def test_activation_application_formal_mode_excludes_projections_as_partial(
         exclude_family_projections=True,
     )
 
-    matrix_rows = {
-        row["peak_hypothesis_id"]: row for row in _read_tsv(outputs.matrix_tsv)
+    assert outputs.hypothesis_identity_tsv is not None
+    identity_rows = {
+        row["peak_hypothesis_id"]: row
+        for row in _read_tsv(outputs.hypothesis_identity_tsv)
     }
-    assert "FAM_BLOCK::family_projection" not in matrix_rows
-    assert matrix_rows["FAM_ADD::mode_1"]["S2"] == "300"
-    assert matrix_rows["FAM_KEEP::mode_1"]["S2"] == "777"
-    assert matrix_rows["FAM_SPLIT::blue"]["S1"] == "111"
-    assert matrix_rows["FAM_SPLIT::green"]["S2"] == "222"
+    assert "FAM_BLOCK::family_projection" not in identity_rows
+    assert identity_rows["FAM_ADD::mode_1"]["S2"] == "300"
+    assert identity_rows["FAM_KEEP::mode_1"]["S2"] == "777"
+    assert identity_rows["FAM_SPLIT::blue"]["S1"] == "111"
+    assert identity_rows["FAM_SPLIT::green"]["S2"] == "222"
 
     summary = _read_tsv(outputs.summary_tsv)[0]
     assert summary["canonical_row_identity_ready"] == "FALSE"
@@ -465,13 +563,15 @@ def test_activation_application_formal_mode_keeps_max_area_for_value_conflict(
         output_mode="formal",
     )
 
-    matrix_rows = {
-        row["peak_hypothesis_id"]: row for row in _read_tsv(outputs.matrix_tsv)
+    assert outputs.hypothesis_identity_tsv is not None
+    identity_rows = {
+        row["peak_hypothesis_id"]: row
+        for row in _read_tsv(outputs.hypothesis_identity_tsv)
     }
-    assert matrix_rows["FAM_KEEP::mode_1"]["feature_family_id"] == (
+    assert identity_rows["FAM_KEEP::mode_1"]["feature_family_id"] == (
         "FAM_ADD;FAM_KEEP"
     )
-    assert matrix_rows["FAM_KEEP::mode_1"]["S2"] == "777"
+    assert identity_rows["FAM_KEEP::mode_1"]["S2"] == "777"
     summary = _read_tsv(outputs.summary_tsv)[0]
     assert summary["matrix_value_conflict_cells"] == "1"
     assert summary["matrix_value_conflict_policy"] == "max_area_pending_baseline"
@@ -521,6 +621,53 @@ def test_activation_application_cli_writes_product_copies(tmp_path: Path) -> Non
     assert (tmp_path / "out" / "activation_value_delta.tsv").exists()
 
 
+def test_activation_application_cli_projects_backfill_evidence_sidecars(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    sidecars = _write_backfill_evidence_sidecars(tmp_path)
+
+    assert (
+        main(
+            [
+                "--activation-decisions-tsv",
+                str(fixture["decisions"]),
+                "--activation-acceptance-tsv",
+                str(fixture["acceptance"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--candidate-ms2-pattern-evidence-tsv",
+                str(sidecars["candidate_ms2_pattern"]),
+                "--ms1-pattern-coherence-evidence-tsv",
+                str(sidecars["ms1_pattern_coherence"]),
+                "--qc-ms1-pattern-reference-evidence-tsv",
+                str(sidecars["qc_ms1_pattern_reference"]),
+                "--matrix-rt-drift-policy-tsv",
+                str(sidecars["matrix_rt_drift_policy"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+            ]
+        )
+        == 0
+    )
+
+    rows = {
+        (row["feature_family_id"], row["sample_stem"]): row
+        for row in _read_tsv(tmp_path / "out" / "alignment_cells_activated.tsv")
+    }
+    row = rows[("FAM_ADD", "S2")]
+    assert row["backfill_ms1_pattern_status"] == "supportive"
+    assert row["backfill_qc_reference_status"] == "supportive"
+    assert row["backfill_matrix_rt_drift_status"] == "drift_supported"
+    assert row["backfill_candidate_ms2_pattern_status"] == "not_observed"
+    assert row["backfill_dda_missing_nl_policy_status"] == "not_dispositive"
+    assert row["backfill_family_ms2_required_tag_status"] == "observed_in_family"
+
+
 def test_activation_application_cli_formal_mode_writes_product_contract_names(
     tmp_path: Path,
 ) -> None:
@@ -551,6 +698,48 @@ def test_activation_application_cli_formal_mode_writes_product_contract_names(
     assert (tmp_path / "formal" / "alignment_review.tsv").exists()
     assert (tmp_path / "formal" / "alignment_cells.tsv").exists()
     assert (tmp_path / "formal" / "activation_value_delta.tsv").exists()
+
+
+def test_activation_application_cli_formal_mode_accepts_public_mz_rt_matrix(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    public_matrix = _write_public_mz_rt_matrix_fixture(tmp_path, fixture)
+    identity = _write_alignment_matrix_identity_fixture(tmp_path)
+
+    assert (
+        main(
+            [
+                "--activation-decisions-tsv",
+                str(fixture["decisions"]),
+                "--activation-acceptance-tsv",
+                str(fixture["acceptance"]),
+                "--alignment-matrix-tsv",
+                str(public_matrix),
+                "--alignment-matrix-identity-tsv",
+                str(identity),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--output-dir",
+                str(tmp_path / "formal"),
+                "--output-mode",
+                "formal",
+            ]
+        )
+        == 0
+    )
+
+    assert _header(tmp_path / "formal" / "alignment_matrix.tsv") == (
+        "Mz",
+        "RT",
+        "S1",
+        "S2",
+    )
+    assert (
+        tmp_path / "formal" / "activation_hypothesis_identity.tsv"
+    ).exists()
 
 
 def test_activation_application_cli_formal_mode_rejects_legacy_context_as_complete(
@@ -614,11 +803,13 @@ def test_activation_application_cli_excludes_projections_as_partial(
         == 0
     )
 
-    matrix_rows = {
+    identity_rows = {
         row["peak_hypothesis_id"]: row
-        for row in _read_tsv(tmp_path / "formal" / "alignment_matrix.tsv")
+        for row in _read_tsv(
+            tmp_path / "formal" / "activation_hypothesis_identity.tsv"
+        )
     }
-    assert "FAM_BLOCK::family_projection" not in matrix_rows
+    assert "FAM_BLOCK::family_projection" not in identity_rows
     summary = _read_tsv(
         tmp_path / "formal" / "activation_application_summary.tsv"
     )[0]
@@ -954,6 +1145,76 @@ def _header(path: Path) -> tuple[str, ...]:
         return tuple(next(csv.reader(handle, delimiter="\t")))
 
 
+def _write_public_mz_rt_matrix_fixture(
+    tmp_path: Path,
+    fixture: dict[str, Path],
+) -> Path:
+    matrix = tmp_path / "public_alignment_matrix.tsv"
+    source_rows = _read_tsv(fixture["matrix"])
+    _write_tsv(
+        matrix,
+        ("Mz", "RT", "S1", "S2"),
+        [
+            {
+                "Mz": row["family_center_mz"],
+                "RT": f"{float(row['family_center_rt']) + 0.05:.2f}".rstrip(
+                    "0"
+                ).rstrip("."),
+                "S1": row["S1"],
+                "S2": row["S2"],
+            }
+            for row in source_rows
+        ],
+    )
+    return matrix
+
+
+def _write_alignment_matrix_identity_fixture(tmp_path: Path) -> Path:
+    identity = tmp_path / "alignment_matrix_identity.tsv"
+    _write_tsv(
+        identity,
+        (
+            "matrix_row_index",
+            "Mz",
+            "RT",
+            "peak_hypothesis_id",
+            "row_identity_basis",
+            "source_feature_family_ids",
+            "source_feature_family_count",
+        ),
+        [
+            {
+                "matrix_row_index": "1",
+                "Mz": "100.1",
+                "RT": "7.15",
+                "peak_hypothesis_id": "FAM_BLOCK",
+                "row_identity_basis": "no_split_peak_hypothesis",
+                "source_feature_family_ids": "FAM_BLOCK",
+                "source_feature_family_count": "1",
+            },
+            {
+                "matrix_row_index": "2",
+                "Mz": "300.3",
+                "RT": "9.35",
+                "peak_hypothesis_id": "FAM_KEEP",
+                "row_identity_basis": "no_split_peak_hypothesis",
+                "source_feature_family_ids": "FAM_KEEP",
+                "source_feature_family_count": "1",
+            },
+            {
+                "matrix_row_index": "3",
+                "Mz": "400.4",
+                "RT": "10.45",
+                "peak_hypothesis_id": "FAM_SPLIT",
+                "row_identity_basis": "no_split_peak_hypothesis",
+                "source_feature_family_ids": "FAM_SPLIT",
+                "source_feature_family_count": "1",
+            },
+        ],
+    )
+    return identity
+
+
 def _write_legacy_rt_row_oracle(
     path: Path,
     *,
@@ -965,3 +1226,161 @@ def _write_legacy_rt_row_oracle(
     for mz, rt in rows:
         sheet.append((mz, rt))
     workbook.save(path)
+
+
+def _write_backfill_evidence_sidecars(tmp_path: Path) -> dict[str, Path]:
+    candidate_ms2 = tmp_path / "candidate_ms2_pattern.tsv"
+    ms1_pattern = tmp_path / "ms1_pattern_coherence.tsv"
+    qc_reference = tmp_path / "qc_ms1_pattern_reference.tsv"
+    rt_drift = tmp_path / "matrix_rt_drift_policy.tsv"
+    _write_tsv(
+        candidate_ms2,
+        (
+            "feature_family_id",
+            "sample_stem",
+            "candidate_ms2_pattern_status",
+            "candidate_ms2_evidence_level",
+            "raw_ms2_trigger_scan_count",
+            "raw_ms2_strict_nl_scan_count",
+            "raw_ms2_trace_strength",
+        ),
+        [
+            {
+                "feature_family_id": "FAM_ADD",
+                "sample_stem": "S1",
+                "candidate_ms2_pattern_status": "supportive",
+                "candidate_ms2_evidence_level": "sample_candidate_aligned",
+                "raw_ms2_trigger_scan_count": "4",
+                "raw_ms2_strict_nl_scan_count": "1",
+                "raw_ms2_trace_strength": "strong",
+            },
+            {
+                "feature_family_id": "FAM_ADD",
+                "sample_stem": "S2",
+                "candidate_ms2_pattern_status": "not_observed",
+                "candidate_ms2_evidence_level": "sample_boundary_no_observed_pattern",
+                "raw_ms2_trigger_scan_count": "3",
+                "raw_ms2_strict_nl_scan_count": "0",
+                "raw_ms2_trace_strength": "moderate",
+            },
+        ],
+    )
+    _write_tsv(
+        ms1_pattern,
+        (
+            "feature_family_id",
+            "sample_stem",
+            "ms1_pattern_status",
+            "ms1_pattern_evidence_level",
+            "apex_coherence_sec",
+            "boundary_overlap_score",
+            "shape_correlation_score",
+            "relative_pattern_stability_score",
+            "local_interference_score",
+            "constellation_peak_count",
+            "reference_peak_count",
+            "drift_compatible_status",
+            "reason",
+            "diagnostic_only",
+        ),
+        [
+            {
+                "feature_family_id": "FAM_ADD",
+                "sample_stem": "S2",
+                "ms1_pattern_status": "supportive",
+                "ms1_pattern_evidence_level": "sample_constellation",
+                "apex_coherence_sec": "8",
+                "boundary_overlap_score": "0.9",
+                "shape_correlation_score": "0.82",
+                "relative_pattern_stability_score": "0.8",
+                "local_interference_score": "0.1",
+                "constellation_peak_count": "4",
+                "reference_peak_count": "5",
+                "drift_compatible_status": "compatible",
+                "reason": "gaussian15_ms1_pattern_coherent",
+                "diagnostic_only": "FALSE",
+            }
+        ],
+    )
+    _write_tsv(
+        qc_reference,
+        (
+            "feature_family_id",
+            "sample_stem",
+            "qc_reference_status",
+            "qc_reference_evidence_level",
+            "target_injection_order",
+            "nearest_qc_sample_stem",
+            "nearest_qc_injection_order",
+            "nearest_qc_injection_order_delta",
+            "target_apex_rt",
+            "nearest_qc_apex_rt",
+            "target_minus_qc_apex_delta_sec",
+            "target_qc_apex_abs_delta_sec",
+            "target_qc_shape_similarity",
+            "target_local_window_to_global_max_ratio",
+            "nearest_qc_local_window_to_global_max_ratio",
+            "reason",
+            "diagnostic_only",
+        ),
+        [
+            {
+                "feature_family_id": "FAM_ADD",
+                "sample_stem": "S2",
+                "qc_reference_status": "supportive",
+                "qc_reference_evidence_level": "qc_consensus_with_local_qc_overlay",
+                "target_injection_order": "10",
+                "nearest_qc_sample_stem": "QC1",
+                "nearest_qc_injection_order": "9",
+                "nearest_qc_injection_order_delta": "1",
+                "target_apex_rt": "8.20",
+                "nearest_qc_apex_rt": "8.18",
+                "target_minus_qc_apex_delta_sec": "1.2",
+                "target_qc_apex_abs_delta_sec": "1.2",
+                "target_qc_shape_similarity": "0.86",
+                "target_local_window_to_global_max_ratio": "0.6",
+                "nearest_qc_local_window_to_global_max_ratio": "0.7",
+                "reason": "local_qc_overlay_supports_peak",
+                "diagnostic_only": "FALSE",
+            }
+        ],
+    )
+    _write_tsv(
+        rt_drift,
+        (
+            "feature_family_id",
+            "sample_stem",
+            "matrix_rt_drift_status",
+            "drift_evidence_level",
+            "raw_rt_delta_sec",
+            "drift_corrected_delta_sec",
+            "matrix_shift_sec",
+            "drift_reference_count",
+            "drift_reference_source",
+            "drift_compatible_status",
+            "reason",
+            "diagnostic_only",
+        ),
+        [
+            {
+                "feature_family_id": "FAM_ADD",
+                "sample_stem": "S2",
+                "matrix_rt_drift_status": "drift_supported",
+                "drift_evidence_level": "matrix_reference_aligned",
+                "raw_rt_delta_sec": "75",
+                "drift_corrected_delta_sec": "15",
+                "matrix_shift_sec": "60",
+                "drift_reference_count": "5",
+                "drift_reference_source": "paired_istd",
+                "drift_compatible_status": "compatible",
+                "reason": "paired_istd_drift_explains_delta",
+                "diagnostic_only": "FALSE",
+            }
+        ],
+    )
+    return {
+        "candidate_ms2_pattern": candidate_ms2,
+        "ms1_pattern_coherence": ms1_pattern,
+        "qc_ms1_pattern_reference": qc_reference,
+        "matrix_rt_drift_policy": rt_drift,
+    }
