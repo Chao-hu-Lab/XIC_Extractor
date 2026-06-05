@@ -1251,6 +1251,8 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
         {
             "activation_peak_hypothesis",
             "matrix_construction_peak_hypothesis",
+            "no_split_peak_hypothesis",
+            "split_peak_hypothesis",
             "family_projection_no_split_evidence",
         }
     ),

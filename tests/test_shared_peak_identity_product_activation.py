@@ -8,6 +8,9 @@ from tools.diagnostics.apply_shared_peak_identity_activation import main
 from xic_extractor.alignment.shared_peak_identity_explanation import (
     product_activation,
 )
+from xic_extractor.alignment.shared_peak_identity_explanation.schema import (
+    RT_MODE_EVIDENCE_COLUMNS,
+)
 
 
 def test_activation_application_blanks_wrong_peak_and_writes_auto_activation(
@@ -316,11 +319,23 @@ def test_activation_application_formal_mode_writes_product_contract_names(
         for row in _read_tsv(outputs.hypothesis_identity_tsv)
     }
     assert identity_rows["FAM_ADD::mode_1"]["S2"] == "300"
+    assert identity_rows["FAM_ADD::mode_1"]["row_identity_basis"] == (
+        "split_peak_hypothesis"
+    )
     assert identity_rows["FAM_KEEP::mode_1"]["S2"] == "777"
+    assert identity_rows["FAM_KEEP::mode_1"]["row_identity_basis"] == (
+        "split_peak_hypothesis"
+    )
     assert identity_rows["FAM_SPLIT::blue"]["S1"] == "111"
     assert identity_rows["FAM_SPLIT::blue"]["S2"] == ""
+    assert identity_rows["FAM_SPLIT::blue"]["row_identity_basis"] == (
+        "split_peak_hypothesis"
+    )
     assert identity_rows["FAM_SPLIT::green"]["S1"] == ""
     assert identity_rows["FAM_SPLIT::green"]["S2"] == "222"
+    assert identity_rows["FAM_SPLIT::green"]["row_identity_basis"] == (
+        "split_peak_hypothesis"
+    )
     assert identity_rows["FAM_BLOCK::family_projection"][
         "row_identity_basis"
     ] == "family_projection_no_split_evidence"
@@ -381,9 +396,21 @@ def test_activation_formal_accepts_public_mz_rt_matrix_with_identity_sidecar(
     assert identity_rows["FAM_BLOCK"]["feature_family_id"] == "FAM_BLOCK"
     assert identity_rows["FAM_BLOCK"]["S2"] == ""
     assert identity_rows["FAM_ADD::mode_1"]["S2"] == "300"
+    assert identity_rows["FAM_ADD::mode_1"]["row_identity_basis"] == (
+        "split_peak_hypothesis"
+    )
     assert identity_rows["FAM_KEEP::mode_1"]["S2"] == "777"
+    assert identity_rows["FAM_KEEP::mode_1"]["row_identity_basis"] == (
+        "split_peak_hypothesis"
+    )
     assert identity_rows["FAM_SPLIT::blue"]["S1"] == "111"
+    assert identity_rows["FAM_SPLIT::blue"]["row_identity_basis"] == (
+        "split_peak_hypothesis"
+    )
     assert identity_rows["FAM_SPLIT::green"]["S2"] == "222"
+    assert identity_rows["FAM_SPLIT::green"]["row_identity_basis"] == (
+        "split_peak_hypothesis"
+    )
 
     assert outputs.matrix_identity_tsv == tmp_path / "formal" / (
         "alignment_matrix_identity.tsv"
@@ -409,17 +436,123 @@ def test_activation_formal_accepts_public_mz_rt_matrix_with_identity_sidecar(
     assert matrix_identity_by_peak["FAM_BLOCK"]["source_feature_family_ids"] == (
         "FAM_BLOCK"
     )
+    assert matrix_identity_by_peak["FAM_BLOCK"]["row_identity_basis"] == (
+        "no_split_peak_hypothesis"
+    )
+    assert matrix_identity_by_peak["FAM_BLOCK"]["split_evaluation_status"] == (
+        "complete_no_product_ready_split"
+    )
+    assert matrix_identity_by_peak["FAM_BLOCK"]["projection_status"] == (
+        "not_projection"
+    )
+    assert matrix_identity_by_peak["FAM_BLOCK"]["parent_peak_hypothesis_id"] == ""
     assert matrix_identity_by_peak["FAM_ADD::mode_1"][
         "source_feature_family_ids"
     ] == "FAM_ADD"
+    assert matrix_identity_by_peak["FAM_ADD::mode_1"]["row_identity_basis"] == (
+        "split_peak_hypothesis"
+    )
+    assert matrix_identity_by_peak["FAM_ADD::mode_1"][
+        "split_evaluation_status"
+    ] == "complete_product_ready_split"
+    assert matrix_identity_by_peak["FAM_ADD::mode_1"][
+        "parent_peak_hypothesis_id"
+    ] == "FAM_ADD"
     assert matrix_identity_by_peak["FAM_SPLIT::blue"][
         "source_feature_family_ids"
+    ] == "FAM_SPLIT"
+    assert matrix_identity_by_peak["FAM_SPLIT::blue"]["row_identity_basis"] == (
+        "split_peak_hypothesis"
+    )
+    assert matrix_identity_by_peak["FAM_SPLIT::blue"][
+        "split_evaluation_status"
+    ] == "complete_product_ready_split"
+    assert matrix_identity_by_peak["FAM_SPLIT::blue"][
+        "parent_peak_hypothesis_id"
     ] == "FAM_SPLIT"
 
     summary = _read_tsv(outputs.summary_tsv)[0]
     assert summary["matrix_row_identity"] == "mz_rt_sample_columns"
     assert summary["canonical_row_identity_blockers"] == "none"
     assert summary["canonical_row_identity_ready"] == "TRUE"
+
+
+def test_activation_formal_uses_rt_mode_evidence_for_split_hypothesis_rt(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+
+    outputs = product_activation.apply_activation_to_alignment_outputs(
+        activation_decisions_tsv=fixture["decisions"],
+        activation_acceptance_tsv=fixture["acceptance"],
+        alignment_matrix_tsv=fixture["matrix"],
+        alignment_review_tsv=fixture["review"],
+        alignment_cells_tsv=fixture["cells"],
+        output_dir=tmp_path / "formal",
+        output_mode="formal",
+        rt_mode_evidence_rows=[
+            _rt_mode_row("FAM_SPLIT", "S1", mode_id="blue", raw_rt="10.1"),
+            _rt_mode_row("FAM_SPLIT", "S2", mode_id="green", raw_rt="10.9"),
+        ],
+    )
+
+    matrix_rows = _read_tsv(outputs.matrix_tsv)
+    assert {
+        (row["RT"], row["S1"], row["S2"])
+        for row in matrix_rows
+        if row["Mz"] == "400.4"
+    } == {
+        ("10.1", "111", ""),
+        ("10.9", "", "222"),
+    }
+
+    assert outputs.matrix_identity_tsv is not None
+    matrix_identity_by_peak = {
+        row["peak_hypothesis_id"]: row
+        for row in _read_tsv(outputs.matrix_identity_tsv)
+    }
+    assert matrix_identity_by_peak["FAM_SPLIT::blue"]["RT"] == "10.1"
+    assert matrix_identity_by_peak["FAM_SPLIT::blue"]["center_rt_basis"] == (
+        "activation_rt_mode_area_weighted_raw_selected_rt"
+    )
+    assert matrix_identity_by_peak["FAM_SPLIT::green"]["RT"] == "10.9"
+    assert matrix_identity_by_peak["FAM_BLOCK::family_projection"]["RT"] == "7.1"
+    assert matrix_identity_by_peak["FAM_BLOCK::family_projection"][
+        "center_rt_basis"
+    ] == "activation_hypothesis_family_center_rt"
+
+
+def test_activation_formal_ignores_raw_overlay_rt_mode_for_product_rt(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    raw_overlay_row = _rt_mode_row(
+        "FAM_SPLIT",
+        "S1",
+        mode_id="blue",
+        raw_rt="10.1",
+    )
+    raw_overlay_row["rt_mode_evidence_level"] = "raw_selected_apex_modes"
+
+    outputs = product_activation.apply_activation_to_alignment_outputs(
+        activation_decisions_tsv=fixture["decisions"],
+        activation_acceptance_tsv=fixture["acceptance"],
+        alignment_matrix_tsv=fixture["matrix"],
+        alignment_review_tsv=fixture["review"],
+        alignment_cells_tsv=fixture["cells"],
+        output_dir=tmp_path / "formal",
+        output_mode="formal",
+        rt_mode_evidence_rows=[raw_overlay_row],
+    )
+
+    matrix_identity_by_peak = {
+        row["peak_hypothesis_id"]: row
+        for row in _read_tsv(outputs.matrix_identity_tsv)
+    }
+    assert matrix_identity_by_peak["FAM_SPLIT::blue"]["RT"] == "10.4"
+    assert matrix_identity_by_peak["FAM_SPLIT::blue"]["center_rt_basis"] == (
+        "activation_hypothesis_family_center_rt"
+    )
 
 
 def test_activation_application_formal_mode_uses_legacy_rt_row_oracle(
@@ -740,6 +873,47 @@ def test_activation_application_cli_formal_mode_accepts_public_mz_rt_matrix(
     assert (
         tmp_path / "formal" / "activation_hypothesis_identity.tsv"
     ).exists()
+
+
+def test_activation_application_cli_formal_mode_uses_rt_mode_evidence(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    rt_mode = _write_rt_mode_evidence_sidecar(tmp_path)
+
+    assert (
+        main(
+            [
+                "--activation-decisions-tsv",
+                str(fixture["decisions"]),
+                "--activation-acceptance-tsv",
+                str(fixture["acceptance"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--alignment-cells-tsv",
+                str(fixture["cells"]),
+                "--rt-mode-evidence-tsv",
+                str(rt_mode),
+                "--output-dir",
+                str(tmp_path / "formal"),
+                "--output-mode",
+                "formal",
+            ]
+        )
+        == 0
+    )
+
+    rows = _read_tsv(tmp_path / "formal" / "alignment_matrix.tsv")
+    assert {
+        (row["RT"], row["S1"], row["S2"])
+        for row in rows
+        if row["Mz"] == "400.4"
+    } == {
+        ("10.1", "111", ""),
+        ("10.9", "", "222"),
+    }
 
 
 def test_activation_application_cli_formal_mode_rejects_legacy_context_as_complete(
@@ -1133,6 +1307,42 @@ def _write_tsv(
         )
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _rt_mode_row(
+    family_id: str,
+    sample_stem: str,
+    *,
+    mode_id: str,
+    raw_rt: str,
+) -> dict[str, str]:
+    return {
+        "feature_family_id": family_id,
+        "sample_stem": sample_stem,
+        "rt_mode_status": "mode_supported",
+        "rt_mode_evidence_level": "irt_selected_apex_modes",
+        "selected_mode_id": mode_id,
+        "raw_selected_rt": raw_rt,
+        "normalized_selected_rt": "",
+    }
+
+
+def _write_rt_mode_evidence_sidecar(tmp_path: Path) -> Path:
+    path = tmp_path / "rt_mode_evidence.tsv"
+    columns = tuple(
+        column
+        for column in RT_MODE_EVIDENCE_COLUMNS
+        if column != "rt_mode_evidence_schema_version"
+    )
+    rows = [{column: "" for column in columns} for _ in range(2)]
+    rows[0].update(
+        _rt_mode_row("FAM_SPLIT", "S1", mode_id="blue", raw_rt="10.1")
+    )
+    rows[1].update(
+        _rt_mode_row("FAM_SPLIT", "S2", mode_id="green", raw_rt="10.9")
+    )
+    _write_tsv(path, columns, rows)
+    return path
 
 
 def _read_tsv(path: Path) -> list[dict[str, str]]:

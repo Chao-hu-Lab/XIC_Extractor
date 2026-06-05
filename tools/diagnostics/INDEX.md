@@ -170,7 +170,11 @@ as `targeted_istd_benchmark.py` can read the public matrix directly. When the
 source matrix is already the public
 `Mz` / `RT` / sample-column matrix, `--alignment-matrix-identity-tsv` supplies
 the bridge back to internal provenance and `feature_family_id` remains
-debug/provenance only. Optional
+debug/provenance only. Optional `--rt-mode-evidence-tsv` lets formal output use
+matching typed mode `raw_selected_rt` values as area-weighted
+PeakHypothesis-level RT centers for split rows; rows without matching typed mode
+evidence fall back to their source family RT and disclose that fallback through
+`alignment_matrix_identity.tsv:center_rt_basis`. Optional
 `--candidate-ms2-pattern-evidence-tsv`,
 `--ms1-pattern-coherence-evidence-tsv`,
 `--qc-ms1-pattern-reference-evidence-tsv`, and

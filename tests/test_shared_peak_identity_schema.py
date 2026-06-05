@@ -458,6 +458,8 @@ def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
         "legacy_rt_row_context_authority",
     )
     validate_token("FALSE", "all_family_split_science_ready")
+    validate_token("no_split_peak_hypothesis", "row_identity_basis")
+    validate_token("split_peak_hypothesis", "row_identity_basis")
     validate_token("family_projection_no_split_evidence", "row_identity_basis")
     validate_token("max_area_pending_baseline", "matrix_value_conflict_policy")
     validate_token("blanked", "matrix_value_effect")

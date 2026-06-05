@@ -17,6 +17,7 @@ from xic_extractor.alignment.backfill_evidence_projection import (
     load_qc_ms1_pattern_reference_rows,
 )
 from xic_extractor.alignment.shared_peak_identity_explanation import (
+    machine_evidence_support,
     product_activation,
 )
 
@@ -35,6 +36,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         matrix_rt_drift_policy_rows = load_matrix_rt_drift_policy_rows(
             args.matrix_rt_drift_policy_tsv
+        )
+        rt_mode_evidence_rows = tuple(
+            machine_evidence_support.load_rt_mode_evidence(
+                args.rt_mode_evidence_tsv
+            ).values()
         )
         outputs = product_activation.apply_activation_to_alignment_outputs(
             activation_decisions_tsv=args.activation_decisions_tsv,
@@ -60,6 +66,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ms1_pattern_coherence_rows=ms1_pattern_coherence_rows,
             qc_ms1_pattern_reference_rows=qc_ms1_pattern_reference_rows,
             matrix_rt_drift_policy_rows=matrix_rt_drift_policy_rows,
+            rt_mode_evidence_rows=rt_mode_evidence_rows,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -123,6 +130,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help=(
             "Optional typed matrix RT drift policy sidecar. When provided, "
             "rescued alignment cells receive backfill RT-drift projection fields."
+        ),
+    )
+    parser.add_argument(
+        "--rt-mode-evidence-tsv",
+        type=Path,
+        help=(
+            "Optional shared_peak_identity_rt_mode_evidence.tsv. Formal mode "
+            "uses raw_selected_rt from matching typed mode rows as the "
+            "PeakHypothesis RT center instead of falling back to family center RT."
         ),
     )
     parser.add_argument(

@@ -65,6 +65,35 @@ class FormalMatrixStats:
     family_projection_cells_excluded: int = 0
 
 
+@dataclass
+class _RtCenterAccumulator:
+    weighted_sum: float = 0.0
+    weight_sum: float = 0.0
+    unweighted_sum: float = 0.0
+    unweighted_count: int = 0
+
+    def add(self, rt: float, weight: float | None) -> None:
+        if weight is not None and weight > 0:
+            self.weighted_sum += rt * weight
+            self.weight_sum += weight
+        self.unweighted_sum += rt
+        self.unweighted_count += 1
+
+    @property
+    def center(self) -> float | None:
+        if self.weight_sum > 0:
+            return self.weighted_sum / self.weight_sum
+        if self.unweighted_count > 0:
+            return self.unweighted_sum / self.unweighted_count
+        return None
+
+    @property
+    def basis(self) -> str:
+        if self.weight_sum > 0:
+            return "activation_rt_mode_area_weighted_raw_selected_rt"
+        return "activation_rt_mode_unweighted_raw_selected_rt"
+
+
 def apply_activation_to_alignment_outputs(
     *,
     activation_decisions_tsv: Path,
@@ -86,6 +115,7 @@ def apply_activation_to_alignment_outputs(
     ms1_pattern_coherence_rows: Sequence[Mapping[str, str]] = (),
     qc_ms1_pattern_reference_rows: Sequence[Mapping[str, str]] = (),
     matrix_rt_drift_policy_rows: Sequence[Mapping[str, str]] = (),
+    rt_mode_evidence_rows: Sequence[Mapping[str, str]] = (),
 ) -> ActivationApplicationOutputs:
     _validate_output_mode(output_mode)
     if exclude_family_projections and output_mode != "formal":
@@ -225,6 +255,7 @@ def apply_activation_to_alignment_outputs(
                     legacy_rt_row_oracle_rt_tolerance_min
                 ),
                 include_family_projections=not exclude_family_projections,
+                rt_mode_evidence_rows=rt_mode_evidence_rows,
             )
         )
         output_matrix_header = _product_matrix_header(sample_columns)
@@ -364,6 +395,8 @@ _PUBLIC_MATRIX_META = frozenset({"Mz", "RT"})
 _INPUT_PEAK_HYPOTHESIS_ID = "_input_peak_hypothesis_id"
 _INPUT_ROW_IDENTITY_BASIS = "_input_row_identity_basis"
 _INPUT_LEGACY_RT_ROW_CONTEXT_ID = "_input_legacy_rt_row_context_id"
+_HYPOTHESIS_CENTER_RT = "_hypothesis_center_rt"
+_CENTER_RT_BASIS = "_center_rt_basis"
 
 _MATRIX_IDENTITY_REQUIRED_COLUMNS = (
     "matrix_row_index",
@@ -625,7 +658,7 @@ def _product_matrix_rows_from_hypotheses(
     for hypothesis_row in hypothesis_rows:
         row = {
             "Mz": hypothesis_row.get("family_center_mz", ""),
-            "RT": hypothesis_row.get("family_center_rt", ""),
+            "RT": _matrix_center_rt(hypothesis_row),
         }
         row.update(
             {
@@ -653,35 +686,80 @@ def _alignment_matrix_identity_rows(
             1 for sample in sample_columns if hypothesis_row.get(sample)
         )
         is_projection = row_identity_basis == "family_projection_no_split_evidence"
+        split_evaluation_status = _split_evaluation_status(row_identity_basis)
         rows.append(
             {
                 "identity_schema_version": _ALIGNMENT_MATRIX_IDENTITY_SCHEMA_VERSION,
                 "matrix_row_index": str(index),
                 "Mz": hypothesis_row.get("family_center_mz", ""),
-                "RT": hypothesis_row.get("family_center_rt", ""),
+                "RT": _matrix_center_rt(hypothesis_row),
                 "peak_hypothesis_id": hypothesis_row.get("peak_hypothesis_id", ""),
                 "row_identity_basis": row_identity_basis,
-                "split_evaluation_status": "activation_formal_identity_sidecar",
+                "split_evaluation_status": split_evaluation_status,
                 "projection_status": (
                     "family_projection" if is_projection else "not_projection"
                 ),
                 "source_feature_family_ids": ";".join(source_family_ids),
                 "source_feature_family_count": str(len(source_family_ids)),
                 "center_mz_basis": "activation_hypothesis_family_center_mz",
-                "center_rt_basis": "activation_hypothesis_family_center_rt",
+                "center_rt_basis": _matrix_center_rt_basis(hypothesis_row),
                 "center_weight_basis": "activation_formal_matrix_row",
                 "accepted_cell_count": str(accepted_count),
                 "accepted_sample_count": str(accepted_count),
                 "evidence_status": (
                     "family_projection_not_split_proof"
                     if is_projection
-                    else "product_matrix_identity_complete"
+                    else _evidence_status(row_identity_basis)
                 ),
-                "parent_peak_hypothesis_id": "",
+                "parent_peak_hypothesis_id": (
+                    _parent_peak_hypothesis_id(hypothesis_row, source_family_ids)
+                ),
                 "child_peak_hypothesis_ids": "",
             }
         )
     return rows
+
+
+def _matrix_center_rt(hypothesis_row: Mapping[str, str]) -> str:
+    return (
+        hypothesis_row.get(_HYPOTHESIS_CENTER_RT, "")
+        or hypothesis_row.get("family_center_rt", "")
+    )
+
+
+def _matrix_center_rt_basis(hypothesis_row: Mapping[str, str]) -> str:
+    return (
+        hypothesis_row.get(_CENTER_RT_BASIS, "")
+        or "activation_hypothesis_family_center_rt"
+    )
+
+
+def _split_evaluation_status(row_identity_basis: str) -> str:
+    if row_identity_basis == "split_peak_hypothesis":
+        return "complete_product_ready_split"
+    if row_identity_basis == "no_split_peak_hypothesis":
+        return "complete_no_product_ready_split"
+    return "incomplete_scope"
+
+
+def _evidence_status(row_identity_basis: str) -> str:
+    if row_identity_basis == "split_peak_hypothesis":
+        return "product_matrix_split_identity_complete"
+    return "product_matrix_identity_complete"
+
+
+def _parent_peak_hypothesis_id(
+    hypothesis_row: Mapping[str, str],
+    source_family_ids: Sequence[str],
+) -> str:
+    if hypothesis_row.get("row_identity_basis", "") != "split_peak_hypothesis":
+        return ""
+    peak_hypothesis_id = hypothesis_row.get("peak_hypothesis_id", "")
+    if "::" in peak_hypothesis_id:
+        return peak_hypothesis_id.split("::", 1)[0]
+    if len(source_family_ids) == 1:
+        return source_family_ids[0]
+    return ";".join(source_family_ids)
 
 
 def _peak_hypothesis_matrix_rows(
@@ -694,8 +772,11 @@ def _peak_hypothesis_matrix_rows(
     legacy_rt_row_oracle_mz_ppm: float,
     legacy_rt_row_oracle_rt_tolerance_min: float,
     include_family_projections: bool = True,
+    rt_mode_evidence_rows: Sequence[Mapping[str, str]] = (),
 ) -> tuple[list[dict[str, str]], FormalMatrixStats]:
     rows_by_hypothesis: dict[str, dict[str, str]] = {}
+    rt_mode_by_key = _rt_mode_by_key(rt_mode_evidence_rows)
+    rt_centers_by_hypothesis: dict[str, _RtCenterAccumulator] = {}
     family_projection_ids: set[str] = set()
     excluded_family_projection_ids: set[str] = set()
     excluded_family_projection_cells = 0
@@ -710,7 +791,10 @@ def _peak_hypothesis_matrix_rows(
                 continue
             decision = decisions_by_key.get((family_id, sample_id), {})
             peak_hypothesis_id = _decision_peak_hypothesis_id(decision)
-            row_identity_basis = "activation_peak_hypothesis"
+            row_identity_basis = _decision_row_identity_basis(
+                family_id,
+                peak_hypothesis_id,
+            )
             candidate_container_id = decision.get("candidate_container_id", family_id)
             if not peak_hypothesis_id:
                 input_peak_hypothesis_id = family_row.get(
@@ -774,6 +858,15 @@ def _peak_hypothesis_matrix_rows(
                 value = _select_conflicting_matrix_value(previous, value)
                 matrix_value_conflict_cells += 1
             row[sample_id] = value
+            _add_rt_mode_center(
+                rt_centers_by_hypothesis,
+                family_id=family_id,
+                sample_id=sample_id,
+                peak_hypothesis_id=peak_hypothesis_id,
+                value=value,
+                rt_mode_by_key=rt_mode_by_key,
+            )
+    _apply_rt_mode_centers(rows_by_hypothesis, rt_centers_by_hypothesis)
     return (
         [rows_by_hypothesis[key] for key in sorted(rows_by_hypothesis)],
         FormalMatrixStats(
@@ -792,6 +885,80 @@ def _decision_peak_hypothesis_id(decision: Mapping[str, str]) -> str:
     if decision.get("activation_status") != "auto_activate":
         return ""
     return decision.get("peak_hypothesis_id", "")
+
+
+def _rt_mode_by_key(
+    rows: Sequence[Mapping[str, str]],
+) -> dict[tuple[str, str], Mapping[str, str]]:
+    return {
+        (row.get("feature_family_id", ""), row.get("sample_stem", "")): row
+        for row in rows
+        if row.get("feature_family_id") and row.get("sample_stem")
+    }
+
+
+def _add_rt_mode_center(
+    rt_centers_by_hypothesis: dict[str, _RtCenterAccumulator],
+    *,
+    family_id: str,
+    sample_id: str,
+    peak_hypothesis_id: str,
+    value: str,
+    rt_mode_by_key: Mapping[tuple[str, str], Mapping[str, str]],
+) -> None:
+    row = rt_mode_by_key.get((family_id, sample_id))
+    if row is None or not _rt_mode_matches_hypothesis(row, peak_hypothesis_id):
+        return
+    raw_rt = _to_float(row.get("raw_selected_rt"))
+    if raw_rt is None:
+        return
+    weight = _to_float(value)
+    rt_centers_by_hypothesis.setdefault(
+        peak_hypothesis_id,
+        _RtCenterAccumulator(),
+    ).add(raw_rt, weight)
+
+
+def _rt_mode_matches_hypothesis(
+    rt_mode_row: Mapping[str, str],
+    peak_hypothesis_id: str,
+) -> bool:
+    if not _rt_mode_is_product_coordinate_authority(rt_mode_row):
+        return False
+    mode_id = rt_mode_row.get("selected_mode_id", "")
+    if not mode_id or "::" not in peak_hypothesis_id:
+        return False
+    return peak_hypothesis_id.rsplit("::", 1)[1] == mode_id
+
+
+def _rt_mode_is_product_coordinate_authority(rt_mode_row: Mapping[str, str]) -> bool:
+    if rt_mode_row.get("rt_mode_status", "") != "mode_supported":
+        return False
+    return rt_mode_row.get("rt_mode_evidence_level", "") in {
+        "irt_selected_apex_modes",
+        "mode_assignment_summary",
+    }
+
+
+def _apply_rt_mode_centers(
+    rows_by_hypothesis: Mapping[str, dict[str, str]],
+    rt_centers_by_hypothesis: Mapping[str, _RtCenterAccumulator],
+) -> None:
+    for peak_hypothesis_id, accumulator in rt_centers_by_hypothesis.items():
+        row = rows_by_hypothesis.get(peak_hypothesis_id)
+        center = accumulator.center
+        if row is None or center is None:
+            continue
+        row[_HYPOTHESIS_CENTER_RT] = _format_float(center)
+        row[_CENTER_RT_BASIS] = accumulator.basis
+
+
+def _decision_row_identity_basis(family_id: str, peak_hypothesis_id: str) -> str:
+    if not peak_hypothesis_id:
+        return ""
+    if peak_hypothesis_id == family_id:
+        return "no_split_peak_hypothesis"
+    return "split_peak_hypothesis"
 
 
 def _identity_metadata_row(
@@ -892,6 +1059,10 @@ def _to_float(value: object) -> float | None:
     if not math.isfinite(number):
         return None
     return number
+
+
+def _format_float(value: float) -> str:
+    return f"{value:.6f}".rstrip("0").rstrip(".")
 
 
 def _append_unique_cell(row: dict[str, str], column: str, value: str) -> None:
