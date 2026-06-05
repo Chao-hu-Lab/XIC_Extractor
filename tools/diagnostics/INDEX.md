@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
 **Last refreshed:** 2026-06-05
-**Total entry-points:** 53
-**Total files (incl. helpers):** 135 Python files under `tools/diagnostics/`
+**Total entry-points:** 56
+**Total files (incl. helpers):** 138 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -30,8 +30,8 @@ top-level `tools/diagnostics/*.py` files for total files.
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 6 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 7 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
-8. [Family / Overlay Visualization](#family--overlay-visualization) — 3 tools
-9. [Area / Region Audits](#area--region-audits) — 2 tools
+8. [Family / Overlay Visualization](#family--overlay-visualization) — 4 tools
+9. [Area / Region Audits](#area--region-audits) — 4 tools
 10. [One-off Fixtures](#one-off-fixtures) — 1 tool
 
 ---
@@ -159,18 +159,39 @@ models because their output schemas are intentionally different; see
 writes `alignment_matrix_activated.tsv`, `alignment_review_activated.tsv`, and
 `alignment_cells_activated.tsv`; `--output-mode formal` writes the formal
 downstream contract files `alignment_matrix.tsv`, `alignment_review.tsv`, and
-`alignment_cells.tsv` in the requested output directory. Formal matrix output
-uses `peak_hypothesis_id` as row identity and keeps `feature_family_id` as
-provenance. By default, rows without split/wrong-peak/mode evidence use
+`alignment_cells.tsv` in the requested output directory. Formal
+`alignment_matrix.tsv` remains the downstream `Mz` / `RT` / sample-column
+matrix; `peak_hypothesis_id` is written to
+`activation_hypothesis_identity.tsv` as an identity/provenance sidecar, not as a
+replacement matrix row key. Formal mode also writes
+`alignment_matrix_identity.tsv` with `matrix_row_index`, `Mz`, `RT`,
+`peak_hypothesis_id`, and `source_feature_family_ids` so downstream tools such
+as `targeted_istd_benchmark.py` can read the public matrix directly. When the
+source matrix is already the public
+`Mz` / `RT` / sample-column matrix, `--alignment-matrix-identity-tsv` supplies
+the bridge back to internal provenance and `feature_family_id` remains
+debug/provenance only. Optional
+`--candidate-ms2-pattern-evidence-tsv`,
+`--ms1-pattern-coherence-evidence-tsv`,
+`--qc-ms1-pattern-reference-evidence-tsv`, and
+`--matrix-rt-drift-policy-tsv` project typed shared-peak evidence into rescued
+cell `backfill_*` fields so the downstream backfill promotion gate can consume
+RT, MS1 pattern/QC, and MS2/NL opportunity facts from the same activation
+output. Missing sidecars do not invent support; stale cells without projection
+columns remain fail-closed for gate/report consumers. Formal activation keeps
+`feature_family_id` as provenance/debug only and treats `peak_hypothesis_id` as
+the internal product identity sidecar. By default, rows without
+split/wrong-peak/mode evidence use
 `<feature_family_id>::family_projection` with
 `row_identity_basis=family_projection_no_split_evidence`; this is a blocker for
 complete canonical row-identity readiness and is disclosed by
 `canonical_row_identity_ready=FALSE`,
 `canonical_row_identity_blockers=family_projection_present`,
-`canonical_row_identity_scope=partial_peak_hypothesis_with_family_projections`,
+`canonical_row_identity_scope=partial_peak_hypothesis_sidecar_with_family_projections`,
 `family_projection_semantics=projection_not_split_proof`, and
 `all_family_split_science_ready=FALSE`. `--exclude-family-projections` is formal
-mode only: it emits only explicit `peak_hypothesis_id` rows, reports skipped
+mode only: it emits only explicit `peak_hypothesis_id` identity sidecar rows,
+reports skipped
 unresolved projections in `family_projection_rows_excluded` and
 `family_projection_cells_excluded`, and keeps
 `canonical_row_identity_ready=FALSE` with
@@ -216,10 +237,10 @@ diagnostic override only and must not be used for product claims.
 
 ### `build_peak_hypothesis_matrix.py`
 
-**Purpose**: Build a diagnostic PeakHypothesis-assigned `alignment_matrix.tsv` before product activation by consuming source alignment TSVs plus `shared_peak_identity_peak_hypothesis_selection.tsv`, optional `shared_peak_identity_hypothesis_consistency.tsv`, and optional RAW-backed `family_ms1_overlay_*` trace-data JSONs with mode windows.
+**Purpose**: Build a diagnostic PeakHypothesis-assigned construction artifact before product activation by consuming source alignment TSVs plus `shared_peak_identity_peak_hypothesis_selection.tsv`, optional `shared_peak_identity_hypothesis_consistency.tsv`, and optional RAW-backed `family_ms1_overlay_*` trace-data JSONs with mode windows.
 **Topic group**: `shared_peak_identity_explanation.py` + `xic_extractor/alignment/shared_peak_identity_explanation/peak_hypothesis_matrix.py`
 **Originating spec/plan**: `specs/2026-05-30-sidecar-to-product-label-activation-contract.md`
-**Status note**: This is the first matrix-construction boundary for mode-aware identity. It writes `alignment_matrix.tsv`, `peak_hypothesis_inventory.tsv`, `peak_hypothesis_cell_assignments.tsv`, and `peak_hypothesis_matrix_summary.tsv` in a separate output directory. The matrix row identity is `peak_hypothesis_id`; explicit product-candidate modes use `row_identity_basis=matrix_construction_peak_hypothesis`, unresolved legacy cells use `<feature_family_id>::family_projection` with `row_identity_basis=family_projection_no_split_evidence`, and hard split/wrong-peak consistency blockers are recorded in assignments but not written to the matrix. When `--overlay-trace-data-json` is supplied, each declared `mode_windows` peak with RAW trace signal is enumerated as an expanded candidate row before matrix output, so two peaks from the same `feature_family_id` can both enter the matrix as independent `peak_hypothesis_id` rows instead of competing through retarget. Any product-status fields embedded in overlay JSON `mode_windows` are ignored and demoted to `raw_mode_review_only`; only typed PeakHypothesis selection rows can supply product-facing authority. Untyped mode windows and raw-apex inferred windows are review-only expanded candidates: they use `construction_assignment_status=expanded_candidate`, default to `candidate_value_basis=raw_overlay_window_trapezoid_area`, set `canonical_row_identity_ready=FALSE` with `canonical_row_identity_blockers=raw_mode_review_only`, and must not be treated as product-ready row identity until a typed mode-hypothesis contract supplies explicit iRT/manual/tag-confirmed status. Family projection rows set `canonical_row_identity_blockers=family_projection_present`; they are acceptable bridge rows but not proof of complete canonical identity. Cells with source `alignment_cells.tsv` area but no source matrix value are recorded as candidate context only (`matrix_value_effect=source_matrix_value_missing`) until quantification/baseline policy is wired. `--require-complete-peak-hypothesis-identity` now fails unless the summary reports `canonical_row_identity_ready=TRUE`, so projection-heavy diagnostic outputs cannot be mistaken for promotion-ready matrices. This tool is `diagnostic_only`: it proves that split/wrong-peak separation can happen before matrix output, but it does not mutate source alignment artifacts or claim all-family split-science readiness.
+**Status note**: This is the first construction boundary for mode-aware identity, not the final downstream matrix contract. It writes `alignment_matrix.tsv`, `peak_hypothesis_inventory.tsv`, `peak_hypothesis_cell_assignments.tsv`, and `peak_hypothesis_matrix_summary.tsv` in a separate output directory as diagnostic construction artifacts. In this artifact, row identity is `peak_hypothesis_id`; explicit product-candidate modes use `row_identity_basis=matrix_construction_peak_hypothesis`, unresolved legacy cells use `<feature_family_id>::family_projection` with `row_identity_basis=family_projection_no_split_evidence`, and hard split/wrong-peak consistency blockers are recorded in assignments but not written to the artifact matrix. This `alignment_matrix.tsv` must not be handed to downstream as the final matrix until it is converted back into the public `Mz` / `RT` / sample-column contract with a separate hypothesis identity sidecar. When `--overlay-trace-data-json` is supplied, each declared `mode_windows` peak with RAW trace signal is enumerated as an expanded candidate row before matrix construction, so two peaks from the same `feature_family_id` can both enter the construction artifact as independent `peak_hypothesis_id` rows instead of competing through retarget. Any product-status fields embedded in overlay JSON `mode_windows` are ignored and demoted to `raw_mode_review_only`; only typed PeakHypothesis selection rows can supply product-facing authority. Untyped mode windows and raw-apex inferred windows are review-only expanded candidates: they use `construction_assignment_status=expanded_candidate`, default to `candidate_value_basis=raw_overlay_window_trapezoid_area`, set `canonical_row_identity_ready=FALSE` with `canonical_row_identity_blockers=raw_mode_review_only`, and must not be treated as product-ready row identity until a typed mode-hypothesis contract supplies explicit iRT/manual/tag-confirmed status. Family projection rows set `canonical_row_identity_blockers=family_projection_present`; they are acceptable bridge rows but not proof of complete canonical identity. Cells with source `alignment_cells.tsv` area but no source matrix value are recorded as candidate context only (`matrix_value_effect=source_matrix_value_missing`) until quantification/baseline policy is wired. `--require-complete-peak-hypothesis-identity` now fails unless the summary reports `canonical_row_identity_ready=TRUE`, so projection-heavy diagnostic outputs cannot be mistaken for promotion-ready matrices. This tool is `diagnostic_only`: it proves that split/wrong-peak separation can happen before matrix output, but it does not mutate source alignment artifacts, does not define the downstream `Mz` / `RT` / sample-column matrix, and does not claim all-family split-science readiness.
 
 ---
 
@@ -486,6 +507,14 @@ workbook, matrix, or candidate-selection outputs.
 **Purpose**: Build a single-dR production gate decision report.
 **Topic group**: `single_dr_production_gate_decision_report.py` + `single_dr_gate_decision_{loaders, writers}` (3 files)
 **Originating spec**: `2026-05-16-module-responsibility-inventory.md:29` (designated PR2 split target)
+**Status note**: The report now writes both review summaries and product-facing
+gate artifacts. `single_dr_gate_activation_decisions.tsv` translates implemented
+row-level gate candidates into activation rows, and
+`single_dr_gate_changed_row_bundle.tsv` records the required changed-row review
+fields for every product-affecting row removal. These files are intended to feed
+`apply_shared_peak_identity_activation.py`; after activation is applied, rerun
+the gate and require zero pending activation-decision rows before claiming the
+8RAW slice has no remaining product mutation.
 
 ---
 
@@ -510,12 +539,12 @@ guarded targeted product mutation.
 **Status note**: Requires repeated `--approved-row SAMPLE::TARGET` inputs and
 fails closed unless each row is a `row_approval_candidate` shadow switch with
 matching runtime `expected_diff_stable_row_id`, selected-candidate RT, and
-paired area ratio `within_reference_range`. The paired-area ratio basis is the
-active counted leave-one-out target/ISTD reference owned by
+paired area ratio `within_robust_range`. The active paired-area ratio basis is
+the counted leave-one-out median +/- 3 scaled-MAD target/ISTD reference owned by
 `xic_extractor.extraction.paired_area_ratio_projection`; the diagnostic writer
-renders that product evidence and must not reintroduce all-reported-area
-authority. It does not auto-approve all watch rows and does not recompute
-candidate evidence.
+renders that product evidence and must not reintroduce min/max or
+all-reported-area authority. It does not auto-approve all watch rows and does
+not recompute candidate evidence.
 
 ---
 
@@ -573,8 +602,10 @@ are not daily).
 
 ## Family / Overlay Visualization
 
-Matplotlib-rendered MS1 overlay visuals for human review of family-level
-backfill candidates.
+Matplotlib-rendered MS1 overlay visuals for human review of backfill candidates.
+Family-level overlays are context; mode-aware outputs should use
+`peak_hypothesis_id` / selected-apex mode evidence when a row may contain
+multiple MS1 peak modes.
 
 ### `family_ms1_overlay_plot.py`
 
@@ -592,6 +623,29 @@ backfill candidates.
 
 ---
 
+### `changed_row_mode_overlay_review.py`
+
+**Purpose**: Convert changed-row family MS1 overlay trace JSONs into a
+mode-aware review surface: RAW selected-apex RT-mode evidence TSV,
+PeakHypothesis review projection TSV, per-sample mode review TSV,
+per-family summary TSV, review-only similarity TSV/summary, Gaussian15-smoothed
+mode-colored PNGs, and an HTML gallery.
+**Topic group**: consumes `family_ms1_overlay_batch.py` trace JSONs plus
+`alignment_matrix_identity.tsv`; reuses
+`xic_extractor/alignment/shared_peak_identity_explanation/rt_mode_evidence.py`
+and `peak_hypothesis_selection.py`.
+**Status note**: This tool keeps `feature_family_id` as provenance only. RAW
+overlay-derived modes are emitted as review-only evidence, not typed iRT or
+product authority. Optional matrix RT drift and MS1 pattern sidecars are
+reported in the review-only similarity panel, which computes
+Gaussian15-smoothed apex-aligned shape similarity within the selected mode and
+badges wrong-apex, partial-shape, multimodal-family, and coherent-review cases.
+The similarity badge is a human triage aid, not a product gate. It is intended
+for changed-row adjudication where a plain family overlay can hide
+selected-apex multimodality or global trace apex conflicts.
+
+---
+
 ### `qc_ms1_pattern_reference.py`
 
 **Purpose**: Build a `diagnostic_only` nearest-injection-QC MS1 pattern reference sidecar from `family_ms1_overlay_plot` RAW trace JSON plus SampleInfo injection order; reports whether the closest QC supports, conflicts with, or cannot adjudicate a reviewed sample's selected MS1 peak.
@@ -601,6 +655,38 @@ backfill candidates.
 ---
 
 ## Area / Region Audits
+
+### `alignment_primary_area_authority_audit.py`
+
+**Purpose**: Audit `alignment_cells.tsv` primary matrix area authority against
+the Gaussian15 morphology area contract; reports fail-closed rows with missing
+MS1 morphology area and hard-fails any non-Gaussian source that still writes
+primary matrix area.
+**Topic group**: `alignment_primary_area_authority_audit.py` (single-file)
+**Originating context**: 2026-06-05 Product Authority Reconciliation v1
+follow-up for owner scalar fallback / retired area-source leakage.
+**Status note**: Reads existing `alignment_cells.tsv`, writes summary and
+flagged-row TSV/JSON only, and does not mutate matrices, workbook outputs,
+owner backfill, or RAW-derived evidence. A non-Gaussian primary area source is a
+product-authority failure; missing Gaussian15 morphology area remains fail-closed
+and requires trigger-rate review before promotion.
+
+### `gaussian15_area_pressure_audit.py`
+
+**Purpose**: Build a diagnostic-only pressure surface for Gaussian15 morphology
+area versus raw area and configured/default-15 smoothing duration from
+`peak_candidates.tsv`.
+**Topic group**: `gaussian15_area_pressure_audit.py` (single-file)
+**Originating context**: 2026-06-05 Product Authority Reconciliation v1
+follow-up for raw-vs-Gaussian area comparability and scan-rate sensitivity.
+**Status note**: Reads candidate-table provenance fields
+(`area_raw_counts_seconds`, `area_ms1_morphology`,
+`ms1_morphology_trace_*`, `region_scan_count`, and `region_duration_min`),
+writes `gaussian15_area_pressure_summary.tsv/json` plus
+`gaussian15_area_pressure_rows.tsv`, and reports
+`readiness_label=diagnostic_pressure_test_surface`. It does not mutate selected
+boundaries, selected area, confidence, presence, workbook output, matrix values,
+or candidate selection.
 
 ### `area_integration_uncertainty_audit.py`
 
