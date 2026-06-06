@@ -193,6 +193,8 @@ def _plot_irt_overlay(
     rt_max: float,
 ) -> None:
     plotted = 0
+    corrected_min = math.inf
+    corrected_max = -math.inf
     for row in rows:
         delta = (
             drift_lookup.sample_delta_min(row.sample_stem)
@@ -221,6 +223,8 @@ def _plot_irt_overlay(
             zorder=zorder,
         )
         plotted += 1
+        corrected_min = min(corrected_min, float(rt.min()))
+        corrected_max = max(corrected_max, float(rt.max()))
     ax.set_title(
         "Drift-corrected (iRT) RT context: per-sample shift = -ISTD drift "
         "(traces collapsing here = same peak with drift)",
@@ -241,7 +245,9 @@ def _plot_irt_overlay(
             color="#888888",
         )
     else:
-        ax.set_xlim(rt_min, rt_max)
+        # Frame the drift-corrected data so no shifted trace is clipped, while
+        # still spanning at least the original RT window for comparability.
+        ax.set_xlim(min(rt_min, corrected_min), max(rt_max, corrected_max))
         _add_panel_note(
             ax,
             "Compare against the absolute-RT panel: convergence here means the "
