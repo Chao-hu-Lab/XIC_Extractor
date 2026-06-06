@@ -74,6 +74,10 @@ from xic_extractor.alignment.raw_sources import (
 )
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.diagnostics.timing import TimingRecorder
+from xic_extractor.injection_rolling import (
+    order_sample_columns_by_injection,
+    read_injection_order,
+)
 
 _RawSourceTimingStats = RawSourceTimingStats
 _TimedRawSource = TimedRawSource
@@ -105,6 +109,7 @@ def run_alignment(
     identity_coherence_output_dir: Path | None = None,
     identity_coherence_controls_manifest: Path | None = None,
     drift_lookup: DriftLookupProtocol | None = None,
+    sample_column_injection_order: Path | None = None,
     timing_recorder: TimingRecorder | None = None,
     backfill_scope: BackfillScope = "full-audit",
     audit_evidence_mode: str = "auto",
@@ -423,10 +428,32 @@ def run_alignment(
                     _summarize_xic_timing_stats(timing_stats),
                 )
                 record_raw_source_timing_stats(timing_stats, recorder=recorder)
+        matrix_sample_order = batch.sample_order
+        if sample_column_injection_order is not None:
+            injection_order = read_injection_order(sample_column_injection_order)
+            matrix_sample_order = order_sample_columns_by_injection(
+                batch.sample_order,
+                injection_order,
+            )
+            recorder.record(
+                "alignment.sample_column_injection_order",
+                elapsed_sec=0.0,
+                metrics={
+                    "ordered_samples": sum(
+                        1 for sample in batch.sample_order if sample in injection_order
+                    ),
+                    "unordered_samples": sum(
+                        1
+                        for sample in batch.sample_order
+                        if sample not in injection_order
+                    ),
+                    "source": str(sample_column_injection_order),
+                },
+            )
         with recorder.stage("alignment.build_matrix"):
             matrix = build_owner_alignment_matrix(
                 owner_features,
-                sample_order=batch.sample_order,
+                sample_order=matrix_sample_order,
                 ambiguous_by_sample={},
                 rescued_cells=rescued_cells,
             )

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import re
 import statistics
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -18,6 +19,29 @@ def read_injection_order(path: Path) -> dict[str, int]:
     if suffix == ".csv":
         return _read_csv(path)
     raise ValueError(f"Unsupported injection-order file type: {suffix}")
+
+
+def order_sample_columns_by_injection(
+    sample_order: Sequence[str],
+    injection_order: Mapping[str, int],
+) -> tuple[str, ...]:
+    """Order sample columns by injection order (early -> late).
+
+    Samples found in ``injection_order`` are sorted ascending by their order so
+    the matrix reads earliest-injected to latest-injected left-to-right (making
+    injection-order drift a smooth gradient across columns). Samples absent from
+    ``injection_order`` keep their original relative order and are placed after
+    all ordered samples. Pure and stable; only reorders columns — it never adds,
+    drops, or alters a sample.
+    """
+
+    def sort_key(sample: str) -> tuple[int, int]:
+        order = injection_order.get(sample)
+        if order is None:
+            return (1, 0)
+        return (0, order)
+
+    return tuple(sorted(sample_order, key=sort_key))
 
 
 def _read_csv(path: Path) -> dict[str, int]:

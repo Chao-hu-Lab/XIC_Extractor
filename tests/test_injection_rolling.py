@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from xic_extractor.injection_rolling import read_injection_order, rolling_median_rt
+from xic_extractor.injection_rolling import (
+    order_sample_columns_by_injection,
+    read_injection_order,
+    rolling_median_rt,
+)
 
 
 def test_read_csv(tmp_path: Path) -> None:
@@ -28,6 +32,34 @@ def test_rolling_median_uses_window() -> None:
     rts = {f"s{i}": float(i) for i in range(1, 11)}
     order = {f"s{i}": i for i in range(1, 11)}
     assert rolling_median_rt("istd", "s5", rts, order, window=2) == 5.0
+
+
+def test_order_sample_columns_sorts_ascending_by_injection() -> None:
+    result = order_sample_columns_by_injection(
+        ("S_c", "S_a", "S_b"),
+        {"S_a": 1, "S_b": 2, "S_c": 3},
+    )
+    assert result == ("S_a", "S_b", "S_c")
+
+
+def test_order_sample_columns_unmatched_go_last_in_original_order() -> None:
+    result = order_sample_columns_by_injection(
+        ("S_x", "S_c", "S_y", "S_a", "S_b"),
+        {"S_a": 1, "S_b": 2, "S_c": 3},
+    )
+    assert result == ("S_a", "S_b", "S_c", "S_x", "S_y")
+
+
+def test_order_sample_columns_empty_map_preserves_input_order() -> None:
+    order = ("S_c", "S_a", "S_b")
+    assert order_sample_columns_by_injection(order, {}) == order
+
+
+def test_order_sample_columns_is_pure_permutation() -> None:
+    order = ("S_c", "S_a", "S_b", "S_x")
+    result = order_sample_columns_by_injection(order, {"S_a": 5, "S_b": 1})
+    assert sorted(result) == sorted(order)
+    assert result == ("S_b", "S_a", "S_c", "S_x")
 
 
 def test_rolling_median_respects_gaps() -> None:
