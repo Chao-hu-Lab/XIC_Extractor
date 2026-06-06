@@ -147,6 +147,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         sample_info = None
         targeted_istd_workbook = None
+    sample_column_injection_order = (
+        args.sample_column_injection_order.resolve()
+        if args.sample_column_injection_order is not None
+        else None
+    )
+    if (
+        sample_column_injection_order is not None
+        and not sample_column_injection_order.is_file()
+    ):
+        print(
+            f"{sample_column_injection_order}: sample-column injection-order file "
+            "does not exist",
+            file=sys.stderr,
+        )
+        return 2
     try:
         selected_family_ids, selected_family_source = _resolve_selected_families(args)
     except (OSError, ValueError) as exc:
@@ -237,6 +252,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 identity_coherence_controls_manifest
             ),
             "drift_lookup": drift_lookup,
+            "sample_column_injection_order": sample_column_injection_order,
             "backfill_scope": args.backfill_scope,
             "audit_evidence_mode": args.audit_evidence_mode,
             "selected_family_ids": selected_family_ids,
@@ -538,6 +554,17 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "Injection-order half-window used to build targeted ISTD drift "
             f"priors. Default {_DEFAULT_DRIFT_LOCAL_WINDOW} supports sparse "
             "validation subsets while preserving sample-local rolling medians."
+        ),
+    )
+    parser.add_argument(
+        "--sample-column-injection-order",
+        type=Path,
+        help=(
+            "CSV/XLSX with Sample_Name,Injection_Order columns (e.g. the "
+            "instrument_qc_injection_order.csv derived from the method .docx). "
+            "When given, final matrix sample columns are ordered earliest- to "
+            "latest-injected; samples not listed keep their order at the end. "
+            "Reorders columns only; values are unchanged."
         ),
     )
     parser.add_argument(

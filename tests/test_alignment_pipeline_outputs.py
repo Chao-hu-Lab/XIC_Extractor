@@ -195,6 +195,79 @@ def test_pipeline_debug_flags_write_optional_outputs(
     assert outputs.status_matrix_tsv.exists()
 
 
+def _status_matrix_sample_columns(
+    status_matrix_tsv: Path,
+    sample_set: set[str],
+) -> list[str]:
+    header = status_matrix_tsv.read_text(encoding="utf-8").splitlines()[0]
+    return [column for column in header.split("\t") if column in sample_set]
+
+
+def test_pipeline_orders_sample_columns_by_injection_order(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    samples = ("Sample_C", "Sample_A", "Sample_X", "Sample_B")
+    batch_index = _write_batch(tmp_path, samples)
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    for stem in samples:
+        (raw_dir / f"{stem}.raw").write_text("raw", encoding="utf-8")
+    injection_csv = tmp_path / "instrument_qc_injection_order.csv"
+    injection_csv.write_text(
+        "Sample_Name,Injection_Order\nSample_A,1\nSample_B,2\nSample_C,3\n",
+        encoding="utf-8",
+    )
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    outputs = pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        emit_alignment_status_matrix=True,
+        sample_column_injection_order=injection_csv,
+        raw_opener=FakeRawOpener(),
+    )
+
+    # earliest->latest injected first; unlisted Sample_X kept at the end.
+    assert _status_matrix_sample_columns(
+        outputs.status_matrix_tsv,
+        set(samples),
+    ) == ["Sample_A", "Sample_B", "Sample_C", "Sample_X"]
+
+
+def test_pipeline_keeps_input_sample_order_without_injection_source(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    samples = ("Sample_C", "Sample_A", "Sample_B")
+    batch_index = _write_batch(tmp_path, samples)
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    for stem in samples:
+        (raw_dir / f"{stem}.raw").write_text("raw", encoding="utf-8")
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    outputs = pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        emit_alignment_status_matrix=True,
+        raw_opener=FakeRawOpener(),
+    )
+
+    assert _status_matrix_sample_columns(
+        outputs.status_matrix_tsv,
+        set(samples),
+    ) == ["Sample_C", "Sample_A", "Sample_B"]
+
+
 def test_pipeline_writes_run_metadata_sidecar_for_p7_scoped_runs(
     tmp_path: Path,
     monkeypatch,
