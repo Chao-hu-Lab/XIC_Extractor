@@ -1809,18 +1809,75 @@ def _family_subthreshold_candidates(
     )
 
 
-def _diagnostic_sort_key(row: Mapping[str, str]) -> tuple[int, str]:
+# Triage categories, in review priority order. (key, label) — label is shown in
+# the gallery filter bar; key is the data-diag attribute and sort bucket.
+DIAGNOSTIC_CATEGORIES: tuple[tuple[str, str], ...] = (
+    ("false_split", "likely false split"),
+    ("true_multimodal", "likely true multimodal"),
+    ("subthreshold", "possible missed peak"),
+    ("other", "other"),
+)
+
+
+def _diagnostic_category(row: Mapping[str, str]) -> str:
     badge = text_value(row.get("drift_diagnostic_badge"))
-    subthreshold_present = text_value(row.get("subthreshold_present")) == "TRUE"
     if "likely_false_split" in badge:
-        bucket = 0
-    elif "likely_true_multimodal" in badge:
-        bucket = 1
-    elif subthreshold_present:
-        bucket = 2
-    else:
-        bucket = 3
-    return (bucket, text_value(row.get("feature_family_id")))
+        return "false_split"
+    if "likely_true_multimodal" in badge:
+        return "true_multimodal"
+    if text_value(row.get("subthreshold_present")) == "TRUE":
+        return "subthreshold"
+    return "other"
+
+
+def _diagnostic_sort_key(row: Mapping[str, str]) -> tuple[int, str]:
+    order = {key: index for index, (key, _label) in enumerate(DIAGNOSTIC_CATEGORIES)}
+    return (
+        order[_diagnostic_category(row)],
+        text_value(row.get("feature_family_id")),
+    )
+
+
+def _triage_bar_html(family_rows: Sequence[Mapping[str, str]]) -> str:
+    counts = Counter(_diagnostic_category(row) for row in family_rows)
+    buttons = [
+        "<button class=\"triage-btn active\" data-filter=\"all\">"
+        f"All ({len(family_rows)})</button>"
+    ]
+    for key, label in DIAGNOSTIC_CATEGORIES:
+        count = counts.get(key, 0)
+        if count == 0:
+            continue
+        buttons.append(
+            f"<button class=\"triage-btn\" data-filter=\"{key}\">"
+            f"{html.escape(label)} ({count})</button>"
+        )
+    return (
+        "<nav class=\"triage\" aria-label=\"Triage filter\">"
+        "<span class=\"triage-label\">Triage</span>"
+        + "".join(buttons)
+        + "</nav>"
+    )
+
+
+_TRIAGE_SCRIPT = """<script>
+(function(){
+  var bar=document.querySelector('.triage');
+  if(!bar){return;}
+  var fams=document.querySelectorAll('article.family');
+  bar.addEventListener('click',function(e){
+    var b=e.target.closest('.triage-btn');
+    if(!b){return;}
+    var f=b.getAttribute('data-filter');
+    bar.querySelectorAll('.triage-btn').forEach(function(x){
+      x.classList.toggle('active',x===b);
+    });
+    fams.forEach(function(a){
+      a.style.display=(f==='all'||a.getAttribute('data-diag')===f)?'':'none';
+    });
+  });
+})();
+</script>"""
 
 
 def _render_mode_plot(
@@ -2283,8 +2340,10 @@ def _write_review_gallery(
                 ),
                 f"<p class=\"links\">{links}</p>",
                 _gallery_overview_html(similarity_rows, family_rows=family_rows),
+                _triage_bar_html(family_rows),
                 body,
                 "</main>",
+                _TRIAGE_SCRIPT,
                 "</body>",
                 "</html>",
             ]
@@ -2329,9 +2388,11 @@ def _family_html_block(
         if text_value(row.get("subthreshold_present")) == "TRUE"
         else ""
     )
+    category = _diagnostic_category(row)
     return "\n".join(
         [
-            f"<article class=\"family {_risk_class(dominant_badge)}\">",
+            f"<article class=\"family {_risk_class(dominant_badge)}\" "
+            f"data-diag=\"{category}\">",
             (
                 f"<h2>{html.escape(row.get('rank', ''))}. {family} "
                 f"<span>{html.escape(row.get('mode_review_verdict', ''))}</span>"
@@ -2733,6 +2794,52 @@ tbody tr.risk-medium {
   font-weight: 700;
   color: #1d3042;
 }
+.meter-low > span {
+  background: #d64545;
+}
+.meter-mid > span {
+  background: #d99a2b;
+}
+.meter-high > span {
+  background: #2e8b57;
+}
+.triage {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #c9d4de;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.triage-label {
+  font-weight: 700;
+  color: #16202a;
+  margin-right: 4px;
+}
+.triage-btn {
+  font: inherit;
+  cursor: pointer;
+  padding: 5px 12px;
+  border: 1px solid #c9d4de;
+  border-radius: 999px;
+  background: #f3f5f7;
+  color: #16202a;
+}
+.triage-btn:hover {
+  background: #e6ecf1;
+}
+.triage-btn.active {
+  background: #1d3042;
+  color: #ffffff;
+  border-color: #1d3042;
+}
 @media (max-width: 820px) {
   main {
     padding: 18px 12px 32px;
@@ -2829,9 +2936,20 @@ def _metric_meter(value: object, *, kind: str) -> str:
         return ""
     if kind == "shape":
         percent = max(0.0, min(100.0, ((parsed + 1.0) / 2.0) * 100.0))
+        level = (
+            "high"
+            if parsed >= SHAPE_STRONG_MIN
+            else "mid"
+            if parsed >= SHAPE_SUPPORT_MIN
+            else "low"
+        )
     else:
         percent = max(0.0, min(100.0, parsed))
-    return f"<span class=\"meter\"><span style=\"width:{percent:.1f}%\"></span></span>"
+        level = "high" if parsed >= 70.0 else "mid" if parsed >= 40.0 else "low"
+    return (
+        f"<span class=\"meter meter-{level}\">"
+        f"<span style=\"width:{percent:.1f}%\"></span></span>"
+    )
 
 
 def _risk_class(value: object) -> str:
@@ -2883,7 +3001,10 @@ def _image_html(path_value: object, *, html_dir: Path) -> str:
         return "<p class=\"note\">No image.</p>"
     rel = _relative_path(Path(path_text), html_dir)
     escaped = html.escape(rel)
-    return f"<a href=\"{escaped}\"><img src=\"{escaped}\" alt=\"\"></a>"
+    return (
+        f"<a href=\"{escaped}\">"
+        f"<img src=\"{escaped}\" loading=\"lazy\" decoding=\"async\" alt=\"\"></a>"
+    )
 
 
 def _resolve_path(value: str, *, base_dir: Path) -> Path:
