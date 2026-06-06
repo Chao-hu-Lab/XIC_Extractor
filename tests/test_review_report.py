@@ -507,8 +507,8 @@ def test_review_report_draws_istd_area_cv_table_and_normalized_chart(
     html = path.read_text(encoding="utf-8")
     assert "<h2>ISTD Area Injection Stability</h2>" in html
     assert (
-        "Detected counts positive numeric ISTD area rows; total counts ISTD rows "
-        "with injection order."
+        "Detected counts ISTD rows with Counted Detection TRUE; total counts ISTD "
+        "rows with injection order."
     ) in html
     assert "<th>Mean Area</th><th>SD</th><th>CV%</th>" in html
     assert (
@@ -539,6 +539,69 @@ def test_review_report_draws_istd_area_cv_table_and_normalized_chart(
     )[0]
     assert "QC Injection" in area_section
     assert "Acceptable Range" not in area_section
+
+
+def test_review_report_istd_trends_use_counted_detection_projection(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "SampleName": "S1",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "8.90",
+            "Area": "100",
+            "NL": "OK",
+            "Confidence": "HIGH",
+            "Product State": "detected_clean",
+            "Counted Detection": "TRUE",
+        },
+        {
+            "SampleName": "S2",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "20.00",
+            "Area": "1000",
+            "NL": "OK",
+            "Confidence": "HIGH",
+            "Product State": "not_counted",
+            "Counted Detection": "FALSE",
+        },
+        {
+            "SampleName": "S3",
+            "Target": "d3-A",
+            "Role": "ISTD",
+            "RT": "9.10",
+            "Area": "110",
+            "NL": "OK",
+            "Confidence": "HIGH",
+            "Product State": "detected_clean",
+            "Counted Detection": "TRUE",
+        },
+    ]
+
+    path = write_review_report(
+        tmp_path / "review_report.html",
+        rows,
+        diagnostics=[],
+        review_rows=[],
+        count_no_ms2_as_detected=False,
+        injection_order={"S1": 1, "S2": 2, "S3": 3},
+        require_projection=True,
+    )
+
+    html = path.read_text(encoding="utf-8")
+    trend_section = html.split("<h2>ISTD RT Injection Trend</h2>", 1)[1].split(
+        "</section>",
+        1,
+    )[0]
+    area_section = html.split("<h2>ISTD Area Injection Stability</h2>", 1)[1].split(
+        "</section>",
+        1,
+    )[0]
+    assert "RT 20.0000 min" not in trend_section
+    assert "area 1000.0" not in area_section
+    assert "<td>d3-A</td><td>2/3</td><td>1.05e+02</td>" in area_section
 
 
 def test_review_report_area_cv_excludes_invalid_area_values(

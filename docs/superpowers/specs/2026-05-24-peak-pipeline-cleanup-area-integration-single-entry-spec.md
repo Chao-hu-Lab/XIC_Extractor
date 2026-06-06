@@ -1,12 +1,29 @@
 # C5 — Area Integration Single Entry Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.3 — METHOD-PRESERVING after design correction
+**Status:** Completed in 2026-06-01 cleanup-retirement branch — single entry
+landed before C1b
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Precondition:** C3a/C3b hypothesis-spine scaffold is accepted or explicitly
 deferred, C1a baseline relocation landed if needed, and Phase 1 conditional
 blockers are documented. P2b conditional audit promotion is enough to preserve
 AsLS audit support, but not enough to make this entry AsLS-only.
+
+## 2026-06-01 Implementation Closeout
+
+C5 landed before linear-edge retirement. The implemented closeout differs from
+the original draft in one important way: the consolidated path became the bridge
+to the later AsLS-only C1b phase after the Tier C/rollback gates passed. The
+C5 closeout note is
+`docs/superpowers/notes/2026-06-01-c5-single-integration-entry-closeout-note.md`.
+
+Current state after C1b:
+
+- production integration uses the consolidated entry path;
+- accepted production baseline method is AsLS;
+- old `linear_edge` selector/config inputs are rejected by the later C1b
+  retirement contract;
+- rollback-column comparison remains only in historical diagnostics.
 
 ## Purpose
 

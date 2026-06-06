@@ -27,6 +27,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             hypothesis_consistency_tsv=args.hypothesis_consistency_tsv,
             overlay_trace_data_jsons=args.overlay_trace_data_json,
             allow_overwrite_source=args.allow_overwrite_source,
+            require_complete_peak_hypothesis_identity=(
+                args.require_complete_peak_hypothesis_identity
+            ),
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -46,6 +49,7 @@ def run_construction(
     hypothesis_consistency_tsv: Path | None = None,
     overlay_trace_data_jsons: Sequence[Path] = (),
     allow_overwrite_source: bool = False,
+    require_complete_peak_hypothesis_identity: bool = False,
 ) -> Mapping[str, Path]:
     outputs = peak_hypothesis_matrix.build_peak_hypothesis_matrix_outputs(
         alignment_matrix_tsv=alignment_matrix_tsv,
@@ -56,6 +60,9 @@ def run_construction(
         overlay_trace_data_jsons=overlay_trace_data_jsons,
         output_dir=output_dir,
         allow_overwrite_source=allow_overwrite_source,
+        require_complete_peak_hypothesis_identity=(
+            require_complete_peak_hypothesis_identity
+        ),
     )
     return {
         "alignment_matrix": outputs.matrix_tsv,
@@ -92,6 +99,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help=(
             "Allow output alignment_matrix.tsv to overwrite the input matrix. "
             "Use only after preserving source artifacts elsewhere."
+        ),
+    )
+    parser.add_argument(
+        "--require-complete-peak-hypothesis-identity",
+        action="store_true",
+        help=(
+            "Fail unless matrix construction can emit only explicit "
+            "PeakHypothesis row identities without family projection, raw-mode "
+            "review-only, hard-blocked, or source-missing blockers."
         ),
     )
     return parser.parse_args(argv)

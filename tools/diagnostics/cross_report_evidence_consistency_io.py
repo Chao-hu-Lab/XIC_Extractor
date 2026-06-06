@@ -4,19 +4,29 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from tools.diagnostics.diagnostic_io import (
-    bool_value as _bool_value,
-    optional_float as _optional_float,
-    read_tsv_required as _read_required_tsv,
-    required_indexes,
-    split_semicolon_labels as _split_labels,
-    text_value as _text,
-)
 from tools.diagnostics.cross_report_evidence_consistency_models import (
     _CANDIDATE_COLUMNS,
     _RELIABILITY_COLUMNS,
     CandidateRow,
     ReliabilityRow,
+)
+from tools.diagnostics.diagnostic_io import (
+    bool_value as _bool_value,
+)
+from tools.diagnostics.diagnostic_io import (
+    optional_float as _optional_float,
+)
+from tools.diagnostics.diagnostic_io import (
+    read_tsv_required as _read_required_tsv,
+)
+from tools.diagnostics.diagnostic_io import (
+    required_indexes,
+)
+from tools.diagnostics.diagnostic_io import (
+    split_semicolon_labels as _split_labels,
+)
+from tools.diagnostics.diagnostic_io import (
+    text_value as _text,
 )
 
 

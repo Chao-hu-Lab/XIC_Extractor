@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.output.messages import DiagnosticRecord
+from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
 from xic_extractor.rt_prior_library import LibraryEntry
 
 if TYPE_CHECKING:
@@ -22,6 +23,7 @@ def run_process(
     rt_prior_library: dict[tuple[str, str], LibraryEntry],
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
+    model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> RunOutput:
     from xic_extractor import extractor
     from xic_extractor.extraction.jobs import ScoringInputs
@@ -45,6 +47,9 @@ def run_process(
         scoring_inputs,
         progress_callback=progress_callback,
         should_stop=should_stop,
+        model_selection_expected_diff_approvals=(
+            model_selection_expected_diff_approvals
+        ),
     )
 
     file_results = [result.file_result for result in raw_results]
@@ -63,6 +68,7 @@ def collect_raw_file_results_process(
     *,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
+    model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
     runner: Callable[..., list[Any]] | None = None,
 ) -> list[RawFileExtractionResult]:
     from xic_extractor.extraction.jobs import (
@@ -80,6 +86,9 @@ def collect_raw_file_results_process(
             config=config,
             targets=targets,
             scoring_inputs=scoring_inputs,
+            model_selection_expected_diff_approvals=(
+                dict(model_selection_expected_diff_approvals or {})
+            ),
         )
         for index, raw_path in enumerate(raw_paths, start=1)
     ]

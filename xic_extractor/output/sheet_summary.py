@@ -21,12 +21,21 @@ from xic_extractor.output.workbook_styles import (
 )
 from xic_extractor.sample_groups import classify_sample_group
 
+_LEGACY_SUMMARY_HEADERS = {
+    "Confidence HIGH",
+    "Confidence MEDIUM",
+    "Confidence LOW",
+    "Confidence VERY_LOW",
+    "Low Confidence Rows",
+}
+
 
 def _build_summary_sheet(
     ws,
     rows: list[dict[str, str]],
     count_no_ms2_as_detected: bool = False,
     review_rows: list[dict[str, str]] | None = None,
+    require_projection: bool = False,
 ) -> None:
     for col_idx, header in enumerate(_SUMMARY_HEADERS, start=1):
         _apply(
@@ -40,6 +49,7 @@ def _build_summary_sheet(
         diagnostics=[],
         review_rows=review_rows or [],
         count_no_ms2_as_detected=count_no_ms2_as_detected,
+        require_projection=require_projection,
     )
     for row_idx, target in enumerate(_target_summaries(rows), start=2):
         fill_hex = GREY if row_idx % 2 == 0 else WHITE
@@ -48,6 +58,7 @@ def _build_summary_sheet(
             rows,
             count_no_ms2_as_detected,
             metrics,
+            require_projection=require_projection,
         )
         for col_idx, value in enumerate(values, start=1):
             cell = ws.cell(row=row_idx, column=col_idx, value=value)
@@ -85,7 +96,12 @@ def _build_summary_sheet(
         14,
     ]
     for col_idx, width in enumerate(widths, start=1):
-        ws.column_dimensions[get_column_letter(col_idx)].width = width
+        letter = get_column_letter(col_idx)
+        header = _SUMMARY_HEADERS[col_idx - 1]
+        ws.column_dimensions[letter].width = width
+        if header in _LEGACY_SUMMARY_HEADERS:
+            ws.column_dimensions[letter].hidden = True
+            ws.column_dimensions[letter].outlineLevel = 1
     ws.auto_filter.ref = (
         f"A1:{get_column_letter(len(_SUMMARY_HEADERS))}"
         f"{max(1, len(_target_summaries(rows)) + 1)}"
@@ -109,11 +125,19 @@ def _summary_row_values(
     rows: list[dict[str, str]],
     count_no_ms2_as_detected: bool,
     metrics: ReviewMetrics,
+    *,
+    require_projection: bool = False,
 ) -> list[object]:
     target = target_row["Target"]
     target_rows = [row for row in rows if row.get("Target") == target]
     detected_rows = [
-        row for row in target_rows if _is_long_detected(row, count_no_ms2_as_detected)
+        row
+        for row in target_rows
+        if _is_long_detected(
+            row,
+            count_no_ms2_as_detected,
+            require_projection=require_projection,
+        )
     ]
     total = len(target_rows)
     detected = len(detected_rows)
@@ -129,8 +153,18 @@ def _summary_row_values(
         f"{detected / total * 100:.0f}%" if total else "0%",
         _long_median_area(detected_rows),
         _long_mean_rt(detected_rows),
-        _long_area_ratio(target_row, rows, count_no_ms2_as_detected),
-        _long_rt_delta(target_row, rows, count_no_ms2_as_detected),
+        _long_area_ratio(
+            target_row,
+            rows,
+            count_no_ms2_as_detected,
+            require_projection=require_projection,
+        ),
+        _long_rt_delta(
+            target_row,
+            rows,
+            count_no_ms2_as_detected,
+            require_projection=require_projection,
+        ),
         nl_counts["OK"],
         nl_counts["WARN"],
         nl_counts["NL_FAIL"],
@@ -156,9 +190,16 @@ def _long_confidence_counts(target_rows: list[dict[str, str]]) -> dict[str, int]
 
 
 def _is_long_detected(
-    row: dict[str, str], count_no_ms2_as_detected: bool = False
+    row: dict[str, str],
+    count_no_ms2_as_detected: bool = False,
+    *,
+    require_projection: bool = False,
 ) -> bool:
-    return is_accepted_row_detection(row, count_no_ms2_as_detected)
+    return is_accepted_row_detection(
+        row,
+        count_no_ms2_as_detected,
+        require_projection=require_projection,
+    )
 
 
 def _long_mean_rt(rows: list[dict[str, str]]) -> str:
@@ -188,6 +229,8 @@ def _long_area_ratio(
     target_row: dict[str, str],
     rows: list[dict[str, str]],
     count_no_ms2_as_detected: bool,
+    *,
+    require_projection: bool = False,
 ) -> str:
     istd_pair = target_row.get("ISTD Pair", "")
     if not istd_pair:
@@ -199,10 +242,18 @@ def _long_area_ratio(
             continue
         if classify_sample_group(row.get("SampleName", "")) != "QC":
             continue
-        if not _is_long_detected(row, count_no_ms2_as_detected):
+        if not _is_long_detected(
+            row,
+            count_no_ms2_as_detected,
+            require_projection=require_projection,
+        ):
             continue
         istd = rows_by_sample.get((row.get("SampleName", ""), istd_pair))
-        if istd is None or not _is_long_detected(istd, count_no_ms2_as_detected):
+        if istd is None or not _is_long_detected(
+            istd,
+            count_no_ms2_as_detected,
+            require_projection=require_projection,
+        ):
             continue
         analyte_area = _safe_float(row.get("Area", ""))
         istd_area = _safe_float(istd.get("Area", ""))
@@ -225,6 +276,8 @@ def _long_rt_delta(
     target_row: dict[str, str],
     rows: list[dict[str, str]],
     count_no_ms2_as_detected: bool,
+    *,
+    require_projection: bool = False,
 ) -> str:
     istd_pair = target_row.get("ISTD Pair", "")
     if not istd_pair:
@@ -234,10 +287,18 @@ def _long_rt_delta(
     for row in rows:
         if row.get("Target") != target_row["Target"]:
             continue
-        if not _is_long_detected(row, count_no_ms2_as_detected):
+        if not _is_long_detected(
+            row,
+            count_no_ms2_as_detected,
+            require_projection=require_projection,
+        ):
             continue
         istd = rows_by_sample.get((row.get("SampleName", ""), istd_pair))
-        if istd is None or not _is_long_detected(istd, count_no_ms2_as_detected):
+        if istd is None or not _is_long_detected(
+            istd,
+            count_no_ms2_as_detected,
+            require_projection=require_projection,
+        ):
             continue
         rt_analyte = _safe_float(row.get("RT", ""))
         rt_istd = _safe_float(istd.get("RT", ""))

@@ -248,7 +248,7 @@ def test_pipeline_passes_alignment_config_to_production_writers(monkeypatch, tmp
     pipeline_outputs.write_outputs_atomic(
         outputs,
         matrix,
-        metadata={"schema_version": "alignment-results-v1"},
+        metadata={"schema_version": "alignment-results-v3"},
         ownership=_empty_ownership(),
         alignment_config=config,
     )

@@ -555,7 +555,8 @@ def _write_markdown(path: Path, result: P2bAslsPromotionGateResult) -> None:
         f"Accepted review rows: {result.review_accepted_count}",
         f"Global blockers: {';'.join(result.global_blockers)}",
         "",
-        "| Target | Feature | Old status | Revised status | Hard blockers | Accepted reasons |",
+        "| Target | Feature | Old status | Revised status | Hard blockers | "
+        "Accepted reasons |",
         "|---|---|---|---|---|---|",
     ]
     for row in result.rows:
@@ -586,7 +587,9 @@ def _write_tsv(
         )
         writer.writeheader()
         for row in rows:
-            writer.writerow({field: _format_value(row.get(field)) for field in fieldnames})
+            writer.writerow(
+                {field: _format_value(row.get(field)) for field in fieldnames}
+            )
 
 
 def _read_tsv(path: Path, required_columns: set[str]) -> list[dict[str, str]]:

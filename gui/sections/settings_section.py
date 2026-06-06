@@ -83,6 +83,7 @@ class SettingsSection(QWidget):
         self._dll_dir_edit = QLineEdit()
         self._smooth_window_spin = QSpinBox()
         self._smooth_polyorder_spin = QSpinBox()
+        self._ms1_morphology_smoothing_window_spin = QSpinBox()
         self._peak_rel_height_spin = QDoubleSpinBox()
         self._peak_min_prominence_ratio_spin = QDoubleSpinBox()
         self._ms2_precursor_tol_da_spin = QDoubleSpinBox()
@@ -95,6 +96,7 @@ class SettingsSection(QWidget):
         self._dirty_matrix_mode_checkbox = QCheckBox("啟用 dirty matrix mode")
         self._rolling_window_size_spin = QSpinBox()
         self._rt_prior_library_path_edit = QLineEdit()
+        self._target_pair_rt_calibration_path_edit = QLineEdit()
         self._injection_order_source_edit = QLineEdit()
         self._resolver_mode_combo = QComboBox()
         self._resolver_chrom_threshold_spin = QDoubleSpinBox()
@@ -128,6 +130,9 @@ class SettingsSection(QWidget):
             ),
             smooth_window_spin=self._smooth_window_spin,
             smooth_polyorder_spin=self._smooth_polyorder_spin,
+            ms1_morphology_smoothing_window_spin=(
+                self._ms1_morphology_smoothing_window_spin
+            ),
             peak_rel_height_spin=self._peak_rel_height_spin,
             peak_min_prominence_ratio_spin=self._peak_min_prominence_ratio_spin,
             chrom_threshold_spin=self._resolver_chrom_threshold_spin,
@@ -148,6 +153,9 @@ class SettingsSection(QWidget):
             count_no_ms2_checkbox=self._count_no_ms2_checkbox,
             rolling_window_size_spin=self._rolling_window_size_spin,
             rt_prior_library_path_edit=self._rt_prior_library_path_edit,
+            target_pair_rt_calibration_path_edit=(
+                self._target_pair_rt_calibration_path_edit
+            ),
             injection_order_source_edit=self._injection_order_source_edit,
             nl_rt_anchor_search_margin_min_spin=(
                 self._nl_rt_anchor_search_margin_min_spin
@@ -223,6 +231,7 @@ class SettingsSection(QWidget):
             QSignalBlocker(self._dll_dir_edit),
             QSignalBlocker(self._smooth_window_spin),
             QSignalBlocker(self._smooth_polyorder_spin),
+            QSignalBlocker(self._ms1_morphology_smoothing_window_spin),
             QSignalBlocker(self._peak_rel_height_spin),
             QSignalBlocker(self._peak_min_prominence_ratio_spin),
             QSignalBlocker(self._ms2_precursor_tol_da_spin),
@@ -235,6 +244,7 @@ class SettingsSection(QWidget):
             QSignalBlocker(self._dirty_matrix_mode_checkbox),
             QSignalBlocker(self._rolling_window_size_spin),
             QSignalBlocker(self._rt_prior_library_path_edit),
+            QSignalBlocker(self._target_pair_rt_calibration_path_edit),
             QSignalBlocker(self._injection_order_source_edit),
             QSignalBlocker(self._resolver_mode_combo),
             QSignalBlocker(self._resolver_chrom_threshold_spin),
@@ -268,6 +278,12 @@ class SettingsSection(QWidget):
             )
             self._smooth_polyorder_spin.setValue(
                 _int_value(self._settings_values, "smooth_polyorder")
+            )
+            self._ms1_morphology_smoothing_window_spin.setValue(
+                _int_value(
+                    self._settings_values,
+                    "ms1_morphology_smoothing_window_points",
+                )
             )
             self._peak_rel_height_spin.setValue(
                 _float_value(self._settings_values, "peak_rel_height")
@@ -304,6 +320,9 @@ class SettingsSection(QWidget):
                 "dll_dir": self._dll_dir_edit.text().strip(),
                 "smooth_window": str(self._smooth_window_spin.value()),
                 "smooth_polyorder": str(self._smooth_polyorder_spin.value()),
+                "ms1_morphology_smoothing_window_points": str(
+                    self._ms1_morphology_smoothing_window_spin.value()
+                ),
                 "peak_rel_height": f"{self._peak_rel_height_spin.value():.2f}",
                 "peak_min_prominence_ratio": (
                     f"{self._peak_min_prominence_ratio_spin.value():.2f}"
@@ -343,6 +362,9 @@ class SettingsSection(QWidget):
                 ),
                 "rt_prior_library_path": (
                     self._rt_prior_library_path_edit.text().strip()
+                ),
+                "target_pair_rt_calibration_path": (
+                    self._target_pair_rt_calibration_path_edit.text().strip()
                 ),
                 "injection_order_source": (
                     self._injection_order_source_edit.text().strip()
@@ -425,6 +447,9 @@ class SettingsSection(QWidget):
         values = self.get_values()
         smooth_window = int(values["smooth_window"])
         smooth_polyorder = int(values["smooth_polyorder"])
+        ms1_morphology_smoothing_window_points = int(
+            values["ms1_morphology_smoothing_window_points"]
+        )
         peak_rel_height = float(values["peak_rel_height"])
         peak_min_prominence_ratio = float(values["peak_min_prominence_ratio"])
         ms2_precursor_tol_da = float(values["ms2_precursor_tol_da"])
@@ -446,6 +471,8 @@ class SettingsSection(QWidget):
             and smooth_window >= 3
             and smooth_window % 2 == 1
             and 1 <= smooth_polyorder < smooth_window
+            and ms1_morphology_smoothing_window_points >= 3
+            and ms1_morphology_smoothing_window_points % 2 == 1
             and 0.50 <= peak_rel_height <= 0.99
             and 0.01 <= peak_min_prominence_ratio <= 0.50
             and ms2_precursor_tol_da > 0
@@ -488,6 +515,9 @@ class SettingsSection(QWidget):
         self._smooth_polyorder_spin.valueChanged.connect(
             lambda _: self._set_dirty(True)
         )
+        self._ms1_morphology_smoothing_window_spin.valueChanged.connect(
+            lambda _: self._set_dirty(True)
+        )
         self._peak_rel_height_spin.valueChanged.connect(lambda _: self._set_dirty(True))
         self._peak_min_prominence_ratio_spin.valueChanged.connect(
             lambda _: self._set_dirty(True)
@@ -515,6 +545,7 @@ class SettingsSection(QWidget):
             checkbox.stateChanged.connect(lambda _: self._set_dirty(True))
         for line_edit in (
             self._rt_prior_library_path_edit,
+            self._target_pair_rt_calibration_path_edit,
             self._injection_order_source_edit,
         ):
             line_edit.textChanged.connect(lambda _: self._set_dirty(True))

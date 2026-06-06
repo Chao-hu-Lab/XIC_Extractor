@@ -37,6 +37,8 @@ def _istd_rt_trend(
     for row in rows:
         if row.get("Role") != "ISTD":
             continue
+        if not _counted_detection(row):
+            continue
         sample = row.get("SampleName", "")
         order = injection_order.get(sample)
         rt = _float_value(row.get("RT", ""))
@@ -217,6 +219,8 @@ def _istd_area_stability(
         if order is None or not target:
             continue
         target_totals[target] = target_totals.get(target, 0) + 1
+        if not _counted_detection(row):
+            continue
         area = _positive_float_value(row.get("Area", ""))
         if area is None:
             continue
@@ -240,8 +244,8 @@ def _istd_area_stability(
     return (
         "<section><h2>ISTD Area Injection Stability</h2>"
         '<p class="dashboard-note">'
-        "Detected counts positive numeric ISTD area rows; total counts ISTD rows "
-        "with injection order. "
+        "Detected counts ISTD rows with Counted Detection TRUE; total counts ISTD "
+        "rows with injection order. "
         "CV% = sample SD / mean area."
         "</p>"
         '<div class="area-stability-layout">'
@@ -507,6 +511,14 @@ def _positive_float_value(text: str) -> float | None:
     if value is None or value <= 0:
         return None
     return value
+
+
+def _counted_detection(row: dict[str, str]) -> bool:
+    counted = row.get("Counted Detection", "").upper()
+    if counted in {"TRUE", "FALSE"}:
+        return counted == "TRUE"
+    return True
+
 
 def _format_area_metric(value: float | None) -> str:
     if value is None:

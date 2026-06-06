@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from xic_extractor import neutral_loss, raw_reader, signal_processing
@@ -11,6 +11,16 @@ from xic_extractor.output.messages import (
     DiagnosticRecord,
 )
 from xic_extractor.peak_detection.hypotheses import IntegrationResult, PeakHypothesis
+from xic_extractor.peak_detection.model_selection import (
+    ExpectedDiffApprovalRecord,
+    PeakModelSelectionResult,
+)
+from xic_extractor.peak_detection.selection_decision import (
+    PeakHypothesisSelectionDecision,
+)
+from xic_extractor.peak_detection.targeted_product_projection import (
+    TargetedProductProjection,
+)
 from xic_extractor.rt_prior_library import LibraryEntry
 
 open_raw = raw_reader.open_raw
@@ -50,6 +60,9 @@ class ExtractionResult:
     quality_flags: tuple[str, ...] = ()
     score_breakdown: tuple[tuple[str, str], ...] = ()
     selected_hypothesis: PeakHypothesis | None = None
+    selection_decision: PeakHypothesisSelectionDecision | None = None
+    model_selection_result: PeakModelSelectionResult | None = None
+    targeted_product_projection: TargetedProductProjection | None = None
 
     @property
     def peak(self) -> PeakResult | None:
@@ -95,6 +108,8 @@ class ExtractionResult:
     def reported_peak_area(self) -> float | None:
         integration = self._selected_integration
         if integration is not None:
+            if integration.area_ms1_morphology is not None:
+                return integration.area_ms1_morphology
             return integration.area_raw_counts_seconds
         peak = self.peak
         return None if peak is None else peak.area
@@ -143,6 +158,9 @@ class FileResult:
     error: str | None = None
     peak_candidate_rows: list[dict[str, str]] = field(default_factory=list)
     peak_candidate_boundary_rows: list[dict[str, str]] = field(default_factory=list)
+    selected_envelope_diagnostic_rows: list[dict[str, str]] = field(
+        default_factory=list
+    )
 
     @property
     def extraction_results(self) -> list[ExtractionResult]:
@@ -170,6 +188,9 @@ def run(
     should_stop: Callable[[], bool] | None = None,
     injection_order: dict[str, int] | None = None,
     rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
+    model_selection_expected_diff_approvals: (
+        Mapping[str, ExpectedDiffApprovalRecord] | None
+    ) = None,
 ) -> RunOutput:
     from xic_extractor.extraction.pipeline import run_pipeline
 
@@ -180,4 +201,7 @@ def run(
         should_stop=should_stop,
         injection_order=injection_order,
         rt_prior_library=rt_prior_library,
+        model_selection_expected_diff_approvals=(
+            model_selection_expected_diff_approvals
+        ),
     )

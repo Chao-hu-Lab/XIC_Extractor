@@ -11,6 +11,7 @@ from xic_extractor.extraction.peak_candidate_table import (
     build_peak_candidate_rows,
     build_peak_candidate_rows_from_hypotheses,
     candidate_audit_id,
+    with_product_selected_marker,
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.output.peak_candidates import write_peak_candidates_tsv
@@ -22,8 +23,8 @@ from xic_extractor.peak_detection.hypotheses import (
     PeakHypothesis,
     build_peak_hypotheses,
 )
+from xic_extractor.peak_detection.scoring_models import ScoringContext
 from xic_extractor.peak_detection.traces import Trace, targeted_trace_group
-from xic_extractor.peak_scoring import ScoringContext
 from xic_extractor.signal_processing import (
     PeakCandidate,
     PeakCandidateScore,
@@ -54,6 +55,11 @@ _PRE_NL_DIAGNOSTIC_HEADERS = (
     "prominence",
     "area_raw_counts_seconds",
     "area_baseline_corrected",
+    "area_ms1_morphology",
+    "ms1_morphology_area_source",
+    "ms1_morphology_trace_method",
+    "ms1_morphology_trace_window_points",
+    "ms1_morphology_trace_effective_points",
     "area_uncertainty",
     "area_uncertainty_formula_version",
     "baseline_residual_mad",
@@ -88,6 +94,17 @@ _NL_DIAGNOSTIC_HEADERS = (
     "best_product_base_ratio",
     "trigger_scan_count",
     "strict_nl_scan_count",
+)
+
+_MS1_PEAK_GROUP_MS2_HEADERS = (
+    "ms1_peak_group_source",
+    "ms1_peak_group_rt_min",
+    "ms1_peak_group_rt_max",
+    "ms1_peak_group_trigger_scan_count",
+    "ms1_peak_group_strict_nl_scan_count",
+    "ms1_peak_group_strict_nl_event_count",
+    "outside_ms1_peak_group_trigger_scan_count",
+    "outside_ms1_peak_group_strict_nl_scan_count",
     "ms2_alignment_source",
     "diagnostic_product_absence_reason",
     "nearest_product_loss_ppm",
@@ -112,7 +129,11 @@ def test_peak_candidate_headers_append_nl_diagnostics_without_reordering() -> No
     nl_start = len(_PRE_NL_DIAGNOSTIC_HEADERS)
     nl_end = nl_start + len(_NL_DIAGNOSTIC_HEADERS)
     assert PEAK_CANDIDATE_HEADERS[nl_start:nl_end] == _NL_DIAGNOSTIC_HEADERS
-    assert PEAK_CANDIDATE_HEADERS[nl_end:] == (
+    ms1_group_end = nl_end + len(_MS1_PEAK_GROUP_MS2_HEADERS)
+    assert PEAK_CANDIDATE_HEADERS[nl_end:ms1_group_end] == (
+        _MS1_PEAK_GROUP_MS2_HEADERS
+    )
+    assert PEAK_CANDIDATE_HEADERS[ms1_group_end:] == (
         _SAFE_MERGE_PROVENANCE_HEADERS
     )
 
@@ -167,7 +188,7 @@ def test_build_rows_marks_selected_and_rejected_candidates() -> None:
         target_label="Analyte",
         role="Analyte",
         istd_pair="ISTD",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=result,
         candidate_ms2_evidence={
             selected: _ms2_evidence(nl_match=True),
@@ -187,6 +208,14 @@ def test_build_rows_marks_selected_and_rejected_candidates() -> None:
     assert rows[0]["best_product_base_ratio"] == "0.30000"
     assert rows[0]["trigger_scan_count"] == "1"
     assert rows[0]["strict_nl_scan_count"] == "1"
+    assert rows[0]["ms1_peak_group_source"] == "gaussian15_ms1_peak_group"
+    assert rows[0]["ms1_peak_group_rt_min"] == "8.40000"
+    assert rows[0]["ms1_peak_group_rt_max"] == "8.60000"
+    assert rows[0]["ms1_peak_group_trigger_scan_count"] == "1"
+    assert rows[0]["ms1_peak_group_strict_nl_scan_count"] == "1"
+    assert rows[0]["ms1_peak_group_strict_nl_event_count"] == "1"
+    assert rows[0]["outside_ms1_peak_group_trigger_scan_count"] == "0"
+    assert rows[0]["outside_ms1_peak_group_strict_nl_scan_count"] == "0"
     assert rows[0]["ms2_alignment_source"] == "region"
     assert rows[0]["diagnostic_product_absence_reason"] == ""
     assert rows[0]["nearest_product_loss_ppm"] == "1.00000"
@@ -360,6 +389,14 @@ def test_build_rows_can_emit_baseline_corrected_audit_area() -> None:
     assert rows[0]["area_baseline_corrected"] == (
         f"{expected.area_baseline_corrected:.5f}"
     )
+    assert rows[0]["area_ms1_morphology"] != ""
+    assert (
+        rows[0]["ms1_morphology_area_source"]
+        == "gaussian15_positive_asls_residual"
+    )
+    assert rows[0]["ms1_morphology_trace_method"] == "gaussian_15"
+    assert rows[0]["ms1_morphology_trace_window_points"] == "15"
+    assert rows[0]["ms1_morphology_trace_effective_points"] != ""
     assert rows[0]["area_uncertainty"] != ""
     assert rows[0]["area_uncertainty_formula_version"] == (
         "baseline_residual_mad_v1"
@@ -413,6 +450,7 @@ def test_build_rows_prefers_shared_trace_group_arrays() -> None:
     assert rows[0]["area_baseline_corrected"] == (
         f"{expected.area_baseline_corrected:.5f}"
     )
+    assert rows[0]["area_ms1_morphology"] != ""
 
 
 def test_build_rows_from_hypotheses_projects_spine_without_legacy_result() -> None:
@@ -463,8 +501,68 @@ def test_build_rows_from_hypotheses_projects_spine_without_legacy_result() -> No
     assert row["selected"] == "TRUE"
     assert row["selection_rank"] == "1"
     assert row["area_baseline_corrected"] == "999.00000"
+    assert row["area_ms1_morphology"] == ""
     assert row["support_labels"] == "strict_nl_ok"
     assert row["reason"] == "spine decision"
+
+
+def test_product_selected_marker_replaces_legacy_selected_candidate() -> None:
+    legacy = _candidate_table_hypothesis("legacy", selected=True, rank=1)
+    successor = _candidate_table_hypothesis("successor", selected=False, rank=2)
+
+    rows = build_peak_candidate_rows_from_hypotheses(
+        sample_name="SampleA",
+        hypotheses=with_product_selected_marker(
+            (legacy, successor),
+            successor.hypothesis_id,
+        ),
+    )
+
+    selected_by_id = {row["candidate_id"]: row["selected"] for row in rows}
+    rank_by_id = {row["candidate_id"]: row["selection_rank"] for row in rows}
+    assert selected_by_id == {"legacy": "FALSE", "successor": "TRUE"}
+    assert rank_by_id["legacy"] == ""
+    assert rank_by_id["successor"] == "1"
+
+
+def test_product_selected_marker_projects_across_cwt_audit_id_change() -> None:
+    legacy = _candidate_table_hypothesis("legacy", selected=True, rank=1)
+    successor = replace(
+        _candidate_table_hypothesis("successor", selected=False, rank=2),
+        integration=IntegrationResult(
+            rt_left_min=8.6,
+            rt_apex_min=8.7,
+            rt_right_min=8.8,
+            raw_apex_rt_min=8.7,
+            rt_width_min=0.2,
+            height_raw=1200.0,
+            height_smoothed=1100.0,
+            area_raw_counts_seconds=4321.0,
+        ),
+    )
+    cwt_merged_successor = replace(
+        successor,
+        hypothesis_id="successor-with-cwt-audit",
+        audit=replace(
+            successor.audit,
+            proposal_sources=("legacy_savgol", "centwave_cwt"),
+        ),
+    )
+
+    rows = build_peak_candidate_rows_from_hypotheses(
+        sample_name="SampleA",
+        hypotheses=with_product_selected_marker(
+            (legacy, cwt_merged_successor),
+            successor.hypothesis_id,
+            selected_hypothesis=successor,
+        ),
+    )
+
+    selected_by_id = {row["candidate_id"]: row["selected"] for row in rows}
+    assert selected_by_id == {
+        "legacy": "FALSE",
+        "successor-with-cwt-audit": "TRUE",
+    }
 
 
 def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
@@ -500,7 +598,7 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
     trace_group = targeted_trace_group(
         trace,
         target_label="Analyte",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         expected_rt_min=8.5,
         role="ISTD",
         istd_pair="Analyte_IS",
@@ -512,14 +610,14 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
         target_label="Analyte",
         role="ISTD",
         istd_pair="Analyte_IS",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=result,
         candidate_ms2_evidence=ms2_evidence,
         trace_group=trace_group,
     )
     assert len(hypotheses) == 1
     hypothesis = hypotheses[0]
-    assert hypothesis.trace_group_id == "SampleA|Analyte|arbitrated"
+    assert hypothesis.trace_group_id == "SampleA|Analyte|region_first_safe_merge"
     assert hypothesis.audit.selected is True
     assert hypothesis.evidence.raw_score == 97
     assert hypothesis.evidence.support_labels == ("strict_nl_ok", "shape_clean")
@@ -530,7 +628,7 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
         target_label="Analyte",
         role="ISTD",
         istd_pair="Analyte_IS",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         peak_result=result,
         candidate_ms2_evidence=ms2_evidence,
         trace_group=trace_group,
@@ -542,11 +640,11 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
     assert row["role"] == "ISTD"
     assert row["istd_pair"] == "Analyte_IS"
     assert row["analysis_mode"] == "targeted"
-    assert row["resolver_mode"] == "arbitrated"
+    assert row["resolver_mode"] == "region_first_safe_merge"
     assert row["candidate_id"] == candidate_audit_id(
         sample_name="SampleA",
         target_label="Analyte",
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         candidate=selected,
     )
     assert row["selected"] == "TRUE"
@@ -566,6 +664,7 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
     assert row["rt_right_min"] == "8.70000"
     assert row["area_raw_counts_seconds"] == "1234.50"
     assert row["area_baseline_corrected"] != ""
+    assert row["area_ms1_morphology"] != ""
 
     path = tmp_path / "peak_candidates.tsv"
     write_peak_candidates_tsv(path, rows)
@@ -576,6 +675,43 @@ def test_targeted_handoff_spine_writes_peak_candidate_contract_row(
     assert len(read_back) == 1
     for key, value in row.items():
         assert read_back[0][key] == value
+
+
+def test_hypothesis_integration_uses_configured_ms1_morphology_window() -> None:
+    selected = _candidate(
+        8.5,
+        left=8.1,
+        right=8.9,
+        area=1234.5,
+        proposal_sources=("legacy_savgol",),
+    )
+    result = PeakDetectionResult(
+        status="OK",
+        peak=selected.peak,
+        n_points=9,
+        max_smoothed=1200.0,
+        n_prominent_peaks=1,
+        candidates=(selected,),
+        selection_reference_rt=8.5,
+    )
+
+    hypotheses = build_peak_hypotheses(
+        sample_name="SampleA",
+        target_label="Analyte",
+        role="ISTD",
+        istd_pair="Analyte_IS",
+        resolver_mode="region_first_safe_merge",
+        peak_result=result,
+        rt=np.linspace(8.1, 8.9, 9),
+        intensity=np.array([10.0, 18.0, 35.0, 80.0, 120.0, 80.0, 35.0, 18.0, 10.0]),
+        ms1_morphology_smoothing_window_points=7,
+    )
+
+    integration = hypotheses[0].integration
+    assert integration.ms1_morphology_trace_method == "gaussian_15"
+    assert integration.ms1_morphology_trace_window_points == 7
+    assert integration.ms1_morphology_trace_effective_points == 7
+    assert integration.area_ms1_morphology is not None
 
 
 def test_append_rows_rescores_same_apex_cwt_audit_support(
@@ -718,7 +854,7 @@ def _config(tmp_path: Path) -> ExtractionConfig:
         peak_min_prominence_ratio=0.1,
         ms2_precursor_tol_da=0.5,
         nl_min_intensity_ratio=0.01,
-        resolver_mode="arbitrated",
+        resolver_mode="region_first_safe_merge",
         emit_peak_candidates=True,
     )
 
@@ -828,6 +964,35 @@ def _candidate(
     )
 
 
+def _candidate_table_hypothesis(
+    hypothesis_id: str,
+    *,
+    selected: bool,
+    rank: int,
+) -> PeakHypothesis:
+    return PeakHypothesis(
+        hypothesis_id=hypothesis_id,
+        trace_group_id="SampleA|Analyte|trace",
+        target_label="Analyte",
+        role="Analyte",
+        istd_pair="",
+        analysis_mode="targeted",
+        resolver_mode="region_first_safe_merge",
+        integration=IntegrationResult(
+            rt_left_min=8.4,
+            rt_apex_min=8.5,
+            rt_right_min=8.6,
+            raw_apex_rt_min=8.5,
+            rt_width_min=0.2,
+            height_raw=1200.0,
+            height_smoothed=1100.0,
+            area_raw_counts_seconds=1234.0,
+        ),
+        evidence=EvidenceVector(confidence="HIGH", reason="decision: accepted"),
+        audit=AuditTrail(selected=selected, selection_rank=rank),
+    )
+
+
 def _score(
     candidate: PeakCandidate,
     *,
@@ -860,4 +1025,12 @@ def _ms2_evidence(*, nl_match: bool) -> CandidateMS2Evidence:
         nearest_product_loss_ppm=1.0 if nl_match else None,
         nearest_product_base_ratio=0.3 if nl_match else None,
         nearest_product_mz=151.0 if nl_match else None,
+        ms1_peak_group_source="gaussian15_ms1_peak_group",
+        ms1_peak_group_rt_min=8.4,
+        ms1_peak_group_rt_max=8.6,
+        ms1_peak_group_trigger_scan_count=1,
+        ms1_peak_group_strict_nl_scan_count=1 if nl_match else 0,
+        ms1_peak_group_strict_nl_event_count=1 if nl_match else 0,
+        outside_ms1_peak_group_trigger_scan_count=0,
+        outside_ms1_peak_group_strict_nl_scan_count=0,
     )

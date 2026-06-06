@@ -17,7 +17,7 @@ def test_primary_review_row_projects_to_use() -> None:
             detected=2,
             rescued=1,
         ),
-        _cell_rows(detected=2, rescued=1),
+        _cell_rows(detected=2, rescued=1, rescue_typed_backfill_support=True),
     )
 
     assert vector.feature_family_id == "FAM001"
@@ -62,7 +62,7 @@ def test_one_detected_seed_supported_rescue_projects_keep_provisional() -> None:
                 "skip_expensive_evidence"
             ),
         ),
-        _cell_rows(detected=1, rescued=2),
+        _cell_rows(detected=1, rescued=2, rescue_typed_backfill_support=True),
     )
 
     assert vector.matrix_role == "provisional"
@@ -260,6 +260,7 @@ def _cell_rows(
     rescue_scan_support_score: str = "0.8",
     rescue_reason: str = "rescued",
     rescue_region_review_reason: str = "",
+    rescue_typed_backfill_support: bool = False,
 ) -> tuple[dict[str, str], ...]:
     rows: list[dict[str, str]] = []
     for index in range(detected):
@@ -274,6 +275,7 @@ def _cell_rows(
                 scan_support_score=rescue_scan_support_score,
                 reason=rescue_reason,
                 region_review_reason=rescue_region_review_reason,
+                typed_backfill_support=rescue_typed_backfill_support,
             ),
         )
     for index in range(detected + rescued, detected + rescued + duplicate):
@@ -295,8 +297,9 @@ def _cell_row(
     scan_support_score: str | None = None,
     reason: str | None = None,
     region_review_reason: str = "",
+    typed_backfill_support: bool = False,
 ) -> dict[str, str]:
-    return {
+    row = {
         "feature_family_id": "FAM001",
         "sample_stem": f"S{index + 1:03d}",
         "status": status,
@@ -319,3 +322,16 @@ def _cell_row(
         "reason": reason if reason is not None else status,
         "region_review_reason": region_review_reason,
     }
+    if typed_backfill_support:
+        row.update(
+            {
+                "backfill_ms1_pattern_status": "supportive",
+                "backfill_ms1_pattern_evidence_level": "sample_constellation",
+                "backfill_candidate_ms2_pattern_status": "supportive",
+                "backfill_candidate_ms2_evidence_level": (
+                    "sample_candidate_aligned"
+                ),
+                "backfill_evidence_reason": "typed_fixture_support",
+            }
+        )
+    return row

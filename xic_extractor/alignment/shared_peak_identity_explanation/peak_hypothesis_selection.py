@@ -3,7 +3,11 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
-from tools.diagnostics.diagnostic_io import read_tsv_required, text_value, write_tsv
+from xic_extractor.diagnostics.diagnostic_io import (
+    read_tsv_required,
+    text_value,
+    write_tsv,
+)
 
 from .schema import (
     PEAK_HYPOTHESIS_SELECTION_COLUMNS,

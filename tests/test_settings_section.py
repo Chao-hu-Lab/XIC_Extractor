@@ -7,6 +7,7 @@ def _canonical_settings() -> dict[str, str]:
         "dll_dir": "C:\\dll",
         "smooth_window": "17",
         "smooth_polyorder": "2",
+        "ms1_morphology_smoothing_window_points": "15",
         "peak_rel_height": "0.90",
         "peak_min_prominence_ratio": "0.15",
         "resolver_mode": "legacy_savgol",
@@ -25,6 +26,8 @@ def _canonical_settings() -> dict[str, str]:
         "rolling_window_size": "5",
         "dirty_matrix_mode": "false",
         "rt_prior_library_path": "",
+        "target_pair_rt_calibration_path": "",
+        "model_selection_expected_diff_approval_registry": "",
         "emit_score_breakdown": "false",
         "emit_review_report": "false",
         "emit_peak_candidates": "false",
@@ -49,6 +52,7 @@ def test_settings_section_saves_canonical_keys_after_canonical_load(qtbot) -> No
     assert migrated is False
     assert values["smooth_window"] == "17"
     assert values["smooth_polyorder"] == "2"
+    assert values["ms1_morphology_smoothing_window_points"] == "15"
     assert values["peak_rel_height"] == "0.90"
     assert values["peak_min_prominence_ratio"] == "0.15"
     assert values["ms2_precursor_tol_da"] == "0.4"
@@ -80,6 +84,7 @@ def test_settings_section_migrates_legacy_smoothing_keys_on_save(qtbot) -> None:
     assert values["smooth_window"] == "19"
     assert values["smooth_polyorder"] == "3"
     assert values["peak_rel_height"] == "0.95"
+    assert values["ms1_morphology_smoothing_window_points"] == "15"
     assert "smooth_points" not in values
     assert "smooth_sigma" not in values
 
@@ -93,6 +98,7 @@ def test_settings_section_exposes_new_processing_controls(qtbot) -> None:
     section._peak_min_prominence_ratio_spin.setValue(0.25)
     section._ms2_precursor_tol_da_spin.setValue(0.7)
     section._nl_min_intensity_ratio_spin.setValue(0.03)
+    section._ms1_morphology_smoothing_window_spin.setValue(21)
     section._count_no_ms2_checkbox.setChecked(False)
 
     values = section.get_values()
@@ -101,6 +107,7 @@ def test_settings_section_exposes_new_processing_controls(qtbot) -> None:
     assert values["peak_min_prominence_ratio"] == "0.25"
     assert values["ms2_precursor_tol_da"] == "0.7"
     assert values["nl_min_intensity_ratio"] == "0.03"
+    assert values["ms1_morphology_smoothing_window_points"] == "21"
     assert values["count_no_ms2_as_detected"] == "false"
 
 
@@ -122,6 +129,10 @@ def test_settings_section_numeric_rules_do_not_require_existing_paths(qtbot) -> 
 
     section._smooth_window_spin.setValue(5)
     section._smooth_polyorder_spin.setValue(5)
+    assert not section.is_valid()
+
+    section._smooth_polyorder_spin.setValue(2)
+    section._ms1_morphology_smoothing_window_spin.setValue(4)
     assert not section.is_valid()
 
 

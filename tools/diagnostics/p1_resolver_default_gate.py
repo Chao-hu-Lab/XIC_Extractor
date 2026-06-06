@@ -319,7 +319,8 @@ def _write_markdown(path: Path, result: P1GateResult) -> None:
         "",
         f"Overall status: {result.overall_status}",
         "",
-        "| Target | Samples | Area RSD delta pct | RT median abs delta sec | Status | Reasons |",
+        "| Target | Samples | Area RSD delta pct | RT median abs delta sec | "
+        "Status | Reasons |",
         "|---|---:|---:|---:|---|---|",
     ]
     for row in result.rows:
@@ -350,7 +351,9 @@ def _write_tsv(
         )
         writer.writeheader()
         for row in rows:
-            writer.writerow({field: _format_value(row.get(field)) for field in fieldnames})
+            writer.writerow(
+                {field: _format_value(row.get(field)) for field in fieldnames}
+            )
 
 
 def _require_columns(

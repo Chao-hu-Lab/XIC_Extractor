@@ -9,6 +9,10 @@ from scripts.benchmark_parallel import _run_extraction_once
 from scripts.compare_workbooks import WorkbookCompareResult, compare_workbooks
 from xic_extractor.config import ConfigError
 from xic_extractor.raw_reader import RawReaderError
+from xic_extractor.settings_schema import (
+    ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+    RESOLVER_MODES,
+)
 
 DEFAULT_MANUAL_DIR = Path(r"C:\Xcalibur\data\20251219_need process data\XIC test")
 DEFAULT_MANUAL_WORKBOOK = DEFAULT_MANUAL_DIR / "20260112 UPLC splitting_forXIC.xlsx"
@@ -76,6 +80,7 @@ def build_validation_specs(
     data_dir_override: Path | None = None,
     settings_overrides: tuple[tuple[str, str], ...] = (),
 ) -> list[ValidationRunSpec]:
+    resolver_mode = _validate_resolver_mode(resolver_mode)
     settings_overrides = _normalize_settings_overrides(settings_overrides)
     run_root = output_root / run_id
     specs: list[ValidationRunSpec] = []
@@ -184,6 +189,16 @@ def _normalize_settings_overrides(
             raise ValueError("settings_overrides cannot include resolver_mode")
         normalized.append((normalized_key, normalized_value))
     return tuple(normalized)
+
+
+def _validate_resolver_mode(resolver_mode: str) -> str:
+    normalized = resolver_mode.strip()
+    if normalized == "arbitrated":
+        raise ValueError(ARBITRATED_RESOLVER_RETIRED_MESSAGE)
+    if normalized not in RESOLVER_MODES:
+        allowed = ", ".join(RESOLVER_MODES[:-1]) + f", or {RESOLVER_MODES[-1]}"
+        raise ValueError(f"resolver_mode must be {allowed}")
+    return normalized
 
 
 def command_to_powershell(command: Sequence[str]) -> str:

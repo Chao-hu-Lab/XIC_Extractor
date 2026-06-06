@@ -51,6 +51,7 @@ def test_build_metadata_rows_returns_contract_keys_in_order() -> None:
         "resolver_mode",
         "smooth_window",
         "smooth_polyorder",
+        "ms1_morphology_smoothing_window_points",
         "peak_min_prominence_ratio",
         "nl_min_intensity_ratio",
         "ms2_precursor_tol_da",
@@ -60,6 +61,7 @@ def test_build_metadata_rows_returns_contract_keys_in_order() -> None:
     assert values["resolver_mode"] == "local_minimum"
     assert values["smooth_window"] == 17
     assert values["smooth_polyorder"] == 3
+    assert values["ms1_morphology_smoothing_window_points"] == 21
     assert values["peak_min_prominence_ratio"] == 0.12
     assert values["nl_min_intensity_ratio"] == 0.02
     assert values["ms2_precursor_tol_da"] == 0.4
@@ -98,6 +100,7 @@ def _config(output_dir: Path) -> ExtractionConfig:
         diagnostics_csv=output_dir / "xic_diagnostics.csv",
         smooth_window=17,
         smooth_polyorder=3,
+        ms1_morphology_smoothing_window_points=21,
         peak_rel_height=0.95,
         peak_min_prominence_ratio=0.12,
         ms2_precursor_tol_da=0.4,

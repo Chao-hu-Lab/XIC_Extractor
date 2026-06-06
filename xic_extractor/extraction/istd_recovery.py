@@ -13,7 +13,7 @@ from xic_extractor.extraction.rt_windows import (
 )
 from xic_extractor.extraction.scoring_factory import selected_candidate
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
-from xic_extractor.peak_scoring import (
+from xic_extractor.peak_detection.scoring_quality import (
     candidate_quality_penalty,
     candidate_selection_quality_penalty,
 )

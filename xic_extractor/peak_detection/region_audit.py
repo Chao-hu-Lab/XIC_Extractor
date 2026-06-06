@@ -44,6 +44,11 @@ class PeakRegionAuditSummary:
     local_mixture_diagnostic: str = ""
     local_mixture_reason: str = ""
     review_reason: str = ""
+    decision_status: str = ""
+    decision_class: str = ""
+    product_action: str = ""
+    promotion_reason: str = ""
+    baseline_method: str = ""
     integration_audit: CellIntegrationAuditSummary | None = None
 
 
@@ -147,6 +152,11 @@ def _summary_from_decision(
         local_mixture_diagnostic=local_mixture.label,
         local_mixture_reason=local_mixture.reason,
         review_reason=decision.review_reason,
+        decision_status=str(decision.decision_status),
+        decision_class=str(decision.decision_class),
+        product_action=str(decision.product_action),
+        promotion_reason=decision.promotion_reason,
+        baseline_method=decision.baseline_method,
         integration_audit=integration_audit,
     )
 

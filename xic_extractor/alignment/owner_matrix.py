@@ -7,7 +7,11 @@ from xic_extractor.alignment.cell_region_audit import with_region_audit
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.matrix_handoff import integration_from_values
 from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
-from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
+from xic_extractor.alignment.owner_group_delivery import (
+    OwnerGroupDeliveryFeature,
+    OwnerGroupDeliveryFeatures,
+    delivery_cell_projection,
+)
 from xic_extractor.alignment.ownership_models import AmbiguousOwnerRecord
 
 _BACKFILL_SUPERSEDES_LOCAL_AREA_RATIO = 3.0
@@ -16,7 +20,7 @@ _BACKFILL_FAMILY_SUPPORT_FRACTION = 0.5
 
 
 def build_owner_alignment_matrix(
-    features: tuple[OwnerAlignedFeature, ...],
+    features: OwnerGroupDeliveryFeatures,
     *,
     sample_order: tuple[str, ...],
     ambiguous_by_sample: Mapping[str, tuple[AmbiguousOwnerRecord, ...]],
@@ -44,7 +48,7 @@ def build_owner_alignment_matrix(
                 (feature.feature_family_id, sample_stem)
             )
             if rescued is not None:
-                cells.append(rescued)
+                cells.append(_rescued_cell(feature, rescued))
                 continue
             ambiguous_records = ambiguous_by_sample.get(sample_stem, ())
             if ambiguous_records:
@@ -67,7 +71,7 @@ def ambiguous_records_by_sample(
     return {sample: tuple(items) for sample, items in grouped.items()}
 
 
-def _detected_cell(feature: OwnerAlignedFeature, owner) -> AlignedCell:
+def _detected_cell(feature: OwnerGroupDeliveryFeature, owner) -> AlignedCell:
     event = owner.primary_identity_event
     cell = AlignedCell(
         sample_stem=owner.sample_stem,
@@ -84,22 +88,31 @@ def _detected_cell(feature: OwnerAlignedFeature, owner) -> AlignedCell:
         source_candidate_id=event.candidate_id,
         source_raw_file=None,
         reason="sample-local MS1 owner with original MS2 evidence",
-        selected_integration=integration_from_values(
-            area_raw_counts_seconds=owner.owner_area,
-            rt_apex_min=owner.owner_apex_rt,
-            raw_apex_rt_min=owner.owner_apex_rt,
-            height_raw=owner.owner_height,
-            height_smoothed=owner.owner_height,
-            rt_left_min=owner.owner_peak_start_rt,
-            rt_right_min=owner.owner_peak_end_rt,
-            boundary_sources=("alignment_owner",),
+        selected_integration=(
+            getattr(owner, "selected_integration", None)
+            or integration_from_values(
+                area_raw_counts_seconds=owner.owner_area,
+                rt_apex_min=owner.owner_apex_rt,
+                raw_apex_rt_min=owner.owner_apex_rt,
+                height_raw=owner.owner_height,
+                height_smoothed=owner.owner_height,
+                rt_left_min=owner.owner_peak_start_rt,
+                rt_right_min=owner.owner_peak_end_rt,
+                boundary_sources=("alignment_owner_scalar_legacy",),
+            )
+        ),
+        **delivery_cell_projection(
+            feature,
+            gap_fill_state="observed_member",
+            gap_fill_reason="local_owner_detected",
+            missing_observation_state="observed",
         ),
     )
     return with_region_audit(cell, owner.region_audit)
 
 
 def _detected_or_confirmed_cell(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     detected: AlignedCell,
     rescued: AlignedCell | None,
 ) -> AlignedCell:
@@ -116,12 +129,47 @@ def _detected_or_confirmed_cell(
                 f"local_owner_rt={detected.apex_rt}; "
                 f"source_reason={detected.reason}"
             ),
+            **delivery_cell_projection(
+                feature,
+                gap_fill_state="gap_fill_rescued",
+                gap_fill_reason="group_centered_query_detected",
+                missing_observation_state="queried_and_detected",
+            ),
         )
     return detected
 
 
+def _rescued_cell(
+    feature: OwnerGroupDeliveryFeature,
+    rescued: AlignedCell,
+) -> AlignedCell:
+    if rescued.status != "rescued":
+        return replace(
+            rescued,
+            **delivery_cell_projection(
+                feature,
+                gap_fill_state="not_filled",
+                gap_fill_reason=(
+                    rescued.gap_fill_reason or "query_attempt_not_detected"
+                ),
+                missing_observation_state=(
+                    rescued.missing_observation_state or "missing_unchecked"
+                ),
+            ),
+        )
+    return replace(
+        rescued,
+        **delivery_cell_projection(
+            feature,
+            gap_fill_state="gap_fill_rescued",
+            gap_fill_reason="group_centered_query_detected",
+            missing_observation_state="queried_and_detected",
+        ),
+    )
+
+
 def _rescued_supersedes_detected(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     detected: AlignedCell,
     rescued: AlignedCell,
 ) -> bool:
@@ -142,7 +190,7 @@ def _rescued_supersedes_detected(
 
 
 def _ambiguous_cell(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     sample_stem: str,
     records: tuple[AmbiguousOwnerRecord, ...],
 ) -> AlignedCell:
@@ -168,11 +216,17 @@ def _ambiguous_cell(
             if not candidate_ids
             else f"checked local MS1 region is ambiguous: {';'.join(candidate_ids)}"
         ),
+        **delivery_cell_projection(
+            feature,
+            gap_fill_state="not_filled",
+            gap_fill_reason="not_requested_ambiguous_owner",
+            missing_observation_state="ambiguous_observation",
+        ),
     )
 
 
 def _feature_ambiguous_cell(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     sample_stem: str,
 ) -> AlignedCell:
     candidate_ids = ";".join(feature.ambiguous_candidate_ids)
@@ -195,10 +249,19 @@ def _feature_ambiguous_cell(
             if not candidate_ids
             else f"checked local MS1 region is ambiguous: {candidate_ids}"
         ),
+        **delivery_cell_projection(
+            feature,
+            gap_fill_state="not_filled",
+            gap_fill_reason="not_requested_ambiguous_owner",
+            missing_observation_state="ambiguous_observation",
+        ),
     )
 
 
-def _absent_cell(feature: OwnerAlignedFeature, sample_stem: str) -> AlignedCell:
+def _absent_cell(
+    feature: OwnerGroupDeliveryFeature,
+    sample_stem: str,
+) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,
         cluster_id=feature.feature_family_id,
@@ -214,4 +277,10 @@ def _absent_cell(feature: OwnerAlignedFeature, sample_stem: str) -> AlignedCell:
         source_candidate_id=None,
         source_raw_file=None,
         reason="no local MS1 owner",
+        **delivery_cell_projection(
+            feature,
+            gap_fill_state="not_filled",
+            gap_fill_reason="not_requested_no_gap_fill",
+            missing_observation_state="missing_not_observed",
+        ),
     )

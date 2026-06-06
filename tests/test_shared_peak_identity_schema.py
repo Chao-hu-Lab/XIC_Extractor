@@ -421,9 +421,14 @@ def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
     validate_token("pass", "acceptance_status")
     validate_token("formal", "activation_output_mode")
     validate_token("peak_hypothesis_id", "matrix_row_identity")
+    validate_token("mz_rt_sample_columns", "matrix_row_identity")
     validate_token("TRUE", "canonical_row_identity_ready")
     validate_token("none", "canonical_row_identity_blockers")
     validate_token("family_projection_present", "canonical_row_identity_blockers")
+    validate_token(
+        "family_projection_excluded_incomplete_scope",
+        "canonical_row_identity_blockers",
+    )
     validate_token("raw_mode_review_only", "canonical_row_identity_blockers")
     validate_token("matrix_construction_blocked", "canonical_row_identity_blockers")
     validate_token("source_matrix_value_missing", "canonical_row_identity_blockers")
@@ -435,13 +440,35 @@ def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
         "partial_peak_hypothesis_with_family_projections",
         "canonical_row_identity_scope",
     )
+    validate_token(
+        "partial_peak_hypothesis_sidecar_with_family_projections",
+        "canonical_row_identity_scope",
+    )
     validate_token("formal_peak_hypothesis_identity", "canonical_row_identity_scope")
+    validate_token(
+        "formal_peak_hypothesis_identity_sidecar",
+        "canonical_row_identity_scope",
+    )
+    validate_token(
+        "canonical_peak_hypothesis_rows_only",
+        "canonical_row_identity_scope",
+    )
+    validate_token(
+        "partial_canonical_peak_hypothesis_rows_only",
+        "canonical_row_identity_scope",
+    )
     validate_token("projection_not_split_proof", "family_projection_semantics")
+    validate_token(
+        "excluded_from_canonical_output",
+        "family_projection_semantics",
+    )
     validate_token(
         "context_only_not_identity_authority",
         "legacy_rt_row_context_authority",
     )
     validate_token("FALSE", "all_family_split_science_ready")
+    validate_token("no_split_peak_hypothesis", "row_identity_basis")
+    validate_token("split_peak_hypothesis", "row_identity_basis")
     validate_token("family_projection_no_split_evidence", "row_identity_basis")
     validate_token("max_area_pending_baseline", "matrix_value_conflict_policy")
     validate_token("blanked", "matrix_value_effect")

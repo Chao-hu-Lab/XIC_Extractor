@@ -3,18 +3,28 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 
 from openpyxl import load_workbook
 
 from tools.diagnostics.diagnostic_io import (
     bool_value,
-    optional_float as _float_value,
     read_tsv_required,
+)
+from tools.diagnostics.diagnostic_io import (
+    optional_float as _float_value,
+)
+from tools.diagnostics.diagnostic_io import (
     require_fields as _require_fields,
+)
+from tools.diagnostics.diagnostic_io import (
     required_float as _required_float,
+)
+from tools.diagnostics.diagnostic_io import (
     required_indexes as _required_indexes,
+)
+from tools.diagnostics.diagnostic_io import (
     text_value as _text,
 )
 from tools.diagnostics.rt_normalization_anchor_models import (

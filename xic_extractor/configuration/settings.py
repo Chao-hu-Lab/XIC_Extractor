@@ -12,7 +12,11 @@ from xic_extractor.configuration.parsing import (
     _parse_optional_path,
     _require_range,
 )
-from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS, RESOLVER_MODES
+from xic_extractor.settings_schema import (
+    ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+    CANONICAL_SETTINGS_DEFAULTS,
+    RESOLVER_MODES,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +31,7 @@ class _ParsedSettings:
     dll_dir: Path
     smooth_window: int
     smooth_polyorder: int
+    ms1_morphology_smoothing_window_points: int
     peak_rel_height: float
     peak_min_prominence_ratio: float
     resolver_mode: str
@@ -48,6 +53,8 @@ class _ParsedSettings:
     rolling_window_size: int
     dirty_matrix_mode: bool
     rt_prior_library_path: Path | None
+    target_pair_rt_calibration_path: Path | None
+    model_selection_expected_diff_approval_registry: Path | None
     emit_score_breakdown: bool
     emit_review_report: bool
     emit_peak_candidates: bool
@@ -121,6 +128,16 @@ def _parse_settings_values(
             None,
             "smooth_polyorder",
             _setting_value(settings, settings_path, "smooth_polyorder"),
+        ),
+        ms1_morphology_smoothing_window_points=_parse_int(
+            settings_path,
+            None,
+            "ms1_morphology_smoothing_window_points",
+            _setting_value(
+                settings,
+                settings_path,
+                "ms1_morphology_smoothing_window_points",
+            ),
         ),
         peak_rel_height=_parse_float(
             settings_path,
@@ -237,6 +254,12 @@ def _parse_settings_values(
         rt_prior_library_path=_parse_optional_path(
             settings.get("rt_prior_library_path", "")
         ),
+        target_pair_rt_calibration_path=_parse_optional_path(
+            settings.get("target_pair_rt_calibration_path", "")
+        ),
+        model_selection_expected_diff_approval_registry=_parse_optional_path(
+            settings.get("model_selection_expected_diff_approval_registry", "")
+        ),
         emit_score_breakdown=_parse_bool(
             settings_path,
             None,
@@ -296,6 +319,17 @@ def _validate_settings_ranges(
             settings["smooth_polyorder"],
             "must be >= 1 and < smooth_window",
         )
+    if (
+        parsed.ms1_morphology_smoothing_window_points < 3
+        or parsed.ms1_morphology_smoothing_window_points % 2 == 0
+    ):
+        raise _config_error(
+            settings_path,
+            None,
+            "ms1_morphology_smoothing_window_points",
+            settings["ms1_morphology_smoothing_window_points"],
+            "must be odd and >= 3",
+        )
     _require_range(
         settings_path,
         "peak_rel_height",
@@ -312,6 +346,14 @@ def _validate_settings_ranges(
         0.01,
         0.50,
     )
+    if parsed.resolver_mode == "arbitrated":
+        raise _config_error(
+            settings_path,
+            None,
+            "resolver_mode",
+            settings["resolver_mode"],
+            ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+        )
     if parsed.resolver_mode not in RESOLVER_MODES:
         raise _config_error(
             settings_path,
@@ -446,13 +488,21 @@ def _validate_settings_ranges(
             settings.get("baseline_audit_method", ""),
             "must be empty or asls",
         )
-    if parsed.baseline_integration_method not in {"asls", "linear_edge"}:
+    if parsed.baseline_integration_method == "linear_edge":
         raise _config_error(
             settings_path,
             None,
             "baseline_integration_method",
             settings.get("baseline_integration_method", ""),
-            "must be asls or linear_edge",
+            "linear_edge is retired; use asls",
+        )
+    if parsed.baseline_integration_method != "asls":
+        raise _config_error(
+            settings_path,
+            None,
+            "baseline_integration_method",
+            settings.get("baseline_integration_method", ""),
+            "must be asls",
         )
     if parsed.parallel_mode not in {"serial", "process"}:
         raise _config_error(
@@ -482,6 +532,9 @@ def _build_config(
         diagnostics_csv=output_dir / "xic_diagnostics.csv",
         smooth_window=parsed.smooth_window,
         smooth_polyorder=parsed.smooth_polyorder,
+        ms1_morphology_smoothing_window_points=(
+            parsed.ms1_morphology_smoothing_window_points
+        ),
         peak_rel_height=parsed.peak_rel_height,
         peak_min_prominence_ratio=parsed.peak_min_prominence_ratio,
         resolver_mode=parsed.resolver_mode,
@@ -503,6 +556,10 @@ def _build_config(
         rolling_window_size=parsed.rolling_window_size,
         dirty_matrix_mode=parsed.dirty_matrix_mode,
         rt_prior_library_path=parsed.rt_prior_library_path,
+        target_pair_rt_calibration_path=parsed.target_pair_rt_calibration_path,
+        model_selection_expected_diff_approval_registry=(
+            parsed.model_selection_expected_diff_approval_registry
+        ),
         emit_score_breakdown=parsed.emit_score_breakdown,
         emit_review_report=parsed.emit_review_report,
         emit_peak_candidates=parsed.emit_peak_candidates,

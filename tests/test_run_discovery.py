@@ -116,6 +116,31 @@ def test_run_discovery_cli_accepts_region_first_safe_merge_mode(
     assert captured["peak_config"].resolver_mode == "region_first_safe_merge"
 
 
+def test_run_discovery_rejects_retired_arbitrated_resolver_mode(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    raw_path = tmp_path / "TumorBC2312_DNA.raw"
+    raw_path.write_text("", encoding="utf-8")
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_discovery.main(
+            [
+                "--raw",
+                str(raw_path),
+                "--dll-dir",
+                str(dll_dir),
+                "--resolver-mode",
+                "arbitrated",
+            ],
+        )
+
+    assert exc_info.value.code == 2
+    assert "arbitrated resolver mode is retired" in capsys.readouterr().err
+
+
 def test_run_discovery_cli_passes_raw_dir_batch_settings(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -18,8 +18,7 @@ import numpy as np
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from xic_extractor.baseline import asls_baseline
-from xic_extractor.peak_detection.baseline import bounded_trace_interval
+from xic_extractor.peak_detection.baseline import asls_baseline, bounded_trace_interval
 
 ROW_FIELDS = (
     "target_label",
@@ -496,6 +495,8 @@ def _linear_and_asls_area(row: Mapping[str, str]) -> tuple[float | None, float |
     reported_area = _optional_float(row.get("area_baseline_corrected"))
     if promoted_linear is not None:
         return promoted_linear, reported_area
+    if row.get("baseline_type", "").strip() == "asls":
+        return None, reported_area
     return reported_area, _optional_float(row.get("area_baseline_corrected_asls"))
 
 

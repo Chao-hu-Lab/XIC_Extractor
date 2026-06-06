@@ -2,7 +2,7 @@ import ast
 import math
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from typing import get_type_hints
 
 import pytest
 
@@ -18,8 +18,6 @@ def test_alignment_public_api_exports_plan2_contract():
         "AlignedCell",
         "AlignmentMatrix",
         "CellStatus",
-        "cluster_candidates",
-        "backfill_alignment_matrix",
     )
     assert {
         name for name in dir(alignment) if not name.startswith("_")
@@ -29,6 +27,24 @@ def test_alignment_public_api_exports_plan2_contract():
     assert "xic_extractor.extraction" not in newly_imported
     assert "xic_extractor.extractor" not in newly_imported
     assert "xic_extractor.raw_reader" not in newly_imported
+
+
+def test_event_first_public_imports_are_retired():
+    import xic_extractor.alignment as alignment
+
+    assert not hasattr(alignment, "cluster_candidates")
+    assert not hasattr(alignment, "backfill_alignment_matrix")
+
+
+def test_alignment_public_type_hints_resolve_without_raw_reader_import():
+    before = set(sys.modules)
+
+    from xic_extractor.alignment import AlignedCell
+
+    hints = get_type_hints(AlignedCell)
+
+    assert "selected_integration" in hints
+    assert "xic_extractor.raw_reader" not in set(sys.modules) - before
 
 
 def test_alignment_modules_do_not_import_pipeline_or_io_boundaries():
@@ -182,7 +198,6 @@ def test_invalid_tolerance_windows_are_rejected(kwargs):
     with pytest.raises(ValueError):
         AlignmentConfig(**kwargs)
 
-
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -284,37 +299,3 @@ def test_invalid_anchor_and_v1_fixed_fields_are_rejected(kwargs):
 
     with pytest.raises(ValueError):
         AlignmentConfig(**kwargs)
-
-
-def test_cluster_candidates_returns_empty_tuple_for_empty_input():
-    from xic_extractor.alignment import cluster_candidates
-
-    assert cluster_candidates([]) == ()
-
-
-def test_cluster_candidates_clusters_non_empty_input_from_public_import():
-    from xic_extractor.alignment import cluster_candidates
-
-    clusters = cluster_candidates(
-        [
-            SimpleNamespace(
-                candidate_id="nl141-sample-a",
-                neutral_loss_tag="NL141",
-                review_priority="LOW",
-                evidence_score=50,
-                seed_event_count=1,
-                ms1_peak_found=True,
-                ms1_scan_support_score=0.5,
-                ms1_area=100.0,
-                neutral_loss_mass_error_ppm=0.0,
-                precursor_mz=500.0,
-                product_mz=359.0,
-                observed_neutral_loss_da=141.0,
-                best_seed_rt=5.0,
-                ms1_apex_rt=5.0,
-                sample_stem="sample-a",
-            ),
-        ],
-    )
-
-    assert tuple(cluster.cluster_id for cluster in clusters) == ("ALN000001",)

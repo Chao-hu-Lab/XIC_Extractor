@@ -17,6 +17,23 @@ MS1_SUFFIXES: tuple[str, ...] = (
     "PeakWidth",
 )
 
+TARGETED_PRODUCT_PROJECTION_HEADERS: tuple[str, ...] = (
+    "Product State",
+    "Counted Detection",
+    "Review State",
+    "Projection Reason",
+    "Projection Support Reasons",
+    "Projection Review Reasons",
+    "Projection Conflict Reasons",
+    "Projection Not Counted Reasons",
+    "Projection Exclusion Reasons",
+    "Legacy Authority Status",
+    "Benchmark Eligibility State",
+)
+TARGETED_PRODUCT_VISIBLE_HEADERS: frozenset[str] = frozenset(
+    {"Product State", "Counted Detection", "Review State"}
+)
+
 LONG_COLUMNS: tuple[OutputColumn, ...] = (
     OutputColumn("SampleName"),
     OutputColumn("Group"),
@@ -24,14 +41,21 @@ LONG_COLUMNS: tuple[OutputColumn, ...] = (
     OutputColumn("Role"),
     OutputColumn("ISTD Pair"),
     OutputColumn("RT", description="smoothed peak apex RT (min)"),
-    OutputColumn("Area", description="raw integrated area"),
+    OutputColumn(
+        "Area",
+        description="Gaussian15-smoothed positive AsLS residual area",
+    ),
     OutputColumn("NL"),
     OutputColumn("Int", advanced=True, description="raw apex intensity"),
     OutputColumn("PeakStart", advanced=True),
     OutputColumn("PeakEnd", advanced=True),
     OutputColumn("PeakWidth", advanced=True),
-    OutputColumn("Confidence"),
+    OutputColumn("Confidence", advanced=True),
     OutputColumn("Reason"),
+    *(
+        OutputColumn(header, advanced=header not in TARGETED_PRODUCT_VISIBLE_HEADERS)
+        for header in TARGETED_PRODUCT_PROJECTION_HEADERS
+    ),
 )
 LONG_HEADERS: tuple[str, ...] = tuple(column.name for column in LONG_COLUMNS)
 LONG_ADVANCED_HEADERS: frozenset[str] = frozenset(
@@ -50,6 +74,10 @@ SCORE_BREAKDOWN_HEADERS: tuple[str, ...] = (
     "Target",
     "Final Confidence",
     "Detection Counted",
+    "Product State",
+    "Review State",
+    "Projection Reason",
+    "Legacy Authority Status",
     "Caps",
     "Raw Score",
     "Support",

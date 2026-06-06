@@ -1,227 +1,294 @@
-# C2 — Resolver Collapse Spec
+# C2 — Resolver Public-Surface Contract Cleanup Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.3 — DESIGN CORRECTION APPLIED; honest
-resolver-semantics cleanup only
+**Status:** Current executable scope v0.6 — `arbitrated` retired; Phase 1
+resolver public-surface contract synchronized without accepted-mode behavior
+changes
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
-**Precondition:** Phase 1 conditional blockers are documented, P1's supported
-resolver behavior is described honestly as conservative
-`local_minimum_with_wis_merge_v1`, P5 (CWT evidence honesty) has a GO note, and
-removed public resolver values have an approved migration / deprecation plan.
+**Current reassessment:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
+**One-goal execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
+**Precondition:** current-state reassessment accepted. `linear_edge` and
+`arbitrated` retirements remain closed. No remaining accepted resolver value is
+removed unless a separate public migration contract approves it.
+
+## 2026-06-01 Implementation Closeout
+
+The cleanup-retirement branch completed the `arbitrated` portion of C2:
+
+- `arbitrated` is no longer in `RESOLVER_MODES`.
+- Config loading, GUI normalization, CLI parsers, validation harnesses, and
+  direct programmatic `resolver_mode="arbitrated"` inputs reject with
+  `arbitrated resolver mode is retired; use region_first_safe_merge`.
+- The `arbitrated` facade branch and private merge helpers were deleted.
+- `_combine_proposal_sources` was preserved because supported recovery logic
+  still uses it.
+- The required one-shot 8RAW comparison did not show `arbitrated` materially
+  outperforming the supported conservative path.
+
+The closeout note is
+`docs/superpowers/notes/2026-06-01-phase8-arbitrated-resolver-retirement-note.md`.
+
+Remaining C2 work is intentionally not completed here: `legacy_savgol` remains
+an accepted mode, `local_minimum` remains accepted, CWT evidence remains a
+proposal/audit surface, and `region_first_safe_merge` remains the public
+compatibility name for conservative local-minimum + WIS/safe-merge behavior.
+
+2026-06-01 current-state reassessment supersedes the older deletion-oriented C2
+wording. The executable scope is the public-surface contract below. Current
+direction is:
+
+- keep `legacy_savgol` as a useful clean-trace / compatibility path unless a
+  separate public migration contract changes it;
+- keep local-minimum internals as boundary/proposal evidence;
+- treat CWT as an evidence-chain integration assessment, not as dead-code
+  deletion;
+- first fix resolver public-surface contract drift, including unsupported
+  programmatic resolver fallback behavior.
+
+## 2026-06-01 Phase 1 Contract Closeout
+
+Phase 1 completed the C2 public-surface cleanup slice:
+
+- README now distinguishes tracked settings / validation-harness default
+  `region_first_safe_merge` from the programmatic `ExtractionConfig`
+  compatibility default `legacy_savgol`.
+- Accepted top-level values remain `legacy_savgol`, `local_minimum`, and
+  `region_first_safe_merge`.
+- `region_first_safe_merge` remains a compatibility token for local-minimum
+  boundary plus safe-merge/WIS promotion, not a true region-first v2 claim.
+- `find_peak_candidates(...)` now rejects unsupported programmatic
+  `resolver_mode` values explicitly instead of silently using `legacy_savgol`.
+- `ExtractionConfig.resolver_mode = "legacy_savgol"` is preserved and tested as
+  a programmatic compatibility default, not the tracked user-facing default.
+- `DiscoverySettings.resolver_mode = "local_minimum"`,
+  `instrument_qc/pipeline_extraction.py`, and `scripts/run_discovery.py` stay
+  intentionally divergent because those flows consume local-minimum boundary
+  evidence directly. Changing them would be a behavior decision, not cleanup.
+- `scripts/run_alignment.py` continues to accept `region_first_safe_merge` at the
+  CLI boundary and coerce production extraction metadata to `local_minimum`.
+  This preserves the existing validation contract.
+
+No accepted resolver behavior, selected peak, area, confidence, reason text,
+TSV schema, or workbook schema changed in this phase.
 
 ## Purpose
 
-Collapse obsolete resolver modes without pretending that the current default is
-already the intended true region-first resolver. The current `resolver_mode`
-flag exposes historical implementation choices that have lost their independent
-meaning after P1, but the surviving behavior is still local-minimum-centered.
+Make the resolver public surface honest and consistent across config, README,
+GUI, CLI, programmatic defaults, and the peak-detection facade.
 
-This refactor introduces no behavioral change for the supported (post-P1)
-production mode. Validation is behavioral parity.
+C2 no longer means "delete every old resolver except one." User calibration and
+current-code review changed the scope:
 
-C2 is therefore a naming and compatibility cleanup, not a new boundary
-algorithm. A true region-first v2 belongs in a separate behavior spec with
-multi-source hypothesis enumeration, score comparison, and manual EIC review.
+- `legacy_savgol` remains useful for normal clean peaks and must not be deleted
+  in this cleanup phase.
+- `local_minimum` internals remain the core boundary/proposal evidence for the
+  conservative production path.
+- `region_first_safe_merge` remains a compatibility token for conservative
+  local-minimum + WIS/safe-merge behavior, not true region-first v2.
+- CWT is not a top-level resolver deletion target here; it moves to a separate
+  evidence-role assessment.
+
+This phase introduces no behavior change for accepted resolver modes. Validation
+is public-contract consistency plus focused tests. A true region-first v2,
+resolver default change, or CWT scoring-policy change belongs in a separate
+behavior spec.
 
 ## Current State
 
-`xic_extractor/peak_detection/facade.py:208-223` dispatches on
-`resolver_mode` with four explicit branches plus an additional proposal
-source (CWT) that is not a top-level `resolver_mode`:
+`xic_extractor/settings_schema.py` accepts three resolver values:
+`legacy_savgol`, `local_minimum`, and `region_first_safe_merge`.
+`arbitrated` is retired and rejected with a migration message.
+
+`xic_extractor/peak_detection/facade.py` dispatches accepted values, rejects the
+retired `arbitrated` value with a migration message, and rejects unsupported
+programmatic values explicitly.
+
+CWT is an additional proposal/evidence source, not a top-level
+`resolver_mode`.
 
 | Mode (top-level dispatch) | Role | Post-P1 status |
 |---------------------------|------|----------------|
-| `legacy_savgol` | SG smoothing + prominence | Fallback branch in `facade.py` |
-| `local_minimum` | Local minimum boundary | Routed via the `{local_minimum, region_first_safe_merge}` branch; remains the main production proposal source |
-| `arbitrated` | Merge legacy + local results | **No production caller** |
-| `region_first_safe_merge` | Compatibility name for local-minimum boundary plus safe-merge/WIS promotion | **Production default after P1; not true region-first v2** |
+| `legacy_savgol` | SG smoothing + prominence | Accepted clean-trace / compatibility path; programmatic `ExtractionConfig` compatibility default |
+| `local_minimum` | Local minimum boundary | Accepted compatibility and production-internal proposal path |
+| `arbitrated` | Merge legacy + local results | **Retired in 2026-06-01 cleanup-retirement branch** |
+| `region_first_safe_merge` | Compatibility name for local-minimum boundary plus safe-merge/WIS promotion | **Tracked settings / validation-harness default; alignment production metadata coerces to `local_minimum`; not true region-first v2** |
 
 Plus a **non-dispatched proposal source** (not a `resolver_mode` value, no
 `facade.py` branch): `centwave_cwt` invoked via `peak_detection/cwt.py`
 infrastructure. After P5 the CWT call only produces flag evidence; it does
 not function as a top-level resolver.
 
-Additional hardcoded `resolver_mode = "local_minimum"`:
+Additional intentionally divergent `resolver_mode` surfaces:
 
 - `xic_extractor/discovery/models.py:117`
 - `xic_extractor/instrument_qc/pipeline_extraction.py:126`
-- script / validation harness defaults such as
-  `scripts/validation_harness_core.py:42`
+- `scripts/run_discovery.py` default
 
-These hardcoded sites bypass the canonical settings defaults and were
-addressed as an open question in P1.
+These hardcoded sites bypass the canonical settings defaults but are not stale
+by themselves. Phase 1 classified them as intentionally divergent until a
+separate behavior spec proves they should change.
+
+Validation harness defaults are synchronized with tracked settings at
+`region_first_safe_merge`.
 
 ## Required Change
 
-Collapse the public resolver surface to the supported conservative resolver path
-while preserving behavior. Do not delete local-minimum internals just because
-the public default is named `region_first_safe_merge`; the default still relies
-on those internals.
+Synchronize resolver contract surfaces while preserving accepted behavior.
 
-Where human-facing docs would otherwise imply a true region-first algorithm,
-describe the current production behavior as `local_minimum_with_wis_merge_v1`.
-Keep the public config value stable until a separate migration plan exists.
+### Step 1 — Resolver public-surface inventory
 
-### Step 1 — Public resolver-value migration gate
+Classify every resolver-facing surface as synchronized, intentionally divergent,
+or stale:
 
-Before deleting any public resolver value, scan repo configs, examples,
-scripts, GUI/config docs, validation harnesses, and known deployment handoff
-paths for all values being removed or demoted:
+- `README.md`
+- `config/settings.example.csv`
+- `xic_extractor/settings_schema.py`
+- `xic_extractor/configuration/models.py::ExtractionConfig.resolver_mode`
+- `xic_extractor/configuration/settings.py`
+- GUI resolver combo and local-minimum panel behavior
+- `scripts/run_alignment.py` default and
+  `_alignment_production_resolver_mode(...)`
+- `scripts/run_discovery.py` default
+- `scripts/validation_harness*.py`
+- `xic_extractor/peak_detection/facade.py`
+- tests and docs that list accepted resolver values
 
-- `arbitrated`
-- `legacy_savgol`
-- `local_minimum` only if it stops being an accepted compatibility value
+The inventory must state:
 
-For each value, record one of:
+- which values remain accepted;
+- whether `legacy_savgol` is a normal option, advanced/compatibility option, or
+  programmatic compatibility default;
+- why `run_alignment.py` may accept `region_first_safe_merge` while production
+  extraction metadata still records `local_minimum`;
+- whether `ExtractionConfig.resolver_mode = "legacy_savgol"` is intentional
+  compatibility or stale default;
+- whether validation harness defaults and accepted/rejected resolver values are
+  synchronized with the public contract;
+- whether the facade unknown-value fallback will be fixed in this phase.
 
-- migrated to `region_first_safe_merge`
-- retained as a compatibility alias for one release cycle
-- blocked because an external caller still depends on it
+### Step 2 — Preserve completed `arbitrated` retirement
 
-Old configs must either keep working through an explicit compatibility alias
-or fail fast with an actionable unsupported-value error that names the
-supported replacement. Do not silently map old values without a migration note
-and regression tests.
+Implementation status: completed in the 2026-06-01 cleanup-retirement branch.
+Do not re-open it. This C2 follow-up only verifies that current public surfaces
+still reject `arbitrated` with the retirement message and do not list it as an
+accepted option.
 
-Because `region_first_safe_merge` is itself a compatibility name, the migration
-note must also state that production behavior is conservative local-minimum +
-WIS/safe-merge, not true region-first v2.
+### Step 3 — Preserve `legacy_savgol` as accepted clean-trace / compatibility path
 
-### Step 2 — Remove the `arbitrated` resolver mode
+The earlier draft proposed demoting `legacy_savgol` to a utility and deleting
+its top-level resolver path. That instruction is superseded. Current policy:
 
-Verify no external caller (other repos, deployment configs, CI scripts) uses
-`resolver_mode=arbitrated`. If confirmed by Step 1:
+- keep `legacy_savgol` accepted;
+- describe its intended role honestly as clean-trace / compatibility behavior;
+- do not delete the module, fallback branch, or SG helper code in this phase;
+- only change labels, defaults, or visibility through a public migration
+  contract.
 
-- delete the `arbitrated` branch from `facade.py:212-217`
-- delete the supporting functions: `_find_peak_candidates_arbitrated`,
-  `_merge_resolver_candidates`, `_matching_merge_index`,
-  `_merged_candidate`, `_material_boundary_disagreement`,
-  `_candidate_detail_score`, `_source_apex_rank`,
-  `_max_result_smoothed`, `_strongest_failure_result`
-- **do NOT delete `_combine_proposal_sources`**: it is shared between the
-  arbitrated path (`facade.py:315` inside `_merged_candidate`) and the
-  recovery path (`facade.py:485` inside `_append_or_merge_recovery_candidate`).
-  After the arbitrated path is removed, the recovery caller still needs
-  this helper. Leave the function in place; only delete its arbitrated
-  call site
-- update `config/settings.example.csv`, `settings_schema.py`, GUI/config docs,
-  validation harness help text, and any CLI validation that lists permitted
-  resolver values according to the Step 1 migration decision
+### Step 4 — Move CWT questions to the evidence-role spec
 
-If external callers exist, defer the removal and document the constraint
-under `docs/superpowers/notes/`.
+The earlier draft treated CWT as a resolver-retirement cleanup item. That
+instruction is superseded. Current policy:
 
-### Step 3 — Convert `legacy_savgol` from resolver_mode to utility
+- CWT is not a top-level resolver value;
+- `centwave_cwt` remains a limited proposal/evidence source;
+- CWT scoring points, cap logic, proposal behavior, and future role are owned by
+  the CWT evidence-role brainstorming/spec phase, not by C2;
+- do not promote or delete CWT in C2.
 
-After P1, no production caller depends on `legacy_savgol` as a top-level
-resolver. The SG noise floor estimation in
-`legacy_savgol.py:_prominence_threshold` (line 138-148) is still useful as a
-noise estimator.
+### Step 5 — Classify hardcoded resolver-mode sites
 
-Plan:
+Hardcoded resolver values are not automatically dead overrides. Classify each
+one by owner and reason:
 
-- move `_prominence_threshold` (MAD-on-SG-residual noise floor) to a new
-  module `xic_extractor/peak_detection/noise_estimation.py`
-- delete `find_peak_candidates_legacy_savgol` and its private helpers from
-  `legacy_savgol.py`
-- delete the `legacy_savgol.py` file
-- delete the `legacy_savgol` fallback branch from `facade.py:218-223`
-- update `config/settings.example.csv`, `settings_schema.py`, GUI/config docs,
-  and CLI validation permitted values according to the Step 1 migration
-  decision. Add tests for old `legacy_savgol` config behavior: either the
-  compatibility alias works for the transition period or the unsupported-value
-  error is explicit.
+- `discovery/models.py:117` — **intentionally divergent discovery default**:
+  discovery consumes local-minimum boundary evidence directly.
+- `instrument_qc/pipeline_extraction.py:126` — **intentionally divergent QC
+  helper config**: QC extraction uses local-minimum boundary behavior directly.
+- `scripts/run_alignment.py` maps `region_first_safe_merge` to `local_minimum`
+  for production extraction; this is a public CLI compatibility boundary.
+- `scripts/run_discovery.py` defaults to `local_minimum` for discovery-specific
+  boundary evidence.
 
-### Step 4 — Retire the standalone CWT resolver mode
+Allowed outcomes:
 
-After P5, CWT emits audit-flag-only evidence; it does not function as a
-peak finder. Plan:
+- keep as an intentionally divergent product contract;
+- change to the canonical setting if tests prove no behavior contract is being
+  changed;
+- document as a later behavior decision.
 
-- delete the standalone `cwt` branch handling from `facade.py` (if any
-  remains — verify at refactor time)
-- keep `centwave_cwt` as a proposal source called from the unified resolver
-  for the `cwt_same_apex_support` evidence flag
-- if P5b (real CWT) has not happened, also consider deleting `cwt.py`
-  entirely and removing the proposal source. This sub-decision depends on
-  whether `_CWT_SAME_APEX_SUPPORT_POINTS = 5` evidence is empirically
-  useful — see open question
-
-### Step 5 — Address hardcoded resolver_mode sites
-
-Two sites pin `resolver_mode` to `"local_minimum"` independently of the
-canonical defaults, but their nature differs:
-
-- `discovery/models.py:117` — **dataclass field default**:
-  `resolver_mode: str = "local_minimum"` on a `DiscoverySettings`-like
-  dataclass. Edit semantics: change the default literal, or remove the
-  field if the caller path can inherit from the global config object.
-- `instrument_qc/pipeline_extraction.py:126` — **inline keyword argument**:
-  `resolver_mode="local_minimum"` passed when constructing the QC config.
-  Edit semantics: change or remove the keyword argument.
-
-The post-collapse production behavior reduces to one supported conservative
-path. Public permitted values may still include `local_minimum` as an explicit
-compatibility alias if Step 1 finds active callers. The hardcoded sites should
-either inherit the global default, use the documented compatibility alias, or
-be deleted as dead overrides. Treat them as separate diffs since the edit kind
-is different.
+Do not normalize these values just for tidiness.
 
 ### Step 6 — Rename `resolver_mode` (optional)
 
-After collapse, `resolver_mode` has one supported production behavior, which
-makes the config field close to redundant. Two options:
+The public name `region_first_safe_merge` remains imperfect but stable. Two
+future options exist:
 
 - (a) keep the field with `region_first_safe_merge` literal for compatibility
   while documenting that the implementation is
   `local_minimum_with_wis_merge_v1`
 - (b) remove the field entirely, hardcoding the resolver in `facade.py`
 
-Decision: keep (a). Matches the same logic as C1's `baseline_type` field.
+Decision for this phase: keep the current public field and accepted values.
+Renaming or removing `resolver_mode` is out of scope.
+
+### Step 7 — Facade unknown-value fail-fast
+
+Implemented in Phase 1: direct programmatic calls to `find_peak_candidates(...)`
+with an unsupported `resolver_mode` raise an explicit `ValueError` instead of
+falling through to `legacy_savgol`.
+
+This is allowed only if accepted values keep identical behavior and tests cover:
+
+- `legacy_savgol`
+- `local_minimum`
+- `region_first_safe_merge`
+- retired `arbitrated`
+- an unknown unsupported value
 
 ## Validation Contract
 
-Behavioral parity required:
+Focused public-contract validation required:
 
-1. Run 8RAW with `resolver_mode = region_first_safe_merge` (Phase 1 final
-   state)
-2. Apply C2 refactor
-3. Re-run 8RAW
-4. `peak_candidates.tsv`, `alignment_matrix.tsv`, `alignment_review.tsv`,
-   `alignment_cells.tsv` must hash-match
-5. Strict ISTD benchmark area / RT / RSD identical
-6. Identity coherence verdicts unchanged
+1. Accepted resolver values still load and route as before:
+   `legacy_savgol`, `local_minimum`, `region_first_safe_merge`.
+2. `arbitrated` still fails fast with the retirement message.
+3. Facade unsupported values raise an explicit error.
+4. `ExtractionConfig.resolver_mode` default policy is asserted by a focused
+   config test, whether the default is kept or changed.
+5. README / config example / settings schema / validation harness defaults no
+   longer contradict each other on resolver defaults, accepted modes, rejected
+   modes, or alignment production coercion.
+6. `config/settings.example.csv` no longer claims `linear_edge` is supported for
+   `baseline_integration_method`.
+7. No RAW validation is required unless this phase changes behavior for an
+   accepted resolver mode. If behavior changes, stop and write a behavior spec.
 
-Additional check:
+Suggested focused tests:
 
-- before deletion, run a one-shot scan with `resolver_mode=arbitrated` on
-  8RAW; result must be either equivalent to or strictly worse than the
-  supported conservative run. If `arbitrated` is materially better on any ISTD,
-  the collapse is premature — record findings and defer
-- scan repo configs, examples, scripts, docs, GUI/config surfaces, validation
-  harnesses, and known deployment handoff paths for every removed value
-  (`arbitrated`, `legacy_savgol`, and optionally `local_minimum`). Each hit
-  must be migrated, documented as external, covered by a compatibility alias,
-  or block C2
-- confirm that docs and summary notes no longer describe the current default as
-  true region-first behavior
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -q tests/test_config.py tests/test_validation_harness.py tests/test_signal_processing.py tests/test_signal_processing_selection.py tests/test_run_alignment.py tests/test_run_discovery.py tests/test_settings_section_advanced.py
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+```
 
 ## Rollback Condition
 
-Restore deleted modes if any of:
+Roll back or stop if any of:
 
-- a non-internal caller of `arbitrated` surfaces during validation
-- a non-internal caller of `legacy_savgol` or `local_minimum` cannot be
-  migrated or covered by an explicit compatibility policy
-- hash mismatch on parity TSVs (would indicate the dispatch deletion changed
-  behavior unexpectedly)
-- the noise estimation extracted in Step 2 changes `_prominence_threshold`
-  output for any ISTD
+- an accepted resolver value changes behavior;
+- `legacy_savgol` or `local_minimum` is removed or silently remapped;
+- `run_alignment.py` production coercion changes without a behavior spec;
+- README/config/GUI/CLI surfaces still disagree after the phase;
+- a direct programmatic caller depends on the old unknown-value fallback and no
+  migration path is documented.
 
 ## What This Spec Does Not Change
 
 - production peak selection for `region_first_safe_merge`
+- production peak selection for `legacy_savgol` or `local_minimum`
 - local-minimum proposal internals used by the supported conservative default
 - true region-first v2 behavior
+- CWT scoring, cap logic, or proposal behavior
 - AsLS baseline (owned by C1)
 - area integration entry (owned by C5)
 - hypothesis spine (owned by C3)
@@ -230,26 +297,20 @@ Restore deleted modes if any of:
 
 ## Open Questions
 
-- Has anyone enabled `arbitrated`, `legacy_savgol`, or `local_minimum` in a
-  downstream config? Repo grep is not sufficient; confirmation from production
-  deployment owners is needed.
 - Should the public config value eventually be renamed from
   `region_first_safe_merge` to `local_minimum_with_wis_merge_v1`, or should the
   old name remain as a stable compatibility token until true region-first v2 is
   ready? Defer to a config migration spec.
 - Does `_CWT_SAME_APEX_SUPPORT_POINTS = 5` give measurable benefit on the
-  strict ISTD benchmark? If not, P5 followup (delete CWT entirely) can be
-  bundled into C2. If yes, keep the proposal source through C2.
-- Should `noise_estimation.py` accept the SG-smoothed array as an argument,
-  or compute it internally? Decision deferred to refactor time.
+  strict ISTD benchmark? Current reassessment reframes this as an evidence-role
+  inventory plus pre-registered promote / keep-audit / externalize-or-kill gate,
+  not an immediate CWT deletion question.
 - Does `discovery/models.py:117`'s `resolver_mode = "local_minimum"` override
   serve a discovery-specific purpose (e.g. discovery needs a different
-  cutoff than extraction)? Verify by running discovery with
-  `region_first_safe_merge` on 8RAW; if discovery output differs in a
-  meaningful way, document the override before deletion.
+  cutoff than extraction)? Classify before changing it.
 
 ## Acceptance Owner
 
-Engineering owner confirms the resolver-value migration checklist, runs parity
-validation, records under `docs/superpowers/notes/`. PR includes the parity
-report and the resolved mode-removal checklist.
+Engineering owner confirms the resolver public-surface inventory, runs focused
+contract tests, and records any intentionally divergent defaults. PR includes
+the surface inventory summary and the exact tests run.

@@ -28,11 +28,20 @@ from xic_extractor.alignment.identity_gates import (
     summarize_detected_seed_quality,
 )
 from xic_extractor.alignment.promotion_policy import (
+    BACKFILL_MS1_PATTERN_BLOCKED_REASON,
+    BACKFILL_MS1_PATTERN_CONFLICT_REASON,
+    BACKFILL_MS2_CONFLICT_REASON,
+    BACKFILL_MS2_CONTEXT_BLOCKED_REASON,
+    BACKFILL_RT_EXPLANATION_BLOCKED_REASON,
     LOW_MS1_COVERAGE_BLOCKED_REASON,
+    MISSING_BACKFILL_EVIDENCE_BLOCKED_REASON,
     NEIGHBOR_INTERFERENCE_BLOCKED_REASON,
     RESCUE_ONLY_BLOCKED_REASON,
     classify_backfill_promotion,
     evidence_from_tsv_rows,
+)
+from xic_extractor.alignment.shared_peak_identity_explanation.schema import (
+    ACTIVATION_DECISION_SCHEMA_VERSION,
 )
 
 _REVIEW_REQUIRED_COLUMNS = (
@@ -41,14 +50,51 @@ _REVIEW_REQUIRED_COLUMNS = (
     "detected_count",
     "include_in_primary_matrix",
 )
-_CELLS_REQUIRED_COLUMNS = ("feature_family_id", "sample_stem", "status")
+_BACKFILL_EVIDENCE_COLUMNS = (
+    "backfill_ms1_pattern_status",
+    "backfill_ms1_pattern_evidence_level",
+    "backfill_qc_reference_status",
+    "backfill_qc_reference_evidence_level",
+    "backfill_matrix_rt_drift_status",
+    "backfill_drift_evidence_level",
+    "backfill_drift_compatible_status",
+    "backfill_drift_corrected_delta_sec",
+    "backfill_candidate_ms2_pattern_status",
+    "backfill_candidate_ms2_evidence_level",
+    "backfill_ms2_trigger_scan_count",
+    "backfill_strict_nl_scan_count",
+    "backfill_ms2_trace_strength",
+    "backfill_dda_missing_nl_policy_status",
+    "backfill_family_ms2_required_tag_status",
+    "backfill_evidence_reason",
+)
+_CELLS_REQUIRED_COLUMNS = (
+    "feature_family_id",
+    "sample_stem",
+    "status",
+    "primary_matrix_area",
+    "apex_rt",
+    "height",
+    "peak_start_rt",
+    "peak_end_rt",
+    "rt_delta_sec",
+    "trace_quality",
+    "scan_support_score",
+    *_BACKFILL_EVIDENCE_COLUMNS,
+)
 
 _EXTREME_GATE_ID = "dr_extreme_backfill_dependency"
 _WEAK_SEED_GATE_ID = "dr_weak_seed_backfill_dependency"
 _WEAK_SEED_TOLERATED_GATE_ID = "dr_weak_seed_tolerated_watch"
 _DUPLICATE_GATE_ID = "dr_duplicate_rescue_pressure"
 _POLICY_BLOCK_REASONS = {
+    BACKFILL_MS1_PATTERN_BLOCKED_REASON,
+    BACKFILL_MS1_PATTERN_CONFLICT_REASON,
+    BACKFILL_MS2_CONTEXT_BLOCKED_REASON,
+    BACKFILL_MS2_CONFLICT_REASON,
+    BACKFILL_RT_EXPLANATION_BLOCKED_REASON,
     LOW_MS1_COVERAGE_BLOCKED_REASON,
+    MISSING_BACKFILL_EVIDENCE_BLOCKED_REASON,
     NEIGHBOR_INTERFERENCE_BLOCKED_REASON,
     RESCUE_ONLY_BLOCKED_REASON,
     "duplicate_claim_pressure",
@@ -133,6 +179,14 @@ def build_decision_report(
         ),
     )
     gate_candidates = _gate_candidates(families)
+    activation_decisions = _activation_decision_rows(
+        families,
+        gate_candidates=gate_candidates,
+    )
+    changed_row_bundle = _changed_row_bundle_rows(
+        families,
+        activation_decisions=activation_decisions,
+    )
     summary = _summary_rows(
         alignment_dir=alignment_dir,
         sample_count=len(sample_order),
@@ -166,6 +220,8 @@ def build_decision_report(
         "families": families,
         "detected_cells": detected_cells,
         "gate_candidates": gate_candidates,
+        "activation_decisions": activation_decisions,
+        "changed_row_bundle": changed_row_bundle,
     }
 
 
@@ -205,6 +261,15 @@ def _classify_family(
         classification = "blocked_neighboring_ms1_interference"
     elif promotion.reason == LOW_MS1_COVERAGE_BLOCKED_REASON:
         classification = "blocked_low_ms1_assessable_coverage"
+    elif promotion.reason in {
+        BACKFILL_MS1_PATTERN_BLOCKED_REASON,
+        BACKFILL_MS1_PATTERN_CONFLICT_REASON,
+        BACKFILL_MS2_CONTEXT_BLOCKED_REASON,
+        BACKFILL_MS2_CONFLICT_REASON,
+        BACKFILL_RT_EXPLANATION_BLOCKED_REASON,
+        MISSING_BACKFILL_EVIDENCE_BLOCKED_REASON,
+    }:
+        classification = "blocked_missing_backfill_identity_evidence"
     elif promotion.reason == RESCUE_ONLY_BLOCKED_REASON:
         classification = "blocked_rescue_only"
     elif dependency == EXTREME_BACKFILL_REASON:
@@ -500,6 +565,121 @@ def _gate_candidate(
     }
 
 
+def _activation_decision_rows(
+    families: list[dict[str, Any]],
+    *,
+    gate_candidates: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    implemented_gate_ids = {
+        str(row["gate_candidate_id"])
+        for row in gate_candidates
+        if row["recommended_action"] == "implement"
+    }
+    decisions = []
+    for family in families:
+        gate_id = _activation_gate_id_for_family(family)
+        if gate_id not in implemented_gate_ids:
+            continue
+        if not family["include_in_primary_matrix"]:
+            continue
+        decisions.append(_activation_decision_row(family, gate_id=gate_id))
+    return decisions
+
+
+def _activation_gate_id_for_family(family: Mapping[str, Any]) -> str:
+    classification = str(family["risk_classification"])
+    if classification == "risky_extreme_backfill":
+        return _EXTREME_GATE_ID
+    if classification == "risky_weak_seed_backfill":
+        return _WEAK_SEED_GATE_ID
+    if classification.startswith("blocked_"):
+        return "dr_backfill_policy_blocked"
+    return ""
+
+
+def _activation_decision_row(
+    family: Mapping[str, Any],
+    *,
+    gate_id: str,
+) -> dict[str, str]:
+    classification = str(family["risk_classification"])
+    promotion_reason = str(family.get("promotion_reason", ""))
+    promotion_flags = str(family.get("promotion_flags", ""))
+    tokens = ["single_dr_gate"]
+    if promotion_flags:
+        tokens.extend(_split_tokens(promotion_flags))
+    return {
+        "activation_schema_version": ACTIVATION_DECISION_SCHEMA_VERSION,
+        "feature_family_id": str(family["feature_family_id"]),
+        "candidate_container_id": str(family["feature_family_id"]),
+        "sample_id": "__family_context__",
+        "peak_hypothesis_id": str(family["feature_family_id"]),
+        "activation_unit_scope": "legacy_family_row",
+        "machine_current_label": classification,
+        "evidence_support_status": "not_supportive",
+        "activation_status": "auto_block",
+        "activation_action": "require_review",
+        "product_label_candidate": "fail",
+        "product_effect": "block_family_promotion",
+        "activation_confidence": "medium",
+        "hard_product_block": "TRUE",
+        "contract_rule_id": "context_or_not_evaluable",
+        "activation_reason": ":".join(
+            part
+            for part in ("single_dr_gate", classification, promotion_reason)
+            if part
+        ),
+        "required_review_reason": "",
+        "source_evidence_tokens": ";".join(dict.fromkeys(tokens)),
+        "diagnostic_only": "FALSE",
+    }
+
+
+def _changed_row_bundle_rows(
+    families: list[dict[str, Any]],
+    *,
+    activation_decisions: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    family_by_id = {
+        str(family["feature_family_id"]): family for family in families
+    }
+    rows: list[dict[str, str]] = []
+    for decision in activation_decisions:
+        family_id = decision["feature_family_id"]
+        family = family_by_id[family_id]
+        rows.append(
+            {
+                "stable_row_id": family_id,
+                "sample": "__row__",
+                "target": str(family.get("neutral_loss_tag", "")),
+                "legacy_candidate_id": "",
+                "successor_candidate_id": decision["peak_hypothesis_id"],
+                "selected_rt": str(family.get("family_center_rt", "")),
+                "area": "",
+                "boundary": "",
+                "confidence": decision["activation_confidence"],
+                "reason": decision["activation_reason"],
+                "presence_impact": "primary_row_removed",
+                "typed_facts_completeness": _typed_facts_completeness(family),
+                "retired_legacy_inputs": "scan_support_only;owner_backfill_label",
+                "ms2_nl_opportunity_status": "not_supportive",
+                "rt_istd_rationale": str(family.get("rt_context", "")),
+                "evidence_tier": str(family["risk_classification"]),
+                "reviewer_verdict": "pending_manual_review",
+            }
+        )
+    return rows
+
+
+def _typed_facts_completeness(family: Mapping[str, Any]) -> str:
+    return (
+        f"{family.get('promotion_state', '')}:"
+        f"{family.get('promotion_reason', '')}:"
+        f"supported_rescue_count={family.get('supported_rescue_count', '')}:"
+        f"assessed_rescue_count={family.get('assessed_rescue_count', '')}"
+    )
+
+
 def _recommendation_reason(default_action: str) -> str:
     if default_action == "implement":
         return (
@@ -549,6 +729,7 @@ def _summary_rows(
         "supported_backfill_capped",
         "blocked_neighboring_ms1_interference",
         "blocked_low_ms1_assessable_coverage",
+        "blocked_missing_backfill_identity_evidence",
         "blocked_rescue_only",
         "watch_duplicate_rescue",
         "watch_weak_seed_tolerated",
@@ -590,7 +771,7 @@ def _is_single_dr_gate_row(row: Mapping[str, str]) -> bool:
         return True
     if row.get("identity_reason", "") in _POLICY_BLOCK_REASONS:
         return True
-    row_flags = row.get("row_flags", "")
+    row_flags = set(_split_tokens(row.get("row_flags", "")))
     return (
         "high_backfill_dependency" in row_flags
         or "weak_seed_backfill_dependency" in row_flags
@@ -615,6 +796,14 @@ def _sample_order(rows: tuple[dict[str, str], ...]) -> tuple[str, ...]:
             seen.add(sample)
             ordered.append(sample)
     return tuple(ordered)
+
+
+def _split_tokens(value: str) -> tuple[str, ...]:
+    return tuple(
+        token
+        for chunk in value.replace(",", ";").replace(" ", ";").split(";")
+        if (token := chunk.strip())
+    )
 
 
 

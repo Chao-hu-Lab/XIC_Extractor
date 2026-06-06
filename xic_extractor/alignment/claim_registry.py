@@ -8,6 +8,9 @@ from typing import Any
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.output_rows import cells_by_cluster, count_status, row_id
+from xic_extractor.alignment.owner_group_delivery import (
+    delivery_group_hypothesis_id,
+)
 
 
 @dataclass(frozen=True)
@@ -163,12 +166,26 @@ def _duplicate_replacements(
     if production_candidates:
         winner = min(production_candidates, key=_winner_sort_key)
         return {
-            candidate.index: _duplicate_cell(candidate.cell, winner.cluster_id)
+            candidate.index: _duplicate_cell(
+                candidate.cell,
+                winner.cluster_id,
+                winner_group_hypothesis_id=delivery_group_hypothesis_id(
+                    winner.cluster,
+                ),
+                source_group_hypothesis_id=delivery_group_hypothesis_id(
+                    candidate.cluster,
+                ),
+            )
             for candidate in candidates
             if candidate.index != winner.index
         }
     return {
-        candidate.index: _review_only_duplicate_cell(candidate.cell)
+        candidate.index: _review_only_duplicate_cell(
+            candidate.cell,
+            source_group_hypothesis_id=delivery_group_hypothesis_id(
+                candidate.cluster,
+            ),
+        )
         for candidate in candidates
     }
 
@@ -223,7 +240,13 @@ def _add_candidate_to_group(
         )
 
 
-def _duplicate_cell(cell: AlignedCell, winner_id: str) -> AlignedCell:
+def _duplicate_cell(
+    cell: AlignedCell,
+    winner_id: str,
+    *,
+    winner_group_hypothesis_id: str,
+    source_group_hypothesis_id: str,
+) -> AlignedCell:
     return replace(
         cell,
         status="duplicate_assigned",
@@ -231,16 +254,36 @@ def _duplicate_cell(cell: AlignedCell, winner_id: str) -> AlignedCell:
             "duplicate MS1 peak claim; "
             f"winner={winner_id}; original_status={cell.status}"
         ),
+        gap_fill_state="not_filled",
+        gap_fill_reason="not_requested_duplicate_loser",
+        missing_observation_state="duplicate_claim_loser",
+        group_claim_state="duplicate_loser",
+        claim_winner_group_hypothesis_id=winner_group_hypothesis_id,
+        claim_source_group_hypothesis_id=(
+            cell.group_hypothesis_id or source_group_hypothesis_id
+        ),
     )
 
 
-def _review_only_duplicate_cell(cell: AlignedCell) -> AlignedCell:
+def _review_only_duplicate_cell(
+    cell: AlignedCell,
+    *,
+    source_group_hypothesis_id: str,
+) -> AlignedCell:
     return replace(
         cell,
         status="duplicate_assigned",
         reason=(
             "review-only MS1 peak claim; "
             f"winner=none; original_status={cell.status}"
+        ),
+        gap_fill_state="not_filled",
+        gap_fill_reason="not_requested_duplicate_loser",
+        missing_observation_state="duplicate_claim_loser",
+        group_claim_state="review_only_duplicate_loser",
+        claim_winner_group_hypothesis_id="",
+        claim_source_group_hypothesis_id=(
+            cell.group_hypothesis_id or source_group_hypothesis_id
         ),
     )
 

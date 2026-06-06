@@ -9,6 +9,7 @@ _ADVANCED_SETTING_KEYS = (
     "count_no_ms2_as_detected",
     "rolling_window_size",
     "rt_prior_library_path",
+    "target_pair_rt_calibration_path",
     "injection_order_source",
     "resolver_mode",
     "resolver_chrom_threshold",

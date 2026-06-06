@@ -3,20 +3,17 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from xic_extractor.raw_reader import open_raw
-from xic_extractor.xic_models import XICRequest
 from scripts.run_alignment import (
     _alignment_production_resolver_mode,
     _peak_config,
 )
 from xic_extractor.alignment.backfill_scope import (
-    BackfillScope,
     backfill_request_sample_stems,
     backfill_seed_centers,
     select_backfill_features,
@@ -32,17 +29,19 @@ from xic_extractor.alignment.output_levels import (
     artifact_names_for_output_level,
     parse_alignment_output_level,
 )
+from xic_extractor.alignment.owner_backfill import _scan_window_aware_chunks
 from xic_extractor.alignment.owner_clustering import (
     OwnerAlignedFeature,
     cluster_sample_local_owners,
     review_only_features_from_ambiguous_records,
 )
-from xic_extractor.alignment.owner_backfill import _scan_window_aware_chunks
 from xic_extractor.alignment.pre_backfill_consolidation import (
     consolidate_pre_backfill_identity_families,
 )
 from xic_extractor.alignment.process_backend import run_owner_build_process
 from xic_extractor.alignment.raw_sources import existing_raw_paths
+from xic_extractor.raw_reader import open_raw
+from xic_extractor.xic_models import XICRequest
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -220,7 +219,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Probe alignment backfill scope size without running owner backfill.",
+        description=(
+            "Probe alignment backfill scope size without running owner backfill."
+        ),
     )
     parser.add_argument("--discovery-batch-index", type=Path, required=True)
     parser.add_argument("--raw-dir", type=Path, required=True)
@@ -545,7 +546,9 @@ def _overlap_window_summary(windows: tuple[tuple[int, int], ...]) -> dict[str, i
     max_individual_span = max(_scan_span(window) for window in sorted_windows)
     return {
         "overlap_component_count": len(components),
-        "max_overlap_component_scan_span": max(_scan_span(window) for window in components),
+        "max_overlap_component_scan_span": max(
+            _scan_span(window) for window in components
+        ),
         "max_individual_scan_span": max_individual_span,
         "superwindow_call_count_span_x1": _capped_overlap_window_count(
             sorted_windows,

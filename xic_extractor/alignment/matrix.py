@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from xic_extractor.alignment.models import AlignmentCluster
-from xic_extractor.peak_detection.hypotheses import IntegrationResult
+from xic_extractor.alignment.primary_matrix_area import (
+    primary_matrix_area_from_integration,
+)
 from xic_extractor.peak_detection.integration_audit import CellIntegrationAuditSummary
+
+if TYPE_CHECKING:
+    from xic_extractor.peak_detection.hypotheses import IntegrationResult
+else:
+    IntegrationResult = Any
 
 CellStatus = Literal[
     "detected",
@@ -54,6 +61,11 @@ class AlignedCell:
     region_local_mixture_diagnostic: str = ""
     region_local_mixture_reason: str = ""
     region_review_reason: str = ""
+    region_decision_status: str = ""
+    region_decision_class: str = ""
+    region_product_action: str = ""
+    region_promotion_reason: str = ""
+    region_baseline_method: str = ""
     integration_audit: CellIntegrationAuditSummary | None = None
     selected_integration: IntegrationResult | None = None
     backfill_seed_mz: float | None = None
@@ -61,19 +73,51 @@ class AlignedCell:
     backfill_request_rt_min: float | None = None
     backfill_request_rt_max: float | None = None
     backfill_request_ppm: float | None = None
+    backfill_ms1_pattern_status: str = ""
+    backfill_ms1_pattern_evidence_level: str = ""
+    backfill_qc_reference_status: str = ""
+    backfill_qc_reference_evidence_level: str = ""
+    backfill_matrix_rt_drift_status: str = ""
+    backfill_drift_evidence_level: str = ""
+    backfill_drift_compatible_status: str = ""
+    backfill_drift_corrected_delta_sec: float | None = None
+    backfill_candidate_ms2_pattern_status: str = ""
+    backfill_candidate_ms2_evidence_level: str = ""
+    backfill_ms2_trigger_scan_count: int | None = None
+    backfill_strict_nl_scan_count: int | None = None
+    backfill_ms2_trace_strength: str = ""
+    backfill_dda_missing_nl_policy_status: str = ""
+    backfill_family_ms2_required_tag_status: str = ""
+    backfill_evidence_reason: str = ""
+    group_hypothesis_id: str = ""
+    public_family_id: str = ""
+    group_construction_role: str = ""
+    group_delivery_role: str = ""
+    group_membership_source: str = ""
+    gap_fill_state: str = ""
+    gap_fill_reason: str = ""
+    missing_observation_state: str = ""
+    group_claim_state: str = ""
+    claim_winner_group_hypothesis_id: str = ""
+    claim_source_group_hypothesis_id: str = ""
+    consolidation_state: str = ""
+    consolidation_winner_group_hypothesis_id: str = ""
+    consolidation_source_group_hypothesis_id: str = ""
 
     @property
     def matrix_area(self) -> float | None:
-        integration = self.selected_integration
-        if integration is not None:
-            return integration.area_raw_counts_seconds
-        return self.area
+        return primary_matrix_area_from_integration(self.selected_integration).value
 
     @property
     def matrix_area_source(self) -> str:
-        if self.selected_integration is not None:
-            return "selected_integration"
-        return "legacy_area_fallback"
+        decision = primary_matrix_area_from_integration(self.selected_integration)
+        return decision.source or self.matrix_area_missing_reason
+
+    @property
+    def matrix_area_missing_reason(self) -> str:
+        if self.status not in {"detected", "rescued"}:
+            return ""
+        return primary_matrix_area_from_integration(self.selected_integration).reason
 
 
 @dataclass(frozen=True)

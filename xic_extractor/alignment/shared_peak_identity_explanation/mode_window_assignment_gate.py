@@ -4,7 +4,11 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from tools.diagnostics.diagnostic_io import read_tsv_required, text_value, write_tsv
+from xic_extractor.diagnostics.diagnostic_io import (
+    read_tsv_required,
+    text_value,
+    write_tsv,
+)
 
 CONTRACT_SCHEMA_VERSION = "shared_peak_identity_mode_window_assignment_contract_v0"
 GATE_ROW_SCHEMA_VERSION = "shared_peak_identity_mode_window_assignment_gate_v0"

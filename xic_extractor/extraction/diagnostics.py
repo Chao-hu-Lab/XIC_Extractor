@@ -51,6 +51,7 @@ def candidate_ms2_evidence_builder(
     nl_ppm_max = target.nl_ppm_max
 
     def _builder(candidate: PeakCandidate) -> Any:
+        peak_group_scope = _candidate_ms1_peak_group_scope(candidate)
         return extractor.collect_candidate_ms2_evidence(
             raw,
             candidate=candidate,
@@ -60,9 +61,26 @@ def candidate_ms2_evidence_builder(
             nl_ppm_max=nl_ppm_max,
             ms2_precursor_tol_da=config.ms2_precursor_tol_da,
             nl_min_intensity_ratio=config.nl_min_intensity_ratio,
+            ms1_peak_group_rt_min=peak_group_scope[0],
+            ms1_peak_group_rt_max=peak_group_scope[1],
+            ms1_peak_group_source=peak_group_scope[2],
         )
 
     return _builder
+
+
+def _candidate_ms1_peak_group_scope(
+    candidate: PeakCandidate,
+) -> tuple[float | None, float | None, str]:
+    proposal_sources = {str(source) for source in candidate.proposal_sources}
+    if "chrom_peak_segment" not in proposal_sources:
+        return None, None, ""
+    peak = candidate.peak
+    return (
+        float(peak.peak_start),
+        float(peak.peak_end),
+        "gaussian15_ms1_peak_group",
+    )
 
 
 def anchor_rt_mismatch_diagnostic(

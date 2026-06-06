@@ -19,6 +19,7 @@ class ResolverControls:
     apply_local_minimum_preset_button: QPushButton
     smooth_window_spin: QSpinBox
     smooth_polyorder_spin: QSpinBox
+    ms1_morphology_smoothing_window_spin: QSpinBox
     peak_rel_height_spin: QDoubleSpinBox
     peak_min_prominence_ratio_spin: QDoubleSpinBox
     chrom_threshold_spin: QDoubleSpinBox
@@ -41,6 +42,7 @@ class AdvancedControls:
     count_no_ms2_checkbox: QCheckBox
     rolling_window_size_spin: QSpinBox
     rt_prior_library_path_edit: QLineEdit
+    target_pair_rt_calibration_path_edit: QLineEdit
     injection_order_source_edit: QLineEdit
     nl_rt_anchor_search_margin_min_spin: QDoubleSpinBox
     nl_rt_anchor_half_window_min_spin: QDoubleSpinBox

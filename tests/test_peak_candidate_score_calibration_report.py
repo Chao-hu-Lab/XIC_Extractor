@@ -232,12 +232,18 @@ def test_score_calibration_report_flags_selected_risks_and_challengers(
             "reason",
         ]
     assert {(row["group_id"], row["risk_type"]) for row in risk_rows} == {
-        ("SampleA|CleanTarget|arbitrated", "high_score_rejected_challenger"),
-        ("SampleA|CleanTarget|arbitrated", "apex_evidence_shadow"),
-        ("SampleB|RiskTarget|arbitrated", "selected_review_only"),
-        ("SampleB|RiskTarget|arbitrated", "selected_nl_fail"),
-        ("SampleB|RiskTarget|arbitrated", "high_score_rejected_challenger"),
-        ("SampleB|RiskTarget|arbitrated", "strict_nl_rejected_challenger"),
+        (
+            "SampleA|CleanTarget|region_first_safe_merge",
+            "high_score_rejected_challenger",
+        ),
+        ("SampleA|CleanTarget|region_first_safe_merge", "apex_evidence_shadow"),
+        ("SampleB|RiskTarget|region_first_safe_merge", "selected_review_only"),
+        ("SampleB|RiskTarget|region_first_safe_merge", "selected_nl_fail"),
+        (
+            "SampleB|RiskTarget|region_first_safe_merge",
+            "high_score_rejected_challenger",
+        ),
+        ("SampleB|RiskTarget|region_first_safe_merge", "strict_nl_rejected_challenger"),
     }
 
     label_rows = _read_tsv(output_dir / "peak_candidate_score_label_impact.tsv")
@@ -338,7 +344,7 @@ def test_score_calibration_report_splits_plausible_nl_dropout_selected_rows(
         row["group_id"]
         for row in risk_rows
         if row["risk_type"] == "plausible_nl_dropout_selected"
-    } == {"SampleA|8-oxodG|arbitrated"}
+    } == {"SampleA|8-oxodG|region_first_safe_merge"}
 
 
 def test_score_calibration_report_rejects_missing_required_columns(
@@ -397,7 +403,7 @@ def _row(
     return {
         "sample_name": sample,
         "target_label": target,
-        "resolver_mode": "arbitrated",
+        "resolver_mode": "region_first_safe_merge",
         "candidate_id": candidate_id,
         "proposal_sources": proposal_sources,
         "rt_apex_min": rt_apex,

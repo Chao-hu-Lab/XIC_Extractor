@@ -38,6 +38,7 @@ def consolidate_pre_backfill_identity_families(
                 replacements[feature.feature_family_id] = _loser_feature(
                     feature,
                     winner_id=winner.feature_family_id,
+                    winner_group_hypothesis_id=winner.group_hypothesis_id,
                 )
     return tuple(
         replacements.get(feature.feature_family_id, feature)
@@ -136,6 +137,16 @@ def _primary_feature(
         backfill_seed_centers=_seed_centers(group),
         ambiguous_sample_stem=None,
         ambiguous_candidate_ids=(),
+        group_hypothesis_id=winner.group_hypothesis_id,
+        public_family_id=winner.public_family_id,
+        group_construction_role="pre_backfill_successor_adapter",
+        group_delivery_role="pre_backfill_successor_adapter",
+        group_membership_source="pre_backfill_cross_sample_peak_group_projection",
+        consolidation_state="primary_winner",
+        consolidation_winner_group_hypothesis_id=winner.group_hypothesis_id,
+        consolidation_source_group_hypothesis_id=";".join(
+            feature.group_hypothesis_id for feature in group
+        ),
     )
 
 
@@ -143,10 +154,22 @@ def _loser_feature(
     feature: OwnerAlignedFeature,
     *,
     winner_id: str,
+    winner_group_hypothesis_id: str | None = None,
 ) -> OwnerAlignedFeature:
     suffix = f"pre_backfill_identity_consolidation_loser;winner={winner_id}"
     evidence = f"{feature.evidence};{suffix}" if feature.evidence else suffix
-    return replace(feature, evidence=evidence, review_only=True)
+    return replace(
+        feature,
+        evidence=evidence,
+        review_only=True,
+        group_delivery_role="pre_backfill_successor_adapter",
+        group_membership_source="pre_backfill_cross_sample_peak_group_projection",
+        consolidation_state="primary_loser",
+        consolidation_winner_group_hypothesis_id=(
+            winner_group_hypothesis_id or winner_id
+        ),
+        consolidation_source_group_hypothesis_id=feature.group_hypothesis_id,
+    )
 
 
 def _winner_feature(

@@ -4,6 +4,8 @@ import csv
 from pathlib import Path
 
 from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.output.detection import MissingTargetedProductProjectionError
+from xic_extractor.output.schema import TARGETED_PRODUCT_PROJECTION_HEADERS
 from xic_extractor.output.workbook_values import ND_ERROR, _safe_float
 from xic_extractor.sample_groups import classify_sample_group
 
@@ -23,7 +25,10 @@ def _read_long_results(
     long_path = config.output_csv.with_name("xic_results_long.csv")
     if long_path.exists():
         return _read_results(long_path)
-    return _wide_to_long_rows(_read_results(config.output_csv), targets)
+    raise MissingTargetedProductProjectionError(
+        "xic_results_long.csv is required for targeted product workbook "
+        f"generation; missing {long_path}"
+    )
 
 
 def _wide_to_long_rows(
@@ -34,26 +39,42 @@ def _wide_to_long_rows(
         sample_name = row.get("SampleName", "")
         for target in targets:
             long_rows.append(
-                {
-                    "SampleName": sample_name,
-                    "Group": _sample_group(sample_name),
-                    "Target": target.label,
-                    "Role": "ISTD" if target.is_istd else "Analyte",
-                    "ISTD Pair": target.istd_pair,
-                    "RT": row.get(f"{target.label}_RT", ""),
-                    "Area": row.get(f"{target.label}_Area", ""),
-                    "NL": row.get(f"{target.label}_NL", "")
-                    if target.neutral_loss_da is not None
-                    else "",
-                    "Int": row.get(f"{target.label}_Int", ""),
-                    "PeakStart": row.get(f"{target.label}_PeakStart", ""),
-                    "PeakEnd": row.get(f"{target.label}_PeakEnd", ""),
-                    "PeakWidth": _legacy_peak_width(row, target.label),
-                    "Confidence": "HIGH",
-                    "Reason": "",
-                }
+                _legacy_wide_long_row(
+                    row,
+                    target,
+                    sample_name=sample_name,
+                )
             )
     return long_rows
+
+
+def _legacy_wide_long_row(
+    row: dict[str, str],
+    target: Target,
+    *,
+    sample_name: str,
+) -> dict[str, str]:
+    long_row = {
+        "SampleName": sample_name,
+        "Group": _sample_group(sample_name),
+        "Target": target.label,
+        "Role": "ISTD" if target.is_istd else "Analyte",
+        "ISTD Pair": target.istd_pair,
+        "RT": row.get(f"{target.label}_RT", ""),
+        "Area": row.get(f"{target.label}_Area", ""),
+        "NL": row.get(f"{target.label}_NL", "")
+        if target.neutral_loss_da is not None
+        else "",
+        "Int": row.get(f"{target.label}_Int", ""),
+        "PeakStart": row.get(f"{target.label}_PeakStart", ""),
+        "PeakEnd": row.get(f"{target.label}_PeakEnd", ""),
+        "PeakWidth": _legacy_peak_width(row, target.label),
+        "Confidence": "",
+        "Reason": "legacy_wide_csv_no_product_projection",
+    }
+    long_row.update({header: "" for header in TARGETED_PRODUCT_PROJECTION_HEADERS})
+    long_row["Legacy Authority Status"] = "legacy_projection_only"
+    return long_row
 
 
 def _read_score_breakdown(config: ExtractionConfig) -> list[dict[str, str]]:

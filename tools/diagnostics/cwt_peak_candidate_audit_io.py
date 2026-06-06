@@ -4,14 +4,18 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from tools.diagnostics.diagnostic_io import (
-    read_tsv_required,
-    required_indexes as _required_indexes,
-    text_value as _text,
-)
 from tools.diagnostics.cwt_peak_candidate_audit_models import (
     _REQUIRED_COLUMNS,
     CwtCandidateRow,
+)
+from tools.diagnostics.diagnostic_io import (
+    read_tsv_required,
+)
+from tools.diagnostics.diagnostic_io import (
+    required_indexes as _required_indexes,
+)
+from tools.diagnostics.diagnostic_io import (
+    text_value as _text,
 )
 
 

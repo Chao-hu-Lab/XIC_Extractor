@@ -146,6 +146,19 @@ def _row_review_issue(row: dict[str, str]) -> str:
         return "NO_MS2"
     if nl.startswith("WARN_"):
         return "NL_WARN"
+    if _has_product_projection(row):
+        if row.get("Projection Conflict Reasons", ""):
+            return "PROJECTION_CONFLICT"
+        if row.get("Projection Exclusion Reasons", ""):
+            return "PRODUCT_EXCLUDED"
+        product_state = row.get("Product State", "")
+        if product_state == "ambiguous":
+            return "PRODUCT_AMBIGUOUS"
+        if row.get("Projection Not Counted Reasons", ""):
+            return "PRODUCT_NOT_COUNTED"
+        if row.get("Review State", "") in {"flagged", "review_required"}:
+            return "PROJECTION_FLAGGED"
+        return ""
     confidence = row.get("Confidence", "")
     if confidence in {"LOW", "VERY_LOW"}:
         return f"CONFIDENCE_{confidence}"
@@ -153,6 +166,20 @@ def _row_review_issue(row: dict[str, str]) -> str:
 
 
 def _review_priority(row: dict[str, str], issue: str) -> int:
+    if _has_product_projection(row):
+        if issue in {
+            "PEAK_NOT_FOUND",
+            "NO_SIGNAL",
+            "FILE_ERROR",
+            "NL_FAIL",
+            "PROJECTION_CONFLICT",
+            "PRODUCT_EXCLUDED",
+            "PRODUCT_AMBIGUOUS",
+        }:
+            return 1
+        if issue in {"NO_MS2", "NL_WARN", "PRODUCT_NOT_COUNTED", "PROJECTION_FLAGGED"}:
+            return 2
+        return 3
     confidence = row.get("Confidence", "")
     if issue in {"PEAK_NOT_FOUND", "NO_SIGNAL", "FILE_ERROR", "NL_FAIL"}:
         return 1
@@ -164,6 +191,15 @@ def _review_priority(row: dict[str, str], issue: str) -> int:
 
 
 def _review_status(issue: str, confidence: str) -> str:
+    if issue in {
+        "PROJECTION_CONFLICT",
+        "PRODUCT_EXCLUDED",
+        "PRODUCT_AMBIGUOUS",
+        "PRODUCT_NOT_COUNTED",
+    }:
+        return "Review"
+    if issue == "PROJECTION_FLAGGED":
+        return "Check"
     if issue in {"NL_FAIL", "PEAK_NOT_FOUND", "NO_SIGNAL", "FILE_ERROR"}:
         return "Review"
     if issue in {"NO_MS2", "NL_WARN"} or confidence in {"LOW", "VERY_LOW"}:
@@ -178,6 +214,25 @@ def _review_why(issue: str, reason: str, evidence: str) -> str:
         return "MS2 trigger missing"
     if issue == "NL_WARN":
         return "NL support is borderline"
+    if issue == "PROJECTION_CONFLICT":
+        return (
+            _first_projection_reason(reason, "conflict")
+            or "Product evidence conflicts"
+        )
+    if issue == "PRODUCT_EXCLUDED":
+        return _first_projection_reason(reason, "excluded") or "Product row excluded"
+    if issue == "PRODUCT_AMBIGUOUS":
+        return "Product evidence is ambiguous"
+    if issue == "PRODUCT_NOT_COUNTED":
+        return (
+            _first_projection_reason(reason, "not_counted")
+            or "Product row not counted"
+        )
+    if issue == "PROJECTION_FLAGGED":
+        return (
+            _first_projection_reason(reason, "review")
+            or "Product projection flagged"
+        )
     if issue in {"PEAK_NOT_FOUND", "NO_SIGNAL"}:
         return "Peak not found"
     if issue.startswith("CONFIDENCE_"):
@@ -187,6 +242,22 @@ def _review_why(issue: str, reason: str, evidence: str) -> str:
         return issue.removeprefix("CONFIDENCE_") + " confidence"
     parsed = _first_concern(reason) or _first_concern(evidence)
     return parsed if parsed and parsed != "all checks passed" else issue
+
+
+def _has_product_projection(row: dict[str, str]) -> bool:
+    return row.get("Counted Detection", "").upper() in {"TRUE", "FALSE"} and bool(
+        row.get("Product State", "")
+    )
+
+
+def _first_projection_reason(reason: str, section: str) -> str:
+    marker = f"{section}:"
+    for part in reason.split(";"):
+        stripped = part.strip()
+        if not stripped.startswith(marker):
+            continue
+        return stripped.removeprefix(marker).strip().split(",", 1)[0].strip()
+    return ""
 
 
 def _first_concern(text: str) -> str:
@@ -210,6 +281,15 @@ def _suggested_action(issue: str, row: dict[str, str]) -> str:
         return "Inspect XIC trace and target RT window"
     if issue == "FILE_ERROR":
         return "Check RAW file readability"
+    if issue in {
+        "PROJECTION_CONFLICT",
+        "PRODUCT_AMBIGUOUS",
+        "PRODUCT_NOT_COUNTED",
+        "PROJECTION_FLAGGED",
+    }:
+        return "Review product projection evidence"
+    if issue == "PRODUCT_EXCLUDED":
+        return "Review exclusion reason"
     if row.get("Confidence") in {"LOW", "VERY_LOW"}:
         return "Review peak shape, RT prior, and ISTD pairing"
     return "Review diagnostic detail"

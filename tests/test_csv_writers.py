@@ -20,11 +20,15 @@ from xic_extractor.output.csv_writers import (
     write_score_breakdown_csv,
     write_wide_csv,
 )
+from xic_extractor.output.schema import TARGETED_PRODUCT_PROJECTION_HEADERS
 from xic_extractor.peak_detection.hypotheses import (
     AuditTrail,
     EvidenceVector,
     IntegrationResult,
     PeakHypothesis,
+)
+from xic_extractor.peak_detection.targeted_product_projection import (
+    TargetedProductProjection,
 )
 from xic_extractor.signal_processing import (
     PeakCandidate,
@@ -107,6 +111,16 @@ def _result(*, nl: NLResult | None = None) -> ExtractionResult:
         prior_source="",
         quality_penalty=1,
         quality_flags=("too_broad",),
+        targeted_product_projection=TargetedProductProjection(
+            product_state="detected_flagged",
+            counted_detection=True,
+            review_state="flagged",
+            projection_reason="decision: detected_flagged; review: local_sn_minor",
+            support_reasons=("ms1_peak_present",),
+            review_reasons=("local_sn_minor",),
+            legacy_evidence={"confidence": "LOW"},
+            legacy_authority_status="evidence_only",
+        ),
     )
 
 
@@ -171,6 +185,37 @@ def test_row_builders_report_selected_candidate_nl_before_target_window_nl() -> 
     assert long_row["NL"] == "NL_FAIL"
 
 
+def test_not_counted_product_projection_blanks_matrix_peak_values() -> None:
+    target = _target("WithNL")
+    result = replace(
+        _result(nl=NLResult("NL_FAIL", 125.0, None, 1, 0, 1)),
+        targeted_product_projection=TargetedProductProjection(
+            product_state="not_counted",
+            counted_detection=False,
+            review_state="review_required",
+            projection_reason=(
+                "decision: not_counted; not_counted: false_positive_peak"
+            ),
+            support_reasons=("ms1_peak_present",),
+            not_counted_reasons=("false_positive_peak",),
+            legacy_evidence={"confidence": "VERY_LOW", "nl_status": "NL_FAIL"},
+            legacy_authority_status="evidence_only",
+        ),
+    )
+    file_result = FileResult(sample_name="SampleA", results={"WithNL": result})
+
+    wide_row = _output_row(file_result, [target])
+    long_row = _long_output_rows(file_result, [target])[0]
+
+    for suffix in ("RT", "Int", "Area", "PeakStart", "PeakEnd", "PeakWidth"):
+        assert wide_row[f"WithNL_{suffix}"] == "ND"
+        assert long_row[suffix if suffix != "PeakWidth" else "PeakWidth"] == "ND"
+    assert wide_row["WithNL_NL"] == "NL_FAIL"
+    assert long_row["NL"] == "NL_FAIL"
+    assert long_row["Product State"] == "not_counted"
+    assert long_row["Counted Detection"] == "FALSE"
+
+
 def test_write_wide_and_long_csv(tmp_path: Path) -> None:
     config = _config(tmp_path)
     target = _target("WithNL")
@@ -194,7 +239,18 @@ def test_write_wide_and_long_csv(tmp_path: Path) -> None:
         "PeakEnd": "9.2000",
         "PeakWidth": "0.3000",
         "Confidence": "LOW",
-        "Reason": "concerns: local_sn (minor)",
+        "Reason": "decision: detected_flagged; review: local_sn_minor",
+        "Product State": "detected_flagged",
+        "Counted Detection": "TRUE",
+        "Review State": "flagged",
+        "Projection Reason": "decision: detected_flagged; review: local_sn_minor",
+        "Projection Support Reasons": "ms1_peak_present",
+        "Projection Review Reasons": "local_sn_minor",
+        "Projection Conflict Reasons": "",
+        "Projection Not Counted Reasons": "",
+        "Projection Exclusion Reasons": "",
+        "Legacy Authority Status": "evidence_only",
+        "Benchmark Eligibility State": "",
     }
 
 
@@ -258,6 +314,107 @@ def test_score_breakdown_csv_includes_weighted_evidence_fields(tmp_path: Path) -
     assert breakdown["Detection Counted"] == "TRUE"
     assert breakdown["Support"] == "strict_nl_ok; local_sn_strong"
     assert breakdown["Concerns"] == ""
+
+
+def test_long_and_score_breakdown_rows_use_targeted_product_projection(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    target = _target("WithNL")
+    result = replace(
+        _result(nl=NLResult("NL_FAIL", 125.0, None, 1, 0, 1)),
+        confidence="VERY_LOW",
+        targeted_product_projection=TargetedProductProjection(
+            product_state="detected_flagged",
+            counted_detection=True,
+            review_state="flagged",
+            projection_reason=(
+                "decision: detected_flagged; review: plausible_dda_nl_dropout"
+            ),
+            support_reasons=("ms1_peak_present",),
+            review_reasons=("plausible_dda_nl_dropout",),
+            legacy_evidence={"confidence": "VERY_LOW", "nl_status": "NL_FAIL"},
+            legacy_authority_status="evidence_only",
+        ),
+    )
+    file_result = FileResult(sample_name="SampleA", results={"WithNL": result})
+
+    long_row = _long_output_rows(file_result, [target])[0]
+    write_score_breakdown_csv(config, [file_result])
+
+    assert long_row["NL"] == "NL_FAIL"
+    assert long_row["Confidence"] == "VERY_LOW"
+    assert (
+        long_row["Reason"]
+        == "decision: detected_flagged; review: plausible_dda_nl_dropout"
+    )
+    assert long_row["Product State"] == "detected_flagged"
+    assert long_row["Counted Detection"] == "TRUE"
+    assert long_row["Projection Review Reasons"] == "plausible_dda_nl_dropout"
+    breakdown = _read_csv(config.output_csv.with_name("xic_score_breakdown.csv"))[0]
+    assert breakdown["Detection Counted"] == "TRUE"
+    assert breakdown["Product State"] == "detected_flagged"
+    assert breakdown["Projection Reason"].startswith("decision: detected_flagged")
+
+
+def test_long_row_reason_prefers_projection_over_legacy_not_counted_text() -> None:
+    target = _target("WithNL")
+    result = replace(
+        _result(nl=NLResult("NL_FAIL", 125.0, None, 1, 0, 1)),
+        confidence="VERY_LOW",
+        reason="decision: review only, not counted; cap: VERY_LOW due to nl fail",
+        targeted_product_projection=TargetedProductProjection(
+            product_state="detected_flagged",
+            counted_detection=True,
+            review_state="flagged",
+            projection_reason=(
+                "decision: detected_flagged; support: role_aware_rt_support; "
+                "review: plausible_dda_nl_dropout"
+            ),
+            support_reasons=("role_aware_rt_support",),
+            review_reasons=("plausible_dda_nl_dropout",),
+            legacy_evidence={"confidence": "VERY_LOW", "nl_status": "NL_FAIL"},
+            legacy_authority_status="evidence_only",
+        ),
+    )
+    file_result = FileResult(sample_name="SampleA", results={"WithNL": result})
+
+    long_row = _long_output_rows(file_result, [target])[0]
+
+    assert long_row["Counted Detection"] == "TRUE"
+    assert long_row["Product State"] == "detected_flagged"
+    assert long_row["Reason"].startswith("decision: detected_flagged")
+    assert "not counted" not in long_row["Reason"]
+
+
+def test_long_row_confidence_follows_not_counted_projection() -> None:
+    target = _target("WithNL")
+    result = replace(
+        _result(nl=NLResult("OK", 125.0, 0.5, 1, 1, 1)),
+        confidence="HIGH",
+        reason="decision: accepted",
+        targeted_product_projection=TargetedProductProjection(
+            product_state="not_counted",
+            counted_detection=False,
+            review_state="review_required",
+            projection_reason=(
+                "decision: not_counted; "
+                "not_counted: missing_positive_ms1_peak"
+            ),
+            support_reasons=("candidate_aligned_ms2_nl",),
+            not_counted_reasons=("missing_positive_ms1_peak",),
+            legacy_evidence={"confidence": "HIGH", "nl_status": "OK"},
+            legacy_authority_status="evidence_only",
+        ),
+    )
+    file_result = FileResult(sample_name="SampleA", results={"WithNL": result})
+
+    long_row = _long_output_rows(file_result, [target])[0]
+
+    assert long_row["Product State"] == "not_counted"
+    assert long_row["Counted Detection"] == "FALSE"
+    assert long_row["Confidence"] == "VERY_LOW"
+    assert long_row["Reason"].startswith("decision: not_counted")
 
 
 def test_score_breakdown_csv_can_emit_ms2_trace_labels_without_schema_change(
@@ -327,10 +484,15 @@ def test_csv_rows_preserve_values_with_runtime_selected_hypothesis() -> None:
         fallback_file,
         [target],
     )
-    assert _long_output_rows(selected_file, [target]) == _long_output_rows(
-        fallback_file,
-        [target],
-    )
+    selected_long = _long_output_rows(selected_file, [target])[0]
+    fallback_long = _long_output_rows(fallback_file, [target])[0]
+    for header, fallback_value in fallback_long.items():
+        if header in {*TARGETED_PRODUCT_PROJECTION_HEADERS, "Reason"}:
+            continue
+        assert selected_long[header] == fallback_value
+    assert selected_long["Reason"].startswith("decision: detected_flagged")
+    assert selected_long["Product State"]
+    assert selected_long["Counted Detection"] in {"TRUE", "FALSE"}
 
 
 def test_csv_rows_project_selected_integration_values_when_present() -> None:
@@ -382,7 +544,7 @@ def test_csv_rows_project_selected_integration_values_when_present() -> None:
     assert long_row["PeakWidth"] == "0.4200"
     assert long_row["NL"] == "WARN_12.3ppm"
     assert long_row["Confidence"] == "LOW"
-    assert long_row["Reason"] == "concerns: local_sn (minor)"
+    assert long_row["Reason"] == "decision: detected_flagged; review: local_sn_minor"
 
 
 def test_csv_rows_preserve_no_peak_nd_projection() -> None:

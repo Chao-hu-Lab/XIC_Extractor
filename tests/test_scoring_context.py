@@ -10,7 +10,15 @@ from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.scoring_factory import build_scoring_context_factory
 from xic_extractor.ms2_trace_evidence import MS2TraceEvidence
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
-from xic_extractor.peak_scoring import score_candidate, select_candidate_with_confidence
+from xic_extractor.peak_detection.candidate_scoring import score_candidate
+from xic_extractor.peak_detection.candidate_selection import (
+    select_candidate_by_evidence,
+)
+from xic_extractor.peak_detection.ms1_morphology import (
+    DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+    MS1_MORPHOLOGY_AREA_SOURCE,
+    MS1_MORPHOLOGY_TRACE_METHOD,
+)
 from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import find_peak_and_area
 
@@ -39,6 +47,35 @@ def test_istd_context_uses_rolling_median_prior() -> None:
     assert ctx.rt_prior_sigma is None
     assert ctx.dirty_matrix is False
     assert ctx.prefer_rt_prior_tiebreak is False
+    assert ctx.active_trace_source == MS1_MORPHOLOGY_AREA_SOURCE
+    assert ctx.morphology_trace_method == MS1_MORPHOLOGY_TRACE_METHOD
+    assert ctx.morphology_trace_window_points == DEFAULT_GAUSSIAN15_WINDOW_POINTS
+    assert ctx.baseline_array is not None
+    assert np.all(ctx.baseline_array == 0.0)
+
+
+def test_scoring_context_uses_configured_ms1_morphology_smoothing_window() -> None:
+    factory = build_scoring_context_factory(
+        config=_config(ms1_morphology_smoothing_window_points=7),
+        injection_order={},
+        istd_rts_by_sample={},
+        rt_prior_library={},
+    )
+
+    builder = factory(
+        target=_target(label="ISTD-A", is_istd=True, istd_pair=""),
+        sample_name="S2",
+        rt=np.linspace(9.7, 10.3, 9),
+        intensity=np.array([0.0, 1.0, 4.0, 7.0, 10.0, 7.0, 4.0, 1.0, 0.0]),
+        istd_rt_in_this_sample=None,
+        paired_istd_fwhm=None,
+        nl_result=None,
+    )
+
+    ctx = builder(SimpleNamespace(selection_apex_index=4))
+
+    assert ctx.morphology_trace_method == MS1_MORPHOLOGY_TRACE_METHOD
+    assert ctx.morphology_trace_window_points == 7
 
 
 def test_analyte_context_uses_delta_rt_library_and_shape_ratio() -> None:
@@ -227,6 +264,14 @@ def test_scoring_context_copies_candidate_ms2_trace_strength() -> None:
             best_scan_rt=10.1,
             best_product_base_ratio=0.5,
             alignment_source="region",
+            ms1_peak_group_source="gaussian15_ms1_peak_group",
+            ms1_peak_group_rt_min=10.0,
+            ms1_peak_group_rt_max=10.2,
+            ms1_peak_group_trigger_scan_count=2,
+            ms1_peak_group_strict_nl_scan_count=2,
+            ms1_peak_group_strict_nl_event_count=1,
+            outside_ms1_peak_group_trigger_scan_count=1,
+            outside_ms1_peak_group_strict_nl_scan_count=0,
             trace=MS2TraceEvidence(
                 product_point_count=2,
                 product_apex_rt=10.1,
@@ -245,6 +290,14 @@ def test_scoring_context_copies_candidate_ms2_trace_strength() -> None:
     assert ctx.ms2_alignment_source == "region"
     assert ctx.trigger_scan_count == 2
     assert ctx.strict_nl_scan_count == 2
+    assert ctx.ms1_peak_group_source == "gaussian15_ms1_peak_group"
+    assert ctx.ms1_peak_group_rt_min == 10.0
+    assert ctx.ms1_peak_group_rt_max == 10.2
+    assert ctx.ms1_peak_group_trigger_scan_count == 2
+    assert ctx.ms1_peak_group_strict_nl_scan_count == 2
+    assert ctx.ms1_peak_group_strict_nl_event_count == 1
+    assert ctx.outside_ms1_peak_group_trigger_scan_count == 1
+    assert ctx.outside_ms1_peak_group_strict_nl_scan_count == 0
 
 
 def test_strict_nl_candidate_beats_candidate_with_trigger_but_failed_nl() -> None:
@@ -296,7 +349,7 @@ def test_strict_nl_candidate_beats_candidate_with_trigger_but_failed_nl() -> Non
         ),
     ]
 
-    selected = select_candidate_with_confidence(scored)
+    selected = select_candidate_by_evidence(scored)
 
     assert selected.candidate is candidate_with_nl
 
@@ -311,7 +364,10 @@ def test_scoring_context_caches_asls_inputs_per_xic(
         call_count += 1
         return np.zeros_like(values)
 
-    monkeypatch.setattr("xic_extractor.peak_scoring.asls_baseline", _fake_asls)
+    monkeypatch.setattr(
+        "xic_extractor.peak_detection.scoring_metrics.asls_baseline",
+        _fake_asls,
+    )
 
     rt = np.linspace(9.6, 10.4, 401)
     intensity = 300 * np.exp(-((rt - 10.00) / 0.03) ** 2)

@@ -1,9 +1,9 @@
 # Peak Pipeline Cleanup Roadmap Overview
 
 **Date:** 2026-05-24
-**Status:** Roadmap draft v0.4 — DESIGN CORRECTION APPLIED; method-preserving
-cleanup and handoff-spine work may proceed after Phase 1 closeout; C1b
-linear-edge retirement remains blocked
+**Status:** Roadmap closeout v0.5 — DESIGN CORRECTION APPLIED; C1a, C5,
+C1b linear-edge retirement, and C2 `arbitrated` retirement completed in the
+2026-06-01 cleanup-retirement branch; remaining cleanup is scoped follow-up
 **Sibling overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
 **2026-05-28 handoff mainline update:** the product-priority reset spec
 (`2026-05-28-product-priority-reset-decision-spec.md`) supersedes this roadmap's
@@ -25,6 +25,21 @@ peak-pipeline chapter of the broader
 Use the v2 roadmap for repo-wide cleanup sequencing, diagnostic lifecycle,
 dependency-direction cleanup, and dead-code classification. Use this file for
 the C1-C6 peak-pipeline cleanup slices only.
+**2026-06-01 current-state reassessment:** for remaining C2/C3/C4/C6 work, use
+[Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
+as the current interpretation. It supersedes older wording that treats
+`legacy_savgol` or CWT as straightforward deletion targets and reframes C4/C6
+as inventory/design-before-refactor work.
+**2026-06-01 one-goal execution contract:** if the remaining cleanup is executed
+as one runtime goal, use
+[Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
+for phase order, commit boundaries, validation, and stop rules.
+
+**2026-06-01 execution closeout:** the cleanup-retirement one-pass branch
+satisfied the C1b gate chain and retired `linear_edge` production/config
+behavior. It also retired only the `arbitrated` portion of C2. Treat older
+language below about C1b being blocked as historical rationale unless this
+closeout section or the C1b spec says otherwise.
 
 This file is the entrypoint for Phase 2 structural cleanup. It is the
 companion to the modernization roadmap. Phase 1 (the modernization overview)
@@ -56,9 +71,9 @@ Phase 2 — structural cleanup (C1a, C1b, C2 .. C6)
 Phase 2 introduces no production behavior by default. Every C-spec validation
 is "before and after this refactor produce byte-identical TSVs / hashes /
 matrix values". Behavior is locked to Phase 1's final state unless a separate
-behavior spec explicitly changes it. After the Phase 1 closeout, the next
-allowed work is method-preserving cleanup and handoff-spine scaffolding, not
-linear-edge deletion.
+behavior spec explicitly changes it. The 2026-06-01 cleanup-retirement branch
+is the explicit exception for the approved `linear_edge` and `arbitrated`
+retirements after their gates passed.
 
 ## 2026-05-26 Design Correction
 
@@ -69,8 +84,9 @@ handoff spine. The corrected strategy is:
   behavior;
 - treat current AsLS as `conditional_audit_promotion`, not production-ready
   baseline truth;
-- keep linear-edge retirement blocked until P2c reaches
-  `GO_FOR_LINEAR_EDGE_RETIREMENT`;
+- require P2c `GO_FOR_LINEAR_EDGE_RETIREMENT` before any linear-edge deletion;
+  the 2026-06-01 cleanup-retirement branch later satisfied this gate and
+  completed C1b;
 - describe `region_first_safe_merge` honestly as a compatibility name for
   conservative `local_minimum_with_wis_merge_v1` behavior;
 - keep P7/P7.5 on the critical path for any 85RAW-backed cleanup decision.
@@ -88,27 +104,31 @@ Listed in original cleanup-slice order. The corrected recommended order is in
      `xic_extractor/peak_detection/baseline.py`
    - keep the top-level module as a compatibility re-export unless a
      breaking-change note explicitly allows deletion
-   - can land first only after Phase 1 and P2b are stable
+   - landed in `codex/cleanup-retirement-foundation` with the top-level
+     compatibility shim preserved
 2. [C2 — Resolver collapse](2026-05-24-peak-pipeline-cleanup-resolver-collapse-spec.md)
-   - remove the `arbitrated` resolver mode (no production caller)
-   - retire the standalone `cwt` resolver_mode; keep `centwave_cwt` as a
-     proposal source only
-   - demote `legacy_savgol` from a top-level resolver_mode to a SG utility
+   - removed the `arbitrated` resolver mode after the one-shot 8RAW comparison
+     showed no material advantage
+   - older deletion-oriented wording about retiring CWT or demoting
+     `legacy_savgol` is superseded by the 2026-06-01 current-state
+     reassessment: keep `legacy_savgol` as a useful clean-trace /
+     compatibility path, keep local-minimum internals, and assess CWT as a
+     future evidence-chain source rather than dead code
    - converge on a single hypothesis-spine-based resolver
-   - can run in parallel with C1a
+   - remaining C2 work is follow-up; `legacy_savgol`, `local_minimum`, and
+     `region_first_safe_merge` compatibility remain accepted
 3. [C5 — Area integration single entry](2026-05-24-peak-pipeline-cleanup-area-integration-single-entry-spec.md)
    - converge the four baseline-corrected-area call sites onto one entry
    - thin adapters where production / audit needs differ
    - defines a local `AreaIntegrationResult`; C3 may later adopt or map it
-   - depends on C1a and P2b
+   - landed before C1b in the 2026-06-01 one-pass branch
 4. [C1b — Linear edge retirement](2026-05-24-peak-pipeline-cleanup-linear-edge-retirement-spec.md)
    - delete `integrate_linear_edge_baseline` and the
-     `integrate_with_baseline` selector wrapper after C5 has migrated all
-     callers
+     linear-edge selector support after C5 has migrated all callers
    - single AsLS source of truth on the area integration path
-   - depends on C5, C1a, P2c `GO_FOR_LINEAR_EDGE_RETIREMENT`, and a prior
-     rollback-column deprecation decision; do not start from P2b audit-promotion
-     evidence alone
+   - completed after C5, C1a, P2c/Tier C evidence, and rollback-column
+     deprecation gates passed; `integrate_with_baseline` remains only as an
+     AsLS-only compatibility guard that rejects `linear_edge`
 5. [C3 — Hypothesis model unification](2026-05-24-peak-pipeline-cleanup-hypothesis-model-unification-spec.md)
    - migrate `PeakCandidate` / `PeakResult` / `PeakDetectionResult`
      consumers to the `PeakHypothesis` / `EvidenceVector` /
@@ -121,11 +141,16 @@ Listed in original cleanup-slice order. The corrected recommended order is in
    - target: scorer, existing `peak_scoring_evidence.py`, local-S/N,
      severity gates, quality flags
    - depends on C3
+   - current-state reassessment says to rewrite this as an evidence-extraction /
+     evidence-interpretation / decision-policy design before implementing a
+     package split
 7. [C6 — Alignment grouping consolidation](2026-05-24-peak-pipeline-cleanup-alignment-grouping-consolidation-spec.md)
    - collapse the multiple owner / cluster / family / fold / consolidation
      stages into a smaller set of grouping primitives
    - pure Scope A refactor only; algorithm upgrades require a separate spec
    - depends on Phase 1 + P3 findings
+   - current-state reassessment says to run inventory and characterization
+     before extracting generic primitives
 
 Order rationale and dependencies are superseded by "Corrected Recommended
 Order" below.
@@ -173,17 +198,16 @@ Close or isolate in-flight behavior work
   -> peak-pipeline C-slices only when the relevant product decision allows them
 ```
 
-Within the peak-pipeline chapter, the corrected order remains:
+Within the peak-pipeline chapter, the current remaining-work order is:
 
 ```text
 Phase 1 conditional blockers resolved
   -> C0  roadmap correction / acceptance rules
-  -> C3a/C3b hypothesis spine scaffold + dual-write
-  -> C5  area integration single entry, method-preserving
-  -> C2  resolver naming/collapse on honest semantics
-  -> C4  peak_scoring split on hypothesis spine
-  -> C6  alignment grouping consolidation with golden parity
-  -> C1b linear edge retirement only after P2c truth validation
+  -> C2  resolver public-surface contract cleanup, preserving useful modes
+  -> CWT evidence-role inventory with a pre-registered gate
+  -> C3  current-state inventory + one parity-backed consumer migration
+  -> C4  evidence-decision design before scorer split
+  -> C6  grouping semantics inventory + characterization parity
 ```
 
 Dependencies:
@@ -193,8 +217,8 @@ Dependencies:
 - C3a/C3b should move earlier because the handoff spine is the main architecture
   boundary. Later cleanup should target this spine rather than the legacy table
   model.
-- C5 should be method-preserving until AsLS truth validation passes. It can
-  unify integration mechanics without deleting linear-edge.
+- C5 was method-preserving until AsLS truth validation passed. It unified
+  integration mechanics before the later C1b deletion.
 - C2 should not describe `region_first_safe_merge` as true region-first. Treat
   it as conservative `local_minimum_with_wis_merge_v1` unless a future v2 spec
   implements primary region/hypothesis enumeration.
@@ -202,9 +226,9 @@ Dependencies:
   hypothesis spine is already visible.
 - C6 requires golden parity for matrix/review/cells and should not proceed as a
   casual grouping refactor.
-- C1b is last. Deleting linear-edge requires C1a, C5 migration, P2c
-  `GO_FOR_LINEAR_EDGE_RETIREMENT`, and deprecation of P2b temporary linear-edge
-  rollback columns.
+- C1b is complete for `linear_edge`. Deleting any future baseline method still
+  requires the same pattern: migration, truth evidence, and audit schema
+  deprecation before removal.
 
 ## Cleanup Hooks Phase 1 Should Provide
 
@@ -217,8 +241,10 @@ modernization overview and re-stated in each P-spec. Examples:
 - P4 places `residual_mad` on the integration/audit boundary so Phase 2 C5
   can carry the value through its local result DTO without a wider refactor.
 - P5's `cwt_audit_filter_reason` column is the single canonical marker
-  Phase 2's C2 uses to identify CWT audit rows for bulk removal when
-  retiring the resolver.
+  Phase 2's C2 historically planned to use for CWT audit-row cleanup. The
+  2026-06-01 current-state reassessment supersedes bulk-removal assumptions:
+  CWT should first be assessed as an evidence-chain source with a pre-registered
+  promote / keep-audit / externalize-or-kill gate.
 - P3 and P6 diagnostic scripts live in `tools/diagnostics/` and never
   imported by `xic_extractor/` production code. Phase 2 can move or delete
   them without touching production.
@@ -286,8 +312,9 @@ land. That is the cost of doing structural work safely.
 - C6 alignment grouping consolidation is Scope A only in this roadmap.
   Any graph-based or EM-style algorithm upgrade is a separate behavior
   spec after Phase 1 evidence.
-- The `arbitrated` resolver mode is user-confirmed as an experimental algorithm
-  whose retirement direction is accepted. C2 still needs the public config
-  migration and one-shot scan named by its spec before deletion.
+- The `arbitrated` resolver mode was user-confirmed as an experimental
+  algorithm and is now retired. C2 still has remaining follow-up work for
+  resolver public-surface contract cleanup, `legacy_savgol` compatibility,
+  local-minimum internals, CWT evidence-chain assessment, and resolver naming.
 
 Each C-spec restates the open questions relevant to its scope.

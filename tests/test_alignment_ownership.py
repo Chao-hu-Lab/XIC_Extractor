@@ -197,7 +197,7 @@ def test_build_sample_local_owners_uses_batch_source_when_available() -> None:
     assert len(result.assignments) == 2
 
 
-def test_sample_local_owner_uses_padded_candidate_peak_bounds_for_xic_request() -> None:
+def test_sample_local_owner_uses_candidate_anchored_quantitation_context() -> None:
     candidate = _candidate(
         "s1#bounded",
         seed_rt=9.10,
@@ -219,8 +219,8 @@ def test_sample_local_owner_uses_padded_candidate_peak_bounds_for_xic_request() 
 
     assert len(result.owners) == 1
     _mz, rt_min, rt_max, _ppm = source.calls[0]
-    assert rt_min == pytest.approx(8.90)
-    assert rt_max == pytest.approx(9.30)
+    assert rt_min == pytest.approx(8.60)
+    assert rt_max == pytest.approx(9.60)
 
 
 @pytest.mark.parametrize(
@@ -233,8 +233,8 @@ def test_sample_local_owner_uses_padded_candidate_peak_bounds_for_xic_request() 
                 "ms1_peak_rt_start": 9.00,
                 "ms1_peak_rt_end": 9.20,
             },
-            8.90,
-            9.30,
+            8.60,
+            9.60,
         ),
         (
             {

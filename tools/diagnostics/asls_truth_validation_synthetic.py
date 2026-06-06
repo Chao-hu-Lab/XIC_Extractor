@@ -32,8 +32,8 @@ from tools.diagnostics.asls_truth_validation_models import (
 )
 from xic_extractor.peak_detection.baseline import (
     BaselineIntegration,
+    bounded_trace_interval,
     integrate_asls_baseline,
-    integrate_linear_edge_baseline,
 )
 from xic_extractor.peak_detection.integration import integrate_area_counts_seconds
 
@@ -141,7 +141,7 @@ def compare_synthetic_trace(
         trace.left_index,
         trace.right_index,
     )
-    linear_edge = integrate_linear_edge_baseline(
+    linear_edge = _integrate_historical_linear_edge_baseline(
         trace.intensity_values,
         trace.rt_values,
         trace.left_index,
@@ -162,6 +162,36 @@ def compare_synthetic_trace(
         linear_edge=linear_edge,
         asls=asls,
         reference_nonblank_median_true_area=reference_nonblank_median_true_area,
+    )
+
+
+def _integrate_historical_linear_edge_baseline(
+    intensity_values: np.ndarray,
+    rt_values: np.ndarray,
+    left: int,
+    right: int,
+) -> BaselineIntegration:
+    """Historical comparator retained only for locked retirement evidence."""
+    rt = np.asarray(rt_values, dtype=float)
+    intensity = np.asarray(intensity_values, dtype=float)
+    left_index, right_index = bounded_trace_interval(left, right, len(rt))
+    segment = intensity[left_index:right_index]
+    segment_rt = rt[left_index:right_index]
+    baseline = np.linspace(float(segment[0]), float(segment[-1]), len(segment))
+    corrected = np.maximum(segment - baseline, 0.0)
+    corrected_area = integrate_area_counts_seconds(
+        corrected,
+        segment_rt,
+        0,
+        len(segment),
+    )
+    raw_area = integrate_area_counts_seconds(intensity, rt, left_index, right_index)
+    baseline_score = corrected_area / raw_area if raw_area else None
+    return BaselineIntegration(
+        area_baseline_corrected=corrected_area,
+        area_uncertainty=None,
+        baseline_type="historical_linear_edge",
+        baseline_score=baseline_score,
     )
 
 

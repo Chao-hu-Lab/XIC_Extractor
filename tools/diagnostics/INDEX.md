@@ -1,9 +1,11 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last generated:** 2026-05-30
-**Total entry-points:** 42
-**Total files (incl. helpers):** ~116
+**Last refreshed:** 2026-06-05
+**Total entry-points:** 56
+**Total files (incl. helpers):** 138 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
+**Count method:** top-level `### *.py` entry headings for entry-points;
+top-level `tools/diagnostics/*.py` files for total files.
 
 ---
 
@@ -22,14 +24,14 @@
 ## Table of Contents
 
 1. [Phase Gates (P1/P2/P2b/P2c/P7)](#phase-gates-p1p2p2bp2cp7) — 7 tools
-2. [Evidence Consistency](#evidence-consistency) — 3 tools
+2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
 4. [Backfill Reviews](#backfill-reviews) — 7 tools
-5. [Peak / Candidate Audits](#peak--candidate-audits) — 2 tools
-6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 6 tools
+5. [Peak / Candidate Audits](#peak--candidate-audits) — 6 tools
+6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 7 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
-8. [Family / Overlay Visualization](#family--overlay-visualization) — 3 tools
-9. [Area / Region Audits](#area--region-audits) — 2 tools
+8. [Family / Overlay Visualization](#family--overlay-visualization) — 4 tools
+9. [Area / Region Audits](#area--region-audits) — 4 tools
 10. [One-off Fixtures](#one-off-fixtures) — 1 tool
 
 ---
@@ -52,7 +54,7 @@ per the lifecycle spec.
 
 ### `p2_asls_shadow_gate.py`
 
-**Purpose**: Gate P2 AsLS baseline area against linear-edge integration audit rows for targeted ISTD benchmark selections; supports both legacy AsLS-shadow and promoted AsLS schemas.
+**Purpose**: Gate P2 AsLS baseline area against historical linear-edge integration audit rows for targeted ISTD benchmark selections; supports both legacy AsLS-shadow and promoted AsLS schemas.
 **Topic group**: `p2_asls_shadow_gate.py`
 **Originating spec**: `2026-05-24-peak-pipeline-area-baseline-asls-spec.md`
 **Recent doc**: `plans/2026-05-25-p2-asls-baseline-shadow-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
@@ -61,7 +63,7 @@ per the lifecycle spec.
 
 ### `p2_baseline_truth_audit.py`
 
-**Purpose**: Build a diagnostic-only baseline truth audit for P2/P2b AsLS gate ISTD families; compares linear-edge rollback against promoted AsLS when available.
+**Purpose**: Build a diagnostic-only baseline truth audit for P2/P2b AsLS gate ISTD families; compares historical linear-edge rollback against promoted AsLS when legacy evidence is available.
 **Topic group**: `p2_baseline_truth_audit.py`
 **Originating spec**: `2026-05-24-peak-pipeline-area-baseline-asls-spec.md` (shared with shadow gate)
 **Recent doc**: `plans/2026-05-25-p2-baseline-truth-audit-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
@@ -82,7 +84,7 @@ per the lifecycle spec.
 **Purpose**: Run the P2c AsLS truth-validation gate with Tier A selected-family guard, locked synthetic Tier B1/B2 benchmark, optional Tier C evidence, methodology waiver documentation, retirement prerequisite manifest, and deletion-safe exit codes.
 **Topic group**: `asls_truth_validation.py` + `_models`, `_manifests`, `_synthetic`, `_inputs`, `_analysis` (6 files)
 **Originating spec/plan**: `specs/2026-05-26-peak-pipeline-asls-truth-validation-spec.md`, `plans/2026-05-27-p2c-tier-b-b1-b2-redesign-plan.md`
-**Current gate note**: Exit `0` is reserved for true linear-edge retirement authority. B1 relevance fixtures are the only synthetic layer that can drive `decision_target=c1b-plan`; B2 stress evidence is reported for retirement/Tier C follow-up and must not by itself create a C1b no-go. v1 fixture outputs are non-authoritative under the B1/B2 contract and should be treated as `LEGACY_V1_NON_AUTHORITATIVE` / `INCONCLUSIVE_FIXTURE_SCOPE_MISMATCH`.
+**Current gate note**: Exit `0` was the true linear-edge retirement authority consumed by the 2026-06-01 Phase 6b/Phase 7 closeout. B1 relevance fixtures are the only synthetic layer that can drive `decision_target=c1b-plan`; B2 stress evidence is reported for retirement/Tier C follow-up and must not by itself create a C1b no-go. v1 fixture outputs are non-authoritative under the B1/B2 contract and should be treated as `LEGACY_V1_NON_AUTHORITATIVE` / `INCONCLUSIVE_FIXTURE_SCOPE_MISMATCH`. After Phase 7, any linear-edge references here are historical comparison evidence, not maintained production selector support.
 
 ---
 
@@ -106,9 +108,10 @@ per the lifecycle spec.
 ## Evidence Consistency
 
 Compare evidence rows produced by parallel pipelines (targeted vs untargeted,
-spine vs cell). The two tools below share low-level diagnostic IO helpers, but
-keep separate row models because their output schemas are intentionally
-different; see `2026-05-26-diagnostic-lifecycle-audit-note.md` Cluster 1.
+spine vs cell) and shared-identity sidecars. The tools below share low-level
+diagnostic IO helpers where their schemas permit it, but keep separate row
+models because their output schemas are intentionally different; see
+`2026-05-26-diagnostic-lifecycle-audit-note.md` Cluster 1.
 
 ### `evidence_spine_consistency.py`
 
@@ -124,7 +127,7 @@ different; see `2026-05-26-diagnostic-lifecycle-audit-note.md` Cluster 1.
 **Purpose**: Compare targeted reliability and peak candidate evidence.
 **Topic group**: `cross_report_evidence_consistency.py` + `_io`, `_models`, `_analysis`, `_writers` (5 files)
 **Originating spec**: (none found — likely landed alongside post-PR60 cleanup; see `2026-05-24-post-pr60-codebase-cleanup-spec.md` Workstream G context)
-**Duplication note**: Low-level parsing/writing helpers are consolidated through `diagnostic_io.py`; row dataclasses stay separate because the schemas differ.
+**Duplication note**: Low-level parsing/writing helpers are consolidated through `xic_extractor/diagnostics/diagnostic_io.py`; `tools/diagnostics/diagnostic_io.py` remains a compatibility shim. Row dataclasses stay separate because the schemas differ.
 
 ---
 
@@ -151,7 +154,64 @@ different; see `2026-05-26-diagnostic-lifecycle-audit-note.md` Cluster 1.
 **Purpose**: Apply accepted `shared_peak_identity_activation_*` sidecars to alignment product outputs.
 **Topic group**: `shared_peak_identity_explanation.py` + `xic_extractor/alignment/shared_peak_identity_explanation/product_activation.py`
 **Originating spec/plan**: `specs/2026-05-30-sidecar-to-product-label-activation-contract.md`
-**Status note**: This is the explicit sidecar-to-product bridge. It requires `activation_acceptance_status=pass` by default. `--output-mode activated-copy` writes `alignment_matrix_activated.tsv`, `alignment_review_activated.tsv`, and `alignment_cells_activated.tsv`; `--output-mode formal` writes the formal downstream contract files `alignment_matrix.tsv`, `alignment_review.tsv`, and `alignment_cells.tsv` in the requested output directory. Formal matrix output uses `peak_hypothesis_id` as row identity and keeps `feature_family_id` as provenance; rows without split/wrong-peak/mode evidence use `<feature_family_id>::family_projection` with `row_identity_basis=family_projection_no_split_evidence`, which is a blocker for complete canonical row-identity readiness. The application summary discloses this limited claim with `canonical_row_identity_ready=FALSE`, `canonical_row_identity_blockers=family_projection_present`, `canonical_row_identity_scope=partial_peak_hypothesis_with_family_projections`, `family_projection_semantics=projection_not_split_proof`, and `all_family_split_science_ready=FALSE`, so projection rows are not misread as exhaustive split-science proof. Optional `--legacy-rt-row-oracle-xlsx` adds context-only `legacy_rt_row_context_id` hints from a legacy MZmine RT-row workbook but does not mint product identities; matching outputs report `legacy_rt_row_context_authority=context_only_not_identity_authority`. Both modes also write `activation_application_summary.tsv` and `activation_value_delta.tsv`. Existing matrix values are preserved; only missing `auto_activate` cells are written, while `auto_block` cells can be blanked or family promotion can be blocked. `activation_value_delta.tsv` records original value, activated value, source cell area, effect, and `value_changed` for review. If multiple provenance rows share one formal hypothesis/sample value, the temporary pre-AsLS policy records the conflict and keeps the larger numeric value. Formal mode refuses to overwrite source alignment TSVs unless `--allow-overwrite-source` is passed. `--require-complete-peak-hypothesis-identity` now fails when family projections remain. The `--allow-non-passing-acceptance` flag is a diagnostic override only and must not be used for product claims.
+**Status note**: This is the explicit sidecar-to-product bridge. It requires
+`activation_acceptance_status=pass` by default. `--output-mode activated-copy`
+writes `alignment_matrix_activated.tsv`, `alignment_review_activated.tsv`, and
+`alignment_cells_activated.tsv`; `--output-mode formal` writes the formal
+downstream contract files `alignment_matrix.tsv`, `alignment_review.tsv`, and
+`alignment_cells.tsv` in the requested output directory. Formal
+`alignment_matrix.tsv` remains the downstream `Mz` / `RT` / sample-column
+matrix; `peak_hypothesis_id` is written to
+`activation_hypothesis_identity.tsv` as an identity/provenance sidecar, not as a
+replacement matrix row key. Formal mode also writes
+`alignment_matrix_identity.tsv` with `matrix_row_index`, `Mz`, `RT`,
+`peak_hypothesis_id`, and `source_feature_family_ids` so downstream tools such
+as `targeted_istd_benchmark.py` can read the public matrix directly. When the
+source matrix is already the public
+`Mz` / `RT` / sample-column matrix, `--alignment-matrix-identity-tsv` supplies
+the bridge back to internal provenance and `feature_family_id` remains
+debug/provenance only. Optional `--rt-mode-evidence-tsv` lets formal output use
+matching typed mode `raw_selected_rt` values as area-weighted
+PeakHypothesis-level RT centers for split rows; rows without matching typed mode
+evidence fall back to their source family RT and disclose that fallback through
+`alignment_matrix_identity.tsv:center_rt_basis`. Optional
+`--candidate-ms2-pattern-evidence-tsv`,
+`--ms1-pattern-coherence-evidence-tsv`,
+`--qc-ms1-pattern-reference-evidence-tsv`, and
+`--matrix-rt-drift-policy-tsv` project typed shared-peak evidence into rescued
+cell `backfill_*` fields so the downstream backfill promotion gate can consume
+RT, MS1 pattern/QC, and MS2/NL opportunity facts from the same activation
+output. Missing sidecars do not invent support; stale cells without projection
+columns remain fail-closed for gate/report consumers. Formal activation keeps
+`feature_family_id` as provenance/debug only and treats `peak_hypothesis_id` as
+the internal product identity sidecar. By default, unresolved rows without
+split/wrong-peak/mode evidence are excluded from emitted `alignment_matrix.tsv`
+and reported in `family_projection_rows_excluded` /
+`family_projection_cells_excluded`. These exclusions keep
+`canonical_row_identity_ready=FALSE` with
+`canonical_row_identity_blockers=family_projection_excluded_incomplete_scope`;
+projection-free emitted rows are not proof that the full legacy family matrix has
+been completely split. `--exclude-family-projections` is the formal-mode default
+and remains as a compatibility flag. `--include-family-projections` is
+diagnostic-only opt-in: it writes `<feature_family_id>::family_projection` rows
+with `row_identity_basis=family_projection_no_split_evidence`, reports
+`canonical_row_identity_blockers=family_projection_present`, and must not be
+handed to downstream as a product matrix. `--require-complete-peak-hypothesis-identity`
+must fail while included or excluded projection rows remain. Optional
+`--legacy-rt-row-oracle-xlsx` adds
+context-only `legacy_rt_row_context_id` hints from a legacy MZmine RT-row
+workbook but does not mint product identities; matching outputs report
+`legacy_rt_row_context_authority=context_only_not_identity_authority`. Both
+modes also write `activation_application_summary.tsv` and
+`activation_value_delta.tsv`. Existing matrix values are preserved; only missing
+`auto_activate` cells are written, while `auto_block` cells can be blanked or
+family promotion can be blocked. `activation_value_delta.tsv` records original
+value, activated value, source cell area, effect, and `value_changed` for
+review. If multiple provenance rows share one formal hypothesis/sample value,
+the temporary pre-AsLS policy records the conflict and keeps the larger numeric
+value. Formal mode refuses to overwrite source alignment TSVs unless
+`--allow-overwrite-source` is passed. `--allow-non-passing-acceptance` is a
+diagnostic override only and must not be used for product claims.
 
 ---
 
@@ -175,10 +235,10 @@ different; see `2026-05-26-diagnostic-lifecycle-audit-note.md` Cluster 1.
 
 ### `build_peak_hypothesis_matrix.py`
 
-**Purpose**: Build a diagnostic PeakHypothesis-assigned `alignment_matrix.tsv` before product activation by consuming source alignment TSVs plus `shared_peak_identity_peak_hypothesis_selection.tsv`, optional `shared_peak_identity_hypothesis_consistency.tsv`, and optional RAW-backed `family_ms1_overlay_*` trace-data JSONs with mode windows.
+**Purpose**: Build a diagnostic PeakHypothesis-assigned construction artifact before product activation by consuming source alignment TSVs plus `shared_peak_identity_peak_hypothesis_selection.tsv`, optional `shared_peak_identity_hypothesis_consistency.tsv`, and optional RAW-backed `family_ms1_overlay_*` trace-data JSONs with mode windows.
 **Topic group**: `shared_peak_identity_explanation.py` + `xic_extractor/alignment/shared_peak_identity_explanation/peak_hypothesis_matrix.py`
 **Originating spec/plan**: `specs/2026-05-30-sidecar-to-product-label-activation-contract.md`
-**Status note**: This is the first matrix-construction boundary for mode-aware identity. It writes `alignment_matrix.tsv`, `peak_hypothesis_inventory.tsv`, `peak_hypothesis_cell_assignments.tsv`, and `peak_hypothesis_matrix_summary.tsv` in a separate output directory. The matrix row identity is `peak_hypothesis_id`; explicit product-candidate modes use `row_identity_basis=matrix_construction_peak_hypothesis`, unresolved legacy cells use `<feature_family_id>::family_projection` with `row_identity_basis=family_projection_no_split_evidence`, and hard split/wrong-peak consistency blockers are recorded in assignments but not written to the matrix. When `--overlay-trace-data-json` is supplied, each declared `mode_windows` peak with RAW trace signal is enumerated as an expanded candidate row before matrix output, so two peaks from the same `feature_family_id` can both enter the matrix as independent `peak_hypothesis_id` rows instead of competing through retarget. Any product-status fields embedded in overlay JSON `mode_windows` are ignored and demoted to `raw_mode_review_only`; only typed PeakHypothesis selection rows can supply product-facing authority. Untyped mode windows and raw-apex inferred windows are review-only expanded candidates: they use `construction_assignment_status=expanded_candidate`, default to `candidate_value_basis=raw_overlay_window_trapezoid_area`, set `canonical_row_identity_ready=FALSE` with `canonical_row_identity_blockers=raw_mode_review_only`, and must not be treated as product-ready row identity until a typed mode-hypothesis contract supplies explicit iRT/manual/tag-confirmed status. Family projection rows set `canonical_row_identity_blockers=family_projection_present`; they are acceptable bridge rows but not proof of complete canonical identity. Cells with source `alignment_cells.tsv` area but no source matrix value are recorded as candidate context only (`matrix_value_effect=source_matrix_value_missing`) until quantification/baseline policy is wired. This tool is `diagnostic_only`: it proves that split/wrong-peak separation can happen before matrix output, but it does not mutate source alignment artifacts or claim all-family split-science readiness.
+**Status note**: This is the first construction boundary for mode-aware identity, not the final downstream matrix contract. It writes `alignment_matrix.tsv`, `peak_hypothesis_inventory.tsv`, `peak_hypothesis_cell_assignments.tsv`, and `peak_hypothesis_matrix_summary.tsv` in a separate output directory as diagnostic construction artifacts. In this artifact, row identity is `peak_hypothesis_id`; explicit product-candidate modes use `row_identity_basis=matrix_construction_peak_hypothesis`, unresolved legacy cells use `<feature_family_id>::family_projection` with `row_identity_basis=family_projection_no_split_evidence`, and hard split/wrong-peak consistency blockers are recorded in assignments but not written to the artifact matrix. This `alignment_matrix.tsv` must not be handed to downstream as the final matrix until it is converted back into the public `Mz` / `RT` / sample-column contract with a separate hypothesis identity sidecar. When `--overlay-trace-data-json` is supplied, each declared `mode_windows` peak with RAW trace signal is enumerated as an expanded candidate row before matrix construction, so two peaks from the same `feature_family_id` can both enter the construction artifact as independent `peak_hypothesis_id` rows instead of competing through retarget. Any product-status fields embedded in overlay JSON `mode_windows` are ignored and demoted to `raw_mode_review_only`; only typed PeakHypothesis selection rows can supply product-facing authority. Untyped mode windows and raw-apex inferred windows are review-only expanded candidates: they use `construction_assignment_status=expanded_candidate`, default to `candidate_value_basis=raw_overlay_window_trapezoid_area`, set `canonical_row_identity_ready=FALSE` with `canonical_row_identity_blockers=raw_mode_review_only`, and must not be treated as product-ready row identity until a typed mode-hypothesis contract supplies explicit iRT/manual/tag-confirmed status. Family projection rows set `canonical_row_identity_blockers=family_projection_present`; they are acceptable bridge rows but not proof of complete canonical identity. Cells with source `alignment_cells.tsv` area but no source matrix value are recorded as candidate context only (`matrix_value_effect=source_matrix_value_missing`) until quantification/baseline policy is wired. `--require-complete-peak-hypothesis-identity` now fails unless the summary reports `canonical_row_identity_ready=TRUE`, so projection-heavy diagnostic outputs cannot be mistaken for promotion-ready matrices. This tool is `diagnostic_only`: it proves that split/wrong-peak separation can happen before matrix output, but it does not mutate source alignment artifacts, does not define the downstream `Mz` / `RT` / sample-column matrix, and does not claim all-family split-science readiness.
 
 ---
 
@@ -334,6 +394,77 @@ existing review/economics axes remain pending cleanup per audit-note Cluster 2.
 
 ---
 
+### `selected_envelope_review_queue.py`
+
+**Purpose**: Build `diagnostic_only` selected-envelope changed-row and boundary-oracle review queue artifacts from `selected_envelope_diagnostics.tsv`.
+**Topic group**: `selected_envelope_review_queue.py` + `xic_extractor/peak_detection/selected_envelope_*`
+**Originating spec/plan**: `specs/2026-06-03-selected-full-envelope-quantitation-boundary-spec.md`; `plans/2026-06-03-selected-full-envelope-quantitation-boundary-implementation-goal.md`
+**Status note**: Writes `selected_envelope_changed_rows.tsv`, `selected_envelope_oracle_review_queue.tsv`, `selected_envelope_diagnostic_manifest.tsv`, and `selected_envelope_review_queue.json` under an explicit output directory. This tool only packages the audit sidecar for manual/expert boundary review; it does not run RAW files, mutate selected `IntegrationResult`, change targeted workbook/CSV `Area`, or authorize FE4/8RAW by itself.
+
+---
+
+### `selected_envelope_plot_review.py`
+
+**Purpose**: Render `diagnostic_only` selected-envelope boundary review plots from selected-envelope diagnostic rows, showing RAW XIC, AsLS baseline, Gaussian15 morphology overlay, resolver interval, selected envelope, optional manual/expert oracle overlay, and quantitation context in one figure.
+**Topic group**: `selected_envelope_plot_review.py` + `xic_extractor/peak_detection/selected_envelope_*`
+**Originating spec/plan**: `specs/2026-06-03-selected-full-envelope-quantitation-boundary-spec.md`; `plans/2026-06-03-selected-full-envelope-quantitation-boundary-implementation-goal.md`
+**Status note**: Re-reads RAW files for bounded manual/expert review only. It can consume an optional `selected_envelope_boundary_oracle.tsv` / boundary-oracle TSV to draw expert-reviewed RT windows and record selected candidate id plus oracle id/source/status in `selected_envelope_plot_index.tsv`. It can also consume `chrom_peak_segment_review_rows.tsv` from `chrom_peak_segment_candidate_gate.py` to force explicit review-only segment rows into the plot index. Gaussian15-smoothed positive AsLS residual is now the active MS1 morphology/final area source; the plot overlay is only a renderer of that evidence and not an exact clone of Xcalibur's proprietary smoothing. Active boundary promotion is owned by segment-native package logic: normal rows use the selected-apex segment, while selected-envelope `context_apex_conflict` rows may switch to the dominant Gaussian15 peak group inside the reviewed envelope and extend its Gaussian tail without crossing the next independent segment. This plotter renders selected-envelope and segment evidence only. Plot overlays fail closed unless oracle rows are `expert_reviewed` with manual/expert sources (`manual_overlay`, `expert_overlay`, or `manual_2raw`); targeted workbook control rows remain benchmark-only and are not drawn as boundary truth. It writes PNG/PDF overlays and `selected_envelope_plot_index.tsv`; it does not mutate selected `IntegrationResult`, change targeted workbook/CSV `Area`, or promote selected-envelope behavior by itself.
+
+---
+
+### `chrom_peak_segment_candidate_gate.py`
+
+**Purpose**: Summarize scored `chrom_peak_segment` candidate adoption from
+`peak_candidates.tsv`, compare selected-row area deltas against a baseline
+candidate TSV, and emit a segment-native gate manifest plus changed-row TSV.
+**Topic group**: `chrom_peak_segment_candidate_gate.py` (single-file)
+**Originating spec/plan**:
+`specs/2026-06-03-selected-full-envelope-quantitation-boundary-spec.md`;
+`notes/2026-06-04-chrom-peak-segment-overlay-evidence.md`
+**Status note**: Writes
+`chrom_peak_segment_gate_manifest.json` and
+`chrom_peak_segment_changed_rows.tsv`, plus
+`chrom_peak_segment_review_rows.tsv`. This is a product-candidate diagnostic
+gate for segment enumeration, not a selected-envelope promotion gate. It reports
+boundary and presence sub-gates separately so area/boundary regressions do not
+get mixed with analyte false-pick or review-only detection policy risk. Manual
+presence review verdicts such as `expected_peak_change`, `blocked`,
+`false_pick`, `inconclusive`, and `needs_followup` keep the presence gate in
+`defer` until the product-selection or review policy is resolved. Optional
+`--manual-selected-envelope-review-tsv` rows are matched by
+`selected_candidate_id`; `extend_right_boundary_before_promotion` keeps the
+boundary gate in `defer`, while
+`select_alternate_or_keep_not_counted_until_rerun` keeps the presence gate in
+`defer`. Typed `decision: not_counted` review-only rows with explicit
+not-counted policy evidence are diagnostic non-presence rows and do not require a
+manual presence verdict. These rows are review comments / promotion blockers,
+not formal boundary+area oracle rows.
+
+---
+
+### `ms1_peak_group_nl_scope_gate.py`
+
+**Purpose**: Gate selected `chrom_peak_segment` candidate MS2/NL evidence so
+strict neutral-loss support must belong to the same Gaussian15 MS1 peak group,
+not merely the same target or candidate window.
+**Topic group**: `ms1_peak_group_nl_scope_gate.py` (single-file)
+**Originating note**: 2026-06-05 Gaussian15 MS1 peak-group MS2/NL ownership
+production-readiness follow-up.
+**Status note**: Consumes `peak_candidates.tsv` rows with
+`ms1_peak_group_*` and `outside_ms1_peak_group_*` diagnostics, writes
+`ms1_peak_group_nl_scope_gate_manifest.json` plus
+`ms1_peak_group_nl_scope_review_rows.tsv` and the non-blocking
+`ms1_peak_group_nl_scope_context_rows.tsv`. It fails closed when a selected
+chrom peak segment lacks Gaussian15 MS1 peak-group scope, uses an unexpected
+group source, has a selected apex outside the group bounds, or appears to borrow
+active strict NL support from outside that selected group. Repeated DDA/NL scans
+inside the same selected group are counted as multiple scans but one
+chromatographic support event; outside strict-NL observations with valid
+in-group support are listed for review context only. This gate does not mutate
+workbook, matrix, or candidate-selection outputs.
+
+---
+
 ## Targeted Benchmarks & Reviews
 
 ### `targeted_istd_benchmark.py`
@@ -374,6 +505,14 @@ existing review/economics axes remain pending cleanup per audit-note Cluster 2.
 **Purpose**: Build a single-dR production gate decision report.
 **Topic group**: `single_dr_production_gate_decision_report.py` + `single_dr_gate_decision_{loaders, writers}` (3 files)
 **Originating spec**: `2026-05-16-module-responsibility-inventory.md:29` (designated PR2 split target)
+**Status note**: The report now writes both review summaries and product-facing
+gate artifacts. `single_dr_gate_activation_decisions.tsv` translates implemented
+row-level gate candidates into activation rows, and
+`single_dr_gate_changed_row_bundle.tsv` records the required changed-row review
+fields for every product-affecting row removal. These files are intended to feed
+`apply_shared_peak_identity_activation.py`; after activation is applied, rerun
+the gate and require zero pending activation-decision rows before claiming the
+8RAW slice has no remaining product mutation.
 
 ---
 
@@ -383,6 +522,27 @@ existing review/economics axes remain pending cleanup per audit-note Cluster 2.
 **Topic group**: `multi_tag_adduct_audit.py` (single-file)
 **Originating spec**: `2026-05-15-multi-nl-tag-and-artificial-adduct-contract.md`
 **Recent doc**: `plans/2026-05-15-multi-nl-tag-and-artificial-adduct-plan.md`
+
+---
+
+### `build_target_pair_expected_diff_approval_registry.py`
+
+**Purpose**: Convert explicitly user-approved `target_pair_rt_auto_reselection.tsv`
+rows into a durable `model_selection_expected_diff_approval_registry` TSV for
+guarded targeted product mutation.
+**Topic group**: `build_target_pair_expected_diff_approval_registry.py`
+(single-file)
+**Originating spec**:
+`specs/2026-06-03-target-pair-rt-auto-reselection-spec.md`
+**Status note**: Requires repeated `--approved-row SAMPLE::TARGET` inputs and
+fails closed unless each row is a `row_approval_candidate` shadow switch with
+matching runtime `expected_diff_stable_row_id`, selected-candidate RT, and
+paired area ratio `within_robust_range`. The active paired-area ratio basis is
+the counted leave-one-out median +/- 3 scaled-MAD target/ISTD reference owned by
+`xic_extractor.extraction.paired_area_ratio_projection`; the diagnostic writer
+renders that product evidence and must not reintroduce min/max or
+all-reported-area authority. It does not auto-approve all watch rows and does
+not recompute candidate evidence.
 
 ---
 
@@ -440,8 +600,10 @@ are not daily).
 
 ## Family / Overlay Visualization
 
-Matplotlib-rendered MS1 overlay visuals for human review of family-level
-backfill candidates.
+Matplotlib-rendered MS1 overlay visuals for human review of backfill candidates.
+Family-level overlays are context; mode-aware outputs should use
+`peak_hypothesis_id` / selected-apex mode evidence when a row may contain
+multiple MS1 peak modes.
 
 ### `family_ms1_overlay_plot.py`
 
@@ -459,6 +621,29 @@ backfill candidates.
 
 ---
 
+### `changed_row_mode_overlay_review.py`
+
+**Purpose**: Convert changed-row family MS1 overlay trace JSONs into a
+mode-aware review surface: RAW selected-apex RT-mode evidence TSV,
+PeakHypothesis review projection TSV, per-sample mode review TSV,
+per-family summary TSV, review-only similarity TSV/summary, Gaussian15-smoothed
+mode-colored PNGs, and an HTML gallery.
+**Topic group**: consumes `family_ms1_overlay_batch.py` trace JSONs plus
+`alignment_matrix_identity.tsv`; reuses
+`xic_extractor/alignment/shared_peak_identity_explanation/rt_mode_evidence.py`
+and `peak_hypothesis_selection.py`.
+**Status note**: This tool keeps `feature_family_id` as provenance only. RAW
+overlay-derived modes are emitted as review-only evidence, not typed iRT or
+product authority. Optional matrix RT drift and MS1 pattern sidecars are
+reported in the review-only similarity panel, which computes
+Gaussian15-smoothed apex-aligned shape similarity within the selected mode and
+badges wrong-apex, partial-shape, multimodal-family, and coherent-review cases.
+The similarity badge is a human triage aid, not a product gate. It is intended
+for changed-row adjudication where a plain family overlay can hide
+selected-apex multimodality or global trace apex conflicts.
+
+---
+
 ### `qc_ms1_pattern_reference.py`
 
 **Purpose**: Build a `diagnostic_only` nearest-injection-QC MS1 pattern reference sidecar from `family_ms1_overlay_plot` RAW trace JSON plus SampleInfo injection order; reports whether the closest QC supports, conflicts with, or cannot adjudicate a reviewed sample's selected MS1 peak.
@@ -469,13 +654,45 @@ backfill candidates.
 
 ## Area / Region Audits
 
+### `alignment_primary_area_authority_audit.py`
+
+**Purpose**: Audit `alignment_cells.tsv` primary matrix area authority against
+the Gaussian15 morphology area contract; reports fail-closed rows with missing
+MS1 morphology area and hard-fails any non-Gaussian source that still writes
+primary matrix area.
+**Topic group**: `alignment_primary_area_authority_audit.py` (single-file)
+**Originating context**: 2026-06-05 Product Authority Reconciliation v1
+follow-up for owner scalar fallback / retired area-source leakage.
+**Status note**: Reads existing `alignment_cells.tsv`, writes summary and
+flagged-row TSV/JSON only, and does not mutate matrices, workbook outputs,
+owner backfill, or RAW-derived evidence. A non-Gaussian primary area source is a
+product-authority failure; missing Gaussian15 morphology area remains fail-closed
+and requires trigger-rate review before promotion.
+
+### `gaussian15_area_pressure_audit.py`
+
+**Purpose**: Build a diagnostic-only pressure surface for Gaussian15 morphology
+area versus raw area and configured/default-15 smoothing duration from
+`peak_candidates.tsv`.
+**Topic group**: `gaussian15_area_pressure_audit.py` (single-file)
+**Originating context**: 2026-06-05 Product Authority Reconciliation v1
+follow-up for raw-vs-Gaussian area comparability and scan-rate sensitivity.
+**Status note**: Reads candidate-table provenance fields
+(`area_raw_counts_seconds`, `area_ms1_morphology`,
+`ms1_morphology_trace_*`, `region_scan_count`, and `region_duration_min`),
+writes `gaussian15_area_pressure_summary.tsv/json` plus
+`gaussian15_area_pressure_rows.tsv`, and reports
+`readiness_label=diagnostic_pressure_test_surface`. It does not mutate selected
+boundaries, selected area, confidence, presence, workbook output, matrix values,
+or candidate selection.
+
 ### `area_integration_uncertainty_audit.py`
 
 **Purpose**: Classify targeted/untargeted area mismatch by integration audit.
 **Topic group**: `area_integration_uncertainty_audit.py` + `_io`, `_models`, `_analysis`, `_writers` (5 files)
 **Originating spec**: `2026-05-18-area-integration-uncertainty-audit-gate.md`
 **Recent doc**: `plans/2026-05-25-p4-area-uncertainty-formula-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
-**Schema note**: When promoted AsLS audit rows include `area_baseline_corrected_linear_edge`, baseline-area mismatch checks use that linear-edge-compatible rollback value, not the promoted AsLS value.
+**Schema note**: The current accepted `alignment_cell_integration_audit.tsv` schema no longer emits linear-edge rollback columns. Historical promoted-AsLS rows that still include `area_baseline_corrected_linear_edge` remain readable as legacy comparison input.
 
 ---
 
@@ -505,7 +722,7 @@ to be re-run only when the underlying data shape changes.
 
 Not entry-points, but referenced by multiple topic groups:
 
-- `tools/diagnostics/diagnostic_io.py` — shared delimited/TSV read-write, scalar parsing, header validation, label splitting, and value formatting. Cluster 1 and the listed Cluster 3 loaders now reuse this module; use it before adding local `_read_required_tsv`, `_bool_value`, `_optional_float`, `_text`, `_required_indexes`, or `_write_tsv` copies.
+- `xic_extractor/diagnostics/diagnostic_io.py` — package-owned shared delimited/TSV read-write, scalar parsing, header validation, label splitting, and value formatting. `tools/diagnostics/diagnostic_io.py` re-exports it as a compatibility shim for existing diagnostic CLIs. Cluster 1 and the listed Cluster 3 loaders now reuse this helper; use it before adding local `_read_required_tsv`, `_bool_value`, `_optional_float`, `_text`, `_required_indexes`, or `_write_tsv` copies.
 
 ## Maintenance Notes
 

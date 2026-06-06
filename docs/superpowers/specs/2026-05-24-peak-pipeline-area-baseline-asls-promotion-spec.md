@@ -9,6 +9,29 @@ truth
 recorded, and baseline-truth plus RT/boundary evidence available. P3
 third-party shadow disposition should be recorded when available, but P3 is
 `diagnostic_only` external-reference evidence and is not a hard P2b gate.
+**Superseding product-flow correction:** [Mature package flow reference](2026-06-02-mature-package-flow-reference-spec.md)
+
+## 2026-06-02 Final-Matrix Correction
+
+This spec predates the completed linear-edge retirement and must be read as a
+historical audit-promotion contract.
+
+Any references below to linear-edge production state, linear-edge rollback, or
+linear-edge-compatible output are historical transition language. They do not
+authorize `linear_edge` as a current product baseline, final-matrix primary
+value, fallback value, or rollback target.
+
+Current product direction:
+
+- `linear_edge` is retired from product quantitation;
+- final matrix quantitation must not use a linear-edge or legacy-baseline value
+  as its primary area;
+- any historical linear-edge-compatible value may exist only in explicitly named
+  diagnostic, side-by-side validation, or migration notes;
+- the next downstream behavior/output contract is
+  [AsLS primary matrix value policy](2026-06-02-asls-primary-matrix-value-policy-spec.md),
+  which defines how AsLS-corrected selected integration area becomes the primary
+  `alignment_matrix.tsv` value and which audit/uncertainty fields accompany it.
 
 ## Purpose
 
@@ -17,14 +40,15 @@ integration-audit `area_baseline_corrected` source, but only if validation shows
 that AsLS has no hard identity / RT / boundary correctness blockers and the
 apparent regressions are explained by review evidence.
 
-This spec does not prove that AsLS has better absolute area accuracy, linearity,
-blank subtraction, or tuned parameters. Those require a separate AsLS truth
-validation spec before linear-edge retirement.
+At the time this spec was written, it did not prove that AsLS had better
+absolute area accuracy, linearity, blank subtraction, or tuned parameters. Those
+truth axes remain useful validation evidence, but they no longer make
+linear-edge a current product fallback.
 
-P2 is intentionally shadow-only. This spec is the missing promotion gate that
-Phase 2 cleanup depends on. If P2b does not land with a GO note, Cleanup must
-not assume AsLS is production and C1a / C5 / C1b have to be rewritten around
-the linear-edge production state.
+P2 was intentionally shadow-only. In the historical 2026-05-24 checkpoint, this
+spec was the missing promotion gate that Phase 2 cleanup depended on. Current
+cleanup and final-matrix work must use the 2026-06-02 correction above instead
+of rewriting around a retired linear-edge product state.
 
 ## 2026-05-25 Revised Gate Semantics
 
@@ -98,8 +122,10 @@ After the conditional audit-promotion decision:
 The conditional audit-promotion implementation is intentionally limited to
 `alignment_cell_integration_audit.tsv`.
 
-- `baseline_integration_method` is the integration-audit baseline selector.
-  Default is `asls`; rollback value is `linear_edge`.
+- `baseline_integration_method` was the integration-audit baseline selector for
+  this historical checkpoint. Default was `asls`; the historical rollback value
+  was `linear_edge`, but the 2026-06-02 correction above supersedes that rollback
+  option for current product and final-matrix work.
 - Default promoted schema reports `area_baseline_corrected` with
   `baseline_type=asls` and emits `area_baseline_corrected_linear_edge` plus
   `baseline_score_linear_edge` as temporary rollback/audit columns.
@@ -107,9 +133,10 @@ The conditional audit-promotion implementation is intentionally limited to
   preserves linear-edge production output and emits `area_baseline_corrected_asls`
   plus `baseline_score_asls` unless an explicit
   `--baseline-integration-method` override is supplied.
-- `alignment_matrix.tsv` stays driven by accepted `cell.area`. This promotion
-  does not change final matrix quantification; downstream matrix delivery is a
-  separate contract.
+- At this historical checkpoint, `alignment_matrix.tsv` stayed driven by
+  accepted `cell.area`. Current downstream matrix work must not use this as
+  permission to keep a retired-baseline primary value; the final matrix now
+  needs an AsLS primary-value behavior/output contract.
 - P2/P2b diagnostic tools must interpret both schemas explicitly. In promoted
   schema, linear-edge comparisons use `area_baseline_corrected_linear_edge` and
   AsLS comparisons use `area_baseline_corrected`; in legacy shadow schema,
@@ -152,9 +179,9 @@ Promotion requires:
      residual source, or the difference is documented as a temporary
      compatibility exception
 
-## Rollback Condition
+## Historical Rollback Condition
 
-Rollback to linear-edge production baseline if any of:
+Historical rollback to linear-edge production baseline was specified if any of:
 
 - a strict ISTD area RSD regression exceeds the threshold above
 - identity coherence verdicts change without an accepted evidence explanation
@@ -162,8 +189,10 @@ Rollback to linear-edge production baseline if any of:
 - downstream workbook / TSV consumers cannot tolerate the promoted area values
   after threshold review
 
-Rollback keeps the P2 AsLS shadow implementation in place unless the bug is in
-the AsLS integration function itself.
+This rollback language is superseded for current product work. If AsLS primary
+matrix promotion finds a blocker now, the allowed outcome is to stop, record a
+NO-GO or diagnostic-only state, and fix the AsLS/boundary/matrix contract. It is
+not to make linear-edge a current product baseline again.
 
 ## Linear-Edge Retirement Blocker
 

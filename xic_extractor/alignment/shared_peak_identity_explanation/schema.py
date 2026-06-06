@@ -26,7 +26,7 @@ ACTIVATION_MUST_NOT_REGRESS_SCHEMA_VERSION = (
     "shared_peak_identity_activation_must_not_regress_v1"
 )
 ACTIVATION_APPLICATION_SCHEMA_VERSION = (
-    "shared_peak_identity_activation_application_v1"
+    "shared_peak_identity_activation_application_v2"
 )
 WRONG_PEAK_ROOT_CAUSE_SCHEMA_VERSION = (
     "shared_peak_identity_wrong_peak_root_cause_v1"
@@ -371,6 +371,8 @@ ACTIVATION_APPLICATION_SUMMARY_COLUMNS = (
     "all_family_split_science_ready",
     "legacy_rt_row_context_rows",
     "family_projection_rows",
+    "family_projection_rows_excluded",
+    "family_projection_cells_excluded",
     "matrix_value_conflict_cells",
     "matrix_value_conflict_policy",
     "auto_activate_count",
@@ -1206,13 +1208,16 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
     "acceptance_status": frozenset({"pass", "fail"}),
     "application_status": frozenset({"applied"}),
     "activation_output_mode": frozenset({"activated-copy", "formal"}),
-    "matrix_row_identity": frozenset({"feature_family_id", "peak_hypothesis_id"}),
+    "matrix_row_identity": frozenset(
+        {"feature_family_id", "peak_hypothesis_id", "mz_rt_sample_columns"}
+    ),
     "canonical_row_identity_ready": frozenset({"TRUE", "FALSE"}),
     "canonical_row_identity_blockers": frozenset(
         {
             "none",
             "formal_output_not_requested",
             "family_projection_present",
+            "family_projection_excluded_incomplete_scope",
             "raw_mode_review_only",
             "matrix_construction_blocked",
             "source_matrix_value_missing",
@@ -1222,8 +1227,12 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
         {
             "formal_peak_hypothesis_with_family_projections",
             "formal_peak_hypothesis_identity",
+            "canonical_peak_hypothesis_rows_only",
+            "partial_canonical_peak_hypothesis_rows_only",
             "partial_peak_hypothesis_with_family_projections",
+            "partial_peak_hypothesis_sidecar_with_family_projections",
             "matrix_construction_peak_hypothesis_with_family_projections",
+            "formal_peak_hypothesis_identity_sidecar",
             "legacy_feature_family_row",
         }
     ),
@@ -1231,6 +1240,7 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
         {
             "projection_not_split_proof",
             "explicit_hypothesis_only",
+            "excluded_from_canonical_output",
             "not_applicable",
         }
     ),
@@ -1245,6 +1255,8 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
         {
             "activation_peak_hypothesis",
             "matrix_construction_peak_hypothesis",
+            "no_split_peak_hypothesis",
+            "split_peak_hypothesis",
             "family_projection_no_split_evidence",
         }
     ),
@@ -1259,6 +1271,7 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
             "block_no_existing_matrix_value",
             "no_cell_area_available",
             "source_matrix_value_missing",
+            "missing_ms1_morphology_area",
         }
     ),
     "value_changed": frozenset({"TRUE", "FALSE"}),

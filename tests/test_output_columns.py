@@ -15,6 +15,9 @@ from xic_extractor.output.csv_writers import (
     _output_row,
     write_all,
 )
+from xic_extractor.peak_detection.targeted_product_projection import (
+    TargetedProductProjection,
+)
 from xic_extractor.signal_processing import (
     PeakCandidate,
     PeakDetectionResult,
@@ -87,6 +90,18 @@ def _fabricate_run_output() -> RunOutput:
         prior_source="rolling_median",
         quality_penalty=1,
         quality_flags=("too_broad",),
+        targeted_product_projection=TargetedProductProjection(
+            product_state="detected_flagged",
+            counted_detection=True,
+            review_state="flagged",
+            projection_reason=(
+                "decision: detected_flagged; review: fixture_quality_flag"
+            ),
+            support_reasons=("ms1_peak_present",),
+            review_reasons=("fixture_quality_flag",),
+            legacy_evidence={"confidence": "VERY_LOW", "nl_status": ""},
+            legacy_authority_status="evidence_only",
+        ),
     )
     file_result = FileResult(
         sample_name="S1",

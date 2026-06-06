@@ -7,7 +7,6 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
 
 DEFAULT_NUMERIC_TOLERANCE = 1e-9
 REVIEW_IDENTITY_COLUMNS = (
@@ -79,8 +78,14 @@ def run_p7_alignment_parity(
                 identity_differences,
             )
 
-    if baseline_targeted_summary_tsv is not None or optimized_targeted_summary_tsv is not None:
-        if baseline_targeted_summary_tsv is None or optimized_targeted_summary_tsv is None:
+    if (
+        baseline_targeted_summary_tsv is not None
+        or optimized_targeted_summary_tsv is not None
+    ):
+        if (
+            baseline_targeted_summary_tsv is None
+            or optimized_targeted_summary_tsv is None
+        ):
             message = "targeted benchmark comparison requires both TSV paths"
             checks["targeted_istd_benchmark"] = "fail"
             differences.append(message)
@@ -137,14 +142,17 @@ def _compare_matrix_tsv(
     if baseline_rows.keys() != optimized_rows.keys():
         differences.append(
             "primary matrix feature ids differ: "
-            f"missing_in_optimized={sorted(baseline_rows.keys() - optimized_rows.keys())}; "
+            "missing_in_optimized="
+            f"{sorted(baseline_rows.keys() - optimized_rows.keys())}; "
             f"new_in_optimized={sorted(optimized_rows.keys() - baseline_rows.keys())}"
         )
     for feature_id in sorted(baseline_rows.keys() & optimized_rows.keys()):
         left = baseline_rows[feature_id]
         right = optimized_rows[feature_id]
         for column in baseline.fieldnames:
-            if _values_match(left.get(column, ""), right.get(column, ""), numeric_tolerance):
+            if _values_match(
+                left.get(column, ""), right.get(column, ""), numeric_tolerance
+            ):
                 continue
             differences.append(
                 f"primary matrix {feature_id} column {column}: "
@@ -175,7 +183,8 @@ def _compare_identity_review_tsv(
     if baseline_primary_ids != optimized_primary_ids:
         differences.append(
             "primary identity feature ids differ: "
-            f"missing_in_optimized={sorted(baseline_primary_ids - optimized_primary_ids)}; "
+            "missing_in_optimized="
+            f"{sorted(baseline_primary_ids - optimized_primary_ids)}; "
             f"new_in_optimized={sorted(optimized_primary_ids - baseline_primary_ids)}"
         )
     for feature_id in sorted(baseline_rows.keys() & optimized_rows.keys()):
@@ -184,8 +193,9 @@ def _compare_identity_review_tsv(
         if not (_is_primary_matrix_row(left) or _is_primary_matrix_row(right)):
             continue
         for column in REVIEW_IDENTITY_COLUMNS[1:]:
-            if _normalized_bool_or_text(left.get(column, "")) == _normalized_bool_or_text(
-                right.get(column, "")
+            if (
+                _normalized_bool_or_text(left.get(column, ""))
+                == _normalized_bool_or_text(right.get(column, ""))
             ):
                 continue
             differences.append(
@@ -334,7 +344,10 @@ def _write_markdown(path: Path, result: P7AlignmentParityResult) -> None:
         "| Check | Status |",
         "|---|---|",
     ]
-    lines.extend(f"| {check} | {status} |" for check, status in sorted(result.checks.items()))
+    lines.extend(
+        f"| {check} | {status} |"
+        for check, status in sorted(result.checks.items())
+    )
     if result.differences:
         lines.extend(["", "## Differences", ""])
         lines.extend(f"- {difference}" for difference in result.differences)
@@ -442,7 +455,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _resolve_matrix_paths(args: argparse.Namespace) -> tuple[Path, Path]:
-    if args.baseline_alignment_dir is not None or args.optimized_alignment_dir is not None:
+    if (
+        args.baseline_alignment_dir is not None
+        or args.optimized_alignment_dir is not None
+    ):
         if args.baseline_alignment_dir is None or args.optimized_alignment_dir is None:
             raise ValueError("baseline and optimized alignment dirs are both required")
         return (
@@ -455,7 +471,10 @@ def _resolve_matrix_paths(args: argparse.Namespace) -> tuple[Path, Path]:
 
 
 def _resolve_review_paths(args: argparse.Namespace) -> tuple[Path | None, Path | None]:
-    if args.baseline_alignment_dir is not None or args.optimized_alignment_dir is not None:
+    if (
+        args.baseline_alignment_dir is not None
+        or args.optimized_alignment_dir is not None
+    ):
         if args.baseline_alignment_dir is None or args.optimized_alignment_dir is None:
             raise ValueError("baseline and optimized alignment dirs are both required")
         return (
@@ -472,7 +491,9 @@ def _resolve_benchmark_paths(args: argparse.Namespace) -> tuple[Path, Path]:
         or args.optimized_targeted_summary_tsv
     )
     if baseline is None or optimized is None:
-        raise ValueError("baseline and optimized targeted benchmark summary TSVs are required")
+        raise ValueError(
+            "baseline and optimized targeted benchmark summary TSVs are required"
+        )
     return baseline, optimized
 
 

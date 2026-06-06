@@ -1,4 +1,5 @@
 from dataclasses import replace
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -12,10 +13,7 @@ from xic_extractor.peak_detection.region_audit import PeakRegionAuditSummary
 
 
 def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
-    source = FakeBackfillSource(
-        rt=np.array([8.40, 8.49, 8.50, 8.51, 8.60]),
-        intensity=np.array([0.0, 50.0, 120.0, 50.0, 0.0]),
-    )
+    source = _dense_peak_source(center=8.50, height=120.0)
     feature = _feature()
 
     cells = build_owner_backfill_cells(
@@ -35,13 +33,80 @@ def test_owner_backfill_rescues_missing_sample_from_feature_center() -> None:
     assert cell.area is not None and cell.area > 0
     assert cell.selected_integration is not None
     assert cell.selected_integration.area_raw_counts_seconds == cell.area
-    assert cell.matrix_area == cell.area
+    assert cell.selected_integration.baseline_type == "asls"
+    assert cell.selected_integration.area_baseline_corrected is not None
+    assert cell.selected_integration.area_ms1_morphology is not None
+    assert cell.matrix_area == cell.selected_integration.area_ms1_morphology
     assert cell.reason == "owner-centered MS1 backfill"
     assert cell.trace_quality == "owner_backfill"
-    assert cell.scan_support_score == 0.5
+    assert cell.group_hypothesis_id == "FAM000001"
+    assert cell.public_family_id == "FAM000001"
+    assert cell.group_construction_role == "successor_constructor"
+    assert cell.group_delivery_role == "owner_aligned_feature_compatibility_facade"
+    assert (
+        cell.group_membership_source
+        == "owner_aligned_feature_successor_projection"
+    )
+    assert cell.gap_fill_state == "gap_fill_rescued"
+    assert cell.gap_fill_reason == "group_centered_query_detected"
+    assert cell.missing_observation_state == "queried_and_detected"
+    assert cell.group_claim_state == "unclaimed_or_winner"
+    assert cell.scan_support_score == 0.9
     assert cell.region_candidate_count is not None
     assert cell.region_shadow_status == "evaluated"
     assert cell.region_local_mixture_diagnostic
+    assert source.calls == [(500.0, 7.5, 9.5, 20.0)]
+
+
+def test_owner_backfill_accepts_delivery_contract_feature_without_legacy_dto() -> None:
+    source = _dense_peak_source(center=8.50, height=120.0)
+    owner = SimpleNamespace(sample_stem="sample-a", owner_area=1000.0)
+    feature = SimpleNamespace(
+        feature_family_id="FAM_CONTRACT",
+        cluster_id="FAM_CONTRACT",
+        neutral_loss_tag="NL116",
+        family_center_mz=500.0,
+        family_center_rt=8.5,
+        family_product_mz=383.9526,
+        family_observed_neutral_loss_da=116.0474,
+        has_anchor=True,
+        owners=(owner,),
+        members=(owner,),
+        event_cluster_ids=("OWN-sample-a-000001",),
+        event_member_count=1,
+        evidence="test_delivery_contract",
+        identity_conflict=False,
+        review_only=False,
+        confirm_local_owners_with_backfill=False,
+        backfill_seed_centers=(),
+        ambiguous_sample_stem=None,
+        ambiguous_candidate_ids=(),
+        group_hypothesis_id="GROUP_CONTRACT",
+        public_family_id="FAM_CONTRACT",
+        group_construction_role="successor_projection_adapter",
+        group_delivery_role="successor_delivery_protocol",
+        group_membership_source="cross_sample_peak_group_hypothesis",
+        consolidation_state="not_consolidated",
+        consolidation_winner_group_hypothesis_id="",
+        consolidation_source_group_hypothesis_id="",
+    )
+
+    cells = build_owner_backfill_cells(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=replace(_peak_config(), resolver_min_scans=10),
+    )
+
+    assert not isinstance(feature, OwnerAlignedFeature)
+    assert len(cells) == 1
+    assert cells[0].cluster_id == "FAM_CONTRACT"
+    assert cells[0].group_hypothesis_id == "GROUP_CONTRACT"
+    assert cells[0].public_family_id == "FAM_CONTRACT"
+    assert cells[0].group_delivery_role == "successor_delivery_protocol"
+    assert cells[0].gap_fill_state == "gap_fill_rescued"
+    assert cells[0].sample_stem == "sample-b"
     assert source.calls == [(500.0, 7.5, 9.5, 20.0)]
 
 
@@ -103,6 +168,10 @@ def test_owner_backfill_audit_mode_none_skips_all_heavy_audit(monkeypatch) -> No
     assert len(cells) == 1
     assert calls["region"] == 0
     assert cells[0].region_candidate_count is None
+    assert cells[0].selected_integration is not None
+    assert cells[0].selected_integration.baseline_type == "asls"
+    assert cells[0].selected_integration.area_ms1_morphology is not None
+    assert cells[0].matrix_area == cells[0].selected_integration.area_ms1_morphology
 
 
 def test_owner_backfill_region_audit_receives_untargeted_trace_group(
@@ -323,16 +392,13 @@ def test_owner_backfill_uses_preconsolidated_seed_centers_and_keeps_best_peak() 
                 center = (request.rt_min + request.rt_max) / 2.0
                 self.centers.append(center)
                 intensity = 300.0 if round(center, 1) == 8.8 else 100.0
+                scale = np.array(
+                    [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 0.75, 0.5, 0.25, 0.1, 0.0],
+                )
                 traces.append(
                     XICTrace.from_arrays(
-                        [
-                            center - 0.10,
-                            center - 0.01,
-                            center,
-                            center + 0.01,
-                            center + 0.10,
-                        ],
-                        [0.0, intensity / 2.0, intensity, intensity / 2.0, 0.0],
+                        np.linspace(center - 0.10, center + 0.10, 11),
+                        intensity * scale,
                     )
                 )
             return tuple(traces)
@@ -360,7 +426,7 @@ def test_owner_backfill_uses_preconsolidated_seed_centers_and_keeps_best_peak() 
     assert cells[0].sample_stem == "sample-b"
     assert cells[0].area is not None and cells[0].area > 0
     assert cells[0].apex_rt == 8.8
-    assert cells[0].scan_support_score == 0.5
+    assert cells[0].scan_support_score == 0.9
     assert cells[0].backfill_seed_mz == 500.0
     assert cells[0].backfill_seed_rt == 8.8
     assert np.isclose(cells[0].backfill_request_rt_min, 5.8)
@@ -382,7 +448,41 @@ def test_owner_backfill_treats_non_finite_trace_as_unchecked() -> None:
         peak_config=_peak_config(),
     )
 
-    assert cells == ()
+    assert len(cells) == 1
+    cell = cells[0]
+    assert cell.sample_stem == "sample-b"
+    assert cell.status == "unchecked"
+    assert cell.area is None
+    assert cell.trace_quality == "owner_backfill_unassessable"
+    assert cell.gap_fill_state == "not_filled"
+    assert cell.gap_fill_reason == "query_attempt_not_detected"
+    assert cell.missing_observation_state == "missing_unchecked"
+    assert cell.backfill_seed_mz == 500.0
+    assert cell.backfill_seed_rt == 8.5
+    assert np.isclose(cell.backfill_request_rt_min, 5.5)
+    assert np.isclose(cell.backfill_request_rt_max, 11.5)
+
+
+def test_owner_backfill_marks_no_peak_query_as_unchecked_outcome() -> None:
+    source = FakeBackfillSource(
+        rt=np.array([8.4, 8.5, 8.6]),
+        intensity=np.array([0.0, 0.0, 0.0]),
+    )
+
+    cells = build_owner_backfill_cells(
+        (_feature(),),
+        sample_order=("sample-b",),
+        raw_sources={"sample-b": source},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+    )
+
+    assert len(cells) == 1
+    assert cells[0].status == "unchecked"
+    assert cells[0].trace_quality == "owner_backfill_not_detected"
+    assert cells[0].gap_fill_state == "not_filled"
+    assert cells[0].gap_fill_reason == "query_attempt_not_detected"
+    assert cells[0].missing_observation_state == "missing_unchecked"
 
 
 def test_owner_backfill_uses_batch_source_and_preserves_feature_major_order() -> None:
@@ -535,10 +635,14 @@ def test_owner_backfill_validates_prefilter_hits_with_secondary_source() -> None
         raw_xic_batch_size=64,
     )
 
-    assert [(cell.cluster_id, cell.sample_stem) for cell in cells] == [
-        ("FAM000001", "sample-b"),
+    assert [(cell.cluster_id, cell.sample_stem, cell.status) for cell in cells] == [
+        ("FAM000001", "sample-b", "rescued"),
+        ("FAM000002", "sample-b", "unchecked"),
     ]
     assert cells[0].height == 240.0
+    assert cells[1].gap_fill_state == "not_filled"
+    assert cells[1].gap_fill_reason == "query_attempt_not_detected"
+    assert cells[1].missing_observation_state == "missing_unchecked"
     assert len(prefilter.requests[0]) == 2
     assert len(validator.requests[0]) == 1
     assert validator.requests[0][0].mz == 500.0
@@ -840,6 +944,16 @@ class FakeBackfillSource:
     def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
         self.calls.append((mz, rt_min, rt_max, ppm_tol))
         return self.rt, self.intensity
+
+
+def _dense_peak_source(*, center: float, height: float) -> FakeBackfillSource:
+    scale = np.array(
+        [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 0.75, 0.5, 0.25, 0.1, 0.0],
+    )
+    return FakeBackfillSource(
+        rt=np.linspace(center - 0.10, center + 0.10, 11),
+        intensity=height * scale,
+    )
 
 
 def _feature(

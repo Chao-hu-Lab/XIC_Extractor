@@ -14,6 +14,8 @@ def configure_resolver_controls(controls: ResolverControls) -> None:
     controls.smooth_window_spin.setRange(3, 999)
     controls.smooth_window_spin.setSingleStep(2)
     controls.smooth_polyorder_spin.setRange(1, 10)
+    controls.ms1_morphology_smoothing_window_spin.setRange(3, 999)
+    controls.ms1_morphology_smoothing_window_spin.setSingleStep(2)
     controls.peak_rel_height_spin.setRange(0.50, 0.99)
     controls.peak_rel_height_spin.setSingleStep(0.01)
     controls.peak_rel_height_spin.setDecimals(2)
@@ -75,6 +77,12 @@ def build_peak_resolver_panel(controls: ResolverControls) -> QWidget:
     legacy_layout.setSpacing(16)
     legacy_layout.addWidget(_LabeledSpin("Window", controls.smooth_window_spin))
     legacy_layout.addWidget(_LabeledSpin("Polyorder", controls.smooth_polyorder_spin))
+    legacy_layout.addWidget(
+        _LabeledSpin(
+            "MS1 smooth",
+            controls.ms1_morphology_smoothing_window_spin,
+        )
+    )
     legacy_layout.addWidget(_LabeledSpin("Peak height", controls.peak_rel_height_spin))
     legacy_layout.addWidget(
         _LabeledSpin("Prominence", controls.peak_min_prominence_ratio_spin)
@@ -121,12 +129,10 @@ def build_peak_resolver_panel(controls: ResolverControls) -> QWidget:
 def update_resolver_profile_visibility(controls: ResolverControls) -> None:
     resolver_mode = controls.mode_combo.currentText()
     controls.legacy_panel.setVisible(
-        resolver_mode
-        in {"legacy_savgol", "arbitrated", "region_first_safe_merge"}
+        resolver_mode in {"legacy_savgol", "region_first_safe_merge"}
     )
     controls.local_minimum_panel.setVisible(
-        resolver_mode
-        in {"local_minimum", "arbitrated", "region_first_safe_merge"}
+        resolver_mode in {"local_minimum", "region_first_safe_merge"}
     )
 
 

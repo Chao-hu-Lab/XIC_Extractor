@@ -10,7 +10,14 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from xic_extractor.alignment.backfill_evidence_projection import (
+    load_candidate_ms2_pattern_rows,
+    load_matrix_rt_drift_policy_rows,
+    load_ms1_pattern_coherence_rows,
+    load_qc_ms1_pattern_reference_rows,
+)
 from xic_extractor.alignment.shared_peak_identity_explanation import (
+    machine_evidence_support,
     product_activation,
 )
 
@@ -18,10 +25,28 @@ from xic_extractor.alignment.shared_peak_identity_explanation import (
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
+        candidate_ms2_pattern_rows = load_candidate_ms2_pattern_rows(
+            args.candidate_ms2_pattern_evidence_tsv
+        )
+        ms1_pattern_coherence_rows = load_ms1_pattern_coherence_rows(
+            args.ms1_pattern_coherence_evidence_tsv
+        )
+        qc_ms1_pattern_reference_rows = load_qc_ms1_pattern_reference_rows(
+            args.qc_ms1_pattern_reference_evidence_tsv
+        )
+        matrix_rt_drift_policy_rows = load_matrix_rt_drift_policy_rows(
+            args.matrix_rt_drift_policy_tsv
+        )
+        rt_mode_evidence_rows = tuple(
+            machine_evidence_support.load_rt_mode_evidence(
+                args.rt_mode_evidence_tsv
+            ).values()
+        )
         outputs = product_activation.apply_activation_to_alignment_outputs(
             activation_decisions_tsv=args.activation_decisions_tsv,
             activation_acceptance_tsv=args.activation_acceptance_tsv,
             alignment_matrix_tsv=args.alignment_matrix_tsv,
+            alignment_matrix_identity_tsv=args.alignment_matrix_identity_tsv,
             alignment_review_tsv=args.alignment_review_tsv,
             alignment_cells_tsv=args.alignment_cells_tsv,
             output_dir=args.output_dir,
@@ -36,6 +61,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             require_complete_peak_hypothesis_identity=(
                 args.require_complete_peak_hypothesis_identity
             ),
+            exclude_family_projections=args.exclude_family_projections,
+            candidate_ms2_pattern_rows=candidate_ms2_pattern_rows,
+            ms1_pattern_coherence_rows=ms1_pattern_coherence_rows,
+            qc_ms1_pattern_reference_rows=qc_ms1_pattern_reference_rows,
+            matrix_rt_drift_policy_rows=matrix_rt_drift_policy_rows,
+            rt_mode_evidence_rows=rt_mode_evidence_rows,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -45,6 +76,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"Activated cells TSV: {outputs.cells_tsv}")
     print(f"Activation application summary TSV: {outputs.summary_tsv}")
     print(f"Activation value delta TSV: {outputs.value_delta_tsv}")
+    if outputs.hypothesis_identity_tsv is not None:
+        print(f"Activation hypothesis identity TSV: {outputs.hypothesis_identity_tsv}")
+    if outputs.matrix_identity_tsv is not None:
+        print(f"Alignment matrix identity TSV: {outputs.matrix_identity_tsv}")
     return 0
 
 
@@ -53,9 +88,59 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--activation-decisions-tsv", type=Path, required=True)
     parser.add_argument("--activation-acceptance-tsv", type=Path, required=True)
     parser.add_argument("--alignment-matrix-tsv", type=Path, required=True)
+    parser.add_argument(
+        "--alignment-matrix-identity-tsv",
+        type=Path,
+        help=(
+            "Required when --alignment-matrix-tsv is a public Mz/RT/sample "
+            "matrix without feature_family_id. Provides peak_hypothesis_id and "
+            "source family provenance for product application."
+        ),
+    )
     parser.add_argument("--alignment-review-tsv", type=Path, required=True)
     parser.add_argument("--alignment-cells-tsv", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--candidate-ms2-pattern-evidence-tsv",
+        type=Path,
+        help=(
+            "Optional typed Candidate MS2 pattern sidecar. When provided, "
+            "rescued alignment cells receive backfill MS2 projection fields."
+        ),
+    )
+    parser.add_argument(
+        "--ms1-pattern-coherence-evidence-tsv",
+        type=Path,
+        help=(
+            "Optional typed MS1 pattern coherence sidecar. When provided, "
+            "rescued alignment cells receive backfill MS1 projection fields."
+        ),
+    )
+    parser.add_argument(
+        "--qc-ms1-pattern-reference-evidence-tsv",
+        type=Path,
+        help=(
+            "Optional typed QC MS1 pattern reference sidecar. When provided, "
+            "rescued alignment cells receive backfill QC projection fields."
+        ),
+    )
+    parser.add_argument(
+        "--matrix-rt-drift-policy-tsv",
+        type=Path,
+        help=(
+            "Optional typed matrix RT drift policy sidecar. When provided, "
+            "rescued alignment cells receive backfill RT-drift projection fields."
+        ),
+    )
+    parser.add_argument(
+        "--rt-mode-evidence-tsv",
+        type=Path,
+        help=(
+            "Optional shared_peak_identity_rt_mode_evidence.tsv. Formal mode "
+            "uses raw_selected_rt from matching typed mode rows as the "
+            "PeakHypothesis RT center instead of falling back to family center RT."
+        ),
+    )
     parser.add_argument(
         "--output-mode",
         choices=("activated-copy", "formal"),
@@ -63,7 +148,9 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help=(
             "activated-copy writes *_activated.tsv sidecars; formal writes "
             "alignment_matrix.tsv, alignment_review.tsv, and alignment_cells.tsv "
-            "as the product output contract."
+            "as the product output contract. Formal alignment_matrix.tsv remains "
+            "Mz/RT/sample-column downstream format; PeakHypothesis identity is "
+            "written to activation_hypothesis_identity.tsv."
         ),
     )
     parser.add_argument(
@@ -105,9 +192,32 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--require-complete-peak-hypothesis-identity",
         action="store_true",
         help=(
-            "Fail unless formal output can emit peak_hypothesis_id as the "
-            "matrix row identity. Family projections are allowed when no split "
-            "evidence exists."
+            "Fail unless formal output can emit a complete PeakHypothesis "
+            "identity sidecar for every Mz/RT/sample matrix row without "
+            "unresolved family projection rows."
+        ),
+    )
+    projection_group = parser.add_mutually_exclusive_group()
+    projection_group.add_argument(
+        "--exclude-family-projections",
+        dest="exclude_family_projections",
+        action="store_true",
+        default=True,
+        help=(
+            "Formal mode default. Exclude unresolved family projection rows "
+            "from emitted alignment_matrix.tsv and report excluded row/cell "
+            "counts in the application summary. Excluded rows keep canonical "
+            "readiness blocked."
+        ),
+    )
+    projection_group.add_argument(
+        "--include-family-projections",
+        dest="exclude_family_projections",
+        action="store_false",
+        help=(
+            "Diagnostic legacy mode only. Include unresolved family projection "
+            "rows in formal outputs for review; these rows block canonical "
+            "readiness and must not be handed to downstream as product matrix."
         ),
     )
     return parser.parse_args(argv)

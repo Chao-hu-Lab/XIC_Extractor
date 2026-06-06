@@ -9,8 +9,12 @@ def default_parallel_workers() -> int:
 RESOLVER_MODES: tuple[str, ...] = (
     "legacy_savgol",
     "local_minimum",
-    "arbitrated",
     "region_first_safe_merge",
+)
+CANONICAL_RESOLVER_MODE = "region_first_safe_merge"
+
+ARBITRATED_RESOLVER_RETIRED_MESSAGE = (
+    "arbitrated resolver mode is retired; use region_first_safe_merge"
 )
 
 
@@ -19,9 +23,10 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "dll_dir": "C:\\Xcalibur\\system\\programs",
     "smooth_window": "15",
     "smooth_polyorder": "3",
+    "ms1_morphology_smoothing_window_points": "15",
     "peak_rel_height": "0.95",
     "peak_min_prominence_ratio": "0.10",
-    "resolver_mode": "region_first_safe_merge",
+    "resolver_mode": CANONICAL_RESOLVER_MODE,
     "resolver_chrom_threshold": "0.05",
     "resolver_min_search_range_min": "0.08",
     "resolver_min_relative_height": "0.02",
@@ -37,6 +42,8 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "rolling_window_size": "5",
     "dirty_matrix_mode": "false",
     "rt_prior_library_path": "",
+    "target_pair_rt_calibration_path": "",
+    "model_selection_expected_diff_approval_registry": "",
     "emit_score_breakdown": "false",
     "emit_review_report": "false",
     "emit_peak_candidates": "false",
@@ -55,6 +62,9 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "dll_dir": "Xcalibur DLL 路徑（通常不需更改）",
     "smooth_window": "Savitzky-Golay 平滑視窗長度（必須為奇數，建議 9-21）",
     "smooth_polyorder": "Savitzky-Golay 多項式階數（通常 2-4）",
+    "ms1_morphology_smoothing_window_points": (
+        "MS1 morphology Gaussian15 smoothing 視窗點數（必須為奇數；預設 15）"
+    ),
     "peak_rel_height": (
         "Peak 邊界的相對高度（0.95 = 積分到 apex 的 5%，範圍 0.5-0.99）"
     ),
@@ -62,8 +72,8 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
         "Peak prominence 至少為 apex 的比例（越低越寬容，0.05-0.20）"
     ),
     "resolver_mode": (
-        "峰切割演算法（legacy_savgol、local_minimum、arbitrated "
-        "或 region_first_safe_merge）"
+        "峰切割演算法（legacy_savgol、local_minimum "
+        "或 region_first_safe_merge；arbitrated 已退休）"
     ),
     "resolver_chrom_threshold": "Local minimum resolver 低強度剪枝百分位（0-1）",
     "resolver_min_search_range_min": "Local minimum 搜尋 valley 的 RT 視窗（分鐘）",
@@ -96,6 +106,14 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "rt_prior_library_path": (
         "developer/debug RT prior library CSV path; leave empty for normal use"
     ),
+    "target_pair_rt_calibration_path": (
+        "target pair RT calibration TSV path for shadow auto-reselection "
+        "diagnostics; leave empty to disable"
+    ),
+    "model_selection_expected_diff_approval_registry": (
+        "Durable expected-diff approval registry TSV for selected-hypothesis "
+        "model selection; leave empty unless approved real-data evidence exists"
+    ),
     "emit_score_breakdown": "是否輸出 Score Breakdown sheet（預設關閉）",
     "emit_review_report": "是否輸出 Review Report HTML（預設關閉）",
     "emit_peak_candidates": "是否輸出 Peak Candidate TSV（除錯/審計用，預設關閉）",
@@ -107,7 +125,7 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "baseline_integration_method": (
         "Baseline-corrected integration method for hypothesis, boundary, "
         "region, and alignment audit surfaces "
-        "(asls or linear_edge; default asls after P2b conditional audit promotion)"
+        "(asls only; linear_edge is retired)"
     ),
     "nl_rt_anchor_search_margin_min": (
         "NL 錨定搜尋半徑（min）：以 rt_center ±此值搜尋 NL 確認的 MS2 作為 RT anchor"

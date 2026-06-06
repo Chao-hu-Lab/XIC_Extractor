@@ -4,6 +4,19 @@ from dataclasses import replace
 import numpy as np
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.candidate_scoring import score_candidate
+from xic_extractor.peak_detection.candidate_selection import (
+    select_candidate_by_evidence,
+)
+from xic_extractor.peak_detection.chrom_peak_candidate_adapter import (
+    chrom_peak_segment_candidates,
+)
+from xic_extractor.peak_detection.evidence_facts import (
+    build_candidate_evidence_facts,
+    decision_semantics_from_candidate_facts,
+    projected_confidence_from_candidate_facts,
+    projected_reason_from_candidate_facts,
+)
 from xic_extractor.peak_detection.legacy_savgol import (
     find_peak_candidates_legacy_savgol,
 )
@@ -20,18 +33,20 @@ from xic_extractor.peak_detection.recovery import preferred_rt_recovery
 from xic_extractor.peak_detection.region_safe_merge import (
     apply_region_first_safe_merge,
 )
+from xic_extractor.peak_detection.scoring_models import (
+    ScoringContext,
+    confidence_from_value,
+)
+from xic_extractor.peak_detection.scoring_reason import score_breakdown_fields
 from xic_extractor.peak_detection.selection import (
     select_candidate,
     selection_rt_for_scored_candidates,
 )
-from xic_extractor.peak_scoring import (
-    ScoringContext,
-    score_breakdown_fields,
-    score_candidate,
-    select_candidate_with_confidence,
+from xic_extractor.settings_schema import (
+    ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+    CANONICAL_RESOLVER_MODE,
+    RESOLVER_MODES,
 )
-
-_BOUNDARY_MERGE_TOLERANCE_MIN = 0.02
 
 
 def find_peak_and_area(
@@ -43,8 +58,18 @@ def find_peak_and_area(
     strict_preferred_rt: bool = False,
     scoring_context_builder: Callable[[PeakCandidate], ScoringContext] | None = None,
     istd_confidence_note: str | None = None,
+    evidence_role: str = "",
+    istd_pair: str = "",
+    paired_istd_anchor_rt: float | None = None,
 ) -> PeakDetectionResult:
     candidates_result = find_peak_candidates(rt, intensity, config)
+    if scoring_context_builder is not None:
+        candidates_result = _augment_with_chrom_peak_segment_candidates(
+            rt,
+            intensity,
+            config,
+            candidates_result,
+        )
     chosen_confidence: str | None = None
     chosen_reason: str | None = None
     chosen_severities: tuple[tuple[int, str], ...] = ()
@@ -92,6 +117,9 @@ def find_peak_and_area(
                     candidate,
                     scoring_context_builder(candidate),
                     istd_confidence_note=istd_confidence_note,
+                    evidence_role=evidence_role,
+                    istd_pair=istd_pair,
+                    paired_istd_anchor_rt=paired_istd_anchor_rt,
                 )
                 for candidate in all_candidates
             ]
@@ -99,7 +127,7 @@ def find_peak_and_area(
                 _candidate_score_summary(scored_candidate)
                 for scored_candidate in scored_candidates
             )
-            chosen = select_candidate_with_confidence(
+            chosen = select_candidate_by_evidence(
                 scored_candidates,
                 selection_rt=selection_rt,
                 strict_selection_rt=strict_preferred_rt,
@@ -137,6 +165,7 @@ def find_peak_and_area(
             score_breakdown=chosen_score_breakdown,
             candidate_scores=candidate_scores,
             selection_reference_rt=selection_rt,
+            paired_istd_anchor_rt=paired_istd_anchor_rt,
         )
 
     recovery_candidate, recovery_result = preferred_rt_recovery(
@@ -158,6 +187,9 @@ def find_peak_and_area(
                 recovery_candidate,
                 scoring_context_builder(recovery_candidate),
                 istd_confidence_note=istd_confidence_note,
+                evidence_role=evidence_role,
+                istd_pair=istd_pair,
+                paired_istd_anchor_rt=paired_istd_anchor_rt,
             )
             candidate_scores = (_candidate_score_summary(scored_recovery),)
             recovery_result, recovery_candidate, candidate_scores = (
@@ -179,6 +211,7 @@ def find_peak_and_area(
                 score_breakdown=score_breakdown_fields(scored_recovery.evidence_score),
                 candidate_scores=candidate_scores,
                 selection_reference_rt=preferred_rt,
+                paired_istd_anchor_rt=paired_istd_anchor_rt,
             )
         recovery_result, recovery_candidate, candidate_scores = (
             _apply_region_first_safe_merge_if_enabled(
@@ -194,6 +227,7 @@ def find_peak_and_area(
             recovery_result,
             recovery_candidate,
             selection_reference_rt=preferred_rt,
+            paired_istd_anchor_rt=paired_istd_anchor_rt,
         )
     return _detection_failure(candidates_result)
 
@@ -205,21 +239,113 @@ def find_peak_candidates(
     *,
     peak_min_prominence_ratio: float | None = None,
 ) -> PeakCandidatesResult:
-    resolver_mode = getattr(config, "resolver_mode", "legacy_savgol")
+    resolver_mode = getattr(config, "resolver_mode", CANONICAL_RESOLVER_MODE)
     if resolver_mode in {"local_minimum", "region_first_safe_merge"}:
         return find_peak_candidates_local_minimum(rt, intensity, config)
     if resolver_mode == "arbitrated":
-        return _find_peak_candidates_arbitrated(
+        raise ValueError(ARBITRATED_RESOLVER_RETIRED_MESSAGE)
+    if resolver_mode == "legacy_savgol":
+        return find_peak_candidates_legacy_savgol(
             rt,
             intensity,
             config,
             peak_min_prominence_ratio=peak_min_prominence_ratio,
         )
-    return find_peak_candidates_legacy_savgol(
-        rt,
-        intensity,
-        config,
-        peak_min_prominence_ratio=peak_min_prominence_ratio,
+    allowed = ", ".join(RESOLVER_MODES[:-1]) + f", or {RESOLVER_MODES[-1]}"
+    raise ValueError(f"unsupported resolver mode {resolver_mode!r}; must be {allowed}")
+
+
+def _augment_with_chrom_peak_segment_candidates(
+    rt: np.ndarray,
+    intensity: np.ndarray,
+    config: ExtractionConfig,
+    candidates_result: PeakCandidatesResult,
+) -> PeakCandidatesResult:
+    resolver_mode = getattr(config, "resolver_mode", CANONICAL_RESOLVER_MODE)
+    if resolver_mode != CANONICAL_RESOLVER_MODE:
+        return candidates_result
+    chrom_candidates = chrom_peak_segment_candidates(rt, intensity, config)
+    if not chrom_candidates:
+        return candidates_result
+    candidates = candidates_result.candidates
+    for candidate in chrom_candidates:
+        candidates = _append_or_merge_chrom_peak_segment_candidate(
+            candidates,
+            candidate,
+        )
+    status = "OK" if candidates else candidates_result.status
+    return replace(
+        candidates_result,
+        status=status,
+        candidates=candidates,
+        n_prominent_peaks=len(candidates),
+    )
+
+
+def _append_or_merge_chrom_peak_segment_candidate(
+    candidates: tuple[PeakCandidate, ...],
+    chrom_candidate: PeakCandidate,
+) -> tuple[PeakCandidate, ...]:
+    merged: list[PeakCandidate] = []
+    replaced = False
+    for candidate in candidates:
+        if _same_chrom_peak_segment_identity(candidate, chrom_candidate):
+            merged.append(_chrom_boundary_upgrade_candidate(candidate, chrom_candidate))
+            replaced = True
+        else:
+            merged.append(candidate)
+    if not replaced:
+        merged.append(chrom_candidate)
+    return tuple(merged)
+
+
+def _same_chrom_peak_segment_identity(
+    candidate: PeakCandidate,
+    chrom_candidate: PeakCandidate,
+) -> bool:
+    if _same_peak_candidate_identity(candidate, chrom_candidate):
+        return True
+    if candidate.selection_apex_index == chrom_candidate.selection_apex_index:
+        return True
+    return abs(candidate.selection_apex_rt - chrom_candidate.selection_apex_rt) <= 1e-9
+
+
+def _chrom_boundary_upgrade_candidate(
+    candidate: PeakCandidate,
+    chrom_candidate: PeakCandidate,
+) -> PeakCandidate:
+    return replace(
+        chrom_candidate,
+        proposal_sources=_combine_proposal_sources(candidate, chrom_candidate),
+        source_apex_rank=(
+            candidate.source_apex_rank
+            if candidate.source_apex_rank is not None
+            else chrom_candidate.source_apex_rank
+        ),
+        cwt_best_scale=(
+            chrom_candidate.cwt_best_scale
+            if chrom_candidate.cwt_best_scale is not None
+            else candidate.cwt_best_scale
+        ),
+        cwt_ridge_persistence=(
+            chrom_candidate.cwt_ridge_persistence
+            if chrom_candidate.cwt_ridge_persistence is not None
+            else candidate.cwt_ridge_persistence
+        ),
+        ms2_evidence_peak_start=(
+            chrom_candidate.ms2_evidence_peak_start
+            if chrom_candidate.ms2_evidence_peak_start is not None
+            else candidate.ms2_evidence_peak_start
+        ),
+        ms2_evidence_peak_end=(
+            chrom_candidate.ms2_evidence_peak_end
+            if chrom_candidate.ms2_evidence_peak_end is not None
+            else candidate.ms2_evidence_peak_end
+        ),
+        merge_note=_combine_merge_note(
+            candidate.merge_note,
+            chrom_candidate.merge_note,
+        ),
     )
 
 
@@ -231,7 +357,8 @@ def _apply_region_first_safe_merge_if_enabled(
     selected_candidate: PeakCandidate,
     candidate_scores: tuple[PeakCandidateScore, ...],
 ) -> tuple[PeakCandidatesResult, PeakCandidate, tuple[PeakCandidateScore, ...]]:
-    if getattr(config, "resolver_mode", "legacy_savgol") != "region_first_safe_merge":
+    resolver_mode = getattr(config, "resolver_mode", CANONICAL_RESOLVER_MODE)
+    if resolver_mode != CANONICAL_RESOLVER_MODE:
         return candidates_result, selected_candidate, candidate_scores
     outcome = apply_region_first_safe_merge(
         rt,
@@ -252,101 +379,6 @@ def _apply_region_first_safe_merge_if_enabled(
     )
 
 
-def _find_peak_candidates_arbitrated(
-    rt: np.ndarray,
-    intensity: np.ndarray,
-    config: ExtractionConfig,
-    *,
-    peak_min_prominence_ratio: float | None,
-) -> PeakCandidatesResult:
-    legacy_result = find_peak_candidates_legacy_savgol(
-        rt,
-        intensity,
-        config,
-        peak_min_prominence_ratio=peak_min_prominence_ratio,
-    )
-    local_result = find_peak_candidates_local_minimum(rt, intensity, config)
-    candidates = _merge_resolver_candidates(
-        legacy_result.candidates,
-        local_result.candidates,
-    )
-    if candidates:
-        return PeakCandidatesResult(
-            status="OK",
-            candidates=candidates,
-            n_points=max(legacy_result.n_points, local_result.n_points),
-            max_smoothed=_max_result_smoothed(legacy_result, local_result),
-            n_prominent_peaks=len(candidates),
-        )
-    return _strongest_failure_result(legacy_result, local_result)
-
-
-def _merge_resolver_candidates(
-    legacy_candidates: tuple[PeakCandidate, ...],
-    local_candidates: tuple[PeakCandidate, ...],
-) -> tuple[PeakCandidate, ...]:
-    merged = list(legacy_candidates)
-    for local_candidate in local_candidates:
-        match_index = _matching_merge_index(merged, local_candidate)
-        if match_index is None:
-            merged.append(local_candidate)
-            continue
-        merged[match_index] = _merged_candidate(merged[match_index], local_candidate)
-    return tuple(merged)
-
-
-def _matching_merge_index(
-    candidates: list[PeakCandidate],
-    candidate: PeakCandidate,
-) -> int | None:
-    for index, existing in enumerate(candidates):
-        if existing.selection_apex_index != candidate.selection_apex_index:
-            continue
-        if _material_boundary_disagreement(existing, candidate):
-            continue
-        return index
-    return None
-
-
-def _merged_candidate(
-    first: PeakCandidate,
-    second: PeakCandidate,
-) -> PeakCandidate:
-    richer = first
-    if _candidate_detail_score(second) > _candidate_detail_score(first):
-        richer = second
-    return replace(
-        richer,
-        proposal_sources=_combine_proposal_sources(first, second),
-        source_apex_rank=_source_apex_rank(first, second, richer),
-        merge_note="same_apex_merged",
-    )
-
-
-def _material_boundary_disagreement(
-    first: PeakCandidate,
-    second: PeakCandidate,
-) -> bool:
-    return (
-        abs(first.peak.peak_start - second.peak.peak_start)
-        > _BOUNDARY_MERGE_TOLERANCE_MIN
-        or abs(first.peak.peak_end - second.peak.peak_end)
-        > _BOUNDARY_MERGE_TOLERANCE_MIN
-    )
-
-
-def _candidate_detail_score(candidate: PeakCandidate) -> int:
-    return len(candidate.quality_flags) + sum(
-        value is not None
-        for value in (
-            candidate.region_scan_count,
-            candidate.region_duration_min,
-            candidate.region_edge_ratio,
-            candidate.region_trace_continuity,
-        )
-    )
-
-
 def _combine_proposal_sources(
     first: PeakCandidate,
     second: PeakCandidate,
@@ -360,48 +392,12 @@ def _combine_proposal_sources(
     )
 
 
-def _source_apex_rank(
-    first: PeakCandidate,
-    second: PeakCandidate,
-    richer: PeakCandidate,
-) -> int | None:
-    if richer.source_apex_rank is not None:
-        return richer.source_apex_rank
-    return first.source_apex_rank or second.source_apex_rank
-
-
-def _max_result_smoothed(
-    first: PeakCandidatesResult,
-    second: PeakCandidatesResult,
-) -> float | None:
-    values = [
-        value
-        for value in (first.max_smoothed, second.max_smoothed)
-        if value is not None
-    ]
-    if not values:
-        return None
-    return max(values)
-
-
-def _strongest_failure_result(
-    legacy_result: PeakCandidatesResult,
-    local_result: PeakCandidatesResult,
-) -> PeakCandidatesResult:
-    status_rank = {
-        "WINDOW_TOO_SHORT": 3,
-        "NO_SIGNAL": 2,
-        "PEAK_NOT_FOUND": 1,
-        "OK": 0,
-    }
-    return max(
-        (legacy_result, local_result),
-        key=lambda result: (
-            status_rank[result.status],
-            result.n_points,
-            result.max_smoothed if result.max_smoothed is not None else 0.0,
-        ),
-    )
+def _combine_merge_note(current: str, note: str) -> str:
+    if not current:
+        return note
+    if not note or note in current.split("; "):
+        return current
+    return f"{current}; {note}"
 
 
 def _score_with_context(
@@ -409,12 +405,44 @@ def _score_with_context(
     context: ScoringContext,
     *,
     istd_confidence_note: str | None,
+    evidence_role: str = "",
+    istd_pair: str = "",
+    paired_istd_anchor_rt: float | None = None,
 ):
-    return score_candidate(
+    scored = score_candidate(
         candidate,
         context,
         prior_rt=context.rt_prior,
         istd_confidence_note=istd_confidence_note,
+    )
+    if (
+        scored.evidence_facts is not None
+        and not evidence_role
+        and not istd_pair
+        and paired_istd_anchor_rt is None
+    ):
+        return scored
+    evidence_facts = build_candidate_evidence_facts(
+        candidate,
+        context,
+        role=evidence_role,
+        istd_pair=istd_pair,
+        paired_istd_anchor_rt_min=paired_istd_anchor_rt,
+    )
+    semantics = decision_semantics_from_candidate_facts(
+        evidence_facts,
+        count_no_ms2_as_detected=context.count_no_ms2_as_detected,
+    )
+    reason = projected_reason_from_candidate_facts(evidence_facts, semantics)
+    if istd_confidence_note:
+        reason = f"{reason}; {istd_confidence_note}"
+    return replace(
+        scored,
+        confidence=confidence_from_value(
+            projected_confidence_from_candidate_facts(evidence_facts, semantics)
+        ),
+        reason=reason,
+        evidence_facts=evidence_facts,
     )
 
 
@@ -436,6 +464,7 @@ def _candidate_score_summary(scored_candidate) -> PeakCandidateScore:
         quality_penalty=scored_candidate.quality_penalty,
         selection_quality_penalty=scored_candidate.selection_quality_penalty,
         severities=scored_candidate.severities,
+        evidence_facts=scored_candidate.evidence_facts,
     )
 
 
@@ -449,6 +478,7 @@ def _detection_success(
     score_breakdown: tuple[tuple[str, str], ...] = (),
     candidate_scores: tuple[PeakCandidateScore, ...] = (),
     selection_reference_rt: float | None = None,
+    paired_istd_anchor_rt: float | None = None,
 ) -> PeakDetectionResult:
     return PeakDetectionResult(
         status="OK",
@@ -463,6 +493,7 @@ def _detection_success(
         score_breakdown=score_breakdown,
         candidate_scores=candidate_scores,
         selection_reference_rt=selection_reference_rt,
+        paired_istd_anchor_rt=paired_istd_anchor_rt,
     )
 
 

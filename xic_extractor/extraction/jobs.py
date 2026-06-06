@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.scoring_factory import build_scoring_context_factory
 from xic_extractor.extractor import RawFileExtractionResult
+from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecord
 from xic_extractor.rt_prior_library import LibraryEntry
 
 if TYPE_CHECKING:
@@ -34,6 +35,9 @@ class RawFileJob:
     config: ExtractionConfig
     targets: tuple[Target, ...]
     scoring_inputs: ScoringInputs | None = None
+    model_selection_expected_diff_approvals: (
+        dict[str, ExpectedDiffApprovalRecord] | None
+    ) = None
 
 
 @dataclass(frozen=True)
@@ -244,6 +248,14 @@ def extract_raw_file_job(job: RawFileJob) -> WorkerResult:
             list(job.targets),
             job.raw_path,
             scoring_context_factory=scoring_context_factory,
+            rt_prior_library=(
+                None
+                if job.scoring_inputs is None
+                else job.scoring_inputs.rt_prior_library
+            ),
+            model_selection_expected_diff_approvals=(
+                job.model_selection_expected_diff_approvals
+            ),
         )
     except Exception as exc:
         return WorkerError(

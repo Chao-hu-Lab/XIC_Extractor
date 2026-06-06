@@ -378,43 +378,6 @@ def _activation_decision(row: Mapping[str, str]) -> dict[str, str]:
             ),
         )
 
-    if _has_any(metrics, _PEAK_HYPOTHESIS_REVIEW_TOKENS):
-        raw_mode_review = _has_any(metrics, _RAW_MODE_REVIEW_TOKENS)
-        return _row(
-            base,
-            status="review_required",
-            action="require_review",
-            label="unchanged",
-            effect="review_only",
-            confidence="review",
-            hard_block=False,
-            rule=(
-                "peak_hypothesis_raw_mode_review_only"
-                if raw_mode_review
-                else "peak_hypothesis_tailing_review_only"
-            ),
-            reason=(
-                "raw-overlay-only mode evidence requires iRT/tag confirmation "
-                "before product activation"
-                if raw_mode_review
-                else (
-                    "tailing-confounded mode evidence cannot activate a product "
-                    "label without manual review"
-                )
-            ),
-            review=(
-                "raw_mode_review_only"
-                if raw_mode_review
-                else "tailing_confounded_peak_hypothesis"
-            ),
-            tokens=(
-                *_matching(metrics, "peak_hypothesis_status="),
-                *_matching(metrics, "product_selection_action="),
-                *_matching(metrics, "product_selection_blocker="),
-                *_matching(metrics, "peak_hypothesis_reason="),
-            ),
-        )
-
     if _has_wrong_peak_block(metrics, missing):
         return _row(
             base,
@@ -532,6 +495,51 @@ def _activation_decision(row: Mapping[str, str]) -> dict[str, str]:
             ),
         )
 
+    if _has_any(metrics, _PEAK_HYPOTHESIS_REVIEW_TOKENS):
+        raw_mode_review = _has_any(metrics, _RAW_MODE_REVIEW_TOKENS)
+        if not (
+            raw_mode_review
+            and _raw_mode_review_has_positive_product_support(
+                row,
+                missing,
+                metrics,
+            )
+        ):
+            return _row(
+                base,
+                status="review_required",
+                action="require_review",
+                label="unchanged",
+                effect="review_only",
+                confidence="review",
+                hard_block=False,
+                rule=(
+                    "peak_hypothesis_raw_mode_review_only"
+                    if raw_mode_review
+                    else "peak_hypothesis_tailing_review_only"
+                ),
+                reason=(
+                    "raw-overlay-only mode evidence requires candidate-aligned "
+                    "MS1 and MS2 support before product activation"
+                    if raw_mode_review
+                    else (
+                        "tailing-confounded mode evidence cannot activate a "
+                        "product label without manual review"
+                    )
+                ),
+                review=(
+                    "raw_mode_review_only"
+                    if raw_mode_review
+                    else "tailing_confounded_peak_hypothesis"
+                ),
+                tokens=(
+                    *_matching(metrics, "peak_hypothesis_status="),
+                    *_matching(metrics, "product_selection_action="),
+                    *_matching(metrics, "product_selection_blocker="),
+                    *_matching(metrics, "peak_hypothesis_reason="),
+                ),
+            )
+
     if evidence_status == "machine_observed_conflict":
         return _row(
             base,
@@ -573,7 +581,10 @@ def _activation_decision(row: Mapping[str, str]) -> dict[str, str]:
                 review="peak_hypothesis_id_required_for_auto_activation",
                 tokens=missing,
             )
-        if not _peak_hypothesis_has_product_authority(metrics):
+        if not (
+            _peak_hypothesis_has_product_authority(metrics)
+            or _raw_mode_review_has_positive_product_support(row, missing, metrics)
+        ):
             return _row(
                 base,
                 status="review_required",
@@ -753,6 +764,25 @@ def _dda_non_dispositive(metrics: Sequence[str]) -> bool:
 def _peak_hypothesis_has_product_authority(metrics: Sequence[str]) -> bool:
     source = _metric_value(metrics, "peak_hypothesis_authority_source=")
     return source in _PRODUCT_PEAK_HYPOTHESIS_AUTHORITY_SOURCES
+
+
+def _raw_mode_review_has_positive_product_support(
+    row: Mapping[str, str],
+    missing: Sequence[str],
+    metrics: Sequence[str],
+) -> bool:
+    if not _has_any(metrics, _RAW_MODE_REVIEW_TOKENS):
+        return False
+    if missing:
+        return False
+    if row.get("shape_basis_status") != "machine_observed":
+        return False
+    if row.get("pattern_basis_status") != "machine_observed":
+        return False
+    return (
+        "ms1_pattern_status=supportive" in metrics
+        and "candidate_ms2_pattern_status=supportive" in metrics
+    )
 
 
 def _matching(values: Sequence[str], prefix: str) -> tuple[str, ...]:

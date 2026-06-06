@@ -1,0 +1,92 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
+
+from xic_extractor.ms2_trace_evidence import MS2TraceStrength
+from xic_extractor.peak_scoring_evidence import EvidenceScore
+
+if TYPE_CHECKING:
+    from xic_extractor.peak_detection.evidence_facts import CandidateEvidenceFacts
+
+
+class Confidence(Enum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+    VERY_LOW = "VERY_LOW"
+
+
+CONFIDENCE_RANK = {
+    Confidence.HIGH: 0,
+    Confidence.MEDIUM: 1,
+    Confidence.LOW: 2,
+    Confidence.VERY_LOW: 3,
+}
+
+
+@dataclass(frozen=True)
+class ScoredCandidate:
+    candidate: Any
+    severities: tuple[tuple[int, str], ...]
+    confidence: Confidence
+    reason: str
+    prior_rt: float | None
+    quality_penalty: int = 0
+    selection_quality_penalty: float | None = None
+    prefer_rt_prior_tiebreak: bool = False
+    evidence_score: EvidenceScore | None = None
+    evidence_facts: CandidateEvidenceFacts | None = None
+
+
+@dataclass(frozen=True)
+class ScoringContext:
+    rt_array: np.ndarray
+    intensity_array: np.ndarray
+    apex_index: int
+    half_width_ratio: float
+    fwhm_ratio: float | None
+    ms2_present: bool
+    nl_match: bool
+    rt_prior: float | None
+    rt_prior_sigma: float | None
+    rt_min: float
+    rt_max: float
+    dirty_matrix: bool
+    neutral_loss_required: bool = True
+    count_no_ms2_as_detected: bool = False
+    ms2_trace_strength: MS2TraceStrength | None = None
+    ms2_alignment_source: str | None = None
+    trigger_scan_count: int | None = None
+    strict_nl_scan_count: int | None = None
+    ms1_peak_group_source: str = ""
+    ms1_peak_group_rt_min: float | None = None
+    ms1_peak_group_rt_max: float | None = None
+    ms1_peak_group_trigger_scan_count: int | None = None
+    ms1_peak_group_strict_nl_scan_count: int | None = None
+    ms1_peak_group_strict_nl_event_count: int | None = None
+    outside_ms1_peak_group_trigger_scan_count: int | None = None
+    outside_ms1_peak_group_strict_nl_scan_count: int | None = None
+    baseline_array: np.ndarray | None = None
+    residual_mad: float | None = None
+    prefer_rt_prior_tiebreak: bool = False
+    active_trace_source: str = ""
+    morphology_trace_method: str = ""
+    morphology_trace_window_points: int | None = None
+
+
+def confidence_from_total(total_severity: int) -> Confidence:
+    if total_severity == 0:
+        return Confidence.HIGH
+    if total_severity <= 2:
+        return Confidence.MEDIUM
+    if total_severity <= 4:
+        return Confidence.LOW
+    return Confidence.VERY_LOW
+
+
+def confidence_from_value(value: str) -> Confidence:
+    return Confidence(value)

@@ -14,7 +14,10 @@ from xic_extractor.alignment.family_compatibility import (
     loose_compatible_primary_family,
 )
 from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
-from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
+from xic_extractor.alignment.owner_group_delivery import (
+    OwnerGroupDeliveryFeature,
+    OwnerGroupDeliveryFeatures,
+)
 from xic_extractor.alignment.ownership_models import SampleLocalMS1Owner
 
 BackfillScope = Literal["full-audit", "production-equivalent", "selected-families"]
@@ -62,13 +65,13 @@ class SkippedEvidenceRecord:
 @dataclass(frozen=True)
 class BackfillScopeSelection:
     scope: BackfillScope
-    features: tuple[OwnerAlignedFeature, ...]
+    features: OwnerGroupDeliveryFeatures
     skipped: tuple[SkippedEvidenceRecord, ...]
     selected_family_ids: frozenset[str]
 
 
 def select_backfill_features(
-    features: tuple[OwnerAlignedFeature, ...],
+    features: OwnerGroupDeliveryFeatures,
     *,
     sample_order: tuple[str, ...],
     raw_sample_stems: frozenset[str],
@@ -91,7 +94,7 @@ def select_backfill_features(
             "or selected-families"
         )
 
-    selected: list[OwnerAlignedFeature] = []
+    selected: list[OwnerGroupDeliveryFeature] = []
     skipped: list[SkippedEvidenceRecord] = []
     for feature in features:
         if scope == "selected-families":
@@ -139,7 +142,7 @@ def select_backfill_features(
 
 
 def backfill_request_sample_stems(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     *,
     sample_order: tuple[str, ...],
     raw_sample_stems: frozenset[str],
@@ -173,13 +176,13 @@ def backfill_request_sample_stems(
 
 
 def backfill_features_for_sample(
-    features: tuple[OwnerAlignedFeature, ...],
+    features: OwnerGroupDeliveryFeatures,
     *,
     sample_stem: str,
     sample_order: tuple[str, ...],
     raw_sample_stems: frozenset[str],
     alignment_config: AlignmentConfig,
-) -> tuple[OwnerAlignedFeature, ...]:
+) -> OwnerGroupDeliveryFeatures:
     return tuple(
         feature
         for feature in features
@@ -194,7 +197,7 @@ def backfill_features_for_sample(
 
 
 def backfill_seed_centers(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
 ) -> tuple[tuple[float, float], ...]:
     return feature.backfill_seed_centers or (
         (feature.family_center_mz, feature.family_center_rt),
@@ -202,7 +205,7 @@ def backfill_seed_centers(
 
 
 def any_detected_owner_can_be_superseded(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     owners: Sequence[SampleLocalMS1Owner] | None,
 ) -> bool:
     return any(
@@ -211,7 +214,7 @@ def any_detected_owner_can_be_superseded(
 
 
 def detected_owner_can_be_superseded(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     owner: SampleLocalMS1Owner,
 ) -> bool:
     detected_area = positive_finite(owner.owner_area)
@@ -268,8 +271,8 @@ def skipped_evidence_summary(rows: Sequence[SkippedEvidenceRecord]) -> dict[str,
 
 
 def _can_skip_for_production_equivalence(
-    feature: OwnerAlignedFeature,
-    features: tuple[OwnerAlignedFeature, ...],
+    feature: OwnerGroupDeliveryFeature,
+    features: OwnerGroupDeliveryFeatures,
     *,
     alignment_config: AlignmentConfig,
 ) -> bool:
@@ -288,7 +291,7 @@ def _can_skip_for_production_equivalence(
 
 
 def _skipped_records(
-    feature: OwnerAlignedFeature,
+    feature: OwnerGroupDeliveryFeature,
     *,
     sample_order: tuple[str, ...],
     raw_sample_stems: frozenset[str],

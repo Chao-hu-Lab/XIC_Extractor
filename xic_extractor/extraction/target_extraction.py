@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +24,7 @@ from xic_extractor.extraction.peak_candidate_audit import append_peak_audit_rows
 from xic_extractor.extraction.result_assembly import build_extraction_result
 from xic_extractor.extraction.rt_windows import get_rt_window
 from xic_extractor.extraction.scoring_factory import (
+    allow_prepass_anchor,
     paired_istd_fwhm,
     selected_candidate,
     selected_shape_metrics,
@@ -32,6 +35,26 @@ from xic_extractor.output.messages import (
     build_diagnostic_records,
     istd_confidence_note,
 )
+from xic_extractor.peak_detection.chrom_peak_segment_projection import (
+    chrom_peak_segment_promoted_hypothesis_from_hypothesis,
+)
+from xic_extractor.peak_detection.chrom_peak_segments import ChromPeakSegmentPolicy
+from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
+from xic_extractor.peak_detection.ms1_morphology import (
+    configured_morphology_window_points,
+)
+from xic_extractor.peak_detection.selected_envelope import (
+    SelectedEnvelopeBoundaryEvaluation,
+    SelectedEnvelopePolicy,
+)
+from xic_extractor.peak_detection.selected_envelope_projection import (
+    selected_envelope_promoted_hypothesis_from_hypothesis,
+)
+from xic_extractor.peak_detection.selection_decision import (
+    PeakHypothesisSelectionDecision,
+    selection_decision_from_hypothesis,
+)
+from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import PeakCandidate
 
 if TYPE_CHECKING:
@@ -49,6 +72,8 @@ def extract_raw_file_result(
     raw_path: Path,
     *,
     scoring_context_factory: Callable[..., Any] | None = None,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
+    model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> RawFileExtractionResult:
     from xic_extractor import extractor
 
@@ -57,6 +82,8 @@ def extract_raw_file_result(
         targets,
         raw_path,
         scoring_context_factory=scoring_context_factory,
+        rt_prior_library=rt_prior_library,
+        model_selection_expected_diff_approvals=model_selection_expected_diff_approvals,
     )
     return extractor.RawFileExtractionResult(
         raw_index=raw_index,
@@ -76,15 +103,19 @@ def process_file(
     precomputed_istd_diagnostics: list[DiagnosticRecord] | None = None,
     precomputed_istd_anchor_rts: dict[str, float] | None = None,
     precomputed_istd_shape_metrics: dict[str, tuple[float, float | None]] | None = None,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
+    model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> tuple[FileResult, list[DiagnosticRecord]]:
     from xic_extractor import extractor
 
     sample_name = raw_path.stem
+    approval_records = model_selection_expected_diff_approvals
     try:
         with extractor.open_raw(raw_path, config.dll_dir) as raw:
-            results: dict[str, ExtractionResult] = dict(precomputed_istd_results or {})
+            results = dict(precomputed_istd_results or {})
             peak_candidate_rows: list[dict[str, str]] = []
             peak_candidate_boundary_rows: list[dict[str, str]] = []
+            selected_envelope_diagnostic_rows: list[dict[str, str]] = []
             diagnostics: list[DiagnosticRecord] = list(
                 precomputed_istd_diagnostics or []
             )
@@ -96,12 +127,13 @@ def process_file(
                 for label, result in results.items()
                 if result.peak_result.confidence is not None
             }
+            active_rt_prior_library = dict(rt_prior_library or {})
             if precomputed_istd_anchor_rts is None:
                 istd_anchor_rts: dict[str, float] = {}
                 for target in targets:
                     if not target.is_istd:
                         continue
-                    anchor_rt = extract_one_target(
+                    extract_one_target(
                         raw,
                         config,
                         sample_name,
@@ -112,12 +144,17 @@ def process_file(
                         diagnostics=diagnostics,
                         peak_candidate_rows=peak_candidate_rows,
                         peak_candidate_boundary_rows=peak_candidate_boundary_rows,
+                        selected_envelope_diagnostic_rows=(
+                            selected_envelope_diagnostic_rows
+                        ),
                         scoring_context_factory=scoring_context_factory,
+                        model_selection_expected_diff_approvals=approval_records,
                         shape_metrics_by_label=istd_shape_metrics_by_label,
                     )
                     confidence = results[target.label].peak_result.confidence
                     if confidence is not None:
                         istd_confidence_by_label[target.label] = confidence
+                    anchor_rt = credible_istd_anchor_rt(results.get(target.label))
                     if anchor_rt is not None:
                         istd_anchor_rts[target.label] = anchor_rt
             else:
@@ -141,13 +178,18 @@ def process_file(
                     sample_name,
                     target,
                     reference_rt=reference_rt,
+                    rt_prior_library=active_rt_prior_library,
                     sample_drift=sample_drift,
                     strict_preferred_rt=reference_rt is not None,
                     results=results,
                     diagnostics=diagnostics,
                     peak_candidate_rows=peak_candidate_rows,
                     peak_candidate_boundary_rows=peak_candidate_boundary_rows,
+                    selected_envelope_diagnostic_rows=(
+                        selected_envelope_diagnostic_rows
+                    ),
                     scoring_context_factory=scoring_context_factory,
+                    model_selection_expected_diff_approvals=approval_records,
                     istd_confidence_note=istd_confidence_note(
                         istd_confidence_by_label.get(target.istd_pair)
                     ),
@@ -162,18 +204,14 @@ def process_file(
                 results=results,
                 peak_candidate_rows=peak_candidate_rows,
                 peak_candidate_boundary_rows=peak_candidate_boundary_rows,
+                selected_envelope_diagnostic_rows=selected_envelope_diagnostic_rows,
             ), diagnostics
     except Exception as exc:
         reason = f"Failed to open .raw: {type(exc).__name__}: {exc}"
         return (
             extractor.FileResult(sample_name=sample_name, results={}, error=reason),
             [
-                DiagnosticRecord(
-                    sample_name=sample_name,
-                    target_label="",
-                    issue="FILE_ERROR",
-                    reason=reason,
-                )
+                DiagnosticRecord(sample_name, "", "FILE_ERROR", reason)
             ],
         )
 
@@ -185,22 +223,35 @@ def extract_one_target(
     target: Target,
     *,
     reference_rt: float | None,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None = None,
     sample_drift: float = 0.0,
     strict_preferred_rt: bool = False,
     results: dict[str, ExtractionResult],
     diagnostics: list[DiagnosticRecord],
     peak_candidate_rows: list[dict[str, str]] | None = None,
     peak_candidate_boundary_rows: list[dict[str, str]] | None = None,
+    selected_envelope_diagnostic_rows: list[dict[str, str]] | None = None,
     scoring_context_factory: Callable[..., Any] | None = None,
     istd_confidence_note: str | None = None,
     istd_rt_in_this_sample: float | None = None,
     paired_istd_fwhm: float | None = None,
     shape_metrics_by_label: dict[str, tuple[float, float | None]] | None = None,
+    model_selection_expected_diff_approvals: ExpectedDiffApprovalRecords | None = None,
 ) -> float | None:
     from xic_extractor import extractor
 
+    target_reference_rt = paired_target_reference_rt(
+        target,
+        reference_rt=reference_rt,
+        rt_prior_library=rt_prior_library,
+    )
     rt_min, rt_max, anchor_used, anchor_rt = get_rt_window(
-        raw, target, config, reference_rt=reference_rt, sample_drift=sample_drift
+        raw,
+        target,
+        config,
+        reference_rt=reference_rt,
+        target_reference_rt=target_reference_rt,
+        sample_drift=sample_drift,
     )
     rt, intensity = raw.extract_xic(target.mz, rt_min, rt_max, target.ppm_tol)
     nl_result = check_target_nl(raw, target, config)
@@ -239,6 +290,9 @@ def extract_one_target(
             strict_preferred_rt=strict_preferred_rt,
             scoring_context_builder=scoring_context_builder,
             istd_confidence_note=istd_confidence_note,
+            evidence_role="ISTD" if target.is_istd else "Analyte",
+            istd_pair=target.istd_pair,
+            paired_istd_anchor_rt=istd_rt_in_this_sample,
         )
     else:
         peak_result = extractor.find_peak_and_area(
@@ -247,6 +301,9 @@ def extract_one_target(
             config,
             preferred_rt=anchor_rt,
             strict_preferred_rt=strict_preferred_rt,
+            evidence_role="ISTD" if target.is_istd else "Analyte",
+            istd_pair=target.istd_pair,
+            paired_istd_anchor_rt=istd_rt_in_this_sample,
         )
     recovery_decision = recover_istd_anchor_peak_if_needed(
         peak_result,
@@ -271,6 +328,7 @@ def extract_one_target(
         peak_result,
         reference_rt=reference_rt,
         anchor_rt=anchor_rt,
+        anchor_used=anchor_used,
         strict_preferred_rt=strict_preferred_rt,
     )
     if paired_rejection is not None:
@@ -278,14 +336,18 @@ def extract_one_target(
             peak_result,
             paired_rejection.reason,
         )
+    if istd_rt_in_this_sample is not None:
+        peak_result = replace(
+            peak_result,
+            paired_istd_anchor_rt=istd_rt_in_this_sample,
+        )
     audit_rt = recovery_decision.rt if recovery_decision.rt is not None else rt
     audit_intensity = (
         recovery_decision.intensity
         if recovery_decision.intensity is not None
         else intensity
     )
-    shape_intensity = audit_intensity
-    shape_metrics = selected_shape_metrics(shape_intensity, peak_result)
+    shape_metrics = selected_shape_metrics(audit_intensity, peak_result)
     candidate = selected_candidate(peak_result)
     if shape_metrics_by_label is not None and shape_metrics is not None:
         shape_metrics_by_label[target.label] = shape_metrics
@@ -302,7 +364,83 @@ def extract_one_target(
         rt_min=rt_min,
         rt_max=rt_max,
         expected_rt_min=anchor_rt,
+        paired_istd_anchor_rt=istd_rt_in_this_sample,
+        model_selection_expected_diff_approvals=model_selection_expected_diff_approvals,
     )
+    if handoff_peak.selected_hypothesis is not None:
+        selected_envelope_evaluation = None
+        chrom_segment_boundary_accepted = False
+        guard_rt = audit_rt
+        guard_intensity = audit_intensity
+        if handoff_peak.trace_group is not None:
+            guard_trace = handoff_peak.trace_group.primary_trace
+            guard_rt = guard_trace.rt
+            guard_intensity = guard_trace.intensity
+        context_rt_start, context_rt_end = _trace_rt_bounds(
+            guard_rt,
+            fallback_start=rt_min,
+            fallback_end=rt_max,
+        )
+        morphology_window_points = configured_morphology_window_points(config)
+        try:
+            promoted_hypothesis, selected_envelope_evaluation = (
+                selected_envelope_promoted_hypothesis_from_hypothesis(
+                    handoff_peak.selected_hypothesis,
+                    rt_values=guard_rt,
+                    intensity_values=guard_intensity,
+                    quantitation_context_rt_start=context_rt_start,
+                    quantitation_context_rt_end=context_rt_end,
+                    policy=SelectedEnvelopePolicy(
+                        morphology_trace_window_points=morphology_window_points,
+                    ),
+                )
+            )
+        except ValueError:
+            promoted_hypothesis = handoff_peak.selected_hypothesis
+        try:
+            chrom_promoted_hypothesis, chrom_segment_projection = (
+                chrom_peak_segment_promoted_hypothesis_from_hypothesis(
+                    handoff_peak.selected_hypothesis,
+                    rt_values=guard_rt,
+                    intensity_values=guard_intensity,
+                    quantitation_context_rt_start=context_rt_start,
+                    quantitation_context_rt_end=context_rt_end,
+                    selected_envelope_evaluation=selected_envelope_evaluation,
+                    policy=ChromPeakSegmentPolicy(
+                        morphology_trace_window_points=morphology_window_points,
+                    ),
+                )
+            )
+        except ValueError:
+            chrom_promoted_hypothesis = handoff_peak.selected_hypothesis
+            chrom_segment_projection = None
+        if (
+            chrom_segment_projection is not None
+            and chrom_segment_projection.accepted
+        ):
+            promoted_hypothesis = chrom_promoted_hypothesis
+            chrom_segment_boundary_accepted = True
+        if promoted_hypothesis is not handoff_peak.selected_hypothesis:
+            handoff_peak = replace(
+                handoff_peak,
+                selected_hypothesis=promoted_hypothesis,
+                selection_decision=selection_decision_from_hypothesis(
+                    promoted_hypothesis,
+                    peak_result=peak_result,
+                ),
+            )
+        if (
+            selected_envelope_evaluation is not None
+            and handoff_peak.selection_decision is not None
+            and not chrom_segment_boundary_accepted
+        ):
+            handoff_peak = replace(
+                handoff_peak,
+                selection_decision=_selected_envelope_guarded_decision(
+                    handoff_peak.selection_decision,
+                    selected_envelope_evaluation,
+                ),
+            )
 
     result = build_extraction_result(
         peak_result=peak_result,
@@ -312,15 +450,22 @@ def extract_one_target(
         candidate=candidate,
         scoring_context_builder=scoring_context_builder,
         selected_hypothesis=handoff_peak.selected_hypothesis,
+        selection_decision=handoff_peak.selection_decision,
+        model_selection_result=handoff_peak.model_selection_result,
+        sample_name=sample_name,
     )
     results[target.label] = result
     diagnostics.extend(build_diagnostic_records(sample_name, target, result, config))
     if paired_rejection is not None:
         diagnostics.append(paired_rejection)
     append_anchor_window_diagnostics(
-        diagnostics, sample_name, target, config, peak_result,
+        diagnostics,
+        sample_name,
+        target,
+        config,
+        peak_result,
         anchor_used=anchor_used,
-        anchor_rt=anchor_rt,
+        anchor_rt=anchor_rt if anchor_used else None,
         rt_min=rt_min,
         rt_max=rt_max,
         nl_result=result.nl,
@@ -329,14 +474,109 @@ def extract_one_target(
     append_peak_audit_rows(
         peak_candidate_rows=peak_candidate_rows,
         peak_candidate_boundary_rows=peak_candidate_boundary_rows,
+        selected_envelope_diagnostic_rows=selected_envelope_diagnostic_rows,
         config=config,
         sample_name=sample_name,
         target=target,
         peak_result=peak_result,
         candidate_ms2_builder=_cached_candidate_ms2_builder,
-        rt=audit_rt, intensity=audit_intensity,
+        rt=audit_rt,
+        intensity=audit_intensity,
         trace_group=handoff_peak.trace_group,
+        product_selected_candidate_id=getattr(
+            handoff_peak.selected_hypothesis, "hypothesis_id", None
+        ),
+        product_selected_hypothesis=handoff_peak.selected_hypothesis,
         scoring_context_builder=scoring_context_builder,
         istd_confidence_note=istd_confidence_note,
     )
     return anchor_rt
+
+
+def paired_target_reference_rt(
+    target: Target,
+    *,
+    reference_rt: float | None,
+    rt_prior_library: dict[tuple[str, str], LibraryEntry] | None,
+) -> float | None:
+    if target.is_istd or not target.istd_pair or reference_rt is None:
+        return None
+    library = rt_prior_library or {}
+    entry = library.get((target.label, "analyte"))
+    if (
+        entry is None
+        or entry.istd_pair != target.istd_pair
+        or entry.median_delta_rt is None
+    ):
+        return None
+    return reference_rt + entry.median_delta_rt
+
+
+def credible_istd_anchor_rt(result: ExtractionResult | None) -> float | None:
+    """Return the selected ISTD MS1 RT only when it is credible as a pair anchor."""
+    if result is None:
+        return None
+    projection = result.targeted_product_projection
+    if projection is not None and not projection.counted_detection:
+        return None
+    if not allow_prepass_anchor(result.peak_result):
+        return None
+    rt = result.reported_rt
+    area = result.reported_peak_area
+    if not _finite_positive(rt) or not _finite_positive(area):
+        return None
+    assert rt is not None
+    return float(rt)
+
+
+def _finite_positive(value: float | None) -> bool:
+    return value is not None and math.isfinite(value) and value > 0
+
+
+def _trace_rt_bounds(
+    rt_values: Any,
+    *,
+    fallback_start: float,
+    fallback_end: float,
+) -> tuple[float, float]:
+    try:
+        values = [float(value) for value in rt_values]
+    except (TypeError, ValueError):
+        values = []
+    finite_values = [value for value in values if math.isfinite(value)]
+    if len(finite_values) >= 2:
+        return min(finite_values), max(finite_values)
+    return min(float(fallback_start), float(fallback_end)), max(
+        float(fallback_start),
+        float(fallback_end),
+    )
+
+
+def _selected_envelope_guarded_decision(
+    decision: PeakHypothesisSelectionDecision,
+    evaluation: SelectedEnvelopeBoundaryEvaluation,
+) -> PeakHypothesisSelectionDecision:
+    if evaluation.row_boundary_decision == "accept_candidate":
+        return decision
+    guard = f"selected_envelope_{evaluation.boundary_change_class}"
+    not_counted = (
+        f"selected_envelope_boundary_{evaluation.row_boundary_decision}"
+    )
+    projected_reason = (
+        f"decision: not_counted; not_counted: {not_counted}; "
+        f"review: {guard}"
+    )
+    return replace(
+        decision,
+        projected_confidence="VERY_LOW",
+        projected_reason=projected_reason,
+        review_reasons=_append_unique(decision.review_reasons, guard),
+        not_counted_reasons=_append_unique(
+            decision.not_counted_reasons,
+            not_counted,
+        ),
+    )
+
+
+def _append_unique(values: tuple[str, ...], value: str) -> tuple[str, ...]:
+    return tuple(dict.fromkeys((*values, value)))

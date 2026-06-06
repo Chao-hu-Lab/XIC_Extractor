@@ -22,14 +22,18 @@ from xic_extractor.alignment.raw_sources import existing_raw_paths
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.diagnostics.timing import TimingRecorder
 from xic_extractor.raw_reader import RawReaderError
-from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS, RESOLVER_MODES
+from xic_extractor.settings_schema import (
+    ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+    CANONICAL_SETTINGS_DEFAULTS,
+    RESOLVER_MODES,
+)
 
 _DEFAULT_DRIFT_LOCAL_WINDOW = 40
 _DEFAULT_RAW_WORKERS = 1
 _DEFAULT_RAW_XIC_BATCH_SIZE = 1
 _PERFORMANCE_PROFILES = {
     "validation-fast": {
-        "raw_workers": 8,
+        "raw_workers": 11,
         "raw_xic_batch_size": 64,
     },
 }
@@ -394,7 +398,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         choices=tuple(_PERFORMANCE_PROFILES),
         help=(
             "Named alignment execution profile. 'validation-fast' uses the "
-            "8-RAW-equivalent fast path: raw-workers=8 and "
+            "local RAW validation fast path: raw-workers=11 and "
             "raw-xic-batch-size=64. Explicit raw flags override profile values."
         ),
     )
@@ -538,7 +542,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--resolver-mode",
-        choices=RESOLVER_MODES,
+        type=_resolver_mode,
         default="region_first_safe_merge",
     )
     parser.add_argument(
@@ -565,8 +569,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--baseline-integration-method",
-        choices=("asls", "linear_edge"),
-        help="Alignment integration-audit baseline method.",
+        help="Alignment integration-audit baseline method. Only asls is supported.",
     )
     parser.add_argument("--emit-alignment-backfill-seed-audit", action="store_true")
     parser.add_argument("--emit-alignment-status-matrix", action="store_true")
@@ -829,6 +832,16 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _resolver_mode(value: str) -> str:
+    parsed = value.strip()
+    if parsed == "arbitrated":
+        raise argparse.ArgumentTypeError(ARBITRATED_RESOLVER_RETIRED_MESSAGE)
+    if parsed not in RESOLVER_MODES:
+        allowed = ", ".join(RESOLVER_MODES[:-1]) + f", or {RESOLVER_MODES[-1]}"
+        raise argparse.ArgumentTypeError(f"resolver-mode must be {allowed}")
+    return parsed
+
+
 def _profile_output_dir(args: argparse.Namespace, output_dir: Path) -> Path:
     if args.profile_output_dir is not None:
         return args.profile_output_dir.resolve()
@@ -873,15 +886,18 @@ def _baseline_audit_method(args: argparse.Namespace) -> str:
 
 def _baseline_integration_method(args: argparse.Namespace) -> str:
     if args.baseline_integration_method:
-        return args.baseline_integration_method
-    if _baseline_audit_method(args) == "asls":
-        return "linear_edge"
+        method = args.baseline_integration_method.strip().lower()
+        if method == "linear_edge":
+            raise ValueError("linear_edge baseline integration is retired; use asls")
+        if method != "asls":
+            raise ValueError("--baseline-integration-method must be asls")
+        return method
     env_method = os.environ.get("BASELINE_INTEGRATION_METHOD", "").strip().lower()
     if env_method in {"", "asls"}:
         return "asls"
     if env_method == "linear_edge":
-        return "linear_edge"
-    raise ValueError("BASELINE_INTEGRATION_METHOD must be asls or linear_edge")
+        raise ValueError("linear_edge baseline integration is retired; use asls")
+    raise ValueError("BASELINE_INTEGRATION_METHOD must be asls")
 
 
 def _peak_config(
@@ -900,6 +916,9 @@ def _peak_config(
         diagnostics_csv=output_dir / "xic_diagnostics.csv",
         smooth_window=int(defaults["smooth_window"]),
         smooth_polyorder=int(defaults["smooth_polyorder"]),
+        ms1_morphology_smoothing_window_points=int(
+            defaults["ms1_morphology_smoothing_window_points"]
+        ),
         peak_rel_height=float(defaults["peak_rel_height"]),
         peak_min_prominence_ratio=float(defaults["peak_min_prominence_ratio"]),
         ms2_precursor_tol_da=float(defaults["ms2_precursor_tol_da"]),

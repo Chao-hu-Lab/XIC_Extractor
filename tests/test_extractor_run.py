@@ -6,11 +6,15 @@ import pytest
 
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extractor import RunOutput
+from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecord
 from xic_extractor.rt_prior_library import LibraryEntry
 from xic_extractor.signal_processing import (
     PeakCandidate,
     PeakDetectionResult,
     PeakResult,
+)
+from xic_extractor.target_pair_rt_calibration import (
+    TARGET_PAIR_RT_CALIBRATION_FIELDS,
 )
 
 
@@ -36,6 +40,7 @@ def test_run_uses_serial_backend_by_default(
     targets = [_target("Analyte")]
     returned = RunOutput(file_results=[], diagnostics=[])
     calls: list[tuple[ExtractionConfig, list[Target], list[str]]] = []
+    approval = _expected_diff_approval()
 
     def _fake_run_serial(
         config_arg: ExtractionConfig,
@@ -46,12 +51,16 @@ def test_run_uses_serial_backend_by_default(
         should_stop=None,
         injection_order=None,
         rt_prior_library=None,
+        model_selection_expected_diff_approvals=None,
     ) -> RunOutput:
         calls.append((config_arg, targets_arg, [path.name for path in raw_paths]))
         assert progress_callback is _progress
         assert should_stop is _should_stop
         assert injection_order == {"SampleA": 1}
         assert rt_prior_library == {}
+        assert model_selection_expected_diff_approvals == {
+            approval.stable_row_id: approval
+        }
         return returned
 
     def _progress(_current: int, _total: int, _filename: str) -> None:
@@ -69,6 +78,9 @@ def test_run_uses_serial_backend_by_default(
         should_stop=_should_stop,
         injection_order={"SampleA": 1},
         rt_prior_library={},
+        model_selection_expected_diff_approvals={
+            approval.stable_row_id: approval
+        },
     )
 
     assert output is returned
@@ -126,12 +138,14 @@ def test_run_resolves_scoring_inputs_before_backend(
         should_stop=None,
         injection_order=None,
         rt_prior_library=None,
+        model_selection_expected_diff_approvals=None,
     ) -> RunOutput:
         assert config_arg is config
         assert targets_arg is targets
         assert [path.name for path in raw_paths] == ["SampleA.raw"]
         assert injection_order == {"SampleA": 1}
         assert rt_prior_library == library
+        assert model_selection_expected_diff_approvals is None
         return RunOutput(file_results=[], diagnostics=[])
 
     monkeypatch.setattr(serial_backend, "run_serial", _fake_run_serial)
@@ -139,6 +153,69 @@ def test_run_resolves_scoring_inputs_before_backend(
     output = extractor.run(config, targets)
 
     assert output.file_results == []
+
+
+def test_target_pair_rt_calibration_fences_legacy_rt_prior_library(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from xic_extractor import extractor
+    from xic_extractor.extraction import serial_backend
+
+    config = _config(tmp_path, keep_intermediate_csv=False)
+    config = ExtractionConfig(
+        **{
+            **config.__dict__,
+            "rt_prior_library_path": tmp_path / "rt_prior_library.csv",
+            "target_pair_rt_calibration_path": (
+                tmp_path / "target_pair_rt_calibration.tsv"
+            ),
+            "config_hash": "abcd1234",
+        }
+    )
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    assert config.target_pair_rt_calibration_path is not None
+    config.target_pair_rt_calibration_path.write_text(
+        "\t".join(TARGET_PAIR_RT_CALIBRATION_FIELDS) + "\n",
+        encoding="utf-8",
+    )
+    targets = [_target("Analyte")]
+    injected_library = {
+        ("Analyte", "analyte"): LibraryEntry(
+            config_hash="abcd1234",
+            target_label="Analyte",
+            role="analyte",
+            istd_pair="ISTD",
+            median_delta_rt=0.25,
+            sigma_delta_rt=0.05,
+            median_abs_rt=None,
+            sigma_abs_rt=None,
+            n_samples=8,
+            updated_at="2026-06-03",
+        )
+    }
+    monkeypatch.setattr(
+        "xic_extractor.extraction.pipeline.load_library",
+        lambda path, config_hash: injected_library,
+    )
+
+    def _fake_run_serial(
+        config_arg: ExtractionConfig,
+        targets_arg: list[Target],
+        *,
+        raw_paths: list[Path],
+        progress_callback=None,
+        should_stop=None,
+        injection_order=None,
+        rt_prior_library=None,
+        model_selection_expected_diff_approvals=None,
+    ) -> RunOutput:
+        assert rt_prior_library == {}
+        return RunOutput(file_results=[], diagnostics=[])
+
+    monkeypatch.setattr(serial_backend, "run_serial", _fake_run_serial)
+
+    extractor.run(config, targets, rt_prior_library=injected_library)
 
 
 def test_resolve_injection_order_returns_empty_dict_without_raw_files(
@@ -288,6 +365,24 @@ def _target(label: str) -> Target:
     )
 
 
+def _expected_diff_approval() -> ExpectedDiffApprovalRecord:
+    return ExpectedDiffApprovalRecord(
+        stable_row_id="SampleA|Analyte|expected-diff",
+        sample_name="SampleA",
+        target_label="Analyte",
+        legacy_selected_candidate_id="legacy",
+        successor_selected_candidate_id="successor",
+        public_outputs_touched=("selected rt", "area", "final matrix value"),
+        matrix_value_impact="area_value_changed",
+        evidence_sources=("ms1_trace",),
+        evidence_summary="approved expected-diff fixture",
+        validation_tier="targeted_benchmark",
+        reviewer_role="implementation-contract-reviewer",
+        reviewer_verdict="approved",
+        final_label="expected_diff",
+    )
+
+
 def _ok_peak(rt: float, intensity: float, area: float) -> PeakDetectionResult:
     peak = PeakResult(
         rt=rt,
@@ -333,6 +428,7 @@ def _peak_sequence(results: list[PeakDetectionResult]):
         strict_preferred_rt: bool = False,
         scoring_context_builder: object | None = None,
         istd_confidence_note: str | None = None,
+        **_kwargs: object,
     ) -> PeakDetectionResult:
         return pending.pop(0)
 

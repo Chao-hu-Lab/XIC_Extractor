@@ -57,13 +57,23 @@ def decide_cell_quality(
     if cell.status == "detected":
         area = _valid_area(cell.matrix_area)
         if area is None:
-            return _decision(cell, "invalid", None, "invalid_area")
+            return _decision(
+                cell,
+                "invalid",
+                None,
+                _invalid_matrix_area_reason(cell),
+            )
         return _decision(cell, "detected_quantifiable", area, "")
 
     if cell.status == "rescued":
         area = _valid_area(cell.matrix_area)
         if area is None:
-            return _decision(cell, "invalid", None, "invalid_area")
+            return _decision(
+                cell,
+                "invalid",
+                None,
+                _invalid_matrix_area_reason(cell),
+            )
         if not _has_complete_peak(cell):
             return _decision(cell, "review_rescue", None, "incomplete_peak")
         if cell.rt_delta_sec is None or abs(cell.rt_delta_sec) > config.max_rt_sec:
@@ -119,6 +129,12 @@ def _valid_area(value: float | None) -> float | None:
     ):
         return None
     return float(value)
+
+
+def _invalid_matrix_area_reason(cell: AlignedCell) -> str:
+    if cell.selected_integration is None and _valid_area(cell.area) is None:
+        return "invalid_area"
+    return cell.matrix_area_missing_reason or "invalid_area"
 
 
 def _has_complete_peak(cell: AlignedCell) -> bool:

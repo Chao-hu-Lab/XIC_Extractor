@@ -7,6 +7,7 @@ from typing import cast
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.baseline import BaselineMethod
+from xic_extractor.peak_detection.candidate_scoring import score_candidate
 from xic_extractor.peak_detection.cwt import add_cwt_proposals_for_audit
 from xic_extractor.peak_detection.hypotheses import (
     PeakHypothesis,
@@ -18,8 +19,14 @@ from xic_extractor.peak_detection.models import (
     PeakCandidateScore,
     PeakDetectionResult,
 )
+from xic_extractor.peak_detection.ms1_morphology import (
+    configured_morphology_window_points,
+)
+from xic_extractor.peak_detection.scoring_models import (
+    ScoredCandidate,
+    ScoringContext,
+)
 from xic_extractor.peak_detection.traces import TraceGroup
-from xic_extractor.peak_scoring import ScoredCandidate, ScoringContext, score_candidate
 from xic_extractor.sample_groups import classify_sample_group
 
 PeakCandidateTableRow = dict[str, str]
@@ -47,6 +54,11 @@ PEAK_CANDIDATE_HEADERS = (
     "prominence",
     "area_raw_counts_seconds",
     "area_baseline_corrected",
+    "area_ms1_morphology",
+    "ms1_morphology_area_source",
+    "ms1_morphology_trace_method",
+    "ms1_morphology_trace_window_points",
+    "ms1_morphology_trace_effective_points",
     "area_uncertainty",
     "area_uncertainty_formula_version",
     "baseline_residual_mad",
@@ -78,6 +90,14 @@ PEAK_CANDIDATE_HEADERS = (
     "best_product_base_ratio",
     "trigger_scan_count",
     "strict_nl_scan_count",
+    "ms1_peak_group_source",
+    "ms1_peak_group_rt_min",
+    "ms1_peak_group_rt_max",
+    "ms1_peak_group_trigger_scan_count",
+    "ms1_peak_group_strict_nl_scan_count",
+    "ms1_peak_group_strict_nl_event_count",
+    "outside_ms1_peak_group_trigger_scan_count",
+    "outside_ms1_peak_group_strict_nl_scan_count",
     "ms2_alignment_source",
     "diagnostic_product_absence_reason",
     "nearest_product_loss_ppm",
@@ -157,6 +177,81 @@ def build_peak_candidate_rows_from_hypotheses(
     ]
 
 
+def with_product_selected_marker(
+    hypotheses: tuple[PeakHypothesis, ...],
+    selected_candidate_id: str | None,
+    *,
+    selected_hypothesis: PeakHypothesis | None = None,
+) -> tuple[PeakHypothesis, ...]:
+    selected_hypothesis_id = _product_selected_marker_hypothesis_id(
+        hypotheses,
+        selected_candidate_id,
+        selected_hypothesis=selected_hypothesis,
+    )
+    if selected_hypothesis_id is None:
+        return hypotheses
+    updated: list[PeakHypothesis] = []
+    for hypothesis in hypotheses:
+        selected = hypothesis.hypothesis_id == selected_hypothesis_id
+        selection_rank = 1 if selected else hypothesis.audit.selection_rank
+        if not selected and selection_rank == 1:
+            selection_rank = None
+        updated.append(
+            replace(
+                hypothesis,
+                audit=replace(
+                    hypothesis.audit,
+                    selected=selected,
+                    selection_rank=selection_rank,
+                ),
+            )
+        )
+    return tuple(updated)
+
+
+def _product_selected_marker_hypothesis_id(
+    hypotheses: tuple[PeakHypothesis, ...],
+    selected_candidate_id: str | None,
+    *,
+    selected_hypothesis: PeakHypothesis | None,
+) -> str | None:
+    if selected_candidate_id is not None:
+        for hypothesis in hypotheses:
+            if hypothesis.hypothesis_id == selected_candidate_id:
+                return selected_candidate_id
+    if selected_hypothesis is None:
+        return None
+
+    selected_key = _selected_marker_projection_key(selected_hypothesis)
+    matches = [
+        hypothesis
+        for hypothesis in hypotheses
+        if _selected_marker_projection_key(hypothesis) == selected_key
+    ]
+    if len(matches) != 1:
+        return None
+    return matches[0].hypothesis_id
+
+
+def _selected_marker_projection_key(
+    hypothesis: PeakHypothesis,
+) -> tuple[str, str, str, str, str, str, str, str, str, str, str]:
+    integration = hypothesis.integration
+    return (
+        hypothesis.trace_group_id,
+        hypothesis.target_label,
+        hypothesis.role,
+        hypothesis.istd_pair,
+        hypothesis.analysis_mode,
+        hypothesis.resolver_mode,
+        _format_float(integration.rt_left_min),
+        _format_float(integration.rt_apex_min),
+        _format_float(integration.rt_right_min),
+        _format_float(integration.raw_apex_rt_min),
+        _format_float(integration.area_raw_counts_seconds),
+    )
+
+
 def build_peak_candidate_audit_hypotheses(
     *,
     config: ExtractionConfig,
@@ -201,6 +296,9 @@ def build_peak_candidate_audit_hypotheses(
         rt=rt,
         intensity=intensity,
         trace_group=trace_group,
+        ms1_morphology_smoothing_window_points=(
+            configured_morphology_window_points(config)
+        ),
         baseline_integration_method=cast(
             BaselineMethod,
             config.baseline_integration_method,
@@ -245,6 +343,19 @@ def _row_from_hypothesis(
         ),
         "area_baseline_corrected": _format_optional_float(
             hypothesis.integration.area_baseline_corrected
+        ),
+        "area_ms1_morphology": _format_optional_float(
+            hypothesis.integration.area_ms1_morphology
+        ),
+        "ms1_morphology_area_source": hypothesis.integration.ms1_morphology_area_source,
+        "ms1_morphology_trace_method": (
+            hypothesis.integration.ms1_morphology_trace_method
+        ),
+        "ms1_morphology_trace_window_points": _format_optional_int(
+            hypothesis.integration.ms1_morphology_trace_window_points
+        ),
+        "ms1_morphology_trace_effective_points": _format_optional_int(
+            hypothesis.integration.ms1_morphology_trace_effective_points
         ),
         "area_uncertainty": _format_optional_float(
             hypothesis.integration.area_uncertainty
@@ -304,6 +415,28 @@ def _row_from_hypothesis(
         ),
         "strict_nl_scan_count": _format_optional_int(
             hypothesis.evidence.strict_nl_scan_count
+        ),
+        "ms1_peak_group_source": hypothesis.evidence.ms1_peak_group_source,
+        "ms1_peak_group_rt_min": _format_optional_float(
+            hypothesis.evidence.ms1_peak_group_rt_min
+        ),
+        "ms1_peak_group_rt_max": _format_optional_float(
+            hypothesis.evidence.ms1_peak_group_rt_max
+        ),
+        "ms1_peak_group_trigger_scan_count": _format_optional_int(
+            hypothesis.evidence.ms1_peak_group_trigger_scan_count
+        ),
+        "ms1_peak_group_strict_nl_scan_count": _format_optional_int(
+            hypothesis.evidence.ms1_peak_group_strict_nl_scan_count
+        ),
+        "ms1_peak_group_strict_nl_event_count": _format_optional_int(
+            hypothesis.evidence.ms1_peak_group_strict_nl_event_count
+        ),
+        "outside_ms1_peak_group_trigger_scan_count": _format_optional_int(
+            hypothesis.evidence.outside_ms1_peak_group_trigger_scan_count
+        ),
+        "outside_ms1_peak_group_strict_nl_scan_count": _format_optional_int(
+            hypothesis.evidence.outside_ms1_peak_group_strict_nl_scan_count
         ),
         "ms2_alignment_source": hypothesis.evidence.ms2_alignment_source,
         "diagnostic_product_absence_reason": (

@@ -1,28 +1,53 @@
 # C1b — Linear Edge Baseline Retirement Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.3 — PAUSED until AsLS truth validation
+**Status:** Completed in 2026-06-01 cleanup-retirement branch — linear-edge
+production/config behavior retired
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Companion spec:** [C1a — Baseline module relocation](2026-05-24-peak-pipeline-cleanup-baseline-module-consolidation-spec.md)
 **Precondition:** C5 (area integration single entry) landed and validated, C1a
 landed and validated, and [P2c AsLS truth validation](2026-05-26-peak-pipeline-asls-truth-validation-spec.md)
 has reached `GO_FOR_LINEAR_EDGE_RETIREMENT`. P2b conditional audit promotion is
 not sufficient. P2b's temporary linear-edge rollback audit columns must also be
-deprecated by an approved schema note before implementation starts.
+deprecated by an approved schema note before implementation starts. These
+preconditions were satisfied in the 2026-06-01 one-pass cleanup branch before
+Phase 7 deleted the production linear-edge implementation.
+
+## 2026-06-01 Implementation Closeout
+
+C1b is complete for the current product surface:
+
+- `integrate_linear_edge_baseline` was deleted from production code.
+- `BaselineMethod` is now `Literal["asls"]`.
+- `integrate_with_baseline` remains as a compatibility guard, not as a
+  multi-method selector: `baseline_method="asls"` works and
+  `baseline_method="linear_edge"` raises
+  `linear_edge baseline integration is retired; use asls`.
+- Config/CLI/env inputs that request `linear_edge` are rejected with the same
+  migration message.
+- The accepted `alignment_cell_integration_audit.tsv` schema no longer emits
+  linear-edge rollback columns.
+- Historical diagnostics may still read old linear-edge comparison columns or
+  use local historical comparator helpers to interpret locked evidence. Those
+  are not maintained production selector support.
+
+The closeout note is
+`docs/superpowers/notes/2026-06-01-phase7-linear-edge-deletion-note.md`.
 
 ## Purpose
 
 Retire the linear-edge baseline path. After C5 has migrated production package
 callers to the single integration entry, AsLS truth validation has cleared, and
 diagnostic comparator callers have been migrated or retired, the
-`integrate_linear_edge_baseline` function and the `integrate_with_baseline`
-selector wrapper have no remaining callers and can be deleted.
+`integrate_linear_edge_baseline` function and linear-edge selector support have
+no remaining production callers and can be deleted.
 
 C1b is the second half of the original C1 plan. C1a relocated AsLS into
 the peak-detection package. C1b removes the dead linear-edge code path.
 
-This refactor introduces no behavioral change. Validation is behavioral
-parity.
+The final retirement is a deliberate public-input behavior change for old
+`linear_edge` requests: they now fail fast with the migration message. Supported
+AsLS production output is preserved.
 
 ## Why C1b Has to Wait for C5 And AsLS Truth
 
@@ -55,26 +80,21 @@ cycle.
 
 ## Current State (assumed after C1a + C5 + AsLS truth validation)
 
-This section describes the working-tree state C1b expects to find when it
-runs. **None of these state items exist in working tree today** — they are
-the cumulative output of C1a, C5, and a separate AsLS truth-validation spec:
+This section originally described the working-tree state C1b expected to find
+before implementation. In the completed branch, these are the actual
+post-closeout facts:
 
-- `xic_extractor/peak_detection/baseline.py` will define both
-  `integrate_linear_edge_baseline` (legacy) and an AsLS-using path (added
-  by P2)
-- `integrate_with_baseline` selector (added by P2) will dispatch on
-  `baseline_method` argument
-- After C5 and truth validation, all production package callers will go through
-  the single integration entry, and the selected method will be AsLS-only
-- Maintained diagnostic comparator callers in `tools/diagnostics/` will already
-  be migrated to an approved comparator interface or explicitly retired
-- `BaselineIntegration.baseline_type` field will exist and take only
-  `"asls"` in production runs
-- P2b temporary linear-edge rollback columns will already be absent from the
-  accepted post-rollback audit schema, with a schema/deprecation note and hash
-
-If any of these conditions are not met at C1b kick-off, escalate to spec
-owner — the precondition chain is broken and C1b should not start.
+- `xic_extractor/peak_detection/baseline.py` defines `integrate_asls_baseline`
+  and no production `integrate_linear_edge_baseline`.
+- `integrate_with_baseline` accepts only AsLS and rejects `linear_edge`.
+- Production package callers go through the consolidated integration path and
+  the selected method is AsLS-only.
+- Maintained diagnostic comparator paths are either historical readers or local
+  historical helpers; they do not expose a production selector.
+- `BaselineIntegration.baseline_type` exists and takes only `"asls"` in
+  production runs.
+- P2b temporary linear-edge rollback columns are absent from the accepted
+  post-rollback audit schema.
 
 ## Required Change
 
@@ -86,11 +106,12 @@ remains in `xic_extractor/`, `tools/`, `scripts/`, or tests except expected
 deletion-diff references. If any maintained caller is found, hold the deletion
 and report whether it is production, diagnostic, or test-only.
 
-### Step 2 — Delete the selector wrapper
+### Step 2 — Collapse the selector wrapper to an AsLS-only guard
 
-Delete `integrate_with_baseline` from the same module. The selector
-existed only to enable the P2 shadow / promotion transition; after C5 the
-hypothesis spine calls AsLS directly and the selector has no callers.
+The implementation kept `integrate_with_baseline` as a public compatibility
+guard because existing tests/importers exercise the name and old configs need a
+clear migration failure. It no longer selects between methods. It accepts AsLS
+only and rejects `linear_edge` with the retirement message.
 
 ### Step 3 — Decide `baseline_type` field fate
 
@@ -122,7 +143,7 @@ must be approved before this refactor.
 
 ## Validation Contract
 
-Behavioral parity required:
+Supported-path parity required:
 
 1. Run 8RAW with the cleanup interim state (Phase 1 + C1a + C5)
 2. Apply C1b refactor
@@ -134,14 +155,16 @@ Behavioral parity required:
    approved post-rollback-column baseline. If rollback columns still exist,
    this validation is invalid and C1b must not start.
 6. `baseline_type` audit column must contain `"asls"` in all rows
+7. Old public `linear_edge` inputs must reject with the retirement message.
 
 ## Rollback Condition
 
 Restore the deleted functions if any of:
 
-- a caller of `integrate_linear_edge_baseline` or `integrate_with_baseline`
-  is found at refactor time (means C5 missed a production site or diagnostic
-  comparator migration/retirement is incomplete)
+- a caller of `integrate_linear_edge_baseline` is found at refactor time, or a
+  caller needs `integrate_with_baseline` to select anything other than AsLS
+  (means C5 missed a production site or diagnostic comparator migration/
+  retirement is incomplete)
 - `area_baseline_corrected_linear_edge` or `baseline_score_linear_edge` is still
   emitted by the accepted audit schema
 - hash mismatch on parity TSVs (would be a regression in the AsLS-only
@@ -153,8 +176,7 @@ Restore the deleted functions if any of:
 - production area or matrix output
 - TSV column names, except for the separately approved rollback-column
   deprecation that must happen before C1b starts
-- `BaselineIntegration` dataclass shape (only the docstring constraint
-  changes)
+- `BaselineIntegration` dataclass shape
 - scoring weights or evidence values
 
 ## Open Questions

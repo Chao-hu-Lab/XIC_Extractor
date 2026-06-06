@@ -20,7 +20,10 @@ from scripts.validation_harness_core import (
     command_to_powershell,
     run_validation_specs,
 )
-from xic_extractor.settings_schema import RESOLVER_MODES
+from xic_extractor.settings_schema import (
+    ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+    RESOLVER_MODES,
+)
 
 __all__ = [
     "DEFAULT_FULL_TISSUE_DIR",
@@ -114,7 +117,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--resolver-mode",
-        choices=RESOLVER_MODES,
+        type=_resolver_mode,
         default="region_first_safe_merge",
     )
     parser.add_argument(
@@ -132,6 +135,16 @@ def _positive_int(value: str) -> int:
     parsed = int(value)
     if parsed < 1:
         raise argparse.ArgumentTypeError("parallel-workers must be >= 1")
+    return parsed
+
+
+def _resolver_mode(value: str) -> str:
+    parsed = value.strip()
+    if parsed == "arbitrated":
+        raise argparse.ArgumentTypeError(ARBITRATED_RESOLVER_RETIRED_MESSAGE)
+    if parsed not in RESOLVER_MODES:
+        allowed = ", ".join(RESOLVER_MODES[:-1]) + f", or {RESOLVER_MODES[-1]}"
+        raise argparse.ArgumentTypeError(f"resolver-mode must be {allowed}")
     return parsed
 
 

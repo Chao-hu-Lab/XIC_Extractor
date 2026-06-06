@@ -7,18 +7,33 @@ import numpy as np
 
 from xic_extractor.evidence_semantics import (
     CommonEvidence,
+    EvidenceDecisionSemantics,
+    EvidenceSignalSet,
     common_evidence_from_targeted_candidate,
+    decision_semantics_from_signal_set,
 )
 from xic_extractor.neutral_loss import CandidateMS2Evidence
 from xic_extractor.peak_detection.baseline import (
     BaselineMethod,
+    asls_baseline,
     bounded_trace_interval,
     integrate_with_baseline,
+)
+from xic_extractor.peak_detection.evidence_facts import (
+    CandidateEvidenceFacts,
+    decision_semantics_from_candidate_facts,
+    projected_confidence_from_candidate_facts,
+    projected_reason_from_candidate_facts,
 )
 from xic_extractor.peak_detection.models import (
     PeakCandidate,
     PeakCandidateScore,
     PeakDetectionResult,
+)
+from xic_extractor.peak_detection.ms1_morphology import (
+    DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+    MS1_MORPHOLOGY_AREA_SOURCE,
+    gaussian15_positive_asls_residual_metrics,
 )
 from xic_extractor.peak_detection.traces import TraceGroup
 
@@ -51,6 +66,11 @@ class IntegrationResult:
     baseline_type: str = ""
     baseline_score: float | None = None
     raw_scan_indices: tuple[int, ...] = ()
+    area_ms1_morphology: float | None = None
+    ms1_morphology_area_source: str = ""
+    ms1_morphology_trace_method: str = ""
+    ms1_morphology_trace_window_points: int | None = None
+    ms1_morphology_trace_effective_points: int | None = None
 
 
 @dataclass(frozen=True)
@@ -62,11 +82,14 @@ class EvidenceVector:
     """
 
     confidence: str = ""
+    projected_confidence: str = ""
     raw_score: int | None = None
     support_labels: tuple[str, ...] = ()
     concern_labels: tuple[str, ...] = ()
     cap_labels: tuple[str, ...] = ()
     reason: str = ""
+    projected_reason: str = ""
+    evidence_facts: CandidateEvidenceFacts | None = None
     quality_flags: tuple[str, ...] = ()
     prominence: float | None = None
     region_scan_count: int | None = None
@@ -83,6 +106,14 @@ class EvidenceVector:
     best_product_base_ratio: float | None = None
     trigger_scan_count: int | None = None
     strict_nl_scan_count: int | None = None
+    ms1_peak_group_source: str = ""
+    ms1_peak_group_rt_min: float | None = None
+    ms1_peak_group_rt_max: float | None = None
+    ms1_peak_group_trigger_scan_count: int | None = None
+    ms1_peak_group_strict_nl_scan_count: int | None = None
+    ms1_peak_group_strict_nl_event_count: int | None = None
+    outside_ms1_peak_group_trigger_scan_count: int | None = None
+    outside_ms1_peak_group_strict_nl_scan_count: int | None = None
     ms2_alignment_source: str = ""
     diagnostic_product_absence_reason: str = ""
     nearest_product_loss_ppm: float | None = None
@@ -94,6 +125,7 @@ class EvidenceVector:
     boundary_score: float | None = None
     baseline_score: float | None = None
     common: CommonEvidence | None = None
+    decision_semantics: EvidenceDecisionSemantics | None = None
 
 
 @dataclass(frozen=True)
@@ -160,6 +192,10 @@ def build_peak_hypotheses(
     intensity: object | None = None,
     trace_group: TraceGroup | None = None,
     baseline_integration_method: BaselineMethod = "asls",
+    count_no_ms2_as_detected: bool = False,
+    ms1_morphology_smoothing_window_points: int = (
+        DEFAULT_GAUSSIAN15_WINDOW_POINTS
+    ),
 ) -> tuple[PeakHypothesis, ...]:
     selected = _selected_candidate(peak_result)
     score_by_candidate = {
@@ -207,12 +243,16 @@ def build_peak_hypotheses(
                     rt=trace_rt,
                     intensity=trace_intensity,
                     baseline_integration_method=baseline_integration_method,
+                    ms1_morphology_smoothing_window_points=(
+                        ms1_morphology_smoothing_window_points
+                    ),
                 ),
                 evidence=_evidence_from_candidate(
                     candidate,
                     score,
                     evidence,
                     target_label=target_label,
+                    count_no_ms2_as_detected=count_no_ms2_as_detected,
                 ),
                 audit=AuditTrail(
                     proposal_sources=candidate.proposal_sources,
@@ -269,8 +309,12 @@ def _integration_from_candidate(
     rt: object | None = None,
     intensity: object | None = None,
     baseline_integration_method: BaselineMethod = "asls",
+    ms1_morphology_smoothing_window_points: int = (
+        DEFAULT_GAUSSIAN15_WINDOW_POINTS
+    ),
 ) -> IntegrationResult:
     baseline = None
+    morphology_metrics = None
     raw_scan_indices: tuple[int, ...] = ()
     if rt is not None and intensity is not None:
         rt_values = np.asarray(rt, dtype=float)
@@ -283,13 +327,28 @@ def _integration_from_candidate(
             len(rt_values),
         )
         raw_scan_indices = tuple(range(bounded_left, bounded_right))
+        baseline_values = (
+            asls_baseline(intensity_values)
+            if baseline_integration_method == "asls"
+            else None
+        )
         baseline = integrate_with_baseline(
             intensity_values,
             rt_values,
             left_index,
             right_index,
             baseline_method=baseline_integration_method,
+            baseline_values=baseline_values,
         )
+        if baseline_values is not None:
+            morphology_metrics = gaussian15_positive_asls_residual_metrics(
+                rt_values,
+                intensity_values,
+                baseline_values,
+                bounded_left,
+                bounded_right,
+                window_points=ms1_morphology_smoothing_window_points,
+            )
     return IntegrationResult(
         rt_left_min=candidate.peak.peak_start,
         rt_apex_min=candidate.selection_apex_rt,
@@ -315,6 +374,27 @@ def _integration_from_candidate(
         baseline_type=baseline.baseline_type if baseline is not None else "",
         baseline_score=baseline.baseline_score if baseline is not None else None,
         raw_scan_indices=raw_scan_indices,
+        area_ms1_morphology=(
+            morphology_metrics.area_positive_asls_residual
+            if morphology_metrics is not None
+            else None
+        ),
+        ms1_morphology_area_source=(
+            MS1_MORPHOLOGY_AREA_SOURCE if morphology_metrics is not None else ""
+        ),
+        ms1_morphology_trace_method=(
+            morphology_metrics.trace_method if morphology_metrics is not None else ""
+        ),
+        ms1_morphology_trace_window_points=(
+            morphology_metrics.trace_window_points
+            if morphology_metrics is not None
+            else None
+        ),
+        ms1_morphology_trace_effective_points=(
+            morphology_metrics.trace_effective_points
+            if morphology_metrics is not None
+            else None
+        ),
     )
 
 
@@ -324,7 +404,36 @@ def _evidence_from_candidate(
     evidence: CandidateMS2Evidence | None,
     *,
     target_label: str,
+    count_no_ms2_as_detected: bool = False,
 ) -> EvidenceVector:
+    facts = score.evidence_facts if score is not None else None
+    semantics = (
+        decision_semantics_from_candidate_facts(
+            facts,
+            count_no_ms2_as_detected=count_no_ms2_as_detected,
+        )
+        if facts is not None
+        else _legacy_decision_semantics(
+            candidate,
+            score,
+            target_label=target_label,
+            count_no_ms2_as_detected=count_no_ms2_as_detected,
+        )
+    )
+    projected_confidence = (
+        projected_confidence_from_candidate_facts(facts, semantics)
+        if facts is not None
+        else score.confidence
+        if score is not None
+        else ""
+    )
+    projected_reason = (
+        projected_reason_from_candidate_facts(facts, semantics)
+        if facts is not None
+        else score.reason
+        if score is not None
+        else ""
+    )
     common = common_evidence_from_targeted_candidate(
         candidate,
         score=score,
@@ -334,11 +443,14 @@ def _evidence_from_candidate(
     best_ms2_scan_rt_min = evidence.best_scan_rt if evidence is not None else None
     return EvidenceVector(
         confidence=score.confidence if score is not None else "",
+        projected_confidence=projected_confidence,
         raw_score=score.raw_score if score is not None else None,
         support_labels=score.support_labels if score is not None else (),
         concern_labels=score.concern_labels if score is not None else (),
         cap_labels=score.cap_labels if score is not None else (),
         reason=score.reason if score is not None else "",
+        projected_reason=projected_reason,
+        evidence_facts=facts,
         quality_flags=tuple(str(flag) for flag in candidate.quality_flags),
         prominence=candidate.prominence,
         region_scan_count=candidate.region_scan_count,
@@ -365,6 +477,40 @@ def _evidence_from_candidate(
         strict_nl_scan_count=(
             evidence.strict_nl_scan_count if evidence is not None else None
         ),
+        ms1_peak_group_source=(
+            evidence.ms1_peak_group_source if evidence is not None else ""
+        ),
+        ms1_peak_group_rt_min=(
+            evidence.ms1_peak_group_rt_min if evidence is not None else None
+        ),
+        ms1_peak_group_rt_max=(
+            evidence.ms1_peak_group_rt_max if evidence is not None else None
+        ),
+        ms1_peak_group_trigger_scan_count=(
+            evidence.ms1_peak_group_trigger_scan_count
+            if evidence is not None
+            else None
+        ),
+        ms1_peak_group_strict_nl_scan_count=(
+            evidence.ms1_peak_group_strict_nl_scan_count
+            if evidence is not None
+            else None
+        ),
+        ms1_peak_group_strict_nl_event_count=(
+            evidence.ms1_peak_group_strict_nl_event_count
+            if evidence is not None
+            else None
+        ),
+        outside_ms1_peak_group_trigger_scan_count=(
+            evidence.outside_ms1_peak_group_trigger_scan_count
+            if evidence is not None
+            else None
+        ),
+        outside_ms1_peak_group_strict_nl_scan_count=(
+            evidence.outside_ms1_peak_group_strict_nl_scan_count
+            if evidence is not None
+            else None
+        ),
         ms2_alignment_source=evidence.alignment_source if evidence is not None else "",
         diagnostic_product_absence_reason=(
             evidence.diagnostic_product_absence_reason if evidence is not None else ""
@@ -382,6 +528,36 @@ def _evidence_from_candidate(
         cwt_best_scale=candidate.cwt_best_scale,
         cwt_ridge_persistence=candidate.cwt_ridge_persistence,
         common=common,
+        decision_semantics=semantics,
+    )
+
+
+def _legacy_decision_semantics(
+    candidate: PeakCandidate,
+    score: PeakCandidateScore | None,
+    *,
+    target_label: str,
+    count_no_ms2_as_detected: bool,
+) -> EvidenceDecisionSemantics:
+    common = common_evidence_from_targeted_candidate(
+        candidate,
+        score=score,
+        target_label=target_label,
+    )
+    return decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=score.support_labels if score is not None else (),
+            concern_labels=score.concern_labels if score is not None else (),
+            proposal_sources=candidate.proposal_sources,
+            quality_flags=tuple(str(flag) for flag in candidate.quality_flags),
+            ms2_present=common.ms2_present,
+            nl_match=common.nl_match,
+            raw_score=score.raw_score if score is not None else None,
+            confidence=score.confidence if score is not None else "",
+            cap_labels=score.cap_labels if score is not None else (),
+            reason=score.reason if score is not None else "",
+            count_no_ms2_as_detected=count_no_ms2_as_detected,
+        )
     )
 
 

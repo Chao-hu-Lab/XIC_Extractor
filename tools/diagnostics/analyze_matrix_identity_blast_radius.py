@@ -17,6 +17,10 @@ from xic_extractor.alignment.machine_decision import (
 )
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.matrix_identity import build_matrix_identity_decisions
+from xic_extractor.alignment.primary_matrix_area import (
+    MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE,
+)
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 REVIEW_REQUIRED = {"feature_family_id", "include_in_primary_matrix"}
 REVIEW_EVIDENCE_COLUMNS = {"family_evidence", "evidence"}
@@ -25,6 +29,9 @@ CELL_REQUIRED = {
     "sample_stem",
     "status",
     "area",
+    "primary_matrix_area",
+    "primary_matrix_area_source",
+    "primary_matrix_area_reason",
     "peak_start_rt",
     "peak_end_rt",
     "rt_delta_sec",
@@ -238,13 +245,14 @@ def _cell_from_row(row: Mapping[str, str]) -> AlignedCell:
     start = _float(row.get("peak_start_rt"))
     end = _float(row.get("peak_end_rt"))
     apex = _float(row.get("apex_rt"))
+    raw_area = _float(row.get("area"))
     if apex is None and start is not None and end is not None:
         apex = (start + end) / 2.0
     return AlignedCell(
         sample_stem=row.get("sample_stem", ""),
         cluster_id=row.get("feature_family_id", ""),
         status=row.get("status", ""),  # type: ignore[arg-type]
-        area=_float(row.get("area")),
+        area=raw_area,
         apex_rt=apex,
         height=_float(row.get("height")) or 1.0,
         peak_start_rt=start,
@@ -255,6 +263,89 @@ def _cell_from_row(row: Mapping[str, str]) -> AlignedCell:
         source_candidate_id=row.get("source_candidate_id") or None,
         source_raw_file=None,
         reason=row.get("reason", ""),
+        selected_integration=_integration_from_cell_row(
+            row,
+            raw_area=raw_area,
+            apex=apex,
+            start=start,
+            end=end,
+        ),
+        backfill_ms1_pattern_status=row.get("backfill_ms1_pattern_status", ""),
+        backfill_ms1_pattern_evidence_level=row.get(
+            "backfill_ms1_pattern_evidence_level",
+            "",
+        ),
+        backfill_qc_reference_status=row.get("backfill_qc_reference_status", ""),
+        backfill_qc_reference_evidence_level=row.get(
+            "backfill_qc_reference_evidence_level",
+            "",
+        ),
+        backfill_matrix_rt_drift_status=row.get(
+            "backfill_matrix_rt_drift_status",
+            "",
+        ),
+        backfill_drift_evidence_level=row.get("backfill_drift_evidence_level", ""),
+        backfill_drift_compatible_status=row.get(
+            "backfill_drift_compatible_status",
+            "",
+        ),
+        backfill_drift_corrected_delta_sec=_float(
+            row.get("backfill_drift_corrected_delta_sec"),
+        ),
+        backfill_candidate_ms2_pattern_status=row.get(
+            "backfill_candidate_ms2_pattern_status",
+            "",
+        ),
+        backfill_candidate_ms2_evidence_level=row.get(
+            "backfill_candidate_ms2_evidence_level",
+            "",
+        ),
+        backfill_dda_missing_nl_policy_status=row.get(
+            "backfill_dda_missing_nl_policy_status",
+            "",
+        ),
+        backfill_family_ms2_required_tag_status=row.get(
+            "backfill_family_ms2_required_tag_status",
+            "",
+        ),
+        backfill_evidence_reason=row.get("backfill_evidence_reason", ""),
+    )
+
+
+def _integration_from_cell_row(
+    row: Mapping[str, str],
+    *,
+    raw_area: float | None,
+    apex: float | None,
+    start: float | None,
+    end: float | None,
+) -> IntegrationResult | None:
+    if (
+        row.get("primary_matrix_area_source", "")
+        != MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE
+    ):
+        return None
+    primary_area = _float(row.get("primary_matrix_area"))
+    if (
+        primary_area is None
+        or raw_area is None
+        or apex is None
+        or start is None
+        or end is None
+    ):
+        return None
+    return IntegrationResult(
+        rt_left_min=start,
+        rt_apex_min=apex,
+        rt_right_min=end,
+        raw_apex_rt_min=apex,
+        rt_width_min=max(end - start, 0.0),
+        height_raw=_float(row.get("height")) or 1.0,
+        height_smoothed=_float(row.get("height")) or 1.0,
+        area_raw_counts_seconds=raw_area,
+        area_ms1_morphology=primary_area,
+        ms1_morphology_area_source=MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE,
+        boundary_sources=("alignment_cells_tsv",),
     )
 
 

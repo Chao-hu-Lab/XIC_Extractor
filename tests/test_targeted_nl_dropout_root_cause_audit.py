@@ -415,7 +415,7 @@ def _candidate(
         "role": "ISTD",
         "istd_pair": "",
         "analysis_mode": "targeted",
-        "resolver_mode": "arbitrated",
+        "resolver_mode": "region_first_safe_merge",
         "candidate_id": f"{sample}|{target}|selected",
         "proposal_sources": "local_minimum",
         "proposal_count": "1",

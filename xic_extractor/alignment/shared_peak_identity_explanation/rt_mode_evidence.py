@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Hashable, Iterable, Mapping, Sequence
 from pathlib import Path
+from statistics import median
+from typing import TypeVar
 
-from tools.diagnostics.diagnostic_io import (
+from xic_extractor.diagnostics.diagnostic_io import (
     optional_float,
     read_delimited_rows,
     read_tsv_required,
@@ -42,7 +44,10 @@ _UNKNOWN_MODES = frozenset(
     }
 )
 _RAW_OVERLAY_MODE_GAP_MIN = 0.5
+_RAW_OVERLAY_SOFT_MODE_GAP_MIN = 0.35
+_RAW_OVERLAY_MODE_GAP_RATIO_MIN = 3.0
 _RAW_OVERLAY_MIN_CLUSTER_SIZE = 2
+_ModeKey = TypeVar("_ModeKey", bound=Hashable)
 
 
 def build_rt_mode_evidence_rows(
@@ -292,32 +297,90 @@ def _raw_overlay_mode_ids(rows: Sequence[Mapping[str, object]]) -> dict[int, str
         value = optional_float(_first_text(row, ("cell_apex_rt", "trace_apex_rt")))
         if value is not None:
             indexed_values.append((index, value))
+    mode_ids = cluster_raw_overlay_rt_modes(
+        indexed_values,
+        prefix="raw_mode",
+        outlier_mode_id="raw_outlier_mode",
+        min_cluster_size=_RAW_OVERLAY_MIN_CLUSTER_SIZE,
+    )
+    return mode_ids
+
+
+def cluster_raw_overlay_rt_modes(
+    indexed_values: Sequence[tuple[_ModeKey, float]],
+    *,
+    prefix: str,
+    outlier_mode_id: str,
+    min_cluster_size: int = _RAW_OVERLAY_MIN_CLUSTER_SIZE,
+) -> dict[_ModeKey, str]:
+    """Cluster raw-overlay apex RTs into review-only chromatographic modes."""
+
     if not indexed_values:
         return {}
-    indexed_values.sort(key=lambda item: item[1])
-    clusters: list[list[tuple[int, float]]] = []
-    current: list[tuple[int, float]] = []
-    for item in indexed_values:
-        if current and item[1] - current[-1][1] > _RAW_OVERLAY_MODE_GAP_MIN:
+    ordered = sorted(indexed_values, key=lambda item: item[1])
+    clusters: list[list[tuple[_ModeKey, float]]] = []
+    current: list[tuple[_ModeKey, float]] = []
+    for index, item in enumerate(ordered):
+        if current and _is_raw_overlay_mode_gap(
+            ordered,
+            split_index=index,
+            current_cluster=current,
+            min_cluster_size=min_cluster_size,
+        ):
             clusters.append(current)
             current = []
         current.append(item)
     if current:
         clusters.append(current)
     if len(clusters) == 1:
-        return {index: "raw_mode_1" for index, _value in indexed_values}
-    mode_ids: dict[int, str] = {}
+        return {index: f"{prefix}_1" for index, _value in ordered}
+    mode_ids: dict[_ModeKey, str] = {}
     named_cluster_number = 0
     for cluster in clusters:
-        if len(cluster) < _RAW_OVERLAY_MIN_CLUSTER_SIZE:
-            mode_id = "raw_outlier_mode"
+        if len(cluster) < min_cluster_size:
+            mode_id = outlier_mode_id
         else:
             named_cluster_number += 1
-            median = cluster[len(cluster) // 2][1]
-            mode_id = f"raw_mode_{named_cluster_number}_{median:.2f}min"
-        for index, _value in cluster:
-            mode_ids[index] = mode_id
+            cluster_median = cluster[len(cluster) // 2][1]
+            mode_id = f"{prefix}_{named_cluster_number}_{cluster_median:.2f}min"
+        for key, _value in cluster:
+            mode_ids[key] = mode_id
     return mode_ids
+
+
+def _is_raw_overlay_mode_gap(
+    ordered: Sequence[tuple[Hashable, float]],
+    *,
+    split_index: int,
+    current_cluster: Sequence[tuple[Hashable, float]],
+    min_cluster_size: int,
+) -> bool:
+    gap = ordered[split_index][1] - ordered[split_index - 1][1]
+    if gap > _RAW_OVERLAY_MODE_GAP_MIN:
+        return True
+    if gap < _RAW_OVERLAY_SOFT_MODE_GAP_MIN:
+        return False
+    remaining_count = len(ordered) - split_index
+    if len(current_cluster) < min_cluster_size or remaining_count < min_cluster_size:
+        return False
+    typical_gap = _typical_adjacent_gap(ordered, excluded_gap_index=split_index)
+    return typical_gap > 0 and gap >= typical_gap * _RAW_OVERLAY_MODE_GAP_RATIO_MIN
+
+
+def _typical_adjacent_gap(
+    ordered: Sequence[tuple[Hashable, float]],
+    *,
+    excluded_gap_index: int,
+) -> float:
+    gaps = [
+        ordered[index][1] - ordered[index - 1][1]
+        for index in range(1, len(ordered))
+        if index != excluded_gap_index
+        and ordered[index][1] - ordered[index - 1][1] > 1e-9
+    ]
+    if not gaps:
+        return 0.0
+    return float(median(gaps))
 
 
 def _infer_sample_type(sample_stem: str) -> str:

@@ -13,7 +13,11 @@ from xic_extractor.discovery.tag_profiles import (
     resolve_selected_tag_profiles,
 )
 from xic_extractor.raw_reader import RawReaderError
-from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS, RESOLVER_MODES
+from xic_extractor.settings_schema import (
+    ARBITRATED_RESOLVER_RETIRED_MESSAGE,
+    CANONICAL_SETTINGS_DEFAULTS,
+    RESOLVER_MODES,
+)
 
 _RT_BOUND_ERROR = "RT bounds must be finite values >= 0"
 
@@ -146,7 +150,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--rt-max", type=_rt_bound, default=999.0)
     parser.add_argument(
         "--resolver-mode",
-        choices=RESOLVER_MODES,
+        type=_resolver_mode,
         default="local_minimum",
     )
     args = parser.parse_args(argv)
@@ -217,6 +221,9 @@ def _peak_config(
         diagnostics_csv=output_dir / "xic_diagnostics.csv",
         smooth_window=int(defaults["smooth_window"]),
         smooth_polyorder=int(defaults["smooth_polyorder"]),
+        ms1_morphology_smoothing_window_points=int(
+            defaults["ms1_morphology_smoothing_window_points"]
+        ),
         peak_rel_height=float(defaults["peak_rel_height"]),
         peak_min_prominence_ratio=float(defaults["peak_min_prominence_ratio"]),
         ms2_precursor_tol_da=float(defaults["ms2_precursor_tol_da"]),
@@ -246,6 +253,16 @@ def _positive_float(value: str) -> float:
         raise argparse.ArgumentTypeError("value must be a float") from exc
     if not math.isfinite(parsed) or parsed <= 0.0:
         raise argparse.ArgumentTypeError("value must be > 0")
+    return parsed
+
+
+def _resolver_mode(value: str) -> str:
+    parsed = value.strip()
+    if parsed == "arbitrated":
+        raise argparse.ArgumentTypeError(ARBITRATED_RESOLVER_RETIRED_MESSAGE)
+    if parsed not in RESOLVER_MODES:
+        allowed = ", ".join(RESOLVER_MODES[:-1]) + f", or {RESOLVER_MODES[-1]}"
+        raise argparse.ArgumentTypeError(f"resolver-mode must be {allowed}")
     return parsed
 
 

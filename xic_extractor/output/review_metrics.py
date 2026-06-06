@@ -35,6 +35,7 @@ def build_review_metrics(
     diagnostics: list[dict[str, str]],
     review_rows: list[dict[str, str]],
     count_no_ms2_as_detected: bool,
+    require_projection: bool = False,
 ) -> ReviewMetrics:
     samples = _ordered_distinct(row.get("SampleName", "") for row in rows)
     targets = _ordered_distinct(row.get("Target", "") for row in rows)
@@ -51,7 +52,11 @@ def build_review_metrics(
         detected = sum(
             1
             for row in target_rows
-            if _is_detected(row, count_no_ms2_as_detected)
+            if _is_detected(
+                row,
+                count_no_ms2_as_detected,
+                require_projection=require_projection,
+            )
         )
         detected_rows += detected
         flagged_rows = len(review_rows_by_target.get(target, []))
@@ -86,6 +91,7 @@ def build_review_metrics(
                 row,
                 is_flagged=(target, sample) in flagged_keys,
                 count_no_ms2_as_detected=count_no_ms2_as_detected,
+                require_projection=require_projection,
             )
 
     return ReviewMetrics(
@@ -134,10 +140,15 @@ def _heatmap_state(
     *,
     is_flagged: bool,
     count_no_ms2_as_detected: bool,
+    require_projection: bool = False,
 ) -> str:
     if _is_error(row):
         return "error"
-    if not _is_detected(row, count_no_ms2_as_detected):
+    if not _is_detected(
+        row,
+        count_no_ms2_as_detected,
+        require_projection=require_projection,
+    ):
         return "not-detected"
     return "flagged-detected" if is_flagged else "clean-detected"
 
@@ -149,8 +160,14 @@ def _is_error(row: dict[str, str]) -> bool:
 def _is_detected(
     row: dict[str, str],
     count_no_ms2_as_detected: bool,
+    *,
+    require_projection: bool = False,
 ) -> bool:
-    return is_accepted_row_detection(row, count_no_ms2_as_detected)
+    return is_accepted_row_detection(
+        row,
+        count_no_ms2_as_detected,
+        require_projection=require_projection,
+    )
 
 
 def _has_ms2_nl_flag(row: dict[str, str]) -> bool:

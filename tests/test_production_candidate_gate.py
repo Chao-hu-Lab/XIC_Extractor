@@ -215,8 +215,8 @@ def test_fractional_counts_are_not_valid_candidate_eligibility(
         ),
     )
 
-    assert decision.candidate_gate_status == "keep_provisional"
-    assert decision.recommended_action == "keep_provisional"
+    assert decision.candidate_gate_status == "audit"
+    assert decision.recommended_action == "review"
     assert decision.tier2_evidence_available is False
     assert decision.support_components == ()
     assert decision.challenge_blockers == ("not_retention_candidate",)
@@ -325,8 +325,8 @@ def test_non_retention_candidate_is_reported_without_tier2_promotion(
         ),
     )
 
-    assert decision.candidate_gate_status == "keep_provisional"
-    assert decision.recommended_action == "keep_provisional"
+    assert decision.candidate_gate_status == "audit"
+    assert decision.recommended_action == "review"
     assert decision.evidence_tier == 1
     assert decision.tier2_evidence_available is False
     assert decision.challenge_blockers == ("not_retention_candidate",)

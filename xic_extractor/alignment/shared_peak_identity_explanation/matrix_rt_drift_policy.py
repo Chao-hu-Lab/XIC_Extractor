@@ -3,16 +3,16 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
-from tools.diagnostics.diagnostic_io import (
+from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.diagnostics.diagnostic_io import (
     optional_float as diagnostic_optional_float,
 )
-from tools.diagnostics.diagnostic_io import (
+from xic_extractor.diagnostics.diagnostic_io import (
     optional_int,
     read_tsv_required,
     text_value,
     write_tsv,
 )
-from xic_extractor.alignment.config import AlignmentConfig
 
 from .machine_evidence_support import MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS
 

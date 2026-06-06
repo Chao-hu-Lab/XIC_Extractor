@@ -6,9 +6,11 @@ from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.production_decisions import build_production_decisions
 from xic_extractor.alignment.promotion_policy import (
+    BACKFILL_MS1_PATTERN_BLOCKED_REASON,
     CELL_EVIDENCE_SUPPORTED_REASON,
     DDA_LIMITED_MS2_SHAPE_REASON,
     HIGH_BACKFILL_CAPPED_FLAG,
+    PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON,
 )
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
@@ -44,7 +46,7 @@ def test_detected_and_supported_rescue_write_numeric_values():
     assert decisions.row("FAM001").row_flags == ()
 
 
-def test_production_matrix_value_uses_selected_integration_area_when_present():
+def test_production_matrix_value_uses_asls_selected_integration_area_when_present():
     matrix = _matrix(
         clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
         cells=(
@@ -53,7 +55,7 @@ def test_production_matrix_value_uses_selected_integration_area_when_present():
                 "FAM001",
                 "detected",
                 100.0,
-                selected_integration=_integration(area=150.0),
+                selected_integration=_integration(raw_area=150.0, asls_area=120.0),
             ),
             _cell("s2", "FAM001", "detected", 95.0),
         ),
@@ -63,7 +65,7 @@ def test_production_matrix_value_uses_selected_integration_area_when_present():
     decisions = build_production_decisions(matrix, AlignmentConfig())
 
     assert decisions.row("FAM001").include_in_primary_matrix is True
-    assert decisions.cell("FAM001", "s1").matrix_value == 150.0
+    assert decisions.cell("FAM001", "s1").matrix_value == 120.0
     assert decisions.cell("FAM001", "s2").matrix_value == 95.0
 
 
@@ -143,6 +145,50 @@ def test_extreme_backfill_dependency_row_is_supported_with_capped_warning():
     assert decisions.cell("FAM001", "seed1").write_matrix_value is True
     assert decisions.cell("FAM001", "rescue01").production_status == "accepted_rescue"
     assert decisions.cell("FAM001", "rescue01").write_matrix_value is True
+
+
+def test_scan_support_only_backfill_keeps_seeds_and_reviews_rescues():
+    matrix = _matrix(
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
+        cells=(
+            _cell("seed1", "FAM001", "detected", 100.0),
+            _cell("seed2", "FAM001", "detected", 95.0),
+            *tuple(
+                _cell(
+                    f"rescue{i:02d}",
+                    "FAM001",
+                    "rescued",
+                    80.0 + i,
+                    backfill_evidence=False,
+                )
+                for i in range(1, 84)
+            ),
+        ),
+        sample_order=(
+            "seed1",
+            "seed2",
+            *(f"rescue{i:02d}" for i in range(1, 84)),
+        ),
+    )
+
+    decisions = build_production_decisions(matrix, AlignmentConfig())
+
+    assert decisions.row("FAM001").include_in_primary_matrix is True
+    assert decisions.row("FAM001").identity_reason == (
+        PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON
+    )
+    assert decisions.row("FAM001").identity_confidence == "review"
+    assert decisions.row("FAM001").accepted_cell_count == 2
+    assert decisions.row("FAM001").accepted_rescue_count == 0
+    assert decisions.row("FAM001").review_rescue_count == 83
+    assert "backfill_cell_evidence_required" in decisions.row("FAM001").row_flags
+    assert "backfill_rescue_review_only" in decisions.row("FAM001").row_flags
+    assert decisions.cell("FAM001", "seed1").write_matrix_value is True
+    assert decisions.cell("FAM001", "rescue01").production_status == "review_rescue"
+    assert decisions.cell("FAM001", "rescue01").write_matrix_value is False
+    assert decisions.cell("FAM001", "rescue01").blank_reason == (
+        BACKFILL_MS1_PATTERN_BLOCKED_REASON
+    )
 
 
 def test_weak_seed_backfill_dependency_row_is_supported_by_cell_evidence():
@@ -414,8 +460,15 @@ def _cell(
     rt_delta_sec: float | None = 0.0,
     source_candidate_id: str | None = None,
     selected_integration: IntegrationResult | None = None,
+    backfill_evidence: bool = True,
 ) -> AlignedCell:
     has_area = area is not None
+    if (
+        selected_integration is None
+        and status in {"detected", "rescued"}
+        and _positive_area(area)
+    ):
+        selected_integration = _integration(raw_area=float(area), asls_area=float(area))
     return AlignedCell(
         sample_stem=sample_stem,
         cluster_id=cluster_id,
@@ -440,6 +493,7 @@ def _cell(
             else status
         ),
         selected_integration=selected_integration,
+        **_backfill_evidence_fields(status=status, enabled=backfill_evidence),
     )
 
 
@@ -460,7 +514,12 @@ def _candidate(
     )
 
 
-def _integration(*, area: float) -> IntegrationResult:
+def _integration(
+    *,
+    raw_area: float,
+    asls_area: float | None,
+    baseline_type: str = "asls",
+) -> IntegrationResult:
     return IntegrationResult(
         rt_left_min=8.4,
         rt_apex_min=8.49,
@@ -469,6 +528,39 @@ def _integration(*, area: float) -> IntegrationResult:
         rt_width_min=0.2,
         height_raw=100.0,
         height_smoothed=100.0,
-        area_raw_counts_seconds=area,
+        area_raw_counts_seconds=raw_area,
+        area_baseline_corrected=asls_area,
+        baseline_type=baseline_type,
         boundary_sources=("test",),
+        area_ms1_morphology=asls_area,
+        ms1_morphology_area_source=(
+            "gaussian15_positive_asls_residual" if asls_area is not None else ""
+        ),
+    )
+
+
+def _backfill_evidence_fields(*, status: str, enabled: bool) -> dict[str, object]:
+    if status != "rescued" or not enabled:
+        return {}
+    return {
+        "backfill_ms1_pattern_status": "supportive",
+        "backfill_ms1_pattern_evidence_level": "sample_constellation",
+        "backfill_qc_reference_status": "supportive",
+        "backfill_qc_reference_evidence_level": "qc_consensus_with_local_qc_overlay",
+        "backfill_candidate_ms2_pattern_status": "partial_support",
+        "backfill_candidate_ms2_evidence_level": "sample_candidate_aligned",
+        "backfill_ms2_trigger_scan_count": 3,
+        "backfill_strict_nl_scan_count": 1,
+        "backfill_ms2_trace_strength": "moderate",
+        "backfill_evidence_reason": "unit_test_supported_backfill_evidence",
+    }
+
+
+def _positive_area(value: float | bool | None) -> bool:
+    return (
+        value is not None
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
     )

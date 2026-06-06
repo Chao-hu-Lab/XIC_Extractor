@@ -6,8 +6,12 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools.diagnostics.diagnostic_io import read_tsv_required, text_value, write_tsv
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.diagnostics.diagnostic_io import (
+    read_tsv_required,
+    text_value,
+    write_tsv,
+)
 
 from .machine_evidence_support import (
     MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS,

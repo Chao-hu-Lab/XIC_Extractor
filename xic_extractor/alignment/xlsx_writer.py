@@ -12,11 +12,15 @@ from xic_extractor.alignment.output_rows import (
     cells_by_cluster,
     count_status,
     escape_excel_formula,
-    production_matrix_area,
     row_id,
 )
+from xic_extractor.alignment.owner_group_delivery import (
+    CROSS_SAMPLE_GROUP_CELL_COLUMNS,
+    GROUP_REVIEW_PROJECTION_COLUMNS,
+    delivery_group_projection,
+)
+from xic_extractor.alignment.product_matrix import build_product_matrix_rows
 from xic_extractor.alignment.production_decisions import (
-    ProductionCellDecision,
     ProductionDecisionSet,
     build_production_decisions,
 )
@@ -30,14 +34,15 @@ def write_alignment_results_xlsx(
     alignment_config: AlignmentConfig | None = None,
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    config = alignment_config or AlignmentConfig()
     decisions = build_production_decisions(
         matrix,
-        alignment_config or AlignmentConfig(),
+        config,
     )
     workbook = Workbook()
     matrix_sheet = workbook.active
     matrix_sheet.title = "Matrix"
-    _write_matrix_sheet(matrix_sheet, matrix, decisions)
+    _write_matrix_sheet(matrix_sheet, matrix, alignment_config=config)
     _write_review_sheet(workbook.create_sheet("Review"), matrix, decisions)
     _write_audit_sheet(workbook.create_sheet("Audit"), matrix, decisions)
     _write_metadata_sheet(workbook.create_sheet("Metadata"), metadata)
@@ -48,37 +53,21 @@ def write_alignment_results_xlsx(
 def _write_matrix_sheet(
     sheet: Any,
     matrix: AlignmentMatrix,
-    decisions: ProductionDecisionSet,
+    alignment_config: AlignmentConfig,
 ) -> None:
-    headers = [
-        "feature_family_id",
-        "neutral_loss_tag",
-        "family_center_mz",
-        "family_center_rt",
-        *matrix.sample_order,
-    ]
+    headers = ["Mz", "RT", *matrix.sample_order]
     _append_xlsx_row(sheet, headers)
-    grouped_cells = cells_by_cluster(matrix)
-    for cluster in matrix.clusters:
-        cluster_id = row_id(cluster)
-        if not decisions.row(cluster_id).include_in_primary_matrix:
-            continue
-        cells = {
-            cell.sample_stem: cell for cell in grouped_cells.get(cluster_id, ())
-        }
+    for product_row in build_product_matrix_rows(
+        matrix,
+        alignment_config=alignment_config,
+    ):
         _append_xlsx_row(
             sheet,
             [
-                cluster_id,
-                cluster.neutral_loss_tag,
-                _family_center_mz(cluster),
-                _family_center_rt(cluster),
+                product_row.mz,
+                product_row.rt,
                 *[
-                    _xlsx_area(
-                        decisions.cell(cluster_id, sample)
-                        if cells.get(sample) is not None
-                        else None
-                    )
+                    _xlsx_matrix_value(product_row.sample_values[sample])
                     for sample in matrix.sample_order
                 ],
             ],
@@ -94,6 +83,7 @@ def _write_review_sheet(
         sheet,
         [
             "feature_family_id",
+            *GROUP_REVIEW_PROJECTION_COLUMNS,
             "neutral_loss_tag",
             "detected_count",
             "rescued_count",
@@ -124,10 +114,15 @@ def _write_review_sheet(
         cluster_id = row_id(cluster)
         cells = grouped_cells.get(cluster_id, ())
         row_decision = decisions.row(cluster_id)
+        group_projection = dict(delivery_group_projection(cluster))
         _append_xlsx_row(
             sheet,
             [
                 cluster_id,
+                *[
+                    group_projection[column]
+                    for column in GROUP_REVIEW_PROJECTION_COLUMNS
+                ],
                 cluster.neutral_loss_tag,
                 count_status(cells, "detected"),
                 count_status(cells, "rescued"),
@@ -164,6 +159,7 @@ def _write_audit_sheet(
         sheet,
         [
             "feature_family_id",
+            *CROSS_SAMPLE_GROUP_CELL_COLUMNS,
             "sample_stem",
             "neutral_loss_tag",
             "family_center_mz",
@@ -174,6 +170,9 @@ def _write_audit_sheet(
             "write_matrix_value",
             "blank_reason",
             "area",
+            "primary_matrix_area",
+            "primary_matrix_area_source",
+            "primary_matrix_area_reason",
             "apex_rt",
             "rt_delta_sec",
             "claim_state",
@@ -194,6 +193,11 @@ def _write_audit_sheet(
             "artificial_adduct_related_family_id",
             "artificial_adduct_mz_delta_error_ppm",
             "artificial_adduct_rt_delta_min",
+            "region_decision_status",
+            "region_decision_class",
+            "region_product_action",
+            "region_promotion_reason",
+            "region_baseline_method",
             "reason",
         ],
     )
@@ -210,6 +214,7 @@ def _write_audit_sheet(
             sheet,
             [
                 cell.cluster_id,
+                *[getattr(cell, column) for column in CROSS_SAMPLE_GROUP_CELL_COLUMNS],
                 cell.sample_stem,
                 cluster.neutral_loss_tag,
                 _family_center_mz(cluster),
@@ -220,6 +225,9 @@ def _write_audit_sheet(
                 decision.write_matrix_value,
                 decision.blank_reason,
                 cell.area,
+                cell.matrix_area,
+                cell.matrix_area_source,
+                cell.matrix_area_missing_reason,
                 cell.apex_rt,
                 cell.rt_delta_sec,
                 _claim_state(cell),
@@ -240,6 +248,11 @@ def _write_audit_sheet(
                 _optional_attr(cluster, "artificial_adduct_related_family_id"),
                 _optional_attr(cluster, "artificial_adduct_mz_delta_error_ppm"),
                 _optional_attr(cluster, "artificial_adduct_rt_delta_min"),
+                cell.region_decision_status,
+                cell.region_decision_class,
+                cell.region_product_action,
+                cell.region_promotion_reason,
+                cell.region_baseline_method,
                 cell.reason,
             ],
         )
@@ -261,8 +274,7 @@ def _xlsx_value(value: object) -> object:
     return value
 
 
-def _xlsx_area(decision: ProductionCellDecision | None) -> float | None:
-    text = production_matrix_area(decision)
+def _xlsx_matrix_value(text: str) -> float | None:
     return float(text) if text else None
 
 

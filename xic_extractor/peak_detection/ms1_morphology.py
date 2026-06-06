@@ -1,0 +1,183 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+
+MS1_MORPHOLOGY_TRACE_METHOD = "gaussian_15"
+MS1_MORPHOLOGY_AREA_SOURCE = "gaussian15_positive_asls_residual"
+DEFAULT_GAUSSIAN15_WINDOW_POINTS = 15
+
+
+@dataclass(frozen=True)
+class Ms1MorphologyMetrics:
+    trace_method: str
+    trace_window_points: int
+    trace_effective_points: int
+    area_positive_asls_residual: float | None
+    area_source: str
+
+
+def configured_morphology_window_points(config: object) -> int:
+    return int(
+        getattr(
+            config,
+            "ms1_morphology_smoothing_window_points",
+            DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+        )
+    )
+
+
+def gaussian15_morphology_trace(
+    residual: np.ndarray,
+    *,
+    window_points: int = DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+) -> np.ndarray:
+    """Return the Xcalibur-like Gaussian15 morphology trace."""
+    values = np.asarray(residual, dtype=float)
+    if values.ndim != 1:
+        raise ValueError("residual must be one-dimensional")
+    window = morphology_trace_effective_points(
+        len(values),
+        method=MS1_MORPHOLOGY_TRACE_METHOD,
+        window_points=window_points,
+    )
+    if window <= 1:
+        return values.copy()
+    kernel = _gaussian_kernel(window)
+    return np.convolve(values, kernel, mode="same")
+
+
+def positive_residual_area(
+    rt_values: np.ndarray,
+    residual_values: np.ndarray,
+    left_index: int,
+    right_index: int,
+) -> float:
+    rt = np.asarray(rt_values, dtype=float)
+    residual = np.asarray(residual_values, dtype=float)
+    if rt.ndim != 1 or residual.ndim != 1:
+        raise ValueError("rt_values and residual_values must be one-dimensional")
+    if len(rt) != len(residual):
+        raise ValueError("rt_values and residual_values must have the same length")
+    left, right = _bounded_interval(left_index, right_index, len(rt))
+    segment = np.maximum(residual[left:right], 0.0)
+    segment_rt = rt[left:right]
+    return float(np.trapezoid(segment, segment_rt)) * 60.0
+
+
+def gaussian15_positive_asls_residual_metrics(
+    rt_values: np.ndarray,
+    intensity_values: np.ndarray,
+    baseline_values: np.ndarray,
+    left_index: int,
+    right_index: int,
+    *,
+    window_points: int = DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+) -> Ms1MorphologyMetrics:
+    rt = np.asarray(rt_values, dtype=float)
+    intensity = np.asarray(intensity_values, dtype=float)
+    baseline = np.asarray(baseline_values, dtype=float)
+    if rt.ndim != 1 or intensity.ndim != 1 or baseline.ndim != 1:
+        raise ValueError("rt_values, intensity_values, and baseline_values must be 1-D")
+    if len(rt) != len(intensity) or len(rt) != len(baseline):
+        raise ValueError("trace arrays must have the same length")
+    if len(rt) < 2:
+        return Ms1MorphologyMetrics(
+            trace_method=MS1_MORPHOLOGY_TRACE_METHOD,
+            trace_window_points=window_points,
+            trace_effective_points=0,
+            area_positive_asls_residual=None,
+            area_source="",
+        )
+    if not (
+        np.all(np.isfinite(rt))
+        and np.all(np.isfinite(intensity))
+        and np.all(np.isfinite(baseline))
+    ):
+        raise ValueError("trace arrays must contain only finite values")
+    residual = intensity - baseline
+    smoothed = gaussian15_morphology_trace(residual, window_points=window_points)
+    area = positive_residual_area(rt, smoothed, left_index, right_index)
+    return Ms1MorphologyMetrics(
+        trace_method=MS1_MORPHOLOGY_TRACE_METHOD,
+        trace_window_points=window_points,
+        trace_effective_points=morphology_trace_effective_points(
+            len(residual),
+            method=MS1_MORPHOLOGY_TRACE_METHOD,
+            window_points=window_points,
+        ),
+        area_positive_asls_residual=area,
+        area_source=MS1_MORPHOLOGY_AREA_SOURCE,
+    )
+
+
+def gaussian15_positive_asls_residual_trace(
+    intensity_values: np.ndarray,
+    baseline_values: np.ndarray,
+    *,
+    window_points: int = DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+) -> np.ndarray:
+    intensity = np.asarray(intensity_values, dtype=float)
+    baseline = np.asarray(baseline_values, dtype=float)
+    if intensity.ndim != 1 or baseline.ndim != 1:
+        raise ValueError("intensity_values and baseline_values must be one-dimensional")
+    if len(intensity) != len(baseline):
+        raise ValueError("intensity_values and baseline_values must match")
+    residual = intensity - baseline
+    return np.maximum(
+        gaussian15_morphology_trace(residual, window_points=window_points),
+        0.0,
+    )
+
+
+def morphology_trace_effective_points(
+    trace_length: int,
+    *,
+    method: str,
+    window_points: int,
+) -> int:
+    if trace_length <= 0:
+        return 0
+    if method not in {MS1_MORPHOLOGY_TRACE_METHOD, "smooth_15"}:
+        return 1
+    if window_points <= 1:
+        return 1
+    if trace_length < window_points:
+        return 1
+    return _odd_window_points(trace_length, window_points)
+
+
+def _gaussian_kernel(window_points: int) -> np.ndarray:
+    if window_points <= 1:
+        return np.ones(1, dtype=float)
+    half_width = (window_points - 1) / 2.0
+    sigma = max(window_points / 6.0, 1e-6)
+    positions = np.arange(window_points, dtype=float) - half_width
+    kernel = np.exp(-0.5 * (positions / sigma) ** 2)
+    kernel_sum = float(np.sum(kernel))
+    if kernel_sum <= 0:
+        return np.ones(window_points, dtype=float) / float(window_points)
+    return kernel / kernel_sum
+
+
+def _odd_window_points(trace_length: int, requested: int) -> int:
+    if trace_length <= 0:
+        return 0
+    window = max(1, min(int(requested), int(trace_length)))
+    if window % 2 == 0:
+        window -= 1
+    return max(1, window)
+
+
+def _bounded_interval(
+    left_index: int,
+    right_index: int,
+    trace_length: int,
+) -> tuple[int, int]:
+    left = max(0, min(int(left_index), trace_length))
+    right = max(left, min(int(right_index), trace_length))
+    if right - left < 2 and trace_length >= 2:
+        right = min(trace_length, left + 2)
+        left = max(0, right - 2)
+    return left, right

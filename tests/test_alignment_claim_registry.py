@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+from pathlib import Path
 from types import SimpleNamespace
 
 from xic_extractor.alignment.claim_registry import apply_ms1_peak_claim_registry
@@ -31,6 +33,13 @@ def test_claim_registry_marks_duplicate_same_sample_peak_loser() -> None:
     assert cells["FAM000002"].peak_end_rt == 8.6
     assert cells["FAM000002"].reason == (
         "duplicate MS1 peak claim; winner=FAM000001; original_status=rescued"
+    )
+    assert cells["FAM000002"].group_claim_state == "duplicate_loser"
+    assert cells["FAM000002"].claim_winner_group_hypothesis_id == (
+        "GROUP-FAM000001"
+    )
+    assert cells["FAM000002"].claim_source_group_hypothesis_id == (
+        "GROUP-FAM000002"
     )
 
 
@@ -244,9 +253,50 @@ def test_claim_registry_all_review_only_conflicts_have_no_winner() -> None:
     assert cells["FAM000001"].reason == (
         "review-only MS1 peak claim; winner=none; original_status=detected"
     )
+    assert cells["FAM000001"].group_claim_state == "review_only_duplicate_loser"
+    assert cells["FAM000001"].claim_winner_group_hypothesis_id == ""
+    assert cells["FAM000001"].claim_source_group_hypothesis_id == "GROUP-FAM000001"
     assert cells["FAM000002"].status == "duplicate_assigned"
     assert cells["FAM000002"].reason == (
         "review-only MS1 peak claim; winner=none; original_status=rescued"
+    )
+    assert cells["FAM000002"].group_claim_state == "review_only_duplicate_loser"
+
+
+def test_claim_registry_duplicate_assignment_is_cells_tsv_visible(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import write_alignment_cells_tsv
+
+    matrix = _matrix(
+        clusters=(
+            _feature("FAM000001", detected_count=10),
+            _feature("FAM000002", detected_count=2),
+        ),
+        cells=(
+            _cell("sample-a", "FAM000001", "detected"),
+            _cell("sample-a", "FAM000002", "rescued"),
+        ),
+    )
+
+    result = apply_ms1_peak_claim_registry(matrix, AlignmentConfig())
+    rows = _rows_by_feature(write_alignment_cells_tsv(tmp_path / "cells.tsv", result))
+
+    assert rows["FAM000001"]["status"] == "detected"
+    assert rows["FAM000002"]["status"] == "duplicate_assigned"
+    assert rows["FAM000002"]["area"] == "1000"
+    assert rows["FAM000002"]["apex_rt"] == "8.5"
+    assert rows["FAM000002"]["peak_start_rt"] == "8.4"
+    assert rows["FAM000002"]["peak_end_rt"] == "8.6"
+    assert rows["FAM000002"]["reason"] == (
+        "duplicate MS1 peak claim; winner=FAM000001; original_status=rescued"
+    )
+    assert rows["FAM000002"]["group_claim_state"] == "duplicate_loser"
+    assert rows["FAM000002"]["claim_winner_group_hypothesis_id"] == (
+        "GROUP-FAM000001"
+    )
+    assert rows["FAM000002"]["claim_source_group_hypothesis_id"] == (
+        "GROUP-FAM000002"
     )
 
 
@@ -287,6 +337,14 @@ def _feature(
         ),
         evidence="owner_complete_link",
         review_only=review_only,
+        group_hypothesis_id=f"GROUP-{feature_id}",
+        public_family_id=feature_id,
+        group_construction_role="successor_projection_adapter",
+        group_delivery_role="successor_delivery_protocol",
+        group_membership_source="cross_sample_peak_group_hypothesis",
+        consolidation_state="not_consolidated",
+        consolidation_winner_group_hypothesis_id="",
+        consolidation_source_group_hypothesis_id="",
     )
 
 
@@ -326,3 +384,11 @@ def _cells_by_feature_sample(
     matrix: AlignmentMatrix,
 ) -> dict[tuple[str, str], AlignedCell]:
     return {(cell.cluster_id, cell.sample_stem): cell for cell in matrix.cells}
+
+
+def _rows_by_feature(path: Path) -> dict[str, dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return {
+            row["feature_family_id"]: row
+            for row in csv.DictReader(handle, delimiter="\t")
+        }

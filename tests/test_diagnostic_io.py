@@ -3,7 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from tools.diagnostics.diagnostic_io import (
+from tools.diagnostics import diagnostic_io as shim_diagnostic_io
+from xic_extractor.diagnostics import diagnostic_io as canonical_diagnostic_io
+from xic_extractor.diagnostics.diagnostic_io import (
     bool_value,
     format_diagnostic_value,
     optional_float,
@@ -16,6 +18,15 @@ from tools.diagnostics.diagnostic_io import (
     write_delimited_rows,
     write_tsv,
 )
+
+
+def test_tools_diagnostic_io_shim_reexports_canonical_helpers() -> None:
+    assert (
+        shim_diagnostic_io.read_tsv_required
+        is canonical_diagnostic_io.read_tsv_required
+    )
+    assert shim_diagnostic_io.write_tsv is canonical_diagnostic_io.write_tsv
+    assert shim_diagnostic_io.text_value is canonical_diagnostic_io.text_value
 
 
 def test_read_delimited_rows_fails_with_clear_missing_columns(

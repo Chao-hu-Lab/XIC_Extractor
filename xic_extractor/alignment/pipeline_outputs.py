@@ -29,6 +29,7 @@ from xic_extractor.alignment.ownership import OwnershipBuildResult
 from xic_extractor.alignment.tsv_writer import (
     write_alignment_cell_integration_audit_tsv,
     write_alignment_cells_tsv,
+    write_alignment_matrix_identity_tsv,
     write_alignment_matrix_tsv,
     write_alignment_owner_backfill_seed_audit_tsv,
     write_alignment_review_tsv,
@@ -44,6 +45,7 @@ class AlignmentRunOutputs:
     review_html: Path | None = None
     review_tsv: Path | None = None
     matrix_tsv: Path | None = None
+    matrix_identity_tsv: Path | None = None
     cells_tsv: Path | None = None
     integration_audit_tsv: Path | None = None
     backfill_seed_audit_tsv: Path | None = None
@@ -90,6 +92,11 @@ def output_paths(
         matrix_tsv=(
             output_dir / "alignment_matrix.tsv"
             if "alignment_matrix.tsv" in artifacts
+            else None
+        ),
+        matrix_identity_tsv=(
+            output_dir / "alignment_matrix_identity.tsv"
+            if "alignment_matrix_identity.tsv" in artifacts
             else None
         ),
         cells_tsv=(
@@ -163,7 +170,7 @@ def alignment_metadata(
     skipped_evidence_predicate_version: str = "",
 ) -> dict[str, str]:
     return {
-        "schema_version": "alignment-results-v1",
+        "schema_version": "alignment-results-v3",
         "discovery_batch_index": str(discovery_batch_index),
         "raw_dir": str(raw_dir),
         "dll_dir": str(dll_dir),
@@ -187,6 +194,17 @@ def alignment_metadata(
         "audit_evidence_mode_reason": audit_evidence_mode_reason,
         "scope_warning": scope_warning,
         "skipped_evidence_predicate_version": skipped_evidence_predicate_version,
+        "cross_sample_peak_group_policy": "cross_sample_peak_group_hypothesis_v1",
+        "public_family_id_policy": "fam_compatibility_id",
+        "group_delivery_policy": "owner_group_delivery_successor_projection_v1",
+        "gap_fill_policy": "missing_observation_gap_fill_v1",
+        "legacy_owner_backfill_role": (
+            "owner_backfill_as_gap_fill_materialization"
+        ),
+        "pre_backfill_projection_policy": (
+            "pre_backfill_successor_projection_required_when_enabled"
+        ),
+        "matrix_value_policy": "gaussian15_positive_asls_residual_primary",
     }
 
 
@@ -227,6 +245,17 @@ def write_outputs_atomic(
             (
                 outputs.matrix_tsv,
                 lambda path: write_alignment_matrix_tsv(
+                    path,
+                    matrix,
+                    alignment_config=alignment_config,
+                ),
+            ),
+        )
+    if outputs.matrix_identity_tsv is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.matrix_identity_tsv,
+                lambda path: write_alignment_matrix_identity_tsv(
                     path,
                     matrix,
                     alignment_config=alignment_config,

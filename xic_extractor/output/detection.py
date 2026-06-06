@@ -3,10 +3,29 @@ from __future__ import annotations
 from typing import Any
 
 
+class MissingTargetedProductProjectionError(ValueError):
+    """Raised when a product consumer lacks targeted projection authority."""
+
+
 def is_accepted_row_detection(
     row: dict[str, str],
     count_no_ms2_as_detected: bool,
+    *,
+    require_projection: bool = False,
 ) -> bool:
+    counted_detection = row.get("Counted Detection", "")
+    if counted_detection:
+        normalized = counted_detection.upper()
+        if normalized in {"TRUE", "FALSE"}:
+            return normalized == "TRUE"
+        if require_projection:
+            raise MissingTargetedProductProjectionError(
+                "Counted Detection must be TRUE or FALSE in product mode"
+            )
+    if require_projection:
+        raise MissingTargetedProductProjectionError(
+            "Counted Detection is required for targeted product detection"
+        )
     if _safe_float(row.get("RT", "")) is None:
         return False
     area = _safe_float(row.get("Area", ""))
@@ -22,7 +41,16 @@ def is_accepted_row_detection(
 def is_accepted_result_detection(
     result: Any,
     count_no_ms2_as_detected: bool,
+    *,
+    require_projection: bool = False,
 ) -> bool:
+    projection = getattr(result, "targeted_product_projection", None)
+    if projection is not None:
+        return bool(projection.counted_detection)
+    if require_projection:
+        raise MissingTargetedProductProjectionError(
+            "TargetedProductProjection is required for targeted product detection"
+        )
     if result.reported_rt is None:
         return False
     peak = result.peak_result.peak

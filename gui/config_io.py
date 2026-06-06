@@ -2,6 +2,7 @@ import csv
 import sys
 from pathlib import Path
 
+from xic_extractor.configuration.csv_io import TARGET_WRITE_FIELDS
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DESCRIPTIONS
 
 if getattr(sys, "frozen", False):
@@ -14,18 +15,7 @@ else:
 CONFIG_DIR = ROOT / "config"
 _BUNDLE_CONFIG = _BUNDLE / "config"
 _SETTINGS_FIELDS = ["key", "value", "description"]
-_TARGETS_FIELDS = [
-    "label",
-    "mz",
-    "rt_min",
-    "rt_max",
-    "ppm_tol",
-    "neutral_loss_da",
-    "nl_ppm_warn",
-    "nl_ppm_max",
-    "is_istd",
-    "istd_pair",
-]
+_TARGETS_FIELDS = list(TARGET_WRITE_FIELDS)
 
 
 def _read_path(name: str) -> Path:
@@ -68,10 +58,20 @@ def read_targets() -> list[dict[str, str]]:
 
 def write_targets(targets: list[dict[str, str]]) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    fieldnames = _target_write_fieldnames(targets)
     with (CONFIG_DIR / "targets.csv").open(
         "w", newline="", encoding="utf-8-sig"
     ) as handle:
-        writer = csv.DictWriter(handle, fieldnames=_TARGETS_FIELDS)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for target in targets:
-            writer.writerow({field: target.get(field, "") for field in _TARGETS_FIELDS})
+            writer.writerow({field: target.get(field, "") for field in fieldnames})
+
+
+def _target_write_fieldnames(targets: list[dict[str, str]]) -> list[str]:
+    fieldnames = list(_TARGETS_FIELDS)
+    for target in targets:
+        for field in target:
+            if field not in fieldnames:
+                fieldnames.append(field)
+    return fieldnames

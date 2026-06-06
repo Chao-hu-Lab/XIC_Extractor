@@ -11,14 +11,26 @@ from xic_extractor.alignment.output_rows import (
     count_status,
     escape_excel_formula,
     format_value,
-    production_matrix_area,
     row_id,
     safe_rate,
 )
+from xic_extractor.alignment.owner_group_delivery import (
+    CROSS_SAMPLE_GROUP_CELL_COLUMNS,
+    GROUP_BACKFILL_SEED_AUDIT_COLUMNS,
+    GROUP_REVIEW_PROJECTION_COLUMNS,
+    delivery_group_projection,
+)
+from xic_extractor.alignment.product_matrix import (
+    ALIGNMENT_MATRIX_IDENTITY_COLUMNS,
+    formatted_identity_rows,
+    product_matrix_tsv_rows,
+)
 from xic_extractor.alignment.production_decisions import build_production_decisions
+from xic_extractor.peak_detection.baseline import LINEAR_EDGE_RETIRED_MESSAGE
 
 ALIGNMENT_REVIEW_COLUMNS = (
     "feature_family_id",
+    *GROUP_REVIEW_PROJECTION_COLUMNS,
     "neutral_loss_tag",
     "family_center_mz",
     "family_center_rt",
@@ -58,9 +70,13 @@ ALIGNMENT_REVIEW_COLUMNS = (
 
 ALIGNMENT_CELLS_COLUMNS = (
     "feature_family_id",
+    *CROSS_SAMPLE_GROUP_CELL_COLUMNS,
     "sample_stem",
     "status",
     "area",
+    "primary_matrix_area",
+    "primary_matrix_area_source",
+    "primary_matrix_area_reason",
     "apex_rt",
     "height",
     "peak_start_rt",
@@ -74,6 +90,22 @@ ALIGNMENT_CELLS_COLUMNS = (
     "family_center_mz",
     "family_center_rt",
     "reason",
+    "backfill_ms1_pattern_status",
+    "backfill_ms1_pattern_evidence_level",
+    "backfill_qc_reference_status",
+    "backfill_qc_reference_evidence_level",
+    "backfill_matrix_rt_drift_status",
+    "backfill_drift_evidence_level",
+    "backfill_drift_compatible_status",
+    "backfill_drift_corrected_delta_sec",
+    "backfill_candidate_ms2_pattern_status",
+    "backfill_candidate_ms2_evidence_level",
+    "backfill_ms2_trigger_scan_count",
+    "backfill_strict_nl_scan_count",
+    "backfill_ms2_trace_strength",
+    "backfill_dda_missing_nl_policy_status",
+    "backfill_family_ms2_required_tag_status",
+    "backfill_evidence_reason",
     "region_candidate_count",
     "region_selected_proposal_sources",
     "region_selected_merge_note",
@@ -86,6 +118,11 @@ ALIGNMENT_CELLS_COLUMNS = (
     "region_local_mixture_diagnostic",
     "region_local_mixture_reason",
     "region_review_reason",
+    "region_decision_status",
+    "region_decision_class",
+    "region_product_action",
+    "region_promotion_reason",
+    "region_baseline_method",
 )
 
 BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
@@ -111,23 +148,11 @@ BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
     "integration_scan_count",
 )
 
-LINEAR_EDGE_ROLLBACK_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
-    "area_baseline_corrected_linear_edge",
-    "baseline_score_linear_edge",
-)
-
-ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
-    *BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
-    *LINEAR_EDGE_ROLLBACK_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
-)
-
-ASLS_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
-    "area_baseline_corrected_asls",
-    "baseline_score_asls",
-)
+ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
 
 ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS = (
     "feature_family_id",
+    *GROUP_BACKFILL_SEED_AUDIT_COLUMNS,
     "sample_stem",
     "status",
     "area",
@@ -168,40 +193,25 @@ def write_alignment_matrix_tsv(
     *,
     alignment_config: AlignmentConfig | None = None,
 ) -> Path:
-    columns = (
-        "feature_family_id",
-        "neutral_loss_tag",
-        "family_center_mz",
-        "family_center_rt",
-        *matrix.sample_order,
+    columns = ("Mz", "RT", *matrix.sample_order)
+    return _write_tsv(
+        path,
+        columns,
+        product_matrix_tsv_rows(matrix, alignment_config=alignment_config),
     )
-    rows: list[dict[str, object]] = []
-    grouped_cells = cells_by_cluster(matrix)
-    decisions = build_production_decisions(
-        matrix,
-        alignment_config or AlignmentConfig(),
+
+
+def write_alignment_matrix_identity_tsv(
+    path: Path,
+    matrix: AlignmentMatrix,
+    *,
+    alignment_config: AlignmentConfig | None = None,
+) -> Path:
+    return _write_tsv(
+        path,
+        ALIGNMENT_MATRIX_IDENTITY_COLUMNS,
+        formatted_identity_rows(matrix, alignment_config=alignment_config),
     )
-    for cluster in matrix.clusters:
-        cluster_id = row_id(cluster)
-        row_decision = decisions.row(cluster_id)
-        if not row_decision.include_in_primary_matrix:
-            continue
-        cells = grouped_cells.get(cluster_id, ())
-        cells_by_sample = {cell.sample_stem: cell for cell in cells}
-        row: dict[str, object] = {
-            "feature_family_id": cluster_id,
-            "neutral_loss_tag": cluster.neutral_loss_tag,
-            "family_center_mz": format_value(_family_center_mz(cluster)),
-            "family_center_rt": format_value(_family_center_rt(cluster)),
-        }
-        for sample_stem in matrix.sample_order:
-            cell = cells_by_sample.get(sample_stem)
-            decision = (
-                decisions.cell(cluster_id, sample_stem) if cell is not None else None
-            )
-            row[sample_stem] = production_matrix_area(decision)
-        rows.append(row)
-    return _write_tsv(path, columns, rows)
 
 
 def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
@@ -212,9 +222,34 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
         rows.append(
             {
                 "feature_family_id": cell.cluster_id,
+                "group_hypothesis_id": cell.group_hypothesis_id,
+                "public_family_id": cell.public_family_id,
+                "group_construction_role": cell.group_construction_role,
+                "group_delivery_role": cell.group_delivery_role,
+                "group_membership_source": cell.group_membership_source,
+                "gap_fill_state": cell.gap_fill_state,
+                "gap_fill_reason": cell.gap_fill_reason,
+                "missing_observation_state": cell.missing_observation_state,
+                "group_claim_state": cell.group_claim_state,
+                "claim_winner_group_hypothesis_id": (
+                    cell.claim_winner_group_hypothesis_id
+                ),
+                "claim_source_group_hypothesis_id": (
+                    cell.claim_source_group_hypothesis_id
+                ),
+                "consolidation_state": cell.consolidation_state,
+                "consolidation_winner_group_hypothesis_id": (
+                    cell.consolidation_winner_group_hypothesis_id
+                ),
+                "consolidation_source_group_hypothesis_id": (
+                    cell.consolidation_source_group_hypothesis_id
+                ),
                 "sample_stem": cell.sample_stem,
                 "status": cell.status,
                 "area": format_value(cell.area),
+                "primary_matrix_area": format_value(cell.matrix_area),
+                "primary_matrix_area_source": cell.matrix_area_source,
+                "primary_matrix_area_reason": cell.matrix_area_missing_reason,
                 "apex_rt": format_value(cell.apex_rt),
                 "height": format_value(cell.height),
                 "peak_start_rt": format_value(cell.peak_start_rt),
@@ -228,6 +263,44 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
                 "family_center_mz": format_value(_family_center_mz(cluster)),
                 "family_center_rt": format_value(_family_center_rt(cluster)),
                 "reason": cell.reason,
+                "backfill_ms1_pattern_status": cell.backfill_ms1_pattern_status,
+                "backfill_ms1_pattern_evidence_level": (
+                    cell.backfill_ms1_pattern_evidence_level
+                ),
+                "backfill_qc_reference_status": cell.backfill_qc_reference_status,
+                "backfill_qc_reference_evidence_level": (
+                    cell.backfill_qc_reference_evidence_level
+                ),
+                "backfill_matrix_rt_drift_status": (
+                    cell.backfill_matrix_rt_drift_status
+                ),
+                "backfill_drift_evidence_level": cell.backfill_drift_evidence_level,
+                "backfill_drift_compatible_status": (
+                    cell.backfill_drift_compatible_status
+                ),
+                "backfill_drift_corrected_delta_sec": format_value(
+                    cell.backfill_drift_corrected_delta_sec
+                ),
+                "backfill_candidate_ms2_pattern_status": (
+                    cell.backfill_candidate_ms2_pattern_status
+                ),
+                "backfill_candidate_ms2_evidence_level": (
+                    cell.backfill_candidate_ms2_evidence_level
+                ),
+                "backfill_ms2_trigger_scan_count": format_value(
+                    cell.backfill_ms2_trigger_scan_count
+                ),
+                "backfill_strict_nl_scan_count": format_value(
+                    cell.backfill_strict_nl_scan_count
+                ),
+                "backfill_ms2_trace_strength": cell.backfill_ms2_trace_strength,
+                "backfill_dda_missing_nl_policy_status": (
+                    cell.backfill_dda_missing_nl_policy_status
+                ),
+                "backfill_family_ms2_required_tag_status": (
+                    cell.backfill_family_ms2_required_tag_status
+                ),
+                "backfill_evidence_reason": cell.backfill_evidence_reason,
                 "region_candidate_count": format_value(cell.region_candidate_count),
                 "region_selected_proposal_sources": ";".join(
                     cell.region_selected_proposal_sources
@@ -248,6 +321,11 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
                 ),
                 "region_local_mixture_reason": cell.region_local_mixture_reason,
                 "region_review_reason": cell.region_review_reason,
+                "region_decision_status": cell.region_decision_status,
+                "region_decision_class": cell.region_decision_class,
+                "region_product_action": cell.region_product_action,
+                "region_promotion_reason": cell.region_promotion_reason,
+                "region_baseline_method": cell.region_baseline_method,
             }
         )
     return _write_tsv(path, ALIGNMENT_CELLS_COLUMNS, rows)
@@ -260,22 +338,20 @@ def write_alignment_cell_integration_audit_tsv(
     baseline_integration_method: str = "asls",
     baseline_audit_method: str = "",
 ) -> Path:
-    if baseline_integration_method not in {"asls", "linear_edge"}:
-        raise ValueError(
-            "baseline_integration_method must be 'asls' or 'linear_edge'"
-        )
+    """Write the post-retirement AsLS-only integration audit TSV.
+
+    ``baseline_audit_method`` is retained as a compatibility input so older
+    callers that pass ``"asls"`` keep working. It no longer selects additional
+    comparison columns; the emitted schema is always
+    ``ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS``.
+    """
+    if baseline_integration_method == "linear_edge":
+        raise ValueError(LINEAR_EDGE_RETIRED_MESSAGE)
+    if baseline_integration_method != "asls":
+        raise ValueError("baseline_integration_method must be 'asls'")
     if baseline_audit_method not in {"", "asls"}:
         raise ValueError("baseline_audit_method must be empty or 'asls'")
-    columns: tuple[str, ...]
-    if baseline_integration_method == "asls":
-        columns = ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
-    elif baseline_audit_method == "asls":
-        columns = (
-            *BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
-            *ASLS_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
-        )
-    else:
-        columns = BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
+    columns = ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS
     clusters_by_id = {row_id(cluster): cluster for cluster in matrix.clusters}
     rows: list[dict[str, object]] = []
     for cell in matrix.cells:
@@ -311,18 +387,6 @@ def write_alignment_cell_integration_audit_tsv(
                 audit.integration_scan_count
             ),
         }
-        if baseline_integration_method == "asls":
-            row["area_baseline_corrected_linear_edge"] = format_value(
-                audit.area_baseline_corrected_linear_edge
-            )
-            row["baseline_score_linear_edge"] = format_value(
-                audit.baseline_score_linear_edge
-            )
-        elif baseline_audit_method == "asls":
-            row["area_baseline_corrected_asls"] = format_value(
-                audit.area_baseline_corrected_asls
-            )
-            row["baseline_score_asls"] = format_value(audit.baseline_score_asls)
         rows.append(row)
     return _write_tsv(path, columns, rows)
 
@@ -340,6 +404,14 @@ def write_alignment_owner_backfill_seed_audit_tsv(
         rows.append(
             {
                 "feature_family_id": cell.cluster_id,
+                "group_hypothesis_id": cell.group_hypothesis_id,
+                "public_family_id": cell.public_family_id,
+                "group_construction_role": cell.group_construction_role,
+                "group_delivery_role": cell.group_delivery_role,
+                "group_membership_source": cell.group_membership_source,
+                "gap_fill_state": cell.gap_fill_state,
+                "gap_fill_reason": cell.gap_fill_reason,
+                "missing_observation_state": cell.missing_observation_state,
                 "sample_stem": cell.sample_stem,
                 "status": cell.status,
                 "area": cell.area,
@@ -415,6 +487,7 @@ def _review_rows(
         rows.append(
             {
                 "feature_family_id": cluster_id,
+                **delivery_group_projection(cluster),
                 "neutral_loss_tag": cluster.neutral_loss_tag,
                 "family_center_mz": _family_center_mz(cluster),
                 "family_center_rt": _family_center_rt(cluster),

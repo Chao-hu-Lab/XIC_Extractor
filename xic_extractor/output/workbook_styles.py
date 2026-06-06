@@ -116,6 +116,8 @@ def _long_cell_value(header: str, raw_val: str) -> object:
             return raw_val
         parsed = _safe_float(raw_val)
         return parsed if parsed is not None else raw_val
+    if header in _ADVANCED_HEADERS:
+        return _excel_text(raw_val) if raw_val else ""
     return raw_val
 
 
@@ -140,7 +142,7 @@ def _long_number_format(header: str) -> str:
 
 
 def _long_column_width(header: str) -> int:
-    return {
+    widths = {
         "SampleName": 28,
         "Group": 14,
         "Target": 24,
@@ -155,7 +157,19 @@ def _long_column_width(header: str) -> int:
         "PeakWidth": 14,
         "Confidence": 14,
         "Reason": 42,
-    }[header]
+        "Product State": 18,
+        "Counted Detection": 18,
+        "Review State": 18,
+        "Projection Reason": 42,
+        "Projection Support Reasons": 32,
+        "Projection Review Reasons": 32,
+        "Projection Conflict Reasons": 32,
+        "Projection Not Counted Reasons": 32,
+        "Projection Exclusion Reasons": 32,
+        "Legacy Authority Status": 22,
+        "Benchmark Eligibility State": 24,
+    }
+    return widths.get(header, 24)
 
 def _review_cell_value(header: str, raw_value: str) -> object:
     if header in {"Priority", "Issue Count"}:

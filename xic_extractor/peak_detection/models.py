@@ -1,5 +1,10 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from xic_extractor.peak_detection.evidence_facts import CandidateEvidenceFacts
 
 PeakStatus = Literal["OK", "NO_SIGNAL", "WINDOW_TOO_SHORT", "PEAK_NOT_FOUND"]
 LocalMinimumQualityFlag = Literal[
@@ -93,6 +98,7 @@ class PeakCandidateScore:
     quality_penalty: int = 0
     selection_quality_penalty: float | None = None
     severities: tuple[tuple[int, str], ...] = ()
+    evidence_facts: CandidateEvidenceFacts | None = None
 
 
 @dataclass(frozen=True)
@@ -109,3 +115,4 @@ class PeakDetectionResult:
     score_breakdown: tuple[tuple[str, str], ...] = ()
     candidate_scores: tuple[PeakCandidateScore, ...] = ()
     selection_reference_rt: float | None = None
+    paired_istd_anchor_rt: float | None = None

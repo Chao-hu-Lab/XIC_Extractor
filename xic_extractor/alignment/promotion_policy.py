@@ -20,8 +20,21 @@ CELL_EVIDENCE_SUPPORTED_REASON = "cell_evidence_supported_backfill"
 DDA_LIMITED_MS2_SHAPE_REASON = "dda_limited_ms2_but_ms1_shape_supported"
 NEIGHBOR_INTERFERENCE_BLOCKED_REASON = "neighboring_ms1_interference_blocked"
 LOW_MS1_COVERAGE_BLOCKED_REASON = "low_ms1_assessable_coverage_blocked"
+MISSING_BACKFILL_EVIDENCE_BLOCKED_REASON = (
+    "missing_independent_backfill_identity_evidence"
+)
+BACKFILL_RT_EXPLANATION_BLOCKED_REASON = "backfill_rt_not_explained"
+BACKFILL_MS1_PATTERN_BLOCKED_REASON = "backfill_ms1_pattern_not_supportive"
+BACKFILL_MS1_PATTERN_CONFLICT_REASON = "backfill_ms1_pattern_conflict"
+BACKFILL_MS2_CONTEXT_BLOCKED_REASON = "backfill_ms2_context_not_supportive"
+BACKFILL_MS2_CONFLICT_REASON = "backfill_ms2_pattern_conflict"
 RESCUE_ONLY_BLOCKED_REASON = "rescue_only_blocked"
 HIGH_BACKFILL_CAPPED_FLAG = "high_backfill_dependency_capped"
+BACKFILL_CELL_EVIDENCE_REQUIRED_FLAG = "backfill_cell_evidence_required"
+BACKFILL_RESCUE_REVIEW_ONLY_FLAG = "backfill_rescue_review_only"
+PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON = (
+    "primary_identity_retained_backfill_review_only"
+)
 
 PromotionState = Literal["not_applicable", "supported", "blocked"]
 
@@ -58,7 +71,40 @@ _LOW_COVERAGE_MARKERS = (
 )
 _MIN_SCAN_SUPPORT = 0.5
 _LOW_SCAN_SUPPORT_MAX = 0.2
+_PREFERRED_RT_DELTA_SEC = 60.0
 _MAX_RT_DELTA_SEC = 180.0
+_SUPPORT_STATUSES = {"supportive", "partial_support"}
+_CONFLICT_STATUSES = {"conflict"}
+_MS1_PATTERN_LEVELS = {
+    "sample_constellation",
+    "sample_boundary_constellation",
+    "trace_constellation",
+}
+_QC_PATTERN_LEVELS = {
+    "qc_consensus_with_local_qc_overlay",
+    "qc_consensus_qc_overlay",
+}
+_DRIFT_SUPPORT_STATUSES = {"drift_supported", "rt_close"}
+_DRIFT_LEVELS = {
+    "matrix_reference_aligned",
+    "sample_istd_aligned",
+    "family_consensus_aligned",
+}
+_MS2_PATTERN_LEVELS = {"sample_candidate_aligned", "sample_boundary_aligned"}
+_DDA_NON_DISPOSITIVE_STATUSES = {"not_dispositive"}
+_FAMILY_MS2_TAG_SUPPORT_STATUSES = {"observed_in_family"}
+_BACKFILL_CELL_ONLY_BLOCK_REASONS = frozenset(
+    {
+        BACKFILL_MS1_PATTERN_BLOCKED_REASON,
+        BACKFILL_MS1_PATTERN_CONFLICT_REASON,
+        BACKFILL_MS2_CONTEXT_BLOCKED_REASON,
+        BACKFILL_MS2_CONFLICT_REASON,
+        BACKFILL_RT_EXPLANATION_BLOCKED_REASON,
+        LOW_MS1_COVERAGE_BLOCKED_REASON,
+        MISSING_BACKFILL_EVIDENCE_BLOCKED_REASON,
+        NEIGHBOR_INTERFERENCE_BLOCKED_REASON,
+    },
+)
 
 
 @dataclass(frozen=True)
@@ -81,6 +127,22 @@ class BackfillCellEvidence:
     region_review_reason: str = ""
     region_shadow_status: str = ""
     region_shadow_verdict: str = ""
+    backfill_ms1_pattern_status: str = ""
+    backfill_ms1_pattern_evidence_level: str = ""
+    backfill_qc_reference_status: str = ""
+    backfill_qc_reference_evidence_level: str = ""
+    backfill_matrix_rt_drift_status: str = ""
+    backfill_drift_evidence_level: str = ""
+    backfill_drift_compatible_status: str = ""
+    backfill_drift_corrected_delta_sec: float | None = None
+    backfill_candidate_ms2_pattern_status: str = ""
+    backfill_candidate_ms2_evidence_level: str = ""
+    backfill_ms2_trigger_scan_count: int | None = None
+    backfill_strict_nl_scan_count: int | None = None
+    backfill_ms2_trace_strength: str = ""
+    backfill_dda_missing_nl_policy_status: str = ""
+    backfill_family_ms2_required_tag_status: str = ""
+    backfill_evidence_reason: str = ""
 
     @property
     def is_rescued_quantifiable(self) -> bool:
@@ -198,12 +260,94 @@ class BackfillCellEvidence:
         )
 
     @property
+    def rt_evidence_supported(self) -> bool:
+        if self.rt_delta_sec is not None and abs(self.rt_delta_sec) <= (
+            _PREFERRED_RT_DELTA_SEC
+        ):
+            return True
+        if _normalize(self.backfill_matrix_rt_drift_status) not in (
+            _DRIFT_SUPPORT_STATUSES
+        ):
+            return False
+        if _normalize(self.backfill_drift_evidence_level) not in _DRIFT_LEVELS:
+            return False
+        if _normalize(self.backfill_drift_compatible_status) != "compatible":
+            return False
+        return (
+            self.backfill_drift_corrected_delta_sec is None
+            or abs(self.backfill_drift_corrected_delta_sec)
+            <= _PREFERRED_RT_DELTA_SEC
+        )
+
+    @property
+    def ms1_pattern_supported(self) -> bool:
+        return (
+            _status_level_supported(
+                self.backfill_ms1_pattern_status,
+                self.backfill_ms1_pattern_evidence_level,
+                _MS1_PATTERN_LEVELS,
+            )
+            or _status_level_supported(
+                self.backfill_qc_reference_status,
+                self.backfill_qc_reference_evidence_level,
+                _QC_PATTERN_LEVELS,
+            )
+        )
+
+    @property
+    def ms1_pattern_conflict(self) -> bool:
+        return (
+            _normalize(self.backfill_ms1_pattern_status) in _CONFLICT_STATUSES
+            or _normalize(self.backfill_qc_reference_status) in _CONFLICT_STATUSES
+        )
+
+    @property
+    def ms2_context_supported(self) -> bool:
+        if _status_level_supported(
+            self.backfill_candidate_ms2_pattern_status,
+            self.backfill_candidate_ms2_evidence_level,
+            _MS2_PATTERN_LEVELS,
+        ):
+            return True
+        if (
+            _normalize(self.backfill_dda_missing_nl_policy_status)
+            in _DDA_NON_DISPOSITIVE_STATUSES
+            and _normalize(self.backfill_family_ms2_required_tag_status)
+            in _FAMILY_MS2_TAG_SUPPORT_STATUSES
+        ):
+            return True
+        return False
+
+    @property
+    def ms2_context_conflict(self) -> bool:
+        return (
+            _normalize(self.backfill_candidate_ms2_pattern_status)
+            in _CONFLICT_STATUSES
+        )
+
+    @property
+    def backfill_identity_block_reason(self) -> str:
+        if not self.local_apex_supported:
+            return LOW_MS1_COVERAGE_BLOCKED_REASON
+        if not self.rt_evidence_supported:
+            return BACKFILL_RT_EXPLANATION_BLOCKED_REASON
+        if self.ms1_pattern_conflict:
+            return BACKFILL_MS1_PATTERN_CONFLICT_REASON
+        if not self.ms1_pattern_supported:
+            return BACKFILL_MS1_PATTERN_BLOCKED_REASON
+        if self.ms2_context_conflict:
+            return BACKFILL_MS2_CONFLICT_REASON
+        if not self.ms2_context_supported:
+            return BACKFILL_MS2_CONTEXT_BLOCKED_REASON
+        return ""
+
+    @property
     def supported_for_backfill(self) -> bool:
         return (
             self.local_apex_supported
             and not self.high_neighbor_interference
             and not self.low_assessable_coverage
-            and (self.additional_ms1_support or self.chemical_support)
+            and self.backfill_identity_block_reason == ""
         )
 
 
@@ -268,6 +412,13 @@ def evidence_from_alignment(
             for cell in cells
         ),
     )
+
+
+def cell_evidence_from_aligned(
+    cell: AlignedCell,
+    quality: CellQualityDecision | None,
+) -> BackfillCellEvidence:
+    return _cell_from_aligned(cell, quality)
 
 
 def evidence_from_tsv_rows(
@@ -372,11 +523,12 @@ def classify_backfill_promotion(
 
     supported = tuple(cell for cell in rescued if cell.supported_for_backfill)
     if len(supported) < evidence.q_rescue:
+        unsupported = tuple(cell for cell in rescued if not cell.supported_for_backfill)
         return BackfillPromotionDecision(
             state="blocked",
-            reason=LOW_MS1_COVERAGE_BLOCKED_REASON,
+            reason=_backfill_identity_block_reason(unsupported),
             confidence="review",
-            flags=("low_ms1_assessable_coverage",),
+            flags=("missing_independent_backfill_identity_evidence",),
             supported_rescue_count=len(supported),
             assessed_rescue_count=len(rescued),
         )
@@ -397,6 +549,10 @@ def classify_backfill_promotion(
     )
 
 
+def is_backfill_cell_only_block_reason(reason: str) -> bool:
+    return reason in _BACKFILL_CELL_ONLY_BLOCK_REASONS
+
+
 def _in_policy_scope(evidence: BackfillPromotionEvidence) -> bool:
     if not is_dr_neutral_loss_tag(evidence.neutral_loss_tag):
         return False
@@ -412,6 +568,20 @@ def _dda_limited_support(evidence: BackfillPromotionEvidence) -> bool:
         return True
     seed_quality = evidence.seed_quality
     return bool(seed_quality is not None and seed_quality.weak_seed_signal)
+
+
+def _backfill_identity_block_reason(cells: Sequence[BackfillCellEvidence]) -> str:
+    for reason in (
+        BACKFILL_MS1_PATTERN_CONFLICT_REASON,
+        BACKFILL_MS2_CONFLICT_REASON,
+        BACKFILL_RT_EXPLANATION_BLOCKED_REASON,
+        BACKFILL_MS1_PATTERN_BLOCKED_REASON,
+        BACKFILL_MS2_CONTEXT_BLOCKED_REASON,
+        LOW_MS1_COVERAGE_BLOCKED_REASON,
+    ):
+        if any(cell.backfill_identity_block_reason == reason for cell in cells):
+            return reason
+    return MISSING_BACKFILL_EVIDENCE_BLOCKED_REASON
 
 
 def _cell_from_aligned(
@@ -437,14 +607,43 @@ def _cell_from_aligned(
         region_review_reason=cell.region_review_reason,
         region_shadow_status=cell.region_shadow_status,
         region_shadow_verdict=cell.region_shadow_verdict,
+        backfill_ms1_pattern_status=cell.backfill_ms1_pattern_status,
+        backfill_ms1_pattern_evidence_level=(
+            cell.backfill_ms1_pattern_evidence_level
+        ),
+        backfill_qc_reference_status=cell.backfill_qc_reference_status,
+        backfill_qc_reference_evidence_level=(
+            cell.backfill_qc_reference_evidence_level
+        ),
+        backfill_matrix_rt_drift_status=cell.backfill_matrix_rt_drift_status,
+        backfill_drift_evidence_level=cell.backfill_drift_evidence_level,
+        backfill_drift_compatible_status=cell.backfill_drift_compatible_status,
+        backfill_drift_corrected_delta_sec=cell.backfill_drift_corrected_delta_sec,
+        backfill_candidate_ms2_pattern_status=(
+            cell.backfill_candidate_ms2_pattern_status
+        ),
+        backfill_candidate_ms2_evidence_level=(
+            cell.backfill_candidate_ms2_evidence_level
+        ),
+        backfill_ms2_trigger_scan_count=cell.backfill_ms2_trigger_scan_count,
+        backfill_strict_nl_scan_count=cell.backfill_strict_nl_scan_count,
+        backfill_ms2_trace_strength=cell.backfill_ms2_trace_strength,
+        backfill_dda_missing_nl_policy_status=(
+            cell.backfill_dda_missing_nl_policy_status
+        ),
+        backfill_family_ms2_required_tag_status=(
+            cell.backfill_family_ms2_required_tag_status
+        ),
+        backfill_evidence_reason=cell.backfill_evidence_reason,
     )
 
 
 def _cell_from_tsv(row: Mapping[str, str]) -> BackfillCellEvidence:
+    primary_area = row.get("primary_matrix_area", "")
     return BackfillCellEvidence(
         sample_stem=row.get("sample_stem", ""),
         status=row.get("status", ""),
-        area=_float_value(row.get("area", "")),
+        area=_float_value(primary_area or row.get("area", "")),
         apex_rt=_float_value(row.get("apex_rt", "")),
         height=_float_value(row.get("height", "")),
         peak_start_rt=_float_value(row.get("peak_start_rt", "")),
@@ -459,12 +658,68 @@ def _cell_from_tsv(row: Mapping[str, str]) -> BackfillCellEvidence:
         region_review_reason=row.get("region_review_reason", ""),
         region_shadow_status=row.get("region_shadow_status", ""),
         region_shadow_verdict=row.get("region_shadow_verdict", ""),
+        backfill_ms1_pattern_status=row.get("backfill_ms1_pattern_status", ""),
+        backfill_ms1_pattern_evidence_level=row.get(
+            "backfill_ms1_pattern_evidence_level",
+            "",
+        ),
+        backfill_qc_reference_status=row.get("backfill_qc_reference_status", ""),
+        backfill_qc_reference_evidence_level=row.get(
+            "backfill_qc_reference_evidence_level",
+            "",
+        ),
+        backfill_matrix_rt_drift_status=row.get(
+            "backfill_matrix_rt_drift_status",
+            "",
+        ),
+        backfill_drift_evidence_level=row.get("backfill_drift_evidence_level", ""),
+        backfill_drift_compatible_status=row.get(
+            "backfill_drift_compatible_status",
+            "",
+        ),
+        backfill_drift_corrected_delta_sec=_float_value(
+            row.get("backfill_drift_corrected_delta_sec", ""),
+        ),
+        backfill_candidate_ms2_pattern_status=row.get(
+            "backfill_candidate_ms2_pattern_status",
+            "",
+        ),
+        backfill_candidate_ms2_evidence_level=row.get(
+            "backfill_candidate_ms2_evidence_level",
+            "",
+        ),
+        backfill_ms2_trigger_scan_count=_int_optional(
+            row.get("backfill_ms2_trigger_scan_count", ""),
+        ),
+        backfill_strict_nl_scan_count=_int_optional(
+            row.get("backfill_strict_nl_scan_count", ""),
+        ),
+        backfill_ms2_trace_strength=row.get("backfill_ms2_trace_strength", ""),
+        backfill_dda_missing_nl_policy_status=row.get(
+            "backfill_dda_missing_nl_policy_status",
+            "",
+        ),
+        backfill_family_ms2_required_tag_status=row.get(
+            "backfill_family_ms2_required_tag_status",
+            "",
+        ),
+        backfill_evidence_reason=row.get("backfill_evidence_reason", ""),
     )
 
 
 def _contains_marker(value: str, markers: Sequence[str]) -> bool:
     text = value.lower()
     return any(marker in text for marker in markers)
+
+
+def _status_level_supported(
+    status: str,
+    level: str,
+    allowed_levels: set[str],
+) -> bool:
+    return _normalize(status) in _SUPPORT_STATUSES and _normalize(level) in (
+        allowed_levels
+    )
 
 
 def _normalize(value: str) -> str:
@@ -503,3 +758,8 @@ def _float_value(value: object) -> float | None:
 def _int_value(value: object) -> int:
     number = _float_value(value)
     return 0 if number is None else int(number)
+
+
+def _int_optional(value: object) -> int | None:
+    number = _float_value(value)
+    return None if number is None else int(number)

@@ -57,6 +57,20 @@ def test_get_targets_round_trips(qtbot):
     assert targets[1]["neutral_loss_da"] == "116.0474"
 
 
+def test_hidden_target_pair_rt_metadata_round_trips(qtbot):
+    section = TargetsSection()
+    qtbot.addWidget(section)
+    rows = _sample_targets()
+    rows[0]["paired_rt_relation"] = "istd_not_later_than_pair"
+    rows[1]["isotope_label_type"] = "deuterated"
+
+    section.load(rows)
+    targets = section.get_targets()
+
+    assert targets[0]["paired_rt_relation"] == "istd_not_later_than_pair"
+    assert targets[1]["isotope_label_type"] == "deuterated"
+
+
 def test_nl_combo_shows_preset(qtbot):
     section = TargetsSection()
     qtbot.addWidget(section)

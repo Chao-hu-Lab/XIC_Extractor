@@ -21,6 +21,7 @@ from xic_extractor.alignment.family_compatibility import (
 )
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.output_rows import cells_by_cluster, row_id
+from xic_extractor.alignment.owner_group_delivery import delivery_group_hypothesis_id
 
 _PRESENT_STATUSES = {"detected", "rescued"}
 _DUPLICATE_WINNER_RE = re.compile(r"(?:^|;\s*)winner=([^;]+)")
@@ -87,6 +88,9 @@ def consolidate_primary_family_rows(
             cluster_replacements[cluster_id] = _loser_cluster(
                 clusters_by_id[cluster_id],
                 winner_id=winner_id,
+                winner_group_hypothesis_id=delivery_group_hypothesis_id(
+                    clusters_by_id[winner_id],
+                ),
             )
         replacement_cells[winner_id] = _winner_cells(
             winner_id,
@@ -94,6 +98,9 @@ def consolidate_primary_family_rows(
             selected_by_sample=selected_by_sample,
             sample_order=matrix.sample_order,
             center_rt=center["family_center_rt"],
+            winner_group_hypothesis_id=delivery_group_hypothesis_id(
+                clusters_by_id[winner_id],
+            ),
         )
 
     clusters = tuple(
@@ -137,6 +144,9 @@ def _demote_near_duplicate_primary_competitors(
             cluster_replacements[cluster_id] = _loser_cluster(
                 clusters_by_id[cluster_id],
                 winner_id=winner_id,
+                winner_group_hypothesis_id=delivery_group_hypothesis_id(
+                    clusters_by_id[winner_id],
+                ),
             )
     return AlignmentMatrix(
         clusters=tuple(
@@ -357,6 +367,7 @@ def _winner_cells(
     selected_by_sample: dict[str, _Observation],
     sample_order: tuple[str, ...],
     center_rt: float,
+    winner_group_hypothesis_id: str,
 ) -> tuple[AlignedCell, ...]:
     current_by_sample = {
         cell.sample_stem: cell for cell in grouped_cells.get(winner_id, ())
@@ -365,7 +376,14 @@ def _winner_cells(
     for sample_stem in sample_order:
         observation = selected_by_sample.get(sample_stem)
         if observation is not None:
-            cells.append(_merged_observation_cell(observation, winner_id, center_rt))
+            cells.append(
+                _merged_observation_cell(
+                    observation,
+                    winner_id,
+                    center_rt,
+                    winner_group_hypothesis_id=winner_group_hypothesis_id,
+                )
+            )
             continue
         current = current_by_sample.get(sample_stem)
         if current is not None:
@@ -391,6 +409,16 @@ def _primary_cluster(
     )
     updates = {
         **center,
+        "group_hypothesis_id": delivery_group_hypothesis_id(cluster),
+        "public_family_id": row_id(cluster),
+        "consolidation_state": "primary_winner",
+        "consolidation_winner_group_hypothesis_id": (
+            delivery_group_hypothesis_id(cluster)
+        ),
+        "consolidation_source_group_hypothesis_id": ";".join(
+            delivery_group_hypothesis_id(clusters_by_id[cluster_id])
+            for cluster_id in component
+        ),
         "has_anchor": any(
             bool(getattr(clusters_by_id[cluster_id], "has_anchor", False))
             for cluster_id in component
@@ -422,18 +450,15 @@ def _merged_member_updates(
                 for owner in tuple(getattr(cluster, "owners"))
             )
         }
-    if all(hasattr(cluster, "event_clusters") for cluster in component_clusters):
-        return {
-            "event_clusters": tuple(
-                event_cluster
-                for cluster in component_clusters
-                for event_cluster in tuple(getattr(cluster, "event_clusters"))
-            )
-        }
     return {}
 
 
-def _loser_cluster(cluster: Any, *, winner_id: str) -> Any:
+def _loser_cluster(
+    cluster: Any,
+    *,
+    winner_id: str,
+    winner_group_hypothesis_id: str,
+) -> Any:
     evidence = _family_evidence(cluster)
     suffix = f"primary_family_consolidation_loser;winner={winner_id}"
     return _clone_cluster(
@@ -441,6 +466,13 @@ def _loser_cluster(cluster: Any, *, winner_id: str) -> Any:
         {
             "evidence": f"{evidence};{suffix}" if evidence else suffix,
             "review_only": True,
+            "consolidation_state": "primary_loser",
+            "consolidation_winner_group_hypothesis_id": (
+                winner_group_hypothesis_id
+            ),
+            "consolidation_source_group_hypothesis_id": (
+                delivery_group_hypothesis_id(cluster)
+            ),
         },
     )
 
@@ -449,6 +481,8 @@ def _merged_observation_cell(
     observation: _Observation,
     winner_id: str,
     center_rt: float,
+    *,
+    winner_group_hypothesis_id: str,
 ) -> AlignedCell:
     cell = _with_cluster_and_rt_delta(observation.cell, winner_id, center_rt)
     reason = (
@@ -461,6 +495,17 @@ def _merged_observation_cell(
         cell,
         status=observation.original_status,  # type: ignore[arg-type]
         reason=reason,
+        group_hypothesis_id=winner_group_hypothesis_id,
+        public_family_id=winner_id,
+        consolidation_state=(
+            "primary_winner"
+            if observation.source_cluster_id == winner_id
+            else "moved_to_primary_winner"
+        ),
+        consolidation_winner_group_hypothesis_id=winner_group_hypothesis_id,
+        consolidation_source_group_hypothesis_id=(
+            observation.cell.group_hypothesis_id or observation.source_cluster_id
+        ),
     )
 
 

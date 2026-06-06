@@ -47,6 +47,19 @@ def test_safe_merge_eligibility_reports_failed_gap_gate() -> None:
     assert result.reason == "gap_exceeds_safe_merge_max"
 
 
+def test_safe_merge_eligibility_requires_internal_product_action() -> None:
+    result = eligibility_for_region_first_safe_merge(
+        _decision(
+            shadow_boundary_id="left;right",
+            source="adjacent_wis_local_minimum_merge",
+            product_action="review_only",
+        )
+    )
+
+    assert result.eligible is False
+    assert result.reason == "product_action_not_safe_merge_eligible"
+
+
 def test_adjacent_wis_safe_merge_updates_selected_boundary_and_area() -> None:
     rt = np.asarray([10.0, 10.1, 10.2, 10.3], dtype=float)
     intensity = np.asarray([100.0, 100.0, 100.0, 100.0], dtype=float)
@@ -386,6 +399,7 @@ def _decision(
     source: str,
     area_ratio: float | None = 1.1,
     selected_interval_gap_max_min: float | None = 0.02,
+    product_action: str = "",
 ) -> RegionSelectionDecision:
     return RegionSelectionDecision(
         shadow_status="evaluated",
@@ -411,6 +425,7 @@ def _decision(
         best_single_boundary_score=70,
         review_reason="test",
         merge_suggestion_source=source,
+        product_action=product_action,
     )
 
 

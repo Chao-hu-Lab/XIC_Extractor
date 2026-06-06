@@ -249,7 +249,9 @@ def _economics_metrics(
     baseline_targets = _int(baseline.get("request_target_count", 0))
     reported_optimized_targets = _int(optimized.get("request_target_count", 0))
     baseline_extracts = _int(baseline.get("request_extract_count_estimate", 0))
-    reported_optimized_extracts = _int(optimized.get("request_extract_count_estimate", 0))
+    reported_optimized_extracts = _int(
+        optimized.get("request_extract_count_estimate", 0)
+    )
     skipped_requests = _int(ledger.get("raw_xic_requests_skipped", 0))
     target_saved = max(
         baseline_targets - reported_optimized_targets,
@@ -272,7 +274,9 @@ def _economics_metrics(
         ),
         "baseline_request_extract_count_estimate": baseline_extracts,
         "optimized_request_extract_count_estimate": effective_optimized_extracts,
-        "optimized_reported_request_extract_count_estimate": reported_optimized_extracts,
+        "optimized_reported_request_extract_count_estimate": (
+            reported_optimized_extracts
+        ),
         "request_extract_count_estimate_saved": extract_saved,
     }
 
@@ -287,8 +291,12 @@ def _delta_metrics(
     optimized_total = float(optimized.get("total_stage_elapsed_sec", 0.0))
     baseline_xic = int(baseline.get("owner_backfill_extract_xic_count", 0))
     optimized_xic = int(optimized.get("owner_backfill_extract_xic_count", 0))
-    baseline_raw_calls = int(baseline.get("owner_backfill_raw_chromatogram_call_count", 0))
-    optimized_raw_calls = int(optimized.get("owner_backfill_raw_chromatogram_call_count", 0))
+    baseline_raw_calls = int(
+        baseline.get("owner_backfill_raw_chromatogram_call_count", 0)
+    )
+    optimized_raw_calls = int(
+        optimized.get("owner_backfill_raw_chromatogram_call_count", 0)
+    )
     return {
         "owner_backfill_elapsed_sec": optimized_owner,
         "owner_backfill_elapsed_saved_sec": baseline_owner - optimized_owner,
@@ -351,7 +359,10 @@ def _positive_resource_improvement_metrics(
 ) -> tuple[str, ...]:
     checks = (
         ("raw_xic_requests_skipped", int(metrics.get("raw_xic_requests_skipped", 0))),
-        ("request_target_count_saved", int(metrics.get("request_target_count_saved", 0))),
+        (
+            "request_target_count_saved",
+            int(metrics.get("request_target_count_saved", 0)),
+        ),
         (
             "request_extract_count_estimate_saved",
             int(metrics.get("request_extract_count_estimate_saved", 0)),

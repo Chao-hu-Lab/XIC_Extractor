@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from tools.diagnostics import single_dr_production_gate_decision_report as report
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
@@ -15,6 +17,7 @@ from xic_extractor.alignment.tsv_writer import (
     write_alignment_cells_tsv,
     write_alignment_review_tsv,
 )
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 
 def test_extreme_dr_backfill_row_becomes_supported_capped_warning(
@@ -202,6 +205,148 @@ def test_tsv_adapter_requires_height_for_rescue_quantifiable_parity(
     assert family["risk_classification"] == "blocked_low_ms1_assessable_coverage"
     assert family["promotion_state"] == "blocked"
     assert family["assessed_rescue_count"] == 0
+
+
+def test_gate_writes_activation_decisions_for_implemented_primary_blocks(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    output_dir = tmp_path / "diagnostics"
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        (_review_row("FAM_BLOCK", q_detected=2, q_rescue=8),),
+    )
+    cells = _cells("FAM_BLOCK", detected=2, rescued=8)
+    for row in cells:
+        if row["status"] == "rescued":
+            row.update(_backfill_evidence_row(supported=False))
+    _write_tsv(alignment_dir / "alignment_cells.tsv", tuple(cells))
+
+    result = report.build_decision_report(alignment_dir=alignment_dir)
+    report.write_outputs(output_dir, result)
+
+    decisions = _read_tsv(output_dir / "single_dr_gate_activation_decisions.tsv")
+    assert decisions == [
+        {
+            "activation_schema_version": (
+                "shared_peak_identity_activation_decision_v1"
+            ),
+            "feature_family_id": "FAM_BLOCK",
+            "candidate_container_id": "FAM_BLOCK",
+            "sample_id": "__family_context__",
+            "peak_hypothesis_id": "FAM_BLOCK",
+            "activation_unit_scope": "legacy_family_row",
+            "machine_current_label": "blocked_missing_backfill_identity_evidence",
+            "evidence_support_status": "not_supportive",
+            "activation_status": "auto_block",
+            "activation_action": "require_review",
+            "product_label_candidate": "fail",
+            "product_effect": "block_family_promotion",
+            "activation_confidence": "medium",
+            "hard_product_block": "TRUE",
+            "contract_rule_id": "context_or_not_evaluable",
+            "activation_reason": (
+                "single_dr_gate:blocked_missing_backfill_identity_evidence:"
+                "backfill_ms1_pattern_not_supportive"
+            ),
+            "required_review_reason": "",
+            "source_evidence_tokens": (
+                "single_dr_gate;"
+                "missing_independent_backfill_identity_evidence"
+            ),
+            "diagnostic_only": "FALSE",
+        }
+    ]
+    changed_rows = _read_tsv(output_dir / "single_dr_gate_changed_row_bundle.tsv")
+    assert changed_rows == [
+        {
+            "stable_row_id": "FAM_BLOCK",
+            "sample": "__row__",
+            "target": "DNA_dR",
+            "legacy_candidate_id": "",
+            "successor_candidate_id": "FAM_BLOCK",
+            "selected_rt": "8.0",
+            "area": "",
+            "boundary": "",
+            "confidence": "medium",
+            "reason": (
+                "single_dr_gate:blocked_missing_backfill_identity_evidence:"
+                "backfill_ms1_pattern_not_supportive"
+            ),
+            "presence_impact": "primary_row_removed",
+            "typed_facts_completeness": (
+                "blocked:backfill_ms1_pattern_not_supportive:"
+                "supported_rescue_count=0:assessed_rescue_count=8"
+            ),
+            "retired_legacy_inputs": "scan_support_only;owner_backfill_label",
+            "ms2_nl_opportunity_status": "not_supportive",
+            "rt_istd_rationale": "",
+            "evidence_tier": "blocked_missing_backfill_identity_evidence",
+            "reviewer_verdict": "pending_manual_review",
+        }
+    ]
+
+
+def test_tsv_adapter_uses_primary_matrix_area_for_rescue_evidence(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        (_review_row("FAM_PRIMARY_AREA", q_detected=2, q_rescue=8),),
+    )
+    cells = _cells("FAM_PRIMARY_AREA", detected=2, rescued=8)
+    for row in cells:
+        if row["status"] == "rescued":
+            row["area"] = ""
+            row["primary_matrix_area"] = "500"
+    _write_tsv(alignment_dir / "alignment_cells.tsv", tuple(cells))
+
+    result = report.build_decision_report(alignment_dir=alignment_dir)
+
+    family = result["families"][0]
+    assert family["risk_classification"] == "supported_backfill_capped"
+    assert family["promotion_state"] == "supported"
+    assert family["assessed_rescue_count"] == 8
+
+
+def test_tsv_adapter_requires_backfill_evidence_schema(tmp_path: Path) -> None:
+    alignment_dir = tmp_path / "alignment"
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        (_review_row("FAM_STALE_SCHEMA", q_detected=2, q_rescue=8),),
+    )
+    cells = _cells("FAM_STALE_SCHEMA", detected=2, rescued=8)
+    for row in cells:
+        row.pop("backfill_ms1_pattern_status")
+    _write_tsv(alignment_dir / "alignment_cells.tsv", tuple(cells))
+
+    with pytest.raises(ValueError, match="missing required columns"):
+        report.build_decision_report(alignment_dir=alignment_dir)
+
+
+def test_single_dr_gate_row_flags_use_exact_tokens(tmp_path: Path) -> None:
+    alignment_dir = tmp_path / "alignment"
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        (
+            _review_row(
+                "FAM_FALSE_FLAG",
+                primary=False,
+                q_detected=2,
+                q_rescue=8,
+                row_flags="not_high_backfill_dependency",
+            ),
+        ),
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        tuple(_cells("FAM_FALSE_FLAG", detected=2, rescued=8)),
+    )
+
+    result = report.build_decision_report(alignment_dir=alignment_dir)
+
+    assert result["families"] == []
 
 
 def test_tsv_diagnostic_reports_neighbor_interference_block(
@@ -565,6 +710,9 @@ def _cells(
                 "sample_stem": sample,
                 "status": "detected",
                 "area": "1000",
+                "primary_matrix_area": "1000",
+                "primary_matrix_area_source": "gaussian15_positive_asls_residual",
+                "primary_matrix_area_reason": "",
                 "apex_rt": "8.0",
                 "height": "100",
                 "peak_start_rt": "7.95",
@@ -578,6 +726,7 @@ def _cells(
                 "family_center_rt": "8.0",
                 "reason": "",
                 "region_review_reason": "",
+                **_backfill_evidence_row(supported=False),
             },
         )
     for index in range(detected + 1, detected + rescued + 1):
@@ -587,6 +736,9 @@ def _cells(
                 "sample_stem": f"S{index:03d}",
                 "status": "rescued",
                 "area": "500",
+                "primary_matrix_area": "500",
+                "primary_matrix_area_source": "gaussian15_positive_asls_residual",
+                "primary_matrix_area_reason": "",
                 "apex_rt": "8.0",
                 "height": "100",
                 "peak_start_rt": "7.95",
@@ -600,6 +752,7 @@ def _cells(
                 "family_center_rt": "8.0",
                 "reason": "owner_backfill",
                 "region_review_reason": "",
+                **_backfill_evidence_row(supported=True),
             },
         )
     for index in range(detected + rescued + 1, detected + rescued + absent + 1):
@@ -609,6 +762,9 @@ def _cells(
                 "sample_stem": f"S{index:03d}",
                 "status": "absent",
                 "area": "",
+                "primary_matrix_area": "",
+                "primary_matrix_area_source": "",
+                "primary_matrix_area_reason": "absent",
                 "apex_rt": "",
                 "height": "",
                 "peak_start_rt": "",
@@ -622,6 +778,7 @@ def _cells(
                 "family_center_rt": "8.0",
                 "reason": "not_found",
                 "region_review_reason": "",
+                **_backfill_evidence_row(supported=False),
             },
         )
     return rows
@@ -740,4 +897,83 @@ def _aligned_cell(
         ),
         source_raw_file=Path(f"{sample_stem}.raw") if status == "detected" else None,
         reason=status,
+        selected_integration=_integration(raw_area=area, asls_area=area),
+        **_backfill_evidence_fields(status=status),
     )
+
+
+def _integration(*, raw_area: float, asls_area: float) -> IntegrationResult:
+    return IntegrationResult(
+        rt_left_min=7.95,
+        rt_apex_min=8.0,
+        rt_right_min=8.05,
+        raw_apex_rt_min=8.0,
+        rt_width_min=0.1,
+        height_raw=100.0,
+        height_smoothed=100.0,
+        area_raw_counts_seconds=raw_area,
+        area_baseline_corrected=asls_area,
+        baseline_type="asls",
+        boundary_sources=("test_single_dr_gate",),
+        area_ms1_morphology=asls_area,
+        ms1_morphology_area_source=(
+            "gaussian15_positive_asls_residual" if asls_area is not None else ""
+        ),
+    )
+
+
+def _backfill_evidence_row(*, supported: bool) -> dict[str, str]:
+    if not supported:
+        return {
+            "backfill_ms1_pattern_status": "",
+            "backfill_ms1_pattern_evidence_level": "",
+            "backfill_qc_reference_status": "",
+            "backfill_qc_reference_evidence_level": "",
+            "backfill_matrix_rt_drift_status": "",
+            "backfill_drift_evidence_level": "",
+            "backfill_drift_compatible_status": "",
+            "backfill_drift_corrected_delta_sec": "",
+            "backfill_candidate_ms2_pattern_status": "",
+            "backfill_candidate_ms2_evidence_level": "",
+            "backfill_ms2_trigger_scan_count": "",
+            "backfill_strict_nl_scan_count": "",
+            "backfill_ms2_trace_strength": "",
+            "backfill_dda_missing_nl_policy_status": "",
+            "backfill_family_ms2_required_tag_status": "",
+            "backfill_evidence_reason": "",
+        }
+    return {
+        "backfill_ms1_pattern_status": "supportive",
+        "backfill_ms1_pattern_evidence_level": "sample_constellation",
+        "backfill_qc_reference_status": "supportive",
+        "backfill_qc_reference_evidence_level": "qc_consensus_with_local_qc_overlay",
+        "backfill_matrix_rt_drift_status": "",
+        "backfill_drift_evidence_level": "",
+        "backfill_drift_compatible_status": "",
+        "backfill_drift_corrected_delta_sec": "",
+        "backfill_candidate_ms2_pattern_status": "partial_support",
+        "backfill_candidate_ms2_evidence_level": "sample_candidate_aligned",
+        "backfill_ms2_trigger_scan_count": "3",
+        "backfill_strict_nl_scan_count": "1",
+        "backfill_ms2_trace_strength": "moderate",
+        "backfill_dda_missing_nl_policy_status": "",
+        "backfill_family_ms2_required_tag_status": "",
+        "backfill_evidence_reason": "unit_test_supported_backfill_evidence",
+    }
+
+
+def _backfill_evidence_fields(*, status: str) -> dict[str, object]:
+    if status != "rescued":
+        return {}
+    return {
+        "backfill_ms1_pattern_status": "supportive",
+        "backfill_ms1_pattern_evidence_level": "sample_constellation",
+        "backfill_qc_reference_status": "supportive",
+        "backfill_qc_reference_evidence_level": "qc_consensus_with_local_qc_overlay",
+        "backfill_candidate_ms2_pattern_status": "partial_support",
+        "backfill_candidate_ms2_evidence_level": "sample_candidate_aligned",
+        "backfill_ms2_trigger_scan_count": 3,
+        "backfill_strict_nl_scan_count": 1,
+        "backfill_ms2_trace_strength": "moderate",
+        "backfill_evidence_reason": "unit_test_supported_backfill_evidence",
+    }

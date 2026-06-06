@@ -1,5 +1,8 @@
+import pytest
+
 from xic_extractor.peak_detection.region_model_selection import (
     RegionBoundaryEvidence,
+    RegionSelectionDecision,
     decide_region_selection,
 )
 
@@ -69,6 +72,21 @@ def test_same_apex_wider_boundary_is_preferred_when_area_gain_is_large() -> None
 
     assert decision.shadow_status == "evaluated"
     assert decision.shadow_verdict == "wider_boundary_preferred"
+    assert decision.decision_status == "evaluated"
+    assert decision.decision_class == "wider_boundary_preferred"
+    assert decision.product_action == "behavior_change_required"
+    assert decision.selected_candidate_id == "candidate-a"
+    assert decision.selected_boundary_id == "candidate-a|candidate"
+    assert decision.alternate_boundary_ids == ("candidate-a|baseline",)
+    assert decision.evidence_sources == (
+        "local_minimum",
+        "candidate_interval",
+        "baseline_return",
+    )
+    assert decision.support_reasons == ("scan_support_ok",)
+    assert decision.conflict_reasons == ()
+    assert decision.audit_reason == decision.review_reason
+    assert decision.baseline_method == "asls"
     assert decision.area_ratio == 1.7
     assert decision.shadow_boundary_id == "candidate-a|baseline"
 
@@ -209,6 +227,14 @@ def test_adjacent_wis_intervals_with_small_area_gain_suggest_merge() -> None:
     )
 
     assert decision.shadow_verdict == "merge_suggested"
+    assert decision.product_action == "safe_merge_eligible"
+    assert decision.promotion_reason == "adjacent_wis_local_minimum_merge"
+    assert decision.alternate_boundary_ids == ("right|candidate",)
+    assert decision.evidence_sources == (
+        "local_minimum",
+        "candidate_interval",
+        "weighted_interval_selection",
+    )
     assert decision.merge_suggestion_source == "adjacent_wis_local_minimum_merge"
     assert decision.area_ratio is None
     assert decision.shadow_area_raw_counts_seconds is None
@@ -292,6 +318,29 @@ def test_adjacent_wis_merge_rejects_zero_area_current_boundary() -> None:
 
     assert decision.shadow_verdict != "merge_suggested"
     assert decision.merge_suggestion_source == ""
+
+
+@pytest.mark.parametrize(
+    ("verdict", "merge_source"),
+    [
+        ("wider_boundary_preferred", ""),
+        ("neighbor_apex_preferred", ""),
+        ("split_supported", ""),
+        ("merge_suggested", "same_apex_wider_boundary_merge"),
+    ],
+)
+def test_non_safe_region_verdicts_stay_behavior_change_required(
+    verdict: str,
+    merge_source: str,
+) -> None:
+    decision = RegionSelectionDecision(
+        shadow_status="evaluated",
+        shadow_verdict=verdict,  # type: ignore[arg-type]
+        merge_suggestion_source=merge_source,  # type: ignore[arg-type]
+    )
+
+    assert decision.product_action == "behavior_change_required"
+    assert decision.product_action != "safe_merge_eligible"
 
 
 def test_same_apex_wider_boundary_merge_is_not_adjacent_wis_source() -> None:
@@ -438,6 +487,8 @@ def test_cwt_only_far_alternative_has_no_merge_suggestion_source() -> None:
     )
 
     assert decision.shadow_verdict == "current_supported"
+    assert decision.product_action == "no_change"
+    assert "centwave_cwt" in decision.evidence_sources
     assert decision.merge_suggestion_source == ""
 
 

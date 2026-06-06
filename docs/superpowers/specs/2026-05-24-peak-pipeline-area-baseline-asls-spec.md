@@ -1,9 +1,27 @@
 # P2 — Area Integration AsLS Baseline Spec
 
 **Date:** 2026-05-24
-**Status:** Implementation slice draft v0.1
+**Status:** Historical implementation slice; superseded for current product
+value selection
 **Overview:** [Peak pipeline modernization overview](2026-05-24-peak-pipeline-modernization-overview-spec.md)
 **Precondition:** P1 resolver default switch validated clean
+
+## 2026-06-02 Retirement Correction
+
+This spec describes the original shadow/audit introduction of AsLS and contains
+historical language from the period when `linear_edge` still existed as the
+production baseline. That language is no longer authoritative for current
+product behavior.
+
+Current product contract:
+
+- `linear_edge` is retired and rejected as config, CLI, environment, integration
+  audit, and writer method input;
+- final matrix values must not use linear-edge or linear-edge-compatible area;
+- the current final-matrix value contract is
+  [AsLS primary matrix value policy](2026-06-02-asls-primary-matrix-value-policy-spec.md);
+- remaining linear-edge references in diagnostics, fixtures, or old notes are
+  historical comparison evidence only.
 
 ## Purpose
 

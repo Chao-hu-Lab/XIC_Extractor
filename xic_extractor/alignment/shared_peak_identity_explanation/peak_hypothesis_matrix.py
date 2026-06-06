@@ -8,8 +8,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools.diagnostics.diagnostic_io import read_tsv_required, text_value, write_tsv
+from xic_extractor.diagnostics.diagnostic_io import (
+    read_tsv_required,
+    text_value,
+    write_tsv,
+)
 
+from . import ms1_peak_modes
 from .schema import (
     HYPOTHESIS_CONSISTENCY_COLUMNS,
     PEAK_HYPOTHESIS_CELL_ASSIGNMENT_COLUMNS,
@@ -50,6 +55,12 @@ _HARD_PEAK_STATUSES = frozenset(
 _HARD_CONSISTENCY_STATUSES = frozenset({"conflict", "split_required"})
 _PRODUCT_CANDIDATE_STATUS = "product_candidate_core"
 _SUPPORT_FAMILY_VERDICT = "ms1_shape_supports_family_backfill"
+_GAUSSIAN15_TRACE_MODE_VERDICTS = frozenset(
+    {
+        "ms1_shape_supports_family_backfill",
+        "review_required_neighboring_ms1_interference",
+    }
+)
 _INFERRED_MODE_GAP_MIN = 0.5
 _INFERRED_MODE_MIN_CLUSTER_SIZE = 2
 _INFERRED_MODE_OUTER_MARGIN_MIN = 0.25
@@ -146,6 +157,7 @@ def build_peak_hypothesis_matrix_outputs(
     hypothesis_consistency_tsv: Path | None = None,
     overlay_trace_data_jsons: Sequence[Path] = (),
     allow_overwrite_source: bool = False,
+    require_complete_peak_hypothesis_identity: bool = False,
 ) -> PeakHypothesisMatrixOutputs:
     matrix_header, matrix_rows = _read_tsv_with_header(
         alignment_matrix_tsv,
@@ -176,6 +188,15 @@ def build_peak_hypothesis_matrix_outputs(
         hypothesis_consistency_rows=consistency_rows,
         expanded_peak_candidate_rows=expanded_candidates,
     )
+    if (
+        require_complete_peak_hypothesis_identity
+        and construction.summary_row["canonical_row_identity_ready"] != "TRUE"
+    ):
+        raise ValueError(
+            "complete PeakHypothesis identity requires canonical row identity "
+            "readiness; blockers="
+            f"{construction.summary_row['canonical_row_identity_blockers']}"
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     matrix_path = output_dir / "alignment_matrix.tsv"
@@ -281,6 +302,13 @@ def construct_peak_hypothesis_matrix(
 
         if not decision.write_matrix_value:
             continue
+        if decision.row_identity_basis == "family_projection_no_split_evidence":
+            continue
+        _reject_multi_family_hypothesis_collapse(
+            rows_by_hypothesis.get(decision.peak_hypothesis_id),
+            peak_hypothesis_id=decision.peak_hypothesis_id,
+            family_id=family_id,
+        )
         output_row = rows_by_hypothesis.setdefault(
             decision.peak_hypothesis_id,
             _new_matrix_row(
@@ -303,6 +331,11 @@ def construct_peak_hypothesis_matrix(
     for candidate in expanded_candidates:
         assignment_row = _expanded_assignment_row(candidate)
         assignment_rows.append(assignment_row)
+        _reject_multi_family_hypothesis_collapse(
+            rows_by_hypothesis.get(candidate.peak_hypothesis_id),
+            peak_hypothesis_id=candidate.peak_hypothesis_id,
+            family_id=candidate.feature_family_id,
+        )
         output_row = rows_by_hypothesis.setdefault(
             candidate.peak_hypothesis_id,
             _new_matrix_row(
@@ -364,8 +397,14 @@ def load_overlay_peak_candidate_rows(
             raise ValueError(f"overlay trace data does not declare family_id: {path}")
         trace_rows = _overlay_trace_rows(payload)
         mode_windows = _mode_windows(payload.get("mode_windows"))
+        if not mode_windows and _supports_gaussian15_trace_mode_windows(payload):
+            mode_windows = _infer_gaussian15_mode_windows_from_trace_rows(
+                trace_rows,
+                payload,
+            )
         if not mode_windows and _supports_inferred_mode_windows(payload):
             mode_windows = _infer_mode_windows_from_trace_rows(trace_rows, payload)
+        mode_windows = _mode_windows_with_detected_seed(mode_windows, trace_rows)
         if not mode_windows:
             continue
         for trace_row in trace_rows:
@@ -448,11 +487,81 @@ def _mode_window_from_value(mode_id: str, value: object) -> _ModeWindow | None:
     return None
 
 
+def _mode_windows_with_detected_seed(
+    mode_windows: Sequence[_ModeWindow],
+    trace_rows: Sequence[Mapping[str, object]],
+) -> tuple[_ModeWindow, ...]:
+    return tuple(
+        mode_window
+        for mode_window in mode_windows
+        if _mode_window_has_detected_seed(mode_window, trace_rows)
+    )
+
+
+def _mode_window_has_detected_seed(
+    mode_window: _ModeWindow,
+    trace_rows: Sequence[Mapping[str, object]],
+) -> bool:
+    if ms1_peak_modes.detected_seed_has_gaussian15_peak_in_window(
+        trace_rows,
+        start_rt=mode_window.start_rt,
+        end_rt=mode_window.end_rt,
+    ):
+        return True
+    for trace_row in trace_rows:
+        if not _trace_is_detected_seed(trace_row):
+            continue
+        apex_rt = _first_float(
+            trace_row,
+            ("cell_apex_rt", "raw_selected_rt", "trace_apex_rt"),
+        )
+        if apex_rt is None:
+            continue
+        if mode_window.start_rt <= apex_rt <= mode_window.end_rt:
+            return True
+    return False
+
+
+def _trace_is_detected_seed(trace_row: Mapping[str, object]) -> bool:
+    return (
+        text_value(trace_row.get("status")) == "detected"
+        or text_value(trace_row.get("group")) == "detected_seed"
+    )
+
+
 def _supports_inferred_mode_windows(payload: Mapping[str, object]) -> bool:
     evidence = payload.get("evidence_summary")
     if not isinstance(evidence, Mapping):
         return False
     return text_value(evidence.get("family_verdict")) == _SUPPORT_FAMILY_VERDICT
+
+
+def _supports_gaussian15_trace_mode_windows(payload: Mapping[str, object]) -> bool:
+    evidence = payload.get("evidence_summary")
+    if not isinstance(evidence, Mapping):
+        return False
+    return text_value(evidence.get("family_verdict")) in _GAUSSIAN15_TRACE_MODE_VERDICTS
+
+
+def _infer_gaussian15_mode_windows_from_trace_rows(
+    trace_rows: Sequence[Mapping[str, object]],
+    payload: Mapping[str, object],
+) -> tuple[_ModeWindow, ...]:
+    windows = ms1_peak_modes.infer_gaussian15_peak_mode_windows(
+        trace_rows,
+        rt_min=_float_or_none(payload.get("rt_min")),
+        rt_max=_float_or_none(payload.get("rt_max")),
+    )
+    return tuple(
+        _ModeWindow(
+            mode_id=window.mode_id,
+            start_rt=window.start_rt,
+            end_rt=window.end_rt,
+            reason="gaussian15_trace_multipeak_mode_window_review_only",
+            candidate_value_basis="gaussian15_trace_mode_window_area",
+        )
+        for window in windows
+    )
 
 
 def _infer_mode_windows_from_trace_rows(
@@ -689,6 +798,28 @@ def _assignment_decision(
         matrix_value_effect="written",
         write_matrix_value=True,
         reason="no_product_candidate_peak_hypothesis_available_before_matrix_output",
+    )
+
+
+def _reject_multi_family_hypothesis_collapse(
+    existing_row: Mapping[str, str] | None,
+    *,
+    peak_hypothesis_id: str,
+    family_id: str,
+) -> None:
+    if existing_row is None:
+        return
+    source_ids = tuple(
+        part.strip()
+        for part in existing_row.get("feature_family_id", "").split(";")
+        if part.strip()
+    )
+    if not source_ids or family_id in source_ids:
+        return
+    collapsed_ids = ";".join((*source_ids, family_id))
+    raise ValueError(
+        f"{peak_hypothesis_id}: peak hypothesis matrix row requires exactly one "
+        f"source_feature_family_id, got {collapsed_ids}"
     )
 
 

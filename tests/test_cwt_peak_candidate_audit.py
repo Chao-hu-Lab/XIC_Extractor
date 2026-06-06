@@ -177,23 +177,27 @@ def test_cwt_peak_candidate_audit_classifies_agreement_and_far_alternatives(
             "selected_reason",
         ]
     assert {row["group_id"]: row["cwt_agreement_class"] for row in group_rows} == {
-        "SampleA|TargetAgreed|arbitrated": "selected_cwt_agreed",
-        "SampleA|TargetFarAlternative|arbitrated": "selected_cwt_far_alternative",
-        "SampleA|TargetChemFar|arbitrated": "selected_cwt_far_alternative",
-        "SampleA|TargetNearby|arbitrated": "selected_cwt_nearby",
-        "SampleB|TargetNoCwt|arbitrated": "selected_without_cwt",
+        "SampleA|TargetAgreed|region_first_safe_merge": "selected_cwt_agreed",
+        "SampleA|TargetFarAlternative|region_first_safe_merge": (
+            "selected_cwt_far_alternative"
+        ),
+        "SampleA|TargetChemFar|region_first_safe_merge": (
+            "selected_cwt_far_alternative"
+        ),
+        "SampleA|TargetNearby|region_first_safe_merge": "selected_cwt_nearby",
+        "SampleB|TargetNoCwt|region_first_safe_merge": "selected_without_cwt",
     }
     assert {row["group_id"]: row["cwt_conditioned_class"] for row in group_rows} == {
-        "SampleA|TargetAgreed|arbitrated": "cwt_selected_support",
-        "SampleA|TargetFarAlternative|arbitrated": "cwt_far_unconfirmed",
-        "SampleA|TargetChemFar|arbitrated": "cwt_far_chemically_plausible",
-        "SampleA|TargetNearby|arbitrated": "cwt_selected_support",
-        "SampleB|TargetNoCwt|arbitrated": "no_cwt_proposal",
+        "SampleA|TargetAgreed|region_first_safe_merge": "cwt_selected_support",
+        "SampleA|TargetFarAlternative|region_first_safe_merge": "cwt_far_unconfirmed",
+        "SampleA|TargetChemFar|region_first_safe_merge": "cwt_far_chemically_plausible",
+        "SampleA|TargetNearby|region_first_safe_merge": "cwt_selected_support",
+        "SampleB|TargetNoCwt|region_first_safe_merge": "no_cwt_proposal",
     }
     far_alternative = next(
         row
         for row in group_rows
-        if row["group_id"] == "SampleA|TargetFarAlternative|arbitrated"
+        if row["group_id"] == "SampleA|TargetFarAlternative|region_first_safe_merge"
     )
     assert far_alternative["selected_rt_apex_min"] == "7.00000"
     assert far_alternative["nearest_cwt_rt_apex_min"] == "7.30000"
@@ -204,7 +208,7 @@ def test_cwt_peak_candidate_audit_classifies_agreement_and_far_alternatives(
     chemically_plausible = next(
         row
         for row in group_rows
-        if row["group_id"] == "SampleA|TargetChemFar|arbitrated"
+        if row["group_id"] == "SampleA|TargetChemFar|region_first_safe_merge"
     )
     assert chemically_plausible["nearest_cwt_nl_match"] == "TRUE"
     assert chemically_plausible["nearest_cwt_ms2_trace_strength"] == "moderate"
@@ -230,8 +234,8 @@ def test_cwt_peak_candidate_audit_classifies_agreement_and_far_alternatives(
     assert (output_dir / "cwt_peak_candidate_audit_summary.tsv").is_file()
     far_rows = _read_tsv(output_dir / "cwt_peak_candidate_far_alternatives.tsv")
     assert {row["group_id"]: row["cwt_conditioned_class"] for row in far_rows} == {
-        "SampleA|TargetFarAlternative|arbitrated": "cwt_far_unconfirmed",
-        "SampleA|TargetChemFar|arbitrated": "cwt_far_chemically_plausible",
+        "SampleA|TargetFarAlternative|region_first_safe_merge": "cwt_far_unconfirmed",
+        "SampleA|TargetChemFar|region_first_safe_merge": "cwt_far_chemically_plausible",
     }
     assert (output_dir / "cwt_peak_candidate_audit.md").is_file()
 
@@ -302,7 +306,7 @@ def test_cwt_peak_candidate_audit_enriches_target_mz_from_workbook(
     agreed = next(
         row
         for row in group_rows
-        if row["group_id"] == "SampleA|TargetAgreed|arbitrated"
+        if row["group_id"] == "SampleA|TargetAgreed|region_first_safe_merge"
     )
     assert agreed["target_mz"] == "269.12345"
 
@@ -330,7 +334,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         (
             "SampleA",
             "TargetAgreed",
-            "arbitrated",
+            "region_first_safe_merge",
             "A1",
             "local_minimum;centwave_cwt",
             "4.00000",
@@ -345,7 +349,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         (
             "SampleA",
             "TargetAgreed",
-            "arbitrated",
+            "region_first_safe_merge",
             "A2",
             "legacy_savgol",
             "4.10000",
@@ -360,7 +364,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         (
             "SampleA",
             "TargetFarAlternative",
-            "arbitrated",
+            "region_first_safe_merge",
             "D1",
             "local_minimum",
             "7.00000",
@@ -375,7 +379,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         (
             "SampleA",
             "TargetFarAlternative",
-            "arbitrated",
+            "region_first_safe_merge",
             "D2",
             "centwave_cwt",
             "7.30000",
@@ -390,7 +394,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         (
             "SampleA",
             "TargetChemFar",
-            "arbitrated",
+            "region_first_safe_merge",
             "C1",
             "local_minimum",
             "8.00000",
@@ -405,7 +409,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         (
             "SampleA",
             "TargetChemFar",
-            "arbitrated",
+            "region_first_safe_merge",
             "C2",
             "local_minimum;centwave_cwt",
             "8.45000",
@@ -420,7 +424,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         (
             "SampleA",
             "TargetNearby",
-            "arbitrated",
+            "region_first_safe_merge",
             "B1",
             "local_minimum",
             "5.00000",
@@ -435,7 +439,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         (
             "SampleA",
             "TargetNearby",
-            "arbitrated",
+            "region_first_safe_merge",
             "B2",
             "legacy_savgol;centwave_cwt",
             "5.05000",
@@ -450,7 +454,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         (
             "SampleB",
             "TargetNoCwt",
-            "arbitrated",
+            "region_first_safe_merge",
             "N1",
             "local_minimum",
             "2.00000",
@@ -465,7 +469,7 @@ def _write_peak_candidates(path: Path, *, encoding: str = "utf-8") -> None:
         (
             "SampleB",
             "TargetNoCwt",
-            "arbitrated",
+            "region_first_safe_merge",
             "N2",
             "legacy_savgol",
             "2.10000",

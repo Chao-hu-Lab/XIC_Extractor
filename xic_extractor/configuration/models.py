@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from xic_extractor.settings_schema import CANONICAL_RESOLVER_MODE
+
 
 @dataclass(frozen=True)
 class ExtractionConfig:
@@ -14,7 +16,8 @@ class ExtractionConfig:
     peak_min_prominence_ratio: float
     ms2_precursor_tol_da: float
     nl_min_intensity_ratio: float
-    resolver_mode: str = "legacy_savgol"
+    ms1_morphology_smoothing_window_points: int = 15
+    resolver_mode: str = CANONICAL_RESOLVER_MODE
     resolver_chrom_threshold: float = 0.05
     resolver_min_search_range_min: float = 0.08
     resolver_min_relative_height: float = 0.02
@@ -31,6 +34,8 @@ class ExtractionConfig:
     rolling_window_size: int = 5
     dirty_matrix_mode: bool = False
     rt_prior_library_path: Path | None = None
+    target_pair_rt_calibration_path: Path | None = None
+    model_selection_expected_diff_approval_registry: Path | None = None
     emit_score_breakdown: bool = False
     emit_review_report: bool = False
     emit_peak_candidates: bool = False
@@ -40,6 +45,7 @@ class ExtractionConfig:
     parallel_mode: str = "serial"
     parallel_workers: int = 1
     config_hash: str = ""
+    target_config_hash: str = ""
 
 
 @dataclass(frozen=True)
@@ -54,6 +60,9 @@ class Target:
     nl_ppm_max: float | None
     is_istd: bool
     istd_pair: str
+    isotope_label_type: str = "unknown"
+    paired_rt_relation: str = "none"
+    sample_applicability: str = "all"
 
 
 class ConfigError(Exception):

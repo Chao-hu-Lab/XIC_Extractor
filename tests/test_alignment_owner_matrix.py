@@ -1,5 +1,7 @@
+import csv
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 from tests.test_alignment_owner_backfill import _feature
 from tests.test_alignment_owner_clustering import _owner
@@ -49,18 +51,145 @@ def test_owner_matrix_writes_detected_rescued_ambiguous_and_absent_cells() -> No
     by_sample = {cell.sample_stem: cell for cell in matrix.cells}
     assert by_sample["sample-a"].status == "detected"
     assert by_sample["sample-a"].area == 1000.0
+    assert by_sample["sample-a"].group_hypothesis_id == "FAM000001"
+    assert by_sample["sample-a"].public_family_id == "FAM000001"
+    assert by_sample["sample-a"].group_construction_role == "successor_constructor"
+    assert (
+        by_sample["sample-a"].group_delivery_role
+        == "owner_aligned_feature_compatibility_facade"
+    )
+    assert (
+        by_sample["sample-a"].group_membership_source
+        == "owner_aligned_feature_successor_projection"
+    )
+    assert by_sample["sample-a"].gap_fill_state == "observed_member"
+    assert by_sample["sample-a"].gap_fill_reason == "local_owner_detected"
+    assert by_sample["sample-a"].missing_observation_state == "observed"
+    assert by_sample["sample-a"].group_claim_state == "unclaimed_or_winner"
     assert by_sample["sample-a"].selected_integration is not None
     assert by_sample["sample-a"].selected_integration.area_raw_counts_seconds == 1000.0
-    assert by_sample["sample-a"].matrix_area == 1000.0
+    assert by_sample["sample-a"].matrix_area == 900.0
     assert by_sample["sample-a"].source_candidate_id == "sample-a#a"
-    assert by_sample["sample-b"] is rescued
+    assert by_sample["sample-b"].status == "rescued"
+    assert by_sample["sample-b"].group_hypothesis_id == "FAM000001"
+    assert by_sample["sample-b"].gap_fill_state == "gap_fill_rescued"
     assert by_sample["sample-c"].status == "ambiguous_ms1_owner"
+    assert by_sample["sample-c"].gap_fill_state == "not_filled"
+    assert by_sample["sample-c"].missing_observation_state == "ambiguous_observation"
+    assert by_sample["sample-c"].gap_fill_reason == "not_requested_ambiguous_owner"
     assert by_sample["sample-c"].area is None
     assert "sample-c#1;sample-c#2" in by_sample["sample-c"].reason
     assert by_sample["sample-d"].status == "absent"
+    assert by_sample["sample-d"].gap_fill_state == "not_filled"
+    assert by_sample["sample-d"].missing_observation_state == "missing_not_observed"
+    assert by_sample["sample-d"].gap_fill_reason == "not_requested_no_gap_fill"
     assert by_sample["sample-d"].source_raw_file is None
     assert matrix.clusters == (feature,)
     assert matrix.sample_order == ("sample-a", "sample-b", "sample-c", "sample-d")
+
+
+def test_owner_matrix_accepts_delivery_contract_feature_without_legacy_dto() -> None:
+    owner = _owner("sample-a", "a", apex_rt=8.5)
+    feature = SimpleNamespace(
+        feature_family_id="FAM_CONTRACT",
+        cluster_id="FAM_CONTRACT",
+        neutral_loss_tag="NL116",
+        family_center_mz=500.0,
+        family_center_rt=8.5,
+        family_product_mz=383.9526,
+        family_observed_neutral_loss_da=116.0474,
+        has_anchor=True,
+        owners=(owner,),
+        members=(owner,),
+        event_cluster_ids=(owner.owner_id,),
+        event_member_count=len(owner.all_events),
+        evidence="test_delivery_contract",
+        identity_conflict=False,
+        review_only=False,
+        confirm_local_owners_with_backfill=False,
+        backfill_seed_centers=(),
+        ambiguous_sample_stem=None,
+        ambiguous_candidate_ids=(),
+        group_hypothesis_id="GROUP_CONTRACT",
+        public_family_id="FAM_CONTRACT",
+        group_construction_role="successor_projection_adapter",
+        group_delivery_role="successor_delivery_protocol",
+        group_membership_source="cross_sample_peak_group_hypothesis",
+        consolidation_state="not_consolidated",
+        consolidation_winner_group_hypothesis_id="",
+        consolidation_source_group_hypothesis_id="",
+    )
+
+    matrix = build_owner_alignment_matrix(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        ambiguous_by_sample={},
+        rescued_cells=(),
+    )
+
+    assert not isinstance(feature, OwnerAlignedFeature)
+    assert matrix.clusters == (feature,)
+    by_sample = {cell.sample_stem: cell for cell in matrix.cells}
+    assert by_sample["sample-a"].status == "detected"
+    assert by_sample["sample-a"].cluster_id == "FAM_CONTRACT"
+    assert by_sample["sample-a"].group_hypothesis_id == "GROUP_CONTRACT"
+    assert by_sample["sample-a"].public_family_id == "FAM_CONTRACT"
+    assert by_sample["sample-a"].group_delivery_role == "successor_delivery_protocol"
+    assert by_sample["sample-b"].status == "absent"
+
+
+def test_owner_matrix_preserves_unchecked_backfill_outcome(tmp_path: Path) -> None:
+    from xic_extractor.alignment.tsv_writer import write_alignment_cells_tsv
+
+    feature = _feature()
+    unchecked = AlignedCell(
+        sample_stem="sample-b",
+        cluster_id=feature.feature_family_id,
+        status="unchecked",
+        area=None,
+        apex_rt=None,
+        height=None,
+        peak_start_rt=None,
+        peak_end_rt=None,
+        rt_delta_sec=None,
+        trace_quality="owner_backfill_not_detected",
+        scan_support_score=None,
+        source_candidate_id=None,
+        source_raw_file=None,
+        reason="owner-centered MS1 backfill query found no accepted peak",
+        backfill_seed_mz=500.0,
+        backfill_seed_rt=8.5,
+        backfill_request_rt_min=5.5,
+        backfill_request_rt_max=11.5,
+        backfill_request_ppm=20.0,
+    )
+
+    matrix = build_owner_alignment_matrix(
+        (feature,),
+        sample_order=("sample-a", "sample-b", "sample-c"),
+        ambiguous_by_sample={},
+        rescued_cells=(unchecked,),
+    )
+
+    by_sample = {cell.sample_stem: cell for cell in matrix.cells}
+    assert by_sample["sample-b"].status == "unchecked"
+    assert by_sample["sample-b"].gap_fill_state == "not_filled"
+    assert by_sample["sample-b"].gap_fill_reason == "query_attempt_not_detected"
+    assert by_sample["sample-b"].missing_observation_state == "missing_unchecked"
+    assert by_sample["sample-b"].matrix_area is None
+    assert by_sample["sample-c"].status == "absent"
+    assert by_sample["sample-c"].gap_fill_reason == "not_requested_no_gap_fill"
+
+    cells_path = write_alignment_cells_tsv(tmp_path / "alignment_cells.tsv", matrix)
+    rows = _cell_rows_by_feature_sample(cells_path)
+    assert rows[("FAM000001", "sample-b")]["status"] == "unchecked"
+    assert rows[("FAM000001", "sample-b")]["gap_fill_state"] == "not_filled"
+    assert rows[("FAM000001", "sample-b")]["gap_fill_reason"] == (
+        "query_attempt_not_detected"
+    )
+    assert rows[("FAM000001", "sample-b")]["missing_observation_state"] == (
+        "missing_unchecked"
+    )
 
 
 def test_owner_matrix_detected_cell_does_not_invent_raw_path() -> None:
@@ -91,11 +220,16 @@ def test_owner_matrix_carries_detected_owner_region_audit() -> None:
             local_mixture_diagnostic="one_envelope_supported",
             local_mixture_reason="adjacent WIS intervals support one envelope",
             review_reason="same envelope",
+            decision_status="evaluated",
+            decision_class="merge_suggested",
+            product_action="safe_merge_eligible",
+            promotion_reason="adjacent_wis_local_minimum_merge",
+            baseline_method="asls",
             integration_audit=CellIntegrationAuditSummary(
                 raw_area=1000.0,
                 area_baseline_corrected=800.0,
                 area_uncertainty=50.0,
-                baseline_type="linear_edge",
+                baseline_type="asls",
                 baseline_score=0.8,
                 uncertainty_fraction=0.05,
                 baseline_fraction=0.8,
@@ -118,6 +252,11 @@ def test_owner_matrix_carries_detected_owner_region_audit() -> None:
     assert cell.region_selected_proposal_sources == ("local_minimum", "cwt_ridge")
     assert cell.region_shadow_status == "evaluated"
     assert cell.region_shadow_verdict == "merge_suggested"
+    assert cell.region_decision_status == "evaluated"
+    assert cell.region_decision_class == "merge_suggested"
+    assert cell.region_product_action == "safe_merge_eligible"
+    assert cell.region_promotion_reason == "adjacent_wis_local_minimum_merge"
+    assert cell.region_baseline_method == "asls"
     assert cell.region_local_mixture_diagnostic == "one_envelope_supported"
     assert cell.integration_audit is not None
     assert cell.integration_audit.baseline_fraction == 0.8
@@ -167,6 +306,9 @@ def test_owner_matrix_uses_backfill_confirmation_for_severe_low_local_owner() ->
 
     assert matrix.cells[0].status == "rescued"
     assert matrix.cells[0].area == 900.0
+    assert matrix.cells[0].gap_fill_state == "gap_fill_rescued"
+    assert matrix.cells[0].missing_observation_state == "queried_and_detected"
+    assert matrix.cells[0].gap_fill_reason == "group_centered_query_detected"
     assert "superseded low local owner" in matrix.cells[0].reason
 
 
@@ -223,3 +365,11 @@ def test_owner_matrix_ambiguous_review_feature_does_not_contaminate_other_featur
     }
     assert cells[("FAM000001", "sample-b")].status == "absent"
     assert cells[("FAM000002", "sample-b")].status == "ambiguous_ms1_owner"
+
+
+def _cell_rows_by_feature_sample(path: Path) -> dict[tuple[str, str], dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return {
+            (row["feature_family_id"], row["sample_stem"]): row
+            for row in csv.DictReader(handle, delimiter="\t")
+        }

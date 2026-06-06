@@ -1,7 +1,8 @@
 # Diagnostic Tool Lifecycle Spec
 
 **Date:** 2026-05-26
-**Status:** Planning - governance rules; no behavior, schema, or method change
+**Status:** Governance rules with 2026-06-01 shared-infrastructure closeout; no
+diagnostic behavior, schema, or method change
 **Worktree:** `codex/peak-pipeline-modernization`
 
 ---
@@ -25,6 +26,22 @@ This spec does NOT:
   behavior,
 - execute any cleanup punch list. Deletions and promotions belong to follow-up
   implementation PRs that cite this spec.
+
+## 2026-06-01 Shared-Infrastructure Closeout
+
+The cleanup-retirement branch completed the dependency-direction cleanup that
+this spec anticipated for schema-neutral shared helpers:
+
+- `xic_extractor/diagnostics/diagnostic_io.py` is the package-owned canonical
+  path for delimited/TSV IO, scalar parsing, header validation, label splitting,
+  and value formatting.
+- `tools/diagnostics/diagnostic_io.py` remains a compatibility shim for
+  existing diagnostic CLIs.
+- This move does not promote a diagnostic gate by itself and does not change any
+  diagnostic schema or scientific method.
+- Future diagnostic tools should reuse the package-owned helper before adding
+  local `_read_required_tsv`, `_optional_float`, `_text`, `_required_indexes`,
+  or `_write_tsv` copies.
 
 ## Problem Statement
 
@@ -53,8 +70,8 @@ monotonically.
 
 ## Existing Specs This Extends
 
-- `AGENTS.md` Architecture And Clean Code Rules (lines 136-178), especially
-  the rule that `tools/diagnostics/` is maintained product code.
+- `docs/architecture-contract.md`, especially the rule that
+  `tools/diagnostics/` is maintained product-adjacent code.
 - `docs/superpowers/specs/2026-05-16-module-responsibility-inventory.md`
 - `docs/superpowers/specs/2026-05-16-alignment-module-responsibility-contract.md`
 - `docs/superpowers/specs/2026-05-24-post-pr60-codebase-cleanup-spec.md`
@@ -93,6 +110,11 @@ future use does not count.
 A tool must not be split across both `tools/diagnostics/` and
 `xic_extractor/diagnostics/`. Pick one based on whether production code
 imports it.
+
+Schema-neutral shared infrastructure is not itself a diagnostic tool. Helpers
+such as delimited/TSV IO, scalar parsing, and header validation may live in
+`xic_extractor/diagnostics/` when package code depends on them, while
+`tools/diagnostics/` keeps a compatibility shim for existing diagnostic CLIs.
 
 ## Promotion Trigger: CANDIDATE/ACTIVE → GATED
 
@@ -187,9 +209,10 @@ author must:
 
 Shared infrastructure that **must** be reused, not re-implemented:
 
-- `tools/diagnostics/diagnostic_io.py` for delimited/TSV reads and writes,
-  scalar parsing, required-column/header validation, label splitting, and
-  formatted-value helpers.
+- `xic_extractor/diagnostics/diagnostic_io.py` for delimited/TSV reads and
+  writes, scalar parsing, required-column/header validation, label splitting,
+  and formatted-value helpers. `tools/diagnostics/diagnostic_io.py` is the
+  compatibility shim for existing diagnostic CLIs.
 - A future `tools/diagnostics/_common/` module only if genuinely shared
   `openpyxl` styling, color palettes, or Excel-safe value conversion appear.
   The 8 known re-implementations identified by the 2026-05-26 audit migrated
@@ -226,8 +249,9 @@ Authors of new diagnostic tools include this section in their PR description:
       Purpose, Topic group, Originating spec/plan. If this PR retires or
       renames an entry-point, updated or removed the corresponding block
       and adjusted the Table of Contents tool counts.
-- [ ] Shared helpers reused (`diagnostic_io.py` or successors). Any new
-      helpers extracted live in a `_common/` location, not inside the tool's
+- [ ] Shared helpers reused (`xic_extractor/diagnostics/diagnostic_io.py` or
+      successors; `tools/diagnostics/diagnostic_io.py` remains the shim). Any
+      new helpers extracted live in a `_common/` location, not inside the tool's
       own 5-file group.
 - [ ] If `CANDIDATE`, the originating spec / plan / note is linked. If no
       originating document exists, the tool is treated as a one-off and is

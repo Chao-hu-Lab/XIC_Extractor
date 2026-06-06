@@ -1,14 +1,25 @@
 # C1a — Baseline Module Relocation Spec
 
 **Date:** 2026-05-24
-**Status:** Cleanup slice draft v0.3 — structural relocation only after design
-correction
+**Status:** Completed in 2026-06-01 cleanup-retirement branch — structural
+relocation only
 **Overview:** [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
 **Companion spec:** [C1b — Linear edge retirement](2026-05-24-peak-pipeline-cleanup-linear-edge-retirement-spec.md)
 **Precondition:** Phase 1 conditional blockers are documented and P2b's
 conditional audit-promotion surface is stable. C1a must not assume AsLS
 production readiness or linear-edge retirement. C1a is one of the first cleanup
 specs that can land after that; no other C-spec is prerequisite.
+
+## 2026-06-01 Implementation Closeout
+
+C1a landed on `codex/cleanup-retirement-foundation` as a pure relocation:
+
+- `asls_baseline` moved into `xic_extractor/peak_detection/baseline.py`.
+- `xic_extractor/baseline.py` remains a thin compatibility re-export for
+  external callers.
+- Internal package imports use the peak-detection package path.
+- Linear-edge retirement did not happen in this phase; it landed later in C1b
+  after C5 and the retirement gates completed.
 
 ## Purpose
 

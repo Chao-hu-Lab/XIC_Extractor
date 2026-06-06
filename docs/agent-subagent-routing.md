@@ -25,15 +25,16 @@ or runtime permission.
 
 Reusable workflow skills should live in the global skill roots and may be
 mirrored to the Claude Code compatibility root when that runtime needs them.
-Repo-local skills under `.codex/skills` should be thin overlays for XIC-specific
-RAW, validation, artifact, and handoff rules. Use skills when their trigger
-threshold applies before recreating process instructions:
+Repo-local skills under `.codex/skills` should exist only when XIC needs an
+execution checklist that cannot live cleanly in this routing doc. Use skills
+when their trigger threshold applies before recreating process instructions:
 
 - global `goal-execution` for goal contract creation, review, tightening, and
   execution; `xic-goal-execution` only adds XIC constraints and validation tiers.
 - global `critical-artifact-review` for multi-angle review of durable specs,
-  plans, goal prompts, workflow rules, handoff docs, and public contracts;
-  `xic-critical-artifact-review` only adds XIC routing and domain risks.
+  plans, goal prompts, workflow rules, handoff docs, and public contracts. It
+  must read this routing doc when running in XIC; do not maintain a duplicate
+  XIC critical-review skill.
 - global `pr-closeout` for durable PR/branch closeout; `xic-pr-closeout` only
   adds XIC readiness labels and artifact rules.
 - `xic-raw-validation` remains repo-local because 8RAW/85RAW, Thermo RAW paths,
@@ -44,12 +45,11 @@ not offer a clearer decision, lower repeat-failure risk, better recovery, or
 repo-specific capability that an existing owner lacks, improve the existing
 owner instead of adding a parallel entry.
 
-This repo owns only the `.codex/skills` overlays and the routing docs. Global
-skills are environment-level workflow dependencies outside this repo diff. If a
-named global skill is unavailable, report `global skill unavailable`, use
-`AGENTS.md`, this routing doc, `docs/agent-parameter-settings.md`, and the
-matching XIC overlay as the minimal fallback checklist, and do not recreate or
-copy the global workflow into the repo.
+This repo owns only XIC-specific overlays and routing docs. Global skills are
+environment-level workflow dependencies outside this repo diff. If a named
+global skill is unavailable, report `global skill unavailable`, use `AGENTS.md`,
+this routing doc, and `docs/agent-parameter-settings.md` as the minimal fallback
+checklist, and do not recreate or copy the global workflow into the repo.
 
 GStack skills are still available and not retired. For this repo, treat them as
 upstream workflow references or explicit user-requested tools while the local
@@ -186,9 +186,9 @@ one review.
 
 ## Critical Artifact Review
 
-Use the global `critical-artifact-review` workflow when this section triggers,
-then apply `.codex/skills/xic-critical-artifact-review/SKILL.md` for
-XIC-specific routing and domain risks.
+Use the global `critical-artifact-review` workflow when this section triggers.
+That global skill is responsible for discovering and following this routing doc;
+this section is the XIC-specific contract.
 
 When the user asks for subagent or critical review of durable artifacts, dispatch
 by review angle, not by artifact count. If two independent artifacts are reviewed
@@ -211,6 +211,14 @@ For every reviewer prompt, include:
 - read-only constraint;
 - the decision the reviewer should challenge;
 - the compact output contract from this document.
+
+For XIC artifacts, reviewer prompts should challenge the strongest assumption
+instead of proofreading. Ask for stale-artifact risk, cheaper existing oracle,
+public-contract drift, validation cost vs decision value, missing exit rule, and
+whether the artifact advances the handoff spine or only preserves legacy shape.
+When relevant, name downstream surfaces such as `alignment_matrix.tsv`,
+`peak_candidates.tsv`, readiness labels, RAW runner/output-level rules, and
+artifact retention.
 
 Trigger phrases that must use this section for non-trivial durable artifacts
 include: `subagent review`, `用 subagent 審`, `審 spec`, `審 plan`,

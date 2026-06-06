@@ -168,6 +168,41 @@ def test_owner_backfill_process_sends_only_sample_requested_features(
     assert by_sample["sample-b"].feature_payload_count == 2
 
 
+def test_owner_backfill_process_accepts_delivery_contract_payload(
+    tmp_path: Path,
+) -> None:
+    feature = _delivery_contract_feature()
+    captured_jobs = []
+
+    def fake_runner(jobs, *, max_workers):
+        captured_jobs.extend(jobs)
+        for job in jobs:
+            pickle.loads(pickle.dumps(job))
+        assert max_workers == 2
+        return []
+
+    run_owner_backfill_process(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        raw_paths={"sample-b": tmp_path / "sample-b.raw"},
+        dll_dir=tmp_path / "dll",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(tmp_path),
+        max_workers=2,
+        runner=fake_runner,
+    )
+
+    assert len(captured_jobs) == 1
+    assert captured_jobs[0].sample_stem == "sample-b"
+    assert captured_jobs[0].features == (feature,)
+    assert captured_jobs[0].features[0].group_hypothesis_id == "GROUP_CONTRACT"
+    assert captured_jobs[0].features[0].public_family_id == "FAM_CONTRACT"
+    assert captured_jobs[0].features[0].group_delivery_role == (
+        "successor_delivery_protocol"
+    )
+    assert captured_jobs[0].feature_payload_count == 1
+
+
 def test_owner_backfill_process_passes_progress_callback_to_runner(
     tmp_path: Path,
 ) -> None:
@@ -564,6 +599,39 @@ def _confirmable_feature_for_sample_a():
         base,
         owners=(low_area_owner, _owner("sample-c")),
         confirm_local_owners_with_backfill=True,
+    )
+
+
+def _delivery_contract_feature():
+    owner = SimpleNamespace(sample_stem="sample-a", owner_area=1000.0)
+    return SimpleNamespace(
+        feature_family_id="FAM_CONTRACT",
+        cluster_id="FAM_CONTRACT",
+        neutral_loss_tag="NL116",
+        family_center_mz=500.0,
+        family_center_rt=8.5,
+        family_product_mz=383.9526,
+        family_observed_neutral_loss_da=116.0474,
+        has_anchor=True,
+        owners=(owner,),
+        members=(owner,),
+        event_cluster_ids=("OWN-sample-a-000001",),
+        event_member_count=1,
+        evidence="test_delivery_contract",
+        identity_conflict=False,
+        review_only=False,
+        confirm_local_owners_with_backfill=False,
+        backfill_seed_centers=(),
+        ambiguous_sample_stem=None,
+        ambiguous_candidate_ids=(),
+        group_hypothesis_id="GROUP_CONTRACT",
+        public_family_id="FAM_CONTRACT",
+        group_construction_role="successor_projection_adapter",
+        group_delivery_role="successor_delivery_protocol",
+        group_membership_source="cross_sample_peak_group_hypothesis",
+        consolidation_state="not_consolidated",
+        consolidation_winner_group_hypothesis_id="",
+        consolidation_source_group_hypothesis_id="",
     )
 
 

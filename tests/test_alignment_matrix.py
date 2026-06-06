@@ -102,6 +102,8 @@ def test_aligned_cell_selected_integration_is_pickleable_for_process_mode():
             height_raw=99.0,
             height_smoothed=99.0,
             area_raw_counts_seconds=234.5,
+            area_baseline_corrected=200.0,
+            baseline_type="asls",
             boundary_sources=("test",),
         ),
     )
@@ -109,11 +111,11 @@ def test_aligned_cell_selected_integration_is_pickleable_for_process_mode():
     restored = pickle.loads(pickle.dumps(cell))
 
     assert restored.selected_integration == cell.selected_integration
-    assert restored.matrix_area == 234.5
-    assert restored.matrix_area_source == "selected_integration"
+    assert restored.matrix_area is None
+    assert restored.matrix_area_source == "missing_ms1_morphology_area"
 
 
-def test_aligned_cell_matrix_area_source_names_legacy_fallback():
+def test_aligned_cell_matrix_area_source_names_missing_asls():
     cell = AlignedCell(
         sample_stem="sample-a",
         cluster_id="ALN000001",
@@ -131,5 +133,5 @@ def test_aligned_cell_matrix_area_source_names_legacy_fallback():
         reason="detected candidate",
     )
 
-    assert cell.matrix_area == 123.4
-    assert cell.matrix_area_source == "legacy_area_fallback"
+    assert cell.matrix_area is None
+    assert cell.matrix_area_source == "missing_ms1_morphology_area"
