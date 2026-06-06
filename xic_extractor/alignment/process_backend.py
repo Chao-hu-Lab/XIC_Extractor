@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import pickle
+from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from dataclasses import dataclass, fields, is_dataclass
@@ -13,7 +14,7 @@ from typing import Any
 
 from xic_extractor.alignment.backfill_scope import (
     REQUEST_PLAN_VERSION,
-    backfill_features_for_sample,
+    backfill_request_sample_stems,
 )
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.identity_coherence.models import (
@@ -30,7 +31,10 @@ from xic_extractor.alignment.owner_backfill import (
     OwnerBackfillWindowStrategy,
     build_owner_backfill_cells,
 )
-from xic_extractor.alignment.owner_group_delivery import OwnerGroupDeliveryFeatures
+from xic_extractor.alignment.owner_group_delivery import (
+    OwnerGroupDeliveryFeature,
+    OwnerGroupDeliveryFeatures,
+)
 from xic_extractor.alignment.ownership import (
     OwnershipBuildResult,
     build_sample_local_owners,
@@ -435,17 +439,27 @@ def run_owner_backfill_process(
         raise ValueError("owner_backfill_superwindow_span_factor must be >= 1")
     jobs: list[OwnerBackfillSampleJob] = []
     raw_sample_stems = frozenset(raw_paths)
+    # Compute each feature's backfill sample set ONCE (pure per-feature) and
+    # bucket features per sample, instead of recomputing
+    # backfill_request_sample_stems for every (sample, feature) pair. Produces
+    # identical per-sample feature lists while turning the O(samples x features)
+    # request scan into O(features).
+    features_by_sample: defaultdict[str, list[OwnerGroupDeliveryFeature]] = (
+        defaultdict(list)
+    )
+    for feature in features:
+        for stem in backfill_request_sample_stems(
+            feature,
+            sample_order=sample_order,
+            raw_sample_stems=raw_sample_stems,
+            alignment_config=alignment_config,
+        ):
+            features_by_sample[stem].append(feature)
     for index, sample_stem in enumerate(sample_order, start=1):
         raw_path = raw_paths.get(sample_stem)
         if raw_path is None:
             continue
-        sample_features = backfill_features_for_sample(
-            features,
-            sample_stem=sample_stem,
-            sample_order=sample_order,
-            raw_sample_stems=raw_sample_stems,
-            alignment_config=alignment_config,
-        )
+        sample_features = tuple(features_by_sample.get(sample_stem, ()))
         if not sample_features:
             continue
         jobs.append(

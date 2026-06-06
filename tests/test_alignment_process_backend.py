@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from tests.test_alignment_owner_backfill import _feature
+from xic_extractor.alignment.backfill_scope import backfill_features_for_sample
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.identity_coherence.models import (
     IdentityCoherenceTraceRequest,
@@ -166,6 +167,51 @@ def test_owner_backfill_process_sends_only_sample_requested_features(
     )
     assert by_sample["sample-a"].feature_payload_count == 1
     assert by_sample["sample-b"].feature_payload_count == 2
+
+
+def test_owner_backfill_process_per_sample_features_match_legacy_scan(
+    tmp_path: Path,
+) -> None:
+    # The per-feature bucketing optimization must produce per-sample job
+    # features byte-identical to the original per-sample
+    # backfill_features_for_sample scan it replaced.
+    feature_a = _confirmable_feature_for_sample_a()
+    feature_b = replace(_feature(), feature_family_id="FAM000002")
+    features = (feature_a, feature_b)
+    sample_order = ("sample-a", "sample-b")
+    raw_paths = {
+        "sample-a": tmp_path / "sample-a.raw",
+        "sample-b": tmp_path / "sample-b.raw",
+    }
+    alignment_config = AlignmentConfig()
+    captured_jobs = []
+
+    def fake_runner(jobs, *, max_workers):
+        captured_jobs.extend(jobs)
+        return []
+
+    run_owner_backfill_process(
+        features,
+        sample_order=sample_order,
+        raw_paths=raw_paths,
+        dll_dir=tmp_path / "dll",
+        alignment_config=alignment_config,
+        peak_config=_peak_config(tmp_path),
+        max_workers=2,
+        runner=fake_runner,
+    )
+
+    by_sample = {job.sample_stem: job.features for job in captured_jobs}
+    raw_sample_stems = frozenset(raw_paths)
+    for sample_stem in sample_order:
+        expected = backfill_features_for_sample(
+            features,
+            sample_stem=sample_stem,
+            sample_order=sample_order,
+            raw_sample_stems=raw_sample_stems,
+            alignment_config=alignment_config,
+        )
+        assert by_sample.get(sample_stem, ()) == expected
 
 
 def test_owner_backfill_process_accepts_delivery_contract_payload(
