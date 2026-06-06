@@ -15,6 +15,9 @@ from tools.diagnostics.selected_envelope_plot_review import (
     write_selected_envelope_boundary_plot,
 )
 from xic_extractor.configuration.models import Target
+from xic_extractor.diagnostics.selected_envelope_gallery import (
+    write_review_gallery_html,
+)
 from xic_extractor.peak_detection.chrom_peak_segments import (
     ChromPeakSegment,
     enumerate_chrom_peak_segments,
@@ -416,17 +419,198 @@ def test_review_gallery_html_marks_active_interval_and_escapes(
     )
     gallery_path = gallery_dir / "review_gallery.html"
 
-    plot_review._write_review_gallery_html(
+    write_review_gallery_html(
         gallery_path,
         [row],
         index_tsv=gallery_dir / "selected_envelope_plot_index.tsv",
     )
 
     html_text = gallery_path.read_text(encoding="utf-8")
-    assert "green = ACTIVE selected/product interval" in html_text
+    assert "綠色 = ACTIVE selected/product interval" in html_text
     assert "&lt;sample-a&gt;" in html_text
     assert 'src="plots/plot.png"' in html_text
     assert "16.06619-17.17301" in html_text
+
+
+def test_review_gallery_html_has_table_lightbox_and_diagnostic_contract(
+    tmp_path: Path,
+) -> None:
+    gallery_dir = tmp_path / "review"
+    plot_path = gallery_dir / "plots" / "plot.png"
+    pdf_path = gallery_dir / "plots" / "plot.pdf"
+    plot_path.parent.mkdir(parents=True)
+    plot_path.write_bytes(b"fake-png")
+    pdf_path.write_bytes(b"fake-pdf")
+    row = {header: "" for header in PLOT_INDEX_HEADERS}
+    row.update(
+        {
+            "plot_rank": "1",
+            "plot_group": "high_risk_externalized",
+            "sample_name": "sample-a",
+            "target_label": "8-oxodG",
+            "role": "Analyte",
+            "row_boundary_decision": "externalize",
+            "boundary_change_class": "context_apex_conflict",
+            "boundary_stop_reason": "stronger_context_apex_outside_envelope",
+            "area_delta_ratio": "0.06760",
+            "resolver_rt_start": "16.06619",
+            "resolver_rt_end": "17.17301",
+            "envelope_rt_start": "15.37481",
+            "envelope_rt_end": "17.20159",
+            "selected_chrom_peak_segment_class": "shoulder_candidate",
+            "selected_chrom_peak_segment_rt_start": "16.55835",
+            "selected_chrom_peak_segment_rt_end": "16.97478",
+            "selected_chrom_peak_segment_projection": "nearest_selected_apex",
+            "oracle_status": "expert_reviewed",
+            "oracle_rt_start": "16.1",
+            "oracle_rt_end": "16.8",
+            "png_path": str(plot_path),
+            "pdf_path": str(pdf_path),
+        }
+    )
+    gallery_path = gallery_dir / "review_gallery.html"
+
+    write_review_gallery_html(
+        gallery_path,
+        [row],
+        index_tsv=gallery_dir / "selected_envelope_plot_index.tsv",
+    )
+
+    html_text = gallery_path.read_text(encoding="utf-8")
+    assert '<html lang="zh-Hant">' in html_text
+    assert "<title>Selected Envelope 邊界審閱</title>" in html_text
+    assert 'aria-label="審閱摘要"' in html_text
+    assert "decision_authority=diagnostic_only / review-only" in html_text
+    assert "signal_rendering_source=RAW XIC + AsLS + Gaussian15 morphology" in (
+        html_text
+    )
+    assert "不會改 selected IntegrationResult" in html_text
+    assert 'class="table-wrap"' in html_text
+    assert 'class="review-table"' in html_text
+    assert '<span lang="en">sample</span><span class="header-sub">樣本</span>' in (
+        html_text
+    )
+    assert (
+        '<span lang="en">PNG action</span><span class="header-sub">PNG 操作</span>'
+        in html_text
+    )
+    assert "position: sticky" in html_text
+    assert '<details class="secondary-details">' in html_text
+    assert "次要 metadata" in html_text
+    assert "legacy envelope 區間" in html_text
+    assert "chrom segment 區間" in html_text
+    assert 'loading="lazy"' in html_text
+    assert 'class="png-fallback"' in html_text
+    assert 'href="plots/plot.png"' in html_text
+    assert 'data-lightbox-open' in html_text
+    assert 'role="dialog"' in html_text
+    assert 'aria-modal="true"' in html_text
+    assert 'aria-labelledby="lightbox-title"' in html_text
+    assert 'aria-describedby="lightbox-caption"' in html_text
+    assert 'id="png-lightbox" role="dialog"' in html_text
+    assert '<h2 id="lightbox-title">PNG 審閱</h2>' in html_text
+    assert '<a id="lightbox-direct" href="">直接開啟 PNG</a>' in html_text
+    assert "closeButton.focus()" in html_text
+    assert "previousTrigger.focus()" in html_text
+    assert "event.key === 'Enter'" in html_text
+    assert "event.key === ' '" in html_text
+    assert "event.key === 'Escape'" in html_text
+    assert "event.key === 'Tab'" in html_text
+
+
+def test_review_gallery_html_escapes_lightbox_payloads(
+    tmp_path: Path,
+) -> None:
+    gallery_dir = tmp_path / "review"
+    plot_path = gallery_dir / "plots" / "plot.png"
+    plot_path.parent.mkdir(parents=True)
+    plot_path.write_bytes(b"fake-png")
+    row = {header: "" for header in PLOT_INDEX_HEADERS}
+    row.update(
+        {
+            "plot_rank": "1",
+            "plot_group": "high_risk_externalized",
+            "sample_name": '<img src=x onerror="alert(1)">',
+            "target_label": 'target";alert(2);//',
+            "role": '<script>alert("role")</script>',
+            "row_boundary_decision": 'externalize"><script>alert(3)</script>',
+            "boundary_change_class": "<b>context_apex_conflict</b>",
+            "resolver_rt_start": "16.06619",
+            "resolver_rt_end": "17.17301",
+            "envelope_rt_start": "15.37481",
+            "envelope_rt_end": "17.20159",
+            "png_path": str(plot_path),
+        }
+    )
+    gallery_path = gallery_dir / "review_gallery.html"
+
+    write_review_gallery_html(
+        gallery_path,
+        [row],
+        index_tsv=gallery_dir / "selected_envelope_plot_index.tsv",
+    )
+
+    html_text = gallery_path.read_text(encoding="utf-8")
+    assert '<img src=x onerror="alert(1)">' not in html_text
+    assert 'target";alert(2);//' not in html_text
+    assert '<script>alert("role")</script>' not in html_text
+    assert 'externalize"><script>alert(3)</script>' not in html_text
+    assert "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;" in html_text
+    assert "target&quot;;alert(2);//" in html_text
+    assert "&lt;script&gt;alert(&quot;role&quot;)&lt;/script&gt;" in html_text
+    assert (
+        "externalize&quot;&gt;&lt;script&gt;alert(3)&lt;/script&gt;" in html_text
+    )
+
+
+def test_review_gallery_html_suppresses_unsafe_artifact_links(
+    tmp_path: Path,
+) -> None:
+    gallery_dir = tmp_path / "review"
+    gallery_dir.mkdir()
+    malicious_png_path = 'javascript:alert(4)"><img src=x onerror="alert(5)">'
+    malicious_pdf_path = 'javascript:alert(6)"><script>alert(7)</script>'
+    row = {header: "" for header in PLOT_INDEX_HEADERS}
+    row.update(
+        {
+            "plot_rank": "1",
+            "plot_group": "high_risk_externalized",
+            "sample_name": "sample-a",
+            "target_label": "8-oxodG",
+            "role": "Analyte",
+            "row_boundary_decision": "externalize",
+            "boundary_change_class": "context_apex_conflict",
+            "resolver_rt_start": "16.06619",
+            "resolver_rt_end": "17.17301",
+            "envelope_rt_start": "15.37481",
+            "envelope_rt_end": "17.20159",
+            "png_path": malicious_png_path,
+            "pdf_path": malicious_pdf_path,
+        }
+    )
+    gallery_path = gallery_dir / "review_gallery.html"
+
+    write_review_gallery_html(
+        gallery_path,
+        [row],
+        index_tsv=gallery_dir / "selected_envelope_plot_index.tsv",
+    )
+
+    html_text = gallery_path.read_text(encoding="utf-8")
+    assert 'href="javascript:' not in html_text
+    assert 'src="javascript:' not in html_text
+    assert 'data-lightbox-src="javascript:' not in html_text
+    assert '<img src=x onerror="alert(5)">' not in html_text
+    assert '<script>alert(7)</script>' not in html_text
+    assert "PNG path 缺失或無法安全連結" in html_text
+    assert (
+        "javascript:alert(4)&quot;&gt;&lt;img src=x "
+        "onerror=&quot;alert(5)&quot;&gt;"
+    ) in html_text
+    assert (
+        "javascript:alert(6)&quot;&gt;&lt;script&gt;alert(7)&lt;/script&gt;"
+        in html_text
+    )
 
 
 def test_select_chrom_peak_segment_prefers_selected_apex_over_wide_envelope() -> None:
