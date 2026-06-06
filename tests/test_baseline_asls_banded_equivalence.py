@@ -85,3 +85,22 @@ def test_banded_asls_handles_degenerate_flat_trace() -> None:
     output = asls_baseline(np.full(60, 17.0))
     assert output.shape == (60,)
     assert np.all(np.isfinite(output))
+
+
+def test_banded_asls_degenerate_traces_match_spsolve_and_stay_finite() -> None:
+    # Edge cases that exercise the non-PD fallback and minimal sizes; each must
+    # stay finite and track the spsolve reference (all-zero hits the singular
+    # penalty -> spsolve fallback in both paths).
+    cases = {
+        "all_zero": np.zeros(50),
+        "n_equals_3": np.array([1.0, 5.0, 2.0]),
+        "single_spike": np.concatenate([np.zeros(20), [500.0], np.zeros(29)]),
+        "near_constant": np.full(60, 42.0) + 1e-6 * np.arange(60),
+        "constant": np.full(40, 7.0),
+    }
+    for name, y in cases.items():
+        new = asls_baseline(y)
+        ref = _asls_spsolve_reference(y)
+        assert new.shape == y.shape, name
+        assert np.all(np.isfinite(new)), name
+        assert np.allclose(new, ref, rtol=1e-3, atol=1e-1), name
