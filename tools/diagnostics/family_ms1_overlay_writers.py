@@ -7,6 +7,7 @@ import json
 import math
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from tools.diagnostics.family_ms1_overlay_evidence import (
     _apex_aligned_shape_similarity,
@@ -21,6 +22,9 @@ from tools.diagnostics.family_ms1_overlay_models import (
 )
 from tools.diagnostics.family_ms1_overlay_rendering import render_family_ms1_overlay
 
+if TYPE_CHECKING:
+    from xic_extractor.alignment.edge_scoring import DriftLookupProtocol
+
 
 def write_family_ms1_overlay_outputs(
     *,
@@ -33,6 +37,7 @@ def write_family_ms1_overlay_outputs(
     rt_min: float,
     rt_max: float,
     family_center_rt: float | None,
+    drift_lookup: DriftLookupProtocol | None = None,
 ) -> FamilyMs1OverlayOutputs:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_tsv = output_dir / f"{output_prefix}_trace_summary.tsv"
@@ -61,6 +66,7 @@ def write_family_ms1_overlay_outputs(
         rt_min=rt_min,
         rt_max=rt_max,
         family_center_rt=family_center_rt,
+        drift_lookup=drift_lookup,
     )
     return FamilyMs1OverlayOutputs(
         png_path=png_path,

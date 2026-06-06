@@ -72,6 +72,7 @@ from tools.diagnostics.family_ms1_overlay_writers import (
     _write_trace_data,
     write_family_ms1_overlay_outputs,
 )
+from xic_extractor.alignment.drift_evidence import read_targeted_istd_drift_evidence
 
 __all__ = [
     "APEX_ALIGN_HALF_WINDOW_MIN",
@@ -146,6 +147,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         else _median_value(row.cell_apex_rt for row in rows)
     )
     prefix = args.output_prefix or f"{args.family_id.lower()}_ms1_overlay"
+    drift_lookup = (
+        read_targeted_istd_drift_evidence(args.targeted_workbook, args.sample_info)
+        if args.targeted_workbook is not None and args.sample_info is not None
+        else None
+    )
     outputs = write_family_ms1_overlay_outputs(
         rows=rows,
         output_dir=args.output_dir,
@@ -156,6 +162,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         rt_min=args.rt_min,
         rt_max=args.rt_max,
         family_center_rt=center_rt,
+        drift_lookup=drift_lookup,
     )
     print(f"MS1 overlay PNG: {outputs.png_path}")
     print(f"MS1 overlay PDF: {outputs.pdf_path}")
@@ -178,6 +185,19 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--ppm", type=float, default=10.0)
     parser.add_argument("--max-highlight-rescued", type=int, default=8)
     parser.add_argument("--family-center-rt", type=float)
+    parser.add_argument(
+        "--targeted-workbook",
+        type=Path,
+        help=(
+            "Targeted XIC workbook (with ISTD rows) used to build the per-sample "
+            "drift shift for the drift-corrected (iRT) overlay panel."
+        ),
+    )
+    parser.add_argument(
+        "--sample-info",
+        type=Path,
+        help="Sample info table providing injection order for ISTD drift trends.",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--output-prefix")
     return parser.parse_args(argv)

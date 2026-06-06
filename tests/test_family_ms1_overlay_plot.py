@@ -191,6 +191,110 @@ def test_write_family_ms1_overlay_outputs_from_synthetic_traces(
     assert payload["traces"][0]["rt"] == [1.0, 1.1, 1.2]
 
 
+class _DriftLookup:
+    def __init__(self, deltas: dict[str, float]) -> None:
+        self._deltas = deltas
+        self.source = "targeted_istd_trend"
+
+    def sample_delta_min(self, sample_stem: str) -> float | None:
+        return self._deltas.get(sample_stem)
+
+    def injection_order(self, sample_stem: str) -> int | None:
+        return None
+
+
+def _synthetic_rows() -> list[object]:
+    return [
+        report.trace_row_from_arrays(
+            report.FamilyCell(
+                sample_stem="detected-a",
+                status="detected",
+                area=1000,
+                height=100,
+                apex_rt=1.1,
+                peak_start_rt=1.0,
+                peak_end_rt=1.2,
+                region_shadow_verdict="current_supported",
+                source_candidate_id="detected-a#1",
+            ),
+            "detected_seed",
+            [1.0, 1.1, 1.2],
+            [0.0, 100.0, 20.0],
+        ),
+        report.trace_row_from_arrays(
+            report.FamilyCell(
+                sample_stem="rescued-a",
+                status="rescued",
+                area=800,
+                height=80,
+                apex_rt=1.11,
+                peak_start_rt=1.01,
+                peak_end_rt=1.21,
+                region_shadow_verdict="split_supported",
+                source_candidate_id="",
+            ),
+            "top_rescued_ms1_area",
+            [1.0, 1.1, 1.2],
+            [0.0, 80.0, 10.0],
+        ),
+    ]
+
+
+def test_overlay_renders_irt_panel_with_drift_lookup(tmp_path: Path) -> None:
+    lookup = _DriftLookup(deltas={"detected-a": 0.01, "rescued-a": -0.01})
+
+    outputs = report.write_family_ms1_overlay_outputs(
+        rows=_synthetic_rows(),
+        output_dir=tmp_path / "out",
+        output_prefix="fam_irt_ms1_overlay",
+        family_id="FAM_IRT",
+        mz=251.165,
+        ppm=10.0,
+        rt_min=1.0,
+        rt_max=1.2,
+        family_center_rt=1.1,
+        drift_lookup=lookup,
+    )
+
+    assert outputs.png_path.is_file()
+    assert outputs.pdf_path.is_file()
+
+
+def test_overlay_renders_without_drift_lookup_backcompat(tmp_path: Path) -> None:
+    outputs = report.write_family_ms1_overlay_outputs(
+        rows=_synthetic_rows(),
+        output_dir=tmp_path / "out",
+        output_prefix="fam_no_drift_ms1_overlay",
+        family_id="FAM_NO_DRIFT",
+        mz=251.165,
+        ppm=10.0,
+        rt_min=1.0,
+        rt_max=1.2,
+        family_center_rt=1.1,
+    )
+
+    assert outputs.png_path.is_file()
+    assert outputs.pdf_path.is_file()
+
+
+def test_cli_help_lists_drift_arguments() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = repo_root / "tools" / "diagnostics" / "family_ms1_overlay_plot.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--targeted-workbook" in result.stdout
+    assert "--sample-info" in result.stdout
+
+
 def test_stable_jitter_is_reproducible() -> None:
     assert report._stable_jitter("sample-a", width=0.18) == report._stable_jitter(
         "sample-a",

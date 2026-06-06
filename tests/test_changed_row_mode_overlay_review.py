@@ -556,6 +556,204 @@ def test_mode_overlay_plot_intensity_uses_gaussian15_smoothing() -> None:
     assert sum(smoothed) > 0.0
 
 
+_MULTIPEAK_PROFILE = [
+    0.0, 0.0, 0.0, 2.0, 8.0, 30.0, 75.0, 100.0, 75.0, 30.0, 8.0, 2.0, 0.0, 0.0,
+    5.0, 20.0, 60.0, 85.0, 60.0, 20.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    0.0,
+]
+_SHOULDER_PROFILE = [
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    2.0, 8.0, 30.0, 70.0, 100.0, 70.0, 30.0, 8.0, 2.0,
+    0.0, 0.0,
+    4.0, 9.0, 13.0, 14.0, 13.0, 9.0, 4.0,
+    0.0, 0.0, 0.0, 0.0,
+]
+
+
+class _DriftLookup:
+    def __init__(self, deltas: dict[str, float]) -> None:
+        self._deltas = deltas
+        self.source = "targeted_istd_trend"
+
+    def sample_delta_min(self, sample_stem: str) -> float | None:
+        return self._deltas.get(sample_stem)
+
+    def injection_order(self, sample_stem: str) -> int | None:
+        return None
+
+
+def _multipeak_family(tmp_path: Path) -> tuple[Path, Path]:
+    overlay_dir = tmp_path / "overlay"
+    overlay_dir.mkdir()
+    trace_json = overlay_dir / "fam_drift_trace_data.json"
+    _write_trace_data(
+        trace_json,
+        family_id="FAM_DRIFT",
+        traces=[
+            _trace_with_profile(
+                "DetectedA",
+                cell_apex_rt=8.3,
+                trace_apex_rt=8.3,
+                intensities=_MULTIPEAK_PROFILE,
+                status="detected",
+            ),
+            _trace_with_profile(
+                "DetectedB",
+                cell_apex_rt=8.3,
+                trace_apex_rt=8.3,
+                intensities=_MULTIPEAK_PROFILE,
+                status="detected",
+            ),
+            _trace_with_profile(
+                "RescueA",
+                cell_apex_rt=8.3,
+                trace_apex_rt=8.3,
+                intensities=_MULTIPEAK_PROFILE,
+            ),
+        ],
+    )
+    overlay_summary = tmp_path / "overlay_summary.tsv"
+    _write_tsv(
+        overlay_summary,
+        [
+            {
+                "rank": "1",
+                "feature_family_id": "FAM_DRIFT",
+                "status": "success",
+                "family_verdict": "review_required_neighboring_ms1_interference",
+                "png_path": "",
+                "pdf_path": "",
+                "trace_data_json": str(trace_json),
+            }
+        ],
+        review.OVERLAY_SUMMARY_REQUIRED_COLUMNS,
+    )
+    changed_bundle = tmp_path / "changed.tsv"
+    _write_tsv(
+        changed_bundle,
+        [{"stable_row_id": "FAM_DRIFT"}],
+        review.CHANGED_ROW_REQUIRED_COLUMNS,
+    )
+    return overlay_summary, changed_bundle
+
+
+def test_mode_overlay_review_drift_badge_and_columns_in_gallery(
+    tmp_path: Path,
+) -> None:
+    overlay_summary, changed_bundle = _multipeak_family(tmp_path)
+    lookup = _DriftLookup(
+        deltas={"DetectedA": 0.10, "DetectedB": 0.12, "RescueA": 0.08},
+    )
+
+    outputs = review.run_changed_row_mode_overlay_review(
+        changed_row_bundle_tsv=changed_bundle,
+        overlay_batch_summary_tsv=overlay_summary,
+        drift_lookup=lookup,
+        output_dir=tmp_path / "review",
+        render_plots=False,
+    )
+
+    family_rows = _read_tsv(outputs.family_summary_tsv)
+    assert "likely_false_split" in family_rows[0]["drift_diagnostic_badge"]
+    assert family_rows[0]["raw_mode_span_min"] != ""
+    assert family_rows[0]["corrected_mode_span_min"] != ""
+
+    sample_rows = _read_tsv(outputs.sample_review_tsv)
+    by_sample = {row["sample_stem"]: row for row in sample_rows}
+    assert by_sample["DetectedA"]["sample_drift_shift_sec"] != ""
+    assert by_sample["DetectedA"]["corrected_apex_rt"] != ""
+
+    html = outputs.review_gallery_html.read_text(encoding="utf-8")
+    assert "likely_false_split" in html
+    assert "drift shift (s)" in html
+    assert "raw apex" in html
+    assert "corrected apex" in html
+    assert "drift diagnostic distribution" in html
+
+
+def test_mode_overlay_review_renders_drift_aware_mode_plot(tmp_path: Path) -> None:
+    overlay_summary, changed_bundle = _multipeak_family(tmp_path)
+    lookup = _DriftLookup(
+        deltas={"DetectedA": 0.10, "DetectedB": 0.12, "RescueA": 0.08},
+    )
+
+    outputs = review.run_changed_row_mode_overlay_review(
+        changed_row_bundle_tsv=changed_bundle,
+        overlay_batch_summary_tsv=overlay_summary,
+        drift_lookup=lookup,
+        output_dir=tmp_path / "review",
+        render_plots=True,
+    )
+
+    family_rows = _read_tsv(outputs.family_summary_tsv)
+    mode_plot = Path(family_rows[0]["mode_plot_png_path"])
+    aligned_plot = Path(family_rows[0]["mode_aligned_plot_png_path"])
+    assert mode_plot.is_file()
+    assert aligned_plot.is_file()
+
+
+def test_mode_overlay_review_flags_subthreshold_missed_peak(tmp_path: Path) -> None:
+    overlay_dir = tmp_path / "overlay"
+    overlay_dir.mkdir()
+    trace_json = overlay_dir / "fam_shoulder_trace_data.json"
+    _write_trace_data(
+        trace_json,
+        family_id="FAM_SHOULDER",
+        traces=[
+            _trace_with_profile(
+                "S1",
+                cell_apex_rt=8.3,
+                trace_apex_rt=8.3,
+                intensities=_SHOULDER_PROFILE,
+                status="detected",
+            ),
+            _trace_with_profile(
+                "S2",
+                cell_apex_rt=8.3,
+                trace_apex_rt=8.3,
+                intensities=_SHOULDER_PROFILE,
+                status="detected",
+            ),
+        ],
+    )
+    overlay_summary = tmp_path / "overlay_summary.tsv"
+    _write_tsv(
+        overlay_summary,
+        [
+            {
+                "rank": "1",
+                "feature_family_id": "FAM_SHOULDER",
+                "status": "success",
+                "family_verdict": "ms1_shape_supports_family_backfill",
+                "png_path": "",
+                "pdf_path": "",
+                "trace_data_json": str(trace_json),
+            }
+        ],
+        review.OVERLAY_SUMMARY_REQUIRED_COLUMNS,
+    )
+    changed_bundle = tmp_path / "changed.tsv"
+    _write_tsv(
+        changed_bundle,
+        [{"stable_row_id": "FAM_SHOULDER"}],
+        review.CHANGED_ROW_REQUIRED_COLUMNS,
+    )
+
+    outputs = review.run_changed_row_mode_overlay_review(
+        changed_row_bundle_tsv=changed_bundle,
+        overlay_batch_summary_tsv=overlay_summary,
+        output_dir=tmp_path / "review",
+        render_plots=False,
+    )
+
+    family_rows = _read_tsv(outputs.family_summary_tsv)
+    assert family_rows[0]["subthreshold_present"] == "TRUE"
+    assert int(family_rows[0]["subthreshold_candidate_count"]) >= 1
+
+    html = outputs.review_gallery_html.read_text(encoding="utf-8")
+    assert "sub_threshold_candidates_present" in html
+
+
 def _trace(
     sample: str,
     *,

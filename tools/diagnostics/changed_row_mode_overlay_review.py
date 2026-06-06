@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -28,6 +28,7 @@ from tools.diagnostics.family_ms1_overlay_models import (
 from tools.diagnostics.family_ms1_overlay_rendering_styles import (
     PLOT_GAUSSIAN_SMOOTH_POINTS,
 )
+from xic_extractor.alignment.drift_evidence import read_targeted_istd_drift_evidence
 from xic_extractor.alignment.shared_peak_identity_explanation import (
     machine_evidence_support,
     ms1_peak_modes,
@@ -40,6 +41,13 @@ from xic_extractor.diagnostics.diagnostic_io import (
     text_value,
     write_tsv,
 )
+from xic_extractor.peak_detection.ms1_morphology import (
+    DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+    gaussian15_morphology_trace,
+)
+
+if TYPE_CHECKING:
+    from xic_extractor.alignment.edge_scoring import DriftLookupProtocol
 
 OVERLAY_SUMMARY_REQUIRED_COLUMNS = (
     "rank",
@@ -108,6 +116,10 @@ SAMPLE_REVIEW_COLUMNS = (
     "display_mode_id",
     "mode_review_basis",
     "gaussian15_trace_mode_ids",
+    "sample_drift_shift_sec",
+    "raw_apex_rt",
+    "corrected_apex_rt",
+    "subthreshold_candidate_count",
     "mode_review_warning",
     "trace_data_json",
     "original_png_path",
@@ -156,6 +168,11 @@ FAMILY_SUMMARY_COLUMNS = (
     "mode_review_basis",
     "gaussian15_trace_mode_counts",
     "gaussian15_trace_mode_windows",
+    "raw_mode_span_min",
+    "corrected_mode_span_min",
+    "drift_diagnostic_badge",
+    "subthreshold_candidate_count",
+    "subthreshold_present",
     "mode_review_verdict",
     "mode_review_warning",
     "changed_row_reason",
@@ -206,6 +223,10 @@ class TraceData:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
+        drift_lookup = _build_drift_lookup(
+            targeted_workbook=args.targeted_workbook,
+            sample_info=args.sample_info,
+        )
         outputs = run_changed_row_mode_overlay_review(
             changed_row_bundle_tsv=args.changed_row_bundle_tsv,
             overlay_batch_summary_tsv=args.overlay_batch_summary_tsv,
@@ -217,6 +238,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             matrix_rt_drift_policy_tsv=args.matrix_rt_drift_policy_tsv,
             alignment_cells_tsv=args.alignment_cells_tsv,
             ms1_pattern_coherence_tsv=args.ms1_pattern_coherence_tsv,
+            drift_lookup=drift_lookup,
             output_dir=args.output_dir,
             render_plots=not args.no_plots,
         )
@@ -225,6 +247,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     print(f"mode-aware review gallery: {outputs.review_gallery_html}")
     return 0
+
+
+def _build_drift_lookup(
+    *,
+    targeted_workbook: Path | None,
+    sample_info: Path | None,
+) -> DriftLookupProtocol | None:
+    """Reuse the ISTD drift evidence as the per-sample iRT shift source.
+
+    Returns None unless BOTH the targeted workbook and sample info are supplied,
+    in which case every drift-aware visual degrades gracefully to raw RT.
+    """
+    if targeted_workbook is None or sample_info is None:
+        return None
+    return read_targeted_istd_drift_evidence(targeted_workbook, sample_info)
 
 
 def run_changed_row_mode_overlay_review(
@@ -237,6 +274,7 @@ def run_changed_row_mode_overlay_review(
     matrix_rt_drift_policy_tsv: Path | None = None,
     alignment_cells_tsv: Path | None = None,
     ms1_pattern_coherence_tsv: Path | None = None,
+    drift_lookup: DriftLookupProtocol | None = None,
     output_dir: Path,
     render_plots: bool = True,
 ) -> ModeOverlayReviewOutputs:
@@ -317,6 +355,7 @@ def run_changed_row_mode_overlay_review(
         global_mode_ids_by_family=global_mode_ids_by_family,
         alignment_modes_by_family=alignment_modes_by_family,
         gaussian15_modes_by_family=gaussian15_modes_by_family,
+        drift_lookup=drift_lookup,
         output_dir=output_dir,
     )
     if render_plots:
@@ -330,12 +369,14 @@ def run_changed_row_mode_overlay_review(
                 trace_data=item,
                 sample_rows=family_sample_rows,
                 gaussian15_modes=gaussian15_modes_by_family.get(item.family_id, ()),
+                drift_lookup=drift_lookup,
                 output_dir=output_dir,
             )
             mode_aligned_plot_paths[item.family_id] = _render_mode_aligned_plot(
                 trace_data=item,
                 sample_rows=family_sample_rows,
                 gaussian15_modes=gaussian15_modes_by_family.get(item.family_id, ()),
+                drift_lookup=drift_lookup,
                 output_dir=output_dir,
             )
     sample_rows = [
@@ -367,6 +408,7 @@ def run_changed_row_mode_overlay_review(
         mode_plot_paths=mode_plot_paths,
         mode_aligned_plot_paths=mode_aligned_plot_paths,
         gaussian15_modes_by_family=gaussian15_modes_by_family,
+        drift_lookup=drift_lookup,
     )
 
     sample_review_tsv = output_dir / "changed_row_mode_sample_review.tsv"
@@ -482,6 +524,7 @@ def _sample_review_rows(
         str,
         Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
     ],
+    drift_lookup: DriftLookupProtocol | None = None,
     output_dir: Path,
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
@@ -526,6 +569,21 @@ def _sample_review_rows(
                 alignment_mode_count=_alignment_mode_count(alignment_modes),
                 mode_basis=mode_basis,
                 gaussian15_trace_mode_ids=gaussian15_trace_modes,
+            )
+            sample_delta = (
+                drift_lookup.sample_delta_min(sample_stem)
+                if drift_lookup is not None
+                else None
+            )
+            corrected_apex = _drift_corrected_rt(
+                optional_float(trace.get("cell_apex_rt")),
+                sample_stem,
+                drift_lookup,
+            )
+            subthreshold_rejected = sum(
+                1
+                for candidate in subthreshold_candidate_report(trace)
+                if not candidate.accepted
             )
             rows.append(
                 {
@@ -589,6 +647,18 @@ def _sample_review_rows(
                     "display_mode_id": display_mode_id,
                     "mode_review_basis": mode_basis,
                     "gaussian15_trace_mode_ids": gaussian15_trace_modes,
+                    "sample_drift_shift_sec": (
+                        _float_text(sample_delta * 60.0)
+                        if sample_delta is not None
+                        else ""
+                    ),
+                    "raw_apex_rt": _float_text(trace.get("cell_apex_rt")),
+                    "corrected_apex_rt": (
+                        _float_text(corrected_apex)
+                        if corrected_apex is not None
+                        else ""
+                    ),
+                    "subthreshold_candidate_count": str(subthreshold_rejected),
                     "mode_review_warning": warning,
                     "trace_data_json": str(item.path),
                     "original_png_path": _resolve_optional_artifact(
@@ -614,6 +684,7 @@ def _family_summary_rows(
         str,
         Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
     ],
+    drift_lookup: DriftLookupProtocol | None = None,
 ) -> list[dict[str, str]]:
     samples_by_family: dict[str, list[Mapping[str, str]]] = defaultdict(list)
     for row in sample_rows:
@@ -630,6 +701,19 @@ def _family_summary_rows(
         )
         gaussian15_modes = gaussian15_modes_by_family.get(family_id, ())
         changed_row = changed_by_family.get(family_id, {})
+        corrected_apexes = [
+            _drift_corrected_rt(
+                optional_float(row.get("cell_apex_rt")),
+                text_value(row.get("sample_stem")),
+                drift_lookup,
+            )
+            for row in family_sample_rows
+        ]
+        subthreshold_rejected = sum(
+            1
+            for candidate in _family_subthreshold_candidates(item.traces)
+            if not candidate.accepted
+        )
         rows.append(
             {
                 "rank": text_value(item.overlay_row.get("rank")),
@@ -672,6 +756,19 @@ def _family_summary_rows(
                 ),
                 "gaussian15_trace_mode_windows": _gaussian15_mode_windows_text(
                     gaussian15_modes,
+                ),
+                "raw_mode_span_min": _mode_span_min(
+                    [mode.apex_rt for mode in gaussian15_modes],
+                ),
+                "corrected_mode_span_min": _mode_span_min(corrected_apexes),
+                "drift_diagnostic_badge": _drift_diagnostic_verdict(
+                    gaussian15_modes=gaussian15_modes,
+                    sample_rows=family_sample_rows,
+                    drift_lookup=drift_lookup,
+                ),
+                "subthreshold_candidate_count": str(subthreshold_rejected),
+                "subthreshold_present": (
+                    "TRUE" if subthreshold_rejected > 0 else "FALSE"
                 ),
                 "mode_review_verdict": _family_mode_verdict(family_sample_rows),
                 "mode_review_warning": _family_mode_warning(
@@ -1479,11 +1576,259 @@ def _active_identity_status(
     return "identity_absent_before_and_after"
 
 
+@dataclass(frozen=True)
+class SubThresholdCandidate:
+    """A Gaussian15 local maximum and why the detector accepted/rejected it.
+
+    Diagnostic-only. ``subthreshold_candidate_report`` re-implements the same
+    local-maximum scan as ``ms1_peak_modes.gaussian15_peak_observations`` but
+    reports *every* local maximum (including the sub-threshold ones the detector
+    silently drops) so a reviewer can see candidate missed peaks. It never feeds
+    back into detection. Its ``accepted`` set is held byte-identical to the real
+    detector by ``test_ms1_peak_modes_detection_unchanged``.
+    """
+
+    sample_stem: str
+    apex_rt: float
+    height_fraction: float
+    prominence_fraction: float
+    accepted: bool
+    reject_reasons: tuple[str, ...]
+
+
+def subthreshold_candidate_report(
+    trace_row: Mapping[str, Any],
+    *,
+    window_points: int = DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+) -> tuple[SubThresholdCandidate, ...]:
+    """Report every Gaussian15 local maximum with accept/reject reasons.
+
+    Mirrors ``ms1_peak_modes.gaussian15_peak_observations`` (same smoothing and
+    thresholds) but does NOT filter: each local maximum is returned, annotated
+    with whether the detector would have accepted it and, if not, why. Smoothing
+    uses ``gaussian15_morphology_trace`` (the detector's smoother), NOT the plot
+    smoother, so reported apexes match the detector's view.
+    """
+    import numpy as np
+
+    sample_stem = text_value(trace_row.get("sample_stem"))
+    if not sample_stem:
+        return ()
+    rt_values = _float_list(trace_row.get("rt") or trace_row.get("raw_rt"))
+    intensity_values = _float_list(
+        trace_row.get("intensity") or trace_row.get("raw_intensity"),
+    )
+    limit = min(len(rt_values), len(intensity_values))
+    if limit < 3:
+        return ()
+    rt = np.asarray(rt_values[:limit], dtype=float)
+    intensity = np.maximum(np.asarray(intensity_values[:limit], dtype=float), 0.0)
+    finite = np.isfinite(rt) & np.isfinite(intensity)
+    if int(np.sum(finite)) < 3:
+        return ()
+    rt = rt[finite]
+    intensity = intensity[finite]
+    if rt.size < 3:
+        return ()
+    smoothed = gaussian15_morphology_trace(intensity, window_points=window_points)
+    max_height = float(np.max(smoothed)) if smoothed.size else 0.0
+    if max_height <= 0:
+        return ()
+    rt_min = float(np.min(rt))
+    rt_max = float(np.max(rt))
+    height_min = ms1_peak_modes.GAUSSIAN15_TRACE_PEAK_HEIGHT_FRACTION_MIN
+    prominence_min = ms1_peak_modes.GAUSSIAN15_TRACE_PEAK_PROMINENCE_FRACTION_MIN
+    edge_min = ms1_peak_modes.GAUSSIAN15_TRACE_EDGE_MARGIN_MIN
+    scanned: list[dict[str, Any]] = []
+    for index in range(1, smoothed.size - 1):
+        height = float(smoothed[index])
+        is_local_maximum = (
+            height >= float(smoothed[index - 1])
+            and height > float(smoothed[index + 1])
+        )
+        if not is_local_maximum:
+            continue
+        left_min = float(np.min(smoothed[: index + 1]))
+        right_min = float(np.min(smoothed[index:]))
+        prominence = height - max(left_min, right_min)
+        apex_rt = float(rt[index])
+        height_fraction = height / max_height
+        prominence_fraction = prominence / max_height
+        reasons: list[str] = []
+        if height_fraction < height_min:
+            reasons.append(f"height {height_fraction:.2f}<{height_min:.2f}")
+        if prominence_fraction < prominence_min:
+            reasons.append(
+                f"prominence {prominence_fraction:.2f}<{prominence_min:.2f}",
+            )
+        if apex_rt - rt_min < edge_min or rt_max - apex_rt < edge_min:
+            reasons.append(f"edge<{edge_min:.2f}")
+        scanned.append(
+            {
+                "apex_rt": apex_rt,
+                "height": height,
+                "height_fraction": height_fraction,
+                "prominence_fraction": prominence_fraction,
+                "reasons": reasons,
+            }
+        )
+    _mark_non_overlapping_accept(scanned)
+    return tuple(
+        SubThresholdCandidate(
+            sample_stem=sample_stem,
+            apex_rt=item["apex_rt"],
+            height_fraction=item["height_fraction"],
+            prominence_fraction=item["prominence_fraction"],
+            accepted=not item["reasons"],
+            reject_reasons=tuple(item["reasons"]),
+        )
+        for item in scanned
+    )
+
+
+def _mark_non_overlapping_accept(scanned: list[dict[str, Any]]) -> None:
+    """Append a suppression reason to filter-passing peaks dropped by the same
+    non-overlapping rule the detector applies (highest peak wins within
+    ``GAUSSIAN15_TRACE_PEAK_GAP_MIN``). Keeps ``accepted`` == detector output.
+    """
+    gap_min = ms1_peak_modes.GAUSSIAN15_TRACE_PEAK_GAP_MIN
+    selected_apexes: list[float] = []
+    survivors: set[int] = set()
+    passing = [item for item in scanned if not item["reasons"]]
+    for item in sorted(passing, key=lambda entry: entry["height"], reverse=True):
+        if all(
+            abs(item["apex_rt"] - apex) >= gap_min for apex in selected_apexes
+        ):
+            selected_apexes.append(item["apex_rt"])
+            survivors.add(id(item))
+    for item in passing:
+        if id(item) not in survivors:
+            item["reasons"].append("suppressed_by_overlapping_peak")
+
+
+def _drift_corrected_rt(
+    raw_rt: float | None,
+    sample_stem: str,
+    drift_lookup: DriftLookupProtocol | None,
+) -> float | None:
+    """Return ``raw_rt`` shifted into drift-corrected (iRT-like) space.
+
+    Corrected RT = raw_rt - sample_delta_min(sample), where the per-sample shift
+    comes from the ISTD drift evidence. Returns None when no drift is available.
+    """
+    if raw_rt is None or drift_lookup is None or not sample_stem:
+        return None
+    delta = drift_lookup.sample_delta_min(sample_stem)
+    if delta is None:
+        return None
+    return raw_rt - delta
+
+
+def _drift_diagnostic_verdict(
+    *,
+    gaussian15_modes: Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
+    sample_rows: Sequence[Mapping[str, str]],
+    drift_lookup: DriftLookupProtocol | None,
+) -> str:
+    """Descriptive human label on whether raw multi-modes survive drift.
+
+    NOT a machine decision: never read back into detection. Re-clusters the
+    drift-corrected selected apexes with the same gap the detector uses and
+    reports whether they collapse (likely false split) or persist (likely true
+    multimodal).
+    """
+    if len(gaussian15_modes) <= 1:
+        return "single_mode"
+    if drift_lookup is None:
+        return "drift_unavailable|raw_modes_only"
+    corrected = [
+        value
+        for row in sample_rows
+        if (
+            value := _drift_corrected_rt(
+                optional_float(row.get("cell_apex_rt")),
+                text_value(row.get("sample_stem")),
+                drift_lookup,
+            )
+        )
+        is not None
+    ]
+    if len(corrected) < 2:
+        return "drift_unavailable|raw_modes_only"
+    if _gap_cluster_count(corrected, ms1_peak_modes.GAUSSIAN15_MODE_GAP_MIN) <= 1:
+        return "modes_converge_after_drift|likely_false_split"
+    return "modes_persist_after_drift|likely_true_multimodal"
+
+
+def _gap_cluster_count(values: Sequence[float], gap: float) -> int:
+    ordered = sorted(values)
+    clusters = 1
+    for previous, current in zip(ordered, ordered[1:], strict=False):
+        if current - previous > gap:
+            clusters += 1
+    return clusters
+
+
+def _mode_span_min(values: Sequence[float | None]) -> str:
+    finite = [value for value in values if value is not None]
+    if len(finite) < 2:
+        return ""
+    return f"{max(finite) - min(finite):.6g}"
+
+
+def _corrected_apex_span_sec(
+    rows: Sequence[Mapping[str, str]],
+    drift_lookup: DriftLookupProtocol | None,
+) -> str:
+    if drift_lookup is None:
+        return ""
+    corrected = [
+        value
+        for row in rows
+        if (
+            value := _drift_corrected_rt(
+                optional_float(row.get("cell_apex_rt")),
+                text_value(row.get("sample_stem")),
+                drift_lookup,
+            )
+        )
+        is not None
+    ]
+    if len(corrected) < 2:
+        return ""
+    return f"; iRT apex span={(max(corrected) - min(corrected)) * 60.0:.1f}s"
+
+
+def _family_subthreshold_candidates(
+    traces: Sequence[Mapping[str, Any]],
+) -> tuple[SubThresholdCandidate, ...]:
+    return tuple(
+        candidate
+        for trace in traces
+        for candidate in subthreshold_candidate_report(trace)
+    )
+
+
+def _diagnostic_sort_key(row: Mapping[str, str]) -> tuple[int, str]:
+    badge = text_value(row.get("drift_diagnostic_badge"))
+    subthreshold_present = text_value(row.get("subthreshold_present")) == "TRUE"
+    if "likely_false_split" in badge:
+        bucket = 0
+    elif "likely_true_multimodal" in badge:
+        bucket = 1
+    elif subthreshold_present:
+        bucket = 2
+    else:
+        bucket = 3
+    return (bucket, text_value(row.get("feature_family_id")))
+
+
 def _render_mode_plot(
     *,
     trace_data: TraceData,
     sample_rows: Sequence[Mapping[str, str]],
     gaussian15_modes: Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
+    drift_lookup: DriftLookupProtocol | None = None,
     output_dir: Path,
 ) -> Path:
     import matplotlib
@@ -1501,13 +1846,15 @@ def _render_mode_plot(
     )
     mode_basis = _dominant_text(row.get("mode_review_basis") for row in sample_rows)
     colors = _mode_colors(modes)
-    fig, (ax_trace, ax_apex) = plt.subplots(
-        2,
+    fig, (ax_trace, ax_irt, ax_apex) = plt.subplots(
+        3,
         1,
-        figsize=(12, 7),
-        gridspec_kw={"height_ratios": [2.2, 1.0]},
+        figsize=(12, 9.6),
+        gridspec_kw={"height_ratios": [2.2, 2.2, 1.0]},
         constrained_layout=True,
     )
+    subthreshold_total = 0
+    irt_plotted = 0
     for trace in trace_data.traces:
         sample = text_value(trace.get("sample_stem"))
         row = by_sample.get(sample, {})
@@ -1537,6 +1884,51 @@ def _render_mode_plot(
                 s=20,
                 zorder=3,
             )
+        for candidate in subthreshold_candidate_report(trace):
+            if candidate.accepted:
+                continue
+            marker_y = _nearest_plot_value(
+                rt[:limit],
+                plot_intensity,
+                candidate.apex_rt,
+            )
+            ax_trace.scatter(
+                [candidate.apex_rt],
+                [marker_y],
+                marker="v",
+                facecolor="none",
+                edgecolor=color,
+                linewidth=0.8,
+                alpha=0.35,
+                s=42,
+                zorder=2,
+            )
+            subthreshold_total += 1
+        sample_delta = (
+            drift_lookup.sample_delta_min(sample)
+            if drift_lookup is not None
+            else None
+        )
+        if sample_delta is not None:
+            ax_irt.plot(
+                [value - sample_delta for value in rt[:limit]],
+                plot_intensity,
+                color=color,
+                linewidth=1.2,
+                alpha=0.72,
+            )
+            corrected_selected = _drift_corrected_rt(selected_rt, sample, drift_lookup)
+            if corrected_selected is not None and selected_height is not None:
+                ax_irt.scatter(
+                    [corrected_selected],
+                    [selected_height],
+                    color=color,
+                    edgecolor="black",
+                    linewidth=0.4,
+                    s=20,
+                    zorder=3,
+                )
+            irt_plotted += 1
     family_center = optional_float(trace_data.payload.get("family_center_rt"))
     rt_min = optional_float(trace_data.payload.get("rt_min"))
     rt_max = optional_float(trace_data.payload.get("rt_max"))
@@ -1571,9 +1963,12 @@ def _render_mode_plot(
         )
     ax_trace.set_title(
         f"{trace_data.family_id} mode-colored MS1 overlay "
-        f"({len(sample_rows)} cells; basis={mode_basis or 'raw_overlay'})",
+        f"({len(sample_rows)} cells; basis={mode_basis or 'raw_overlay'}; "
+        f"sub-threshold candidates={subthreshold_total})",
     )
-    ax_trace.set_xlabel("Retention time (min)")
+    ax_trace.set_xlabel(
+        "Retention time (min); hollow triangle = detector-rejected local maximum",
+    )
     ax_trace.set_ylabel("Intensity")
     handles = [
         plt.Line2D([0], [0], color=colors[mode], lw=2, label=mode)
@@ -1581,6 +1976,24 @@ def _render_mode_plot(
     ]
     if handles:
         ax_trace.legend(handles=handles, loc="upper right", fontsize=8)
+
+    ax_irt.set_title(
+        f"{trace_data.family_id} drift-corrected (iRT) MS1 overlay "
+        "(collapse = likely false split; persist = likely true multimodal)",
+    )
+    ax_irt.set_xlabel("Drift-corrected RT (min); per-sample shift = -ISTD drift")
+    ax_irt.set_ylabel("Intensity")
+    if not irt_plotted:
+        ax_irt.text(
+            0.5,
+            0.5,
+            "drift evidence not supplied — iRT panel unavailable",
+            transform=ax_irt.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#888888",
+        )
 
     ordered = sorted(
         sample_rows,
@@ -1608,10 +2021,35 @@ def _render_mode_plot(
                 marker="x",
                 s=36,
             )
+        corrected_rt = _drift_corrected_rt(
+            selected_rt,
+            text_value(row.get("sample_stem")),
+            drift_lookup,
+        )
+        if corrected_rt is not None:
+            if selected_rt is not None:
+                ax_apex.plot(
+                    [selected_rt, corrected_rt],
+                    [y_pos, y_pos],
+                    color=color,
+                    alpha=0.3,
+                    lw=0.8,
+                )
+            ax_apex.scatter(
+                [corrected_rt],
+                [y_pos],
+                color=color,
+                marker="D",
+                s=24,
+                alpha=0.75,
+                edgecolor="black",
+                linewidth=0.3,
+            )
     ax_apex.set_yticks(y_positions)
     ax_apex.set_yticklabels([row["sample_stem"] for row in ordered], fontsize=7)
     ax_apex.set_xlabel(
-        "Apex RT (circle=selected cell, x=global trace apex; color=display mode)"
+        "Apex RT (circle=selected cell, x=global trace apex, "
+        "diamond=drift-corrected apex; color=display mode)"
     )
     ax_apex.set_ylabel("Sample")
     ax_apex.grid(axis="x", alpha=0.2)
@@ -1644,6 +2082,7 @@ def _render_mode_aligned_plot(
     trace_data: TraceData,
     sample_rows: Sequence[Mapping[str, str]],
     gaussian15_modes: Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
+    drift_lookup: DriftLookupProtocol | None = None,
     output_dir: Path,
 ) -> Path:
     import matplotlib
@@ -1725,7 +2164,8 @@ def _render_mode_aligned_plot(
         ax.grid(True, alpha=0.2)
         ax.set_title(
             f"{mode_id}: apex-aligned Gaussian15 MS1 traces "
-            f"(n={plotted_count}, detected={detected_count})",
+            f"(n={plotted_count}, detected={detected_count}"
+            f"{_corrected_apex_span_sec(mode_rows, drift_lookup)})",
             fontsize=10,
         )
     axes[-1][0].set_xlabel("RT relative to selected apex (min)")
@@ -1748,6 +2188,19 @@ def _smoothed_plot_intensity(values: Sequence[float]) -> list[float]:
         points=PLOT_GAUSSIAN_SMOOTH_POINTS,
     )
     return [float(value) for value in smoothed]
+
+
+def _nearest_plot_value(
+    xs: Sequence[float],
+    ys: Sequence[float],
+    target: float,
+) -> float:
+    if not xs or not ys:
+        return 0.0
+    best_index = min(range(len(xs)), key=lambda index: abs(xs[index] - target))
+    if best_index >= len(ys):
+        return 0.0
+    return ys[best_index]
 
 
 def _mode_colors(modes: Sequence[str]) -> dict[str, str]:
@@ -1784,6 +2237,7 @@ def _write_review_gallery(
     similarity_by_family: dict[str, list[Mapping[str, str]]] = defaultdict(list)
     for row in similarity_rows:
         similarity_by_family[row["feature_family_id"]].append(row)
+    ordered_family_rows = sorted(family_rows, key=_diagnostic_sort_key)
     row_blocks = [
         _family_html_block(
             row,
@@ -1791,7 +2245,7 @@ def _write_review_gallery(
             similarity_rows=similarity_by_family.get(row["feature_family_id"], []),
             html_dir=path.parent,
         )
-        for row in family_rows
+        for row in ordered_family_rows
     ]
     body = "\n".join(row_blocks)
     links = " ".join(
@@ -1828,7 +2282,7 @@ def _write_review_gallery(
                     "iRT authority.</p>"
                 ),
                 f"<p class=\"links\">{links}</p>",
-                _gallery_overview_html(similarity_rows),
+                _gallery_overview_html(similarity_rows, family_rows=family_rows),
                 body,
                 "</main>",
                 "</body>",
@@ -1869,6 +2323,12 @@ def _family_html_block(
     dominant_badge = _dominant_text(
         row.get("quick_review_badge") for row in similarity_rows
     )
+    drift_badge = _badge_html(row.get("drift_diagnostic_badge"))
+    subthreshold_badge = (
+        _badge_html("sub_threshold_candidates_present|possible_missed_peak")
+        if text_value(row.get("subthreshold_present")) == "TRUE"
+        else ""
+    )
     return "\n".join(
         [
             f"<article class=\"family {_risk_class(dominant_badge)}\">",
@@ -1881,6 +2341,8 @@ def _family_html_block(
             _badge_html(dominant_badge or "mixed_review_queue"),
             _badge_html(row.get("active_identity_status")),
             _badge_html(row.get("family_verdict")),
+            drift_badge,
+            subthreshold_badge,
             "</div>",
             "<section class=\"score-strip\" aria-label=\"Review similarity summary\">",
             _score_card("median shape similarity", median_shape, kind="shape"),
@@ -1919,6 +2381,13 @@ def _family_html_block(
             _fact("selected modes", row.get("selected_mode_counts")),
             _fact("global apex modes", row.get("global_trace_mode_counts")),
             _fact("alignment modes", row.get("alignment_mode_counts")),
+            _fact("drift diagnostic", row.get("drift_diagnostic_badge")),
+            _fact("raw mode span (min)", row.get("raw_mode_span_min")),
+            _fact("corrected mode span (min)", row.get("corrected_mode_span_min")),
+            _fact(
+                "sub-threshold candidates",
+                row.get("subthreshold_candidate_count"),
+            ),
             _fact("review basis", row.get("mode_review_basis")),
             _fact("mode aligned plot", row.get("mode_aligned_plot_png_path")),
             _fact("quick review badges", badge_counts),
@@ -1953,6 +2422,9 @@ def _sample_table_html(
         "display mode",
         "basis",
         "alignment delta",
+        "drift shift (s)",
+        "raw apex",
+        "corrected apex",
         "quick badge",
         "shape similarity",
         "quick score",
@@ -1976,6 +2448,9 @@ def _sample_table_html(
             _table_cell(row.get("display_mode_id", "")),
             _table_cell(row.get("mode_review_basis", "")),
             _table_cell(row.get("alignment_apex_delta_sec", "")),
+            _table_cell(row.get("sample_drift_shift_sec", "")),
+            _table_cell(row.get("raw_apex_rt", "")),
+            _table_cell(row.get("corrected_apex_rt", "")),
             _table_cell(_badge_html(badge), "badge-cell", raw_html=True),
             _table_cell(
                 _metric_html(
@@ -2269,7 +2744,11 @@ tbody tr.risk-medium {
 """
 
 
-def _gallery_overview_html(similarity_rows: Sequence[Mapping[str, str]]) -> str:
+def _gallery_overview_html(
+    similarity_rows: Sequence[Mapping[str, str]],
+    *,
+    family_rows: Sequence[Mapping[str, str]] = (),
+) -> str:
     median_shape = _float_text(
         _median_float(
             row.get("gaussian15_shape_similarity_to_mode") for row in similarity_rows
@@ -2281,6 +2760,14 @@ def _gallery_overview_html(similarity_rows: Sequence[Mapping[str, str]]) -> str:
     badge_counts = _counts_text(
         row.get("quick_review_badge") for row in similarity_rows
     )
+    diagnostic_counts = _counts_text(
+        row.get("drift_diagnostic_badge") for row in family_rows
+    )
+    subthreshold_families = sum(
+        1
+        for row in family_rows
+        if text_value(row.get("subthreshold_present")) == "TRUE"
+    )
     return "\n".join(
         [
             "<section class=\"overview\" aria-label=\"Gallery review summary\">",
@@ -2288,6 +2775,11 @@ def _gallery_overview_html(similarity_rows: Sequence[Mapping[str, str]]) -> str:
             _score_card("global median shape similarity", median_shape, kind="shape"),
             _score_card("global median quick score", median_score, kind="score"),
             _score_card("badge distribution", badge_counts),
+            _score_card("drift diagnostic distribution", diagnostic_counts),
+            _score_card(
+                "families with sub-threshold candidates",
+                str(subthreshold_families),
+            ),
             "</section>",
         ]
     )
@@ -2362,6 +2854,9 @@ def _risk_class(value: object) -> str:
             "inconclusive",
             "review_required",
             "warning",
+            "likely_false_split",
+            "possible_missed_peak",
+            "sub_threshold_candidates_present",
         )
     ):
         return "risk-medium"
@@ -2545,6 +3040,19 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--matrix-rt-drift-policy-tsv", type=Path)
     parser.add_argument("--alignment-cells-tsv", type=Path)
     parser.add_argument("--ms1-pattern-coherence-tsv", type=Path)
+    parser.add_argument(
+        "--targeted-workbook",
+        type=Path,
+        help=(
+            "Targeted XIC workbook (with ISTD rows) used to build the per-sample "
+            "drift shift for the drift-corrected (iRT) overlay panels."
+        ),
+    )
+    parser.add_argument(
+        "--sample-info",
+        type=Path,
+        help="Sample info table providing injection order for ISTD drift trends.",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--no-plots",
