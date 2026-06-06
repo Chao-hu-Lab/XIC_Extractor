@@ -71,6 +71,7 @@ def test_blast_radius_projects_one_detected_provisional_action(
                 90.0,
                 trace_quality="clean",
                 scan_support_score=0.8,
+                typed_backfill_support=True,
             ),
             _cell_row(
                 "FAM_ONE",
@@ -79,6 +80,7 @@ def test_blast_radius_projects_one_detected_provisional_action(
                 80.0,
                 trace_quality="clean",
                 scan_support_score=0.8,
+                typed_backfill_support=True,
             ),
         ],
     )
@@ -273,8 +275,9 @@ def _cell_row(
     trace_quality: str = "",
     scan_support_score: float | None = None,
     reason: str | None = None,
+    typed_backfill_support: bool = False,
 ) -> dict[str, object]:
-    return {
+    row: dict[str, object] = {
         "feature_family_id": family_id,
         "sample_stem": sample,
         "status": status,
@@ -291,6 +294,20 @@ def _cell_row(
         "scan_support_score": scan_support_score,
         "reason": reason if reason is not None else status,
     }
+    if typed_backfill_support:
+        row.update(
+            {
+                "backfill_ms1_pattern_status": "supportive",
+                "backfill_ms1_pattern_evidence_level": "sample_constellation",
+                "backfill_matrix_rt_drift_status": "rt_close",
+                "backfill_drift_evidence_level": "sample_istd_aligned",
+                "backfill_drift_compatible_status": "compatible",
+                "backfill_candidate_ms2_pattern_status": "supportive",
+                "backfill_candidate_ms2_evidence_level": "sample_candidate_aligned",
+                "backfill_evidence_reason": "typed_fixture_support",
+            },
+        )
+    return row
 
 
 def _write_benchmark_dir(path: Path, family_id: str) -> Path:

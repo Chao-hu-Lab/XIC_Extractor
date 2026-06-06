@@ -13,6 +13,9 @@ from xic_extractor.signal_processing import (
     PeakDetectionResult,
     PeakResult,
 )
+from xic_extractor.target_pair_rt_calibration import (
+    TARGET_PAIR_RT_CALIBRATION_FIELDS,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -171,6 +174,11 @@ def test_target_pair_rt_calibration_fences_legacy_rt_prior_library(
         }
     )
     (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    assert config.target_pair_rt_calibration_path is not None
+    config.target_pair_rt_calibration_path.write_text(
+        "\t".join(TARGET_PAIR_RT_CALIBRATION_FIELDS) + "\n",
+        encoding="utf-8",
+    )
     targets = [_target("Analyte")]
     injected_library = {
         ("Analyte", "analyte"): LibraryEntry(
@@ -420,6 +428,7 @@ def _peak_sequence(results: list[PeakDetectionResult]):
         strict_preferred_rt: bool = False,
         scoring_context_builder: object | None = None,
         istd_confidence_note: str | None = None,
+        **_kwargs: object,
     ) -> PeakDetectionResult:
         return pending.pop(0)
 

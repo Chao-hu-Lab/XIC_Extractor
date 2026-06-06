@@ -338,6 +338,13 @@ def write_alignment_cell_integration_audit_tsv(
     baseline_integration_method: str = "asls",
     baseline_audit_method: str = "",
 ) -> Path:
+    """Write the post-retirement AsLS-only integration audit TSV.
+
+    ``baseline_audit_method`` is retained as a compatibility input so older
+    callers that pass ``"asls"`` keep working. It no longer selects additional
+    comparison columns; the emitted schema is always
+    ``ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS``.
+    """
     if baseline_integration_method == "linear_edge":
         raise ValueError(LINEAR_EDGE_RETIRED_MESSAGE)
     if baseline_integration_method != "asls":

@@ -410,9 +410,11 @@ def test_raw_worker_rebuilds_scoring_factory_inside_worker(
         raw_path_arg,
         *,
         scoring_context_factory,
+        rt_prior_library,
         model_selection_expected_diff_approvals,
     ):
         rebuilt["worker_factory"] = scoring_context_factory
+        rebuilt["worker_rt_prior_library"] = rt_prior_library
         rebuilt["approvals"] = model_selection_expected_diff_approvals
         from xic_extractor.extractor import FileResult, RawFileExtractionResult
 
@@ -456,6 +458,7 @@ def test_raw_worker_rebuilds_scoring_factory_inside_worker(
     assert rebuilt["injection_order"] == {"SampleA": 1}
     assert rebuilt["istd_rts_by_sample"] == {"ISTD": {"SampleA": 9.1}}
     assert rebuilt["rt_prior_library"] == {}
+    assert rebuilt["worker_rt_prior_library"] == {}
     assert rebuilt["worker_factory"] is not None
 
 

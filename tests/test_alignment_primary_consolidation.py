@@ -13,6 +13,7 @@ from xic_extractor.alignment.primary_consolidation import (
 )
 from xic_extractor.alignment.production_decisions import build_production_decisions
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
+from xic_extractor.peak_detection.ms1_morphology import MS1_MORPHOLOGY_AREA_SOURCE
 
 
 def test_consolidation_promotes_one_primary_row_from_duplicate_claim_family():
@@ -563,6 +564,8 @@ def _integration(*, raw_area: float, asls_area: float) -> IntegrationResult:
         area_raw_counts_seconds=raw_area,
         area_baseline_corrected=asls_area,
         baseline_type="asls",
+        area_ms1_morphology=asls_area,
+        ms1_morphology_area_source=MS1_MORPHOLOGY_AREA_SOURCE,
         boundary_sources=("test_primary_consolidation",),
     )
 

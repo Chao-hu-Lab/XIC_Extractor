@@ -270,6 +270,45 @@ def _cell_from_row(row: Mapping[str, str]) -> AlignedCell:
             start=start,
             end=end,
         ),
+        backfill_ms1_pattern_status=row.get("backfill_ms1_pattern_status", ""),
+        backfill_ms1_pattern_evidence_level=row.get(
+            "backfill_ms1_pattern_evidence_level",
+            "",
+        ),
+        backfill_qc_reference_status=row.get("backfill_qc_reference_status", ""),
+        backfill_qc_reference_evidence_level=row.get(
+            "backfill_qc_reference_evidence_level",
+            "",
+        ),
+        backfill_matrix_rt_drift_status=row.get(
+            "backfill_matrix_rt_drift_status",
+            "",
+        ),
+        backfill_drift_evidence_level=row.get("backfill_drift_evidence_level", ""),
+        backfill_drift_compatible_status=row.get(
+            "backfill_drift_compatible_status",
+            "",
+        ),
+        backfill_drift_corrected_delta_sec=_float(
+            row.get("backfill_drift_corrected_delta_sec"),
+        ),
+        backfill_candidate_ms2_pattern_status=row.get(
+            "backfill_candidate_ms2_pattern_status",
+            "",
+        ),
+        backfill_candidate_ms2_evidence_level=row.get(
+            "backfill_candidate_ms2_evidence_level",
+            "",
+        ),
+        backfill_dda_missing_nl_policy_status=row.get(
+            "backfill_dda_missing_nl_policy_status",
+            "",
+        ),
+        backfill_family_ms2_required_tag_status=row.get(
+            "backfill_family_ms2_required_tag_status",
+            "",
+        ),
+        backfill_evidence_reason=row.get("backfill_evidence_reason", ""),
     )
 
 
