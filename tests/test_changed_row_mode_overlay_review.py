@@ -692,6 +692,33 @@ def test_mode_overlay_review_renders_drift_aware_mode_plot(tmp_path: Path) -> No
     assert aligned_plot.is_file()
 
 
+def test_gallery_has_triage_bar_lazy_images_and_meter_levels(tmp_path: Path) -> None:
+    overlay_summary, changed_bundle = _multipeak_family(tmp_path)
+    lookup = _DriftLookup(
+        deltas={"DetectedA": 0.10, "DetectedB": 0.12, "RescueA": 0.08},
+    )
+
+    outputs = review.run_changed_row_mode_overlay_review(
+        changed_row_bundle_tsv=changed_bundle,
+        overlay_batch_summary_tsv=overlay_summary,
+        drift_lookup=lookup,
+        output_dir=tmp_path / "review",
+        render_plots=True,
+    )
+
+    html = outputs.review_gallery_html.read_text(encoding="utf-8")
+    # sticky triage filter bar + client-side filter script
+    assert 'class="triage"' in html
+    assert 'data-filter="all"' in html
+    assert "querySelector('.triage')" in html
+    # every family card carries its diagnostic category for filtering
+    assert "data-diag=" in html
+    # rendered plots are lazy-loaded
+    assert 'loading="lazy"' in html
+    # threshold-coloured meter (rendered, not just the CSS rule)
+    assert "meter meter-" in html
+
+
 def test_mode_overlay_review_flags_subthreshold_missed_peak(tmp_path: Path) -> None:
     overlay_dir = tmp_path / "overlay"
     overlay_dir.mkdir()
