@@ -5,9 +5,12 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from xic_extractor.alignment.edge_scoring import DriftLookupProtocol
 
 from tools.diagnostics.family_ms1_overlay_evidence import (
     _apex_aligned_normalized_trace,
@@ -46,6 +49,7 @@ def render_family_ms1_overlay(
     rt_min: float,
     rt_max: float,
     family_center_rt: float | None,
+    drift_lookup: DriftLookupProtocol | None = None,
 ) -> None:
     import matplotlib
 
@@ -69,16 +73,24 @@ def render_family_ms1_overlay(
         [
             ["aligned", "rt", "area"],
             ["norm", "raw", "shape"],
+            ["irt", "irt", "irt"],
             ["legend", "legend", "legend"],
         ],
-        figsize=(18, 10),
+        figsize=(18, 13),
         constrained_layout=True,
-        gridspec_kw={"height_ratios": [1.0, 1.0, 0.12]},
+        gridspec_kw={"height_ratios": [1.0, 1.0, 1.0, 0.12]},
     )
     _plot_normalized_overlay(
         axes["norm"],
         rows,
         family_center_rt=family_center_rt,
+        rt_min=rt_min,
+        rt_max=rt_max,
+    )
+    _plot_irt_overlay(
+        axes["irt"],
+        rows,
+        drift_lookup=drift_lookup,
         rt_min=rt_min,
         rt_max=rt_max,
     )
@@ -170,6 +182,71 @@ def _plot_normalized_overlay(
         ax,
         "RT/shape context only; compare abundance in raw intensity panel.",
     )
+
+
+def _plot_irt_overlay(
+    ax: Any,
+    rows: Sequence[TraceOverlayRow],
+    *,
+    drift_lookup: DriftLookupProtocol | None,
+    rt_min: float,
+    rt_max: float,
+) -> None:
+    plotted = 0
+    for row in rows:
+        delta = (
+            drift_lookup.sample_delta_min(row.sample_stem)
+            if drift_lookup is not None
+            else None
+        )
+        if delta is None:
+            continue
+        rt = np.asarray(row.rt, dtype=float) - delta
+        intensity = _gaussian_smooth(
+            np.asarray(row.intensity, dtype=float),
+            points=PLOT_GAUSSIAN_SMOOTH_POINTS,
+        )
+        if rt.size == 0 or row.trace_max_intensity <= 0:
+            continue
+        max_intensity = float(np.max(intensity)) if intensity.size else 0.0
+        if max_intensity <= 0:
+            continue
+        color, alpha, line_width, zorder = _line_style(row.group)
+        ax.plot(
+            rt,
+            intensity / max_intensity,
+            color=color,
+            alpha=alpha,
+            lw=line_width,
+            zorder=zorder,
+        )
+        plotted += 1
+    ax.set_title(
+        "Drift-corrected (iRT) RT context: per-sample shift = -ISTD drift "
+        "(traces collapsing here = same peak with drift)",
+    )
+    ax.set_xlabel("Drift-corrected RT (min)")
+    ax.set_ylabel("Per-trace scaled intensity (0-1)")
+    ax.set_ylim(-0.03, 1.08)
+    ax.grid(True, alpha=0.2)
+    if plotted == 0:
+        ax.text(
+            0.5,
+            0.5,
+            "drift evidence not supplied — iRT panel unavailable",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#888888",
+        )
+    else:
+        ax.set_xlim(rt_min, rt_max)
+        _add_panel_note(
+            ax,
+            "Compare against the absolute-RT panel: convergence here means the "
+            "apparent split is drift, not separate peaks.",
+        )
 
 
 def _plot_raw_highlights(
