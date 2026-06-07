@@ -349,7 +349,7 @@ def _plot_apex_aligned_overlay(
         align_to_apex=True,
     )
     ax.axvline(0.0, color="black", lw=1, ls="--", alpha=0.6)
-    ax.set_title("Main decision: apex-aligned MS1 shape")
+    ax.set_title("Apex-aligned MS1 shape context")
     ax.set_xlabel("RT relative to selected apex (min)")
     ax.set_ylabel("Per-trace scaled intensity (0-1)")
     ax.set_xlim(-APEX_ALIGN_HALF_WINDOW_MIN, APEX_ALIGN_HALF_WINDOW_MIN)
