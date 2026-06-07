@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import math
 import statistics
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+import numpy as np
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.diagnostics.diagnostic_io import (
@@ -21,6 +24,9 @@ from .ms1_peak_quality_vector import build_peak_quality_vector
 
 MS1_PATTERN_COHERENCE_OPTIONAL_COLUMNS = (
     "shape_metric_source",
+    "anchor_peak_rt",
+    "anchor_peak_delta_sec",
+    "anchor_peak_own_max_shape_similarity",
     "family_ms1_overlay_verdict",
     "cell_height",
     "local_window_max_intensity",
@@ -79,6 +85,9 @@ _OVERLAY_LOCAL_APEX_SUPPORT_SEC = 3.0
 _OVERLAY_FAMILY_CONSENSUS_APEX_CONFLICT_SEC = 30.0
 _OVERLAY_COMPETING_PEAK_TO_CONSENSUS_SEC = 15.0
 _OVERLAY_COMPETING_PEAK_TO_SELECTED_MIN_RATIO = 0.25
+_OVERLAY_ANCHOR_PEAK_CLUSTER_MAX_DELTA_SEC = 21.0
+_OVERLAY_ANCHOR_PEAK_LOCAL_HALF_WINDOW_MIN = 0.35
+_OVERLAY_ANCHOR_PEAK_GRID_SIZE = 81
 
 
 @dataclass(frozen=True)
@@ -92,6 +101,8 @@ class _PeakCell:
     rt_delta_sec: float | None
     trace_quality: str
     scan_support_score: float | None
+    gap_fill_state: str
+    gap_fill_reason: str
 
     @property
     def is_present(self) -> bool:
@@ -114,6 +125,16 @@ class _PeakCell:
             return None
         return max(0.0, (self.peak_end_rt - self.peak_start_rt) * 60.0)
 
+    @property
+    def is_duplicate_loser(self) -> bool:
+        return (
+            self.gap_fill_reason == "not_requested_duplicate_loser"
+            or (
+                self.gap_fill_state == "not_filled"
+                and "duplicate_loser" in self.gap_fill_reason
+            )
+        )
+
 
 @dataclass(frozen=True)
 class _OverlayMetric:
@@ -135,6 +156,9 @@ class _OverlayMetric:
     trace_rt: tuple[float, ...]
     trace_intensity: tuple[float, ...]
     family_consensus_apex_rt: float | None
+    anchor_peak_rt: float | None
+    anchor_peak_delta_sec: float | None
+    anchor_peak_own_max_shape_similarity: float | None
     source_json: Path
 
     @property
@@ -142,6 +166,19 @@ class _OverlayMetric:
         if self.cell_apex_rt is None or self.rt_min is None or self.rt_max is None:
             return True
         return self.rt_min <= self.cell_apex_rt <= self.rt_max
+
+
+@dataclass(frozen=True)
+class _AnchorPeakCluster:
+    anchor_peak_rt: float
+    sample_stems: frozenset[str]
+
+
+@dataclass(frozen=True)
+class _AnchorPeakAssignment:
+    anchor_peak_rt: float | None
+    anchor_peak_delta_sec: float | None
+    own_max_shape_similarity: float | None
 
 
 def build_ms1_pattern_coherence_rows(
@@ -163,20 +200,39 @@ def build_ms1_pattern_coherence_rows(
     """
 
     config = config or AlignmentConfig()
-    cells = tuple(_peak_cell(row) for row in _read_cell_rows(alignment_cells_tsv))
+    matrix_drift_rows = (
+        read_tsv_required(
+            matrix_rt_drift_policy_tsv,
+            MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS,
+        )
+        if matrix_rt_drift_policy_tsv is not None
+        else ()
+    )
+    return build_ms1_pattern_coherence_rows_from_cell_rows(
+        cell_rows=_read_cell_rows(alignment_cells_tsv),
+        oracle_keys=oracle_keys,
+        matrix_rt_drift_rows=matrix_drift_rows,
+        family_ms1_overlay_trace_data_jsons=family_ms1_overlay_trace_data_jsons,
+        config=config,
+    )
+
+
+def build_ms1_pattern_coherence_rows_from_cell_rows(
+    *,
+    cell_rows: Iterable[Mapping[str, str]],
+    oracle_keys: Iterable[tuple[str, str]],
+    matrix_rt_drift_rows: Sequence[Mapping[str, str]] = (),
+    family_ms1_overlay_trace_data_jsons: Sequence[Path] | None = None,
+    config: AlignmentConfig | None = None,
+) -> tuple[dict[str, str], ...]:
+    """Build MS1 coherence rows from already-loaded alignment cell rows."""
+
+    config = config or AlignmentConfig()
+    cells = tuple(_peak_cell(row) for row in cell_rows)
     cell_by_key = {(cell.feature_family_id, cell.sample_stem): cell for cell in cells}
     cells_by_family = _group_cells(cells, key=lambda cell: cell.feature_family_id)
     cells_by_sample = _group_cells(cells, key=lambda cell: cell.sample_stem)
-    matrix_drift = (
-        _matrix_drift_by_key(
-            read_tsv_required(
-                matrix_rt_drift_policy_tsv,
-                MATRIX_RT_DRIFT_POLICY_REQUIRED_COLUMNS,
-            )
-        )
-        if matrix_rt_drift_policy_tsv is not None
-        else {}
-    )
+    matrix_drift = _matrix_drift_by_key(matrix_rt_drift_rows)
     overlay_metrics = _overlay_metrics_by_key(
         family_ms1_overlay_trace_data_jsons or ()
     )
@@ -222,6 +278,8 @@ def _peak_cell(row: Mapping[str, str]) -> _PeakCell:
         rt_delta_sec=_optional_float(row.get("rt_delta_sec")),
         trace_quality=text_value(row.get("trace_quality")),
         scan_support_score=_optional_float(row.get("scan_support_score")),
+        gap_fill_state=text_value(row.get("gap_fill_state")),
+        gap_fill_reason=text_value(row.get("gap_fill_reason")),
     )
 
 
@@ -260,11 +318,20 @@ def _row_for_key(
         return {**base, "reason": "alignment_cell_not_present"}
     if not cell.has_boundary:
         return {**base, "reason": "alignment_cell_boundary_missing"}
+    if cell.is_duplicate_loser:
+        return {
+            **base,
+            "ms1_pattern_status": "conflict",
+            "ms1_pattern_evidence_level": "not_available",
+            "reason": "alignment_gap_fill_duplicate_loser",
+        }
 
     reference_cells = tuple(
         peer
         for peer in family_cells
-        if peer.status in _SUPPORTIVE_STATUSES and peer.has_boundary
+        if peer.status in _SUPPORTIVE_STATUSES
+        and peer.has_boundary
+        and not peer.is_duplicate_loser
     )
     reference_count = len(reference_cells)
     median_width = _median_width(reference_cells)
@@ -312,6 +379,7 @@ def _row_for_key(
         row = _with_overlay_metric(
             row,
             overlay_metric,
+            cell=cell,
             matrix_drift_row=matrix_drift_row,
         )
     return row
@@ -334,6 +402,9 @@ def _base_row(feature_family_id: str, sample_stem: str) -> dict[str, str]:
         "reason": "",
         "diagnostic_only": "TRUE",
         "shape_metric_source": "",
+        "anchor_peak_rt": "",
+        "anchor_peak_delta_sec": "",
+        "anchor_peak_own_max_shape_similarity": "",
         "family_ms1_overlay_verdict": "",
         "cell_height": "",
         "local_window_max_intensity": "",
@@ -537,10 +608,16 @@ def _overlay_metrics_by_key(
             raise ValueError(f"{path}: missing traces array")
         parsed_traces = [trace for trace in traces if isinstance(trace, dict)]
         family_consensus_apex_rt = _family_consensus_apex_rt(parsed_traces)
+        anchor_assignments = _anchor_peak_assignments(parsed_traces)
         for trace in parsed_traces:
             sample_stem = text_value(trace.get("sample_stem"))
             if not sample_stem:
                 continue
+            cell_apex_rt = _optional_float(trace.get("cell_apex_rt"))
+            anchor_assignment = anchor_assignments.get(
+                sample_stem,
+                _AnchorPeakAssignment(None, None, None),
+            )
             metric = _OverlayMetric(
                 family_id=family_id,
                 sample_stem=sample_stem,
@@ -562,7 +639,7 @@ def _overlay_metrics_by_key(
                 global_trace_apex_delta_sec=_minutes_to_seconds(
                     _optional_float(trace.get("global_trace_apex_delta_min"))
                 ),
-                cell_apex_rt=_optional_float(trace.get("cell_apex_rt")),
+                cell_apex_rt=cell_apex_rt,
                 cell_start_rt=_optional_float(trace.get("cell_start_rt")),
                 cell_end_rt=_optional_float(trace.get("cell_end_rt")),
                 rt_min=rt_min,
@@ -570,6 +647,11 @@ def _overlay_metrics_by_key(
                 trace_rt=_optional_float_sequence(trace.get("rt")),
                 trace_intensity=_optional_float_sequence(trace.get("intensity")),
                 family_consensus_apex_rt=family_consensus_apex_rt,
+                anchor_peak_rt=anchor_assignment.anchor_peak_rt,
+                anchor_peak_delta_sec=anchor_assignment.anchor_peak_delta_sec,
+                anchor_peak_own_max_shape_similarity=(
+                    anchor_assignment.own_max_shape_similarity
+                ),
                 source_json=path,
             )
             metrics[(family_id, sample_stem)] = metric
@@ -580,8 +662,10 @@ def _with_overlay_metric(
     row: Mapping[str, str],
     metric: _OverlayMetric,
     *,
+    cell: _PeakCell,
     matrix_drift_row: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
+    shape_similarity = _preferred_shape_similarity(metric)
     peak_quality = build_peak_quality_vector(
         trace_rt=metric.trace_rt,
         trace_intensity=metric.trace_intensity,
@@ -590,11 +674,12 @@ def _with_overlay_metric(
     )
     enriched = {
         **row,
-        "shape_correlation_score": _format_float(metric.shape_similarity),
-        "shape_metric_source": (
-            "family_ms1_overlay_raw_trace"
-            if metric.shape_similarity is not None
-            else "family_ms1_overlay_raw_trace_unscored"
+        "shape_correlation_score": _format_float(shape_similarity),
+        "shape_metric_source": _shape_metric_source(metric),
+        "anchor_peak_rt": _format_float(metric.anchor_peak_rt),
+        "anchor_peak_delta_sec": _format_float(metric.anchor_peak_delta_sec),
+        "anchor_peak_own_max_shape_similarity": (
+            _format_float(metric.anchor_peak_own_max_shape_similarity)
         ),
         "family_ms1_overlay_verdict": metric.family_verdict,
         "cell_height": _format_float(metric.cell_height),
@@ -637,12 +722,46 @@ def _with_overlay_metric(
         "peak_quality_vector_reason": peak_quality.reason,
     }
     if not metric.cell_apex_inside_trace_window:
-        return {
+        enriched = {
             **enriched,
             "reason": _join_reason(
                 enriched.get("reason", ""),
                 "family_ms1_overlay_trace_window_does_not_cover_cell_apex",
             ),
+        }
+        if _requires_anchor_peak_evidence(cell):
+            if enriched.get("ms1_pattern_status") == "conflict":
+                return enriched
+            return {
+                **enriched,
+                "ms1_pattern_status": "inconclusive",
+                "ms1_pattern_evidence_level": "trace_constellation",
+            }
+        return enriched
+    if _overlay_anchor_peak_mismatch(metric):
+        return {
+            **enriched,
+            "ms1_pattern_status": "conflict",
+            "ms1_pattern_evidence_level": "trace_constellation",
+            "reason": "family_ms1_overlay_anchor_peak_mismatch",
+        }
+    if _overlay_anchor_peak_supports_shape(metric):
+        if enriched.get("drift_compatible_status") == "conflict":
+            return enriched
+        return {
+            **enriched,
+            "ms1_pattern_status": "supportive",
+            "ms1_pattern_evidence_level": "trace_constellation",
+            "reason": "family_ms1_overlay_anchor_peak_own_max_shape_supported",
+        }
+    if _overlay_anchor_peak_shape_below_threshold(metric):
+        if enriched.get("drift_compatible_status") == "conflict":
+            return enriched
+        return {
+            **enriched,
+            "ms1_pattern_status": "inconclusive",
+            "ms1_pattern_evidence_level": "trace_constellation",
+            "reason": "family_ms1_overlay_anchor_peak_shape_below_threshold",
         }
     if _overlay_lacks_complete_expected_peak(metric):
         return {
@@ -660,6 +779,17 @@ def _with_overlay_metric(
             "ms1_pattern_status": "conflict",
             "ms1_pattern_evidence_level": "trace_constellation",
             "reason": "family_ms1_overlay_competing_peak_matches_family_consensus",
+        }
+    if _requires_anchor_peak_evidence(cell) and _overlay_anchor_peak_evidence_missing(
+        metric,
+    ):
+        if enriched.get("ms1_pattern_status") == "conflict":
+            return enriched
+        return {
+            **enriched,
+            "ms1_pattern_status": "inconclusive",
+            "ms1_pattern_evidence_level": "trace_constellation",
+            "reason": "family_ms1_overlay_anchor_peak_evidence_unavailable",
         }
     if _overlay_supports_shape(metric):
         if enriched.get("drift_compatible_status") == "conflict":
@@ -690,6 +820,222 @@ def _with_overlay_metric(
             "reason": "family_ms1_overlay_shape_metric_inconclusive_apex_or_height",
         }
     return enriched
+
+
+def _anchor_peak_assignments(
+    traces: Sequence[Mapping[str, object]],
+) -> dict[str, _AnchorPeakAssignment]:
+    grid = np.linspace(
+        -_OVERLAY_ANCHOR_PEAK_LOCAL_HALF_WINDOW_MIN,
+        _OVERLAY_ANCHOR_PEAK_LOCAL_HALF_WINDOW_MIN,
+        _OVERLAY_ANCHOR_PEAK_GRID_SIZE,
+    )
+    clusters = _detected_anchor_peak_clusters(traces)
+    normalized: dict[str, np.ndarray | None] = {}
+    apex_by_sample: dict[str, float | None] = {}
+    for trace in traces:
+        sample_stem = text_value(trace.get("sample_stem"))
+        if not sample_stem:
+            continue
+        apex_by_sample[sample_stem] = _optional_float(trace.get("cell_apex_rt"))
+        normalized[sample_stem] = _anchor_local_own_max_trace(trace, grid=grid)
+    if not clusters:
+        return {
+            sample: _AnchorPeakAssignment(None, None, None)
+            for sample in normalized
+        }
+    references = _anchor_peak_reference_traces(clusters, normalized)
+    assignments: dict[str, _AnchorPeakAssignment] = {}
+    for sample_stem, values in normalized.items():
+        apex_rt = apex_by_sample.get(sample_stem)
+        cluster = _nearest_anchor_peak_cluster(clusters, apex_rt)
+        if cluster is None:
+            assignments[sample_stem] = _AnchorPeakAssignment(None, None, None)
+            continue
+        reference = references.get(cluster.anchor_peak_rt)
+        similarity = None
+        if values is not None and reference is not None:
+            reference_trace, reference_columns = reference
+            similarity = _pearson_similarity(
+                values[reference_columns],
+                reference_trace,
+            )
+        assignments[sample_stem] = _AnchorPeakAssignment(
+            cluster.anchor_peak_rt,
+            _rt_delta_sec(apex_rt, cluster.anchor_peak_rt),
+            similarity,
+        )
+    return assignments
+
+
+def _detected_anchor_peak_clusters(
+    traces: Sequence[Mapping[str, object]],
+) -> tuple[_AnchorPeakCluster, ...]:
+    detected = sorted(
+        (
+            (text_value(trace.get("sample_stem")), apex_rt)
+            for trace in traces
+            if text_value(trace.get("sample_stem"))
+            and text_value(trace.get("status")) == "detected"
+            and (apex_rt := _optional_float(trace.get("cell_apex_rt"))) is not None
+        ),
+        key=lambda item: item[1],
+    )
+    if not detected:
+        return ()
+    threshold_min = _OVERLAY_ANCHOR_PEAK_CLUSTER_MAX_DELTA_SEC / 60.0
+    clusters: list[list[tuple[str, float]]] = []
+    current: list[tuple[str, float]] = []
+    for sample_stem, apex_rt in detected:
+        if not current:
+            current.append((sample_stem, apex_rt))
+            continue
+        current_anchor = statistics.median(apex for _, apex in current)
+        if abs(apex_rt - current_anchor) <= threshold_min:
+            current.append((sample_stem, apex_rt))
+        else:
+            clusters.append(current)
+            current = [(sample_stem, apex_rt)]
+    if current:
+        clusters.append(current)
+    return tuple(
+        _AnchorPeakCluster(
+            anchor_peak_rt=statistics.median(apex for _, apex in cluster),
+            sample_stems=frozenset(sample for sample, _ in cluster),
+        )
+        for cluster in clusters
+    )
+
+
+def _anchor_peak_reference_traces(
+    clusters: Sequence[_AnchorPeakCluster],
+    normalized: Mapping[str, np.ndarray | None],
+) -> dict[float, tuple[np.ndarray, np.ndarray]]:
+    references: dict[float, tuple[np.ndarray, np.ndarray]] = {}
+    for cluster in clusters:
+        reference_values = [
+            values
+            for sample in cluster.sample_stems
+            if (values := normalized.get(sample)) is not None
+        ]
+        if not reference_values:
+            continue
+        reference_stack = np.vstack(reference_values)
+        reference_columns = np.isfinite(reference_stack).all(axis=0)
+        if not np.any(reference_columns):
+            continue
+        references[cluster.anchor_peak_rt] = (
+            np.nanmedian(reference_stack[:, reference_columns], axis=0),
+            reference_columns,
+        )
+    return references
+
+
+def _nearest_anchor_peak_cluster(
+    clusters: Sequence[_AnchorPeakCluster],
+    apex_rt: float | None,
+) -> _AnchorPeakCluster | None:
+    if apex_rt is None or not clusters:
+        return None
+    return min(clusters, key=lambda cluster: abs(apex_rt - cluster.anchor_peak_rt))
+
+
+def _anchor_local_own_max_trace(
+    trace: Mapping[str, object],
+    *,
+    grid: np.ndarray,
+) -> np.ndarray | None:
+    cell_apex_rt = _optional_float(trace.get("cell_apex_rt"))
+    if cell_apex_rt is None:
+        return None
+    rt = np.asarray(_optional_float_sequence(trace.get("rt")), dtype=float)
+    intensity = np.asarray(
+        _optional_float_sequence(trace.get("intensity")),
+        dtype=float,
+    )
+    if rt.size != intensity.size or rt.size < 3:
+        return None
+    relative_rt = rt - cell_apex_rt
+    mask = (
+        np.isfinite(relative_rt)
+        & np.isfinite(intensity)
+        & (relative_rt >= grid[0])
+        & (relative_rt <= grid[-1])
+    )
+    if np.count_nonzero(mask) < 3:
+        return None
+    relative_rt = relative_rt[mask]
+    intensity = intensity[mask]
+    order = np.argsort(relative_rt)
+    relative_rt = relative_rt[order]
+    intensity = intensity[order]
+    max_intensity = float(np.max(intensity)) if intensity.size else 0.0
+    if max_intensity <= 0:
+        return None
+    return np.interp(
+        grid,
+        relative_rt,
+        intensity / max_intensity,
+        left=np.nan,
+        right=np.nan,
+    )
+
+
+def _preferred_shape_similarity(metric: _OverlayMetric) -> float | None:
+    if metric.anchor_peak_own_max_shape_similarity is not None:
+        return metric.anchor_peak_own_max_shape_similarity
+    return metric.shape_similarity
+
+
+def _shape_metric_source(metric: _OverlayMetric) -> str:
+    if metric.anchor_peak_own_max_shape_similarity is not None:
+        return "family_ms1_overlay_anchor_peak_own_max"
+    if metric.shape_similarity is not None:
+        return "family_ms1_overlay_raw_trace"
+    return "family_ms1_overlay_raw_trace_unscored"
+
+
+def _overlay_anchor_peak_mismatch(metric: _OverlayMetric) -> bool:
+    if metric.anchor_peak_delta_sec is None:
+        return False
+    return (
+        abs(metric.anchor_peak_delta_sec)
+        > _OVERLAY_ANCHOR_PEAK_CLUSTER_MAX_DELTA_SEC
+    )
+
+
+def _overlay_anchor_peak_supports_shape(metric: _OverlayMetric) -> bool:
+    if metric.anchor_peak_delta_sec is None:
+        return False
+    if abs(metric.anchor_peak_delta_sec) > _OVERLAY_ANCHOR_PEAK_CLUSTER_MAX_DELTA_SEC:
+        return False
+    score = metric.anchor_peak_own_max_shape_similarity
+    return score is not None and score >= _OVERLAY_SHAPE_SUPPORT_MIN
+
+
+def _overlay_anchor_peak_shape_below_threshold(metric: _OverlayMetric) -> bool:
+    if metric.anchor_peak_delta_sec is None:
+        return False
+    if abs(metric.anchor_peak_delta_sec) > _OVERLAY_ANCHOR_PEAK_CLUSTER_MAX_DELTA_SEC:
+        return False
+    score = metric.anchor_peak_own_max_shape_similarity
+    return score is not None and score < _OVERLAY_SHAPE_SUPPORT_MIN
+
+
+def _requires_anchor_peak_evidence(cell: _PeakCell) -> bool:
+    return (
+        cell.status == "rescued"
+        or "backfill" in cell.gap_fill_state
+        or "backfill" in cell.gap_fill_reason
+    )
+
+
+def _overlay_anchor_peak_evidence_missing(metric: _OverlayMetric) -> bool:
+    return (
+        metric.anchor_peak_rt is None
+        or metric.anchor_peak_delta_sec is None
+        or metric.anchor_peak_own_max_shape_similarity is None
+    )
 
 
 def _family_consensus_apex_rt(traces: Sequence[Mapping[str, object]]) -> float | None:
@@ -855,6 +1201,24 @@ def _optional_float_sequence(value: object) -> tuple[float, ...]:
         if parsed_value is not None:
             parsed.append(parsed_value)
     return tuple(parsed)
+
+
+def _rt_delta_sec(left: float | None, right: float | None) -> float | None:
+    if left is None or right is None:
+        return None
+    return (left - right) * 60.0
+
+
+def _pearson_similarity(left: np.ndarray, right: np.ndarray) -> float | None:
+    mask = np.isfinite(left) & np.isfinite(right)
+    if np.count_nonzero(mask) < 3:
+        return None
+    left = left[mask]
+    right = right[mask]
+    if float(np.std(left)) == 0.0 or float(np.std(right)) == 0.0:
+        return None
+    value = float(np.corrcoef(left, right)[0, 1])
+    return value if math.isfinite(value) else None
 
 
 def _format_float(value: float | None) -> str:

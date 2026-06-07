@@ -14,7 +14,13 @@ def test_batch_uses_structured_queue_columns_and_limit(
     _write_queue(
         queue_tsv,
         [
-            _queue_row("FAM001", mz="251.165", rt_min="1.0", rt_max="1.2"),
+            _queue_row(
+                "FAM001",
+                mz="251.165",
+                rt_min="1.0",
+                rt_max="1.2",
+                seed_group_id="seed::FAM001::a",
+            ),
             _queue_row("FAM002", mz="252.165", rt_min="2.0", rt_max="2.2"),
         ],
     )
@@ -66,6 +72,13 @@ def test_batch_uses_structured_queue_columns_and_limit(
             "local_apex_assessable_trace_count": 78,
             "global_apex_interference_count": 1,
             "shape_supported_fraction": 0.8,
+            "absolute_own_max_evaluable_trace_count": 82,
+            "absolute_own_max_shape_supported_count": 81,
+            "absolute_own_max_shape_supported_fraction": 0.988,
+            "absolute_trace_apex_assessable_count": 82,
+            "absolute_trace_apex_cluster_count": 80,
+            "absolute_trace_apex_cluster_fraction": 0.976,
+            "absolute_trace_apex_delta_abs_median_min": 0.012,
             "global_apex_interference_fraction": 0.0125,
             "local_apex_supported_count": 77,
             "local_apex_supported_fraction": 0.987,
@@ -84,6 +97,7 @@ def test_batch_uses_structured_queue_columns_and_limit(
 
     assert len(rows) == 1
     assert rows[0]["feature_family_id"] == "FAM001"
+    assert rows[0]["seed_group_id"] == "seed::FAM001::a"
     assert rows[0]["status"] == "success"
     assert rows[0]["family_verdict"] == "ms1_shape_supports_family_backfill"
     assert calls[0]["mz"] == 251.165
@@ -91,11 +105,14 @@ def test_batch_uses_structured_queue_columns_and_limit(
     assert calls[0]["rt_min"] == 1.0
     assert calls[0]["rt_max"] == 1.2
     summary = _read_tsv(output_dir / "family_ms1_overlay_batch_summary.tsv")
+    assert summary[0]["seed_group_id"] == "seed::FAM001::a"
     assert summary[0]["png_path"].endswith("fam001_overlay.png")
     assert summary[0]["ppm"] == "10"
     assert summary[0]["global_apex_assessable_trace_count"] == "80"
     assert summary[0]["selected_apex_in_trace_window_fraction"] == "0.963"
     assert summary[0]["global_apex_interference_count"] == "1"
+    assert summary[0]["absolute_own_max_shape_supported_fraction"] == "0.988"
+    assert summary[0]["absolute_trace_apex_cluster_fraction"] == "0.976"
     markdown = (output_dir / "family_ms1_overlay_batch.md").read_text(
         encoding="utf-8",
     )
@@ -296,9 +313,11 @@ def _queue_row(
     mz: str = "251.165",
     rt_min: str = "1.0",
     rt_max: str = "1.2",
+    seed_group_id: str = "",
 ) -> dict[str, str]:
     return {
         "feature_family_id": family_id,
+        "seed_group_id": seed_group_id,
         "family_center_mz": mz,
         "family_center_rt": "1.1",
         "suggested_rt_min": rt_min,
@@ -311,6 +330,7 @@ def _queue_row(
 def _write_queue(path: Path, rows: list[dict[str, str]]) -> None:
     fields = (
         "feature_family_id",
+        "seed_group_id",
         "family_center_mz",
         "backfill_seed_mz",
         "ppm",
@@ -341,6 +361,7 @@ def _batch_row(
     return {
         "rank": rank,
         "feature_family_id": family_id,
+        "seed_group_id": "",
         "mz": 251.165 + rank,
         "ppm": 10.0,
         "rt_min": 1.0,
@@ -361,6 +382,13 @@ def _batch_row(
         "local_apex_assessable_trace_count": 78,
         "global_apex_interference_count": 1,
         "shape_supported_fraction": 0.8,
+        "absolute_own_max_evaluable_trace_count": 82,
+        "absolute_own_max_shape_supported_count": 81,
+        "absolute_own_max_shape_supported_fraction": 0.988,
+        "absolute_trace_apex_assessable_count": 82,
+        "absolute_trace_apex_cluster_count": 80,
+        "absolute_trace_apex_cluster_fraction": 0.976,
+        "absolute_trace_apex_delta_abs_median_min": 0.012,
         "global_apex_interference_fraction": 0.1,
         "local_apex_supported_count": 77,
         "local_apex_supported_fraction": 0.8,

@@ -13,6 +13,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.diagnostics.family_ms1_overlay_evidence import (
+    _absolute_own_max_shape_similarity,
     _apex_aligned_normalized_trace,
     _apex_aligned_shape_similarity,
     _gaussian_smooth_values,
@@ -90,6 +91,7 @@ __all__ = [
     "SHAPE_SUPPORT_MIN",
     "TraceOverlayRow",
     "_add_panel_note",
+    "_absolute_own_max_shape_similarity",
     "_apex_aligned_normalized_trace",
     "_apex_aligned_shape_similarity",
     "_draw_center_rt",

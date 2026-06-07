@@ -33,6 +33,7 @@ TOP30_EXPANSION_BLOCKED = "blocked"
 class OverlayBatchRequest:
     rank: int
     family_id: str
+    seed_group_id: str
     mz: float
     ppm: float
     rt_min: float
@@ -175,6 +176,34 @@ def _render_family(
             "",
         ),
         "shape_supported_fraction": evidence.get("shape_supported_fraction", ""),
+        "absolute_own_max_evaluable_trace_count": evidence.get(
+            "absolute_own_max_evaluable_trace_count",
+            "",
+        ),
+        "absolute_own_max_shape_supported_count": evidence.get(
+            "absolute_own_max_shape_supported_count",
+            "",
+        ),
+        "absolute_own_max_shape_supported_fraction": evidence.get(
+            "absolute_own_max_shape_supported_fraction",
+            "",
+        ),
+        "absolute_trace_apex_assessable_count": evidence.get(
+            "absolute_trace_apex_assessable_count",
+            "",
+        ),
+        "absolute_trace_apex_cluster_count": evidence.get(
+            "absolute_trace_apex_cluster_count",
+            "",
+        ),
+        "absolute_trace_apex_cluster_fraction": evidence.get(
+            "absolute_trace_apex_cluster_fraction",
+            "",
+        ),
+        "absolute_trace_apex_delta_abs_median_min": evidence.get(
+            "absolute_trace_apex_delta_abs_median_min",
+            "",
+        ),
         "global_apex_interference_fraction": evidence.get(
             "global_apex_interference_fraction",
             "",
@@ -212,6 +241,13 @@ def _failure_row(
         "local_apex_assessable_trace_count": "",
         "global_apex_interference_count": "",
         "shape_supported_fraction": "",
+        "absolute_own_max_evaluable_trace_count": "",
+        "absolute_own_max_shape_supported_count": "",
+        "absolute_own_max_shape_supported_fraction": "",
+        "absolute_trace_apex_assessable_count": "",
+        "absolute_trace_apex_cluster_count": "",
+        "absolute_trace_apex_cluster_fraction": "",
+        "absolute_trace_apex_delta_abs_median_min": "",
         "global_apex_interference_fraction": "",
         "local_apex_supported_count": "",
         "local_apex_supported_fraction": "",
@@ -227,6 +263,7 @@ def _request_row(request: OverlayBatchRequest) -> dict[str, Any]:
     return {
         "rank": request.rank,
         "feature_family_id": request.family_id,
+        "seed_group_id": request.seed_group_id,
         "mz": request.mz,
         "ppm": request.ppm,
         "rt_min": request.rt_min,
@@ -254,6 +291,7 @@ def _load_requests(
             OverlayBatchRequest(
                 rank=offset,
                 family_id=_required_text(row, "feature_family_id"),
+                seed_group_id=str(row.get("seed_group_id", "")).strip(),
                 mz=_queue_mz(row),
                 ppm=_queue_ppm(row, default_ppm),
                 rt_min=_required_float(row, "suggested_rt_min"),
@@ -330,9 +368,10 @@ def _write_markdown(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
             "",
             (
                 "| rank | family | m/z | RT window | status | family verdict | "
-                "coverage | global conflict | DDA-height signal | failure |"
+                "coverage | own-max shape | global conflict | DDA-height signal | "
+                "failure |"
             ),
-            "|---:|---|---:|---|---|---|---:|---:|---|---|",
+            "|---:|---|---:|---|---|---|---:|---:|---:|---|---|",
         ]
     )
     for row in rows:
@@ -351,6 +390,7 @@ def _markdown_family_row(row: Mapping[str, Any]) -> str:
         f"| `{row.get('status', '')}` "
         f"| `{row.get('family_verdict', '')}` "
         f"| {_format_value(row.get('selected_apex_in_trace_window_fraction'))} "
+        f"| {_format_value(row.get('absolute_own_max_shape_supported_fraction'))} "
         f"| {_format_value(row.get('global_apex_interference_fraction'))} "
         f"| `{row.get('dda_trigger_limited_ms2_support', '')}` "
         f"| {failure} |"
@@ -444,6 +484,7 @@ def _summary_fields() -> tuple[str, ...]:
     return (
         "rank",
         "feature_family_id",
+        "seed_group_id",
         "mz",
         "ppm",
         "rt_min",
@@ -464,6 +505,13 @@ def _summary_fields() -> tuple[str, ...]:
         "local_apex_assessable_trace_count",
         "global_apex_interference_count",
         "shape_supported_fraction",
+        "absolute_own_max_evaluable_trace_count",
+        "absolute_own_max_shape_supported_count",
+        "absolute_own_max_shape_supported_fraction",
+        "absolute_trace_apex_assessable_count",
+        "absolute_trace_apex_cluster_count",
+        "absolute_trace_apex_cluster_fraction",
+        "absolute_trace_apex_delta_abs_median_min",
         "global_apex_interference_fraction",
         "local_apex_supported_count",
         "local_apex_supported_fraction",

@@ -149,6 +149,7 @@ def test_write_family_ms1_overlay_outputs_from_synthetic_traces(
             "source_candidate_id",
             "highlight_group",
             "apex_aligned_shape_similarity",
+            "absolute_own_max_shape_similarity",
         ]
         summary_rows = list(reader)
     assert summary_rows[0]["highlight_group"] == "detected_seed"
@@ -184,6 +185,7 @@ def test_write_family_ms1_overlay_outputs_from_synthetic_traces(
         "region_shadow_verdict",
         "source_candidate_id",
         "apex_aligned_shape_similarity",
+        "absolute_own_max_shape_similarity",
         "rt",
         "intensity",
     ]
@@ -386,6 +388,75 @@ def test_family_evidence_summary_flags_global_apex_interference() -> None:
 
     assert summary["family_verdict"] == "review_required_neighboring_ms1_interference"
     assert summary["global_apex_interference_count"] == 3
+
+
+def test_scaled_own_max_shape_support_can_override_global_apex_interference() -> None:
+    rows = [
+        report.trace_row_from_arrays(
+            _family_cell("detected-a", status="detected", apex_rt=1.0),
+            "detected_seed",
+            [0.2, 0.9, 1.0, 1.1],
+            [110.0, 0.0, 100.0, 0.0],
+        ),
+        report.trace_row_from_arrays(
+            _family_cell("detected-b", status="detected", apex_rt=1.0),
+            "detected_seed",
+            [0.2, 0.9, 1.0, 1.1],
+            [108.0, 0.0, 100.0, 0.0],
+        ),
+        report.trace_row_from_arrays(
+            _family_cell("rescued-a", apex_rt=1.0),
+            "rescued_other",
+            [0.2, 0.9, 1.0, 1.1],
+            [112.0, 0.0, 100.0, 0.0],
+        ),
+    ]
+
+    summary = report.build_family_ms1_evidence_summary(rows)
+
+    assert summary["family_verdict"] == "ms1_shape_supports_family_backfill"
+    assert summary["global_apex_interference_count"] == 3
+    assert summary["shape_supported_fraction"] == 1.0
+    assert summary["local_apex_supported_fraction"] == 1.0
+    assert summary["low_selected_peak_dominance_fraction"] == 0.0
+
+
+def test_absolute_own_max_shape_support_handles_misaligned_selected_apex() -> None:
+    rows = [
+        report.trace_row_from_arrays(
+            _family_cell("detected-a", status="detected", apex_rt=0.72),
+            "detected_seed",
+            [0.60, 0.80, 1.00, 1.20, 1.40],
+            [0.0, 25.0, 100.0, 25.0, 0.0],
+        ),
+        report.trace_row_from_arrays(
+            _family_cell("detected-b", status="detected", apex_rt=1.30),
+            "detected_seed",
+            [0.60, 0.80, 1.00, 1.20, 1.40],
+            [0.0, 20.0, 95.0, 20.0, 0.0],
+        ),
+        report.trace_row_from_arrays(
+            _family_cell("rescued-a", apex_rt=1.28),
+            "top_rescued_ms1_area",
+            [0.60, 0.80, 1.02, 1.20, 1.40],
+            [0.0, 30.0, 90.0, 30.0, 0.0],
+        ),
+        report.trace_row_from_arrays(
+            _family_cell("rescued-b", apex_rt=0.75),
+            "rescued_other",
+            [0.60, 0.82, 1.01, 1.20, 1.40],
+            [0.0, 28.0, 88.0, 28.0, 0.0],
+        ),
+    ]
+
+    summary = report.build_family_ms1_evidence_summary(rows)
+
+    assert summary["family_verdict"] == "ms1_shape_supports_family_backfill"
+    assert summary["global_apex_interference_fraction"] == 1.0
+    assert summary["local_apex_supported_fraction"] == 0.0
+    assert summary["absolute_own_max_shape_supported_fraction"] == 1.0
+    assert summary["absolute_trace_apex_cluster_fraction"] == 1.0
+    assert summary["low_selected_peak_dominance_fraction"] == 0.0
 
 
 def test_global_apex_interference_counts_shape_unevaluable_traces() -> None:

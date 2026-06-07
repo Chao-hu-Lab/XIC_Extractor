@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from tools.diagnostics.family_ms1_overlay_evidence import (
+    _absolute_own_max_shape_similarity,
     _apex_aligned_shape_similarity,
     _global_trace_apex_delta,
     _local_to_global_max_ratio,
@@ -78,6 +79,7 @@ def write_family_ms1_overlay_outputs(
 
 def _write_summary(path: Path, rows: Sequence[TraceOverlayRow]) -> None:
     shape_similarity = _apex_aligned_shape_similarity(rows)
+    absolute_shape_similarity = _absolute_own_max_shape_similarity(rows)
     fields = (
         "sample_stem",
         "status",
@@ -96,6 +98,7 @@ def _write_summary(path: Path, rows: Sequence[TraceOverlayRow]) -> None:
         "source_candidate_id",
         "highlight_group",
         "apex_aligned_shape_similarity",
+        "absolute_own_max_shape_similarity",
     )
     with path.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(
@@ -135,6 +138,9 @@ def _write_summary(path: Path, rows: Sequence[TraceOverlayRow]) -> None:
                     "apex_aligned_shape_similarity": _format_float(
                         shape_similarity.get(row.sample_stem),
                     ),
+                    "absolute_own_max_shape_similarity": _format_float(
+                        absolute_shape_similarity.get(row.sample_stem),
+                    ),
                 }
             )
 
@@ -151,6 +157,7 @@ def _write_trace_data(
     family_center_rt: float | None,
 ) -> None:
     shape_similarity = _apex_aligned_shape_similarity(rows)
+    absolute_shape_similarity = _absolute_own_max_shape_similarity(rows)
     data = {
         "family_id": family_id,
         "mz": mz,
@@ -188,6 +195,9 @@ def _write_trace_data(
                 "source_candidate_id": row.source_candidate_id,
                 "apex_aligned_shape_similarity": _json_float(
                     shape_similarity.get(row.sample_stem),
+                ),
+                "absolute_own_max_shape_similarity": _json_float(
+                    absolute_shape_similarity.get(row.sample_stem),
                 ),
                 "rt": row.rt,
                 "intensity": row.intensity,
