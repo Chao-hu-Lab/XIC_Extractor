@@ -753,18 +753,24 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
         in text
     )
     assert "position: sticky" in text
-    assert "max-width: 1120px" in text
-    assert "width: 1114px" in text
+    assert "max-width: 1090px" in text
+    assert "width: 1084px" in text
     assert "margin: 0 auto" in text
     assert ".cell-family," in text
-    assert ".cell-product," in text
+    assert ".cell-state," in text
     assert '<th scope="col">rank</th>' in text
     assert '<th scope="col">priority</th>' not in text
+    assert '<th scope="col">state</th>' in text
+    assert '<th scope="col">issue</th>' in text
+    assert '<th scope="col">product</th>' not in text
+    assert '<th scope="col">evidence</th>' not in text
     assert "white-space: nowrap" in text
     assert "<details" in text
     assert '<caption id="galleryTableDescription">' in text
     assert '<th class="cell-family" scope="row" data-label="family / seed">' in text
-    assert 'data-label="top issue"' in text
+    assert 'data-label="state"' in text
+    assert 'data-label="issue"' in text
+    assert 'data-label="top issue"' not in text
     assert "cells D/R/P" in text
     assert (
         'aria-label="cells: D detected, R rescued or backfilled, P provisional"'
@@ -776,15 +782,18 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     assert 'data-detail-toggle=' in text
     assert 'aria-expanded="false"' in text
     assert '<tr class="detail-row"' in text
-    assert '<td colspan="8">' in text
+    assert '<td colspan="7">' in text
     assert "cells D/R/P 是 cell counts" in text
     assert '<label for="categoryFilter">Focus</label>' in text
     assert '<option value="">All rows</option>' in text
     assert '<option value="needs_review">Needs review</option>' in text
     assert '<option value="accepted_supported">Accepted + supported</option>' in text
+    assert 'data-result-count data-total-families="1"' in text
+    assert "顯示 1 / 1 families" in text
     assert '<option value="product_rejects_but_visual_supports">' not in text
     assert 'data-category="needs_review"' in text
     assert "const focusFilter = document.querySelector('[data-filter-control]')" in text
+    assert "const resultCount = document.querySelector('[data-result-count]')" in text
     assert "row.dataset.category" in text
     assert 'class="artifact-strip"' in text
     assert '<details class="provenance-panel">' in text

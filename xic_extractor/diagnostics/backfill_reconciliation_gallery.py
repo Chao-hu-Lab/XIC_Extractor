@@ -635,7 +635,7 @@ def write_reconciliation_gallery_html(
         "<main>",
         "<h1>Backfill Evidence Reconciliation</h1>",
         *_summary_html(index, output_paths, html_path=path),
-        *_filter_html(),
+        *_filter_html(total_families=len(_family_groups(groups))),
     ]
     if not groups:
         lines.append(
@@ -1669,7 +1669,7 @@ def _slash_path(value: str) -> str:
     return value.replace("\\", "/")
 
 
-def _filter_html() -> list[str]:
+def _filter_html(*, total_families: int) -> list[str]:
     return [
         '<section class="filters" aria-label="table filters">',
         '<label for="categoryFilter">Focus</label>',
@@ -1683,6 +1683,11 @@ def _filter_html() -> list[str]:
         '<label for="searchBox">Search</label>',
         '<input id="searchBox" type="search" data-search-control '
         'aria-label="Search family, seed group, support, blocker">',
+        (
+            '<span class="result-count" data-result-count '
+            f'data-total-families="{total_families}">'
+            f"顯示 {total_families} / {total_families} families</span>"
+        ),
         "</section>",
     ]
 
@@ -1704,8 +1709,7 @@ def _table_html(
         "<colgroup>",
         '<col class="col-priority">',
         '<col class="col-family">',
-        '<col class="col-product">',
-        '<col class="col-evidence">',
+        '<col class="col-state">',
         '<col class="col-issue">',
         '<col class="col-counts">',
         '<col class="col-overlay">',
@@ -1715,9 +1719,8 @@ def _table_html(
         "<tr>",
         '<th scope="col">rank</th>',
         '<th scope="col">family / seed</th>',
-        '<th scope="col">product</th>',
-        '<th scope="col">evidence</th>',
-        '<th scope="col">top issue</th>',
+        '<th scope="col">state</th>',
+        '<th scope="col">issue</th>',
         (
             '<th scope="col"><span title="D=detected cells, '
             'R=rescued/backfilled cells, P=provisional cells">'
@@ -1859,6 +1862,21 @@ def _top_issue_html(group: ReconciliationGroup) -> str:
     )
 
 
+def _state_html(group: ReconciliationGroup) -> str:
+    return (
+        '<div class="state-stack" aria-label="product and evidence state">'
+        '<div class="state-line">'
+        '<span class="state-key">prod</span>'
+        f"{_badge(group.product_behavior_state)}"
+        "</div>"
+        '<div class="state-line">'
+        '<span class="state-key">evd</span>'
+        f"{_badge(group.evidence_authority_state)}"
+        "</div>"
+        "</div>"
+    )
+
+
 def _counts_html(group: ReconciliationGroup) -> str:
     return (
         '<dl class="count-stack" '
@@ -1925,7 +1943,7 @@ def _family_table_row(
             f'data-detail-row="{_escape_attr(detail_id)}" '
             f'data-search="{_escape_attr(_family_search_blob(ordered_groups))}">'
         ),
-        f'<td class="cell-priority" data-label="priority">{priority}</td>',
+        f'<td class="cell-priority" data-label="rank">{priority}</td>',
         (
             '<th class="cell-family" scope="row" data-label="family / seed">'
             f'<span class="family-id">{_escape(group.feature_family_id)}</span>'
@@ -1935,15 +1953,11 @@ def _family_table_row(
             "</th>"
         ),
         (
-            '<td class="cell-product" data-label="product">'
-            f"{_badge(group.product_behavior_state)}</td>"
+            '<td class="cell-state" data-label="state">'
+            f"{_state_html(group)}</td>"
         ),
         (
-            '<td class="cell-evidence" data-label="evidence">'
-            f"{_badge(group.evidence_authority_state)}</td>"
-        ),
-        (
-            '<td class="cell-issue" data-label="top issue">'
+            '<td class="cell-issue" data-label="issue">'
             f"{_top_issue_html(group)}</td>"
         ),
         (
@@ -1969,7 +1983,7 @@ def _family_table_row(
             f'<tr class="detail-row" id="{_escape_attr(detail_id)}" '
             f'data-detail-for="{_escape_attr(group.feature_family_id)}" hidden>'
         ),
-        '<td colspan="8">',
+        '<td colspan="7">',
         '<div class="detail-drawer">',
         '<div class="detail-drawer-head">',
         '<strong>Evidence chain</strong>',
@@ -2373,24 +2387,33 @@ def _lightbox_script() -> str:
   });
   const focusFilter = document.querySelector('[data-filter-control]');
   const search = document.querySelector('[data-search-control]');
+  const resultCount = document.querySelector('[data-result-count]');
+  const familyRows = Array.from(
+    document.querySelectorAll('.review-table > tbody > tr[data-family-row]')
+  );
+  const totalFamilies = familyRows.length;
   const applyFilters = () => {
     const selected = focusFilter ? focusFilter.value : '';
     const term = search ? search.value.toLowerCase() : '';
-    document.querySelectorAll(
-      '.review-table > tbody > tr[data-family-row]'
-    ).forEach((row) => {
+    let visibleFamilies = 0;
+    familyRows.forEach((row) => {
       const rowCategories = (row.dataset.category || '').split(/\\s+/);
       const focusOk = !selected || rowCategories.includes(selected);
       const searchOk = !term || (row.dataset.search || '').toLowerCase().includes(term);
       const visible = focusOk && searchOk;
+      if (visible) visibleFamilies += 1;
       row.hidden = !visible;
       const button = row.querySelector('[data-detail-toggle]');
       const detailRow = document.getElementById(row.dataset.detailRow);
       if (!visible && button && detailRow) setDetailOpen(button, false);
     });
+    if (resultCount) {
+      resultCount.textContent = `顯示 ${visibleFamilies} / ${totalFamilies} families`;
+    }
   };
   if (focusFilter) focusFilter.addEventListener('change', applyFilters);
   if (search) search.addEventListener('input', applyFilters);
+  applyFilters();
 })();
 </script>
 """
@@ -2501,6 +2524,8 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   padding: 9px 11px;
   cursor: pointer;
   color: #334155;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .provenance-list {
   display: grid;
@@ -2543,9 +2568,16 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   padding: 5px 8px;
 }
 .filters input { min-width: min(360px, 100%); }
+.result-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
 .table-wrap {
   overflow-x: auto;
-  max-width: 1120px;
+  max-width: 1090px;
   margin: 0 auto;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2553,8 +2585,8 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   box-shadow: var(--shadow);
 }
 .review-table {
-  width: 1114px;
-  min-width: 1114px;
+  width: 1084px;
+  min-width: 1084px;
   border-collapse: collapse;
   font-size: 13px;
   table-layout: fixed;
@@ -2569,10 +2601,9 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   white-space: nowrap;
 }
 .review-table .col-priority { width: 54px; }
-.review-table .col-family { width: 300px; }
-.review-table .col-product { width: 150px; }
-.review-table .col-evidence { width: 140px; }
-.review-table .col-issue { width: 180px; }
+.review-table .col-family { width: 310px; }
+.review-table .col-state { width: 220px; }
+.review-table .col-issue { width: 220px; }
 .review-table .col-counts { width: 92px; }
 .review-table .col-overlay { width: 78px; }
 .review-table .col-details { width: 110px; }
@@ -2627,19 +2658,35 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   vertical-align: middle;
 }
 .cell-family,
-.cell-product,
-.cell-evidence,
+.cell-state,
 .cell-issue {
   text-align: center;
 }
-.cell-product,
-.cell-evidence,
+.cell-state,
 .cell-issue {
   vertical-align: middle;
 }
-.cell-product .badge,
-.cell-evidence .badge {
-  margin-inline: auto;
+.state-stack {
+  display: grid;
+  gap: 5px;
+  align-content: center;
+}
+.state-line {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+.state-key {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.cell-state .badge {
+  justify-self: start;
+  max-width: 100%;
 }
 .detail-toggle {
   min-height: 30px;
@@ -2953,7 +3000,7 @@ details summary {
 @media (max-width: 760px) {
   main { padding: 18px 12px 32px; }
   h1 { font-size: 22px; }
-  .review-table { min-width: 1040px; }
+  .review-table { min-width: 1084px; }
   .evidence-chain { grid-template-columns: 1fr; }
   .chain-item:nth-last-child(-n + 2) { grid-column: auto; }
   .lightbox-header { display: grid; }
