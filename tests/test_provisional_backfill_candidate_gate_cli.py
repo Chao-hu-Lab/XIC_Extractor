@@ -420,7 +420,7 @@ def _write_alignment_run(path: Path) -> Path:
     )
     _write_tsv(
         path / "alignment_matrix.tsv",
-        [{"feature_family_id": "FAM_PRIMARY", "S1": "100", "S2": "90"}],
+        [{"Mz": "269.145", "RT": "10.0000", "S1": "100", "S2": "90"}],
     )
     return path
 
