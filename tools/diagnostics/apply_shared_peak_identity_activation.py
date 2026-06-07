@@ -104,16 +104,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--candidate-ms2-pattern-evidence-tsv",
         type=Path,
         help=(
-            "Optional typed Candidate MS2 pattern sidecar. When provided, "
-            "rescued alignment cells receive backfill MS2 projection fields."
+            "Optional product-authorized Candidate MS2 pattern sidecar from "
+            "authorize_backfill_candidate_ms2_pattern_evidence.py. Raw "
+            "diagnostic sidecars remain review-only and fail closed."
         ),
     )
     parser.add_argument(
         "--ms1-pattern-coherence-evidence-tsv",
         type=Path,
         help=(
-            "Optional typed MS1 pattern coherence sidecar. When provided, "
-            "rescued alignment cells receive backfill MS1 projection fields."
+            "Optional product-authorized MS1 pattern coherence sidecar from "
+            "authorize_backfill_ms1_pattern_evidence.py. Raw diagnostic "
+            "sidecars remain review-only and fail closed."
         ),
     )
     parser.add_argument(

@@ -5,6 +5,9 @@ import json
 from pathlib import Path
 
 from tools.diagnostics import analyze_matrix_identity_blast_radius as blast
+from xic_extractor.alignment.promotion_policy import (
+    ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+)
 
 
 def test_blast_radius_reports_complete_identity_changes_and_benchmark_join(
@@ -397,16 +400,36 @@ def _cell_row(
         row.update(
             {
                 "backfill_ms1_pattern_status": "supportive",
-                "backfill_ms1_pattern_evidence_level": "sample_constellation",
+                "backfill_ms1_pattern_evidence_level": "trace_constellation",
                 "backfill_matrix_rt_drift_status": "rt_close",
                 "backfill_drift_evidence_level": "sample_istd_aligned",
                 "backfill_drift_compatible_status": "compatible",
                 "backfill_candidate_ms2_pattern_status": "supportive",
                 "backfill_candidate_ms2_evidence_level": "sample_candidate_aligned",
-                "backfill_evidence_reason": "typed_fixture_support",
+                "backfill_evidence_reason": ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+                **_product_authority_fields(),
             },
         )
     return row
+
+
+def _product_authority_fields() -> dict[str, object]:
+    return {
+        "backfill_ms1_product_authority_status": "product_authorized",
+        "backfill_ms1_product_authority_scope": "feature_family_sample",
+        "backfill_ms1_product_authority_source": "unit_test_reviewed_allowlist",
+        "backfill_ms1_product_authority_reason": "unit_test_authorized",
+        "backfill_ms1_product_authority_evidence_sha256": "unit-test-ms1-sha256",
+        "backfill_candidate_ms2_product_authority_status": "product_authorized",
+        "backfill_candidate_ms2_product_authority_scope": "feature_family_sample",
+        "backfill_candidate_ms2_product_authority_source": (
+            "unit_test_reviewed_allowlist"
+        ),
+        "backfill_candidate_ms2_product_authority_reason": "unit_test_authorized",
+        "backfill_candidate_ms2_product_authority_evidence_sha256": (
+            "unit-test-ms2-sha256"
+        ),
+    }
 
 
 def _write_benchmark_dir(path: Path, family_id: str) -> Path:

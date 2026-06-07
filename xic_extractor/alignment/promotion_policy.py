@@ -35,6 +35,9 @@ BACKFILL_RESCUE_REVIEW_ONLY_FLAG = "backfill_rescue_review_only"
 PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON = (
     "primary_identity_retained_backfill_review_only"
 )
+ANCHOR_OWN_MAX_MS1_SUPPORT_REASON = (
+    "family_ms1_overlay_anchor_peak_own_max_shape_supported"
+)
 
 PromotionState = Literal["not_applicable", "supported", "blocked"]
 
@@ -75,11 +78,15 @@ _PREFERRED_RT_DELTA_SEC = 60.0
 _MAX_RT_DELTA_SEC = 180.0
 _SUPPORT_STATUSES = {"supportive", "partial_support"}
 _CONFLICT_STATUSES = {"conflict"}
+_PRODUCT_AUTHORIZED_STATUS = "product_authorized"
+_PRODUCT_AUTHORIZED_SCOPE = "feature_family_sample"
 _MS1_PATTERN_LEVELS = {
     "sample_constellation",
     "sample_boundary_constellation",
     "trace_constellation",
 }
+_MS1_SAME_PEAK_LEVELS = frozenset({"trace_constellation"})
+_MS1_SAME_PEAK_SUPPORT_REASONS = frozenset({ANCHOR_OWN_MAX_MS1_SUPPORT_REASON})
 _QC_PATTERN_LEVELS = {
     "qc_consensus_with_local_qc_overlay",
     "qc_consensus_qc_overlay",
@@ -91,8 +98,6 @@ _DRIFT_LEVELS = {
     "family_consensus_aligned",
 }
 _MS2_PATTERN_LEVELS = {"sample_candidate_aligned", "sample_boundary_aligned"}
-_DDA_NON_DISPOSITIVE_STATUSES = {"not_dispositive"}
-_FAMILY_MS2_TAG_SUPPORT_STATUSES = {"observed_in_family"}
 _BACKFILL_CELL_ONLY_BLOCK_REASONS = frozenset(
     {
         BACKFILL_MS1_PATTERN_BLOCKED_REASON,
@@ -129,6 +134,11 @@ class BackfillCellEvidence:
     region_shadow_verdict: str = ""
     backfill_ms1_pattern_status: str = ""
     backfill_ms1_pattern_evidence_level: str = ""
+    backfill_ms1_product_authority_status: str = ""
+    backfill_ms1_product_authority_scope: str = ""
+    backfill_ms1_product_authority_source: str = ""
+    backfill_ms1_product_authority_reason: str = ""
+    backfill_ms1_product_authority_evidence_sha256: str = ""
     backfill_qc_reference_status: str = ""
     backfill_qc_reference_evidence_level: str = ""
     backfill_matrix_rt_drift_status: str = ""
@@ -137,6 +147,11 @@ class BackfillCellEvidence:
     backfill_drift_corrected_delta_sec: float | None = None
     backfill_candidate_ms2_pattern_status: str = ""
     backfill_candidate_ms2_evidence_level: str = ""
+    backfill_candidate_ms2_product_authority_status: str = ""
+    backfill_candidate_ms2_product_authority_scope: str = ""
+    backfill_candidate_ms2_product_authority_source: str = ""
+    backfill_candidate_ms2_product_authority_reason: str = ""
+    backfill_candidate_ms2_product_authority_evidence_sha256: str = ""
     backfill_ms2_trigger_scan_count: int | None = None
     backfill_strict_nl_scan_count: int | None = None
     backfill_ms2_trace_strength: str = ""
@@ -281,18 +296,29 @@ class BackfillCellEvidence:
 
     @property
     def ms1_pattern_supported(self) -> bool:
-        return (
-            _status_level_supported(
-                self.backfill_ms1_pattern_status,
-                self.backfill_ms1_pattern_evidence_level,
-                _MS1_PATTERN_LEVELS,
-            )
-            or _status_level_supported(
-                self.backfill_qc_reference_status,
-                self.backfill_qc_reference_evidence_level,
-                _QC_PATTERN_LEVELS,
-            )
-        )
+        return self.same_peak_ms1_pattern_supported
+
+    @property
+    def same_peak_ms1_pattern_supported(self) -> bool:
+        if not _product_authority_present(
+            status=self.backfill_ms1_product_authority_status,
+            scope=self.backfill_ms1_product_authority_scope,
+            source=self.backfill_ms1_product_authority_source,
+        ):
+            return False
+        if not _status_level_supported(
+            self.backfill_ms1_pattern_status,
+            self.backfill_ms1_pattern_evidence_level,
+            _MS1_PATTERN_LEVELS,
+        ):
+            return False
+        if (
+            _normalize(self.backfill_ms1_pattern_evidence_level)
+            not in _MS1_SAME_PEAK_LEVELS
+        ):
+            return False
+        reason_tokens = _reason_tokens(self.backfill_evidence_reason)
+        return bool(reason_tokens & _MS1_SAME_PEAK_SUPPORT_REASONS)
 
     @property
     def ms1_pattern_conflict(self) -> bool:
@@ -303,20 +329,17 @@ class BackfillCellEvidence:
 
     @property
     def ms2_context_supported(self) -> bool:
-        if _status_level_supported(
+        if not _product_authority_present(
+            status=self.backfill_candidate_ms2_product_authority_status,
+            scope=self.backfill_candidate_ms2_product_authority_scope,
+            source=self.backfill_candidate_ms2_product_authority_source,
+        ):
+            return False
+        return _status_level_supported(
             self.backfill_candidate_ms2_pattern_status,
             self.backfill_candidate_ms2_evidence_level,
             _MS2_PATTERN_LEVELS,
-        ):
-            return True
-        if (
-            _normalize(self.backfill_dda_missing_nl_policy_status)
-            in _DDA_NON_DISPOSITIVE_STATUSES
-            and _normalize(self.backfill_family_ms2_required_tag_status)
-            in _FAMILY_MS2_TAG_SUPPORT_STATUSES
-        ):
-            return True
-        return False
+        )
 
     @property
     def ms2_context_conflict(self) -> bool:
@@ -629,6 +652,21 @@ def _cell_from_aligned(
         backfill_ms1_pattern_evidence_level=(
             cell.backfill_ms1_pattern_evidence_level
         ),
+        backfill_ms1_product_authority_status=(
+            cell.backfill_ms1_product_authority_status
+        ),
+        backfill_ms1_product_authority_scope=(
+            cell.backfill_ms1_product_authority_scope
+        ),
+        backfill_ms1_product_authority_source=(
+            cell.backfill_ms1_product_authority_source
+        ),
+        backfill_ms1_product_authority_reason=(
+            cell.backfill_ms1_product_authority_reason
+        ),
+        backfill_ms1_product_authority_evidence_sha256=(
+            cell.backfill_ms1_product_authority_evidence_sha256
+        ),
         backfill_qc_reference_status=cell.backfill_qc_reference_status,
         backfill_qc_reference_evidence_level=(
             cell.backfill_qc_reference_evidence_level
@@ -642,6 +680,21 @@ def _cell_from_aligned(
         ),
         backfill_candidate_ms2_evidence_level=(
             cell.backfill_candidate_ms2_evidence_level
+        ),
+        backfill_candidate_ms2_product_authority_status=(
+            cell.backfill_candidate_ms2_product_authority_status
+        ),
+        backfill_candidate_ms2_product_authority_scope=(
+            cell.backfill_candidate_ms2_product_authority_scope
+        ),
+        backfill_candidate_ms2_product_authority_source=(
+            cell.backfill_candidate_ms2_product_authority_source
+        ),
+        backfill_candidate_ms2_product_authority_reason=(
+            cell.backfill_candidate_ms2_product_authority_reason
+        ),
+        backfill_candidate_ms2_product_authority_evidence_sha256=(
+            cell.backfill_candidate_ms2_product_authority_evidence_sha256
         ),
         backfill_ms2_trigger_scan_count=cell.backfill_ms2_trigger_scan_count,
         backfill_strict_nl_scan_count=cell.backfill_strict_nl_scan_count,
@@ -681,6 +734,26 @@ def _cell_from_tsv(row: Mapping[str, str]) -> BackfillCellEvidence:
             "backfill_ms1_pattern_evidence_level",
             "",
         ),
+        backfill_ms1_product_authority_status=row.get(
+            "backfill_ms1_product_authority_status",
+            "",
+        ),
+        backfill_ms1_product_authority_scope=row.get(
+            "backfill_ms1_product_authority_scope",
+            "",
+        ),
+        backfill_ms1_product_authority_source=row.get(
+            "backfill_ms1_product_authority_source",
+            "",
+        ),
+        backfill_ms1_product_authority_reason=row.get(
+            "backfill_ms1_product_authority_reason",
+            "",
+        ),
+        backfill_ms1_product_authority_evidence_sha256=row.get(
+            "backfill_ms1_product_authority_evidence_sha256",
+            "",
+        ),
         backfill_qc_reference_status=row.get("backfill_qc_reference_status", ""),
         backfill_qc_reference_evidence_level=row.get(
             "backfill_qc_reference_evidence_level",
@@ -704,6 +777,26 @@ def _cell_from_tsv(row: Mapping[str, str]) -> BackfillCellEvidence:
         ),
         backfill_candidate_ms2_evidence_level=row.get(
             "backfill_candidate_ms2_evidence_level",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_status=row.get(
+            "backfill_candidate_ms2_product_authority_status",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_scope=row.get(
+            "backfill_candidate_ms2_product_authority_scope",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_source=row.get(
+            "backfill_candidate_ms2_product_authority_source",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_reason=row.get(
+            "backfill_candidate_ms2_product_authority_reason",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_evidence_sha256=row.get(
+            "backfill_candidate_ms2_product_authority_evidence_sha256",
             "",
         ),
         backfill_ms2_trigger_scan_count=_int_optional(
@@ -738,6 +831,18 @@ def _status_level_supported(
     return _normalize(status) in _SUPPORT_STATUSES and _normalize(level) in (
         allowed_levels
     )
+
+
+def _product_authority_present(*, status: str, scope: str, source: str) -> bool:
+    return (
+        _normalize(status) == _PRODUCT_AUTHORIZED_STATUS
+        and _normalize(scope) == _PRODUCT_AUTHORIZED_SCOPE
+        and bool(_normalize(source))
+    )
+
+
+def _reason_tokens(value: str) -> set[str]:
+    return {_normalize(token) for token in value.split(";") if token.strip()}
 
 
 def _normalize(value: str) -> str:
