@@ -4,6 +4,9 @@ from xic_extractor.alignment.machine_decision import (
     machine_decision_as_row,
     project_machine_decision,
 )
+from xic_extractor.alignment.promotion_policy import (
+    ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+)
 
 
 def test_primary_review_row_projects_to_use() -> None:
@@ -326,12 +329,32 @@ def _cell_row(
         row.update(
             {
                 "backfill_ms1_pattern_status": "supportive",
-                "backfill_ms1_pattern_evidence_level": "sample_constellation",
+                "backfill_ms1_pattern_evidence_level": "trace_constellation",
                 "backfill_candidate_ms2_pattern_status": "supportive",
                 "backfill_candidate_ms2_evidence_level": (
                     "sample_candidate_aligned"
                 ),
-                "backfill_evidence_reason": "typed_fixture_support",
+                "backfill_evidence_reason": ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+                **_product_authority_fields(),
             }
         )
     return row
+
+
+def _product_authority_fields() -> dict[str, str]:
+    return {
+        "backfill_ms1_product_authority_status": "product_authorized",
+        "backfill_ms1_product_authority_scope": "feature_family_sample",
+        "backfill_ms1_product_authority_source": "unit_test_reviewed_allowlist",
+        "backfill_ms1_product_authority_reason": "unit_test_authorized",
+        "backfill_ms1_product_authority_evidence_sha256": "unit-test-ms1-sha256",
+        "backfill_candidate_ms2_product_authority_status": "product_authorized",
+        "backfill_candidate_ms2_product_authority_scope": "feature_family_sample",
+        "backfill_candidate_ms2_product_authority_source": (
+            "unit_test_reviewed_allowlist"
+        ),
+        "backfill_candidate_ms2_product_authority_reason": "unit_test_authorized",
+        "backfill_candidate_ms2_product_authority_evidence_sha256": (
+            "unit-test-ms2-sha256"
+        ),
+    }

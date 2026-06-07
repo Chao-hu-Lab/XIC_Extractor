@@ -64,12 +64,54 @@ contract, machine-readable reason/status fields, and regression tests.
   diagnostics, but high-risk rescue promotion must not rely on broad-window
   membership, `owner_backfill` trace labels, local apex presence, or scan support
   alone.
+- Treat `family` as a review/search container, not the promotion unit. The
+  same-peak evidence unit is the detected anchor peak/seed group, and the
+  product decision unit is the individual rescued cell.
+- Legacy family/window MS1 shape support is review context. Product MS1 pattern
+  support for a rescued cell requires a typed same-peak reason such as
+  `family_ms1_overlay_anchor_peak_own_max_shape_supported`, which means the
+  rescued cell was compared to the nearest detected anchor peak after scaling
+  each trace to its own local max. The sidecar evidence level must remain
+  `trace_constellation`; `sample_constellation` and
+  `sample_boundary_constellation` are context unless promoted under a separate
+  contract. Every projected backfill evidence sidecar row, including MS1, QC,
+  RT-drift, and Candidate MS2 rows, must also be product-authorized
+  (`diagnostic_only=FALSE` plus `product_authority_status=product_authorized`,
+  `product_authority_scope=feature_family_sample`, and a non-empty
+  `product_authority_source`) before projection can feed product promotion.
+  Projection writes product-authority provenance into the rescued-cell
+  `backfill_*_product_authority_*` fields, and downstream backfill promotion
+  treats naked supportive `backfill_*` fields without that provenance as
+  review-only/stale context.
+  The current MS1 own-max authority floor is strict: observed anchor own-max
+  shape similarity must be above `0.5` by default, and an allowlist threshold can
+  tighten but not lower that floor without a new approved contract. This avoids
+  treating a different peak inside the same broad family window, or a
+  review-only MS2 context, as backfill evidence. Duplicate product sidecar rows
+  for the same `(feature_family_id, sample_stem)` are not ordered preferences;
+  they are an ambiguous evidence state and must fail closed.
+- Product-authorized MS1 own-max rows must also prove artifact provenance before
+  projection: the recorded `family_ms1_overlay_trace_data_json` must resolve to
+  a readable overlay JSON, declare the same top-level `family_id`, contain exactly
+  one matching `sample_stem` trace with usable RAW RT/intensity vectors and
+  own-max similarity, match the reviewed allowlist path/hash, and record the
+  overlay JSON sha256 in the authorized sidecar. Missing, stale, mismatched,
+  duplicate, out-of-bundle, or vectorless overlay artifacts remain review-only.
+- Product-authorized Candidate MS2 rows must prove source-row provenance before
+  projection: the reviewed allowlist must match the source row's canonical
+  SHA256 plus expected `candidate_ms2_pattern_status`,
+  `candidate_ms2_evidence_level`, and `ms2_alignment_source`. Only
+  `supportive` or `partial_support` rows at `sample_candidate_aligned` or
+  `sample_boundary_aligned` can become product-authorized. `not_observed` rows
+  may document DDA opportunity or non-dispositive missing-NL context, but they
+  do not satisfy the same-cell MS2/NL support requirement.
 - A rescued cell can support high/weak backfill-dependent matrix promotion only
   when the typed backfill projection explains all three evidence groups:
-  preferred-RT proximity or compatible drift/iRT correction; machine-observed
-  MS1 pattern or QC pattern support; and candidate-aligned MS2/NL support or an
-  explicit DDA-missing-NL non-dispositive context with family-level required tag
-  support.
+  preferred-RT proximity or compatible drift/iRT correction; same-peak anchor
+  MS1 own-max pattern support; and direct candidate-aligned MS2/NL support for
+  the rescued cell. QC pattern support and DDA-missing-NL context may remain
+  visible as review context, but they do not replace anchor MS1 or a same-cell
+  candidate MS2 support row until a seed/anchor-scoped product contract exists.
 - Scan support and trace quality remain assessability/coverage evidence. They
   may block low-quality rescue, but they are not independent identity evidence.
 - Candidate-aligned MS2 conflict, MS1/QC pattern conflict, or unexplained RT

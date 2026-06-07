@@ -7,6 +7,7 @@ from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.matrix_identity import build_matrix_identity_decisions
 from xic_extractor.alignment.promotion_policy import (
+    ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
     CELL_EVIDENCE_SUPPORTED_REASON,
     DDA_LIMITED_MS2_SHAPE_REASON,
     HIGH_BACKFILL_CAPPED_FLAG,
@@ -979,7 +980,7 @@ def _backfill_evidence_fields(
         return {}
     fields: dict[str, object] = {
         "backfill_ms1_pattern_status": "supportive",
-        "backfill_ms1_pattern_evidence_level": "sample_constellation",
+        "backfill_ms1_pattern_evidence_level": "trace_constellation",
         "backfill_qc_reference_status": "supportive",
         "backfill_qc_reference_evidence_level": "qc_consensus_with_local_qc_overlay",
         "backfill_candidate_ms2_pattern_status": "partial_support",
@@ -987,7 +988,8 @@ def _backfill_evidence_fields(
         "backfill_ms2_trigger_scan_count": 3,
         "backfill_strict_nl_scan_count": 1,
         "backfill_ms2_trace_strength": "moderate",
-        "backfill_evidence_reason": "unit_test_supported_backfill_evidence",
+        "backfill_evidence_reason": ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+        **_product_authority_fields(),
     }
     if drift_supported:
         fields.update(
@@ -999,6 +1001,25 @@ def _backfill_evidence_fields(
             }
         )
     return fields
+
+
+def _product_authority_fields() -> dict[str, object]:
+    return {
+        "backfill_ms1_product_authority_status": "product_authorized",
+        "backfill_ms1_product_authority_scope": "feature_family_sample",
+        "backfill_ms1_product_authority_source": "unit_test_reviewed_allowlist",
+        "backfill_ms1_product_authority_reason": "unit_test_authorized",
+        "backfill_ms1_product_authority_evidence_sha256": "unit-test-ms1-sha256",
+        "backfill_candidate_ms2_product_authority_status": "product_authorized",
+        "backfill_candidate_ms2_product_authority_scope": "feature_family_sample",
+        "backfill_candidate_ms2_product_authority_source": (
+            "unit_test_reviewed_allowlist"
+        ),
+        "backfill_candidate_ms2_product_authority_reason": "unit_test_authorized",
+        "backfill_candidate_ms2_product_authority_evidence_sha256": (
+            "unit-test-ms2-sha256"
+        ),
+    }
 
 
 def _candidate(

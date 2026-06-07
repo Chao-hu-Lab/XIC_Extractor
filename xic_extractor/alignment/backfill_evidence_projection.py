@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
 from xic_extractor.alignment.shared_peak_identity_explanation import (
@@ -11,6 +11,11 @@ from xic_extractor.diagnostics.diagnostic_io import read_tsv_required, text_valu
 BACKFILL_PROJECTION_COLUMNS = (
     "backfill_ms1_pattern_status",
     "backfill_ms1_pattern_evidence_level",
+    "backfill_ms1_product_authority_status",
+    "backfill_ms1_product_authority_scope",
+    "backfill_ms1_product_authority_source",
+    "backfill_ms1_product_authority_reason",
+    "backfill_ms1_product_authority_evidence_sha256",
     "backfill_qc_reference_status",
     "backfill_qc_reference_evidence_level",
     "backfill_matrix_rt_drift_status",
@@ -19,6 +24,11 @@ BACKFILL_PROJECTION_COLUMNS = (
     "backfill_drift_corrected_delta_sec",
     "backfill_candidate_ms2_pattern_status",
     "backfill_candidate_ms2_evidence_level",
+    "backfill_candidate_ms2_product_authority_status",
+    "backfill_candidate_ms2_product_authority_scope",
+    "backfill_candidate_ms2_product_authority_source",
+    "backfill_candidate_ms2_product_authority_reason",
+    "backfill_candidate_ms2_product_authority_evidence_sha256",
     "backfill_ms2_trigger_scan_count",
     "backfill_strict_nl_scan_count",
     "backfill_ms2_trace_strength",
@@ -27,12 +37,53 @@ BACKFILL_PROJECTION_COLUMNS = (
     "backfill_evidence_reason",
 )
 
-_CANDIDATE_MS2_SUPPORT_STATUSES = frozenset({"supportive", "partial_support"})
-_CANDIDATE_MS2_OBSERVED_LEVELS = frozenset(
-    {"sample_candidate_aligned", "sample_boundary_aligned"}
-)
+PRODUCT_AUTHORITY_STATUS_FIELD = "product_authority_status"
+PRODUCT_AUTHORITY_SCOPE_FIELD = "product_authority_scope"
+PRODUCT_AUTHORITY_SOURCE_FIELD = "product_authority_source"
+PRODUCT_AUTHORIZED_STATUS = "product_authorized"
+PRODUCT_AUTHORIZED_SCOPE = "feature_family_sample"
+
 _DDA_NON_DISPOSITIVE_TRIGGER_SCAN_MIN = 3
 _DDA_NON_DISPOSITIVE_TRACE_STRENGTHS = frozenset({"moderate", "strong"})
+_MS1_PATTERN_PROJECTION = {
+    "ms1_pattern_status": "backfill_ms1_pattern_status",
+    "ms1_pattern_evidence_level": "backfill_ms1_pattern_evidence_level",
+}
+_MS1_AUTHORITY_PROJECTION = {
+    PRODUCT_AUTHORITY_STATUS_FIELD: "backfill_ms1_product_authority_status",
+    PRODUCT_AUTHORITY_SCOPE_FIELD: "backfill_ms1_product_authority_scope",
+    PRODUCT_AUTHORITY_SOURCE_FIELD: "backfill_ms1_product_authority_source",
+    "product_authority_reason": "backfill_ms1_product_authority_reason",
+    "product_authority_overlay_trace_data_sha256": (
+        "backfill_ms1_product_authority_evidence_sha256"
+    ),
+}
+_QC_REFERENCE_PROJECTION = {
+    "qc_reference_status": "backfill_qc_reference_status",
+    "qc_reference_evidence_level": "backfill_qc_reference_evidence_level",
+}
+_RT_DRIFT_PROJECTION = {
+    "matrix_rt_drift_status": "backfill_matrix_rt_drift_status",
+    "drift_evidence_level": "backfill_drift_evidence_level",
+    "drift_compatible_status": "backfill_drift_compatible_status",
+    "drift_corrected_delta_sec": "backfill_drift_corrected_delta_sec",
+}
+_CANDIDATE_MS2_PROJECTION = {
+    "candidate_ms2_pattern_status": "backfill_candidate_ms2_pattern_status",
+    "candidate_ms2_evidence_level": "backfill_candidate_ms2_evidence_level",
+    "raw_ms2_trigger_scan_count": "backfill_ms2_trigger_scan_count",
+    "raw_ms2_strict_nl_scan_count": "backfill_strict_nl_scan_count",
+    "raw_ms2_trace_strength": "backfill_ms2_trace_strength",
+}
+_CANDIDATE_MS2_AUTHORITY_PROJECTION = {
+    PRODUCT_AUTHORITY_STATUS_FIELD: "backfill_candidate_ms2_product_authority_status",
+    PRODUCT_AUTHORITY_SCOPE_FIELD: "backfill_candidate_ms2_product_authority_scope",
+    PRODUCT_AUTHORITY_SOURCE_FIELD: "backfill_candidate_ms2_product_authority_source",
+    "product_authority_reason": "backfill_candidate_ms2_product_authority_reason",
+    "product_authority_candidate_ms2_source_row_sha256": (
+        "backfill_candidate_ms2_product_authority_evidence_sha256"
+    ),
+}
 
 
 def load_candidate_ms2_pattern_rows(
@@ -87,16 +138,27 @@ def project_backfill_evidence_to_cells(
     qc_ms1_pattern_reference_rows: Sequence[Mapping[str, str]] = (),
     matrix_rt_drift_policy_rows: Sequence[Mapping[str, str]] = (),
 ) -> tuple[dict[str, str], ...]:
-    candidate_ms2 = _rows_by_key(candidate_ms2_pattern_rows)
-    ms1_pattern = _rows_by_key(ms1_pattern_coherence_rows)
-    qc_reference = _rows_by_key(qc_ms1_pattern_reference_rows)
-    rt_drift = _rows_by_key(matrix_rt_drift_policy_rows)
-    family_required_tag = _family_ms2_required_tag_by_family(candidate_ms2)
-
+    candidate_ms2 = _rows_by_key(
+        candidate_ms2_pattern_rows,
+        source_name="candidate_ms2_pattern",
+    )
+    ms1_pattern = _rows_by_key(
+        ms1_pattern_coherence_rows,
+        source_name="ms1_pattern_coherence",
+    )
+    qc_reference = _rows_by_key(
+        qc_ms1_pattern_reference_rows,
+        source_name="qc_ms1_pattern_reference",
+    )
+    rt_drift = _rows_by_key(
+        matrix_rt_drift_policy_rows,
+        source_name="matrix_rt_drift_policy",
+    )
     projected_rows: list[dict[str, str]] = []
     for cell in cell_rows:
         row = dict(cell)
         _ensure_projection_columns(row)
+        _clear_projection_fields(row, BACKFILL_PROJECTION_COLUMNS)
         if text_value(row.get("status")) != "rescued":
             projected_rows.append(row)
             continue
@@ -109,65 +171,47 @@ def project_backfill_evidence_to_cells(
 
         key = (family_id, sample_stem)
         source_tokens: list[str] = []
+        ms1_pattern_row = _product_authorized_row(ms1_pattern.get(key))
         if _copy_projection(
             row,
-            ms1_pattern.get(key),
-            {
-                "ms1_pattern_status": "backfill_ms1_pattern_status",
-                "ms1_pattern_evidence_level": (
-                    "backfill_ms1_pattern_evidence_level"
-                ),
-            },
+            ms1_pattern_row,
+            _MS1_PATTERN_PROJECTION,
         ):
+            _copy_projection(
+                row,
+                ms1_pattern_row,
+                _MS1_AUTHORITY_PROJECTION,
+            )
             source_tokens.append("ms1_pattern_coherence")
+            _append_source_reason(source_tokens, ms1_pattern_row)
         if _copy_projection(
             row,
-            qc_reference.get(key),
-            {
-                "qc_reference_status": "backfill_qc_reference_status",
-                "qc_reference_evidence_level": (
-                    "backfill_qc_reference_evidence_level"
-                ),
-            },
+            _product_authorized_row(qc_reference.get(key)),
+            _QC_REFERENCE_PROJECTION,
         ):
             source_tokens.append("qc_ms1_pattern_reference")
         if _copy_projection(
             row,
-            rt_drift.get(key),
-            {
-                "matrix_rt_drift_status": "backfill_matrix_rt_drift_status",
-                "drift_evidence_level": "backfill_drift_evidence_level",
-                "drift_compatible_status": "backfill_drift_compatible_status",
-                "drift_corrected_delta_sec": (
-                    "backfill_drift_corrected_delta_sec"
-                ),
-            },
+            _product_authorized_row(rt_drift.get(key)),
+            _RT_DRIFT_PROJECTION,
         ):
             source_tokens.append("matrix_rt_drift_policy")
 
-        candidate = candidate_ms2.get(key)
+        candidate = _product_authorized_row(candidate_ms2.get(key))
         if _copy_projection(
             row,
             candidate,
-            {
-                "candidate_ms2_pattern_status": (
-                    "backfill_candidate_ms2_pattern_status"
-                ),
-                "candidate_ms2_evidence_level": (
-                    "backfill_candidate_ms2_evidence_level"
-                ),
-                "raw_ms2_trigger_scan_count": "backfill_ms2_trigger_scan_count",
-                "raw_ms2_strict_nl_scan_count": "backfill_strict_nl_scan_count",
-                "raw_ms2_trace_strength": "backfill_ms2_trace_strength",
-            },
+            _CANDIDATE_MS2_PROJECTION,
         ):
+            _copy_projection(
+                row,
+                candidate,
+                _CANDIDATE_MS2_AUTHORITY_PROJECTION,
+            )
             source_tokens.append("candidate_ms2_pattern")
         if _dda_missing_nl_not_dispositive(candidate):
             row["backfill_dda_missing_nl_policy_status"] = "not_dispositive"
             _append_unique(source_tokens, "dda_missing_nl_policy")
-        if family_id in family_required_tag:
-            row["backfill_family_ms2_required_tag_status"] = "observed_in_family"
-            _append_unique(source_tokens, "family_ms2_required_tag")
 
         row["backfill_evidence_reason"] = _merged_reason(
             row.get("backfill_evidence_reason", ""),
@@ -179,47 +223,22 @@ def project_backfill_evidence_to_cells(
 
 def _rows_by_key(
     rows: Sequence[Mapping[str, str]],
+    *,
+    source_name: str,
 ) -> dict[tuple[str, str], Mapping[str, str]]:
     by_key: dict[tuple[str, str], Mapping[str, str]] = {}
     for row in rows:
         family_id = text_value(row.get("feature_family_id"))
         sample_stem = text_value(row.get("sample_stem") or row.get("sample_id"))
         if family_id and sample_stem:
-            by_key[(family_id, sample_stem)] = row
+            key = (family_id, sample_stem)
+            if key in by_key:
+                raise ValueError(
+                    f"duplicate {source_name} backfill evidence sidecar key: "
+                    f"{family_id}, {sample_stem}"
+                )
+            by_key[key] = row
     return by_key
-
-
-def _family_ms2_required_tag_by_family(
-    rows_by_key: Mapping[tuple[str, str], Mapping[str, str]],
-) -> dict[str, Mapping[str, str]]:
-    observed: dict[str, Mapping[str, str]] = {}
-    for family_id, _sample_stem in rows_by_key:
-        row = rows_by_key[(family_id, _sample_stem)]
-        if family_id and family_id not in observed and _has_required_tag(row):
-            observed[family_id] = row
-    return observed
-
-
-def _has_required_tag(row: Mapping[str, str] | None) -> bool:
-    if not row:
-        return False
-    if (
-        row.get("candidate_ms2_pattern_status")
-        not in _CANDIDATE_MS2_SUPPORT_STATUSES
-    ):
-        return False
-    if row.get("candidate_ms2_evidence_level") not in (
-        _CANDIDATE_MS2_OBSERVED_LEVELS
-    ):
-        return False
-    return any(
-        (count := _int_or_none(row.get(field))) is not None and count >= 1
-        for field in (
-            "raw_ms2_strict_nl_scan_count",
-            "matched_neutral_loss_count",
-            "source_matched_tag_count",
-        )
-    )
 
 
 def _dda_missing_nl_not_dispositive(row: Mapping[str, str] | None) -> bool:
@@ -261,9 +280,33 @@ def _copy_projection(
     return copied
 
 
+def _product_authorized_row(
+    row: Mapping[str, str] | None,
+) -> Mapping[str, str] | None:
+    if row is None:
+        return None
+    if text_value(row.get("diagnostic_only")).upper() != "FALSE":
+        return None
+    if text_value(row.get(PRODUCT_AUTHORITY_STATUS_FIELD)) != PRODUCT_AUTHORIZED_STATUS:
+        return None
+    if text_value(row.get(PRODUCT_AUTHORITY_SCOPE_FIELD)) != PRODUCT_AUTHORIZED_SCOPE:
+        return None
+    if not text_value(row.get(PRODUCT_AUTHORITY_SOURCE_FIELD)):
+        return None
+    return row
+
+
 def _ensure_projection_columns(row: dict[str, str]) -> None:
     for column in BACKFILL_PROJECTION_COLUMNS:
         row.setdefault(column, "")
+
+
+def _clear_projection_fields(
+    row: dict[str, str],
+    fields: Iterable[str],
+) -> None:
+    for field in fields:
+        row[field] = ""
 
 
 def _merged_reason(existing: object, tokens: Sequence[str]) -> str:
@@ -276,6 +319,19 @@ def _merged_reason(existing: object, tokens: Sequence[str]) -> str:
 def _append_unique(values: list[str], value: str) -> None:
     if value and value not in values:
         values.append(value)
+
+
+def _append_source_reason(
+    values: list[str],
+    source: Mapping[str, str] | None,
+) -> None:
+    if source is None:
+        return
+    reason = text_value(source.get("reason"))
+    if not reason:
+        return
+    for token in reason.split(";"):
+        _append_unique(values, token.strip())
 
 
 def _int_or_none(value: object) -> int | None:
