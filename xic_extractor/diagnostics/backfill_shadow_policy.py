@@ -28,7 +28,7 @@ _DANGEROUS_SCHEMES = {"javascript", "data", "vbscript"}
 ShadowPolicyDecision = Literal[
     "fill_now",
     "would_fill_under_ms1_rt_policy",
-    "needs_ms2_or_policy",
+    "needs_ms1_same_peak_evidence",
     "blocked",
 ]
 
@@ -309,20 +309,15 @@ def _shadow_decision(
             return ("blocked", "own_max_shape_metric_missing", "")
         if own_max_fraction <= 0.5:
             return ("blocked", "own_max_shape_at_or_below_threshold", "")
-        production_gap = (
-            ""
-            if _candidate_ms2_product_authority_present(cell)
-            else "needs_ms2_or_policy"
-        )
         return (
             "would_fill_under_ms1_rt_policy",
             "ms1_rt_shadow_supported",
-            production_gap,
+            "",
         )
     return (
-        "needs_ms2_or_policy",
+        "needs_ms1_same_peak_evidence",
         "ms1_rt_evidence_inconclusive_or_unlinked",
-        "needs_ms2_or_policy",
+        "needs_ms1_same_peak_evidence",
     )
 
 
@@ -332,19 +327,6 @@ def _current_product_cell_state(cell: Mapping[str, str]) -> str:
     if text_value(cell.get("gap_fill_state")) == "gap_fill_rescued":
         return "filled_now"
     return "review_only"
-
-
-def _candidate_ms2_product_authority_present(cell: Mapping[str, str]) -> bool:
-    return (
-        text_value(cell.get("backfill_candidate_ms2_product_authority_status"))
-        == "product_authorized"
-        and text_value(cell.get("backfill_candidate_ms2_product_authority_scope"))
-        == "feature_family_sample"
-        and bool(
-            text_value(cell.get("backfill_candidate_ms2_product_authority_source")),
-        )
-    )
-
 
 def _summary(
     rows: Sequence[Mapping[str, str]],
@@ -596,7 +578,7 @@ def _group_by_family(
 def _row_sort_key(row: Mapping[str, str]) -> tuple[int, str, str, str]:
     priority = {
         "would_fill_under_ms1_rt_policy": 0,
-        "needs_ms2_or_policy": 1,
+        "needs_ms1_same_peak_evidence": 1,
         "blocked": 2,
         "fill_now": 3,
     }.get(text_value(row.get("shadow_policy_decision")), 9)

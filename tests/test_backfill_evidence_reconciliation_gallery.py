@@ -925,18 +925,23 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
         "不會修改 alignment matrix、cells、review TSV、workbooks 或 product decisions"
         in text
     )
-    assert "position: sticky" in text
+    assert ".review-table thead th {\n  position: sticky" in text
+    assert ".review-table th {\n  position: sticky" not in text
     assert "max-width: 1090px" in text
     assert "width: 1084px" in text
     assert "margin: 0 auto" in text
     assert ".cell-family," in text
     assert ".cell-state," in text
+    main_table_head = text[
+        text.index('<table class="review-table"') :
+        text.index("</thead>", text.index('<table class="review-table"'))
+    ]
     assert '<th scope="col">rank</th>' in text
     assert '<th scope="col">priority</th>' not in text
     assert '<th scope="col">state</th>' in text
     assert '<th scope="col">issue</th>' in text
-    assert '<th scope="col">product</th>' not in text
-    assert '<th scope="col">evidence</th>' not in text
+    assert '<th scope="col">product</th>' not in main_table_head
+    assert '<th scope="col">evidence</th>' not in main_table_head
     assert "white-space: nowrap" in text
     assert "<details" in text
     assert '<caption id="galleryTableDescription">' in text
@@ -968,6 +973,7 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     assert "Family 是 pattern context" in text
     assert '<label for="categoryFilter">Focus</label>' in text
     assert '<option value="product_rows" selected>Product rows</option>' in text
+    assert '<option value="projection_accepts">Projection accepts</option>' in text
     assert '<option value="">All rows</option>' in text
     assert '<option value="needs_review">Needs review</option>' in text
     assert '<option value="accepted_supported">Accepted + supported</option>' in text
@@ -1003,7 +1009,7 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     assert "provenance / benchmark" in text
     assert "seed request, target benchmark, source artifacts" in text
     assert "Hypothesis MS1 evidence" in text
-    assert "Candidate MS2 / NL or product-grade support" in text
+    assert "Optional Candidate MS2 / review context" in text
     assert "representative cells" in text
     assert 'aria-modal="true"' in text
     assert 'aria-describedby="lightboxCaption"' in text
@@ -1021,6 +1027,162 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;" in text
     assert "<script>alert" not in text
     assert 'S1&quot;&gt;&lt;script&gt;alert(&quot;sample&quot;)&lt;/script&gt;' in text
+
+
+def test_html_gallery_caps_large_inconclusive_dom_but_keeps_action_rows(
+    tmp_path: Path,
+) -> None:
+    html_path = tmp_path / "backfill_evidence_reconciliation_gallery.html"
+    groups = [
+        _group(
+            "FAM_ACTION",
+            "product_accepts_and_visual_supports",
+            "review_only_visual_support",
+            overlay_png_path=str(tmp_path / "action.png"),
+        ),
+        *(
+            _group(
+                f"FAM_INCON_{index:04d}",
+                "evidence_inconclusive",
+                "dependent_context_only",
+            )
+            for index in range(1600)
+        ),
+    ]
+    gallery.write_reconciliation_gallery_html(
+        html_path,
+        gallery.ReconciliationIndex(groups=tuple(groups), representative_cells=()),
+        output_paths={
+            "groups_tsv": tmp_path / "groups.tsv",
+            "representative_cells_tsv": tmp_path / "representatives.tsv",
+            "summary_json": tmp_path / "summary.json",
+        },
+    )
+
+    text = html_path.read_text(encoding="utf-8")
+    assert "HTML 顯示 201 / 1601 groups" in text
+    assert "完整機器索引仍在 groups TSV" in text
+    assert "FAM_ACTION" in text
+    assert "FAM_INCON_0000" in text
+    assert "FAM_INCON_0199" in text
+    assert "FAM_INCON_0200" not in text
+
+
+def test_html_gallery_cap_keeps_projection_accept_rows(tmp_path: Path) -> None:
+    html_path = tmp_path / "backfill_evidence_reconciliation_gallery.html"
+    projection_group = _group(
+        "FAM_PROJECTION",
+        "evidence_inconclusive",
+        "dependent_context_only",
+    )
+    groups = [
+        *(
+            _group(
+                f"FAM_INCON_{index:04d}",
+                "evidence_inconclusive",
+                "dependent_context_only",
+            )
+            for index in range(1600)
+        ),
+        projection_group,
+    ]
+    gallery.write_reconciliation_gallery_html(
+        html_path,
+        gallery.ReconciliationIndex(
+            groups=tuple(groups),
+            representative_cells=(),
+            shadow_projection_cells=(
+                gallery.ShadowProjectionCell(
+                    feature_family_id="FAM_PROJECTION",
+                    seed_group_id=projection_group.seed_group_id,
+                    sample_stem="S_PROJECT",
+                    current_raw_status="rescued",
+                    current_production_status="review_rescue",
+                    current_rescue_tier="review_rescue",
+                    current_matrix_written=False,
+                    current_matrix_value="",
+                    current_blank_reason="review_required",
+                    current_matrix_source="production_decision_snapshot",
+                    review_rescued_cell=True,
+                    shadow_decision="accept",
+                    shadow_reasons=("product_authorized_same_peak_backfill",),
+                    projected_matrix_written=True,
+                    projected_matrix_value="123",
+                    projection_authority="shadow_projection_only",
+                ),
+            ),
+        ),
+        output_paths={
+            "groups_tsv": tmp_path / "groups.tsv",
+            "representative_cells_tsv": tmp_path / "representatives.tsv",
+            "summary_json": tmp_path / "summary.json",
+        },
+    )
+
+    text = html_path.read_text(encoding="utf-8")
+    assert "HTML 顯示 201 / 1601 groups" in text
+    assert "FAM_PROJECTION" in text
+    assert "S_PROJECT" in text
+    assert "projection_accept" in text
+    assert "FAM_INCON_0200" not in text
+
+
+def test_html_gallery_projection_accept_requires_positive_projected_value(
+    tmp_path: Path,
+) -> None:
+    html_path = tmp_path / "backfill_evidence_reconciliation_gallery.html"
+    projection_group = _group(
+        "FAM_STALE_PROJECTION",
+        "evidence_inconclusive",
+        "dependent_context_only",
+    )
+    groups = [
+        *(
+            _group(
+                f"FAM_INCON_{index:04d}",
+                "evidence_inconclusive",
+                "dependent_context_only",
+            )
+            for index in range(1600)
+        ),
+        projection_group,
+    ]
+    gallery.write_reconciliation_gallery_html(
+        html_path,
+        gallery.ReconciliationIndex(
+            groups=tuple(groups),
+            representative_cells=(),
+            shadow_projection_cells=(
+                gallery.ShadowProjectionCell(
+                    feature_family_id="FAM_STALE_PROJECTION",
+                    seed_group_id=projection_group.seed_group_id,
+                    sample_stem="S_PROJECT",
+                    current_raw_status="rescued",
+                    current_production_status="review_rescue",
+                    current_rescue_tier="review_rescue",
+                    current_matrix_written=False,
+                    current_matrix_value="",
+                    current_blank_reason="review_required",
+                    current_matrix_source="production_decision_snapshot",
+                    review_rescued_cell=True,
+                    shadow_decision="accept",
+                    shadow_reasons=("product_authorized_same_peak_backfill",),
+                    projected_matrix_written=True,
+                    projected_matrix_value="",
+                    projection_authority="shadow_projection_only",
+                ),
+            ),
+        ),
+        output_paths={
+            "groups_tsv": tmp_path / "groups.tsv",
+            "representative_cells_tsv": tmp_path / "representatives.tsv",
+            "summary_json": tmp_path / "summary.json",
+        },
+    )
+
+    text = html_path.read_text(encoding="utf-8")
+    assert "HTML 顯示 200 / 1601 groups" in text
+    assert "FAM_STALE_PROJECTION" not in text
 
 
 def test_html_gallery_defaults_to_product_rows_not_loser_debug_rows(
@@ -1165,7 +1327,43 @@ def test_html_gallery_collapses_consolidated_seed_aliases_to_one_decision_row(
             ("15.4426", "12.4426-18.4426", 1),
         )
     )
-    index = gallery.ReconciliationIndex(groups=groups, representative_cells=())
+    index = gallery.ReconciliationIndex(
+        groups=groups,
+        representative_cells=(),
+        shadow_projection_cells=(
+            gallery.ShadowProjectionCell(
+                feature_family_id="FAM_ALIAS",
+                seed_group_id=groups[1].seed_group_id,
+                sample_stem="S_ACCEPT_ALIAS_2",
+                current_raw_status="rescued",
+                current_production_status="review_rescue",
+                current_rescue_tier="review_rescue",
+                current_matrix_written=False,
+                current_matrix_value="",
+                current_blank_reason="backfill_ms1_pattern_blocked",
+                current_matrix_source="production_decision_snapshot",
+                review_rescued_cell=True,
+                shadow_decision="accept",
+                shadow_reasons=("product_authorized_same_peak_backfill",),
+                shadow_warnings=("same_peak_multi_claim",),
+                projected_matrix_written=True,
+                projected_matrix_value="1200",
+                projection_authority="shadow_projection_only",
+                product_authority_chain=(
+                    "MS1:product_authorized:supportive:trace_constellation | "
+                    "candidateMS2(optional):product_authorized:supportive:"
+                    "sample_boundary_aligned | "
+                    "same_peak_reason:"
+                    "family_ms1_overlay_anchor_peak_own_max_shape_supported"
+                ),
+                detected_anchor_count="1",
+                request_window_overlap="TRUE",
+                local_global_ratio="0.42",
+                evidence_gate_status="visual_support",
+                overlay_png_path="plots/fam-alias-projection.png",
+            ),
+        ),
+    )
 
     gallery.write_reconciliation_gallery_html(
         html_path,
@@ -1185,6 +1383,17 @@ def test_html_gallery_collapses_consolidated_seed_aliases_to_one_decision_row(
     assert "seed::FAM_ALIAS::mz=249.086::rt=15.2091" in text
     assert "seed::FAM_ALIAS::mz=249.086::rt=15.0063" in text
     assert "seed::FAM_ALIAS::mz=249.086::rt=15.4426" in text
+    assert 'data-category="needs_review product_rows projection_accepts"' in text
+    assert "projection_accept" in text
+    assert "projected_new_write" in text
+    assert "Projection accept cells" in text
+    assert "S_ACCEPT_ALIAS_2" in text
+    assert "RT 15.0063" in text
+    assert "blank</span> -> <span" in text
+    assert "product_authorized_same_peak_backfill" in text
+    assert "same_peak_multi_claim" in text
+    assert "MS1 product rule / optional context chain" in text
+    assert "MS1:product_authorized:supportive:trace_constellation" in text
 
 
 def test_html_gallery_shows_one_main_overlay_for_consolidated_seed_aliases(
@@ -1338,6 +1547,66 @@ def test_html_gallery_rejects_dangerous_png_schemes(tmp_path: Path) -> None:
     assert text.count("no overlay") >= 3
 
 
+def test_html_gallery_escapes_shadow_projection_product_behavior_chain(
+    tmp_path: Path,
+) -> None:
+    html_path = tmp_path / "backfill_evidence_reconciliation_gallery.html"
+    family = 'FAM_PROJ"><script>alert("family")</script>'
+    group = _group(
+        family,
+        "product_rejects_but_visual_supports",
+        "review_only_visual_support",
+    )
+    index = gallery.ReconciliationIndex(
+        groups=(group,),
+        representative_cells=(),
+        shadow_projection_cells=(
+            gallery.ShadowProjectionCell(
+                feature_family_id=family,
+                seed_group_id=group.seed_group_id,
+                sample_stem='S_PROJ"><script>alert("projection")</script>',
+                current_raw_status="rescued",
+                current_production_status="review_rescue",
+                current_rescue_tier="review_rescue",
+                current_matrix_written=False,
+                current_matrix_value="",
+                current_blank_reason="backfill_ms1_pattern_blocked",
+                current_matrix_source="production_decision_snapshot",
+                review_rescued_cell=True,
+                shadow_decision="accept",
+                shadow_reasons=('reason"><script>alert("reason")</script>',),
+                shadow_warnings=('warn"><script>alert("warn")</script>',),
+                projected_matrix_written=True,
+                projected_matrix_value="123",
+                projection_authority="shadow_projection_only",
+                product_authority_chain=(
+                    'MS1:product_authorized:supportive:trace_constellation:'
+                    'reason"><script>alert("chain")</script>'
+                ),
+            ),
+        ),
+    )
+
+    gallery.write_reconciliation_gallery_html(
+        html_path,
+        index,
+        output_paths={},
+    )
+
+    text = html_path.read_text(encoding="utf-8")
+    assert "MS1 product rule / optional context chain" in text
+    assert "projection_accept" in text
+    assert "projected_new_write" in text
+    assert "&lt;script&gt;alert(&quot;chain&quot;)&lt;/script&gt;" in text
+    assert (
+        "S_PROJ&quot;&gt;&lt;script&gt;alert(&quot;projection&quot;)&lt;/script&gt;"
+        in text
+    )
+    assert "&lt;script&gt;alert(&quot;reason&quot;)&lt;/script&gt;" in text
+    assert "&lt;script&gt;alert(&quot;warn&quot;)&lt;/script&gt;" in text
+    assert "<script>alert" not in text
+
+
 def test_cli_integrates_shadow_policy_html_without_group_schema_change(
     tmp_path: Path,
 ) -> None:
@@ -1397,7 +1666,6 @@ def test_cli_integrates_shadow_policy_html_without_group_schema_change(
                 current="review_only",
                 decision="would_fill_under_ms1_rt_policy",
                 reason="ms1_rt_shadow_supported",
-                production_gap="needs_ms2_or_policy",
                 own_max="0.875",
             ),
             _shadow_row(
@@ -1441,7 +1709,7 @@ def test_cli_integrates_shadow_policy_html_without_group_schema_change(
     assert 'class="shadow-policy-table-wrap"' in html
     assert "shadow: fill 1 · would 1 · block 1" in html
     assert "would_fill_under_ms1_rt_policy" in html
-    assert "needs_ms2_or_policy" in html
+    assert "needs_ms2_or_policy" not in html
     assert "own-max=0.875" in html
     assert "S_WOULD" in html
     assert "backfill_shadow_policy_cells.tsv" in html
@@ -1511,6 +1779,11 @@ def test_cli_integrates_shadow_production_projection_without_group_schema_change
                 projected_written="TRUE",
                 reasons="request_window_shadow_projection_candidate",
                 warnings="same_peak_multi_claim",
+                authority_chain=(
+                    "MS1:product_authorized:supportive:trace_constellation | "
+                    "candidateMS2(optional):product_authorized:partial_support:"
+                    "sample_candidate_aligned"
+                ),
             ),
             _projection_row(
                 family,
@@ -1568,6 +1841,10 @@ def test_cli_integrates_shadow_production_projection_without_group_schema_change
     assert "current decision" in html
     assert "projected decision" in html
     assert "same_peak_multi_claim" in html
+    assert "MS1 product rule / optional context chain" in html
+    assert "projection_accept" in html
+    assert "projected_new_write" in html
+    assert "MS1:product_authorized:supportive:trace_constellation" in html
     assert "neighboring_interference_hard_block" in html
     assert "shadow_production_projection_cells.tsv" in html
     summary = json.loads(
@@ -1990,6 +2267,7 @@ def _projection_row(
     projected_written: str,
     reasons: str,
     warnings: str = "",
+    authority_chain: str = "",
 ) -> dict[str, str]:
     row = _blank_row(SHADOW_PRODUCTION_PROJECTION_COLUMNS)
     row.update(
@@ -2020,6 +2298,7 @@ def _projection_row(
             "projected_matrix_written": projected_written,
             "projected_matrix_value": "1200" if projected_written == "TRUE" else "",
             "projection_authority": "shadow_projection_only",
+            "product_authority_chain": authority_chain,
             "seed_mz": "269.145",
             "seed_rt": "10.0000",
             "seed_rt_window": "9.0000-11.0000",

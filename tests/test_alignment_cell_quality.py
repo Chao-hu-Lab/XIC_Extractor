@@ -9,6 +9,9 @@ from xic_extractor.alignment.cell_quality import (
 )
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
+from xic_extractor.alignment.promotion_policy import (
+    ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+)
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 
@@ -91,6 +94,94 @@ def test_rescue_requires_complete_peak_and_rt_inside_alignment_window() -> None:
     assert outside.quality_reason == "rt_outside_max"
 
 
+def test_product_authorized_same_peak_rescue_can_override_rt_cap() -> None:
+    config = AlignmentConfig(preferred_rt_sec=10.0, max_rt_sec=30.0)
+
+    supported = decide_cell_quality(
+        _cell(
+            "s1",
+            "FAM001",
+            "rescued",
+            100.0,
+            rt_delta_sec=120.0,
+            backfill_evidence=True,
+        ),
+        config,
+    )
+    ms1_only = decide_cell_quality(
+        _cell(
+            "s1_ms1_only",
+            "FAM001",
+            "rescued",
+            100.0,
+            rt_delta_sec=120.0,
+            backfill_evidence=True,
+            candidate_ms2_evidence=False,
+        ),
+        config,
+    )
+    unsupported = decide_cell_quality(
+        _cell(
+            "s2",
+            "FAM001",
+            "rescued",
+            100.0,
+            rt_delta_sec=120.0,
+            backfill_evidence=False,
+        ),
+        config,
+    )
+    incomplete = decide_cell_quality(
+        _cell(
+            "s3",
+            "FAM001",
+            "rescued",
+            100.0,
+            apex_rt=None,
+            rt_delta_sec=120.0,
+            backfill_evidence=True,
+        ),
+        config,
+    )
+    drift_supported = decide_cell_quality(
+        _cell(
+            "s4",
+            "FAM001",
+            "rescued",
+            100.0,
+            rt_delta_sec=240.0,
+            backfill_evidence=True,
+            backfill_drift_supported=True,
+        ),
+        config,
+    )
+    missing_rt = decide_cell_quality(
+        _cell(
+            "s5",
+            "FAM001",
+            "rescued",
+            100.0,
+            rt_delta_sec=None,
+            backfill_evidence=True,
+            backfill_drift_supported=True,
+        ),
+        config,
+    )
+
+    assert supported.quality_status == "rescue_quantifiable"
+    assert supported.matrix_area == 100.0
+    assert ms1_only.quality_status == "rescue_quantifiable"
+    assert ms1_only.matrix_area == 100.0
+    assert drift_supported.quality_status == "rescue_quantifiable"
+    assert drift_supported.matrix_area == 100.0
+    assert unsupported.quality_status == "review_rescue"
+    assert unsupported.quality_reason == "rt_outside_max"
+    assert incomplete.quality_status == "review_rescue"
+    assert incomplete.quality_reason == "incomplete_peak"
+    assert missing_rt.quality_status == "review_rescue"
+    assert missing_rt.quality_reason == "rt_outside_max"
+
+
 def test_duplicate_and_ambiguous_cells_do_not_support_identity() -> None:
     config = AlignmentConfig()
     decisions = build_cell_quality_decisions(
@@ -119,6 +210,9 @@ def _cell(
     peak_end_rt: float | None = 8.55,
     rt_delta_sec: float | None = 0.0,
     selected_integration: IntegrationResult | None = None,
+    backfill_evidence: bool = False,
+    backfill_drift_supported: bool = False,
+    candidate_ms2_evidence: bool = True,
 ) -> AlignedCell:
     if (
         selected_integration is None
@@ -146,6 +240,12 @@ def _cell(
         source_raw_file=Path(f"{sample_stem}.raw"),
         reason=status,
         selected_integration=selected_integration,
+        **_backfill_evidence_fields(
+            status=status,
+            enabled=backfill_evidence,
+            drift_supported=backfill_drift_supported,
+            candidate_ms2_evidence=candidate_ms2_evidence,
+        ),
     )
 
 
@@ -175,6 +275,62 @@ def _integration(
             else ""
         ),
     )
+
+
+def _backfill_evidence_fields(
+    *,
+    status: str,
+    enabled: bool,
+    drift_supported: bool,
+    candidate_ms2_evidence: bool,
+) -> dict[str, object]:
+    if status != "rescued" or not enabled:
+        return {}
+    fields: dict[str, object] = {
+        "backfill_ms1_pattern_status": "supportive",
+        "backfill_ms1_pattern_evidence_level": "trace_constellation",
+        "backfill_ms2_trigger_scan_count": 3,
+        "backfill_strict_nl_scan_count": 1,
+        "backfill_ms2_trace_strength": "moderate",
+        "backfill_evidence_reason": ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+        "backfill_ms1_product_authority_status": "product_authorized",
+        "backfill_ms1_product_authority_scope": "feature_family_sample",
+        "backfill_ms1_product_authority_source": "unit_test_reviewed_allowlist",
+        "backfill_ms1_product_authority_reason": "unit_test_authorized",
+        "backfill_ms1_product_authority_evidence_sha256": "unit-test-ms1-sha256",
+    }
+    if candidate_ms2_evidence:
+        fields.update(
+            {
+                "backfill_candidate_ms2_pattern_status": "partial_support",
+                "backfill_candidate_ms2_evidence_level": "sample_candidate_aligned",
+                "backfill_candidate_ms2_product_authority_status": (
+                    "product_authorized"
+                ),
+                "backfill_candidate_ms2_product_authority_scope": (
+                    "feature_family_sample"
+                ),
+                "backfill_candidate_ms2_product_authority_source": (
+                    "unit_test_reviewed_allowlist"
+                ),
+                "backfill_candidate_ms2_product_authority_reason": (
+                    "unit_test_authorized"
+                ),
+                "backfill_candidate_ms2_product_authority_evidence_sha256": (
+                    "unit-test-ms2-sha256"
+                ),
+            },
+        )
+    if drift_supported:
+        fields.update(
+            {
+                "backfill_matrix_rt_drift_status": "drift_supported",
+                "backfill_drift_evidence_level": "sample_istd_aligned",
+                "backfill_drift_compatible_status": "compatible",
+                "backfill_drift_corrected_delta_sec": 4.0,
+            },
+        )
+    return fields
 
 
 def _positive_area(value: float | None) -> bool:

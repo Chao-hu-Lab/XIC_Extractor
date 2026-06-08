@@ -277,6 +277,9 @@ def _cell_from_row(row: Mapping[str, str]) -> AlignedCell:
         group_membership_source=row.get("group_membership_source", ""),
         gap_fill_state=row.get("gap_fill_state", ""),
         gap_fill_reason=row.get("gap_fill_reason", ""),
+        peak_hypothesis_status=row.get("peak_hypothesis_status", ""),
+        product_selection_blocker=row.get("product_selection_blocker", ""),
+        rt_mode_status=row.get("rt_mode_status", ""),
         group_claim_state=row.get("group_claim_state", ""),
         consolidation_state=row.get("consolidation_state", ""),
     )

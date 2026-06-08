@@ -38,7 +38,13 @@ def test_projection_uses_production_decisions_for_current_matrix_state() -> None
         production_decisions=decisions,
         cell_rows=(
             _cell_row("FAM001", "S_DET", "detected"),
-            _cell_row("FAM001", "S_REVIEW", "rescued", area="250.0"),
+            _cell_row(
+                "FAM001",
+                "S_REVIEW",
+                "rescued",
+                area="250.0",
+                product_evidence=True,
+            ),
         ),
         retained_gate_rows=(
             _gate_row("FAM001", "S_DET;S_REVIEW", detected="1"),
@@ -59,7 +65,7 @@ def test_projection_uses_production_decisions_for_current_matrix_state() -> None
     assert by_sample["S_REVIEW"]["projected_matrix_value"] == "250"
 
 
-def test_projection_keeps_dup_as_review_context_not_projected_write() -> None:
+def test_projection_keeps_dup_without_product_authority_as_review_context() -> None:
     decisions = _production_decisions(
         cells=(
             _cell_decision("FAM_DUP", "S_DET", "detected", True, 100.0),
@@ -93,9 +99,260 @@ def test_projection_keeps_dup_as_review_context_not_projected_write() -> None:
 
     dup = next(row for row in index.rows if row["sample_stem"] == "S_DUP")
     assert dup["shadow_decision"] == "context"
-    assert dup["shadow_reasons"] == "same_peak_multi_claim_requires_review"
+    assert dup["shadow_reasons"] == "missing_product_authorized_evidence_chain"
     assert dup["shadow_warnings"] == "same_peak_multi_claim"
     assert dup["projected_matrix_written"] == "FALSE"
+
+
+def test_projection_accepts_same_peak_dup_with_product_authority() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_DUP", "S_DET", "detected", True, 100.0),
+            _cell_decision(
+                "FAM_DUP",
+                "S_DUP",
+                "review_rescue",
+                False,
+                None,
+                blank_reason="backfill_ms1_pattern_blocked",
+            ),
+        ),
+    )
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row("FAM_DUP", "S_DET", "detected"),
+            _cell_row(
+                "FAM_DUP",
+                "S_DUP",
+                "rescued",
+                gap_fill_state="not_filled",
+                gap_fill_reason="not_requested_duplicate_loser",
+                product_evidence=True,
+            ),
+        ),
+        retained_gate_rows=(
+            _gate_row("FAM_DUP", "S_DET;S_DUP", detected="1"),
+        ),
+    )
+
+    dup = next(row for row in index.rows if row["sample_stem"] == "S_DUP")
+    assert dup["shadow_decision"] == "accept"
+    assert dup["shadow_reasons"] == "product_authorized_same_peak_backfill"
+    assert dup["shadow_warnings"] == "same_peak_multi_claim"
+    assert dup["projected_matrix_written"] == "TRUE"
+    assert dup["projected_matrix_value"] == "200"
+    assert "MS1:product_authorized:supportive:trace_constellation" in (
+        dup["product_authority_chain"]
+    )
+    assert (
+        "candidateMS2(optional):product_authorized:partial_support:"
+        "sample_candidate_aligned"
+    ) in dup["product_authority_chain"]
+    assert "same_peak_reason:" in dup["product_authority_chain"]
+
+
+def test_projection_blocks_current_hypothesis_blocker_with_authority() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_BLOCK", "S_DET", "detected", True, 100.0),
+            _cell_decision(
+                "FAM_BLOCK",
+                "S_REVIEW",
+                "review_rescue",
+                False,
+                None,
+                blank_reason="backfill_wrong_peak_or_hypothesis_blocked",
+            ),
+        ),
+    )
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row("FAM_BLOCK", "S_DET", "detected"),
+            _cell_row(
+                "FAM_BLOCK",
+                "S_REVIEW",
+                "rescued",
+                product_evidence=True,
+            ),
+        ),
+        retained_gate_rows=(
+            _gate_row("FAM_BLOCK", "S_DET;S_REVIEW", detected="1"),
+        ),
+    )
+
+    review = next(row for row in index.rows if row["sample_stem"] == "S_REVIEW")
+    assert review["shadow_decision"] == "block"
+    assert review["shadow_reasons"] == "backfill_wrong_peak_or_hypothesis_blocked"
+    assert review["projected_matrix_written"] == "FALSE"
+
+
+def test_projection_blocks_cell_hypothesis_loser_even_without_current_reason() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_CELL_BLOCK", "S_DET", "detected", True, 100.0),
+            _cell_decision(
+                "FAM_CELL_BLOCK",
+                "S_REVIEW",
+                "review_rescue",
+                False,
+                None,
+                blank_reason="backfill_ms1_pattern_blocked",
+            ),
+        ),
+    )
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row("FAM_CELL_BLOCK", "S_DET", "detected"),
+            _cell_row(
+                "FAM_CELL_BLOCK",
+                "S_REVIEW",
+                "rescued",
+                product_evidence=True,
+                consolidation_state="primary_loser",
+            ),
+        ),
+        retained_gate_rows=(
+            _gate_row("FAM_CELL_BLOCK", "S_DET;S_REVIEW", detected="1"),
+        ),
+    )
+
+    review = next(row for row in index.rows if row["sample_stem"] == "S_REVIEW")
+    assert review["shadow_decision"] == "block"
+    assert review["shadow_reasons"] == "backfill_wrong_peak_or_hypothesis_blocked"
+    assert review["shadow_warnings"] == ""
+    assert review["projected_matrix_written"] == "FALSE"
+
+
+def test_projection_blocks_activation_wrong_peak_even_with_product_authority() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_ACT_BLOCK", "S_DET", "detected", True, 100.0),
+            _cell_decision(
+                "FAM_ACT_BLOCK",
+                "S_REVIEW",
+                "review_rescue",
+                False,
+                None,
+                blank_reason="backfill_ms1_pattern_blocked",
+            ),
+        ),
+    )
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row("FAM_ACT_BLOCK", "S_DET", "detected"),
+            _cell_row(
+                "FAM_ACT_BLOCK",
+                "S_REVIEW",
+                "rescued",
+                product_evidence=True,
+                activation_contract_rule_id="wrong_peak_conflict",
+                activation_product_effect="block_rescue_cell",
+                activation_reason="wrong peak",
+            ),
+        ),
+        retained_gate_rows=(
+            _gate_row("FAM_ACT_BLOCK", "S_DET;S_REVIEW", detected="1"),
+        ),
+    )
+
+    review = next(row for row in index.rows if row["sample_stem"] == "S_REVIEW")
+    assert review["shadow_decision"] == "block"
+    assert review["shadow_reasons"] == "backfill_wrong_peak_or_hypothesis_blocked"
+    assert review["projected_matrix_written"] == "FALSE"
+
+
+def test_projection_accepts_ms1_same_peak_authority_without_candidate_ms2() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_MS1_ONLY", "S_DET", "detected", True, 100.0),
+            _cell_decision(
+                "FAM_MS1_ONLY",
+                "S_REVIEW",
+                "review_rescue",
+                False,
+                None,
+                blank_reason="backfill_ms1_pattern_blocked",
+            ),
+        ),
+    )
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row("FAM_MS1_ONLY", "S_DET", "detected"),
+            _cell_row(
+                "FAM_MS1_ONLY",
+                "S_REVIEW",
+                "rescued",
+                product_evidence=True,
+                candidate_ms2_evidence=False,
+            ),
+        ),
+        retained_gate_rows=(
+            _gate_row("FAM_MS1_ONLY", "S_DET;S_REVIEW", detected="1"),
+        ),
+    )
+
+    review = next(row for row in index.rows if row["sample_stem"] == "S_REVIEW")
+    assert review["shadow_decision"] == "accept"
+    assert review["shadow_reasons"] == "product_authorized_same_peak_backfill"
+    assert review["projected_matrix_written"] == "TRUE"
+    assert "MS1:product_authorized:supportive:trace_constellation" in (
+        review["product_authority_chain"]
+    )
+    assert "candidateMS2(optional):product_authorized" not in (
+        review["product_authority_chain"]
+    )
+
+
+def test_projection_accept_requires_positive_projected_matrix_value() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_NO_VALUE", "S_DET", "detected", True, 100.0),
+            _cell_decision(
+                "FAM_NO_VALUE",
+                "S_REVIEW",
+                "review_rescue",
+                False,
+                None,
+                blank_reason="backfill_ms1_pattern_blocked",
+            ),
+        ),
+    )
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row("FAM_NO_VALUE", "S_DET", "detected"),
+            _cell_row(
+                "FAM_NO_VALUE",
+                "S_REVIEW",
+                "rescued",
+                area="0",
+                product_evidence=True,
+            ),
+        ),
+        retained_gate_rows=(
+            _gate_row("FAM_NO_VALUE", "S_DET;S_REVIEW", detected="1"),
+        ),
+    )
+
+    review = next(row for row in index.rows if row["sample_stem"] == "S_REVIEW")
+    assert review["shadow_decision"] == "context"
+    assert "product_authorized_same_peak_backfill" in review["shadow_reasons"]
+    assert "missing_projected_matrix_value" in review["shadow_reasons"]
+    assert "projection_accept_without_positive_area" in review["shadow_warnings"]
+    assert review["projected_matrix_written"] == "FALSE"
+    assert review["projected_matrix_value"] == ""
+    assert index.summary["projected_new_write_count"] == 0
 
 
 def test_projection_keeps_evidence_conflicts_as_review_context() -> None:
@@ -129,6 +386,45 @@ def test_projection_keeps_evidence_conflicts_as_review_context() -> None:
     assert review["shadow_reasons"] == "evidence_gate_requires_review"
     assert review["shadow_warnings"] == "review_required_neighboring_ms1_interference"
     assert review["projected_matrix_written"] == "FALSE"
+
+
+def test_projection_keeps_review_required_blockers_closed_with_authority() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_REVIEW", "S_DET", "detected", True, 100.0),
+            _cell_decision(
+                "FAM_REVIEW",
+                "S_REVIEW",
+                "review_rescue",
+                False,
+                None,
+            ),
+        ),
+    )
+    gate = _gate_row("FAM_REVIEW", "S_DET;S_REVIEW", detected="1")
+    gate["evidence_gate_status"] = "visual_support"
+    gate["challenge_blockers"] = "review_required_neighboring_ms1_interference"
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row("FAM_REVIEW", "S_DET", "detected"),
+            _cell_row(
+                "FAM_REVIEW",
+                "S_REVIEW",
+                "rescued",
+                product_evidence=True,
+            ),
+        ),
+        retained_gate_rows=(gate,),
+    )
+
+    review = next(row for row in index.rows if row["sample_stem"] == "S_REVIEW")
+    assert review["shadow_decision"] == "context"
+    assert review["shadow_reasons"] == "challenge_blockers_require_review"
+    assert review["shadow_warnings"] == "review_required_neighboring_ms1_interference"
+    assert review["projected_matrix_written"] == "FALSE"
+    assert "product_authorized" in review["product_authority_chain"]
 
 
 def test_projection_blocks_only_hard_failures_for_review_rescues() -> None:
@@ -244,7 +540,7 @@ def test_projection_writer_serializes_stable_schema_and_summary(tmp_path: Path) 
         production_decisions=decisions,
         cell_rows=(
             _cell_row("FAM001", "S_DET", "detected"),
-            _cell_row("FAM001", "S_REVIEW", "rescued"),
+            _cell_row("FAM001", "S_REVIEW", "rescued", product_evidence=True),
         ),
         retained_gate_rows=(
             _gate_row("FAM001", "S_DET;S_REVIEW", detected="1"),
@@ -261,10 +557,33 @@ def test_projection_writer_serializes_stable_schema_and_summary(tmp_path: Path) 
     assert payload["schema_version"] == "shadow_production_projection_v1"
     assert payload["source_run_id"] == "unit-run"
     assert payload["decision_counts"] == {"accept": 1, "context": 1}
+    assert payload["gate_row_count"] == 1
+    assert payload["projectable_gate_row_count"] == 1
+    assert payload["unprojectable_gate_row_count"] == 0
+    assert payload["unprojectable_gate_reasons"] == {}
     assert payload["projected_new_write_count"] == 1
     assert payload["source_overlay_sha256s"] == []
     assert payload["current_matrix_source"] == "production_decision_snapshot"
     assert payload["alignment_matrix_cross_checked"] is False
+
+
+def test_projection_summary_reports_unprojectable_missing_seed_audit_gate() -> None:
+    gate = _gate_row("FAM_MISSING_SEED", "", detected="2")
+    gate["seed_group_basis"] = "missing_seed_audit"
+
+    index = build_shadow_production_projection_index(
+        production_decisions=_production_decisions(cells=()),
+        cell_rows=(),
+        retained_gate_rows=(gate,),
+    )
+
+    assert index.rows == ()
+    assert index.summary["gate_row_count"] == 1
+    assert index.summary["projectable_gate_row_count"] == 0
+    assert index.summary["unprojectable_gate_row_count"] == 1
+    assert index.summary["unprojectable_gate_reasons"] == {
+        "missing_seed_audit": 1,
+    }
 
 
 def test_cli_writes_projection_from_alignment_artifacts(tmp_path: Path) -> None:
@@ -301,6 +620,11 @@ def test_cli_writes_projection_from_alignment_artifacts(tmp_path: Path) -> None:
             "primary_matrix_area",
             "gap_fill_state",
             "gap_fill_reason",
+            "group_claim_state",
+            "consolidation_state",
+            "peak_hypothesis_status",
+            "product_selection_blocker",
+            "rt_mode_status",
         ),
     )
     _write_tsv(
@@ -406,6 +730,11 @@ def test_cli_fails_when_gate_schema_omits_challenge_blockers(tmp_path: Path) -> 
             "primary_matrix_area",
             "gap_fill_state",
             "gap_fill_reason",
+            "group_claim_state",
+            "consolidation_state",
+            "peak_hypothesis_status",
+            "product_selection_blocker",
+            "rt_mode_status",
         ),
     )
     gate = _gate_row("FAM_FAIL", "S_REVIEW", detected="1")
@@ -513,8 +842,18 @@ def _cell_row(
     end: str = "9.60",
     gap_fill_state: str = "owner_backfill",
     gap_fill_reason: str = "owner_backfill",
+    product_evidence: bool = False,
+    candidate_ms2_evidence: bool = True,
+    group_claim_state: str = "",
+    consolidation_state: str = "",
+    peak_hypothesis_status: str = "",
+    product_selection_blocker: str = "",
+    rt_mode_status: str = "",
+    activation_contract_rule_id: str = "",
+    activation_product_effect: str = "",
+    activation_reason: str = "",
 ) -> dict[str, str]:
-    return {
+    row = {
         "feature_family_id": family,
         "sample_stem": sample,
         "status": status,
@@ -525,7 +864,50 @@ def _cell_row(
         "peak_end_rt": end,
         "gap_fill_state": gap_fill_state,
         "gap_fill_reason": gap_fill_reason,
+        "group_claim_state": group_claim_state,
+        "consolidation_state": consolidation_state,
+        "peak_hypothesis_status": peak_hypothesis_status,
+        "product_selection_blocker": product_selection_blocker,
+        "rt_mode_status": rt_mode_status,
     }
+    if activation_contract_rule_id:
+        row["activation_contract_rule_id"] = activation_contract_rule_id
+    if activation_product_effect:
+        row["activation_product_effect"] = activation_product_effect
+    if activation_reason:
+        row["activation_reason"] = activation_reason
+    if product_evidence:
+        row.update(
+            {
+                "backfill_ms1_pattern_status": "supportive",
+                "backfill_ms1_pattern_evidence_level": "trace_constellation",
+                "backfill_ms1_product_authority_status": "product_authorized",
+                "backfill_ms1_product_authority_scope": "feature_family_sample",
+                "backfill_ms1_product_authority_source": (
+                    "unit_test_reviewed_allowlist"
+                ),
+                "backfill_evidence_reason": (
+                    "family_ms1_overlay_anchor_peak_own_max_shape_supported"
+                ),
+            },
+        )
+    if product_evidence and candidate_ms2_evidence:
+        row.update(
+            {
+                "backfill_candidate_ms2_pattern_status": "partial_support",
+                "backfill_candidate_ms2_evidence_level": "sample_candidate_aligned",
+                "backfill_candidate_ms2_product_authority_status": (
+                    "product_authorized"
+                ),
+                "backfill_candidate_ms2_product_authority_scope": (
+                    "feature_family_sample"
+                ),
+                "backfill_candidate_ms2_product_authority_source": (
+                    "unit_test_reviewed_allowlist"
+                ),
+            },
+        )
+    return row
 
 
 def _gate_row(

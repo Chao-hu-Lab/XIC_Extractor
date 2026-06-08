@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
+import json
 import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -27,6 +29,7 @@ REQUIRED_QUEUE_COLUMNS = (
 SUPPORT_FAMILY_VERDICT = "ms1_shape_supports_family_backfill"
 TOP30_EXPANSION_ELIGIBLE = "eligible"
 TOP30_EXPANSION_BLOCKED = "blocked"
+OVERLAY_BATCH_SOURCE = "family_ms1_overlay_batch_v1"
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             start_rank=args.start_rank,
             ppm=args.ppm,
             max_highlight_rescued=args.max_highlight_rescued,
+            reuse_existing=args.reuse_existing,
+            write_incremental=True,
         )
         _write_outputs(args.output_dir, rows)
     except (OSError, ValueError) as exc:
@@ -76,6 +81,8 @@ def run_overlay_batch(
     start_rank: int = 1,
     ppm: float = 10.0,
     max_highlight_rescued: int = 8,
+    reuse_existing: bool = False,
+    write_incremental: bool = False,
 ) -> list[dict[str, Any]]:
     if limit < 1:
         raise ValueError("--limit must be >= 1")
@@ -88,23 +95,100 @@ def run_overlay_batch(
         limit=limit,
         default_ppm=ppm,
     )
+    source_provenance = _source_provenance(
+        review_queue_tsv=review_queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, Any]] = []
     for request in requests:
         try:
-            rows.append(
-                _render_family(
+            existing = (
+                _existing_success_row(
                     request,
-                    alignment_cells=alignment_cells,
-                    raw_dir=raw_dir,
-                    dll_dir=dll_dir,
-                    output_dir=output_dir,
-                    max_highlight_rescued=max_highlight_rescued,
+                    output_dir,
+                    source_provenance=source_provenance,
                 )
+                if reuse_existing
+                else None
             )
+            if existing is not None:
+                rows.append(existing)
+            else:
+                rows.append(
+                    _render_family(
+                        request,
+                        alignment_cells=alignment_cells,
+                        raw_dir=raw_dir,
+                        dll_dir=dll_dir,
+                        output_dir=output_dir,
+                        max_highlight_rescued=max_highlight_rescued,
+                        source_provenance=source_provenance,
+                    )
+                )
         except Exception as exc:  # noqa: BLE001 - diagnostic batch must continue.
             rows.append(_failure_row(request, exc))
+        if write_incremental:
+            _write_outputs(output_dir, rows)
     return rows
+
+
+def _existing_success_row(
+    request: OverlayBatchRequest,
+    output_dir: Path,
+    *,
+    source_provenance: Mapping[str, object],
+) -> dict[str, Any] | None:
+    outputs = _request_output_paths(request, output_dir)
+    if any(not path.exists() for path in outputs.values()):
+        return None
+    try:
+        payload = json.loads(outputs["trace_data_json"].read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not _existing_payload_matches_request(
+        payload,
+        request,
+        source_provenance=source_provenance,
+    ):
+        return None
+    evidence = payload.get("evidence_summary")
+    if not isinstance(evidence, Mapping):
+        return None
+    return _success_row_from_evidence(request, outputs=outputs, evidence=evidence)
+
+
+def _existing_payload_matches_request(
+    payload: Mapping[str, Any],
+    request: OverlayBatchRequest,
+    *,
+    source_provenance: Mapping[str, object],
+) -> bool:
+    provenance = payload.get("provenance")
+    if not isinstance(provenance, Mapping):
+        return False
+    return (
+        str(payload.get("family_id", "")).strip() == request.family_id
+        and _existing_provenance_matches_request(
+            provenance,
+            request,
+            source_provenance=source_provenance,
+        )
+        and _payload_float_matches(payload.get("mz"), request.mz)
+        and _payload_float_matches(payload.get("ppm"), request.ppm)
+        and _payload_float_matches(payload.get("rt_min"), request.rt_min)
+        and _payload_float_matches(payload.get("rt_max"), request.rt_max)
+    )
+
+
+def _payload_float_matches(value: object, expected: float) -> bool:
+    observed = _optional_float(value)
+    if observed is None:
+        return False
+    tolerance = max(1e-6, abs(expected) * 1e-9)
+    return abs(observed - expected) <= tolerance
 
 
 def _render_family(
@@ -115,6 +199,7 @@ def _render_family(
     dll_dir: Path,
     output_dir: Path,
     max_highlight_rescued: int,
+    source_provenance: Mapping[str, object],
 ) -> dict[str, Any]:
     cells = overlay_plot.load_family_cells(alignment_cells, request.family_id)
     trace_rows = overlay_plot.extract_family_trace_rows(
@@ -137,8 +222,44 @@ def _render_family(
         rt_min=request.rt_min,
         rt_max=request.rt_max,
         family_center_rt=request.family_center_rt,
+        provenance=_request_provenance(
+            request,
+            source_provenance=source_provenance,
+        ),
     )
     evidence = overlay_plot.build_family_ms1_evidence_summary(trace_rows)
+    return _success_row_from_evidence(request, outputs=outputs, evidence=evidence)
+
+
+def _request_output_paths(
+    request: OverlayBatchRequest,
+    output_dir: Path,
+) -> dict[str, Path]:
+    prefix = request.output_prefix
+    return {
+        "png_path": output_dir / f"{prefix}.png",
+        "pdf_path": output_dir / f"{prefix}.pdf",
+        "trace_summary_tsv": output_dir / f"{prefix}_trace_summary.tsv",
+        "trace_data_json": output_dir / f"{prefix}_trace_data.json",
+    }
+
+
+def _success_row_from_evidence(
+    request: OverlayBatchRequest,
+    *,
+    outputs: Mapping[str, Path] | overlay_plot.FamilyMs1OverlayOutputs,
+    evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    if isinstance(outputs, Mapping):
+        png_path = outputs["png_path"]
+        pdf_path = outputs["pdf_path"]
+        summary_tsv = outputs["trace_summary_tsv"]
+        trace_data_json = outputs["trace_data_json"]
+    else:
+        png_path = outputs.png_path
+        pdf_path = outputs.pdf_path
+        summary_tsv = outputs.summary_tsv
+        trace_data_json = outputs.trace_data_json
     return {
         **_request_row(request),
         "status": "success",
@@ -213,10 +334,10 @@ def _render_family(
             "local_apex_supported_fraction",
             "",
         ),
-        "png_path": str(outputs.png_path),
-        "pdf_path": str(outputs.pdf_path),
-        "trace_summary_tsv": str(outputs.summary_tsv),
-        "trace_data_json": str(outputs.trace_data_json),
+        "png_path": str(png_path),
+        "pdf_path": str(pdf_path),
+        "trace_summary_tsv": str(summary_tsv),
+        "trace_data_json": str(trace_data_json),
         "failure_reason": "",
     }
 
@@ -271,6 +392,56 @@ def _request_row(request: OverlayBatchRequest) -> dict[str, Any]:
         "family_center_rt": request.family_center_rt,
         "output_prefix": request.output_prefix,
     }
+
+
+def _source_provenance(
+    *,
+    review_queue_tsv: Path,
+    alignment_cells: Path,
+    raw_dir: Path,
+    dll_dir: Path,
+) -> dict[str, object]:
+    return {
+        "overlay_batch_source": OVERLAY_BATCH_SOURCE,
+        "review_queue_tsv": str(review_queue_tsv),
+        "review_queue_sha256": _sha256_file(review_queue_tsv),
+        "alignment_cells_tsv": str(alignment_cells),
+        "alignment_cells_sha256": _sha256_file(alignment_cells),
+        "raw_dir": str(raw_dir),
+        "dll_dir": str(dll_dir),
+    }
+
+
+def _request_provenance(
+    request: OverlayBatchRequest,
+    *,
+    source_provenance: Mapping[str, object],
+) -> dict[str, object]:
+    return {
+        **dict(source_provenance),
+        "seed_group_id": request.seed_group_id,
+        "output_prefix": request.output_prefix,
+    }
+
+
+def _existing_provenance_matches_request(
+    provenance: Mapping[str, object],
+    request: OverlayBatchRequest,
+    *,
+    source_provenance: Mapping[str, object],
+) -> bool:
+    expected = _request_provenance(
+        request,
+        source_provenance=source_provenance,
+    )
+    return all(
+        str(provenance.get(key, "")).strip() == str(value)
+        for key, value in expected.items()
+    )
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
 
 
 def _load_requests(
@@ -574,6 +745,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--start-rank", type=int, default=1)
     parser.add_argument("--ppm", type=float, default=10.0)
     parser.add_argument("--max-highlight-rescued", type=int, default=8)
+    parser.add_argument(
+        "--reuse-existing",
+        action="store_true",
+        help=(
+            "Reuse completed overlay outputs in output-dir when PNG/PDF/trace "
+            "summary/trace JSON already exist for a queued output prefix."
+        ),
+    )
     return parser.parse_args(argv)
 
 

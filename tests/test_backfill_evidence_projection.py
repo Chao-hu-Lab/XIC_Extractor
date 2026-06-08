@@ -14,8 +14,8 @@ from xic_extractor.alignment.backfill_evidence_projection import (
 )
 from xic_extractor.alignment.promotion_policy import (
     ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+    BACKFILL_HYPOTHESIS_BLOCKED_REASON,
     BACKFILL_MS1_PATTERN_BLOCKED_REASON,
-    BACKFILL_MS2_CONTEXT_BLOCKED_REASON,
     evidence_from_tsv_rows,
 )
 
@@ -441,7 +441,7 @@ def test_ms1_projection_drops_stale_anchor_reason_before_current_sidecar() -> No
     )
 
 
-def test_diagnostic_only_candidate_ms2_is_not_product_context() -> None:
+def test_diagnostic_only_candidate_ms2_does_not_block_ms1_product_support() -> None:
     rows = project_backfill_evidence_to_cells(
         cell_rows=[
             _cell_row("FAM_DIAGNOSTIC_MS2", "S1", status="detected"),
@@ -505,10 +505,9 @@ def test_diagnostic_only_candidate_ms2_is_not_product_context() -> None:
         sample_count=3,
     )
 
-    assert not evidence.cells[0].supported_for_backfill
-    assert evidence.cells[0].backfill_identity_block_reason == (
-        BACKFILL_MS2_CONTEXT_BLOCKED_REASON
-    )
+    assert not evidence.cells[0].ms2_context_supported
+    assert evidence.cells[0].supported_for_backfill
+    assert evidence.cells[0].backfill_identity_block_reason == ""
 
 
 def test_backfill_projection_is_fail_closed_when_sidecars_are_missing() -> None:
@@ -571,6 +570,40 @@ def test_naked_backfill_support_fields_without_authority_do_not_promote() -> Non
     assert not evidence.cells[0].supported_for_backfill
     assert evidence.cells[0].backfill_identity_block_reason == (
         BACKFILL_MS1_PATTERN_BLOCKED_REASON
+    )
+
+
+def test_same_peak_support_does_not_override_duplicate_loser_claim() -> None:
+    row = {
+        **_cell_row("FAM_DUP_LOSER", "S2", status="rescued"),
+        "group_claim_state": "duplicate_loser",
+        "claim_winner_group_hypothesis_id": "FAM_WINNER",
+        "claim_source_group_hypothesis_id": "FAM_DUP_LOSER",
+        "backfill_ms1_pattern_status": "supportive",
+        "backfill_ms1_pattern_evidence_level": "trace_constellation",
+        "backfill_evidence_reason": ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+        "backfill_ms1_product_authority_status": PRODUCT_AUTHORIZED_STATUS,
+        "backfill_ms1_product_authority_scope": PRODUCT_AUTHORIZED_SCOPE,
+        "backfill_ms1_product_authority_source": "unit_test_reviewed_allowlist",
+    }
+
+    evidence = evidence_from_tsv_rows(
+        {
+            "neutral_loss_tag": "DNA_dR",
+            "primary_evidence": "owner_complete_link",
+            "detected_count": "2",
+            "accepted_rescue_count": "1",
+        },
+        [row],
+        seed_quality=None,
+        sample_count=3,
+    )
+
+    assert evidence.cells[0].same_peak_ms1_pattern_supported
+    assert not evidence.cells[0].supported_for_backfill
+    assert (
+        evidence.cells[0].backfill_identity_block_reason
+        == BACKFILL_HYPOTHESIS_BLOCKED_REASON
     )
 
 

@@ -114,6 +114,27 @@ python -m scripts.agent_sandbox_doctor --strict --command ".venv\Scripts\python.
 repo 是合理預設：agent 可以寫工作樹與 `C:\tmp`，讀外部 RAW / DLL / reference
 data，遇到外部寫入、network、GUI、或高風險命令時才升權。
 
+### Approval-First Commands
+
+下列類型在這台 Windows / Codex sandbox 上已反覆出現「先跑一次被拒，再用同
+一條命令提權重跑」的浪費。不要把這些當未知問題重複試錯；如果任務需要它們，
+直接用 `sandbox_permissions=require_escalated` 送同一條命令，並使用窄
+`prefix_rule`。如果不需要它們，改用已存在 artifact 或離線替代，不要先跑。
+
+| 命令類型 | 固定處理 | 不要做 |
+| --- | --- | --- |
+| `uv lock`、`uv sync --extra dev --group dev`、會下載 dependency 的 `uv run --with ...` | 任務需要更新 lock/env 時直接提權；保留 `$env:UV_CACHE_DIR='.uv-cache'`；prefix 只給 `uv lock` 或 `uv sync` 這種窄命令。本 repo 同時使用 optional `dev` extra 與 dependency group；需要完整 dev env 時用 `uv sync --extra dev --group dev` | 不要先在 sandbox 裡等 PyPI 被擋；不要只跑 `uv sync --group dev`，那會漏掉 optional dev extra 裡的 pytest stack；不要因為 `uv sync` 被擋就改成未 lock 的臨時安裝 |
+| `uv run python -m playwright install chromium`、browser binary install/update | 只有 browser binary 缺失時才提權安裝；gallery smoke 先用 `tools\diagnostics\gallery_browser_smoke.py`，它會 fallback 到 system Chrome/Edge | 不要用 MCP timeout 或 Chrome extension 狀態當作自動化 smoke 的唯一驗收 |
+| 會讀 `C:\Xcalibur\...` RAW 或載入 `C:\Xcalibur\system\programs` DLL 的命令 | 先跑本檔 Preflight 的 `Test-Path` 與 `.venv\Scripts\python.exe` runtime check；命令本身用 `.venv\Scripts\python.exe`；若 sandbox / DLL loading / external executable spawn 被擋，直接提權重跑同一條命令 | 不要先用 bare `python` 撞一次；不要掃 sibling directory 猜 RAW/DLL；不要把較窄 no-RAW pytest 當成 RAW 驗證替代 |
+| GUI/browser 開啟、外部 terminal、`Start-Process` 類命令 | 只有使用者明確需要互動視窗或外部 terminal 時才提權；長 RAW run 優先用前景 heartbeat command，不用 GUI | 不要用背景 helper 隱性取代可審計的 foreground RAW run |
+| 寫入 `$CODEX_HOME` / `.codex` config、plugin/skill install、全域 hook/config | 只有使用者明確要求改 agent environment 時才提權；完成後寫 smoke / rollback note | 不要為了單次 repo 任務擴大成全域設定 |
+
+如果命令不在上表，才回到「先 doctor、再決定」：
+
+```powershell
+python -m scripts.agent_sandbox_doctor --command "<command-to-check>"
+```
+
 常見 friction 不要全部用放寬 sandbox 解決：
 
 | 症狀 | 先做什麼 | 不要做什麼 |
@@ -121,9 +142,14 @@ data，遇到外部寫入、network、GUI、或高風險命令時才升權。
 | 寫入 `C:\Xcalibur`、桌面資料夾、`$CODEX_HOME` / `%USERPROFILE%\.codex` 失敗 | 把 output / cache / sidecar 改到目前 worktree 的 `output\...` 或 `C:\tmp`；若真的要改全域 Codex 設定，先明確取得使用者要求 | 不要切 `danger-full-access` 或擴大 writable root 只為了省一次路徑修正 |
 | package install、`npx`、下載文件、GitHub/網路失敗 | 確認這是任務必要條件後，用 narrow approval / prefix；成功後記錄穩定命令或替代離線路徑 | 不要把 network access 永久打開當預設 |
 | pytest / Python 產生 cache 被擋 | 在 worktree 內跑；必要時加 `$env:PYTHONDONTWRITEBYTECODE='1'` 和 `-p no:cacheprovider`；tester role 可 workspace-write 只為 verification side effects，驗證後要回報 `git status` 是否只剩預期 side effects | 不要把 tester 當 implementation worker 讓它改 source |
+| pytest 回 `no tests ran` 或 `not found` | 先用 `rg -n "<test_name>|def test_" tests\...` 找實際名稱；必要時跑 `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest --collect-only -q <test-file>` 後再下精準 node id | 不要把 `no tests ran` 當成測試失敗或通過；不要猜 node id 一直重跑 |
 | RAW / DLL 讀不到 | 先跑本檔 Preflight 的 `Test-Path` 與 Python runner check；RAW 命令用 `.venv\Scripts\python.exe` | 不要用 bare `python` 重試 RAW，也不要掃 sibling directory 猜路徑 |
 | PowerShell 語法錯誤 | 改成 PowerShell 語法；多行命令用 backtick；inline Python 用 `python -c` 或 PowerShell here-string pipe；不確定時先跑 `scripts.agent_sandbox_doctor` | 不要貼 Bash heredoc、`export`、`&&` |
 | 長時間 85RAW 卡住 | 用 foreground command + `--timing-live-output`；先看 heartbeat / timing artifact 再重跑 | 不要背景 `Start-Process` 後回來輪詢 |
+| `git add` / `git commit` / `git stash` / `git worktree add` 出現 `.git\index.lock`、ref-lock、或 permission denied | 先確認正確 worktree：`git worktree list`、`git -C <worktree> status`；若是必要 git index/ref 操作，用同一命令的 narrow approval 或 `git -C <repo> ...` 重跑 | 不要把 index/ref lock 誤判成程式碼問題；不要用 `git reset --hard`、`git clean` 或強制刪分支除非使用者明確要求 |
+| 要續接舊 worktree / 舊 artifact | 先 `git worktree list` 與 `Test-Path` exact artifact；若 worktree/output 不存在，改用 `local_validation_artifacts/` 或明確重建 smoke path | 不要假設上一輪 worktree 還存在；不要把 `.worktrees\<branch>\output\...` 當長期可重用 input |
+| 遞迴掃描太慢、掃到 access denied、或 output/build/.worktrees 噪音 | 優先用 `git ls-files`、`rg --files`、targeted `rg`，再讀特定 range | 不要用 blanket `Get-ChildItem -Recurse` 掃整個 repo、`output/`、`.worktrees/`、或 build/cache 目錄 |
+| output / workbook overwrite `Permission denied` | 先假設檔案可能被 Excel/browser/previewer 鎖住；改寫到 timestamped 或 suffixed output，並回報原檔可能被鎖 | 不要強刪或反覆覆蓋；不要把 permission denied 當成 pipeline 邏輯失敗 |
 
 只有在「失敗模式重複、doctor 或現有 preflight 無法降低風險、且人工 approval
 本身變成主要摩擦」時，才考慮新增 project-local execpolicy 或 hook。新增前
@@ -325,36 +351,42 @@ emit the same minimal machine contract and heartbeat shape documented here.
 1. 選 Python runner 前，先判斷命令是否讀 RAW。RAW 用
    `.venv\Scripts\python.exe`；no-RAW pytest 才可用 `python`。
 2. 選 RAW / DLL 目錄前，先查本檔並 `Test-Path`。不要先掃 filesystem。
-3. phase-specific artifacts 不要寫進本檔；查當前 spec、plan、validation note
+3. 已列在 `Approval-First Commands` 的命令不要先在 sandbox 裡撞一次；
+   任務必要時直接用 narrow approval 跑固定命令，否則改用既有 artifact 或
+   離線替代。
+4. RAW / DLL 命令若因 sandbox、DLL loading、或 external executable spawn
+   被擋，提權重跑同一條 `.venv\Scripts\python.exe ...` 命令；不要換成
+   bare `python`、不要改 RAW/DLL path、不要用 no-RAW pytest 替代。
+5. phase-specific artifacts 不要寫進本檔；查當前 spec、plan、validation note
    或 task output index。
-4. `.mzML` 不是 production input。除非使用者明確要求，否則不要把 mzML 當成
+6. `.mzML` 不是 production input。除非使用者明確要求，否則不要把 mzML 當成
    fallback 或替代資料源。
-5. 如果 stable path 缺失，停止並回報缺失路徑與失敗命令。不要靜默換成另一份
+7. 如果 stable path 缺失，停止並回報缺失路徑與失敗命令。不要靜默換成另一份
    資料。
-6. gate 回 non-zero 時，先讀 JSON/TSV status。不要在 status 還沒釐清時進入
+8. gate 回 non-zero 時，先讀 JSON/TSV status。不要在 status 還沒釐清時進入
    更大的 validation tier。
-7. 85RAW 或任何可能超過 30 分鐘的 RAW run 必須加 `--timing-live-output`；
+9. 85RAW 或任何可能超過 30 分鐘的 RAW run 必須加 `--timing-live-output`；
    沒有 heartbeat artifact 就不要宣稱已完成可審計 profiling。
-8. validation / downstream handoff 預設用 `--output-level validation-minimal`。
-   `.xlsx` 和 HTML 不是正式交付契約；只有明確需要人工檢視或 debug 時才產生。
-9. 85RAW 正式驗收預設加 `--performance-profile validation-fast`,
-   `--raw-workers 11` 與
-   `--owner-backfill-window-strategy super-window`。如果刻意不用，必須在
-   validation note 說明原因。
-10. 85RAW 開跑前先檢查 discovery index sample count、candidate CSV path、
+10. validation / downstream handoff 預設用 `--output-level validation-minimal`。
+    `.xlsx` 和 HTML 不是正式交付契約；只有明確需要人工檢視或 debug 時才產生。
+11. 85RAW 正式驗收預設加 `--performance-profile validation-fast`,
+    `--raw-workers 11` 與
+    `--owner-backfill-window-strategy super-window`。如果刻意不用，必須在
+    validation note 說明原因。
+12. 85RAW 開跑前先檢查 discovery index sample count、candidate CSV path、
     RAW path；8RAW index 不可拿來跑 full tissue validation。正式 alignment
     run 用 `--expected-sample-count 85` 固化 sample-count 檢查。
-11. 不要把 `.worktrees\<branch>\output\...` 當成 reusable validation input。
+13. 不要把 `.worktrees\<branch>\output\...` 當成 reusable validation input。
     若只有某個 worktree 有 accepted discovery artifact，先移到
     `local_validation_artifacts/` 並重寫 index 內部絕對路徑，再跑 preflight。
-12. 不要用 Codex shell 的 background `Start-Process` 跑 85RAW 後就回來輪詢；
+14. 不要用 Codex shell 的 background `Start-Process` 跑 85RAW 後就回來輪詢；
     這個模式已反覆失敗。用前景 run 搭配足夠 timeout，或先取得使用者同意
     轉到外部 terminal / automation。
-13. 每次長時間 RAW run 後，若發現新的穩定參數或反覆失敗模式，更新本檔；
+15. 每次長時間 RAW run 後，若發現新的穩定參數或反覆失敗模式，更新本檔；
     不要只把教訓留在聊天紀錄。
-14. PowerShell 語法錯誤、ruff E501、Markdown fence mismatch 這類可重複避免
+16. PowerShell 語法錯誤、ruff E501、Markdown fence mismatch 這類可重複避免
     的錯誤，修完後要把穩定教訓寫回本檔或相關 repo-local contract。
-15. 遇到已知 target 或 failure mode，例如 `d3-N6-medA` RT drift / primary
+17. 遇到已知 target 或 failure mode，例如 `d3-N6-medA` RT drift / primary
     delivery 問題，先讀 `docs/diagnostic-ledger.md`。不要把 ledger 已經
     解釋過的 RT drift、area mismatch、或 mixed-surface warning 當成新的
     hard blocker；除非 current artifact 與 ledger 明確矛盾。

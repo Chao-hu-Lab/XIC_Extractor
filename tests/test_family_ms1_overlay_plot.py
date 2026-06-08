@@ -165,10 +165,12 @@ def test_write_family_ms1_overlay_outputs_from_synthetic_traces(
         "rt_min",
         "rt_max",
         "family_center_rt",
+        "provenance",
         "trace_count",
         "evidence_summary",
         "traces",
     ]
+    assert payload["provenance"] == {}
     assert list(payload["traces"][0]) == [
         "sample_stem",
         "status",

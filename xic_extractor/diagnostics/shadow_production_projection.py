@@ -18,6 +18,7 @@ from xic_extractor.alignment.production_decisions import (
     ProductionCellDecision,
     ProductionDecisionSet,
 )
+from xic_extractor.alignment.promotion_policy import BACKFILL_HYPOTHESIS_BLOCKED_REASON
 from xic_extractor.diagnostics.diagnostic_io import (
     format_diagnostic_value,
     optional_float,
@@ -49,6 +50,7 @@ SHADOW_PRODUCTION_PROJECTION_COLUMNS = (
     "projected_matrix_written",
     "projected_matrix_value",
     "projection_authority",
+    "product_authority_chain",
     "seed_mz",
     "seed_rt",
     "seed_rt_window",
@@ -90,13 +92,19 @@ HARD_BLOCKER_TOKENS = {
     "neighboring_interference_hard_block",
     "missing_ms1_peak_segment",
 }
+CURRENT_PRODUCTION_HARD_BLOCKERS = {BACKFILL_HYPOTHESIS_BLOCKED_REASON}
 
 PROJECTION_ACCEPT_GATE_STATUSES = {
     "visual_support",
     "product_grade_support",
 }
-
-
+_PRODUCT_AUTHORIZED_STATUS = "product_authorized"
+_PRODUCT_AUTHORIZED_SCOPE = "feature_family_sample"
+_SUPPORT_STATUSES = {"supportive", "partial_support"}
+_MS1_SAME_PEAK_LEVEL = "trace_constellation"
+_MS1_SAME_PEAK_SUPPORT_REASON = (
+    "family_ms1_overlay_anchor_peak_own_max_shape_supported"
+)
 @dataclass(frozen=True)
 class ShadowProductionProjectionIndex:
     rows: tuple[dict[str, str], ...]
@@ -125,6 +133,7 @@ def build_shadow_production_projection_index(
 ) -> ShadowProductionProjectionIndex:
     gate_rows = tuple(dict(row) for row in retained_gate_rows)
     _validate_gate_rows(gate_rows)
+    gate_projection_summary = _gate_projection_summary(gate_rows)
     cells_by_key = {
         (
             text_value(row.get("feature_family_id")),
@@ -163,6 +172,7 @@ def build_shadow_production_projection_index(
         rows=rows,
         summary=_summary(
             rows,
+            gate_projection_summary=gate_projection_summary,
             source_run_id=source_run_id,
             source_review_sha256=source_review_sha256,
             source_cell_sha256=source_cell_sha256,
@@ -222,13 +232,15 @@ def _projection_row(
         review_rescued=review_rescued,
         current_written=current_written,
     )
-    projected_written = current_written or shadow_decision == "accept"
-    projected_value = (
-        current_value
-        if current_written
-        else _projected_cell_value(cell)
-        if shadow_decision == "accept"
-        else None
+    projected_value = current_value if current_written else None
+    if shadow_decision == "accept":
+        projected_value = _projected_cell_value(cell)
+        if projected_value is None:
+            shadow_decision = "context"
+            reasons = (*reasons, "missing_projected_matrix_value")
+            warnings = (*warnings, "projection_accept_without_positive_area")
+    projected_written = current_written or (
+        shadow_decision == "accept" and projected_value is not None
     )
     rt_start = text_value(gate_row.get("suggested_rt_min"))
     rt_end = text_value(gate_row.get("suggested_rt_max"))
@@ -256,6 +268,7 @@ def _projection_row(
         "projected_matrix_written": _bool_text(projected_written),
         "projected_matrix_value": _number_text(projected_value),
         "projection_authority": "shadow_projection_only",
+        "product_authority_chain": _product_authority_chain_text(cell),
         "seed_mz": text_value(gate_row.get("seed_mz")),
         "seed_rt": text_value(gate_row.get("seed_rt")),
         "seed_rt_window": f"{rt_start}-{rt_end}" if rt_start or rt_end else "",
@@ -303,6 +316,13 @@ def _shadow_projection_decision(
     if not _request_window_overlap(cell, gate_row):
         return "block", ("outside_request_window",), _warnings(cell, gate_row)
 
+    current_blocker = _current_production_hard_blocker(decision)
+    if current_blocker:
+        return "block", (current_blocker,), _warnings(cell, gate_row)
+    cell_blocker = _cell_hypothesis_blocker(cell)
+    if cell_blocker:
+        return "block", (cell_blocker,), _warnings(cell, gate_row)
+
     blockers = _hard_blocker_tokens(gate_row)
     if blockers:
         return "block", blockers, _warnings(cell, gate_row)
@@ -312,15 +332,126 @@ def _shadow_projection_decision(
             cell,
             gate_row,
         )
-    if _same_peak_multi_claim(cell):
-        return "context", ("same_peak_multi_claim_requires_review",), _warnings(
+    soft_blockers = _soft_blocker_tokens(gate_row)
+    if soft_blockers:
+        return "context", ("challenge_blockers_require_review",), _warnings(
             cell,
             gate_row,
         )
-    return "accept", ("request_window_shadow_projection_candidate",), _warnings(
+    if not _product_authorized_same_peak_backfill(cell):
+        return "context", ("missing_product_authorized_evidence_chain",), _warnings(
+            cell,
+            gate_row,
+        )
+    if _same_peak_multi_claim(cell):
+        return "accept", ("product_authorized_same_peak_backfill",), _warnings(
+            cell,
+            gate_row,
+        )
+    return "accept", ("product_authorized_same_peak_backfill",), _warnings(
         cell,
         gate_row,
     )
+
+
+def _product_authorized_same_peak_backfill(cell: Mapping[str, str]) -> bool:
+    if not _product_authority_present(
+        status=cell.get("backfill_ms1_product_authority_status"),
+        scope=cell.get("backfill_ms1_product_authority_scope"),
+        source=cell.get("backfill_ms1_product_authority_source"),
+    ):
+        return False
+    if _normalize(cell.get("backfill_ms1_pattern_status")) not in _SUPPORT_STATUSES:
+        return False
+    if (
+        _normalize(cell.get("backfill_ms1_pattern_evidence_level"))
+        != _MS1_SAME_PEAK_LEVEL
+    ):
+        return False
+    if _MS1_SAME_PEAK_SUPPORT_REASON not in split_semicolon_labels(
+        cell.get("backfill_evidence_reason"),
+    ):
+        return False
+    return True
+
+
+def _product_authority_chain_text(cell: Mapping[str, str]) -> str:
+    return " | ".join(
+        part
+        for part in (
+            _authority_component_text(
+                cell,
+                label="MS1",
+                prefix="backfill_ms1",
+                status_key="backfill_ms1_pattern_status",
+                level_key="backfill_ms1_pattern_evidence_level",
+            ),
+            _authority_component_text(
+                cell,
+                label="candidateMS2(optional)",
+                prefix="backfill_candidate_ms2",
+                status_key="backfill_candidate_ms2_pattern_status",
+                level_key="backfill_candidate_ms2_evidence_level",
+            ),
+            _same_peak_reason_text(cell),
+        )
+        if part
+    )
+
+
+def _authority_component_text(
+    cell: Mapping[str, str],
+    *,
+    label: str,
+    prefix: str,
+    status_key: str,
+    level_key: str,
+) -> str:
+    authority_status = text_value(cell.get(f"{prefix}_product_authority_status"))
+    if not authority_status:
+        return ""
+    pattern_status = text_value(cell.get(status_key)) or "no_pattern_status"
+    evidence_level = text_value(cell.get(level_key)) or "no_evidence_level"
+    scope = text_value(cell.get(f"{prefix}_product_authority_scope"))
+    source = text_value(cell.get(f"{prefix}_product_authority_source"))
+    reason = text_value(cell.get(f"{prefix}_product_authority_reason"))
+    parts = [
+        label,
+        authority_status,
+        pattern_status,
+        evidence_level,
+    ]
+    if scope:
+        parts.append(scope)
+    if reason:
+        parts.append(reason)
+    elif source:
+        parts.append(source)
+    return ":".join(parts)
+
+
+def _same_peak_reason_text(cell: Mapping[str, str]) -> str:
+    reasons = split_semicolon_labels(cell.get("backfill_evidence_reason"))
+    if _MS1_SAME_PEAK_SUPPORT_REASON not in reasons:
+        return ""
+    return f"same_peak_reason:{_MS1_SAME_PEAK_SUPPORT_REASON}"
+
+
+def _product_authority_present(
+    *,
+    status: object,
+    scope: object,
+    source: object,
+) -> bool:
+    return (
+        _normalize(status) == _PRODUCT_AUTHORIZED_STATUS
+        and _normalize(scope) == _PRODUCT_AUTHORIZED_SCOPE
+        and bool(_normalize(source))
+    )
+
+
+def _normalize(value: object) -> str:
+    return text_value(value).strip().lower().replace(" ", "_")
 
 
 def _warnings(
@@ -339,9 +470,55 @@ def _warnings(
     return tuple(dict.fromkeys(warnings))
 
 
+def _current_production_hard_blocker(
+    decision: ProductionCellDecision | None,
+) -> str:
+    if decision is None:
+        return ""
+    return (
+        decision.blank_reason
+        if decision.blank_reason in CURRENT_PRODUCTION_HARD_BLOCKERS
+        else ""
+    )
+
+
+def _cell_hypothesis_blocker(cell: Mapping[str, str]) -> str:
+    tokens = " ".join(
+        text_value(cell.get(key)).lower().replace(" ", "_")
+        for key in (
+            "group_claim_state",
+            "consolidation_state",
+            "peak_hypothesis_status",
+            "product_selection_blocker",
+            "rt_mode_status",
+            "activation_product_effect",
+            "activation_contract_rule_id",
+            "activation_reason",
+            "reason",
+            "backfill_evidence_reason",
+        )
+    )
+    hard_markers = (
+        "duplicate_loser",
+        "primary_loser",
+        "wrong_peak",
+        "cross_mode_rescue_blocked",
+        "mode_split_required",
+        "consolidation_no_go",
+    )
+    if any(marker in tokens for marker in hard_markers):
+        return BACKFILL_HYPOTHESIS_BLOCKED_REASON
+    return ""
+
+
 def _hard_blocker_tokens(gate_row: Mapping[str, str]) -> tuple[str, ...]:
     tokens = split_semicolon_labels(gate_row.get("challenge_blockers"))
     return tuple(token for token in tokens if token in HARD_BLOCKER_TOKENS)
+
+
+def _soft_blocker_tokens(gate_row: Mapping[str, str]) -> tuple[str, ...]:
+    tokens = split_semicolon_labels(gate_row.get("challenge_blockers"))
+    return tuple(token for token in tokens if token not in HARD_BLOCKER_TOKENS)
 
 
 def _same_peak_multi_claim(cell: Mapping[str, str]) -> bool:
@@ -452,6 +629,7 @@ def _group_by_family(
 def _summary(
     rows: Sequence[Mapping[str, str]],
     *,
+    gate_projection_summary: Mapping[str, object],
     source_run_id: str,
     source_review_sha256: str,
     source_cell_sha256: str,
@@ -472,6 +650,7 @@ def _summary(
         "schema_version": SCHEMA_VERSION,
         "validation_label": "shadow_projection_only",
         "source_run_id": source_run_id,
+        **gate_projection_summary,
         "row_count": len(rows),
         "decision_counts": dict(sorted(decisions.items())),
         "current_matrix_written_count": current_written,
@@ -491,6 +670,36 @@ def _summary(
         "matrix_contract_changed": False,
         "product_behavior_changed": False,
     }
+
+
+def _gate_projection_summary(
+    gate_rows: Sequence[Mapping[str, str]],
+) -> dict[str, object]:
+    reasons = Counter(
+        reason
+        for row in gate_rows
+        if (reason := _unprojectable_gate_reason(row))
+    )
+    unprojectable = sum(reasons.values())
+    return {
+        "gate_row_count": len(gate_rows),
+        "projectable_gate_row_count": len(gate_rows) - unprojectable,
+        "unprojectable_gate_row_count": unprojectable,
+        "unprojectable_gate_reasons": dict(sorted(reasons.items())),
+    }
+
+
+def _unprojectable_gate_reason(row: Mapping[str, str]) -> str:
+    if not text_value(row.get("feature_family_id")):
+        return "missing_feature_family_id"
+    if not text_value(row.get("seed_group_id")):
+        return "missing_seed_group_id"
+    if not split_semicolon_labels(row.get("seed_source_samples")):
+        seed_basis = text_value(row.get("seed_group_basis"))
+        if seed_basis == "missing_seed_audit":
+            return "missing_seed_audit"
+        return "missing_seed_source_samples"
+    return ""
 
 
 def _int_text(value: object) -> int:

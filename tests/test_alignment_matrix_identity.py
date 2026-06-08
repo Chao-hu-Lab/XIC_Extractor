@@ -191,6 +191,31 @@ def test_single_detected_same_peak_support_keeps_ambiguous_owner_review() -> Non
     assert HIGH_BACKFILL_CAPPED_FLAG not in decision.row_flags
 
 
+def test_same_peak_product_authority_downgrades_duplicate_pressure_to_warning() -> None:
+    matrix = _matrix(
+        _feature("FAM001", evidence="owner_complete_link;owner_count=1"),
+        (
+            _cell("seed1", "FAM001", "detected", 100.0),
+            _cell("rescue1", "FAM001", "rescued", 90.0),
+            _cell("rescue2", "FAM001", "rescued", 80.0),
+            _cell("dup1", "FAM001", "duplicate_assigned", 70.0),
+            _cell("dup2", "FAM001", "duplicate_assigned", 60.0),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is True
+    assert decision.identity_decision == "production_family"
+    assert decision.identity_reason == CELL_EVIDENCE_SUPPORTED_REASON
+    assert decision.quantifiable_detected_count == 1
+    assert decision.quantifiable_rescue_count == 2
+    assert decision.duplicate_assigned_count == 2
+    assert "duplicate_claim_pressure" not in decision.row_flags
+    assert "same_peak_multi_claim" in decision.row_flags
+    assert HIGH_BACKFILL_CAPPED_FLAG in decision.row_flags
+
+
 def test_one_detected_area_only_rescue_is_not_provisional_retention_candidate() -> None:
     matrix = _matrix(
         _feature("FAM001", evidence="owner_complete_link;owner_count=1"),
@@ -328,7 +353,7 @@ def test_weak_seed_dr_backfill_dependency_with_cell_evidence_is_supported() -> N
     assert HIGH_BACKFILL_CAPPED_FLAG in decision.row_flags
 
 
-def test_known_drift_within_alignment_window_does_not_demote_family() -> None:
+def test_known_drift_beyond_local_apex_window_does_not_demote_family() -> None:
     matrix = _matrix(
         _feature(
             "FAM001",
@@ -368,7 +393,7 @@ def test_known_drift_within_alignment_window_does_not_demote_family() -> None:
                 80.0,
                 trace_quality="owner_backfill",
                 scan_support_score=0.8,
-                rt_delta_sec=-120.0,
+                rt_delta_sec=-240.0,
                 backfill_drift_supported=True,
             ),
             *tuple(
@@ -432,6 +457,7 @@ def test_unexplained_rt_delta_beyond_preferred_blocks_backfill_promotion() -> No
                     "rescued",
                     70.0 + i,
                     rt_delta_sec=120.0,
+                    backfill_evidence=False,
                 )
                 for i in range(1, 7)
             ),
