@@ -63,6 +63,17 @@ Canonical references:
 - When sandbox, PowerShell syntax, output path, network approval, or RAW runner
   choice is uncertain, preflight with `python -m scripts.agent_sandbox_doctor`
   before launching expensive or permission-sensitive commands.
+- Known approval-first commands are documented in
+  `docs/agent-parameter-settings.md`: dependency sync/lock, Playwright browser
+  install, RAW/DLL loading, GUI/external-terminal launch, and global Codex
+  config changes should not be re-tried once in sandbox just to fail. If the
+  task needs them, request the documented narrow approval up front; otherwise
+  use existing artifacts or the offline path.
+- Also use the same operational playbook for repeated local pitfalls: guessed
+  pytest node ids that collect zero tests, Windows git `.git\index.lock` /
+  ref-lock friction, stale or deleted `.worktrees`, noisy recursive scans over
+  generated outputs, and locked workbook/report files. Do not keep retrying the
+  failing shape; switch to the documented fixed command pattern.
 - Treat `.codex/config.toml`, hooks, execpolicy, and subagent TOML as
   execution-affecting config. Changes need docs/handoff review and a smoke
   check.

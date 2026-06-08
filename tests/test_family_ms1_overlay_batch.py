@@ -1,4 +1,6 @@
 import csv
+import hashlib
+import json
 from pathlib import Path
 
 from tools.diagnostics import family_ms1_overlay_batch as batch
@@ -10,7 +12,9 @@ def test_batch_uses_structured_queue_columns_and_limit(
     monkeypatch,
 ) -> None:
     queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
     output_dir = tmp_path / "out"
+    alignment_cells.write_text("feature_family_id\nFAM001\n", encoding="utf-8")
     _write_queue(
         queue_tsv,
         [
@@ -124,7 +128,9 @@ def test_batch_uses_backfill_seed_mz_when_seed_queue_provides_it(
     monkeypatch,
 ) -> None:
     queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
     output_dir = tmp_path / "out"
+    alignment_cells.write_text("feature_family_id\nFAM_SEED\n", encoding="utf-8")
     row = _queue_row("FAM_SEED", mz="300.0", rt_min="10.0", rt_max="11.0")
     row["backfill_seed_mz"] = "301.123"
     row["ppm"] = "20"
@@ -174,6 +180,224 @@ def test_batch_uses_backfill_seed_mz_when_seed_queue_provides_it(
     assert rows[0]["status"] == "success"
     assert calls[0]["mz"] == 301.123
     assert calls[0]["ppm"] == 20.0
+
+
+def test_batch_reuses_existing_outputs_without_raw_when_requested(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    alignment_cells.write_text("feature_family_id\nFAM_REUSE\n", encoding="utf-8")
+    seed_group_id = (
+        "seed::FAM_REUSE::mz=251.165::rt=1.1000::"
+        "window=1.0000-1.2000::ppm=10"
+    )
+    _write_queue(queue_tsv, [_queue_row("FAM_REUSE", seed_group_id=seed_group_id)])
+    prefix = "fam_reuse_overlay"
+    for suffix in (".png", ".pdf", "_trace_summary.tsv"):
+        (output_dir / f"{prefix}{suffix}").write_text("ok", encoding="utf-8")
+    (output_dir / f"{prefix}_trace_data.json").write_text(
+        json.dumps(
+            {
+                "family_id": "FAM_REUSE",
+                "mz": 251.165,
+                "ppm": 10.0,
+                "rt_min": 1.0,
+                "rt_max": 1.2,
+                "provenance": {
+                    "overlay_batch_source": batch.OVERLAY_BATCH_SOURCE,
+                    "review_queue_tsv": str(queue_tsv),
+                    "review_queue_sha256": _sha256_file(queue_tsv),
+                    "alignment_cells_tsv": str(alignment_cells),
+                    "alignment_cells_sha256": _sha256_file(alignment_cells),
+                    "raw_dir": str(raw_dir),
+                    "dll_dir": str(dll_dir),
+                    "seed_group_id": seed_group_id,
+                    "output_prefix": prefix,
+                },
+                "evidence_summary": {
+                    "family_verdict": "ms1_shape_supports_family_backfill",
+                    "detected_count": 2,
+                    "rescued_count": 3,
+                    "detected_rescued_count": 5,
+                    "evaluable_trace_count": 5,
+                    "absolute_own_max_shape_supported_fraction": 0.8,
+                    "local_apex_supported_fraction": 1.0,
+                }
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "load_family_cells",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("RAW path should not be used"),
+        ),
+    )
+
+    rows = batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=output_dir,
+        reuse_existing=True,
+        write_incremental=True,
+    )
+
+    assert rows[0]["status"] == "success"
+    assert rows[0]["family_verdict"] == "ms1_shape_supports_family_backfill"
+    assert rows[0]["detected_count"] == 2
+    assert rows[0]["png_path"].endswith("fam_reuse_overlay.png")
+    summary = _read_tsv(output_dir / "family_ms1_overlay_batch_summary.tsv")
+    assert summary[0]["feature_family_id"] == "FAM_REUSE"
+    assert summary[0]["absolute_own_max_shape_supported_fraction"] == "0.8"
+
+
+def test_batch_does_not_reuse_existing_outputs_with_mismatched_trace_json(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    alignment_cells.write_text("feature_family_id\nFAM_REUSE\n", encoding="utf-8")
+    _write_queue(queue_tsv, [_queue_row("FAM_REUSE")])
+    prefix = "fam_reuse_overlay"
+    for suffix in (".png", ".pdf", "_trace_summary.tsv"):
+        (output_dir / f"{prefix}{suffix}").write_text("stale", encoding="utf-8")
+    (output_dir / f"{prefix}_trace_data.json").write_text(
+        json.dumps(
+            {
+                "family_id": "FAM_STALE",
+                "mz": 999.0,
+                "ppm": 20.0,
+                "rt_min": 99.0,
+                "rt_max": 100.0,
+                "evidence_summary": {
+                    "family_verdict": "ms1_shape_supports_family_backfill",
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    calls: list[str] = []
+
+    def fake_load_family_cells(_alignment_cells: Path, family_id: str) -> list[str]:
+        calls.append(family_id)
+        return [family_id]
+
+    monkeypatch.setattr(batch.overlay_plot, "load_family_cells", fake_load_family_cells)
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "extract_family_trace_rows",
+        lambda **_kwargs: ["trace-row"],
+    )
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "write_family_ms1_overlay_outputs",
+        lambda **kwargs: overlay_plot.FamilyMs1OverlayOutputs(
+            png_path=output_dir / f"{kwargs['output_prefix']}.png",
+            pdf_path=output_dir / f"{kwargs['output_prefix']}.pdf",
+            summary_tsv=output_dir / f"{kwargs['output_prefix']}_trace_summary.tsv",
+            trace_data_json=output_dir / f"{kwargs['output_prefix']}_trace_data.json",
+        ),
+    )
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "build_family_ms1_evidence_summary",
+        lambda _rows: {"family_verdict": "review_required_uncertain_ms1_shape"},
+    )
+
+    rows = batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=tmp_path / "raw",
+        dll_dir=tmp_path / "dll",
+        output_dir=output_dir,
+        reuse_existing=True,
+    )
+
+    assert calls == ["FAM_REUSE"]
+    assert rows[0]["status"] == "success"
+    assert rows[0]["family_verdict"] == "review_required_uncertain_ms1_shape"
+
+
+def test_batch_does_not_reuse_legacy_trace_json_without_batch_provenance(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    alignment_cells.write_text("feature_family_id\nFAM_REUSE\n", encoding="utf-8")
+    _write_queue(queue_tsv, [_queue_row("FAM_REUSE")])
+    prefix = "fam_reuse_overlay"
+    for suffix in (".png", ".pdf", "_trace_summary.tsv"):
+        (output_dir / f"{prefix}{suffix}").write_text("legacy", encoding="utf-8")
+    (output_dir / f"{prefix}_trace_data.json").write_text(
+        json.dumps(
+            {
+                "family_id": "FAM_REUSE",
+                "mz": 251.165,
+                "ppm": 10.0,
+                "rt_min": 1.0,
+                "rt_max": 1.2,
+                "evidence_summary": {
+                    "family_verdict": "ms1_shape_supports_family_backfill",
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    calls: list[str] = []
+
+    def fake_load_family_cells(_alignment_cells: Path, family_id: str) -> list[str]:
+        calls.append(family_id)
+        return [family_id]
+
+    monkeypatch.setattr(batch.overlay_plot, "load_family_cells", fake_load_family_cells)
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "extract_family_trace_rows",
+        lambda **_kwargs: ["trace-row"],
+    )
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "write_family_ms1_overlay_outputs",
+        lambda **kwargs: overlay_plot.FamilyMs1OverlayOutputs(
+            png_path=output_dir / f"{kwargs['output_prefix']}.png",
+            pdf_path=output_dir / f"{kwargs['output_prefix']}.pdf",
+            summary_tsv=output_dir / f"{kwargs['output_prefix']}_trace_summary.tsv",
+            trace_data_json=output_dir / f"{kwargs['output_prefix']}_trace_data.json",
+        ),
+    )
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "build_family_ms1_evidence_summary",
+        lambda _rows: {"family_verdict": "review_required_uncertain_ms1_shape"},
+    )
+
+    rows = batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=tmp_path / "raw",
+        dll_dir=tmp_path / "dll",
+        output_dir=output_dir,
+        reuse_existing=True,
+    )
+
+    assert calls == ["FAM_REUSE"]
+    assert rows[0]["family_verdict"] == "review_required_uncertain_ms1_shape"
 
 
 def test_markdown_blocks_top30_expansion_for_review_required_family(
@@ -278,7 +502,9 @@ def test_family_failure_is_recorded_and_main_exits_2(
     monkeypatch,
 ) -> None:
     queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
     output_dir = tmp_path / "out"
+    alignment_cells.write_text("feature_family_id\nFAM_FAIL\n", encoding="utf-8")
     _write_queue(queue_tsv, [_queue_row("FAM_FAIL")])
 
     def fake_load_family_cells(_alignment_cells: Path, _family_id: str) -> list[str]:
@@ -291,7 +517,7 @@ def test_family_failure_is_recorded_and_main_exits_2(
             "--review-queue-tsv",
             str(queue_tsv),
             "--alignment-cells",
-            str(tmp_path / "alignment_cells.tsv"),
+            str(alignment_cells),
             "--raw-dir",
             str(tmp_path / "raw"),
             "--dll-dir",
@@ -403,3 +629,7 @@ def _batch_row(
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as fh:
         return list(csv.DictReader(fh, delimiter="\t"))
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()

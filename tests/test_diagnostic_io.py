@@ -110,6 +110,7 @@ def test_read_tsv_required_accepts_utf8_sig_and_validates_columns(
 
 def test_shared_scalar_parsers_match_diagnostic_loader_contracts() -> None:
     assert optional_float(" 1.25 ") == 1.25
+    assert optional_float("'-8.6973") == -8.6973
     assert optional_float(float("inf")) is None
     assert optional_float("not numeric") is None
     assert optional_int("3.9") == 3

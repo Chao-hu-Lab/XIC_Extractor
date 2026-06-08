@@ -119,8 +119,11 @@ _REVIEW_CATEGORY_LABELS = {
     "missing_evidence": "Missing evidence",
 }
 _DEFAULT_FILTER_CATEGORY = "product_rows"
+_HTML_FULL_RENDER_GROUP_LIMIT = 1500
+_HTML_INCONCLUSIVE_SAMPLE_LIMIT = 200
 _REVIEW_FILTER_LABELS = {
     "product_rows": "Product rows",
+    "projection_accepts": "Projection accepts",
     **_REVIEW_CATEGORY_LABELS,
     "debug_rows": "Duplicate / audit debug",
 }
@@ -286,6 +289,7 @@ class ShadowProjectionCell:
     projected_matrix_written: bool = False
     projected_matrix_value: str = ""
     projection_authority: str = ""
+    product_authority_chain: str = ""
     detected_anchor_count: str = ""
     rescued_cell_count: str = ""
     request_window_overlap: str = ""
@@ -849,17 +853,42 @@ def write_reconciliation_gallery_html(
 
     path.parent.mkdir(parents=True, exist_ok=True)
     groups = sorted(index.groups, key=_group_sort_key)
-    representatives_by_group = _representatives_by_group(index.representative_cells)
-    shadow_by_group = _shadow_policy_cells_by_group(index.shadow_policy_cells)
-    shadow_by_family = _shadow_policy_cells_by_family(index.shadow_policy_cells)
-    projection_by_group = _shadow_projection_cells_by_group(
+    projection_accept_keys = _shadow_projection_accept_group_keys(
         index.shadow_projection_cells,
+    )
+    html_groups = _html_render_groups(
+        groups,
+        projection_accept_keys=projection_accept_keys,
+    )
+    html_group_keys = {
+        (group.feature_family_id, group.seed_group_id) for group in html_groups
+    }
+    html_family_ids = {group.feature_family_id for group in html_groups}
+    html_shadow_policy_cells = tuple(
+        cell
+        for cell in index.shadow_policy_cells
+        if (cell.feature_family_id, cell.seed_group_id) in html_group_keys
+    )
+    html_shadow_projection_cells = tuple(
+        cell
+        for cell in index.shadow_projection_cells
+        if (cell.feature_family_id, cell.seed_group_id) in html_group_keys
+    )
+    representatives_by_group = _representatives_by_group(index.representative_cells)
+    shadow_by_group = _shadow_policy_cells_by_group(html_shadow_policy_cells)
+    shadow_by_family = _shadow_policy_cells_by_family(html_shadow_policy_cells)
+    projection_by_group = _shadow_projection_cells_by_group(
+        html_shadow_projection_cells,
     )
     projection_by_family = _shadow_projection_cells_by_family(
-        index.shadow_projection_cells,
+        html_shadow_projection_cells,
     )
     target_context_by_family = _target_benchmark_contexts_by_family(
-        index.target_benchmark_contexts,
+        tuple(
+            context
+            for context in index.target_benchmark_contexts
+            if any(family in html_family_ids for family in context.feature_family_ids)
+        ),
     )
     lines = [
         "<!doctype html>",
@@ -876,19 +905,20 @@ def write_reconciliation_gallery_html(
         "<main>",
         "<h1>Backfill Evidence Reconciliation</h1>",
         *_summary_html(index, output_paths, html_path=path),
+        *_html_scope_notice(groups, html_groups),
         *_filter_html(
-            total_families=len(_family_groups(groups)),
-            default_visible_families=_default_visible_family_count(groups),
+            total_families=len(_family_groups(html_groups)),
+            default_visible_families=_default_visible_family_count(html_groups),
         ),
     ]
-    if not groups:
+    if not html_groups:
         lines.append(
             '<p class="empty-state">沒有 backfill family/seed group 可審閱。</p>',
         )
     else:
         lines.extend(
             _table_html(
-                groups,
+                html_groups,
                 representatives_by_group=representatives_by_group,
                 shadow_policy_cells_by_group=shadow_by_group,
                 shadow_policy_cells_by_family=shadow_by_family,
@@ -902,6 +932,76 @@ def write_reconciliation_gallery_html(
         lines.extend(_lightbox_html())
     lines.extend(["</main>", _lightbox_script(), "</body>", "</html>"])
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _html_render_groups(
+    groups: Sequence[ReconciliationGroup],
+    *,
+    projection_accept_keys: set[tuple[str, str]] | None = None,
+) -> tuple[ReconciliationGroup, ...]:
+    projection_accept_keys = projection_accept_keys or set()
+    sorted_groups = tuple(sorted(groups, key=_group_sort_key))
+    if len(sorted_groups) <= _HTML_FULL_RENDER_GROUP_LIMIT:
+        return sorted_groups
+    priority_groups = [
+        group
+        for group in sorted_groups
+        if _html_priority_group(group, projection_accept_keys=projection_accept_keys)
+    ]
+    priority_keys = {
+        (group.feature_family_id, group.seed_group_id) for group in priority_groups
+    }
+    inconclusive_sample = [
+        group
+        for group in sorted_groups
+        if (group.feature_family_id, group.seed_group_id) not in priority_keys
+    ][: _HTML_INCONCLUSIVE_SAMPLE_LIMIT]
+    return tuple(sorted((*priority_groups, *inconclusive_sample), key=_group_sort_key))
+
+
+def _html_priority_group(
+    group: ReconciliationGroup,
+    *,
+    projection_accept_keys: set[tuple[str, str]],
+) -> bool:
+    return (
+        (group.feature_family_id, group.seed_group_id) in projection_accept_keys
+        or group.reconciliation_class != "evidence_inconclusive"
+        or bool(group.overlay_png_path)
+        or bool(group.overlay_trace_json_path)
+        or bool(group.family_pattern_png_path)
+        or bool(group.family_pattern_trace_json_path)
+        or group.evidence_authority_state == "human_visual_judgment_only"
+    )
+
+
+def _shadow_projection_accept_group_keys(
+    cells: Sequence[ShadowProjectionCell],
+) -> set[tuple[str, str]]:
+    return {
+        (cell.feature_family_id, cell.seed_group_id)
+        for cell in cells
+        if _is_projected_new_accept(cell)
+    }
+
+
+def _html_scope_notice(
+    all_groups: Sequence[ReconciliationGroup],
+    html_groups: Sequence[ReconciliationGroup],
+) -> list[str]:
+    if len(all_groups) == len(html_groups):
+        return []
+    hidden = len(all_groups) - len(html_groups)
+    return [
+        '<div class="html-scope-note" role="note">',
+        (
+            f"HTML 顯示 {_escape(str(len(html_groups)))} / "
+            f"{_escape(str(len(all_groups)))} groups；"
+            f"{_escape(str(hidden))} 個低資訊量 inconclusive rows 只保留在 TSV/JSON。"
+        ),
+        "完整機器索引仍在 groups TSV 與 representatives TSV，產品決策未改變。",
+        "</div>",
+    ]
 
 
 def _read_required_tsv(
@@ -2244,10 +2344,12 @@ def _review_category(reconciliation_class: str) -> str:
 
 def _family_filter_categories(
     groups: Sequence[ReconciliationGroup],
+    shadow_projection_cells: Sequence[ShadowProjectionCell] = (),
 ) -> tuple[str, ...]:
     categories: list[str] = []
     for group in groups:
         categories.extend(_group_filter_categories(group))
+    categories.extend(_shadow_projection_filter_categories(shadow_projection_cells))
     return tuple(_ordered_unique(categories))
 
 
@@ -2271,6 +2373,25 @@ def _debug_only_group(group: ReconciliationGroup) -> bool:
             and group.duplicate_assigned_cell_count > 0
             and group.accepted_cell_count == 0
         )
+    )
+
+
+def _shadow_projection_filter_categories(
+    cells: Sequence[ShadowProjectionCell],
+) -> tuple[str, ...]:
+    if any(_is_projected_new_accept(cell) for cell in cells):
+        return ("projection_accepts",)
+    return ()
+
+
+def _is_projected_new_accept(cell: ShadowProjectionCell) -> bool:
+    projected_value = optional_float(cell.projected_matrix_value)
+    return (
+        cell.shadow_decision == "accept"
+        and cell.projected_matrix_written
+        and not cell.current_matrix_written
+        and projected_value is not None
+        and projected_value > 0
     )
 
 
@@ -2557,12 +2678,23 @@ def _family_table_row(
 ) -> list[str]:
     ordered_groups = tuple(sorted(family_groups, key=_group_sort_key))
     group = ordered_groups[0]
+    family_projection_cells = _shadow_projection_cells_for_family_groups(
+        ordered_groups,
+        shadow_projection_cells_by_group=shadow_projection_cells_by_group,
+        shadow_projection_cells_by_family=shadow_projection_cells_by_family,
+    )
     classes = " ".join(
         _ordered_unique(row.reconciliation_class for row in ordered_groups),
     )
-    categories = " ".join(_family_filter_categories(ordered_groups))
+    categories = " ".join(
+        _family_filter_categories(ordered_groups, family_projection_cells),
+    )
     search_blob = _escape_attr(
-        _family_search_blob(ordered_groups, target_benchmark_contexts),
+        _family_search_blob(
+            ordered_groups,
+            target_benchmark_contexts,
+            family_projection_cells,
+        ),
     )
     row = [
         (
@@ -2670,7 +2802,8 @@ def _consolidated_seed_alias_rows(
         shadow_projection_cells_by_family=shadow_projection_cells_by_family,
     )
     representatives = _representatives_for_groups(groups, representatives_by_group)
-    category = " ".join(_family_filter_categories(groups))
+    category = " ".join(_family_filter_categories(groups, projection_cells))
+    search_blob = _family_search_blob(groups, (), projection_cells)
     return [
         (
             '<tr class="seed-decision-row consolidated-seed-row" '
@@ -2678,7 +2811,7 @@ def _consolidated_seed_alias_rows(
             f'data-class="{_escape_attr(base.reconciliation_class)}" '
             f'data-category="{_escape_attr(category)}" '
             f'data-detail-row="{_escape_attr(detail_id)}" '
-            f'data-search="{_escape_attr(_family_search_blob(groups))}">'
+            f'data-search="{_escape_attr(search_blob)}">'
         ),
         (
             '<td class="cell-priority seed-rank" data-label="rank">'
@@ -2948,6 +3081,7 @@ def _consolidated_seed_alias_details_html(
         "The aliases remain below as provenance; they are not separate peak "
         "decisions.</p>"
         + _seed_alias_table_html(groups, html_path)
+        + _projection_accept_cells_html(groups, shadow_projection_cells, html_path)
         + _details_html(
             base,
             representatives,
@@ -2958,6 +3092,73 @@ def _consolidated_seed_alias_details_html(
             input_artifacts=input_artifacts,
             include_seed_context=False,
         )
+    )
+
+
+def _projection_accept_cells_html(
+    groups: Sequence[ReconciliationGroup],
+    cells: Sequence[ShadowProjectionCell],
+    html_path: Path,
+) -> str:
+    accepted = tuple(
+        cell
+        for cell in sorted(cells, key=_shadow_projection_cell_sort_key)
+        if _is_projected_new_accept(cell)
+    )
+    if not accepted:
+        return ""
+    groups_by_seed = {group.seed_group_id: group for group in groups}
+    rows = "".join(
+        "<tr>"
+        f"<td>{_escape(cell.sample_stem)}</td>"
+        "<td>"
+        f"{_projection_accept_seed_hint_html(groups_by_seed.get(cell.seed_group_id))}"
+        f"<code>{_escape(cell.seed_group_id)}</code>"
+        "</td>"
+        "<td>"
+        f"{_projection_matrix_state_html(cell.current_matrix_written)}"
+        " -> "
+        f"{_projection_matrix_state_html(cell.projected_matrix_written)}"
+        "</td>"
+        "<td>"
+        f"{_component_list_html(cell.shadow_reasons) or 'none'}"
+        f"{_shadow_projection_warnings_html(cell.shadow_warnings)}"
+        "</td>"
+        f"<td>{_shadow_projection_evidence_html(cell)}</td>"
+        f"<td>{_shadow_projection_overlay_link_html(cell, html_path)}</td>"
+        "</tr>"
+        for cell in accepted
+    )
+    return (
+        '<section class="projection-accept-index">'
+        "<h3>Projection accept cells</h3>"
+        '<p class="chain-note">'
+        "Only blank review-rescued cells that shadow projection would turn into "
+        "writes are listed here; projection_only, product output is unchanged.</p>"
+        '<div class="seed-alias-table-wrap">'
+        '<table class="seed-alias-table projection-accept-table">'
+        "<thead><tr>"
+        '<th scope="col">sample</th>'
+        '<th scope="col">seed request</th>'
+        '<th scope="col">decision</th>'
+        '<th scope="col">reason / warning</th>'
+        '<th scope="col">MS1 product rule / optional context</th>'
+        '<th scope="col">overlay</th>'
+        "</tr></thead>"
+        f"<tbody>{rows}</tbody></table></div>"
+        "</section>"
+    )
+
+
+def _projection_accept_seed_hint_html(group: ReconciliationGroup | None) -> str:
+    if group is None:
+        return '<span class="seed-summary">seed not matched in gallery row</span>'
+    return (
+        '<span class="seed-summary">'
+        f"m/z {_escape(group.seed_mz or 'unknown')} · "
+        f"RT {_escape(group.seed_rt or 'unknown')} · "
+        f"window {_escape(group.seed_rt_window or 'unknown')}"
+        "</span>"
     )
 
 
@@ -3049,7 +3250,14 @@ def _seed_decision_rows(
         (group.feature_family_id, group.seed_group_id),
         (),
     )
-    category = " ".join(_group_filter_categories(group))
+    category = " ".join(
+        _ordered_unique(
+            (
+                *_group_filter_categories(group),
+                *_shadow_projection_filter_categories(projection_cells),
+            ),
+        ),
+    )
     return [
         (
             '<tr class="seed-decision-row" data-family-section="'
@@ -3057,7 +3265,7 @@ def _seed_decision_rows(
             f'data-class="{_escape_attr(group.reconciliation_class)}" '
             f'data-category="{_escape_attr(category)}" '
             f'data-detail-row="{_escape_attr(detail_id)}" '
-            f'data-search="{_escape_attr(_search_blob(group))}">'
+            f'data-search="{_escape_attr(_search_blob(group, projection_cells))}">'
         ),
         (
             '<td class="cell-priority seed-rank" data-label="rank">'
@@ -3704,11 +3912,11 @@ def _details_html(
             css_class="shadow-policy-chain",
         )
         + _chain_item_html(
-            "Candidate MS2 / NL or product-grade support",
-            group.evidence_authority_state,
+            "Optional Candidate MS2 / review context",
+            "not a backfill gate",
             _component_list_html(group.product_grade_support_components)
             or _component_list_html(group.review_only_visual_components)
-            or '<p class="chain-note">No product-grade support component supplied.</p>',
+            or '<p class="chain-note">No optional MS2/review context supplied.</p>',
         )
         + _chain_item_html(
             "blockers / missing evidence",
@@ -4043,7 +4251,7 @@ def _shadow_projection_cells_html(
         f"{_shadow_projection_warnings_html(cell.shadow_warnings)}"
         "</td>"
         "<td>"
-        f"{_escape(_shadow_projection_metric_text(cell))}"
+        f"{_shadow_projection_evidence_html(cell)}"
         "</td>"
         f"<td>{_shadow_projection_overlay_link_html(cell, html_path)}</td>"
         "</tr>"
@@ -4094,6 +4302,19 @@ def _shadow_projection_metric_text(cell: ShadowProjectionCell) -> str:
     if cell.evidence_gate_status:
         parts.append(f"gate={cell.evidence_gate_status}")
     return " · ".join(parts) or "not supplied"
+
+
+def _shadow_projection_evidence_html(cell: ShadowProjectionCell) -> str:
+    metric = _escape(_shadow_projection_metric_text(cell))
+    if not cell.product_authority_chain:
+        return metric
+    return (
+        metric
+        + '<div class="projection-authority-chain">'
+        + "<span>MS1 product rule / optional context chain</span> "
+        + _escape(cell.product_authority_chain)
+        + "</div>"
+    )
 
 
 def _shadow_projection_overlay_link_html(
@@ -4500,6 +4721,7 @@ summary:focus-visible { outline: 3px solid var(--focus); }
 .authority-note,
 .artifact-strip,
 .provenance-panel,
+.html-scope-note,
 .filters {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -4584,6 +4806,13 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   white-space: nowrap;
   font-weight: 700;
 }
+.html-scope-note {
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border-left: 5px solid var(--blue);
+  color: #334155;
+  font-weight: 700;
+}
 .filters {
   display: flex;
   flex-wrap: wrap;
@@ -4653,7 +4882,7 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   overflow-wrap: anywhere;
   background: var(--row-bg, var(--surface));
 }
-.review-table th {
+.review-table thead th {
   position: sticky;
   top: 0;
   z-index: 4;
@@ -4679,20 +4908,12 @@ summary:focus-visible { outline: 3px solid var(--focus); }
 .review-table tbody tr.seed-decision-row:nth-of-type(even) {
   --row-bg: var(--surface-muted);
 }
-.review-table th:nth-child(1),
 .review-table td:nth-child(1) {
-  position: sticky;
-  left: 0;
-  z-index: 3;
   text-align: center;
   vertical-align: middle;
   font-variant-numeric: tabular-nums;
 }
-.review-table th:nth-child(2),
 .review-table tbody th[scope="row"] {
-  position: sticky;
-  left: 54px;
-  z-index: 3;
   box-shadow: 1px 0 0 var(--line-soft);
 }
 .review-table thead th:nth-child(1),
@@ -5157,6 +5378,30 @@ details summary {
   border: 1px solid var(--line-soft);
   overflow-wrap: anywhere;
 }
+.projection-accept-index {
+  margin: 10px 0 12px;
+}
+.projection-accept-index h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.projection-accept-table {
+  min-width: 980px;
+}
+.projection-authority-chain {
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 3px solid var(--ok);
+  color: #334155;
+  font-weight: 700;
+}
+.projection-authority-chain span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
 .gap-label {
   color: var(--muted);
   font-size: 11px;
@@ -5433,7 +5678,10 @@ def _badge_label(value: str) -> str:
     return labels.get(value, text_value(value).replace("_", " "))
 
 
-def _search_blob(group: ReconciliationGroup) -> str:
+def _search_blob(
+    group: ReconciliationGroup,
+    shadow_projection_cells: Sequence[ShadowProjectionCell] = (),
+) -> str:
     return " ".join(
         (
             group.feature_family_id,
@@ -5445,6 +5693,7 @@ def _search_blob(group: ReconciliationGroup) -> str:
             group.top_blocker,
             ";".join(group.missing_evidence),
             ";".join(group.source_warnings),
+            _shadow_projection_search_blob(shadow_projection_cells),
         ),
     )
 
@@ -5452,6 +5701,7 @@ def _search_blob(group: ReconciliationGroup) -> str:
 def _family_search_blob(
     groups: Sequence[ReconciliationGroup],
     target_benchmark_contexts: Sequence[TargetBenchmarkContext] = (),
+    shadow_projection_cells: Sequence[ShadowProjectionCell] = (),
 ) -> str:
     target_text = " ".join(
         " ".join(
@@ -5464,7 +5714,36 @@ def _family_search_blob(
         )
         for context in target_benchmark_contexts
     )
-    return " ".join((*(_search_blob(group) for group in groups), target_text))
+    return " ".join(
+        (
+            *(_search_blob(group) for group in groups),
+            target_text,
+            _shadow_projection_search_blob(shadow_projection_cells),
+        ),
+    )
+
+
+def _shadow_projection_search_blob(
+    cells: Sequence[ShadowProjectionCell],
+) -> str:
+    terms: list[str] = []
+    for cell in cells:
+        terms.extend(
+            (
+                cell.feature_family_id,
+                cell.seed_group_id,
+                cell.sample_stem,
+                cell.current_production_status,
+                cell.shadow_decision,
+                cell.projection_authority,
+                cell.product_authority_chain,
+                ";".join(cell.shadow_reasons),
+                ";".join(cell.shadow_warnings),
+            ),
+        )
+        if _is_projected_new_accept(cell):
+            terms.extend(("projection_accept", "projected_new_write"))
+    return " ".join(term for term in terms if term)
 
 
 def _representatives_by_group(
@@ -5531,6 +5810,7 @@ def _shadow_projection_cell_from_row(
         ),
         projected_matrix_value=text_value(row.get("projected_matrix_value")),
         projection_authority=text_value(row.get("projection_authority")),
+        product_authority_chain=text_value(row.get("product_authority_chain")),
         detected_anchor_count=text_value(row.get("detected_anchor_count")),
         rescued_cell_count=text_value(row.get("rescued_cell_count")),
         request_window_overlap=(
@@ -5752,7 +6032,7 @@ def _shadow_policy_compact_summary(
     labels = (
         ("fill_now", "fill"),
         ("would_fill_under_ms1_rt_policy", "would"),
-        ("needs_ms2_or_policy", "policy"),
+        ("needs_ms1_same_peak_evidence", "needs MS1"),
         ("blocked", "block"),
     )
     parts = [f"{label} {counts[key]}" for key, label in labels if counts[key]]

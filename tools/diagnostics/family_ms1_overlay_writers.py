@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -41,6 +41,7 @@ def write_family_ms1_overlay_outputs(
     rt_min: float,
     rt_max: float,
     family_center_rt: float | None,
+    provenance: Mapping[str, object] | None = None,
     drift_lookup: DriftLookupProtocol | None = None,
 ) -> FamilyMs1OverlayOutputs:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -61,6 +62,7 @@ def write_family_ms1_overlay_outputs(
         rt_min=rt_min,
         rt_max=rt_max,
         family_center_rt=family_center_rt,
+        provenance=provenance,
     )
     render_family_ms1_overlay(
         rows=rows,
@@ -171,6 +173,7 @@ def _write_trace_data(
     rt_min: float,
     rt_max: float,
     family_center_rt: float | None,
+    provenance: Mapping[str, object] | None = None,
 ) -> None:
     shape_similarity = _apex_aligned_shape_similarity(rows)
     absolute_shape_similarity = _absolute_own_max_shape_similarity(rows)
@@ -181,6 +184,7 @@ def _write_trace_data(
         "rt_min": rt_min,
         "rt_max": rt_max,
         "family_center_rt": family_center_rt,
+        "provenance": dict(provenance or {}),
         "trace_count": len(rows),
         "evidence_summary": build_family_ms1_evidence_summary(rows),
         "traces": [

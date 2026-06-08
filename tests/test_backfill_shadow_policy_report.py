@@ -65,7 +65,7 @@ def test_cli_writes_cell_level_shadow_policy_report(tmp_path: Path) -> None:
         "would_fill_under_ms1_rt_policy"
     )
     assert would_fill["decision_reason"] == "ms1_rt_shadow_supported"
-    assert would_fill["production_gap"] == "needs_ms2_or_policy"
+    assert would_fill["production_gap"] == ""
     assert would_fill["own_max_shape_supported_fraction"] == "0.875"
     assert would_fill["overlay_png_path"] == "plots/fam-would.png"
 
@@ -102,7 +102,7 @@ def test_cli_writes_cell_level_shadow_policy_report(tmp_path: Path) -> None:
         "fill_now": 1,
         "would_fill_under_ms1_rt_policy": 1,
     }
-    assert payload["production_gap_counts"] == {"needs_ms2_or_policy": 1}
+    assert payload["production_gap_counts"] == {}
     assert payload["matrix_contract_changed"] is False
     assert payload["product_behavior_changed"] is False
 

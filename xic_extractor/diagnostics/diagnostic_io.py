@@ -118,8 +118,11 @@ def optional_float(value: object) -> float | None:
         return None
     if isinstance(value, int | float):
         return float(value) if math.isfinite(value) else None
+    text = str(value).strip()
+    if text.startswith("'"):
+        text = text[1:].strip()
     try:
-        parsed = float(str(value).strip())
+        parsed = float(text)
     except ValueError:
         return None
     return parsed if math.isfinite(parsed) else None

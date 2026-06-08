@@ -71,6 +71,9 @@ ALIGNMENT_REVIEW_COLUMNS = (
 ALIGNMENT_CELLS_COLUMNS = (
     "feature_family_id",
     *CROSS_SAMPLE_GROUP_CELL_COLUMNS,
+    "peak_hypothesis_status",
+    "product_selection_blocker",
+    "rt_mode_status",
     "sample_stem",
     "status",
     "area",
@@ -240,6 +243,9 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
                 "gap_fill_state": cell.gap_fill_state,
                 "gap_fill_reason": cell.gap_fill_reason,
                 "missing_observation_state": cell.missing_observation_state,
+                "peak_hypothesis_status": cell.peak_hypothesis_status,
+                "product_selection_blocker": cell.product_selection_blocker,
+                "rt_mode_status": cell.rt_mode_status,
                 "group_claim_state": cell.group_claim_state,
                 "claim_winner_group_hypothesis_id": (
                     cell.claim_winner_group_hypothesis_id

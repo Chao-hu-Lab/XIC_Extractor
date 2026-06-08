@@ -74,8 +74,9 @@ contract, machine-readable reason/status fields, and regression tests.
   each trace to its own local max. The sidecar evidence level must remain
   `trace_constellation`; `sample_constellation` and
   `sample_boundary_constellation` are context unless promoted under a separate
-  contract. Every projected backfill evidence sidecar row, including MS1, QC,
-  RT-drift, and Candidate MS2 rows, must also be product-authorized
+  contract. Every projected backfill evidence sidecar row that is used as
+  product support, including MS1, QC, RT-drift, and optional Candidate MS2 rows,
+  must also be product-authorized
   (`diagnostic_only=FALSE` plus `product_authority_status=product_authorized`,
   `product_authority_scope=feature_family_sample`, and a non-empty
   `product_authority_source`) before projection can feed product promotion.
@@ -86,10 +87,11 @@ contract, machine-readable reason/status fields, and regression tests.
   The current MS1 own-max authority floor is strict: observed anchor own-max
   shape similarity must be above `0.5` by default, and an allowlist threshold can
   tighten but not lower that floor without a new approved contract. This avoids
-  treating a different peak inside the same broad family window, or a
-  review-only MS2 context, as backfill evidence. Duplicate product sidecar rows
-  for the same `(feature_family_id, sample_stem)` are not ordered preferences;
-  they are an ambiguous evidence state and must fail closed.
+  treating a different peak inside the same broad family window as backfill
+  evidence. Review-only MS2 context may be displayed for interpretation, but it
+  is not required for backfill promotion. Duplicate product sidecar rows for the
+  same `(feature_family_id, sample_stem)` are not ordered preferences; they are
+  an ambiguous evidence state and must fail closed.
 - Product-authorized MS1 own-max rows must also prove artifact provenance before
   projection: the recorded `family_ms1_overlay_trace_data_json` must resolve to
   a readable overlay JSON, declare the same top-level `family_id`, contain exactly
@@ -103,20 +105,29 @@ contract, machine-readable reason/status fields, and regression tests.
   `candidate_ms2_evidence_level`, and `ms2_alignment_source`. Only
   `supportive` or `partial_support` rows at `sample_candidate_aligned` or
   `sample_boundary_aligned` can become product-authorized. `not_observed` rows
-  may document DDA opportunity or non-dispositive missing-NL context, but they
-  do not satisfy the same-cell MS2/NL support requirement.
+  may document DDA opportunity or non-dispositive missing-NL context. Candidate
+  MS2 is auxiliary context for rescued/backfilled cells because those cells
+  would already be detected if they had the required NL tag themselves.
 - A rescued cell can support high/weak backfill-dependent matrix promotion only
-  when the typed backfill projection explains all three evidence groups:
+  when the typed backfill projection explains the required evidence groups:
   preferred-RT proximity or compatible drift/iRT correction; same-peak anchor
-  MS1 own-max pattern support; and direct candidate-aligned MS2/NL support for
-  the rescued cell. QC pattern support and DDA-missing-NL context may remain
-  visible as review context, but they do not replace anchor MS1 or a same-cell
-  candidate MS2 support row until a seed/anchor-scoped product contract exists.
+  MS1 own-max pattern support; and a positive selected matrix value for the
+  rescued cell. QC pattern support, Candidate MS2 rows, and DDA-missing-NL
+  context may remain visible as review context or supporting provenance, but
+  they do not replace anchor MS1 same-peak evidence and are not required when
+  MS1 same-peak evidence is product-authorized.
+- Wrong-peak or unresolved hypothesis blockers remain fail-closed for rescued
+  cells. Same-peak MS1 support must not override explicit duplicate-loser,
+  primary-loser, mode-split, cross-mode-rescue, or `consolidation_no_go`
+  provenance until those rows are consolidated into the product hypothesis by a
+  reviewed production rule.
 - Scan support and trace quality remain assessability/coverage evidence. They
   may block low-quality rescue, but they are not independent identity evidence.
-- Candidate-aligned MS2 conflict, MS1/QC pattern conflict, or unexplained RT
+- MS1/QC pattern conflict, wrong-peak hypothesis evidence, or unexplained RT
   outside the preferred RT band keeps the rescue review-only even if the peak is
-  quantifiable inside the broader owner-backfill query window.
+  quantifiable inside the broader owner-backfill query window. Candidate-aligned
+  MS2 conflict is review context unless it is tied to a wrong-peak/hypothesis
+  blocker; it is not an automatic veto of MS1 same-peak backfill support.
 - Pre-backfill consolidation remains a separate high-risk identity-row problem.
   Do not use the backfill evidence gate as proof that a 180 sec consolidation
   row is chemically valid.
