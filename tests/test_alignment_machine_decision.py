@@ -85,6 +85,36 @@ def test_one_detected_seed_supported_rescue_projects_keep_provisional() -> None:
     assert vector.recommended_action == "keep_provisional"
 
 
+def test_single_detected_same_peak_support_has_no_seed_blocker() -> None:
+    vector = project_machine_decision(
+        _review_row(
+            include="TRUE",
+            decision="production_family",
+            confidence="medium",
+            reason="cell_evidence_supported_backfill",
+            primary_evidence="owner_complete_link",
+            detected=1,
+            rescued=2,
+            flags=(
+                "single_detected_seed;skip_expensive_evidence;"
+                "high_backfill_dependency_capped"
+            ),
+        ),
+        _cell_rows(detected=1, rescued=2, rescue_typed_backfill_support=True),
+    )
+
+    assert vector.matrix_role == "primary"
+    assert vector.support_reasons == (
+        "detected_seed",
+        "ms1_backfill_supported",
+        "rt_coherent",
+        "owner_complete_link",
+    )
+    assert vector.blockers == ()
+    assert vector.confidence == "medium"
+    assert vector.recommended_action == "use"
+
+
 def test_rescue_only_row_projects_to_exclude_with_explicit_blocker() -> None:
     vector = project_machine_decision(
         _review_row(

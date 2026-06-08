@@ -92,16 +92,7 @@ def _plot_unified_legend(ax: Any) -> None:
             lw=1,
             ls="--",
             alpha=0.6,
-            label="family center / aligned apex",
-        ),
-        Line2D(
-            [0],
-            [0],
-            color="0.35",
-            lw=1,
-            ls=":",
-            alpha=0.7,
-            label="review threshold",
+            label="family center",
         ),
     ]
     ax.legend(

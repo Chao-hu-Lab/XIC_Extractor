@@ -254,10 +254,11 @@ backfill as filling a whole family at once. The promotion gate must distinguish:
 
 Allowed production promotion paths:
 
-- `minimum detected support`: high-backfill promotion requires at least two
-  detected identity cells. A single detected seed can remain visible as a risky
-  provisional row, but cannot be promoted only because owner backfill found local
-  MS1 peaks in other samples;
+- `minimum detected support`: high-backfill promotion requires either at least
+  two detected identity cells or one detected seed plus product-authorized
+  same-peak rescue evidence. A single detected seed can remain visible as a
+  risky provisional row, but cannot be promoted only because owner backfill found
+  local MS1 peaks in other samples;
 - `RT + chemical`: the cell has candidate-aligned fragment, product, or neutral
   loss evidence in the same selected region;
 - `RT + MS1 shape`: DDA / MS2 evidence is weak or absent, but the rescued cell

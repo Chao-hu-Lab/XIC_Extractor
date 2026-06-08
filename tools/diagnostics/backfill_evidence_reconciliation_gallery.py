@@ -29,6 +29,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             seed_aware_summary_tsv=args.seed_aware_summary_tsv,
             candidate_gate_tsv=args.candidate_gate_tsv,
             tier2_trace_evidence_tsv=args.tier2_trace_evidence_tsv,
+            shadow_policy_cells_tsv=args.shadow_policy_cells_tsv,
+            shadow_projection_cells_tsv=args.shadow_projection_cells_tsv,
+            targeted_istd_benchmark_summary_tsv=(
+                args.targeted_istd_benchmark_summary_tsv
+            ),
             source_run_id=args.source_run_id or "",
         )
     except (OSError, ValueError) as exc:
@@ -99,6 +104,28 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--tier2-trace-evidence-tsv",
         type=Path,
         help="Optional alignment_tier2_trace_evidence.tsv for provenance display.",
+    )
+    parser.add_argument(
+        "--shadow-policy-cells-tsv",
+        type=Path,
+        help="Optional backfill_shadow_policy_cells.tsv for HTML provenance display.",
+    )
+    parser.add_argument(
+        "--shadow-production-projection-cells-tsv",
+        dest="shadow_projection_cells_tsv",
+        type=Path,
+        help=(
+            "Optional shadow_production_projection_cells.tsv for current vs "
+            "projected decision display."
+        ),
+    )
+    parser.add_argument(
+        "--targeted-istd-benchmark-summary-tsv",
+        type=Path,
+        help=(
+            "Optional targeted_istd_benchmark_summary.tsv for validation-only "
+            "target match context in the HTML gallery."
+        ),
     )
     parser.add_argument(
         "--source-run-id",

@@ -265,13 +265,20 @@ def _apex_aligned_shape_similarity(
         )
     if not traces:
         return {}
-    stack = np.vstack(tuple(traces.values()))
+    reference_traces = [
+        traces[row.sample_stem]
+        for row in rows
+        if row.sample_stem in traces and row.group == "detected_seed"
+    ]
+    if not reference_traces:
+        return {sample: None for sample in traces}
+    stack = np.vstack(tuple(reference_traces))
     finite_columns = np.isfinite(stack).any(axis=0)
     if not np.any(finite_columns):
         return {sample: None for sample in traces}
-    median_trace = np.nanmedian(stack[:, finite_columns], axis=0)
+    detected_anchor_trace = np.nanmedian(stack[:, finite_columns], axis=0)
     return {
-        sample: _pearson_similarity(values[finite_columns], median_trace)
+        sample: _pearson_similarity(values[finite_columns], detected_anchor_trace)
         for sample, values in traces.items()
     }
 

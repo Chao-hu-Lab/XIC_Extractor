@@ -76,11 +76,21 @@ def test_consolidation_promotes_one_primary_row_from_duplicate_claim_family():
     assert _feature_by_id(consolidated, "FAM002").family_center_rt == 8.55
 
 
-def test_consolidation_keeps_different_product_identity_separate():
+def test_consolidation_merges_shared_ms1_peak_across_nl_evidence_tags():
     matrix = AlignmentMatrix(
         clusters=(
-            _feature("FAM001", product_mz=384.0),
-            _feature("FAM002", product_mz=390.0),
+            _feature(
+                "FAM001",
+                product_mz=384.0,
+                observed_loss=116.0,
+                neutral_loss_tag="DNA_dR",
+            ),
+            _feature(
+                "FAM002",
+                product_mz=368.0,
+                observed_loss=132.0,
+                neutral_loss_tag="DNA_R",
+            ),
         ),
         sample_order=("s1", "s2"),
         cells=(
@@ -96,15 +106,20 @@ def test_consolidation_keeps_different_product_identity_separate():
     )
 
     consolidated = consolidate_primary_family_rows(matrix, AlignmentConfig())
+    decisions = build_production_decisions(consolidated, AlignmentConfig())
 
-    assert [cluster.feature_family_id for cluster in consolidated.clusters] == [
-        "FAM001",
-        "FAM002",
+    primary_rows = [
+        row.feature_family_id
+        for row in decisions.rows.values()
+        if row.include_in_primary_matrix
     ]
-    assert all(
-        not getattr(cluster, "review_only", False)
-        for cluster in consolidated.clusters
-    )
+
+    assert primary_rows == ["FAM001"]
+    assert decisions.row("FAM001").accepted_cell_count == 2
+    assert decisions.row("FAM002").include_in_primary_matrix is False
+    evidence = _feature_by_id(consolidated, "FAM001").evidence
+    assert "primary_family_consolidated;family_count=2" in evidence
+    assert "shared_ms1_peak_nl_tags=DNA_R,DNA_dR" in evidence
 
 
 def test_consolidation_prefers_stronger_sample_peak_over_weak_detected_peak():
@@ -394,11 +409,12 @@ def _feature(
     rt: float = 8.5,
     product_mz: float = 384.0,
     observed_loss: float = 116.0,
+    neutral_loss_tag: str = "DNA_dR",
     evidence: str = "single_sample_local_owner",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         feature_family_id=feature_family_id,
-        neutral_loss_tag="DNA_dR",
+        neutral_loss_tag=neutral_loss_tag,
         family_center_mz=mz,
         family_center_rt=rt,
         family_product_mz=product_mz,

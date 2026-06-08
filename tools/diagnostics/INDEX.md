@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-07
-**Total entry-points:** 59
-**Total files (incl. helpers):** 143 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-08
+**Total entry-points:** 62
+**Total files (incl. helpers):** 146 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -26,7 +26,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 1. [Phase Gates (P1/P2/P2b/P2c/P7)](#phase-gates-p1p2p2bp2cp7) — 7 tools
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 10 tools
+4. [Backfill Reviews](#backfill-reviews) — 13 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 6 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 7 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
@@ -315,11 +315,12 @@ decisions, RT normalization, matrix identity).
 
 Three overlapping review axes (seed-level / family-level /
 row-classifier-level), 2 owner-backfill economics tools, 1 reconciliation
-gallery/index surface, 1 Tier 2 RAW trace producer, 1 `diagnostic_only`
-provisional candidate-gate sidecar, and 1 `diagnostic_only` product-retained
-backfill evidence-gate sidecar. The sidecars are not economics axes; they emit
-source-hashed support/blocker/missing-evidence rows while the existing
-review/economics axes remain pending cleanup per audit-note Cluster 2.
+gallery/index surface, 1 MS1+RT shadow-policy report, 1 Tier 2 RAW trace
+producer, 1 `diagnostic_only` provisional candidate-gate sidecar, and 1
+`diagnostic_only` product-retained backfill evidence-gate sidecar. The sidecars
+are not economics axes; they emit source-hashed support/blocker/missing-evidence
+rows while the existing review/economics axes remain pending cleanup per
+audit-note Cluster 2.
 
 ### `seed_aware_backfill_review.py`
 
@@ -375,7 +376,25 @@ review/economics axes remain pending cleanup per audit-note Cluster 2.
 **Purpose**: Emit a `diagnostic_only` machine sidecar for product-retained backfill family/seed groups, linking actual primary-matrix backfill behavior to seed provenance, MS1 overlay support/blockers, missing evidence, and source artifact hashes.
 **Topic group**: `retained_backfill_evidence_gate.py` + `xic_extractor/diagnostics/retained_backfill_evidence_gate.py`
 **Originating spec/goal/plan**: `specs/2026-06-07-backfill-evidence-reconciliation-gallery-design.md`; `goals/2026-06-07-backfill-evidence-reconciliation-productization-goal.md`; `plans/2026-06-07-backfill-evidence-reconciliation-productization-plan.md`
-**Status note**: Writes `alignment_retained_backfill_evidence_gate.tsv`, `alignment_retained_backfill_evidence_gate.json`, and `alignment_retained_backfill_missing_overlay_queue.tsv`. It consumes existing alignment review/cell/matrix, optional owner backfill seed audit, and optional overlay summary TSVs only. `detected=0` families are excluded from main rows and counted separately. Missing-overlay rows with seed provenance are emitted as a queue consumable by `family_ms1_overlay_batch.py`. It does not accept RAW/DLL paths, does not generate overlays, does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbook schemas, or product decisions, and does not declare production readiness.
+**Status note**: Writes `alignment_retained_backfill_evidence_gate.tsv`, `alignment_retained_backfill_evidence_gate.json`, and `alignment_retained_backfill_missing_overlay_queue.tsv`. It consumes existing alignment review/cell/matrix, optional owner backfill seed audit, and optional overlay summary TSVs only. `detected=0` families are excluded from main rows and counted separately. Exact `seed_group_id` overlay rows are required for seed-specific MS1 support/blocker decisions; legacy overlay rows without `seed_group_id` are retained only as family context and are re-queued as `missing_seed_specific_overlay`. Missing-overlay rows with seed provenance are emitted as a queue consumable by `family_ms1_overlay_batch.py`. It does not accept RAW/DLL paths, does not generate overlays, does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbook schemas, or product decisions, and does not declare production readiness.
+
+---
+
+### `backfill_shadow_policy_report.py`
+
+**Purpose**: Emit a `diagnostic_only` cell-level MS1+RT shadow-policy report for retained backfill seed groups, showing which rescued cells already fill now, which would fill under an MS1 own-max + RT policy, which need MS2/policy support, and which are blocked by missing seed/overlay evidence or visual-review blockers.
+**Topic group**: `backfill_shadow_policy_report.py` + `xic_extractor/diagnostics/backfill_shadow_policy.py`
+**Originating spec/goal/plan**: `specs/2026-06-07-backfill-evidence-reconciliation-gallery-design.md`; `goals/2026-06-07-backfill-evidence-reconciliation-productization-goal.md`; `plans/2026-06-07-backfill-evidence-reconciliation-productization-plan.md`
+**Status note**: Writes `backfill_shadow_policy_cells.tsv`, `backfill_shadow_policy_summary.json`, and `backfill_shadow_policy_report.html`. It consumes existing `alignment_cells.tsv`, `alignment_retained_backfill_evidence_gate.tsv`, optional `alignment_matrix.tsv` for source hashing, and optional overlay batch summaries for own-max metric display. The report does not accept RAW/DLL paths, generate overlays, compute a composite score, mutate alignment artifacts, workbook schemas, or product decisions, and remains a calibration surface for a future reviewed production-policy contract.
+
+---
+
+### `shadow_production_projection.py`
+
+**Purpose**: Emit a `shadow_projection_only` cell-level current-production-decision vs projected-decision sidecar for retained backfill seed groups, using formal `build_production_decisions()` as the current product snapshot and applying the reviewed shadow criteria only as a projection.
+**Topic group**: `shadow_production_projection.py` + `xic_extractor/diagnostics/shadow_production_projection.py`
+**Originating spec/goal/plan**: `specs/2026-06-07-backfill-evidence-reconciliation-gallery-design.md`; `goals/2026-06-07-backfill-evidence-reconciliation-productization-goal.md`; `plans/2026-06-07-backfill-evidence-reconciliation-productization-plan.md`
+**Status note**: Writes `shadow_production_projection_cells.tsv` and `shadow_production_projection_summary.json`. Rows expose `current_matrix_written`, `current_matrix_source=production_decision_snapshot`, `current_production_status`, `shadow_decision` (`accept` / `block` / `context`), `projected_matrix_written`, reasons, warnings, detected-anchor count, request-window overlap status, and overlay provenance. `alignment_matrix.tsv` is hashed as source provenance here, not re-parsed as the row/cell authority. This sidecar does not claim a formal same-Gaussian segment oracle; `request_window_shadow_projection_candidate` is a review projection candidate until a separate production activation slice supplies the stricter selected-peak / same-Gaussian evidence. `evidence_conflict`, `review_required_*`, and `same_peak_multi_claim` / DUP rows stay `context` and do not count as projected writes; `local/global` dominance is annotation only and does not hide traces. This tool does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbooks, or product decisions; promotion still requires a separate reviewed production activation slice and RAW validation.
 
 ---
 
@@ -402,7 +421,7 @@ review/economics axes remain pending cleanup per audit-note Cluster 2.
 **Purpose**: Build a `diagnostic_only` / `shadow_review` backfill family/seed-group reconciliation index and HTML gallery from existing alignment, seed-audit, seed-aware, overlay, and candidate-gate artifacts.
 **Topic group**: `backfill_evidence_reconciliation_gallery.py` + `xic_extractor/diagnostics/backfill_reconciliation_gallery.py`
 **Originating spec/goal/plan**: `specs/2026-06-07-backfill-evidence-reconciliation-gallery-design.md`; `goals/2026-06-07-backfill-evidence-reconciliation-productization-goal.md`; `plans/2026-06-07-backfill-evidence-reconciliation-productization-plan.md`
-**Status note**: Writes `backfill_evidence_reconciliation_groups.tsv`, `backfill_evidence_reconciliation_representative_cells.tsv`, `backfill_evidence_reconciliation_summary.json`, and `backfill_evidence_reconciliation_gallery.html`. The gallery is a family-first sticky table with seed groups and representative cells collapsed in row details, plus PNG lightbox links and compact overlay metric notes including own-max absolute-RT shape support. The TSV remains a deterministic family/seed-group machine index. `review_required_*` overlay verdicts are displayed as human visual judgment needs, not hard evidence blockers. It consumes existing artifacts only, does not accept RAW/DLL paths, does not generate overlays, does not invent `backfill_score`, and does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbook schemas, or product decisions. Product promotion remains outside this renderer and requires a separate reviewed allowlist contract plus 8RAW/85RAW validation.
+**Status note**: Writes `backfill_evidence_reconciliation_groups.tsv`, `backfill_evidence_reconciliation_representative_cells.tsv`, `backfill_evidence_reconciliation_summary.json`, and `backfill_evidence_reconciliation_gallery.html`. The gallery is a hypothesis-first sticky table: thin family header rows provide MS1 pattern/drift/multimodal context only, while hypothesis rows are directly visible decision-review rows with representative cells collapsed in row details. Seed requests are provenance, not the primary visual decision unit. When alignment review marks a row as `primary_family_consolidated`, close seed requests are rendered as one MS1 product hypothesis with seed aliases in the evidence drawer instead of separate main-table decisions. The default Focus is `Product rows`; `family_consolidation_loser`, `duplicate_only`, and duplicate-loser audit rows are routed to `Duplicate / audit debug` instead of competing with product candidates in the first view. Family headers summarize detected required-tag anchors and their nearest seed group (`anchors D=... · seed N D=...`). Hypothesis rows show `impact`: without projection input, `NL` is the family detected anchor count, `Fill` is hypothesis rescued/backfilled cells, and `Dup` / `Review` appear only when duplicate-assigned or provisional context is non-zero; this is alignment cell provenance, not target benchmark coverage. With optional `shadow_production_projection_cells.tsv`, the impact column switches to current production-decision writes / review target / projected accept / projected block counts, and the detail drawer shows a cell-level current-decision vs projected-decision table. Overlay links distinguish `family context` from `hypothesis PNG`; if multiple seed aliases share one family-level PNG, the gallery labels it as shared context instead of presenting fake per-seed PNGs. Optional `backfill_shadow_policy_cells.tsv` input is rendered as HTML-only MS1+RT shadow provenance (`fill_now` / `would_fill_under_ms1_rt_policy` / `blocked` / policy gap counts) without changing the reconciliation group TSV schema. Optional `targeted_istd_benchmark_summary.tsv` input is rendered as validation-only target match context in HTML and summary counts; it does not become product identity authority and does not change the group TSV schema. The TSV remains a deterministic family/seed-group machine index. `review_required_*` overlay verdicts are displayed as human visual judgment needs, not hard evidence blockers. It consumes existing artifacts only, does not accept RAW/DLL paths, does not generate overlays, does not invent `backfill_score`, and does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbook schemas, or product decisions. Product promotion remains outside this renderer and requires a separate reviewed allowlist contract plus 8RAW/85RAW validation.
 
 ---
 
@@ -649,6 +668,7 @@ multiple MS1 peak modes.
 **Purpose**: Render MS1 overlay evidence for one alignment feature family.
 **Topic group**: `family_ms1_overlay_plot.py` + `_evidence`, `_models`, `_rendering`, `_rendering_styles`, `_trace`, `_writers` (7 files)
 **Originating spec**: (none found; landed alongside backfill review work)
+**Status note**: Family overlay PNG/PDF is family-context only and intentionally keeps two panels: absolute RT own-max pattern and raw-intensity signal height. The writer also emits sibling `_hypothesis.png` / `_hypothesis.pdf` files that keep apex-aligned MS1 shape on the hypothesis-evidence surface, using detected NL seed traces as the anchor reference instead of letting rescued traces define the reference shape. Detected/rescued selected-peak traces are drawn even when selected/cell local-window peak dominance is below `0.5`; low dominance is an annotation/warning for review, not a visibility gate. The shaded band marks the selected/cell peak segment used for the visual comparison. `--targeted-workbook` / `--sample-info` remain accepted for CLI compatibility, but the current two-panel family-context overlay does not render a drift-corrected iRT panel. Area, apex-delta, shape-similarity scatter, and iRT/mode evidence remain hypothesis/mode questions and should not be put back into the family-context overlay. This renderer remains diagnostic-only and does not change backfill decisions or matrix areas.
 
 ---
 
@@ -657,7 +677,7 @@ multiple MS1 peak modes.
 **Purpose**: Render queued family MS1 overlays from a backfill review report.
 **Topic group**: shares helpers with `family_ms1_overlay_plot`
 **Pairs with**: `family_ms1_backfill_review_report.py` (produces the queue, this consumes it)
-**Status note**: Preserves optional queue `seed_group_id` in `family_ms1_overlay_batch_summary.tsv` so downstream retained-backfill evidence gates can join overlay evidence at seed-group precision. Summary rows carry separate apex-aligned shape metrics and own-max absolute-RT shape / absolute apex cluster metrics; these are evidence notes, not a composite `backfill_score`. Queues without `seed_group_id` remain supported and join as legacy family-level overlay evidence.
+**Status note**: Preserves optional queue `seed_group_id` in `family_ms1_overlay_batch_summary.tsv` so downstream retained-backfill evidence gates can join overlay evidence at seed-group precision. Summary rows carry separate apex-aligned shape metrics and own-max absolute-RT shape / absolute apex cluster metrics; these are evidence notes, not a composite `backfill_score`. Queues without `seed_group_id` remain supported for legacy family context, but seed-specific retained-backfill gates treat them as insufficient and request an exact `seed_group_id` overlay before using visual support/blockers.
 
 ---
 

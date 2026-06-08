@@ -97,8 +97,8 @@ def test_rescue_heavy_row_needs_multiple_detected_owners_for_primary_promotion()
         clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
         cells=(
             _cell("s1", "FAM001", "detected", 100.0),
-            _cell("s2", "FAM001", "rescued", 90.0),
-            _cell("s3", "FAM001", "rescued", 80.0),
+            _cell("s2", "FAM001", "rescued", 90.0, backfill_evidence=False),
+            _cell("s3", "FAM001", "rescued", 80.0, backfill_evidence=False),
         ),
         sample_order=("s1", "s2", "s3"),
     )
@@ -108,14 +108,36 @@ def test_rescue_heavy_row_needs_multiple_detected_owners_for_primary_promotion()
     assert set(decisions.row("FAM001").row_flags) == {
         "single_detected_seed",
         "rescue_heavy",
-        "provisional_retention_candidate",
-        "skip_expensive_evidence",
         "rescue_only_review",
     }
     assert decisions.row("FAM001").accepted_cell_count == 0
     assert decisions.row("FAM001").quantifiable_detected_count == 1
     assert decisions.row("FAM001").quantifiable_rescue_count == 2
     assert decisions.row("FAM001").include_in_primary_matrix is False
+
+
+def test_single_detected_product_authorized_same_peak_rescues_write_matrix_values():
+    matrix = _matrix(
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=1"),),
+        cells=(
+            _cell("seed1", "FAM001", "detected", 100.0),
+            _cell("rescue1", "FAM001", "rescued", 90.0),
+            _cell("rescue2", "FAM001", "rescued", 80.0),
+        ),
+        sample_order=("seed1", "rescue1", "rescue2"),
+    )
+
+    decisions = build_production_decisions(matrix, AlignmentConfig())
+
+    assert decisions.row("FAM001").include_in_primary_matrix is True
+    assert decisions.row("FAM001").identity_decision == "production_family"
+    assert decisions.row("FAM001").identity_reason == CELL_EVIDENCE_SUPPORTED_REASON
+    assert decisions.row("FAM001").accepted_cell_count == 3
+    assert decisions.row("FAM001").accepted_rescue_count == 2
+    assert decisions.cell("FAM001", "seed1").write_matrix_value is True
+    assert decisions.cell("FAM001", "rescue1").production_status == "accepted_rescue"
+    assert decisions.cell("FAM001", "rescue1").write_matrix_value is True
+    assert decisions.cell("FAM001", "rescue1").matrix_value == 90.0
 
 
 def test_extreme_backfill_dependency_row_is_supported_with_capped_warning():
