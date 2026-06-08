@@ -23,8 +23,10 @@ The fix is production-path evidence, not a target exception:
   trace and selected peak boundary;
 - `trace_quality=owner_backfill` still does not count as independent support by
   itself;
-- high-backfill promotion requires at least two detected identity cells, so a
-  single detected seed cannot promote a mostly backfilled row;
+- high-backfill promotion requires either at least two detected identity cells
+  or one detected seed plus product-authorized same-peak rescue evidence; a
+  single detected seed cannot promote a mostly backfilled row from local MS1
+  peak presence alone;
 - supported high-backfill rows are capped at medium confidence and marked with
   `high_backfill_dependency_capped`.
 

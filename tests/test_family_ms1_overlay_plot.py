@@ -128,6 +128,8 @@ def test_write_family_ms1_overlay_outputs_from_synthetic_traces(
 
     assert outputs.png_path.is_file()
     assert outputs.pdf_path.is_file()
+    assert (outputs.png_path.parent / "fam001_ms1_overlay_hypothesis.png").is_file()
+    assert (outputs.png_path.parent / "fam001_ms1_overlay_hypothesis.pdf").is_file()
     assert outputs.trace_data_json.is_file()
     with outputs.summary_tsv.open(encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
@@ -242,7 +244,9 @@ def _synthetic_rows() -> list[object]:
     ]
 
 
-def test_overlay_renders_irt_panel_with_drift_lookup(tmp_path: Path) -> None:
+def test_overlay_keeps_drift_lookup_backcompat_without_irt_panel(
+    tmp_path: Path,
+) -> None:
     lookup = _DriftLookup(deltas={"detected-a": 0.01, "rescued-a": -0.01})
 
     outputs = report.write_family_ms1_overlay_outputs(
@@ -295,6 +299,67 @@ def test_cli_help_lists_drift_arguments() -> None:
     assert result.returncode == 0, result.stderr
     assert "--targeted-workbook" in result.stdout
     assert "--sample-info" in result.stdout
+    assert "compatibility" in result.stdout
+    assert "does not render" in result.stdout
+    assert "iRT panel" in result.stdout
+
+
+def test_cli_accepts_drift_arguments_as_noop_compatibility(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(report, "load_family_cells", lambda *_args, **_kwargs: ())
+    monkeypatch.setattr(
+        report,
+        "extract_family_trace_rows",
+        lambda **_kwargs: (),
+    )
+    monkeypatch.setattr(
+        report,
+        "build_family_ms1_evidence_summary",
+        lambda _rows: {"family_verdict": "not_assessable"},
+    )
+
+    def fake_write_family_ms1_overlay_outputs(**_kwargs):
+        return report.FamilyMs1OverlayOutputs(
+            png_path=tmp_path / "overlay.png",
+            pdf_path=tmp_path / "overlay.pdf",
+            summary_tsv=tmp_path / "summary.tsv",
+            trace_data_json=tmp_path / "trace.json",
+        )
+
+    monkeypatch.setattr(
+        report,
+        "write_family_ms1_overlay_outputs",
+        fake_write_family_ms1_overlay_outputs,
+    )
+
+    code = report.main(
+        [
+            "--alignment-cells",
+            str(tmp_path / "cells.tsv"),
+            "--family-id",
+            "FAM_NOOP",
+            "--raw-dir",
+            str(tmp_path / "raw"),
+            "--dll-dir",
+            str(tmp_path / "dll"),
+            "--mz",
+            "251.165",
+            "--rt-min",
+            "1.0",
+            "--rt-max",
+            "1.2",
+            "--targeted-workbook",
+            str(tmp_path / "missing.xlsx"),
+            "--sample-info",
+            str(tmp_path / "missing_sample_info.tsv"),
+            "--output-dir",
+            str(tmp_path / "out"),
+        ],
+    )
+
+    assert code == 0
 
 
 def test_stable_jitter_is_reproducible() -> None:
@@ -334,6 +399,52 @@ def test_apex_aligned_shape_similarity_compares_shifted_peak_shapes() -> None:
     assert similarity["similar-a"] > 0.5
     assert similarity["similar-b"] > 0.5
     assert similarity["different"] < 0.0
+
+
+def test_apex_aligned_shape_similarity_uses_detected_anchor_reference() -> None:
+    detected = report.trace_row_from_arrays(
+        _family_cell("detected-anchor", status="detected", apex_rt=1.1),
+        "detected_seed",
+        [1.0, 1.05, 1.1, 1.15, 1.2],
+        [0.0, 25.0, 100.0, 25.0, 0.0],
+    )
+    rescued_like_detected = report.trace_row_from_arrays(
+        _family_cell("rescued-like-detected", apex_rt=2.1),
+        "top_rescued_ms1_area",
+        [2.0, 2.05, 2.1, 2.15, 2.2],
+        [0.0, 20.0, 80.0, 20.0, 0.0],
+    )
+    rescued_neighbor_majority = [
+        report.trace_row_from_arrays(
+            _family_cell(f"rescued-neighbor-{index}", apex_rt=3.1 + index),
+            "rescued_other",
+            [3.0 + index, 3.05 + index, 3.1 + index, 3.15 + index, 3.2 + index],
+            [100.0, 20.0, 0.0, 20.0, 100.0],
+        )
+        for index in range(3)
+    ]
+
+    similarity = report._apex_aligned_shape_similarity(
+        [detected, rescued_like_detected, *rescued_neighbor_majority],
+    )
+
+    assert similarity["detected-anchor"] is not None
+    assert similarity["rescued-like-detected"] is not None
+    assert similarity["rescued-like-detected"] > 0.5
+    assert all(
+        (similarity[f"rescued-neighbor-{index}"] or 0.0) < 0.0
+        for index in range(3)
+    )
+
+
+def test_hypothesis_overlay_layout_keeps_apex_alignment_on_evidence_surface() -> None:
+    layout = report._hypothesis_overlay_panel_layout()
+    panel_ids = {panel for row in layout for panel in row}
+
+    assert panel_ids == {"aligned", "raw", "legend"}
+    assert "aligned" in panel_ids
+    assert "area" not in panel_ids
+    assert "shape" not in panel_ids
 
 
 def test_apex_aligned_trace_uses_local_peak_normalization() -> None:

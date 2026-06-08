@@ -463,7 +463,8 @@ def evidence_from_tsv_rows(
 def classify_backfill_promotion(
     evidence: BackfillPromotionEvidence,
 ) -> BackfillPromotionDecision:
-    if not _in_policy_scope(evidence):
+    single_detected_same_peak_support = _single_detected_same_peak_support(evidence)
+    if not _in_policy_scope(evidence) and not single_detected_same_peak_support:
         return BackfillPromotionDecision(state="not_applicable")
     if evidence.q_detected <= 0 and evidence.q_rescue > 0:
         return BackfillPromotionDecision(
@@ -472,7 +473,7 @@ def classify_backfill_promotion(
             confidence="review",
             flags=("rescue_only",),
         )
-    if evidence.q_detected < 2:
+    if evidence.q_detected < 2 and not single_detected_same_peak_support:
         return BackfillPromotionDecision(state="not_applicable")
     if evidence.duplicate_count > evidence.q_detected:
         return BackfillPromotionDecision(
@@ -561,6 +562,23 @@ def _in_policy_scope(evidence: BackfillPromotionEvidence) -> bool:
     if evidence.q_rescue <= 0:
         return False
     return evidence.backfill_dependency in _POLICY_BACKFILL_REASONS
+
+
+def _single_detected_same_peak_support(evidence: BackfillPromotionEvidence) -> bool:
+    if not is_dr_neutral_loss_tag(evidence.neutral_loss_tag):
+        return False
+    if evidence.primary_evidence not in _SUPPORTED_PRIMARY_EVIDENCE:
+        return False
+    if evidence.q_detected != 1 or evidence.q_rescue <= 0:
+        return False
+    if evidence.duplicate_count > evidence.q_detected:
+        return False
+    if evidence.ambiguous_count > 0:
+        return False
+    rescued = tuple(cell for cell in evidence.cells if cell.is_rescued_quantifiable)
+    if len(rescued) != evidence.q_rescue:
+        return False
+    return all(cell.supported_for_backfill for cell in rescued)
 
 
 def _dda_limited_support(evidence: BackfillPromotionEvidence) -> bool:

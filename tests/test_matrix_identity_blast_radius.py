@@ -54,7 +54,7 @@ def test_blast_radius_reports_complete_identity_changes_and_benchmark_join(
     assert payload["would_change_to_audit_count"] == 1
 
 
-def test_blast_radius_projects_one_detected_provisional_action(
+def test_blast_radius_projects_single_detected_product_authority_action(
     tmp_path: Path,
 ) -> None:
     alignment_dir = _write_alignment_run(
@@ -98,11 +98,11 @@ def test_blast_radius_projects_one_detected_provisional_action(
     rows = _read_tsv(tmp_path / "blast" / "matrix_identity_blast_radius.tsv")
     by_id = {row["feature_family_id"]: row for row in rows}
 
-    assert by_id["FAM_ONE"]["identity_decision"] == "provisional_discovery"
-    assert by_id["FAM_ONE"]["matrix_role"] == "provisional"
-    assert by_id["FAM_ONE"]["recommended_action"] == "keep_provisional"
+    assert by_id["FAM_ONE"]["identity_decision"] == "production_family"
+    assert by_id["FAM_ONE"]["matrix_role"] == "primary"
+    assert by_id["FAM_ONE"]["recommended_action"] == "use"
     assert by_id["FAM_ONE"]["evidence_tier"] == "1"
-    assert "single_detected_seed" in by_id["FAM_ONE"]["blockers"]
+    assert by_id["FAM_ONE"]["blockers"] == ""
     assert "ms1_backfill_supported" in by_id["FAM_ONE"]["support_reasons"]
 
 
@@ -156,6 +156,39 @@ def test_blast_radius_preserves_review_only_projection(
     assert by_id["FAM_REVIEW"]["identity_reason"] == "review_only"
     assert by_id["FAM_REVIEW"]["matrix_role"] == "audit"
     assert by_id["FAM_REVIEW"]["recommended_action"] == "review"
+
+
+def test_blast_radius_accepts_downstream_mz_rt_matrix(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_run(
+        tmp_path / "alignment",
+        review_rows=[
+            _review_row("FAM001", "TRUE", "owner_complete_link;owner_count=2"),
+        ],
+        cell_rows=[
+            _cell_row("FAM001", "sample-a", "detected", 100.0),
+            _cell_row("FAM001", "sample-b", "detected", 90.0),
+        ],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_matrix.tsv",
+        [{"Mz": "500.123", "RT": "8.49", "sample-a": "100", "sample-b": "90"}],
+    )
+
+    code = blast.main(
+        [
+            "--alignment-run",
+            str(alignment_dir),
+            "--output-dir",
+            str(tmp_path / "blast"),
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(tmp_path / "blast" / "matrix_identity_blast_radius.tsv")
+    assert rows[0]["evidence_status"] == "complete"
+    assert rows[0]["matrix_role"] == "primary"
 
 
 def test_blast_radius_missing_peak_columns_outputs_incomplete_summary(
@@ -230,6 +263,72 @@ def test_blast_radius_requires_targeted_benchmark_when_enabled(
     )
 
     assert code == 2
+
+
+def test_blast_radius_joins_current_targeted_istd_benchmark_aliases(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_run(
+        tmp_path / "alignment",
+        review_rows=[
+            _review_row("FAM001", "TRUE", "owner_complete_link;owner_count=2"),
+            _review_row("FAM002", "TRUE", "owner_complete_link;owner_count=2"),
+        ],
+        cell_rows=[
+            _cell_row("FAM001", "sample-a", "detected", 100.0),
+            _cell_row("FAM001", "sample-b", "detected", 90.0),
+            _cell_row("FAM002", "sample-a", "detected", 50.0),
+            _cell_row("FAM002", "sample-b", "detected", 45.0),
+        ],
+    )
+    benchmark_dir = tmp_path / "benchmark"
+    benchmark_dir.mkdir()
+    _write_tsv(
+        benchmark_dir / "targeted_istd_benchmark_matches.tsv",
+        [
+            {"target_label": "d3-5-medC", "feature_family_id": "FAM001"},
+            {"target_label": "d3-5-medC", "feature_family_id": "FAM002"},
+        ],
+    )
+    _write_tsv(
+        benchmark_dir / "targeted_istd_benchmark_summary.tsv",
+        [
+            {
+                "target_label": "d3-5-medC",
+                "role": "ISTD",
+                "status": "PASS",
+                "active_tag": "TRUE",
+                "selected_feature_id": "FAM001",
+            },
+        ],
+    )
+    (benchmark_dir / "targeted_istd_benchmark.json").write_text(
+        json.dumps({"overall_status": "PASS"}),
+        encoding="utf-8",
+    )
+
+    code = blast.main(
+        [
+            "--alignment-run",
+            str(alignment_dir),
+            "--benchmark-dir",
+            str(benchmark_dir),
+            "--output-dir",
+            str(tmp_path / "blast"),
+            "--require-targeted-benchmark",
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(tmp_path / "blast" / "matrix_identity_blast_radius.tsv")
+    by_family = {row["feature_family_id"]: row for row in rows}
+    assert by_family["FAM001"]["targeted_target_name"] == "d3-5-medC"
+    assert by_family["FAM001"]["targeted_role"] == "ISTD"
+    assert by_family["FAM001"]["targeted_benchmark_class"] == "PASS"
+    assert by_family["FAM001"]["active_dna_istd_candidate"] == "TRUE"
+    assert by_family["FAM002"]["targeted_target_name"] == "d3-5-medC"
+    assert by_family["FAM002"]["targeted_benchmark_class"] == "PASS"
+    assert by_family["FAM002"]["active_dna_istd_candidate"] == ""
 
 
 def _write_alignment_run(

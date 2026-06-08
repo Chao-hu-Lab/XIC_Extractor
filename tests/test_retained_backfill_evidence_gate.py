@@ -137,10 +137,11 @@ def test_overlay_support_without_seed_provenance_fails_closed(
     rows = _read_tsv(output_dir / "alignment_retained_backfill_evidence_gate.tsv")
     by_id = {row["feature_family_id"]: row for row in rows}
     assert by_id["FAM_SUPPORT"]["evidence_gate_status"] == "evidence_missing"
-    assert "ms1_shape_supports_family_backfill" in by_id["FAM_SUPPORT"][
+    assert "ms1_shape_supports_family_backfill" not in by_id["FAM_SUPPORT"][
         "support_components"
     ]
     assert "missing_seed_provenance" in by_id["FAM_SUPPORT"]["missing_evidence"]
+    assert "missing_overlay_evidence" in by_id["FAM_SUPPORT"]["missing_evidence"]
     payload = json.loads(
         (output_dir / "alignment_retained_backfill_evidence_gate.json").read_text(
             encoding="utf-8",
@@ -148,6 +149,50 @@ def test_overlay_support_without_seed_provenance_fails_closed(
     )
     assert payload["source_seed_audit_artifact"] == ""
     assert payload["source_seed_audit_sha256"] == ""
+
+
+def test_legacy_family_overlay_requires_seed_specific_overlay(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_run(tmp_path / "alignment")
+    output_dir = tmp_path / "gate"
+    legacy_overlay_path = _write_overlay_summary(
+        tmp_path / "legacy_overlay.tsv",
+        seed_specific=False,
+    )
+
+    code = gate_cli.main(
+        [
+            "--alignment-dir",
+            str(alignment_dir),
+            "--overlay-batch-summary-tsv",
+            str(legacy_overlay_path),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(output_dir / "alignment_retained_backfill_evidence_gate.tsv")
+    by_id = {row["feature_family_id"]: row for row in rows}
+    supported = by_id["FAM_SUPPORT"]
+    assert supported["evidence_gate_status"] == "evidence_missing"
+    assert supported["recommended_action"] == "generate_missing_evidence"
+    assert "missing_seed_specific_overlay" in supported["missing_evidence"]
+    assert "legacy_family_overlay_context" in supported["dependent_context"]
+    assert "ms1_shape_supports_family_backfill" not in supported["support_components"]
+    assert supported["overlay_png_path"] == "plots/fam-support.png"
+
+    queue_rows = _read_tsv(
+        output_dir / "alignment_retained_backfill_missing_overlay_queue.tsv",
+    )
+    by_queue_id = {row["feature_family_id"]: row for row in queue_rows}
+    assert by_queue_id["FAM_SUPPORT"]["seed_group_id"] == _seed_group_id(
+        "FAM_SUPPORT",
+    )
+    assert "missing_seed_specific_overlay" in by_queue_id["FAM_SUPPORT"][
+        "missing_evidence"
+    ]
 
 
 def test_seed_specific_overlay_rows_do_not_leak_across_seed_groups(
@@ -437,21 +482,23 @@ def _seed_group_id(
     )
 
 
-def _write_overlay_summary(path: Path) -> Path:
+def _write_overlay_summary(path: Path, *, seed_specific: bool = True) -> Path:
+    support: dict[str, str] = {
+        "feature_family_id": "FAM_SUPPORT",
+        "family_verdict": "ms1_shape_supports_family_backfill",
+        "png_path": "plots/fam-support.png",
+    }
+    conflict: dict[str, str] = {
+        "feature_family_id": "FAM_CONFLICT",
+        "family_verdict": "review_required_neighboring_ms1_interference",
+        "png_path": "plots/fam-conflict.png",
+    }
+    if seed_specific:
+        support["seed_group_id"] = _seed_group_id("FAM_SUPPORT")
+        conflict["seed_group_id"] = _seed_group_id("FAM_CONFLICT")
     _write_tsv(
         path,
-        [
-            {
-                "feature_family_id": "FAM_SUPPORT",
-                "family_verdict": "ms1_shape_supports_family_backfill",
-                "png_path": "plots/fam-support.png",
-            },
-            {
-                "feature_family_id": "FAM_CONFLICT",
-                "family_verdict": "review_required_neighboring_ms1_interference",
-                "png_path": "plots/fam-conflict.png",
-            },
-        ],
+        [support, conflict],
     )
     return path
 

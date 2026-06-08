@@ -21,7 +21,10 @@ from tools.diagnostics.family_ms1_overlay_models import (
     FamilyMs1OverlayOutputs,
     TraceOverlayRow,
 )
-from tools.diagnostics.family_ms1_overlay_rendering import render_family_ms1_overlay
+from tools.diagnostics.family_ms1_overlay_rendering import (
+    render_family_ms1_overlay,
+    render_hypothesis_ms1_overlay,
+)
 
 if TYPE_CHECKING:
     from xic_extractor.alignment.edge_scoring import DriftLookupProtocol
@@ -45,6 +48,8 @@ def write_family_ms1_overlay_outputs(
     trace_data_json = output_dir / f"{output_prefix}_trace_data.json"
     png_path = output_dir / f"{output_prefix}.png"
     pdf_path = output_dir / f"{output_prefix}.pdf"
+    hypothesis_png_path = output_dir / f"{output_prefix}_hypothesis.png"
+    hypothesis_pdf_path = output_dir / f"{output_prefix}_hypothesis.pdf"
 
     _write_summary(summary_tsv, rows)
     _write_trace_data(
@@ -68,6 +73,17 @@ def write_family_ms1_overlay_outputs(
         rt_max=rt_max,
         family_center_rt=family_center_rt,
         drift_lookup=drift_lookup,
+    )
+    render_hypothesis_ms1_overlay(
+        rows=rows,
+        png_path=hypothesis_png_path,
+        pdf_path=hypothesis_pdf_path,
+        family_id=family_id,
+        mz=mz,
+        ppm=ppm,
+        rt_min=rt_min,
+        rt_max=rt_max,
+        family_center_rt=family_center_rt,
     )
     return FamilyMs1OverlayOutputs(
         png_path=png_path,

@@ -35,6 +35,7 @@ from tools.diagnostics.family_ms1_overlay_models import (
 from tools.diagnostics.family_ms1_overlay_rendering import (
     _add_panel_note,
     _gaussian_smooth,
+    _hypothesis_overlay_panel_layout,
     _plot_apex_aligned_overlay,
     _plot_area_distribution,
     _plot_group_median_trace,
@@ -43,6 +44,7 @@ from tools.diagnostics.family_ms1_overlay_rendering import (
     _plot_shape_similarity,
     _plot_trace_apex_delta_distribution,
     render_family_ms1_overlay,
+    render_hypothesis_ms1_overlay,
 )
 from tools.diagnostics.family_ms1_overlay_rendering_styles import (
     DETECTED_COLOR,
@@ -73,7 +75,6 @@ from tools.diagnostics.family_ms1_overlay_writers import (
     _write_trace_data,
     write_family_ms1_overlay_outputs,
 )
-from xic_extractor.alignment.drift_evidence import read_targeted_istd_drift_evidence
 
 __all__ = [
     "APEX_ALIGN_HALF_WINDOW_MIN",
@@ -99,6 +100,7 @@ __all__ = [
     "_gaussian_smooth",
     "_gaussian_smooth_values",
     "_global_trace_apex_delta",
+    "_hypothesis_overlay_panel_layout",
     "_json_float",
     "_line_style",
     "_local_to_global_max_ratio",
@@ -125,6 +127,7 @@ __all__ = [
     "main",
     "np",
     "render_family_ms1_overlay",
+    "render_hypothesis_ms1_overlay",
     "trace_row_from_arrays",
     "write_family_ms1_overlay_outputs",
 ]
@@ -149,11 +152,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         else _median_value(row.cell_apex_rt for row in rows)
     )
     prefix = args.output_prefix or f"{args.family_id.lower()}_ms1_overlay"
-    drift_lookup = (
-        read_targeted_istd_drift_evidence(args.targeted_workbook, args.sample_info)
-        if args.targeted_workbook is not None and args.sample_info is not None
-        else None
-    )
+    # Compatibility only: these args used to feed an iRT panel, but the current
+    # family-context overlay is intentionally two-panel and must not fail on a
+    # no-op drift artifact.
+    drift_lookup = None
     outputs = write_family_ms1_overlay_outputs(
         rows=rows,
         output_dir=args.output_dir,
@@ -191,14 +193,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--targeted-workbook",
         type=Path,
         help=(
-            "Targeted XIC workbook (with ISTD rows) used to build the per-sample "
-            "drift shift for the drift-corrected (iRT) overlay panel."
+            "Targeted XIC workbook (with ISTD rows). Accepted for compatibility; "
+            "the current family-context overlay stays two-panel and does not "
+            "render an iRT panel."
         ),
     )
     parser.add_argument(
         "--sample-info",
         type=Path,
-        help="Sample info table providing injection order for ISTD drift trends.",
+        help=(
+            "Sample info table for ISTD drift provenance. Accepted for "
+            "compatibility; not rendered by the current family-context overlay."
+        ),
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--output-prefix")

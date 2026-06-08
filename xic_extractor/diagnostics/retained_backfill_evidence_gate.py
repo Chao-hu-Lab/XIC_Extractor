@@ -390,6 +390,10 @@ def _evaluate_group(
         seed_group_id=seed_group.seed_group_id,
     )
     overlay_verdict = text_value(selected_overlay.get("family_verdict"))
+    overlay_is_seed_specific = _is_seed_specific_overlay(
+        selected_overlay,
+        seed_group_id=seed_group.seed_group_id,
+    )
     support_components: list[str] = []
     dependent_context: list[str] = ["retained_product_backfill"]
     challenge_blockers: list[str] = []
@@ -407,6 +411,11 @@ def _evaluate_group(
 
     if not selected_overlay:
         missing_evidence.append("missing_overlay_evidence")
+    elif not overlay_is_seed_specific:
+        dependent_context.append("legacy_family_overlay_context")
+        if overlay_verdict:
+            dependent_context.append(f"legacy_family_overlay:{overlay_verdict}")
+        missing_evidence.append("missing_seed_specific_overlay")
     elif overlay_verdict == SUPPORT_OVERLAY_VERDICT:
         support_components.append(SUPPORT_OVERLAY_VERDICT)
     elif overlay_verdict:
@@ -658,6 +667,14 @@ def _selected_overlay_row(
     return sorted(selected, key=_overlay_sort_key)[0]
 
 
+def _is_seed_specific_overlay(
+    row: Mapping[str, str],
+    *,
+    seed_group_id: str,
+) -> bool:
+    return bool(row) and text_value(row.get("seed_group_id")) == seed_group_id
+
+
 def _overlay_sort_key(row: Mapping[str, str]) -> tuple[int, str]:
     verdict = text_value(row.get("family_verdict"))
     if verdict and verdict != SUPPORT_OVERLAY_VERDICT:
@@ -774,7 +791,10 @@ def _missing_overlay_queue_rows(
         row
         for row in rows
         if row.evidence_gate_status == "evidence_missing"
-        and "missing_overlay_evidence" in row.missing_evidence
+        and (
+            "missing_overlay_evidence" in row.missing_evidence
+            or "missing_seed_specific_overlay" in row.missing_evidence
+        )
         and row.seed_group_basis == "seed_audit"
         and row.suggested_rt_min
         and row.suggested_rt_max

@@ -154,14 +154,28 @@ def _blockers(
     evidence: BackfillPromotionEvidence,
 ) -> tuple[str, ...]:
     blockers: list[str] = []
-    if evidence.q_detected == 1:
+    single_detected_supported = (
+        evidence.q_detected == 1
+        and identity_decision != _PROVISIONAL_DECISION
+        and identity_reason in _NON_BLOCKING_IDENTITY_REASONS
+        and _all_rescue_cells_supported(evidence)
+    )
+    if evidence.q_detected == 1 and not single_detected_supported:
         blockers.append("single_detected_seed")
     if (
         identity_reason not in _NON_BLOCKING_IDENTITY_REASONS
         and identity_reason not in _GENERIC_PROVISIONAL_REASONS
     ):
         blockers.append(identity_reason)
-    blockers.extend(flag for flag in flags if flag in _ROW_BLOCKERS)
+    blockers.extend(
+        flag
+        for flag in flags
+        if flag in _ROW_BLOCKERS
+        and not (
+            flag in {"single_detected_seed", "skip_expensive_evidence"}
+            and single_detected_supported
+        )
+    )
     blockers.extend(_cell_evidence_blockers(evidence))
     if identity_decision == _PROVISIONAL_DECISION and not blockers:
         blockers.append("insufficient_identity_support")

@@ -23,8 +23,8 @@ def test_owner_complete_link_requires_two_detected_identity_cells() -> None:
         _feature("FAM001", evidence="owner_complete_link;owner_count=2"),
         (
             _cell("s1", "FAM001", "detected", 100.0),
-            _cell("s2", "FAM001", "rescued", 90.0),
-            _cell("s3", "FAM001", "rescued", 80.0),
+            _cell("s2", "FAM001", "rescued", 90.0, backfill_evidence=False),
+            _cell("s3", "FAM001", "rescued", 80.0, backfill_evidence=False),
         ),
     )
 
@@ -37,8 +37,8 @@ def test_owner_complete_link_requires_two_detected_identity_cells() -> None:
     assert decision.quantifiable_rescue_count == 2
     assert "single_detected_seed" in decision.row_flags
     assert "rescue_heavy" in decision.row_flags
-    assert "provisional_retention_candidate" in decision.row_flags
-    assert "skip_expensive_evidence" in decision.row_flags
+    assert "provisional_retention_candidate" not in decision.row_flags
+    assert "skip_expensive_evidence" not in decision.row_flags
 
 
 def test_owner_complete_link_with_two_detected_cells_is_production_family() -> None:
@@ -124,7 +124,13 @@ def test_single_detected_seed_does_not_enter_policy_promotion() -> None:
         (
             _cell("seed1", "FAM001", "detected", 100.0),
             *tuple(
-                _cell(f"rescue{i:02d}", "FAM001", "rescued", 80.0 + i)
+                _cell(
+                    f"rescue{i:02d}",
+                    "FAM001",
+                    "rescued",
+                    80.0 + i,
+                    backfill_evidence=False,
+                )
                 for i in range(1, 8)
             ),
         ),
@@ -136,9 +142,51 @@ def test_single_detected_seed_does_not_enter_policy_promotion() -> None:
     assert decision.identity_decision == "provisional_discovery"
     assert decision.identity_reason == "extreme_backfill_dependency"
     assert "single_detected_seed" in decision.row_flags
-    assert "provisional_retention_candidate" in decision.row_flags
-    assert "skip_expensive_evidence" in decision.row_flags
+    assert "provisional_retention_candidate" not in decision.row_flags
+    assert "skip_expensive_evidence" not in decision.row_flags
     assert "high_backfill_dependency" in decision.row_flags
+    assert HIGH_BACKFILL_CAPPED_FLAG not in decision.row_flags
+
+
+def test_single_detected_seed_with_same_peak_evidence_promotes() -> None:
+    matrix = _matrix(
+        _feature("FAM001", evidence="owner_complete_link;owner_count=1"),
+        (
+            _cell("seed1", "FAM001", "detected", 100.0),
+            _cell("rescue1", "FAM001", "rescued", 90.0),
+            _cell("rescue2", "FAM001", "rescued", 80.0),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is True
+    assert decision.identity_decision == "production_family"
+    assert decision.identity_confidence == "medium"
+    assert decision.identity_reason == CELL_EVIDENCE_SUPPORTED_REASON
+    assert decision.quantifiable_detected_count == 1
+    assert decision.quantifiable_rescue_count == 2
+    assert "single_detected_seed" in decision.row_flags
+    assert HIGH_BACKFILL_CAPPED_FLAG in decision.row_flags
+
+
+def test_single_detected_same_peak_support_keeps_ambiguous_owner_review() -> None:
+    matrix = _matrix(
+        _feature("FAM001", evidence="owner_complete_link;owner_count=1"),
+        (
+            _cell("seed1", "FAM001", "detected", 100.0),
+            _cell("rescue1", "FAM001", "rescued", 90.0),
+            _cell("rescue2", "FAM001", "rescued", 80.0),
+            _cell("ambiguous1", "FAM001", "ambiguous_ms1_owner", 70.0),
+        ),
+    )
+
+    decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
+
+    assert decision.include_in_primary_matrix is False
+    assert decision.identity_decision == "provisional_discovery"
+    assert decision.identity_reason == "insufficient_detected_identity_support"
+    assert "ambiguous_ms1_owner_pressure" in decision.row_flags
     assert HIGH_BACKFILL_CAPPED_FLAG not in decision.row_flags
 
 
