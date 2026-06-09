@@ -695,7 +695,8 @@ def build_reconciliation_index(
                 ),
                 include_in_primary_matrix=bool_value(
                     review.get("include_in_primary_matrix"),
-                ),
+                )
+                is True,
                 identity_decision=text_value(review.get("identity_decision")),
                 row_flags=text_value(review.get("row_flags")),
                 family_evidence=text_value(review.get("family_evidence")),
@@ -5840,11 +5841,11 @@ def _target_benchmark_context_from_row(
         active_tag=text_value(row.get("active_tag")),
         status=text_value(row.get("status")),
         selected_feature_id=selected_feature_id,
-        primary_feature_ids=primary_feature_ids,
+        primary_feature_ids=tuple(primary_feature_ids),
         targeted_positive_count=text_value(row.get("targeted_positive_count")),
         untargeted_positive_count=text_value(row.get("untargeted_positive_count")),
         coverage_minimum=text_value(row.get("coverage_minimum")),
-        failure_modes=split_semicolon_labels(row.get("failure_modes")),
+        failure_modes=tuple(split_semicolon_labels(row.get("failure_modes"))),
         note=text_value(row.get("note")),
     )
 

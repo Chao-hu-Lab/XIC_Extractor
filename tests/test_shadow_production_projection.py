@@ -65,6 +65,88 @@ def test_projection_uses_production_decisions_for_current_matrix_state() -> None
     assert by_sample["S_REVIEW"]["projected_matrix_value"] == "250"
 
 
+def test_projection_carries_group_hypothesis_as_peak_identity() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_ID", "S_REVIEW", "review_rescue", False, None),
+        ),
+    )
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row(
+                "FAM_ID",
+                "S_REVIEW",
+                "rescued",
+                group_hypothesis_id="PH_FAM_ID",
+                product_evidence=True,
+            ),
+        ),
+        retained_gate_rows=(_gate_row("FAM_ID", "S_REVIEW", detected="1"),),
+    )
+
+    row = index.rows[0]
+    assert row["peak_hypothesis_id"] == "PH_FAM_ID"
+    assert row["activation_unit_scope"] == "peak_hypothesis"
+
+
+def test_projection_leaves_identity_blank_without_peak_or_group_hypothesis() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_NO_ID", "S_REVIEW", "review_rescue", False, None),
+        ),
+    )
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row(
+                "FAM_NO_ID",
+                "S_REVIEW",
+                "rescued",
+                product_evidence=True,
+            ),
+        ),
+        retained_gate_rows=(_gate_row("FAM_NO_ID", "S_REVIEW", detected="1"),),
+    )
+
+    row = index.rows[0]
+    assert row["peak_hypothesis_id"] == ""
+    assert row["activation_unit_scope"] == ""
+
+
+def test_projection_row_hash_is_present_and_stable_across_identical_builds() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_HASH", "S_REVIEW", "review_rescue", False, None),
+        ),
+    )
+
+    def build() -> str:
+        index = build_shadow_production_projection_index(
+            production_decisions=decisions,
+            cell_rows=(
+                _cell_row(
+                    "FAM_HASH",
+                    "S_REVIEW",
+                    "rescued",
+                    group_hypothesis_id="PH_HASH",
+                    product_evidence=True,
+                ),
+            ),
+            retained_gate_rows=(_gate_row("FAM_HASH", "S_REVIEW", detected="1"),),
+        )
+        return index.rows[0]["shadow_projection_row_sha256"]
+
+    first_hash = build()
+    second_hash = build()
+
+    assert first_hash
+    assert len(first_hash) == 64
+    assert first_hash == second_hash
+
+
 def test_projection_keeps_dup_without_product_authority_as_review_context() -> None:
     decisions = _production_decisions(
         cells=(
@@ -102,6 +184,50 @@ def test_projection_keeps_dup_without_product_authority_as_review_context() -> N
     assert dup["shadow_reasons"] == "missing_product_authorized_evidence_chain"
     assert dup["shadow_warnings"] == "same_peak_multi_claim"
     assert dup["projected_matrix_written"] == "FALSE"
+
+
+def test_projection_keeps_visual_same_peak_support_as_identity_review_context() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_VISUAL", "S_DET", "detected", True, 100.0),
+            _cell_decision(
+                "FAM_VISUAL",
+                "S_REVIEW",
+                "review_rescue",
+                False,
+                None,
+                blank_reason="backfill_ms1_pattern_blocked",
+            ),
+        ),
+    )
+    gate = _gate_row("FAM_VISUAL", "S_DET;S_REVIEW", detected="5")
+    gate["support_components"] = (
+        "seed_request_provenance;ms1_shape_supports_family_backfill"
+    )
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row("FAM_VISUAL", "S_DET", "detected"),
+            _cell_row(
+                "FAM_VISUAL",
+                "S_REVIEW",
+                "rescued",
+                area="321.5",
+                group_hypothesis_id="PH_VISUAL",
+            ),
+        ),
+        retained_gate_rows=(gate,),
+    )
+
+    review = next(row for row in index.rows if row["sample_stem"] == "S_REVIEW")
+    assert review["shadow_decision"] == "context"
+    assert review["shadow_reasons"] == "identity_supported_review"
+    assert review["projected_matrix_written"] == "FALSE"
+    assert review["projected_matrix_value"] == "321.5"
+    assert review["product_authority_chain"] == ""
+    assert review["peak_hypothesis_id"] == "PH_VISUAL"
+    assert index.summary["projected_new_write_count"] == 0
 
 
 def test_projection_accepts_same_peak_dup_with_product_authority() -> None:
@@ -852,6 +978,9 @@ def _cell_row(
     activation_contract_rule_id: str = "",
     activation_product_effect: str = "",
     activation_reason: str = "",
+    group_hypothesis_id: str = "",
+    peak_hypothesis_id: str = "",
+    **extra_fields: str,
 ) -> dict[str, str]:
     row = {
         "feature_family_id": family,
@@ -876,6 +1005,10 @@ def _cell_row(
         row["activation_product_effect"] = activation_product_effect
     if activation_reason:
         row["activation_reason"] = activation_reason
+    if group_hypothesis_id:
+        row["group_hypothesis_id"] = group_hypothesis_id
+    if peak_hypothesis_id:
+        row["peak_hypothesis_id"] = peak_hypothesis_id
     if product_evidence:
         row.update(
             {
@@ -907,6 +1040,7 @@ def _cell_row(
                 ),
             },
         )
+    row.update(extra_fields)
     return row
 
 

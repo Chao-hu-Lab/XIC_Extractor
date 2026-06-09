@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable
 from contextlib import AbstractContextManager, ExitStack
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from xic_extractor.alignment.backfill_scope import (
     PREDICATE_VERSION,
@@ -30,8 +31,11 @@ from xic_extractor.alignment.identity_coherence_adapter import (
 from xic_extractor.alignment.ms1_index_source import OwnerBackfillXicBackend
 from xic_extractor.alignment.output_levels import AlignmentOutputLevel
 from xic_extractor.alignment.owner_backfill import (
+    OwnerBackfillCandidateAuditRow,
+    OwnerBackfillResult,
     OwnerBackfillWindowStrategy,
     build_owner_backfill_cells,
+    build_owner_backfill_result,
 )
 from xic_extractor.alignment.owner_clustering import (
     cluster_sample_local_owners,
@@ -347,8 +351,12 @@ def run_alignment(
                     **skipped_evidence_summary(scope_selection.skipped),
                     **request_summary,
                 }
-            )
+        )
         with recorder.stage("alignment.owner_backfill") as owner_backfill_stage:
+            owner_backfill_candidate_audit_rows: tuple[
+                OwnerBackfillCandidateAuditRow,
+                ...,
+            ] = ()
             if raw_workers > 1:
                 process_output = run_owner_backfill_process(
                     backfill_features,
@@ -374,6 +382,9 @@ def run_alignment(
                     ),
                 )
                 rescued_cells = process_output.cells
+                owner_backfill_candidate_audit_rows = (
+                    process_output.candidate_audit_rows
+                )
                 owner_backfill_stage.metrics.update(
                     _summarize_xic_timing_stats(process_output.timing_stats),
                 )
@@ -408,7 +419,7 @@ def run_alignment(
                     if validation_raw_sources is not None
                     else {}
                 )
-                rescued_cells = build_owner_backfill_cells(
+                backfill_result = _build_owner_backfill_result(
                     backfill_features,
                     sample_order=batch.sample_order,
                     raw_sources=backfill_raw_sources,
@@ -423,6 +434,10 @@ def run_alignment(
                     emit_region_audit=emit_cell_region_audit,
                     region_audit_family_ids=region_audit_family_ids,
                     audit_evidence_mode=resolved_audit_evidence_mode,
+                )
+                rescued_cells = backfill_result.cells
+                owner_backfill_candidate_audit_rows = (
+                    backfill_result.candidate_audit_rows
                 )
                 owner_backfill_stage.metrics.update(
                     _summarize_xic_timing_stats(timing_stats),
@@ -506,6 +521,9 @@ def run_alignment(
                 alignment_config=alignment_config,
                 edge_evidence=edge_evidence or (),
                 skipped_evidence=scope_selection.skipped,
+                owner_backfill_candidate_audit_rows=(
+                    owner_backfill_candidate_audit_rows
+                ),
                 baseline_integration_method=getattr(
                     peak_config,
                     "baseline_integration_method",
@@ -519,6 +537,16 @@ def run_alignment(
 _existing_raw_paths = existing_raw_paths
 _output_paths = output_paths
 _write_outputs_atomic = write_outputs_atomic
+_DEFAULT_BUILD_OWNER_BACKFILL_CELLS = build_owner_backfill_cells
+
+
+def _build_owner_backfill_result(*args: Any, **kwargs: Any) -> OwnerBackfillResult:
+    if build_owner_backfill_cells is not _DEFAULT_BUILD_OWNER_BACKFILL_CELLS:
+        return OwnerBackfillResult(
+            cells=tuple(build_owner_backfill_cells(*args, **kwargs)),
+            candidate_audit_rows=(),
+        )
+    return build_owner_backfill_result(*args, **kwargs)
 _metadata = alignment_metadata
 
 

@@ -183,6 +183,10 @@ def test_pipeline_debug_flags_write_optional_outputs(
         outputs.backfill_seed_audit_tsv
         == tmp_path / "out" / "alignment_owner_backfill_seed_audit.tsv"
     )
+    assert (
+        outputs.backfill_candidate_audit_tsv
+        == tmp_path / "out" / "alignment_owner_backfill_candidate_audit.tsv"
+    )
     assert outputs.status_matrix_tsv == tmp_path / "out" / "alignment_matrix_status.tsv"
     assert (
         outputs.matrix_identity_tsv
@@ -192,6 +196,7 @@ def test_pipeline_debug_flags_write_optional_outputs(
     assert outputs.matrix_identity_tsv.exists()
     assert outputs.integration_audit_tsv.exists()
     assert outputs.backfill_seed_audit_tsv.exists()
+    assert outputs.backfill_candidate_audit_tsv.exists()
     assert outputs.status_matrix_tsv.exists()
 
 
@@ -482,7 +487,9 @@ def test_pipeline_backfill_seed_sidecar_does_not_force_alignment_cells_or_region
 
     assert outputs.cells_tsv is None
     assert outputs.backfill_seed_audit_tsv is not None
+    assert outputs.backfill_candidate_audit_tsv is not None
     assert outputs.backfill_seed_audit_tsv.exists()
+    assert outputs.backfill_candidate_audit_tsv.exists()
     assert calls["emit_region_audit"] is False
 
 
@@ -545,8 +552,10 @@ def test_run_alignment_output_level_does_not_emit_integration_audit_by_default(
     names = sorted(path.name for path in (tmp_path / "out").iterdir())
     assert "alignment_cell_integration_audit.tsv" not in names
     assert "alignment_owner_backfill_seed_audit.tsv" not in names
+    assert "alignment_owner_backfill_candidate_audit.tsv" not in names
     assert outputs.integration_audit_tsv is None
     assert outputs.backfill_seed_audit_tsv is None
+    assert outputs.backfill_candidate_audit_tsv is None
 
 
 def test_run_alignment_validation_minimal_writes_machine_gate_surface_only(

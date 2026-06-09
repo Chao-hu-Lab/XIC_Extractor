@@ -64,6 +64,36 @@ Use allowlist promotion:
 - never describe the result as full backfill-system `production_ready` unless a
   separate reviewed contract validates that broader scope.
 
+### PeakHypothesis Backfill Promotion Addendum, 2026-06-08
+
+Promotion is PeakHypothesis / sample-cell scoped and must carry
+`peak_hypothesis_id` plus `activation_unit_scope=peak_hypothesis`. MS1
+same-peak own-max evidence is strong identity evidence inside the backfill
+evidence chain, but it is not a standalone production authority. A
+product-authorized projection `accept` still requires seed provenance,
+RT/window compatibility, detected anchors, product-authorized MS1 same-peak
+support, positive projected area, source-row hash agreement, and no wrong-peak
+or hypothesis blocker.
+
+If the formal product-authorized MS1 chain is absent but the row has seed
+provenance plus MS1 same-peak visual support, projection may emit
+`identity_supported_review` as `shadow_decision=context`. That context row can
+carry the positive projected area for human calibration, but
+`projected_matrix_written` remains `FALSE`. It can become a `shadow_ready`
+promotion sidecar only after an exact PeakHypothesis/sample allowlist marks the
+area as `standard_assessable_area`; this still does not mutate the production
+matrix.
+
+Nonstandard but assessable peak shapes may support gallery/evidence-chain
+review, but must not become promoted matrix-write candidates in this slice.
+Those rows remain blocked with `area_uncertainty_state=nonstandard_assessable`
+until a separate integration policy is approved. Identity support and area
+confidence are separate decisions. The public `alignment_matrix.tsv` shape
+remains unchanged; uncertainty is carried by the review row keyed by
+PeakHypothesis / feature family / seed group / sample. If `peak_hypothesis_id`
+cannot be resolved, the output remains a review queue and must not be consumed
+by activation.
+
 ## Goal
 
 Build a backfill evidence reconciliation gallery that lets a reviewer answer:

@@ -28,8 +28,9 @@ from xic_extractor.alignment.ms1_index_source import (
     source_for_owner_backfill_backend,
 )
 from xic_extractor.alignment.owner_backfill import (
+    OwnerBackfillCandidateAuditRow,
     OwnerBackfillWindowStrategy,
-    build_owner_backfill_cells,
+    build_owner_backfill_result,
 )
 from xic_extractor.alignment.owner_group_delivery import (
     OwnerGroupDeliveryFeature,
@@ -135,6 +136,7 @@ class OwnerBackfillSampleResult:
     sample_index: int
     sample_stem: str
     cells: tuple[AlignedCell, ...]
+    candidate_audit_rows: tuple[OwnerBackfillCandidateAuditRow, ...] = ()
     timing_stats: tuple[OwnerBackfillTimingStats, ...] = ()
 
 
@@ -142,6 +144,7 @@ class OwnerBackfillSampleResult:
 class OwnerBackfillProcessOutput:
     cells: tuple[AlignedCell, ...]
     timing_stats: tuple[OwnerBackfillTimingStats, ...]
+    candidate_audit_rows: tuple[OwnerBackfillCandidateAuditRow, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -539,7 +542,25 @@ def collect_owner_backfill_results(
         for result in sorted(successes, key=lambda item: item.sample_index)
         for stat in result.timing_stats
     )
-    return OwnerBackfillProcessOutput(cells=cells, timing_stats=timing_stats)
+    candidate_audit_rows = tuple(
+        sorted(
+            (
+                row
+                for result in successes
+                for row in result.candidate_audit_rows
+            ),
+            key=lambda row: (
+                feature_rank.get(row.feature_family_id, len(feature_rank)),
+                sample_rank.get(row.sample_stem, len(sample_rank)),
+                row.candidate_index,
+            ),
+        )
+    )
+    return OwnerBackfillProcessOutput(
+        cells=cells,
+        timing_stats=timing_stats,
+        candidate_audit_rows=candidate_audit_rows,
+    )
 
 
 def run_owner_backfill_jobs(
@@ -781,7 +802,7 @@ def extract_owner_backfill_sample_job(
                 if validation_raw_sources is not None
                 else {}
             )
-            cells = build_owner_backfill_cells(
+            backfill_result = build_owner_backfill_result(
                 job.features,
                 sample_order=(job.sample_stem,),
                 raw_sources={job.sample_stem: timed_raw},
@@ -800,7 +821,8 @@ def extract_owner_backfill_sample_job(
         return OwnerBackfillSampleResult(
             sample_index=job.sample_index,
             sample_stem=job.sample_stem,
-            cells=cells,
+            cells=backfill_result.cells,
+            candidate_audit_rows=backfill_result.candidate_audit_rows,
             timing_stats=(
                 OwnerBackfillTimingStats(
                     sample_stem=job.sample_stem,

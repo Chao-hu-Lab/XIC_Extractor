@@ -6,7 +6,10 @@ import numpy as np
 import xic_extractor.alignment.owner_backfill as owner_backfill_module
 from tests.test_alignment_owner_clustering import _owner
 from xic_extractor.alignment.config import AlignmentConfig
-from xic_extractor.alignment.owner_backfill import build_owner_backfill_cells
+from xic_extractor.alignment.owner_backfill import (
+    build_owner_backfill_cells,
+    build_owner_backfill_result,
+)
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_detection.region_audit import PeakRegionAuditSummary
@@ -483,6 +486,65 @@ def test_owner_backfill_marks_no_peak_query_as_unchecked_outcome() -> None:
     assert cells[0].gap_fill_state == "not_filled"
     assert cells[0].gap_fill_reason == "query_attempt_not_detected"
     assert cells[0].missing_observation_state == "missing_unchecked"
+
+
+def test_owner_backfill_result_records_all_candidate_audit_rows() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class MixedSource:
+        def extract_xic_many(self, requests):
+            traces = []
+            for request in requests:
+                if request.mz == 500.0:
+                    traces.append(
+                        XICTrace.from_arrays(
+                            [8.40, 8.50, 8.60],
+                            [0.0, 0.0, 0.0],
+                        )
+                    )
+                else:
+                    traces.append(
+                        XICTrace.from_arrays(
+                            [8.40, 8.49, 8.50, 8.51, 8.60],
+                            [0.0, 50.0, 120.0, 50.0, 0.0],
+                        )
+                    )
+            return tuple(traces)
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    feature = replace(
+        _feature(),
+        backfill_seed_centers=((500.0, 8.5), (501.0, 8.5)),
+    )
+
+    result = build_owner_backfill_result(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": MixedSource()},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=64,
+    )
+
+    assert [
+        (cell.cluster_id, cell.sample_stem, cell.status)
+        for cell in result.cells
+    ] == [("FAM000001", "sample-b", "rescued")]
+    assert [
+        (row.sample_stem, row.backfill_seed_mz, row.candidate_status)
+        for row in result.candidate_audit_rows
+    ] == [
+        ("sample-b", 500.0, "unchecked"),
+        ("sample-b", 501.0, "rescued"),
+    ]
+    assert [row.selected_for_output for row in result.candidate_audit_rows] == [
+        False,
+        True,
+    ]
+    assert result.candidate_audit_rows[0].candidate_outcome == "not_detected"
+    assert result.candidate_audit_rows[1].candidate_outcome == "detected"
 
 
 def test_owner_backfill_uses_batch_source_and_preserves_feature_major_order() -> None:

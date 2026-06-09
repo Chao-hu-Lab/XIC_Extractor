@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-08
-**Total entry-points:** 63
-**Total files (incl. helpers):** 147 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-09
+**Total entry-points:** 74
+**Total files (incl. helpers):** 158 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -26,7 +26,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 1. [Phase Gates (P1/P2/P2b/P2c/P7)](#phase-gates-p1p2p2bp2cp7) — 7 tools
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 14 tools
+4. [Backfill Reviews](#backfill-reviews) — 22 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 6 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 7 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
@@ -209,12 +209,35 @@ modes also write `activation_application_summary.tsv` and
 `activation_value_delta.tsv`. Existing matrix values are preserved; only missing
 `auto_activate` cells are written, while `auto_block` cells can be blanked or
 family promotion can be blocked. `activation_value_delta.tsv` records original
-value, activated value, source cell area, effect, and `value_changed` for
-review. If multiple provenance rows share one formal hypothesis/sample value,
+value, activated value, source cell area, effect, `value_changed`, and v3
+matrix-value provenance fields such as `matrix_value_kind`,
+`matrix_value_source`, `matrix_value_source_field`,
+`matrix_value_source_artifact_sha256`, and `matrix_value_source_row_sha256` for
+review. Matrix-only `activation_values.tsv` input must carry
+`projected_matrix_value_source`, source artifact schema/hash, source row hash,
+and source provenance detail; the source artifact hash must be a real lowercase
+SHA256 provenance digest, not an id-derived placeholder. Naked projected values
+fail closed. If multiple
+provenance rows share one formal hypothesis/sample value,
 the temporary pre-AsLS policy records the conflict and keeps the larger numeric
 value. Formal mode refuses to overwrite source alignment TSVs unless
 `--allow-overwrite-source` is passed. `--allow-non-passing-acceptance` is a
 diagnostic override only and must not be used for product claims.
+
+`--matrix-only` is the reviewed normal-peak backfill cost-control path. It
+requires `--activation-values-tsv`, `--alignment-matrix-tsv`,
+`--alignment-matrix-identity-tsv`, and `--alignment-review-tsv`, but does not
+require or read `--alignment-cells-tsv`. It writes only `alignment_matrix.tsv`,
+`alignment_matrix_identity.tsv`, `activation_hypothesis_identity.tsv`,
+`activation_value_delta.tsv`, and `activation_application_summary.tsv`.
+`alignment_cells.tsv` remains the audit/debug ledger for full activation copies
+and evidence projection; it is not a product dependency for matrix-only
+activation when product-authorized activation values are available. Matrix-only
+written values are tagged in `activation_value_delta.tsv` as
+`matrix_value_kind=backfill_activation` with
+`matrix_value_source=activation_values_tsv`, source artifact hash, and source
+row hash, so downstream reviewers can distinguish reviewed backfill values from
+primary detected values.
 
 ---
 
@@ -395,7 +418,287 @@ audit-note Cluster 2.
 **Purpose**: Emit a `shadow_projection_only` cell-level current-production-decision vs projected-decision sidecar for retained backfill seed groups, using formal `build_production_decisions()` as the current product snapshot and applying the reviewed shadow criteria only as a projection.
 **Topic group**: `shadow_production_projection.py` + `xic_extractor/diagnostics/shadow_production_projection.py`
 **Originating spec/goal/plan**: `specs/2026-06-07-backfill-evidence-reconciliation-gallery-design.md`; `goals/2026-06-07-backfill-evidence-reconciliation-productization-goal.md`; `plans/2026-06-07-backfill-evidence-reconciliation-productization-plan.md`
-**Status note**: Writes `shadow_production_projection_cells.tsv` and `shadow_production_projection_summary.json`. Rows expose `current_matrix_written`, `current_matrix_source=production_decision_snapshot`, `current_production_status`, `shadow_decision` (`accept` / `block` / `context`), `projected_matrix_written`, reasons, warnings, `product_authority_chain`, detected-anchor count, request-window overlap status, and overlay provenance. `product_authority_chain` is the compact MS1 product-rule / optional candidate-MS2 / same-peak trace consumed by gallery review; it is not a matrix schema change. `alignment_matrix.tsv` is hashed as source provenance here, not re-parsed as the row/cell authority. Projection no longer lets `visual_support` alone create a projected write: `accept` requires the same product-authorized evidence chain used by promotion (`trace_constellation` RAW-overlay MS1 same-peak own-max support, same-peak reason, and a positive projected matrix value). Candidate MS2 is auxiliary context for backfill cells; missing candidate-MS2 product authority does not block projection because those cells would already be detected if they had the required NL tag. `evidence_conflict`, `review_required_*`, missing detected anchors, missing selected peak segments, outside-window cells, and explicit wrong-peak/hypothesis blockers remain closed or context. `same_peak_multi_claim` / DUP is a warning instead of a hard blocker when that product-authorized same-Gaussian evidence chain is present; without that chain it remains `context`. `local/global` dominance is annotation only and does not hide traces. The summary separately reports `gate_row_count`, `projectable_gate_row_count`, `unprojectable_gate_row_count`, and `unprojectable_gate_reasons`; `row_count=0` can therefore mean that retained gate rows lacked seed/cell provenance such as `missing_seed_audit`, not that risk was absent. This tool does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbooks, or product decisions.
+**Status note**: Writes `shadow_production_projection_cells.tsv` and `shadow_production_projection_summary.json`. Rows expose `current_matrix_written`, `current_matrix_source=production_decision_snapshot`, `current_production_status`, `shadow_decision` (`accept` / `block` / `context`), `projected_matrix_written`, reasons, warnings, `product_authority_chain`, detected-anchor count, request-window overlap status, and overlay provenance. `product_authority_chain` is the compact MS1 product-rule / optional candidate-MS2 / same-peak trace consumed by gallery review; it is not a matrix schema change. `alignment_matrix.tsv` is hashed as source provenance here, not re-parsed as the row/cell authority. Projection no longer lets `visual_support` alone create a projected write: `accept` requires the same product-authorized evidence chain used by promotion (`trace_constellation` RAW-overlay MS1 same-peak own-max support, same-peak reason, and a positive projected matrix value). Seed provenance plus MS1 same-peak visual support without formal product authority is emitted as `shadow_decision=context` with `shadow_reasons=identity_supported_review`; it keeps the positive projected value for reviewed allowlist calibration but leaves `projected_matrix_written=FALSE`. Candidate MS2 is auxiliary context for backfill cells; missing candidate-MS2 product authority does not block projection because those cells would already be detected if they had the required NL tag. `evidence_conflict`, `review_required_*`, missing detected anchors, missing selected peak segments, outside-window cells, and explicit wrong-peak/hypothesis blockers remain closed or context. `same_peak_multi_claim` / DUP is a warning instead of a hard blocker when that product-authorized same-Gaussian evidence chain is present; without that chain it remains `context`. `local/global` dominance is annotation only and does not hide traces. The summary separately reports `gate_row_count`, `projectable_gate_row_count`, `unprojectable_gate_row_count`, and `unprojectable_gate_reasons`; `row_count=0` can therefore mean that retained gate rows lacked seed/cell provenance such as `missing_seed_audit`, not that risk was absent. This tool does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbooks, or product decisions.
+
+---
+
+### `backfill_peakhypothesis_promotion.py`
+
+**Purpose**: Convert reviewed PeakHypothesis/sample-cell backfill projection rows
+into an allowlisted product-candidate promotion sidecar while keeping
+nonstandard but assessable peaks review-only.
+**Topic group**: `backfill_peakhypothesis_promotion.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_promotion.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_promotion_cells.tsv`,
+`backfill_peakhypothesis_area_uncertainty.tsv`, and
+`backfill_peakhypothesis_promotion_summary.json`. It consumes
+`shadow_production_projection_cells.tsv` and a reviewed allowlist only. It can
+promote either formal product-authorized `accept` rows or
+`identity_supported_review` context rows when an exact PeakHypothesis/sample
+allowlist marks the area as `standard_assessable_area`. It does not read RAW,
+generate overlays, mutate alignment artifacts, change workbook schemas, or write
+final matrices. `nonstandard_assessable_area` rows can be review evidence only
+and remain blocked until a separate integration policy exists.
+8RAW activation and 85RAW validation are still required before production-ready
+claims.
+
+---
+
+### `backfill_peakhypothesis_activation_bridge.py`
+
+**Purpose**: Convert reviewed `backfill_peakhypothesis_promotion_cells.tsv`
+rows into the existing shared-peak activation decision/acceptance TSV contract
+without creating a parallel matrix writer.
+**Topic group**: `backfill_peakhypothesis_activation_bridge.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_activation_bridge.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `activation_decisions.tsv`,
+`activation_acceptance.tsv`, `activation_matrix_preflight.tsv`, and
+`backfill_peakhypothesis_activation_bridge_summary.json`. By default acceptance
+is `fail` with `next_action=run_activation_matrix_diff_smoke`, so the sidecar
+cannot be mistaken for production approval. Optional
+`--normal-peak-decisions-tsv` makes explicit `require_backfill` normal-peak
+decisions a fail-closed activation prerequisite. Optional
+`--alignment-matrix-tsv` plus `--alignment-matrix-identity-tsv` performs a
+public-matrix preflight: promoted PeakHypothesis/sample cells already present in
+the public matrix are suppressed from activation decisions. If the promotion
+snapshot says `current_matrix_written=FALSE` but the public matrix has a value,
+the preflight reports
+`public_matrix_conflicts_with_projection_current_snapshot` and points to
+rebuilding the matrix with the current writer before activation. This tool does
+not read RAW, mutate alignment artifacts, change workbook schemas, or write
+final matrices; matrix application remains owned by
+`apply_shared_peak_identity_activation.py`.
+
+---
+
+### `backfill_peakhypothesis_activation_acceptance.py`
+
+**Purpose**: Validate the post-activation matrix diff for a reviewed
+PeakHypothesis backfill promotion slice, proving that activation changed exactly
+the promoted PeakHypothesis/sample cells and no unrelated public matrix cells.
+**Topic group**: `backfill_peakhypothesis_activation_acceptance.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_activation_acceptance.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_activation_acceptance.tsv`,
+`backfill_peakhypothesis_activation_matrix_diff.tsv`, and
+`backfill_peakhypothesis_activation_acceptance_summary.json`. The gate consumes
+promotion cells, activation decisions, bridge matrix preflight, activation
+application summary, activation value delta, and before/after
+`alignment_matrix.tsv` plus `alignment_matrix_identity.tsv`. A pass requires
+all promoted rows to have matching `auto_activate` decisions, `needs_activation`
+preflight, `written` value deltas, coherent application summary, and a full
+matrix diff containing only the promoted cells with values matching the
+promotion sidecar. This is an 8RAW/current-writer diagnostic acceptance surface;
+it does not read RAW, mutate artifacts, change workbook schemas, or replace
+85RAW production validation.
+
+---
+
+### `backfill_peakhypothesis_raw85_slice_gate.py`
+
+**Purpose**: Gate reviewed PeakHypothesis backfill promotion cells against an
+existing 85RAW alignment artifact refresh before any direct production-transfer
+trial.
+**Topic group**: `backfill_peakhypothesis_raw85_slice_gate.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_raw85_slice_gate.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_raw85_slice_gate.tsv` and
+`backfill_peakhypothesis_raw85_slice_gate_summary.json`. It consumes only
+`backfill_peakhypothesis_promotion_cells.tsv`, 85RAW `alignment_review.tsv`,
+and 85RAW `alignment_cells.tsv`. Cross-run `feature_family_id` values are not
+treated as stable identity; when the promotion row carries a seed m/z/RT anchor,
+the 85RAW candidate is selected by hypothesis-anchor m/z/RT plus sample. A
+direct-transfer candidate requires that anchored PeakHypothesis/sample cell to
+exist, remain a primary matrix row, avoid unresolved family consolidation, have
+`detected` or `rescued` status, and carry a positive
+`gaussian15_positive_asls_residual` primary matrix area. Anchored detected or
+rescued cells blocked only by family consolidation/non-primary-row ownership are
+reported as `hypothesis_candidate_review`, not as absent. Hard missing cells,
+absent cells, duplicate-assigned cells, and missing Gaussian15 area still fail
+closed. This diagnostic does not read RAW, remap winners, apply activation,
+mutate alignment artifacts, change workbook schemas, or claim production
+readiness.
+
+---
+
+### `backfill_peakhypothesis_raw85_winner_remap.py`
+
+**Purpose**: Build diagnostic 85RAW primary-winner remap proposals for reviewed
+PeakHypothesis backfill cells that became consolidation losers in the direct
+85RAW slice gate.
+**Topic group**: `backfill_peakhypothesis_raw85_winner_remap.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_raw85_winner_remap.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Legacy family-consolidation context only. It writes
+`backfill_peakhypothesis_raw85_winner_remap.tsv` and
+`backfill_peakhypothesis_raw85_winner_remap_summary.json` from a slice-gate TSV
+plus 85RAW `alignment_review.tsv` and `alignment_cells.tsv`. It must not be used
+as hypothesis identity authority, because family winners can collapse multiple
+peaks inside a broad family/window. The 2026-06-09 top14 winner-remap artifact
+generated before the hypothesis-anchor correction is obsolete. Use the
+hypothesis-anchor slice gate as the current review surface; winner-remap output,
+if regenerated later, is only family-consolidation context and not product
+activation. It does not read RAW, change row identity, apply activation, mutate
+matrices, remap public outputs, or claim production readiness.
+
+---
+
+### `backfill_peakhypothesis_raw85_hypothesis_review.py`
+
+**Purpose**: Package corrected 85RAW hypothesis-anchor slice-gate candidates
+into a compact manual review queue before any product-transfer decision.
+**Topic group**: `backfill_peakhypothesis_raw85_hypothesis_review.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_raw85_hypothesis_review.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes
+`backfill_peakhypothesis_raw85_hypothesis_review_queue.tsv` and
+`backfill_peakhypothesis_raw85_hypothesis_review_summary.json` from the corrected
+85RAW slice-gate TSV only. It keeps source PeakHypothesis identity, m/z/RT
+anchor, matched 85RAW PeakHypothesis, same-sample area/status, and family
+consolidation context in one review row. It intentionally leaves
+`reviewer_verdict` and `reviewer_note` blank and records
+`proposed_product_transfer_status=review_only_pending_same_peak_and_consolidation_policy`.
+It does not read RAW, judge peak shape, choose S/N, apply activation, mutate
+matrices, remap family winners, or claim production readiness.
+
+---
+
+### `backfill_peakhypothesis_raw85_overlay.py`
+
+**Purpose**: Render RAW XIC overlay plots for corrected 85RAW hypothesis review
+candidates so reviewers do not need to inspect each row manually in Xcalibur.
+**Topic group**: `backfill_peakhypothesis_raw85_overlay.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_raw85_overlay.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_raw85_overlay_index.tsv`,
+`backfill_peakhypothesis_raw85_overlay_summary.json`, an HTML gallery, and
+per-candidate PNG/PDF plots. Each plot overlays raw XIC plus
+`gaussian15_asls_residual` smoothed XIC for the candidate m/z and current
+consolidation winner m/z in the same RAW sample, with candidate anchor RT,
+candidate peak window, and winner RT marked. The output is visual review
+evidence only: it does not choose S/N, judge same-peak automatically, apply
+activation, mutate matrices, remap family winners, or claim production
+readiness.
+
+---
+
+### `backfill_peakhypothesis_normal_peak_decision.py`
+
+**Purpose**: Convert reviewed PeakHypothesis promotion rows, corrected 85RAW
+hypothesis-anchor slice-gate rows, and manual same-peak verdicts into an
+explicit normal-peak backfill decision surface.
+**Topic group**: `backfill_peakhypothesis_normal_peak_decision.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_normal_peak_decision.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_normal_peak_decisions.tsv` and
+`backfill_peakhypothesis_normal_peak_decision_summary.json`. The normal-peak
+shape definition is
+`gaussian15_asls_residual_selected_segment_single_complete_unimodal_peak;raw_spikes_neighbor_contact_family_multiplet_not_blockers`:
+the selected PeakHypothesis/sample segment must show a complete Gaussian15
+positive AsLS residual single peak, from broad/flat through sharp/peaked. Raw
+XIC spikes, neighboring peak contact, family/window-level multiplets, and
+family consolidation/non-primary ownership are not peak-shape hard blockers by
+themselves. For `standard_assessable_area` rows with manual same-peak support,
+positive Gaussian15 primary area, and no other blockers, the decision is
+`require_backfill`; consolidation is recorded as a policy effect instead of a
+hard blocker. `nonstandard_assessable_area` rows remain review-only and out of
+scope for this normal-peak goal. This diagnostic does not write matrices or
+mutate alignment artifacts. The 2026-06-09 top14 reviewed slice was consumed by
+the activation bridge as a prerequisite and all 11 required normal-peak
+backfills reached
+matrix-diff acceptance without unexpected matrix changes.
+
+---
+
+### `backfill_peakhypothesis_85raw_activation_trial.py`
+
+**Purpose**: Run a no-RAW, artifact-only 85RAW normal-peak activation trial for
+reviewed PeakHypothesis/sample cells before launching a new full 85RAW rerun.
+**Topic group**: `backfill_peakhypothesis_85raw_activation_trial.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_85raw_activation_trial.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_85raw_activation_trial.tsv`
+and `backfill_peakhypothesis_85raw_activation_trial_summary.json`. It consumes
+only current 85RAW `alignment_matrix.tsv`, `alignment_matrix_identity.tsv`,
+`alignment_run_metadata.json`, `timing.json`, normal-peak decision rows, and
+manual same-peak verdict rows. It does not read RAW, load `alignment_cells.tsv`,
+apply activation, mutate alignment artifacts, or claim production readiness. It
+uses `raw85_matched_peak_hypothesis_id + sample` as the transfer trial key
+rather than cross-run source FAM IDs. The 2026-06-09 artifact-only trial found
+`normal_peak_required_count=11`, `primary_loser_count=9`,
+`primary_winner_count=2`, `expected_matrix_diff_count=11`,
+`unexpected_diff_count=0`, and a pass status, so the next action is implementing
+the normal-peak override through the activation owner rather than rerunning
+85RAW unchanged.
+
+---
+
+### `backfill_peakhypothesis_85raw_activation_transfer.py`
+
+**Purpose**: Transfer reviewed normal-peak 85RAW backfill decisions into
+raw85-keyed promotion rows that the existing activation bridge can consume.
+**Topic group**: `backfill_peakhypothesis_85raw_activation_transfer.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_85raw_activation_transfer.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes
+`backfill_peakhypothesis_85raw_transfer_promotion_cells.tsv`,
+`backfill_peakhypothesis_85raw_activation_transfer.tsv`, and
+`backfill_peakhypothesis_85raw_activation_transfer_summary.json`. It uses
+`raw85_matched_peak_hypothesis_id + sample` as the activation key, keeps source
+PeakHypothesis/FAM ids as audit-only provenance, and writes
+`source_artifact_sha256` as the content bundle hash of
+`normal_peak_decisions_tsv + activation_trial_tsv`, with row-level
+`source_row_sha256` for each transfer/promotion row. It fails closed on
+normal-peak decision blockers, manual same-peak conflicts, non-positive
+Gaussian15 primary area, or activation-trial blockers. It does not apply
+activation or write matrices; downstream matrix mutation remains owned by
+`apply_shared_peak_identity_activation.py` / `product_activation`.
+
+---
+
+### `backfill_peakhypothesis_transfer_readiness.py`
+
+**Purpose**: Summarize transfer readiness for a reviewed PeakHypothesis backfill
+promotion slice by joining the promotion summary, 8RAW/current-writer activation
+acceptance, 85RAW current-writer artifact contract, optional 85RAW slice gate
+summary, optional 85RAW hypothesis manual-review summary, and optional 85RAW
+winner-remap proposal summary.
+**Topic group**: `backfill_peakhypothesis_transfer_readiness.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_transfer_readiness.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_transfer_readiness.tsv` and
+`backfill_peakhypothesis_transfer_readiness_summary.json`. The gate is a
+decision surface, not a matrix writer: it does not read RAW, apply activation,
+mutate alignment artifacts, or change workbook schemas. A pass through its hard
+checks can report `readiness_label=production_candidate` when the 8RAW matrix
+diff acceptance passes and the 85RAW artifact refresh uses the canonical
+current-writer contract. With `--raw85-slice-gate-summary-json`, a failing
+slice gate becomes a hard blocker such as
+`85raw_slice_specific_no_regression_failed`; a missing slice gate remains
+`raw85_slice_gate_status=not_assessed`. A hypothesis-anchor partial gate is
+surfaced as `raw85_slice_gate_hypothesis_candidate_review_count` with
+`next_action=review_85raw_hypothesis_candidates_before_product_transfer`. When
+`--raw85-hypothesis-review-summary-json` shows every review candidate was
+manually accepted as same-peak evidence, the partial gate no longer counts as a
+hard peak-shape failure; readiness records
+`raw85_peak_shape_review_status=manual_same_peak_supported_all_review_candidates`
+and moves the remaining blocker to `raw85_consolidation_policy_not_productized`.
+Winner-remap summaries are optional legacy context and no longer override the
+hypothesis-anchor next action. It deliberately keeps `production_ready=FALSE`
+until an explicit product-transfer decision and consolidation policy exist.
 
 ---
 

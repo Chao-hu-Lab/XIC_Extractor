@@ -25,12 +25,14 @@ from xic_extractor.alignment.output_levels import (
     AlignmentOutputLevel,
     artifact_names_for_output_level,
 )
+from xic_extractor.alignment.owner_backfill import OwnerBackfillCandidateAuditRow
 from xic_extractor.alignment.ownership import OwnershipBuildResult
 from xic_extractor.alignment.tsv_writer import (
     write_alignment_cell_integration_audit_tsv,
     write_alignment_cells_tsv,
     write_alignment_matrix_identity_tsv,
     write_alignment_matrix_tsv,
+    write_alignment_owner_backfill_candidate_audit_tsv,
     write_alignment_owner_backfill_seed_audit_tsv,
     write_alignment_review_tsv,
     write_alignment_status_matrix_tsv,
@@ -49,6 +51,7 @@ class AlignmentRunOutputs:
     cells_tsv: Path | None = None
     integration_audit_tsv: Path | None = None
     backfill_seed_audit_tsv: Path | None = None
+    backfill_candidate_audit_tsv: Path | None = None
     status_matrix_tsv: Path | None = None
     event_to_owner_tsv: Path | None = None
     ambiguous_owners_tsv: Path | None = None
@@ -111,6 +114,11 @@ def output_paths(
         ),
         backfill_seed_audit_tsv=(
             output_dir / "alignment_owner_backfill_seed_audit.tsv"
+            if emit_alignment_backfill_seed_audit
+            else None
+        ),
+        backfill_candidate_audit_tsv=(
+            output_dir / "alignment_owner_backfill_candidate_audit.tsv"
             if emit_alignment_backfill_seed_audit
             else None
         ),
@@ -217,6 +225,9 @@ def write_outputs_atomic(
     alignment_config: AlignmentConfig,
     edge_evidence: Sequence[OwnerEdgeEvidence] = (),
     skipped_evidence: Sequence[SkippedEvidenceRecord] = (),
+    owner_backfill_candidate_audit_rows: Sequence[
+        OwnerBackfillCandidateAuditRow
+    ] = (),
     baseline_integration_method: str = "asls",
     baseline_audit_method: str = "",
 ) -> None:
@@ -296,6 +307,16 @@ def write_outputs_atomic(
                 lambda path: write_alignment_owner_backfill_seed_audit_tsv(
                     path,
                     matrix,
+                ),
+            ),
+        )
+    if outputs.backfill_candidate_audit_tsv is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.backfill_candidate_audit_tsv,
+                lambda path: write_alignment_owner_backfill_candidate_audit_tsv(
+                    path,
+                    owner_backfill_candidate_audit_rows,
                 ),
             ),
         )

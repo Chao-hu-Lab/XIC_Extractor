@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from itertools import groupby
 from typing import Literal, Protocol
 
@@ -50,6 +51,45 @@ class OwnerBackfillSource(Protocol):
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]: ...
 
 
+@dataclass(frozen=True)
+class OwnerBackfillCandidateAuditRow:
+    feature_family_id: str
+    group_hypothesis_id: str
+    public_family_id: str
+    sample_stem: str
+    candidate_index: int
+    candidate_phase: str
+    selected_for_output: bool
+    candidate_status: str
+    candidate_outcome: str
+    trace_quality: str
+    area: float | None
+    apex_rt: float | None
+    peak_start_rt: float | None
+    peak_end_rt: float | None
+    rt_delta_sec: float | None
+    backfill_seed_mz: float | None
+    backfill_seed_rt: float | None
+    backfill_request_rt_min: float | None
+    backfill_request_rt_max: float | None
+    backfill_request_ppm: float | None
+    reason: str
+    selection_note: str
+
+
+@dataclass(frozen=True)
+class OwnerBackfillResult:
+    cells: tuple[AlignedCell, ...]
+    candidate_audit_rows: tuple[OwnerBackfillCandidateAuditRow, ...]
+
+
+@dataclass(frozen=True)
+class _OwnerBackfillCandidateRecord:
+    cell: AlignedCell
+    candidate_index: int
+    candidate_phase: str
+
+
 def build_owner_backfill_cells(
     features: OwnerGroupDeliveryFeatures,
     *,
@@ -65,6 +105,37 @@ def build_owner_backfill_cells(
     region_audit_family_ids: frozenset[str] | None = None,
     audit_evidence_mode: str = "full",
 ) -> tuple[AlignedCell, ...]:
+    return build_owner_backfill_result(
+        features,
+        sample_order=sample_order,
+        raw_sources=raw_sources,
+        validation_raw_sources=validation_raw_sources,
+        alignment_config=alignment_config,
+        peak_config=peak_config,
+        raw_xic_batch_size=raw_xic_batch_size,
+        owner_backfill_window_strategy=owner_backfill_window_strategy,
+        owner_backfill_superwindow_span_factor=owner_backfill_superwindow_span_factor,
+        emit_region_audit=emit_region_audit,
+        region_audit_family_ids=region_audit_family_ids,
+        audit_evidence_mode=audit_evidence_mode,
+    ).cells
+
+
+def build_owner_backfill_result(
+    features: OwnerGroupDeliveryFeatures,
+    *,
+    sample_order: tuple[str, ...],
+    raw_sources: Mapping[str, OwnerBackfillSource],
+    validation_raw_sources: Mapping[str, OwnerBackfillSource] | None = None,
+    alignment_config: AlignmentConfig,
+    peak_config: ExtractionConfig,
+    raw_xic_batch_size: int = 1,
+    owner_backfill_window_strategy: OwnerBackfillWindowStrategy = "exact",
+    owner_backfill_superwindow_span_factor: int = 2,
+    emit_region_audit: bool = False,
+    region_audit_family_ids: frozenset[str] | None = None,
+    audit_evidence_mode: str = "full",
+) -> OwnerBackfillResult:
     if raw_xic_batch_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
     if owner_backfill_superwindow_span_factor < 1:
@@ -75,6 +146,7 @@ def build_owner_backfill_cells(
         )
     effective_emit_region_audit = emit_region_audit and audit_evidence_mode != "none"
     cells: list[AlignedCell] = []
+    candidate_records: list[_OwnerBackfillCandidateRecord] = []
     pending: dict[str, list[_RequestItem]] = defaultdict(list)
     rt_window_min = alignment_config.max_rt_sec / 60.0
     raw_sample_stems = frozenset(raw_sources)
@@ -132,6 +204,15 @@ def build_owner_backfill_cells(
                     ),
                 )
                 if cell is not None:
+                    _append_candidate_record(
+                        candidate_records,
+                        cell,
+                        phase=(
+                            "prefilter_query"
+                            if validation_raw_sources is not None
+                            else "primary_query"
+                        ),
+                    )
                     if validation_raw_sources is None or cell.status != "rescued":
                         _keep_best_backfill_outcome_cell(
                             backfill_by_feature_sample,
@@ -147,16 +228,22 @@ def build_owner_backfill_cells(
                 key not in backfill_by_feature_sample
                 and not _has_pending_validation(validation_pending, key)
             ):
+                cell = _backfill_unchecked_cell(
+                    feature,
+                    requested_sample,
+                    request=request,
+                    preferred_rt=preferred_rt,
+                    trace_quality="owner_backfill_unassessable",
+                    reason="owner-centered MS1 backfill query was not assessable",
+                )
+                _append_candidate_record(
+                    candidate_records,
+                    cell,
+                    phase="primary_fallback",
+                )
                 _keep_best_backfill_outcome_cell(
                     backfill_by_feature_sample,
-                    _backfill_unchecked_cell(
-                        feature,
-                        requested_sample,
-                        request=request,
-                        preferred_rt=preferred_rt,
-                        trace_quality="owner_backfill_unassessable",
-                        reason="owner-centered MS1 backfill query was not assessable",
-                    ),
+                    cell,
                 )
     if validation_raw_sources is not None:
         for sample_stem in sample_order:
@@ -165,19 +252,25 @@ def build_owner_backfill_cells(
                 continue
             if sample_stem not in validation_raw_sources:
                 for feature, requested_sample, request, preferred_rt in sample_requests:
+                    cell = _backfill_unchecked_cell(
+                        feature,
+                        requested_sample,
+                        request=request,
+                        preferred_rt=preferred_rt,
+                        trace_quality="owner_backfill_unassessable",
+                        reason=(
+                            "owner-centered MS1 backfill validation "
+                            "source was not available"
+                        ),
+                    )
+                    _append_candidate_record(
+                        candidate_records,
+                        cell,
+                        phase="validation_unavailable",
+                    )
                     _keep_best_backfill_outcome_cell(
                         backfill_by_feature_sample,
-                        _backfill_unchecked_cell(
-                            feature,
-                            requested_sample,
-                            request=request,
-                            preferred_rt=preferred_rt,
-                            trace_quality="owner_backfill_unassessable",
-                            reason=(
-                                "owner-centered MS1 backfill validation "
-                                "source was not available"
-                            ),
-                        ),
+                        cell,
                     )
                 continue
             source = validation_raw_sources[sample_stem]
@@ -212,6 +305,11 @@ def build_owner_backfill_cells(
                         ),
                     )
                     if cell is not None:
+                        _append_candidate_record(
+                            candidate_records,
+                            cell,
+                            phase="validation_query",
+                        )
                         _keep_best_backfill_outcome_cell(
                             backfill_by_feature_sample,
                             cell,
@@ -219,19 +317,25 @@ def build_owner_backfill_cells(
             for feature, requested_sample, request, preferred_rt in sample_requests:
                 key = (feature.feature_family_id, requested_sample)
                 if key not in backfill_by_feature_sample:
+                    cell = _backfill_unchecked_cell(
+                        feature,
+                        requested_sample,
+                        request=request,
+                        preferred_rt=preferred_rt,
+                        trace_quality="owner_backfill_unassessable",
+                        reason=(
+                            "owner-centered MS1 backfill validation "
+                            "query was not assessable"
+                        ),
+                    )
+                    _append_candidate_record(
+                        candidate_records,
+                        cell,
+                        phase="validation_fallback",
+                    )
                     _keep_best_backfill_outcome_cell(
                         backfill_by_feature_sample,
-                        _backfill_unchecked_cell(
-                            feature,
-                            requested_sample,
-                            request=request,
-                            preferred_rt=preferred_rt,
-                            trace_quality="owner_backfill_unassessable",
-                            reason=(
-                                "owner-centered MS1 backfill validation "
-                                "query was not assessable"
-                            ),
-                        ),
+                        cell,
                     )
     for feature in features:
         if feature.review_only:
@@ -242,7 +346,16 @@ def build_owner_backfill_cells(
             )
             if cell is not None:
                 cells.append(cell)
-    return tuple(cells)
+    selected_cell_ids = {id(cell) for cell in backfill_by_feature_sample.values()}
+    return OwnerBackfillResult(
+        cells=tuple(cells),
+        candidate_audit_rows=_candidate_audit_rows(
+            candidate_records,
+            selected_cell_ids=selected_cell_ids,
+            feature_order=tuple(feature.feature_family_id for feature in features),
+            sample_order=sample_order,
+        ),
+    )
 
 
 def _iter_extracted_request_traces(
@@ -285,6 +398,87 @@ def _has_pending_validation(
         and requested_sample == sample_stem
         for feature, requested_sample, _request, _preferred_rt in pending_items
     )
+
+
+def _append_candidate_record(
+    records: list[_OwnerBackfillCandidateRecord],
+    cell: AlignedCell,
+    *,
+    phase: str,
+) -> None:
+    records.append(
+        _OwnerBackfillCandidateRecord(
+            cell=cell,
+            candidate_index=len(records) + 1,
+            candidate_phase=phase,
+        )
+    )
+
+
+def _candidate_audit_rows(
+    records: Sequence[_OwnerBackfillCandidateRecord],
+    *,
+    selected_cell_ids: set[int],
+    feature_order: tuple[str, ...],
+    sample_order: tuple[str, ...],
+) -> tuple[OwnerBackfillCandidateAuditRow, ...]:
+    feature_rank = {feature_id: index for index, feature_id in enumerate(feature_order)}
+    sample_rank = {sample: index for index, sample in enumerate(sample_order)}
+    rows = [
+        _candidate_audit_row(record, id(record.cell) in selected_cell_ids)
+        for record in records
+    ]
+    return tuple(
+        sorted(
+            rows,
+            key=lambda row: (
+                feature_rank.get(row.feature_family_id, len(feature_rank)),
+                sample_rank.get(row.sample_stem, len(sample_rank)),
+                row.candidate_index,
+            ),
+        )
+    )
+
+
+def _candidate_audit_row(
+    record: _OwnerBackfillCandidateRecord,
+    selected_for_output: bool,
+) -> OwnerBackfillCandidateAuditRow:
+    cell = record.cell
+    return OwnerBackfillCandidateAuditRow(
+        feature_family_id=cell.cluster_id,
+        group_hypothesis_id=cell.group_hypothesis_id,
+        public_family_id=cell.public_family_id,
+        sample_stem=cell.sample_stem,
+        candidate_index=record.candidate_index,
+        candidate_phase=record.candidate_phase,
+        selected_for_output=selected_for_output,
+        candidate_status=cell.status,
+        candidate_outcome=_candidate_outcome(cell),
+        trace_quality=cell.trace_quality,
+        area=cell.area,
+        apex_rt=cell.apex_rt,
+        peak_start_rt=cell.peak_start_rt,
+        peak_end_rt=cell.peak_end_rt,
+        rt_delta_sec=cell.rt_delta_sec,
+        backfill_seed_mz=cell.backfill_seed_mz,
+        backfill_seed_rt=cell.backfill_seed_rt,
+        backfill_request_rt_min=cell.backfill_request_rt_min,
+        backfill_request_rt_max=cell.backfill_request_rt_max,
+        backfill_request_ppm=cell.backfill_request_ppm,
+        reason=cell.reason,
+        selection_note="selected" if selected_for_output else "not_selected",
+    )
+
+
+def _candidate_outcome(cell: AlignedCell) -> str:
+    if cell.status == "rescued":
+        return "detected"
+    if cell.trace_quality == "owner_backfill_not_detected":
+        return "not_detected"
+    if cell.trace_quality == "owner_backfill_unassessable":
+        return "unassessable"
+    return cell.trace_quality or cell.status
 
 
 def _iter_exact_request_traces(
