@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ from xic_extractor.alignment.output_rows import (
     row_id,
     safe_rate,
 )
+from xic_extractor.alignment.owner_backfill import OwnerBackfillCandidateAuditRow
 from xic_extractor.alignment.owner_group_delivery import (
     CROSS_SAMPLE_GROUP_CELL_COLUMNS,
     GROUP_BACKFILL_SEED_AUDIT_COLUMNS,
@@ -183,6 +185,31 @@ ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS = (
     "backfill_request_ppm",
     "backfill_apex_delta_sec",
     "reason",
+)
+
+ALIGNMENT_OWNER_BACKFILL_CANDIDATE_AUDIT_COLUMNS = (
+    "feature_family_id",
+    "group_hypothesis_id",
+    "public_family_id",
+    "sample_stem",
+    "candidate_index",
+    "candidate_phase",
+    "selected_for_output",
+    "candidate_status",
+    "candidate_outcome",
+    "trace_quality",
+    "area",
+    "apex_rt",
+    "peak_start_rt",
+    "peak_end_rt",
+    "rt_delta_sec",
+    "backfill_seed_mz",
+    "backfill_seed_rt",
+    "backfill_request_rt_min",
+    "backfill_request_rt_max",
+    "backfill_request_ppm",
+    "reason",
+    "selection_note",
 )
 
 
@@ -481,6 +508,45 @@ def write_alignment_owner_backfill_seed_audit_tsv(
             }
         )
     return _write_tsv(path, ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS, rows)
+
+
+def write_alignment_owner_backfill_candidate_audit_tsv(
+    path: Path,
+    rows: Sequence[OwnerBackfillCandidateAuditRow],
+) -> Path:
+    rendered: list[dict[str, object]] = []
+    for row in rows:
+        rendered.append(
+            {
+                "feature_family_id": row.feature_family_id,
+                "group_hypothesis_id": row.group_hypothesis_id,
+                "public_family_id": row.public_family_id,
+                "sample_stem": row.sample_stem,
+                "candidate_index": row.candidate_index,
+                "candidate_phase": row.candidate_phase,
+                "selected_for_output": row.selected_for_output,
+                "candidate_status": row.candidate_status,
+                "candidate_outcome": row.candidate_outcome,
+                "trace_quality": row.trace_quality,
+                "area": row.area,
+                "apex_rt": row.apex_rt,
+                "peak_start_rt": row.peak_start_rt,
+                "peak_end_rt": row.peak_end_rt,
+                "rt_delta_sec": row.rt_delta_sec,
+                "backfill_seed_mz": row.backfill_seed_mz,
+                "backfill_seed_rt": row.backfill_seed_rt,
+                "backfill_request_rt_min": row.backfill_request_rt_min,
+                "backfill_request_rt_max": row.backfill_request_rt_max,
+                "backfill_request_ppm": row.backfill_request_ppm,
+                "reason": row.reason,
+                "selection_note": row.selection_note,
+            }
+        )
+    return _write_tsv(
+        path,
+        ALIGNMENT_OWNER_BACKFILL_CANDIDATE_AUDIT_COLUMNS,
+        rendered,
+    )
 
 
 def write_alignment_status_matrix_tsv(path: Path, matrix: AlignmentMatrix) -> Path:

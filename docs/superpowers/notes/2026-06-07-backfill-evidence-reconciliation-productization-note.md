@@ -2,7 +2,11 @@
 
 Date: 2026-06-07
 
-Status: `shadow_ready` for Slice 0/1 diagnostic review surface.
+Status: `shadow_ready` for Slice 0/1 diagnostic review surface and the manually
+reviewed top14 PeakHypothesis promotion sidecar smoke. Activation has only been
+tested and accepted as an 8RAW/current-writer diagnostic copy on rebuilt matrix
+artifacts. The 85RAW current-writer artifact refresh passed as
+`artifact_refresh_only`; no production matrix write has been promoted.
 
 ## Verdict
 
@@ -127,8 +131,493 @@ Observed:
 - Initial smoke did not prove production readiness because the representative
   8RAW artifact root lacked seed audit and candidate-gate sidecars.
 - A future allowlisted product-promotion slice still needs a reviewed promotion
-  sub-contract, product-grade machine evidence, 8RAW validation, 85RAW
-  validation, and validation-evidence reviewer acceptance.
+  sub-contract, product-grade machine evidence, production-transfer activation
+  acceptance, and validation-evidence reviewer acceptance. The 85RAW
+  current-writer refresh now exists as a baseline artifact, but it did not carry
+  an activation/matrix-diff production-transfer gate.
+
+## Follow-up: Top14 Activation Drift
+
+The user-reviewed top14 standard PeakHypothesis/sample rows were projected into
+`backfill_peakhypothesis_promotion_cells.tsv` with 11
+`promote_matrix_write` rows. A public-matrix preflight against the 2026-06-07
+alignment root initially suppressed all 11 rows because the old public
+`alignment_matrix.tsv` already contained values.
+
+Root-cause check rebuilt `alignment_matrix.tsv` and
+`alignment_matrix_identity.tsv` from the same
+`alignment_review.tsv` / `alignment_cells.tsv` using the current writer. The
+rebuilt matrix keeps the same 343 rows but blanks all 11 top14 promotion cells.
+Whole-matrix presence drift between the old public matrix and the current writer
+was larger than the top14 set: 406 cells were old-written/current-blank and 35
+cells were old-blank/current-written.
+
+The activation bridge now writes `activation_matrix_preflight.tsv` and reports
+this exact state as
+`public_matrix_conflicts_with_projection_current_snapshot`, with
+`next_action=rebuild_alignment_matrix_with_current_writer_before_activation`.
+When the bridge is run against the current-writer rebuilt matrix, it emits 11
+activation decisions. A diagnostic activation copy then reports
+`canonical_row_identity_ready=TRUE`, `matrix_cells_written=11`, and all 11
+value-delta rows as `written, TRUE`.
+
+The post-activation acceptance gate compares the before/after public matrices
+with their identity sidecars and consumes promotion cells, bridge preflight,
+activation decisions, activation value delta, and application summary. For the
+top14 current-writer diagnostic run it reports:
+
+- `validation_scope=8raw_current_writer_matrix_diff`;
+- `promotion_row_count=11`;
+- `activation_decision_row_count=11`;
+- `preflight_needs_activation_count=11`;
+- `changed_matrix_cell_count=11`;
+- `unexpected_matrix_diff_count=0`;
+- `missing_matrix_diff_count=0`;
+- `value_mismatch_count=0`;
+- `acceptance_status=pass`.
+
+Interpretation: gallery plus evidence-chain promotion can route the reviewed
+true-signal backfill rows through the existing activation owner, but only after
+using coherent current-writer matrix artifacts. The old 2026-06-07 public matrix
+must not be used as the activation oracle for this slice. This closes the
+projection/public-matrix drift blocker for the reviewed top14 standard rows by
+identifying the root cause as a stale public-matrix artifact and proving the
+current-writer path with matrix-diff acceptance. It does not by itself promote a
+production matrix write.
+
+## Follow-up: 85RAW Launch Preflight
+
+Command:
+
+```powershell
+.venv\Scripts\python.exe -m scripts.run_alignment --discovery-batch-index local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R --dll-dir C:\Xcalibur\system\programs --output-dir output\backfill_peakhypothesis_promotion_85raw_20260609\preflight_current_contract --expected-sample-count 85 --output-level validation-minimal --backfill-scope production-equivalent --audit-evidence-mode none --performance-profile validation-fast --raw-workers 11 --owner-backfill-window-strategy super-window --owner-backfill-superwindow-span-factor 2 --timing-output output\backfill_peakhypothesis_promotion_85raw_20260609\preflight_current_contract\timing.json --timing-live-output output\backfill_peakhypothesis_promotion_85raw_20260609\preflight_current_contract\timing.live.json --preflight-only
+```
+
+Observed:
+
+- discovery batch samples: 85;
+- candidate CSVs found: 85;
+- RAW paths found: 85;
+- expected sample count: 85;
+- 85RAW canonical contract: enforced;
+- output level: `validation-minimal`;
+- backfill scope: `production-equivalent`;
+- audit evidence mode: `none`;
+- performance profile: `validation-fast`;
+- owner backfill window strategy: `super-window`;
+- timing output and live timing heartbeat paths are configured.
+
+Interpretation: this closes the launch-readiness gate only. The preflight did
+not load candidate CSV rows, open RAW files, run alignment, mutate product
+matrices, or prove 85RAW acceptance. The next production-readiness step, if the
+RAW cost is accepted, is the same foreground command without `--preflight-only`,
+followed by matrix-diff and no-regression review for the allowlisted slice.
+
+## Follow-up: 85RAW Artifact Refresh
+
+The foreground 85RAW current-writer artifact refresh completed with the same
+canonical command shape, omitting `--preflight-only` and writing to:
+
+- `output/backfill_peakhypothesis_promotion_85raw_20260609/artifact_refresh_current_writer/`
+
+Observed artifacts:
+
+- `alignment_review.tsv`
+- `alignment_matrix.tsv`
+- `alignment_matrix_identity.tsv`
+- `alignment_cells.tsv`
+- `skipped_evidence_ledger.tsv`
+- `alignment_run_metadata.json`
+- `timing.json`
+- `timing.live.json`
+
+Observed artifact counts:
+
+- `alignment_matrix.tsv`: 685 data rows and 85 sample columns;
+- `alignment_review.tsv`: 21,151 data rows;
+- `alignment_cells.tsv`: 1,797,835 data rows, matching 21,151 review rows x 85
+  samples;
+- `skipped_evidence_ledger.tsv`: 38,976 data rows.
+
+Metadata confirms:
+
+- `output_level=validation-minimal`;
+- `backfill_scope=production-equivalent`;
+- `audit_evidence_mode=none`;
+- `matrix_value_policy=gaussian15_positive_asls_residual_primary`;
+- `owner_backfill_xic_backend=raw`;
+- `schema_version=alignment-results-v3`.
+
+Timing summary:
+
+- timing records: 354;
+- summed stage elapsed: about 1,470 seconds;
+- heaviest stages: `alignment.owner_backfill` about 409 seconds,
+  `alignment.write_outputs` about 220 seconds,
+  `alignment.cluster_owners` about 119 seconds.
+
+Validation-evidence reviewer acceptance:
+
+- `run_ok=true`;
+- `gate_ok=true` for `artifact_refresh_only`;
+- `gate_ok=false` if interpreted as `production_transfer_gate`;
+- `production_ready=false`;
+- production readiness remains `inconclusive`.
+
+Interpretation: this closes the 85RAW current-writer artifact refresh only. It
+does not close top14 production promotion, because the known
+projection/public-matrix drift and missing activation matrix-diff/no-regression
+acceptance remain product blockers. Do not rerun 85RAW for this slice unless a
+fix changes matrix writer behavior or RAW-backed materialization.
+
+## Follow-up: Transfer Readiness Surface
+
+Implemented a final decision surface for the reviewed top14 standard slice:
+
+- `tools/diagnostics/backfill_peakhypothesis_transfer_readiness.py`
+- `xic_extractor/diagnostics/backfill_peakhypothesis_transfer_readiness.py`
+- `tests/test_backfill_peakhypothesis_transfer_readiness.py`
+
+Correction, 2026-06-09: the earlier 85RAW slice gate incorrectly treated
+cross-run `feature_family_id` values as stable identity. That made the
+`FAM000572 / Breast_Cancer_Tissue_pooled_QC5` row look absent in 85RAW. This was
+wrong. The current gate uses the reviewed promotion seed m/z/RT anchor plus
+sample to find the corresponding 85RAW PeakHypothesis candidate. Under that
+corrected hypothesis-anchor match, the 8RAW `FAM000572` row maps to 85RAW
+`FAM005540`, with `status=rescued` and
+`primary_matrix_area=48462.2`. The old winner-remap artifact generated from the
+pre-correction slice gate is obsolete and must not be used as product evidence.
+
+The tool consumes only existing artifacts:
+
+- promotion summary from
+  `projection_top14_user_standard/backfill_peakhypothesis_promotion_summary.json`;
+- 8RAW/current-writer activation acceptance from
+  `activation_acceptance_top14_user_standard_current_writer/backfill_peakhypothesis_activation_acceptance.tsv`;
+- 85RAW current-writer metadata and TSV counts from
+  `output/backfill_peakhypothesis_promotion_85raw_20260609/artifact_refresh_current_writer/`;
+- corrected 85RAW hypothesis-anchor slice gate summary from
+  `raw85_slice_gate_top14_user_standard/backfill_peakhypothesis_raw85_slice_gate_summary.json`;
+- optional manual same-peak verdict summary from
+  `raw85_hypothesis_manual_review_top14_user_standard/backfill_peakhypothesis_raw85_manual_verdict_summary.json`.
+
+Observed output:
+
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/transfer_readiness_top14_user_standard/backfill_peakhypothesis_transfer_readiness.tsv`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/transfer_readiness_top14_user_standard/backfill_peakhypothesis_transfer_readiness_summary.json`
+
+Observed readiness row:
+
+- `promotion_matrix_write_count=11`;
+- `activation_acceptance_status=pass`;
+- `eight_raw_gate_status=pass`;
+- `raw85_artifact_status=pass`;
+- `raw85_metadata_contract_status=pass`;
+- `raw85_sample_column_count=85`;
+- `manual_review_scope=observed_8raw_top14_standard_cells`;
+- `raw85_slice_gate_status=partial`;
+- `raw85_slice_gate_hypothesis_candidate_review_count=11`;
+- `raw85_slice_gate_blocked_count=0`;
+- `raw85_slice_gate_candidate_no_regression_count=0`;
+- `raw85_slice_gate_primary_loser_count=9`;
+- `raw85_slice_gate_duplicate_assigned_count=0`;
+- `raw85_slice_gate_absent_count=0`;
+- `raw85_winner_remap_status=not_assessed`;
+- `raw85_peak_shape_review_status=manual_same_peak_supported_all_review_candidates`;
+- `area_generalization_status=manual_same_peak_reviewed_area_policy_pending`;
+- `readiness_label=production_candidate`;
+- `production_ready=FALSE`;
+- `hard_fail_reasons=` empty;
+- `remaining_blockers=explicit_product_transfer_decision_required;raw85_consolidation_policy_not_productized`;
+- `next_action=define_raw85_consolidation_policy_for_same_peak_non_primary_candidates`.
+
+Interpretation: the reviewed top14 standard slice has a clean
+8RAW/current-writer matrix-diff gate and a clean 85RAW current-writer artifact
+baseline. It no longer shows 85RAW absence for the reviewed cells: all 11
+reviewed PeakHypothesis/sample cells have a detected or rescued m/z/RT-anchored
+85RAW candidate with a positive Gaussian15 primary area. Manual overlay review
+then confirmed all 11 candidates as selected on the correct same peak. The
+remaining blocker is no longer peak shape; it is productizing how same-peak
+PeakHypothesis evidence should override or coexist with broad family
+consolidation / non-primary-row ownership. Nine rows are `primary_loser` rows
+and two are primary-winner rows that still carry family consolidation context.
+The stale winner-remap route is not a product authority.
+
+The corresponding 85RAW hypothesis review queue was then emitted:
+
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/raw85_hypothesis_review_top14_user_standard/backfill_peakhypothesis_raw85_hypothesis_review_queue.tsv`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/raw85_hypothesis_review_top14_user_standard/backfill_peakhypothesis_raw85_hypothesis_review_summary.json`
+
+Observed review queue summary:
+
+- `review_queue_status=manual_review_required`;
+- `candidate_queue_count=11`;
+- `non_primary_candidate_count=9`;
+- `primary_row_consolidation_context_count=2`;
+- `next_action=manual_review_85raw_hypothesis_candidates`.
+
+This queue is review-only. It keeps the corrected source-to-85RAW
+PeakHypothesis anchor mapping visible, but it does not judge peak S/N, choose
+integration policy, or mutate product matrices.
+
+The queue was then rendered as RAW-backed overlay plots:
+
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/raw85_hypothesis_overlay_top14_user_standard/backfill_peakhypothesis_raw85_overlay_gallery.html`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/raw85_hypothesis_overlay_top14_user_standard/backfill_peakhypothesis_raw85_overlay_index.tsv`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/raw85_hypothesis_overlay_top14_user_standard/plots/`
+
+Observed overlay summary:
+
+- `overlay_count=11`;
+- `smooth_method=gaussian15_asls_residual`;
+- `smooth_window_points=15`;
+- `matrix_contract_changed=false`;
+- `product_behavior_changed=false`;
+- `next_action=review_overlay_pngs_for_same_peak_candidate_status`.
+
+Representative visual QA uses raw XIC plus `gaussian15_asls_residual` smooth:
+`FAM000572 -> FAM005540` has a visible candidate-window peak while the winner RT
+sits later; `FAM000808 -> FAM007718` shows a large candidate-vs-winner RT
+disagreement. The overlay surface is therefore the right next review surface for
+same-peak judgment; family winner text alone is not.
+
+Follow-up manual review, 2026-06-09:
+
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/raw85_hypothesis_manual_review_top14_user_standard/backfill_peakhypothesis_raw85_manual_verdicts.tsv`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/raw85_hypothesis_manual_review_top14_user_standard/backfill_peakhypothesis_raw85_manual_verdict_summary.json`
+
+Observed manual review summary:
+
+- `reviewed_candidate_count=11`;
+- `same_peak_supported_count=11`;
+- `same_peak_conflict_count=0`;
+- `unreviewed_candidate_count=0`;
+- `raw85_peak_shape_review_status=manual_same_peak_supported_all_review_candidates`;
+- `next_action=define_raw85_consolidation_policy_for_same_peak_non_primary_candidates`.
+
+Follow-up normal-peak decision surface, 2026-06-09:
+
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/normal_peak_decision_top14_user_standard/backfill_peakhypothesis_normal_peak_decisions.tsv`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/normal_peak_decision_top14_user_standard/backfill_peakhypothesis_normal_peak_decision_summary.json`
+
+Normal-peak definition from user review:
+
+- `normal_peak_shape_definition=gaussian15_asls_residual_selected_segment_single_complete_unimodal_peak;raw_spikes_neighbor_contact_family_multiplet_not_blockers`;
+- broad/flat to sharp/peaked complete one-peak distributions count as normal;
+- the selected segment's Gaussian15 positive AsLS residual morphology is the
+  peak-shape boundary;
+- raw XIC spikes, neighboring peak contact, family/window-level multiplets, and
+  family consolidation/non-primary ownership are not peak-shape hard blockers
+  by themselves.
+
+Observed normal-peak decision summary:
+
+- `row_count=11`;
+- `normal_peak_candidate_count=11`;
+- `required_backfill_count=11`;
+- `review_only_nonstandard_count=0`;
+- `blocked_count=0`;
+- `consolidation_override_count=11`;
+- `normal_peak_policy_status=normal_peak_backfill_required_all_reviewed_candidates`;
+- `decision_counts.require_backfill=11`.
+
+Interpretation: the normal-peak decision problem for this reviewed top14 slice
+is no longer ambiguous. All 11 reviewed normal same-peak PeakHypothesis/sample
+cells are `require_backfill`. Nonstandard peaks remain outside this goal.
+
+Follow-up normal-peak activation bridge and matrix diff, 2026-06-09:
+
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/activation_bridge_top14_user_standard_normal_peak_checked/backfill_peakhypothesis_activation_bridge_summary.json`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/activation_acceptance_top14_user_standard_normal_peak_checked/backfill_peakhypothesis_activation_acceptance_summary.json`
+
+Observed activation bridge summary:
+
+- `normal_peak_decision_input_count=11`;
+- `normal_peak_required_backfill_count=11`;
+- `normal_peak_decision_blocked_count=0`;
+- `activation_decision_row_count=11`;
+- `public_matrix_projection_conflict_count=0`.
+
+Observed matrix diff acceptance summary:
+
+- `acceptance_status=pass`;
+- `changed_matrix_cell_count=11`;
+- `expected_written_count=11`;
+- `application_matrix_cells_written=11`;
+- `unexpected_matrix_diff_count=0`;
+- `missing_matrix_diff_count=0`;
+- `value_mismatch_count=0`.
+
+Interpretation: the reviewed normal-peak top14 slice is now wired through the
+activation bridge and exact matrix-diff acceptance. This proves the reviewed
+normal-peak cells can be activated without unrelated public matrix changes. It
+does not settle nonstandard peak integration policy or full 85RAW production
+readiness.
+
+Follow-up 85RAW artifact-only activation trial, 2026-06-09:
+
+- `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/preflight_current_contract/`
+- `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_trial_artifact_only/backfill_peakhypothesis_85raw_activation_trial.tsv`
+- `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_trial_artifact_only/backfill_peakhypothesis_85raw_activation_trial_summary.json`
+
+Observed 85RAW preflight:
+
+- `Alignment launch preflight OK`;
+- discovery batch samples: `85`;
+- candidate CSVs found: `85`;
+- RAW paths found: `85`;
+- canonical 85RAW contract: enforced;
+- no candidate CSVs loaded and no RAW files opened.
+
+Observed no-RAW trial summary:
+
+- `trial_status=pass`;
+- `validation_mode=artifact_only_no_raw`;
+- `candidate_count=30289`;
+- `sample_count=85`;
+- `matrix_row_count=685`;
+- `normal_peak_required_count=11`;
+- `nonstandard_blocked_count=0`;
+- `same_peak_supported_count=11`;
+- `same_peak_conflict_count=0`;
+- `primary_loser_count=9`;
+- `primary_winner_count=2`;
+- `consolidation_override_count=9`;
+- `already_primary_matrix_written_count=0`;
+- `expected_matrix_diff_count=11`;
+- `unexpected_diff_count=0`;
+- `owner_backfill_elapsed_sec=408.9423352999984`;
+- `build_matrix_elapsed_sec=60.98443249999946`;
+- `claim_registry_elapsed_sec=57.67576149999877`;
+- `primary_consolidation_elapsed_sec=89.63260999999875`;
+- `write_outputs_elapsed_sec=219.65262780000012`.
+
+Subagent review synthesis:
+
+- strategy/policy: normal same-peak `require_backfill` may override
+  consolidation/non-primary only as a PeakHypothesis/sample-scoped rule with
+  fail-closed matrix diff acceptance;
+- code impact: place the behavior in the shared-peak activation owner, not in
+  primary consolidation, claim registry, owner matrix, or the base writer;
+- validation: do not rerun full 85RAW before the override path exists, because a
+  plain rerun would recreate current artifacts and not close the policy question.
+
+Interpretation: the reviewed normal-peak 85RAW transfer trial expects 11 matrix
+cell writes. The two `primary_winner` review-context candidates are still blank
+in the current public matrix for their reviewed sample cells, so they also need
+activation writes. The transfer key is `raw85_matched_peak_hypothesis_id +
+sample`, not the 8RAW source FAM ID. The next implementation slice is a
+normal-peak transfer activation path plus matrix-diff acceptance; full RAW
+rerun comes after that path exists.
+
+85RAW transfer activation closure, 2026-06-09:
+
+- transfer outputs:
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_transfer_artifact_only/backfill_peakhypothesis_85raw_transfer_promotion_cells.tsv`,
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_transfer_artifact_only/backfill_peakhypothesis_85raw_activation_transfer_summary.json`;
+- bridge outputs:
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_bridge_transfer_artifact_only/activation_decisions.tsv`,
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_bridge_transfer_artifact_only/backfill_peakhypothesis_activation_bridge_summary.json`;
+- diagnostic activation copy:
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_transfer_diagnostic/activation_application_summary.tsv`,
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_transfer_diagnostic/alignment_matrix.tsv`,
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_transfer_diagnostic/alignment_matrix_identity.tsv`;
+- post-activation acceptance:
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_acceptance_transfer_artifact_only/backfill_peakhypothesis_activation_acceptance_summary.json`.
+
+Observed closure summary:
+
+- transfer `promotion_row_count=11`;
+- transfer `activation_key_authority=raw85_matched_peak_hypothesis_id`;
+- transfer `source_peak_hypothesis_id_authority=audit_only_not_activation_key`;
+- bridge `activation_decision_row_count=11`;
+- bridge `public_matrix_projection_conflict_count=0`;
+- application `matrix_cells_written=11`;
+- application `families_added_to_matrix=9`;
+- application `matrix_value_conflict_cells=0`;
+- acceptance `validation_scope=85raw_current_writer_matrix_diff`;
+- acceptance `acceptance_status=pass`;
+- acceptance `changed_matrix_cell_count=11`;
+- acceptance `unexpected_matrix_diff_count=0`;
+- acceptance `missing_matrix_diff_count=0`;
+- acceptance `value_mismatch_count=0`;
+- acceptance `next_action=ready_for_85raw_reviewed_activation_acceptance`.
+
+Interpretation: the reviewed normal-peak transfer path now passes exact
+matrix-diff acceptance on current 85RAW artifacts. This still does not settle
+nonstandard peak integration policy or full automatic production activation, but
+it closes the specific normal-peak reviewed slice: if a cell is a reviewed
+standard-assessable selected segment, same-peak supported, Gaussian15-positive,
+and blocker-free except for consolidation/non-primary policy bookkeeping, it can
+be activated through the existing activation owner without unrelated matrix
+changes.
+
+Matrix-only activation architecture closure, 2026-06-09:
+
+- output:
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_transfer_matrix_only/`;
+- post-activation acceptance:
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_acceptance_matrix_only/backfill_peakhypothesis_activation_acceptance_summary.json`;
+- application `activation_output_mode=matrix-only`;
+- application `matrix_cells_written=11`;
+- application `canonical_row_identity_ready=TRUE`;
+- output includes `alignment_matrix.tsv`, `alignment_matrix_identity.tsv`,
+  `activation_hypothesis_identity.tsv`, `activation_value_delta.tsv`, and
+  `activation_application_summary.tsv`;
+- output intentionally does not write `alignment_cells.tsv` or
+  `alignment_review.tsv`;
+- acceptance `acceptance_status=pass`;
+- acceptance `changed_matrix_cell_count=11`;
+- acceptance `unexpected_matrix_diff_count=0`;
+- acceptance `missing_matrix_diff_count=0`;
+- acceptance `value_mismatch_count=0`.
+
+Architecture interpretation: the earlier full diagnostic activation copy proved
+the same matrix diff, but it unnecessarily read and rewrote the 85RAW
+`alignment_cells.tsv` audit ledger. Reviewed normal-peak activation can now use
+product-authorized activation values as the quantity source and update only the
+public matrix plus identity/delta/summary artifacts. Keep `alignment_cells.tsv`
+for audit/debug, evidence projection, and full-copy diagnostics; do not make it
+a required dependency for this normal-peak matrix activation slice.
+
+Provenance update: `activation_value_delta.tsv` now uses schema v3 and records
+matrix value provenance fields, including source artifact schema/hash and source
+row hash. Matrix-only written cells are explicitly tagged as
+`matrix_value_kind=backfill_activation` with source
+`activation_values_tsv/projected_matrix_value`. In product terms, same-peak
+normal-peak evidence can still trigger backfill, but the filled value remains
+distinguishable from primary detected values through the sidecar.
+
+Source-bundle provenance rerun, 2026-06-09:
+
+- transfer:
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_transfer_artifact_only_source_bundle/`;
+- matrix-only application:
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_transfer_matrix_only_source_bundle/`;
+- acceptance:
+  `output/backfill_peakhypothesis_normal_peak_override_85raw_20260609/activation_acceptance_matrix_only_source_bundle/`.
+
+Observed: all 11 promotion rows, transfer rows, and value-delta rows carry the
+same actual `normal_peak_decisions_tsv + activation_trial_tsv` content bundle
+hash. The acceptance summary reports `acceptance_status=pass`,
+`changed_matrix_cell_count=11`, `unexpected_matrix_diff_count=0`,
+`missing_matrix_diff_count=0`, `value_mismatch_count=0`, and
+`value_delta_mismatch_count=0`.
+
+## Follow-up: Peak / Backfill Outside-Frame Research
+
+Bounded literature and source-code research was summarized in:
+
+- `docs/superpowers/notes/2026-06-09-peak-backfill-outside-frame-research-note.md`
+
+The research input supports separating identity confidence, fill/backfill
+provenance, and quantitative integration confidence. Mature tools and recent
+peak-quality literature do not support treating a single peak picker,
+same-peak visual match, or Gaussian-style area as standalone product authority
+for nonstandard peaks. The recommended next design slice is diagnostic-only:
+emit PeakHypothesis-level integration-quality and fill-provenance rows, validate
+them first with masked-positive detected-cell recovery, then decide whether any
+area policy can be promoted.
 
 ## Follow-up: 8RAW Seed Chain
 
@@ -535,3 +1024,190 @@ The older one-off changed-row HTML was also refreshed from the updated
 - `FAM000540` now displays
   `family_verdict=ms1_shape_supports_family_backfill`
   with own-max/absolute-apex metrics.
+
+## Follow-up: PeakHypothesis Backfill Promotion Smoke, 2026-06-08
+
+The promotion policy was implemented as a diagnostic-only projection path with
+PeakHypothesis/sample-cell allowlist keys. The current smoke did not promote or
+activate any matrix value.
+
+Nonstandard but assessable peak-shape rows remain review-only in this slice.
+They may carry same-peak own-max identity evidence and area-uncertainty notes,
+but they are blocked from matrix-write promotion until a separate integration
+policy is approved.
+
+Smoke outputs:
+
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/shadow_projection_refresh/shadow_production_projection_cells.tsv`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/shadow_projection_refresh/shadow_production_projection_summary.json`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/backfill_peakhypothesis_review_queue.tsv`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/backfill_peakhypothesis_promotion_smoke_summary.json`
+
+Current refreshed projection from the same 8RAW source artifacts has
+PeakHypothesis identity and row-hash coverage for all 803 rows, but no accepted
+promotion candidates:
+
+- refreshed `decision_counts`: `accept=0`, `block=454`, `context=349`
+- refreshed rows with `peak_hypothesis_id` and `activation_unit_scope`: 803
+- refreshed rows with `shadow_projection_row_sha256`: 803
+- review queue row count: 0
+
+The older `reconciliation_seed_gate_overlay` shadow artifact still has 163
+legacy accept/projected-new-write rows, but it predates the PeakHypothesis
+identity/hash schema and now conflicts with the current projection policy. Those
+legacy rows were not converted to `product_authorized` allowlist rows.
+
+Readiness remains `diagnostic_only`. A manually reviewed
+`product_authorized` allowlist is still required before the promotion CLI may
+produce `shadow_ready` projection outputs; activation, 8RAW matrix diff,
+targeted benchmark check, and 85RAW validation remain unrun.
+
+## Follow-up: Activation Gate Decision, 2026-06-08
+
+The existing activation owner remains
+`tools/diagnostics/apply_shared_peak_identity_activation.py` and
+`xic_extractor.alignment.shared_peak_identity_explanation.product_activation`.
+That path expects explicit activation decision and acceptance sidecars, while
+the new PeakHypothesis promotion path currently produces only diagnostic review
+queue and smoke-summary artifacts.
+
+No activation bridge was added in this slice because the refreshed
+PeakHypothesis projection produced zero accepted rows and there is no reviewed
+`product_authorized` allowlist. The public `alignment_matrix.tsv` surface
+therefore remains unchanged by this work, and the expected matrix diff is
+`none` for the current 8RAW smoke.
+
+The next production-transfer slice should only be opened after manually
+reviewed promotion rows exist. That slice should convert reviewed
+PeakHypothesis promotions into the existing activation decision/acceptance
+contract, preserve PeakHypothesis identity in the activation sidecars, and add a
+focused matrix-diff oracle before any product activation run.
+
+## Follow-up: Identity-Supported Top14 Calibration, 2026-06-09
+
+The projection now separates formal product-authorized MS1 support from strong
+review identity support:
+
+- formal product-authorized support can still reach `shadow_decision=accept`
+  and `projected_matrix_written=TRUE`;
+- seed provenance plus MS1 same-peak visual support without formal product
+  authority is emitted as `shadow_decision=context`,
+  `shadow_reasons=identity_supported_review`, and
+  `projected_matrix_written=FALSE`;
+- those context rows keep the positive projected area so a reviewed allowlist can
+  test a narrow sidecar promotion path without changing production behavior.
+
+Refreshed 8RAW projection from the same source artifacts:
+
+- output:
+  `output/backfill_peakhypothesis_promotion_8raw_20260608/shadow_projection_identity_support_refresh/shadow_production_projection_summary.json`
+- `decision_counts`: `block=454`, `context=349`
+- `shadow_reason_counts.identity_supported_review`: 185
+- `projected_new_write_count`: 0
+- `matrix_contract_changed`: false
+- `product_behavior_changed`: false
+
+Manual top14 review was encoded only for user-standard rows
+`01,02,03,04,05,06,07,08,09,10,13`. Rows `11` and `14` were excluded as
+nonstandard/review-only, and row `12` was left out as borderline. The reviewed
+allowlist and sidecar projection are:
+
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/top14_user_standard_allowlist.tsv`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/projection_top14_user_standard/backfill_peakhypothesis_promotion_cells.tsv`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/projection_top14_user_standard/backfill_peakhypothesis_area_uncertainty.tsv`
+- `output/backfill_peakhypothesis_promotion_8raw_20260608/projection_top14_user_standard/backfill_peakhypothesis_promotion_summary.json`
+
+Observed top14 sidecar summary:
+
+- `readiness_label`: `shadow_ready`
+- `allowlist_row_count`: 11
+- `decision_counts.promote_matrix_write`: 11
+- `area_uncertainty_counts.standard_assessable`: 11
+- `matrix_contract_changed`: false
+- `product_behavior_changed`: false
+
+Interpretation: this closes the narrow cost/feasibility question for standard
+same-peak user-reviewed rows. It does not activate the rows, write the public
+matrix, validate 8RAW matrix diffs, or prove 85RAW readiness. The next step is
+an activation planning gate that consumes this sidecar through the existing
+activation owner instead of creating a parallel matrix writer.
+
+## Follow-up: Activation Bridge Preflight, 2026-06-09
+
+Implemented a small bridge from reviewed backfill PeakHypothesis promotions into
+the existing shared-peak activation sidecar contract:
+
+- `tools/diagnostics/backfill_peakhypothesis_activation_bridge.py`
+- `xic_extractor/diagnostics/backfill_peakhypothesis_activation_bridge.py`
+- `tests/test_backfill_peakhypothesis_activation_bridge.py`
+
+The bridge writes:
+
+- `activation_decisions.tsv`
+- `activation_acceptance.tsv`
+- `backfill_peakhypothesis_activation_bridge_summary.json`
+
+It does not apply activation or write matrices. Acceptance defaults to `fail`
+with `next_action=run_activation_matrix_diff_smoke`, so the output cannot be
+used as production approval by accident.
+
+Initial top14 bridge runs were produced:
+
+- without matrix preflight:
+  `output/backfill_peakhypothesis_promotion_8raw_20260608/activation_bridge_top14_user_standard/backfill_peakhypothesis_activation_bridge_summary.json`
+  - `activation_decision_row_count`: 11
+  - `acceptance_status`: `fail`
+  - `hard_fail_reasons`:
+    `activation_acceptance_requires_matrix_diff_validation`
+- with the stale public matrix + identity preflight:
+  `output/backfill_peakhypothesis_promotion_8raw_20260608/activation_bridge_top14_user_standard_matrix_checked/backfill_peakhypothesis_activation_bridge_summary.json`
+  - `promotion_row_count`: 11
+  - `public_matrix_already_written_count`: 11
+  - `activation_decision_row_count`: 0
+  - `hard_fail_reasons`:
+    `public_matrix_conflicts_with_projection_current_snapshot`
+  - `next_action`: `rebuild_alignment_matrix_with_current_writer_before_activation`
+
+A diagnostic-only activation copy was also run with
+`--allow-non-passing-acceptance` to measure the would-be matrix effect through
+the existing activation owner:
+
+- output:
+  `output/backfill_peakhypothesis_promotion_8raw_20260608/activation_top14_user_standard_diagnostic/activation_application_summary.tsv`
+- `acceptance_status`: `fail`
+- `canonical_row_identity_ready`: `TRUE`
+- `auto_activate_count`: 11
+- `matrix_cells_written`: 0
+- `activation_value_delta.tsv`: 11 `unchanged` rows
+
+Superseding closure run:
+
+- current-writer public matrix + identity preflight:
+  `output/backfill_peakhypothesis_promotion_8raw_20260608/activation_bridge_top14_user_standard_current_writer_checked/backfill_peakhypothesis_activation_bridge_summary.json`
+  - `promotion_row_count`: 11
+  - `public_matrix_already_written_count`: 0
+  - `public_matrix_projection_conflict_count`: 0
+  - `activation_decision_row_count`: 11
+  - `hard_fail_reasons`:
+    `activation_acceptance_requires_matrix_diff_validation`
+  - `next_action`: `run_activation_matrix_diff_smoke`
+- current-writer diagnostic activation copy:
+  `output/backfill_peakhypothesis_promotion_8raw_20260608/activation_top14_user_standard_current_writer_diagnostic/activation_application_summary.tsv`
+  - `canonical_row_identity_ready`: `TRUE`
+  - `matrix_cells_written`: 11
+  - `matrix_value_conflict_cells`: 0
+- current-writer post-activation acceptance:
+  `output/backfill_peakhypothesis_promotion_8raw_20260608/activation_acceptance_top14_user_standard_current_writer/backfill_peakhypothesis_activation_acceptance.tsv`
+  - `acceptance_status`: `pass`
+  - `changed_matrix_cell_count`: 11
+  - `unexpected_matrix_diff_count`: 0
+  - `missing_matrix_diff_count`: 0
+  - `value_mismatch_count`: 0
+  - `next_action`: `ready_for_8raw_reviewed_activation_acceptance`
+
+Interpretation: the original blocker was a stale 2026-06-07 public matrix
+artifact, not a live activation-owner or current-writer contradiction. The
+bridge correctly fails closed on the stale matrix. Rebuilding the matrix with
+the current writer removes the conflict, emits the 11 activation decisions, and
+passes the post-activation matrix-diff gate. This closes the
+projection/public-matrix drift blocker for the reviewed top14 standard slice.

@@ -7,6 +7,7 @@ It does not mutate the alignment matrix or workbook outputs.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -33,6 +34,8 @@ ShadowDecision = Literal["accept", "block", "context"]
 
 SHADOW_PRODUCTION_PROJECTION_COLUMNS = (
     "schema_version",
+    "peak_hypothesis_id",
+    "activation_unit_scope",
     "feature_family_id",
     "seed_group_id",
     "sample_stem",
@@ -65,6 +68,7 @@ SHADOW_PRODUCTION_PROJECTION_COLUMNS = (
     "support_components",
     "hard_blockers",
     "missing_evidence",
+    "shadow_projection_row_sha256",
     "overlay_verdict",
     "overlay_png_path",
 )
@@ -105,6 +109,11 @@ _MS1_SAME_PEAK_LEVEL = "trace_constellation"
 _MS1_SAME_PEAK_SUPPORT_REASON = (
     "family_ms1_overlay_anchor_peak_own_max_shape_supported"
 )
+_IDENTITY_SUPPORTED_REVIEW_REASON = "identity_supported_review"
+_SEED_REQUEST_COMPONENT = "seed_request_provenance"
+_MS1_SHAPE_SUPPORT_COMPONENT = "ms1_shape_supports_family_backfill"
+
+
 @dataclass(frozen=True)
 class ShadowProductionProjectionIndex:
     rows: tuple[dict[str, str], ...]
@@ -239,18 +248,27 @@ def _projection_row(
             shadow_decision = "context"
             reasons = (*reasons, "missing_projected_matrix_value")
             warnings = (*warnings, "projection_accept_without_positive_area")
+    elif _IDENTITY_SUPPORTED_REVIEW_REASON in reasons:
+        projected_value = _projected_cell_value(cell)
     projected_written = current_written or (
         shadow_decision == "accept" and projected_value is not None
     )
     rt_start = text_value(gate_row.get("suggested_rt_min"))
     rt_end = text_value(gate_row.get("suggested_rt_max"))
+    peak_hypothesis_id = text_value(cell.get("peak_hypothesis_id")) or text_value(
+        cell.get("group_hypothesis_id"),
+    )
     hard_blockers = tuple(
         token
         for token in _hard_blocker_tokens(gate_row)
         if token in HARD_BLOCKER_TOKENS
     )
-    return {
+    row = {
         "schema_version": SCHEMA_VERSION,
+        "peak_hypothesis_id": peak_hypothesis_id,
+        "activation_unit_scope": (
+            "peak_hypothesis" if peak_hypothesis_id else ""
+        ),
         "feature_family_id": text_value(gate_row.get("feature_family_id")),
         "seed_group_id": text_value(gate_row.get("seed_group_id")),
         "sample_stem": sample_stem,
@@ -283,12 +301,30 @@ def _projection_row(
         "support_components": text_value(gate_row.get("support_components")),
         "hard_blockers": ";".join(hard_blockers),
         "missing_evidence": text_value(gate_row.get("missing_evidence")),
+        "shadow_projection_row_sha256": "",
         "overlay_verdict": text_value(gate_row.get("overlay_family_verdict")),
         "overlay_png_path": (
             text_value(overlay_row.get("png_path"))
             or text_value(gate_row.get("overlay_png_path"))
         ),
     }
+    row["shadow_projection_row_sha256"] = _shadow_projection_row_sha256(row)
+    return row
+
+
+def _shadow_projection_row_sha256(row: Mapping[str, str]) -> str:
+    payload = {
+        column: text_value(row.get(column))
+        for column in SHADOW_PRODUCTION_PROJECTION_COLUMNS
+        if column != "shadow_projection_row_sha256"
+    }
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
 
 
 def _shadow_projection_decision(
@@ -339,6 +375,11 @@ def _shadow_projection_decision(
             gate_row,
         )
     if not _product_authorized_same_peak_backfill(cell):
+        if _identity_supported_by_review(gate_row):
+            return "context", (_IDENTITY_SUPPORTED_REVIEW_REASON,), _warnings(
+                cell,
+                gate_row,
+            )
         return "context", ("missing_product_authorized_evidence_chain",), _warnings(
             cell,
             gate_row,
@@ -373,6 +414,16 @@ def _product_authorized_same_peak_backfill(cell: Mapping[str, str]) -> bool:
     ):
         return False
     return True
+
+
+def _identity_supported_by_review(gate_row: Mapping[str, str]) -> bool:
+    gate_status = text_value(gate_row.get("evidence_gate_status"))
+    components = set(split_semicolon_labels(gate_row.get("support_components")))
+    return (
+        gate_status in PROJECTION_ACCEPT_GATE_STATUSES
+        and _SEED_REQUEST_COMPONENT in components
+        and _MS1_SHAPE_SUPPORT_COMPONENT in components
+    )
 
 
 def _product_authority_chain_text(cell: Mapping[str, str]) -> str:

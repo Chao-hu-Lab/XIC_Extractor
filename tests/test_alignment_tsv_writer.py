@@ -1281,6 +1281,61 @@ def test_write_alignment_owner_backfill_seed_audit_tsv_is_sidecar(
     assert audit[0]["backfill_apex_delta_sec"] == "-3.6"
 
 
+def test_write_alignment_owner_backfill_candidate_audit_tsv_is_sidecar(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.owner_backfill import (
+        OwnerBackfillCandidateAuditRow,
+    )
+    from xic_extractor.alignment.tsv_writer import (
+        ALIGNMENT_OWNER_BACKFILL_CANDIDATE_AUDIT_COLUMNS,
+        write_alignment_owner_backfill_candidate_audit_tsv,
+    )
+
+    audit = _read_tsv(
+        write_alignment_owner_backfill_candidate_audit_tsv(
+            tmp_path / "alignment_owner_backfill_candidate_audit.tsv",
+            (
+                OwnerBackfillCandidateAuditRow(
+                    feature_family_id="FAM000001",
+                    group_hypothesis_id="HYP000001",
+                    public_family_id="FAM000001",
+                    sample_stem="sample-b",
+                    candidate_index=1,
+                    candidate_phase="primary_query",
+                    selected_for_output=False,
+                    candidate_status="unchecked",
+                    candidate_outcome="not_detected",
+                    trace_quality="owner_backfill_not_detected",
+                    area=None,
+                    apex_rt=None,
+                    peak_start_rt=None,
+                    peak_end_rt=None,
+                    rt_delta_sec=None,
+                    backfill_seed_mz=500.0,
+                    backfill_seed_rt=8.5,
+                    backfill_request_rt_min=7.5,
+                    backfill_request_rt_max=9.5,
+                    backfill_request_ppm=20.0,
+                    reason=(
+                        "owner-centered MS1 backfill query found no accepted peak"
+                    ),
+                    selection_note="not_selected",
+                ),
+            ),
+        )
+    )
+
+    assert list(audit[0]) == list(
+        ALIGNMENT_OWNER_BACKFILL_CANDIDATE_AUDIT_COLUMNS
+    )
+    assert audit[0]["feature_family_id"] == "FAM000001"
+    assert audit[0]["candidate_phase"] == "primary_query"
+    assert audit[0]["selected_for_output"] == "FALSE"
+    assert audit[0]["candidate_outcome"] == "not_detected"
+    assert audit[0]["backfill_seed_mz"] == "500"
+
+
 def test_tsv_writers_escape_formula_like_text(tmp_path: Path):
     from xic_extractor.alignment.tsv_writer import (
         write_alignment_matrix_tsv,
