@@ -27,6 +27,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 manual_verdict_rows=(
                     backfill_peakhypothesis_85raw_activation_trial
                     .read_manual_verdict_rows(args.raw85_manual_verdicts_tsv)
+                    if args.raw85_manual_verdicts_tsv is not None
+                    else ()
                 ),
                 source_run_id=args.source_run_id,
             )
@@ -47,7 +49,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--current-85raw-artifact-dir", type=Path, required=True)
     parser.add_argument("--normal-peak-decisions-tsv", type=Path, required=True)
-    parser.add_argument("--raw85-manual-verdicts-tsv", type=Path, required=True)
+    parser.add_argument("--raw85-manual-verdicts-tsv", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--source-run-id", default="")
     return parser.parse_args(argv)

@@ -584,18 +584,23 @@ candidates so reviewers do not need to inspect each row manually in Xcalibur.
 per-candidate PNG/PDF plots. Each plot overlays raw XIC plus
 `gaussian15_asls_residual` smoothed XIC for the candidate m/z and current
 consolidation winner m/z in the same RAW sample, with candidate anchor RT,
-candidate peak window, and winner RT marked. The output is visual review
-evidence only: it does not choose S/N, judge same-peak automatically, apply
-activation, mutate matrices, remap family winners, or claim production
-readiness.
+candidate peak window, and winner RT marked. The overlay index also records
+machine Gaussian15 normal-shape evidence from the selected bounds' local shape
+context, using `ChromPeakSegment` baseline-return boundaries plus
+`gaussian15_positive_asls_residual` lobe area as audit evidence. It can support
+standard vs non-standard peak-shape gating, show the Gaussian area that would
+be integrated, and emit a machine same-peak verdict when the slice-gate
+PeakHypothesis/sample match, detected/rescued cell state, standard shape, and
+positive lobe area all agree. It does not apply activation, mutate matrices,
+remap family winners, or claim production readiness.
 
 ---
 
 ### `backfill_peakhypothesis_normal_peak_decision.py`
 
-**Purpose**: Convert reviewed PeakHypothesis promotion rows, corrected 85RAW
-hypothesis-anchor slice-gate rows, and manual same-peak verdicts into an
-explicit normal-peak backfill decision surface.
+**Purpose**: Convert PeakHypothesis promotion rows, corrected 85RAW
+hypothesis-anchor slice-gate rows, machine Gaussian15 shape evidence, and
+same-peak verdicts into an explicit normal-peak backfill decision surface.
 **Topic group**: `backfill_peakhypothesis_normal_peak_decision.py` +
 `xic_extractor/diagnostics/backfill_peakhypothesis_normal_peak_decision.py`
 **Originating spec/goal/plan**:
@@ -603,20 +608,27 @@ explicit normal-peak backfill decision surface.
 **Status note**: Writes `backfill_peakhypothesis_normal_peak_decisions.tsv` and
 `backfill_peakhypothesis_normal_peak_decision_summary.json`. The normal-peak
 shape definition is
-`gaussian15_asls_residual_selected_segment_single_complete_unimodal_peak;raw_spikes_neighbor_contact_family_multiplet_not_blockers`:
-the selected PeakHypothesis/sample segment must show a complete Gaussian15
-positive AsLS residual single peak, from broad/flat through sharp/peaked. Raw
-XIC spikes, neighboring peak contact, family/window-level multiplets, and
+`gaussian15_asls_residual_selected_shape_context_single_complete_unimodal_peak;raw_spikes_neighbor_contact_family_multiplet_not_blockers`:
+the selected PeakHypothesis/sample must show a complete Gaussian15 positive
+AsLS residual single peak in the selected bounds' local shape context, from
+broad/flat through sharp/peaked. This avoids treating a too-narrow integration
+bound as the whole peak-shape review window. Raw XIC spikes, neighboring peak
+contact, family/window-level multiplets, and
 family consolidation/non-primary ownership are not peak-shape hard blockers by
-themselves. For `standard_assessable_area` rows with manual same-peak support,
-positive Gaussian15 primary area, and no other blockers, the decision is
-`require_backfill`; consolidation is recorded as a policy effect instead of a
-hard blocker. `nonstandard_assessable_area` rows remain review-only and out of
-scope for this normal-peak goal. This diagnostic does not write matrices or
-mutate alignment artifacts. The 2026-06-09 top14 reviewed slice was consumed by
-the activation bridge as a prerequisite and all 11 required normal-peak
-backfills reached
-matrix-diff acceptance without unexpected matrix changes.
+themselves. When `--machine-shape-evidence-tsv` is supplied, the standard vs
+non-standard peak-shape decision comes from `machine_shape_decision`; a
+`standard_peak_shape_supported` row can resolve a missing/legacy area label to
+`standard_assessable_area`, while `nonstandard_peak_shape` stays review-only and
+does not activate. Same-peak support is still a separate evidence requirement,
+but it can now come from the overlay index's `machine_same_peak_verdict` when
+manual review is absent; manual same-peak conflicts still override and block.
+For standard machine-shape rows, the decision TSV selects
+`normal_peak_quantitation_area` from the overlay's Gaussian15
+baseline-return lobe area (`gaussian15_lobe_area`), with boundary start/end and
+source fields preserved for audit. Without machine-shape evidence, the legacy
+fallback remains the reviewed `raw85_primary_matrix_area`. For product
+activation, use the end-to-end normal-peak activation CLI so matrix writing is
+gated by post-activation matrix diff acceptance.
 
 ---
 
@@ -631,8 +643,10 @@ reviewed PeakHypothesis/sample cells before launching a new full 85RAW rerun.
 **Status note**: Writes `backfill_peakhypothesis_85raw_activation_trial.tsv`
 and `backfill_peakhypothesis_85raw_activation_trial_summary.json`. It consumes
 only current 85RAW `alignment_matrix.tsv`, `alignment_matrix_identity.tsv`,
-`alignment_run_metadata.json`, `timing.json`, normal-peak decision rows, and
-manual same-peak verdict rows. It does not read RAW, load `alignment_cells.tsv`,
+`alignment_run_metadata.json`, `timing.json`, and normal-peak decision rows.
+Manual same-peak verdict rows are optional override/review evidence; when they
+are absent, the trial consumes `same_peak_verdict` from the normal-peak
+decision TSV. It does not read RAW, load `alignment_cells.tsv`,
 apply activation, mutate alignment artifacts, or claim production readiness. It
 uses `raw85_matched_peak_hypothesis_id + sample` as the transfer trial key
 rather than cross-run source FAM IDs. The 2026-06-09 artifact-only trial found
@@ -661,10 +675,49 @@ PeakHypothesis/FAM ids as audit-only provenance, and writes
 `source_artifact_sha256` as the content bundle hash of
 `normal_peak_decisions_tsv + activation_trial_tsv`, with row-level
 `source_row_sha256` for each transfer/promotion row. It fails closed on
-normal-peak decision blockers, manual same-peak conflicts, non-positive
-Gaussian15 primary area, or activation-trial blockers. It does not apply
+normal-peak decision blockers, same-peak conflicts, non-positive normal-peak
+quantitation area, non-Gaussian15 quantitation area source, or activation-trial
+blockers. The projected value is
+`normal_peak_quantitation_area` when present, so machine-shape standard peaks
+write the Gaussian15 lobe area selected by the decision TSV. It does not apply
 activation or write matrices; downstream matrix mutation remains owned by
 `apply_shared_peak_identity_activation.py` / `product_activation`.
+
+---
+
+### `backfill_peakhypothesis_normal_peak_activation.py`
+
+**Purpose**: Run the normal-peak backfill product path end to end: evidence
+rows become explicit `require_backfill` normal-peak decisions, 85RAW activation
+keys, activation sidecars, matrix-only `alignment_matrix.tsv` output, and a
+post-activation matrix-diff acceptance audit.
+**Topic group**: `backfill_peakhypothesis_normal_peak_activation.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_normal_peak_activation.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-09-matrix-only-backfill-activation.md`
+**Status note**: This is the normal-peak end-to-end CLI for product behavior.
+It accepts either a provided `backfill_peakhypothesis_normal_peak_decisions.tsv`
+or the evidence inputs needed to generate it
+(`backfill_peakhypothesis_promotion_cells.tsv`,
+`backfill_peakhypothesis_raw85_slice_gate.tsv`, and machine Gaussian15
+shape/same-peak evidence from the overlay index; manual same-peak verdicts are
+optional overrides). It then consumes an existing
+`backfill_peakhypothesis_85raw_activation_trial.tsv` or can build one from a
+current 85RAW artifact directory, runs the 85RAW activation transfer,
+bridges transfer promotions into activation decisions, applies matrix-only
+activation through `product_activation`, and runs exact post-activation
+matrix-diff acceptance. The bridge's pre-application `activation_acceptance.tsv`
+is intentionally allowed to be fail-closed inside this orchestrator because the
+real product gate is the final `backfill_peakhypothesis_activation_acceptance.tsv`.
+Standard normal-peak rows with blockers fail closed before matrix writing.
+For machine-shape standard peaks, the matrix-only activation value comes from
+the decision TSV's `normal_peak_quantitation_area`, which is the Gaussian15
+baseline-return lobe area selected by the overlay/`ChromPeakSegment` evidence.
+`review_only_nonstandard_peak` rows are counted and excluded from activation
+rather than blocking this normal-peak goal. Passing output writes `alignment_matrix.tsv`,
+`alignment_matrix_identity.tsv`, `activation_value_delta.tsv`,
+`activation_hypothesis_identity.tsv`, and an end-to-end summary with source
+paths, source hashes, changed-cell count, and acceptance status.
 
 ---
 

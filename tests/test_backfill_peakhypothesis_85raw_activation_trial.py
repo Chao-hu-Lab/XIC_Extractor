@@ -71,8 +71,40 @@ def test_trial_fails_closed_on_same_peak_conflict(tmp_path: Path) -> None:
     assert index.summary["trial_status"] == "fail"
     assert index.summary["same_peak_conflict_count"] == 1
     assert index.summary["expected_matrix_diff_count"] == 0
-    assert "manual_same_peak_conflict" in index.summary["hard_fail_reasons"]
+    assert "same_peak_conflict" in index.summary["hard_fail_reasons"]
     assert index.trial_rows[0]["trial_action"] == "blocked"
+
+
+def test_trial_uses_machine_same_peak_verdict_when_manual_rows_absent(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = _write_artifact_dir(tmp_path)
+    index = trial.build_activation_trial_index(
+        current_85raw_artifact_dir=artifact_dir,
+        normal_peak_decision_rows=[
+            _normal_decision(
+                "SRC001",
+                "QC1",
+                "RAW85_LOSER",
+                "FALSE",
+                "primary_loser",
+                same_peak_verdict="same_peak_supported",
+                same_peak_source="machine_gaussian15_trace",
+            ),
+        ],
+        manual_verdict_rows=[],
+        source_run_id="trial",
+    )
+
+    assert index.summary["trial_status"] == "pass"
+    assert index.summary["manual_verdict_row_count"] == 0
+    assert index.summary["same_peak_supported_count"] == 1
+    assert index.summary["expected_matrix_diff_count"] == 1
+    assert index.trial_rows[0]["trial_action"] == "would_write_normal_peak_override"
+    assert index.trial_rows[0]["same_peak_verdict"] == "same_peak_supported"
+    assert index.trial_rows[0]["same_peak_verdict_source"] == (
+        "machine_gaussian15_trace"
+    )
 
 
 def test_cli_writes_summary_and_trial_rows(tmp_path: Path) -> None:
@@ -116,6 +148,54 @@ def test_cli_writes_summary_and_trial_rows(tmp_path: Path) -> None:
         ).read_text(encoding="utf-8")
     )
     assert summary["source_run_id"] == "cli-trial"
+    assert summary["expected_matrix_diff_count"] == 1
+
+
+def test_cli_accepts_machine_same_peak_without_manual_verdict_tsv(
+    tmp_path: Path,
+) -> None:
+    artifact_dir = _write_artifact_dir(tmp_path)
+    normal_tsv = tmp_path / "normal.tsv"
+    output_dir = tmp_path / "out"
+    _write_tsv(
+        normal_tsv,
+        [
+            _normal_decision(
+                "SRC001",
+                "QC1",
+                "RAW85_LOSER",
+                "FALSE",
+                "primary_loser",
+                same_peak_verdict="same_peak_supported",
+                same_peak_source="machine_gaussian15_trace",
+            ),
+        ],
+    )
+
+    from tools.diagnostics import backfill_peakhypothesis_85raw_activation_trial as cli
+
+    assert (
+        cli.main(
+            [
+                "--current-85raw-artifact-dir",
+                str(artifact_dir),
+                "--normal-peak-decisions-tsv",
+                str(normal_tsv),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "cli-machine-trial",
+            ],
+        )
+        == 0
+    )
+    summary = json.loads(
+        (
+            output_dir
+            / "backfill_peakhypothesis_85raw_activation_trial_summary.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert summary["manual_verdict_row_count"] == 0
     assert summary["expected_matrix_diff_count"] == 1
 
 
@@ -188,6 +268,8 @@ def _normal_decision(
     decision: str = "require_backfill",
     required: str = "TRUE",
     blockers: str = "",
+    same_peak_verdict: str = "same_peak_supported",
+    same_peak_source: str = "manual_review",
 ) -> dict[str, str]:
     return {
         "schema_version": "backfill_peakhypothesis_normal_peak_decision_v1",
@@ -206,9 +288,13 @@ def _normal_decision(
         "raw85_primary_matrix_area_source": "gaussian15_positive_asls_residual",
         "raw85_include_in_primary_matrix": include_primary,
         "raw85_consolidation_state": consolidation_state,
-        "manual_same_peak_verdict": "same_peak_supported",
+        "manual_same_peak_verdict": (
+            same_peak_verdict if same_peak_source == "manual_review" else ""
+        ),
+        "same_peak_verdict": same_peak_verdict,
+        "same_peak_verdict_source": same_peak_source,
         "normal_peak_shape_definition": (
-            "gaussian15_asls_residual_selected_segment_single_complete_unimodal_peak;"
+            "gaussian15_asls_residual_selected_shape_context_single_complete_unimodal_peak;"
             "raw_spikes_neighbor_contact_family_multiplet_not_blockers"
         ),
         "normal_peak_decision": decision,

@@ -47,6 +47,8 @@ TRANSFER_COLUMNS = (
     "raw85_cell_status",
     "raw85_consolidation_state",
     "manual_same_peak_verdict",
+    "same_peak_verdict",
+    "same_peak_verdict_source",
     "normal_peak_decision",
     "normal_peak_backfill_required",
     "trial_action",
@@ -54,6 +56,7 @@ TRANSFER_COLUMNS = (
     "current_matrix_value",
     "projected_matrix_value",
     "projected_matrix_value_source",
+    "projected_matrix_value_source_field",
     "source_artifact_schema_version",
     "source_artifact_sha256",
     "source_row_sha256",
@@ -209,17 +212,17 @@ def _transfer_blockers(
         blockers.append("normal_peak_backfill_not_required")
     if _value(normal_row, "normal_peak_decision_blockers"):
         blockers.append("normal_peak_decision_blockers_present")
-    if _value(normal_row, "manual_same_peak_verdict") != "same_peak_supported":
-        blockers.append("manual_same_peak_conflict")
+    if _same_peak_verdict(normal_row) != "same_peak_supported":
+        blockers.append("same_peak_conflict")
     if not _value(normal_row, "raw85_matched_peak_hypothesis_id"):
         blockers.append("missing_raw85_peak_hypothesis_id")
     if _value(normal_row, "raw85_cell_status") not in {"detected", "rescued"}:
         blockers.append("raw85_cell_status_not_detected_or_rescued")
-    area_source = _value(normal_row, "raw85_primary_matrix_area_source")
+    area_source = _projected_matrix_value_source(normal_row)
     if area_source != _GAUSSIAN15_AREA_SOURCE:
-        blockers.append("raw85_primary_matrix_area_source_not_gaussian15")
-    if not _positive_number(_value(normal_row, "raw85_primary_matrix_area")):
-        blockers.append("raw85_primary_matrix_area_not_positive")
+        blockers.append("normal_peak_quantitation_area_source_not_gaussian15")
+    if not _positive_number(_projected_matrix_value(normal_row)):
+        blockers.append("normal_peak_quantitation_area_not_positive")
     if not trial_row:
         blockers.append("activation_trial_missing")
         return tuple(_dedupe(blockers))
@@ -228,11 +231,11 @@ def _transfer_blockers(
         blockers.extend(trial_blockers)
     if _value(trial_row, "trial_action") == "blocked" and not trial_blockers:
         blockers.append("activation_trial_blocked")
-    if _value(trial_row, "manual_same_peak_verdict") != "same_peak_supported":
-        blockers.append("manual_same_peak_conflict")
+    if _same_peak_verdict(trial_row) != "same_peak_supported":
+        blockers.append("same_peak_conflict")
     current_written = bool_value(trial_row.get("current_public_matrix_written")) is True
     current_value = _value(trial_row, "current_public_matrix_value")
-    projected_value = _value(normal_row, "raw85_primary_matrix_area")
+    projected_value = _projected_matrix_value(normal_row)
     if (
         current_written
         and current_value
@@ -257,7 +260,8 @@ def _promotion_row(
         source_peak_id,
         activation_peak_id,
         sample,
-        _value(normal_row, "raw85_primary_matrix_area"),
+        _projected_matrix_value(normal_row),
+        _projected_matrix_value_source_field(normal_row),
     )
     return {
         "schema_version": backfill_peakhypothesis_promotion.SCHEMA_VERSION,
@@ -280,8 +284,8 @@ def _promotion_row(
         "current_matrix_written": current_written,
         "shadow_reasons": _shadow_reasons(normal_row),
         "projected_matrix_written": "TRUE",
-        "projected_matrix_value": _value(normal_row, "raw85_primary_matrix_area"),
-        "projected_matrix_value_source": _GAUSSIAN15_AREA_SOURCE,
+        "projected_matrix_value": _projected_matrix_value(normal_row),
+        "projected_matrix_value_source": _projected_matrix_value_source(normal_row),
         "area_policy": _value(normal_row, "area_policy"),
         "area_uncertainty_state": "standard_assessable",
         "area_uncertainty_reason": _value(
@@ -293,7 +297,7 @@ def _promotion_row(
         "matrix_quantitative_use": _value(normal_row, "matrix_quantitative_use"),
         "product_authority_chain": (
             "normal_peak_same_peak_manual_overlay;"
-            f"{_GAUSSIAN15_AREA_SOURCE}"
+            f"{_projected_matrix_value_source(normal_row)}"
         ),
         "authority_source": "raw85_normal_peak_transfer_activation",
         "source_artifact_schema_version": SCHEMA_VERSION,
@@ -301,7 +305,9 @@ def _promotion_row(
         "source_row_sha256": row_hash,
         "source_provenance_detail": (
             "raw85_normal_peak_transfer_activation;"
-            "source_bundle=normal_peak_decisions_tsv+activation_trial_tsv"
+            "source_bundle=normal_peak_decisions_tsv+activation_trial_tsv;"
+            "normal_peak_quantitation_area_source_field:"
+            f"{_projected_matrix_value_source_field(normal_row)}"
         ),
         "shadow_projection_sha256": source_artifact_sha256,
         "shadow_projection_row_sha256": row_hash,
@@ -333,6 +339,8 @@ def _transfer_row(
             "raw85_consolidation_state",
         ),
         "manual_same_peak_verdict": _value(normal_row, "manual_same_peak_verdict"),
+        "same_peak_verdict": _same_peak_verdict(normal_row),
+        "same_peak_verdict_source": _same_peak_verdict_source(normal_row),
         "normal_peak_decision": _value(normal_row, "normal_peak_decision"),
         "normal_peak_backfill_required": _bool_text(
             normal_row.get("normal_peak_backfill_required"),
@@ -342,15 +350,19 @@ def _transfer_row(
             trial_row.get("current_public_matrix_written"),
         ),
         "current_matrix_value": _value(trial_row, "current_public_matrix_value"),
-        "projected_matrix_value": _value(normal_row, "raw85_primary_matrix_area"),
-        "projected_matrix_value_source": _GAUSSIAN15_AREA_SOURCE,
+        "projected_matrix_value": _projected_matrix_value(normal_row),
+        "projected_matrix_value_source": _projected_matrix_value_source(normal_row),
+        "projected_matrix_value_source_field": _projected_matrix_value_source_field(
+            normal_row,
+        ),
         "source_artifact_schema_version": SCHEMA_VERSION,
         "source_artifact_sha256": source_artifact_sha256,
         "source_row_sha256": _row_sha256(
             _value(normal_row, "peak_hypothesis_id"),
             _value(normal_row, "raw85_matched_peak_hypothesis_id"),
             _value(normal_row, "sample_stem"),
-            _value(normal_row, "raw85_primary_matrix_area"),
+            _projected_matrix_value(normal_row),
+            _projected_matrix_value_source_field(normal_row),
         ),
         "source_provenance_detail": (
             "raw85_normal_peak_transfer_activation;"
@@ -413,6 +425,41 @@ def _shadow_reasons(row: Mapping[str, Any]) -> str:
     reasons = _split_semicolon(_value(row, "normal_peak_decision_reasons"))
     reasons.append("normal_peak_same_peak_override")
     return ";".join(_dedupe(reasons))
+
+
+def _projected_matrix_value(row: Mapping[str, Any]) -> str:
+    return _value(row, "normal_peak_quantitation_area") or _value(
+        row,
+        "raw85_primary_matrix_area",
+    )
+
+
+def _projected_matrix_value_source(row: Mapping[str, Any]) -> str:
+    return _value(row, "normal_peak_quantitation_area_source") or _value(
+        row,
+        "raw85_primary_matrix_area_source",
+    )
+
+
+def _projected_matrix_value_source_field(row: Mapping[str, Any]) -> str:
+    return _value(row, "normal_peak_quantitation_area_source_field") or (
+        "raw85_primary_matrix_area"
+    )
+
+
+def _same_peak_verdict(row: Mapping[str, Any]) -> str:
+    return _value(row, "same_peak_verdict") or _value(
+        row,
+        "manual_same_peak_verdict",
+    )
+
+
+def _same_peak_verdict_source(row: Mapping[str, Any]) -> str:
+    return _value(row, "same_peak_verdict_source") or (
+        "legacy_manual_same_peak_verdict"
+        if _value(row, "manual_same_peak_verdict")
+        else ""
+    )
 
 
 def _row_sha256(*parts: str) -> str:

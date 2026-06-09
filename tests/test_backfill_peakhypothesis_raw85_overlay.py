@@ -57,10 +57,22 @@ def test_builds_and_renders_raw85_overlay_gallery(tmp_path: Path) -> None:
 
     rows = _read_tsv(outputs.index_tsv)
     assert rows[0]["review_item_id"] == "HYPREV0001"
+    assert rows[0]["source_peak_hypothesis_id"] == "FAM_SRC"
     assert rows[0]["candidate_point_count"] == "80"
     assert rows[0]["winner_point_count"] == "80"
     assert rows[0]["smooth_method"] == "gaussian15_asls_residual"
     assert rows[0]["smooth_window_points"] == "15"
+    assert rows[0]["machine_shape_decision"] == "standard_peak_shape_supported"
+    assert rows[0]["machine_same_peak_verdict"] == "same_peak_supported"
+    assert rows[0]["machine_same_peak_blockers"] == ""
+    assert (
+        rows[0]["machine_shape_reasons"]
+        == "gaussian15_selected_shape_context_single_complete_unimodal_peak"
+    )
+    assert rows[0]["gaussian15_selected_segment_peak_count"] == "1"
+    assert float(rows[0]["gaussian15_lobe_area"]) > 0.0
+    assert rows[0]["gaussian15_lobe_area_source"] == "gaussian15_positive_asls_residual"
+    assert rows[0]["gaussian15_lobe_boundary_source"] == "baseline_return"
     assert rows[0]["png_path"].endswith(".png")
     assert rows[0]["pdf_path"].endswith(".pdf")
     assert (tmp_path / rows[0]["png_path"]).is_file()
@@ -75,6 +87,106 @@ def test_builds_and_renders_raw85_overlay_gallery(tmp_path: Path) -> None:
     assert summary["product_behavior_changed"] is False
 
 
+def test_machine_shape_uses_local_context_when_peak_bounds_are_too_narrow(
+    tmp_path: Path,
+) -> None:
+    requests = overlay.build_overlay_requests(
+        review_queue_rows=[
+            _review_queue_row(
+                review_item_id="HYPREV_NARROW",
+                sample="Sample_A",
+                matched_family="FAM_MATCH",
+                winner_family="FAM_WIN",
+                anchor_mz="289.116",
+                anchor_rt="13.0485",
+                peak_start_rt="13.073",
+                peak_end_rt="13.095",
+            ),
+        ],
+        raw85_review_rows=[
+            _alignment_review_row("FAM_MATCH", mz="289.116", rt="13.0485"),
+            _alignment_review_row("FAM_WIN", mz="289.115", rt="13.328"),
+        ],
+        discovery_batch_rows=[
+            {
+                "sample_stem": "Sample_A",
+                "raw_file": r"C:\Xcalibur\data\Sample_A.raw",
+            },
+        ],
+        rt_padding_min=0.5,
+        ppm_tolerance=20.0,
+    )
+
+    outputs = overlay.write_raw85_overlay_outputs(
+        tmp_path,
+        requests,
+        trace_provider=_fake_trace_provider,
+        source_run_id="unit",
+    )
+
+    rows = _read_tsv(outputs.index_tsv)
+    assert rows[0]["machine_shape_decision"] == "standard_peak_shape_supported"
+    assert rows[0]["machine_same_peak_verdict"] == "same_peak_supported"
+    assert rows[0]["machine_shape_blockers"] == ""
+    assert rows[0]["gaussian15_selected_segment_peak_count"] == "1"
+    assert float(rows[0]["gaussian15_lobe_start_rt"]) < 13.073
+    assert float(rows[0]["gaussian15_lobe_end_rt"]) > 13.095
+    assert float(rows[0]["gaussian15_lobe_area"]) > 0.0
+
+
+def test_machine_shape_blocks_multiple_peaks_in_local_context(
+    tmp_path: Path,
+) -> None:
+    requests = overlay.build_overlay_requests(
+        review_queue_rows=[
+            _review_queue_row(
+                review_item_id="HYPREV_MULTI",
+                sample="Sample_A",
+                matched_family="FAM_MATCH",
+                winner_family="FAM_WIN",
+                anchor_mz="289.116",
+                anchor_rt="13.0485",
+                peak_start_rt="12.98",
+                peak_end_rt="13.48",
+            ),
+        ],
+        raw85_review_rows=[
+            _alignment_review_row("FAM_MATCH", mz="289.116", rt="13.0485"),
+            _alignment_review_row("FAM_WIN", mz="289.115", rt="13.328"),
+        ],
+        discovery_batch_rows=[
+            {
+                "sample_stem": "Sample_A",
+                "raw_file": r"C:\Xcalibur\data\Sample_A.raw",
+            },
+        ],
+        rt_padding_min=0.5,
+        ppm_tolerance=20.0,
+    )
+
+    outputs = overlay.write_raw85_overlay_outputs(
+        tmp_path,
+        requests,
+        trace_provider=_two_peak_trace_provider,
+        source_run_id="unit",
+    )
+
+    rows = _read_tsv(outputs.index_tsv)
+    assert rows[0]["machine_shape_decision"] == "nonstandard_peak_shape"
+    assert rows[0]["machine_same_peak_verdict"] == "same_peak_not_supported"
+    assert (
+        rows[0]["machine_same_peak_blockers"]
+        == "machine_standard_peak_shape_not_supported;"
+        "machine_gaussian15_lobe_area_not_positive"
+    )
+    assert (
+        rows[0]["machine_shape_blockers"]
+        == "selected_shape_context_multiple_gaussian15_peaks"
+    )
+    assert rows[0]["gaussian15_selected_segment_peak_count"] == "2"
+    assert rows[0]["gaussian15_lobe_area"] == ""
+
+
 def _fake_trace_provider(
     _raw_file: Path,
     mz: float,
@@ -85,6 +197,21 @@ def _fake_trace_provider(
     rt = np.linspace(rt_min, rt_max, 80)
     center = 13.05 if mz > 289.1155 else 13.33
     intensity = np.exp(-((rt - center) ** 2) / (2 * 0.035**2)) * 1000
+    return rt, intensity
+
+
+def _two_peak_trace_provider(
+    _raw_file: Path,
+    _mz: float,
+    rt_min: float,
+    rt_max: float,
+    _ppm_tolerance: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    rt = np.linspace(rt_min, rt_max, 120)
+    intensity = (
+        np.exp(-((rt - 13.05) ** 2) / (2 * 0.035**2)) * 1000
+        + np.exp(-((rt - 13.38) ** 2) / (2 * 0.035**2)) * 700
+    )
     return rt, intensity
 
 
