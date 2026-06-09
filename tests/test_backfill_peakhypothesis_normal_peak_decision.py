@@ -7,7 +7,7 @@ from xic_extractor.diagnostics import (
 )
 
 EXPECTED_NORMAL_PEAK_SHAPE_DEFINITION = (
-    "gaussian15_asls_residual_selected_segment_single_complete_unimodal_peak;"
+    "gaussian15_asls_residual_selected_shape_context_single_complete_unimodal_peak;"
     "raw_spikes_neighbor_contact_family_multiplet_not_blockers"
 )
 
@@ -57,6 +57,10 @@ def test_normal_same_peak_non_primary_candidate_requires_backfill(
         "consolidation_not_blocking_normal_peak"
     )
     assert row["normal_peak_decision_blockers"] == ""
+    assert row["normal_peak_quantitation_area"] == "298267"
+    assert row["normal_peak_quantitation_area_source_field"] == (
+        "raw85_primary_matrix_area"
+    )
     assert row["consolidation_policy_effect"] == (
         "allow_same_peak_peakhypothesis_candidate_despite_non_primary"
     )
@@ -121,6 +125,223 @@ def test_standard_area_policy_uses_gaussian15_selected_segment() -> None:
     )
 
 
+def test_machine_shape_evidence_can_classify_standard_peak_without_area_label() -> None:
+    index = decision.build_normal_peak_decision_index(
+        promotion_rows=[
+            _promotion_row(
+                peak_hypothesis_id="FAM_MACHINE_STANDARD",
+                sample="Sample_A",
+                area_policy="",
+            ),
+        ],
+        raw85_slice_gate_rows=[
+            _raw85_slice_row(
+                peak_hypothesis_id="FAM_MACHINE_STANDARD",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_STANDARD",
+                blockers="",
+            ),
+        ],
+        manual_verdict_rows=[
+            _manual_verdict_row(
+                source_peak_hypothesis_id="FAM_MACHINE_STANDARD",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_STANDARD",
+            ),
+        ],
+        machine_shape_rows=[
+            _machine_shape_row(
+                source_peak_hypothesis_id="FAM_MACHINE_STANDARD",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_STANDARD",
+                decision="standard_peak_shape_supported",
+            ),
+        ],
+    )
+
+    row = index.rows[0]
+    assert row["area_policy"] == "standard_assessable_area"
+    assert row["normal_peak_decision"] == "require_backfill"
+    assert row["normal_peak_quantitation_area"] == "456.7"
+    assert row["normal_peak_quantitation_area_source_field"] == (
+        "gaussian15_lobe_area"
+    )
+    assert row["normal_peak_quantitation_boundary_source"] == "baseline_return"
+    assert "machine_gaussian15_standard_peak_shape_supported" in (
+        row["normal_peak_decision_reasons"]
+    )
+    assert "machine_gaussian15_lobe_area_selected" in (
+        row["normal_peak_decision_reasons"]
+    )
+    assert row["same_peak_verdict"] == "same_peak_supported"
+    assert row["same_peak_verdict_source"] == "manual_review"
+
+
+def test_machine_same_peak_support_can_replace_manual_verdict() -> None:
+    index = decision.build_normal_peak_decision_index(
+        promotion_rows=[
+            _promotion_row(
+                peak_hypothesis_id="FAM_MACHINE_AUTO",
+                sample="Sample_A",
+                area_policy="",
+            ),
+        ],
+        raw85_slice_gate_rows=[
+            _raw85_slice_row(
+                peak_hypothesis_id="FAM_MACHINE_AUTO",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_AUTO",
+                blockers="",
+            ),
+        ],
+        manual_verdict_rows=[],
+        machine_shape_rows=[
+            _machine_shape_row(
+                source_peak_hypothesis_id="FAM_MACHINE_AUTO",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_AUTO",
+                decision="standard_peak_shape_supported",
+                same_peak_verdict="same_peak_supported",
+            ),
+        ],
+    )
+
+    row = index.rows[0]
+    assert row["normal_peak_decision"] == "require_backfill"
+    assert row["normal_peak_backfill_required"] is True
+    assert row["manual_same_peak_verdict"] == ""
+    assert row["same_peak_verdict"] == "same_peak_supported"
+    assert row["same_peak_verdict_source"] == "machine_gaussian15_trace"
+    assert "machine_same_peak_supported" in row["normal_peak_decision_reasons"]
+
+
+def test_manual_same_peak_conflict_overrides_machine_support() -> None:
+    index = decision.build_normal_peak_decision_index(
+        promotion_rows=[
+            _promotion_row(
+                peak_hypothesis_id="FAM_MACHINE_MANUAL_CONFLICT",
+                sample="Sample_A",
+                area_policy="",
+            ),
+        ],
+        raw85_slice_gate_rows=[
+            _raw85_slice_row(
+                peak_hypothesis_id="FAM_MACHINE_MANUAL_CONFLICT",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_MANUAL_CONFLICT",
+                blockers="",
+            ),
+        ],
+        manual_verdict_rows=[
+            _manual_verdict_row(
+                source_peak_hypothesis_id="FAM_MACHINE_MANUAL_CONFLICT",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_MANUAL_CONFLICT",
+                reviewer_verdict="same_peak_conflict",
+            ),
+        ],
+        machine_shape_rows=[
+            _machine_shape_row(
+                source_peak_hypothesis_id="FAM_MACHINE_MANUAL_CONFLICT",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_MANUAL_CONFLICT",
+                decision="standard_peak_shape_supported",
+                same_peak_verdict="same_peak_supported",
+            ),
+        ],
+    )
+
+    row = index.rows[0]
+    assert row["normal_peak_decision"] == "blocked"
+    assert row["same_peak_verdict"] == "same_peak_conflict"
+    assert row["same_peak_verdict_source"] == "manual_review"
+    assert "same_peak_not_supported" in row["normal_peak_decision_blockers"]
+
+
+def test_machine_shape_evidence_blocks_multipeak_even_if_area_label_standard() -> None:
+    index = decision.build_normal_peak_decision_index(
+        promotion_rows=[
+            _promotion_row(
+                peak_hypothesis_id="FAM_MACHINE_MULTI",
+                sample="Sample_A",
+                area_policy="standard_assessable_area",
+            ),
+        ],
+        raw85_slice_gate_rows=[
+            _raw85_slice_row(
+                peak_hypothesis_id="FAM_MACHINE_MULTI",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_MULTI",
+                blockers="",
+            ),
+        ],
+        manual_verdict_rows=[
+            _manual_verdict_row(
+                source_peak_hypothesis_id="FAM_MACHINE_MULTI",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_MULTI",
+            ),
+        ],
+        machine_shape_rows=[
+            _machine_shape_row(
+                source_peak_hypothesis_id="FAM_MACHINE_MULTI",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_MULTI",
+                decision="nonstandard_peak_shape",
+                blockers="selected_segment_multiple_gaussian15_peaks",
+                peak_count="2",
+            ),
+        ],
+    )
+
+    row = index.rows[0]
+    assert row["area_policy"] == "nonstandard_assessable_area"
+    assert row["normal_peak_decision"] == "review_only_nonstandard_peak"
+    assert row["normal_peak_backfill_required"] is False
+
+
+def test_machine_shape_standard_peak_blocks_without_lobe_area() -> None:
+    index = decision.build_normal_peak_decision_index(
+        promotion_rows=[
+            _promotion_row(
+                peak_hypothesis_id="FAM_MACHINE_NO_AREA",
+                sample="Sample_A",
+                area_policy="",
+            ),
+        ],
+        raw85_slice_gate_rows=[
+            _raw85_slice_row(
+                peak_hypothesis_id="FAM_MACHINE_NO_AREA",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_NO_AREA",
+                blockers="",
+            ),
+        ],
+        manual_verdict_rows=[
+            _manual_verdict_row(
+                source_peak_hypothesis_id="FAM_MACHINE_NO_AREA",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_NO_AREA",
+            ),
+        ],
+        machine_shape_rows=[
+            _machine_shape_row(
+                source_peak_hypothesis_id="FAM_MACHINE_NO_AREA",
+                sample="Sample_A",
+                matched_peak_hypothesis_id="HYP_MACHINE_NO_AREA",
+                decision="standard_peak_shape_supported",
+                lobe_area="",
+            ),
+        ],
+    )
+
+    row = index.rows[0]
+    assert row["normal_peak_decision"] == "blocked"
+    assert row["normal_peak_decision_blockers"] == (
+        "machine_gaussian15_lobe_area_not_positive"
+    )
+
+
 def test_nonstandard_peak_stays_review_only_even_with_same_peak_support() -> None:
     index = decision.build_normal_peak_decision_index(
         promotion_rows=[
@@ -172,7 +393,7 @@ def test_same_peak_conflict_blocks_normal_peak_backfill() -> None:
     assert row["normal_peak_decision"] == "blocked"
     assert row["normal_peak_backfill_required"] is False
     assert row["normal_peak_decision_blockers"] == (
-        "manual_same_peak_not_supported"
+        "same_peak_not_supported"
     )
     assert index.summary["blocked_count"] == 1
 
@@ -295,6 +516,50 @@ def _manual_verdict_row(
         "review_basis": "visual_review_raw_plus_gaussian15_overlay_gallery",
         "reviewer": "user",
         "reviewed_at": "2026-06-09",
+    }
+
+
+def _machine_shape_row(
+    *,
+    source_peak_hypothesis_id: str,
+    sample: str,
+    matched_peak_hypothesis_id: str,
+    decision: str,
+    blockers: str = "",
+    peak_count: str = "1",
+    lobe_area: str = "456.7",
+    same_peak_verdict: str = "same_peak_supported",
+) -> dict[str, str]:
+    return {
+        "schema_version": "backfill_peakhypothesis_raw85_overlay_v1",
+        "source_peak_hypothesis_id": source_peak_hypothesis_id,
+        "sample_stem": sample,
+        "raw85_matched_peak_hypothesis_id": matched_peak_hypothesis_id,
+        "machine_shape_decision": decision,
+        "machine_shape_reasons": (
+            "gaussian15_selected_segment_single_complete_unimodal_peak"
+            if decision == "standard_peak_shape_supported"
+            else ""
+        ),
+        "machine_shape_blockers": blockers,
+        "gaussian15_selected_segment_peak_count": peak_count,
+        "gaussian15_lobe_start_rt": "12.9",
+        "gaussian15_lobe_end_rt": "13.3",
+        "gaussian15_lobe_area": lobe_area,
+        "gaussian15_lobe_area_source": (
+            "gaussian15_positive_asls_residual" if lobe_area else ""
+        ),
+        "gaussian15_lobe_boundary_source": "baseline_return" if lobe_area else "",
+        "machine_same_peak_verdict": same_peak_verdict,
+        "machine_same_peak_reasons": (
+            "slice_gate_hypothesis_anchor_match;"
+            "machine_gaussian15_standard_peak_shape_supported"
+            if same_peak_verdict == "same_peak_supported"
+            else ""
+        ),
+        "machine_same_peak_blockers": (
+            "" if same_peak_verdict == "same_peak_supported" else "unit_blocker"
+        ),
     }
 
 

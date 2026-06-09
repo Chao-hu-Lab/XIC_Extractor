@@ -41,6 +41,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                         .MANUAL_VERDICT_REQUIRED_COLUMNS
                     ),
                 ),
+                machine_shape_rows=(
+                    read_tsv_required(
+                        args.machine_shape_evidence_tsv,
+                        (
+                            backfill_peakhypothesis_normal_peak_decision
+                            .MACHINE_SHAPE_REQUIRED_COLUMNS
+                        ),
+                    )
+                    if args.machine_shape_evidence_tsv is not None
+                    else ()
+                ),
                 source_run_id=args.source_run_id,
             )
         )
@@ -61,6 +72,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--promotion-cells-tsv", type=Path, required=True)
     parser.add_argument("--raw85-slice-gate-tsv", type=Path, required=True)
     parser.add_argument("--raw85-manual-verdict-tsv", type=Path, required=True)
+    parser.add_argument("--machine-shape-evidence-tsv", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--source-run-id", default="")
     return parser.parse_args(argv)

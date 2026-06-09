@@ -14,7 +14,14 @@ from xic_extractor.diagnostics import backfill_peakhypothesis_promotion
 def test_transfer_emits_raw85_peak_hypothesis_keyed_promotion_row() -> None:
     index = transfer.build_activation_transfer_index(
         normal_peak_decision_rows=[
-            _normal_decision("SRC001", "QC1", "RAW85_LOSER", area="42"),
+            _normal_decision(
+                "SRC001",
+                "QC1",
+                "RAW85_LOSER",
+                area="42",
+                quantitation_area="84",
+                quantitation_area_source_field="gaussian15_lobe_area",
+            ),
         ],
         activation_trial_rows=[
             _trial_row("SRC001", "QC1", "RAW85_LOSER"),
@@ -33,10 +40,13 @@ def test_transfer_emits_raw85_peak_hypothesis_keyed_promotion_row() -> None:
     assert row["peak_hypothesis_id"] == "RAW85_LOSER"
     assert row["feature_family_id"] == "RAW85_LOSER"
     assert row["sample_stem"] == "QC1"
-    assert row["projected_matrix_value"] == "42"
+    assert row["projected_matrix_value"] == "84"
     assert row["current_matrix_written"] == "FALSE"
     assert row["promotion_decision"] == "promote_matrix_write"
     assert "normal_peak_same_peak_transfer_activation" in row["promotion_reasons"]
+    assert "normal_peak_quantitation_area_source_field:gaussian15_lobe_area" in (
+        row["source_provenance_detail"]
+    )
 
     transfer_row = index.transfer_rows[0]
     assert transfer_row["source_peak_hypothesis_id"] == "SRC001"
@@ -56,7 +66,7 @@ def test_transfer_fails_closed_on_trial_blocker() -> None:
                 "QC1",
                 "RAW85_LOSER",
                 trial_action="blocked",
-                blockers="manual_same_peak_conflict",
+                blockers="same_peak_conflict",
             ),
         ],
         source_artifact_sha256="c" * 64,
@@ -65,9 +75,9 @@ def test_transfer_fails_closed_on_trial_blocker() -> None:
 
     assert index.summary["transfer_status"] == "fail"
     assert index.summary["promotion_row_count"] == 0
-    assert "manual_same_peak_conflict" in index.summary["hard_fail_reasons"]
+    assert "same_peak_conflict" in index.summary["hard_fail_reasons"]
     assert index.transfer_rows[0]["transfer_action"] == "blocked"
-    assert index.transfer_rows[0]["transfer_blockers"] == "manual_same_peak_conflict"
+    assert index.transfer_rows[0]["transfer_blockers"] == "same_peak_conflict"
 
 
 def test_cli_writes_transfer_outputs(tmp_path: Path) -> None:
@@ -168,10 +178,13 @@ def _normal_decision(
     raw85_peak_hypothesis_id: str,
     *,
     area: str = "42",
+    quantitation_area: str | None = None,
+    quantitation_area_source_field: str = "raw85_primary_matrix_area",
     decision: str = "require_backfill",
     required: str = "TRUE",
     blockers: str = "",
 ) -> dict[str, str]:
+    quantitation_area = area if quantitation_area is None else quantitation_area
     return {
         "schema_version": "backfill_peakhypothesis_normal_peak_decision_v1",
         "source_run_id": "test",
@@ -187,11 +200,29 @@ def _normal_decision(
         "raw85_cell_status": "rescued",
         "raw85_primary_matrix_area": area,
         "raw85_primary_matrix_area_source": "gaussian15_positive_asls_residual",
+        "normal_peak_quantitation_area": quantitation_area,
+        "normal_peak_quantitation_area_source": "gaussian15_positive_asls_residual",
+        "normal_peak_quantitation_area_source_field": (
+            quantitation_area_source_field
+        ),
+        "normal_peak_quantitation_boundary_start_rt": (
+            "12.9" if quantitation_area_source_field == "gaussian15_lobe_area" else ""
+        ),
+        "normal_peak_quantitation_boundary_end_rt": (
+            "13.3" if quantitation_area_source_field == "gaussian15_lobe_area" else ""
+        ),
+        "normal_peak_quantitation_boundary_source": (
+            "baseline_return"
+            if quantitation_area_source_field == "gaussian15_lobe_area"
+            else ""
+        ),
         "raw85_include_in_primary_matrix": "FALSE",
         "raw85_consolidation_state": "primary_loser",
         "manual_same_peak_verdict": "same_peak_supported",
+        "same_peak_verdict": "same_peak_supported",
+        "same_peak_verdict_source": "manual_review",
         "normal_peak_shape_definition": (
-            "gaussian15_asls_residual_selected_segment_single_complete_unimodal_peak;"
+            "gaussian15_asls_residual_selected_shape_context_single_complete_unimodal_peak;"
             "raw_spikes_neighbor_contact_family_multiplet_not_blockers"
         ),
         "normal_peak_decision": decision,
@@ -222,6 +253,8 @@ def _trial_row(
         "raw85_include_in_primary_matrix": "FALSE",
         "raw85_consolidation_state": "primary_loser",
         "manual_same_peak_verdict": "same_peak_supported",
+        "same_peak_verdict": "same_peak_supported",
+        "same_peak_verdict_source": "manual_review",
         "normal_peak_decision": "require_backfill",
         "normal_peak_backfill_required": "TRUE",
         "current_public_matrix_written": "FALSE",

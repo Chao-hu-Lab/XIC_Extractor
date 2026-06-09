@@ -19,20 +19,28 @@ from xic_extractor.diagnostics.diagnostic_io import (
     write_tsv,
 )
 from xic_extractor.peak_detection.baseline import asls_baseline
+from xic_extractor.peak_detection.chrom_peak_segments import (
+    ChromPeakSegment,
+    ChromPeakSegmentPolicy,
+    enumerate_chrom_peak_segments,
+)
 from xic_extractor.peak_detection.ms1_morphology import (
     DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+    MS1_MORPHOLOGY_AREA_SOURCE,
     gaussian15_morphology_trace,
 )
 
 SCHEMA_VERSION = "backfill_peakhypothesis_raw85_overlay_v1"
 SMOOTH_METHOD = "gaussian15_asls_residual"
 SMOOTH_WINDOW_POINTS = DEFAULT_GAUSSIAN15_WINDOW_POINTS
+MIN_MACHINE_SHAPE_CONTEXT_WIDTH_MIN = 0.60
 
 OVERLAY_INDEX_COLUMNS = (
     "schema_version",
     "source_run_id",
     "review_item_id",
     "sample_stem",
+    "source_peak_hypothesis_id",
     "source_feature_family_id",
     "raw85_matched_peak_hypothesis_id",
     "raw85_consolidation_winner_group_hypothesis_id",
@@ -47,6 +55,23 @@ OVERLAY_INDEX_COLUMNS = (
     "ppm_tolerance",
     "smooth_method",
     "smooth_window_points",
+    "machine_shape_decision",
+    "machine_shape_reasons",
+    "machine_shape_blockers",
+    "machine_same_peak_verdict",
+    "machine_same_peak_reasons",
+    "machine_same_peak_blockers",
+    "gaussian15_selected_segment_peak_count",
+    "gaussian15_selected_segment_apex_rts",
+    "gaussian15_shape_context_start_rt",
+    "gaussian15_shape_context_end_rt",
+    "gaussian15_lobe_start_rt",
+    "gaussian15_lobe_end_rt",
+    "gaussian15_lobe_apex_rt",
+    "gaussian15_lobe_area",
+    "gaussian15_lobe_area_source",
+    "gaussian15_lobe_boundary_source",
+    "gaussian15_lobe_segment_class",
     "candidate_point_count",
     "winner_point_count",
     "candidate_max_intensity",
@@ -54,6 +79,13 @@ OVERLAY_INDEX_COLUMNS = (
     "review_focus",
     "png_path",
     "pdf_path",
+)
+
+_MACHINE_SHAPE_SEGMENT_POLICY = ChromPeakSegmentPolicy(
+    min_scan_count=3,
+    min_apex_residual=1.0,
+    min_apex_fraction_of_context=0.20,
+    morphology_trace_window_points=SMOOTH_WINDOW_POINTS,
 )
 
 TraceProvider = Callable[
@@ -66,6 +98,7 @@ TraceProvider = Callable[
 class Raw85OverlayRequest:
     review_item_id: str
     sample_stem: str
+    source_peak_hypothesis_id: str
     source_feature_family_id: str
     raw85_matched_peak_hypothesis_id: str
     raw85_consolidation_winner_group_hypothesis_id: str
@@ -149,6 +182,7 @@ def build_overlay_requests(
             Raw85OverlayRequest(
                 review_item_id=_value(row, "review_item_id"),
                 sample_stem=sample,
+                source_peak_hypothesis_id=_value(row, "source_peak_hypothesis_id"),
                 source_feature_family_id=_value(row, "source_feature_family_id"),
                 raw85_matched_peak_hypothesis_id=matched_id,
                 raw85_consolidation_winner_group_hypothesis_id=winner_id,
@@ -225,6 +259,7 @@ def write_raw85_overlay_outputs(
             _index_row(
                 request=request,
                 source_run_id=source_run_id,
+                candidate_rt=np.asarray(candidate_rt, dtype=float),
                 candidate_intensity=np.asarray(candidate_intensity, dtype=float),
                 winner_intensity=np.asarray(winner_intensity, dtype=float),
                 png_path=png_path.relative_to(output_dir),
@@ -250,7 +285,7 @@ def write_raw85_overlay_outputs(
         "smooth_window_points": SMOOTH_WINDOW_POINTS,
         "matrix_contract_changed": False,
         "product_behavior_changed": False,
-        "next_action": "review_overlay_pngs_for_same_peak_candidate_status",
+        "next_action": "feed_machine_same_peak_evidence_to_normal_peak_activation",
     }
     summary_json.write_text(
         json.dumps(summary, indent=2, sort_keys=True),
@@ -407,16 +442,24 @@ def _index_row(
     *,
     request: Raw85OverlayRequest,
     source_run_id: str,
+    candidate_rt: np.ndarray,
     candidate_intensity: np.ndarray,
     winner_intensity: np.ndarray,
     png_path: Path,
     pdf_path: Path,
 ) -> dict[str, Any]:
+    shape = _machine_shape_evidence(
+        request=request,
+        candidate_rt=candidate_rt,
+        candidate_intensity=candidate_intensity,
+    )
+    same_peak = _machine_same_peak_evidence(request=request, shape=shape)
     return {
         "schema_version": SCHEMA_VERSION,
         "source_run_id": source_run_id,
         "review_item_id": request.review_item_id,
         "sample_stem": request.sample_stem,
+        "source_peak_hypothesis_id": request.source_peak_hypothesis_id,
         "source_feature_family_id": request.source_feature_family_id,
         "raw85_matched_peak_hypothesis_id": (
             request.raw85_matched_peak_hypothesis_id
@@ -435,6 +478,29 @@ def _index_row(
         "ppm_tolerance": request.ppm_tolerance,
         "smooth_method": SMOOTH_METHOD,
         "smooth_window_points": SMOOTH_WINDOW_POINTS,
+        "machine_shape_decision": shape["machine_shape_decision"],
+        "machine_shape_reasons": shape["machine_shape_reasons"],
+        "machine_shape_blockers": shape["machine_shape_blockers"],
+        "machine_same_peak_verdict": same_peak["machine_same_peak_verdict"],
+        "machine_same_peak_reasons": same_peak["machine_same_peak_reasons"],
+        "machine_same_peak_blockers": same_peak["machine_same_peak_blockers"],
+        "gaussian15_selected_segment_peak_count": (
+            shape["gaussian15_selected_segment_peak_count"]
+        ),
+        "gaussian15_selected_segment_apex_rts": (
+            shape["gaussian15_selected_segment_apex_rts"]
+        ),
+        "gaussian15_shape_context_start_rt": (
+            shape["gaussian15_shape_context_start_rt"]
+        ),
+        "gaussian15_shape_context_end_rt": shape["gaussian15_shape_context_end_rt"],
+        "gaussian15_lobe_start_rt": shape["gaussian15_lobe_start_rt"],
+        "gaussian15_lobe_end_rt": shape["gaussian15_lobe_end_rt"],
+        "gaussian15_lobe_apex_rt": shape["gaussian15_lobe_apex_rt"],
+        "gaussian15_lobe_area": shape["gaussian15_lobe_area"],
+        "gaussian15_lobe_area_source": shape["gaussian15_lobe_area_source"],
+        "gaussian15_lobe_boundary_source": shape["gaussian15_lobe_boundary_source"],
+        "gaussian15_lobe_segment_class": shape["gaussian15_lobe_segment_class"],
         "candidate_point_count": len(candidate_intensity),
         "winner_point_count": len(winner_intensity),
         "candidate_max_intensity": _max_intensity(candidate_intensity),
@@ -442,6 +508,215 @@ def _index_row(
         "review_focus": request.review_focus,
         "png_path": str(png_path).replace("\\", "/"),
         "pdf_path": str(pdf_path).replace("\\", "/"),
+    }
+
+
+def _machine_shape_evidence(
+    *,
+    request: Raw85OverlayRequest,
+    candidate_rt: np.ndarray,
+    candidate_intensity: np.ndarray,
+) -> dict[str, str]:
+    start_rt = request.candidate_peak_start_rt
+    end_rt = request.candidate_peak_end_rt
+    if start_rt is None or end_rt is None or end_rt <= start_rt:
+        return _shape_row(
+            decision="shape_evidence_missing",
+            reasons=(),
+            blockers=("candidate_peak_window_missing",),
+            apex_rts=(),
+        )
+    rt = np.asarray(candidate_rt, dtype=float)
+    intensity = np.asarray(candidate_intensity, dtype=float)
+    limit = min(rt.size, intensity.size)
+    if limit < 3:
+        return _shape_row(
+            decision="shape_evidence_missing",
+            reasons=(),
+            blockers=("candidate_trace_too_short",),
+            apex_rts=(),
+        )
+    rt = rt[:limit]
+    intensity = intensity[:limit]
+    finite = np.isfinite(rt) & np.isfinite(intensity)
+    rt = rt[finite]
+    intensity = intensity[finite]
+    context_start, context_end = _machine_shape_context_bounds(start_rt, end_rt)
+    baseline = _safe_asls(intensity)
+    try:
+        enumeration = enumerate_chrom_peak_segments(
+            rt,
+            intensity,
+            baseline,
+            quantitation_context_rt_start=context_start,
+            quantitation_context_rt_end=context_end,
+            policy=_MACHINE_SHAPE_SEGMENT_POLICY,
+        )
+    except (ValueError, FloatingPointError):
+        return _shape_row(
+            decision="shape_evidence_missing",
+            reasons=(),
+            blockers=("selected_shape_context_malformed_trace",),
+            apex_rts=(),
+            context_start_rt=context_start,
+            context_end_rt=context_end,
+        )
+    if enumeration.status in {"MALFORMED_TRACE", "WINDOW_TOO_SHORT"}:
+        return _shape_row(
+            decision="shape_evidence_missing",
+            reasons=(),
+            blockers=(f"selected_shape_context_{enumeration.status.lower()}",),
+            apex_rts=(),
+            context_start_rt=context_start,
+            context_end_rt=context_end,
+        )
+    if enumeration.status == "NO_SIGNAL":
+        return _shape_row(
+            decision="nonstandard_peak_shape",
+            reasons=(),
+            blockers=("selected_shape_context_no_positive_gaussian15_signal",),
+            apex_rts=(),
+            context_start_rt=context_start,
+            context_end_rt=context_end,
+        )
+    segments = enumeration.segments
+    apex_rts = tuple(segment.apex_rt_min for segment in segments)
+    if not segments:
+        return _shape_row(
+            decision="nonstandard_peak_shape",
+            reasons=(),
+            blockers=("selected_shape_context_peak_apex_not_resolved",),
+            apex_rts=(),
+            context_start_rt=context_start,
+            context_end_rt=context_end,
+        )
+    product_segments = tuple(
+        segment
+        for segment in segments
+        if segment.segment_class in {"isolated_peak", "separate_peak"}
+    )
+    if len(product_segments) == 1 and len(segments) == 1:
+        return _shape_row(
+            decision="standard_peak_shape_supported",
+            reasons=(
+                "gaussian15_selected_shape_context_single_complete_unimodal_peak",
+            ),
+            blockers=(),
+            apex_rts=apex_rts,
+            context_start_rt=context_start,
+            context_end_rt=context_end,
+            lobe_segment=product_segments[0],
+        )
+    blockers = (
+        ("selected_shape_context_multiple_gaussian15_peaks",)
+        if len(product_segments) > 1
+        else ("selected_shape_context_nonstandard_segment_class",)
+    )
+    return _shape_row(
+        decision="nonstandard_peak_shape",
+        reasons=(),
+        blockers=blockers,
+        apex_rts=apex_rts,
+        context_start_rt=context_start,
+        context_end_rt=context_end,
+    )
+
+
+def _machine_shape_context_bounds(
+    start_rt: float,
+    end_rt: float,
+) -> tuple[float, float]:
+    center_rt = (start_rt + end_rt) / 2.0
+    context_width = max(
+        end_rt - start_rt,
+        MIN_MACHINE_SHAPE_CONTEXT_WIDTH_MIN,
+    )
+    return (
+        center_rt - context_width / 2.0,
+        center_rt + context_width / 2.0,
+    )
+
+
+def _machine_same_peak_evidence(
+    *,
+    request: Raw85OverlayRequest,
+    shape: dict[str, str],
+) -> dict[str, str]:
+    blockers: list[str] = []
+    reasons: list[str] = []
+    if not request.raw85_matched_peak_hypothesis_id:
+        blockers.append("raw85_peak_hypothesis_missing")
+    else:
+        reasons.append("slice_gate_hypothesis_anchor_match")
+    if request.raw85_cell_status not in {"detected", "rescued"}:
+        blockers.append("raw85_cell_not_detected_or_rescued")
+    else:
+        reasons.append(f"raw85_cell_status:{request.raw85_cell_status}")
+    if shape.get("machine_shape_decision") != "standard_peak_shape_supported":
+        blockers.append("machine_standard_peak_shape_not_supported")
+    else:
+        reasons.append("machine_gaussian15_standard_peak_shape_supported")
+    if not _positive_number(shape.get("gaussian15_lobe_area", "")):
+        blockers.append("machine_gaussian15_lobe_area_not_positive")
+    else:
+        reasons.append("machine_gaussian15_lobe_area_positive")
+    if request.raw85_include_in_primary_matrix != "TRUE":
+        reasons.append("non_primary_candidate_not_same_peak_blocker")
+    if request.raw85_consolidation_state:
+        reasons.append(
+            f"raw85_consolidation_state:{request.raw85_consolidation_state}",
+        )
+    verdict = "same_peak_supported" if not blockers else "same_peak_not_supported"
+    return {
+        "machine_same_peak_verdict": verdict,
+        "machine_same_peak_reasons": ";".join(reasons),
+        "machine_same_peak_blockers": ";".join(blockers),
+    }
+
+
+def _shape_row(
+    *,
+    decision: str,
+    reasons: Sequence[str],
+    blockers: Sequence[str],
+    apex_rts: Sequence[float],
+    context_start_rt: float | None = None,
+    context_end_rt: float | None = None,
+    lobe_segment: ChromPeakSegment | None = None,
+) -> dict[str, str]:
+    return {
+        "machine_shape_decision": decision,
+        "machine_shape_reasons": ";".join(reasons),
+        "machine_shape_blockers": ";".join(blockers),
+        "gaussian15_selected_segment_peak_count": str(len(apex_rts)),
+        "gaussian15_selected_segment_apex_rts": ";".join(
+            f"{value:.6g}" for value in apex_rts
+        ),
+        "gaussian15_shape_context_start_rt": _format_optional_float(
+            context_start_rt,
+        ),
+        "gaussian15_shape_context_end_rt": _format_optional_float(context_end_rt),
+        "gaussian15_lobe_start_rt": _format_optional_float(
+            None if lobe_segment is None else lobe_segment.interval.rt_start_min,
+        ),
+        "gaussian15_lobe_end_rt": _format_optional_float(
+            None if lobe_segment is None else lobe_segment.interval.rt_end_min,
+        ),
+        "gaussian15_lobe_apex_rt": _format_optional_float(
+            None if lobe_segment is None else lobe_segment.apex_rt_min,
+        ),
+        "gaussian15_lobe_area": _format_optional_float(
+            None if lobe_segment is None else lobe_segment.morphology_area_shadow,
+        ),
+        "gaussian15_lobe_area_source": (
+            MS1_MORPHOLOGY_AREA_SOURCE if lobe_segment is not None else ""
+        ),
+        "gaussian15_lobe_boundary_source": (
+            lobe_segment.boundary_stop_reason if lobe_segment is not None else ""
+        ),
+        "gaussian15_lobe_segment_class": (
+            lobe_segment.segment_class if lobe_segment is not None else ""
+        ),
     }
 
 
@@ -552,6 +827,17 @@ def _max_intensity(values: np.ndarray) -> float:
     finite = np.asarray(values, dtype=float)
     finite = finite[np.isfinite(finite)]
     return float(np.max(finite)) if len(finite) else 0.0
+
+
+def _format_optional_float(value: float | None) -> str:
+    if value is None or not math.isfinite(float(value)):
+        return ""
+    return f"{float(value):.6g}"
+
+
+def _positive_number(value: object) -> bool:
+    parsed = optional_float(value)
+    return parsed is not None and math.isfinite(parsed) and parsed > 0.0
 
 
 def _rt_window(

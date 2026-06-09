@@ -29,6 +29,8 @@ NORMAL_DECISION_REQUIRED_COLUMNS = (
     "raw85_include_in_primary_matrix",
     "raw85_consolidation_state",
     "manual_same_peak_verdict",
+    "same_peak_verdict",
+    "same_peak_verdict_source",
     "normal_peak_decision",
     "normal_peak_backfill_required",
     "normal_peak_decision_blockers",
@@ -53,6 +55,8 @@ TRIAL_COLUMNS = (
     "raw85_include_in_primary_matrix",
     "raw85_consolidation_state",
     "manual_same_peak_verdict",
+    "same_peak_verdict",
+    "same_peak_verdict_source",
     "normal_peak_decision",
     "normal_peak_backfill_required",
     "current_public_matrix_written",
@@ -283,6 +287,8 @@ def _trial_row(
         ),
         "raw85_consolidation_state": _state(row, manual_row),
         "manual_same_peak_verdict": _manual_verdict(row, manual_row),
+        "same_peak_verdict": _same_peak_verdict(row, manual_row),
+        "same_peak_verdict_source": _same_peak_verdict_source(row, manual_row),
         "normal_peak_decision": text_value(row.get("normal_peak_decision")),
         "normal_peak_backfill_required": required,
         "current_public_matrix_written": current_written,
@@ -304,8 +310,8 @@ def _trial_blockers(
         blockers.append("normal_peak_decision_not_required")
     if bool_value(row.get("normal_peak_backfill_required")) is not True:
         blockers.append("normal_peak_backfill_not_required")
-    if _manual_verdict(row, manual_row) != "same_peak_supported":
-        blockers.append("manual_same_peak_conflict")
+    if _same_peak_verdict(row, manual_row) != "same_peak_supported":
+        blockers.append("same_peak_conflict")
     if not text_value(row.get("raw85_matched_peak_hypothesis_id")):
         blockers.append("missing_raw85_peak_hypothesis_id")
     return tuple(blockers)
@@ -315,6 +321,27 @@ def _manual_verdict(row: Mapping[str, Any], manual_row: Mapping[str, Any]) -> st
     return text_value(
         manual_row.get("reviewer_verdict")
         or row.get("manual_same_peak_verdict")
+    )
+
+
+def _same_peak_verdict(row: Mapping[str, Any], manual_row: Mapping[str, Any]) -> str:
+    return text_value(
+        manual_row.get("reviewer_verdict")
+        or row.get("same_peak_verdict")
+        or row.get("manual_same_peak_verdict")
+    )
+
+
+def _same_peak_verdict_source(
+    row: Mapping[str, Any],
+    manual_row: Mapping[str, Any],
+) -> str:
+    if text_value(manual_row.get("reviewer_verdict")):
+        return "manual_review"
+    return text_value(row.get("same_peak_verdict_source")) or (
+        "legacy_manual_same_peak_verdict"
+        if text_value(row.get("manual_same_peak_verdict"))
+        else ""
     )
 
 
@@ -346,12 +373,14 @@ def _summary(
     states = Counter(
         text_value(row.get("raw85_consolidation_state")) for row in trial_rows
     )
-    manual = Counter(_manual_verdict(row, {}) for row in normal_peak_decision_rows)
+    same_peak = Counter(
+        _same_peak_verdict(row, {}) for row in normal_peak_decision_rows
+    )
     trial_blocker_count = sum(
         1 for row in trial_rows if text_value(row.get("trial_blockers"))
     )
     same_peak_conflict_count = sum(
-        1 for row in trial_rows if _manual_verdict(row, {}) != "same_peak_supported"
+        1 for row in trial_rows if _same_peak_verdict(row, {}) != "same_peak_supported"
     )
     expected_matrix_diff_count = actions["would_write_normal_peak_override"]
     hard_fail_reasons = _hard_fail_reasons(
@@ -385,7 +414,7 @@ def _summary(
             for row in normal_peak_decision_rows
             if text_value(row.get("normal_peak_decision")) == "blocked"
         ),
-        "same_peak_supported_count": manual["same_peak_supported"],
+        "same_peak_supported_count": same_peak["same_peak_supported"],
         "same_peak_conflict_count": same_peak_conflict_count,
         "primary_loser_count": states["primary_loser"],
         "primary_winner_count": states["primary_winner"],
@@ -431,10 +460,12 @@ def _hard_fail_reasons(
     reasons: list[str] = []
     if not normal_peak_decision_rows:
         reasons.append("normal_peak_decisions_missing")
-    if not manual_verdict_rows:
-        reasons.append("manual_verdicts_missing")
+    if not manual_verdict_rows and any(
+        not _same_peak_verdict(row, {}) for row in normal_peak_decision_rows
+    ):
+        reasons.append("same_peak_verdicts_missing")
     if same_peak_conflict_count:
-        reasons.append("manual_same_peak_conflict")
+        reasons.append("same_peak_conflict")
     if trial_blocker_count:
         reasons.append("trial_rows_blocked")
     return tuple(reasons)

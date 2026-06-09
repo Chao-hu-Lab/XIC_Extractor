@@ -23,7 +23,7 @@ from xic_extractor.diagnostics.diagnostic_io import (
 
 SCHEMA_VERSION = "backfill_peakhypothesis_normal_peak_decision_v1"
 NORMAL_PEAK_SHAPE_DEFINITION = (
-    "gaussian15_asls_residual_selected_segment_single_complete_unimodal_peak;"
+    "gaussian15_asls_residual_selected_shape_context_single_complete_unimodal_peak;"
     "raw_spikes_neighbor_contact_family_multiplet_not_blockers"
 )
 
@@ -42,9 +42,17 @@ DECISION_COLUMNS = (
     "raw85_cell_status",
     "raw85_primary_matrix_area",
     "raw85_primary_matrix_area_source",
+    "normal_peak_quantitation_area",
+    "normal_peak_quantitation_area_source",
+    "normal_peak_quantitation_area_source_field",
+    "normal_peak_quantitation_boundary_start_rt",
+    "normal_peak_quantitation_boundary_end_rt",
+    "normal_peak_quantitation_boundary_source",
     "raw85_include_in_primary_matrix",
     "raw85_consolidation_state",
     "manual_same_peak_verdict",
+    "same_peak_verdict",
+    "same_peak_verdict_source",
     "normal_peak_shape_definition",
     "normal_peak_decision",
     "normal_peak_backfill_required",
@@ -88,6 +96,24 @@ MANUAL_VERDICT_REQUIRED_COLUMNS = (
     "reviewer_verdict",
 )
 
+MACHINE_SHAPE_REQUIRED_COLUMNS = (
+    "source_peak_hypothesis_id",
+    "sample_stem",
+    "raw85_matched_peak_hypothesis_id",
+    "machine_shape_decision",
+    "machine_shape_reasons",
+    "machine_shape_blockers",
+    "gaussian15_selected_segment_peak_count",
+    "gaussian15_lobe_start_rt",
+    "gaussian15_lobe_end_rt",
+    "gaussian15_lobe_area",
+    "gaussian15_lobe_area_source",
+    "gaussian15_lobe_boundary_source",
+    "machine_same_peak_verdict",
+    "machine_same_peak_reasons",
+    "machine_same_peak_blockers",
+)
+
 _ALLOWED_CONSOLIDATION_BLOCKERS = {
     "raw85_candidate_not_primary_matrix_row",
     "raw85_candidate_family_consolidation_review_required",
@@ -112,15 +138,19 @@ def build_normal_peak_decision_index(
     promotion_rows: Sequence[Mapping[str, Any]],
     raw85_slice_gate_rows: Sequence[Mapping[str, Any]],
     manual_verdict_rows: Sequence[Mapping[str, Any]],
+    machine_shape_rows: Sequence[Mapping[str, Any]] = (),
     source_run_id: str = "",
 ) -> NormalPeakDecisionIndex:
     raw85_by_key = {_promotion_key(row): row for row in raw85_slice_gate_rows}
     manual_by_key = {_manual_key(row): row for row in manual_verdict_rows}
+    shape_by_key = {_machine_shape_key(row): row for row in machine_shape_rows}
     rows = tuple(
         _decision_row(
             promotion_row=promotion_row,
             raw85_row=raw85_by_key.get(_promotion_key(promotion_row), {}),
             manual_by_key=manual_by_key,
+            machine_shape_by_key=shape_by_key,
+            machine_shape_required=bool(machine_shape_rows),
             source_run_id=source_run_id,
         )
         for promotion_row in promotion_rows
@@ -162,6 +192,8 @@ def _decision_row(
     promotion_row: Mapping[str, Any],
     raw85_row: Mapping[str, Any],
     manual_by_key: Mapping[tuple[str, str, str], Mapping[str, Any]],
+    machine_shape_by_key: Mapping[tuple[str, str, str], Mapping[str, Any]],
+    machine_shape_required: bool,
     source_run_id: str,
 ) -> dict[str, Any]:
     raw85_id = _value(raw85_row, "raw85_matched_peak_hypothesis_id")
@@ -173,10 +205,31 @@ def _decision_row(
         ),
         {},
     )
+    machine_shape = machine_shape_by_key.get(
+        (
+            _value(promotion_row, "peak_hypothesis_id"),
+            _value(promotion_row, "sample_stem"),
+            raw85_id,
+        ),
+        {},
+    )
     decision, required, reasons, blockers, consolidation_effect = _classify(
         promotion_row=promotion_row,
         raw85_row=raw85_row,
         manual_row=manual,
+        machine_shape_row=machine_shape,
+        machine_shape_required=machine_shape_required,
+    )
+    resolved_area_policy = _resolved_area_policy(promotion_row, machine_shape)
+    quantitation_area = _normal_peak_quantitation_area(
+        raw85_row,
+        machine_shape,
+        machine_shape_required=machine_shape_required,
+    )
+    same_peak = _same_peak_verdict(
+        manual_row=manual,
+        machine_shape_row=machine_shape,
+        machine_shape_required=machine_shape_required,
     )
     return {
         "schema_version": SCHEMA_VERSION,
@@ -186,7 +239,7 @@ def _decision_row(
         "feature_family_id": _value(promotion_row, "feature_family_id"),
         "seed_group_id": _value(promotion_row, "seed_group_id"),
         "sample_stem": _value(promotion_row, "sample_stem"),
-        "area_policy": _value(promotion_row, "area_policy"),
+        "area_policy": resolved_area_policy,
         "matrix_quantitative_use": _value(
             promotion_row,
             "matrix_quantitative_use",
@@ -202,6 +255,20 @@ def _decision_row(
             raw85_row,
             "raw85_primary_matrix_area_source",
         ),
+        "normal_peak_quantitation_area": quantitation_area["area"],
+        "normal_peak_quantitation_area_source": quantitation_area["area_source"],
+        "normal_peak_quantitation_area_source_field": quantitation_area[
+            "area_source_field"
+        ],
+        "normal_peak_quantitation_boundary_start_rt": quantitation_area[
+            "boundary_start_rt"
+        ],
+        "normal_peak_quantitation_boundary_end_rt": quantitation_area[
+            "boundary_end_rt"
+        ],
+        "normal_peak_quantitation_boundary_source": quantitation_area[
+            "boundary_source"
+        ],
         "raw85_include_in_primary_matrix": _value(
             raw85_row,
             "raw85_include_in_primary_matrix",
@@ -211,6 +278,8 @@ def _decision_row(
             "raw85_consolidation_state",
         ),
         "manual_same_peak_verdict": _value(manual, "reviewer_verdict"),
+        "same_peak_verdict": same_peak["verdict"],
+        "same_peak_verdict_source": same_peak["source"],
         "normal_peak_shape_definition": NORMAL_PEAK_SHAPE_DEFINITION,
         "normal_peak_decision": decision,
         "normal_peak_backfill_required": required,
@@ -225,8 +294,10 @@ def _classify(
     promotion_row: Mapping[str, Any],
     raw85_row: Mapping[str, Any],
     manual_row: Mapping[str, Any],
+    machine_shape_row: Mapping[str, Any],
+    machine_shape_required: bool,
 ) -> tuple[str, bool, tuple[str, ...], tuple[str, ...], str]:
-    area_policy = _value(promotion_row, "area_policy")
+    area_policy = _resolved_area_policy(promotion_row, machine_shape_row)
     if area_policy == "nonstandard_assessable_area":
         return (
             "review_only_nonstandard_peak",
@@ -235,7 +306,13 @@ def _classify(
             ("nonstandard_peak_out_of_goal_scope",),
             "not_applicable_nonstandard_peak",
         )
-    blockers = _normal_peak_blockers(promotion_row, raw85_row, manual_row)
+    blockers = _normal_peak_blockers(
+        promotion_row,
+        raw85_row,
+        manual_row,
+        machine_shape_row,
+        machine_shape_required=machine_shape_required,
+    )
     if blockers:
         return ("blocked", False, (), tuple(blockers), "")
     consolidation_override = _has_only_allowed_consolidation_blockers(raw85_row)
@@ -243,6 +320,16 @@ def _classify(
         "standard_peak_same_peak_supported",
         "positive_gaussian15_area",
     ]
+    if machine_shape_required:
+        reasons.append("machine_gaussian15_standard_peak_shape_supported")
+        reasons.append("machine_gaussian15_lobe_area_selected")
+        same_peak = _same_peak_verdict(
+            manual_row=manual_row,
+            machine_shape_row=machine_shape_row,
+            machine_shape_required=machine_shape_required,
+        )
+        if same_peak["source"] == "machine_gaussian15_trace":
+            reasons.append("machine_same_peak_supported")
     effect = "not_needed_primary_candidate"
     if consolidation_override:
         reasons.append("consolidation_not_blocking_normal_peak")
@@ -254,9 +341,15 @@ def _normal_peak_blockers(
     promotion_row: Mapping[str, Any],
     raw85_row: Mapping[str, Any],
     manual_row: Mapping[str, Any],
+    machine_shape_row: Mapping[str, Any],
+    *,
+    machine_shape_required: bool,
 ) -> list[str]:
     blockers: list[str] = []
-    if _value(promotion_row, "area_policy") != "standard_assessable_area":
+    if (
+        _resolved_area_policy(promotion_row, machine_shape_row)
+        != "standard_assessable_area"
+    ):
         blockers.append("normal_peak_area_policy_not_standard")
     if _value(promotion_row, "matrix_quantitative_use") != "standard_quantitative_use":
         blockers.append("normal_peak_quantitative_use_not_standard")
@@ -268,14 +361,47 @@ def _normal_peak_blockers(
         blockers.append("missing_raw85_slice_gate_row")
     if _value(raw85_row, "raw85_cell_status") not in {"detected", "rescued"}:
         blockers.append("raw85_cell_not_detected_or_rescued")
-    if _value(raw85_row, "raw85_primary_matrix_area_source") != (
-        _GAUSSIAN15_AREA_SOURCE
+    if (
+        machine_shape_required
+        and _value(machine_shape_row, "machine_shape_decision")
+        == "standard_peak_shape_supported"
     ):
-        blockers.append("raw85_area_source_not_gaussian15")
-    if not _positive_number(_value(raw85_row, "raw85_primary_matrix_area")):
-        blockers.append("raw85_area_not_positive")
-    if _value(manual_row, "reviewer_verdict") != "same_peak_supported":
-        blockers.append("manual_same_peak_not_supported")
+        if not _positive_number(_value(machine_shape_row, "gaussian15_lobe_area")):
+            blockers.append("machine_gaussian15_lobe_area_not_positive")
+        elif _value(machine_shape_row, "gaussian15_lobe_area_source") != (
+            _GAUSSIAN15_AREA_SOURCE
+        ):
+            blockers.append("machine_gaussian15_lobe_area_source_not_gaussian15")
+        boundary_source = _value(machine_shape_row, "gaussian15_lobe_boundary_source")
+        if boundary_source and boundary_source != "baseline_return":
+            blockers.append("machine_gaussian15_lobe_boundary_not_baseline_return")
+    else:
+        if _value(raw85_row, "raw85_primary_matrix_area_source") != (
+            _GAUSSIAN15_AREA_SOURCE
+        ):
+            blockers.append("raw85_area_source_not_gaussian15")
+        if not _positive_number(_value(raw85_row, "raw85_primary_matrix_area")):
+            blockers.append("raw85_area_not_positive")
+    same_peak = _same_peak_verdict(
+        manual_row=manual_row,
+        machine_shape_row=machine_shape_row,
+        machine_shape_required=machine_shape_required,
+    )
+    if same_peak["verdict"] != "same_peak_supported":
+        blockers.append("same_peak_not_supported")
+    if same_peak["source"] == "machine_gaussian15_trace" and _value(
+        machine_shape_row,
+        "machine_same_peak_blockers",
+    ):
+        blockers.append("machine_same_peak_blockers_present")
+    if machine_shape_required:
+        shape_decision = _value(machine_shape_row, "machine_shape_decision")
+        if not machine_shape_row:
+            blockers.append("machine_shape_evidence_missing")
+        elif shape_decision != "standard_peak_shape_supported":
+            blockers.append("machine_standard_peak_shape_not_supported")
+        if _value(machine_shape_row, "machine_shape_blockers"):
+            blockers.append("machine_shape_blockers_present")
     disallowed = set(_semicolon_values(_value(raw85_row, "raw85_slice_blockers")))
     disallowed -= _ALLOWED_CONSOLIDATION_BLOCKERS
     if disallowed:
@@ -355,6 +481,76 @@ def _manual_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
         _value(row, "sample_stem"),
         _value(row, "raw85_matched_peak_hypothesis_id"),
     )
+
+
+def _machine_shape_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
+    return (
+        _value(row, "source_peak_hypothesis_id"),
+        _value(row, "sample_stem"),
+        _value(row, "raw85_matched_peak_hypothesis_id"),
+    )
+
+
+def _resolved_area_policy(
+    promotion_row: Mapping[str, Any],
+    machine_shape_row: Mapping[str, Any],
+) -> str:
+    shape_decision = _value(machine_shape_row, "machine_shape_decision")
+    if shape_decision == "standard_peak_shape_supported":
+        return "standard_assessable_area"
+    if shape_decision == "nonstandard_peak_shape":
+        return "nonstandard_assessable_area"
+    return _value(promotion_row, "area_policy")
+
+
+def _same_peak_verdict(
+    *,
+    manual_row: Mapping[str, Any],
+    machine_shape_row: Mapping[str, Any],
+    machine_shape_required: bool,
+) -> dict[str, str]:
+    manual_verdict = _value(manual_row, "reviewer_verdict")
+    if manual_verdict:
+        return {"verdict": manual_verdict, "source": "manual_review"}
+    machine_verdict = _value(machine_shape_row, "machine_same_peak_verdict")
+    if machine_shape_required and machine_verdict:
+        return {
+            "verdict": machine_verdict,
+            "source": "machine_gaussian15_trace",
+        }
+    return {"verdict": "", "source": ""}
+
+
+def _normal_peak_quantitation_area(
+    raw85_row: Mapping[str, Any],
+    machine_shape_row: Mapping[str, Any],
+    *,
+    machine_shape_required: bool,
+) -> dict[str, str]:
+    if (
+        machine_shape_required
+        and _value(machine_shape_row, "machine_shape_decision")
+        == "standard_peak_shape_supported"
+    ):
+        return {
+            "area": _value(machine_shape_row, "gaussian15_lobe_area"),
+            "area_source": _value(machine_shape_row, "gaussian15_lobe_area_source"),
+            "area_source_field": "gaussian15_lobe_area",
+            "boundary_start_rt": _value(machine_shape_row, "gaussian15_lobe_start_rt"),
+            "boundary_end_rt": _value(machine_shape_row, "gaussian15_lobe_end_rt"),
+            "boundary_source": _value(
+                machine_shape_row,
+                "gaussian15_lobe_boundary_source",
+            ),
+        }
+    return {
+        "area": _value(raw85_row, "raw85_primary_matrix_area"),
+        "area_source": _value(raw85_row, "raw85_primary_matrix_area_source"),
+        "area_source_field": "raw85_primary_matrix_area",
+        "boundary_start_rt": "",
+        "boundary_end_rt": "",
+        "boundary_source": "",
+    }
 
 
 def _has_only_allowed_consolidation_blockers(row: Mapping[str, Any]) -> bool:
