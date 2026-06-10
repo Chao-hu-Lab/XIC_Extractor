@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import sys
 from collections.abc import Mapping, Sequence
@@ -64,6 +65,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             retained_gate_tsv=args.retained_gate_tsv,
             output_dir=args.output_dir,
             alignment_matrix_tsv=args.alignment_matrix_tsv,
+            alignment_matrix_identity_tsv=args.alignment_matrix_identity_tsv,
             overlay_batch_summary_tsvs=tuple(args.overlay_batch_summary_tsv or ()),
             ms1_pattern_coherence_tsvs=tuple(
                 args.ms1_pattern_coherence_tsv or ()
@@ -85,12 +87,18 @@ def run_shadow_production_projection(
     retained_gate_tsv: Path,
     output_dir: Path,
     alignment_matrix_tsv: Path | None = None,
+    alignment_matrix_identity_tsv: Path | None = None,
     overlay_batch_summary_tsvs: Sequence[Path] = (),
     ms1_pattern_coherence_tsvs: Sequence[Path] = (),
     source_run_id: str = "",
 ) -> ShadowProductionProjectionOutputs:
     if alignment_matrix_tsv is not None and not alignment_matrix_tsv.exists():
         raise FileNotFoundError(str(alignment_matrix_tsv))
+    if (
+        alignment_matrix_identity_tsv is not None
+        and not alignment_matrix_identity_tsv.exists()
+    ):
+        raise FileNotFoundError(str(alignment_matrix_identity_tsv))
     review_rows = read_tsv_required(alignment_review_tsv, REVIEW_REQUIRED_COLUMNS)
     cell_rows = read_tsv_required(alignment_cells_tsv, CELL_REQUIRED_COLUMNS)
     projection_cell_rows: Sequence[Mapping[str, str]] = cell_rows
@@ -114,6 +122,10 @@ def run_shadow_production_projection(
         cell_rows=projection_cell_rows,
         retained_gate_rows=gate_rows,
         overlay_rows=overlay_rows,
+        current_matrix_values=_current_matrix_values_by_family_sample(
+            alignment_matrix_tsv=alignment_matrix_tsv,
+            alignment_matrix_identity_tsv=alignment_matrix_identity_tsv,
+        ),
         source_run_id=source_run_id,
         source_review_sha256=_sha256_file(alignment_review_tsv),
         source_cell_sha256=_sha256_file(alignment_cells_tsv),
@@ -146,10 +158,63 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--retained-gate-tsv", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--alignment-matrix-tsv", type=Path)
+    parser.add_argument("--alignment-matrix-identity-tsv", type=Path)
     parser.add_argument("--overlay-batch-summary-tsv", action="append", type=Path)
     parser.add_argument("--ms1-pattern-coherence-tsv", action="append", type=Path)
     parser.add_argument("--source-run-id")
     return parser.parse_args(argv)
+
+
+def _current_matrix_values_by_family_sample(
+    *,
+    alignment_matrix_tsv: Path | None,
+    alignment_matrix_identity_tsv: Path | None,
+) -> dict[tuple[str, str], str]:
+    if alignment_matrix_tsv is None or alignment_matrix_identity_tsv is None:
+        return {}
+    matrix_header, matrix_rows = _read_tsv_with_header(alignment_matrix_tsv)
+    identity_rows = read_tsv_required(
+        alignment_matrix_identity_tsv,
+        ("matrix_row_index", "peak_hypothesis_id"),
+    )
+    sample_columns = tuple(
+        column for column in matrix_header if column not in {"Mz", "RT"}
+    )
+    values: dict[tuple[str, str], str] = {}
+    for identity in identity_rows:
+        row_index = _positive_int(identity.get("matrix_row_index"))
+        if row_index is None or row_index > len(matrix_rows):
+            continue
+        matrix_row = matrix_rows[row_index - 1]
+        row_keys = _identity_family_keys(identity)
+        for row_key in row_keys:
+            for sample in sample_columns:
+                values[(row_key, sample)] = matrix_row.get(sample, "")
+    return values
+
+
+def _identity_family_keys(identity: Mapping[str, str]) -> tuple[str, ...]:
+    keys = [identity.get("peak_hypothesis_id", "").strip()]
+    keys.extend(
+        part.strip()
+        for part in identity.get("source_feature_family_ids", "").split(";")
+        if part.strip()
+    )
+    return tuple(dict.fromkeys(key for key in keys if key))
+
+
+def _read_tsv_with_header(path: Path) -> tuple[tuple[str, ...], list[dict[str, str]]]:
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        return tuple(reader.fieldnames or ()), list(reader)
+
+
+def _positive_int(value: object) -> int | None:
+    try:
+        parsed = int(str(value or "").strip())
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
 
 
 def _alignment_matrix_from_tsv(

@@ -44,7 +44,33 @@ def test_build_standard_peak_activation_inputs_selects_new_standard_accepts() ->
     assert index.summary["standard_peak_gate_status"] == "pass"
     assert index.summary["activation_acceptance_status"] == "pass"
     assert index.summary["activation_acceptance_hard_fail_reasons"] == ""
+    assert index.summary["activation_decision_scope"] == "manual_oracle_seed_rows"
+    assert index.summary["must_not_regress_basis"] == "manual_status_flag"
     assert index.summary["next_action"] == "apply_matrix_only_activation"
+    assert index.acceptance["activation_decision_scope"] == "manual_oracle_seed_rows"
+    assert index.acceptance["must_not_regress_basis"] == "manual_status_flag"
+
+
+def test_build_standard_peak_activation_inputs_labels_machine_gate_scope() -> None:
+    index = build_standard_peak_activation_inputs(
+        [_shadow_row("FAM_STD", "S1", "100", standard=True, machine=True)],
+        source_shadow_projection_sha256="a" * 64,
+        source_run_id="machine-gate-unit-test",
+    )
+
+    assert index.summary["selected_activation_row_count"] == "1"
+    assert index.summary["activation_decision_scope"] == (
+        "machine_gate_standard_peak_rows"
+    )
+    assert index.summary["must_not_regress_basis"] == (
+        "machine_shift_aware_standard_peak_gate"
+    )
+    assert index.acceptance["activation_decision_scope"] == (
+        "machine_gate_standard_peak_rows"
+    )
+    assert index.acceptance["must_not_regress_basis"] == (
+        "machine_shift_aware_standard_peak_gate"
+    )
 
 
 def test_build_standard_peak_activation_inputs_rejects_malformed_row_hash() -> None:
@@ -197,10 +223,16 @@ def _shadow_row(
     standard: bool,
     decision: str = "accept",
     current_written: str = "FALSE",
+    machine: bool = False,
 ) -> dict[str, str]:
+    authority_token = (
+        "machine_standard_peak_gate_authorized"
+        if machine
+        else "manual_standard_peak_gate_authorized"
+    )
     reason = (
         "MS1:product_authorized:supportive:trace_constellation:"
-        "feature_family_sample:manual_standard_peak_gate_authorized | "
+        f"feature_family_sample:{authority_token} | "
         "same_peak_reason:shift_aware_standard_peak_gate_supported"
         if standard
         else "MS1:product_authorized:supportive:trace_constellation:"

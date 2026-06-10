@@ -279,6 +279,54 @@ def test_projection_accepts_same_peak_dup_with_product_authority() -> None:
     assert "same_peak_reason:" in dup["product_authority_chain"]
 
 
+def test_projection_warns_family_duplicate_loser_with_authority() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_DUP_AUTH", "S_DET", "detected", True, 100.0),
+            _cell_decision(
+                "FAM_DUP_AUTH",
+                "S_DUP",
+                "accepted_rescue",
+                False,
+                None,
+                blank_reason="backfill_ms1_pattern_blocked",
+            ),
+        ),
+    )
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row("FAM_DUP_AUTH", "S_DET", "detected"),
+            _cell_row(
+                "FAM_DUP_AUTH",
+                "S_DUP",
+                "rescued",
+                group_claim_state="same_peak_multi_claim;duplicate_loser",
+                product_evidence=True,
+                candidate_ms2_evidence=False,
+                backfill_evidence_reason=(
+                    "shift_aware_standard_peak_gate_supported"
+                ),
+                backfill_ms1_product_authority_source=(
+                    "unit_test_standard_peak_gate"
+                ),
+            ),
+        ),
+        retained_gate_rows=(
+            _gate_row("FAM_DUP_AUTH", "S_DET;S_DUP", detected="1"),
+        ),
+    )
+
+    dup = next(row for row in index.rows if row["sample_stem"] == "S_DUP")
+    assert dup["current_production_status"] == "accepted_rescue"
+    assert dup["shadow_decision"] == "accept"
+    assert dup["shadow_reasons"] == "product_authorized_same_peak_backfill"
+    assert dup["shadow_warnings"] == "same_peak_multi_claim"
+    assert dup["projected_matrix_written"] == "TRUE"
+    assert dup["projected_matrix_value"] == "200"
+
+
 def test_projection_blocks_current_hypothesis_blocker_with_authority() -> None:
     decisions = _production_decisions(
         cells=(
@@ -792,6 +840,8 @@ def test_cli_writes_projection_from_alignment_artifacts(tmp_path: Path) -> None:
             "peak_end_rt",
             "rt_delta_sec",
             "primary_matrix_area",
+            "primary_matrix_area_source",
+            "height",
             "gap_fill_state",
             "gap_fill_reason",
             "group_claim_state",
@@ -872,6 +922,158 @@ def test_cli_writes_projection_from_alignment_artifacts(tmp_path: Path) -> None:
     assert payload["product_behavior_changed"] is False
     assert payload["matrix_contract_changed"] is False
     assert payload["source_overlay_sha256s"]
+
+
+def test_cli_current_written_uses_actual_matrix_cell_when_identity_supplied(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir()
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM_STALE",
+                "neutral_loss_tag": "DNA_dR",
+                "detected_count": "1",
+                "family_evidence": "owner_complete_link;owner_count=1",
+                "family_center_mz": "300.3",
+                "family_center_rt": "10.0",
+            },
+        ],
+        (
+            "feature_family_id",
+            "neutral_loss_tag",
+            "detected_count",
+            "family_evidence",
+            "family_center_mz",
+            "family_center_rt",
+        ),
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [
+            _cell_row("FAM_STALE", "S_DET", "detected", area="100.0"),
+            _cell_row(
+                "FAM_STALE",
+                "S_REVIEW",
+                "rescued",
+                area="250.0",
+                product_evidence=True,
+                candidate_ms2_evidence=False,
+                primary_matrix_area="250.0",
+                primary_matrix_area_source="gaussian15_positive_asls_residual",
+                height="1000.0",
+                rt_delta_sec="0.0",
+                backfill_evidence_reason=(
+                    "shift_aware_standard_peak_gate_supported"
+                ),
+                backfill_ms1_product_authority_source=(
+                    "unit_test_standard_peak_gate"
+                ),
+            ),
+        ],
+        (
+            "feature_family_id",
+            "sample_stem",
+            "status",
+            "area",
+            "apex_rt",
+            "height",
+            "peak_start_rt",
+            "peak_end_rt",
+            "rt_delta_sec",
+            "primary_matrix_area",
+            "primary_matrix_area_source",
+            "gap_fill_state",
+            "gap_fill_reason",
+            "group_claim_state",
+            "consolidation_state",
+            "peak_hypothesis_status",
+            "product_selection_blocker",
+            "rt_mode_status",
+            "backfill_evidence_level",
+            "backfill_evidence_status",
+            "backfill_evidence_reason",
+            "backfill_ms1_pattern_status",
+            "backfill_ms1_pattern_evidence_level",
+            "backfill_ms1_product_authority_status",
+            "backfill_ms1_product_authority_scope",
+            "backfill_ms1_product_authority_source",
+        ),
+    )
+    _write_tsv(
+        alignment_dir / "alignment_matrix.tsv",
+        [{"Mz": "300.3", "RT": "10.0", "S_DET": "100", "S_REVIEW": ""}],
+        ("Mz", "RT", "S_DET", "S_REVIEW"),
+    )
+    _write_tsv(
+        alignment_dir / "alignment_matrix_identity.tsv",
+        [
+            {
+                "matrix_row_index": "1",
+                "Mz": "300.3",
+                "RT": "10.0",
+                "peak_hypothesis_id": "FAM_STALE",
+                "source_feature_family_ids": "FAM_STALE",
+            },
+        ],
+        (
+            "matrix_row_index",
+            "Mz",
+            "RT",
+            "peak_hypothesis_id",
+            "source_feature_family_ids",
+        ),
+    )
+    _write_tsv(
+        alignment_dir / "retained_gate.tsv",
+        [_gate_row("FAM_STALE", "S_DET;S_REVIEW", detected="1")],
+        (
+            "feature_family_id",
+            "seed_group_id",
+            "seed_group_basis",
+            "seed_mz",
+            "seed_rt",
+            "suggested_rt_min",
+            "suggested_rt_max",
+            "detected_cell_count",
+            "rescued_cell_count",
+            "seed_source_samples",
+            "support_components",
+            "challenge_blockers",
+            "missing_evidence",
+            "evidence_gate_status",
+            "overlay_family_verdict",
+            "overlay_png_path",
+        ),
+    )
+    output_dir = tmp_path / "projection"
+
+    code = projection_cli.main(
+        [
+            "--alignment-review-tsv",
+            str(alignment_dir / "alignment_review.tsv"),
+            "--alignment-cells-tsv",
+            str(alignment_dir / "alignment_cells.tsv"),
+            "--retained-gate-tsv",
+            str(alignment_dir / "retained_gate.tsv"),
+            "--alignment-matrix-tsv",
+            str(alignment_dir / "alignment_matrix.tsv"),
+            "--alignment-matrix-identity-tsv",
+            str(alignment_dir / "alignment_matrix_identity.tsv"),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(output_dir / "shadow_production_projection_cells.tsv")
+    review = next(row for row in rows if row["sample_stem"] == "S_REVIEW")
+    assert review["current_matrix_written"] == "FALSE"
+    assert review["shadow_decision"] == "accept"
+    assert review["projected_matrix_written"] == "TRUE"
+    assert review["projected_matrix_value"] == "250"
 
 
 def test_cli_projects_ms1_product_authority_sidecar(tmp_path: Path) -> None:
