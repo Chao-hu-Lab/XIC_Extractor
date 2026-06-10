@@ -1694,6 +1694,100 @@ def test_html_gallery_projection_accept_requires_positive_projected_value(
     assert "FAM_STALE_PROJECTION" not in text
 
 
+def test_html_gallery_projection_context_is_not_presented_as_matrix_write(
+    tmp_path: Path,
+) -> None:
+    html_path = tmp_path / "backfill_evidence_reconciliation_gallery.html"
+    group = _group(
+        "FAM_REVIEW_ONLY",
+        "product_rejects_but_visual_supports",
+        "review_only_visual_support",
+    )
+
+    gallery.write_reconciliation_gallery_html(
+        html_path,
+        gallery.ReconciliationIndex(
+            groups=(group,),
+            representative_cells=(),
+            shadow_projection_cells=(
+                gallery.ShadowProjectionCell(
+                    feature_family_id="FAM_REVIEW_ONLY",
+                    seed_group_id=group.seed_group_id,
+                    sample_stem="S_REVIEW",
+                    current_raw_status="rescued",
+                    current_production_status="review_rescue",
+                    current_rescue_tier="review_rescue",
+                    current_matrix_written=False,
+                    current_matrix_value="",
+                    current_blank_reason="backfill_ms1_pattern_not_supportive",
+                    current_matrix_source="production_decision_snapshot",
+                    review_rescued_cell=True,
+                    shadow_decision="context",
+                    shadow_reasons=("identity_supported_review",),
+                    projected_matrix_written=False,
+                    projected_matrix_value="123",
+                    projection_authority="shadow_projection_only",
+                    product_authority_chain="",
+                ),
+            ),
+        ),
+        output_paths={},
+    )
+
+    text = html_path.read_text(encoding="utf-8")
+    assert "review-only: 1 candidate cell" in text
+    assert "結論：未寫入 matrix；1 個 cell 仍是 review-only candidate" in text
+    assert "product-authorized standard-peak same-peak chain" in text
+    assert "projection: context" not in text
+    assert "white-space: nowrap" in text
+
+
+def test_html_gallery_projection_context_current_write_is_not_review_only(
+    tmp_path: Path,
+) -> None:
+    html_path = tmp_path / "backfill_evidence_reconciliation_gallery.html"
+    group = _group(
+        "FAM_ALREADY_WRITTEN",
+        "product_accepts_and_visual_supports",
+        "review_only_visual_support",
+    )
+
+    gallery.write_reconciliation_gallery_html(
+        html_path,
+        gallery.ReconciliationIndex(
+            groups=(group,),
+            representative_cells=(),
+            shadow_projection_cells=(
+                gallery.ShadowProjectionCell(
+                    feature_family_id="FAM_ALREADY_WRITTEN",
+                    seed_group_id=group.seed_group_id,
+                    sample_stem="S_CURRENT",
+                    current_raw_status="rescued",
+                    current_production_status="accepted_rescue",
+                    current_rescue_tier="accepted_rescue",
+                    current_matrix_written=True,
+                    current_matrix_value="123",
+                    current_blank_reason="",
+                    current_matrix_source="production_decision_snapshot",
+                    review_rescued_cell=True,
+                    shadow_decision="context",
+                    shadow_reasons=("already_written_context",),
+                    projected_matrix_written=True,
+                    projected_matrix_value="123",
+                    projection_authority="shadow_projection_only",
+                    product_authority_chain="",
+                ),
+            ),
+        ),
+        output_paths={},
+    )
+
+    text = html_path.read_text(encoding="utf-8")
+    assert "already written: 1 current cell" in text
+    assert "結論：目前 production snapshot 已寫入 1 個 value" in text
+    assert "review-only: 1 candidate cell" not in text
+
+
 def test_html_gallery_defaults_to_product_rows_not_loser_debug_rows(
     tmp_path: Path,
 ) -> None:
@@ -2398,7 +2492,7 @@ def test_cli_integrates_shadow_production_projection_without_group_schema_change
         output_dir / "backfill_evidence_reconciliation_gallery.html"
     ).read_text(encoding="utf-8")
     assert "Shadow production projection" in html
-    assert "projection: accept 1 · block 1 · context 1 · +1 matrix" in html
+    assert "projection: current 1 · write 1 · block 1 · +1 matrix" in html
     assert "current decision" in html
     assert "projected decision" in html
     assert "same_peak_multi_claim" in html
