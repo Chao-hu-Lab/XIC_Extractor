@@ -68,6 +68,7 @@ EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
 EXPECTED_AUTHORITY_STATES = (
     "product_grade_support",
     "review_only_visual_support",
+    "machine_support_no_overlay",
     "dependent_context_only",
     "human_visual_judgment_only",
     "evidence_blocks_backfill",
@@ -82,6 +83,7 @@ EXPECTED_RECONCILIATION_CLASSES = (
     "product_rejects_but_visual_supports",
     "product_accepts_but_evidence_conflicts",
     "product_rejects_and_evidence_blocks",
+    "machine_support_no_overlay",
     "evidence_inconclusive",
     "not_assessable_missing_overlay",
     "not_assessable_missing_seed_provenance",
@@ -97,6 +99,7 @@ EXPECTED_RECONCILIATION_CLASS_PRIORITY = (
     "not_assessable_join_gap",
     "evidence_inconclusive",
     "product_accepts_and_visual_supports",
+    "machine_support_no_overlay",
     "product_accepts_and_product_grade_supports",
     "product_rejects_and_evidence_blocks",
 )
@@ -159,6 +162,55 @@ def test_non_primary_duplicate_context_is_not_reported_as_primary_backfilled() -
     assert group.reconciliation_class == "evidence_inconclusive"
     assert group.duplicate_assigned_cell_count == 1
     assert group.cell_total_count == 3
+
+
+def test_review_candidate_area_context_does_not_count_as_matrix_written() -> None:
+    family = "FAM_REVIEW_CANDIDATE"
+    seed_group_id = (
+        "seed::FAM_REVIEW_CANDIDATE::mz=269.145::rt=10.0000::"
+        "window=9.0000-11.0000::ppm=10"
+    )
+    candidate = _cell_row(family, "S_REVIEW", "rescued")
+    candidate["production_cell_status"] = "review_rescue"
+    candidate["primary_matrix_area"] = "1200.0"
+    candidate["primary_matrix_area_source"] = "gaussian15_positive_asls_residual"
+    candidate["write_matrix_value"] = "FALSE"
+
+    result = gallery.build_reconciliation_index(
+        review_rows=[
+            _review_row(
+                family,
+                include_in_primary_matrix="TRUE",
+                detected="2",
+                rescued="83",
+            ),
+        ],
+        cell_rows=[
+            _cell_row(family, "S_DETECTED", "detected"),
+            candidate,
+        ],
+        seed_audit_rows=[_seed_row(family, "S_REVIEW")],
+        retained_gate_rows=[
+            {
+                "feature_family_id": family,
+                "seed_group_id": seed_group_id,
+                "evidence_gate_status": "evidence_conflict",
+                "recommended_action": "review_product_backfill",
+                "support_components": "seed_request_provenance",
+                "challenge_blockers": "neighboring_ms1_interference",
+                "missing_evidence": "",
+                "overlay_family_verdict": (
+                    "review_required_neighboring_ms1_interference"
+                ),
+            },
+        ],
+    )
+
+    group = result.groups[0]
+    assert group.product_behavior_state == "product_rescued_context_only"
+    assert group.evidence_authority_state == "evidence_blocks_backfill"
+    assert group.reconciliation_class == "product_rejects_and_evidence_blocks"
+    assert group.representative_cells[0].product_cell_state == "candidate_context"
 
 
 def test_detected_zero_families_are_excluded_from_backfill_review_queue() -> None:
@@ -231,6 +283,303 @@ def test_product_grade_and_visual_support_remain_separate() -> None:
     )
     assert group.reconciliation_class == "product_rejects_but_product_grade_supports"
     assert group.overlay_png_path == "plots/fam002.png"
+
+
+def test_shift_aware_same_pattern_support_is_review_only_visual_evidence() -> None:
+    result = gallery.build_reconciliation_index(
+        review_rows=[_review_row("FAM_SHIFT")],
+        cell_rows=[
+            _cell_row("FAM_SHIFT", "S1", "detected"),
+            _cell_row("FAM_SHIFT", "S2", "rescued"),
+        ],
+        seed_audit_rows=[_seed_row("FAM_SHIFT", "S2")],
+        shift_aware_same_pattern_rows=[
+            {
+                "feature_family_id": "FAM_SHIFT",
+                "source_family": "FAM_REF",
+                "is_reference": "TRUE",
+                "shift_basis": "median_shape_correlation",
+                "shift_to_reference_sec": "0.0",
+                "shape_similarity_to_reference_after_group_shift": "1.000",
+            },
+            {
+                "feature_family_id": "FAM_SHIFT",
+                "source_family": "FAM_SHIFT",
+                "is_reference": "FALSE",
+                "shift_basis": "median_shape_correlation",
+                "shift_to_reference_sec": "-2.4",
+                "shape_similarity_to_reference_after_group_shift": "0.983",
+            },
+        ],
+    )
+
+    group = result.groups[0]
+    assert group.evidence_authority_state == "review_only_visual_support"
+    assert group.product_grade_support_components == ()
+    assert group.review_only_visual_components == (
+        "shift_aware_same_pattern_support_review_only",
+    )
+    assert group.reconciliation_class == "product_rejects_but_visual_supports"
+    assert "source_family_best_shift_summary.tsv" in group.source_artifacts
+    assert any("min r=0.983" in note for note in group.overlay_evidence_notes)
+
+
+def test_shift_aware_standard_peak_gate_is_shadow_visual_support() -> None:
+    result = gallery.build_reconciliation_index(
+        review_rows=[_review_row("FAM_GATE")],
+        cell_rows=[
+            _cell_row("FAM_GATE", "S1", "detected"),
+            _cell_row("FAM_GATE", "S2", "rescued"),
+        ],
+        seed_audit_rows=[_seed_row("FAM_GATE", "S2")],
+        shift_aware_standard_peak_gate_rows=[
+            {
+                "feature_family_id": "FAM_GATE",
+                "standard_peak_gate_call": "standard_peak_gate_supported",
+                "standard_peak_gate_reasons": (
+                    "shift_aware_same_pattern_supported;"
+                    "family_overlay_gaussian_smoothed_standard_peak_supported"
+                ),
+                "standard_peak_gate_blockers": "",
+                "calibration_outcome": "true_positive",
+                "min_shape_r_after_best_shift": "0.983",
+                "max_abs_shift_sec": "2.40",
+            },
+        ],
+    )
+
+    group = result.groups[0]
+    assert group.evidence_authority_state == "review_only_visual_support"
+    assert group.product_grade_support_components == ()
+    assert (
+        "shift_aware_standard_peak_gate_supported_review_only"
+        in group.review_only_visual_components
+    )
+    assert group.reconciliation_class == "product_rejects_but_visual_supports"
+    assert "shift_aware_standard_peak_gate_calibration.tsv" in group.source_artifacts
+    assert any(
+        "standard peak gate=supported" in note
+        for note in group.overlay_evidence_notes
+    )
+
+
+def test_activation_delta_promotes_matching_projection_accept_to_product_written(
+) -> None:
+    family = "FAM_GATE_ACTIVATED"
+    seed_group_id = (
+        "seed::FAM_GATE_ACTIVATED::mz=269.145::rt=10.0000::"
+        "window=9.0000-11.0000::ppm=10"
+    )
+
+    result = gallery.build_reconciliation_index(
+        review_rows=[_review_row(family)],
+        cell_rows=[
+            _cell_row(family, "S1", "detected"),
+            _cell_row(family, "S2", "rescued"),
+        ],
+        seed_audit_rows=[_seed_row(family, "S2")],
+        shift_aware_standard_peak_gate_rows=[
+            {
+                "feature_family_id": family,
+                "standard_peak_gate_call": "standard_peak_gate_supported",
+                "standard_peak_gate_reasons": (
+                    "shift_aware_same_pattern_supported;"
+                    "family_overlay_gaussian_smoothed_standard_peak_supported"
+                ),
+                "standard_peak_gate_blockers": "",
+                "calibration_outcome": "true_positive",
+                "min_shape_r_after_best_shift": "0.983",
+                "max_abs_shift_sec": "2.40",
+            },
+        ],
+        shadow_projection_rows=[
+            _projection_row(
+                family,
+                seed_group_id,
+                "S2",
+                current_status="review_rescue",
+                current_written="FALSE",
+                shadow_decision="accept",
+                projected_written="TRUE",
+                reasons="same_peak_reason:shift_aware_standard_peak_gate_supported",
+                authority_chain="standard_peak_ms1_pattern_product_authorized",
+            ),
+        ],
+        activation_application_summary_rows=[
+            {
+                "application_status": "applied",
+                "activation_output_mode": "matrix-only",
+                "acceptance_status": "pass",
+                "decision_rows_total": "1",
+                "auto_activate_count": "1",
+                "auto_block_count": "0",
+                "matrix_cells_written": "1",
+                "matrix_cells_blanked": "0",
+                "summary_reason": "explicit_activation_sidecar_applied",
+            },
+        ],
+        activation_value_delta_rows=[
+            _activation_delta_row(family, "S2", effect="written"),
+        ],
+    )
+
+    group = result.groups[0]
+    assert group.product_behavior_state == "product_primary_backfilled"
+    assert group.top_product_reason == "activation_value_delta_written"
+    assert group.reconciliation_class == "product_accepts_and_visual_supports"
+    assert "activation_application_summary.tsv" in group.source_artifacts
+    assert "activation_value_delta.tsv" in group.source_artifacts
+    assert result.summary["activation_value_delta_matrix_effect_counts"] == {
+        "written": 1,
+    }
+    assert result.summary["activation_written_projection_group_count"] == 1
+    assert result.summary["activation_written_projection_cell_count"] == 1
+    assert result.summary["product_behavior_changed"] is True
+    assert result.summary["product_behavior_source"] == "activation_value_delta.tsv"
+
+
+def test_activation_delta_without_projection_accept_does_not_promote_blocked_group(
+) -> None:
+    family = "FAM_GATE_BLOCKED_WITH_DELTA"
+    seed_group_id = (
+        "seed::FAM_GATE_BLOCKED_WITH_DELTA::mz=269.145::rt=10.0000::"
+        "window=9.0000-11.0000::ppm=10"
+    )
+
+    result = gallery.build_reconciliation_index(
+        review_rows=[_review_row(family)],
+        cell_rows=[
+            _cell_row(family, "S1", "detected"),
+            _cell_row(family, "S2", "rescued"),
+        ],
+        seed_audit_rows=[_seed_row(family, "S2")],
+        shift_aware_standard_peak_gate_rows=[
+            {
+                "feature_family_id": family,
+                "standard_peak_gate_call": "standard_peak_gate_blocked",
+                "standard_peak_gate_reasons": "shift_aware_same_pattern_supported",
+                "standard_peak_gate_blockers": (
+                    "family_overlay_gaussian_smoothed_peak_not_standard"
+                ),
+                "calibration_outcome": "true_negative",
+                "min_shape_r_after_best_shift": "0.998",
+                "max_abs_shift_sec": "0.00",
+            },
+        ],
+        shadow_projection_rows=[
+            _projection_row(
+                family,
+                seed_group_id,
+                "S2",
+                current_status="review_rescue",
+                current_written="FALSE",
+                shadow_decision="block",
+                projected_written="FALSE",
+                reasons="family_overlay_gaussian_smoothed_peak_not_standard",
+            ),
+        ],
+        activation_value_delta_rows=[
+            _activation_delta_row(family, "S2", effect="written"),
+        ],
+    )
+
+    group = result.groups[0]
+    assert group.product_behavior_state == "product_rescued_context_only"
+    assert group.reconciliation_class == "product_rejects_and_evidence_blocks"
+    assert "activation_value_delta.tsv" not in group.source_artifacts
+    assert result.summary["activation_value_delta_matrix_effect_counts"] == {
+        "written": 1,
+    }
+    assert result.summary["activation_written_projection_group_count"] == 0
+    assert result.summary["product_behavior_changed"] is False
+
+
+def test_current_projection_accepted_rescue_counts_as_product_written() -> None:
+    family = "FAM_ALREADY_WRITTEN"
+    seed_group_id = (
+        "seed::FAM_ALREADY_WRITTEN::mz=269.145::rt=10.0000::"
+        "window=9.0000-11.0000::ppm=10"
+    )
+
+    result = gallery.build_reconciliation_index(
+        review_rows=[_review_row(family)],
+        cell_rows=[
+            _cell_row(family, "S1", "detected"),
+            _cell_row(family, "S2", "rescued"),
+        ],
+        seed_audit_rows=[_seed_row(family, "S2")],
+        shift_aware_standard_peak_gate_rows=[
+            {
+                "feature_family_id": family,
+                "standard_peak_gate_call": "standard_peak_gate_supported",
+                "standard_peak_gate_reasons": (
+                    "shift_aware_same_pattern_supported;"
+                    "family_overlay_gaussian_smoothed_standard_peak_supported"
+                ),
+                "standard_peak_gate_blockers": "",
+                "calibration_outcome": "true_positive",
+                "min_shape_r_after_best_shift": "0.983",
+                "max_abs_shift_sec": "2.40",
+            },
+        ],
+        shadow_projection_rows=[
+            _projection_row(
+                family,
+                seed_group_id,
+                "S2",
+                current_status="accepted_rescue",
+                current_written="TRUE",
+                shadow_decision="context",
+                projected_written="TRUE",
+                reasons="already_written_current_matrix",
+            ),
+        ],
+    )
+
+    group = result.groups[0]
+    assert group.product_behavior_state == "product_primary_backfilled"
+    assert group.top_product_reason == "shadow_projection_current_matrix_written"
+    assert group.reconciliation_class == "product_accepts_and_visual_supports"
+    assert "shadow_production_projection_cells.tsv" in group.source_artifacts
+    assert "activation_value_delta.tsv" not in group.source_artifacts
+    assert result.summary["current_written_projection_group_count"] == 1
+    assert result.summary["current_written_projection_cell_count"] == 1
+    assert result.summary["product_behavior_changed"] is True
+
+
+def test_shift_aware_standard_peak_gate_blocked_is_evidence_blocker() -> None:
+    result = gallery.build_reconciliation_index(
+        review_rows=[_review_row("FAM_BLOCK")],
+        cell_rows=[
+            _cell_row("FAM_BLOCK", "S1", "detected"),
+            _cell_row("FAM_BLOCK", "S2", "rescued"),
+        ],
+        seed_audit_rows=[_seed_row("FAM_BLOCK", "S2")],
+        shift_aware_standard_peak_gate_rows=[
+            {
+                "feature_family_id": "FAM_BLOCK",
+                "standard_peak_gate_call": "standard_peak_gate_blocked",
+                "standard_peak_gate_reasons": "shift_aware_same_pattern_supported",
+                "standard_peak_gate_blockers": (
+                    "family_overlay_gaussian_smoothed_peak_not_standard"
+                ),
+                "calibration_outcome": "true_negative",
+                "min_shape_r_after_best_shift": "0.998",
+                "max_abs_shift_sec": "0.00",
+            },
+        ],
+    )
+
+    group = result.groups[0]
+    assert group.evidence_authority_state == "evidence_blocks_backfill"
+    assert (
+        "shift_aware_standard_peak_gate_blocked"
+        in group.blocker_components
+    )
+    assert any(
+        "family_overlay_gaussian_smoothed_peak_not_standard" in note
+        for note in group.overlay_evidence_notes
+    )
 
 
 def test_product_authorized_cell_evidence_is_product_grade_support() -> None:
@@ -313,6 +662,61 @@ def test_malformed_candidate_gate_with_blockers_fails_closed() -> None:
     assert group.reconciliation_class == "product_rejects_and_evidence_blocks"
     assert group.product_grade_support_components == ()
     assert group.blocker_components == ("missing_seed_trace",)
+
+
+def test_retained_gate_machine_support_marks_overlay_not_required(
+    tmp_path: Path,
+) -> None:
+    family = "FAM_STRONG"
+    seed_group_id = (
+        "seed::FAM_STRONG::mz=269.145::rt=10.0000::window=9.0000-11.0000::ppm=10"
+    )
+    result = gallery.build_reconciliation_index(
+        review_rows=[
+            _review_row(
+                family,
+                identity_decision="production_family",
+                include_in_primary_matrix="TRUE",
+                row_flags="",
+                detected="83",
+                rescued="2",
+            ),
+        ],
+        cell_rows=[
+            _cell_row(family, "S1", "detected"),
+            _cell_row(family, "S2", "detected"),
+            _cell_row(family, "S3", "rescued"),
+        ],
+        seed_audit_rows=[_seed_row(family, "S3")],
+        retained_gate_rows=[
+            {
+                "feature_family_id": family,
+                "seed_group_id": seed_group_id,
+                "evidence_gate_status": "machine_support_no_overlay",
+                "recommended_action": "track_machine_supported_backfill",
+                "support_components": (
+                    "seed_request_provenance;"
+                    "high_detected_anchor_low_rescue_machine_support"
+                ),
+                "challenge_blockers": "",
+                "missing_evidence": "",
+            },
+        ],
+    )
+
+    group = result.groups[0]
+    assert group.evidence_authority_state == "machine_support_no_overlay"
+    assert group.reconciliation_class == "machine_support_no_overlay"
+    assert group.missing_evidence == ()
+    assert "high_detected_anchor_low_rescue_machine_support" in (
+        group.dependent_context_components
+    )
+
+    html_path = tmp_path / "gallery.html"
+    gallery.write_reconciliation_gallery_html(html_path, result, output_paths={})
+    text = html_path.read_text(encoding="utf-8")
+    assert "not required: high detected anchors, low candidate load" in text
+    assert "not in supplied overlay batch" not in text
 
 
 def test_missing_overlay_and_join_gap_fail_closed() -> None:
@@ -512,7 +916,7 @@ def test_gallery_notes_include_anchor_peak_own_max_cell_evidence(
     group = result.groups[0]
     assert "anchor peak RT=10" in group.overlay_evidence_notes
     assert any(
-        note.startswith("anchor same-peak rescued support=S_SUPPORT")
+        note.startswith("anchor same-peak candidate support=S_SUPPORT")
         for note in group.overlay_evidence_notes
     )
     assert any(
@@ -744,6 +1148,46 @@ def test_html_gallery_marks_family_context_available_from_overlay_fallback(
     assert "pattern unavailable" not in text
 
 
+def test_html_gallery_keeps_hypothesis_and_family_context_in_separate_rows(
+    tmp_path: Path,
+) -> None:
+    html_path = tmp_path / "backfill_evidence_reconciliation_gallery.html"
+    plots = tmp_path / "plots"
+    plots.mkdir()
+    (plots / "fam-context.png").write_bytes(b"family context")
+    (plots / "fam-context_hypothesis.png").write_bytes(b"hypothesis")
+    index = gallery.ReconciliationIndex(
+        groups=(
+            _group(
+                "FAM_CONTEXT",
+                "product_accepts_and_visual_supports",
+                "human_visual_judgment_only",
+                overlay_png_path="plots/fam-context.png",
+            ),
+        ),
+        representative_cells=(),
+    )
+
+    gallery.write_reconciliation_gallery_html(
+        html_path,
+        index,
+        output_paths={},
+    )
+
+    text = html_path.read_text(encoding="utf-8")
+    family_row = text[
+        text.index('class="family-section-row"') :
+        text.index('class="seed-decision-row"')
+    ]
+    child_row = text[
+        text.index('class="seed-decision-row"') : text.index('class="detail-row"')
+    ]
+    assert ">family context</a>" in family_row
+    assert ">hypothesis PNG</a>" in child_row
+    assert ">family context</a>" not in child_row
+    assert "family context in header" not in child_row
+
+
 def test_writer_schema_values_and_order_are_stable(tmp_path: Path) -> None:
     assert gallery.GROUP_TSV_COLUMNS == EXPECTED_GROUP_COLUMNS
     assert (
@@ -770,6 +1214,7 @@ def test_writer_schema_values_and_order_are_stable(tmp_path: Path) -> None:
                         "review_only_visual_support",
                         "evidence_blocks_backfill",
                         "evidence_blocks_backfill",
+                        "machine_support_no_overlay",
                         "evidence_inconclusive",
                         "not_assessable",
                         "not_assessable",
@@ -912,6 +1357,11 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     png_href = os.path.relpath(png_path, html_path.parent).replace("\\", "/")
     review_href = os.path.relpath(review_tsv, html_path.parent).replace("\\", "/")
     assert '<html lang="zh-Hant">' in text
+    assert '<header class="gallery-hero" aria-label="gallery introduction">' in text
+    assert "Matrix-decision audit surface" in text
+    assert "artifact consumer only" in text
+    assert "does not write matrix" in text
+    assert "Candidate is not a matrix write." in text
     assert "diagnostic_only" in text
     assert (
         "benchmark context only；target benchmark 可作驗收/定位 target context"
@@ -927,6 +1377,20 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     )
     assert ".review-table thead th {\n  position: sticky" in text
     assert ".review-table th {\n  position: sticky" not in text
+    assert (
+        ".review-table th,\n.review-table td {\n"
+        "  padding: 9px 10px;\n"
+        "  border-bottom-color: var(--line-soft);\n"
+        "  text-align: center;\n"
+        "  vertical-align: middle;"
+        in text
+    )
+    assert (
+        ".seed-cell .seed-summary,\n"
+        ".seed-cell .seed-window {\n"
+        "  color: var(--red);"
+        in text
+    )
     assert "max-width: 1090px" in text
     assert "width: 1084px" in text
     assert "margin: 0 auto" in text
@@ -955,7 +1419,7 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     assert "impact" in text
     assert (
         'aria-label="NL anchors are family detected required-tag anchors; '
-        "Fill is hypothesis rescued/backfilled cells; "
+        "Candidate-only is hypothesis candidate cells, not matrix-written; "
         "Dup is family duplicate-assigned cell context; "
         "Review is hypothesis provisional cell context. "
         'These are alignment cell provenance counts, not target benchmark coverage."'
@@ -963,7 +1427,7 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     )
     assert 'data-label="impact"' in text
     assert "<dt>NL</dt>" in text
-    assert "<dt>Fill</dt>" in text
+    assert "<dt>Candidate-only</dt>" in text
     assert '<th scope="col">chain</th>' in text
     assert 'data-label="chain"' in text
     assert 'data-detail-toggle=' in text
@@ -972,11 +1436,16 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     assert '<td colspan="7">' in text
     assert "Family 是 pattern context" in text
     assert '<label for="categoryFilter">Focus</label>' in text
-    assert '<option value="product_rows" selected>Product rows</option>' in text
-    assert '<option value="projection_accepts">Projection accepts</option>' in text
+    assert '<option value="product_rows" selected>Review queue</option>' in text
+    projection_filter_option = (
+        '<option value="projection_accepts">Projected matrix writes</option>'
+    )
+    assert projection_filter_option not in text
     assert '<option value="">All rows</option>' in text
     assert '<option value="needs_review">Needs review</option>' in text
-    assert '<option value="accepted_supported">Accepted + supported</option>' in text
+    assert (
+        '<option value="accepted_supported">Evidence-supported rows</option>' in text
+    )
     assert '<option value="debug_rows">Duplicate / audit debug</option>' in text
     assert 'data-result-count data-total-families="1"' in text
     assert "顯示 1 / 1 families" in text
@@ -995,14 +1464,15 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     assert 'class="seed-table"' not in text
     assert 'class="seed-subdetails"' not in text
     assert "seed / request" in text
-    assert '<span class="seed-index">H1</span>' in text
-    assert '<span class="seed-summary">1 seed request</span>' in text
+    assert "seed-index" not in text
+    assert '<span class="seed-summary">1 seed request</span>' not in text
     assert '<span class="seed-summary">m/z 3 · RT 3</span>' in text
     assert '<span class="seed-window">window 2-4</span>' in text
     assert "1 seed · m/z 3 · RT 3" not in text
+    assert "detail-hint" not in text
     assert 'class="detail-summary-grid"' in text
     assert "current product / evidence state" in text
-    assert "hypothesis first, family context second" in text
+    assert "hypothesis evidence / family context" in text
     assert "Single detected NL anchor" in text
     assert "Dup=family duplicate-assigned cell context" in text
     assert 'class="chain-item secondary-chain"' in text
@@ -1066,6 +1536,45 @@ def test_html_gallery_caps_large_inconclusive_dom_but_keeps_action_rows(
     assert "FAM_INCON_0000" in text
     assert "FAM_INCON_0199" in text
     assert "FAM_INCON_0200" not in text
+
+
+def test_html_gallery_caps_large_missing_seed_dom_but_keeps_action_rows(
+    tmp_path: Path,
+) -> None:
+    html_path = tmp_path / "backfill_evidence_reconciliation_gallery.html"
+    groups = [
+        _group(
+            "FAM_ACTION",
+            "product_accepts_and_visual_supports",
+            "review_only_visual_support",
+            overlay_png_path=str(tmp_path / "action.png"),
+        ),
+        *(
+            _group(
+                f"FAM_MISSING_SEED_{index:04d}",
+                "not_assessable_missing_seed_provenance",
+                "not_assessable",
+            )
+            for index in range(1600)
+        ),
+    ]
+    gallery.write_reconciliation_gallery_html(
+        html_path,
+        gallery.ReconciliationIndex(groups=tuple(groups), representative_cells=()),
+        output_paths={
+            "groups_tsv": tmp_path / "groups.tsv",
+            "representative_cells_tsv": tmp_path / "representatives.tsv",
+            "summary_json": tmp_path / "summary.json",
+        },
+    )
+
+    text = html_path.read_text(encoding="utf-8")
+    assert "HTML 顯示 201 / 1601 groups" in text
+    assert "低資訊量 rows" in text
+    assert "FAM_ACTION" in text
+    assert "FAM_MISSING_SEED_0000" in text
+    assert "FAM_MISSING_SEED_0199" in text
+    assert "FAM_MISSING_SEED_0200" not in text
 
 
 def test_html_gallery_cap_keeps_projection_accept_rows(tmp_path: Path) -> None:
@@ -1286,8 +1795,8 @@ def test_html_gallery_groups_seed_aliases_under_one_family_section(
     assert 'class="seed-table"' not in text
     assert 'class="seed-subdetails"' not in text
     assert 'data-family-section="FAM_DUP"' in text
-    assert ">H1</span>" in text
-    assert ">H2</span>" in text
+    assert ">H1</span>" not in text
+    assert ">H2</span>" not in text
     assert ">H1 family context<" in text
     assert ">H2 family context<" in text
     assert ">PNG 1<" not in text
@@ -1372,11 +1881,11 @@ def test_html_gallery_collapses_consolidated_seed_aliases_to_one_decision_row(
     )
 
     text = html_path.read_text(encoding="utf-8")
-    assert "1 MS1 hypothesis" in text
+    assert "1 MS1 hypothesis" not in text
     assert "3 seed aliases" in text
     assert "seed aliases collapsed under one product hypothesis" in text
     assert text.count('class="seed-decision-row consolidated-seed-row"') == 1
-    assert ">hypothesis H1</span>" in text
+    assert ">hypothesis H1</span>" not in text
     assert ">seed 1</span>" not in text
     assert "RT 15.0063-15.4426" in text
     assert "no consolidated overlay" in text
@@ -1384,9 +1893,10 @@ def test_html_gallery_collapses_consolidated_seed_aliases_to_one_decision_row(
     assert "seed::FAM_ALIAS::mz=249.086::rt=15.0063" in text
     assert "seed::FAM_ALIAS::mz=249.086::rt=15.4426" in text
     assert 'data-category="needs_review product_rows projection_accepts"' in text
+    assert '<option value="projection_accepts">Projected matrix writes</option>' in text
     assert "projection_accept" in text
     assert "projected_new_write" in text
-    assert "Projection accept cells" in text
+    assert "Projection write cells" in text
     assert "S_ACCEPT_ALIAS_2" in text
     assert "RT 15.0063" in text
     assert "blank</span> -> <span" in text
@@ -1444,6 +1954,57 @@ def test_html_gallery_shows_one_main_overlay_for_consolidated_seed_aliases(
     assert "2 alias overlays share the same MS1 family context" in main_row
     assert "seed 1 PNG" not in main_row
     assert "seed 2 PNG" not in main_row
+
+
+def test_html_gallery_explains_high_alias_count_missing_overlay_batch(
+    tmp_path: Path,
+) -> None:
+    html_path = tmp_path / "backfill_evidence_reconciliation_gallery.html"
+    groups = tuple(
+        gallery.ReconciliationGroup(
+            feature_family_id="FAM_HIGH_ALIAS",
+            seed_group_id=(
+                f"seed::FAM_HIGH_ALIAS::mz=246.117::rt=15.{index:04d}::"
+                f"window=12.{index:04d}-18.{index:04d}::ppm=20"
+            ),
+            seed_group_basis="seed_audit",
+            seed_mz="246.117",
+            seed_rt=f"15.{index:04d}",
+            seed_rt_window=f"12.{index:04d}-18.{index:04d}",
+            seed_ppm="20",
+            product_behavior_state="product_primary_backfilled",
+            evidence_authority_state="dependent_context_only",
+            reconciliation_class="evidence_inconclusive",
+            include_in_primary_matrix=True,
+            detected_cell_count=26,
+            rescued_cell_count=5,
+            top_support_component="seed_request_provenance",
+            family_evidence="primary_family_consolidated;family_count=5",
+        )
+        for index in range(1, 6)
+    )
+    index = gallery.ReconciliationIndex(
+        groups=groups,
+        representative_cells=(),
+        summary={
+            "input_artifacts": {
+                "overlay_batch_summary_tsvs": ["family_ms1_overlay_batch_summary.tsv"],
+            },
+        },
+    )
+
+    gallery.write_reconciliation_gallery_html(
+        html_path,
+        index,
+        output_paths={},
+    )
+
+    text = html_path.read_text(encoding="utf-8")
+    assert "5 seed aliases · high alias count" in text
+    assert "Reviewer readout" in text
+    assert "not 5 independent peak decisions" in text
+    assert "not in supplied overlay batch" in text
+    assert "High alias count" in text
 
 
 def test_html_gallery_marks_shared_family_overlay_without_fake_seed_pngs(
@@ -1544,7 +2105,7 @@ def test_html_gallery_rejects_dangerous_png_schemes(tmp_path: Path) -> None:
     assert 'href="javascript:' not in text.lower()
     assert "java\nscript:alert" not in text
     assert "data:text/html" not in text
-    assert text.count("no overlay") >= 3
+    assert text.count("overlay artifact not supplied") >= 3
 
 
 def test_html_gallery_escapes_shadow_projection_product_behavior_chain(
@@ -2028,6 +2589,55 @@ def test_cli_writes_outputs_without_raw_or_dll_contract(tmp_path: Path, capsys) 
         [{"Mz": "269.145", "RT": "10.0", "S1": "1200"}],
         ("Mz", "RT", "S1"),
     )
+    shift_tsv = alignment_dir / "source_family_best_shift_summary.tsv"
+    _write_tsv(
+        shift_tsv,
+        [
+            {
+                "feature_family_id": "FAM_CLI",
+                "source_family": "FAM_REF",
+                "is_reference": "TRUE",
+                "shift_basis": "median_shape_correlation",
+                "shift_to_reference_sec": "0.0",
+                "shape_similarity_to_reference_after_group_shift": "1.000",
+            },
+        ],
+        (
+            "feature_family_id",
+            "source_family",
+            "is_reference",
+            "shift_basis",
+            "shift_to_reference_sec",
+            "shape_similarity_to_reference_after_group_shift",
+        ),
+    )
+    standard_gate_tsv = alignment_dir / "shift_aware_standard_peak_gate_calibration.tsv"
+    _write_tsv(
+        standard_gate_tsv,
+        [
+            {
+                "feature_family_id": "FAM_CLI",
+                "standard_peak_gate_call": "standard_peak_gate_supported",
+                "standard_peak_gate_reasons": (
+                    "shift_aware_same_pattern_supported;"
+                    "family_overlay_gaussian_smoothed_standard_peak_supported"
+                ),
+                "standard_peak_gate_blockers": "",
+                "calibration_outcome": "true_positive",
+                "min_shape_r_after_best_shift": "0.990",
+                "max_abs_shift_sec": "1.20",
+            },
+        ],
+        (
+            "feature_family_id",
+            "standard_peak_gate_call",
+            "standard_peak_gate_reasons",
+            "standard_peak_gate_blockers",
+            "calibration_outcome",
+            "min_shape_r_after_best_shift",
+            "max_abs_shift_sec",
+        ),
+    )
     output_dir = tmp_path / "out"
 
     code = cli.main(
@@ -2042,6 +2652,10 @@ def test_cli_writes_outputs_without_raw_or_dll_contract(tmp_path: Path, capsys) 
             str(alignment_dir / "alignment_production_candidate_gate.tsv"),
             "--alignment-matrix-tsv",
             str(alignment_dir / "alignment_matrix.tsv"),
+            "--shift-aware-same-pattern-tsv",
+            str(shift_tsv),
+            "--shift-aware-standard-peak-gate-tsv",
+            str(standard_gate_tsv),
             "--output-dir",
             str(output_dir),
             "--source-run-id",
@@ -2057,6 +2671,17 @@ def test_cli_writes_outputs_without_raw_or_dll_contract(tmp_path: Path, capsys) 
     assert (output_dir / "backfill_evidence_reconciliation_summary.json").is_file()
     assert (output_dir / "backfill_evidence_reconciliation_gallery.html").is_file()
     assert "backfill evidence reconciliation groups TSV" in capsys.readouterr().out
+    summary = json.loads(
+        (output_dir / "backfill_evidence_reconciliation_summary.json").read_text(
+            encoding="utf-8",
+        ),
+    )
+    assert summary["input_artifacts"]["shift_aware_same_pattern_tsvs"] == [
+        str(shift_tsv),
+    ]
+    assert summary["input_artifacts"]["shift_aware_standard_peak_gate_tsvs"] == [
+        str(standard_gate_tsv),
+    ]
 
     with pytest.raises(SystemExit):
         cli._parse_args(["--raw-dir", "RAW", "--dll-dir", "DLL"])
@@ -2069,6 +2694,9 @@ def test_cli_writes_outputs_without_raw_or_dll_contract(tmp_path: Path, capsys) 
     assert "--shadow-policy-cells-tsv" in help_text
     assert "--shadow-production-projection-cells-tsv" in help_text
     assert "--targeted-istd-benchmark-summary-tsv" in help_text
+    assert "--retained-backfill-evidence-gate-tsv" in help_text
+    assert "--shift-aware-same-pattern-tsv" in help_text
+    assert "--shift-aware-standard-peak-gate-tsv" in help_text
 
 
 def test_cli_reports_missing_required_inputs(tmp_path: Path, capsys) -> None:
@@ -2321,6 +2949,48 @@ def _projection_row(
         },
     )
     return row
+
+
+def _activation_delta_row(
+    family: str,
+    sample: str,
+    *,
+    effect: str,
+    activation_status: str = "auto_activate",
+    product_effect: str = "accept_label_or_rescue",
+    activated_value: str = "1200",
+) -> dict[str, str]:
+    return {
+        "activation_value_delta_schema_version": (
+            "shared_peak_identity_activation_value_delta_v3"
+        ),
+        "feature_family_id": family,
+        "candidate_container_id": family,
+        "sample_id": sample,
+        "peak_hypothesis_id": family,
+        "activation_unit_scope": "peak_hypothesis",
+        "activation_status": activation_status,
+        "product_effect": product_effect,
+        "contract_rule_id": "machine_observed_sufficient_positive_identity",
+        "original_matrix_value": "",
+        "activated_matrix_value": activated_value,
+        "matrix_value_kind": "backfill_activation",
+        "matrix_value_source": "activation_values_tsv",
+        "matrix_value_source_field": "projected_matrix_value",
+        "matrix_value_source_detail": "standard_peak_shadow_projection",
+        "matrix_value_source_artifact_schema_version": (
+            "shadow_production_projection_v1"
+        ),
+        "matrix_value_source_artifact_sha256": "fixture",
+        "matrix_value_source_row_sha256": "fixture-row",
+        "source_cell_status": "rescued",
+        "source_cell_area": activated_value,
+        "matrix_value_effect": effect,
+        "value_changed": "TRUE",
+        "activation_reason": (
+            "standard_peak_shift_aware_ms1_same_peak_product_authorized"
+        ),
+    }
 
 
 def _overlay_trace(

@@ -514,6 +514,54 @@ def test_projection_keeps_evidence_conflicts_as_review_context() -> None:
     assert review["projected_matrix_written"] == "FALSE"
 
 
+def test_projection_accepts_standard_peak_authority_when_gate_lacks_overlay() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_STD", "S_DET", "detected", True, 100.0),
+            _cell_decision(
+                "FAM_STD",
+                "S_REVIEW",
+                "review_rescue",
+                False,
+                None,
+            ),
+        ),
+    )
+    gate = _gate_row("FAM_STD", "S_DET;S_REVIEW", detected="1")
+    gate["evidence_gate_status"] = "evidence_missing"
+    gate["missing_evidence"] = "missing_overlay_evidence"
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(
+            _cell_row("FAM_STD", "S_DET", "detected"),
+            _cell_row(
+                "FAM_STD",
+                "S_REVIEW",
+                "rescued",
+                product_evidence=True,
+                candidate_ms2_evidence=False,
+                backfill_evidence_reason=(
+                    "shift_aware_standard_peak_gate_supported"
+                ),
+                backfill_ms1_product_authority_source=(
+                    "unit_test_standard_peak_gate"
+                ),
+            ),
+        ),
+        retained_gate_rows=(gate,),
+    )
+
+    review = next(row for row in index.rows if row["sample_stem"] == "S_REVIEW")
+    assert review["shadow_decision"] == "accept"
+    assert review["shadow_reasons"] == "product_authorized_same_peak_backfill"
+    assert review["projected_matrix_written"] == "TRUE"
+    assert (
+        "same_peak_reason:shift_aware_standard_peak_gate_supported"
+        in review["product_authority_chain"]
+    )
+
+
 def test_projection_keeps_review_required_blockers_closed_with_authority() -> None:
     decisions = _production_decisions(
         cells=(
@@ -824,6 +872,150 @@ def test_cli_writes_projection_from_alignment_artifacts(tmp_path: Path) -> None:
     assert payload["product_behavior_changed"] is False
     assert payload["matrix_contract_changed"] is False
     assert payload["source_overlay_sha256s"]
+
+
+def test_cli_projects_ms1_product_authority_sidecar(tmp_path: Path) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir()
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM_MS1",
+                "neutral_loss_tag": "DNA_dR",
+                "detected_count": "1",
+                "family_evidence": "owner_complete_link;owner_count=1",
+            },
+        ],
+        ("feature_family_id", "neutral_loss_tag", "detected_count", "family_evidence"),
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [
+            _cell_row("FAM_MS1", "S_DET", "detected", area="100.0"),
+            _cell_row("FAM_MS1", "S_REVIEW", "rescued", area="250.0"),
+        ],
+        (
+            "feature_family_id",
+            "sample_stem",
+            "status",
+            "area",
+            "apex_rt",
+            "height",
+            "peak_start_rt",
+            "peak_end_rt",
+            "rt_delta_sec",
+            "primary_matrix_area",
+            "gap_fill_state",
+            "gap_fill_reason",
+            "group_claim_state",
+            "consolidation_state",
+            "peak_hypothesis_status",
+            "product_selection_blocker",
+            "rt_mode_status",
+        ),
+    )
+    gate = _gate_row("FAM_MS1", "S_DET;S_REVIEW", detected="1")
+    _write_tsv(
+        alignment_dir / "retained_gate.tsv",
+        [gate],
+        (
+            "feature_family_id",
+            "seed_group_id",
+            "seed_group_basis",
+            "seed_mz",
+            "seed_rt",
+            "suggested_rt_min",
+            "suggested_rt_max",
+            "detected_cell_count",
+            "rescued_cell_count",
+            "seed_source_samples",
+            "support_components",
+            "challenge_blockers",
+            "missing_evidence",
+            "evidence_gate_status",
+            "overlay_family_verdict",
+            "overlay_png_path",
+        ),
+    )
+    ms1_sidecar = alignment_dir / "ms1_product_authorized.tsv"
+    _write_tsv(
+        ms1_sidecar,
+        [
+            {
+                "feature_family_id": "FAM_MS1",
+                "sample_stem": "S_REVIEW",
+                "ms1_pattern_status": "supportive",
+                "ms1_pattern_evidence_level": "trace_constellation",
+                "apex_coherence_sec": "0.5",
+                "boundary_overlap_score": "1",
+                "shape_correlation_score": "0.95",
+                "relative_pattern_stability_score": "0.95",
+                "local_interference_score": "0",
+                "constellation_peak_count": "2",
+                "reference_peak_count": "1",
+                "drift_compatible_status": "compatible",
+                "reason": "shift_aware_standard_peak_gate_supported",
+                "diagnostic_only": "FALSE",
+                "product_authority_status": "product_authorized",
+                "product_authority_scope": "feature_family_sample",
+                "product_authority_source": "unit_test_standard_peak_gate",
+            },
+        ],
+        (
+            "feature_family_id",
+            "sample_stem",
+            "ms1_pattern_status",
+            "ms1_pattern_evidence_level",
+            "apex_coherence_sec",
+            "boundary_overlap_score",
+            "shape_correlation_score",
+            "relative_pattern_stability_score",
+            "local_interference_score",
+            "constellation_peak_count",
+            "reference_peak_count",
+            "drift_compatible_status",
+            "reason",
+            "diagnostic_only",
+            "product_authority_status",
+            "product_authority_scope",
+            "product_authority_source",
+        ),
+    )
+    output_dir = tmp_path / "projection"
+
+    code = projection_cli.main(
+        [
+            "--alignment-review-tsv",
+            str(alignment_dir / "alignment_review.tsv"),
+            "--alignment-cells-tsv",
+            str(alignment_dir / "alignment_cells.tsv"),
+            "--retained-gate-tsv",
+            str(alignment_dir / "retained_gate.tsv"),
+            "--ms1-pattern-coherence-tsv",
+            str(ms1_sidecar),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(output_dir / "shadow_production_projection_cells.tsv")
+    review = next(row for row in rows if row["sample_stem"] == "S_REVIEW")
+    assert review["current_matrix_written"] == "FALSE"
+    assert review["shadow_decision"] == "accept"
+    assert review["projected_matrix_written"] == "TRUE"
+    assert (
+        "same_peak_reason:shift_aware_standard_peak_gate_supported"
+        in review["product_authority_chain"]
+    )
+    payload = json.loads(
+        (output_dir / "shadow_production_projection_summary.json").read_text(
+            encoding="utf-8",
+        ),
+    )
+    assert payload["projected_new_write_count"] == 1
+    assert payload["source_ms1_pattern_coherence_sha256s"]
 
 
 def test_cli_fails_when_gate_schema_omits_challenge_blockers(tmp_path: Path) -> None:

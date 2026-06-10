@@ -19,7 +19,11 @@ from xic_extractor.alignment.production_decisions import (
     ProductionCellDecision,
     ProductionDecisionSet,
 )
-from xic_extractor.alignment.promotion_policy import BACKFILL_HYPOTHESIS_BLOCKED_REASON
+from xic_extractor.alignment.promotion_policy import (
+    ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+    BACKFILL_HYPOTHESIS_BLOCKED_REASON,
+    STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
+)
 from xic_extractor.diagnostics.diagnostic_io import (
     format_diagnostic_value,
     optional_float,
@@ -106,8 +110,11 @@ _PRODUCT_AUTHORIZED_STATUS = "product_authorized"
 _PRODUCT_AUTHORIZED_SCOPE = "feature_family_sample"
 _SUPPORT_STATUSES = {"supportive", "partial_support"}
 _MS1_SAME_PEAK_LEVEL = "trace_constellation"
-_MS1_SAME_PEAK_SUPPORT_REASON = (
-    "family_ms1_overlay_anchor_peak_own_max_shape_supported"
+_MS1_SAME_PEAK_SUPPORT_REASONS = frozenset(
+    {
+        ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+        STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
+    }
 )
 _IDENTITY_SUPPORTED_REVIEW_REASON = "identity_supported_review"
 _SEED_REQUEST_COMPONENT = "seed_request_provenance"
@@ -139,6 +146,8 @@ def build_shadow_production_projection_index(
     source_matrix_sha256: str = "",
     source_overlay_artifacts: Sequence[str] = (),
     source_overlay_sha256s: Sequence[str] = (),
+    source_ms1_pattern_coherence_artifacts: Sequence[str] = (),
+    source_ms1_pattern_coherence_sha256s: Sequence[str] = (),
 ) -> ShadowProductionProjectionIndex:
     gate_rows = tuple(dict(row) for row in retained_gate_rows)
     _validate_gate_rows(gate_rows)
@@ -189,6 +198,12 @@ def build_shadow_production_projection_index(
             source_matrix_sha256=source_matrix_sha256,
             source_overlay_artifacts=source_overlay_artifacts,
             source_overlay_sha256s=source_overlay_sha256s,
+            source_ms1_pattern_coherence_artifacts=(
+                source_ms1_pattern_coherence_artifacts
+            ),
+            source_ms1_pattern_coherence_sha256s=(
+                source_ms1_pattern_coherence_sha256s
+            ),
         ),
     )
 
@@ -362,8 +377,13 @@ def _shadow_projection_decision(
     blockers = _hard_blocker_tokens(gate_row)
     if blockers:
         return "block", blockers, _warnings(cell, gate_row)
+    product_authorized = _product_authorized_same_peak_backfill(cell)
     gate_status = text_value(gate_row.get("evidence_gate_status"))
-    if gate_status and gate_status not in PROJECTION_ACCEPT_GATE_STATUSES:
+    if (
+        not product_authorized
+        and gate_status
+        and gate_status not in PROJECTION_ACCEPT_GATE_STATUSES
+    ):
         return "context", ("evidence_gate_requires_review",), _warnings(
             cell,
             gate_row,
@@ -374,7 +394,7 @@ def _shadow_projection_decision(
             cell,
             gate_row,
         )
-    if not _product_authorized_same_peak_backfill(cell):
+    if not product_authorized:
         if _identity_supported_by_review(gate_row):
             return "context", (_IDENTITY_SUPPORTED_REVIEW_REASON,), _warnings(
                 cell,
@@ -409,8 +429,9 @@ def _product_authorized_same_peak_backfill(cell: Mapping[str, str]) -> bool:
         != _MS1_SAME_PEAK_LEVEL
     ):
         return False
-    if _MS1_SAME_PEAK_SUPPORT_REASON not in split_semicolon_labels(
-        cell.get("backfill_evidence_reason"),
+    if not (
+        _MS1_SAME_PEAK_SUPPORT_REASONS
+        & set(split_semicolon_labels(cell.get("backfill_evidence_reason")))
     ):
         return False
     return True
@@ -482,10 +503,11 @@ def _authority_component_text(
 
 
 def _same_peak_reason_text(cell: Mapping[str, str]) -> str:
-    reasons = split_semicolon_labels(cell.get("backfill_evidence_reason"))
-    if _MS1_SAME_PEAK_SUPPORT_REASON not in reasons:
+    reasons = set(split_semicolon_labels(cell.get("backfill_evidence_reason")))
+    matched = tuple(sorted(_MS1_SAME_PEAK_SUPPORT_REASONS & reasons))
+    if not matched:
         return ""
-    return f"same_peak_reason:{_MS1_SAME_PEAK_SUPPORT_REASON}"
+    return "same_peak_reason:" + ";".join(matched)
 
 
 def _product_authority_present(
@@ -688,6 +710,8 @@ def _summary(
     source_matrix_sha256: str,
     source_overlay_artifacts: Sequence[str],
     source_overlay_sha256s: Sequence[str],
+    source_ms1_pattern_coherence_artifacts: Sequence[str],
+    source_ms1_pattern_coherence_sha256s: Sequence[str],
 ) -> dict[str, object]:
     decisions = Counter(row["shadow_decision"] for row in rows)
     current_written = sum(row["current_matrix_written"] == "TRUE" for row in rows)
@@ -716,6 +740,12 @@ def _summary(
         "source_matrix_sha256": source_matrix_sha256,
         "source_overlay_artifacts": tuple(source_overlay_artifacts),
         "source_overlay_sha256s": tuple(source_overlay_sha256s),
+        "source_ms1_pattern_coherence_artifacts": tuple(
+            source_ms1_pattern_coherence_artifacts
+        ),
+        "source_ms1_pattern_coherence_sha256s": tuple(
+            source_ms1_pattern_coherence_sha256s
+        ),
         "current_matrix_source": "production_decision_snapshot",
         "alignment_matrix_cross_checked": False,
         "matrix_contract_changed": False,

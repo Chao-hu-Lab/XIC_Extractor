@@ -12,6 +12,10 @@ from types import SimpleNamespace
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from xic_extractor.alignment.backfill_evidence_projection import (
+    load_ms1_pattern_coherence_rows,
+    project_backfill_evidence_to_cells,
+)
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.primary_matrix_area import (
@@ -61,6 +65,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=args.output_dir,
             alignment_matrix_tsv=args.alignment_matrix_tsv,
             overlay_batch_summary_tsvs=tuple(args.overlay_batch_summary_tsv or ()),
+            ms1_pattern_coherence_tsvs=tuple(
+                args.ms1_pattern_coherence_tsv or ()
+            ),
             source_run_id=args.source_run_id or "",
         )
     except (OSError, ValueError) as exc:
@@ -79,13 +86,23 @@ def run_shadow_production_projection(
     output_dir: Path,
     alignment_matrix_tsv: Path | None = None,
     overlay_batch_summary_tsvs: Sequence[Path] = (),
+    ms1_pattern_coherence_tsvs: Sequence[Path] = (),
     source_run_id: str = "",
 ) -> ShadowProductionProjectionOutputs:
     if alignment_matrix_tsv is not None and not alignment_matrix_tsv.exists():
         raise FileNotFoundError(str(alignment_matrix_tsv))
     review_rows = read_tsv_required(alignment_review_tsv, REVIEW_REQUIRED_COLUMNS)
     cell_rows = read_tsv_required(alignment_cells_tsv, CELL_REQUIRED_COLUMNS)
+    projection_cell_rows: Sequence[Mapping[str, str]] = cell_rows
     gate_rows = read_tsv_required(retained_gate_tsv, GATE_REQUIRED_COLUMNS)
+    ms1_pattern_rows: list[dict[str, str]] = []
+    for path in ms1_pattern_coherence_tsvs:
+        ms1_pattern_rows.extend(load_ms1_pattern_coherence_rows(path))
+    if ms1_pattern_rows:
+        projection_cell_rows = project_backfill_evidence_to_cells(
+            cell_rows=cell_rows,
+            ms1_pattern_coherence_rows=ms1_pattern_rows,
+        )
     overlay_rows: list[dict[str, str]] = []
     for path in overlay_batch_summary_tsvs:
         overlay_rows.extend(read_tsv_required(path, OVERLAY_REQUIRED_COLUMNS))
@@ -94,7 +111,7 @@ def run_shadow_production_projection(
     decisions = build_production_decisions(matrix, AlignmentConfig())
     index = build_shadow_production_projection_index(
         production_decisions=decisions,
-        cell_rows=cell_rows,
+        cell_rows=projection_cell_rows,
         retained_gate_rows=gate_rows,
         overlay_rows=overlay_rows,
         source_run_id=source_run_id,
@@ -112,6 +129,12 @@ def run_shadow_production_projection(
         source_overlay_sha256s=tuple(
             _sha256_file(path) for path in overlay_batch_summary_tsvs
         ),
+        source_ms1_pattern_coherence_artifacts=tuple(
+            str(path) for path in ms1_pattern_coherence_tsvs
+        ),
+        source_ms1_pattern_coherence_sha256s=tuple(
+            _sha256_file(path) for path in ms1_pattern_coherence_tsvs
+        ),
     )
     return write_shadow_production_projection_outputs(output_dir, index)
 
@@ -124,6 +147,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--alignment-matrix-tsv", type=Path)
     parser.add_argument("--overlay-batch-summary-tsv", action="append", type=Path)
+    parser.add_argument("--ms1-pattern-coherence-tsv", action="append", type=Path)
     parser.add_argument("--source-run-id")
     return parser.parse_args(argv)
 
