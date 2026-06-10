@@ -14,6 +14,7 @@ from xic_extractor.alignment.promotion_policy import (
     DDA_LIMITED_MS2_SHAPE_REASON,
     HIGH_BACKFILL_CAPPED_FLAG,
     PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON,
+    STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
 )
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
@@ -160,6 +161,33 @@ def test_single_detected_ms1_same_peak_without_candidate_ms2_writes_rescue():
 
     decisions = build_production_decisions(matrix, AlignmentConfig())
     rescue = decisions.cell("FAM001", "rescue_ms1_only")
+
+    assert decisions.row("FAM001").include_in_primary_matrix is True
+    assert decisions.row("FAM001").identity_reason == CELL_EVIDENCE_SUPPORTED_REASON
+    assert rescue.production_status == "accepted_rescue"
+    assert rescue.write_matrix_value is True
+    assert rescue.matrix_value == 90.0
+
+
+def test_standard_peak_gate_ms1_authority_writes_rescue():
+    matrix = _matrix(
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=1"),),
+        cells=(
+            _cell("seed1", "FAM001", "detected", 100.0),
+            _cell(
+                "standard_rescue",
+                "FAM001",
+                "rescued",
+                90.0,
+                candidate_ms2_evidence=False,
+                backfill_ms1_reason=STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
+            ),
+        ),
+        sample_order=("seed1", "standard_rescue"),
+    )
+
+    decisions = build_production_decisions(matrix, AlignmentConfig())
+    rescue = decisions.cell("FAM001", "standard_rescue")
 
     assert decisions.row("FAM001").include_in_primary_matrix is True
     assert decisions.row("FAM001").identity_reason == CELL_EVIDENCE_SUPPORTED_REASON
@@ -662,6 +690,7 @@ def _cell(
     source_candidate_id: str | None = None,
     selected_integration: IntegrationResult | None = None,
     backfill_evidence: bool = True,
+    backfill_ms1_reason: str = ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
     backfill_drift_supported: bool = False,
     candidate_ms2_evidence: bool = True,
     group_claim_state: str = "",
@@ -713,6 +742,7 @@ def _cell(
         **_backfill_evidence_fields(
             status=status,
             enabled=backfill_evidence,
+            ms1_reason=backfill_ms1_reason,
             drift_supported=backfill_drift_supported,
             candidate_ms2_evidence=candidate_ms2_evidence,
         ),
@@ -765,6 +795,7 @@ def _backfill_evidence_fields(
     *,
     status: str,
     enabled: bool,
+    ms1_reason: str,
     drift_supported: bool,
     candidate_ms2_evidence: bool,
 ) -> dict[str, object]:
@@ -778,7 +809,7 @@ def _backfill_evidence_fields(
         "backfill_ms2_trigger_scan_count": 3,
         "backfill_strict_nl_scan_count": 1,
         "backfill_ms2_trace_strength": "moderate",
-        "backfill_evidence_reason": ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+        "backfill_evidence_reason": ms1_reason,
         **_product_authority_fields(),
     }
     if not candidate_ms2_evidence:

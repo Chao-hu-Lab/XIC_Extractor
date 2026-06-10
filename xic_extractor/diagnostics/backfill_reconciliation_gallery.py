@@ -12,6 +12,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from xic_extractor.alignment.shared_peak_identity_explanation.schema import (
+    ACTIVATION_APPLICATION_SUMMARY_COLUMNS,
+    ACTIVATION_VALUE_DELTA_COLUMNS,
+)
 from xic_extractor.diagnostics.backfill_shadow_policy import (
     BACKFILL_SHADOW_POLICY_COLUMNS,
 )
@@ -28,6 +32,8 @@ from xic_extractor.diagnostics.shadow_production_projection import (
 )
 
 SCHEMA_VERSION = "backfill_evidence_reconciliation_v0"
+SHIFT_AWARE_SAME_PATTERN_SUPPORT_MIN_R = 0.98
+SHIFT_AWARE_SAME_PATTERN_CONFLICT_MAX_R = 0.90
 
 GROUP_TSV_COLUMNS = (
     "schema_version",
@@ -76,6 +82,7 @@ REPRESENTATIVE_CELL_TSV_COLUMNS = (
 EVIDENCE_AUTHORITY_STATES = (
     "product_grade_support",
     "review_only_visual_support",
+    "machine_support_no_overlay",
     "dependent_context_only",
     "human_visual_judgment_only",
     "evidence_blocks_backfill",
@@ -90,6 +97,7 @@ RECONCILIATION_CLASSES = (
     "product_rejects_but_visual_supports",
     "product_accepts_but_evidence_conflicts",
     "product_rejects_and_evidence_blocks",
+    "machine_support_no_overlay",
     "evidence_inconclusive",
     "not_assessable_missing_overlay",
     "not_assessable_missing_seed_provenance",
@@ -105,6 +113,7 @@ RECONCILIATION_CLASS_PRIORITY = (
     "not_assessable_join_gap",
     "evidence_inconclusive",
     "product_accepts_and_visual_supports",
+    "machine_support_no_overlay",
     "product_accepts_and_product_grade_supports",
     "product_rejects_and_evidence_blocks",
 )
@@ -114,22 +123,26 @@ _CLASS_PRIORITY = {
 }
 _REVIEW_CATEGORY_LABELS = {
     "needs_review": "Needs review",
-    "accepted_supported": "Accepted + supported",
+    "accepted_supported": "Evidence-supported rows",
     "conflict_or_blocked": "Conflict / blocked",
     "missing_evidence": "Missing evidence",
 }
 _DEFAULT_FILTER_CATEGORY = "product_rows"
 _HTML_FULL_RENDER_GROUP_LIMIT = 1500
 _HTML_INCONCLUSIVE_SAMPLE_LIMIT = 200
+_HTML_LOW_INFORMATION_CLASSES = {
+    "evidence_inconclusive",
+    "not_assessable_missing_seed_provenance",
+}
 _REVIEW_FILTER_LABELS = {
-    "product_rows": "Product rows",
-    "projection_accepts": "Projection accepts",
+    "product_rows": "Review queue",
+    "projection_accepts": "Projected matrix writes",
     **_REVIEW_CATEGORY_LABELS,
     "debug_rows": "Duplicate / audit debug",
 }
 _REVIEW_CATEGORY_SUMMARY_LABELS = {
     "needs_review": "Review",
-    "accepted_supported": "Accepted",
+    "accepted_supported": "Evidence-supported",
     "conflict_or_blocked": "Conflict",
     "missing_evidence": "Missing",
 }
@@ -137,6 +150,7 @@ _REVIEW_CATEGORY_BY_CLASS = {
     "product_rejects_but_product_grade_supports": "needs_review",
     "product_rejects_but_visual_supports": "needs_review",
     "evidence_inconclusive": "needs_review",
+    "machine_support_no_overlay": "accepted_supported",
     "product_accepts_and_product_grade_supports": "accepted_supported",
     "product_accepts_and_visual_supports": "accepted_supported",
     "product_accepts_but_evidence_conflicts": "conflict_or_blocked",
@@ -166,6 +180,7 @@ _ANCHOR_SHAPE_SUPPORTED_REASON = (
 _ANCHOR_SHAPE_REVIEW_REASON = (
     "family_ms1_overlay_anchor_peak_shape_below_threshold"
 )
+_HIGH_SEED_ALIAS_COUNT = 5
 _REQUIRED_ALIGNMENT_REVIEW_COLUMNS = (
     "feature_family_id",
     "group_construction_role",
@@ -205,6 +220,24 @@ _REQUIRED_ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS = (
     "backfill_request_rt_max",
     "backfill_request_ppm",
 )
+_REQUIRED_RETAINED_BACKFILL_GATE_COLUMNS = (
+    "feature_family_id",
+    "seed_group_id",
+    "evidence_gate_status",
+    "recommended_action",
+    "support_components",
+    "challenge_blockers",
+    "missing_evidence",
+)
+_REQUIRED_SHIFT_AWARE_STANDARD_PEAK_GATE_COLUMNS = (
+    "feature_family_id",
+    "standard_peak_gate_call",
+    "standard_peak_gate_reasons",
+    "standard_peak_gate_blockers",
+    "calibration_outcome",
+    "min_shape_r_after_best_shift",
+    "max_abs_shift_sec",
+)
 _REQUIRED_TARGETED_ISTD_BENCHMARK_SUMMARY_COLUMNS = (
     "target_label",
     "role",
@@ -218,16 +251,23 @@ _REQUIRED_TARGETED_ISTD_BENCHMARK_SUMMARY_COLUMNS = (
 )
 _INPUT_ARTIFACT_LABEL_BY_KEY = {
     "alignment_review_tsv": "alignment_review.tsv",
-    "alignment_cells_tsv": "alignment_cells.tsv",
+    "alignment_cells_tsv": "cell evidence TSV",
     "alignment_matrix_tsv": "alignment_matrix.tsv",
     "backfill_seed_audit_tsv": "alignment_owner_backfill_seed_audit.tsv",
     "overlay_batch_summary_tsvs": "family_ms1_overlay_batch_summary.tsv",
+    "shift_aware_same_pattern_tsvs": "source_family_best_shift_summary.tsv",
+    "shift_aware_standard_peak_gate_tsvs": (
+        "shift_aware_standard_peak_gate_calibration.tsv"
+    ),
     "seed_aware_family_tsv": "seed_aware_backfill_review_families.tsv",
     "seed_aware_summary_tsv": "seed_aware_backfill_review_summary.tsv",
     "candidate_gate_tsv": "alignment_production_candidate_gate.tsv",
+    "retained_backfill_gate_tsv": "alignment_retained_backfill_evidence_gate.tsv",
     "tier2_trace_evidence_tsv": "alignment_tier2_trace_evidence.tsv",
     "shadow_policy_cells_tsv": "backfill_shadow_policy_cells.tsv",
     "shadow_projection_cells_tsv": "shadow_production_projection_cells.tsv",
+    "activation_application_summary_tsv": "activation_application_summary.tsv",
+    "activation_value_delta_tsv": "activation_value_delta.tsv",
     "targeted_istd_benchmark_summary_tsv": "targeted_istd_benchmark_summary.tsv",
 }
 
@@ -303,6 +343,17 @@ class ShadowProjectionCell:
 
 
 @dataclass(frozen=True)
+class ActivationDeltaCell:
+    feature_family_id: str
+    sample_id: str
+    activation_status: str
+    product_effect: str
+    activated_matrix_value: str
+    matrix_value_effect: str
+    activation_reason: str = ""
+
+
+@dataclass(frozen=True)
 class TargetBenchmarkContext:
     target_label: str
     role: str
@@ -321,6 +372,13 @@ class TargetBenchmarkContext:
         return tuple(
             _ordered_unique((*self.primary_feature_ids, self.selected_feature_id)),
         )
+
+
+@dataclass(frozen=True)
+class _ShiftAwareSamePatternEvidence:
+    support: bool
+    review_required: bool
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -372,6 +430,7 @@ class ReconciliationIndex:
     representative_cells: tuple[RepresentativeCell, ...]
     shadow_policy_cells: tuple[ShadowPolicyCell, ...] = ()
     shadow_projection_cells: tuple[ShadowProjectionCell, ...] = ()
+    activation_delta_cells: tuple[ActivationDeltaCell, ...] = ()
     target_benchmark_contexts: tuple[TargetBenchmarkContext, ...] = ()
     summary: dict[str, object] = field(default_factory=dict)
 
@@ -410,12 +469,17 @@ def run_reconciliation_gallery(
     alignment_matrix_tsv: Path | None = None,
     backfill_seed_audit_tsv: Path | None = None,
     overlay_batch_summary_tsvs: Sequence[Path] = (),
+    shift_aware_same_pattern_tsvs: Sequence[Path] = (),
+    shift_aware_standard_peak_gate_tsvs: Sequence[Path] = (),
     seed_aware_family_tsv: Path | None = None,
     seed_aware_summary_tsv: Path | None = None,
     candidate_gate_tsv: Path | None = None,
+    retained_backfill_gate_tsv: Path | None = None,
     tier2_trace_evidence_tsv: Path | None = None,
     shadow_policy_cells_tsv: Path | None = None,
     shadow_projection_cells_tsv: Path | None = None,
+    activation_application_summary_tsv: Path | None = None,
+    activation_value_delta_tsv: Path | None = None,
     targeted_istd_benchmark_summary_tsv: Path | None = None,
     source_run_id: str = "",
 ) -> ReconciliationOutputs:
@@ -454,6 +518,29 @@ def run_reconciliation_gallery(
                 ),
             ),
         )
+    shift_aware_rows: list[dict[str, str]] = []
+    for path in shift_aware_same_pattern_tsvs:
+        shift_aware_rows.extend(
+            _read_required_tsv(
+                path,
+                (
+                    "feature_family_id",
+                    "source_family",
+                    "is_reference",
+                    "shift_basis",
+                    "shift_to_reference_sec",
+                    "shape_similarity_to_reference_after_group_shift",
+                ),
+            ),
+        )
+    standard_peak_gate_rows: list[dict[str, str]] = []
+    for path in shift_aware_standard_peak_gate_tsvs:
+        standard_peak_gate_rows.extend(
+            _read_required_tsv(
+                path,
+                _REQUIRED_SHIFT_AWARE_STANDARD_PEAK_GATE_COLUMNS,
+            ),
+        )
     seed_aware_family_rows = (
         _read_required_tsv(
             seed_aware_family_tsv,
@@ -480,6 +567,14 @@ def run_reconciliation_gallery(
         if candidate_gate_tsv is not None
         else ()
     )
+    retained_gate_rows = (
+        _read_required_tsv(
+            retained_backfill_gate_tsv,
+            _REQUIRED_RETAINED_BACKFILL_GATE_COLUMNS,
+        )
+        if retained_backfill_gate_tsv is not None
+        else ()
+    )
     tier2_trace_evidence_rows = (
         _read_required_tsv(tier2_trace_evidence_tsv, ("feature_family_id",))
         if tier2_trace_evidence_tsv is not None
@@ -501,6 +596,22 @@ def run_reconciliation_gallery(
         if shadow_projection_cells_tsv is not None
         else ()
     )
+    activation_application_summary_rows = (
+        _read_required_tsv(
+            activation_application_summary_tsv,
+            ACTIVATION_APPLICATION_SUMMARY_COLUMNS,
+        )
+        if activation_application_summary_tsv is not None
+        else ()
+    )
+    activation_value_delta_rows = (
+        _read_required_tsv(
+            activation_value_delta_tsv,
+            ACTIVATION_VALUE_DELTA_COLUMNS,
+        )
+        if activation_value_delta_tsv is not None
+        else ()
+    )
     target_benchmark_rows = (
         _read_required_tsv(
             targeted_istd_benchmark_summary_tsv,
@@ -515,12 +626,17 @@ def run_reconciliation_gallery(
         alignment_matrix_tsv=alignment_matrix_tsv,
         backfill_seed_audit_tsv=backfill_seed_audit_tsv,
         overlay_batch_summary_tsvs=overlay_batch_summary_tsvs,
+        shift_aware_same_pattern_tsvs=shift_aware_same_pattern_tsvs,
+        shift_aware_standard_peak_gate_tsvs=shift_aware_standard_peak_gate_tsvs,
         seed_aware_family_tsv=seed_aware_family_tsv,
         seed_aware_summary_tsv=seed_aware_summary_tsv,
         candidate_gate_tsv=candidate_gate_tsv,
+        retained_backfill_gate_tsv=retained_backfill_gate_tsv,
         tier2_trace_evidence_tsv=tier2_trace_evidence_tsv,
         shadow_policy_cells_tsv=shadow_policy_cells_tsv,
         shadow_projection_cells_tsv=shadow_projection_cells_tsv,
+        activation_application_summary_tsv=activation_application_summary_tsv,
+        activation_value_delta_tsv=activation_value_delta_tsv,
         targeted_istd_benchmark_summary_tsv=targeted_istd_benchmark_summary_tsv,
         source_run_id=source_run_id,
     )
@@ -531,12 +647,19 @@ def run_reconciliation_gallery(
             alignment_matrix_tsv=alignment_matrix_tsv,
             backfill_seed_audit_tsv=backfill_seed_audit_tsv,
             overlay_batch_summary_tsvs=overlay_batch_summary_tsvs,
+            shift_aware_same_pattern_tsvs=shift_aware_same_pattern_tsvs,
+            shift_aware_standard_peak_gate_tsvs=(
+                shift_aware_standard_peak_gate_tsvs
+            ),
             seed_aware_family_tsv=seed_aware_family_tsv,
             seed_aware_summary_tsv=seed_aware_summary_tsv,
             candidate_gate_tsv=candidate_gate_tsv,
+            retained_backfill_gate_tsv=retained_backfill_gate_tsv,
             tier2_trace_evidence_tsv=tier2_trace_evidence_tsv,
             shadow_policy_cells_tsv=shadow_policy_cells_tsv,
             shadow_projection_cells_tsv=shadow_projection_cells_tsv,
+            activation_application_summary_tsv=activation_application_summary_tsv,
+            activation_value_delta_tsv=activation_value_delta_tsv,
             targeted_istd_benchmark_summary_tsv=targeted_istd_benchmark_summary_tsv,
         ),
     )
@@ -546,12 +669,17 @@ def run_reconciliation_gallery(
         alignment_matrix_rows=matrix_rows,
         seed_audit_rows=seed_audit_rows,
         overlay_rows=overlay_rows,
+        shift_aware_same_pattern_rows=shift_aware_rows,
+        shift_aware_standard_peak_gate_rows=standard_peak_gate_rows,
         seed_aware_family_rows=seed_aware_family_rows,
         seed_aware_summary_rows=seed_aware_summary_rows,
         candidate_gate_rows=candidate_gate_rows,
+        retained_gate_rows=retained_gate_rows,
         tier2_trace_evidence_rows=tier2_trace_evidence_rows,
         shadow_policy_rows=shadow_policy_rows,
         shadow_projection_rows=shadow_projection_rows,
+        activation_application_summary_rows=activation_application_summary_rows,
+        activation_value_delta_rows=activation_value_delta_rows,
         target_benchmark_rows=target_benchmark_rows,
         input_artifacts=input_artifacts,
     )
@@ -573,12 +701,17 @@ def build_reconciliation_index(
     alignment_matrix_rows: Iterable[Mapping[str, str]] = (),
     seed_audit_rows: Iterable[Mapping[str, str]] = (),
     overlay_rows: Iterable[Mapping[str, str]] = (),
+    shift_aware_same_pattern_rows: Iterable[Mapping[str, str]] = (),
+    shift_aware_standard_peak_gate_rows: Iterable[Mapping[str, str]] = (),
     seed_aware_family_rows: Iterable[Mapping[str, str]] = (),
     seed_aware_summary_rows: Iterable[Mapping[str, str]] = (),
     candidate_gate_rows: Iterable[Mapping[str, str]] = (),
+    retained_gate_rows: Iterable[Mapping[str, str]] = (),
     tier2_trace_evidence_rows: Iterable[Mapping[str, str]] = (),
     shadow_policy_rows: Iterable[Mapping[str, str]] = (),
     shadow_projection_rows: Iterable[Mapping[str, str]] = (),
+    activation_application_summary_rows: Iterable[Mapping[str, str]] = (),
+    activation_value_delta_rows: Iterable[Mapping[str, str]] = (),
     target_benchmark_rows: Iterable[Mapping[str, str]] = (),
     input_artifacts: Mapping[str, object] | None = None,
 ) -> ReconciliationIndex:
@@ -589,15 +722,31 @@ def build_reconciliation_index(
     matrices = [dict(row) for row in alignment_matrix_rows]
     seeds = [dict(row) for row in seed_audit_rows]
     overlays = [dict(row) for row in overlay_rows]
+    shift_aware = [dict(row) for row in shift_aware_same_pattern_rows]
+    standard_peak_gate = [dict(row) for row in shift_aware_standard_peak_gate_rows]
     seed_aware = [dict(row) for row in seed_aware_family_rows]
     seed_aware_summary = [dict(row) for row in seed_aware_summary_rows]
     candidates = [dict(row) for row in candidate_gate_rows]
+    retained_gate = [dict(row) for row in retained_gate_rows]
     tier2 = [dict(row) for row in tier2_trace_evidence_rows]
     shadow_policy_cells = tuple(
         _shadow_policy_cell_from_row(row) for row in shadow_policy_rows
     )
     shadow_projection_cells = tuple(
         _shadow_projection_cell_from_row(row) for row in shadow_projection_rows
+    )
+    activation_application_summary = [
+        dict(row) for row in activation_application_summary_rows
+    ]
+    activation_delta_cells = tuple(
+        _activation_delta_cell_from_row(row) for row in activation_value_delta_rows
+    )
+    activated_projection_group_keys = _activation_written_projection_group_keys(
+        shadow_projection_cells,
+        activation_delta_cells,
+    )
+    current_written_projection_group_keys = (
+        _current_matrix_written_projection_group_keys(shadow_projection_cells)
     )
     target_contexts = tuple(
         context
@@ -611,8 +760,11 @@ def build_reconciliation_index(
     seed_records_by_family = _seed_records_by_family(seeds)
     seed_samples_by_family = _seed_samples_by_family(seeds)
     overlays_by_family = _group_by_family(overlays)
+    shift_aware_by_family = _group_by_family(shift_aware)
+    standard_peak_gate_by_family = _group_by_family(standard_peak_gate)
     seed_aware_by_family = _first_by_family(seed_aware)
     candidate_by_family = _first_by_family(candidates)
+    retained_gate_by_group = _first_by_family_and_seed_group(retained_gate)
     source_hashes = _source_hashes_from_input_artifacts(input_artifacts or {})
     tier2_families = {
         text_value(row.get("feature_family_id"))
@@ -654,16 +806,59 @@ def build_reconciliation_index(
                     overlays_by_family.get(family, ()),
                     seed_group_id=seed_record.seed_group_id,
                 ),
+                shift_aware_same_pattern_rows=shift_aware_by_family.get(
+                    family,
+                    (),
+                ),
+                shift_aware_standard_peak_gate_rows=(
+                    standard_peak_gate_by_family.get(family, ())
+                ),
                 legacy_overlay_rows=_legacy_overlay_rows(
                     overlays_by_family.get(family, ()),
                 ),
                 seed_aware_row=seed_aware_by_family.get(family, {}),
                 candidate_gate_row=candidate_by_family.get(family, {}),
+                retained_gate_row=retained_gate_by_group.get(
+                    (family, seed_record.seed_group_id),
+                    {},
+                ),
                 source_hashes=source_hashes,
                 has_tier2_trace_evidence=family in tier2_families,
             )
             product_behavior = _product_behavior(review, family_cells)
+            current_written_by_projection = (
+                family,
+                seed_record.seed_group_id,
+            ) in current_written_projection_group_keys
+            activated_by_delta = (
+                family,
+                seed_record.seed_group_id,
+            ) in activated_projection_group_keys
+            if current_written_by_projection or activated_by_delta:
+                product_behavior = "product_primary_backfilled"
             product_reason = _top_product_reason(review)
+            if activated_by_delta:
+                product_reason = "activation_value_delta_written"
+            elif current_written_by_projection:
+                product_reason = "shadow_projection_current_matrix_written"
+            source_artifacts = tuple(evidence["source_artifacts"])
+            if current_written_by_projection or activated_by_delta:
+                product_sources = ["shadow_production_projection_cells.tsv"]
+                if activated_by_delta:
+                    product_sources.extend(
+                        (
+                            "activation_application_summary.tsv",
+                            "activation_value_delta.tsv",
+                        ),
+                    )
+                source_artifacts = tuple(
+                    _ordered_unique(
+                        (
+                            *source_artifacts,
+                            *product_sources,
+                        ),
+                    ),
+                )
             seed_count_cells = group_cells or family_cells
             representative_cells = _representative_cells_for_group(
                 family=family,
@@ -730,7 +925,7 @@ def build_reconciliation_index(
                 ),
                 family_pattern_verdict=text_value(evidence["family_pattern_verdict"]),
                 overlay_evidence_notes=tuple(evidence["overlay_evidence_notes"]),
-                source_artifacts=tuple(evidence["source_artifacts"]),
+                source_artifacts=source_artifacts,
                 source_warnings=tuple(evidence["source_warnings"]),
                 product_grade_support_components=tuple(
                     evidence["product_grade_support_components"],
@@ -761,6 +956,41 @@ def build_reconciliation_index(
     summary["shadow_projection_matrix_counts"] = _shadow_projection_matrix_counts(
         shadow_projection_cells,
     )
+    summary["activation_application_summary"] = _activation_application_summary(
+        activation_application_summary,
+    )
+    summary["activation_value_delta_matrix_effect_counts"] = (
+        _activation_value_delta_matrix_effect_counts(activation_delta_cells)
+    )
+    summary["activation_written_projection_group_count"] = len(
+        activated_projection_group_keys,
+    )
+    summary["activation_written_projection_cell_count"] = (
+        _activation_written_projection_cell_count(
+            shadow_projection_cells,
+            activation_delta_cells,
+        )
+    )
+    summary["current_written_projection_group_count"] = len(
+        current_written_projection_group_keys,
+    )
+    summary["current_written_projection_cell_count"] = (
+        _current_matrix_written_projection_cell_count(shadow_projection_cells)
+    )
+    summary["activation_delta_view"] = (
+        "activated_matrix"
+        if activation_delta_cells
+        else "not_supplied"
+    )
+    summary["product_behavior_changed"] = bool(
+        activated_projection_group_keys or current_written_projection_group_keys,
+    )
+    product_behavior_sources: list[str] = []
+    if current_written_projection_group_keys:
+        product_behavior_sources.append("shadow_production_projection_cells.tsv")
+    if activated_projection_group_keys:
+        product_behavior_sources.append("activation_value_delta.tsv")
+    summary["product_behavior_source"] = ";".join(product_behavior_sources)
     summary["target_benchmark_context_counts"] = _target_benchmark_context_counts(
         target_contexts,
     )
@@ -769,6 +999,7 @@ def build_reconciliation_index(
         representative_cells=tuple(representatives),
         shadow_policy_cells=shadow_policy_cells,
         shadow_projection_cells=shadow_projection_cells,
+        activation_delta_cells=activation_delta_cells,
         target_benchmark_contexts=target_contexts,
         summary=summary,
     )
@@ -813,6 +1044,10 @@ def write_reconciliation_outputs(
         )
         summary["shadow_projection_matrix_counts"] = (
             _shadow_projection_matrix_counts(index.shadow_projection_cells)
+        )
+    if index.activation_delta_cells:
+        summary["activation_value_delta_matrix_effect_counts"] = (
+            _activation_value_delta_matrix_effect_counts(index.activation_delta_cells)
         )
     if index.target_benchmark_contexts:
         summary["target_benchmark_context_counts"] = _target_benchmark_context_counts(
@@ -904,12 +1139,27 @@ def write_reconciliation_gallery_html(
         "</head>",
         "<body>",
         "<main>",
+        '<header class="gallery-hero" aria-label="gallery introduction">',
+        '<div class="hero-kicker">Matrix-decision audit surface</div>',
         "<h1>Backfill Evidence Reconciliation</h1>",
+        (
+            '<p class="hero-copy">Production decisions, same-peak evidence, '
+            "missing artifacts, and review-only context are reconciled here "
+            "without recalculating domain evidence.</p>"
+        ),
+        '<div class="hero-status-strip" aria-label="gallery role">',
+        "<span>artifact consumer only</span>",
+        "<span>does not write matrix</span>",
+        "<span>hypothesis first</span>",
+        "<span>human review ready</span>",
+        "</div>",
+        "</header>",
         *_summary_html(index, output_paths, html_path=path),
         *_html_scope_notice(groups, html_groups),
         *_filter_html(
             total_families=len(_family_groups(html_groups)),
             default_visible_families=_default_visible_family_count(html_groups),
+            has_shadow_projection=bool(html_shadow_projection_cells),
         ),
     ]
     if not html_groups:
@@ -952,12 +1202,14 @@ def _html_render_groups(
     priority_keys = {
         (group.feature_family_id, group.seed_group_id) for group in priority_groups
     }
-    inconclusive_sample = [
+    low_information_sample = [
         group
         for group in sorted_groups
         if (group.feature_family_id, group.seed_group_id) not in priority_keys
     ][: _HTML_INCONCLUSIVE_SAMPLE_LIMIT]
-    return tuple(sorted((*priority_groups, *inconclusive_sample), key=_group_sort_key))
+    return tuple(
+        sorted((*priority_groups, *low_information_sample), key=_group_sort_key),
+    )
 
 
 def _html_priority_group(
@@ -967,7 +1219,7 @@ def _html_priority_group(
 ) -> bool:
     return (
         (group.feature_family_id, group.seed_group_id) in projection_accept_keys
-        or group.reconciliation_class != "evidence_inconclusive"
+        or group.reconciliation_class not in _HTML_LOW_INFORMATION_CLASSES
         or bool(group.overlay_png_path)
         or bool(group.overlay_trace_json_path)
         or bool(group.family_pattern_png_path)
@@ -986,6 +1238,79 @@ def _shadow_projection_accept_group_keys(
     }
 
 
+def _activation_written_projection_group_keys(
+    projection_cells: Sequence[ShadowProjectionCell],
+    activation_cells: Sequence[ActivationDeltaCell],
+) -> set[tuple[str, str]]:
+    written_cell_keys = _activation_written_cell_keys(activation_cells)
+    return {
+        (cell.feature_family_id, cell.seed_group_id)
+        for cell in projection_cells
+        if _is_projected_new_accept(cell)
+        and (cell.feature_family_id, cell.sample_stem) in written_cell_keys
+    }
+
+
+def _activation_written_projection_cell_count(
+    projection_cells: Sequence[ShadowProjectionCell],
+    activation_cells: Sequence[ActivationDeltaCell],
+) -> int:
+    written_cell_keys = _activation_written_cell_keys(activation_cells)
+    return sum(
+        1
+        for cell in projection_cells
+        if _is_projected_new_accept(cell)
+        and (cell.feature_family_id, cell.sample_stem) in written_cell_keys
+    )
+
+
+def _current_matrix_written_projection_group_keys(
+    projection_cells: Sequence[ShadowProjectionCell],
+) -> set[tuple[str, str]]:
+    return {
+        (cell.feature_family_id, cell.seed_group_id)
+        for cell in projection_cells
+        if _is_current_backfill_matrix_write(cell)
+    }
+
+
+def _current_matrix_written_projection_cell_count(
+    projection_cells: Sequence[ShadowProjectionCell],
+) -> int:
+    return sum(
+        1 for cell in projection_cells if _is_current_backfill_matrix_write(cell)
+    )
+
+
+def _is_current_backfill_matrix_write(cell: ShadowProjectionCell) -> bool:
+    return (
+        cell.current_matrix_written
+        and cell.current_raw_status == "rescued"
+        and cell.current_production_status == "accepted_rescue"
+    )
+
+
+def _activation_written_cell_keys(
+    cells: Sequence[ActivationDeltaCell],
+) -> set[tuple[str, str]]:
+    return {
+        (cell.feature_family_id, cell.sample_id)
+        for cell in cells
+        if _is_activation_matrix_write(cell)
+    }
+
+
+def _is_activation_matrix_write(cell: ActivationDeltaCell) -> bool:
+    activated_value = optional_float(cell.activated_matrix_value)
+    return (
+        cell.activation_status == "auto_activate"
+        and cell.matrix_value_effect == "written"
+        and cell.product_effect in {"", "accept_label_or_rescue"}
+        and activated_value is not None
+        and activated_value > 0
+    )
+
+
 def _html_scope_notice(
     all_groups: Sequence[ReconciliationGroup],
     html_groups: Sequence[ReconciliationGroup],
@@ -998,7 +1323,7 @@ def _html_scope_notice(
         (
             f"HTML 顯示 {_escape(str(len(html_groups)))} / "
             f"{_escape(str(len(all_groups)))} groups；"
-            f"{_escape(str(hidden))} 個低資訊量 inconclusive rows 只保留在 TSV/JSON。"
+            f"{_escape(str(hidden))} 個低資訊量 rows 只保留在 TSV/JSON。"
         ),
         "完整機器索引仍在 groups TSV 與 representatives TSV，產品決策未改變。",
         "</div>",
@@ -1073,6 +1398,19 @@ def _first_by_family(rows: Sequence[Mapping[str, str]]) -> dict[str, dict[str, s
         family = text_value(row.get("feature_family_id"))
         if family and family not in result:
             result[family] = dict(row)
+    return result
+
+
+def _first_by_family_and_seed_group(
+    rows: Sequence[Mapping[str, str]],
+) -> dict[tuple[str, str], dict[str, str]]:
+    result: dict[tuple[str, str], dict[str, str]] = {}
+    for row in rows:
+        family = text_value(row.get("feature_family_id"))
+        seed_group_id = text_value(row.get("seed_group_id"))
+        if not family or not seed_group_id:
+            continue
+        result.setdefault((family, seed_group_id), dict(row))
     return result
 
 
@@ -1303,9 +1641,12 @@ def _classify_evidence(
     has_matrix_context: bool,
     seed_samples: frozenset[str],
     overlay_rows: Sequence[Mapping[str, str]],
+    shift_aware_same_pattern_rows: Sequence[Mapping[str, str]],
+    shift_aware_standard_peak_gate_rows: Sequence[Mapping[str, str]],
     legacy_overlay_rows: Sequence[Mapping[str, str]],
     seed_aware_row: Mapping[str, str],
     candidate_gate_row: Mapping[str, str],
+    retained_gate_row: Mapping[str, str],
     source_hashes: Mapping[str, str],
     has_tier2_trace_evidence: bool,
 ) -> dict[str, Any]:
@@ -1316,7 +1657,7 @@ def _classify_evidence(
     human_review: list[str] = []
     missing: list[str] = []
     warnings: list[str] = []
-    artifacts: list[str] = ["alignment_review.tsv", "alignment_cells.tsv"]
+    artifacts: list[str] = ["alignment_review.tsv", "cell evidence TSV"]
     overlay_png_path = ""
     overlay_trace_json_path = ""
     family_pattern_png_path = ""
@@ -1373,6 +1714,26 @@ def _classify_evidence(
                 warnings.append(f"stale_candidate_gate_{blocker}")
                 missing.append(f"stale_candidate_gate_{blocker}")
 
+    retained_status = text_value(retained_gate_row.get("evidence_gate_status"))
+    retained_action = text_value(retained_gate_row.get("recommended_action"))
+    retained_support = split_semicolon_labels(
+        retained_gate_row.get("support_components"),
+    )
+    retained_blockers = split_semicolon_labels(
+        retained_gate_row.get("challenge_blockers"),
+    )
+    retained_missing = split_semicolon_labels(retained_gate_row.get("missing_evidence"))
+    if retained_status:
+        artifacts.append("alignment_retained_backfill_evidence_gate.tsv")
+    if retained_status == "machine_support_no_overlay":
+        dependent.extend(retained_support)
+        dependent.append("overlay_not_required_machine_supported")
+        if retained_action:
+            dependent.append(retained_action)
+    else:
+        blockers.extend(retained_blockers)
+        missing.extend(retained_missing)
+
     if seed_aware_row:
         artifacts.append("seed_aware_backfill_review_families.tsv")
         classification = text_value(seed_aware_row.get("review_classification"))
@@ -1392,6 +1753,24 @@ def _classify_evidence(
             seed_aware_row.get("png_path"),
         )
         overlay_trace_json_path = _first_path(seed_aware_row.get("trace_json_paths"))
+    if shift_aware_same_pattern_rows:
+        artifacts.append("source_family_best_shift_summary.tsv")
+        shift_evidence = _shift_aware_same_pattern_evidence(
+            shift_aware_same_pattern_rows,
+        )
+        if shift_evidence.support:
+            visual.append("shift_aware_same_pattern_support_review_only")
+        elif shift_evidence.review_required:
+            human_review.append("shift_aware_same_pattern_review_required")
+        overlay_evidence_notes.extend(shift_evidence.notes)
+    if shift_aware_standard_peak_gate_rows:
+        artifacts.append("shift_aware_standard_peak_gate_calibration.tsv")
+        gate_components = _shift_aware_standard_peak_gate_components(
+            shift_aware_standard_peak_gate_rows,
+        )
+        visual.extend(gate_components["visual"])
+        blockers.extend(gate_components["blockers"])
+        overlay_evidence_notes.extend(gate_components["notes"])
     for row in overlay_rows:
         artifacts.append("family_ms1_overlay_batch_summary.tsv")
         verdict = text_value(row.get("family_verdict"))
@@ -1441,7 +1820,9 @@ def _classify_evidence(
         and not human_review
         and not missing
     ):
-        if dependent:
+        if "high_detected_anchor_low_rescue_machine_support" in dependent:
+            authority_state = "machine_support_no_overlay"
+        elif dependent:
             authority_state = "dependent_context_only"
         else:
             authority_state = "evidence_inconclusive"
@@ -1500,6 +1881,91 @@ def _overlay_evidence_notes(row: Mapping[str, str]) -> tuple[str, ...]:
         if value:
             notes.append(f"{label}={value}")
     return tuple(notes)
+
+
+def _shift_aware_standard_peak_gate_components(
+    rows: Sequence[Mapping[str, str]],
+) -> dict[str, tuple[str, ...]]:
+    visual: list[str] = []
+    blockers: list[str] = []
+    notes: list[str] = []
+    for row in rows:
+        call = text_value(row.get("standard_peak_gate_call"))
+        if call == "standard_peak_gate_supported":
+            visual.append("shift_aware_standard_peak_gate_supported_review_only")
+            notes.append("standard peak gate=supported")
+        elif call == "standard_peak_gate_blocked":
+            blockers.append("shift_aware_standard_peak_gate_blocked")
+            notes.append("standard peak gate=blocked")
+        reasons = split_semicolon_labels(row.get("standard_peak_gate_reasons"))
+        gate_blockers = split_semicolon_labels(row.get("standard_peak_gate_blockers"))
+        if reasons:
+            notes.append(f"standard peak gate reasons={';'.join(reasons)}")
+        if gate_blockers:
+            notes.append(f"standard peak gate blockers={';'.join(gate_blockers)}")
+        min_r = text_value(row.get("min_shape_r_after_best_shift"))
+        max_shift = text_value(row.get("max_abs_shift_sec"))
+        if min_r or max_shift:
+            parts = []
+            if min_r:
+                parts.append(f"min r={min_r}")
+            if max_shift:
+                parts.append(f"max shift={max_shift}s")
+            notes.append(f"standard peak gate metrics={'; '.join(parts)}")
+        outcome = text_value(row.get("calibration_outcome"))
+        if outcome:
+            notes.append(f"standard peak gate calibration={outcome}")
+    return {
+        "visual": tuple(_ordered_unique(visual)),
+        "blockers": tuple(_ordered_unique(blockers)),
+        "notes": tuple(_ordered_unique(notes)),
+    }
+
+
+def _shift_aware_same_pattern_evidence(
+    rows: Sequence[Mapping[str, str]],
+) -> _ShiftAwareSamePatternEvidence:
+    candidates = [
+        row
+        for row in rows
+        if text_value(row.get("shift_basis")) == "median_shape_correlation"
+        and not bool_value(row.get("is_reference"))
+    ]
+    similarities = [
+        value
+        for row in candidates
+        if (
+            value := optional_float(
+                row.get("shape_similarity_to_reference_after_group_shift"),
+            )
+        )
+        is not None
+    ]
+    shift_seconds = [
+        abs(value)
+        for row in candidates
+        if (value := optional_float(row.get("shift_to_reference_sec"))) is not None
+    ]
+    notes: list[str] = []
+    if similarities:
+        notes.append(
+            "shift-aware same-pattern min r="
+            f"{min(similarities):.3f}; max shift={max(shift_seconds or [0.0]):.1f}s",
+        )
+    if candidates:
+        notes.append(f"shift-aware source-family groups={len(candidates)}")
+    has_support = bool(
+        similarities
+        and min(similarities) >= SHIFT_AWARE_SAME_PATTERN_SUPPORT_MIN_R
+    )
+    has_conflict = any(
+        value < SHIFT_AWARE_SAME_PATTERN_CONFLICT_MAX_R for value in similarities
+    )
+    return _ShiftAwareSamePatternEvidence(
+        support=has_support and not has_conflict,
+        review_required=bool(candidates and not has_support),
+        notes=tuple(notes),
+    )
 
 
 def _product_authority_components(
@@ -1608,7 +2074,7 @@ def _anchor_peak_overlay_notes(
     ]
     if support:
         notes.append(
-            "anchor same-peak rescued support="
+            "anchor same-peak candidate support="
             + _compact_note_items(tuple(support)),
         )
     if review:
@@ -1684,10 +2150,8 @@ def _product_behavior(
     rescued_cells = [
         row for row in cell_rows if text_value(row.get("status")).lower() == "rescued"
     ]
-    primary_rescued = any(
-        text_value(row.get("primary_matrix_area_source")) for row in rescued_cells
-    )
-    if include_primary and (rescued_cells or primary_rescued):
+    primary_rescued = any(_cell_writes_primary_matrix(row) for row in rescued_cells)
+    if include_primary and primary_rescued:
         return "product_primary_backfilled"
     if rescued_cells:
         return "product_rescued_context_only"
@@ -1699,6 +2163,20 @@ def _product_behavior(
     if "review" in identity or "review" in confidence:
         return "product_review_only"
     return "product_not_backfilled"
+
+
+def _cell_writes_primary_matrix(row: Mapping[str, str]) -> bool:
+    write_value = text_value(row.get("write_matrix_value"))
+    if write_value:
+        return bool_value(write_value) is True
+    return bool(text_value(row.get("primary_matrix_area_source")))
+
+
+def _cell_has_primary_area_context(row: Mapping[str, str]) -> bool:
+    return bool(
+        text_value(row.get("primary_matrix_area"))
+        or text_value(row.get("primary_matrix_area_source"))
+    )
 
 
 def _reconciliation_class(
@@ -1718,6 +2196,8 @@ def _reconciliation_class(
         return "evidence_inconclusive"
     if evidence_authority_state == "human_visual_judgment_only":
         return "evidence_inconclusive"
+    if evidence_authority_state == "machine_support_no_overlay":
+        return "machine_support_no_overlay"
     product_accepts = product_behavior_state == "product_primary_backfilled"
     if evidence_authority_state == "product_grade_support":
         return (
@@ -1924,6 +2404,26 @@ def _target_benchmark_summary_text(
     return "not supplied"
 
 
+def _activation_summary_text(summary: Mapping[str, object]) -> str:
+    if text_value(summary.get("activation_delta_view")) == "not_supplied":
+        return "not supplied"
+    effect_counts = _string_int_mapping(
+        summary.get("activation_value_delta_matrix_effect_counts"),
+    )
+    written = effect_counts.get("written", 0)
+    groups = _int_text(summary.get("activation_written_projection_group_count"))
+    cells = _int_text(summary.get("activation_written_projection_cell_count"))
+    return f"written {written} · groups {groups} · cells {cells}"
+
+
+def _current_rescue_summary_text(summary: Mapping[str, object]) -> str:
+    if not summary.get("shadow_projection_matrix_counts"):
+        return "not supplied"
+    groups = _int_text(summary.get("current_written_projection_group_count"))
+    cells = _int_text(summary.get("current_written_projection_cell_count"))
+    return f"written {cells} · groups {groups}"
+
+
 def _summary_html(
     index: ReconciliationIndex,
     output_paths: Mapping[str, Path],
@@ -1945,6 +2445,7 @@ def _summary_html(
     validation_label = text_value(summary.get("validation_label")) or "diagnostic_only"
     return [
         '<section class="summary" aria-label="reconciliation summary">',
+        _decision_legend_html(),
         _summary_item("validation", "Validation", validation_label),
         _summary_item("groups", "Groups", str(summary["group_count"])),
         _summary_item(
@@ -1992,6 +2493,16 @@ def _summary_html(
                 summary.get("input_artifacts"),
             ),
         ),
+        _summary_item(
+            "current-rescue",
+            "Current rescue writes",
+            _current_rescue_summary_text(summary),
+        ),
+        _summary_item(
+            "activation-delta",
+            "Activated writes",
+            _activation_summary_text(summary),
+        ),
         *_artifact_links(output_paths, html_path=html_path),
         *_target_benchmark_panel_html(
             index.target_benchmark_contexts,
@@ -2010,6 +2521,43 @@ def _summary_html(
         ),
         "</section>",
     ]
+
+
+def _decision_legend_html() -> str:
+    items = (
+        (
+            "matrix written",
+            "Final matrix value",
+            "Only this wording means the cell is written to the delivered matrix.",
+        ),
+        (
+            "candidate only",
+            "Evidence candidate",
+            "Candidate counts are review/provenance cells, not matrix writes.",
+        ),
+        (
+            "not written + blocks",
+            "Blocked or rejected",
+            "The evidence chain says to leave the value out unless policy changes.",
+        ),
+    )
+    rows = "".join(
+        '<div class="decision-legend-item">'
+        f'<span class="decision-token">{_escape(token)}</span>'
+        f"<strong>{_escape(title)}</strong>"
+        f"<p>{_escape(copy)}</p>"
+        "</div>"
+        for token, title, copy in items
+    )
+    return (
+        '<div class="decision-legend" aria-label="decision wording guide">'
+        '<div class="decision-legend-heading">'
+        "<span>Read first</span>"
+        "<strong>Candidate is not a matrix write.</strong>"
+        "</div>"
+        f"{rows}"
+        "</div>"
+    )
 
 
 def _summary_item(css_class: str, label: str, value: str) -> str:
@@ -2201,7 +2749,11 @@ def _filter_html(
     *,
     total_families: int,
     default_visible_families: int,
+    has_shadow_projection: bool,
 ) -> list[str]:
+    labels = dict(_REVIEW_FILTER_LABELS)
+    if not has_shadow_projection:
+        labels.pop("projection_accepts", None)
     return [
         '<section class="filters" aria-label="table filters">',
         '<label for="categoryFilter">Focus</label>',
@@ -2212,7 +2764,7 @@ def _filter_html(
                 f'{" selected" if value == _DEFAULT_FILTER_CATEGORY else ""}>'
                 f"{_escape(label)}</option>"
             )
-            for value, label in _REVIEW_FILTER_LABELS.items()
+            for value, label in labels.items()
         ],
         '<option value="">All rows</option>',
         "</select>",
@@ -2277,10 +2829,10 @@ def _table_html(
         (
             '<th scope="col"><span title="Cell-level impact. With shadow '
             "projection input: Current=current production decision writes, "
-            "Review=review-rescued target cells, Accept/Block=projected shadow "
+            "Review=manual-review candidate cells, Write/Block=projected shadow "
             "outcome. Without projection "
-            "input: NL/Fill/Dup/Review remain alignment provenance counts, not target "
-            'benchmark coverage.">'
+            "input: NL/Candidate/Dup/Review remain alignment provenance counts, "
+            'not matrix-written counts or target benchmark coverage.">'
             "impact</span></th>"
         ),
         '<th scope="col">overlay</th>',
@@ -2486,7 +3038,8 @@ def _top_issue_html(group: ReconciliationGroup) -> str:
     return (
         '<div class="top-issue">'
         f"{_badge(group.reconciliation_class)}"
-        f'<span class="issue-text {detail_class}" title="{_escape_attr(detail)}">'
+        f'<span class="issue-text {detail_class}" '
+        f'title="{_escape_attr(_compact_issue_label(detail))}">'
         f"{_escape(_compact_issue_label(detail))}</span>"
         "</div>"
     )
@@ -2494,6 +3047,25 @@ def _top_issue_html(group: ReconciliationGroup) -> str:
 
 def _state_html(group: ReconciliationGroup) -> str:
     return _state_html_for_shadow(group, ())
+
+
+def _state_aria_label(
+    group: ReconciliationGroup,
+    shadow_summary: str,
+    projection_summary: str,
+) -> str:
+    product = _badge_label(group.product_behavior_state)
+    if group.product_behavior_state == "product_rescued_context_only":
+        product = "candidate only, not matrix written"
+    elif group.product_behavior_state == "product_not_backfilled":
+        product = "not matrix written"
+    evidence = _badge_label(group.evidence_authority_state)
+    parts = [f"Product: {product}", f"Evidence: {evidence}"]
+    if shadow_summary:
+        parts.append(f"Shadow: {shadow_summary}")
+    if projection_summary:
+        parts.append(f"Projection: {projection_summary}")
+    return "; ".join(parts)
 
 
 def _state_html_for_shadow(
@@ -2524,8 +3096,9 @@ def _state_html_for_shadow(
         if projection_summary
         else ""
     )
+    aria_label = _state_aria_label(group, shadow_summary, projection_summary)
     return (
-        '<div class="state-stack" aria-label="product and evidence state">'
+        f'<div class="state-stack" aria-label="{_escape_attr(aria_label)}">'
         '<div class="state-line">'
         '<span class="state-key">Product</span>'
         f"{_badge(group.product_behavior_state)}"
@@ -2553,7 +3126,7 @@ def _counts_html(
         provisional=group.provisional_cell_count,
         aria_label=(
             "NL anchors are family detected required-tag anchors; "
-            "Fill is hypothesis rescued/backfilled cells; "
+            "Candidate-only is hypothesis candidate cells, not matrix-written; "
             "Dup is family duplicate-assigned cell context; "
             "Review is hypothesis provisional cell context. "
             "These are alignment cell provenance counts, not target benchmark coverage."
@@ -2577,7 +3150,7 @@ def _projection_counts_html(
         aria_label=(
             "Shadow production projection impact. Current is cells already "
             "written by the production-decision snapshot; Review is "
-            "review-rescued candidate cells; Accept is projected writable cells; "
+            "manual-review candidate cells; Write is projected writable cells; "
             "Block is hard projection blockers."
         ),
     )
@@ -2593,8 +3166,8 @@ def _projection_impact_counts_html(
 ) -> str:
     items = [
         _count_pill("Current", "current production-decision written cells", current),
-        _count_pill("Review", "review-rescued candidate cells", review),
-        _count_pill("Accept", "shadow projected accepted cells", accept),
+        _count_pill("Review", "manual-review candidate cells", review),
+        _count_pill("Write", "shadow projected matrix-written cells", accept),
         _count_pill("Block", "shadow hard-blocked cells", block),
     ]
     return (
@@ -2615,7 +3188,11 @@ def _impact_counts_html(
 ) -> str:
     items = [
         _count_pill("NL", "family detected required-tag anchors", detected),
-        _count_pill("Fill", "hypothesis rescued/backfilled cells", rescued),
+        _count_pill(
+            "Candidate-only",
+            "hypothesis candidate-only cells; not matrix-written",
+            rescued,
+        ),
     ]
     if duplicate:
         items.append(_count_pill("Dup", "family duplicate-assigned cells", duplicate))
@@ -2643,9 +3220,35 @@ def _compact_issue_label(value: str) -> str:
         "review_required_neighboring_ms1_interference": "neighboring MS1 review",
         "review_required_interference": "interference review",
         "evidence_inconclusive": "inconclusive",
-        "product_accepts_and_visual_supports": "accepts + visual support",
-        "product_rejects_but_visual_supports": "rejects + visual support",
-        "product_accepts_but_evidence_conflicts": "accepts + evidence conflict",
+        "machine_support_no_overlay": "machine support, no overlay",
+        "track_machine_supported_backfill": "track machine-supported candidate",
+        "ms1_shape_supports_family_backfill": (
+            "MS1 shape supports same-peak candidate"
+        ),
+        "primary_identity_retained_backfill_review_only": (
+            "primary identity retained; candidate only"
+        ),
+        "product_authorized_same_peak_backfill": "same-peak policy would write",
+        "backfill_ms1_pattern_blocked": "MS1 pattern blocks matrix write",
+        "review_only": "review only",
+        "high_detected_anchor_low_rescue_machine_support": (
+            "high detected anchors, low candidate load"
+        ),
+        "overlay_not_required_machine_supported": "overlay not required",
+        "seed_specific_overlay_not_required_machine_supported": (
+            "seed overlay not required"
+        ),
+        "product_accepts_and_visual_supports": "matrix + visual support",
+        "product_rejects_but_visual_supports": "not written + visual support",
+        "product_accepts_but_evidence_conflicts": "matrix + evidence conflict",
+        "product_rejects_and_evidence_blocks": "not written + blocks",
+        "product_primary_backfilled": "matrix written",
+        "product_rescued_context_only": "candidate only",
+        "product_not_backfilled": "not written",
+        "candidate_context": "candidate only",
+        "rescued": "candidate",
+        "review_rescue": "manual-review candidate",
+        "gap_fill_rescued": "candidate",
         "not_assessable_missing_overlay": "missing overlay",
         "not_assessable_missing_seed_provenance": "missing seed provenance",
         "not_assessable_join_gap": "join gap",
@@ -2653,6 +3256,10 @@ def _compact_issue_label(value: str) -> str:
     if text in replacements:
         return replacements[text]
     return text.replace("_", " ")
+
+
+def _compact_product_reason(value: str) -> str:
+    return _compact_issue_label(value) or "no product reason supplied"
 
 
 def _family_table_row(
@@ -2718,10 +3325,10 @@ def _family_table_row(
         ),
         (
             '<td class="cell-overlay" data-label="overlay">'
-            f"{_family_pattern_link_html(ordered_groups, html_path)}</td>"
+            f"{_family_pattern_link_html(ordered_groups, html_path, input_artifacts)}"
+            "</td>"
         ),
         '<td class="cell-details" data-label="chain">',
-        '<span class="detail-hint">seed rows below</span>',
         "</td>",
         "</tr>",
     ]
@@ -2821,9 +3428,6 @@ def _consolidated_seed_alias_rows(
         (
             '<th class="cell-family seed-cell" scope="row" '
             'data-label="family / hypothesis">'
-            '<span class="seed-index">hypothesis H1</span>'
-            f'<span class="seed-summary">1 MS1 hypothesis · '
-            f"{len(groups)} seed aliases</span>"
             f'<span class="seed-summary">m/z {_escape(_seed_mz_range(groups))} '
             f'· RT {_escape(_seed_rt_range(groups))}</span>'
             f'<span class="seed-window">window '
@@ -2848,6 +3452,7 @@ def _consolidated_seed_alias_rows(
             + _consolidated_overlay_cell_html(
                 groups,
                 html_path=html_path,
+                input_artifacts=input_artifacts,
                 href_counts=href_counts,
                 first_index_by_href=first_index_by_href,
             )
@@ -2860,10 +3465,6 @@ def _consolidated_seed_alias_rows(
             f'aria-controls="{_escape_attr(detail_id)}" '
             f'data-detail-toggle="{_escape_attr(detail_id)}">Open</button>'
         ),
-        (
-            '<span class="detail-hint">'
-            f"{len(groups)} seed aliases · consolidated hypothesis</span>"
-        ),
         "</td>",
         "</tr>",
         (
@@ -2874,9 +3475,10 @@ def _consolidated_seed_alias_rows(
         '<td colspan="7">',
         '<div class="detail-drawer">',
         '<div class="detail-drawer-head">',
-            "<strong>Consolidated hypothesis evidence chain</strong>",
+        "<strong>Consolidated hypothesis evidence chain</strong>",
         (
-            "<span>seed aliases collapsed under one product hypothesis；"
+            f"<span>{_escape(_seed_alias_count_label(len(groups)))}；"
+            "seed aliases collapsed under one product hypothesis；"
             "這些 rows 不是獨立 peak decisions。</span>"
         ),
         "</div>",
@@ -2905,6 +3507,12 @@ def _consolidated_seed_alias_family(
         in split_semicolon_labels(group.family_evidence)
         for group in groups
     )
+
+
+def _seed_alias_count_label(count: int) -> str:
+    if count >= _HIGH_SEED_ALIAS_COUNT:
+        return f"{count} seed aliases · high alias count"
+    return f"{count} seed aliases"
 
 
 def _representatives_for_groups(
@@ -3001,8 +3609,10 @@ def _consolidated_counts_html(
         aria_label=(
             "Consolidated product hypothesis impact. "
             "NL anchors are family detected required-tag anchors; "
-            "Fill and Review are summed seed-alias rescued/provisional cells; "
-            "Dup is family duplicate-assigned cell context."
+            "Candidate-only and Review are summed seed-alias "
+            "candidate/provisional cells, not matrix-written counts; "
+            "Dup is family duplicate-assigned "
+            "cell context."
         ),
     )
 
@@ -3011,6 +3621,7 @@ def _consolidated_overlay_cell_html(
     groups: Sequence[ReconciliationGroup],
     *,
     html_path: Path,
+    input_artifacts: object,
     href_counts: Mapping[str, int],
     first_index_by_href: Mapping[str, int],
 ) -> str:
@@ -3024,23 +3635,15 @@ def _consolidated_overlay_cell_html(
         seen_hrefs.add(href)
         unique_groups.append(group)
     if not unique_groups:
-        return '<span class="overlay-scope muted">no consolidated overlay</span>'
-    hypothesis_link = _hypothesis_overlay_link_html(unique_groups[0], html_path)
-    family_link = _overlay_link_html(
-        unique_groups[0],
-        html_path,
-        label="family context",
-        caption=(
-            f"{unique_groups[0].feature_family_id} | family MS1 pattern context"
-        ),
-    )
-    if hypothesis_link and family_link:
-        return (
-            f"{hypothesis_link}<br>"
-            f"{family_link}<br>"
-            '<span class="overlay-scope">1 hypothesis evidence · '
-            "family context retained</span>"
+        if any(_overlay_not_required_by_gate(group) for group in groups):
+            return _overlay_not_required_status_html("no consolidated overlay")
+        return _missing_overlay_status_html(
+            input_artifacts,
+            "no consolidated overlay",
         )
+    hypothesis_link = _hypothesis_overlay_link_html(unique_groups[0], html_path)
+    if hypothesis_link:
+        return hypothesis_link
     link = _overlay_link_html(
         unique_groups[0],
         html_path,
@@ -3051,7 +3654,10 @@ def _consolidated_overlay_cell_html(
         ),
     )
     if not link:
-        return '<span class="overlay-scope muted">no consolidated overlay</span>'
+        return _missing_overlay_status_html(
+            input_artifacts,
+            "no consolidated overlay",
+        )
     if len(unique_groups) <= 1:
         return link
     return (
@@ -3076,12 +3682,14 @@ def _consolidated_seed_alias_details_html(
 ) -> str:
     base = groups[0]
     return (
+        _consolidated_review_answer_html(groups, input_artifacts, html_path)
+        +
         '<p class="chain-note">'
         "seed aliases collapsed under one product hypothesis because the "
         "alignment review marked this family as primary_family_consolidated. "
         "The aliases remain below as provenance; they are not separate peak "
         "decisions.</p>"
-        + _seed_alias_table_html(groups, html_path)
+        + _seed_alias_table_html(groups, html_path, input_artifacts)
         + _projection_accept_cells_html(groups, shadow_projection_cells, html_path)
         + _details_html(
             base,
@@ -3094,6 +3702,48 @@ def _consolidated_seed_alias_details_html(
             include_seed_context=False,
         )
     )
+
+
+def _consolidated_review_answer_html(
+    groups: Sequence[ReconciliationGroup],
+    input_artifacts: object,
+    html_path: Path,
+) -> str:
+    base = groups[0]
+    overlay_text = _consolidated_overlay_readout(groups, input_artifacts, html_path)
+    alias_warning = (
+        "<p>High alias count: review the consolidated overlay and seed table before "
+        "treating this as a simple one-seed backfill.</p>"
+        if len(groups) >= _HIGH_SEED_ALIAS_COUNT
+        else ""
+    )
+    return (
+        '<section class="review-answer">'
+        "<strong>Reviewer readout</strong>"
+        "<p>"
+        "This row is one consolidated MS1 hypothesis, not "
+        f"{len(groups)} independent peak decisions. "
+        "Product state is "
+        f"{_escape(_compact_issue_label(base.product_behavior_state))}; "
+        "evidence state is "
+        f"{_escape(_compact_issue_label(base.evidence_authority_state))}. "
+        f"Overlay status: {_escape(overlay_text)}."
+        "</p>"
+        f"{alias_warning}"
+        "</section>"
+    )
+
+
+def _consolidated_overlay_readout(
+    groups: Sequence[ReconciliationGroup],
+    input_artifacts: object,
+    html_path: Path,
+) -> str:
+    if any(_hypothesis_overlay_path(group, html_path) for group in groups):
+        return "hypothesis overlay available"
+    if any(_href_for_path(group.overlay_png_path, html_path) for group in groups):
+        return "family context available, hypothesis overlay not generated"
+    return _missing_overlay_reason_text(input_artifacts)
 
 
 def _projection_accept_cells_html(
@@ -3132,10 +3782,11 @@ def _projection_accept_cells_html(
     )
     return (
         '<section class="projection-accept-index">'
-        "<h3>Projection accept cells</h3>"
+        "<h3>Projection write cells</h3>"
         '<p class="chain-note">'
-        "Only blank review-rescued cells that shadow projection would turn into "
-        "writes are listed here; projection_only, product output is unchanged.</p>"
+        "Only blank manual-review candidate cells that shadow projection would "
+        "turn into writes are listed here; projection_only, product output is "
+        "unchanged.</p>"
         '<div class="seed-alias-table-wrap">'
         '<table class="seed-alias-table projection-accept-table">'
         "<thead><tr>"
@@ -3166,6 +3817,7 @@ def _projection_accept_seed_hint_html(group: ReconciliationGroup | None) -> str:
 def _seed_alias_table_html(
     groups: Sequence[ReconciliationGroup],
     html_path: Path,
+    input_artifacts: object,
 ) -> str:
     href_counts, first_index_by_href = _overlay_href_context(groups, html_path)
     rows = "".join(
@@ -3183,6 +3835,7 @@ def _seed_alias_table_html(
             href_counts=href_counts,
             first_index_by_href=first_index_by_href,
             total_seed_groups=len(groups),
+            input_artifacts=input_artifacts,
         )
         + "</td>"
         f'<td><code>{_escape(group.seed_group_id)}</code></td>'
@@ -3275,8 +3928,6 @@ def _seed_decision_rows(
         (
             '<th class="cell-family seed-cell" scope="row" '
             'data-label="family / hypothesis">'
-            f'<span class="seed-index">H{seed_index}</span>'
-            '<span class="seed-summary">1 seed request</span>'
             f'<span class="seed-summary">m/z {_escape(group.seed_mz or "unknown")} '
             f'· RT {_escape(group.seed_rt or "unknown")}</span>'
             f'<span class="seed-window">window '
@@ -3305,6 +3956,7 @@ def _seed_decision_rows(
                 href_counts=href_counts,
                 first_index_by_href=first_index_by_href,
                 total_seed_groups=total_seed_groups,
+                input_artifacts=input_artifacts,
             )
             + "</td>"
         ),
@@ -3314,10 +3966,6 @@ def _seed_decision_rows(
             'aria-expanded="false" '
             f'aria-controls="{_escape_attr(detail_id)}" '
             f'data-detail-toggle="{_escape_attr(detail_id)}">Open</button>'
-        ),
-        (
-            '<span class="detail-hint">'
-            f"{_escape(_seed_detail_summary(group, seed_index))}</span>"
         ),
         "</td>",
         "</tr>",
@@ -3421,6 +4069,54 @@ def _family_target_summary_html(
     return f'<span class="target-status">{_escape(label)}</span>'
 
 
+def _missing_overlay_status_html(input_artifacts: object, label: str) -> str:
+    reason = _missing_overlay_reason_text(input_artifacts)
+    return (
+        '<span class="overlay-scope muted">'
+        f"{_escape(label)}<br>"
+        f'<span class="overlay-missing-reason">{_escape(reason)}</span>'
+        "</span>"
+    )
+
+
+def _overlay_not_required_status_html(label: str) -> str:
+    return (
+        '<span class="overlay-scope muted">'
+        f"{_escape(label)}<br>"
+        '<span class="overlay-missing-reason">'
+        "not required: high detected anchors, low candidate load"
+        "</span>"
+        "</span>"
+    )
+
+
+def _overlay_not_required_by_gate(group: ReconciliationGroup) -> bool:
+    return (
+        group.evidence_authority_state == "machine_support_no_overlay"
+        or group.reconciliation_class == "machine_support_no_overlay"
+        or "high_detected_anchor_low_rescue_machine_support"
+        in group.dependent_context_components
+    )
+
+
+def _missing_overlay_reason_text(input_artifacts: object) -> str:
+    artifacts = _string_object_mapping(input_artifacts)
+    if _overlay_batch_supplied(artifacts):
+        return "not in supplied overlay batch"
+    return "overlay artifact not supplied"
+
+
+def _overlay_batch_supplied(input_artifacts: Mapping[str, object]) -> bool:
+    for key in ("overlay_batch_summary_tsvs", "overlay_batch_summary_hashes"):
+        value = input_artifacts.get(key)
+        if isinstance(value, Sequence) and not isinstance(value, str):
+            if len(value) > 0:
+                return True
+        elif text_value(value):
+            return True
+    return False
+
+
 def _family_pattern_issue_html(groups: Sequence[ReconciliationGroup]) -> str:
     issues = _ordered_unique(
         _compact_issue_label(group.family_pattern_verdict)
@@ -3445,6 +4141,7 @@ def _family_pattern_issue_html(groups: Sequence[ReconciliationGroup]) -> str:
 def _family_pattern_link_html(
     groups: Sequence[ReconciliationGroup],
     html_path: Path,
+    input_artifacts: object,
 ) -> str:
     for group in groups:
         href = _href_for_path(group.family_pattern_png_path, html_path)
@@ -3474,12 +4171,15 @@ def _family_pattern_link_html(
             'child-row hypothesis PNG is shown only when generated." '
             'title="family MS1 context fallback">family context</a>'
         )
-    return '<span class="overlay-scope muted">no context</span>'
+    if any(_overlay_not_required_by_gate(group) for group in groups):
+        return _overlay_not_required_status_html("no family context")
+    return _missing_overlay_status_html(input_artifacts, "no family context")
 
 
 def _family_overlay_links(
     groups: Sequence[ReconciliationGroup],
     html_path: Path,
+    input_artifacts: object,
 ) -> str:
     links: list[str] = []
     seen_hrefs: set[str] = set()
@@ -3491,7 +4191,9 @@ def _family_overlay_links(
         seen_hrefs.add(href)
         unique_items.append((index, group))
     if not unique_items:
-        return "no overlay"
+        if any(_overlay_not_required_by_gate(group) for group in groups):
+            return _overlay_not_required_status_html("no family overlay")
+        return _missing_overlay_status_html(input_artifacts, "no family overlay")
     if len(groups) > 1 and len(unique_items) == 1:
         _, group = unique_items[0]
         link = _overlay_link_html(
@@ -3513,7 +4215,9 @@ def _family_overlay_links(
         link = _overlay_link_html(group, html_path, label=label)
         if link:
             links.append(link)
-    return "<br>".join(links) if links else "no overlay"
+    if links:
+        return "<br>".join(links)
+    return _missing_overlay_status_html(input_artifacts, "no family overlay")
 
 
 def _overlay_link_html(
@@ -3636,20 +4340,15 @@ def _seed_overlay_cell_html(
     href_counts: Mapping[str, int],
     first_index_by_href: Mapping[str, int],
     total_seed_groups: int,
+    input_artifacts: object,
 ) -> str:
     href = _href_for_path(group.overlay_png_path, html_path)
     if not href:
-        return "no overlay"
+        if _overlay_not_required_by_gate(group):
+            return _overlay_not_required_status_html("no seed overlay")
+        return _missing_overlay_status_html(input_artifacts, "no seed overlay")
     hypothesis_link = _hypothesis_overlay_link_html(group, html_path)
     if hypothesis_link:
-        family_link = _overlay_link_html(
-            group,
-            html_path,
-            label="family context",
-            caption=f"{group.feature_family_id} | family MS1 pattern context",
-        )
-        if family_link:
-            return f"{hypothesis_link}<br>{family_link}"
         return hypothesis_link
     if href_counts.get(href, 0) <= 1:
         label = (
@@ -3657,7 +4356,10 @@ def _seed_overlay_cell_html(
             if total_seed_groups == 1
             else f"H{seed_index} family context"
         )
-        return _overlay_link_html(group, html_path, label=label) or "no overlay"
+        return (
+            _overlay_link_html(group, html_path, label=label)
+            or _missing_overlay_status_html(input_artifacts, "no seed overlay")
+        )
     first_index = first_index_by_href.get(href, seed_index)
     if first_index != seed_index:
         return (
@@ -3673,7 +4375,7 @@ def _seed_overlay_cell_html(
         caption=f"{group.feature_family_id} | shared family MS1 context",
     )
     if not link:
-        return "no overlay"
+        return _missing_overlay_status_html(input_artifacts, "no seed overlay")
     return (
         f"{link}<br>"
         '<span class="overlay-scope" '
@@ -3689,6 +4391,7 @@ def _seed_table_row_html(
     html_path: Path,
     href_counts: Mapping[str, int],
     first_index_by_href: Mapping[str, int],
+    input_artifacts: object,
 ) -> str:
     overlay_html = _seed_overlay_cell_html(
         group,
@@ -3697,6 +4400,7 @@ def _seed_table_row_html(
         href_counts=href_counts,
         first_index_by_href=first_index_by_href,
         total_seed_groups=max(len(first_index_by_href), 1),
+        input_artifacts=input_artifacts,
     )
     return (
         "<tr>"
@@ -3755,6 +4459,7 @@ def _family_details_html(
             html_path=html_path,
             href_counts=href_counts,
             first_index_by_href=first_index_by_href,
+            input_artifacts=input_artifacts,
         )
         for index, group in enumerate(groups, start=1)
     )
@@ -3862,10 +4567,12 @@ def _details_html(
         )
     )
     return (
-        _detail_summary_html(
+        _review_answer_html(group, html_path, input_artifacts)
+        + _detail_summary_html(
             group,
             representatives,
             html_path=html_path,
+            input_artifacts=input_artifacts,
             shadow_policy_cells=shadow_policy_cells,
             shadow_projection_cells=shadow_projection_cells,
         )
@@ -3876,7 +4583,7 @@ def _details_html(
             (
                 f"{_badge(group.product_behavior_state)}"
                 '<p class="chain-note">'
-                f'{_escape(group.top_product_reason or "no product reason supplied")}'
+                f"{_escape(_compact_product_reason(group.top_product_reason))}"
                 "</p>"
             ),
         )
@@ -3895,22 +4602,32 @@ def _details_html(
             _overlay_evidence_notes_html(group.overlay_evidence_notes)
             or '<p class="chain-note">No overlay metric notes supplied.</p>',
         )
-        + _chain_item_html(
-            "Shadow production projection",
-            _shadow_projection_compact_summary(shadow_projection_cells)
-            or "not supplied",
-            _shadow_projection_cells_html(shadow_projection_cells, html_path),
-            css_class="shadow-projection-chain",
+        + (
+            _chain_item_html(
+                "Shadow production projection",
+                _shadow_projection_compact_summary(shadow_projection_cells),
+                _shadow_projection_cells_html(shadow_projection_cells, html_path),
+                css_class="shadow-projection-chain",
+            )
+            if shadow_projection_cells
+            else ""
         )
-        + _chain_item_html(
-            _shadow_policy_chain_title(shadow_projection_cells),
-            _shadow_policy_chain_subtitle(shadow_policy_cells, shadow_projection_cells),
-            _shadow_policy_cells_html(
-                shadow_policy_cells,
-                html_path,
-                legacy_reference=bool(shadow_projection_cells),
-            ),
-            css_class="shadow-policy-chain",
+        + (
+            _chain_item_html(
+                _shadow_policy_chain_title(shadow_projection_cells),
+                _shadow_policy_chain_subtitle(
+                    shadow_policy_cells,
+                    shadow_projection_cells,
+                ),
+                _shadow_policy_cells_html(
+                    shadow_policy_cells,
+                    html_path,
+                    legacy_reference=bool(shadow_projection_cells),
+                ),
+                css_class="shadow-policy-chain",
+            )
+            if shadow_policy_cells or shadow_projection_cells
+            else ""
         )
         + _chain_item_html(
             "Optional Candidate MS2 / review context",
@@ -3953,6 +4670,7 @@ def _detail_summary_html(
     representatives: Sequence[RepresentativeCell],
     *,
     html_path: Path,
+    input_artifacts: object,
     shadow_policy_cells: Sequence[ShadowPolicyCell],
     shadow_projection_cells: Sequence[ShadowProjectionCell],
 ) -> str:
@@ -3984,8 +4702,8 @@ def _detail_summary_html(
         )
         + _detail_summary_card_html(
             "visual evidence",
-            "hypothesis first, family context second",
-            _detail_visual_summary_html(group, html_path),
+            "hypothesis evidence / family context",
+            _detail_visual_summary_html(group, html_path, input_artifacts),
         )
         + _detail_summary_card_html(
             "cell impact",
@@ -4007,6 +4725,41 @@ def _detail_summary_card_html(title: str, subtitle: str, body_html: str) -> str:
         f"<h3>{_escape(title)}</h3>"
         f'<p class="summary-subtitle">{_escape(subtitle)}</p>'
         f'<div class="summary-body">{body_html}</div>'
+        "</section>"
+    )
+
+
+def _review_answer_html(
+    group: ReconciliationGroup,
+    html_path: Path,
+    input_artifacts: object,
+) -> str:
+    support = _component_summary_text(_support_summary_items(group), "none")
+    blocker = _component_summary_text(_blocker_summary_items(group), "none")
+    overlay = _hypothesis_overlay_link_html(group, html_path)
+    family_context = _overlay_link_html(
+        group,
+        html_path,
+        label="family context",
+    )
+    if overlay:
+        overlay_text = "hypothesis overlay available"
+    elif family_context:
+        overlay_text = "family context only, hypothesis overlay not generated"
+    else:
+        overlay_text = _missing_overlay_reason_text(input_artifacts)
+    return (
+        '<section class="review-answer">'
+        "<strong>Reviewer readout</strong>"
+        "<p>"
+        "Product state is "
+        f"{_escape(_compact_issue_label(group.product_behavior_state))}; "
+        "evidence state is "
+        f"{_escape(_compact_issue_label(group.evidence_authority_state))}. "
+        f"Support: {_escape(support)}. "
+        f"Blocker or missing item: {_escape(blocker)}. "
+        f"Overlay status: {_escape(overlay_text)}."
+        "</p>"
         "</section>"
     )
 
@@ -4046,7 +4799,11 @@ def _component_summary_text(items: Sequence[str], fallback: str) -> str:
     return summary
 
 
-def _detail_visual_summary_html(group: ReconciliationGroup, html_path: Path) -> str:
+def _detail_visual_summary_html(
+    group: ReconciliationGroup,
+    html_path: Path,
+    input_artifacts: object,
+) -> str:
     link = _hypothesis_overlay_link_html(group, html_path) or _overlay_link_html(
         group,
         html_path,
@@ -4055,7 +4812,10 @@ def _detail_visual_summary_html(group: ReconciliationGroup, html_path: Path) -> 
     link_html = (
         f'<p class="summary-link">{link}</p>'
         if link
-        else '<p class="chain-note">No overlay PNG supplied.</p>'
+        else (
+            '<p class="chain-note">'
+            f"{_escape(_missing_overlay_reason_text(input_artifacts))}.</p>"
+        )
     )
     note_text = _component_summary_text(group.overlay_evidence_notes, "no metric notes")
     return (
@@ -4125,14 +4885,14 @@ def _cell_impact_legend_note_html(
         return (
             '<p class="chain-note">'
             "Current=目前 production decision snapshot 會寫入的 cells；"
-            "Review=review-rescued candidate cells；"
-            "Accept=shadow projection 認為可寫入的 review cells；"
+            "Review=需要人工判讀的 candidate cells；"
+            "Write=shadow projection 認為可寫入的 review cells；"
             "Block=hard blockers；Context=仍需人審/duplicate/debug；"
             "projection_only，不會直接改 matrix。</p>"
         )
     return (
         '<p class="chain-note">NL=detected required-tag anchors；'
-        "Fill=目前 hypothesis 的 rescued/backfilled cells；"
+        "Candidate-only=目前 hypothesis 的候選 cells，不代表已寫入 matrix；"
         "Dup=family duplicate-assigned cell context；"
         "Review=仍需人工判斷的 provisional cells。</p>"
     )
@@ -4227,7 +4987,7 @@ def _shadow_policy_intro_text(legacy_reference: bool) -> str:
         )
     return (
         "diagnostic_only；這裡只描述 MS1 own-max + RT shadow policy "
-        "會如何解讀既有 rescued cells，不會修改 product output。"
+        "會如何解讀既有 candidate cells，不會修改 product output。"
     )
 
 
@@ -4475,7 +5235,7 @@ def _chain_item_html(
         f'<section class="{_escape_attr(class_attr)}">'
         '<div class="chain-head">'
         f"<h3>{_escape(title)}</h3>"
-        f'<span class="chain-state">{_escape(state)}</span>'
+        f'<span class="chain-state">{_escape(_compact_issue_label(state))}</span>'
         "</div>"
         f'<div class="chain-body">{body_html}</div>'
         "</section>"
@@ -4488,7 +5248,7 @@ def _component_list_html(items: Sequence[str]) -> str:
         return ""
     return (
         '<ul class="component-list">'
-        + "".join(f"<li>{_escape(item)}</li>" for item in cleaned)
+        + "".join(f"<li>{_escape(_compact_issue_label(item))}</li>" for item in cleaned)
         + "</ul>"
     )
 
@@ -4500,7 +5260,7 @@ def _representative_cells_table_html(
         "<tr>"
         f"<td>{_escape(';'.join(cell.representative_roles))}</td>"
         f"<td>{_escape(cell.sample_stem)}</td>"
-        f"<td>{_escape(cell.cell_status)}</td>"
+        f"<td>{_escape(_compact_issue_label(cell.cell_status))}</td>"
         f"<td>{_escape(cell.scan_support_score)}</td>"
         f"<td>{_escape(cell.apex_delta_sec)}</td>"
         f"<td>{_escape(cell.representative_reason)}</td>"
@@ -4697,7 +5457,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: Segoe UI, Arial, sans-serif;
+  font-family: Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   line-height: 1.45;
 }
 main {
@@ -4941,7 +5701,6 @@ summary:focus-visible { outline: 3px solid var(--focus); }
 .seed-cell {
   border-left: 4px solid #d8e3ec;
 }
-.seed-index,
 .pattern-label,
 .pattern-status,
 .anchor-status,
@@ -5001,6 +5760,12 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   font-weight: 800;
   line-height: 1.25;
 }
+.overlay-missing-reason {
+  display: inline-block;
+  margin-top: 2px;
+  color: #5f6f7c;
+  font-weight: 700;
+}
 .muted {
   color: var(--muted);
 }
@@ -5053,13 +5818,6 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   border-color: var(--blue);
   background: #eef6fb;
 }
-.detail-hint {
-  display: block;
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-}
 .review-table .detail-row > td {
   position: static;
   padding: 0;
@@ -5085,6 +5843,23 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+}
+.review-answer {
+  margin: 0 0 10px;
+  padding: 11px 12px;
+  border: 1px solid #cfdae0;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: inset 5px 0 0 var(--blue);
+}
+.review-answer strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #14242d;
+}
+.review-answer p {
+  margin: 0;
+  color: #334155;
 }
 .family-id {
   display: block;
@@ -5498,6 +6273,641 @@ details summary {
   .chain-item:nth-last-child(-n + 2) { grid-column: auto; }
   .lightbox-header { display: grid; }
 }
+
+/* Final reconciliation gallery visual system. These rules intentionally sit
+   after the legacy layout so the stable HTML/JS contract remains untouched. */
+:root {
+  color-scheme: light;
+  --bg: #f1f3f1;
+  --bg-pattern: rgba(34, 49, 54, 0.035);
+  --surface: #fdfdfb;
+  --surface-raised: #ffffff;
+  --surface-muted: #f6f7f4;
+  --surface-accent: #eef5f1;
+  --text: #121916;
+  --muted: #64706b;
+  --line: #cbd3ce;
+  --line-soft: #e2e7e3;
+  --focus: #2c8171;
+  --blue: #2f6f84;
+  --green: #23704d;
+  --amber: #956c1a;
+  --red: #a13b42;
+  --purple: #6c5d91;
+  --ok: #23704d;
+  --warn: #956c1a;
+  --shadow: 0 24px 58px rgba(25, 35, 31, 0.105);
+  --shadow-soft: 0 12px 30px rgba(25, 35, 31, 0.072);
+  --motion: cubic-bezier(0.32, 0.72, 0, 1);
+  --radius: 8px;
+  --radius-sm: 6px;
+}
+html {
+  scroll-behavior: smooth;
+}
+body {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,255,255,0.58),
+      rgba(255,255,255,0.18) 44%,
+      rgba(255,255,255,0.52)
+    ),
+    linear-gradient(90deg, var(--bg-pattern) 1px, transparent 1px),
+    linear-gradient(180deg, var(--bg-pattern) 1px, transparent 1px),
+    var(--bg);
+  background-size: auto, 28px 28px, 28px 28px, auto;
+  color: var(--text);
+  font-family: Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+main {
+  width: min(100%, 1620px);
+  max-width: 1620px;
+  padding: 26px clamp(14px, 2.4vw, 34px) 48px;
+}
+.gallery-hero {
+  position: relative;
+  overflow: hidden;
+  margin: 0 0 14px;
+  padding: clamp(18px, 2.4vw, 30px);
+  border: 1px solid rgba(59, 84, 74, 0.22);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.96), rgba(245,248,244,0.92)),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 42px,
+      rgba(43,103,88,0.044) 42px 43px
+    );
+  box-shadow: var(--shadow);
+}
+.gallery-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 7px;
+  background: linear-gradient(180deg, var(--green), var(--blue));
+}
+.hero-kicker {
+  color: #2d6c5c;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+h1 {
+  max-width: 920px;
+  margin: 4px 0 8px;
+  color: #0d1820;
+  font-size: clamp(30px, 4vw, 56px);
+  font-weight: 780;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+.hero-copy {
+  max-width: 760px;
+  margin: 0;
+  color: #455865;
+  font-size: clamp(14px, 1.4vw, 17px);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+.hero-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.hero-status-strip span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 9px;
+  border: 1px solid rgba(43, 103, 88, 0.22);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.78);
+  color: #294237;
+  font-size: 12px;
+  font-weight: 800;
+}
+.summary {
+  grid-template-columns: repeat(auto-fit, minmax(min(174px, 100%), 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.summary-item,
+.authority-note,
+.artifact-strip,
+.provenance-panel,
+.html-scope-note,
+.filters,
+.table-wrap,
+.empty-state {
+  border-color: rgba(158, 174, 184, 0.68);
+  border-radius: var(--radius);
+  background: rgba(252,253,253,0.94);
+  box-shadow: var(--shadow-soft);
+}
+.summary-item {
+  min-height: 76px;
+  padding: 11px 12px;
+  border-left: 0;
+  box-shadow: inset 0 4px 0 var(--blue), var(--shadow-soft);
+}
+.decision-legend {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(210px, 0.75fr) repeat(3, minmax(180px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid rgba(146, 158, 151, 0.72);
+  border-radius: var(--radius);
+  background: var(--line-soft);
+  box-shadow: var(--shadow-soft);
+}
+.decision-legend-heading,
+.decision-legend-item {
+  min-width: 0;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.94);
+}
+.decision-legend-heading {
+  background: #13211c;
+  color: #f8fbf7;
+}
+.decision-legend-heading span {
+  display: block;
+  margin-bottom: 6px;
+  color: rgba(248,251,247,0.72);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.decision-legend-heading strong,
+.decision-legend-item strong {
+  display: block;
+  line-height: 1.2;
+}
+.decision-token {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--amber);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: #283a33;
+  font-size: 12px;
+  font-weight: 850;
+}
+.decision-legend-item:first-of-type .decision-token {
+  border-left-color: var(--green);
+}
+.decision-legend-item:last-of-type .decision-token {
+  border-left-color: var(--red);
+}
+.decision-legend-item p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.42;
+}
+.summary-item span,
+.artifact-strip span,
+.artifact-label,
+.gap-label,
+.pattern-label,
+.pattern-status,
+.anchor-status,
+.target-status,
+.summary-line span:first-child,
+.chain-state,
+.count-stack dt {
+  letter-spacing: 0.04em;
+}
+.summary-item span {
+  color: #657685;
+  font-size: 11px;
+}
+.summary-item strong {
+  color: #101820;
+  font-size: 16px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.authority-note,
+.html-scope-note {
+  padding: 11px 13px;
+  border-left: 0;
+  box-shadow: inset 5px 0 0 var(--red), var(--shadow-soft);
+}
+.html-scope-note {
+  box-shadow: inset 5px 0 0 var(--blue), var(--shadow-soft);
+}
+.artifact-strip,
+.provenance-panel > summary {
+  padding: 10px 13px;
+}
+.artifact-strip a,
+.provenance-list a,
+.summary-link a,
+.lightbox-direct {
+  color: #086f86;
+  text-decoration: none;
+}
+.artifact-strip a:hover,
+.provenance-list a:hover,
+.summary-link a:hover,
+.lightbox-direct:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.provenance-panel[open] > summary {
+  border-bottom: 1px solid var(--line-soft);
+}
+.provenance-list {
+  padding: 11px 13px 13px;
+}
+.filters {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  gap: 9px 12px;
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  backdrop-filter: blur(16px);
+  background: rgba(252,253,253,0.92);
+}
+.filters label {
+  color: #2a3c48;
+  font-size: 12px;
+  font-weight: 850;
+}
+.filters select,
+.filters input {
+  min-height: 38px;
+  border-color: #b6c5ce;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text);
+  transition:
+    border-color 180ms var(--motion),
+    box-shadow 180ms var(--motion),
+    transform 180ms var(--motion);
+}
+.filters select:hover,
+.filters input:hover {
+  border-color: #78a498;
+}
+.filters select:focus-visible,
+.filters input:focus-visible {
+  box-shadow: 0 0 0 4px rgba(43, 103, 88, 0.16);
+}
+.filters input {
+  min-width: min(430px, 100%);
+}
+.result-count {
+  padding: 5px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: #f8faf7;
+  color: #40534a;
+  font-variant-numeric: tabular-nums;
+}
+.table-wrap {
+  max-width: none;
+  margin: 0;
+  overflow: auto;
+  border-radius: var(--radius);
+}
+.review-table {
+  width: 100%;
+  min-width: 1180px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.review-table .col-priority { width: 60px; }
+.review-table .col-family { width: 330px; }
+.review-table .col-state { width: 230px; }
+.review-table .col-issue { width: 260px; }
+.review-table .col-counts { width: 112px; }
+.review-table .col-overlay { width: 88px; }
+.review-table .col-details { width: 116px; }
+.review-table th,
+.review-table td {
+  padding: 9px 10px;
+  border-bottom-color: var(--line-soft);
+  text-align: center;
+  vertical-align: middle;
+}
+.review-table thead th {
+  background: #e4ebe6;
+  color: #1b2b24;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.review-table thead th:nth-child(1),
+.review-table thead th:nth-child(2) {
+  background: #dce7e0;
+}
+.review-table tbody tr:nth-child(even) {
+  --row-bg: #fafbf8;
+}
+.review-table tbody tr:hover {
+  --row-bg: #edf6f1;
+}
+.review-table tbody tr.family-section-row {
+  --row-bg: #e8eee9;
+}
+.review-table tbody tr.family-section-row th,
+.review-table tbody tr.family-section-row td {
+  border-top: 2px solid #a9bec8;
+  border-bottom-color: #c5d5dc;
+}
+.review-table td:nth-child(1),
+.cell-counts,
+.cell-overlay,
+.cell-details {
+  text-align: center;
+}
+.cell-family,
+.cell-state,
+.cell-issue {
+  text-align: center;
+}
+.family-id {
+  color: #0f1c24;
+  font-size: 14px;
+  font-weight: 850;
+  text-align: center;
+}
+.family-meta,
+.seed-summary,
+.seed-window {
+  color: #60717d;
+  text-align: center;
+}
+.family-context-cell .family-id {
+  margin-right: 12px;
+}
+.family-context-cell .anchor-status,
+.family-context-cell .pattern-status,
+.family-context-cell .target-status,
+.seed-count,
+.shadow-pill,
+.badge {
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+}
+.seed-cell {
+  border-left-color: #b6cbd4;
+}
+.seed-cell .seed-summary,
+.seed-cell .seed-window {
+  color: var(--red);
+  font-weight: 850;
+}
+.state-line {
+  grid-template-columns: auto auto;
+  justify-content: center;
+  width: 100%;
+}
+.state-key {
+  color: #667886;
+}
+.state-stack {
+  justify-items: center;
+  text-align: center;
+}
+.cell-state .badge,
+.shadow-pill {
+  justify-self: center;
+}
+.shadow-pill,
+.badge {
+  padding: 4px 7px;
+  box-shadow: 0 1px 0 rgba(17, 26, 34, 0.04);
+}
+.badge {
+  font-weight: 800;
+}
+.badge.product_grade_support,
+.badge.product_primary_backfilled,
+.badge.product_accepts_and_product_grade_supports {
+  border-left-color: var(--green);
+}
+.badge.review_only_visual_support,
+.badge.product_rejects_but_visual_supports {
+  border-left-color: var(--blue);
+}
+.badge.evidence_blocks_backfill,
+.badge.product_accepts_but_evidence_conflicts,
+.badge.product_rejects_and_evidence_blocks {
+  border-left-color: var(--red);
+}
+.badge.product_rescued_context_only,
+.badge.product_provisional,
+.badge.not_assessable,
+.badge.not_assessable_missing_overlay,
+.badge.not_assessable_missing_seed_provenance,
+.badge.not_assessable_join_gap {
+  border-left-color: var(--amber);
+}
+.badge.evidence_inconclusive,
+.badge.human_visual_judgment_only {
+  border-left-color: var(--purple);
+}
+.top-issue {
+  justify-items: center;
+  margin-inline: auto;
+  text-align: center;
+}
+.issue-text {
+  color: #273842;
+  padding-inline: 8px;
+  text-align: center;
+}
+.count-stack {
+  gap: 10px;
+}
+.count-stack dd {
+  color: #10202a;
+}
+.detail-toggle,
+.lightbox-close,
+.lightbox-direct {
+  min-height: 34px;
+  border-color: #b6c5ce;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: #17333d;
+  cursor: pointer;
+  transition:
+    background 180ms var(--motion),
+    border-color 180ms var(--motion),
+    transform 160ms var(--motion),
+    box-shadow 180ms var(--motion);
+}
+.detail-toggle:hover,
+.lightbox-close:hover,
+.lightbox-direct:hover {
+  border-color: var(--blue);
+  background: #edf6f1;
+  box-shadow: 0 6px 16px rgba(43, 103, 88, 0.12);
+}
+.detail-toggle:active,
+.lightbox-close:active,
+.lightbox-direct:active {
+  transform: translateY(1px);
+}
+.detail-toggle[aria-expanded="true"] {
+  border-color: var(--blue);
+  background: #dceee7;
+  box-shadow: inset 0 0 0 1px rgba(43, 103, 88, 0.28);
+}
+.review-table .detail-row > td {
+  background: #f5f8f5;
+}
+.detail-drawer {
+  padding: 14px;
+  border-left: 0;
+  box-shadow: inset 5px 0 0 var(--blue);
+}
+.detail-drawer-head {
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.detail-drawer-head h2 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.15;
+}
+.detail-summary-grid {
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+}
+.detail-summary-card,
+.chain-item {
+  border-color: #cfdae0;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(16, 31, 42, 0.06);
+}
+.detail-summary-card h3,
+.chain-head h3 {
+  color: #14242d;
+  font-weight: 850;
+}
+.summary-subtitle,
+.chain-state,
+.secondary-chain summary small {
+  color: #667886;
+}
+.chain-head,
+.secondary-chain summary {
+  background: #f1f6f8;
+}
+.chain-body,
+.secondary-chain-body {
+  background: #ffffff;
+}
+.shadow-policy-table th,
+.target-benchmark-table th,
+.seed-alias-table th,
+.seed-table th,
+.rep-table th {
+  background: #e7eef2;
+  color: #21323d;
+  font-size: 11px;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+.shadow-policy-table td,
+.target-benchmark-table td,
+.seed-alias-table td,
+.seed-table td,
+.rep-table td {
+  background: #ffffff;
+}
+.projection-authority-chain {
+  border-left-color: var(--green);
+}
+.lightbox {
+  background: rgba(9, 18, 24, 0.78);
+  backdrop-filter: blur(6px);
+}
+.lightbox-panel {
+  border: 1px solid rgba(255,255,255,0.32);
+  border-radius: var(--radius);
+  box-shadow: 0 26px 70px rgba(0,0,0,0.38);
+}
+.lightbox-header {
+  background: rgba(255,255,255,0.96);
+}
+.lightbox-header h2 {
+  font-size: 22px;
+  line-height: 1.1;
+}
+.lightbox-image {
+  border-radius: var(--radius-sm);
+  background: #f8fafb;
+}
+.empty-state {
+  padding: 22px;
+  color: #40515d;
+  font-weight: 750;
+}
+@media (max-width: 760px) {
+  main {
+    padding: 14px 10px 30px;
+  }
+  .gallery-hero {
+    padding: 16px 15px 17px;
+  }
+  h1 {
+    font-size: 30px;
+  }
+  .hero-status-strip span {
+    width: 100%;
+    justify-content: center;
+  }
+  .decision-legend {
+    grid-template-columns: 1fr;
+  }
+  .filters {
+    position: static;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .result-count {
+    margin-left: 0;
+    white-space: normal;
+  }
+  .review-table {
+    min-width: 1120px;
+  }
+  .detail-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
 """
 
 
@@ -5520,10 +6930,12 @@ def _representative_sort_key(cell: RepresentativeCell) -> tuple[str, str, str, i
 
 
 def _product_cell_state(row: Mapping[str, str], group_state: str) -> str:
-    if text_value(row.get("primary_matrix_area_source")):
+    if _cell_writes_primary_matrix(row):
         return "primary_matrix"
+    if _cell_has_primary_area_context(row):
+        return "candidate_context"
     if group_state == "product_rescued_context_only":
-        return "context_only"
+        return "candidate_context"
     return group_state
 
 
@@ -5642,9 +7054,10 @@ def _escape_attr(value: object) -> str:
 
 
 def _badge(value: str) -> str:
+    label = _badge_label(value)
     return (
-        f'<span class="badge {_escape_attr(value)}" title="{_escape_attr(value)}">'
-        f"{_escape(_badge_label(value))}</span>"
+        f'<span class="badge {_escape_attr(value)}" title="{_escape_attr(label)}">'
+        f"{_escape(label)}</span>"
     )
 
 
@@ -5657,20 +7070,21 @@ def _badge_label(value: str) -> str:
         "evidence_blocks_backfill": "blocks",
         "evidence_inconclusive": "inconclusive",
         "not_assessable": "not assessable",
-        "product_accepts_and_product_grade_supports": "accepts + product-grade",
-        "product_accepts_and_visual_supports": "accepts + visual",
-        "product_rejects_but_product_grade_supports": "rejects + product-grade",
-        "product_rejects_but_visual_supports": "rejects + visual",
-        "product_accepts_but_evidence_conflicts": "accepts + conflict",
-        "product_rejects_and_evidence_blocks": "rejects + blocks",
+        "product_accepts_and_product_grade_supports": "matrix + product-grade",
+        "product_accepts_and_visual_supports": "matrix + visual",
+        "product_rejects_but_product_grade_supports": "not written + product-grade",
+        "product_rejects_but_visual_supports": "not written + visual",
+        "product_accepts_but_evidence_conflicts": "matrix + conflict",
+        "product_rejects_and_evidence_blocks": "not written + blocks",
         "not_assessable_missing_overlay": "missing overlay",
         "not_assessable_missing_seed_provenance": "missing seed",
         "not_assessable_join_gap": "join gap",
-        "product_primary_backfilled": "primary backfilled",
-        "product_rescued_context_only": "context only",
+        "product_primary_backfilled": "matrix written",
+        "product_rescued_context_only": "candidate only",
+        "candidate_context": "candidate only",
         "product_provisional": "provisional",
         "product_review_only": "review only",
-        "product_not_backfilled": "not backfilled",
+        "product_not_backfilled": "not written",
         "product_unknown": "unknown",
         "pattern_context_only": "family map",
         "pattern_available": "context available",
@@ -5825,6 +7239,20 @@ def _shadow_projection_cell_from_row(
         missing_evidence=tuple(split_semicolon_labels(row.get("missing_evidence"))),
         overlay_verdict=text_value(row.get("overlay_verdict")),
         overlay_png_path=text_value(row.get("overlay_png_path")),
+    )
+
+
+def _activation_delta_cell_from_row(
+    row: Mapping[str, str],
+) -> ActivationDeltaCell:
+    return ActivationDeltaCell(
+        feature_family_id=text_value(row.get("feature_family_id")),
+        sample_id=text_value(row.get("sample_id")),
+        activation_status=text_value(row.get("activation_status")),
+        product_effect=text_value(row.get("product_effect")),
+        activated_matrix_value=text_value(row.get("activated_matrix_value")),
+        matrix_value_effect=text_value(row.get("matrix_value_effect")),
+        activation_reason=text_value(row.get("activation_reason")),
     )
 
 
@@ -6089,6 +7517,33 @@ def _shadow_projection_matrix_counts(
         ),
         "review_rescued_target": sum(cell.review_rescued_cell for cell in cells),
     }
+
+
+def _activation_application_summary(
+    rows: Sequence[Mapping[str, str]],
+) -> dict[str, str]:
+    if not rows:
+        return {}
+    row = rows[0]
+    keys = (
+        "application_status",
+        "activation_output_mode",
+        "acceptance_status",
+        "decision_rows_total",
+        "auto_activate_count",
+        "auto_block_count",
+        "matrix_cells_written",
+        "matrix_cells_blanked",
+        "summary_reason",
+    )
+    return {key: text_value(row.get(key)) for key in keys if text_value(row.get(key))}
+
+
+def _activation_value_delta_matrix_effect_counts(
+    cells: Sequence[ActivationDeltaCell],
+) -> dict[str, int]:
+    counts = Counter(cell.matrix_value_effect for cell in cells)
+    return {key: counts[key] for key in sorted(counts) if key}
 
 
 def _shadow_policy_production_gap_counts(

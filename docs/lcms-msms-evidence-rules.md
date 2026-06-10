@@ -123,6 +123,12 @@ contract, machine-readable reason/status fields, and regression tests.
   reviewed production rule.
 - Scan support and trace quality remain assessability/coverage evidence. They
   may block low-quality rescue, but they are not independent identity evidence.
+- Shift-aware same-pattern diagnostics may support manual same-peak review when
+  a source-family-level median-shape correlation is high after one group-level
+  RT translation and the unshifted RT context remains visible. This is auxiliary
+  review evidence only unless a future product-authority contract defines the
+  allowed shift model, artifact provenance, thresholds, and false-positive
+  controls.
 - MS1/QC pattern conflict, wrong-peak hypothesis evidence, or unexplained RT
   outside the preferred RT band keeps the rescue review-only even if the peak is
   quantifiable inside the broader owner-backfill query window. Candidate-aligned

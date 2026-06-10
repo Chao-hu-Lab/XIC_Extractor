@@ -25,12 +25,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             alignment_matrix_tsv=args.alignment_matrix_tsv,
             backfill_seed_audit_tsv=args.backfill_seed_audit_tsv,
             overlay_batch_summary_tsvs=tuple(args.overlay_batch_summary_tsv or ()),
+            shift_aware_same_pattern_tsvs=tuple(
+                args.shift_aware_same_pattern_tsv or (),
+            ),
+            shift_aware_standard_peak_gate_tsvs=tuple(
+                args.shift_aware_standard_peak_gate_tsv or (),
+            ),
             seed_aware_family_tsv=args.seed_aware_family_tsv,
             seed_aware_summary_tsv=args.seed_aware_summary_tsv,
             candidate_gate_tsv=args.candidate_gate_tsv,
+            retained_backfill_gate_tsv=args.retained_backfill_gate_tsv,
             tier2_trace_evidence_tsv=args.tier2_trace_evidence_tsv,
             shadow_policy_cells_tsv=args.shadow_policy_cells_tsv,
             shadow_projection_cells_tsv=args.shadow_projection_cells_tsv,
+            activation_application_summary_tsv=(
+                args.activation_application_summary_tsv
+            ),
+            activation_value_delta_tsv=args.activation_value_delta_tsv,
             targeted_istd_benchmark_summary_tsv=(
                 args.targeted_istd_benchmark_summary_tsv
             ),
@@ -59,9 +70,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--alignment-cells-tsv",
+        "--alignment-cell-evidence-tsv",
+        dest="alignment_cells_tsv",
         required=True,
         type=Path,
-        help="Source alignment_cells.tsv.",
+        help=(
+            "Source cell evidence TSV: compact "
+            "alignment_backfill_cell_evidence.tsv or legacy alignment_cells.tsv."
+        ),
     )
     parser.add_argument(
         "--output-dir",
@@ -86,6 +102,24 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Optional family/seed overlay batch summary TSV; repeatable.",
     )
     parser.add_argument(
+        "--shift-aware-same-pattern-tsv",
+        action="append",
+        type=Path,
+        help=(
+            "Optional source_family_best_shift_summary.tsv with review-only "
+            "source-family median-shape correlation evidence; repeatable."
+        ),
+    )
+    parser.add_argument(
+        "--shift-aware-standard-peak-gate-tsv",
+        action="append",
+        type=Path,
+        help=(
+            "Optional shift_aware_standard_peak_gate_calibration.tsv with "
+            "shadow-only standard-peak gate evidence; repeatable."
+        ),
+    )
+    parser.add_argument(
         "--seed-aware-family-tsv",
         type=Path,
         help="Optional seed_aware_backfill_review_families.tsv.",
@@ -99,6 +133,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--candidate-gate-tsv",
         type=Path,
         help="Optional alignment_production_candidate_gate.tsv.",
+    )
+    parser.add_argument(
+        "--retained-backfill-evidence-gate-tsv",
+        dest="retained_backfill_gate_tsv",
+        type=Path,
+        help=(
+            "Optional alignment_retained_backfill_evidence_gate.tsv for "
+            "overlay review routing and no-overlay machine-support display."
+        ),
     )
     parser.add_argument(
         "--tier2-trace-evidence-tsv",
@@ -117,6 +160,23 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help=(
             "Optional shadow_production_projection_cells.tsv for current vs "
             "projected decision display."
+        ),
+    )
+    parser.add_argument(
+        "--activation-application-summary-tsv",
+        type=Path,
+        help=(
+            "Optional activation_application_summary.tsv for activated matrix "
+            "view provenance."
+        ),
+    )
+    parser.add_argument(
+        "--activation-value-delta-tsv",
+        type=Path,
+        help=(
+            "Optional activation_value_delta.tsv. Written rows are joined "
+            "row-level to projection accepts before the gallery displays "
+            "activated product state."
         ),
     )
     parser.add_argument(
