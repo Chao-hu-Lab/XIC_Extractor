@@ -57,6 +57,7 @@ def test_standard_peak_productization_applies_matrix_and_synced_gallery(
     assert summary["selected_activation_row_count"] == "1"
     assert summary["skipped_non_standard_reason_count"] == "1"
     assert summary["activation_application_status"] == "applied"
+    assert summary["activation_output_mode"] == "matrix-only"
     assert summary["matrix_cells_written"] == "1"
     assert summary["activation_value_delta_written_count"] == "1"
     assert summary["product_behavior_changed"] == "TRUE"
@@ -76,6 +77,21 @@ def test_standard_peak_productization_applies_matrix_and_synced_gallery(
     assert len(delta) == 1
     assert delta[0]["feature_family_id"] == "FAM_STD"
     assert delta[0]["matrix_value_effect"] == "written"
+    assert delta[0]["activation_reason"] == (
+        "standard_peak_shift_aware_ms1_same_peak_product_authorized"
+    )
+
+    acceptance = _read_tsv(
+        output_dir
+        / "standard_peak_activation_inputs"
+        / "standard_peak_activation_acceptance.tsv",
+    )[0]
+    assert acceptance["activation_decision_scope"] == (
+        "machine_gate_standard_peak_rows"
+    )
+    assert acceptance["must_not_regress_basis"] == (
+        "machine_shift_aware_standard_peak_gate"
+    )
 
     gallery_groups = _read_tsv(
         output_dir
@@ -95,6 +111,120 @@ def test_standard_peak_productization_applies_matrix_and_synced_gallery(
     assert by_family["FAM_NON"]["reconciliation_class"] == (
         "product_rejects_and_evidence_blocks"
     )
+
+
+def test_standard_peak_productization_rejects_stale_current_projection(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    shadow_rows = _read_tsv(fixture["shadow"])
+    stale = shadow_rows[0]
+    stale.update(
+        {
+            "current_production_status": "accepted_rescue",
+            "current_matrix_written": "TRUE",
+            "current_matrix_value": "100",
+            "current_matrix_source": "production_decision_snapshot",
+            "shadow_decision": "context",
+            "shadow_reasons": "already_written_current_matrix",
+            "projected_matrix_written": "TRUE",
+            "projected_matrix_value": "100",
+        },
+    )
+    _write_tsv(fixture["shadow"], shadow_rows, SHADOW_PRODUCTION_PROJECTION_COLUMNS)
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--source-run-id",
+                "unit-standard-peak-productization",
+            ],
+        )
+        == 2
+    )
+
+
+def test_standard_peak_productization_writes_duplicate_warning_rescue(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    shadow_rows = _read_tsv(fixture["shadow"])
+    standard_row = shadow_rows[0]
+    standard_row.update(
+        {
+            "current_production_status": "accepted_rescue",
+            "gap_fill_state": "not_filled",
+            "gap_fill_reason": "not_requested_duplicate_loser",
+            "shadow_warnings": "same_peak_multi_claim",
+        },
+    )
+    _write_tsv(fixture["shadow"], shadow_rows, SHADOW_PRODUCTION_PROJECTION_COLUMNS)
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-standard-peak-productization",
+            ],
+        )
+        == 0
+    )
+
+    summary = json.loads(
+        (
+            output_dir / "standard_peak_backfill_productization_summary.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert summary["selected_activation_row_count"] == "1"
+    assert summary["matrix_cells_written"] == "1"
+
+    matrix_rows = _read_tsv(output_dir / "activated_matrix" / "alignment_matrix.tsv")
+    identity_rows = _read_tsv(
+        output_dir / "activated_matrix" / "alignment_matrix_identity.tsv",
+    )
+    matrix_index_by_hypothesis = {
+        row["peak_hypothesis_id"]: int(row["matrix_row_index"]) - 1
+        for row in identity_rows
+    }
+    assert matrix_rows[matrix_index_by_hypothesis["FAM_STD"]]["S2"] == "100"
+
+    decisions = _read_tsv(
+        output_dir
+        / "standard_peak_activation_inputs"
+        / "standard_peak_activation_decisions.tsv",
+    )
+    values = _read_tsv(
+        output_dir
+        / "standard_peak_activation_inputs"
+        / "standard_peak_activation_values.tsv",
+    )
+    assert "audit_warning:same_peak_multi_claim" in decisions[0][
+        "source_evidence_tokens"
+    ]
+    assert "audit_warning:same_peak_multi_claim" in values[0][
+        "source_provenance_detail"
+    ]
 
 
 def _write_fixture(tmp_path: Path) -> dict[str, Path]:
@@ -311,7 +441,7 @@ def _shadow_row(
     row = _blank_row(SHADOW_PRODUCTION_PROJECTION_COLUMNS)
     reason = (
         "MS1:product_authorized:supportive:trace_constellation:"
-        "feature_family_sample:manual_standard_peak_gate_authorized | "
+        "feature_family_sample:machine_standard_peak_gate_authorized | "
         "same_peak_reason:shift_aware_standard_peak_gate_supported"
         if standard
         else "MS1:product_authorized:supportive:trace_constellation:"

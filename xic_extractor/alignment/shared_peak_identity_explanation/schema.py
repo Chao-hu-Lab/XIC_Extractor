@@ -1219,6 +1219,7 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
         {
             "manual_oracle_seed_rows",
             "backfill_peakhypothesis_promotion_rows",
+            "machine_gate_standard_peak_rows",
         }
     ),
     "blast_radius_current": frozenset({"TRUE", "FALSE"}),
@@ -1232,7 +1233,11 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
     "product_affecting_rows_basis": frozenset({"activation_decision_rows"}),
     "must_not_regress_status": frozenset({"not_assessed", "pass", "fail"}),
     "must_not_regress_basis": frozenset(
-        {"manual_status_flag", "activation_must_not_regress_tsv"}
+        {
+            "manual_status_flag",
+            "activation_must_not_regress_tsv",
+            "machine_shift_aware_standard_peak_gate",
+        }
     ),
     "acceptance_status": frozenset({"pass", "fail"}),
     "application_status": frozenset({"applied"}),

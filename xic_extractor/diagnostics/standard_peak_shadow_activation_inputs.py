@@ -22,6 +22,7 @@ from xic_extractor.alignment.shared_peak_identity_explanation.schema import (
 )
 from xic_extractor.diagnostics.diagnostic_io import (
     format_diagnostic_value,
+    split_semicolon_labels,
     text_value,
     write_tsv,
 )
@@ -31,6 +32,8 @@ SCHEMA_VERSION = "standard_peak_shadow_activation_inputs_v1"
 SUMMARY_COLUMNS = (
     "schema_version",
     "source_run_id",
+    "activation_decision_scope",
+    "must_not_regress_basis",
     "source_shadow_projection_sha256",
     "source_shadow_projection_row_count",
     "selected_activation_row_count",
@@ -115,12 +118,15 @@ def build_standard_peak_activation_inputs(
         decisions_tuple,
         values_tuple,
     )
+    activation_decision_scope, must_not_regress_basis = _activation_contract_scope(
+        decisions_tuple,
+    )
     acceptance = activation_contract.summarize_activation_acceptance(
         decisions_tuple,
         blast_radius_current=True,
-        activation_decision_scope="manual_oracle_seed_rows",
+        activation_decision_scope=activation_decision_scope,
         must_not_regress_status=gate_status,
-        must_not_regress_basis="manual_status_flag",
+        must_not_regress_basis=must_not_regress_basis,
         must_not_regress_failure_reasons=gate_failures,
         thresholds=activation_contract.ActivationAcceptanceThresholds(
             max_product_affecting_fraction=1.0,
@@ -130,6 +136,8 @@ def build_standard_peak_activation_inputs(
     summary = {
         "schema_version": SCHEMA_VERSION,
         "source_run_id": source_run_id,
+        "activation_decision_scope": activation_decision_scope,
+        "must_not_regress_basis": must_not_regress_basis,
         "source_shadow_projection_sha256": source_shadow_projection_sha256,
         "source_shadow_projection_row_count": str(len(rows)),
         "selected_activation_row_count": str(len(decisions_tuple)),
@@ -284,6 +292,20 @@ def _standard_peak_gate_status(
     return ("pass", ()) if not failures else ("fail", tuple(failures))
 
 
+def _activation_contract_scope(
+    decisions: Sequence[Mapping[str, str]],
+) -> tuple[str, str]:
+    source_tokens = tuple(
+        text_value(decision.get("source_evidence_tokens")) for decision in decisions
+    )
+    if any("machine_standard_peak_gate_authorized" in token for token in source_tokens):
+        return (
+            "machine_gate_standard_peak_rows",
+            "machine_shift_aware_standard_peak_gate",
+        )
+    return ("manual_oracle_seed_rows", "manual_status_flag")
+
+
 def _is_lowercase_sha256(value: str) -> bool:
     return len(value) == 64 and all(char in "0123456789abcdef" for char in value)
 
@@ -327,6 +349,7 @@ def _activation_decision_row(row: Mapping[str, str]) -> dict[str, str]:
     family_id = text_value(row.get("feature_family_id"))
     sample_id = text_value(row.get("sample_stem"))
     peak_hypothesis_id = text_value(row.get("peak_hypothesis_id"))
+    source_provenance = _source_provenance_detail(row)
     return {
         "activation_schema_version": ACTIVATION_DECISION_SCHEMA_VERSION,
         "feature_family_id": family_id,
@@ -348,7 +371,7 @@ def _activation_decision_row(row: Mapping[str, str]) -> dict[str, str]:
             "standard_peak_shift_aware_ms1_same_peak_product_authorized"
         ),
         "required_review_reason": "",
-        "source_evidence_tokens": text_value(row.get("product_authority_chain")),
+        "source_evidence_tokens": source_provenance,
         "diagnostic_only": "FALSE",
     }
 
@@ -369,5 +392,19 @@ def _activation_value_row(
         "source_artifact_schema_version": text_value(row.get("schema_version")),
         "source_artifact_sha256": source_shadow_projection_sha256,
         "source_row_sha256": text_value(row.get("shadow_projection_row_sha256")),
-        "source_provenance_detail": text_value(row.get("product_authority_chain")),
+        "source_provenance_detail": _source_provenance_detail(row),
     }
+
+
+def _source_provenance_detail(row: Mapping[str, str]) -> str:
+    warnings = tuple(
+        f"audit_warning:{warning}"
+        for warning in split_semicolon_labels(row.get("shadow_warnings"))
+    )
+    return " | ".join(
+        dict.fromkeys(
+            part
+            for part in (text_value(row.get("product_authority_chain")), *warnings)
+            if part
+        ),
+    )

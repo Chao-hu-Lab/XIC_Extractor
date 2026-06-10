@@ -139,6 +139,7 @@ def build_shadow_production_projection_index(
     cell_rows: Iterable[Mapping[str, str]],
     retained_gate_rows: Iterable[Mapping[str, str]],
     overlay_rows: Iterable[Mapping[str, str]] = (),
+    current_matrix_values: Mapping[tuple[str, str], str] | None = None,
     source_run_id: str = "",
     source_review_sha256: str = "",
     source_cell_sha256: str = "",
@@ -152,6 +153,7 @@ def build_shadow_production_projection_index(
     gate_rows = tuple(dict(row) for row in retained_gate_rows)
     _validate_gate_rows(gate_rows)
     gate_projection_summary = _gate_projection_summary(gate_rows)
+    current_matrix_values = current_matrix_values or {}
     cells_by_key = {
         (
             text_value(row.get("feature_family_id")),
@@ -175,6 +177,7 @@ def build_shadow_production_projection_index(
         for sample in split_semicolon_labels(gate_row.get("seed_source_samples")):
             decision = production_decisions.cells.get((family_id, sample))
             cell = cells_by_key.get((family_id, sample), {})
+            matrix_key = (family_id, sample)
             rows.append(
                 _projection_row(
                     gate_row=gate_row,
@@ -182,6 +185,12 @@ def build_shadow_production_projection_index(
                     cell=cell,
                     sample_stem=sample,
                     decision=decision,
+                    current_matrix_cell_value=(
+                        current_matrix_values.get(matrix_key)
+                        if matrix_key in current_matrix_values
+                        else None
+                    ),
+                    current_matrix_cell_known=matrix_key in current_matrix_values,
                 ),
             )
 
@@ -236,18 +245,30 @@ def _projection_row(
     cell: Mapping[str, str],
     sample_stem: str,
     decision: ProductionCellDecision | None,
+    current_matrix_cell_value: str | None = None,
+    current_matrix_cell_known: bool = False,
 ) -> dict[str, str]:
-    current_written = bool(decision and decision.write_matrix_value)
     current_status = decision.production_status if decision else "blank"
-    current_value = decision.matrix_value if decision else None
-    current_blank = decision.blank_reason if decision else "missing_production_decision"
+    if current_matrix_cell_known:
+        current_value = optional_float(current_matrix_cell_value)
+        current_written = bool(text_value(current_matrix_cell_value))
+        current_blank = "" if current_written else "source_matrix_blank"
+        current_matrix_source = "alignment_matrix_tsv"
+    else:
+        current_written = bool(decision and decision.write_matrix_value)
+        current_value = decision.matrix_value if decision else None
+        current_blank = (
+            decision.blank_reason if decision else "missing_production_decision"
+        )
+        current_matrix_source = "production_decision_snapshot"
     current_raw_status = (
         decision.raw_status if decision else text_value(cell.get("status"))
     )
     review_rescued = (
         decision is not None
-        and decision.production_status == "review_rescue"
+        and decision.production_status in {"review_rescue", "accepted_rescue"}
         and current_raw_status == "rescued"
+        and not current_written
     )
     shadow_decision, reasons, warnings = _shadow_projection_decision(
         gate_row=gate_row,
@@ -293,7 +314,7 @@ def _projection_row(
         "current_matrix_written": _bool_text(current_written),
         "current_matrix_value": _number_text(current_value),
         "current_blank_reason": current_blank,
-        "current_matrix_source": "production_decision_snapshot",
+        "current_matrix_source": current_matrix_source,
         "review_rescued_cell": _bool_text(review_rescued),
         "shadow_decision": shadow_decision,
         "shadow_reasons": ";".join(reasons),
@@ -367,17 +388,20 @@ def _shadow_projection_decision(
     if not _request_window_overlap(cell, gate_row):
         return "block", ("outside_request_window",), _warnings(cell, gate_row)
 
+    product_authorized = _product_authorized_same_peak_backfill(cell)
     current_blocker = _current_production_hard_blocker(decision)
     if current_blocker:
         return "block", (current_blocker,), _warnings(cell, gate_row)
-    cell_blocker = _cell_hypothesis_blocker(cell)
+    cell_blocker = _cell_hypothesis_blocker(
+        cell,
+        product_authorized=product_authorized,
+    )
     if cell_blocker:
         return "block", (cell_blocker,), _warnings(cell, gate_row)
 
     blockers = _hard_blocker_tokens(gate_row)
     if blockers:
         return "block", blockers, _warnings(cell, gate_row)
-    product_authorized = _product_authorized_same_peak_backfill(cell)
     gate_status = text_value(gate_row.get("evidence_gate_status"))
     if (
         not product_authorized
@@ -555,7 +579,11 @@ def _current_production_hard_blocker(
     )
 
 
-def _cell_hypothesis_blocker(cell: Mapping[str, str]) -> str:
+def _cell_hypothesis_blocker(
+    cell: Mapping[str, str],
+    *,
+    product_authorized: bool = False,
+) -> str:
     tokens = " ".join(
         text_value(cell.get(key)).lower().replace(" ", "_")
         for key in (
@@ -571,14 +599,15 @@ def _cell_hypothesis_blocker(cell: Mapping[str, str]) -> str:
             "backfill_evidence_reason",
         )
     )
-    hard_markers = (
-        "duplicate_loser",
+    hard_markers: tuple[str, ...] = (
         "primary_loser",
         "wrong_peak",
         "cross_mode_rescue_blocked",
         "mode_split_required",
         "consolidation_no_go",
     )
+    if not product_authorized:
+        hard_markers = ("duplicate_loser", *hard_markers)
     if any(marker in tokens for marker in hard_markers):
         return BACKFILL_HYPOTHESIS_BLOCKED_REASON
     return ""

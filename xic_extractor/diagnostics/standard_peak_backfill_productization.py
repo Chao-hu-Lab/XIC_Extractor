@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -118,6 +119,11 @@ def run_standard_peak_backfill_productization(
     shadow_rows = read_tsv_required(
         shadow_projection_cells_tsv,
         SHADOW_PROJECTION_REQUIRED_COLUMNS,
+    )
+    _validate_shadow_current_matrix_claims(
+        shadow_rows,
+        alignment_matrix_tsv=alignment_matrix_tsv,
+        alignment_matrix_identity_tsv=alignment_matrix_identity_tsv,
     )
     activation_index = build_standard_peak_activation_inputs(
         shadow_rows,
@@ -332,6 +338,100 @@ def _summary_row(
         else "FALSE",
         "next_action": next_action,
     }
+
+
+def _validate_shadow_current_matrix_claims(
+    shadow_rows: Sequence[Mapping[str, str]],
+    *,
+    alignment_matrix_tsv: Path,
+    alignment_matrix_identity_tsv: Path,
+) -> None:
+    current_claims = tuple(
+        row
+        for row in shadow_rows
+        if text_value(row.get("current_matrix_written")) == "TRUE"
+    )
+    if not current_claims:
+        return
+    matrix_values = _current_matrix_values_by_family_sample(
+        alignment_matrix_tsv=alignment_matrix_tsv,
+        alignment_matrix_identity_tsv=alignment_matrix_identity_tsv,
+    )
+    stale: list[str] = []
+    for row in current_claims:
+        family_id = text_value(row.get("feature_family_id"))
+        peak_hypothesis_id = text_value(row.get("peak_hypothesis_id"))
+        sample = text_value(row.get("sample_stem"))
+        keys = tuple(
+            dict.fromkeys(
+                key for key in (peak_hypothesis_id, family_id) if key
+            ),
+        )
+        actual = None
+        for key in keys:
+            matrix_key = (key, sample)
+            if matrix_key in matrix_values:
+                actual = matrix_values[matrix_key]
+                break
+        if actual is None or not text_value(actual):
+            stale.append(f"{family_id}/{sample}")
+    if stale:
+        preview = ";".join(stale[:10])
+        suffix = f";+{len(stale) - 10} more" if len(stale) > 10 else ""
+        raise ValueError(
+            "shadow_projection current_matrix_written claims do not match "
+            "alignment_matrix.tsv values: "
+            f"{preview}{suffix}",
+        )
+
+
+def _current_matrix_values_by_family_sample(
+    *,
+    alignment_matrix_tsv: Path,
+    alignment_matrix_identity_tsv: Path,
+) -> dict[tuple[str, str], str]:
+    matrix_header, matrix_rows = _read_tsv_with_header(alignment_matrix_tsv)
+    identity_rows = read_tsv_required(
+        alignment_matrix_identity_tsv,
+        ("matrix_row_index", "peak_hypothesis_id"),
+    )
+    sample_columns = tuple(
+        column for column in matrix_header if column not in {"Mz", "RT"}
+    )
+    values: dict[tuple[str, str], str] = {}
+    for identity in identity_rows:
+        row_index = _positive_int(identity.get("matrix_row_index"))
+        if row_index is None or row_index > len(matrix_rows):
+            continue
+        matrix_row = matrix_rows[row_index - 1]
+        for row_key in _identity_family_keys(identity):
+            for sample in sample_columns:
+                values[(row_key, sample)] = matrix_row.get(sample, "")
+    return values
+
+
+def _identity_family_keys(identity: Mapping[str, str]) -> tuple[str, ...]:
+    keys = [text_value(identity.get("peak_hypothesis_id"))]
+    keys.extend(
+        part.strip()
+        for part in text_value(identity.get("source_feature_family_ids")).split(";")
+        if part.strip()
+    )
+    return tuple(dict.fromkeys(key for key in keys if key))
+
+
+def _read_tsv_with_header(path: Path) -> tuple[tuple[str, ...], list[dict[str, str]]]:
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        return tuple(reader.fieldnames or ()), list(reader)
+
+
+def _positive_int(value: object) -> int | None:
+    try:
+        parsed = int(str(value or "").strip())
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
 
 
 def _single_row(rows: Sequence[dict[str, str]]) -> dict[str, str]:
