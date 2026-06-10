@@ -71,6 +71,9 @@ ALIGNMENT_REVIEW_COLUMNS = (
 ALIGNMENT_CELLS_COLUMNS = (
     "feature_family_id",
     *CROSS_SAMPLE_GROUP_CELL_COLUMNS,
+    "peak_hypothesis_status",
+    "product_selection_blocker",
+    "rt_mode_status",
     "sample_stem",
     "status",
     "area",
@@ -92,6 +95,11 @@ ALIGNMENT_CELLS_COLUMNS = (
     "reason",
     "backfill_ms1_pattern_status",
     "backfill_ms1_pattern_evidence_level",
+    "backfill_ms1_product_authority_status",
+    "backfill_ms1_product_authority_scope",
+    "backfill_ms1_product_authority_source",
+    "backfill_ms1_product_authority_reason",
+    "backfill_ms1_product_authority_evidence_sha256",
     "backfill_qc_reference_status",
     "backfill_qc_reference_evidence_level",
     "backfill_matrix_rt_drift_status",
@@ -100,6 +108,11 @@ ALIGNMENT_CELLS_COLUMNS = (
     "backfill_drift_corrected_delta_sec",
     "backfill_candidate_ms2_pattern_status",
     "backfill_candidate_ms2_evidence_level",
+    "backfill_candidate_ms2_product_authority_status",
+    "backfill_candidate_ms2_product_authority_scope",
+    "backfill_candidate_ms2_product_authority_source",
+    "backfill_candidate_ms2_product_authority_reason",
+    "backfill_candidate_ms2_product_authority_evidence_sha256",
     "backfill_ms2_trigger_scan_count",
     "backfill_strict_nl_scan_count",
     "backfill_ms2_trace_strength",
@@ -230,6 +243,9 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
                 "gap_fill_state": cell.gap_fill_state,
                 "gap_fill_reason": cell.gap_fill_reason,
                 "missing_observation_state": cell.missing_observation_state,
+                "peak_hypothesis_status": cell.peak_hypothesis_status,
+                "product_selection_blocker": cell.product_selection_blocker,
+                "rt_mode_status": cell.rt_mode_status,
                 "group_claim_state": cell.group_claim_state,
                 "claim_winner_group_hypothesis_id": (
                     cell.claim_winner_group_hypothesis_id
@@ -267,6 +283,21 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
                 "backfill_ms1_pattern_evidence_level": (
                     cell.backfill_ms1_pattern_evidence_level
                 ),
+                "backfill_ms1_product_authority_status": (
+                    cell.backfill_ms1_product_authority_status
+                ),
+                "backfill_ms1_product_authority_scope": (
+                    cell.backfill_ms1_product_authority_scope
+                ),
+                "backfill_ms1_product_authority_source": (
+                    cell.backfill_ms1_product_authority_source
+                ),
+                "backfill_ms1_product_authority_reason": (
+                    cell.backfill_ms1_product_authority_reason
+                ),
+                "backfill_ms1_product_authority_evidence_sha256": (
+                    cell.backfill_ms1_product_authority_evidence_sha256
+                ),
                 "backfill_qc_reference_status": cell.backfill_qc_reference_status,
                 "backfill_qc_reference_evidence_level": (
                     cell.backfill_qc_reference_evidence_level
@@ -286,6 +317,21 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
                 ),
                 "backfill_candidate_ms2_evidence_level": (
                     cell.backfill_candidate_ms2_evidence_level
+                ),
+                "backfill_candidate_ms2_product_authority_status": (
+                    cell.backfill_candidate_ms2_product_authority_status
+                ),
+                "backfill_candidate_ms2_product_authority_scope": (
+                    cell.backfill_candidate_ms2_product_authority_scope
+                ),
+                "backfill_candidate_ms2_product_authority_source": (
+                    cell.backfill_candidate_ms2_product_authority_source
+                ),
+                "backfill_candidate_ms2_product_authority_reason": (
+                    cell.backfill_candidate_ms2_product_authority_reason
+                ),
+                "backfill_candidate_ms2_product_authority_evidence_sha256": (
+                    cell.backfill_candidate_ms2_product_authority_evidence_sha256
                 ),
                 "backfill_ms2_trigger_scan_count": format_value(
                     cell.backfill_ms2_trigger_scan_count

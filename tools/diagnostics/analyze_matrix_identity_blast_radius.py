@@ -37,7 +37,8 @@ CELL_REQUIRED = {
     "rt_delta_sec",
     "reason",
 }
-MATRIX_REQUIRED = {"feature_family_id"}
+MATRIX_IDENTITY_COLUMNS = {"feature_family_id"}
+MATRIX_DOWNSTREAM_COLUMNS = {"Mz", "RT"}
 
 OUTPUT_COLUMNS = (
     "feature_family_id",
@@ -275,6 +276,26 @@ def _cell_from_row(row: Mapping[str, str]) -> AlignedCell:
             "backfill_ms1_pattern_evidence_level",
             "",
         ),
+        backfill_ms1_product_authority_status=row.get(
+            "backfill_ms1_product_authority_status",
+            "",
+        ),
+        backfill_ms1_product_authority_scope=row.get(
+            "backfill_ms1_product_authority_scope",
+            "",
+        ),
+        backfill_ms1_product_authority_source=row.get(
+            "backfill_ms1_product_authority_source",
+            "",
+        ),
+        backfill_ms1_product_authority_reason=row.get(
+            "backfill_ms1_product_authority_reason",
+            "",
+        ),
+        backfill_ms1_product_authority_evidence_sha256=row.get(
+            "backfill_ms1_product_authority_evidence_sha256",
+            "",
+        ),
         backfill_qc_reference_status=row.get("backfill_qc_reference_status", ""),
         backfill_qc_reference_evidence_level=row.get(
             "backfill_qc_reference_evidence_level",
@@ -298,6 +319,26 @@ def _cell_from_row(row: Mapping[str, str]) -> AlignedCell:
         ),
         backfill_candidate_ms2_evidence_level=row.get(
             "backfill_candidate_ms2_evidence_level",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_status=row.get(
+            "backfill_candidate_ms2_product_authority_status",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_scope=row.get(
+            "backfill_candidate_ms2_product_authority_scope",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_source=row.get(
+            "backfill_candidate_ms2_product_authority_source",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_reason=row.get(
+            "backfill_candidate_ms2_product_authority_reason",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_evidence_sha256=row.get(
+            "backfill_candidate_ms2_product_authority_evidence_sha256",
             "",
         ),
         backfill_dda_missing_nl_policy_status=row.get(
@@ -364,10 +405,11 @@ def _missing_columns(
         f"alignment_cells.tsv:{column}"
         for column in sorted(CELL_REQUIRED - cell_columns)
     )
-    missing.extend(
-        f"alignment_matrix.tsv:{column}"
-        for column in sorted(MATRIX_REQUIRED - matrix_columns)
-    )
+    if not (
+        MATRIX_IDENTITY_COLUMNS <= matrix_columns
+        or MATRIX_DOWNSTREAM_COLUMNS <= matrix_columns
+    ):
+        missing.append("alignment_matrix.tsv:feature_family_id or Mz+RT")
     return missing
 
 
@@ -450,12 +492,63 @@ def _load_benchmark_by_family(
     if missing:
         return {}
     rows, _columns = _read_tsv_with_columns(required_files[0])
+    summary_rows, _summary_columns = _read_tsv_with_columns(required_files[1])
+    summary_by_target = {
+        _target_name(row): row for row in summary_rows if _target_name(row)
+    }
     by_family: dict[str, dict[str, str]] = {}
     for row in rows:
         family_id = row.get("feature_family_id", "")
         if family_id:
-            by_family[family_id] = dict(row)
+            target_name = _target_name(row)
+            summary = summary_by_target.get(target_name, {})
+            by_family[family_id] = _normalized_benchmark_row(row, summary)
     return by_family
+
+
+def _normalized_benchmark_row(
+    match_row: Mapping[str, str],
+    summary_row: Mapping[str, str],
+) -> dict[str, str]:
+    target_name = _target_name(match_row) or _target_name(summary_row)
+    family_id = match_row.get("feature_family_id", "")
+    selected_family_id = summary_row.get("selected_feature_id", "")
+    return {
+        **dict(match_row),
+        "target_name": target_name,
+        "role": match_row.get("role") or summary_row.get("role", ""),
+        "benchmark_class": (
+            match_row.get("benchmark_class")
+            or summary_row.get("benchmark_class")
+            or summary_row.get("status", "")
+        ),
+        "active_dna_istd_candidate": (
+            match_row.get("active_dna_istd_candidate")
+            or _selected_family_active_tag(
+                family_id=family_id,
+                selected_family_id=selected_family_id,
+                summary_row=summary_row,
+            )
+        ),
+    }
+
+
+def _selected_family_active_tag(
+    *,
+    family_id: str,
+    selected_family_id: str,
+    summary_row: Mapping[str, str],
+) -> str:
+    if not family_id or family_id != selected_family_id:
+        return ""
+    return (
+        summary_row.get("active_dna_istd_candidate")
+        or summary_row.get("active_tag", "")
+    )
+
+
+def _target_name(row: Mapping[str, str]) -> str:
+    return row.get("target_name") or row.get("target_label") or ""
 
 
 def _write_outputs(

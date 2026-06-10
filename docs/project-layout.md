@@ -217,6 +217,14 @@ else:
 - **誰建**：`git worktree add ...`，或 superpowers/using-git-worktrees skill 自動建立
 - **何時可清**：個別 worktree 的分支已合入 `master`，且 worktree 內無未提交修改
 - **風險**：盲清會丟失未合的工作分支；目前 24 個活躍 worktree、20.2 GB
+- **續接規則**：每次續接舊任務前先跑 `git worktree list` 與
+  `git -C .worktrees\<name> status`。不要假設上一輪 worktree 還存在；若路徑已
+  被刪，重新建立 worktree 或改用 `local_validation_artifacts/` 裡的 durable
+  input，不要從記憶中的 `.worktrees\<branch>\output\...` 繼續。
+- **Git friction**：`.git\index.lock`、ref-lock、或 permission denied 常是
+  Windows sandbox / ACL 摩擦。先確認正確 worktree，再用 `git -C <repo> ...` 或
+  narrow approval 重跑同一 git 操作；不要用 `git reset --hard` / `git clean`
+  當通用修復。
 - **安全步驟**：
   ```powershell
   # 1. 列出所有 worktree
@@ -241,6 +249,15 @@ else:
 - **誰建**：pipeline 寫入結果（`xlsx`、`tsv`、`html`、中間 CSV）
 - **何時可清**：結果已備份 / 驗收後
 - **現況**：截至 2026-05-16，340 MB，含 2026-04-07 到 2026-05-14 的舊輸出
+- **規則**：`output/` 是 evidence reference，不是 durable input store。跨
+  worktree 要重用的 accepted input 必須搬到 `local_validation_artifacts/` 並重寫
+  內部路徑。
+- **掃描規則**：不要用 blanket `Get-ChildItem -Recurse` 掃整個 `output/` 來找
+  artifact；先用目前 spec / validation note / `tools/diagnostics/INDEX.md`，再用
+  targeted `rg` 或 `Get-ChildItem -Filter <exact-pattern>`。
+- **鎖檔規則**：`xlsx`、HTML、PNG 若被 Excel/browser/previewer 開著，overwrite
+  可能回 `Permission denied`。優先寫 timestamped / suffixed 新檔並回報鎖檔可能，
+  不要強刪或反覆覆蓋。
 - **指令**：依檔案需求手動刪除子集，不一鍵全清
 
 ### `local_raw_samples/` `local_validation_raw/`

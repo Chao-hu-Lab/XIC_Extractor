@@ -131,6 +131,7 @@ def _candidate_ms2_row(
             "raw_ms2_strict_nl_scan_count": "1",
             "matched_neutral_loss_count": "1",
             "source_matched_tag_count": "1",
+            "diagnostic_only": "TRUE",
         }
     if dda_missing:
         return {
@@ -141,6 +142,7 @@ def _candidate_ms2_row(
             "raw_ms2_trigger_scan_count": "3",
             "raw_ms2_strict_nl_scan_count": "0",
             "raw_ms2_trace_strength": "strong",
+            "diagnostic_only": "TRUE",
         }
     raise AssertionError("test fixture needs tag or DDA evidence")
 

@@ -721,6 +721,7 @@ def _candidate_ms2_row(family_id: str, sample_id: str) -> dict[str, str]:
         "sample_stem": sample_id,
         "candidate_ms2_pattern_status": "supportive",
         "candidate_ms2_evidence_level": "sample_boundary_aligned",
+        "diagnostic_only": "TRUE",
     }
 
 

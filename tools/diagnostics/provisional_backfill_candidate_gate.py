@@ -49,7 +49,7 @@ CELL_REQUIRED_COLUMNS = (
     "scan_support_score",
     "reason",
 )
-MATRIX_REQUIRED_COLUMNS = ("feature_family_id",)
+MATRIX_REQUIRED_COLUMNS: tuple[str, ...] = ()
 
 
 def main(argv: Sequence[str] | None = None) -> int:

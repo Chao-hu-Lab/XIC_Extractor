@@ -5,9 +5,14 @@ from dataclasses import dataclass
 from typing import Literal
 
 from xic_extractor.alignment.promotion_policy import (
+    BACKFILL_HYPOTHESIS_BLOCKED_REASON,
+    BACKFILL_MS1_PATTERN_BLOCKED_REASON,
+    BACKFILL_MS1_PATTERN_CONFLICT_REASON,
+    BACKFILL_RT_EXPLANATION_BLOCKED_REASON,
     LOW_MS1_COVERAGE_BLOCKED_REASON,
     NEIGHBOR_INTERFERENCE_BLOCKED_REASON,
     BackfillPromotionEvidence,
+    classify_backfill_promotion,
     evidence_from_tsv_rows,
 )
 
@@ -26,6 +31,10 @@ _EXCLUDE_BLOCKERS = {
 _AUDIT_BLOCKERS = {
     "ambiguous_ms1_owner_pressure",
     "ambiguous_only",
+    BACKFILL_HYPOTHESIS_BLOCKED_REASON,
+    BACKFILL_MS1_PATTERN_BLOCKED_REASON,
+    BACKFILL_MS1_PATTERN_CONFLICT_REASON,
+    BACKFILL_RT_EXPLANATION_BLOCKED_REASON,
     "duplicate_claim_pressure",
     "low_ms1_assessable_coverage",
     LOW_MS1_COVERAGE_BLOCKED_REASON,
@@ -154,14 +163,28 @@ def _blockers(
     evidence: BackfillPromotionEvidence,
 ) -> tuple[str, ...]:
     blockers: list[str] = []
-    if evidence.q_detected == 1:
+    promotion = classify_backfill_promotion(evidence)
+    single_detected_supported = evidence.q_detected == 1 and promotion.supported
+    same_peak_backfill_supported = promotion.supported
+    if evidence.q_detected == 1 and not single_detected_supported:
         blockers.append("single_detected_seed")
     if (
         identity_reason not in _NON_BLOCKING_IDENTITY_REASONS
         and identity_reason not in _GENERIC_PROVISIONAL_REASONS
     ):
         blockers.append(identity_reason)
-    blockers.extend(flag for flag in flags if flag in _ROW_BLOCKERS)
+    blockers.extend(
+        flag
+        for flag in flags
+        if flag in _ROW_BLOCKERS
+        and not (
+            flag in {"single_detected_seed", "skip_expensive_evidence"}
+            and single_detected_supported
+        )
+        and not (
+            flag == "duplicate_claim_pressure" and same_peak_backfill_supported
+        )
+    )
     blockers.extend(_cell_evidence_blockers(evidence))
     if identity_decision == _PROVISIONAL_DECISION and not blockers:
         blockers.append("insufficient_identity_support")
@@ -193,8 +216,32 @@ def _cell_evidence_blockers(
     if any(cell.high_neighbor_interference for cell in rescued):
         return (NEIGHBOR_INTERFERENCE_BLOCKED_REASON,)
     if any(
+        cell.backfill_identity_block_reason == BACKFILL_HYPOTHESIS_BLOCKED_REASON
+        for cell in rescued
+    ):
+        return (BACKFILL_HYPOTHESIS_BLOCKED_REASON,)
+    if any(
         cell.low_assessable_coverage
-        or not cell.local_apex_supported
+        or (
+            not cell.additional_ms1_support
+            and not cell.same_peak_ms1_pattern_supported
+        )
+        for cell in rescued
+    ):
+        return (LOW_MS1_COVERAGE_BLOCKED_REASON,)
+    for reason in (
+        BACKFILL_MS1_PATTERN_CONFLICT_REASON,
+        BACKFILL_RT_EXPLANATION_BLOCKED_REASON,
+        BACKFILL_MS1_PATTERN_BLOCKED_REASON,
+    ):
+        if any(cell.backfill_identity_block_reason == reason for cell in rescued):
+            return (reason,)
+    if any(
+        cell.low_assessable_coverage
+        or not (
+            cell.local_apex_supported
+            or cell.product_authorized_same_peak_supported
+        )
         or not cell.supported_for_backfill
         for cell in rescued
     ):

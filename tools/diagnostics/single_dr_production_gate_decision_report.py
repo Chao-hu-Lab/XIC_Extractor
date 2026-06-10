@@ -520,8 +520,9 @@ def _gate_candidates(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
             ],
             default_action="keep_warning",
             false_positive_risk_reason=(
-                "The row passes because at least two detected seeds are trusted, "
-                "but a weak seed signal still needs to stay visible."
+                "The row passes through detected support or product-authorized "
+                "same-peak rescue evidence, but a weak seed signal still needs "
+                "to stay visible."
             ),
         ),
     ]

@@ -8,10 +8,12 @@ from collections.abc import Iterable, Sequence
 import numpy as np
 
 from tools.diagnostics.family_ms1_overlay_models import (
+    ABSOLUTE_TRACE_APEX_CLUSTER_FRACTION_MIN,
     APEX_ALIGN_GRID_SIZE,
     APEX_ALIGN_HALF_WINDOW_MIN,
     DDA_TRIGGER_HEIGHT_RATIO_MIN,
     DDA_TRIGGER_SHAPE_SUPPORT_FRACTION_MIN,
+    FAMILY_SHAPE_SUPPORT_FRACTION_MIN,
     GLOBAL_APEX_CONFLICT_DELTA_MIN,
     GLOBAL_APEX_REVIEW_FRACTION_MIN,
     LOCAL_APEX_SUPPORT_DELTA_MIN,
@@ -26,6 +28,7 @@ def build_family_ms1_evidence_summary(
     rows: Sequence[TraceOverlayRow],
 ) -> dict[str, int | float | str | bool | None]:
     shape_similarity = _apex_aligned_shape_similarity(rows)
+    absolute_shape_similarity = _absolute_own_max_shape_similarity(rows)
     detected = [row for row in rows if row.status == "detected"]
     rescued = [row for row in rows if row.status == "rescued"]
     status_rows = [row for row in rows if row.status in {"detected", "rescued"}]
@@ -39,6 +42,22 @@ def build_family_ms1_evidence_summary(
         for row in evaluable
         if (shape_similarity.get(row.sample_stem) or 0.0) >= SHAPE_SUPPORT_MIN
     ]
+    absolute_shape_evaluable = [
+        row
+        for row in status_rows
+        if absolute_shape_similarity.get(row.sample_stem) is not None
+    ]
+    absolute_shape_supported = [
+        row
+        for row in absolute_shape_evaluable
+        if (absolute_shape_similarity.get(row.sample_stem) or 0.0) >= SHAPE_SUPPORT_MIN
+    ]
+    (
+        absolute_trace_apex_assessable,
+        absolute_trace_apex_clustered,
+        absolute_trace_apex_median_rt,
+        absolute_trace_apex_delta_abs_median,
+    ) = _absolute_trace_apex_cluster(status_rows)
     global_apex_assessable = [
         row for row in status_rows if _global_trace_apex_delta(row) is not None
     ]
@@ -86,6 +105,14 @@ def build_family_ms1_evidence_summary(
         len(local_apex_assessable),
     )
     local_global_low_fraction = _safe_fraction(len(low_local_to_global), len(evaluable))
+    absolute_shape_fraction = _safe_fraction(
+        len(absolute_shape_supported),
+        len(absolute_shape_evaluable),
+    )
+    absolute_trace_apex_cluster_fraction = _safe_fraction(
+        len(absolute_trace_apex_clustered),
+        len(absolute_trace_apex_assessable),
+    )
     detected_height_median = _median_value(row.cell_height for row in detected)
     rescued_height_median = _median_value(row.cell_height for row in rescued)
     detected_local_max_median = _median_value(
@@ -113,28 +140,48 @@ def build_family_ms1_evidence_summary(
         )
     )
 
+    enough_ms1_coverage = (
+        global_apex_assessable_fraction is not None
+        and global_apex_assessable_fraction >= MS1_ASSESSABLE_COVERAGE_MIN
+        and selected_apex_in_trace_window_fraction is not None
+        and selected_apex_in_trace_window_fraction >= MS1_ASSESSABLE_COVERAGE_MIN
+    )
+    has_low_selected_peak_dominance = (
+        local_global_low_fraction is not None and local_global_low_fraction >= 0.50
+    )
+    apex_aligned_shape_support = (
+        enough_ms1_coverage
+        and shape_fraction is not None
+        and shape_fraction >= FAMILY_SHAPE_SUPPORT_FRACTION_MIN
+        and local_support_fraction is not None
+        and local_support_fraction >= FAMILY_SHAPE_SUPPORT_FRACTION_MIN
+        and not has_low_selected_peak_dominance
+    )
+    absolute_own_max_shape_support = (
+        enough_ms1_coverage
+        and absolute_shape_fraction is not None
+        and absolute_shape_fraction >= FAMILY_SHAPE_SUPPORT_FRACTION_MIN
+        and absolute_trace_apex_cluster_fraction is not None
+        and absolute_trace_apex_cluster_fraction
+        >= ABSOLUTE_TRACE_APEX_CLUSTER_FRACTION_MIN
+        and not has_low_selected_peak_dominance
+    )
+    scaled_shape_support_overrides_global_interference = (
+        apex_aligned_shape_support or absolute_own_max_shape_support
+    )
+
     if len(detected) < 2:
         family_verdict = "insufficient_nl_seed_support"
+    elif scaled_shape_support_overrides_global_interference:
+        family_verdict = "ms1_shape_supports_family_backfill"
     elif (
         global_interference_fraction is not None
         and global_interference_fraction >= GLOBAL_APEX_REVIEW_FRACTION_MIN
     ):
         family_verdict = "review_required_neighboring_ms1_interference"
-    elif (
-        global_apex_assessable_fraction is None
-        or global_apex_assessable_fraction < MS1_ASSESSABLE_COVERAGE_MIN
-        or selected_apex_in_trace_window_fraction is None
-        or selected_apex_in_trace_window_fraction < MS1_ASSESSABLE_COVERAGE_MIN
-    ):
+    elif not enough_ms1_coverage:
         family_verdict = "review_required_low_ms1_assessable_coverage"
-    elif (
-        shape_fraction is not None
-        and shape_fraction >= 0.70
-        and local_support_fraction is not None
-        and local_support_fraction >= 0.70
-    ):
-        family_verdict = "ms1_shape_supports_family_backfill"
-    elif local_global_low_fraction is not None and local_global_low_fraction >= 0.50:
+    elif has_low_selected_peak_dominance:
         family_verdict = "review_required_low_selected_peak_dominance"
     else:
         family_verdict = "review_required_uncertain_ms1_shape"
@@ -155,6 +202,16 @@ def build_family_ms1_evidence_summary(
         "local_apex_assessable_trace_count": len(local_apex_assessable),
         "shape_supported_count": len(shape_supported),
         "shape_supported_fraction": shape_fraction,
+        "absolute_own_max_evaluable_trace_count": len(absolute_shape_evaluable),
+        "absolute_own_max_shape_supported_count": len(absolute_shape_supported),
+        "absolute_own_max_shape_supported_fraction": absolute_shape_fraction,
+        "absolute_trace_apex_assessable_count": len(absolute_trace_apex_assessable),
+        "absolute_trace_apex_cluster_count": len(absolute_trace_apex_clustered),
+        "absolute_trace_apex_cluster_fraction": absolute_trace_apex_cluster_fraction,
+        "absolute_trace_apex_median_rt": absolute_trace_apex_median_rt,
+        "absolute_trace_apex_delta_abs_median_min": (
+            absolute_trace_apex_delta_abs_median
+        ),
         "global_apex_interference_count": len(global_apex_interference),
         "global_apex_interference_fraction": global_interference_fraction,
         "local_apex_supported_count": len(local_apex_supported),
@@ -208,15 +265,74 @@ def _apex_aligned_shape_similarity(
         )
     if not traces:
         return {}
-    stack = np.vstack(tuple(traces.values()))
+    reference_traces = [
+        traces[row.sample_stem]
+        for row in rows
+        if row.sample_stem in traces and row.group == "detected_seed"
+    ]
+    if not reference_traces:
+        return {sample: None for sample in traces}
+    stack = np.vstack(tuple(reference_traces))
     finite_columns = np.isfinite(stack).any(axis=0)
     if not np.any(finite_columns):
         return {sample: None for sample in traces}
+    detected_anchor_trace = np.nanmedian(stack[:, finite_columns], axis=0)
+    return {
+        sample: _pearson_similarity(values[finite_columns], detected_anchor_trace)
+        for sample, values in traces.items()
+    }
+
+
+def _absolute_own_max_shape_similarity(
+    rows: Sequence[TraceOverlayRow],
+) -> dict[str, float | None]:
+    traces: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for row in rows:
+        rt, normalized = _absolute_own_max_normalized_trace(row)
+        if rt.size < 2:
+            continue
+        traces[row.sample_stem] = (rt, normalized)
+    if not traces:
+        return {}
+    rt_min = max(float(rt[0]) for rt, _normalized in traces.values())
+    rt_max = min(float(rt[-1]) for rt, _normalized in traces.values())
+    if not math.isfinite(rt_min) or not math.isfinite(rt_max) or rt_max <= rt_min:
+        return {sample: None for sample in traces}
+    grid = np.linspace(rt_min, rt_max, APEX_ALIGN_GRID_SIZE)
+    interpolated = {
+        sample: np.interp(grid, rt, normalized, left=np.nan, right=np.nan)
+        for sample, (rt, normalized) in traces.items()
+    }
+    stack = np.vstack(tuple(interpolated.values()))
+    finite_columns = np.isfinite(stack).all(axis=0)
+    if not np.any(finite_columns):
+        return {sample: None for sample in interpolated}
     median_trace = np.nanmedian(stack[:, finite_columns], axis=0)
     return {
         sample: _pearson_similarity(values[finite_columns], median_trace)
-        for sample, values in traces.items()
+        for sample, values in interpolated.items()
     }
+
+
+def _absolute_own_max_normalized_trace(
+    row: TraceOverlayRow,
+    *,
+    smooth_points: int = 0,
+) -> tuple[np.ndarray, np.ndarray]:
+    rt = np.asarray(row.rt, dtype=float)
+    intensity = np.asarray(row.intensity, dtype=float)
+    mask = np.isfinite(rt) & np.isfinite(intensity)
+    if not np.any(mask):
+        return np.array([], dtype=float), np.array([], dtype=float)
+    rt = rt[mask]
+    intensity = _gaussian_smooth_values(intensity[mask], points=smooth_points)
+    order = np.argsort(rt)
+    rt = rt[order]
+    intensity = intensity[order]
+    max_intensity = float(np.max(intensity)) if intensity.size else 0.0
+    if max_intensity <= 0:
+        return np.array([], dtype=float), np.array([], dtype=float)
+    return rt, intensity / max_intensity
 
 
 def _apex_aligned_normalized_trace(
@@ -242,6 +358,31 @@ def _apex_aligned_normalized_trace(
     if local_max <= 0:
         return np.array([], dtype=float), np.array([], dtype=float)
     return rt[mask], local_intensity / local_max
+
+
+def _absolute_trace_apex_cluster(
+    rows: Sequence[TraceOverlayRow],
+) -> tuple[list[TraceOverlayRow], list[TraceOverlayRow], float | None, float | None]:
+    assessable = [
+        row
+        for row in rows
+        if row.trace_apex_rt is not None and math.isfinite(row.trace_apex_rt)
+    ]
+    median_rt = _median_value(row.trace_apex_rt for row in assessable)
+    if median_rt is None:
+        return assessable, [], None, None
+    clustered = [
+        row
+        for row in assessable
+        if row.trace_apex_rt is not None
+        and abs(row.trace_apex_rt - median_rt) <= GLOBAL_APEX_CONFLICT_DELTA_MIN
+    ]
+    delta_median = _median_value(
+        abs(row.trace_apex_rt - median_rt)
+        for row in assessable
+        if row.trace_apex_rt is not None
+    )
+    return assessable, clustered, median_rt, delta_median
 
 
 def _gaussian_smooth_values(values: np.ndarray, *, points: int) -> np.ndarray:

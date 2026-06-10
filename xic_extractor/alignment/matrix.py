@@ -75,6 +75,11 @@ class AlignedCell:
     backfill_request_ppm: float | None = None
     backfill_ms1_pattern_status: str = ""
     backfill_ms1_pattern_evidence_level: str = ""
+    backfill_ms1_product_authority_status: str = ""
+    backfill_ms1_product_authority_scope: str = ""
+    backfill_ms1_product_authority_source: str = ""
+    backfill_ms1_product_authority_reason: str = ""
+    backfill_ms1_product_authority_evidence_sha256: str = ""
     backfill_qc_reference_status: str = ""
     backfill_qc_reference_evidence_level: str = ""
     backfill_matrix_rt_drift_status: str = ""
@@ -83,6 +88,11 @@ class AlignedCell:
     backfill_drift_corrected_delta_sec: float | None = None
     backfill_candidate_ms2_pattern_status: str = ""
     backfill_candidate_ms2_evidence_level: str = ""
+    backfill_candidate_ms2_product_authority_status: str = ""
+    backfill_candidate_ms2_product_authority_scope: str = ""
+    backfill_candidate_ms2_product_authority_source: str = ""
+    backfill_candidate_ms2_product_authority_reason: str = ""
+    backfill_candidate_ms2_product_authority_evidence_sha256: str = ""
     backfill_ms2_trigger_scan_count: int | None = None
     backfill_strict_nl_scan_count: int | None = None
     backfill_ms2_trace_strength: str = ""
@@ -97,6 +107,9 @@ class AlignedCell:
     gap_fill_state: str = ""
     gap_fill_reason: str = ""
     missing_observation_state: str = ""
+    peak_hypothesis_status: str = ""
+    product_selection_blocker: str = ""
+    rt_mode_status: str = ""
     group_claim_state: str = ""
     claim_winner_group_hypothesis_id: str = ""
     claim_source_group_hypothesis_id: str = ""

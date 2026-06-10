@@ -5,10 +5,12 @@ from __future__ import annotations
 import csv
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from tools.diagnostics.family_ms1_overlay_evidence import (
+    _absolute_own_max_shape_similarity,
     _apex_aligned_shape_similarity,
     _global_trace_apex_delta,
     _local_to_global_max_ratio,
@@ -19,7 +21,13 @@ from tools.diagnostics.family_ms1_overlay_models import (
     FamilyMs1OverlayOutputs,
     TraceOverlayRow,
 )
-from tools.diagnostics.family_ms1_overlay_rendering import render_family_ms1_overlay
+from tools.diagnostics.family_ms1_overlay_rendering import (
+    render_family_ms1_overlay,
+    render_hypothesis_ms1_overlay,
+)
+
+if TYPE_CHECKING:
+    from xic_extractor.alignment.edge_scoring import DriftLookupProtocol
 
 
 def write_family_ms1_overlay_outputs(
@@ -33,12 +41,16 @@ def write_family_ms1_overlay_outputs(
     rt_min: float,
     rt_max: float,
     family_center_rt: float | None,
+    provenance: Mapping[str, object] | None = None,
+    drift_lookup: DriftLookupProtocol | None = None,
 ) -> FamilyMs1OverlayOutputs:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_tsv = output_dir / f"{output_prefix}_trace_summary.tsv"
     trace_data_json = output_dir / f"{output_prefix}_trace_data.json"
     png_path = output_dir / f"{output_prefix}.png"
     pdf_path = output_dir / f"{output_prefix}.pdf"
+    hypothesis_png_path = output_dir / f"{output_prefix}_hypothesis.png"
+    hypothesis_pdf_path = output_dir / f"{output_prefix}_hypothesis.pdf"
 
     _write_summary(summary_tsv, rows)
     _write_trace_data(
@@ -50,11 +62,24 @@ def write_family_ms1_overlay_outputs(
         rt_min=rt_min,
         rt_max=rt_max,
         family_center_rt=family_center_rt,
+        provenance=provenance,
     )
     render_family_ms1_overlay(
         rows=rows,
         png_path=png_path,
         pdf_path=pdf_path,
+        family_id=family_id,
+        mz=mz,
+        ppm=ppm,
+        rt_min=rt_min,
+        rt_max=rt_max,
+        family_center_rt=family_center_rt,
+        drift_lookup=drift_lookup,
+    )
+    render_hypothesis_ms1_overlay(
+        rows=rows,
+        png_path=hypothesis_png_path,
+        pdf_path=hypothesis_pdf_path,
         family_id=family_id,
         mz=mz,
         ppm=ppm,
@@ -72,6 +97,7 @@ def write_family_ms1_overlay_outputs(
 
 def _write_summary(path: Path, rows: Sequence[TraceOverlayRow]) -> None:
     shape_similarity = _apex_aligned_shape_similarity(rows)
+    absolute_shape_similarity = _absolute_own_max_shape_similarity(rows)
     fields = (
         "sample_stem",
         "status",
@@ -90,6 +116,7 @@ def _write_summary(path: Path, rows: Sequence[TraceOverlayRow]) -> None:
         "source_candidate_id",
         "highlight_group",
         "apex_aligned_shape_similarity",
+        "absolute_own_max_shape_similarity",
     )
     with path.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(
@@ -129,6 +156,9 @@ def _write_summary(path: Path, rows: Sequence[TraceOverlayRow]) -> None:
                     "apex_aligned_shape_similarity": _format_float(
                         shape_similarity.get(row.sample_stem),
                     ),
+                    "absolute_own_max_shape_similarity": _format_float(
+                        absolute_shape_similarity.get(row.sample_stem),
+                    ),
                 }
             )
 
@@ -143,8 +173,10 @@ def _write_trace_data(
     rt_min: float,
     rt_max: float,
     family_center_rt: float | None,
+    provenance: Mapping[str, object] | None = None,
 ) -> None:
     shape_similarity = _apex_aligned_shape_similarity(rows)
+    absolute_shape_similarity = _absolute_own_max_shape_similarity(rows)
     data = {
         "family_id": family_id,
         "mz": mz,
@@ -152,6 +184,7 @@ def _write_trace_data(
         "rt_min": rt_min,
         "rt_max": rt_max,
         "family_center_rt": family_center_rt,
+        "provenance": dict(provenance or {}),
         "trace_count": len(rows),
         "evidence_summary": build_family_ms1_evidence_summary(rows),
         "traces": [
@@ -182,6 +215,9 @@ def _write_trace_data(
                 "source_candidate_id": row.source_candidate_id,
                 "apex_aligned_shape_similarity": _json_float(
                     shape_similarity.get(row.sample_stem),
+                ),
+                "absolute_own_max_shape_similarity": _json_float(
+                    absolute_shape_similarity.get(row.sample_stem),
                 ),
                 "rt": row.rt,
                 "intensity": row.intensity,

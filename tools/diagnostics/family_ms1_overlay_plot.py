@@ -13,6 +13,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.diagnostics.family_ms1_overlay_evidence import (
+    _absolute_own_max_shape_similarity,
     _apex_aligned_normalized_trace,
     _apex_aligned_shape_similarity,
     _gaussian_smooth_values,
@@ -34,6 +35,7 @@ from tools.diagnostics.family_ms1_overlay_models import (
 from tools.diagnostics.family_ms1_overlay_rendering import (
     _add_panel_note,
     _gaussian_smooth,
+    _hypothesis_overlay_panel_layout,
     _plot_apex_aligned_overlay,
     _plot_area_distribution,
     _plot_group_median_trace,
@@ -42,6 +44,7 @@ from tools.diagnostics.family_ms1_overlay_rendering import (
     _plot_shape_similarity,
     _plot_trace_apex_delta_distribution,
     render_family_ms1_overlay,
+    render_hypothesis_ms1_overlay,
 )
 from tools.diagnostics.family_ms1_overlay_rendering_styles import (
     DETECTED_COLOR,
@@ -89,6 +92,7 @@ __all__ = [
     "SHAPE_SUPPORT_MIN",
     "TraceOverlayRow",
     "_add_panel_note",
+    "_absolute_own_max_shape_similarity",
     "_apex_aligned_normalized_trace",
     "_apex_aligned_shape_similarity",
     "_draw_center_rt",
@@ -96,6 +100,7 @@ __all__ = [
     "_gaussian_smooth",
     "_gaussian_smooth_values",
     "_global_trace_apex_delta",
+    "_hypothesis_overlay_panel_layout",
     "_json_float",
     "_line_style",
     "_local_to_global_max_ratio",
@@ -122,6 +127,7 @@ __all__ = [
     "main",
     "np",
     "render_family_ms1_overlay",
+    "render_hypothesis_ms1_overlay",
     "trace_row_from_arrays",
     "write_family_ms1_overlay_outputs",
 ]
@@ -146,6 +152,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         else _median_value(row.cell_apex_rt for row in rows)
     )
     prefix = args.output_prefix or f"{args.family_id.lower()}_ms1_overlay"
+    # Compatibility only: these args used to feed an iRT panel, but the current
+    # family-context overlay is intentionally two-panel and must not fail on a
+    # no-op drift artifact.
+    drift_lookup = None
     outputs = write_family_ms1_overlay_outputs(
         rows=rows,
         output_dir=args.output_dir,
@@ -156,6 +166,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         rt_min=args.rt_min,
         rt_max=args.rt_max,
         family_center_rt=center_rt,
+        drift_lookup=drift_lookup,
     )
     print(f"MS1 overlay PNG: {outputs.png_path}")
     print(f"MS1 overlay PDF: {outputs.pdf_path}")
@@ -178,6 +189,23 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--ppm", type=float, default=10.0)
     parser.add_argument("--max-highlight-rescued", type=int, default=8)
     parser.add_argument("--family-center-rt", type=float)
+    parser.add_argument(
+        "--targeted-workbook",
+        type=Path,
+        help=(
+            "Targeted XIC workbook (with ISTD rows). Accepted for compatibility; "
+            "the current family-context overlay stays two-panel and does not "
+            "render an iRT panel."
+        ),
+    )
+    parser.add_argument(
+        "--sample-info",
+        type=Path,
+        help=(
+            "Sample info table for ISTD drift provenance. Accepted for "
+            "compatibility; not rendered by the current family-context overlay."
+        ),
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--output-prefix")
     return parser.parse_args(argv)

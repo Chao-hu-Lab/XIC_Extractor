@@ -75,6 +75,7 @@ def consolidate_primary_family_rows(
             component,
             clusters_by_id=clusters_by_id,
             selected_by_sample=selected_by_sample,
+            winner_id=winner_id,
         )
         cluster_replacements[winner_id] = _primary_cluster(
             clusters_by_id[winner_id],
@@ -176,7 +177,7 @@ def _duplicate_claim_graph(
             or cell.cluster_id not in clusters_by_id
         ):
             continue
-        if not _compatible_primary_family(
+        if not _compatible_duplicate_claim_family(
             clusters_by_id[cell.cluster_id],
             clusters_by_id[winner_id],
             config,
@@ -329,6 +330,7 @@ def _component_center(
     *,
     clusters_by_id: dict[str, Any],
     selected_by_sample: dict[str, _Observation],
+    winner_id: str,
 ) -> dict[str, float]:
     selected_cells = [observation.cell for observation in selected_by_sample.values()]
     selected_rts = [
@@ -349,15 +351,45 @@ def _component_center(
                 for cluster_id in component
             )
         ),
-        "family_product_mz": median(
-            _family_product_mz(clusters_by_id[cluster_id])
-            for cluster_id in component
+        "family_product_mz": _component_product_mz(
+            component,
+            clusters_by_id=clusters_by_id,
+            winner_id=winner_id,
         ),
-        "family_observed_neutral_loss_da": median(
-            _family_observed_loss(clusters_by_id[cluster_id])
-            for cluster_id in component
+        "family_observed_neutral_loss_da": _component_observed_loss(
+            component,
+            clusters_by_id=clusters_by_id,
+            winner_id=winner_id,
         ),
     }
+
+
+def _component_product_mz(
+    component: tuple[str, ...],
+    *,
+    clusters_by_id: dict[str, Any],
+    winner_id: str,
+) -> float:
+    if len(_component_neutral_loss_tags(component, clusters_by_id)) > 1:
+        return _family_product_mz(clusters_by_id[winner_id])
+    return median(
+        _family_product_mz(clusters_by_id[cluster_id])
+        for cluster_id in component
+    )
+
+
+def _component_observed_loss(
+    component: tuple[str, ...],
+    *,
+    clusters_by_id: dict[str, Any],
+    winner_id: str,
+) -> float:
+    if len(_component_neutral_loss_tags(component, clusters_by_id)) > 1:
+        return _family_observed_loss(clusters_by_id[winner_id])
+    return median(
+        _family_observed_loss(clusters_by_id[cluster_id])
+        for cluster_id in component
+    )
 
 
 def _winner_cells(
@@ -406,6 +438,7 @@ def _primary_cluster(
     evidence = (
         f"owner_complete_link;owner_count={max(2, len(event_cluster_ids))};"
         f"primary_family_consolidated;family_count={len(component)}"
+        f"{_shared_ms1_peak_nl_evidence(component, clusters_by_id)}"
     )
     updates = {
         **center,
@@ -435,6 +468,27 @@ def _primary_cluster(
         cluster,
         updates,
     )
+
+
+def _shared_ms1_peak_nl_evidence(
+    component: tuple[str, ...],
+    clusters_by_id: dict[str, Any],
+) -> str:
+    tags = _component_neutral_loss_tags(component, clusters_by_id)
+    if len(tags) < 2:
+        return ""
+    return f";shared_ms1_peak_nl_tags={','.join(tags)}"
+
+
+def _component_neutral_loss_tags(
+    component: tuple[str, ...],
+    clusters_by_id: dict[str, Any],
+) -> tuple[str, ...]:
+    tags = sorted(
+        str(getattr(clusters_by_id[cluster_id], "neutral_loss_tag", ""))
+        for cluster_id in component
+    )
+    return tuple(tag for tag in dict.fromkeys(tags) if tag)
 
 
 def _merged_member_updates(
@@ -703,6 +757,33 @@ def _compatible_primary_family(
     config: AlignmentConfig,
 ) -> bool:
     return compatible_primary_family(left, right, config)
+
+
+def _compatible_duplicate_claim_family(
+    left: Any,
+    right: Any,
+    config: AlignmentConfig,
+) -> bool:
+    if _compatible_primary_family(left, right, config):
+        return True
+    return _shared_ms1_peak_family(left, right, config)
+
+
+def _shared_ms1_peak_family(
+    left: Any,
+    right: Any,
+    config: AlignmentConfig,
+) -> bool:
+    if bool(getattr(left, "review_only", False)) or bool(
+        getattr(right, "review_only", False),
+    ):
+        return False
+    if ppm(_family_center_mz(left), _family_center_mz(right)) > config.max_ppm:
+        return False
+    return (
+        abs(_family_center_rt(left) - _family_center_rt(right)) * 60.0
+        <= config.identity_rt_candidate_window_sec
+    )
 
 
 def _loose_compatible_primary_family(

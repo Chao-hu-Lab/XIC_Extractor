@@ -146,6 +146,11 @@ def decide_matrix_identity_row(
         cell_quality=cell_quality,
     )
     promotion_policy = classify_backfill_promotion(policy_evidence)
+    if promotion_policy.supported and duplicate_count > q_detected:
+        flags = [
+            "same_peak_multi_claim" if flag == "duplicate_claim_pressure" else flag
+            for flag in flags
+        ]
     if _is_provisional_retention_candidate(
         cluster,
         evidence=evidence,
@@ -217,7 +222,7 @@ def _promotion_decision(
         return False, "audit_family", "review", "ambiguous_only"
     if q_detected == 0:
         return False, "audit_family", "none", "zero_quantifiable_detected"
-    if duplicate_count > q_detected:
+    if duplicate_count > q_detected and not promotion_policy.supported:
         return False, "audit_family", "review", "duplicate_claim_pressure"
     rescue_cell_only_block = (
         promotion_policy.blocked

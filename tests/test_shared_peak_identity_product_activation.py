@@ -5,6 +5,16 @@ import pytest
 from openpyxl import Workbook
 
 from tools.diagnostics.apply_shared_peak_identity_activation import main
+from xic_extractor.alignment.backfill_evidence_projection import (
+    PRODUCT_AUTHORITY_SCOPE_FIELD,
+    PRODUCT_AUTHORITY_SOURCE_FIELD,
+    PRODUCT_AUTHORITY_STATUS_FIELD,
+    PRODUCT_AUTHORIZED_SCOPE,
+    PRODUCT_AUTHORIZED_STATUS,
+)
+from xic_extractor.alignment.promotion_policy import (
+    ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+)
 from xic_extractor.alignment.shared_peak_identity_explanation import (
     product_activation,
 )
@@ -931,11 +941,13 @@ def test_activation_application_cli_projects_backfill_evidence_sidecars(
     }
     row = rows[("FAM_ADD", "S2")]
     assert row["backfill_ms1_pattern_status"] == "supportive"
+    assert row["backfill_ms1_pattern_evidence_level"] == "trace_constellation"
+    assert ANCHOR_OWN_MAX_MS1_SUPPORT_REASON in row["backfill_evidence_reason"]
     assert row["backfill_qc_reference_status"] == "supportive"
     assert row["backfill_matrix_rt_drift_status"] == "drift_supported"
     assert row["backfill_candidate_ms2_pattern_status"] == "not_observed"
     assert row["backfill_dda_missing_nl_policy_status"] == "not_dispositive"
-    assert row["backfill_family_ms2_required_tag_status"] == "observed_in_family"
+    assert row["backfill_family_ms2_required_tag_status"] == ""
 
 
 def test_activation_application_cli_formal_mode_writes_product_contract_names(
@@ -1729,6 +1741,10 @@ def _write_backfill_evidence_sidecars(tmp_path: Path) -> dict[str, Path]:
             "raw_ms2_trigger_scan_count",
             "raw_ms2_strict_nl_scan_count",
             "raw_ms2_trace_strength",
+            "diagnostic_only",
+            PRODUCT_AUTHORITY_STATUS_FIELD,
+            PRODUCT_AUTHORITY_SCOPE_FIELD,
+            PRODUCT_AUTHORITY_SOURCE_FIELD,
         ),
         [
             {
@@ -1739,6 +1755,8 @@ def _write_backfill_evidence_sidecars(tmp_path: Path) -> dict[str, Path]:
                 "raw_ms2_trigger_scan_count": "4",
                 "raw_ms2_strict_nl_scan_count": "1",
                 "raw_ms2_trace_strength": "strong",
+                "diagnostic_only": "FALSE",
+                **_product_authority(),
             },
             {
                 "feature_family_id": "FAM_ADD",
@@ -1748,6 +1766,8 @@ def _write_backfill_evidence_sidecars(tmp_path: Path) -> dict[str, Path]:
                 "raw_ms2_trigger_scan_count": "3",
                 "raw_ms2_strict_nl_scan_count": "0",
                 "raw_ms2_trace_strength": "moderate",
+                "diagnostic_only": "FALSE",
+                **_product_authority(),
             },
         ],
     )
@@ -1768,13 +1788,16 @@ def _write_backfill_evidence_sidecars(tmp_path: Path) -> dict[str, Path]:
             "drift_compatible_status",
             "reason",
             "diagnostic_only",
+            PRODUCT_AUTHORITY_STATUS_FIELD,
+            PRODUCT_AUTHORITY_SCOPE_FIELD,
+            PRODUCT_AUTHORITY_SOURCE_FIELD,
         ),
         [
             {
                 "feature_family_id": "FAM_ADD",
                 "sample_stem": "S2",
                 "ms1_pattern_status": "supportive",
-                "ms1_pattern_evidence_level": "sample_constellation",
+                "ms1_pattern_evidence_level": "trace_constellation",
                 "apex_coherence_sec": "8",
                 "boundary_overlap_score": "0.9",
                 "shape_correlation_score": "0.82",
@@ -1783,8 +1806,9 @@ def _write_backfill_evidence_sidecars(tmp_path: Path) -> dict[str, Path]:
                 "constellation_peak_count": "4",
                 "reference_peak_count": "5",
                 "drift_compatible_status": "compatible",
-                "reason": "gaussian15_ms1_pattern_coherent",
+                "reason": ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
                 "diagnostic_only": "FALSE",
+                **_product_authority(),
             }
         ],
     )
@@ -1808,6 +1832,9 @@ def _write_backfill_evidence_sidecars(tmp_path: Path) -> dict[str, Path]:
             "nearest_qc_local_window_to_global_max_ratio",
             "reason",
             "diagnostic_only",
+            PRODUCT_AUTHORITY_STATUS_FIELD,
+            PRODUCT_AUTHORITY_SCOPE_FIELD,
+            PRODUCT_AUTHORITY_SOURCE_FIELD,
         ),
         [
             {
@@ -1828,6 +1855,7 @@ def _write_backfill_evidence_sidecars(tmp_path: Path) -> dict[str, Path]:
                 "nearest_qc_local_window_to_global_max_ratio": "0.7",
                 "reason": "local_qc_overlay_supports_peak",
                 "diagnostic_only": "FALSE",
+                **_product_authority(),
             }
         ],
     )
@@ -1846,6 +1874,9 @@ def _write_backfill_evidence_sidecars(tmp_path: Path) -> dict[str, Path]:
             "drift_compatible_status",
             "reason",
             "diagnostic_only",
+            PRODUCT_AUTHORITY_STATUS_FIELD,
+            PRODUCT_AUTHORITY_SCOPE_FIELD,
+            PRODUCT_AUTHORITY_SOURCE_FIELD,
         ),
         [
             {
@@ -1861,6 +1892,7 @@ def _write_backfill_evidence_sidecars(tmp_path: Path) -> dict[str, Path]:
                 "drift_compatible_status": "compatible",
                 "reason": "paired_istd_drift_explains_delta",
                 "diagnostic_only": "FALSE",
+                **_product_authority(),
             }
         ],
     )
@@ -1869,4 +1901,12 @@ def _write_backfill_evidence_sidecars(tmp_path: Path) -> dict[str, Path]:
         "ms1_pattern_coherence": ms1_pattern,
         "qc_ms1_pattern_reference": qc_reference,
         "matrix_rt_drift_policy": rt_drift,
+    }
+
+
+def _product_authority() -> dict[str, str]:
+    return {
+        PRODUCT_AUTHORITY_STATUS_FIELD: PRODUCT_AUTHORIZED_STATUS,
+        PRODUCT_AUTHORITY_SCOPE_FIELD: PRODUCT_AUTHORIZED_SCOPE,
+        PRODUCT_AUTHORITY_SOURCE_FIELD: "unit_test_reviewed_allowlist",
     }

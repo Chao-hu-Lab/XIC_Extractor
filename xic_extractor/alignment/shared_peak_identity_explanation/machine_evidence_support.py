@@ -52,6 +52,7 @@ CANDIDATE_MS2_PATTERN_REQUIRED_COLUMNS = (
     "sample_stem",
     "candidate_ms2_pattern_status",
     "candidate_ms2_evidence_level",
+    "diagnostic_only",
 )
 MS1_PATTERN_COHERENCE_REQUIRED_COLUMNS = (
     "feature_family_id",

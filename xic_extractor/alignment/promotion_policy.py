@@ -3,9 +3,8 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-from xic_extractor.alignment.cell_quality import CellQualityDecision
 from xic_extractor.alignment.identity_gates import (
     EXTREME_BACKFILL_REASON,
     WEAK_SEED_BACKFILL_REASON,
@@ -15,6 +14,9 @@ from xic_extractor.alignment.identity_gates import (
     is_dr_neutral_loss_tag,
 )
 from xic_extractor.alignment.matrix import AlignedCell
+
+if TYPE_CHECKING:
+    from xic_extractor.alignment.cell_quality import CellQualityDecision
 
 CELL_EVIDENCE_SUPPORTED_REASON = "cell_evidence_supported_backfill"
 DDA_LIMITED_MS2_SHAPE_REASON = "dda_limited_ms2_but_ms1_shape_supported"
@@ -28,12 +30,16 @@ BACKFILL_MS1_PATTERN_BLOCKED_REASON = "backfill_ms1_pattern_not_supportive"
 BACKFILL_MS1_PATTERN_CONFLICT_REASON = "backfill_ms1_pattern_conflict"
 BACKFILL_MS2_CONTEXT_BLOCKED_REASON = "backfill_ms2_context_not_supportive"
 BACKFILL_MS2_CONFLICT_REASON = "backfill_ms2_pattern_conflict"
+BACKFILL_HYPOTHESIS_BLOCKED_REASON = "backfill_wrong_peak_or_hypothesis_blocked"
 RESCUE_ONLY_BLOCKED_REASON = "rescue_only_blocked"
 HIGH_BACKFILL_CAPPED_FLAG = "high_backfill_dependency_capped"
 BACKFILL_CELL_EVIDENCE_REQUIRED_FLAG = "backfill_cell_evidence_required"
 BACKFILL_RESCUE_REVIEW_ONLY_FLAG = "backfill_rescue_review_only"
 PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON = (
     "primary_identity_retained_backfill_review_only"
+)
+ANCHOR_OWN_MAX_MS1_SUPPORT_REASON = (
+    "family_ms1_overlay_anchor_peak_own_max_shape_supported"
 )
 
 PromotionState = Literal["not_applicable", "supported", "blocked"]
@@ -75,11 +81,31 @@ _PREFERRED_RT_DELTA_SEC = 60.0
 _MAX_RT_DELTA_SEC = 180.0
 _SUPPORT_STATUSES = {"supportive", "partial_support"}
 _CONFLICT_STATUSES = {"conflict"}
+_HYPOTHESIS_BLOCKING_CLAIM_STATES = {
+    "duplicate_loser",
+    "review_only_duplicate_loser",
+}
+_HYPOTHESIS_BLOCKING_CONSOLIDATION_STATES = {
+    "primary_loser",
+    "consolidation_no_go",
+}
+_HYPOTHESIS_BLOCKING_MARKERS = (
+    "wrong_peak_conflict",
+    "wrong_peak",
+    "duplicate_loser",
+    "cross_mode_rescue_blocked",
+    "mode_split_required",
+    "consolidation_no_go",
+)
+_PRODUCT_AUTHORIZED_STATUS = "product_authorized"
+_PRODUCT_AUTHORIZED_SCOPE = "feature_family_sample"
 _MS1_PATTERN_LEVELS = {
     "sample_constellation",
     "sample_boundary_constellation",
     "trace_constellation",
 }
+_MS1_SAME_PEAK_LEVELS = frozenset({"trace_constellation"})
+_MS1_SAME_PEAK_SUPPORT_REASONS = frozenset({ANCHOR_OWN_MAX_MS1_SUPPORT_REASON})
 _QC_PATTERN_LEVELS = {
     "qc_consensus_with_local_qc_overlay",
     "qc_consensus_qc_overlay",
@@ -91,12 +117,11 @@ _DRIFT_LEVELS = {
     "family_consensus_aligned",
 }
 _MS2_PATTERN_LEVELS = {"sample_candidate_aligned", "sample_boundary_aligned"}
-_DDA_NON_DISPOSITIVE_STATUSES = {"not_dispositive"}
-_FAMILY_MS2_TAG_SUPPORT_STATUSES = {"observed_in_family"}
 _BACKFILL_CELL_ONLY_BLOCK_REASONS = frozenset(
     {
         BACKFILL_MS1_PATTERN_BLOCKED_REASON,
         BACKFILL_MS1_PATTERN_CONFLICT_REASON,
+        BACKFILL_HYPOTHESIS_BLOCKED_REASON,
         BACKFILL_MS2_CONTEXT_BLOCKED_REASON,
         BACKFILL_MS2_CONFLICT_REASON,
         BACKFILL_RT_EXPLANATION_BLOCKED_REASON,
@@ -127,8 +152,23 @@ class BackfillCellEvidence:
     region_review_reason: str = ""
     region_shadow_status: str = ""
     region_shadow_verdict: str = ""
+    group_hypothesis_id: str = ""
+    group_claim_state: str = ""
+    claim_winner_group_hypothesis_id: str = ""
+    claim_source_group_hypothesis_id: str = ""
+    consolidation_state: str = ""
+    consolidation_winner_group_hypothesis_id: str = ""
+    consolidation_source_group_hypothesis_id: str = ""
+    peak_hypothesis_status: str = ""
+    product_selection_blocker: str = ""
+    rt_mode_status: str = ""
     backfill_ms1_pattern_status: str = ""
     backfill_ms1_pattern_evidence_level: str = ""
+    backfill_ms1_product_authority_status: str = ""
+    backfill_ms1_product_authority_scope: str = ""
+    backfill_ms1_product_authority_source: str = ""
+    backfill_ms1_product_authority_reason: str = ""
+    backfill_ms1_product_authority_evidence_sha256: str = ""
     backfill_qc_reference_status: str = ""
     backfill_qc_reference_evidence_level: str = ""
     backfill_matrix_rt_drift_status: str = ""
@@ -137,6 +177,11 @@ class BackfillCellEvidence:
     backfill_drift_corrected_delta_sec: float | None = None
     backfill_candidate_ms2_pattern_status: str = ""
     backfill_candidate_ms2_evidence_level: str = ""
+    backfill_candidate_ms2_product_authority_status: str = ""
+    backfill_candidate_ms2_product_authority_scope: str = ""
+    backfill_candidate_ms2_product_authority_source: str = ""
+    backfill_candidate_ms2_product_authority_reason: str = ""
+    backfill_candidate_ms2_product_authority_evidence_sha256: str = ""
     backfill_ms2_trigger_scan_count: int | None = None
     backfill_strict_nl_scan_count: int | None = None
     backfill_ms2_trace_strength: str = ""
@@ -151,7 +196,10 @@ class BackfillCellEvidence:
         return (
             self.status == "rescued"
             and _positive(self.area)
-            and self.local_apex_supported
+            and (
+                self.local_apex_supported
+                or self.product_authorized_same_peak_supported
+            )
         )
 
     @property
@@ -168,13 +216,17 @@ class BackfillCellEvidence:
         )
 
     @property
-    def local_apex_supported(self) -> bool:
+    def selected_peak_geometry_supported(self) -> bool:
         if not self.has_complete_peak:
             return False
         assert self.apex_rt is not None
         assert self.peak_start_rt is not None
         assert self.peak_end_rt is not None
-        if not self.peak_start_rt <= self.apex_rt <= self.peak_end_rt:
+        return self.peak_start_rt <= self.apex_rt <= self.peak_end_rt
+
+    @property
+    def local_apex_supported(self) -> bool:
+        if not self.selected_peak_geometry_supported:
             return False
         return (
             self.rt_delta_sec is not None
@@ -252,6 +304,29 @@ class BackfillCellEvidence:
         )
 
     @property
+    def hypothesis_or_claim_blocked(self) -> bool:
+        if _normalize(self.group_claim_state) in _HYPOTHESIS_BLOCKING_CLAIM_STATES:
+            return True
+        if (
+            _normalize(self.consolidation_state)
+            in _HYPOTHESIS_BLOCKING_CONSOLIDATION_STATES
+        ):
+            return True
+        text = " ".join(
+            (
+                self.reason,
+                self.region_review_reason,
+                self.region_shadow_status,
+                self.region_shadow_verdict,
+                self.backfill_evidence_reason,
+                self.peak_hypothesis_status,
+                self.product_selection_blocker,
+                self.rt_mode_status,
+            ),
+        ).lower()
+        return any(marker in text for marker in _HYPOTHESIS_BLOCKING_MARKERS)
+
+    @property
     def additional_ms1_support(self) -> bool:
         return (
             self.scan_support
@@ -261,9 +336,9 @@ class BackfillCellEvidence:
 
     @property
     def rt_evidence_supported(self) -> bool:
-        if self.rt_delta_sec is not None and abs(self.rt_delta_sec) <= (
-            _PREFERRED_RT_DELTA_SEC
-        ):
+        if self.rt_delta_sec is None:
+            return False
+        if abs(self.rt_delta_sec) <= _PREFERRED_RT_DELTA_SEC:
             return True
         if _normalize(self.backfill_matrix_rt_drift_status) not in (
             _DRIFT_SUPPORT_STATUSES
@@ -274,25 +349,36 @@ class BackfillCellEvidence:
         if _normalize(self.backfill_drift_compatible_status) != "compatible":
             return False
         return (
-            self.backfill_drift_corrected_delta_sec is None
-            or abs(self.backfill_drift_corrected_delta_sec)
+            self.backfill_drift_corrected_delta_sec is not None
+            and abs(self.backfill_drift_corrected_delta_sec)
             <= _PREFERRED_RT_DELTA_SEC
         )
 
     @property
     def ms1_pattern_supported(self) -> bool:
-        return (
-            _status_level_supported(
-                self.backfill_ms1_pattern_status,
-                self.backfill_ms1_pattern_evidence_level,
-                _MS1_PATTERN_LEVELS,
-            )
-            or _status_level_supported(
-                self.backfill_qc_reference_status,
-                self.backfill_qc_reference_evidence_level,
-                _QC_PATTERN_LEVELS,
-            )
-        )
+        return self.same_peak_ms1_pattern_supported
+
+    @property
+    def same_peak_ms1_pattern_supported(self) -> bool:
+        if not _product_authority_present(
+            status=self.backfill_ms1_product_authority_status,
+            scope=self.backfill_ms1_product_authority_scope,
+            source=self.backfill_ms1_product_authority_source,
+        ):
+            return False
+        if not _status_level_supported(
+            self.backfill_ms1_pattern_status,
+            self.backfill_ms1_pattern_evidence_level,
+            _MS1_PATTERN_LEVELS,
+        ):
+            return False
+        if (
+            _normalize(self.backfill_ms1_pattern_evidence_level)
+            not in _MS1_SAME_PEAK_LEVELS
+        ):
+            return False
+        reason_tokens = _reason_tokens(self.backfill_evidence_reason)
+        return bool(reason_tokens & _MS1_SAME_PEAK_SUPPORT_REASONS)
 
     @property
     def ms1_pattern_conflict(self) -> bool:
@@ -303,20 +389,17 @@ class BackfillCellEvidence:
 
     @property
     def ms2_context_supported(self) -> bool:
-        if _status_level_supported(
+        if not _product_authority_present(
+            status=self.backfill_candidate_ms2_product_authority_status,
+            scope=self.backfill_candidate_ms2_product_authority_scope,
+            source=self.backfill_candidate_ms2_product_authority_source,
+        ):
+            return False
+        return _status_level_supported(
             self.backfill_candidate_ms2_pattern_status,
             self.backfill_candidate_ms2_evidence_level,
             _MS2_PATTERN_LEVELS,
-        ):
-            return True
-        if (
-            _normalize(self.backfill_dda_missing_nl_policy_status)
-            in _DDA_NON_DISPOSITIVE_STATUSES
-            and _normalize(self.backfill_family_ms2_required_tag_status)
-            in _FAMILY_MS2_TAG_SUPPORT_STATUSES
-        ):
-            return True
-        return False
+        )
 
     @property
     def ms2_context_conflict(self) -> bool:
@@ -326,25 +409,37 @@ class BackfillCellEvidence:
         )
 
     @property
+    def product_authorized_same_peak_supported(self) -> bool:
+        return (
+            self.selected_peak_geometry_supported
+            and (self.local_apex_supported or self.rt_evidence_supported)
+            and not self.ms1_pattern_conflict
+            and not self.hypothesis_or_claim_blocked
+            and self.same_peak_ms1_pattern_supported
+        )
+
+    @property
     def backfill_identity_block_reason(self) -> str:
-        if not self.local_apex_supported:
+        if not self.selected_peak_geometry_supported:
             return LOW_MS1_COVERAGE_BLOCKED_REASON
-        if not self.rt_evidence_supported:
-            return BACKFILL_RT_EXPLANATION_BLOCKED_REASON
         if self.ms1_pattern_conflict:
             return BACKFILL_MS1_PATTERN_CONFLICT_REASON
+        if self.hypothesis_or_claim_blocked:
+            return BACKFILL_HYPOTHESIS_BLOCKED_REASON
+        if self.product_authorized_same_peak_supported:
+            return ""
+        if not self.local_apex_supported:
+            return BACKFILL_RT_EXPLANATION_BLOCKED_REASON
+        if not self.rt_evidence_supported:
+            return BACKFILL_RT_EXPLANATION_BLOCKED_REASON
         if not self.ms1_pattern_supported:
             return BACKFILL_MS1_PATTERN_BLOCKED_REASON
-        if self.ms2_context_conflict:
-            return BACKFILL_MS2_CONFLICT_REASON
-        if not self.ms2_context_supported:
-            return BACKFILL_MS2_CONTEXT_BLOCKED_REASON
         return ""
 
     @property
     def supported_for_backfill(self) -> bool:
         return (
-            self.local_apex_supported
+            (self.local_apex_supported or self.product_authorized_same_peak_supported)
             and not self.high_neighbor_interference
             and not self.low_assessable_coverage
             and self.backfill_identity_block_reason == ""
@@ -421,6 +516,10 @@ def cell_evidence_from_aligned(
     return _cell_from_aligned(cell, quality)
 
 
+def cell_has_product_authorized_same_peak_backfill_support(cell: AlignedCell) -> bool:
+    return cell_evidence_from_aligned(cell, None).supported_for_backfill
+
+
 def evidence_from_tsv_rows(
     review_row: Mapping[str, str],
     cell_rows: Sequence[Mapping[str, str]],
@@ -463,7 +562,19 @@ def evidence_from_tsv_rows(
 def classify_backfill_promotion(
     evidence: BackfillPromotionEvidence,
 ) -> BackfillPromotionDecision:
-    if not _in_policy_scope(evidence):
+    rescued = tuple(cell for cell in evidence.cells if cell.is_rescued_quantifiable)
+    if evidence.q_rescue > 0 and any(
+        cell.hypothesis_or_claim_blocked for cell in rescued
+    ):
+        return BackfillPromotionDecision(
+            state="blocked",
+            reason=BACKFILL_HYPOTHESIS_BLOCKED_REASON,
+            confidence="review",
+            flags=("missing_independent_backfill_identity_evidence",),
+            assessed_rescue_count=len(rescued),
+        )
+    same_peak_override = _same_peak_policy_override(evidence)
+    if not _in_policy_scope(evidence) and not same_peak_override:
         return BackfillPromotionDecision(state="not_applicable")
     if evidence.q_detected <= 0 and evidence.q_rescue > 0:
         return BackfillPromotionDecision(
@@ -472,9 +583,9 @@ def classify_backfill_promotion(
             confidence="review",
             flags=("rescue_only",),
         )
-    if evidence.q_detected < 2:
+    if evidence.q_detected < 2 and not same_peak_override:
         return BackfillPromotionDecision(state="not_applicable")
-    if evidence.duplicate_count > evidence.q_detected:
+    if evidence.duplicate_count > evidence.q_detected and not same_peak_override:
         return BackfillPromotionDecision(
             state="blocked",
             reason="duplicate_claim_pressure",
@@ -482,7 +593,6 @@ def classify_backfill_promotion(
             flags=("duplicate_claim_pressure",),
         )
 
-    rescued = tuple(cell for cell in evidence.cells if cell.is_rescued_quantifiable)
     if evidence.q_rescue > 0 and len(rescued) < evidence.q_rescue:
         return BackfillPromotionDecision(
             state="blocked",
@@ -509,10 +619,7 @@ def classify_backfill_promotion(
             assessed_rescue_count=len(rescued),
         )
 
-    if any(
-        cell.low_assessable_coverage or not cell.local_apex_supported
-        for cell in rescued
-    ):
+    if any(cell.low_assessable_coverage for cell in rescued):
         return BackfillPromotionDecision(
             state="blocked",
             reason=LOW_MS1_COVERAGE_BLOCKED_REASON,
@@ -563,6 +670,30 @@ def _in_policy_scope(evidence: BackfillPromotionEvidence) -> bool:
     return evidence.backfill_dependency in _POLICY_BACKFILL_REASONS
 
 
+def _same_peak_policy_override(evidence: BackfillPromotionEvidence) -> bool:
+    if not (
+        evidence.q_detected == 1
+        or evidence.duplicate_count > evidence.q_detected
+    ):
+        return False
+    return _same_peak_backfill_support(evidence)
+
+
+def _same_peak_backfill_support(evidence: BackfillPromotionEvidence) -> bool:
+    if not is_dr_neutral_loss_tag(evidence.neutral_loss_tag):
+        return False
+    if evidence.primary_evidence not in _SUPPORTED_PRIMARY_EVIDENCE:
+        return False
+    if evidence.q_detected <= 0 or evidence.q_rescue <= 0:
+        return False
+    if evidence.ambiguous_count > 0:
+        return False
+    rescued = tuple(cell for cell in evidence.cells if cell.is_rescued_quantifiable)
+    if len(rescued) != evidence.q_rescue:
+        return False
+    return all(cell.supported_for_backfill for cell in rescued)
+
+
 def _dda_limited_support(evidence: BackfillPromotionEvidence) -> bool:
     if evidence.backfill_dependency == WEAK_SEED_BACKFILL_REASON:
         return True
@@ -573,10 +704,9 @@ def _dda_limited_support(evidence: BackfillPromotionEvidence) -> bool:
 def _backfill_identity_block_reason(cells: Sequence[BackfillCellEvidence]) -> str:
     for reason in (
         BACKFILL_MS1_PATTERN_CONFLICT_REASON,
-        BACKFILL_MS2_CONFLICT_REASON,
+        BACKFILL_HYPOTHESIS_BLOCKED_REASON,
         BACKFILL_RT_EXPLANATION_BLOCKED_REASON,
         BACKFILL_MS1_PATTERN_BLOCKED_REASON,
-        BACKFILL_MS2_CONTEXT_BLOCKED_REASON,
         LOW_MS1_COVERAGE_BLOCKED_REASON,
     ):
         if any(cell.backfill_identity_block_reason == reason for cell in cells):
@@ -607,9 +737,38 @@ def _cell_from_aligned(
         region_review_reason=cell.region_review_reason,
         region_shadow_status=cell.region_shadow_status,
         region_shadow_verdict=cell.region_shadow_verdict,
+        group_hypothesis_id=cell.group_hypothesis_id,
+        group_claim_state=cell.group_claim_state,
+        claim_winner_group_hypothesis_id=cell.claim_winner_group_hypothesis_id,
+        claim_source_group_hypothesis_id=cell.claim_source_group_hypothesis_id,
+        consolidation_state=cell.consolidation_state,
+        consolidation_winner_group_hypothesis_id=(
+            cell.consolidation_winner_group_hypothesis_id
+        ),
+        consolidation_source_group_hypothesis_id=(
+            cell.consolidation_source_group_hypothesis_id
+        ),
+        peak_hypothesis_status=cell.peak_hypothesis_status,
+        product_selection_blocker=cell.product_selection_blocker,
+        rt_mode_status=cell.rt_mode_status,
         backfill_ms1_pattern_status=cell.backfill_ms1_pattern_status,
         backfill_ms1_pattern_evidence_level=(
             cell.backfill_ms1_pattern_evidence_level
+        ),
+        backfill_ms1_product_authority_status=(
+            cell.backfill_ms1_product_authority_status
+        ),
+        backfill_ms1_product_authority_scope=(
+            cell.backfill_ms1_product_authority_scope
+        ),
+        backfill_ms1_product_authority_source=(
+            cell.backfill_ms1_product_authority_source
+        ),
+        backfill_ms1_product_authority_reason=(
+            cell.backfill_ms1_product_authority_reason
+        ),
+        backfill_ms1_product_authority_evidence_sha256=(
+            cell.backfill_ms1_product_authority_evidence_sha256
         ),
         backfill_qc_reference_status=cell.backfill_qc_reference_status,
         backfill_qc_reference_evidence_level=(
@@ -624,6 +783,21 @@ def _cell_from_aligned(
         ),
         backfill_candidate_ms2_evidence_level=(
             cell.backfill_candidate_ms2_evidence_level
+        ),
+        backfill_candidate_ms2_product_authority_status=(
+            cell.backfill_candidate_ms2_product_authority_status
+        ),
+        backfill_candidate_ms2_product_authority_scope=(
+            cell.backfill_candidate_ms2_product_authority_scope
+        ),
+        backfill_candidate_ms2_product_authority_source=(
+            cell.backfill_candidate_ms2_product_authority_source
+        ),
+        backfill_candidate_ms2_product_authority_reason=(
+            cell.backfill_candidate_ms2_product_authority_reason
+        ),
+        backfill_candidate_ms2_product_authority_evidence_sha256=(
+            cell.backfill_candidate_ms2_product_authority_evidence_sha256
         ),
         backfill_ms2_trigger_scan_count=cell.backfill_ms2_trigger_scan_count,
         backfill_strict_nl_scan_count=cell.backfill_strict_nl_scan_count,
@@ -658,9 +832,51 @@ def _cell_from_tsv(row: Mapping[str, str]) -> BackfillCellEvidence:
         region_review_reason=row.get("region_review_reason", ""),
         region_shadow_status=row.get("region_shadow_status", ""),
         region_shadow_verdict=row.get("region_shadow_verdict", ""),
+        group_hypothesis_id=row.get("group_hypothesis_id", ""),
+        group_claim_state=row.get("group_claim_state", ""),
+        claim_winner_group_hypothesis_id=row.get(
+            "claim_winner_group_hypothesis_id",
+            "",
+        ),
+        claim_source_group_hypothesis_id=row.get(
+            "claim_source_group_hypothesis_id",
+            "",
+        ),
+        consolidation_state=row.get("consolidation_state", ""),
+        consolidation_winner_group_hypothesis_id=row.get(
+            "consolidation_winner_group_hypothesis_id",
+            "",
+        ),
+        consolidation_source_group_hypothesis_id=row.get(
+            "consolidation_source_group_hypothesis_id",
+            "",
+        ),
+        peak_hypothesis_status=row.get("peak_hypothesis_status", ""),
+        product_selection_blocker=row.get("product_selection_blocker", ""),
+        rt_mode_status=row.get("rt_mode_status", ""),
         backfill_ms1_pattern_status=row.get("backfill_ms1_pattern_status", ""),
         backfill_ms1_pattern_evidence_level=row.get(
             "backfill_ms1_pattern_evidence_level",
+            "",
+        ),
+        backfill_ms1_product_authority_status=row.get(
+            "backfill_ms1_product_authority_status",
+            "",
+        ),
+        backfill_ms1_product_authority_scope=row.get(
+            "backfill_ms1_product_authority_scope",
+            "",
+        ),
+        backfill_ms1_product_authority_source=row.get(
+            "backfill_ms1_product_authority_source",
+            "",
+        ),
+        backfill_ms1_product_authority_reason=row.get(
+            "backfill_ms1_product_authority_reason",
+            "",
+        ),
+        backfill_ms1_product_authority_evidence_sha256=row.get(
+            "backfill_ms1_product_authority_evidence_sha256",
             "",
         ),
         backfill_qc_reference_status=row.get("backfill_qc_reference_status", ""),
@@ -686,6 +902,26 @@ def _cell_from_tsv(row: Mapping[str, str]) -> BackfillCellEvidence:
         ),
         backfill_candidate_ms2_evidence_level=row.get(
             "backfill_candidate_ms2_evidence_level",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_status=row.get(
+            "backfill_candidate_ms2_product_authority_status",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_scope=row.get(
+            "backfill_candidate_ms2_product_authority_scope",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_source=row.get(
+            "backfill_candidate_ms2_product_authority_source",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_reason=row.get(
+            "backfill_candidate_ms2_product_authority_reason",
+            "",
+        ),
+        backfill_candidate_ms2_product_authority_evidence_sha256=row.get(
+            "backfill_candidate_ms2_product_authority_evidence_sha256",
             "",
         ),
         backfill_ms2_trigger_scan_count=_int_optional(
@@ -720,6 +956,18 @@ def _status_level_supported(
     return _normalize(status) in _SUPPORT_STATUSES and _normalize(level) in (
         allowed_levels
     )
+
+
+def _product_authority_present(*, status: str, scope: str, source: str) -> bool:
+    return (
+        _normalize(status) == _PRODUCT_AUTHORIZED_STATUS
+        and _normalize(scope) == _PRODUCT_AUTHORIZED_SCOPE
+        and bool(_normalize(source))
+    )
+
+
+def _reason_tokens(value: str) -> set[str]:
+    return {_normalize(token) for token in value.split(";") if token.strip()}
 
 
 def _normalize(value: str) -> str:
