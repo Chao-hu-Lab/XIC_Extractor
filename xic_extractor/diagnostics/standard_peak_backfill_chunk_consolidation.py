@@ -178,31 +178,42 @@ def run_standard_peak_backfill_chunk_consolidation(
     published_alignment_output_dir: Path | None = None
     published_alignment_manifest_json: Path | None = None
     if emit_formal_product_output and not status_reasons:
-        formal_output_dir, formal_manifest_json = _emit_formal_product_output(
+        formal_target_dir = formal_product_output_dir or output_dir / (
+            "formal_product_output"
+        )
+        if _is_noop_formal_product_output(
             productization=productization,
             product_summary=product_summary,
-            output_dir=formal_product_output_dir
-            or output_dir / "formal_product_output",
-            source_alignment_matrix_tsv=alignment_matrix_tsv,
-            source_run_id=source_run_id,
-            coverage=coverage,
-        )
-        if publish_to_source_alignment_output:
-            (
-                published_alignment_output_dir,
-                published_alignment_manifest_json,
-            ) = _publish_formal_product_output_to_alignment_output(
-                formal_product_output_dir=formal_output_dir,
-                formal_product_manifest_json=formal_manifest_json,
-                publish_alignment_matrix_tsv=(
-                    publish_alignment_matrix_tsv or alignment_matrix_tsv
-                ),
-                publish_alignment_matrix_identity_tsv=(
-                    publish_alignment_matrix_identity_tsv
-                    or alignment_matrix_identity_tsv
-                ),
-                source_run_id=source_run_id,
+        ):
+            _clear_stale_formal_product_output(
+                output_dir=formal_target_dir,
+                source_alignment_matrix_tsv=alignment_matrix_tsv,
             )
+        else:
+            formal_output_dir, formal_manifest_json = _emit_formal_product_output(
+                productization=productization,
+                product_summary=product_summary,
+                output_dir=formal_target_dir,
+                source_alignment_matrix_tsv=alignment_matrix_tsv,
+                source_run_id=source_run_id,
+                coverage=coverage,
+            )
+            if publish_to_source_alignment_output:
+                (
+                    published_alignment_output_dir,
+                    published_alignment_manifest_json,
+                ) = _publish_formal_product_output_to_alignment_output(
+                    formal_product_output_dir=formal_output_dir,
+                    formal_product_manifest_json=formal_manifest_json,
+                    publish_alignment_matrix_tsv=(
+                        publish_alignment_matrix_tsv or alignment_matrix_tsv
+                    ),
+                    publish_alignment_matrix_identity_tsv=(
+                        publish_alignment_matrix_identity_tsv
+                        or alignment_matrix_identity_tsv
+                    ),
+                    source_run_id=source_run_id,
+                )
     elif emit_formal_product_output:
         blocked_formal_output_dir = (
             formal_product_output_dir or output_dir / "formal_product_output"
@@ -253,6 +264,18 @@ def run_standard_peak_backfill_chunk_consolidation(
         formal_product_manifest_json=formal_manifest_json,
         published_alignment_output_dir=published_alignment_output_dir,
         published_alignment_manifest_json=published_alignment_manifest_json,
+    )
+
+
+def _is_noop_formal_product_output(
+    *,
+    productization: StandardPeakBackfillProductizationOutputs,
+    product_summary: Mapping[str, object],
+) -> bool:
+    return (
+        productization.status == "pass"
+        and productization.activated_matrix_tsv is None
+        and text_value(product_summary.get("selected_activation_row_count")) == "0"
     )
 
 
