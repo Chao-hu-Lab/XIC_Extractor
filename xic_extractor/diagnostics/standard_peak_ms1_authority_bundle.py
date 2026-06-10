@@ -27,7 +27,12 @@ from xic_extractor.diagnostics.diagnostic_io import (
 )
 
 SCHEMA_VERSION = "standard_peak_ms1_authority_bundle_v0"
-DEFAULT_AUTHORITY_SOURCE = "manual_standard_peak_gate_calibration"
+AUTHORITY_MODE_MANUAL_ORACLE = "manual-oracle"
+AUTHORITY_MODE_MACHINE_GATE = "machine-gate"
+AUTHORITY_MODES = (AUTHORITY_MODE_MANUAL_ORACLE, AUTHORITY_MODE_MACHINE_GATE)
+DEFAULT_MANUAL_AUTHORITY_SOURCE = "manual_standard_peak_gate_calibration"
+DEFAULT_MACHINE_AUTHORITY_SOURCE = "machine_shift_aware_standard_peak_gate"
+DEFAULT_AUTHORITY_SOURCE = DEFAULT_MANUAL_AUTHORITY_SOURCE
 STANDARD_PEAK_SUPPORTED = "standard_peak_gate_supported"
 MANUAL_AUTHORIZED_CALL = "authorize_standard_peak_backfill"
 
@@ -94,11 +99,18 @@ def run_standard_peak_ms1_authority_bundle(
     standard_peak_gate_tsv: Path,
     overlay_batch_summary_tsv: Path,
     output_dir: Path,
-    authority_source: str = DEFAULT_AUTHORITY_SOURCE,
+    authority_source: str | None = None,
+    authority_mode: str = AUTHORITY_MODE_MANUAL_ORACLE,
     min_anchor_own_max_shape_similarity: float = (
         authority.DEFAULT_MIN_ANCHOR_OWN_MAX_SHAPE_SIMILARITY
     ),
 ) -> StandardPeakAuthorityBundleOutputs:
+    if authority_mode not in AUTHORITY_MODES:
+        allowed = ", ".join(AUTHORITY_MODES)
+        raise ValueError(f"authority_mode must be one of: {allowed}")
+    resolved_authority_source = authority_source or _default_authority_source(
+        authority_mode,
+    )
     gate_rows = read_tsv_required(standard_peak_gate_tsv, STANDARD_PEAK_GATE_COLUMNS)
     overlay_rows = read_tsv_required(overlay_batch_summary_tsv, OVERLAY_BATCH_COLUMNS)
     overlay_by_family = {
@@ -117,8 +129,11 @@ def run_standard_peak_ms1_authority_bundle(
         if not family_id:
             skipped["missing_family_id"] += 1
             continue
-        if not _gate_row_is_authorized_standard_peak(gate_row):
-            skipped["gate_not_manual_authorized_standard_peak"] += 1
+        if not _gate_row_is_authorized_standard_peak(
+            gate_row,
+            authority_mode=authority_mode,
+        ):
+            skipped[_gate_skip_reason(authority_mode)] += 1
             continue
         overlay_row = overlay_by_family.get(family_id)
         if overlay_row is None:
@@ -167,8 +182,11 @@ def run_standard_peak_ms1_authority_bundle(
                 _allowlist_row(
                     family_id=family_id,
                     sample_stem=sample_stem,
-                    authority_source=authority_source,
-                    authority_reason=_authority_reason(gate_row),
+                    authority_source=resolved_authority_source,
+                    authority_reason=_authority_reason(
+                        gate_row,
+                        authority_mode=authority_mode,
+                    ),
                     relative_trace_path=relative_trace_path,
                     trace_sha256=trace_sha256,
                     min_shape_similarity=min_anchor_own_max_shape_similarity,
@@ -212,6 +230,8 @@ def run_standard_peak_ms1_authority_bundle(
         "validation_label": "diagnostic_only",
         "product_behavior_changed": False,
         "matrix_contract_changed": False,
+        "authority_mode": authority_mode,
+        "authority_source": resolved_authority_source,
         "standard_peak_gate_tsv": str(standard_peak_gate_tsv),
         "standard_peak_gate_sha256": _sha256_file(standard_peak_gate_tsv),
         "overlay_batch_summary_tsv": str(overlay_batch_summary_tsv),
@@ -229,6 +249,7 @@ def run_standard_peak_ms1_authority_bundle(
             "rejected_row_count": len(audit_rows) - len(authorized_rows),
             "product_ready": False,
             "readiness_label": "standard_peak_product_authority_sidecar_candidate",
+            "authority_mode": authority_mode,
         },
     }
     summary_json.write_text(
@@ -244,12 +265,25 @@ def run_standard_peak_ms1_authority_bundle(
     )
 
 
-def _gate_row_is_authorized_standard_peak(row: Mapping[str, str]) -> bool:
+def _gate_row_is_authorized_standard_peak(
+    row: Mapping[str, str],
+    *,
+    authority_mode: str,
+) -> bool:
+    if text_value(row.get("standard_peak_gate_call")) != STANDARD_PEAK_SUPPORTED:
+        return False
+    if authority_mode == AUTHORITY_MODE_MACHINE_GATE:
+        return True
     return (
-        text_value(row.get("standard_peak_gate_call")) == STANDARD_PEAK_SUPPORTED
-        and text_value(row.get("manual_backfill_authority_call"))
+        text_value(row.get("manual_backfill_authority_call"))
         == MANUAL_AUTHORIZED_CALL
     )
+
+
+def _gate_skip_reason(authority_mode: str) -> str:
+    if authority_mode == AUTHORITY_MODE_MACHINE_GATE:
+        return "gate_not_machine_supported_standard_peak"
+    return "gate_not_manual_authorized_standard_peak"
 
 
 def _source_row(
@@ -486,13 +520,24 @@ def _allowlist_row(
     }
 
 
-def _authority_reason(row: Mapping[str, str]) -> str:
+def _authority_reason(row: Mapping[str, str], *, authority_mode: str) -> str:
+    authority_token = (
+        "machine_standard_peak_gate_authorized"
+        if authority_mode == AUTHORITY_MODE_MACHINE_GATE
+        else "manual_standard_peak_gate_authorized"
+    )
     parts = [
-        "manual_standard_peak_gate_authorized",
+        authority_token,
         text_value(row.get("calibration_outcome")),
         text_value(row.get("standard_peak_gate_reasons")),
     ]
     return ";".join(part for part in parts if part)
+
+
+def _default_authority_source(authority_mode: str) -> str:
+    if authority_mode == AUTHORITY_MODE_MACHINE_GATE:
+        return DEFAULT_MACHINE_AUTHORITY_SOURCE
+    return DEFAULT_MANUAL_AUTHORITY_SOURCE
 
 
 def _validate_trace_data(

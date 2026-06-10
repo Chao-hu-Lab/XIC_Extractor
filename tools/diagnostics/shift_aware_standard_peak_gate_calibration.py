@@ -1,4 +1,4 @@
-"""Evaluate a standard-peak gate against shift-aware manual labels."""
+"""Evaluate a standard-peak gate from a shift-aware calibration pack."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ def evaluate_standard_peak_gate(
 
 def _evaluate_row(row: Mapping[str, str]) -> dict[str, Any]:
     gate = _gate_call(row)
-    manual_positive = _manual_positive(row)
+    manual_label = _manual_label(row)
     machine_positive = gate["call"] == "standard_peak_gate_supported"
     return {
         "schema_version": SCHEMA_VERSION,
@@ -111,7 +111,7 @@ def _evaluate_row(row: Mapping[str, str]) -> dict[str, Any]:
         ),
         "calibration_outcome": _outcome(
             machine_positive=machine_positive,
-            manual_positive=manual_positive,
+            manual_label=manual_label,
         ),
         "min_shape_r_after_best_shift": text_value(
             row.get("min_shape_r_after_best_shift"),
@@ -146,15 +146,27 @@ def _gate_call(row: Mapping[str, str]) -> dict[str, tuple[str, ...] | str]:
     }
 
 
-def _manual_positive(row: Mapping[str, str]) -> bool:
-    return (
-        text_value(row.get("manual_standard_peak_call")) == "standard_peak"
-        and text_value(row.get("manual_backfill_authority_call"))
-        == "authorize_standard_peak_backfill"
-    )
+def _manual_label(row: Mapping[str, str]) -> str:
+    manual_peak_call = text_value(row.get("manual_standard_peak_call"))
+    manual_authority_call = text_value(row.get("manual_backfill_authority_call"))
+    if not manual_peak_call and not manual_authority_call:
+        return "unlabeled"
+    if (
+        manual_peak_call == "standard_peak"
+        and manual_authority_call == "authorize_standard_peak_backfill"
+    ):
+        return "positive"
+    return "negative"
 
 
-def _outcome(*, machine_positive: bool, manual_positive: bool) -> str:
+def _outcome(*, machine_positive: bool, manual_label: str) -> str:
+    if manual_label == "unlabeled":
+        return (
+            "unlabeled_machine_supported"
+            if machine_positive
+            else "unlabeled_machine_blocked"
+        )
+    manual_positive = manual_label == "positive"
     if machine_positive and manual_positive:
         return "true_positive"
     if machine_positive and not manual_positive:
@@ -175,8 +187,17 @@ def _summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     manual_positive_count = sum(
         1
         for row in rows
-        if text_value(row.get("manual_backfill_authority_call"))
-        == "authorize_standard_peak_backfill"
+        if _manual_label(row) == "positive"
+    )
+    manual_negative_count = sum(
+        1
+        for row in rows
+        if _manual_label(row) == "negative"
+    )
+    unlabeled_count = sum(
+        1
+        for row in rows
+        if _manual_label(row) == "unlabeled"
     )
     true_positive = outcomes.get("true_positive", 0)
     false_positive = outcomes.get("false_positive", 0)
@@ -188,13 +209,22 @@ def _summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "validation_label": "diagnostic_only",
         "row_count": len(rows),
         "manual_positive_count": manual_positive_count,
-        "manual_negative_count": len(rows) - manual_positive_count,
+        "manual_negative_count": manual_negative_count,
+        "unlabeled_count": unlabeled_count,
         "machine_positive_count": machine_positive_count,
         "machine_negative_count": len(rows) - machine_positive_count,
         "true_positive_count": true_positive,
         "true_negative_count": outcomes.get("true_negative", 0),
         "false_positive_count": false_positive,
         "false_negative_count": false_negative,
+        "unlabeled_machine_supported_count": outcomes.get(
+            "unlabeled_machine_supported",
+            0,
+        ),
+        "unlabeled_machine_blocked_count": outcomes.get(
+            "unlabeled_machine_blocked",
+            0,
+        ),
         "precision": precision,
         "recall": recall,
         "outcome_counts": dict(sorted(outcomes.items())),
@@ -216,7 +246,16 @@ def _safe_ratio(numerator: int, denominator: int) -> float | None:
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manual-pack-tsv", type=Path, required=True)
+    parser.add_argument(
+        "--manual-pack-tsv",
+        type=Path,
+        required=True,
+        help=(
+            "Historical flag name for shift_aware_backfill_calibration_pack.tsv. "
+            "Rows may be manual calibration oracle rows or unlabeled "
+            "machine-gate candidates."
+        ),
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     return parser.parse_args(argv)
 

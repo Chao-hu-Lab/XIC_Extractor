@@ -19,6 +19,7 @@ from xic_extractor.diagnostics.diagnostic_io import (
 )
 
 SCHEMA_VERSION = "shift_aware_backfill_calibration_pack_v0"
+DEFAULT_STANDARD_PEAK_MIN_SHAPE_R = 0.95
 
 PACK_COLUMNS = (
     "schema_version",
@@ -60,6 +61,13 @@ _SHIFT_SUMMARY_REQUIRED_COLUMNS = (
     "max_shape_r_after_best_shift",
     "max_abs_shift_sec",
 )
+_SHIFT_SOURCE_FAMILY_REQUIRED_COLUMNS = (
+    "feature_family_id",
+    "source_family",
+    "is_reference",
+    "shift_to_reference_sec",
+    "shape_similarity_to_reference_after_group_shift",
+)
 _RECONCILIATION_GROUP_REQUIRED_COLUMNS = (
     "feature_family_id",
     "product_behavior_state",
@@ -84,16 +92,38 @@ _OVERLAY_SUMMARY_REQUIRED_COLUMNS = (
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
-        rows = build_calibration_rows(
-            shift_aware_summary_tsv=args.shift_aware_summary_tsv,
-            reconciliation_groups_tsv=args.reconciliation_groups_tsv,
-            overlay_batch_summary_tsv=args.overlay_batch_summary_tsv,
-            shift_aware_output_dir=args.shift_aware_output_dir,
-            reconciliation_gallery_html=args.reconciliation_gallery_html,
-            min_shape_r=args.min_shape_r,
-            include_all=args.include_all,
-        )
+        shift_rows = None
+        if args.shift_aware_summary_dir is not None:
+            shift_rows = collect_shift_aware_family_summary_rows(
+                sorted(
+                    args.shift_aware_summary_dir.glob(args.shift_aware_summary_pattern),
+                ),
+            )
+        if shift_rows is None:
+            rows = build_calibration_rows(
+                shift_aware_summary_tsv=args.shift_aware_summary_tsv,
+                reconciliation_groups_tsv=args.reconciliation_groups_tsv,
+                overlay_batch_summary_tsv=args.overlay_batch_summary_tsv,
+                shift_aware_output_dir=args.shift_aware_output_dir,
+                reconciliation_gallery_html=args.reconciliation_gallery_html,
+                min_shape_r=args.min_shape_r,
+                include_all=args.include_all,
+            )
+        else:
+            rows = build_calibration_rows_from_shift_rows(
+                shift_rows=shift_rows,
+                reconciliation_groups_tsv=args.reconciliation_groups_tsv,
+                overlay_batch_summary_tsv=args.overlay_batch_summary_tsv,
+                shift_aware_output_dir=args.shift_aware_output_dir,
+                reconciliation_gallery_html=args.reconciliation_gallery_html,
+                min_shape_r=args.min_shape_r,
+                include_all=args.include_all,
+            )
         args.output_dir.mkdir(parents=True, exist_ok=True)
+        summary_path = None
+        if shift_rows is not None:
+            summary_path = args.output_dir / "shift_aware_family_best_shift_summary.tsv"
+            write_tsv(summary_path, shift_rows, _SHIFT_SUMMARY_REQUIRED_COLUMNS)
         tsv_path = args.output_dir / "shift_aware_backfill_calibration_pack.tsv"
         html_path = args.output_dir / "shift_aware_backfill_calibration_pack.html"
         write_tsv(tsv_path, rows, PACK_COLUMNS)
@@ -103,6 +133,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     print(f"shift-aware calibration pack TSV: {tsv_path}")
     print(f"shift-aware calibration pack HTML: {html_path}")
+    if summary_path is not None:
+        print(f"shift-aware family summary TSV: {summary_path}")
     return 0
 
 
@@ -113,13 +145,34 @@ def build_calibration_rows(
     overlay_batch_summary_tsv: Path,
     shift_aware_output_dir: Path,
     reconciliation_gallery_html: Path | None = None,
-    min_shape_r: float = 0.98,
+    min_shape_r: float = DEFAULT_STANDARD_PEAK_MIN_SHAPE_R,
     include_all: bool = False,
 ) -> list[dict[str, str]]:
     shift_rows = read_tsv_required(
         shift_aware_summary_tsv,
         _SHIFT_SUMMARY_REQUIRED_COLUMNS,
     )
+    return build_calibration_rows_from_shift_rows(
+        shift_rows=shift_rows,
+        reconciliation_groups_tsv=reconciliation_groups_tsv,
+        overlay_batch_summary_tsv=overlay_batch_summary_tsv,
+        shift_aware_output_dir=shift_aware_output_dir,
+        reconciliation_gallery_html=reconciliation_gallery_html,
+        min_shape_r=min_shape_r,
+        include_all=include_all,
+    )
+
+
+def build_calibration_rows_from_shift_rows(
+    *,
+    shift_rows: Sequence[Mapping[str, str]],
+    reconciliation_groups_tsv: Path,
+    overlay_batch_summary_tsv: Path,
+    shift_aware_output_dir: Path,
+    reconciliation_gallery_html: Path | None = None,
+    min_shape_r: float = DEFAULT_STANDARD_PEAK_MIN_SHAPE_R,
+    include_all: bool = False,
+) -> list[dict[str, str]]:
     group_rows = read_tsv_required(
         reconciliation_groups_tsv,
         _RECONCILIATION_GROUP_REQUIRED_COLUMNS,
@@ -133,14 +186,16 @@ def build_calibration_rows(
     overlays_by_family = _first_by_family(overlay_rows)
     selected: list[dict[str, str]] = []
     for row in shift_rows:
-        min_r = optional_float(row.get("min_shape_r_after_best_shift"))
-        if min_r is None:
-            continue
-        if not include_all and min_r < min_shape_r:
-            continue
         family = text_value(row.get("feature_family_id"))
         group_row = groups_by_family.get(family, {})
         overlay_row = overlays_by_family.get(family, {})
+        shift_supported = _shift_aware_min_supported(row, min_shape_r=min_shape_r)
+        overlay_supported = _overlay_reference_supported(
+            overlay_row,
+            min_shape_r=min_shape_r,
+        )
+        if not include_all and not (shift_supported or overlay_supported):
+            continue
         selected.append(
             _calibration_row(
                 shift_row=row,
@@ -163,6 +218,60 @@ def build_calibration_rows(
     return selected
 
 
+def collect_shift_aware_family_summary_rows(
+    source_family_summary_paths: Sequence[Path],
+) -> list[dict[str, str]]:
+    by_family: dict[str, list[Mapping[str, str]]] = {}
+    for path in source_family_summary_paths:
+        for row in read_tsv_required(path, _SHIFT_SOURCE_FAMILY_REQUIRED_COLUMNS):
+            family = text_value(row.get("feature_family_id"))
+            if family:
+                by_family.setdefault(family, []).append(row)
+
+    summaries: list[dict[str, str]] = []
+    for family, rows in sorted(by_family.items()):
+        nonref_rows = [
+            row
+            for row in rows
+            if text_value(row.get("is_reference")).upper() != "TRUE"
+        ]
+        shape_values = tuple(
+            value
+            for value in (
+                optional_float(
+                    row.get("shape_similarity_to_reference_after_group_shift"),
+                )
+                for row in nonref_rows
+            )
+            if value is not None
+        )
+        if not nonref_rows or not shape_values:
+            continue
+        shift_values = tuple(
+            abs(value)
+            for value in (
+                optional_float(row.get("shift_to_reference_sec"))
+                for row in nonref_rows
+            )
+            if value is not None
+        )
+        summaries.append(
+            {
+                "feature_family_id": family,
+                "nonref_source_families": ";".join(
+                    text_value(row.get("source_family")) for row in nonref_rows
+                ),
+                "nonref_group_count": str(len(nonref_rows)),
+                "min_shape_r_after_best_shift": f"{min(shape_values):.4f}",
+                "max_shape_r_after_best_shift": f"{max(shape_values):.4f}",
+                "max_abs_shift_sec": (
+                    f"{max(shift_values):.2f}" if shift_values else ""
+                ),
+            },
+        )
+    return summaries
+
+
 def _calibration_row(
     *,
     shift_row: Mapping[str, str],
@@ -175,10 +284,10 @@ def _calibration_row(
 ) -> dict[str, str]:
     family = text_value(shift_row.get("feature_family_id"))
     min_r_text = text_value(shift_row.get("min_shape_r_after_best_shift"))
-    min_r = optional_float(min_r_text)
     machine_call = (
         "shift_aware_same_pattern_support_review_only"
-        if min_r is not None and min_r >= min_shape_r
+        if _shift_aware_min_supported(shift_row, min_shape_r=min_shape_r)
+        or _overlay_reference_supported(overlay_row, min_shape_r=min_shape_r)
         else "shift_aware_same_pattern_review_required"
     )
     return {
@@ -230,6 +339,44 @@ def _calibration_row(
             str(reconciliation_gallery_html) if reconciliation_gallery_html else ""
         ),
     }
+
+
+def _shift_aware_min_supported(
+    row: Mapping[str, str],
+    *,
+    min_shape_r: float,
+) -> bool:
+    min_r = optional_float(row.get("min_shape_r_after_best_shift"))
+    return min_r is not None and min_r >= min_shape_r
+
+
+def _overlay_reference_supported(
+    row: Mapping[str, str],
+    *,
+    min_shape_r: float,
+) -> bool:
+    if text_value(row.get("status")) != "success":
+        return False
+    if text_value(row.get("family_verdict")) != "ms1_shape_supports_family_backfill":
+        return False
+    shape_fraction = optional_float(row.get("shape_supported_fraction"))
+    if shape_fraction is None or shape_fraction < min_shape_r:
+        return False
+    if _positive_int(row.get("detected_count")) <= 0:
+        return False
+    if _positive_int(row.get("rescued_count")) <= 0:
+        return False
+    if _positive_int(row.get("global_apex_interference_count")) != 0:
+        return False
+    return True
+
+
+def _positive_int(value: object) -> int:
+    try:
+        parsed = int(float(text_value(value)))
+    except ValueError:
+        return -1
+    return parsed if parsed >= 0 else -1
 
 
 def _first_by_family(rows: Sequence[Mapping[str, str]]) -> dict[str, Mapping[str, str]]:
@@ -594,13 +741,31 @@ def _attr(value: object) -> str:
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--shift-aware-summary-tsv", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--shift-aware-summary-tsv", type=Path)
+    source.add_argument(
+        "--shift-aware-summary-dir",
+        type=Path,
+        help=(
+            "Directory containing *_source_family_best_shift_summary.tsv files; "
+            "the tool will aggregate them into a per-family summary."
+        ),
+    )
+    parser.add_argument(
+        "--shift-aware-summary-pattern",
+        default="*_source_family_best_shift_summary.tsv",
+        help="Glob pattern used with --shift-aware-summary-dir.",
+    )
     parser.add_argument("--reconciliation-groups-tsv", type=Path, required=True)
     parser.add_argument("--overlay-batch-summary-tsv", type=Path, required=True)
     parser.add_argument("--shift-aware-output-dir", type=Path, required=True)
     parser.add_argument("--reconciliation-gallery-html", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--min-shape-r", type=float, default=0.98)
+    parser.add_argument(
+        "--min-shape-r",
+        type=float,
+        default=DEFAULT_STANDARD_PEAK_MIN_SHAPE_R,
+    )
     parser.add_argument(
         "--include-all",
         action="store_true",
