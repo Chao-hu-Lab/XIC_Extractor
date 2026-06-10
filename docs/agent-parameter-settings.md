@@ -239,6 +239,40 @@ with `--start-rank` / `--limit` when needed. The batch renderer reuses completed
 PNG/trace bundles and extracts RAW traces in sample-batched mode, so each chunk
 opens each sample RAW at most once instead of reopening RAW per family.
 
+For DNA dR production-style runs, prefer the preset surface instead of manually
+stitching the retained gate, machine pipeline, chunk consolidation, and final
+matrix publication:
+
+```powershell
+.venv\Scripts\python.exe -m scripts.run_alignment `
+  --preset dna_dr `
+  --discovery-batch-index <current-spec-discovery-batch-index.csv> `
+  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
+  --dll-dir C:\Xcalibur\system\programs `
+  --output-dir <task-specific-output-dir> `
+  --expected-sample-count 85 `
+  --output-level validation-minimal `
+  --backfill-scope production-equivalent `
+  --audit-evidence-mode none `
+  --performance-profile validation-fast `
+  --raw-workers 11 `
+  --owner-backfill-window-strategy super-window `
+  --owner-backfill-superwindow-span-factor 2 `
+  --timing-output <task-specific-output-dir>\timing.json `
+  --timing-live-output <task-specific-output-dir>\timing.live.json
+```
+
+`--preset dna_dr` loads `xic_extractor.presets.data\dna_dr.toml`. Its alignment
+section enables the standard-peak backfill publication runner after the base
+alignment finishes. The preset forces the lightweight seed audit and uses
+`alignment_backfill_cell_evidence.tsv` on `validation-minimal`; non-minimal
+output levels additionally emit `alignment_cells.tsv` because the publication
+runner still needs a cell-level evidence source. When standard-peak candidates
+pass the machine gate and consolidation, the runner publishes the accepted values
+back into the same `alignment_matrix.tsv` and writes a summary JSON, publication
+manifest, and optional review gallery under the alignment output directory.
+Non-standard peaks remain outside this preset's automatic publication policy.
+
 Before starting 85RAW, verify the batch index actually contains 85 samples. Do
 not reuse the historical 8RAW index by path similarity. Prefer the CLI preflight
 guard because it uses the same discovery-batch parser, checks candidate CSV

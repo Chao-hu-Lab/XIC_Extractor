@@ -1,0 +1,15 @@
+name = "DNA dR"
+description = "CID neutral-loss discovery, 2'-deoxyribose (116.0474 Da)"
+combine_mode = "single"
+
+[[tag]]
+strategy = "neutral_loss"
+name = "DNA_dR"
+value = 116.0474
+
+[discovery]
+
+[alignment]
+standard_peak_backfill = true
+standard_peak_backfill_chunk_size = 120
+standard_peak_backfill_write_gallery = true

@@ -7,6 +7,7 @@ import os
 import pstats
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from xic_extractor.alignment.backfill_scope import read_family_allowlist_tsv
@@ -21,6 +22,8 @@ from xic_extractor.alignment.process_backend import AlignmentProcessExecutionErr
 from xic_extractor.alignment.raw_sources import existing_raw_paths
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.diagnostics.timing import TimingRecorder
+from xic_extractor.presets import PresetError, apply_to_alignment, load_preset
+from xic_extractor.presets.models import Preset
 from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.settings_schema import (
     ARBITRATED_RESOLVER_RETIRED_MESSAGE,
@@ -41,6 +44,14 @@ _PERFORMANCE_PROFILES = {
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
+    try:
+        preset, preset_alignment_config, preset_runtime_options = _resolve_preset(args)
+    except PresetError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    standard_peak_backfill_enabled = bool(
+        preset_runtime_options.get("standard_peak_backfill", False),
+    )
     if (args.sample_info is None) != (args.targeted_istd_workbook is None):
         print(
             (
@@ -199,6 +210,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if timing_recorder is not None
         else {}
     )
+    standard_peak_outputs = None
     try:
         drift_lookup = (
             read_targeted_istd_drift_evidence(
@@ -214,7 +226,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "raw_dir": raw_dir,
             "dll_dir": dll_dir,
             "output_dir": output_dir,
-            "alignment_config": AlignmentConfig(
+            "alignment_config": replace(
+                preset_alignment_config,
                 owner_backfill_min_detected_samples=(
                     args.owner_backfill_min_detected_samples
                 ),
@@ -228,11 +241,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 baseline_integration_method=_baseline_integration_method(args),
             ),
             "output_level": args.output_level,
-            "emit_alignment_cells": args.emit_alignment_cells,
+            "emit_alignment_cells": (
+                args.emit_alignment_cells
+                or _standard_peak_backfill_requires_full_cells(
+                    standard_peak_backfill_enabled=standard_peak_backfill_enabled,
+                    output_level=args.output_level,
+                )
+            ),
             "emit_alignment_status_matrix": args.emit_alignment_status_matrix,
             "emit_alignment_integration_audit": args.emit_alignment_integration_audit,
             "emit_alignment_backfill_seed_audit": (
                 args.emit_alignment_backfill_seed_audit
+                or standard_peak_backfill_enabled
             ),
             "emit_alignment_backfill_candidate_audit": (
                 args.emit_alignment_backfill_candidate_audit
@@ -268,6 +288,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                 outputs = run_alignment(**run_kwargs)
             else:
                 outputs = profiler.runcall(run_alignment, **run_kwargs)
+            if standard_peak_backfill_enabled:
+                standard_peak_outputs = run_standard_peak_backfill_preset(
+                    alignment_dir=output_dir,
+                    raw_dir=raw_dir,
+                    dll_dir=dll_dir,
+                    source_run_id=_preset_source_run_id(preset),
+                    chunk_size=int(
+                        preset_runtime_options[
+                            "standard_peak_backfill_chunk_size"
+                        ],
+                    ),
+                    reuse_existing=bool(
+                        preset_runtime_options[
+                            "standard_peak_backfill_reuse_existing"
+                        ],
+                    ),
+                    write_gallery=bool(
+                        preset_runtime_options[
+                            "standard_peak_backfill_write_gallery"
+                        ],
+                    ),
+                    min_shape_r=float(
+                        preset_runtime_options[
+                            "standard_peak_backfill_min_shape_r"
+                        ],
+                    ),
+                )
         finally:
             if profiler is not None:
                 _write_cprofile_outputs(
@@ -320,6 +367,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             "Identity coherence diagnostic: "
             f"{outputs.identity_coherence_output_dir}"
         )
+    if standard_peak_outputs is not None:
+        print(
+            "Standard-peak backfill preset summary JSON: "
+            f"{standard_peak_outputs.summary_json}"
+        )
+        published_manifest = getattr(
+            standard_peak_outputs,
+            "published_alignment_manifest_json",
+            None,
+        )
+        if published_manifest is not None:
+            print(
+                "Standard-peak backfill publication manifest: "
+                f"{published_manifest}"
+            )
+        gallery_html = getattr(standard_peak_outputs, "gallery_html", None)
+        if gallery_html is not None:
+            print(f"Standard-peak backfill gallery HTML: {gallery_html}")
     if timing_recorder is not None:
         if args.timing_live_output is not None:
             print(f"Timing live JSON: {args.timing_live_output.resolve()}")
@@ -357,6 +422,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=Path,
         default=Path("output") / "alignment",
         help="Output directory for alignment_review.tsv and alignment_matrix.tsv.",
+    )
+    parser.add_argument(
+        "--preset",
+        help=(
+            "Built-in preset name or TOML path. Alignment presets may enable "
+            "post-alignment standard-peak backfill publication."
+        ),
     )
     parser.add_argument(
         "--timing-output",
@@ -734,6 +806,41 @@ def _validate_expected_85raw_contract(args: argparse.Namespace) -> None:
     if failures:
         joined = "\n- ".join(failures)
         raise ValueError(f"85RAW canonical launch contract failed:\n- {joined}")
+
+
+def _resolve_preset(
+    args: argparse.Namespace,
+) -> tuple[Preset | None, AlignmentConfig, dict[str, object]]:
+    if args.preset is None:
+        return None, AlignmentConfig(), {"standard_peak_backfill": False}
+    preset = load_preset(args.preset)
+    alignment_config, runtime_options = apply_to_alignment(preset)
+    return preset, alignment_config, runtime_options
+
+
+def _preset_source_run_id(preset: Preset | None) -> str:
+    if preset is None:
+        return "alignment-preset:standard-peak-backfill"
+    safe_source = preset.source.replace("\\", "/")
+    return f"alignment-preset:{safe_source}:standard-peak-backfill"
+
+
+def _standard_peak_backfill_requires_full_cells(
+    *,
+    standard_peak_backfill_enabled: bool,
+    output_level: str,
+) -> bool:
+    if not standard_peak_backfill_enabled:
+        return False
+    return output_level != "validation-minimal"
+
+
+def run_standard_peak_backfill_preset(**kwargs):
+    from tools.diagnostics.standard_peak_backfill_preset import (
+        run_standard_peak_backfill_preset as runner,
+    )
+
+    return runner(**kwargs)
 
 
 def _expect_arg(
