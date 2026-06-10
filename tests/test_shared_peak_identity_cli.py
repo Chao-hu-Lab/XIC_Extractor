@@ -1636,6 +1636,7 @@ def _write_candidate_ms2(path: Path) -> None:
             "matched_neutral_loss_count",
             "apex_ms2_delta_sec",
             "ms2_alignment_source",
+            "diagnostic_only",
         ),
         [
             {
@@ -1648,6 +1649,7 @@ def _write_candidate_ms2(path: Path) -> None:
                 "matched_neutral_loss_count": "1",
                 "apex_ms2_delta_sec": "3.0",
                 "ms2_alignment_source": "unit_test_sidecar",
+                "diagnostic_only": "TRUE",
             }
         ],
     )
