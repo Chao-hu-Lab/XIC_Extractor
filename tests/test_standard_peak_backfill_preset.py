@@ -277,7 +277,19 @@ def test_standard_peak_backfill_preset_reuses_completed_chunk_summaries(
         / "standard_peak_backfill_machine_pipeline_summary.json"
     )
     completed_summary.parent.mkdir(parents=True)
-    completed_summary.write_text('{"status": "pass"}', encoding="utf-8")
+    completed_summary.write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "publication_mode": "deep-audit",
+                "start_rank": 1,
+                "effective_overlay_limit": 2,
+                "min_shape_r": 0.95,
+                "source_run_id": "standard-peak-backfill-r1-2",
+            },
+        ),
+        encoding="utf-8",
+    )
     machine_calls: list[dict[str, object]] = []
     consolidation_calls: list[dict[str, object]] = []
 
@@ -345,6 +357,164 @@ def test_standard_peak_backfill_preset_reuses_completed_chunk_summaries(
         / "r3_3"
         / "standard_peak_backfill_machine_pipeline_summary.json",
     )
+
+
+def test_standard_peak_backfill_preset_reruns_failed_reuse_summary(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_artifacts(tmp_path)
+    raw_dir = tmp_path / "raws"
+    dll_dir = tmp_path / "dll"
+    output_dir = tmp_path / "preset"
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    failed_summary = (
+        output_dir
+        / "chunks"
+        / "r1_2"
+        / "standard_peak_backfill_machine_pipeline_summary.json"
+    )
+    failed_summary.parent.mkdir(parents=True)
+    failed_summary.write_text(
+        json.dumps(
+            {
+                "status": "fail",
+                "publication_mode": "deep-audit",
+                "start_rank": 1,
+                "effective_overlay_limit": 2,
+                "min_shape_r": 0.95,
+                "source_run_id": "preset:test-r1-2",
+            },
+        ),
+        encoding="utf-8",
+    )
+    machine_calls: list[dict[str, object]] = []
+    consolidation_calls: list[dict[str, object]] = []
+
+    def fake_gate(**_kwargs):
+        gate_dir = output_dir / "retained_backfill_evidence_gate"
+        gate_dir.mkdir(parents=True, exist_ok=True)
+        gate_tsv = gate_dir / "retained_backfill_evidence_gate.tsv"
+        queue = gate_dir / "review_overlay_queue.tsv"
+        gate_tsv.write_text("feature_family_id\n", encoding="utf-8")
+        queue.write_text("feature_family_id\nFAM1\nFAM2\nFAM3\n", encoding="utf-8")
+        missing = gate_dir / "missing_overlay_queue.tsv"
+        missing.write_text("feature_family_id\n", encoding="utf-8")
+        return RetainedBackfillGateOutputs(
+            tsv=gate_tsv,
+            json=gate_dir / "retained_backfill_evidence_gate.json",
+            missing_overlay_queue_tsv=missing,
+            review_overlay_queue_tsv=queue,
+        )
+
+    def fake_machine(**kwargs):
+        machine_calls.append(dict(kwargs))
+        summary_path = Path(kwargs["output_dir"]) / (
+            "standard_peak_backfill_machine_pipeline_summary.json"
+        )
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(
+            json.dumps(
+                {
+                    "status": "pass",
+                    "publication_mode": kwargs["publication_mode"],
+                    "start_rank": kwargs["start_rank"],
+                    "effective_overlay_limit": kwargs["limit"],
+                    "min_shape_r": kwargs["min_shape_r"],
+                    "source_run_id": kwargs["source_run_id"],
+                },
+            ),
+            encoding="utf-8",
+        )
+        return summary_path
+
+    def fake_consolidation(**kwargs):
+        consolidation_calls.append(dict(kwargs))
+        output = Path(kwargs["output_dir"])
+        output.mkdir(parents=True, exist_ok=True)
+        summary_json = output / "summary.json"
+        summary_json.write_text('{"status": "pass"}', encoding="utf-8")
+        return StandardPeakChunkConsolidationOutputs(
+            summary_tsv=output / "summary.tsv",
+            summary_json=summary_json,
+            status="pass",
+            merged_shadow_projection_cells_tsv=output / "shadow.tsv",
+            productization=SimpleNamespace(reconciliation_gallery_html=None),
+        )
+
+    monkeypatch.setattr(
+        standard_peak_backfill_preset,
+        "run_retained_backfill_evidence_gate",
+        fake_gate,
+    )
+
+    standard_peak_backfill_preset.run_standard_peak_backfill_preset(
+        alignment_dir=alignment_dir,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=output_dir,
+        source_run_id="preset:test",
+        chunk_size=2,
+        reuse_existing=True,
+        machine_pipeline_runner=fake_machine,
+        consolidation_runner=fake_consolidation,
+    )
+
+    assert [call["start_rank"] for call in machine_calls] == [1, 3]
+    assert consolidation_calls[0]["machine_pipeline_summary_jsons"] == (
+        output_dir
+        / "chunks"
+        / "r1_2"
+        / "standard_peak_backfill_machine_pipeline_summary.json",
+        output_dir
+        / "chunks"
+        / "r3_3"
+        / "standard_peak_backfill_machine_pipeline_summary.json",
+    )
+
+
+def test_standard_peak_backfill_preset_reuse_summary_requires_matching_provenance(
+    tmp_path: Path,
+) -> None:
+    summary_json = tmp_path / "summary.json"
+    reusable_summary = {
+        "status": "pass",
+        "publication_mode": "deep-audit",
+        "start_rank": 1,
+        "effective_overlay_limit": 2,
+        "min_shape_r": 0.95,
+        "source_run_id": "preset:test-r1-2",
+    }
+    summary_json.write_text(json.dumps(reusable_summary), encoding="utf-8")
+    assert standard_peak_backfill_preset._can_reuse_chunk_summary(
+        summary_json,
+        publication_mode="deep-audit",
+        start_rank=1,
+        limit=2,
+        source_run_id="preset:test-r1-2",
+        min_shape_r=0.95,
+    )
+
+    for field, value in (
+        ("status", "fail"),
+        ("publication_mode", "matrix-only"),
+        ("start_rank", 2),
+        ("effective_overlay_limit", 1),
+        ("source_run_id", "other-run-r1-2"),
+        ("min_shape_r", 0.9),
+    ):
+        stale_summary = dict(reusable_summary)
+        stale_summary[field] = value
+        summary_json.write_text(json.dumps(stale_summary), encoding="utf-8")
+        assert not standard_peak_backfill_preset._can_reuse_chunk_summary(
+            summary_json,
+            publication_mode="deep-audit",
+            start_rank=1,
+            limit=2,
+            source_run_id="preset:test-r1-2",
+            min_shape_r=0.95,
+        )
 
 
 def _write_alignment_artifacts(tmp_path: Path) -> Path:

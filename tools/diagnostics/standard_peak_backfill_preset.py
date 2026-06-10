@@ -138,7 +138,14 @@ def run_standard_peak_backfill_preset(
         if (
             reuse_existing
             and existing_summary_path.is_file()
-            and _can_reuse_chunk_summary(existing_summary_path, publication_mode)
+            and _can_reuse_chunk_summary(
+                existing_summary_path,
+                publication_mode=publication_mode,
+                start_rank=start_rank,
+                limit=limit,
+                source_run_id=f"{source_run_id}-r{start_rank}-{end_rank}",
+                min_shape_r=min_shape_r,
+            )
         ):
             chunk_summary_jsons.append(existing_summary_path)
             continue
@@ -381,9 +388,43 @@ def _resolve_publication_mode(
     return publication_mode
 
 
-def _can_reuse_chunk_summary(path: Path, publication_mode: str) -> bool:
+def _can_reuse_chunk_summary(
+    path: Path,
+    *,
+    publication_mode: str,
+    start_rank: int,
+    limit: int,
+    source_run_id: str,
+    min_shape_r: float,
+) -> bool:
     summary = _load_json_mapping(path)
+    if text_value(summary.get("status")) != "pass":
+        return False
     existing_mode = text_value(summary.get("publication_mode"))
-    if not existing_mode:
-        return publication_mode == "deep-audit"
-    return existing_mode == publication_mode
+    if existing_mode != publication_mode:
+        return False
+    if _int_value(summary.get("start_rank")) != start_rank:
+        return False
+    if _int_value(summary.get("effective_overlay_limit")) != limit:
+        return False
+    if text_value(summary.get("source_run_id")) != source_run_id:
+        return False
+    existing_min_shape_r = _float_value(summary.get("min_shape_r"))
+    return (
+        existing_min_shape_r is not None
+        and abs(existing_min_shape_r - min_shape_r) <= 1e-12
+    )
+
+
+def _int_value(value: object) -> int | None:
+    try:
+        return int(text_value(value))
+    except ValueError:
+        return None
+
+
+def _float_value(value: object) -> float | None:
+    try:
+        return float(text_value(value))
+    except ValueError:
+        return None
