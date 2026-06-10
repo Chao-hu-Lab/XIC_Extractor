@@ -1,0 +1,240 @@
+from __future__ import annotations
+
+import math
+from collections.abc import Mapping
+from typing import cast
+
+from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.discovery.models import DiscoverySettings, NeutralLossProfile
+from xic_extractor.presets.loader import DISCOVERY_TUNING_OVERRIDE_KEYS
+from xic_extractor.presets.models import Preset, PresetError
+from xic_extractor.settings_schema import RESOLVER_MODES
+
+_POSITIVE_FLOAT_FIELDS = frozenset(
+    {
+        "nl_tolerance_ppm",
+        "precursor_mz_tolerance_ppm",
+        "product_mz_tolerance_ppm",
+        "product_search_ppm",
+        "nl_min_intensity_ratio",
+        "seed_rt_gap_min",
+        "ms1_search_padding_min",
+    }
+)
+_RT_FIELDS = frozenset({"rt_min", "rt_max"})
+
+
+def apply_to_discovery(
+    preset: Preset,
+    *,
+    explicit_tuning_overrides: Mapping[str, object] | None = None,
+) -> DiscoverySettings:
+    neutral_loss_profiles = tuple(
+        NeutralLossProfile(tag=tag.name, neutral_loss_da=tag.value)
+        for tag in preset.tags
+    )
+    baseline = DiscoverySettings(
+        neutral_loss_profiles=neutral_loss_profiles,
+        selected_tag_names=tuple(tag.name for tag in preset.tags),
+        tag_combine_mode=preset.combine_mode,
+    )
+
+    tuning = dict(preset.discovery_overrides)
+    if explicit_tuning_overrides is not None:
+        _reject_unknown_explicit_tuning(explicit_tuning_overrides)
+        tuning.update(explicit_tuning_overrides)
+
+    _validate_discovery_tuning(tuning, baseline=baseline)
+    return DiscoverySettings(
+        neutral_loss_profiles=neutral_loss_profiles,
+        selected_tag_names=baseline.selected_tag_names,
+        tag_combine_mode=baseline.tag_combine_mode,
+        nl_tolerance_ppm=_float_setting(
+            tuning,
+            "nl_tolerance_ppm",
+            baseline.nl_tolerance_ppm,
+        ),
+        precursor_mz_tolerance_ppm=_float_setting(
+            tuning,
+            "precursor_mz_tolerance_ppm",
+            baseline.precursor_mz_tolerance_ppm,
+        ),
+        product_mz_tolerance_ppm=_float_setting(
+            tuning,
+            "product_mz_tolerance_ppm",
+            baseline.product_mz_tolerance_ppm,
+        ),
+        product_search_ppm=_float_setting(
+            tuning,
+            "product_search_ppm",
+            baseline.product_search_ppm,
+        ),
+        nl_min_intensity_ratio=_float_setting(
+            tuning,
+            "nl_min_intensity_ratio",
+            baseline.nl_min_intensity_ratio,
+        ),
+        seed_rt_gap_min=_float_setting(
+            tuning,
+            "seed_rt_gap_min",
+            baseline.seed_rt_gap_min,
+        ),
+        ms1_search_padding_min=_float_setting(
+            tuning,
+            "ms1_search_padding_min",
+            baseline.ms1_search_padding_min,
+        ),
+        rt_min=_float_setting(tuning, "rt_min", baseline.rt_min),
+        rt_max=_float_setting(tuning, "rt_max", baseline.rt_max),
+        resolver_mode=_str_setting(tuning, "resolver_mode", baseline.resolver_mode),
+    )
+
+
+def apply_to_alignment(preset: Preset) -> tuple[AlignmentConfig, dict[str, object]]:
+    overrides = dict(preset.alignment_overrides)
+    standard_peak = _bool_setting(overrides, "standard_peak_backfill", False)
+    chunk_size = _positive_int_setting(
+        overrides,
+        "standard_peak_backfill_chunk_size",
+        120,
+    )
+    write_gallery = _bool_setting(
+        overrides,
+        "standard_peak_backfill_write_gallery",
+        True,
+    )
+    reuse_existing = _bool_setting(
+        overrides,
+        "standard_peak_backfill_reuse_existing",
+        False,
+    )
+    min_shape_r = _range_float_setting(
+        overrides,
+        "standard_peak_backfill_min_shape_r",
+        0.95,
+        minimum=0.0,
+        maximum=1.0,
+    )
+    if not standard_peak:
+        return AlignmentConfig(), {"standard_peak_backfill": False}
+
+    return AlignmentConfig(), {
+        "standard_peak_backfill": True,
+        "standard_peak_backfill_chunk_size": chunk_size,
+        "standard_peak_backfill_write_gallery": write_gallery,
+        "standard_peak_backfill_reuse_existing": reuse_existing,
+        "standard_peak_backfill_min_shape_r": min_shape_r,
+    }
+
+
+def _reject_unknown_explicit_tuning(overrides: Mapping[str, object]) -> None:
+    unknown = sorted(set(overrides) - DISCOVERY_TUNING_OVERRIDE_KEYS)
+    if unknown:
+        raise PresetError(f"unknown explicit discovery tuning override: {unknown[0]}")
+
+
+def _float_setting(
+    tuning: Mapping[str, object],
+    field: str,
+    default: float,
+) -> float:
+    value = tuning.get(field, default)
+    return float(cast(int | float, value))
+
+
+def _str_setting(
+    tuning: Mapping[str, object],
+    field: str,
+    default: str,
+) -> str:
+    return cast(str, tuning.get(field, default))
+
+
+def _bool_setting(
+    overrides: Mapping[str, object],
+    field: str,
+    default: bool,
+) -> bool:
+    value = overrides.get(field, default)
+    if type(value) is not bool:
+        raise PresetError(f"{field} must be true or false")
+    return value
+
+
+def _positive_int_setting(
+    overrides: Mapping[str, object],
+    field: str,
+    default: int,
+) -> int:
+    value = overrides.get(field, default)
+    if type(value) is not int or value < 1:
+        raise PresetError(f"{field} must be an integer >= 1")
+    return value
+
+
+def _range_float_setting(
+    overrides: Mapping[str, object],
+    field: str,
+    default: float,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
+    value = overrides.get(field, default)
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(value)
+        or not minimum <= float(value) <= maximum
+    ):
+        raise PresetError(
+            f"{field} must be a finite number between {minimum} and {maximum}",
+        )
+    return float(value)
+
+
+def _validate_discovery_tuning(
+    tuning: Mapping[str, object],
+    *,
+    baseline: DiscoverySettings,
+) -> None:
+    unknown = sorted(set(tuning) - DISCOVERY_TUNING_OVERRIDE_KEYS)
+    if unknown:
+        raise PresetError(f"unknown discovery tuning override: {unknown[0]}")
+
+    for field in sorted(_POSITIVE_FLOAT_FIELDS):
+        if field in tuning and not _is_positive_float(tuning[field]):
+            raise PresetError(f"{field} must be finite and positive")
+
+    for field in sorted(_RT_FIELDS):
+        if field in tuning and not _is_rt_bound(tuning[field]):
+            raise PresetError(f"{field} must be finite and >= 0")
+
+    if "resolver_mode" in tuning:
+        resolver_mode = tuning["resolver_mode"]
+        if not isinstance(resolver_mode, str) or resolver_mode not in RESOLVER_MODES:
+            modes = ", ".join(RESOLVER_MODES)
+            raise PresetError(f"resolver_mode must be one of: {modes}")
+
+    rt_min = _float_setting(tuning, "rt_min", baseline.rt_min)
+    rt_max = _float_setting(tuning, "rt_max", baseline.rt_max)
+    if rt_min > rt_max:
+        raise PresetError("rt_min must be <= rt_max")
+
+
+def _is_positive_float(value: object) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int | float)
+        and math.isfinite(value)
+        and value > 0
+    )
+
+
+def _is_rt_bound(value: object) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int | float)
+        and math.isfinite(value)
+        and value >= 0
+    )
