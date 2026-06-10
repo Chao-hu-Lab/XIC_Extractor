@@ -137,7 +137,10 @@ def test_validation_minimal_outputs_keep_gate_artifacts_without_debug_surfaces(
     assert outputs.matrix_tsv == tmp_path / "alignment_matrix.tsv"
     assert outputs.matrix_identity_tsv == tmp_path / "alignment_matrix_identity.tsv"
     assert outputs.review_tsv == tmp_path / "alignment_review.tsv"
-    assert outputs.cells_tsv == tmp_path / "alignment_cells.tsv"
+    assert outputs.backfill_cell_evidence_tsv == (
+        tmp_path / "alignment_backfill_cell_evidence.tsv"
+    )
+    assert outputs.cells_tsv is None
     assert outputs.workbook is None
     assert outputs.review_html is None
     assert outputs.edge_evidence_tsv is None
@@ -170,6 +173,7 @@ def test_pipeline_debug_flags_write_optional_outputs(
         emit_alignment_cells=True,
         emit_alignment_integration_audit=True,
         emit_alignment_backfill_seed_audit=True,
+        emit_alignment_backfill_candidate_audit=True,
         emit_alignment_status_matrix=True,
         raw_opener=FakeRawOpener(),
     )
@@ -183,6 +187,10 @@ def test_pipeline_debug_flags_write_optional_outputs(
         outputs.backfill_seed_audit_tsv
         == tmp_path / "out" / "alignment_owner_backfill_seed_audit.tsv"
     )
+    assert (
+        outputs.backfill_candidate_audit_tsv
+        == tmp_path / "out" / "alignment_owner_backfill_candidate_audit.tsv"
+    )
     assert outputs.status_matrix_tsv == tmp_path / "out" / "alignment_matrix_status.tsv"
     assert (
         outputs.matrix_identity_tsv
@@ -192,7 +200,81 @@ def test_pipeline_debug_flags_write_optional_outputs(
     assert outputs.matrix_identity_tsv.exists()
     assert outputs.integration_audit_tsv.exists()
     assert outputs.backfill_seed_audit_tsv.exists()
+    assert outputs.backfill_candidate_audit_tsv.exists()
     assert outputs.status_matrix_tsv.exists()
+
+
+def _status_matrix_sample_columns(
+    status_matrix_tsv: Path,
+    sample_set: set[str],
+) -> list[str]:
+    header = status_matrix_tsv.read_text(encoding="utf-8").splitlines()[0]
+    return [column for column in header.split("\t") if column in sample_set]
+
+
+def test_pipeline_orders_sample_columns_by_injection_order(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    samples = ("Sample_C", "Sample_A", "Sample_X", "Sample_B")
+    batch_index = _write_batch(tmp_path, samples)
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    for stem in samples:
+        (raw_dir / f"{stem}.raw").write_text("raw", encoding="utf-8")
+    injection_csv = tmp_path / "instrument_qc_injection_order.csv"
+    injection_csv.write_text(
+        "Sample_Name,Injection_Order\nSample_A,1\nSample_B,2\nSample_C,3\n",
+        encoding="utf-8",
+    )
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    outputs = pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        emit_alignment_status_matrix=True,
+        sample_column_injection_order=injection_csv,
+        raw_opener=FakeRawOpener(),
+    )
+
+    # earliest->latest injected first; unlisted Sample_X kept at the end.
+    assert _status_matrix_sample_columns(
+        outputs.status_matrix_tsv,
+        set(samples),
+    ) == ["Sample_A", "Sample_B", "Sample_C", "Sample_X"]
+
+
+def test_pipeline_keeps_input_sample_order_without_injection_source(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    samples = ("Sample_C", "Sample_A", "Sample_B")
+    batch_index = _write_batch(tmp_path, samples)
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    for stem in samples:
+        (raw_dir / f"{stem}.raw").write_text("raw", encoding="utf-8")
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    outputs = pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        emit_alignment_status_matrix=True,
+        raw_opener=FakeRawOpener(),
+    )
+
+    assert _status_matrix_sample_columns(
+        outputs.status_matrix_tsv,
+        set(samples),
+    ) == ["Sample_C", "Sample_A", "Sample_B"]
 
 
 def test_pipeline_writes_run_metadata_sidecar_for_p7_scoped_runs(
@@ -410,6 +492,72 @@ def test_pipeline_backfill_seed_sidecar_does_not_force_alignment_cells_or_region
     assert outputs.cells_tsv is None
     assert outputs.backfill_seed_audit_tsv is not None
     assert outputs.backfill_seed_audit_tsv.exists()
+    assert outputs.backfill_candidate_audit_tsv is None
+    assert calls["emit_region_audit"] is False
+
+
+def test_pipeline_backfill_candidate_audit_requires_own_flag(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    calls = {}
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        lambda candidates, **kwargs: SimpleNamespace(
+            owners=("owner",),
+            assignments=(),
+            ambiguous_records=(),
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (
+            "feature",
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+
+    def fake_owner_backfill(features, **kwargs):
+        calls["emit_region_audit"] = kwargs["emit_region_audit"]
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        fake_owner_backfill,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
+
+    outputs = pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        emit_alignment_backfill_candidate_audit=True,
+        raw_opener=FakeRawOpener(),
+    )
+
+    assert outputs.cells_tsv is None
+    assert outputs.backfill_seed_audit_tsv is None
+    assert outputs.backfill_candidate_audit_tsv is not None
+    assert outputs.backfill_candidate_audit_tsv.exists()
     assert calls["emit_region_audit"] is False
 
 
@@ -472,8 +620,10 @@ def test_run_alignment_output_level_does_not_emit_integration_audit_by_default(
     names = sorted(path.name for path in (tmp_path / "out").iterdir())
     assert "alignment_cell_integration_audit.tsv" not in names
     assert "alignment_owner_backfill_seed_audit.tsv" not in names
+    assert "alignment_owner_backfill_candidate_audit.tsv" not in names
     assert outputs.integration_audit_tsv is None
     assert outputs.backfill_seed_audit_tsv is None
+    assert outputs.backfill_candidate_audit_tsv is None
 
 
 def test_run_alignment_validation_minimal_writes_machine_gate_surface_only(
@@ -488,7 +638,7 @@ def test_run_alignment_validation_minimal_writes_machine_gate_surface_only(
 
     names = sorted(path.name for path in (tmp_path / "out").iterdir())
     assert names == [
-        "alignment_cells.tsv",
+        "alignment_backfill_cell_evidence.tsv",
         "alignment_matrix.tsv",
         "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
@@ -499,7 +649,10 @@ def test_run_alignment_validation_minimal_writes_machine_gate_surface_only(
         == tmp_path / "out" / "alignment_matrix_identity.tsv"
     )
     assert outputs.review_tsv == tmp_path / "out" / "alignment_review.tsv"
-    assert outputs.cells_tsv == tmp_path / "out" / "alignment_cells.tsv"
+    assert outputs.backfill_cell_evidence_tsv == (
+        tmp_path / "out" / "alignment_backfill_cell_evidence.tsv"
+    )
+    assert outputs.cells_tsv is None
     assert outputs.workbook is None
     assert outputs.review_html is None
     assert outputs.edge_evidence_tsv is None

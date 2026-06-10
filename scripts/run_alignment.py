@@ -7,6 +7,7 @@ import os
 import pstats
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from xic_extractor.alignment.backfill_scope import read_family_allowlist_tsv
@@ -21,6 +22,8 @@ from xic_extractor.alignment.process_backend import AlignmentProcessExecutionErr
 from xic_extractor.alignment.raw_sources import existing_raw_paths
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.diagnostics.timing import TimingRecorder
+from xic_extractor.presets import PresetError, apply_to_alignment, load_preset
+from xic_extractor.presets.models import Preset
 from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.settings_schema import (
     ARBITRATED_RESOLVER_RETIRED_MESSAGE,
@@ -41,6 +44,14 @@ _PERFORMANCE_PROFILES = {
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
+    try:
+        preset, preset_alignment_config, preset_runtime_options = _resolve_preset(args)
+    except PresetError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    standard_peak_backfill_enabled = bool(
+        preset_runtime_options.get("standard_peak_backfill", False),
+    )
     if (args.sample_info is None) != (args.targeted_istd_workbook is None):
         print(
             (
@@ -147,6 +158,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         sample_info = None
         targeted_istd_workbook = None
+    sample_column_injection_order = (
+        args.sample_column_injection_order.resolve()
+        if args.sample_column_injection_order is not None
+        else None
+    )
+    if (
+        sample_column_injection_order is not None
+        and not sample_column_injection_order.is_file()
+    ):
+        print(
+            f"{sample_column_injection_order}: sample-column injection-order file "
+            "does not exist",
+            file=sys.stderr,
+        )
+        return 2
     try:
         selected_family_ids, selected_family_source = _resolve_selected_families(args)
     except (OSError, ValueError) as exc:
@@ -184,6 +210,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if timing_recorder is not None
         else {}
     )
+    standard_peak_outputs = None
     try:
         drift_lookup = (
             read_targeted_istd_drift_evidence(
@@ -199,7 +226,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "raw_dir": raw_dir,
             "dll_dir": dll_dir,
             "output_dir": output_dir,
-            "alignment_config": AlignmentConfig(
+            "alignment_config": replace(
+                preset_alignment_config,
                 owner_backfill_min_detected_samples=(
                     args.owner_backfill_min_detected_samples
                 ),
@@ -213,11 +241,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 baseline_integration_method=_baseline_integration_method(args),
             ),
             "output_level": args.output_level,
-            "emit_alignment_cells": args.emit_alignment_cells,
+            "emit_alignment_cells": (
+                args.emit_alignment_cells
+                or _standard_peak_backfill_requires_full_cells(
+                    standard_peak_backfill_enabled=standard_peak_backfill_enabled,
+                    output_level=args.output_level,
+                )
+            ),
             "emit_alignment_status_matrix": args.emit_alignment_status_matrix,
             "emit_alignment_integration_audit": args.emit_alignment_integration_audit,
             "emit_alignment_backfill_seed_audit": (
                 args.emit_alignment_backfill_seed_audit
+                or standard_peak_backfill_enabled
+            ),
+            "emit_alignment_backfill_candidate_audit": (
+                args.emit_alignment_backfill_candidate_audit
             ),
             "raw_workers": raw_workers,
             "raw_xic_batch_size": raw_xic_batch_size,
@@ -237,6 +275,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 identity_coherence_controls_manifest
             ),
             "drift_lookup": drift_lookup,
+            "sample_column_injection_order": sample_column_injection_order,
             "backfill_scope": args.backfill_scope,
             "audit_evidence_mode": args.audit_evidence_mode,
             "selected_family_ids": selected_family_ids,
@@ -249,6 +288,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                 outputs = run_alignment(**run_kwargs)
             else:
                 outputs = profiler.runcall(run_alignment, **run_kwargs)
+            if standard_peak_backfill_enabled:
+                standard_peak_outputs = run_standard_peak_backfill_preset(
+                    alignment_dir=output_dir,
+                    raw_dir=raw_dir,
+                    dll_dir=dll_dir,
+                    source_run_id=_preset_source_run_id(preset),
+                    chunk_size=int(
+                        preset_runtime_options[
+                            "standard_peak_backfill_chunk_size"
+                        ],
+                    ),
+                    reuse_existing=bool(
+                        preset_runtime_options[
+                            "standard_peak_backfill_reuse_existing"
+                        ],
+                    ),
+                    write_gallery=bool(
+                        preset_runtime_options[
+                            "standard_peak_backfill_write_gallery"
+                        ],
+                    ),
+                    min_shape_r=float(
+                        preset_runtime_options[
+                            "standard_peak_backfill_min_shape_r"
+                        ],
+                    ),
+                )
         finally:
             if profiler is not None:
                 _write_cprofile_outputs(
@@ -279,6 +345,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Alignment integration audit TSV: {outputs.integration_audit_tsv}")
     if outputs.backfill_seed_audit_tsv is not None:
         print(f"Alignment backfill seed audit TSV: {outputs.backfill_seed_audit_tsv}")
+    if outputs.backfill_candidate_audit_tsv is not None:
+        print(
+            "Alignment backfill candidate audit TSV: "
+            f"{outputs.backfill_candidate_audit_tsv}"
+        )
     if outputs.status_matrix_tsv is not None:
         print(f"Alignment status matrix TSV: {outputs.status_matrix_tsv}")
     if outputs.event_to_owner_tsv is not None:
@@ -296,6 +367,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             "Identity coherence diagnostic: "
             f"{outputs.identity_coherence_output_dir}"
         )
+    if standard_peak_outputs is not None:
+        print(
+            "Standard-peak backfill preset summary JSON: "
+            f"{standard_peak_outputs.summary_json}"
+        )
+        published_manifest = getattr(
+            standard_peak_outputs,
+            "published_alignment_manifest_json",
+            None,
+        )
+        if published_manifest is not None:
+            print(
+                "Standard-peak backfill publication manifest: "
+                f"{published_manifest}"
+            )
+        gallery_html = getattr(standard_peak_outputs, "gallery_html", None)
+        if gallery_html is not None:
+            print(f"Standard-peak backfill gallery HTML: {gallery_html}")
     if timing_recorder is not None:
         if args.timing_live_output is not None:
             print(f"Timing live JSON: {args.timing_live_output.resolve()}")
@@ -333,6 +422,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=Path,
         default=Path("output") / "alignment",
         help="Output directory for alignment_review.tsv and alignment_matrix.tsv.",
+    )
+    parser.add_argument(
+        "--preset",
+        help=(
+            "Built-in preset name or TOML path. Alignment presets may enable "
+            "post-alignment standard-peak backfill publication."
+        ),
     )
     parser.add_argument(
         "--timing-output",
@@ -541,6 +637,17 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--sample-column-injection-order",
+        type=Path,
+        help=(
+            "CSV/XLSX with Sample_Name,Injection_Order columns (e.g. the "
+            "instrument_qc_injection_order.csv derived from the method .docx). "
+            "When given, final matrix sample columns are ordered earliest- to "
+            "latest-injected; samples not listed keep their order at the end. "
+            "Reorders columns only; values are unchanged."
+        ),
+    )
+    parser.add_argument(
         "--resolver-mode",
         type=_resolver_mode,
         default="region_first_safe_merge",
@@ -571,7 +678,23 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--baseline-integration-method",
         help="Alignment integration-audit baseline method. Only asls is supported.",
     )
-    parser.add_argument("--emit-alignment-backfill-seed-audit", action="store_true")
+    parser.add_argument(
+        "--emit-alignment-backfill-seed-audit",
+        action="store_true",
+        help=(
+            "Emit lightweight owner-backfill seed provenance needed by retained "
+            "backfill evidence gates and seed-specific overlay galleries."
+        ),
+    )
+    parser.add_argument(
+        "--emit-alignment-backfill-candidate-audit",
+        action="store_true",
+        help=(
+            "Emit the exhaustive owner-backfill all-candidate audit sidecar. "
+            "This is a deep-debug output and is not required for normal "
+            "backfill gallery overlay generation."
+        ),
+    )
     parser.add_argument("--emit-alignment-status-matrix", action="store_true")
     return parser.parse_args(argv)
 
@@ -683,6 +806,41 @@ def _validate_expected_85raw_contract(args: argparse.Namespace) -> None:
     if failures:
         joined = "\n- ".join(failures)
         raise ValueError(f"85RAW canonical launch contract failed:\n- {joined}")
+
+
+def _resolve_preset(
+    args: argparse.Namespace,
+) -> tuple[Preset | None, AlignmentConfig, dict[str, object]]:
+    if args.preset is None:
+        return None, AlignmentConfig(), {"standard_peak_backfill": False}
+    preset = load_preset(args.preset)
+    alignment_config, runtime_options = apply_to_alignment(preset)
+    return preset, alignment_config, runtime_options
+
+
+def _preset_source_run_id(preset: Preset | None) -> str:
+    if preset is None:
+        return "alignment-preset:standard-peak-backfill"
+    safe_source = preset.source.replace("\\", "/")
+    return f"alignment-preset:{safe_source}:standard-peak-backfill"
+
+
+def _standard_peak_backfill_requires_full_cells(
+    *,
+    standard_peak_backfill_enabled: bool,
+    output_level: str,
+) -> bool:
+    if not standard_peak_backfill_enabled:
+        return False
+    return output_level != "validation-minimal"
+
+
+def run_standard_peak_backfill_preset(**kwargs):
+    from tools.diagnostics.standard_peak_backfill_preset import (
+        run_standard_peak_backfill_preset as runner,
+    )
+
+    return runner(**kwargs)
 
 
 def _expect_arg(

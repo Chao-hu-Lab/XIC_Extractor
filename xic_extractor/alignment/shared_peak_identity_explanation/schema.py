@@ -384,7 +384,23 @@ ACTIVATION_APPLICATION_SUMMARY_COLUMNS = (
     "summary_reason",
 )
 
-ACTIVATION_VALUE_DELTA_SCHEMA_VERSION = "shared_peak_identity_activation_value_delta_v1"
+ACTIVATION_VALUE_INPUT_SCHEMA_VERSION = "shared_peak_identity_activation_value_input_v1"
+
+ACTIVATION_VALUE_INPUT_COLUMNS = (
+    "peak_hypothesis_id",
+    "feature_family_id",
+    "sample_stem",
+    "projected_matrix_value",
+    "projected_matrix_value_source",
+    "current_raw_status",
+    "current_production_status",
+    "source_artifact_schema_version",
+    "source_artifact_sha256",
+    "source_row_sha256",
+    "source_provenance_detail",
+)
+
+ACTIVATION_VALUE_DELTA_SCHEMA_VERSION = "shared_peak_identity_activation_value_delta_v3"
 
 ACTIVATION_VALUE_DELTA_COLUMNS = (
     "activation_value_delta_schema_version",
@@ -398,6 +414,13 @@ ACTIVATION_VALUE_DELTA_COLUMNS = (
     "contract_rule_id",
     "original_matrix_value",
     "activated_matrix_value",
+    "matrix_value_kind",
+    "matrix_value_source",
+    "matrix_value_source_field",
+    "matrix_value_source_detail",
+    "matrix_value_source_artifact_schema_version",
+    "matrix_value_source_artifact_sha256",
+    "matrix_value_source_row_sha256",
     "source_cell_status",
     "source_cell_area",
     "matrix_value_effect",
@@ -1192,22 +1215,35 @@ ALLOWED_BY_FIELD: dict[str, frozenset[str]] = {
         }
     ),
     "activation_mode": frozenset({"sidecar_to_product_label_contract"}),
-    "activation_decision_scope": frozenset({"manual_oracle_seed_rows"}),
+    "activation_decision_scope": frozenset(
+        {
+            "manual_oracle_seed_rows",
+            "backfill_peakhypothesis_promotion_rows",
+            "machine_gate_standard_peak_rows",
+        }
+    ),
     "blast_radius_current": frozenset({"TRUE", "FALSE"}),
     "assessed_rows_basis": frozenset(
         {
             "activation_decision_rows_fallback",
+            "backfill_peakhypothesis_promotion_cells",
             "blast_radius_summary:all_available_85raw:assessed_row_count",
         }
     ),
     "product_affecting_rows_basis": frozenset({"activation_decision_rows"}),
     "must_not_regress_status": frozenset({"not_assessed", "pass", "fail"}),
     "must_not_regress_basis": frozenset(
-        {"manual_status_flag", "activation_must_not_regress_tsv"}
+        {
+            "manual_status_flag",
+            "activation_must_not_regress_tsv",
+            "machine_shift_aware_standard_peak_gate",
+        }
     ),
     "acceptance_status": frozenset({"pass", "fail"}),
     "application_status": frozenset({"applied"}),
-    "activation_output_mode": frozenset({"activated-copy", "formal"}),
+    "activation_output_mode": frozenset(
+        {"activated-copy", "formal", "matrix-only"}
+    ),
     "matrix_row_identity": frozenset(
         {"feature_family_id", "peak_hypothesis_id", "mz_rt_sample_columns"}
     ),

@@ -2,6 +2,7 @@ import csv
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from tools.diagnostics import family_ms1_overlay_batch as batch
 from tools.diagnostics import family_ms1_overlay_plot as overlay_plot
@@ -180,6 +181,168 @@ def test_batch_uses_backfill_seed_mz_when_seed_queue_provides_it(
     assert rows[0]["status"] == "success"
     assert calls[0]["mz"] == 301.123
     assert calls[0]["ppm"] == 20.0
+
+
+def test_batch_no_pdf_skips_pdf_output_contract(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    output_dir = tmp_path / "out"
+    alignment_cells.write_text("feature_family_id\nFAM_NO_PDF\n", encoding="utf-8")
+    _write_queue(queue_tsv, [_queue_row("FAM_NO_PDF")])
+    writer_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "load_family_cells",
+        lambda _alignment_cells, family_id: [family_id],
+    )
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "extract_family_trace_rows",
+        lambda **_kwargs: ["trace-row"],
+    )
+
+    def fake_write_family_ms1_overlay_outputs(**kwargs):
+        writer_calls.append(dict(kwargs))
+        prefix = kwargs["output_prefix"]
+        for suffix in (
+            ".png",
+            "_hypothesis.png",
+            "_trace_summary.tsv",
+            "_trace_data.json",
+        ):
+            (output_dir / f"{prefix}{suffix}").write_text("ok", encoding="utf-8")
+        return overlay_plot.FamilyMs1OverlayOutputs(
+            png_path=output_dir / f"{prefix}.png",
+            pdf_path=None,
+            summary_tsv=output_dir / f"{prefix}_trace_summary.tsv",
+            trace_data_json=output_dir / f"{prefix}_trace_data.json",
+        )
+
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "write_family_ms1_overlay_outputs",
+        fake_write_family_ms1_overlay_outputs,
+    )
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "build_family_ms1_evidence_summary",
+        lambda _rows: {"family_verdict": "ms1_shape_supports_family_backfill"},
+    )
+
+    rows = batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=tmp_path / "raw",
+        dll_dir=tmp_path / "dll",
+        output_dir=output_dir,
+        limit=1,
+        write_pdf=False,
+    )
+    batch._write_outputs(output_dir, rows)
+
+    assert writer_calls[0]["write_pdf"] is False
+    summary = _read_tsv(output_dir / "family_ms1_overlay_batch_summary.tsv")
+    assert summary[0]["png_path"].endswith("fam_no_pdf_overlay.png")
+    assert summary[0]["pdf_path"] == ""
+    assert not (output_dir / "fam_no_pdf_overlay.pdf").exists()
+    assert not (output_dir / "fam_no_pdf_overlay_hypothesis.pdf").exists()
+
+
+def test_batch_fast_path_opens_each_raw_sample_once(tmp_path: Path) -> None:
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    for sample in ("Sample_A", "Sample_B"):
+        (raw_dir / f"{sample}.raw").write_text("raw", encoding="utf-8")
+    _write_alignment_cells(
+        alignment_cells,
+        [
+            _cell_row("FAM_A", "Sample_A", "detected", "1000"),
+            _cell_row("FAM_A", "Sample_B", "rescued", "500"),
+            _cell_row("FAM_B", "Sample_A", "detected", "900"),
+            _cell_row("FAM_B", "Sample_B", "rescued", "400"),
+        ],
+    )
+    requests = (
+        batch.OverlayBatchRequest(
+            rank=1,
+            family_id="FAM_A",
+            seed_group_id="seed-a",
+            mz=251.0,
+            ppm=10.0,
+            rt_min=1.0,
+            rt_max=1.2,
+            family_center_rt=1.1,
+            output_prefix="fam_a",
+        ),
+        batch.OverlayBatchRequest(
+            rank=2,
+            family_id="FAM_B",
+            seed_group_id="seed-b",
+            mz=252.0,
+            ppm=10.0,
+            rt_min=2.0,
+            rt_max=2.2,
+            family_center_rt=2.1,
+            output_prefix="fam_b",
+        ),
+    )
+    cells_by_family = overlay_plot.load_family_cells_for_families(
+        alignment_cells,
+        ("FAM_A", "FAM_B"),
+    )
+    opened: list[str] = []
+    extract_counts: dict[str, int] = {}
+
+    class FakeRaw:
+        def __init__(self, sample_stem: str) -> None:
+            self.sample_stem = sample_stem
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def extract_xic_many(self, xic_requests):
+            extract_counts[self.sample_stem] = len(xic_requests)
+            return tuple(
+                SimpleNamespace(
+                    rt=(request.rt_min, request.rt_max),
+                    intensity=(request.mz, request.mz + 1),
+                )
+                for request in xic_requests
+            )
+
+    def fake_open_raw(raw_path: Path, _dll_dir: Path) -> FakeRaw:
+        opened.append(raw_path.name)
+        return FakeRaw(raw_path.stem)
+
+    rows_by_rank = batch._extract_batch_family_trace_rows(
+        requests,
+        cells_by_family=cells_by_family,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        max_highlight_rescued=8,
+        open_raw_func=fake_open_raw,
+    )
+
+    assert opened == ["Sample_A.raw", "Sample_B.raw"]
+    assert extract_counts == {"Sample_A": 2, "Sample_B": 2}
+    assert [row.sample_stem for row in rows_by_rank[1]] == [
+        "Sample_A",
+        "Sample_B",
+    ]
+    assert [row.sample_stem for row in rows_by_rank[2]] == [
+        "Sample_A",
+        "Sample_B",
+    ]
 
 
 def test_batch_reuses_existing_outputs_without_raw_when_requested(
@@ -565,6 +728,50 @@ def _write_queue(path: Path, rows: list[dict[str, str]]) -> None:
         "suggested_rt_max",
         "suggested_output_prefix",
         "suggested_overlay_command_args",
+    )
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=fields,
+            delimiter="\t",
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _cell_row(
+    family_id: str,
+    sample_stem: str,
+    status: str,
+    area: str,
+) -> dict[str, str]:
+    return {
+        "feature_family_id": family_id,
+        "sample_stem": sample_stem,
+        "status": status,
+        "area": area,
+        "apex_rt": "1.1",
+        "height": "100",
+        "peak_start_rt": "1.0",
+        "peak_end_rt": "1.2",
+        "region_shadow_verdict": "current_supported",
+        "source_candidate_id": "",
+    }
+
+
+def _write_alignment_cells(path: Path, rows: list[dict[str, str]]) -> None:
+    fields = (
+        "feature_family_id",
+        "sample_stem",
+        "status",
+        "area",
+        "apex_rt",
+        "height",
+        "peak_start_rt",
+        "peak_end_rt",
+        "region_shadow_verdict",
+        "source_candidate_id",
     )
     with path.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(

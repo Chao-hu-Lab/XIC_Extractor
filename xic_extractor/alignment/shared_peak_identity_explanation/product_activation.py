@@ -23,6 +23,7 @@ from .schema import (
     ACTIVATION_REVIEW_AUDIT_COLUMNS,
     ACTIVATION_VALUE_DELTA_COLUMNS,
     ACTIVATION_VALUE_DELTA_SCHEMA_VERSION,
+    ACTIVATION_VALUE_INPUT_COLUMNS,
 )
 
 ACTIVE_PRIMARY_MATRIX_AREA_SOURCES = frozenset(
@@ -41,6 +42,15 @@ class ActivationApplicationOutputs:
     value_delta_tsv: Path
     hypothesis_identity_tsv: Path | None = None
     matrix_identity_tsv: Path | None = None
+
+
+@dataclass(frozen=True)
+class MatrixActivationApplicationOutputs:
+    matrix_tsv: Path
+    summary_tsv: Path
+    value_delta_tsv: Path
+    hypothesis_identity_tsv: Path
+    matrix_identity_tsv: Path
 
 
 @dataclass(frozen=True)
@@ -394,6 +404,223 @@ def apply_activation_to_alignment_outputs(
         matrix_tsv=matrix_path,
         review_tsv=review_path,
         cells_tsv=cells_path,
+        summary_tsv=summary_path,
+        value_delta_tsv=value_delta_path,
+        hypothesis_identity_tsv=hypothesis_identity_path,
+        matrix_identity_tsv=matrix_identity_path,
+    )
+
+
+def apply_activation_to_alignment_matrix_outputs(
+    *,
+    activation_decisions_tsv: Path,
+    activation_acceptance_tsv: Path,
+    activation_values_tsv: Path,
+    alignment_matrix_tsv: Path,
+    alignment_matrix_identity_tsv: Path,
+    alignment_review_tsv: Path,
+    output_dir: Path,
+    require_acceptance_pass: bool = True,
+    allow_overwrite_source: bool = False,
+    rt_mode_evidence_rows: Sequence[Mapping[str, str]] = (),
+) -> MatrixActivationApplicationOutputs:
+    decisions = _read_tsv(activation_decisions_tsv)
+    _validate_decisions_for_product_application(decisions)
+    _validate_matrix_only_decisions(decisions)
+    acceptance_rows = _read_tsv(activation_acceptance_tsv)
+    if len(acceptance_rows) != 1:
+        raise ValueError("activation acceptance TSV must contain exactly one row")
+    acceptance = acceptance_rows[0]
+    if require_acceptance_pass and acceptance.get("acceptance_status") != "pass":
+        raise ValueError("activation acceptance must pass before product application")
+
+    matrix_header, matrix_rows = _read_tsv_with_header(alignment_matrix_tsv)
+    review_header, review_rows = _read_tsv_with_header(alignment_review_tsv)
+    _require_columns(
+        review_header,
+        (
+            "feature_family_id",
+            "neutral_loss_tag",
+            "family_center_mz",
+            "family_center_rt",
+            "include_in_primary_matrix",
+        ),
+    )
+    review_by_family = {row["feature_family_id"]: row for row in review_rows}
+    sample_columns, matrix_by_family = _matrix_input_by_family(
+        matrix_header=matrix_header,
+        matrix_rows=matrix_rows,
+        alignment_matrix_identity_tsv=alignment_matrix_identity_tsv,
+        review_by_family=review_by_family,
+    )
+    original_matrix_by_family = {
+        row_key: dict(row) for row_key, row in matrix_by_family.items()
+    }
+    original_matrix_families = _matrix_source_family_ids(matrix_by_family)
+    decision_by_key = {
+        (row.get("feature_family_id", ""), row.get("sample_id", "")): row
+        for row in decisions
+        if row.get("sample_id") and row.get("sample_id") != "__family_context__"
+    }
+    activation_values_by_key = _activation_values_by_key(activation_values_tsv)
+
+    matrix_effects: dict[tuple[str, str], str] = {}
+    synthetic_cells_by_key: dict[tuple[str, str], dict[str, str]] = {}
+    families_added: set[str] = set()
+    for decision in decisions:
+        family_id = decision.get("feature_family_id", "")
+        sample_id = decision.get("sample_id", "")
+        if not sample_id or sample_id == "__family_context__":
+            continue
+        if sample_id not in sample_columns:
+            raise ValueError(
+                f"{family_id}/{sample_id}: activation sample is not present in "
+                "alignment_matrix.tsv sample columns"
+            )
+        peak_hypothesis_id = decision.get("peak_hypothesis_id", "")
+        value_row = activation_values_by_key.get((peak_hypothesis_id, sample_id))
+        if value_row is None:
+            raise ValueError(
+                f"{family_id}/{sample_id}: matrix-only activation requires a "
+                "matching activation value row"
+            )
+        value_family_id = value_row.get("feature_family_id", "")
+        if value_family_id and value_family_id != family_id:
+            raise ValueError(
+                f"{family_id}/{sample_id}: activation value source family "
+                f"{value_family_id} does not match decision family"
+            )
+        value = value_row.get("projected_matrix_value", "")
+        if not value:
+            raise ValueError(
+                f"{family_id}/{sample_id}: matrix-only activation value is blank"
+            )
+
+        row_key = _matrix_row_key_for_decision(
+            matrix_by_family,
+            family_id=family_id,
+            sample_id=sample_id,
+            decision=decision,
+        )
+        row = matrix_by_family.get(row_key) if row_key is not None else None
+        if row is None:
+            row = _new_matrix_row(
+                family_id,
+                sample_columns=sample_columns,
+                review_row=review_by_family.get(family_id, {}),
+            )
+            matrix_by_family[family_id] = row
+            families_added.add(family_id)
+        key = (family_id, sample_id)
+        if row.get(sample_id):
+            matrix_effects[key] = "unchanged"
+        else:
+            row[sample_id] = value
+            matrix_effects[key] = "written"
+        synthetic_cells_by_key[key] = {
+            "status": (
+                value_row.get("current_raw_status", "")
+                or value_row.get("current_production_status", "")
+            ),
+            "area": value,
+            "_matrix_value_source": "activation_values_tsv",
+            "_matrix_value_source_field": "projected_matrix_value",
+            "_matrix_value_source_detail": (
+                value_row.get("projected_matrix_value_source", "")
+                or "matrix_only_activation_value"
+            ),
+            "_matrix_value_source_artifact_schema_version": value_row.get(
+                "source_artifact_schema_version",
+                "",
+            ),
+            "_matrix_value_source_artifact_sha256": value_row.get(
+                "source_artifact_sha256",
+                "",
+            ),
+            "_matrix_value_source_row_sha256": value_row.get(
+                "source_row_sha256",
+                "",
+            ),
+        }
+
+    matrix_by_family = {
+        row_key: row
+        for row_key, row in matrix_by_family.items()
+        if _has_any_sample_value(row, sample_columns)
+    }
+    hypothesis_identity_rows, formal_matrix_stats = _peak_hypothesis_matrix_rows(
+        matrix_by_family=matrix_by_family,
+        review_by_family=review_by_family,
+        decisions_by_key=decision_by_key,
+        sample_columns=sample_columns,
+        legacy_rt_row_oracle=(),
+        legacy_rt_row_oracle_mz_ppm=20.0,
+        legacy_rt_row_oracle_rt_tolerance_min=1.0,
+        include_family_projections=False,
+        rt_mode_evidence_rows=rt_mode_evidence_rows,
+    )
+    output_matrix_rows = _product_matrix_rows_from_hypotheses(
+        hypothesis_identity_rows,
+        sample_columns,
+    )
+    value_delta_rows = _value_delta_rows(
+        decisions=decisions,
+        original_matrix_by_family=original_matrix_by_family,
+        matrix_by_family=matrix_by_family,
+        cells_by_key=synthetic_cells_by_key,
+        sample_columns=sample_columns,
+        matrix_effects=matrix_effects,
+    )
+    summary_row = _summary_row(
+        acceptance=acceptance,
+        decisions=decisions,
+        output_mode="matrix-only",
+        input_matrix_rows=len(matrix_rows),
+        output_matrix_rows=len(output_matrix_rows),
+        formal_matrix_stats=formal_matrix_stats,
+        matrix_effects=matrix_effects,
+        families_added=families_added,
+        families_removed=original_matrix_families
+        - _matrix_source_family_ids(matrix_by_family),
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    matrix_path = output_dir / "alignment_matrix.tsv"
+    summary_path = output_dir / "activation_application_summary.tsv"
+    value_delta_path = output_dir / "activation_value_delta.tsv"
+    hypothesis_identity_path = output_dir / "activation_hypothesis_identity.tsv"
+    matrix_identity_path = output_dir / "alignment_matrix_identity.tsv"
+    if not allow_overwrite_source:
+        _reject_source_overwrite(
+            output_paths=(
+                matrix_path,
+                summary_path,
+                value_delta_path,
+                hypothesis_identity_path,
+                matrix_identity_path,
+            ),
+            source_paths=(
+                alignment_matrix_tsv,
+                alignment_matrix_identity_tsv,
+                alignment_review_tsv,
+                activation_values_tsv,
+            ),
+        )
+    _write_tsv(matrix_path, _product_matrix_header(sample_columns), output_matrix_rows)
+    _write_tsv(
+        hypothesis_identity_path,
+        _formal_matrix_header(sample_columns),
+        hypothesis_identity_rows,
+    )
+    _write_tsv(
+        matrix_identity_path,
+        _ALIGNMENT_MATRIX_IDENTITY_COLUMNS,
+        _alignment_matrix_identity_rows(hypothesis_identity_rows, sample_columns),
+    )
+    _write_tsv(summary_path, ACTIVATION_APPLICATION_SUMMARY_COLUMNS, [summary_row])
+    _write_tsv(value_delta_path, ACTIVATION_VALUE_DELTA_COLUMNS, value_delta_rows)
+    return MatrixActivationApplicationOutputs(
+        matrix_tsv=matrix_path,
         summary_tsv=summary_path,
         value_delta_tsv=value_delta_path,
         hypothesis_identity_tsv=hypothesis_identity_path,
@@ -763,6 +990,82 @@ def _validate_decisions_for_product_application(
                 "auto_activate decisions require peak_hypothesis_id and "
                 "activation_unit_scope=peak_hypothesis before product "
                 f"application: {family_id}/{sample_id}"
+            )
+
+
+def _validate_matrix_only_decisions(
+    decisions: Sequence[Mapping[str, str]],
+) -> None:
+    for decision in decisions:
+        sample_id = decision.get("sample_id", "")
+        if not sample_id or sample_id == "__family_context__":
+            continue
+        if decision.get("activation_status") == "auto_activate":
+            continue
+        family_id = decision.get("feature_family_id", "")
+        status = decision.get("activation_status", "")
+        raise ValueError(
+            "matrix-only activation only applies auto_activate rows; "
+            f"got {status or '<blank>'} for {family_id}/{sample_id}"
+        )
+
+
+def _activation_values_by_key(
+    activation_values_tsv: Path,
+) -> dict[tuple[str, str], Mapping[str, str]]:
+    header, rows = _read_tsv_with_header(activation_values_tsv)
+    missing = [
+        column for column in ACTIVATION_VALUE_INPUT_COLUMNS if column not in header
+    ]
+    if missing:
+        raise ValueError(
+            "activation_values.tsv missing columns: " + ",".join(missing)
+        )
+    values_by_key: dict[tuple[str, str], Mapping[str, str]] = {}
+    for row_number, row in enumerate(rows, start=2):
+        key = (row.get("peak_hypothesis_id", ""), row.get("sample_stem", ""))
+        if not key[0] or not key[1]:
+            raise ValueError(
+                "activation value rows require peak_hypothesis_id and sample_stem"
+            )
+        _validate_activation_value_provenance(
+            activation_values_tsv,
+            row_number=row_number,
+            row=row,
+        )
+        if key in values_by_key:
+            raise ValueError(
+                "activation value rows must be unique by "
+                f"peak_hypothesis_id/sample_stem: {key[0]}/{key[1]}"
+            )
+        values_by_key[key] = row
+    return values_by_key
+
+
+def _validate_activation_value_provenance(
+    path: Path,
+    *,
+    row_number: int,
+    row: Mapping[str, str],
+) -> None:
+    for column in (
+        "projected_matrix_value_source",
+        "source_artifact_schema_version",
+        "source_artifact_sha256",
+        "source_row_sha256",
+        "source_provenance_detail",
+    ):
+        if not row.get(column, ""):
+            raise ValueError(
+                f"{path}: row {row_number} activation value provenance "
+                f"column {column} must not be blank"
+            )
+    for column in ("source_artifact_sha256", "source_row_sha256"):
+        value = row.get(column, "")
+        if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
+            raise ValueError(
+                f"{path}: row {row_number} {column} must be a lowercase "
+                "sha256 hex digest"
             )
 
 
@@ -1453,6 +1756,7 @@ def _value_delta_rows(
             else ""
         )
         cell = cells_by_key.get(key, {})
+        matrix_value_effect = matrix_effects.get(key, "unchanged")
         rows.append(
             {
                 "activation_value_delta_schema_version": (
@@ -1471,9 +1775,35 @@ def _value_delta_rows(
                 "contract_rule_id": decision.get("contract_rule_id", ""),
                 "original_matrix_value": original_value,
                 "activated_matrix_value": activated_value,
+                "matrix_value_kind": _matrix_value_kind(
+                    matrix_value_effect,
+                    activation_status=decision.get("activation_status", ""),
+                ),
+                "matrix_value_source": _matrix_value_source(
+                    matrix_value_effect,
+                    cell,
+                    activation_status=decision.get("activation_status", ""),
+                ),
+                "matrix_value_source_field": _matrix_value_source_field(
+                    matrix_value_effect,
+                    cell,
+                ),
+                "matrix_value_source_detail": _matrix_value_source_detail(
+                    matrix_value_effect,
+                    cell,
+                ),
+                "matrix_value_source_artifact_schema_version": (
+                    _matrix_value_source_artifact_schema_version(cell)
+                ),
+                "matrix_value_source_artifact_sha256": (
+                    _matrix_value_source_artifact_sha256(cell)
+                ),
+                "matrix_value_source_row_sha256": _matrix_value_source_row_sha256(
+                    cell
+                ),
                 "source_cell_status": cell.get("status", ""),
                 "source_cell_area": cell.get("area", ""),
-                "matrix_value_effect": matrix_effects.get(key, "unchanged"),
+                "matrix_value_effect": matrix_value_effect,
                 "value_changed": (
                     "TRUE" if original_value != activated_value else "FALSE"
                 ),
@@ -1481,6 +1811,81 @@ def _value_delta_rows(
             }
         )
     return rows
+
+
+def _matrix_value_kind(
+    matrix_value_effect: str,
+    *,
+    activation_status: str,
+) -> str:
+    if matrix_value_effect == "written" and activation_status == "auto_activate":
+        return "backfill_activation"
+    if matrix_value_effect == "unchanged":
+        return "existing_matrix_value"
+    if matrix_value_effect == "blanked":
+        return "blanked_by_activation"
+    if matrix_value_effect:
+        return "not_written"
+    return "not_applicable"
+
+
+def _matrix_value_source(
+    matrix_value_effect: str,
+    cell: Mapping[str, str],
+    *,
+    activation_status: str,
+) -> str:
+    kind = _matrix_value_kind(
+        matrix_value_effect,
+        activation_status=activation_status,
+    )
+    if kind == "existing_matrix_value":
+        return "existing_alignment_matrix"
+    if kind == "backfill_activation":
+        return cell.get("_matrix_value_source", "") or "alignment_cells_tsv"
+    if cell and kind == "not_written":
+        return cell.get("_matrix_value_source", "") or "alignment_cells_tsv"
+    return "none"
+
+
+def _matrix_value_source_field(
+    matrix_value_effect: str,
+    cell: Mapping[str, str],
+) -> str:
+    if matrix_value_effect == "unchanged":
+        return "existing_matrix_value"
+    explicit = cell.get("_matrix_value_source_field", "")
+    if explicit:
+        return explicit
+    if cell.get("primary_matrix_area", ""):
+        return "primary_matrix_area"
+    if cell.get("area", ""):
+        return "area"
+    return "none"
+
+
+def _matrix_value_source_detail(
+    matrix_value_effect: str,
+    cell: Mapping[str, str],
+) -> str:
+    if matrix_value_effect == "unchanged":
+        return "matrix_value_preexisted"
+    explicit = cell.get("_matrix_value_source_detail", "")
+    if explicit:
+        return explicit
+    return cell.get("primary_matrix_area_source", "")
+
+
+def _matrix_value_source_artifact_schema_version(cell: Mapping[str, str]) -> str:
+    return cell.get("_matrix_value_source_artifact_schema_version", "")
+
+
+def _matrix_value_source_artifact_sha256(cell: Mapping[str, str]) -> str:
+    return cell.get("_matrix_value_source_artifact_sha256", "")
+
+
+def _matrix_value_source_row_sha256(cell: Mapping[str, str]) -> str:
+    return cell.get("_matrix_value_source_row_sha256", "")
 
 
 def _summary_row(
@@ -1511,7 +1916,7 @@ def _summary_row(
         "output_matrix_rows": str(output_matrix_rows),
         "matrix_row_identity": (
             "mz_rt_sample_columns"
-            if output_mode == "formal"
+            if _uses_formal_matrix_identity(output_mode)
             else "feature_family_id"
         ),
         "canonical_row_identity_ready": _canonical_row_identity_ready(
@@ -1568,7 +1973,7 @@ def _family_projection_semantics(
     output_mode: str,
     formal_matrix_stats: FormalMatrixStats,
 ) -> str:
-    if output_mode != "formal":
+    if not _uses_formal_matrix_identity(output_mode):
         return "not_applicable"
     if formal_matrix_stats.family_projection_rows:
         return "projection_not_split_proof"
@@ -1581,7 +1986,7 @@ def _canonical_row_identity_ready(
     output_mode: str,
     formal_matrix_stats: FormalMatrixStats,
 ) -> str:
-    if output_mode != "formal":
+    if not _uses_formal_matrix_identity(output_mode):
         return "FALSE"
     if (
         formal_matrix_stats.family_projection_rows
@@ -1595,7 +2000,7 @@ def _canonical_row_identity_blocker(
     output_mode: str,
     formal_matrix_stats: FormalMatrixStats,
 ) -> str:
-    if output_mode != "formal":
+    if not _uses_formal_matrix_identity(output_mode):
         return "formal_output_not_requested"
     if formal_matrix_stats.family_projection_rows:
         return "family_projection_present"
@@ -1608,13 +2013,17 @@ def _canonical_row_identity_scope(
     output_mode: str,
     formal_matrix_stats: FormalMatrixStats,
 ) -> str:
-    if output_mode != "formal":
+    if not _uses_formal_matrix_identity(output_mode):
         return "legacy_feature_family_row"
     if formal_matrix_stats.family_projection_rows:
         return "partial_peak_hypothesis_sidecar_with_family_projections"
     if formal_matrix_stats.family_projection_rows_excluded:
         return "partial_canonical_peak_hypothesis_rows_only"
     return "formal_peak_hypothesis_identity_sidecar"
+
+
+def _uses_formal_matrix_identity(output_mode: str) -> bool:
+    return output_mode in {"formal", "matrix-only"}
 
 
 def _matrix_value_for_activation(cell: Mapping[str, str] | None) -> str:

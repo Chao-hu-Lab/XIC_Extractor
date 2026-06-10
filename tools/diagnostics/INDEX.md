@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-08
-**Total entry-points:** 63
-**Total files (incl. helpers):** 147 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-10
+**Total entry-points:** 75
+**Total files (incl. helpers):** 159 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -26,7 +26,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 1. [Phase Gates (P1/P2/P2b/P2c/P7)](#phase-gates-p1p2p2bp2cp7) — 7 tools
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 14 tools
+4. [Backfill Reviews](#backfill-reviews) — 22 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 6 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 7 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
@@ -209,12 +209,35 @@ modes also write `activation_application_summary.tsv` and
 `activation_value_delta.tsv`. Existing matrix values are preserved; only missing
 `auto_activate` cells are written, while `auto_block` cells can be blanked or
 family promotion can be blocked. `activation_value_delta.tsv` records original
-value, activated value, source cell area, effect, and `value_changed` for
-review. If multiple provenance rows share one formal hypothesis/sample value,
+value, activated value, source cell area, effect, `value_changed`, and v3
+matrix-value provenance fields such as `matrix_value_kind`,
+`matrix_value_source`, `matrix_value_source_field`,
+`matrix_value_source_artifact_sha256`, and `matrix_value_source_row_sha256` for
+review. Matrix-only `activation_values.tsv` input must carry
+`projected_matrix_value_source`, source artifact schema/hash, source row hash,
+and source provenance detail; the source artifact hash must be a real lowercase
+SHA256 provenance digest, not an id-derived placeholder. Naked projected values
+fail closed. If multiple
+provenance rows share one formal hypothesis/sample value,
 the temporary pre-AsLS policy records the conflict and keeps the larger numeric
 value. Formal mode refuses to overwrite source alignment TSVs unless
 `--allow-overwrite-source` is passed. `--allow-non-passing-acceptance` is a
 diagnostic override only and must not be used for product claims.
+
+`--matrix-only` is the reviewed normal-peak backfill cost-control path. It
+requires `--activation-values-tsv`, `--alignment-matrix-tsv`,
+`--alignment-matrix-identity-tsv`, and `--alignment-review-tsv`, but does not
+require or read `--alignment-cells-tsv`. It writes only `alignment_matrix.tsv`,
+`alignment_matrix_identity.tsv`, `activation_hypothesis_identity.tsv`,
+`activation_value_delta.tsv`, and `activation_application_summary.tsv`.
+`alignment_cells.tsv` remains the audit/debug ledger for full activation copies
+and evidence projection; it is not a product dependency for matrix-only
+activation when product-authorized activation values are available. Matrix-only
+written values are tagged in `activation_value_delta.tsv` as
+`matrix_value_kind=backfill_activation` with
+`matrix_value_source=activation_values_tsv`, source artifact hash, and source
+row hash, so downstream reviewers can distinguish reviewed backfill values from
+primary detected values.
 
 ---
 
@@ -395,7 +418,403 @@ audit-note Cluster 2.
 **Purpose**: Emit a `shadow_projection_only` cell-level current-production-decision vs projected-decision sidecar for retained backfill seed groups, using formal `build_production_decisions()` as the current product snapshot and applying the reviewed shadow criteria only as a projection.
 **Topic group**: `shadow_production_projection.py` + `xic_extractor/diagnostics/shadow_production_projection.py`
 **Originating spec/goal/plan**: `specs/2026-06-07-backfill-evidence-reconciliation-gallery-design.md`; `goals/2026-06-07-backfill-evidence-reconciliation-productization-goal.md`; `plans/2026-06-07-backfill-evidence-reconciliation-productization-plan.md`
-**Status note**: Writes `shadow_production_projection_cells.tsv` and `shadow_production_projection_summary.json`. Rows expose `current_matrix_written`, `current_matrix_source=production_decision_snapshot`, `current_production_status`, `shadow_decision` (`accept` / `block` / `context`), `projected_matrix_written`, reasons, warnings, `product_authority_chain`, detected-anchor count, request-window overlap status, and overlay provenance. `product_authority_chain` is the compact MS1 product-rule / optional candidate-MS2 / same-peak trace consumed by gallery review; it is not a matrix schema change. `alignment_matrix.tsv` is hashed as source provenance here, not re-parsed as the row/cell authority. Projection no longer lets `visual_support` alone create a projected write: `accept` requires the same product-authorized evidence chain used by promotion (`trace_constellation` RAW-overlay MS1 same-peak own-max support, same-peak reason, and a positive projected matrix value). Candidate MS2 is auxiliary context for backfill cells; missing candidate-MS2 product authority does not block projection because those cells would already be detected if they had the required NL tag. `evidence_conflict`, `review_required_*`, missing detected anchors, missing selected peak segments, outside-window cells, and explicit wrong-peak/hypothesis blockers remain closed or context. `same_peak_multi_claim` / DUP is a warning instead of a hard blocker when that product-authorized same-Gaussian evidence chain is present; without that chain it remains `context`. `local/global` dominance is annotation only and does not hide traces. The summary separately reports `gate_row_count`, `projectable_gate_row_count`, `unprojectable_gate_row_count`, and `unprojectable_gate_reasons`; `row_count=0` can therefore mean that retained gate rows lacked seed/cell provenance such as `missing_seed_audit`, not that risk was absent. This tool does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbooks, or product decisions.
+**Status note**: Writes `shadow_production_projection_cells.tsv` and `shadow_production_projection_summary.json`. Rows expose `current_matrix_written`, `current_matrix_source`, `current_production_status`, `shadow_decision` (`accept` / `block` / `context`), `projected_matrix_written`, reasons, warnings, `product_authority_chain`, detected-anchor count, request-window overlap status, and overlay provenance. `product_authority_chain` is the compact MS1 product-rule / optional candidate-MS2 / same-peak trace consumed by gallery review; it is not a matrix schema change. When both `--alignment-matrix-tsv` and `--alignment-matrix-identity-tsv` are supplied, `current_matrix_written` and `current_matrix_value` are grounded in the actual public matrix cell and `current_matrix_source=alignment_matrix_tsv`; otherwise the tool falls back to the formal production-decision snapshot. Projection no longer lets `visual_support` alone create a projected write: `accept` requires the same product-authorized evidence chain used by promotion (`trace_constellation` RAW-overlay MS1 same-peak own-max support or standard-peak gate MS1 support, same-peak reason, and a positive projected matrix value). Seed provenance plus MS1 same-peak visual support without formal product authority is emitted as `shadow_decision=context` with `shadow_reasons=identity_supported_review`; it keeps the positive projected value for reviewed allowlist calibration but leaves `projected_matrix_written=FALSE`. Candidate MS2 is auxiliary context for backfill cells; missing candidate-MS2 product authority does not block projection because those cells would already be detected if they had the required NL tag. Product-authorized same-peak rows may pass old retained-gate `evidence_missing` / missing-overlay states, while missing detected anchors, missing selected peak segments, outside-window cells, explicit wrong-peak/hypothesis blockers, hard MS1 blockers, and retained-gate `review_required_*` challenge blockers remain closed or context. `same_peak_multi_claim` / DUP is a warning instead of a hard blocker when that product-authorized same-Gaussian evidence chain is present; without that chain it remains `context`. `local/global` dominance is annotation only and does not hide traces. The summary separately reports `gate_row_count`, `projectable_gate_row_count`, `unprojectable_gate_row_count`, and `unprojectable_gate_reasons`; `row_count=0` can therefore mean that retained gate rows lacked seed/cell provenance such as `missing_seed_audit`, not that risk was absent. This tool does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbooks, or product decisions.
+
+---
+
+### `shift_aware_backfill_calibration_pack.py`
+
+**Purpose**: Build a standard-peak calibration/review pack from shift-aware family overlay summaries, reconciliation groups, and overlay batch summaries.
+**Topic group**: `shift_aware_backfill_calibration_pack.py`
+**Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
+**Status note**: Writes `shift_aware_backfill_calibration_pack.tsv/html` and, when `--shift-aware-summary-dir` is supplied, `shift_aware_family_best_shift_summary.tsv`. Manual labels in this pack are calibration oracle fields only; they are not a production whitelist. The default standard-peak machine threshold is `--min-shape-r 0.95`, matching the accepted broad-but-standard Gaussian-smoothed peak contract; stricter thresholds may be used for review experiments but should not silently replace the product gate. The pack can aggregate multiple `*_source_family_best_shift_summary.tsv` files and records non-reference source-family count, best-shift shape similarity, max absolute shift, overlay verdict, and provenance paths for downstream machine-gate review.
+
+---
+
+### `shift_aware_standard_peak_gate_calibration.py`
+
+**Purpose**: Convert shift-aware calibration rows into a machine standard-peak gate that separates supported standard-peak same-pattern cases from blocked/review-only cases.
+**Topic group**: `shift_aware_standard_peak_gate_calibration.py`
+**Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
+**Status note**: Writes `shift_aware_standard_peak_gate_calibration.tsv` and summary JSON. `standard_peak_gate_supported` requires the configured shift-aware shape threshold and a Gaussian-smoothed family overlay verdict that supports standard-peak backfill. Rows without manual labels are reported as `unlabeled_machine_supported` or `unlabeled_machine_blocked`; they are valid machine-gate candidates but are not counted as manual false positives/negatives. Non-standard, missing-overlay, stale-provenance, and conflict rows remain fail-closed or review-only.
+
+---
+
+### `standard_peak_ms1_authority_bundle.py`
+
+**Purpose**: Convert standard-peak gate rows plus overlay trace provenance into a product-authorized MS1 same-peak sidecar consumable by shadow projection.
+**Topic group**: `standard_peak_ms1_authority_bundle.py` + `xic_extractor/diagnostics/standard_peak_ms1_authority_bundle.py`
+**Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
+**Status note**: Writes `standard_peak_ms1_pattern_coherence_evidence.tsv`, `standard_peak_ms1_product_authority_allowlist.tsv`, `shared_peak_identity_ms1_pattern_coherence_product_authorized.tsv`, an audit TSV, and summary JSON. `--authority-mode manual-oracle` keeps the historical manual calibration requirement; `--authority-mode machine-gate` authorizes rows from `standard_peak_gate_supported` without requiring a manual status label and records `machine_standard_peak_gate_authorized` / `machine_shift_aware_standard_peak_gate` provenance. Trace JSON path/SHA validation, Gaussian-smoothed standard-peak family verdicts, and `same_peak_reason:shift_aware_standard_peak_gate_supported` are preserved before any projection can write matrix values.
+
+---
+
+### `standard_peak_shadow_activation_inputs.py`
+
+**Purpose**: Convert product-authorized standard-peak `shadow_production_projection_cells.tsv` accepts into `product_activation --matrix-only` input TSVs.
+**Topic group**: `standard_peak_shadow_activation_inputs.py` + `xic_extractor/diagnostics/standard_peak_shadow_activation_inputs.py`
+**Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
+**Status note**: Writes `standard_peak_activation_decisions.tsv`, `standard_peak_activation_values.tsv`, `standard_peak_activation_acceptance.tsv`, `standard_peak_activation_inputs.tsv`, and `standard_peak_activation_inputs_summary.json`. It selects only rows with `shadow_decision=accept`, `current_matrix_written=FALSE`, `projected_matrix_written=TRUE`, a nonblank projected value, and `same_peak_reason:shift_aware_standard_peak_gate_supported` in the product-authority chain. Current-matrix rows are counted as already written and are not reactivated; nonstandard, context, blocked, or unprovenanced rows fail closed. Before writing acceptance, the converter runs a standard-peak row-level gate that checks PeakHypothesis scope, auto-activate decision shape, matching activation values, source schema, source row SHA, and the standard-peak same-peak reason. Passing rows generate an existing-contract `activation_acceptance.tsv` with `must_not_regress_status=pass`, a max product-affecting row allowance equal to the gated selected row count, and an activation scope derived from authority provenance: manual-oracle rows stay `manual_oracle_seed_rows`, while machine-gate rows are labeled `machine_gate_standard_peak_rows` with `must_not_regress_basis=machine_shift_aware_standard_peak_gate`. With `--apply-matrix-only`, the CLI immediately calls the existing matrix-only product activation writer and emits an activated matrix under `<output-dir>/activated_matrix` unless `--activated-output-dir` is supplied. If the standard-peak gate fails, acceptance stays fail and product application must stop for review. This converter does not generate upstream evidence, change source alignment artifacts, or bypass product activation; `apply_shared_peak_identity_activation.py --matrix-only` remains the matrix writer.
+
+---
+
+### `standard_peak_backfill_productization.py`
+
+**Purpose**: Run the reviewed standard-peak backfill path end to end: convert shadow projection accepts into activation inputs, apply matrix-only product activation, and optionally render an activation-synced reconciliation gallery.
+**Topic group**: `standard_peak_backfill_productization.py` + `xic_extractor/diagnostics/standard_peak_backfill_productization.py`
+**Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
+**Status note**: Requires `shadow_production_projection_cells.tsv`, `alignment_matrix.tsv`, `alignment_matrix_identity.tsv`, and `alignment_review.tsv`. It writes `standard_peak_backfill_productization_summary.tsv/json`, nests the converter output under `standard_peak_activation_inputs/`, and writes matrix-only activation outputs under `activated_matrix/`. It uses the same fail-closed standard-peak row gate as `standard_peak_shadow_activation_inputs.py`; rows without `same_peak_reason:shift_aware_standard_peak_gate_supported`, rows already written in the current matrix, context/block rows, and rows without positive projected values are not activated. Before activation, the orchestrator checks `current_matrix_written=TRUE` claims against the actual public matrix via `alignment_matrix.tsv` + `alignment_matrix_identity.tsv`; stale projection rows that claim an already-written current cell while the public matrix is blank fail fast and must be regenerated. With `--write-gallery`, it also consumes optional gallery artifacts and passes the generated `activation_application_summary.tsv` / `activation_value_delta.tsv` into `backfill_evidence_reconciliation_gallery.py`, so the HTML distinguishes existing accepted-rescue writes from newly activated matrix writes. This orchestrator does not generate upstream evidence, rerun RAW, loosen nonstandard-peak policy, or mutate source alignment artifacts.
+
+---
+
+### `standard_peak_backfill_machine_pipeline.py`
+
+**Purpose**: Run the standard-peak machine-gate chain from either an existing overlay summary or a retained-backfill review queue to activated matrix and optional gallery.
+**Topic group**: `family_ms1_overlay_batch.py`, `family_ms1_alignment_experiment_batch.py`, `backfill_evidence_reconciliation_gallery.py`, `shift_aware_backfill_calibration_pack.py`, `shift_aware_standard_peak_gate_calibration.py`, `standard_peak_ms1_authority_bundle.py`, `shadow_production_projection.py`, `standard_peak_backfill_productization.py`
+**Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
+**Status note**: This orchestrator can start from an existing `family_ms1_overlay_batch_summary.tsv` or from `alignment_retained_backfill_overlay_review_queue.tsv` plus RAW/DLL paths. The two source modes are mutually exclusive so stale overlay evidence is not silently reused when RAW queue inputs are supplied. In queue mode it runs `family_ms1_overlay_batch.py` with resumable PNG-only defaults; omitting `--limit` renders all remaining queue rows from `--start-rank` instead of inheriting the overlay-batch default top-N chunk size. It builds a fresh reconciliation group index when `--reconciliation-groups-tsv` is omitted, batch-renders shift-aware source-family best-shift evidence, builds the calibration pack with the product default `min_shape_r=0.95`, evaluates the standard-peak machine gate, creates the machine-gate MS1 authority bundle, regenerates shadow projection grounded in `alignment_matrix.tsv` + `alignment_matrix_identity.tsv`, applies matrix-only product activation, and optionally writes the activation-synced gallery. It writes `standard_peak_backfill_machine_pipeline_summary.json` plus subdirectories for each stage. The final summary records source mode, queue row count, start rank, requested/effective limit, overlay/shift status counts, activation counts, and `status_reasons`; `status=pass` is reserved for the requested scope with successful overlay, shift-aware evidence, and productization. Full 85RAW use remains intentionally chunkable with `--start-rank`, `--limit`, and `--reuse-existing` so expensive RAW-backed overlay generation can resume without hand-splicing downstream inputs.
+
+---
+
+### `standard_peak_backfill_chunk_consolidation.py`
+
+**Purpose**: Consolidate chunked standard-peak machine-pipeline outputs into one formal matrix-only activation pass.
+**Topic group**: `standard_peak_backfill_machine_pipeline.py` + `standard_peak_backfill_productization.py` + `xic_extractor/diagnostics/standard_peak_backfill_chunk_consolidation.py`
+**Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
+**Status note**: Consumes repeated chunk `standard_peak_backfill_machine_pipeline_summary.json` files or chunk directories, validates that all chunks passed, optionally verifies complete non-overlapping rank coverage against the full retained-backfill review queue by reading actual overlay summary `rank` values, deduplicates full-matrix chunk `shadow_projection_cells.tsv` rows into `consolidated_shadow_projection_cells.tsv`, preferring product-affecting accepted rows over context rows and failing closed on conflicting accepted values, then calls `standard_peak_backfill_productization.py` once to write the final matrix-only activated matrix. This is the product bridge for expensive 85RAW chunked overlay runs: individual chunk matrices are review artifacts only; the consolidated run is the formal matrix candidate. With `--emit-formal-product-output`, only a passing consolidated run with a supplied full review queue and complete non-duplicated rank coverage publishes a downstream-ready product output directory containing `alignment_matrix.tsv`, `alignment_matrix_identity.tsv`, `activation_hypothesis_identity.tsv`, `activation_value_delta.tsv`, `activation_application_summary.tsv`, and `standard_peak_formal_product_manifest.json`; the manifest records the activation output mode, decision scope, standard-peak gate basis, source shadow projection hash, artifact hashes, and queue coverage. By default that passing formal product is also promoted back to the source alignment output so the source `alignment_matrix.tsv` and `alignment_matrix_identity.tsv` become the standard-peak-backfilled final matrix; the original source files are preserved as `*.pre_standard_peak_backfill.tsv`, and `standard_peak_default_matrix_manifest.json` plus `standard_peak_*` audit sidecars are written beside the final matrix. Use `--no-publish-to-source-alignment-output` only for sidecar-only validation. After publication, reruns should use the `*.pre_standard_peak_backfill.tsv` files as activation input and supply `--publish-alignment-matrix-tsv` / `--publish-alignment-matrix-identity-tsv` pointing back to the default final matrix paths, so written-count semantics stay grounded in the pre-standard matrix. The CLI refuses to use the source alignment directory as the formal sidecar directory, requires publish target matrix/identity paths as a pair, and incomplete or duplicated coverage leaves only a failing consolidation summary while clearing known stale formal-product files from the target formal output directory. With `--write-gallery`, it also passes all chunk overlay and shift-aware gate TSVs to the activation-synced reconciliation gallery so evidence display and matrix writes use the same product-authorized rows.
+
+---
+
+### `backfill_peakhypothesis_promotion.py`
+
+**Purpose**: Convert reviewed PeakHypothesis/sample-cell backfill projection rows
+into an allowlisted product-candidate promotion sidecar while keeping
+nonstandard but assessable peaks review-only.
+**Topic group**: `backfill_peakhypothesis_promotion.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_promotion.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_promotion_cells.tsv`,
+`backfill_peakhypothesis_area_uncertainty.tsv`, and
+`backfill_peakhypothesis_promotion_summary.json`. It consumes
+`shadow_production_projection_cells.tsv` and a reviewed allowlist only. It can
+promote either formal product-authorized `accept` rows or
+`identity_supported_review` context rows when an exact PeakHypothesis/sample
+allowlist marks the area as `standard_assessable_area`. It does not read RAW,
+generate overlays, mutate alignment artifacts, change workbook schemas, or write
+final matrices. `nonstandard_assessable_area` rows can be review evidence only
+and remain blocked until a separate integration policy exists.
+8RAW activation and 85RAW validation are still required before production-ready
+claims.
+
+---
+
+### `backfill_peakhypothesis_activation_bridge.py`
+
+**Purpose**: Convert reviewed `backfill_peakhypothesis_promotion_cells.tsv`
+rows into the existing shared-peak activation decision/acceptance TSV contract
+without creating a parallel matrix writer.
+**Topic group**: `backfill_peakhypothesis_activation_bridge.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_activation_bridge.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `activation_decisions.tsv`,
+`activation_acceptance.tsv`, `activation_matrix_preflight.tsv`, and
+`backfill_peakhypothesis_activation_bridge_summary.json`. By default acceptance
+is `fail` with `next_action=run_activation_matrix_diff_smoke`, so the sidecar
+cannot be mistaken for production approval. Optional
+`--normal-peak-decisions-tsv` makes explicit `require_backfill` normal-peak
+decisions a fail-closed activation prerequisite. Optional
+`--alignment-matrix-tsv` plus `--alignment-matrix-identity-tsv` performs a
+public-matrix preflight: promoted PeakHypothesis/sample cells already present in
+the public matrix are suppressed from activation decisions. If the promotion
+snapshot says `current_matrix_written=FALSE` but the public matrix has a value,
+the preflight reports
+`public_matrix_conflicts_with_projection_current_snapshot` and points to
+rebuilding the matrix with the current writer before activation. This tool does
+not read RAW, mutate alignment artifacts, change workbook schemas, or write
+final matrices; matrix application remains owned by
+`apply_shared_peak_identity_activation.py`.
+
+---
+
+### `backfill_peakhypothesis_activation_acceptance.py`
+
+**Purpose**: Validate the post-activation matrix diff for a reviewed
+PeakHypothesis backfill promotion slice, proving that activation changed exactly
+the promoted PeakHypothesis/sample cells and no unrelated public matrix cells.
+**Topic group**: `backfill_peakhypothesis_activation_acceptance.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_activation_acceptance.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_activation_acceptance.tsv`,
+`backfill_peakhypothesis_activation_matrix_diff.tsv`, and
+`backfill_peakhypothesis_activation_acceptance_summary.json`. The gate consumes
+promotion cells, activation decisions, bridge matrix preflight, activation
+application summary, activation value delta, and before/after
+`alignment_matrix.tsv` plus `alignment_matrix_identity.tsv`. A pass requires
+all promoted rows to have matching `auto_activate` decisions, `needs_activation`
+preflight, `written` value deltas, coherent application summary, and a full
+matrix diff containing only the promoted cells with values matching the
+promotion sidecar. This is an 8RAW/current-writer diagnostic acceptance surface;
+it does not read RAW, mutate artifacts, change workbook schemas, or replace
+85RAW production validation.
+
+---
+
+### `backfill_peakhypothesis_raw85_slice_gate.py`
+
+**Purpose**: Gate reviewed PeakHypothesis backfill promotion cells against an
+existing 85RAW alignment artifact refresh before any direct production-transfer
+trial.
+**Topic group**: `backfill_peakhypothesis_raw85_slice_gate.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_raw85_slice_gate.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_raw85_slice_gate.tsv` and
+`backfill_peakhypothesis_raw85_slice_gate_summary.json`. It consumes only
+`backfill_peakhypothesis_promotion_cells.tsv`, 85RAW `alignment_review.tsv`,
+and 85RAW `alignment_cells.tsv`. Cross-run `feature_family_id` values are not
+treated as stable identity; when the promotion row carries a seed m/z/RT anchor,
+the 85RAW candidate is selected by hypothesis-anchor m/z/RT plus sample. A
+direct-transfer candidate requires that anchored PeakHypothesis/sample cell to
+exist, remain a primary matrix row, avoid unresolved family consolidation, have
+`detected` or `rescued` status, and carry a positive
+`gaussian15_positive_asls_residual` primary matrix area. Anchored detected or
+rescued cells blocked only by family consolidation/non-primary-row ownership are
+reported as `hypothesis_candidate_review`, not as absent. Hard missing cells,
+absent cells, duplicate-assigned cells, and missing Gaussian15 area still fail
+closed. This diagnostic does not read RAW, remap winners, apply activation,
+mutate alignment artifacts, change workbook schemas, or claim production
+readiness.
+
+---
+
+### `backfill_peakhypothesis_raw85_winner_remap.py`
+
+**Purpose**: Build diagnostic 85RAW primary-winner remap proposals for reviewed
+PeakHypothesis backfill cells that became consolidation losers in the direct
+85RAW slice gate.
+**Topic group**: `backfill_peakhypothesis_raw85_winner_remap.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_raw85_winner_remap.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Legacy family-consolidation context only. It writes
+`backfill_peakhypothesis_raw85_winner_remap.tsv` and
+`backfill_peakhypothesis_raw85_winner_remap_summary.json` from a slice-gate TSV
+plus 85RAW `alignment_review.tsv` and `alignment_cells.tsv`. It must not be used
+as hypothesis identity authority, because family winners can collapse multiple
+peaks inside a broad family/window. The 2026-06-09 top14 winner-remap artifact
+generated before the hypothesis-anchor correction is obsolete. Use the
+hypothesis-anchor slice gate as the current review surface; winner-remap output,
+if regenerated later, is only family-consolidation context and not product
+activation. It does not read RAW, change row identity, apply activation, mutate
+matrices, remap public outputs, or claim production readiness.
+
+---
+
+### `backfill_peakhypothesis_raw85_hypothesis_review.py`
+
+**Purpose**: Package corrected 85RAW hypothesis-anchor slice-gate candidates
+into a compact manual review queue before any product-transfer decision.
+**Topic group**: `backfill_peakhypothesis_raw85_hypothesis_review.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_raw85_hypothesis_review.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes
+`backfill_peakhypothesis_raw85_hypothesis_review_queue.tsv` and
+`backfill_peakhypothesis_raw85_hypothesis_review_summary.json` from the corrected
+85RAW slice-gate TSV only. It keeps source PeakHypothesis identity, m/z/RT
+anchor, matched 85RAW PeakHypothesis, same-sample area/status, and family
+consolidation context in one review row. It intentionally leaves
+`reviewer_verdict` and `reviewer_note` blank and records
+`proposed_product_transfer_status=review_only_pending_same_peak_and_consolidation_policy`.
+It does not read RAW, judge peak shape, choose S/N, apply activation, mutate
+matrices, remap family winners, or claim production readiness.
+
+---
+
+### `backfill_peakhypothesis_raw85_overlay.py`
+
+**Purpose**: Render RAW XIC overlay plots for corrected 85RAW hypothesis review
+candidates so reviewers do not need to inspect each row manually in Xcalibur.
+**Topic group**: `backfill_peakhypothesis_raw85_overlay.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_raw85_overlay.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_raw85_overlay_index.tsv`,
+`backfill_peakhypothesis_raw85_overlay_summary.json`, an HTML gallery, and
+per-candidate PNG/PDF plots. Each plot overlays raw XIC plus
+`gaussian15_asls_residual` smoothed XIC for the candidate m/z and current
+consolidation winner m/z in the same RAW sample, with candidate anchor RT,
+candidate peak window, and winner RT marked. The overlay index also records
+machine Gaussian15 normal-shape evidence from the selected bounds' local shape
+context, using `ChromPeakSegment` baseline-return boundaries plus
+`gaussian15_positive_asls_residual` lobe area as audit evidence. It can support
+standard vs non-standard peak-shape gating, show the Gaussian area that would
+be integrated, and emit a machine same-peak verdict when the slice-gate
+PeakHypothesis/sample match, detected/rescued cell state, standard shape, and
+positive lobe area all agree. It does not apply activation, mutate matrices,
+remap family winners, or claim production readiness.
+
+---
+
+### `backfill_peakhypothesis_normal_peak_decision.py`
+
+**Purpose**: Convert PeakHypothesis promotion rows, corrected 85RAW
+hypothesis-anchor slice-gate rows, machine Gaussian15 shape evidence, and
+same-peak verdicts into an explicit normal-peak backfill decision surface.
+**Topic group**: `backfill_peakhypothesis_normal_peak_decision.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_normal_peak_decision.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_normal_peak_decisions.tsv` and
+`backfill_peakhypothesis_normal_peak_decision_summary.json`. The normal-peak
+shape definition is
+`gaussian15_asls_residual_selected_shape_context_single_complete_unimodal_peak;raw_spikes_neighbor_contact_family_multiplet_not_blockers`:
+the selected PeakHypothesis/sample must show a complete Gaussian15 positive
+AsLS residual single peak in the selected bounds' local shape context, from
+broad/flat through sharp/peaked. This avoids treating a too-narrow integration
+bound as the whole peak-shape review window. Raw XIC spikes, neighboring peak
+contact, family/window-level multiplets, and
+family consolidation/non-primary ownership are not peak-shape hard blockers by
+themselves. When `--machine-shape-evidence-tsv` is supplied, the standard vs
+non-standard peak-shape decision comes from `machine_shape_decision`; a
+`standard_peak_shape_supported` row can resolve a missing/legacy area label to
+`standard_assessable_area`, while `nonstandard_peak_shape` stays review-only and
+does not activate. Same-peak support is still a separate evidence requirement,
+but it can now come from the overlay index's `machine_same_peak_verdict` when
+manual review is absent; manual same-peak conflicts still override and block.
+For standard machine-shape rows, the decision TSV selects
+`normal_peak_quantitation_area` from the overlay's Gaussian15
+baseline-return lobe area (`gaussian15_lobe_area`), with boundary start/end and
+source fields preserved for audit. Without machine-shape evidence, the legacy
+fallback remains the reviewed `raw85_primary_matrix_area`. For product
+activation, use the end-to-end normal-peak activation CLI so matrix writing is
+gated by post-activation matrix diff acceptance.
+
+---
+
+### `backfill_peakhypothesis_85raw_activation_trial.py`
+
+**Purpose**: Run a no-RAW, artifact-only 85RAW normal-peak activation trial for
+reviewed PeakHypothesis/sample cells before launching a new full 85RAW rerun.
+**Topic group**: `backfill_peakhypothesis_85raw_activation_trial.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_85raw_activation_trial.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_85raw_activation_trial.tsv`
+and `backfill_peakhypothesis_85raw_activation_trial_summary.json`. It consumes
+only current 85RAW `alignment_matrix.tsv`, `alignment_matrix_identity.tsv`,
+`alignment_run_metadata.json`, `timing.json`, and normal-peak decision rows.
+Manual same-peak verdict rows are optional override/review evidence; when they
+are absent, the trial consumes `same_peak_verdict` from the normal-peak
+decision TSV. It does not read RAW, load `alignment_cells.tsv`,
+apply activation, mutate alignment artifacts, or claim production readiness. It
+uses `raw85_matched_peak_hypothesis_id + sample` as the transfer trial key
+rather than cross-run source FAM IDs. The 2026-06-09 artifact-only trial found
+`normal_peak_required_count=11`, `primary_loser_count=9`,
+`primary_winner_count=2`, `expected_matrix_diff_count=11`,
+`unexpected_diff_count=0`, and a pass status, so the next action is implementing
+the normal-peak override through the activation owner rather than rerunning
+85RAW unchanged.
+
+---
+
+### `backfill_peakhypothesis_85raw_activation_transfer.py`
+
+**Purpose**: Transfer reviewed normal-peak 85RAW backfill decisions into
+raw85-keyed promotion rows that the existing activation bridge can consume.
+**Topic group**: `backfill_peakhypothesis_85raw_activation_transfer.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_85raw_activation_transfer.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes
+`backfill_peakhypothesis_85raw_transfer_promotion_cells.tsv`,
+`backfill_peakhypothesis_85raw_activation_transfer.tsv`, and
+`backfill_peakhypothesis_85raw_activation_transfer_summary.json`. It uses
+`raw85_matched_peak_hypothesis_id + sample` as the activation key, keeps source
+PeakHypothesis/FAM ids as audit-only provenance, and writes
+`source_artifact_sha256` as the content bundle hash of
+`normal_peak_decisions_tsv + activation_trial_tsv`, with row-level
+`source_row_sha256` for each transfer/promotion row. It fails closed on
+normal-peak decision blockers, same-peak conflicts, non-positive normal-peak
+quantitation area, non-Gaussian15 quantitation area source, or activation-trial
+blockers. The projected value is
+`normal_peak_quantitation_area` when present, so machine-shape standard peaks
+write the Gaussian15 lobe area selected by the decision TSV. It does not apply
+activation or write matrices; downstream matrix mutation remains owned by
+`apply_shared_peak_identity_activation.py` / `product_activation`.
+
+---
+
+### `backfill_peakhypothesis_normal_peak_activation.py`
+
+**Purpose**: Run the normal-peak backfill product path end to end: evidence
+rows become explicit `require_backfill` normal-peak decisions, 85RAW activation
+keys, activation sidecars, matrix-only `alignment_matrix.tsv` output, and a
+post-activation matrix-diff acceptance audit.
+**Topic group**: `backfill_peakhypothesis_normal_peak_activation.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_normal_peak_activation.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-09-matrix-only-backfill-activation.md`
+**Status note**: This is the normal-peak end-to-end CLI for product behavior.
+It accepts either a provided `backfill_peakhypothesis_normal_peak_decisions.tsv`
+or the evidence inputs needed to generate it
+(`backfill_peakhypothesis_promotion_cells.tsv`,
+`backfill_peakhypothesis_raw85_slice_gate.tsv`, and machine Gaussian15
+shape/same-peak evidence from the overlay index; manual same-peak verdicts are
+optional overrides). It then consumes an existing
+`backfill_peakhypothesis_85raw_activation_trial.tsv` or can build one from a
+current 85RAW artifact directory, runs the 85RAW activation transfer,
+bridges transfer promotions into activation decisions, applies matrix-only
+activation through `product_activation`, and runs exact post-activation
+matrix-diff acceptance. The bridge's pre-application `activation_acceptance.tsv`
+is intentionally allowed to be fail-closed inside this orchestrator because the
+real product gate is the final `backfill_peakhypothesis_activation_acceptance.tsv`.
+Standard normal-peak rows with blockers fail closed before matrix writing.
+For machine-shape standard peaks, the matrix-only activation value comes from
+the decision TSV's `normal_peak_quantitation_area`, which is the Gaussian15
+baseline-return lobe area selected by the overlay/`ChromPeakSegment` evidence.
+`review_only_nonstandard_peak` rows are counted and excluded from activation
+rather than blocking this normal-peak goal. Passing output writes `alignment_matrix.tsv`,
+`alignment_matrix_identity.tsv`, `activation_value_delta.tsv`,
+`activation_hypothesis_identity.tsv`, and an end-to-end summary with source
+paths, source hashes, changed-cell count, and acceptance status.
+
+---
+
+### `backfill_peakhypothesis_transfer_readiness.py`
+
+**Purpose**: Summarize transfer readiness for a reviewed PeakHypothesis backfill
+promotion slice by joining the promotion summary, 8RAW/current-writer activation
+acceptance, 85RAW current-writer artifact contract, optional 85RAW slice gate
+summary, optional 85RAW hypothesis manual-review summary, and optional 85RAW
+winner-remap proposal summary.
+**Topic group**: `backfill_peakhypothesis_transfer_readiness.py` +
+`xic_extractor/diagnostics/backfill_peakhypothesis_transfer_readiness.py`
+**Originating spec/goal/plan**:
+`plans/2026-06-08-peakhypothesis-backfill-promotion-policy.md`
+**Status note**: Writes `backfill_peakhypothesis_transfer_readiness.tsv` and
+`backfill_peakhypothesis_transfer_readiness_summary.json`. The gate is a
+decision surface, not a matrix writer: it does not read RAW, apply activation,
+mutate alignment artifacts, or change workbook schemas. A pass through its hard
+checks can report `readiness_label=production_candidate` when the 8RAW matrix
+diff acceptance passes and the 85RAW artifact refresh uses the canonical
+current-writer contract. With `--raw85-slice-gate-summary-json`, a failing
+slice gate becomes a hard blocker such as
+`85raw_slice_specific_no_regression_failed`; a missing slice gate remains
+`raw85_slice_gate_status=not_assessed`. A hypothesis-anchor partial gate is
+surfaced as `raw85_slice_gate_hypothesis_candidate_review_count` with
+`next_action=review_85raw_hypothesis_candidates_before_product_transfer`. When
+`--raw85-hypothesis-review-summary-json` shows every review candidate was
+manually accepted as same-peak evidence, the partial gate no longer counts as a
+hard peak-shape failure; readiness records
+`raw85_peak_shape_review_status=manual_same_peak_supported_all_review_candidates`
+and moves the remaining blocker to `raw85_consolidation_policy_not_productized`.
+Winner-remap summaries are optional legacy context and no longer override the
+hypothesis-anchor next action. It deliberately keeps `production_ready=FALSE`
+until an explicit product-transfer decision and consolidation policy exist.
 
 ---
 
@@ -423,6 +842,7 @@ audit-note Cluster 2.
 **Topic group**: `backfill_evidence_reconciliation_gallery.py` + `xic_extractor/diagnostics/backfill_reconciliation_gallery.py`
 **Originating spec/goal/plan**: `specs/2026-06-07-backfill-evidence-reconciliation-gallery-design.md`; `goals/2026-06-07-backfill-evidence-reconciliation-productization-goal.md`; `plans/2026-06-07-backfill-evidence-reconciliation-productization-plan.md`
 **Status note**: Writes `backfill_evidence_reconciliation_groups.tsv`, `backfill_evidence_reconciliation_representative_cells.tsv`, `backfill_evidence_reconciliation_summary.json`, and `backfill_evidence_reconciliation_gallery.html`. The gallery is a hypothesis-first sticky table: thin family header rows provide MS1 pattern/drift/multimodal context only, while hypothesis rows are directly visible decision-review rows with representative cells collapsed in row details. Seed requests are provenance, not the primary visual decision unit. When alignment review marks a row as `primary_family_consolidated`, close seed requests are rendered as one MS1 product hypothesis with seed aliases in the evidence drawer instead of separate main-table decisions. The default Focus is `Product rows`; `Projection accepts` isolates projected new writes from optional shadow production projection input; `family_consolidation_loser`, `duplicate_only`, and duplicate-loser audit rows are routed to `Duplicate / audit debug` instead of competing with product candidates in the first view. Family headers summarize detected required-tag anchors and their nearest seed group (`anchors D=... · seed N D=...`). Hypothesis rows show `impact`: without projection input, `NL` is the family detected anchor count, `Fill` is hypothesis rescued/backfilled cells, and `Dup` / `Review` appear only when duplicate-assigned or provisional context is non-zero; this is alignment cell provenance, not target benchmark coverage. With optional `shadow_production_projection_cells.tsv`, the impact column switches to current production-decision writes / review target / projected accept / projected block counts, the detail drawer shows a cell-level current-decision vs projected-decision table, and consolidated drawers include a `Projection accept cells` mini-index with sample, exact seed request, reason/warning, MS1 product rule / optional context chain, and overlay link. Overlay links distinguish `family context` from `hypothesis PNG`; if multiple seed aliases share one family-level PNG, the gallery labels it as shared context instead of presenting fake per-seed PNGs. For very large reports, the HTML DOM caps low-information `evidence_inconclusive` rows while preserving all action/overlay rows and writes a visible scope notice; the groups/representatives TSV plus summary JSON remain exhaustive. Optional `backfill_shadow_policy_cells.tsv` input is rendered as HTML-only MS1+RT shadow provenance (`fill_now` / `would_fill_under_ms1_rt_policy` / `blocked` / policy gap counts) without changing the reconciliation group TSV schema. Optional `targeted_istd_benchmark_summary.tsv` input is rendered as validation-only target match context in HTML and summary counts; it does not become product identity authority and does not change the group TSV schema. The TSV remains a deterministic family/seed-group machine index. `review_required_*` overlay verdicts are displayed as human visual judgment needs, not hard evidence blockers. It consumes existing artifacts only, does not accept RAW/DLL paths, does not generate overlays, does not invent `backfill_score`, and does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbook schemas, or product decisions. Product promotion remains outside this renderer and requires a separate reviewed allowlist contract plus 8RAW/85RAW validation.
+**Activation sync note**: Optional `--activation-application-summary-tsv` and `--activation-value-delta-tsv` let the gallery display an already-applied activated matrix view. Current `accepted_rescue` projection cells and row-level activation delta `written` cells can update only the gallery's product-state display/provenance; the renderer still does not write or recompute matrix values.
 
 ---
 
@@ -688,6 +1108,14 @@ multiple MS1 peak modes.
 **Topic group**: shares helpers with `family_ms1_overlay_plot`
 **Pairs with**: `family_ms1_backfill_review_report.py` (produces the queue, this consumes it)
 **Status note**: Preserves optional queue `seed_group_id` in `family_ms1_overlay_batch_summary.tsv` so downstream retained-backfill evidence gates can join overlay evidence at seed-group precision. Summary rows carry separate apex-aligned shape metrics and own-max absolute-RT shape / absolute apex cluster metrics; these are evidence notes, not a composite `backfill_score`. Queues without `seed_group_id` remain supported for legacy family context, but seed-specific retained-backfill gates treat them as insufficient and request an exact `seed_group_id` overlay before using visual support/blockers. The CLI writes summary/Markdown incrementally after each rendered row and supports `--reuse-existing`, which rebuilds summary rows from completed PNG/PDF/trace-summary/trace-JSON bundles without re-reading RAW; this makes large 85RAW overlay queues resumable after timeout.
+
+---
+
+### `family_ms1_alignment_experiment_batch.py`
+
+**Purpose**: Convert `family_ms1_overlay_batch_summary.tsv` trace JSON outputs into shift-aware source-family alignment experiment outputs in batch.
+**Topic group**: `family_ms1_alignment_experiment.py`
+**Status note**: This no-RAW batch wrapper reads existing overlay trace JSONs, runs the single-family shift-aware alignment experiment for successful overlay rows, and writes `family_ms1_alignment_experiment_batch_summary.tsv/json`. It uses deterministic `<rank>_<family>_shift_aware` output prefixes so downstream `shift_aware_backfill_calibration_pack.py --shift-aware-summary-dir` can collect `*_source_family_best_shift_summary.tsv` files without hand-built command lists. `--start-rank`, `--limit`, and `--reuse-existing` make full 85RAW review queues resumable after overlay rendering; failed or missing overlay rows are reported as skipped/failed and do not imply standard-peak support.
 
 ---
 

@@ -25,6 +25,46 @@ from xic_extractor.alignment.shared_peak_identity_explanation import (
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
+        if args.matrix_only:
+            if args.activation_values_tsv is None:
+                raise ValueError(
+                    "--activation-values-tsv is required with --matrix-only"
+                )
+            if args.alignment_matrix_identity_tsv is None:
+                raise ValueError(
+                    "--alignment-matrix-identity-tsv is required with "
+                    "--matrix-only"
+                )
+            rt_mode_evidence_rows = tuple(
+                machine_evidence_support.load_rt_mode_evidence(
+                    args.rt_mode_evidence_tsv
+                ).values()
+            )
+            outputs = (
+                product_activation.apply_activation_to_alignment_matrix_outputs(
+                    activation_decisions_tsv=args.activation_decisions_tsv,
+                    activation_acceptance_tsv=args.activation_acceptance_tsv,
+                    activation_values_tsv=args.activation_values_tsv,
+                    alignment_matrix_tsv=args.alignment_matrix_tsv,
+                    alignment_matrix_identity_tsv=args.alignment_matrix_identity_tsv,
+                    alignment_review_tsv=args.alignment_review_tsv,
+                    output_dir=args.output_dir,
+                    require_acceptance_pass=not args.allow_non_passing_acceptance,
+                    allow_overwrite_source=args.allow_overwrite_source,
+                    rt_mode_evidence_rows=rt_mode_evidence_rows,
+                )
+            )
+            print(f"Activated matrix TSV: {outputs.matrix_tsv}")
+            print(f"Activation application summary TSV: {outputs.summary_tsv}")
+            print(f"Activation value delta TSV: {outputs.value_delta_tsv}")
+            print(
+                "Activation hypothesis identity TSV: "
+                f"{outputs.hypothesis_identity_tsv}"
+            )
+            print(f"Alignment matrix identity TSV: {outputs.matrix_identity_tsv}")
+            return 0
+        if args.alignment_cells_tsv is None:
+            raise ValueError("--alignment-cells-tsv is required unless --matrix-only")
         candidate_ms2_pattern_rows = load_candidate_ms2_pattern_rows(
             args.candidate_ms2_pattern_evidence_tsv
         )
@@ -98,8 +138,25 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--alignment-review-tsv", type=Path, required=True)
-    parser.add_argument("--alignment-cells-tsv", type=Path, required=True)
+    parser.add_argument("--alignment-cells-tsv", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--matrix-only",
+        action="store_true",
+        help=(
+            "Apply accepted activation values to the product matrix and "
+            "PeakHypothesis identity sidecars without reading or writing "
+            "alignment_cells.tsv or alignment_review.tsv outputs."
+        ),
+    )
+    parser.add_argument(
+        "--activation-values-tsv",
+        type=Path,
+        help=(
+            "Required with --matrix-only. Product-authorized activation values "
+            "keyed by peak_hypothesis_id and sample_stem."
+        ),
+    )
     parser.add_argument(
         "--candidate-ms2-pattern-evidence-tsv",
         type=Path,

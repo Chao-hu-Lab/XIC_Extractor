@@ -1,0 +1,82 @@
+"""Build normal-peak PeakHypothesis backfill decision outputs."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from xic_extractor.diagnostics import backfill_peakhypothesis_normal_peak_decision
+from xic_extractor.diagnostics.diagnostic_io import read_tsv_required
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
+    try:
+        index = (
+            backfill_peakhypothesis_normal_peak_decision
+            .build_normal_peak_decision_index(
+                promotion_rows=read_tsv_required(
+                    args.promotion_cells_tsv,
+                    (
+                        backfill_peakhypothesis_normal_peak_decision
+                        .PROMOTION_REQUIRED_COLUMNS
+                    ),
+                ),
+                raw85_slice_gate_rows=read_tsv_required(
+                    args.raw85_slice_gate_tsv,
+                    (
+                        backfill_peakhypothesis_normal_peak_decision
+                        .RAW85_SLICE_REQUIRED_COLUMNS
+                    ),
+                ),
+                manual_verdict_rows=read_tsv_required(
+                    args.raw85_manual_verdict_tsv,
+                    (
+                        backfill_peakhypothesis_normal_peak_decision
+                        .MANUAL_VERDICT_REQUIRED_COLUMNS
+                    ),
+                ),
+                machine_shape_rows=(
+                    read_tsv_required(
+                        args.machine_shape_evidence_tsv,
+                        (
+                            backfill_peakhypothesis_normal_peak_decision
+                            .MACHINE_SHAPE_REQUIRED_COLUMNS
+                        ),
+                    )
+                    if args.machine_shape_evidence_tsv is not None
+                    else ()
+                ),
+                source_run_id=args.source_run_id,
+            )
+        )
+        outputs = (
+            backfill_peakhypothesis_normal_peak_decision
+            .write_normal_peak_decision_outputs(args.output_dir, index)
+        )
+    except (OSError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(f"Normal-peak decision TSV: {outputs.decisions_tsv}")
+    print(f"Normal-peak decision summary JSON: {outputs.summary_json}")
+    return 0 if not index.summary["blocked_count"] else 1
+
+
+def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--promotion-cells-tsv", type=Path, required=True)
+    parser.add_argument("--raw85-slice-gate-tsv", type=Path, required=True)
+    parser.add_argument("--raw85-manual-verdict-tsv", type=Path, required=True)
+    parser.add_argument("--machine-shape-evidence-tsv", type=Path)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--source-run-id", default="")
+    return parser.parse_args(argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,6 +1,7 @@
 import json
 import tomllib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -31,8 +32,19 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
         cells = output_dir / "alignment_cells.tsv"
         integration = output_dir / "alignment_cell_integration_audit.tsv"
         backfill_seed = output_dir / "alignment_owner_backfill_seed_audit.tsv"
+        backfill_candidate = (
+            output_dir / "alignment_owner_backfill_candidate_audit.tsv"
+        )
         status = output_dir / "alignment_matrix_status.tsv"
-        for path in (review, matrix, cells, integration, backfill_seed, status):
+        for path in (
+            review,
+            matrix,
+            cells,
+            integration,
+            backfill_seed,
+            backfill_candidate,
+            status,
+        ):
             path.write_text("x\n", encoding="utf-8")
         return AlignmentRunOutputs(
             workbook=output_dir / "alignment_results.xlsx",
@@ -42,6 +54,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
             cells_tsv=cells,
             integration_audit_tsv=integration,
             backfill_seed_audit_tsv=backfill_seed,
+            backfill_candidate_audit_tsv=backfill_candidate,
             status_matrix_tsv=status,
             edge_evidence_tsv=output_dir / "owner_edge_evidence.tsv",
         )
@@ -63,6 +76,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
             "--emit-alignment-cells",
             "--emit-alignment-integration-audit",
             "--emit-alignment-backfill-seed-audit",
+            "--emit-alignment-backfill-candidate-audit",
             "--emit-alignment-status-matrix",
             "--emit-baseline-audit-asls",
         ]
@@ -86,6 +100,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert captured["emit_alignment_cells"] is True
     assert captured["emit_alignment_integration_audit"] is True
     assert captured["emit_alignment_backfill_seed_audit"] is True
+    assert captured["emit_alignment_backfill_candidate_audit"] is True
     assert captured["emit_alignment_status_matrix"] is True
     assert captured["raw_workers"] == 1
     assert captured["raw_xic_batch_size"] == 1
@@ -100,6 +115,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert "alignment_review.tsv" in stdout
     assert "alignment_cell_integration_audit.tsv" in stdout
     assert "alignment_owner_backfill_seed_audit.tsv" in stdout
+    assert "alignment_owner_backfill_candidate_audit.tsv" in stdout
     assert "alignment_matrix_status.tsv" in stdout
     assert "Owner edge evidence TSV:" in stdout
 
@@ -640,6 +656,146 @@ def test_run_alignment_cli_accepts_validation_minimal_output_level(
 
     assert code == 0
     assert captured["output_level"] == "validation-minimal"
+
+
+def test_run_alignment_cli_dna_dr_preset_runs_standard_peak_backfill(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured_alignment: dict[str, object] = {}
+    captured_preset: dict[str, object] = {}
+
+    def fake_run_alignment(**kwargs):
+        captured_alignment.update(kwargs)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        review = output_dir / "alignment_review.tsv"
+        matrix = output_dir / "alignment_matrix.tsv"
+        identity = output_dir / "alignment_matrix_identity.tsv"
+        cells = output_dir / "alignment_cells.tsv"
+        seed_audit = output_dir / "alignment_owner_backfill_seed_audit.tsv"
+        for path in (review, matrix, identity, cells, seed_audit):
+            path.write_text("x\n", encoding="utf-8")
+        return AlignmentRunOutputs(
+            review_tsv=review,
+            matrix_tsv=matrix,
+            matrix_identity_tsv=identity,
+            cells_tsv=cells,
+            backfill_seed_audit_tsv=seed_audit,
+        )
+
+    def fake_preset_runner(**kwargs):
+        captured_preset.update(kwargs)
+        summary_json = output_dir / "standard_peak_backfill_preset_summary.json"
+        summary_json.write_text("{}", encoding="utf-8")
+        return SimpleNamespace(
+            summary_json=summary_json,
+            published_alignment_manifest_json=output_dir / "publish_manifest.json",
+            gallery_html=output_dir / "gallery.html",
+        )
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setattr(
+        run_alignment,
+        "run_standard_peak_backfill_preset",
+        fake_preset_runner,
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--preset",
+            "dna_dr",
+        ]
+    )
+
+    assert code == 0
+    assert captured_alignment["emit_alignment_backfill_seed_audit"] is True
+    assert captured_alignment["emit_alignment_cells"] is True
+    assert captured_preset["alignment_dir"] == output_dir.resolve()
+    assert captured_preset["raw_dir"] == raw_dir.resolve()
+    assert captured_preset["dll_dir"] == dll_dir.resolve()
+    assert captured_preset["chunk_size"] == 120
+    assert captured_preset["write_gallery"] is True
+    assert captured_preset["reuse_existing"] is False
+    assert captured_preset["min_shape_r"] == pytest.approx(0.95)
+
+
+def test_run_alignment_cli_dna_dr_preset_uses_light_cells_for_validation_minimal(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured_alignment: dict[str, object] = {}
+
+    def fake_run_alignment(**kwargs):
+        captured_alignment.update(kwargs)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        review = output_dir / "alignment_review.tsv"
+        matrix = output_dir / "alignment_matrix.tsv"
+        identity = output_dir / "alignment_matrix_identity.tsv"
+        light_cells = output_dir / "alignment_backfill_cell_evidence.tsv"
+        seed_audit = output_dir / "alignment_owner_backfill_seed_audit.tsv"
+        for path in (review, matrix, identity, light_cells, seed_audit):
+            path.write_text("x\n", encoding="utf-8")
+        return AlignmentRunOutputs(
+            review_tsv=review,
+            matrix_tsv=matrix,
+            matrix_identity_tsv=identity,
+            backfill_cell_evidence_tsv=light_cells,
+            backfill_seed_audit_tsv=seed_audit,
+        )
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setattr(
+        run_alignment,
+        "run_standard_peak_backfill_preset",
+        lambda **_kwargs: SimpleNamespace(
+            summary_json=output_dir / "summary.json",
+            published_alignment_manifest_json=None,
+            gallery_html=None,
+        ),
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--preset",
+            "dna_dr",
+            "--output-level",
+            "validation-minimal",
+        ]
+    )
+
+    assert code == 0
+    assert captured_alignment["emit_alignment_backfill_seed_audit"] is True
+    assert captured_alignment["emit_alignment_cells"] is False
 
 
 def test_run_alignment_cli_passes_raw_workers(

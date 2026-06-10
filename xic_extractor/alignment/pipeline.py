@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable
 from contextlib import AbstractContextManager, ExitStack
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from xic_extractor.alignment.backfill_scope import (
     PREDICATE_VERSION,
@@ -30,8 +31,11 @@ from xic_extractor.alignment.identity_coherence_adapter import (
 from xic_extractor.alignment.ms1_index_source import OwnerBackfillXicBackend
 from xic_extractor.alignment.output_levels import AlignmentOutputLevel
 from xic_extractor.alignment.owner_backfill import (
+    OwnerBackfillCandidateAuditRow,
+    OwnerBackfillResult,
     OwnerBackfillWindowStrategy,
     build_owner_backfill_cells,
+    build_owner_backfill_result,
 )
 from xic_extractor.alignment.owner_clustering import (
     cluster_sample_local_owners,
@@ -74,6 +78,10 @@ from xic_extractor.alignment.raw_sources import (
 )
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.diagnostics.timing import TimingRecorder
+from xic_extractor.injection_rolling import (
+    order_sample_columns_by_injection,
+    read_injection_order,
+)
 
 _RawSourceTimingStats = RawSourceTimingStats
 _TimedRawSource = TimedRawSource
@@ -94,6 +102,7 @@ def run_alignment(
     emit_alignment_status_matrix: bool = False,
     emit_alignment_integration_audit: bool = False,
     emit_alignment_backfill_seed_audit: bool = False,
+    emit_alignment_backfill_candidate_audit: bool = False,
     raw_opener: RawOpener | None = None,
     raw_workers: int = 1,
     raw_xic_batch_size: int = 1,
@@ -105,6 +114,7 @@ def run_alignment(
     identity_coherence_output_dir: Path | None = None,
     identity_coherence_controls_manifest: Path | None = None,
     drift_lookup: DriftLookupProtocol | None = None,
+    sample_column_injection_order: Path | None = None,
     timing_recorder: TimingRecorder | None = None,
     backfill_scope: BackfillScope = "full-audit",
     audit_evidence_mode: str = "auto",
@@ -158,6 +168,9 @@ def run_alignment(
         emit_alignment_status_matrix=emit_alignment_status_matrix,
         emit_alignment_integration_audit=emit_alignment_integration_audit,
         emit_alignment_backfill_seed_audit=emit_alignment_backfill_seed_audit,
+        emit_alignment_backfill_candidate_audit=(
+            emit_alignment_backfill_candidate_audit
+        ),
         emit_skipped_evidence_ledger=backfill_scope != "full-audit",
     )
     resolved_audit_evidence_mode, audit_evidence_mode_reason = (
@@ -342,8 +355,12 @@ def run_alignment(
                     **skipped_evidence_summary(scope_selection.skipped),
                     **request_summary,
                 }
-            )
+        )
         with recorder.stage("alignment.owner_backfill") as owner_backfill_stage:
+            owner_backfill_candidate_audit_rows: tuple[
+                OwnerBackfillCandidateAuditRow,
+                ...,
+            ] = ()
             if raw_workers > 1:
                 process_output = run_owner_backfill_process(
                     backfill_features,
@@ -369,6 +386,9 @@ def run_alignment(
                     ),
                 )
                 rescued_cells = process_output.cells
+                owner_backfill_candidate_audit_rows = (
+                    process_output.candidate_audit_rows
+                )
                 owner_backfill_stage.metrics.update(
                     _summarize_xic_timing_stats(process_output.timing_stats),
                 )
@@ -403,7 +423,7 @@ def run_alignment(
                     if validation_raw_sources is not None
                     else {}
                 )
-                rescued_cells = build_owner_backfill_cells(
+                backfill_result = _build_owner_backfill_result(
                     backfill_features,
                     sample_order=batch.sample_order,
                     raw_sources=backfill_raw_sources,
@@ -419,14 +439,40 @@ def run_alignment(
                     region_audit_family_ids=region_audit_family_ids,
                     audit_evidence_mode=resolved_audit_evidence_mode,
                 )
+                rescued_cells = backfill_result.cells
+                owner_backfill_candidate_audit_rows = (
+                    backfill_result.candidate_audit_rows
+                )
                 owner_backfill_stage.metrics.update(
                     _summarize_xic_timing_stats(timing_stats),
                 )
                 record_raw_source_timing_stats(timing_stats, recorder=recorder)
+        matrix_sample_order = batch.sample_order
+        if sample_column_injection_order is not None:
+            injection_order = read_injection_order(sample_column_injection_order)
+            matrix_sample_order = order_sample_columns_by_injection(
+                batch.sample_order,
+                injection_order,
+            )
+            recorder.record(
+                "alignment.sample_column_injection_order",
+                elapsed_sec=0.0,
+                metrics={
+                    "ordered_samples": sum(
+                        1 for sample in batch.sample_order if sample in injection_order
+                    ),
+                    "unordered_samples": sum(
+                        1
+                        for sample in batch.sample_order
+                        if sample not in injection_order
+                    ),
+                    "source": str(sample_column_injection_order),
+                },
+            )
         with recorder.stage("alignment.build_matrix"):
             matrix = build_owner_alignment_matrix(
                 owner_features,
-                sample_order=batch.sample_order,
+                sample_order=matrix_sample_order,
                 ambiguous_by_sample={},
                 rescued_cells=rescued_cells,
             )
@@ -479,6 +525,9 @@ def run_alignment(
                 alignment_config=alignment_config,
                 edge_evidence=edge_evidence or (),
                 skipped_evidence=scope_selection.skipped,
+                owner_backfill_candidate_audit_rows=(
+                    owner_backfill_candidate_audit_rows
+                ),
                 baseline_integration_method=getattr(
                     peak_config,
                     "baseline_integration_method",
@@ -492,6 +541,16 @@ def run_alignment(
 _existing_raw_paths = existing_raw_paths
 _output_paths = output_paths
 _write_outputs_atomic = write_outputs_atomic
+_DEFAULT_BUILD_OWNER_BACKFILL_CELLS = build_owner_backfill_cells
+
+
+def _build_owner_backfill_result(*args: Any, **kwargs: Any) -> OwnerBackfillResult:
+    if build_owner_backfill_cells is not _DEFAULT_BUILD_OWNER_BACKFILL_CELLS:
+        return OwnerBackfillResult(
+            cells=tuple(build_owner_backfill_cells(*args, **kwargs)),
+            candidate_audit_rows=(),
+        )
+    return build_owner_backfill_result(*args, **kwargs)
 _metadata = alignment_metadata
 
 

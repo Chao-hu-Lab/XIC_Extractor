@@ -13,7 +13,6 @@ DETECTED_COLOR = "#D55E00"
 RESCUED_COLOR = "#0072B2"
 QC_COLOR = "#009E73"
 OTHER_TRACE_COLOR = "0.65"
-DETECTED_MEDIAN_COLOR = "#A04000"
 RESCUED_MEDIAN_COLOR = "#005A8D"
 
 
@@ -70,13 +69,6 @@ def _plot_unified_legend(ax: Any) -> None:
         ),
         Line2D([0], [0], color=QC_COLOR, lw=0.9, label="pooled QC"),
         Line2D([0], [0], color=OTHER_TRACE_COLOR, lw=0.7, label="other rescued"),
-        Line2D(
-            [0],
-            [0],
-            color=DETECTED_MEDIAN_COLOR,
-            lw=2.6,
-            label="detected median",
-        ),
         Line2D(
             [0],
             [0],

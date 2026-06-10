@@ -117,12 +117,31 @@ contract, machine-readable reason/status fields, and regression tests.
   they do not replace anchor MS1 same-peak evidence and are not required when
   MS1 same-peak evidence is product-authorized.
 - Wrong-peak or unresolved hypothesis blockers remain fail-closed for rescued
-  cells. Same-peak MS1 support must not override explicit duplicate-loser,
-  primary-loser, mode-split, cross-mode-rescue, or `consolidation_no_go`
-  provenance until those rows are consolidated into the product hypothesis by a
-  reviewed production rule.
+  cells. In the standard-peak MS1 gate, legacy family duplicate or multi-claim
+  labels such as duplicate-loser are context warnings, not product vetoes, when
+  the row is product-authorized at the `PeakHypothesis` level, the rescued cell
+  is an accepted rescue with standard Gaussian-smoothed shape, same-peak MS1
+  support, no neighboring/global apex interference, and no conflicting primary
+  detection. Keep the duplicate/multi-claim provenance in audit fields. Explicit
+  wrong-peak, primary-loser, mode-split, cross-mode-rescue, or
+  `consolidation_no_go` provenance remains fail-closed until those rows are
+  consolidated into the product hypothesis by a reviewed production rule.
 - Scan support and trace quality remain assessability/coverage evidence. They
   may block low-quality rescue, but they are not independent identity evidence.
+- Shift-aware same-pattern evidence may become product authority only through
+  the standard-peak MS1 gate. The product-authorized source is
+  `machine_shift_aware_standard_peak_gate`; it requires
+  `standard_peak_gate_supported`, a default shift-aware best-shift shape
+  threshold of `min_shape_r >= 0.95`, a Gaussian-smoothed family overlay verdict
+  of `ms1_shape_supports_family_backfill`, a same-peak product-authority reason
+  of `shift_aware_standard_peak_gate_supported`, and trace JSON path/SHA
+  provenance validation before projection. Manual standard-peak examples are
+  calibration oracle rows, not a product whitelist. Unlabeled machine-supported
+  rows must be labeled as machine-gate scope in activation artifacts, not as
+  manual-oracle rows. Non-standard peaks, neighboring-interference cases,
+  missing overlay traces, stale hashes, duplicate trace samples, explicit
+  wrong-peak/conflict blockers, and non-`PeakHypothesis` activation units remain
+  fail-closed or review-only.
 - MS1/QC pattern conflict, wrong-peak hypothesis evidence, or unexplained RT
   outside the preferred RT band keeps the rescue review-only even if the peak is
   quantifiable inside the broader owner-backfill query window. Candidate-aligned

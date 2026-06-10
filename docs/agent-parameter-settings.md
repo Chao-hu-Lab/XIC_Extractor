@@ -211,15 +211,67 @@ timing heartbeat`:
 
 - `alignment_matrix.tsv`: downstream correction / statistics handoff.
 - `alignment_review.tsv`: targeted benchmark and decision diagnostics.
-- `alignment_cells.tsv`: targeted benchmark and scoped audit diagnostics.
+- `alignment_matrix_identity.tsv`: matrix row/cell identity sidecar.
+- `alignment_backfill_cell_evidence.tsv`: compact cell-level ledger for
+  backfill evidence chain, gallery, and overlay review queues.
 
-It does not write `.xlsx`, HTML, owner-edge, status-matrix, event-owner, or
-ambiguous-owner debug outputs. Use fuller output levels only when a human
-review surface or debug artifact is explicitly required. In `auto` audit mode,
-`validation-minimal` resolves to no heavy audit evidence unless an explicit
-integration audit destination is requested. Some lightweight sidecars, such as
+It does not write `.xlsx`, HTML, full `alignment_cells.tsv`, owner-edge,
+status-matrix, event-owner, or ambiguous-owner debug outputs. Use `debug`,
+`validation`, or `--emit-alignment-cells` only when a human review surface or
+deep debug artifact explicitly needs the full 80-column cell ledger. In `auto`
+audit mode, `validation-minimal` resolves to no heavy audit evidence unless an
+explicit integration audit destination is requested. Some lightweight sidecars, such as
 `skipped_evidence_ledger.tsv` and `alignment_run_metadata.json`, may still be
 emitted when backfill scope needs machine-readable skip provenance.
+
+Backfill reconciliation gallery delivery has one extra lightweight requirement:
+add `--emit-alignment-backfill-seed-audit` to emit
+`alignment_owner_backfill_seed_audit.tsv`. That file provides seed-specific
+provenance for retained-gate review queues and overlay joins, but it does not
+force the full `alignment_cells.tsv` or all-candidate audit. Use
+`--emit-alignment-backfill-candidate-audit` only for deep owner-backfill debug;
+it is not required for normal seed-specific or family overlay galleries.
+
+For overlay rendering, first run retained backfill evidence gate and render only
+its `alignment_retained_backfill_overlay_review_queue.tsv`. Use
+`family_ms1_overlay_batch.py --no-pdf --reuse-existing` and chunk large queues
+with `--start-rank` / `--limit` when needed. The batch renderer reuses completed
+PNG/trace bundles and extracts RAW traces in sample-batched mode, so each chunk
+opens each sample RAW at most once instead of reopening RAW per family.
+
+For DNA dR production-style runs, prefer the preset surface instead of manually
+stitching the retained gate, machine pipeline, chunk consolidation, and final
+matrix publication:
+
+```powershell
+.venv\Scripts\python.exe -m scripts.run_alignment `
+  --preset dna_dr `
+  --discovery-batch-index <current-spec-discovery-batch-index.csv> `
+  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
+  --dll-dir C:\Xcalibur\system\programs `
+  --output-dir <task-specific-output-dir> `
+  --expected-sample-count 85 `
+  --output-level validation-minimal `
+  --backfill-scope production-equivalent `
+  --audit-evidence-mode none `
+  --performance-profile validation-fast `
+  --raw-workers 11 `
+  --owner-backfill-window-strategy super-window `
+  --owner-backfill-superwindow-span-factor 2 `
+  --timing-output <task-specific-output-dir>\timing.json `
+  --timing-live-output <task-specific-output-dir>\timing.live.json
+```
+
+`--preset dna_dr` loads `xic_extractor.presets.data\dna_dr.toml`. Its alignment
+section enables the standard-peak backfill publication runner after the base
+alignment finishes. The preset forces the lightweight seed audit and uses
+`alignment_backfill_cell_evidence.tsv` on `validation-minimal`; non-minimal
+output levels additionally emit `alignment_cells.tsv` because the publication
+runner still needs a cell-level evidence source. When standard-peak candidates
+pass the machine gate and consolidation, the runner publishes the accepted values
+back into the same `alignment_matrix.tsv` and writes a summary JSON, publication
+manifest, and optional review gallery under the alignment output directory.
+Non-standard peaks remain outside this preset's automatic publication policy.
 
 Before starting 85RAW, verify the batch index actually contains 85 samples. Do
 not reuse the historical 8RAW index by path similarity. Prefer the CLI preflight

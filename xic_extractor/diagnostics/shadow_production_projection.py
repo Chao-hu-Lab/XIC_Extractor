@@ -7,6 +7,7 @@ It does not mutate the alignment matrix or workbook outputs.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -18,7 +19,11 @@ from xic_extractor.alignment.production_decisions import (
     ProductionCellDecision,
     ProductionDecisionSet,
 )
-from xic_extractor.alignment.promotion_policy import BACKFILL_HYPOTHESIS_BLOCKED_REASON
+from xic_extractor.alignment.promotion_policy import (
+    ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+    BACKFILL_HYPOTHESIS_BLOCKED_REASON,
+    STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
+)
 from xic_extractor.diagnostics.diagnostic_io import (
     format_diagnostic_value,
     optional_float,
@@ -33,6 +38,8 @@ ShadowDecision = Literal["accept", "block", "context"]
 
 SHADOW_PRODUCTION_PROJECTION_COLUMNS = (
     "schema_version",
+    "peak_hypothesis_id",
+    "activation_unit_scope",
     "feature_family_id",
     "seed_group_id",
     "sample_stem",
@@ -65,6 +72,7 @@ SHADOW_PRODUCTION_PROJECTION_COLUMNS = (
     "support_components",
     "hard_blockers",
     "missing_evidence",
+    "shadow_projection_row_sha256",
     "overlay_verdict",
     "overlay_png_path",
 )
@@ -102,9 +110,17 @@ _PRODUCT_AUTHORIZED_STATUS = "product_authorized"
 _PRODUCT_AUTHORIZED_SCOPE = "feature_family_sample"
 _SUPPORT_STATUSES = {"supportive", "partial_support"}
 _MS1_SAME_PEAK_LEVEL = "trace_constellation"
-_MS1_SAME_PEAK_SUPPORT_REASON = (
-    "family_ms1_overlay_anchor_peak_own_max_shape_supported"
+_MS1_SAME_PEAK_SUPPORT_REASONS = frozenset(
+    {
+        ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+        STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
+    }
 )
+_IDENTITY_SUPPORTED_REVIEW_REASON = "identity_supported_review"
+_SEED_REQUEST_COMPONENT = "seed_request_provenance"
+_MS1_SHAPE_SUPPORT_COMPONENT = "ms1_shape_supports_family_backfill"
+
+
 @dataclass(frozen=True)
 class ShadowProductionProjectionIndex:
     rows: tuple[dict[str, str], ...]
@@ -123,6 +139,7 @@ def build_shadow_production_projection_index(
     cell_rows: Iterable[Mapping[str, str]],
     retained_gate_rows: Iterable[Mapping[str, str]],
     overlay_rows: Iterable[Mapping[str, str]] = (),
+    current_matrix_values: Mapping[tuple[str, str], str] | None = None,
     source_run_id: str = "",
     source_review_sha256: str = "",
     source_cell_sha256: str = "",
@@ -130,10 +147,13 @@ def build_shadow_production_projection_index(
     source_matrix_sha256: str = "",
     source_overlay_artifacts: Sequence[str] = (),
     source_overlay_sha256s: Sequence[str] = (),
+    source_ms1_pattern_coherence_artifacts: Sequence[str] = (),
+    source_ms1_pattern_coherence_sha256s: Sequence[str] = (),
 ) -> ShadowProductionProjectionIndex:
     gate_rows = tuple(dict(row) for row in retained_gate_rows)
     _validate_gate_rows(gate_rows)
     gate_projection_summary = _gate_projection_summary(gate_rows)
+    current_matrix_values = current_matrix_values or {}
     cells_by_key = {
         (
             text_value(row.get("feature_family_id")),
@@ -157,6 +177,7 @@ def build_shadow_production_projection_index(
         for sample in split_semicolon_labels(gate_row.get("seed_source_samples")):
             decision = production_decisions.cells.get((family_id, sample))
             cell = cells_by_key.get((family_id, sample), {})
+            matrix_key = (family_id, sample)
             rows.append(
                 _projection_row(
                     gate_row=gate_row,
@@ -164,6 +185,12 @@ def build_shadow_production_projection_index(
                     cell=cell,
                     sample_stem=sample,
                     decision=decision,
+                    current_matrix_cell_value=(
+                        current_matrix_values.get(matrix_key)
+                        if matrix_key in current_matrix_values
+                        else None
+                    ),
+                    current_matrix_cell_known=matrix_key in current_matrix_values,
                 ),
             )
 
@@ -180,6 +207,12 @@ def build_shadow_production_projection_index(
             source_matrix_sha256=source_matrix_sha256,
             source_overlay_artifacts=source_overlay_artifacts,
             source_overlay_sha256s=source_overlay_sha256s,
+            source_ms1_pattern_coherence_artifacts=(
+                source_ms1_pattern_coherence_artifacts
+            ),
+            source_ms1_pattern_coherence_sha256s=(
+                source_ms1_pattern_coherence_sha256s
+            ),
         ),
     )
 
@@ -212,18 +245,30 @@ def _projection_row(
     cell: Mapping[str, str],
     sample_stem: str,
     decision: ProductionCellDecision | None,
+    current_matrix_cell_value: str | None = None,
+    current_matrix_cell_known: bool = False,
 ) -> dict[str, str]:
-    current_written = bool(decision and decision.write_matrix_value)
     current_status = decision.production_status if decision else "blank"
-    current_value = decision.matrix_value if decision else None
-    current_blank = decision.blank_reason if decision else "missing_production_decision"
+    if current_matrix_cell_known:
+        current_value = optional_float(current_matrix_cell_value)
+        current_written = bool(text_value(current_matrix_cell_value))
+        current_blank = "" if current_written else "source_matrix_blank"
+        current_matrix_source = "alignment_matrix_tsv"
+    else:
+        current_written = bool(decision and decision.write_matrix_value)
+        current_value = decision.matrix_value if decision else None
+        current_blank = (
+            decision.blank_reason if decision else "missing_production_decision"
+        )
+        current_matrix_source = "production_decision_snapshot"
     current_raw_status = (
         decision.raw_status if decision else text_value(cell.get("status"))
     )
     review_rescued = (
         decision is not None
-        and decision.production_status == "review_rescue"
+        and decision.production_status in {"review_rescue", "accepted_rescue"}
         and current_raw_status == "rescued"
+        and not current_written
     )
     shadow_decision, reasons, warnings = _shadow_projection_decision(
         gate_row=gate_row,
@@ -239,18 +284,27 @@ def _projection_row(
             shadow_decision = "context"
             reasons = (*reasons, "missing_projected_matrix_value")
             warnings = (*warnings, "projection_accept_without_positive_area")
+    elif _IDENTITY_SUPPORTED_REVIEW_REASON in reasons:
+        projected_value = _projected_cell_value(cell)
     projected_written = current_written or (
         shadow_decision == "accept" and projected_value is not None
     )
     rt_start = text_value(gate_row.get("suggested_rt_min"))
     rt_end = text_value(gate_row.get("suggested_rt_max"))
+    peak_hypothesis_id = text_value(cell.get("peak_hypothesis_id")) or text_value(
+        cell.get("group_hypothesis_id"),
+    )
     hard_blockers = tuple(
         token
         for token in _hard_blocker_tokens(gate_row)
         if token in HARD_BLOCKER_TOKENS
     )
-    return {
+    row = {
         "schema_version": SCHEMA_VERSION,
+        "peak_hypothesis_id": peak_hypothesis_id,
+        "activation_unit_scope": (
+            "peak_hypothesis" if peak_hypothesis_id else ""
+        ),
         "feature_family_id": text_value(gate_row.get("feature_family_id")),
         "seed_group_id": text_value(gate_row.get("seed_group_id")),
         "sample_stem": sample_stem,
@@ -260,7 +314,7 @@ def _projection_row(
         "current_matrix_written": _bool_text(current_written),
         "current_matrix_value": _number_text(current_value),
         "current_blank_reason": current_blank,
-        "current_matrix_source": "production_decision_snapshot",
+        "current_matrix_source": current_matrix_source,
         "review_rescued_cell": _bool_text(review_rescued),
         "shadow_decision": shadow_decision,
         "shadow_reasons": ";".join(reasons),
@@ -283,12 +337,30 @@ def _projection_row(
         "support_components": text_value(gate_row.get("support_components")),
         "hard_blockers": ";".join(hard_blockers),
         "missing_evidence": text_value(gate_row.get("missing_evidence")),
+        "shadow_projection_row_sha256": "",
         "overlay_verdict": text_value(gate_row.get("overlay_family_verdict")),
         "overlay_png_path": (
             text_value(overlay_row.get("png_path"))
             or text_value(gate_row.get("overlay_png_path"))
         ),
     }
+    row["shadow_projection_row_sha256"] = _shadow_projection_row_sha256(row)
+    return row
+
+
+def _shadow_projection_row_sha256(row: Mapping[str, str]) -> str:
+    payload = {
+        column: text_value(row.get(column))
+        for column in SHADOW_PRODUCTION_PROJECTION_COLUMNS
+        if column != "shadow_projection_row_sha256"
+    }
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
 
 
 def _shadow_projection_decision(
@@ -316,10 +388,14 @@ def _shadow_projection_decision(
     if not _request_window_overlap(cell, gate_row):
         return "block", ("outside_request_window",), _warnings(cell, gate_row)
 
+    product_authorized = _product_authorized_same_peak_backfill(cell)
     current_blocker = _current_production_hard_blocker(decision)
     if current_blocker:
         return "block", (current_blocker,), _warnings(cell, gate_row)
-    cell_blocker = _cell_hypothesis_blocker(cell)
+    cell_blocker = _cell_hypothesis_blocker(
+        cell,
+        product_authorized=product_authorized,
+    )
     if cell_blocker:
         return "block", (cell_blocker,), _warnings(cell, gate_row)
 
@@ -327,7 +403,11 @@ def _shadow_projection_decision(
     if blockers:
         return "block", blockers, _warnings(cell, gate_row)
     gate_status = text_value(gate_row.get("evidence_gate_status"))
-    if gate_status and gate_status not in PROJECTION_ACCEPT_GATE_STATUSES:
+    if (
+        not product_authorized
+        and gate_status
+        and gate_status not in PROJECTION_ACCEPT_GATE_STATUSES
+    ):
         return "context", ("evidence_gate_requires_review",), _warnings(
             cell,
             gate_row,
@@ -338,7 +418,12 @@ def _shadow_projection_decision(
             cell,
             gate_row,
         )
-    if not _product_authorized_same_peak_backfill(cell):
+    if not product_authorized:
+        if _identity_supported_by_review(gate_row):
+            return "context", (_IDENTITY_SUPPORTED_REVIEW_REASON,), _warnings(
+                cell,
+                gate_row,
+            )
         return "context", ("missing_product_authorized_evidence_chain",), _warnings(
             cell,
             gate_row,
@@ -368,11 +453,22 @@ def _product_authorized_same_peak_backfill(cell: Mapping[str, str]) -> bool:
         != _MS1_SAME_PEAK_LEVEL
     ):
         return False
-    if _MS1_SAME_PEAK_SUPPORT_REASON not in split_semicolon_labels(
-        cell.get("backfill_evidence_reason"),
+    if not (
+        _MS1_SAME_PEAK_SUPPORT_REASONS
+        & set(split_semicolon_labels(cell.get("backfill_evidence_reason")))
     ):
         return False
     return True
+
+
+def _identity_supported_by_review(gate_row: Mapping[str, str]) -> bool:
+    gate_status = text_value(gate_row.get("evidence_gate_status"))
+    components = set(split_semicolon_labels(gate_row.get("support_components")))
+    return (
+        gate_status in PROJECTION_ACCEPT_GATE_STATUSES
+        and _SEED_REQUEST_COMPONENT in components
+        and _MS1_SHAPE_SUPPORT_COMPONENT in components
+    )
 
 
 def _product_authority_chain_text(cell: Mapping[str, str]) -> str:
@@ -431,10 +527,11 @@ def _authority_component_text(
 
 
 def _same_peak_reason_text(cell: Mapping[str, str]) -> str:
-    reasons = split_semicolon_labels(cell.get("backfill_evidence_reason"))
-    if _MS1_SAME_PEAK_SUPPORT_REASON not in reasons:
+    reasons = set(split_semicolon_labels(cell.get("backfill_evidence_reason")))
+    matched = tuple(sorted(_MS1_SAME_PEAK_SUPPORT_REASONS & reasons))
+    if not matched:
         return ""
-    return f"same_peak_reason:{_MS1_SAME_PEAK_SUPPORT_REASON}"
+    return "same_peak_reason:" + ";".join(matched)
 
 
 def _product_authority_present(
@@ -482,7 +579,11 @@ def _current_production_hard_blocker(
     )
 
 
-def _cell_hypothesis_blocker(cell: Mapping[str, str]) -> str:
+def _cell_hypothesis_blocker(
+    cell: Mapping[str, str],
+    *,
+    product_authorized: bool = False,
+) -> str:
     tokens = " ".join(
         text_value(cell.get(key)).lower().replace(" ", "_")
         for key in (
@@ -498,14 +599,15 @@ def _cell_hypothesis_blocker(cell: Mapping[str, str]) -> str:
             "backfill_evidence_reason",
         )
     )
-    hard_markers = (
-        "duplicate_loser",
+    hard_markers: tuple[str, ...] = (
         "primary_loser",
         "wrong_peak",
         "cross_mode_rescue_blocked",
         "mode_split_required",
         "consolidation_no_go",
     )
+    if not product_authorized:
+        hard_markers = ("duplicate_loser", *hard_markers)
     if any(marker in tokens for marker in hard_markers):
         return BACKFILL_HYPOTHESIS_BLOCKED_REASON
     return ""
@@ -637,6 +739,8 @@ def _summary(
     source_matrix_sha256: str,
     source_overlay_artifacts: Sequence[str],
     source_overlay_sha256s: Sequence[str],
+    source_ms1_pattern_coherence_artifacts: Sequence[str],
+    source_ms1_pattern_coherence_sha256s: Sequence[str],
 ) -> dict[str, object]:
     decisions = Counter(row["shadow_decision"] for row in rows)
     current_written = sum(row["current_matrix_written"] == "TRUE" for row in rows)
@@ -665,6 +769,12 @@ def _summary(
         "source_matrix_sha256": source_matrix_sha256,
         "source_overlay_artifacts": tuple(source_overlay_artifacts),
         "source_overlay_sha256s": tuple(source_overlay_sha256s),
+        "source_ms1_pattern_coherence_artifacts": tuple(
+            source_ms1_pattern_coherence_artifacts
+        ),
+        "source_ms1_pattern_coherence_sha256s": tuple(
+            source_ms1_pattern_coherence_sha256s
+        ),
         "current_matrix_source": "production_decision_snapshot",
         "alignment_matrix_cross_checked": False,
         "matrix_contract_changed": False,

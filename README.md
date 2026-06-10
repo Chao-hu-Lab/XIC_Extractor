@@ -262,9 +262,14 @@ Targeted workbook harness 預設只跑 `manual-2raw` 與 `tissue-8raw`，不把
 Alignment validation / 85RAW downstream handoff 不走 workbook harness。正式大規模
 alignment 驗收預設使用 `validation-minimal + production-equivalent +
 validation-fast + super-window + timing heartbeat`。主要 machine gate surface 是
-`alignment_matrix.tsv`、`alignment_review.tsv`、`alignment_cells.tsv`；必要時仍可能
-產生 `skipped_evidence_ledger.tsv`、`alignment_run_metadata.json` 這類輕量 sidecar。
-`.xlsx` 與 HTML 只在明確需要人工 review 或 debug 時產生。
+`alignment_matrix.tsv`、`alignment_review.tsv`、
+`alignment_matrix_identity.tsv` 與 `alignment_backfill_cell_evidence.tsv`；必要時
+仍可能產生 `skipped_evidence_ledger.tsv`、`alignment_run_metadata.json` 這類輕量
+sidecar。`.xlsx` 與 HTML 只在明確需要人工 review 或 debug 時產生。
+DNA dR workflow 可用 `--preset dna_dr`，這會在 alignment 後自動執行
+standard-peak backfill publication：標準峰候選經 machine gate / consolidation
+通過後會寫回同一個 `alignment_matrix.tsv`，並保留 publication manifest 與
+gallery summary。非標準峰仍不在此 preset 的自動補值範圍內。
 正式 85RAW alignment run 應加 `--expected-sample-count 85`，需要先檢查 launch
 contract 時可同一組參數加 `--preflight-only`。這個 85RAW guard 會檢查 canonical
 profile、heartbeat、Python `.venv`、candidate CSV path 與 RAW path。

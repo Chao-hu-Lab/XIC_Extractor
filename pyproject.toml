@@ -29,8 +29,11 @@ xic-align-cli = "scripts.run_alignment:main"
 xic-align-validate-cli = "scripts.run_alignment_validation:main"
 
 [tool.setuptools.packages.find]
-include = ["gui*", "scripts*", "xic_extractor*"]
+include = ["gui*", "scripts*", "tools*", "xic_extractor*"]
 exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+"xic_extractor.presets.data" = ["*.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

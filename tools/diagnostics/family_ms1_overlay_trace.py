@@ -16,27 +16,47 @@ from tools.diagnostics.family_ms1_overlay_models import (
 
 
 def load_family_cells(alignment_cells: Path, family_id: str) -> list[FamilyCell]:
+    families = load_family_cells_for_families(alignment_cells, (family_id,))
+    rows = families.get(family_id, [])
+    if not rows:
+        raise ValueError(f"No alignment cells found for family `{family_id}`")
+    return rows
+
+
+def load_family_cells_for_families(
+    alignment_cells: Path,
+    family_ids: Sequence[str],
+) -> dict[str, list[FamilyCell]]:
+    requested = {family_id for family_id in family_ids if family_id}
+    if not requested:
+        return {}
+    rows_by_family: dict[str, list[FamilyCell]] = {
+        family_id: [] for family_id in requested
+    }
     with alignment_cells.open("r", encoding="utf-8", newline="") as fh:
         reader = csv.DictReader(fh, delimiter="\t")
         _require_columns(reader.fieldnames or (), REQUIRED_ALIGNMENT_COLUMNS)
-        rows = [
-            FamilyCell(
-                sample_stem=row["sample_stem"],
-                status=row["status"],
-                area=_parse_float(row.get("area")),
-                height=_parse_float(row.get("height")),
-                apex_rt=_parse_float(row.get("apex_rt")),
-                peak_start_rt=_parse_float(row.get("peak_start_rt")),
-                peak_end_rt=_parse_float(row.get("peak_end_rt")),
-                region_shadow_verdict=row.get("region_shadow_verdict", ""),
-                source_candidate_id=row.get("source_candidate_id", ""),
+        for row in reader:
+            family_id = row.get("feature_family_id", "")
+            if family_id not in requested:
+                continue
+            rows_by_family[family_id].append(
+                FamilyCell(
+                    sample_stem=row["sample_stem"],
+                    status=row["status"],
+                    area=_parse_float(row.get("area")),
+                    height=_parse_float(row.get("height")),
+                    apex_rt=_parse_float(row.get("apex_rt")),
+                    peak_start_rt=_parse_float(row.get("peak_start_rt")),
+                    peak_end_rt=_parse_float(row.get("peak_end_rt")),
+                    region_shadow_verdict=row.get("region_shadow_verdict", ""),
+                    source_candidate_id=row.get("source_candidate_id", ""),
+                )
             )
-            for row in reader
-            if row.get("feature_family_id") == family_id
-        ]
-    if not rows:
-        raise ValueError(f"No alignment cells found for family `{family_id}`")
-    return sorted(rows, key=lambda row: row.area or 0.0, reverse=True)
+    return {
+        family_id: sorted(rows, key=lambda row: row.area or 0.0, reverse=True)
+        for family_id, rows in rows_by_family.items()
+    }
 
 
 def extract_family_trace_rows(

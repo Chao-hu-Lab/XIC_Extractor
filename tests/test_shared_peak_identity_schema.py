@@ -10,6 +10,8 @@ from xic_extractor.alignment.shared_peak_identity_explanation.schema import (
     ACTIVATION_DECISION_SCHEMA_VERSION,
     ACTIVATION_VALUE_DELTA_COLUMNS,
     ACTIVATION_VALUE_DELTA_SCHEMA_VERSION,
+    ACTIVATION_VALUE_INPUT_COLUMNS,
+    ACTIVATION_VALUE_INPUT_SCHEMA_VERSION,
     ALLOWED_BY_FIELD,
     BLAST_RADIUS_MANIFEST_COLUMNS,
     BLAST_RADIUS_MANIFEST_SCHEMA_VERSION,
@@ -382,16 +384,44 @@ def test_activation_schema_tokens_are_allowed_and_reject_drift() -> None:
         "activation_unit_scope",
     )
     assert (
-        ACTIVATION_VALUE_DELTA_SCHEMA_VERSION
-        == "shared_peak_identity_activation_value_delta_v1"
+        ACTIVATION_VALUE_INPUT_SCHEMA_VERSION
+        == "shared_peak_identity_activation_value_input_v1"
     )
-    assert ACTIVATION_VALUE_DELTA_COLUMNS[:5] == (
+    assert ACTIVATION_VALUE_INPUT_COLUMNS[:5] == (
+        "peak_hypothesis_id",
+        "feature_family_id",
+        "sample_stem",
+        "projected_matrix_value",
+        "projected_matrix_value_source",
+    )
+    assert "source_artifact_schema_version" in ACTIVATION_VALUE_INPUT_COLUMNS
+    assert "source_artifact_sha256" in ACTIVATION_VALUE_INPUT_COLUMNS
+    assert "source_row_sha256" in ACTIVATION_VALUE_INPUT_COLUMNS
+    assert "source_provenance_detail" in ACTIVATION_VALUE_INPUT_COLUMNS
+    assert (
+        ACTIVATION_VALUE_DELTA_SCHEMA_VERSION
+        == "shared_peak_identity_activation_value_delta_v3"
+    )
+    assert ACTIVATION_VALUE_DELTA_COLUMNS[:9] == (
         "activation_value_delta_schema_version",
         "feature_family_id",
         "candidate_container_id",
         "sample_id",
         "peak_hypothesis_id",
+        "activation_unit_scope",
+        "activation_status",
+        "product_effect",
+        "contract_rule_id",
     )
+    assert "matrix_value_kind" in ACTIVATION_VALUE_DELTA_COLUMNS
+    assert "matrix_value_source" in ACTIVATION_VALUE_DELTA_COLUMNS
+    assert "matrix_value_source_field" in ACTIVATION_VALUE_DELTA_COLUMNS
+    assert "matrix_value_source_detail" in ACTIVATION_VALUE_DELTA_COLUMNS
+    assert "matrix_value_source_artifact_schema_version" in (
+        ACTIVATION_VALUE_DELTA_COLUMNS
+    )
+    assert "matrix_value_source_artifact_sha256" in ACTIVATION_VALUE_DELTA_COLUMNS
+    assert "matrix_value_source_row_sha256" in ACTIVATION_VALUE_DELTA_COLUMNS
 
     for token in {
         "auto_activate",

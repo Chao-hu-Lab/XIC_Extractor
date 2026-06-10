@@ -76,6 +76,10 @@ def test_cli_writes_retained_product_backfill_gate_and_summary(
         output_dir / "alignment_retained_backfill_missing_overlay_queue.tsv",
     )
     assert [row["feature_family_id"] for row in queue_rows] == ["FAM_MISSING"]
+    review_queue_rows = _read_tsv(
+        output_dir / "alignment_retained_backfill_overlay_review_queue.tsv",
+    )
+    assert [row["feature_family_id"] for row in review_queue_rows] == ["FAM_MISSING"]
     queue = queue_rows[0]
     assert queue["rank"] == "1"
     assert queue["family_center_mz"] == "269.145"
@@ -100,6 +104,7 @@ def test_cli_writes_retained_product_backfill_gate_and_summary(
     assert payload["row_count"] == 3
     assert payload["family_count"] == 3
     assert payload["missing_overlay_queue_count"] == 1
+    assert payload["review_overlay_queue_count"] == 1
     assert payload["excluded_family_counts"] == {
         "detected_cell_join_mismatch": 1,
         "detected_zero_family": 1,
@@ -149,6 +154,86 @@ def test_overlay_support_without_seed_provenance_fails_closed(
     )
     assert payload["source_seed_audit_artifact"] == ""
     assert payload["source_seed_audit_sha256"] == ""
+
+
+def test_high_detected_low_rescue_missing_overlay_is_not_queued(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir()
+    output_dir = tmp_path / "gate"
+    family_id = "FAM_STRONG"
+    detected_cells = [
+        _cell_row(family_id, f"D{index:02d}", "detected")
+        for index in range(1, 84)
+    ]
+    rescued_cells = [
+        _cell_row(family_id, "R01", "rescued"),
+        _cell_row(family_id, "R02", "rescued"),
+    ]
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [_review_row(family_id, detected=83, rescued=2, accepted=2)],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [*detected_cells, *rescued_cells],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_matrix.tsv",
+        [{"Mz": "269.145", "RT": "10.0000", "D01": "100", "R01": "90"}],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_owner_backfill_seed_audit.tsv",
+        [_seed_row(family_id, "R01"), _seed_row(family_id, "R02")],
+    )
+
+    code = gate_cli.main(
+        [
+            "--alignment-dir",
+            str(alignment_dir),
+            "--output-dir",
+            str(output_dir),
+            "--source-run-id",
+            "strong-support",
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(output_dir / "alignment_retained_backfill_evidence_gate.tsv")
+    assert {row["evidence_gate_status"] for row in rows} == {
+        "machine_support_no_overlay",
+    }
+    assert {row["recommended_action"] for row in rows} == {
+        "track_machine_supported_backfill",
+    }
+    assert all(
+        "high_detected_anchor_low_rescue_machine_support"
+        in row["support_components"]
+        for row in rows
+    )
+    assert all(
+        "missing_overlay_evidence" not in row["missing_evidence"]
+        for row in rows
+    )
+    queue_rows = _read_tsv(
+        output_dir / "alignment_retained_backfill_missing_overlay_queue.tsv",
+    )
+    assert queue_rows == []
+    review_queue_rows = _read_tsv(
+        output_dir / "alignment_retained_backfill_overlay_review_queue.tsv",
+    )
+    assert review_queue_rows == []
+    payload = json.loads(
+        (output_dir / "alignment_retained_backfill_evidence_gate.json").read_text(
+            encoding="utf-8",
+        ),
+    )
+    assert payload["missing_overlay_queue_count"] == 0
+    assert payload["review_overlay_queue_count"] == 0
+    assert payload["recommended_action_counts"] == {
+        "track_machine_supported_backfill": 1,
+    }
 
 
 def test_legacy_family_overlay_requires_seed_specific_overlay(
@@ -309,6 +394,31 @@ def test_cli_defaults_output_dir_to_alignment_dir(tmp_path: Path) -> None:
     assert (
         alignment_dir / "alignment_retained_backfill_missing_overlay_queue.tsv"
     ).is_file()
+    assert (
+        alignment_dir / "alignment_retained_backfill_overlay_review_queue.tsv"
+    ).is_file()
+
+
+def test_cli_prefers_compact_backfill_cell_evidence_over_full_cells(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_run(tmp_path / "alignment")
+    compact_path = alignment_dir / "alignment_backfill_cell_evidence.tsv"
+    compact_path.write_text(
+        (alignment_dir / "alignment_cells.tsv").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    _write_tsv(alignment_dir / "alignment_cells.tsv", [{"feature_family_id": "FAM"}])
+
+    code = gate_cli.main(["--alignment-dir", str(alignment_dir)])
+
+    assert code == 0
+    payload = json.loads(
+        (alignment_dir / "alignment_retained_backfill_evidence_gate.json").read_text(
+            encoding="utf-8",
+        ),
+    )
+    assert payload["source_cell_artifact"] == str(compact_path)
 
 
 def test_cli_reports_missing_required_columns(tmp_path: Path, capsys) -> None:

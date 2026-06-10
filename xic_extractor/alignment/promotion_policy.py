@@ -41,6 +41,7 @@ PRIMARY_IDENTITY_RETAINED_BACKFILL_REVIEW_REASON = (
 ANCHOR_OWN_MAX_MS1_SUPPORT_REASON = (
     "family_ms1_overlay_anchor_peak_own_max_shape_supported"
 )
+STANDARD_PEAK_GATE_MS1_SUPPORT_REASON = "shift_aware_standard_peak_gate_supported"
 
 PromotionState = Literal["not_applicable", "supported", "blocked"]
 
@@ -105,7 +106,12 @@ _MS1_PATTERN_LEVELS = {
     "trace_constellation",
 }
 _MS1_SAME_PEAK_LEVELS = frozenset({"trace_constellation"})
-_MS1_SAME_PEAK_SUPPORT_REASONS = frozenset({ANCHOR_OWN_MAX_MS1_SUPPORT_REASON})
+_MS1_SAME_PEAK_SUPPORT_REASONS = frozenset(
+    {
+        ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
+        STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
+    }
+)
 _QC_PATTERN_LEVELS = {
     "qc_consensus_with_local_qc_overlay",
     "qc_consensus_qc_overlay",

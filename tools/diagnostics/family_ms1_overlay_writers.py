@@ -43,14 +43,17 @@ def write_family_ms1_overlay_outputs(
     family_center_rt: float | None,
     provenance: Mapping[str, object] | None = None,
     drift_lookup: DriftLookupProtocol | None = None,
+    write_pdf: bool = True,
 ) -> FamilyMs1OverlayOutputs:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_tsv = output_dir / f"{output_prefix}_trace_summary.tsv"
     trace_data_json = output_dir / f"{output_prefix}_trace_data.json"
     png_path = output_dir / f"{output_prefix}.png"
-    pdf_path = output_dir / f"{output_prefix}.pdf"
+    pdf_path = output_dir / f"{output_prefix}.pdf" if write_pdf else None
     hypothesis_png_path = output_dir / f"{output_prefix}_hypothesis.png"
-    hypothesis_pdf_path = output_dir / f"{output_prefix}_hypothesis.pdf"
+    hypothesis_pdf_path = (
+        output_dir / f"{output_prefix}_hypothesis.pdf" if write_pdf else None
+    )
 
     _write_summary(summary_tsv, rows)
     _write_trace_data(

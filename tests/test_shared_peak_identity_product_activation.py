@@ -1024,6 +1024,204 @@ def test_activation_application_cli_formal_mode_accepts_public_mz_rt_matrix(
     ).exists()
 
 
+def test_activation_application_cli_matrix_only_uses_activation_values_without_cells(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    public_matrix = _write_public_mz_rt_matrix_fixture(tmp_path, fixture)
+    identity = _write_alignment_matrix_identity_fixture(tmp_path)
+    decisions = tmp_path / "matrix_only_activation_decisions.tsv"
+    activation_values = tmp_path / "activation_values.tsv"
+    _write_tsv(
+        decisions,
+        (
+            "feature_family_id",
+            "candidate_container_id",
+            "sample_id",
+            "peak_hypothesis_id",
+            "activation_unit_scope",
+            "activation_status",
+            "product_effect",
+            "contract_rule_id",
+            "activation_reason",
+        ),
+        [
+            {
+                "feature_family_id": "FAM_ADD",
+                "candidate_container_id": "FAM_ADD",
+                "sample_id": "S2",
+                "peak_hypothesis_id": "FAM_ADD::mode_1",
+                "activation_unit_scope": "peak_hypothesis",
+                "activation_status": "auto_activate",
+                "product_effect": "accept_label_or_rescue",
+                "contract_rule_id": (
+                    "machine_observed_sufficient_positive_identity"
+                ),
+                "activation_reason": "matrix-only normal peak",
+            }
+        ],
+    )
+    _write_tsv(
+        activation_values,
+        (
+            "peak_hypothesis_id",
+            "feature_family_id",
+            "sample_stem",
+            "projected_matrix_value",
+            "projected_matrix_value_source",
+            "current_raw_status",
+            "current_production_status",
+            "source_artifact_schema_version",
+            "source_artifact_sha256",
+            "source_row_sha256",
+            "source_provenance_detail",
+        ),
+        [
+            {
+                "peak_hypothesis_id": "FAM_ADD::mode_1",
+                "feature_family_id": "FAM_ADD",
+                "sample_stem": "S2",
+                "projected_matrix_value": "300",
+                "projected_matrix_value_source": (
+                    "gaussian15_positive_asls_residual"
+                ),
+                "current_raw_status": "rescued",
+                "current_production_status": "rescued",
+                "source_artifact_schema_version": "backfill_test_projection_v1",
+                "source_artifact_sha256": "a" * 64,
+                "source_row_sha256": "b" * 64,
+                "source_provenance_detail": "unit_test_activation_value",
+            }
+        ],
+    )
+
+    assert (
+        main(
+            [
+                "--matrix-only",
+                "--activation-values-tsv",
+                str(activation_values),
+                "--activation-decisions-tsv",
+                str(decisions),
+                "--activation-acceptance-tsv",
+                str(fixture["acceptance"]),
+                "--alignment-matrix-tsv",
+                str(public_matrix),
+                "--alignment-matrix-identity-tsv",
+                str(identity),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(tmp_path / "matrix_only"),
+            ]
+        )
+        == 0
+    )
+
+    matrix_rows = _read_tsv(tmp_path / "matrix_only" / "alignment_matrix.tsv")
+    identity_rows = _read_tsv(
+        tmp_path / "matrix_only" / "alignment_matrix_identity.tsv"
+    )
+    add_index = next(
+        index
+        for index, row in enumerate(identity_rows)
+        if row["peak_hypothesis_id"] == "FAM_ADD::mode_1"
+    )
+    assert matrix_rows[add_index]["S2"] == "300"
+    assert (tmp_path / "matrix_only" / "activation_value_delta.tsv").exists()
+    assert (
+        tmp_path / "matrix_only" / "activation_hypothesis_identity.tsv"
+    ).exists()
+    assert not (tmp_path / "matrix_only" / "alignment_cells.tsv").exists()
+    assert not (tmp_path / "matrix_only" / "alignment_review.tsv").exists()
+    summary = _read_tsv(
+        tmp_path / "matrix_only" / "activation_application_summary.tsv"
+    )[0]
+    assert summary["activation_output_mode"] == "matrix-only"
+    assert summary["matrix_cells_written"] == "1"
+    assert summary["families_added_to_matrix"] == "1"
+    delta = _read_tsv(tmp_path / "matrix_only" / "activation_value_delta.tsv")[0]
+    assert delta["activated_matrix_value"] == "300"
+    assert delta["source_cell_status"] == "rescued"
+    assert delta["matrix_value_kind"] == "backfill_activation"
+    assert delta["matrix_value_source"] == "activation_values_tsv"
+    assert delta["matrix_value_source_field"] == "projected_matrix_value"
+    assert delta["matrix_value_source_detail"] == "gaussian15_positive_asls_residual"
+    assert (
+        delta["matrix_value_source_artifact_schema_version"]
+        == "backfill_test_projection_v1"
+    )
+    assert delta["matrix_value_source_artifact_sha256"] == "a" * 64
+    assert delta["matrix_value_source_row_sha256"] == "b" * 64
+
+
+def test_activation_application_matrix_only_rejects_unprovenanced_values(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path, acceptance_status="pass")
+    public_matrix = _write_public_mz_rt_matrix_fixture(tmp_path, fixture)
+    identity = _write_alignment_matrix_identity_fixture(tmp_path)
+    decisions = tmp_path / "matrix_only_activation_decisions.tsv"
+    activation_values = tmp_path / "activation_values.tsv"
+    _write_tsv(
+        decisions,
+        (
+            "feature_family_id",
+            "candidate_container_id",
+            "sample_id",
+            "peak_hypothesis_id",
+            "activation_unit_scope",
+            "activation_status",
+            "product_effect",
+            "contract_rule_id",
+            "activation_reason",
+        ),
+        [
+            {
+                "feature_family_id": "FAM_ADD",
+                "candidate_container_id": "FAM_ADD",
+                "sample_id": "S2",
+                "peak_hypothesis_id": "FAM_ADD::mode_1",
+                "activation_unit_scope": "peak_hypothesis",
+                "activation_status": "auto_activate",
+                "product_effect": "accept_label_or_rescue",
+                "contract_rule_id": (
+                    "machine_observed_sufficient_positive_identity"
+                ),
+                "activation_reason": "matrix-only normal peak",
+            }
+        ],
+    )
+    _write_tsv(
+        activation_values,
+        (
+            "peak_hypothesis_id",
+            "feature_family_id",
+            "sample_stem",
+            "projected_matrix_value",
+        ),
+        [
+            {
+                "peak_hypothesis_id": "FAM_ADD::mode_1",
+                "feature_family_id": "FAM_ADD",
+                "sample_stem": "S2",
+                "projected_matrix_value": "300",
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="activation_values.tsv missing columns"):
+        product_activation.apply_activation_to_alignment_matrix_outputs(
+            activation_decisions_tsv=decisions,
+            activation_acceptance_tsv=fixture["acceptance"],
+            activation_values_tsv=activation_values,
+            alignment_matrix_tsv=public_matrix,
+            alignment_matrix_identity_tsv=identity,
+            alignment_review_tsv=fixture["review"],
+            output_dir=tmp_path / "matrix_only",
+        )
+
+
 def test_activation_application_cli_formal_mode_uses_rt_mode_evidence(
     tmp_path: Path,
 ) -> None:
