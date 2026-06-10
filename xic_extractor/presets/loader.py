@@ -50,6 +50,7 @@ ALIGNMENT_RUNTIME_OVERRIDE_KEYS = frozenset(
     {
         "standard_peak_backfill",
         "standard_peak_backfill_chunk_size",
+        "standard_peak_backfill_publication_mode",
         "standard_peak_backfill_write_gallery",
         "standard_peak_backfill_reuse_existing",
         "standard_peak_backfill_min_shape_r",

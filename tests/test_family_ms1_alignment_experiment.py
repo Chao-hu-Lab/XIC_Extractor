@@ -3,14 +3,20 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tools.diagnostics.family_ms1_alignment_experiment import (
+    _best_source_family_shape_shift,
     _drift_corrected_normalized_trace,
+    _pearson_similarity,
     _relative_aligned_normalized_trace,
+    _source_family_normalized_traces,
+    _source_family_shifted_median_curve_from_normalized_traces,
     _source_family_shifted_trace,
     build_source_family_best_shift_plan,
     build_source_family_shift_plan,
+    load_source_family_by_family_sample,
     load_source_family_by_sample,
     load_trace_data_bundle,
     main,
@@ -127,6 +133,33 @@ def test_load_source_family_by_sample_reads_reason_provenance(tmp_path: Path) ->
     assert mapping == {"sample-a": "FAM000123"}
 
 
+def test_load_source_family_by_family_sample_reads_requested_families(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "cells.tsv"
+    path.write_text(
+        "\t".join(("feature_family_id", "sample_stem", "reason"))
+        + "\n"
+        + "\t".join(("FAM001", "sample-a", "source_family=FAM000123"))
+        + "\n"
+        + "\t".join(("FAM002", "sample-b", "source_family=FAM000999"))
+        + "\n"
+        + "\t".join(("FAM003", "sample-c", "missing source"))
+        + "\n",
+        encoding="utf-8",
+    )
+
+    mapping = load_source_family_by_family_sample(
+        path,
+        family_ids=("FAM001", "FAM003"),
+    )
+
+    assert mapping == {
+        "FAM001": {"sample-a": "FAM000123"},
+        "FAM003": {"sample-c": "(none)"},
+    }
+
+
 def test_source_family_shift_plan_uses_one_group_shift() -> None:
     reference = _trace_row(
         "reference",
@@ -200,6 +233,60 @@ def test_source_family_best_shift_plan_uses_group_shape_correlation() -> None:
     assert by_source["FAM000002"].shift_to_reference_min == pytest.approx(-1.0)
     assert by_source["FAM000002"].shape_similarity_to_reference is not None
     assert by_source["FAM000002"].shape_similarity_to_reference > 0.99
+
+
+def test_best_shift_vectorized_search_matches_scalar_loop() -> None:
+    reference_rows = (
+        _trace_row(
+            "reference-a",
+            rt=(7.8, 7.9, 8.0, 8.1, 8.2),
+            intensity=(0.0, 40.0, 100.0, 40.0, 0.0),
+        ),
+        _trace_row(
+            "reference-b",
+            rt=(7.8, 7.9, 8.0, 8.1, 8.2),
+            intensity=(0.0, 35.0, 95.0, 35.0, 0.0),
+        ),
+    )
+    shifted_rows = (
+        _trace_row(
+            "shifted-a",
+            rt=(8.8, 8.9, 9.0, 9.1, 9.2),
+            intensity=(0.0, 40.0, 100.0, 40.0, 0.0),
+        ),
+        _trace_row(
+            "shifted-b",
+            rt=(8.8, 8.9, 9.0, 9.1, 9.2),
+            intensity=(0.0, 35.0, 95.0, 35.0, 0.0),
+        ),
+    )
+    grid = np.linspace(7.5, 9.5, 600)
+    reference_curve = _source_family_shifted_median_curve_from_normalized_traces(
+        _source_family_normalized_traces(reference_rows),
+        shift_min=0.0,
+        grid=grid,
+    )
+    traces = _source_family_normalized_traces(shifted_rows)
+
+    shift, similarity = _best_source_family_shape_shift(
+        traces,
+        reference_curve=reference_curve,
+        grid=grid,
+        shift_min=-1.2,
+        shift_max=0.0,
+        shift_step=0.1,
+    )
+    scalar_shift, scalar_similarity = _scalar_best_source_family_shape_shift(
+        traces,
+        reference_curve=reference_curve,
+        grid=grid,
+        shift_min=-1.2,
+        shift_max=0.0,
+        shift_step=0.1,
+    )
+
+    assert shift == pytest.approx(scalar_shift)
+    assert similarity == pytest.approx(scalar_similarity)
 
 
 def test_cli_renders_alignment_experiment_without_raw_or_drift(tmp_path: Path) -> None:
@@ -296,6 +383,79 @@ def test_cli_renders_alignment_experiment_without_raw_or_drift(tmp_path: Path) -
     assert "median_shape_correlation" in best_shift_summary
 
 
+def test_cli_no_images_writes_shift_summaries_without_pngs(tmp_path: Path) -> None:
+    trace_json = tmp_path / "fam_trace_data.json"
+    cell_evidence = tmp_path / "cells.tsv"
+    trace_json.write_text(
+        json.dumps(
+            {
+                "family_id": "FAM001",
+                "mz": 123.45,
+                "ppm": 20.0,
+                "rt_min": 7.0,
+                "rt_max": 9.0,
+                "family_center_rt": 8.0,
+                "provenance": {"output_prefix": "fam001_overlay"},
+                "evidence_summary": {
+                    "absolute_trace_apex_cluster_fraction": 0.75,
+                    "absolute_own_max_shape_supported_fraction": 0.8,
+                    "shape_supported_fraction": 0.3,
+                },
+                "traces": [
+                    _trace_json("detected-a", status="detected", group="detected_seed"),
+                    _trace_json("rescued-a", status="rescued"),
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    cell_evidence.write_text(
+        "\t".join(("feature_family_id", "sample_stem", "reason"))
+        + "\n"
+        + "\t".join(
+            (
+                "FAM001",
+                "detected-a",
+                "primary family consolidation; source_family=FAM000001",
+            ),
+        )
+        + "\n"
+        + "\t".join(
+            (
+                "FAM001",
+                "rescued-a",
+                "primary family consolidation; source_family=FAM000002",
+            ),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    out_dir = tmp_path / "out"
+
+    exit_code = main(
+        [
+            "--trace-data-json",
+            str(trace_json),
+            "--output-dir",
+            str(out_dir),
+            "--output-prefix",
+            "fam001_experiment",
+            "--cell-evidence-tsv",
+            str(cell_evidence),
+            "--no-images",
+        ],
+    )
+
+    assert exit_code == 0
+    assert (out_dir / "fam001_experiment_summary.tsv").is_file()
+    assert (out_dir / "fam001_experiment_source_family_summary.tsv").is_file()
+    assert (out_dir / "fam001_experiment_source_family_shift_summary.tsv").is_file()
+    assert (
+        out_dir / "fam001_experiment_source_family_best_shift_summary.tsv"
+    ).is_file()
+    assert not list(out_dir.glob("*.png"))
+
+
 class _FakeDriftLookup:
     def __init__(self, deltas: dict[str, float]) -> None:
         self._deltas = deltas
@@ -330,6 +490,32 @@ def _trace_row(
         rt=rt,
         intensity=intensity,
     )
+
+
+def _scalar_best_source_family_shape_shift(
+    traces: tuple[tuple[np.ndarray, np.ndarray], ...],
+    *,
+    reference_curve: np.ndarray,
+    grid: np.ndarray,
+    shift_min: float,
+    shift_max: float,
+    shift_step: float,
+) -> tuple[float | None, float | None]:
+    best_shift: float | None = None
+    best_similarity: float | None = None
+    for shift in np.arange(shift_min, shift_max + shift_step / 2.0, shift_step):
+        curve = _source_family_shifted_median_curve_from_normalized_traces(
+            traces,
+            shift_min=float(shift),
+            grid=grid,
+        )
+        similarity = _pearson_similarity(curve, reference_curve)
+        if similarity is None:
+            continue
+        if best_similarity is None or similarity > best_similarity:
+            best_shift = float(shift)
+            best_similarity = similarity
+    return best_shift, best_similarity
 
 
 def _trace_json(

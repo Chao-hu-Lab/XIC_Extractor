@@ -237,7 +237,15 @@ its `alignment_retained_backfill_overlay_review_queue.tsv`. Use
 `family_ms1_overlay_batch.py --no-pdf --reuse-existing` and chunk large queues
 with `--start-rank` / `--limit` when needed. The batch renderer reuses completed
 PNG/trace bundles and extracts RAW traces in sample-batched mode, so each chunk
-opens each sample RAW at most once instead of reopening RAW per family.
+opens each sample RAW at most once instead of reopening RAW per family. Within
+each sample, overlapping scan windows are grouped into bounded super-windows and
+cropped back to the original request windows; the batch summary JSON records RAW
+opens, XIC requests, exact scan windows, super-window groups, chromatogram calls,
+and trace point counts. Preset/in-process callers write the final batch outputs
+once, while the standalone CLI keeps incremental summary rewrites for resumable
+manual rendering. For product publication that needs compact RAW-backed evidence
+but not images, use `family_ms1_overlay_batch.py --evidence-only`; this writes
+trace TSV/JSON and summary rows with blank PNG/PDF fields.
 
 For DNA dR production-style runs, prefer the preset surface instead of manually
 stitching the retained gate, machine pipeline, chunk consolidation, and final
@@ -266,12 +274,24 @@ matrix publication:
 section enables the standard-peak backfill publication runner after the base
 alignment finishes. The preset forces the lightweight seed audit and uses
 `alignment_backfill_cell_evidence.tsv` on `validation-minimal`; non-minimal
-output levels additionally emit `alignment_cells.tsv` because the publication
-runner still needs a cell-level evidence source. When standard-peak candidates
-pass the machine gate and consolidation, the runner publishes the accepted values
-back into the same `alignment_matrix.tsv` and writes a summary JSON, publication
-manifest, and optional review gallery under the alignment output directory.
+output levels may still emit `alignment_cells.tsv` for debug/deep-audit review.
+The built-in `dna_dr` preset defaults to
+`standard_peak_backfill_publication_mode = "matrix-only"`: it extracts compact
+trace/evidence artifacts, runs the existing authority/projection/product
+activation chain, publishes accepted values back into `alignment_matrix.tsv`, and
+does not render full PNG/gallery evidence. The shift-aware stage still writes the
+machine-readable best-shift summary TSVs required by the calibration pack and
+standard-peak gate, but review PNGs are reserved for gallery modes. Use
+`--standard-peak-backfill-publication-mode deep-audit` to preserve the legacy
+full overlay/gallery behavior. `review-gallery` keeps RAW overlay evidence
+compact, but renders shift-aware review evidence and the activation-synced HTML
+review surface without changing the standard-peak acceptance policy.
 Non-standard peaks remain outside this preset's automatic publication policy.
+
+When `--timing-output` or `--timing-live-output` is supplied, timing spans include
+the base alignment plus the post-alignment standard-peak preset stages. Use this
+shape for HEARTBEAT monitoring; older artifacts may only contain the base
+`pipeline: alignment` timing and therefore under-report preset-tail bottlenecks.
 
 Before starting 85RAW, verify the batch index actually contains 85 samples. Do
 not reuse the historical 8RAW index by path similarity. Prefer the CLI preflight

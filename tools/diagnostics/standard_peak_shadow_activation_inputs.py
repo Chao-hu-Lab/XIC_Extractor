@@ -10,9 +10,11 @@ from xic_extractor.alignment.shared_peak_identity_explanation import (
     product_activation,
 )
 from xic_extractor.diagnostics.diagnostic_io import read_tsv_required
+from xic_extractor.diagnostics.shadow_production_projection import (
+    canonical_shadow_projection_sha256,
+)
 from xic_extractor.diagnostics.standard_peak_shadow_activation_inputs import (
     build_standard_peak_activation_inputs,
-    sha256_file,
     write_standard_peak_activation_input_outputs,
 )
 
@@ -40,9 +42,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     index = build_standard_peak_activation_inputs(
         rows,
-        source_shadow_projection_sha256=sha256_file(
-            args.shadow_projection_cells_tsv,
-        ),
+        source_shadow_projection_sha256=canonical_shadow_projection_sha256(rows),
         source_run_id=args.source_run_id,
     )
     outputs = write_standard_peak_activation_input_outputs(

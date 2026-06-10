@@ -31,15 +31,18 @@ from xic_extractor.diagnostics.diagnostic_io import (
     text_value,
     write_tsv,
 )
+from xic_extractor.diagnostics.timing import TimingRecorder
 
 
 @dataclass(frozen=True)
 class OverlaySourceResolution:
     summary_tsv: Path
     mode: str
+    evidence_source_mode: str
     queue_row_count: int | None = None
     requested_limit: int | None = None
     effective_limit: int | None = None
+    metrics: dict[str, Any] | None = None
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -70,6 +73,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_highlight_rescued=args.max_highlight_rescued,
             write_overlay_pdf=args.write_overlay_pdf,
             min_shape_r=args.min_shape_r,
+            publication_mode=args.publication_mode,
+            evidence_only=args.evidence_only,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -106,36 +111,57 @@ def run_machine_pipeline(
     min_shape_r: float = (
         shift_aware_backfill_calibration_pack.DEFAULT_STANDARD_PEAK_MIN_SHAPE_R
     ),
+    publication_mode: str = "deep-audit",
+    evidence_only: bool = False,
+    timing_recorder: TimingRecorder | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    overlay_source = _resolve_overlay_batch_summary_tsv(
-        overlay_batch_summary_tsv=overlay_batch_summary_tsv,
-        review_queue_tsv=review_queue_tsv,
-        alignment_cells_tsv=alignment_cells_tsv,
-        raw_dir=raw_dir,
-        dll_dir=dll_dir,
-        output_dir=output_dir,
-        overlay_output_dir=overlay_output_dir,
-        start_rank=start_rank,
-        limit=limit,
-        reuse_existing=reuse_existing,
-        ppm=ppm,
-        max_highlight_rescued=max_highlight_rescued,
-        write_overlay_pdf=write_overlay_pdf,
-    )
+    recorder = timing_recorder or TimingRecorder.disabled("standard_peak")
+    with recorder.stage(
+        "standard_peak.overlay_batch",
+        metrics={
+            "publication_mode": publication_mode,
+            "evidence_only": evidence_only,
+            "start_rank": start_rank,
+            "limit": limit or "",
+        },
+    ) as scope:
+        overlay_source = _resolve_overlay_batch_summary_tsv(
+            overlay_batch_summary_tsv=overlay_batch_summary_tsv,
+            review_queue_tsv=review_queue_tsv,
+            alignment_cells_tsv=alignment_cells_tsv,
+            raw_dir=raw_dir,
+            dll_dir=dll_dir,
+            output_dir=output_dir,
+            overlay_output_dir=overlay_output_dir,
+            start_rank=start_rank,
+            limit=limit,
+            reuse_existing=reuse_existing,
+            ppm=ppm,
+            max_highlight_rescued=max_highlight_rescued,
+            write_overlay_pdf=write_overlay_pdf,
+            evidence_only=evidence_only,
+        )
+        scope.metrics["overlay_source_mode"] = overlay_source.mode
+        scope.metrics["evidence_source_mode"] = overlay_source.evidence_source_mode
+        scope.metrics["effective_limit"] = overlay_source.effective_limit or ""
+        if overlay_source.metrics:
+            scope.metrics.update(overlay_source.metrics)
     overlay_batch_summary_tsv = overlay_source.summary_tsv
     overlay_summary = _summarize_overlay_batch(overlay_batch_summary_tsv)
-    reconciliation_groups_tsv = _resolve_reconciliation_groups_tsv(
-        reconciliation_groups_tsv=reconciliation_groups_tsv,
-        alignment_review_tsv=alignment_review_tsv,
-        alignment_cells_tsv=alignment_cells_tsv,
-        alignment_matrix_tsv=alignment_matrix_tsv,
-        backfill_seed_audit_tsv=backfill_seed_audit_tsv,
-        overlay_batch_summary_tsv=overlay_batch_summary_tsv,
-        retained_gate_tsv=retained_gate_tsv,
-        output_dir=output_dir,
-        source_run_id=source_run_id,
-    )
+    with recorder.stage("standard_peak.reconciliation_groups") as scope:
+        reconciliation_groups_tsv = _resolve_reconciliation_groups_tsv(
+            reconciliation_groups_tsv=reconciliation_groups_tsv,
+            alignment_review_tsv=alignment_review_tsv,
+            alignment_cells_tsv=alignment_cells_tsv,
+            alignment_matrix_tsv=alignment_matrix_tsv,
+            backfill_seed_audit_tsv=backfill_seed_audit_tsv,
+            overlay_batch_summary_tsv=overlay_batch_summary_tsv,
+            retained_gate_tsv=retained_gate_tsv,
+            output_dir=output_dir,
+            source_run_id=source_run_id,
+        )
+        scope.metrics["reconciliation_groups_tsv"] = str(reconciliation_groups_tsv)
     shift_dir = output_dir / "shift_aware_alignment_experiment"
     pack_dir = output_dir / "shift_aware_calibration_pack"
     gate_dir = output_dir / "shift_aware_standard_peak_gate"
@@ -144,108 +170,132 @@ def run_machine_pipeline(
     productization_dir = output_dir / "standard_peak_productization"
     gallery_dir = gallery_output_dir or output_dir / "reconciliation_gallery"
 
-    shift_rows, shift_summary = (
-        family_ms1_alignment_experiment_batch.run_alignment_experiment_batch(
-            overlay_batch_summary_tsv=overlay_batch_summary_tsv,
-            cell_evidence_tsv=alignment_cells_tsv,
-            output_dir=shift_dir,
-            start_rank=start_rank,
-            limit=limit,
-            reuse_existing=reuse_existing,
+    render_shift_aware_images = publication_mode != "matrix-only"
+    with recorder.stage(
+        "standard_peak.shift_aware_batch",
+        metrics={
+            "render_images": render_shift_aware_images,
+            "start_rank": start_rank,
+            "limit": limit or "",
+        },
+    ) as scope:
+        shift_rows, shift_summary = (
+            family_ms1_alignment_experiment_batch.run_alignment_experiment_batch(
+                overlay_batch_summary_tsv=overlay_batch_summary_tsv,
+                cell_evidence_tsv=alignment_cells_tsv,
+                output_dir=shift_dir,
+                start_rank=start_rank,
+                limit=limit,
+                reuse_existing=reuse_existing,
+                render_images=render_shift_aware_images,
+                timing_recorder=recorder,
+            )
         )
-    )
+        scope.metrics["selected_row_count"] = shift_summary.get("selected_row_count", 0)
+        scope.metrics["successful_row_count"] = shift_summary.get(
+            "successful_shift_aware_row_count",
+            0,
+        )
     shift_summary = dict(shift_summary)
     shift_batch_tsv = shift_dir / "family_ms1_alignment_experiment_batch_summary.tsv"
     shift_batch_json = shift_dir / "family_ms1_alignment_experiment_batch_summary.json"
-    write_tsv(
-        shift_batch_tsv,
-        shift_rows,
-        family_ms1_alignment_experiment_batch.SUMMARY_COLUMNS,
-    )
-    shift_batch_json.write_text(
-        json.dumps(shift_summary, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    with recorder.stage(
+        "standard_peak.shift_aware_summary_write",
+        metrics={"row_count": len(shift_rows)},
+    ):
+        write_tsv(
+            shift_batch_tsv,
+            shift_rows,
+            family_ms1_alignment_experiment_batch.SUMMARY_COLUMNS,
+        )
+        shift_batch_json.write_text(
+            json.dumps(shift_summary, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
 
-    _run_step(
-        "shift-aware calibration pack",
-        shift_aware_backfill_calibration_pack.main(
-            [
-                "--shift-aware-summary-dir",
-                str(shift_dir),
-                "--reconciliation-groups-tsv",
-                str(reconciliation_groups_tsv),
-                "--overlay-batch-summary-tsv",
-                str(overlay_batch_summary_tsv),
-                "--shift-aware-output-dir",
-                str(shift_dir),
-                "--min-shape-r",
-                str(min_shape_r),
-                "--output-dir",
-                str(pack_dir),
-                *_optional_path_arg(
-                    "--reconciliation-gallery-html",
-                    reconciliation_gallery_html,
-                ),
-            ],
-        ),
-    )
+    with recorder.stage("standard_peak.calibration_pack"):
+        _run_step(
+            "shift-aware calibration pack",
+            shift_aware_backfill_calibration_pack.main(
+                [
+                    "--shift-aware-summary-dir",
+                    str(shift_dir),
+                    "--reconciliation-groups-tsv",
+                    str(reconciliation_groups_tsv),
+                    "--overlay-batch-summary-tsv",
+                    str(overlay_batch_summary_tsv),
+                    "--shift-aware-output-dir",
+                    str(shift_dir),
+                    "--min-shape-r",
+                    str(min_shape_r),
+                    "--output-dir",
+                    str(pack_dir),
+                    *_optional_path_arg(
+                        "--reconciliation-gallery-html",
+                        reconciliation_gallery_html,
+                    ),
+                ],
+            ),
+        )
     pack_tsv = pack_dir / "shift_aware_backfill_calibration_pack.tsv"
-    _run_step(
-        "shift-aware standard-peak gate",
-        shift_aware_standard_peak_gate_calibration.main(
-            [
-                "--manual-pack-tsv",
-                str(pack_tsv),
-                "--output-dir",
-                str(gate_dir),
-            ],
-        ),
-    )
+    with recorder.stage("standard_peak.standard_peak_gate"):
+        _run_step(
+            "shift-aware standard-peak gate",
+            shift_aware_standard_peak_gate_calibration.main(
+                [
+                    "--manual-pack-tsv",
+                    str(pack_tsv),
+                    "--output-dir",
+                    str(gate_dir),
+                ],
+            ),
+        )
     gate_tsv = gate_dir / "shift_aware_standard_peak_gate_calibration.tsv"
-    _run_step(
-        "standard-peak MS1 authority bundle",
-        standard_peak_ms1_authority_bundle.main(
-            [
-                "--standard-peak-gate-tsv",
-                str(gate_tsv),
-                "--overlay-batch-summary-tsv",
-                str(overlay_batch_summary_tsv),
-                "--authority-mode",
-                "machine-gate",
-                "--output-dir",
-                str(authority_dir),
-            ],
-        ),
-    )
+    with recorder.stage("standard_peak.ms1_authority_bundle"):
+        _run_step(
+            "standard-peak MS1 authority bundle",
+            standard_peak_ms1_authority_bundle.main(
+                [
+                    "--standard-peak-gate-tsv",
+                    str(gate_tsv),
+                    "--overlay-batch-summary-tsv",
+                    str(overlay_batch_summary_tsv),
+                    "--authority-mode",
+                    "machine-gate",
+                    "--output-dir",
+                    str(authority_dir),
+                ],
+            ),
+        )
     authorized_ms1_tsv = authority_dir / (
         "shared_peak_identity_ms1_pattern_coherence_product_authorized.tsv"
     )
-    _run_step(
-        "shadow production projection",
-        shadow_production_projection.main(
-            [
-                "--alignment-review-tsv",
-                str(alignment_review_tsv),
-                "--alignment-cells-tsv",
-                str(alignment_cells_tsv),
-                "--retained-gate-tsv",
-                str(retained_gate_tsv),
-                "--alignment-matrix-tsv",
-                str(alignment_matrix_tsv),
-                "--alignment-matrix-identity-tsv",
-                str(alignment_matrix_identity_tsv),
-                "--overlay-batch-summary-tsv",
-                str(overlay_batch_summary_tsv),
-                "--ms1-pattern-coherence-tsv",
-                str(authorized_ms1_tsv),
-                "--source-run-id",
-                source_run_id,
-                "--output-dir",
-                str(projection_dir),
-            ],
-        ),
-    )
+    with recorder.stage("standard_peak.shadow_projection"):
+        _run_step(
+            "shadow production projection",
+            shadow_production_projection.main(
+                [
+                    "--alignment-review-tsv",
+                    str(alignment_review_tsv),
+                    "--alignment-cells-tsv",
+                    str(alignment_cells_tsv),
+                    "--retained-gate-tsv",
+                    str(retained_gate_tsv),
+                    "--alignment-matrix-tsv",
+                    str(alignment_matrix_tsv),
+                    "--alignment-matrix-identity-tsv",
+                    str(alignment_matrix_identity_tsv),
+                    "--overlay-batch-summary-tsv",
+                    str(overlay_batch_summary_tsv),
+                    "--ms1-pattern-coherence-tsv",
+                    str(authorized_ms1_tsv),
+                    "--source-run-id",
+                    source_run_id,
+                    "--output-dir",
+                    str(projection_dir),
+                ],
+            ),
+        )
     projection_cells_tsv = projection_dir / "shadow_production_projection_cells.tsv"
     product_args = [
         "--shadow-projection-cells-tsv",
@@ -274,10 +324,11 @@ def run_machine_pipeline(
     if write_gallery:
         product_args.append("--write-gallery")
         product_args.extend(["--gallery-output-dir", str(gallery_dir)])
-    _run_step(
-        "standard-peak productization",
-        standard_peak_backfill_productization.main(product_args),
-    )
+    with recorder.stage("standard_peak.productization"):
+        _run_step(
+            "standard-peak productization",
+            standard_peak_backfill_productization.main(product_args),
+        )
     productization_summary = _load_json_mapping(
         productization_dir / "standard_peak_backfill_productization_summary.json",
     )
@@ -293,9 +344,11 @@ def run_machine_pipeline(
         "status": status,
         "status_reasons": status_reasons,
         "source_run_id": source_run_id,
+        "publication_mode": publication_mode,
         "min_shape_r": min_shape_r,
         "overlay_batch_summary_tsv": str(overlay_batch_summary_tsv),
         "overlay_source_mode": overlay_source.mode,
+        "evidence_source_mode": overlay_source.evidence_source_mode,
         "overlay_queue_row_count": overlay_source.queue_row_count,
         "start_rank": start_rank,
         "requested_limit": overlay_source.requested_limit,
@@ -304,8 +357,10 @@ def run_machine_pipeline(
         "overlay_success_count": overlay_summary["success_count"],
         "overlay_failed_count": overlay_summary["failed_count"],
         "overlay_status_counts": overlay_summary["status_counts"],
+        "rendered_image_count": overlay_summary["rendered_image_count"],
         "reconciliation_groups_tsv": str(reconciliation_groups_tsv),
         "shift_aware_alignment_experiment_dir": str(shift_dir),
+        "shift_aware_render_images": render_shift_aware_images,
         "shift_aware_selected_row_count": shift_summary.get("selected_row_count", 0),
         "shift_aware_successful_row_count": shift_summary.get(
             "successful_shift_aware_row_count",
@@ -374,6 +429,7 @@ def _resolve_overlay_batch_summary_tsv(
     ppm: float,
     max_highlight_rescued: int,
     write_overlay_pdf: bool,
+    evidence_only: bool,
 ) -> OverlaySourceResolution:
     if overlay_batch_summary_tsv is not None:
         conflicting = [
@@ -395,6 +451,7 @@ def _resolve_overlay_batch_summary_tsv(
         return OverlaySourceResolution(
             summary_tsv=overlay_batch_summary_tsv,
             mode="existing_overlay_summary",
+            evidence_source_mode="existing_overlay_summary",
             requested_limit=limit,
             effective_limit=limit,
         )
@@ -424,40 +481,41 @@ def _resolve_overlay_batch_summary_tsv(
         )
     effective_limit = remaining if limit is None else limit
     overlay_dir = overlay_output_dir or output_dir / "family_ms1_overlay_batch"
-    overlay_args = [
-        "--review-queue-tsv",
-        str(review_queue_tsv),
-        "--alignment-cells",
-        str(alignment_cells_tsv),
-        "--raw-dir",
-        str(raw_dir),
-        "--dll-dir",
-        str(dll_dir),
-        "--output-dir",
-        str(overlay_dir),
-        "--start-rank",
-        str(start_rank),
-        "--limit",
-        str(effective_limit),
-        "--ppm",
-        str(ppm),
-        "--max-highlight-rescued",
-        str(max_highlight_rescued),
-    ]
-    if reuse_existing:
-        overlay_args.append("--reuse-existing")
-    if not write_overlay_pdf:
-        overlay_args.append("--no-pdf")
-    _run_step(
-        "family MS1 overlay batch",
-        family_ms1_overlay_batch.main(overlay_args),
+    overlay_metrics: dict[str, Any] = {}
+    overlay_rows = family_ms1_overlay_batch.run_overlay_batch(
+        review_queue_tsv=review_queue_tsv,
+        alignment_cells=alignment_cells_tsv,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=overlay_dir,
+        limit=effective_limit,
+        start_rank=start_rank,
+        ppm=ppm,
+        max_highlight_rescued=max_highlight_rescued,
+        reuse_existing=reuse_existing,
+        write_pdf=write_overlay_pdf,
+        evidence_only=evidence_only,
+        metrics=overlay_metrics,
     )
+    family_ms1_overlay_batch._write_outputs(
+        overlay_dir,
+        overlay_rows,
+        metrics=overlay_metrics,
+    )
+    failed = [row for row in overlay_rows if row["status"] == "failed"]
+    _run_step("family MS1 overlay batch", 2 if failed else 0)
     return OverlaySourceResolution(
         summary_tsv=overlay_dir / "family_ms1_overlay_batch_summary.tsv",
-        mode="rendered_from_review_queue",
+        mode=(
+            "evidence_from_review_queue"
+            if evidence_only
+            else "rendered_from_review_queue"
+        ),
+        evidence_source_mode="evidence_only" if evidence_only else "rendered_images",
         queue_row_count=len(queue_rows),
         requested_limit=limit,
         effective_limit=effective_limit,
+        metrics=overlay_metrics,
     )
 
 
@@ -496,11 +554,13 @@ def _run_step(label: str, code: int) -> None:
 def _summarize_overlay_batch(path: Path) -> dict[str, Any]:
     rows = read_tsv_required(path, ("status", "rank", "feature_family_id"))
     status_counts = Counter(text_value(row.get("status")) for row in rows)
+    rendered_image_count = sum(1 for row in rows if text_value(row.get("png_path")))
     return {
         "selected_row_count": len(rows),
         "status_counts": dict(sorted(status_counts.items())),
         "success_count": status_counts.get("success", 0),
         "failed_count": status_counts.get("failed", 0),
+        "rendered_image_count": rendered_image_count,
     }
 
 
@@ -612,6 +672,19 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=float,
         default=(
             shift_aware_backfill_calibration_pack.DEFAULT_STANDARD_PEAK_MIN_SHAPE_R
+        ),
+    )
+    parser.add_argument(
+        "--publication-mode",
+        choices=("matrix-only", "review-gallery", "deep-audit"),
+        default="deep-audit",
+    )
+    parser.add_argument(
+        "--evidence-only",
+        action="store_true",
+        help=(
+            "Generate compact trace/evidence artifacts from the review queue "
+            "without rendering family overlay PNG/PDF files."
         ),
     )
     parser.add_argument("--write-gallery", action="store_true")

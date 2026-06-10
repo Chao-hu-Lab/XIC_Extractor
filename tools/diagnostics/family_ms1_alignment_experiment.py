@@ -7,7 +7,7 @@ import csv
 import json
 import math
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -75,84 +75,147 @@ class SourceFamilyShift:
     shape_similarity_to_reference: float | None = None
 
 
+NormalizedTrace = tuple[np.ndarray, np.ndarray]
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
-    bundle = load_trace_data_bundle(args.trace_data_json)
-    output_prefix = args.output_prefix or f"{bundle.output_prefix}_alignment_experiment"
-    output_dir: Path = args.output_dir
-    output_dir.mkdir(parents=True, exist_ok=True)
-    png_path = output_dir / f"{output_prefix}.png"
-    summary_tsv = output_dir / f"{output_prefix}_summary.tsv"
-    source_split_png = output_dir / f"{output_prefix}_source_family_split.png"
-    source_summary_tsv = output_dir / f"{output_prefix}_source_family_summary.tsv"
-    source_shift_png = output_dir / f"{output_prefix}_source_family_shift_alignment.png"
-    source_shift_summary_tsv = (
-        output_dir / f"{output_prefix}_source_family_shift_summary.tsv"
-    )
-    source_best_shift_png = (
-        output_dir / f"{output_prefix}_source_family_best_shift_alignment.png"
-    )
-    source_best_shift_summary_tsv = (
-        output_dir / f"{output_prefix}_source_family_best_shift_summary.tsv"
-    )
-    drift_lookup = _build_drift_lookup(
+    outputs = run_alignment_experiment(
+        trace_data_json=args.trace_data_json,
+        output_dir=args.output_dir,
+        output_prefix=args.output_prefix,
+        cell_evidence_tsv=args.cell_evidence_tsv,
+        reference_source_family=args.reference_source_family,
         targeted_workbook=args.targeted_workbook,
         sample_info=args.sample_info,
+        render_images=not args.no_images,
     )
-    render_alignment_experiment(
-        rows=bundle.rows,
-        png_path=png_path,
-        family_id=bundle.family_id,
-        mz=bundle.mz,
-        ppm=bundle.ppm,
-        rt_min=bundle.rt_min,
-        rt_max=bundle.rt_max,
-        family_center_rt=bundle.family_center_rt,
-        drift_lookup=drift_lookup,
-        evidence_summary=bundle.evidence_summary,
+    if not args.no_images and "png_path" in outputs:
+        print(f"Alignment experiment PNG: {outputs['png_path']}")
+    print(f"Alignment experiment summary TSV: {outputs['summary_tsv']}")
+    if "source_summary_tsv" in outputs:
+        print(f"Source-family summary TSV: {outputs['source_summary_tsv']}")
+        print(f"Source-family shift summary TSV: {outputs['source_shift_summary_tsv']}")
+        print(
+            "Source-family best-shift summary TSV: "
+            f"{outputs['source_best_shift_summary_tsv']}"
+        )
+        if not args.no_images:
+            print(f"Source-family split PNG: {outputs['source_split_png']}")
+            print(
+                "Source-family shift alignment PNG: "
+                f"{outputs['source_shift_png']}"
+            )
+            print(
+                "Source-family best-shift alignment PNG: "
+                f"{outputs['source_best_shift_png']}"
+            )
+    return 0
+
+
+def run_alignment_experiment(
+    *,
+    trace_data_json: Path,
+    output_dir: Path,
+    output_prefix: str | None = None,
+    cell_evidence_tsv: Path | None = None,
+    source_family_by_sample: Mapping[str, str] | None = None,
+    reference_source_family: str | None = None,
+    targeted_workbook: Path | None = None,
+    sample_info: Path | None = None,
+    render_images: bool = True,
+) -> dict[str, Path]:
+    bundle = load_trace_data_bundle(trace_data_json)
+    resolved_output_prefix = (
+        output_prefix or f"{bundle.output_prefix}_alignment_experiment"
     )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    png_path = output_dir / f"{resolved_output_prefix}.png"
+    summary_tsv = output_dir / f"{resolved_output_prefix}_summary.tsv"
+    source_split_png = output_dir / f"{resolved_output_prefix}_source_family_split.png"
+    source_summary_tsv = (
+        output_dir / f"{resolved_output_prefix}_source_family_summary.tsv"
+    )
+    source_shift_png = (
+        output_dir / f"{resolved_output_prefix}_source_family_shift_alignment.png"
+    )
+    source_shift_summary_tsv = (
+        output_dir / f"{resolved_output_prefix}_source_family_shift_summary.tsv"
+    )
+    source_best_shift_png = (
+        output_dir / f"{resolved_output_prefix}_source_family_best_shift_alignment.png"
+    )
+    source_best_shift_summary_tsv = (
+        output_dir / f"{resolved_output_prefix}_source_family_best_shift_summary.tsv"
+    )
+    drift_lookup = _build_drift_lookup(
+        targeted_workbook=targeted_workbook,
+        sample_info=sample_info,
+    )
+    if render_images:
+        render_alignment_experiment(
+            rows=bundle.rows,
+            png_path=png_path,
+            family_id=bundle.family_id,
+            mz=bundle.mz,
+            ppm=bundle.ppm,
+            rt_min=bundle.rt_min,
+            rt_max=bundle.rt_max,
+            family_center_rt=bundle.family_center_rt,
+            drift_lookup=drift_lookup,
+            evidence_summary=bundle.evidence_summary,
+        )
     write_alignment_experiment_summary(
         summary_tsv,
         rows=bundle.rows,
         drift_lookup=drift_lookup,
         evidence_summary=bundle.evidence_summary,
     )
-    source_family_by_sample = (
-        load_source_family_by_sample(args.cell_evidence_tsv, family_id=bundle.family_id)
-        if args.cell_evidence_tsv is not None
-        else {}
+    resolved_source_family_by_sample = dict(
+        source_family_by_sample
+        if source_family_by_sample is not None
+        else (
+            load_source_family_by_sample(cell_evidence_tsv, family_id=bundle.family_id)
+            if cell_evidence_tsv is not None
+            else {}
+        ),
     )
-    if source_family_by_sample:
-        render_source_family_split(
-            rows=bundle.rows,
-            source_family_by_sample=source_family_by_sample,
-            png_path=source_split_png,
-            family_id=bundle.family_id,
-            mz=bundle.mz,
-            ppm=bundle.ppm,
-            rt_min=bundle.rt_min,
-            rt_max=bundle.rt_max,
-        )
+    outputs = {"summary_tsv": summary_tsv}
+    if render_images:
+        outputs["png_path"] = png_path
+    if resolved_source_family_by_sample:
+        if render_images:
+            render_source_family_split(
+                rows=bundle.rows,
+                source_family_by_sample=resolved_source_family_by_sample,
+                png_path=source_split_png,
+                family_id=bundle.family_id,
+                mz=bundle.mz,
+                ppm=bundle.ppm,
+                rt_min=bundle.rt_min,
+                rt_max=bundle.rt_max,
+            )
         write_source_family_summary(
             source_summary_tsv,
             rows=bundle.rows,
-            source_family_by_sample=source_family_by_sample,
+            source_family_by_sample=resolved_source_family_by_sample,
         )
         shifts = build_source_family_shift_plan(
             bundle.rows,
-            source_family_by_sample=source_family_by_sample,
-            reference_source_family=args.reference_source_family,
+            source_family_by_sample=resolved_source_family_by_sample,
+            reference_source_family=reference_source_family,
         )
-        render_source_family_shift_alignment(
-            rows=bundle.rows,
-            shifts=shifts,
-            png_path=source_shift_png,
-            family_id=bundle.family_id,
-            mz=bundle.mz,
-            ppm=bundle.ppm,
-            rt_min=bundle.rt_min,
-            rt_max=bundle.rt_max,
-        )
+        if render_images:
+            render_source_family_shift_alignment(
+                rows=bundle.rows,
+                shifts=shifts,
+                png_path=source_shift_png,
+                family_id=bundle.family_id,
+                mz=bundle.mz,
+                ppm=bundle.ppm,
+                rt_min=bundle.rt_min,
+                rt_max=bundle.rt_max,
+            )
         write_source_family_shift_summary(
             source_shift_summary_tsv,
             family_id=bundle.family_id,
@@ -160,36 +223,43 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         best_shifts = build_source_family_best_shift_plan(
             bundle.rows,
-            source_family_by_sample=source_family_by_sample,
-            reference_source_family=args.reference_source_family,
+            source_family_by_sample=resolved_source_family_by_sample,
+            reference_source_family=reference_source_family,
             rt_min=bundle.rt_min,
             rt_max=bundle.rt_max,
         )
-        render_source_family_shift_alignment(
-            rows=bundle.rows,
-            shifts=best_shifts,
-            png_path=source_best_shift_png,
-            family_id=bundle.family_id,
-            mz=bundle.mz,
-            ppm=bundle.ppm,
-            rt_min=bundle.rt_min,
-            rt_max=bundle.rt_max,
-        )
+        if render_images:
+            render_source_family_shift_alignment(
+                rows=bundle.rows,
+                shifts=best_shifts,
+                png_path=source_best_shift_png,
+                family_id=bundle.family_id,
+                mz=bundle.mz,
+                ppm=bundle.ppm,
+                rt_min=bundle.rt_min,
+                rt_max=bundle.rt_max,
+            )
         write_source_family_shift_summary(
             source_best_shift_summary_tsv,
             family_id=bundle.family_id,
             shifts=best_shifts,
         )
-    print(f"Alignment experiment PNG: {png_path}")
-    print(f"Alignment experiment summary TSV: {summary_tsv}")
-    if source_family_by_sample:
-        print(f"Source-family split PNG: {source_split_png}")
-        print(f"Source-family summary TSV: {source_summary_tsv}")
-        print(f"Source-family shift alignment PNG: {source_shift_png}")
-        print(f"Source-family shift summary TSV: {source_shift_summary_tsv}")
-        print(f"Source-family best-shift alignment PNG: {source_best_shift_png}")
-        print(f"Source-family best-shift summary TSV: {source_best_shift_summary_tsv}")
-    return 0
+        outputs.update(
+            {
+                "source_summary_tsv": source_summary_tsv,
+                "source_shift_summary_tsv": source_shift_summary_tsv,
+                "source_best_shift_summary_tsv": source_best_shift_summary_tsv,
+            },
+        )
+        if render_images:
+            outputs.update(
+                {
+                    "source_split_png": source_split_png,
+                    "source_shift_png": source_shift_png,
+                    "source_best_shift_png": source_best_shift_png,
+                },
+            )
+    return outputs
 
 
 def load_trace_data_bundle(path: Path) -> TraceDataBundle:
@@ -213,17 +283,30 @@ def load_trace_data_bundle(path: Path) -> TraceDataBundle:
 
 
 def load_source_family_by_sample(path: Path, *, family_id: str) -> dict[str, str]:
+    return load_source_family_by_family_sample(
+        path,
+        family_ids=(family_id,),
+    ).get(family_id, {})
+
+
+def load_source_family_by_family_sample(
+    path: Path,
+    *,
+    family_ids: Sequence[str] | None = None,
+) -> dict[str, dict[str, str]]:
+    wanted = set(family_ids) if family_ids is not None else None
     with path.open("r", encoding="utf-8", newline="") as fh:
         reader = csv.DictReader(fh, delimiter="\t")
-        out: dict[str, str] = {}
+        out: dict[str, dict[str, str]] = {}
         for row in reader:
-            if row.get("feature_family_id") != family_id:
+            family = str(row.get("feature_family_id", "")).strip()
+            if not family or (wanted is not None and family not in wanted):
                 continue
             sample = str(row.get("sample_stem", "")).strip()
             if not sample:
                 continue
             match = re.search(r"source_family=(FAM\d+)", row.get("reason", ""))
-            out[sample] = match.group(1) if match else "(none)"
+            out.setdefault(family, {})[sample] = match.group(1) if match else "(none)"
         return out
 
 
@@ -452,8 +535,12 @@ def build_source_family_best_shift_plan(
     if bounds is None:
         return ()
     grid = np.linspace(bounds[0], bounds[1], 600)
-    reference_curve = _source_family_shifted_median_curve_on_grid(
-        group_by_source[reference],
+    normalized_by_source = {
+        source_family: _source_family_normalized_traces(group_rows)
+        for source_family, group_rows in group_by_source.items()
+    }
+    reference_curve = _source_family_shifted_median_curve_from_normalized_traces(
+        normalized_by_source[reference],
         shift_min=0.0,
         grid=grid,
     )
@@ -465,7 +552,7 @@ def build_source_family_best_shift_plan(
             similarity = _pearson_similarity(reference_curve, reference_curve)
         else:
             shift, similarity = _best_source_family_shape_shift(
-                group_rows,
+                normalized_by_source[source_family],
                 reference_curve=reference_curve,
                 grid=grid,
                 shift_min=shift_min,
@@ -1244,20 +1331,45 @@ def _source_family_shifted_median_curve_on_grid(
     shift_min: float,
     grid: np.ndarray,
 ) -> np.ndarray:
-    traces: list[np.ndarray] = []
+    return _source_family_shifted_median_curve_from_normalized_traces(
+        _source_family_normalized_traces(rows),
+        shift_min=shift_min,
+        grid=grid,
+    )
+
+
+def _source_family_normalized_traces(
+    rows: Sequence[TraceOverlayRow],
+    *,
+    smooth_points: int = PLOT_GAUSSIAN_SMOOTH_POINTS,
+) -> tuple[NormalizedTrace, ...]:
+    traces: list[NormalizedTrace] = []
     for row in rows:
-        rt, normalized = _source_family_shifted_trace(
-            row,
-            shift_min=shift_min,
-            smooth_points=PLOT_GAUSSIAN_SMOOTH_POINTS,
-        )
+        rt, normalized = _absolute_normalized_trace(row, smooth_points=smooth_points)
         if rt.size < 2:
             continue
-        traces.append(np.interp(grid, rt, normalized, left=np.nan, right=np.nan))
+        traces.append((rt, normalized))
+    return tuple(traces)
+
+
+def _source_family_shifted_median_curve_from_normalized_traces(
+    traces: Sequence[NormalizedTrace],
+    *,
+    shift_min: float,
+    grid: np.ndarray,
+) -> np.ndarray:
     out = np.full(grid.shape, np.nan, dtype=float)
     if not traces:
         return out
-    stack = np.vstack(traces)
+    if len(traces) == 1:
+        rt, normalized = traces[0]
+        return np.interp(grid, rt + shift_min, normalized, left=np.nan, right=np.nan)
+    stack = np.vstack(
+        [
+            np.interp(grid, rt + shift_min, normalized, left=np.nan, right=np.nan)
+            for rt, normalized in traces
+        ],
+    )
     finite_columns = np.isfinite(stack).any(axis=0)
     if not np.any(finite_columns):
         return out
@@ -1265,8 +1377,77 @@ def _source_family_shifted_median_curve_on_grid(
     return out
 
 
+def _source_family_shifted_median_curve_matrix_from_normalized_traces(
+    traces: Sequence[NormalizedTrace],
+    *,
+    shifts: np.ndarray,
+    grid: np.ndarray,
+) -> np.ndarray:
+    out = np.full((shifts.size, grid.size), np.nan, dtype=float)
+    if not traces or shifts.size == 0:
+        return out
+    if len(traces) == 1:
+        rt, normalized = traces[0]
+        return np.vstack(
+            [
+                np.interp(
+                    grid,
+                    rt + float(shift),
+                    normalized,
+                    left=np.nan,
+                    right=np.nan,
+                )
+                for shift in shifts
+            ],
+        )
+    stack = np.stack(
+        [
+            np.vstack(
+                [
+                    np.interp(
+                        grid,
+                        rt + float(shift),
+                        normalized,
+                        left=np.nan,
+                        right=np.nan,
+                    )
+                    for shift in shifts
+                ],
+            )
+            for rt, normalized in traces
+        ],
+        axis=1,
+    )
+    finite_columns = np.isfinite(stack).any(axis=1)
+    if not np.any(finite_columns):
+        return out
+    medians = _nanmedian_small_axis1(stack)
+    out[finite_columns] = medians[finite_columns]
+    return out
+
+
+def _nanmedian_small_axis1(values: np.ndarray) -> np.ndarray:
+    valid_counts = np.sum(~np.isnan(values), axis=1)
+    ordered = np.sort(values, axis=1)
+    lower_indices = np.clip((valid_counts - 1) // 2, 0, values.shape[1] - 1)
+    upper_indices = np.clip(valid_counts // 2, 0, values.shape[1] - 1)
+    lower = np.take_along_axis(ordered, lower_indices[:, np.newaxis, :], axis=1)[
+        :,
+        0,
+        :,
+    ]
+    upper = np.take_along_axis(ordered, upper_indices[:, np.newaxis, :], axis=1)[
+        :,
+        0,
+        :,
+    ]
+    medians = (lower + upper) / 2.0
+    medians[valid_counts == 0] = np.nan
+    return medians
+
+
 def _best_source_family_shape_shift(
-    rows: Sequence[TraceOverlayRow],
+    traces: Sequence[NormalizedTrace],
     *,
     reference_curve: np.ndarray,
     grid: np.ndarray,
@@ -1278,18 +1459,20 @@ def _best_source_family_shape_shift(
         raise ValueError("shift_step must be positive")
     best_shift: float | None = None
     best_similarity: float | None = None
-    for shift in np.arange(shift_min, shift_max + shift_step / 2.0, shift_step):
-        curve = _source_family_shifted_median_curve_on_grid(
-            rows,
-            shift_min=float(shift),
-            grid=grid,
-        )
-        similarity = _pearson_similarity(curve, reference_curve)
-        if similarity is None:
-            continue
-        if best_similarity is None or similarity > best_similarity:
-            best_shift = float(shift)
-            best_similarity = similarity
+    shifts = np.arange(shift_min, shift_max + shift_step / 2.0, shift_step)
+    curves = _source_family_shifted_median_curve_matrix_from_normalized_traces(
+        traces,
+        shifts=shifts,
+        grid=grid,
+    )
+    similarities = _pearson_similarity_vector(curves, reference_curve)
+    finite = np.isfinite(similarities)
+    if not np.any(finite):
+        return None, None
+    finite_indices = np.flatnonzero(finite)
+    best_index = int(finite_indices[int(np.argmax(similarities[finite]))])
+    best_shift = float(shifts[best_index])
+    best_similarity = _pearson_similarity(curves[best_index], reference_curve)
     return best_shift, best_similarity
 
 
@@ -1676,6 +1859,32 @@ def _pearson_similarity(
     return float(np.corrcoef(x, y)[0, 1])
 
 
+def _pearson_similarity_vector(
+    values: np.ndarray,
+    reference: np.ndarray,
+) -> np.ndarray:
+    if values.ndim != 2:
+        raise ValueError("values must be a 2D array")
+    finite = np.isfinite(values) & np.isfinite(reference)
+    counts = finite.sum(axis=1).astype(float)
+    safe_counts = np.where(counts > 0.0, counts, 1.0)
+    masked_values = np.where(finite, values, 0.0)
+    masked_reference = np.where(finite, reference, 0.0)
+    sum_x = masked_values.sum(axis=1)
+    sum_y = masked_reference.sum(axis=1)
+    mean_x = sum_x / safe_counts
+    mean_y = sum_y / safe_counts
+    var_x = (np.square(masked_values).sum(axis=1) / safe_counts) - np.square(mean_x)
+    var_y = (np.square(masked_reference).sum(axis=1) / safe_counts) - np.square(mean_y)
+    cov = (masked_values * masked_reference).sum(axis=1) / safe_counts - (
+        mean_x * mean_y
+    )
+    similarities = np.full(values.shape[0], np.nan, dtype=float)
+    valid = (counts >= 5.0) & (var_x > 1e-24) & (var_y > 1e-24)
+    similarities[valid] = cov[valid] / np.sqrt(var_x[valid] * var_y[valid])
+    return similarities
+
+
 def _build_drift_lookup(
     *,
     targeted_workbook: Path | None,
@@ -1788,6 +1997,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--sample-info",
         type=Path,
         help="Optional sample metadata used with --targeted-workbook.",
+    )
+    parser.add_argument(
+        "--no-images",
+        action="store_true",
+        help=(
+            "Write machine-readable summary TSVs without rendering PNG review "
+            "images."
+        ),
     )
     return parser.parse_args(argv)
 

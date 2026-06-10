@@ -20,6 +20,7 @@ from xic_extractor.diagnostics.diagnostic_io import (
     text_value,
     write_tsv,
 )
+from xic_extractor.diagnostics.timing import TimingRecorder
 
 SUMMARY_COLUMNS = (
     "rank",
@@ -45,6 +46,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             start_rank=args.start_rank,
             limit=args.limit,
             reuse_existing=args.reuse_existing,
+            render_images=not args.no_images,
+            write_incremental=True,
         )
     except Exception as exc:  # noqa: BLE001 - diagnostic CLI reports failure.
         print(f"error: {exc}")
@@ -69,34 +72,82 @@ def run_alignment_experiment_batch(
     start_rank: int = 1,
     limit: int | None = None,
     reuse_existing: bool = False,
+    render_images: bool = True,
+    write_incremental: bool = False,
+    timing_recorder: TimingRecorder | None = None,
 ) -> tuple[list[dict[str, str]], dict[str, Any]]:
     if start_rank < 1:
         raise ValueError("--start-rank must be >= 1")
     if limit is not None and limit < 1:
         raise ValueError("--limit must be >= 1 when supplied")
-    overlay_rows = list(
-        read_tsv_required(
-            overlay_batch_summary_tsv,
-            ("rank", "feature_family_id", "output_prefix", "status"),
+    recorder = timing_recorder or TimingRecorder.disabled("standard_peak")
+    with recorder.stage("standard_peak.shift_aware_batch.read_overlay"):
+        overlay_rows = list(
+            read_tsv_required(
+                overlay_batch_summary_tsv,
+                ("rank", "feature_family_id", "output_prefix", "status"),
+            ),
+        )
+    with recorder.stage(
+        "standard_peak.shift_aware_batch.select_rows",
+        metrics={"start_rank": start_rank, "limit": limit or ""},
+    ) as scope:
+        selected_rows = _select_rows(overlay_rows, start_rank=start_rank, limit=limit)
+        scope.metrics["selected_row_count"] = len(selected_rows)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    selected_family_ids = tuple(
+        sorted(
+            {
+                text_value(row.get("feature_family_id"))
+                for row in selected_rows
+                if text_value(row.get("feature_family_id"))
+            },
         ),
     )
-    selected_rows = _select_rows(overlay_rows, start_rank=start_rank, limit=limit)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    with recorder.stage(
+        "standard_peak.shift_aware_batch.read_cell_evidence",
+        metrics={"family_count": len(selected_family_ids)},
+    ) as scope:
+        source_family_by_family = (
+            family_ms1_alignment_experiment.load_source_family_by_family_sample(
+                cell_evidence_tsv,
+                family_ids=selected_family_ids,
+            )
+            if selected_family_ids
+            else {}
+        )
+        scope.metrics["mapped_family_count"] = len(source_family_by_family)
     rows: list[dict[str, str]] = []
     for row in selected_rows:
-        rows.append(
-            _render_or_reuse_row(
+        family = text_value(row.get("feature_family_id"))
+        with recorder.stage(
+            "standard_peak.shift_aware_batch.row",
+            metrics={
+                "rank": text_value(row.get("rank")),
+                "feature_family_id": family,
+                "render_images": render_images,
+            },
+        ) as scope:
+            result = _render_or_reuse_row(
                 row,
                 cell_evidence_tsv=cell_evidence_tsv,
                 output_dir=output_dir,
                 reuse_existing=reuse_existing,
-            ),
-        )
-        write_tsv(
-            output_dir / "family_ms1_alignment_experiment_batch_summary.tsv",
-            rows,
-            SUMMARY_COLUMNS,
-        )
+                render_images=render_images,
+                source_family_by_sample=source_family_by_family.get(family, {}),
+            )
+            scope.metrics["alignment_status"] = result["alignment_status"]
+            rows.append(result)
+        if write_incremental:
+            with recorder.stage(
+                "standard_peak.shift_aware_batch.write_incremental_summary",
+                metrics={"row_count": len(rows)},
+            ):
+                write_tsv(
+                    output_dir / "family_ms1_alignment_experiment_batch_summary.tsv",
+                    rows,
+                    SUMMARY_COLUMNS,
+                )
     status_counts = Counter(row["alignment_status"] for row in rows)
     summary: dict[str, Any] = {
         "schema_version": "family_ms1_alignment_experiment_batch_v0",
@@ -105,6 +156,8 @@ def run_alignment_experiment_batch(
         "start_rank": start_rank,
         "limit": "" if limit is None else limit,
         "selected_row_count": len(rows),
+        "render_images": render_images,
+        "write_incremental": write_incremental,
         "status_counts": dict(sorted(status_counts.items())),
         "successful_shift_aware_row_count": sum(
             1
@@ -121,6 +174,8 @@ def _render_or_reuse_row(
     cell_evidence_tsv: Path,
     output_dir: Path,
     reuse_existing: bool,
+    render_images: bool,
+    source_family_by_sample: Mapping[str, str],
 ) -> dict[str, str]:
     rank = text_value(row.get("rank"))
     family = text_value(row.get("feature_family_id"))
@@ -138,7 +193,7 @@ def _render_or_reuse_row(
         "output_prefix": output_prefix,
         "trace_data_json": trace_json,
         "source_best_shift_summary_tsv": str(best_summary),
-        "source_best_shift_png": str(best_png),
+        "source_best_shift_png": str(best_png) if render_images else "",
     }
     if overlay_status != "success":
         return {
@@ -159,25 +214,24 @@ def _render_or_reuse_row(
             "alignment_status": "failed",
             "failure_reason": f"trace_data_json_not_found:{trace_json}",
         }
-    if reuse_existing and best_summary.exists() and best_png.exists():
+    if reuse_existing and best_summary.exists() and (
+        best_png.exists() if render_images else True
+    ):
         return {**base, "alignment_status": "reused", "failure_reason": ""}
-    exit_code = family_ms1_alignment_experiment.main(
-        [
-            "--trace-data-json",
-            str(trace_path),
-            "--output-dir",
-            str(output_dir),
-            "--output-prefix",
-            output_prefix,
-            "--cell-evidence-tsv",
-            str(cell_evidence_tsv),
-        ],
-    )
-    if exit_code != 0:
+    try:
+        family_ms1_alignment_experiment.run_alignment_experiment(
+            trace_data_json=trace_path,
+            output_dir=output_dir,
+            output_prefix=output_prefix,
+            cell_evidence_tsv=cell_evidence_tsv,
+            source_family_by_sample=source_family_by_sample,
+            render_images=render_images,
+        )
+    except Exception:  # noqa: BLE001 - preserve batch failure semantics.
         return {
             **base,
             "alignment_status": "failed",
-            "failure_reason": f"alignment_experiment_exit_code:{exit_code}",
+            "failure_reason": "alignment_experiment_exit_code:2",
         }
     if not best_summary.exists():
         return {
@@ -233,9 +287,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--reuse-existing",
         action="store_true",
         help=(
-            "Reuse rows whose source-family best-shift summary and PNG already "
-            "exist in output-dir."
+            "Reuse rows whose source-family best-shift summary already exists "
+            "in output-dir. Image mode also requires the best-shift PNG."
         ),
+    )
+    parser.add_argument(
+        "--no-images",
+        action="store_true",
+        help="Write shift-aware summary TSVs without rendering PNG review images.",
     )
     return parser.parse_args(argv)
 

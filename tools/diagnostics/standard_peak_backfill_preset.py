@@ -18,9 +18,11 @@ from xic_extractor.diagnostics.standard_peak_backfill_chunk_consolidation import
     StandardPeakChunkConsolidationOutputs,
     run_standard_peak_backfill_chunk_consolidation,
 )
+from xic_extractor.diagnostics.timing import TimingRecorder
 
 PRESET_NAME = "standard-peak-backfill"
 DEFAULT_CHUNK_SIZE = 120
+PUBLICATION_MODES = frozenset({"matrix-only", "review-gallery", "deep-audit"})
 
 
 @dataclass(frozen=True)
@@ -48,9 +50,11 @@ def run_standard_peak_backfill_preset(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     reuse_existing: bool = False,
     write_gallery: bool = True,
+    publication_mode: str | None = None,
     ppm: float = 20.0,
     max_highlight_rescued: int = 8,
     min_shape_r: float = 0.95,
+    timing_recorder: TimingRecorder | None = None,
     machine_pipeline_runner: MachinePipelineRunner = run_machine_pipeline,
     consolidation_runner: ConsolidationRunner = (
         run_standard_peak_backfill_chunk_consolidation
@@ -60,6 +64,13 @@ def run_standard_peak_backfill_preset(
 
     if chunk_size < 1:
         raise ValueError("standard-peak backfill preset chunk_size must be >= 1")
+    recorder = timing_recorder or TimingRecorder.disabled("standard_peak")
+    publication_mode = _resolve_publication_mode(
+        publication_mode,
+        legacy_write_gallery=write_gallery,
+    )
+    evidence_only = publication_mode in {"matrix-only", "review-gallery"}
+    write_consolidation_gallery = publication_mode in {"review-gallery", "deep-audit"}
 
     alignment_dir = alignment_dir.resolve()
     output_dir = (
@@ -70,18 +81,24 @@ def run_standard_peak_backfill_preset(
     paths = _resolve_alignment_paths(alignment_dir)
     source_run_id = source_run_id or PRESET_NAME
     retained_dir = output_dir / "retained_backfill_evidence_gate"
-    retained_outputs = run_retained_backfill_evidence_gate(
-        alignment_review_tsv=paths["review"],
-        alignment_cells_tsv=paths["cells"],
-        alignment_matrix_tsv=paths["activation_matrix"],
-        output_dir=retained_dir,
-        backfill_seed_audit_tsv=paths["seed_audit"],
-        source_run_id=source_run_id,
-    )
-    review_queue_rows = read_tsv_required(
-        retained_outputs.review_overlay_queue_tsv,
-        ("feature_family_id",),
-    )
+    with recorder.stage(
+        "standard_peak.retained_gate",
+        metrics={"publication_mode": publication_mode},
+    ):
+        retained_outputs = run_retained_backfill_evidence_gate(
+            alignment_review_tsv=paths["review"],
+            alignment_cells_tsv=paths["cells"],
+            alignment_matrix_tsv=paths["activation_matrix"],
+            output_dir=retained_dir,
+            backfill_seed_audit_tsv=paths["seed_audit"],
+            source_run_id=source_run_id,
+        )
+    with recorder.stage("standard_peak.review_queue_read") as scope:
+        review_queue_rows = read_tsv_required(
+            retained_outputs.review_overlay_queue_tsv,
+            ("feature_family_id",),
+        )
+        scope.metrics["review_queue_row_count"] = len(review_queue_rows)
     if not review_queue_rows:
         summary_json = output_dir / "standard_peak_backfill_preset_summary.json"
         summary = _summary(
@@ -96,11 +113,13 @@ def run_standard_peak_backfill_preset(
             chunk_summary_jsons=(),
             consolidation_outputs=None,
             status_reasons=("no_standard_peak_backfill_review_rows",),
+            publication_mode=publication_mode,
         )
-        summary_json.write_text(
-            json.dumps(summary, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        with recorder.stage("standard_peak.summary_write"):
+            summary_json.write_text(
+                json.dumps(summary, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
         return StandardPeakBackfillPresetOutputs(
             summary_json=summary_json,
             retained_gate_tsv=retained_outputs.tsv,
@@ -116,55 +135,81 @@ def run_standard_peak_backfill_preset(
         existing_summary_path = (
             chunk_dir / "standard_peak_backfill_machine_pipeline_summary.json"
         )
-        if reuse_existing and existing_summary_path.is_file():
+        if (
+            reuse_existing
+            and existing_summary_path.is_file()
+            and _can_reuse_chunk_summary(existing_summary_path, publication_mode)
+        ):
             chunk_summary_jsons.append(existing_summary_path)
             continue
-        summary_path = machine_pipeline_runner(
-            review_queue_tsv=retained_outputs.review_overlay_queue_tsv,
-            raw_dir=raw_dir,
-            dll_dir=dll_dir,
-            alignment_review_tsv=paths["review"],
-            alignment_cells_tsv=paths["cells"],
-            alignment_matrix_tsv=paths["activation_matrix"],
-            alignment_matrix_identity_tsv=paths["activation_identity"],
-            retained_gate_tsv=retained_outputs.tsv,
-            output_dir=chunk_dir,
-            source_run_id=f"{source_run_id}-r{start_rank}-{end_rank}",
-            backfill_seed_audit_tsv=paths["seed_audit"],
-            start_rank=start_rank,
-            limit=limit,
-            reuse_existing=reuse_existing,
-            ppm=ppm,
-            max_highlight_rescued=max_highlight_rescued,
-            write_overlay_pdf=False,
-            min_shape_r=min_shape_r,
-        )
+        with recorder.stage(
+            "standard_peak.chunk",
+            metrics={
+                "start_rank": start_rank,
+                "end_rank": end_rank,
+                "limit": limit,
+                "publication_mode": publication_mode,
+            },
+        ) as scope:
+            summary_path = machine_pipeline_runner(
+                review_queue_tsv=retained_outputs.review_overlay_queue_tsv,
+                raw_dir=raw_dir,
+                dll_dir=dll_dir,
+                alignment_review_tsv=paths["review"],
+                alignment_cells_tsv=paths["cells"],
+                alignment_matrix_tsv=paths["activation_matrix"],
+                alignment_matrix_identity_tsv=paths["activation_identity"],
+                retained_gate_tsv=retained_outputs.tsv,
+                output_dir=chunk_dir,
+                source_run_id=f"{source_run_id}-r{start_rank}-{end_rank}",
+                backfill_seed_audit_tsv=paths["seed_audit"],
+                start_rank=start_rank,
+                limit=limit,
+                reuse_existing=reuse_existing,
+                ppm=ppm,
+                max_highlight_rescued=max_highlight_rescued,
+                write_overlay_pdf=False,
+                min_shape_r=min_shape_r,
+                publication_mode=publication_mode,
+                evidence_only=evidence_only,
+                timing_recorder=recorder,
+            )
+            scope.metrics["summary_json"] = str(summary_path)
         chunk_summary_jsons.append(summary_path)
 
     consolidated_dir = output_dir / "consolidated"
     gallery_dir = (
         consolidated_dir / "standard_peak_productization" / "reconciliation_gallery"
-        if write_gallery
+        if write_consolidation_gallery
         else None
     )
-    consolidation_outputs = consolidation_runner(
-        machine_pipeline_summary_jsons=tuple(chunk_summary_jsons),
-        alignment_matrix_tsv=paths["activation_matrix"],
-        alignment_matrix_identity_tsv=paths["activation_identity"],
-        alignment_review_tsv=paths["review"],
-        output_dir=consolidated_dir,
-        source_run_id=source_run_id,
-        review_queue_tsv=retained_outputs.review_overlay_queue_tsv,
-        write_gallery=write_gallery,
-        alignment_cells_tsv=paths["cells"],
-        backfill_seed_audit_tsv=paths["seed_audit"],
-        retained_backfill_gate_tsv=retained_outputs.tsv,
-        gallery_output_dir=gallery_dir,
-        emit_formal_product_output=True,
-        publish_to_source_alignment_output=True,
-        publish_alignment_matrix_tsv=paths["published_matrix"],
-        publish_alignment_matrix_identity_tsv=paths["published_identity"],
-    )
+    with recorder.stage(
+        "standard_peak.consolidation",
+        metrics={
+            "chunk_count": len(chunk_summary_jsons),
+            "write_gallery": write_consolidation_gallery,
+            "publication_mode": publication_mode,
+        },
+    ) as scope:
+        consolidation_outputs = consolidation_runner(
+            machine_pipeline_summary_jsons=tuple(chunk_summary_jsons),
+            alignment_matrix_tsv=paths["activation_matrix"],
+            alignment_matrix_identity_tsv=paths["activation_identity"],
+            alignment_review_tsv=paths["review"],
+            output_dir=consolidated_dir,
+            source_run_id=source_run_id,
+            review_queue_tsv=retained_outputs.review_overlay_queue_tsv,
+            write_gallery=write_consolidation_gallery,
+            alignment_cells_tsv=paths["cells"],
+            backfill_seed_audit_tsv=paths["seed_audit"],
+            retained_backfill_gate_tsv=retained_outputs.tsv,
+            gallery_output_dir=gallery_dir,
+            emit_formal_product_output=True,
+            publish_to_source_alignment_output=True,
+            publish_alignment_matrix_tsv=paths["published_matrix"],
+            publish_alignment_matrix_identity_tsv=paths["published_identity"],
+        )
+        scope.metrics["status"] = consolidation_outputs.status
     summary_json = output_dir / "standard_peak_backfill_preset_summary.json"
     summary = _summary(
         status=consolidation_outputs.status,
@@ -178,11 +223,13 @@ def run_standard_peak_backfill_preset(
         chunk_summary_jsons=tuple(chunk_summary_jsons),
         consolidation_outputs=consolidation_outputs,
         status_reasons=(),
+        publication_mode=publication_mode,
     )
-    summary_json.write_text(
-        json.dumps(summary, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    with recorder.stage("standard_peak.summary_write"):
+        summary_json.write_text(
+            json.dumps(summary, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return StandardPeakBackfillPresetOutputs(
         summary_json=summary_json,
         retained_gate_tsv=retained_outputs.tsv,
@@ -260,6 +307,7 @@ def _summary(
     chunk_summary_jsons: Sequence[Path],
     consolidation_outputs: StandardPeakChunkConsolidationOutputs | None,
     status_reasons: Sequence[str],
+    publication_mode: str,
 ) -> dict[str, object]:
     consolidation_summary = (
         _load_json_mapping(consolidation_outputs.summary_json)
@@ -269,6 +317,7 @@ def _summary(
     return {
         "schema_version": "standard_peak_backfill_preset_v0",
         "preset_name": PRESET_NAME,
+        "publication_mode": publication_mode,
         "status": status,
         "source_run_id": source_run_id,
         "alignment_dir": str(alignment_dir),
@@ -317,3 +366,24 @@ def _load_json_mapping(path: Path) -> dict[str, object]:
     except (OSError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _resolve_publication_mode(
+    publication_mode: str | None,
+    *,
+    legacy_write_gallery: bool,
+) -> str:
+    if publication_mode is None:
+        return "deep-audit" if legacy_write_gallery else "matrix-only"
+    if publication_mode not in PUBLICATION_MODES:
+        modes = ", ".join(sorted(PUBLICATION_MODES))
+        raise ValueError(f"publication_mode must be one of: {modes}")
+    return publication_mode
+
+
+def _can_reuse_chunk_summary(path: Path, publication_mode: str) -> bool:
+    summary = _load_json_mapping(path)
+    existing_mode = text_value(summary.get("publication_mode"))
+    if not existing_mode:
+        return publication_mode == "deep-audit"
+    return existing_mode == publication_mode

@@ -124,6 +124,81 @@ def test_batch_uses_structured_queue_columns_and_limit(
     assert "`FAM001`" in markdown
 
 
+def test_batch_evidence_only_writes_trace_artifacts_without_png(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    output_dir = tmp_path / "out"
+    alignment_cells.write_text("feature_family_id\nFAM001\n", encoding="utf-8")
+    _write_queue(queue_tsv, [_queue_row("FAM001")])
+
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "load_family_cells",
+        lambda _alignment_cells, family_id: [family_id],
+    )
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "extract_family_trace_rows",
+        lambda **_kwargs: ["trace-row"],
+    )
+
+    def fail_render(**_kwargs):
+        raise AssertionError("evidence-only mode must not render PNG overlays")
+
+    def fake_write_summary(path: Path, _rows) -> None:
+        path.write_text("sample_stem\nS1\n", encoding="utf-8")
+
+    def fake_write_trace_data(path: Path, **_kwargs) -> None:
+        path.write_text(
+            json.dumps(
+                {
+                    "family_id": "FAM001",
+                    "provenance": {},
+                    "evidence_summary": {
+                        "family_verdict": batch.SUPPORT_FAMILY_VERDICT,
+                    },
+                },
+            ),
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "write_family_ms1_overlay_outputs",
+        fail_render,
+    )
+    monkeypatch.setattr(batch.overlay_plot, "_write_summary", fake_write_summary)
+    monkeypatch.setattr(batch.overlay_plot, "_write_trace_data", fake_write_trace_data)
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "build_family_ms1_evidence_summary",
+        lambda _rows: {"family_verdict": batch.SUPPORT_FAMILY_VERDICT},
+    )
+
+    rows = batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=tmp_path / "raw",
+        dll_dir=tmp_path / "dll",
+        output_dir=output_dir,
+        limit=1,
+        evidence_only=True,
+    )
+    batch._write_outputs(output_dir, rows)
+
+    assert rows[0]["status"] == "success"
+    assert rows[0]["png_path"] == ""
+    assert rows[0]["pdf_path"] == ""
+    assert rows[0]["trace_summary_tsv"].endswith("fam001_overlay_trace_summary.tsv")
+    assert rows[0]["trace_data_json"].endswith("fam001_overlay_trace_data.json")
+    summary = _read_tsv(output_dir / "family_ms1_overlay_batch_summary.tsv")
+    assert summary[0]["png_path"] == ""
+    assert summary[0]["trace_data_json"].endswith("fam001_overlay_trace_data.json")
+
+
 def test_batch_uses_backfill_seed_mz_when_seed_queue_provides_it(
     tmp_path: Path,
     monkeypatch,
@@ -303,6 +378,7 @@ def test_batch_fast_path_opens_each_raw_sample_once(tmp_path: Path) -> None:
     class FakeRaw:
         def __init__(self, sample_stem: str) -> None:
             self.sample_stem = sample_stem
+            self.raw_chromatogram_call_count = 0
 
         def __enter__(self):
             return self
@@ -311,6 +387,7 @@ def test_batch_fast_path_opens_each_raw_sample_once(tmp_path: Path) -> None:
             return None
 
         def extract_xic_many(self, xic_requests):
+            self.raw_chromatogram_call_count += 1
             extract_counts[self.sample_stem] = len(xic_requests)
             return tuple(
                 SimpleNamespace(
@@ -324,6 +401,7 @@ def test_batch_fast_path_opens_each_raw_sample_once(tmp_path: Path) -> None:
         opened.append(raw_path.name)
         return FakeRaw(raw_path.stem)
 
+    stats = batch.OverlayExtractionStats.empty()
     rows_by_rank = batch._extract_batch_family_trace_rows(
         requests,
         cells_by_family=cells_by_family,
@@ -331,10 +409,25 @@ def test_batch_fast_path_opens_each_raw_sample_once(tmp_path: Path) -> None:
         dll_dir=dll_dir,
         max_highlight_rescued=8,
         open_raw_func=fake_open_raw,
+        extraction_stats=stats,
     )
 
     assert opened == ["Sample_A.raw", "Sample_B.raw"]
     assert extract_counts == {"Sample_A": 2, "Sample_B": 2}
+    assert stats.to_metrics() == {
+        "sample_count": 2,
+        "sample_stems": "Sample_A,Sample_B",
+        "raw_open_count": 2,
+        "extract_xic_batch_count": 2,
+        "extract_xic_count": 4,
+        "raw_chromatogram_call_count": 2,
+        "mean_xic_per_raw_chromatogram_call": 2.0,
+        "trace_point_count": 8,
+        "exact_scan_window_count": 0,
+        "superwindow_group_count": 0,
+        "superwindow_fallback_sample_count": 2,
+        "superwindow_span_factor": 2,
+    }
     assert [row.sample_stem for row in rows_by_rank[1]] == [
         "Sample_A",
         "Sample_B",
@@ -343,6 +436,105 @@ def test_batch_fast_path_opens_each_raw_sample_once(tmp_path: Path) -> None:
         "Sample_A",
         "Sample_B",
     ]
+
+
+def test_batch_superwindow_crops_back_to_original_scan_windows(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    _write_alignment_cells(
+        alignment_cells,
+        [
+            _cell_row("FAM_A", "Sample_A", "detected", "1000"),
+            _cell_row("FAM_B", "Sample_A", "detected", "900"),
+        ],
+    )
+    requests = (
+        batch.OverlayBatchRequest(
+            rank=1,
+            family_id="FAM_A",
+            seed_group_id="seed-a",
+            mz=251.0,
+            ppm=10.0,
+            rt_min=1.0,
+            rt_max=2.0,
+            family_center_rt=1.5,
+            output_prefix="fam_a",
+        ),
+        batch.OverlayBatchRequest(
+            rank=2,
+            family_id="FAM_B",
+            seed_group_id="seed-b",
+            mz=252.0,
+            ppm=10.0,
+            rt_min=1.2,
+            rt_max=2.2,
+            family_center_rt=1.7,
+            output_prefix="fam_b",
+        ),
+    )
+    cells_by_family = overlay_plot.load_family_cells_for_families(
+        alignment_cells,
+        ("FAM_A", "FAM_B"),
+    )
+    extract_batch_sizes: list[int] = []
+
+    class FakeRaw:
+        raw_chromatogram_call_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def scan_window_for_request(self, request):
+            return int(round(request.rt_min * 10)), int(round(request.rt_max * 10))
+
+        def retention_time_for_scan(self, scan_number: int):
+            return scan_number / 10.0
+
+        def extract_xic_many(self, xic_requests):
+            self.raw_chromatogram_call_count += 1
+            extract_batch_sizes.append(len(xic_requests))
+            rt = [1.0, 1.1, 1.2, 2.0, 2.1, 2.2]
+            return tuple(
+                XICTrace.from_arrays(
+                    rt,
+                    [request.mz + offset for offset, _rt in enumerate(rt)],
+                )
+                for request in xic_requests
+            )
+
+    def fake_open_raw(_raw_path: Path, _dll_dir: Path) -> FakeRaw:
+        return FakeRaw()
+
+    stats = batch.OverlayExtractionStats.empty()
+    rows_by_rank = batch._extract_batch_family_trace_rows(
+        requests,
+        cells_by_family=cells_by_family,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        max_highlight_rescued=8,
+        open_raw_func=fake_open_raw,
+        extraction_stats=stats,
+    )
+
+    assert extract_batch_sizes == [2]
+    assert rows_by_rank[1][0].rt == (1.0, 1.1, 1.2, 2.0)
+    assert rows_by_rank[2][0].rt == (1.2, 2.0, 2.1, 2.2)
+    assert stats.to_metrics()["extract_xic_batch_count"] == 1
+    assert stats.to_metrics()["raw_chromatogram_call_count"] == 1
+    assert stats.to_metrics()["exact_scan_window_count"] == 2
+    assert stats.to_metrics()["superwindow_group_count"] == 1
+    assert stats.to_metrics()["trace_point_count"] == 8
 
 
 def test_batch_reuses_existing_outputs_without_raw_when_requested(
