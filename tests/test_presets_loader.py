@@ -22,7 +22,7 @@ def test_load_builtin_dna_dr_preset_enables_standard_peak_backfill() -> None:
     assert preset.alignment_overrides == {
         "standard_peak_backfill": True,
         "standard_peak_backfill_chunk_size": 120,
-        "standard_peak_backfill_write_gallery": True,
+        "standard_peak_backfill_publication_mode": "matrix-only",
     }
     assert preset.source == "builtin:dna_dr"
 
@@ -55,7 +55,7 @@ rt_max = 20.0
 [alignment]
 standard_peak_backfill = true
 standard_peak_backfill_chunk_size = 24
-standard_peak_backfill_write_gallery = false
+standard_peak_backfill_publication_mode = "review-gallery"
 standard_peak_backfill_min_shape_r = 0.97
 """.strip(),
         encoding="utf-8",
@@ -68,7 +68,7 @@ standard_peak_backfill_min_shape_r = 0.97
     assert preset.alignment_overrides == {
         "standard_peak_backfill": True,
         "standard_peak_backfill_chunk_size": 24,
-        "standard_peak_backfill_write_gallery": False,
+        "standard_peak_backfill_publication_mode": "review-gallery",
         "standard_peak_backfill_min_shape_r": 0.97,
     }
 

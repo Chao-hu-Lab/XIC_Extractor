@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Literal
 
 import numpy as np
+from numpy.linalg import LinAlgError
 from scipy import sparse
+from scipy.linalg import solveh_banded
 from scipy.sparse.linalg import spsolve
 
 from xic_extractor.peak_detection.integration import integrate_area_counts_seconds
@@ -14,10 +17,40 @@ AREA_UNCERTAINTY_FORMULA_VERSION = "baseline_residual_mad_v1"
 LINEAR_EDGE_RETIRED_MESSAGE = "linear_edge baseline integration is retired; use asls"
 
 
+@lru_cache(maxsize=512)
+def _asls_penalty(n: int, lam: float) -> tuple[sparse.csc_matrix, np.ndarray]:
+    """Cache the AsLS smoothness penalty ``lam * D^T D`` for a trace length.
+
+    The second-difference operator depends only on ``n`` and ``lam``, so it is
+    built once per ``(n, lam)`` instead of on every ``asls_baseline`` call.
+    Returns the sparse penalty (for the rare non-SPD fallback) plus its
+    symmetric banded diagonals (offsets 0/+1/+2) in scipy ``solveh_banded``
+    upper form for the fast banded solve.
+    """
+    differences = sparse.diags(
+        [1, -2, 1], [0, 1, 2], shape=(n - 2, n), dtype=float, format="csc"
+    )
+    penalty = (lam * (differences.T @ differences)).tocsc()
+    bands = np.zeros((3, n), dtype=float)
+    bands[2, :] = penalty.diagonal(0)
+    bands[1, 1:] = penalty.diagonal(1)
+    bands[0, 2:] = penalty.diagonal(2)
+    return penalty, bands
+
+
 def asls_baseline(
     y: np.ndarray, lam: float = 1e5, p: float = 0.01, n_iter: int = 10
 ) -> np.ndarray:
-    """Asymmetric Least Squares baseline (Eilers & Boelens 2005)."""
+    """Asymmetric Least Squares baseline (Eilers & Boelens 2005).
+
+    The penalised system ``(W + lam D^T D) x = W y`` is symmetric positive
+    definite and pentadiagonal, so it is solved with a banded Cholesky solver
+    (``solveh_banded``) over the cached penalty bands instead of rebuilding a
+    general sparse matrix and running superLU on every call. Mathematically
+    identical to the previous ``spsolve`` formulation (validated to rtol 1e-9);
+    falls back to ``spsolve`` only if a degenerate weight vector makes the
+    system non-positive-definite.
+    """
     values = np.asarray(y, dtype=float)
     if values.ndim != 1:
         raise ValueError("asls_baseline expects a 1-D trace")
@@ -33,15 +66,22 @@ def asls_baseline(
     if n < 3:
         return values.copy()
 
-    differences = sparse.diags(
-        [1, -2, 1], [0, 1, 2], shape=(n - 2, n), dtype=float, format="csc"
-    )
-    penalty = lam * (differences.T @ differences)
+    penalty, bands = _asls_penalty(n, float(lam))
+    penalty_main = bands[2]
+    ab = np.empty((3, n), dtype=float)
+    ab[0] = bands[0]
+    ab[1] = bands[1]
     weights = np.ones(n)
     baseline = values.copy()
     for _ in range(n_iter):
-        weight_matrix = sparse.diags(weights, 0, format="csc")
-        baseline = spsolve((weight_matrix + penalty).tocsc(), weights * values)
+        ab[2] = penalty_main + weights
+        try:
+            baseline = solveh_banded(
+                ab, weights * values, lower=False, check_finite=False
+            )
+        except LinAlgError:
+            weight_matrix = sparse.diags(weights, 0, format="csc")
+            baseline = spsolve((weight_matrix + penalty).tocsc(), weights * values)
         weights = p * (values > baseline) + (1 - p) * (values < baseline)
     return baseline
 

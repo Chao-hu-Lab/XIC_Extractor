@@ -23,10 +23,12 @@ from xic_extractor.diagnostics.diagnostic_io import (
     text_value,
     write_tsv,
 )
+from xic_extractor.diagnostics.shadow_production_projection import (
+    canonical_shadow_projection_sha256,
+)
 from xic_extractor.diagnostics.standard_peak_shadow_activation_inputs import (
     StandardPeakActivationInputOutputs,
     build_standard_peak_activation_inputs,
-    sha256_file,
     write_standard_peak_activation_input_outputs,
 )
 
@@ -127,7 +129,9 @@ def run_standard_peak_backfill_productization(
     )
     activation_index = build_standard_peak_activation_inputs(
         shadow_rows,
-        source_shadow_projection_sha256=sha256_file(shadow_projection_cells_tsv),
+        source_shadow_projection_sha256=canonical_shadow_projection_sha256(
+            shadow_rows,
+        ),
         source_run_id=source_run_id,
     )
     activation_outputs = write_standard_peak_activation_input_outputs(

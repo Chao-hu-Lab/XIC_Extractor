@@ -40,6 +40,11 @@ _PERFORMANCE_PROFILES = {
         "raw_xic_batch_size": 64,
     },
 }
+_STANDARD_PEAK_PUBLICATION_MODES = (
+    "matrix-only",
+    "review-gallery",
+    "deep-audit",
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -52,6 +57,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     standard_peak_backfill_enabled = bool(
         preset_runtime_options.get("standard_peak_backfill", False),
     )
+    if args.standard_peak_backfill_publication_mode is not None:
+        if not standard_peak_backfill_enabled:
+            print(
+                "--standard-peak-backfill-publication-mode requires a preset "
+                "that enables standard_peak_backfill",
+                file=sys.stderr,
+            )
+            return 2
+        preset_runtime_options = dict(preset_runtime_options)
+        _apply_standard_peak_publication_mode_override(
+            preset_runtime_options,
+            args.standard_peak_backfill_publication_mode,
+        )
     if (args.sample_info is None) != (args.targeted_istd_workbook is None):
         print(
             (
@@ -309,11 +327,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                             "standard_peak_backfill_write_gallery"
                         ],
                     ),
+                    publication_mode=str(
+                        preset_runtime_options[
+                            "standard_peak_backfill_publication_mode"
+                        ],
+                    ),
                     min_shape_r=float(
                         preset_runtime_options[
                             "standard_peak_backfill_min_shape_r"
                         ],
                     ),
+                    timing_recorder=timing_recorder,
                 )
         finally:
             if profiler is not None:
@@ -428,6 +452,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help=(
             "Built-in preset name or TOML path. Alignment presets may enable "
             "post-alignment standard-peak backfill publication."
+        ),
+    )
+    parser.add_argument(
+        "--standard-peak-backfill-publication-mode",
+        choices=_STANDARD_PEAK_PUBLICATION_MODES,
+        help=(
+            "Override the preset standard-peak publication mode. matrix-only "
+            "publishes the formal matrix from compact evidence without PNG "
+            "gallery rendering; deep-audit preserves the legacy full overlay "
+            "and gallery behavior. review-gallery keeps RAW overlay evidence "
+            "compact while rendering shift-aware review evidence and the "
+            "activation-synced review gallery."
         ),
     )
     parser.add_argument(
@@ -823,6 +859,17 @@ def _preset_source_run_id(preset: Preset | None) -> str:
         return "alignment-preset:standard-peak-backfill"
     safe_source = preset.source.replace("\\", "/")
     return f"alignment-preset:{safe_source}:standard-peak-backfill"
+
+
+def _apply_standard_peak_publication_mode_override(
+    runtime_options: dict[str, object],
+    publication_mode: str,
+) -> None:
+    runtime_options["standard_peak_backfill_publication_mode"] = publication_mode
+    runtime_options["standard_peak_backfill_write_gallery"] = publication_mode in {
+        "review-gallery",
+        "deep-audit",
+    }
 
 
 def _standard_peak_backfill_requires_full_cells(
