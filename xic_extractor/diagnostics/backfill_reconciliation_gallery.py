@@ -2829,8 +2829,8 @@ def _table_html(
         (
             '<th scope="col"><span title="Cell-level impact. With shadow '
             "projection input: Current=current production decision writes, "
-            "Review=manual-review candidate cells, Write/Block=projected shadow "
-            "outcome. Without projection "
+            "Review=projection candidate pool, Write=new projected matrix "
+            "writes, Block=projected hard blockers. Without projection "
             "input: NL/Candidate/Dup/Review remain alignment provenance counts, "
             'not matrix-written counts or target benchmark coverage.">'
             "impact</span></th>"
@@ -3149,8 +3149,8 @@ def _projection_counts_html(
         block=sum(cell.shadow_decision == "block" for cell in cells),
         aria_label=(
             "Shadow production projection impact. Current is cells already "
-            "written by the production-decision snapshot; Review is "
-            "manual-review candidate cells; Write is projected writable cells; "
+            "written by the production-decision snapshot; Review is the "
+            "projection candidate pool; Write is new projected matrix writes; "
             "Block is hard projection blockers."
         ),
     )
@@ -3165,9 +3165,13 @@ def _projection_impact_counts_html(
     aria_label: str,
 ) -> str:
     items = [
-        _count_pill("Current", "current production-decision written cells", current),
-        _count_pill("Review", "manual-review candidate cells", review),
-        _count_pill("Write", "shadow projected matrix-written cells", accept),
+        _count_pill("Current", "already written in the production snapshot", current),
+        _count_pill(
+            "Review",
+            "projection candidate pool; final status is Current, Write, or Block",
+            review,
+        ),
+        _count_pill("Write", "new matrix cells authorized by this projection", accept),
         _count_pill("Block", "shadow hard-blocked cells", block),
     ]
     return (
@@ -3247,7 +3251,7 @@ def _compact_issue_label(value: str) -> str:
         "product_not_backfilled": "not written",
         "candidate_context": "candidate only",
         "rescued": "candidate",
-        "review_rescue": "manual-review candidate",
+        "review_rescue": "review candidate",
         "gap_fill_rescued": "candidate",
         "not_assessable_missing_overlay": "missing overlay",
         "not_assessable_missing_seed_provenance": "missing seed provenance",
@@ -3784,7 +3788,7 @@ def _projection_accept_cells_html(
         '<section class="projection-accept-index">'
         "<h3>Projection write cells</h3>"
         '<p class="chain-note">'
-        "Only blank manual-review candidate cells that shadow projection would "
+        "Only blank candidate cells that shadow projection would "
         "turn into writes are listed here; projection_only, product output is "
         "unchanged.</p>"
         '<div class="seed-alias-table-wrap">'
@@ -4567,7 +4571,12 @@ def _details_html(
         )
     )
     return (
-        _review_answer_html(group, html_path, input_artifacts)
+        _review_answer_html(
+            group,
+            html_path,
+            input_artifacts,
+            shadow_projection_cells=shadow_projection_cells,
+        )
         + _detail_summary_html(
             group,
             representatives,
@@ -4733,6 +4742,8 @@ def _review_answer_html(
     group: ReconciliationGroup,
     html_path: Path,
     input_artifacts: object,
+    *,
+    shadow_projection_cells: Sequence[ShadowProjectionCell] = (),
 ) -> str:
     support = _component_summary_text(_support_summary_items(group), "none")
     blocker = _component_summary_text(_blocker_summary_items(group), "none")
@@ -4748,20 +4759,59 @@ def _review_answer_html(
         overlay_text = "family context only, hypothesis overlay not generated"
     else:
         overlay_text = _missing_overlay_reason_text(input_artifacts)
+    decision_text = _review_answer_decision_text(group, shadow_projection_cells)
     return (
         '<section class="review-answer">'
         "<strong>Reviewer readout</strong>"
-        "<p>"
-        "Product state is "
-        f"{_escape(_compact_issue_label(group.product_behavior_state))}; "
-        "evidence state is "
-        f"{_escape(_compact_issue_label(group.evidence_authority_state))}. "
+        f"<p>{_escape(decision_text)}</p>"
+        '<p class="review-answer-meta">'
         f"Support: {_escape(support)}. "
         f"Blocker or missing item: {_escape(blocker)}. "
         f"Overlay status: {_escape(overlay_text)}."
         "</p>"
         "</section>"
     )
+
+
+def _review_answer_decision_text(
+    group: ReconciliationGroup,
+    shadow_projection_cells: Sequence[ShadowProjectionCell],
+) -> str:
+    if shadow_projection_cells:
+        current = sum(cell.current_matrix_written for cell in shadow_projection_cells)
+        review = sum(cell.review_rescued_cell for cell in shadow_projection_cells)
+        write = sum(
+            cell.shadow_decision == "accept" and cell.projected_matrix_written
+            for cell in shadow_projection_cells
+        )
+        block = sum(cell.shadow_decision == "block" for cell in shadow_projection_cells)
+        context = sum(
+            cell.shadow_decision == "context" for cell in shadow_projection_cells
+        )
+        if write:
+            return (
+                f"結論：會寫入 {write} 個新 matrix value。"
+                f"目前已寫入 {current} 個，review candidate {review} 個。"
+            )
+        if current:
+            return (
+                f"結論：目前 production snapshot 已寫入 {current} 個 value；"
+                "這一列沒有新的 activation write。"
+            )
+        if block:
+            return (
+                f"結論：未寫入 matrix；{block} 個 cell 被 hard blocker 擋下。"
+                f"Review candidate {review} 個。"
+            )
+        if context:
+            return (
+                f"結論：未寫入 matrix；{context} 個 cell 仍是 review-only "
+                "candidate。這代表 MS1/visual evidence 支持同峰候選，但還沒有 "
+                "product-authorized standard-peak same-peak chain。"
+            )
+    product = _compact_issue_label(group.product_behavior_state)
+    evidence = _compact_issue_label(group.evidence_authority_state)
+    return f"結論：Product={product}；Evidence={evidence}。"
 
 
 def _support_summary_items(group: ReconciliationGroup) -> tuple[str, ...]:
@@ -4884,11 +4934,10 @@ def _cell_impact_legend_note_html(
     if shadow_projection_cells:
         return (
             '<p class="chain-note">'
-            "Current=目前 production decision snapshot 會寫入的 cells；"
-            "Review=需要人工判讀的 candidate cells；"
-            "Write=shadow projection 認為可寫入的 review cells；"
-            "Block=hard blockers；Context=仍需人審/duplicate/debug；"
-            "projection_only，不會直接改 matrix。</p>"
+            "Current=目前 production snapshot 已寫入的 cells；"
+            "Review=只有 review/candidate context，尚未寫入 matrix；"
+            "Write=這輪 projection/activation 可寫入的新 cells；"
+            "Block=hard blockers。Context/review-only 不會直接改 matrix。</p>"
         )
     return (
         '<p class="chain-note">NL=detected required-tag anchors；'
@@ -5861,6 +5910,11 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   margin: 0;
   color: #334155;
 }
+.review-answer-meta {
+  margin-top: 6px !important;
+  color: var(--muted) !important;
+  font-size: 12px;
+}
 .family-id {
   display: block;
   font-size: 14px;
@@ -5945,11 +5999,14 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   display: grid;
   justify-items: center;
   gap: 1px;
+  min-width: 38px;
 }
 .count-stack dt {
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 .count-stack dd {
   margin: 0;
@@ -6594,9 +6651,9 @@ h1 {
 }
 .review-table .col-priority { width: 60px; }
 .review-table .col-family { width: 330px; }
-.review-table .col-state { width: 230px; }
+.review-table .col-state { width: 222px; }
 .review-table .col-issue { width: 260px; }
-.review-table .col-counts { width: 112px; }
+.review-table .col-counts { width: 146px; }
 .review-table .col-overlay { width: 88px; }
 .review-table .col-details { width: 116px; }
 .review-table th,
@@ -6737,7 +6794,15 @@ h1 {
   text-align: center;
 }
 .count-stack {
-  gap: 10px;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+.count-stack div {
+  min-width: 38px;
+}
+.count-stack dt {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 .count-stack dd {
   color: #10202a;
@@ -7473,17 +7538,32 @@ def _shadow_projection_compact_summary(
 ) -> str:
     if not cells:
         return ""
-    counts = Counter(cell.shadow_decision for cell in cells)
+    current = sum(cell.current_matrix_written for cell in cells)
+    review_only = sum(
+        cell.shadow_decision == "context" and not cell.current_matrix_written
+        for cell in cells
+    )
+    block = sum(cell.shadow_decision == "block" for cell in cells)
+    accept = sum(cell.shadow_decision == "accept" for cell in cells)
     projected_new = sum(
         not cell.current_matrix_written and cell.projected_matrix_written
         for cell in cells
     )
-    labels = (
-        ("accept", "accept"),
-        ("block", "block"),
-        ("context", "context"),
-    )
-    parts = [f"{label} {counts[key]}" for key, label in labels if counts[key]]
+    if review_only and not accept and not block and not current:
+        label = "candidate cell" if review_only == 1 else "candidate cells"
+        return f"review-only: {review_only} {label}"
+    if current and not accept and not block and not review_only:
+        label = "cell" if current == 1 else "cells"
+        return f"already written: {current} current {label}"
+    parts = []
+    if current:
+        parts.append(f"current {current}")
+    if accept:
+        parts.append(f"write {accept}")
+    if block:
+        parts.append(f"block {block}")
+    if review_only:
+        parts.append(f"review-only {review_only}")
     if projected_new:
         parts.append(f"+{projected_new} matrix")
     return "projection: " + " · ".join(parts)
