@@ -31,8 +31,19 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
         cells = output_dir / "alignment_cells.tsv"
         integration = output_dir / "alignment_cell_integration_audit.tsv"
         backfill_seed = output_dir / "alignment_owner_backfill_seed_audit.tsv"
+        backfill_candidate = (
+            output_dir / "alignment_owner_backfill_candidate_audit.tsv"
+        )
         status = output_dir / "alignment_matrix_status.tsv"
-        for path in (review, matrix, cells, integration, backfill_seed, status):
+        for path in (
+            review,
+            matrix,
+            cells,
+            integration,
+            backfill_seed,
+            backfill_candidate,
+            status,
+        ):
             path.write_text("x\n", encoding="utf-8")
         return AlignmentRunOutputs(
             workbook=output_dir / "alignment_results.xlsx",
@@ -42,6 +53,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
             cells_tsv=cells,
             integration_audit_tsv=integration,
             backfill_seed_audit_tsv=backfill_seed,
+            backfill_candidate_audit_tsv=backfill_candidate,
             status_matrix_tsv=status,
             edge_evidence_tsv=output_dir / "owner_edge_evidence.tsv",
         )
@@ -63,6 +75,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
             "--emit-alignment-cells",
             "--emit-alignment-integration-audit",
             "--emit-alignment-backfill-seed-audit",
+            "--emit-alignment-backfill-candidate-audit",
             "--emit-alignment-status-matrix",
             "--emit-baseline-audit-asls",
         ]
@@ -86,6 +99,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert captured["emit_alignment_cells"] is True
     assert captured["emit_alignment_integration_audit"] is True
     assert captured["emit_alignment_backfill_seed_audit"] is True
+    assert captured["emit_alignment_backfill_candidate_audit"] is True
     assert captured["emit_alignment_status_matrix"] is True
     assert captured["raw_workers"] == 1
     assert captured["raw_xic_batch_size"] == 1
@@ -100,6 +114,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert "alignment_review.tsv" in stdout
     assert "alignment_cell_integration_audit.tsv" in stdout
     assert "alignment_owner_backfill_seed_audit.tsv" in stdout
+    assert "alignment_owner_backfill_candidate_audit.tsv" in stdout
     assert "alignment_matrix_status.tsv" in stdout
     assert "Owner edge evidence TSV:" in stdout
 

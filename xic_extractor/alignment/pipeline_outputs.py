@@ -28,6 +28,7 @@ from xic_extractor.alignment.output_levels import (
 from xic_extractor.alignment.owner_backfill import OwnerBackfillCandidateAuditRow
 from xic_extractor.alignment.ownership import OwnershipBuildResult
 from xic_extractor.alignment.tsv_writer import (
+    write_alignment_backfill_cell_evidence_tsv,
     write_alignment_cell_integration_audit_tsv,
     write_alignment_cells_tsv,
     write_alignment_matrix_identity_tsv,
@@ -48,6 +49,7 @@ class AlignmentRunOutputs:
     review_tsv: Path | None = None
     matrix_tsv: Path | None = None
     matrix_identity_tsv: Path | None = None
+    backfill_cell_evidence_tsv: Path | None = None
     cells_tsv: Path | None = None
     integration_audit_tsv: Path | None = None
     backfill_seed_audit_tsv: Path | None = None
@@ -69,6 +71,7 @@ def output_paths(
     emit_alignment_status_matrix: bool,
     emit_alignment_integration_audit: bool = False,
     emit_alignment_backfill_seed_audit: bool = False,
+    emit_alignment_backfill_candidate_audit: bool = False,
     emit_skipped_evidence_ledger: bool = False,
 ) -> AlignmentRunOutputs:
     artifacts = set(artifact_names_for_output_level(output_level))
@@ -107,6 +110,11 @@ def output_paths(
             if "alignment_cells.tsv" in artifacts
             else None
         ),
+        backfill_cell_evidence_tsv=(
+            output_dir / "alignment_backfill_cell_evidence.tsv"
+            if "alignment_backfill_cell_evidence.tsv" in artifacts
+            else None
+        ),
         integration_audit_tsv=(
             output_dir / "alignment_cell_integration_audit.tsv"
             if emit_alignment_integration_audit
@@ -119,7 +127,7 @@ def output_paths(
         ),
         backfill_candidate_audit_tsv=(
             output_dir / "alignment_owner_backfill_candidate_audit.tsv"
-            if emit_alignment_backfill_seed_audit
+            if emit_alignment_backfill_candidate_audit
             else None
         ),
         status_matrix_tsv=(
@@ -287,6 +295,17 @@ def write_outputs_atomic(
     if outputs.cells_tsv is not None:
         output_paths_and_writers.append(
             (outputs.cells_tsv, lambda path: write_alignment_cells_tsv(path, matrix)),
+        )
+    if outputs.backfill_cell_evidence_tsv is not None:
+        output_paths_and_writers.append(
+            (
+                outputs.backfill_cell_evidence_tsv,
+                lambda path: write_alignment_backfill_cell_evidence_tsv(
+                    path,
+                    matrix,
+                    alignment_config=alignment_config,
+                ),
+            ),
         )
     if outputs.integration_audit_tsv is not None:
         output_paths_and_writers.append(

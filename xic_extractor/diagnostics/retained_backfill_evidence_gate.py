@@ -22,16 +22,21 @@ from xic_extractor.diagnostics.diagnostic_io import (
 
 SCHEMA_VERSION = "retained_backfill_evidence_gate_v0"
 SUPPORT_OVERLAY_VERDICT = "ms1_shape_supports_family_backfill"
+MACHINE_SUPPORT_COMPONENT = "high_detected_anchor_low_rescue_machine_support"
+MACHINE_SUPPORT_DETECTED_MIN = 20
+MACHINE_SUPPORT_RESCUE_FRACTION_MAX = 0.10
 _SAFE_PREFIX_CHARS = re.compile(r"[^A-Za-z0-9_.-]+")
 
 EvidenceGateStatus = Literal[
     "visual_support",
+    "machine_support_no_overlay",
     "evidence_conflict",
     "evidence_missing",
     "evidence_inconclusive",
 ]
 RecommendedAction = Literal[
     "track_supported_backfill",
+    "track_machine_supported_backfill",
     "review_product_backfill",
     "generate_missing_evidence",
     "review_inconclusive_evidence",
@@ -207,6 +212,7 @@ class RetainedBackfillGateOutputs:
     tsv: Path
     json: Path
     missing_overlay_queue_tsv: Path
+    review_overlay_queue_tsv: Path
 
 
 @dataclass(frozen=True)
@@ -350,6 +356,9 @@ def write_retained_backfill_gate_outputs(
     tsv_path = output_dir / "alignment_retained_backfill_evidence_gate.tsv"
     json_path = output_dir / "alignment_retained_backfill_evidence_gate.json"
     queue_path = output_dir / "alignment_retained_backfill_missing_overlay_queue.tsv"
+    review_queue_path = (
+        output_dir / "alignment_retained_backfill_overlay_review_queue.tsv"
+    )
     write_tsv(
         tsv_path,
         [_row_as_mapping(row) for row in index.rows],
@@ -363,8 +372,16 @@ def write_retained_backfill_gate_outputs(
         MISSING_OVERLAY_QUEUE_COLUMNS,
         lineterminator="\n",
     )
+    review_queue_rows = _review_overlay_queue_rows(index.rows)
+    write_tsv(
+        review_queue_path,
+        review_queue_rows,
+        MISSING_OVERLAY_QUEUE_COLUMNS,
+        lineterminator="\n",
+    )
     summary = dict(index.summary)
     summary["missing_overlay_queue_count"] = len(queue_rows)
+    summary["review_overlay_queue_count"] = len(review_queue_rows)
     json_path.write_text(
         json.dumps(summary, indent=2, sort_keys=True),
         encoding="utf-8",
@@ -373,6 +390,7 @@ def write_retained_backfill_gate_outputs(
         tsv=tsv_path,
         json=json_path,
         missing_overlay_queue_tsv=queue_path,
+        review_overlay_queue_tsv=review_queue_path,
     )
 
 
@@ -410,12 +428,20 @@ def _evaluate_group(
     dependent_context.extend(_review_context_labels(review))
 
     if not selected_overlay:
-        missing_evidence.append("missing_overlay_evidence")
+        if _has_machine_support_without_overlay(review, family_cells):
+            support_components.append(MACHINE_SUPPORT_COMPONENT)
+            dependent_context.append("overlay_not_required_machine_supported")
+        else:
+            missing_evidence.append("missing_overlay_evidence")
     elif not overlay_is_seed_specific:
         dependent_context.append("legacy_family_overlay_context")
         if overlay_verdict:
             dependent_context.append(f"legacy_family_overlay:{overlay_verdict}")
-        missing_evidence.append("missing_seed_specific_overlay")
+        if _has_machine_support_without_overlay(review, family_cells):
+            support_components.append(MACHINE_SUPPORT_COMPONENT)
+            dependent_context.append("seed_specific_overlay_not_required_machine_supported")
+        else:
+            missing_evidence.append("missing_seed_specific_overlay")
     elif overlay_verdict == SUPPORT_OVERLAY_VERDICT:
         support_components.append(SUPPORT_OVERLAY_VERDICT)
     elif overlay_verdict:
@@ -476,12 +502,16 @@ def _status(
         return "evidence_missing"
     if SUPPORT_OVERLAY_VERDICT in support_components:
         return "visual_support"
+    if MACHINE_SUPPORT_COMPONENT in support_components:
+        return "machine_support_no_overlay"
     return "evidence_inconclusive"
 
 
 def _recommended_action(status: EvidenceGateStatus) -> RecommendedAction:
     if status == "visual_support":
         return "track_supported_backfill"
+    if status == "machine_support_no_overlay":
+        return "track_machine_supported_backfill"
     if status == "evidence_conflict":
         return "review_product_backfill"
     if status == "evidence_missing":
@@ -509,6 +539,46 @@ def _is_retained_product_backfill(
     ):
         return True
     return any(text_value(cell.get("status")) == "rescued" for cell in family_cells)
+
+
+def _has_machine_support_without_overlay(
+    review: Mapping[str, str],
+    family_cells: Sequence[Mapping[str, str]],
+) -> bool:
+    if _int_or_zero(review.get("review_rescue_count")) > 0:
+        return False
+    if _overlay_required_by_review_flags(review):
+        return False
+    detected_count = max(
+        _detected_count(review),
+        _count_cells(family_cells, "detected"),
+    )
+    rescued_count = max(
+        _int_or_zero(review.get("quantifiable_rescue_count")),
+        _int_or_zero(review.get("accepted_rescue_count")),
+        _count_cells(family_cells, "rescued"),
+    )
+    if detected_count < MACHINE_SUPPORT_DETECTED_MIN:
+        return False
+    rescue_limit = max(
+        5,
+        int(round(detected_count * MACHINE_SUPPORT_RESCUE_FRACTION_MAX)),
+    )
+    return rescued_count <= rescue_limit
+
+
+def _overlay_required_by_review_flags(review: Mapping[str, str]) -> bool:
+    flags = set(split_semicolon_labels(review.get("row_flags")))
+    overlay_required_flags = {
+        "backfill_cell_evidence_required",
+        "backfill_rescue_review_only",
+        "high_backfill_dependency",
+        "missing_independent_backfill_identity_evidence",
+        "provisional_retention_candidate",
+        "rescue_heavy",
+        "single_detected_seed",
+    }
+    return bool(flags & overlay_required_flags)
 
 
 def _is_detected_zero_backfill_context(
@@ -787,6 +857,28 @@ def _row_as_mapping(row: RetainedBackfillGateRow) -> dict[str, object]:
 def _missing_overlay_queue_rows(
     rows: Sequence[RetainedBackfillGateRow],
 ) -> list[dict[str, object]]:
+    queueable = _missing_overlay_queue_candidates(rows)
+    return [
+        _missing_overlay_queue_row(row, rank=rank)
+        for rank, row in enumerate(queueable, start=1)
+    ]
+
+
+def _review_overlay_queue_rows(
+    rows: Sequence[RetainedBackfillGateRow],
+) -> list[dict[str, object]]:
+    by_family: dict[str, RetainedBackfillGateRow] = {}
+    for row in _missing_overlay_queue_candidates(rows):
+        by_family.setdefault(row.feature_family_id, row)
+    return [
+        _missing_overlay_queue_row(row, rank=rank)
+        for rank, row in enumerate(by_family.values(), start=1)
+    ]
+
+
+def _missing_overlay_queue_candidates(
+    rows: Sequence[RetainedBackfillGateRow],
+) -> list[RetainedBackfillGateRow]:
     queueable = [
         row
         for row in rows
@@ -801,10 +893,7 @@ def _missing_overlay_queue_rows(
         and (row.seed_mz or row.family_center_mz)
     ]
     queueable.sort(key=_overlay_queue_sort_key)
-    return [
-        _missing_overlay_queue_row(row, rank=rank)
-        for rank, row in enumerate(queueable, start=1)
-    ]
+    return queueable
 
 
 def _missing_overlay_queue_row(
@@ -875,7 +964,8 @@ def _row_sort_key(row: RetainedBackfillGateRow) -> tuple[int, str, str]:
         "evidence_conflict": 0,
         "evidence_missing": 1,
         "evidence_inconclusive": 2,
-        "visual_support": 3,
+        "machine_support_no_overlay": 3,
+        "visual_support": 4,
     }
     return (
         status_priority.get(row.evidence_gate_status, 9),

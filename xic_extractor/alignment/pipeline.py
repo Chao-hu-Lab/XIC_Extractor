@@ -102,6 +102,7 @@ def run_alignment(
     emit_alignment_status_matrix: bool = False,
     emit_alignment_integration_audit: bool = False,
     emit_alignment_backfill_seed_audit: bool = False,
+    emit_alignment_backfill_candidate_audit: bool = False,
     raw_opener: RawOpener | None = None,
     raw_workers: int = 1,
     raw_xic_batch_size: int = 1,
@@ -167,6 +168,9 @@ def run_alignment(
         emit_alignment_status_matrix=emit_alignment_status_matrix,
         emit_alignment_integration_audit=emit_alignment_integration_audit,
         emit_alignment_backfill_seed_audit=emit_alignment_backfill_seed_audit,
+        emit_alignment_backfill_candidate_audit=(
+            emit_alignment_backfill_candidate_audit
+        ),
         emit_skipped_evidence_ledger=backfill_scope != "full-audit",
     )
     resolved_audit_evidence_mode, audit_evidence_mode_reason = (

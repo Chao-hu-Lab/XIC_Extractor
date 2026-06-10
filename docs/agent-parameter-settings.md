@@ -211,15 +211,33 @@ timing heartbeat`:
 
 - `alignment_matrix.tsv`: downstream correction / statistics handoff.
 - `alignment_review.tsv`: targeted benchmark and decision diagnostics.
-- `alignment_cells.tsv`: targeted benchmark and scoped audit diagnostics.
+- `alignment_matrix_identity.tsv`: matrix row/cell identity sidecar.
+- `alignment_backfill_cell_evidence.tsv`: compact cell-level ledger for
+  backfill evidence chain, gallery, and overlay review queues.
 
-It does not write `.xlsx`, HTML, owner-edge, status-matrix, event-owner, or
-ambiguous-owner debug outputs. Use fuller output levels only when a human
-review surface or debug artifact is explicitly required. In `auto` audit mode,
-`validation-minimal` resolves to no heavy audit evidence unless an explicit
-integration audit destination is requested. Some lightweight sidecars, such as
+It does not write `.xlsx`, HTML, full `alignment_cells.tsv`, owner-edge,
+status-matrix, event-owner, or ambiguous-owner debug outputs. Use `debug`,
+`validation`, or `--emit-alignment-cells` only when a human review surface or
+deep debug artifact explicitly needs the full 80-column cell ledger. In `auto`
+audit mode, `validation-minimal` resolves to no heavy audit evidence unless an
+explicit integration audit destination is requested. Some lightweight sidecars, such as
 `skipped_evidence_ledger.tsv` and `alignment_run_metadata.json`, may still be
 emitted when backfill scope needs machine-readable skip provenance.
+
+Backfill reconciliation gallery delivery has one extra lightweight requirement:
+add `--emit-alignment-backfill-seed-audit` to emit
+`alignment_owner_backfill_seed_audit.tsv`. That file provides seed-specific
+provenance for retained-gate review queues and overlay joins, but it does not
+force the full `alignment_cells.tsv` or all-candidate audit. Use
+`--emit-alignment-backfill-candidate-audit` only for deep owner-backfill debug;
+it is not required for normal seed-specific or family overlay galleries.
+
+For overlay rendering, first run retained backfill evidence gate and render only
+its `alignment_retained_backfill_overlay_review_queue.tsv`. Use
+`family_ms1_overlay_batch.py --no-pdf --reuse-existing` and chunk large queues
+with `--start-rank` / `--limit` when needed. The batch renderer reuses completed
+PNG/trace bundles and extracts RAW traces in sample-batched mode, so each chunk
+opens each sample RAW at most once instead of reopening RAW per family.
 
 Before starting 85RAW, verify the batch index actually contains 85 samples. Do
 not reuse the historical 8RAW index by path similarity. Prefer the CLI preflight

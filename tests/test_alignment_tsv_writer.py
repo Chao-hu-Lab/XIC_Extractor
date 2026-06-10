@@ -1088,6 +1088,62 @@ def test_debug_tsvs_write_cells_and_status_matrix(tmp_path: Path):
     assert status[0]["sample-b"] == "unchecked"
 
 
+def test_backfill_cell_evidence_tsv_is_compact_and_backfill_scoped(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.tsv_writer import (
+        ALIGNMENT_BACKFILL_CELL_EVIDENCE_COLUMNS,
+        write_alignment_backfill_cell_evidence_tsv,
+    )
+
+    matrix = AlignmentMatrix(
+        clusters=(
+            _cluster(cluster_id="ALN000001"),
+            _cluster(cluster_id="ALN000002"),
+        ),
+        cells=(
+            _cell(
+                "sample-a",
+                "detected",
+                cluster_id="ALN000001",
+                area=10.0,
+                candidate_id="sample-a#1",
+                region=True,
+            ),
+            _cell("sample-b", "rescued", cluster_id="ALN000001", area=8.0),
+            _cell("sample-c", "unchecked", cluster_id="ALN000001"),
+            _cell(
+                "sample-a",
+                "detected",
+                cluster_id="ALN000002",
+                area=20.0,
+                candidate_id="sample-a#2",
+                region=True,
+            ),
+        ),
+        sample_order=("sample-a", "sample-b", "sample-c"),
+    )
+
+    rows = _read_tsv(
+        write_alignment_backfill_cell_evidence_tsv(
+            tmp_path / "alignment_backfill_cell_evidence.tsv",
+            matrix,
+        ),
+    )
+
+    assert list(rows[0]) == list(ALIGNMENT_BACKFILL_CELL_EVIDENCE_COLUMNS)
+    assert {row["feature_family_id"] for row in rows} == {"ALN000001"}
+    assert {row["sample_stem"] for row in rows} == {"sample-a", "sample-b"}
+    rescued = next(row for row in rows if row["status"] == "rescued")
+    assert rescued["production_cell_status"] in {
+        "accepted_rescue",
+        "review_rescue",
+    }
+    assert rescued["primary_matrix_area"] == "8"
+    assert "region_candidate_count" not in rows[0]
+    assert "backfill_candidate_ms2_product_authority_status" not in rows[0]
+
+
 def test_alignment_cells_tsv_can_emit_without_region_audit(tmp_path: Path) -> None:
     from xic_extractor.alignment.tsv_writer import write_alignment_cells_tsv
 

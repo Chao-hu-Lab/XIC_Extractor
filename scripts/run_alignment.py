@@ -234,6 +234,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "emit_alignment_backfill_seed_audit": (
                 args.emit_alignment_backfill_seed_audit
             ),
+            "emit_alignment_backfill_candidate_audit": (
+                args.emit_alignment_backfill_candidate_audit
+            ),
             "raw_workers": raw_workers,
             "raw_xic_batch_size": raw_xic_batch_size,
             "owner_backfill_xic_backend": _owner_backfill_xic_backend(
@@ -295,6 +298,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Alignment integration audit TSV: {outputs.integration_audit_tsv}")
     if outputs.backfill_seed_audit_tsv is not None:
         print(f"Alignment backfill seed audit TSV: {outputs.backfill_seed_audit_tsv}")
+    if outputs.backfill_candidate_audit_tsv is not None:
+        print(
+            "Alignment backfill candidate audit TSV: "
+            f"{outputs.backfill_candidate_audit_tsv}"
+        )
     if outputs.status_matrix_tsv is not None:
         print(f"Alignment status matrix TSV: {outputs.status_matrix_tsv}")
     if outputs.event_to_owner_tsv is not None:
@@ -598,7 +606,23 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--baseline-integration-method",
         help="Alignment integration-audit baseline method. Only asls is supported.",
     )
-    parser.add_argument("--emit-alignment-backfill-seed-audit", action="store_true")
+    parser.add_argument(
+        "--emit-alignment-backfill-seed-audit",
+        action="store_true",
+        help=(
+            "Emit lightweight owner-backfill seed provenance needed by retained "
+            "backfill evidence gates and seed-specific overlay galleries."
+        ),
+    )
+    parser.add_argument(
+        "--emit-alignment-backfill-candidate-audit",
+        action="store_true",
+        help=(
+            "Emit the exhaustive owner-backfill all-candidate audit sidecar. "
+            "This is a deep-debug output and is not required for normal "
+            "backfill gallery overlay generation."
+        ),
+    )
     parser.add_argument("--emit-alignment-status-matrix", action="store_true")
     return parser.parse_args(argv)
 
