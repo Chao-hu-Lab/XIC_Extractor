@@ -16,13 +16,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
         output_dir = args.output_dir or args.alignment_dir
+        cell_evidence_tsv = _default_cell_evidence_path(
+            args.alignment_cell_evidence_tsv,
+            args.alignment_dir,
+        )
         seed_audit_tsv = _default_optional_path(
             args.backfill_seed_audit_tsv,
             args.alignment_dir / "alignment_owner_backfill_seed_audit.tsv",
         )
         outputs = run_retained_backfill_evidence_gate(
             alignment_review_tsv=args.alignment_dir / "alignment_review.tsv",
-            alignment_cells_tsv=args.alignment_dir / "alignment_cells.tsv",
+            alignment_cells_tsv=cell_evidence_tsv,
             alignment_matrix_tsv=args.alignment_dir / "alignment_matrix.tsv",
             backfill_seed_audit_tsv=seed_audit_tsv,
             overlay_batch_summary_tsvs=tuple(args.overlay_batch_summary_tsv),
@@ -38,6 +42,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "retained backfill missing overlay queue TSV: "
         f"{outputs.missing_overlay_queue_tsv}",
     )
+    print(
+        "retained backfill review overlay queue TSV: "
+        f"{outputs.review_overlay_queue_tsv}",
+    )
     return 0
 
 
@@ -45,6 +53,15 @@ def _default_optional_path(explicit: Path | None, default: Path) -> Path | None:
     if explicit is not None:
         return explicit
     return default if default.exists() else None
+
+
+def _default_cell_evidence_path(explicit: Path | None, alignment_dir: Path) -> Path:
+    if explicit is not None:
+        return explicit
+    light_path = alignment_dir / "alignment_backfill_cell_evidence.tsv"
+    if light_path.exists():
+        return light_path
+    return alignment_dir / "alignment_cells.tsv"
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -55,7 +72,17 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         required=True,
         help=(
             "Alignment output directory containing alignment_review.tsv, "
-            "alignment_cells.tsv, and alignment_matrix.tsv."
+            "alignment_matrix.tsv, and either alignment_backfill_cell_evidence.tsv "
+            "or alignment_cells.tsv."
+        ),
+    )
+    parser.add_argument(
+        "--alignment-cell-evidence-tsv",
+        type=Path,
+        help=(
+            "Optional compact alignment_backfill_cell_evidence.tsv or legacy "
+            "alignment_cells.tsv. Defaults to alignment_backfill_cell_evidence.tsv "
+            "in --alignment-dir when present, otherwise alignment_cells.tsv."
         ),
     )
     parser.add_argument(

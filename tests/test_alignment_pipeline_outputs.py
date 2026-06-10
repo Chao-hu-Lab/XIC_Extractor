@@ -137,7 +137,10 @@ def test_validation_minimal_outputs_keep_gate_artifacts_without_debug_surfaces(
     assert outputs.matrix_tsv == tmp_path / "alignment_matrix.tsv"
     assert outputs.matrix_identity_tsv == tmp_path / "alignment_matrix_identity.tsv"
     assert outputs.review_tsv == tmp_path / "alignment_review.tsv"
-    assert outputs.cells_tsv == tmp_path / "alignment_cells.tsv"
+    assert outputs.backfill_cell_evidence_tsv == (
+        tmp_path / "alignment_backfill_cell_evidence.tsv"
+    )
+    assert outputs.cells_tsv is None
     assert outputs.workbook is None
     assert outputs.review_html is None
     assert outputs.edge_evidence_tsv is None
@@ -170,6 +173,7 @@ def test_pipeline_debug_flags_write_optional_outputs(
         emit_alignment_cells=True,
         emit_alignment_integration_audit=True,
         emit_alignment_backfill_seed_audit=True,
+        emit_alignment_backfill_candidate_audit=True,
         emit_alignment_status_matrix=True,
         raw_opener=FakeRawOpener(),
     )
@@ -487,8 +491,72 @@ def test_pipeline_backfill_seed_sidecar_does_not_force_alignment_cells_or_region
 
     assert outputs.cells_tsv is None
     assert outputs.backfill_seed_audit_tsv is not None
-    assert outputs.backfill_candidate_audit_tsv is not None
     assert outputs.backfill_seed_audit_tsv.exists()
+    assert outputs.backfill_candidate_audit_tsv is None
+    assert calls["emit_region_audit"] is False
+
+
+def test_pipeline_backfill_candidate_audit_requires_own_flag(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    calls = {}
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        lambda candidates, **kwargs: SimpleNamespace(
+            owners=("owner",),
+            assignments=(),
+            ambiguous_records=(),
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (
+            "feature",
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+
+    def fake_owner_backfill(features, **kwargs):
+        calls["emit_region_audit"] = kwargs["emit_region_audit"]
+        return ()
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        fake_owner_backfill,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
+
+    outputs = pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        emit_alignment_backfill_candidate_audit=True,
+        raw_opener=FakeRawOpener(),
+    )
+
+    assert outputs.cells_tsv is None
+    assert outputs.backfill_seed_audit_tsv is None
+    assert outputs.backfill_candidate_audit_tsv is not None
     assert outputs.backfill_candidate_audit_tsv.exists()
     assert calls["emit_region_audit"] is False
 
@@ -570,7 +638,7 @@ def test_run_alignment_validation_minimal_writes_machine_gate_surface_only(
 
     names = sorted(path.name for path in (tmp_path / "out").iterdir())
     assert names == [
-        "alignment_cells.tsv",
+        "alignment_backfill_cell_evidence.tsv",
         "alignment_matrix.tsv",
         "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
@@ -581,7 +649,10 @@ def test_run_alignment_validation_minimal_writes_machine_gate_surface_only(
         == tmp_path / "out" / "alignment_matrix_identity.tsv"
     )
     assert outputs.review_tsv == tmp_path / "out" / "alignment_review.tsv"
-    assert outputs.cells_tsv == tmp_path / "out" / "alignment_cells.tsv"
+    assert outputs.backfill_cell_evidence_tsv == (
+        tmp_path / "out" / "alignment_backfill_cell_evidence.tsv"
+    )
+    assert outputs.cells_tsv is None
     assert outputs.workbook is None
     assert outputs.review_html is None
     assert outputs.edge_evidence_tsv is None

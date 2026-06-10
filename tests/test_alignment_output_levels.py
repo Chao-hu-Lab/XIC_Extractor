@@ -59,7 +59,7 @@ def test_validation_minimal_output_level_is_machine_gate_surface_only():
         "alignment_matrix.tsv",
         "alignment_matrix_identity.tsv",
         "alignment_review.tsv",
-        "alignment_cells.tsv",
+        "alignment_backfill_cell_evidence.tsv",
     )
 
 

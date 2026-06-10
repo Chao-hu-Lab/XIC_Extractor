@@ -140,6 +140,52 @@ ALIGNMENT_CELLS_COLUMNS = (
     "region_baseline_method",
 )
 
+ALIGNMENT_BACKFILL_CELL_EVIDENCE_SCHEMA_VERSION = "alignment_backfill_cell_evidence_v1"
+ALIGNMENT_BACKFILL_CELL_EVIDENCE_COLUMNS = (
+    "schema_version",
+    "feature_family_id",
+    "group_hypothesis_id",
+    "public_family_id",
+    "sample_stem",
+    "status",
+    "production_cell_status",
+    "rescue_tier",
+    "write_matrix_value",
+    "include_in_primary_matrix",
+    "identity_decision",
+    "row_flags",
+    "area",
+    "primary_matrix_area",
+    "primary_matrix_area_source",
+    "primary_matrix_area_reason",
+    "apex_rt",
+    "height",
+    "peak_start_rt",
+    "peak_end_rt",
+    "rt_delta_sec",
+    "trace_quality",
+    "scan_support_score",
+    "gap_fill_state",
+    "gap_fill_reason",
+    "backfill_evidence_reason",
+    "source_candidate_id",
+    "source_raw_file",
+    "neutral_loss_tag",
+    "family_center_mz",
+    "family_center_rt",
+    "region_shadow_verdict",
+    "reason",
+)
+BACKFILL_EVIDENCE_ROW_FLAGS = frozenset(
+    {
+        "backfill_cell_evidence_required",
+        "backfill_rescue_review_only",
+        "high_backfill_dependency",
+        "missing_independent_backfill_identity_evidence",
+        "rescue_heavy",
+    },
+)
+
 BASE_ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS = (
     "feature_family_id",
     "sample_stem",
@@ -402,6 +448,67 @@ def write_alignment_cells_tsv(path: Path, matrix: AlignmentMatrix) -> Path:
             }
         )
     return _write_tsv(path, ALIGNMENT_CELLS_COLUMNS, rows)
+
+
+def write_alignment_backfill_cell_evidence_tsv(
+    path: Path,
+    matrix: AlignmentMatrix,
+    *,
+    alignment_config: AlignmentConfig | None = None,
+) -> Path:
+    """Write the compact cell ledger needed by backfill evidence review surfaces."""
+
+    config = alignment_config or AlignmentConfig()
+    clusters_by_id = {row_id(cluster): cluster for cluster in matrix.clusters}
+    decisions = build_production_decisions(matrix, config)
+    backfill_family_ids = _backfill_evidence_family_ids(matrix, decisions)
+    rows: list[dict[str, object]] = []
+    for cell in matrix.cells:
+        if cell.cluster_id not in backfill_family_ids:
+            continue
+        cluster = clusters_by_id[cell.cluster_id]
+        row_decision = decisions.row(cell.cluster_id)
+        cell_decision = decisions.cell(cell.cluster_id, cell.sample_stem)
+        if not _include_backfill_evidence_cell(cell, cell_decision):
+            continue
+        rows.append(
+            {
+                "schema_version": ALIGNMENT_BACKFILL_CELL_EVIDENCE_SCHEMA_VERSION,
+                "feature_family_id": cell.cluster_id,
+                "group_hypothesis_id": cell.group_hypothesis_id,
+                "public_family_id": cell.public_family_id,
+                "sample_stem": cell.sample_stem,
+                "status": cell.status,
+                "production_cell_status": cell_decision.production_status,
+                "rescue_tier": cell_decision.rescue_tier,
+                "write_matrix_value": cell_decision.write_matrix_value,
+                "include_in_primary_matrix": row_decision.include_in_primary_matrix,
+                "identity_decision": row_decision.identity_decision,
+                "row_flags": ";".join(row_decision.row_flags),
+                "area": format_value(cell.area),
+                "primary_matrix_area": format_value(cell.matrix_area),
+                "primary_matrix_area_source": cell.matrix_area_source,
+                "primary_matrix_area_reason": cell.matrix_area_missing_reason,
+                "apex_rt": format_value(cell.apex_rt),
+                "height": format_value(cell.height),
+                "peak_start_rt": format_value(cell.peak_start_rt),
+                "peak_end_rt": format_value(cell.peak_end_rt),
+                "rt_delta_sec": format_value(cell.rt_delta_sec),
+                "trace_quality": cell.trace_quality,
+                "scan_support_score": format_value(cell.scan_support_score),
+                "gap_fill_state": cell.gap_fill_state,
+                "gap_fill_reason": cell.gap_fill_reason,
+                "backfill_evidence_reason": cell.backfill_evidence_reason,
+                "source_candidate_id": cell.source_candidate_id or "",
+                "source_raw_file": str(cell.source_raw_file or ""),
+                "neutral_loss_tag": cluster.neutral_loss_tag,
+                "family_center_mz": format_value(_family_center_mz(cluster)),
+                "family_center_rt": format_value(_family_center_rt(cluster)),
+                "region_shadow_verdict": cell.region_shadow_verdict,
+                "reason": cell.reason,
+            },
+        )
+    return _write_tsv(path, ALIGNMENT_BACKFILL_CELL_EVIDENCE_COLUMNS, rows)
 
 
 def write_alignment_cell_integration_audit_tsv(
@@ -667,6 +774,64 @@ def _review_rows(
             }
         )
     return rows
+
+
+def _backfill_evidence_family_ids(
+    matrix: AlignmentMatrix,
+    decisions: Any,
+) -> set[str]:
+    grouped_cells = cells_by_cluster(matrix)
+    family_ids: set[str] = set()
+    for cluster in matrix.clusters:
+        cluster_id = row_id(cluster)
+        cells = grouped_cells.get(cluster_id, ())
+        row_decision = decisions.row(cluster_id)
+        if any(cell.status == "rescued" for cell in cells):
+            family_ids.add(cluster_id)
+            continue
+        if any(
+            count > 0
+            for count in (
+                row_decision.quantifiable_rescue_count,
+                row_decision.accepted_rescue_count,
+                row_decision.review_rescue_count,
+            )
+        ):
+            family_ids.add(cluster_id)
+            continue
+        if set(row_decision.row_flags) & BACKFILL_EVIDENCE_ROW_FLAGS:
+            family_ids.add(cluster_id)
+            continue
+        if any(_cell_mentions_backfill(cell) for cell in cells):
+            family_ids.add(cluster_id)
+    return family_ids
+
+
+def _cell_mentions_backfill(cell: AlignedCell) -> bool:
+    values = (
+        cell.gap_fill_state,
+        cell.gap_fill_reason,
+        cell.trace_quality,
+        cell.matrix_area_source,
+        cell.matrix_area_missing_reason,
+        cell.reason,
+        cell.backfill_evidence_reason,
+    )
+    return any("backfill" in str(value).lower() for value in values)
+
+
+def _include_backfill_evidence_cell(cell: AlignedCell, decision: Any) -> bool:
+    if cell.status in {"detected", "rescued"}:
+        return True
+    if getattr(decision, "write_matrix_value", False):
+        return True
+    production_status = str(getattr(decision, "production_status", ""))
+    return production_status in {
+        "detected",
+        "accepted_rescue",
+        "review_rescue",
+        "rejected_rescue",
+    }
 
 
 def _write_tsv(
