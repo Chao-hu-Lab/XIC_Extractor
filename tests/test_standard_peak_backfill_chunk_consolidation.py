@@ -138,6 +138,78 @@ def test_chunk_consolidation_applies_one_matrix_from_two_chunks(
     assert default_manifest["alignment_matrix_identity_backup_sha256"]
 
 
+def test_chunk_consolidation_allows_formal_output_noop_when_no_activation_rows(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    out = tmp_path / "out"
+    for chunk_key in ("chunk_a", "chunk_b"):
+        shadow = (
+            fixture[chunk_key]
+            / "shadow_projection"
+            / "shadow_production_projection_cells.tsv"
+        )
+        rows = _read_tsv(shadow)
+        for row in rows:
+            row.update(
+                {
+                    "shadow_decision": "context",
+                    "shadow_reasons": "evidence_gate_requires_review",
+                    "projected_matrix_written": "FALSE",
+                    "projected_matrix_value": "",
+                    "product_authority_chain": "",
+                },
+            )
+        _write_tsv(shadow, rows, SHADOW_PRODUCTION_PROJECTION_COLUMNS)
+
+    assert (
+        cli.main(
+            [
+                "--chunk-dir",
+                str(fixture["chunk_a"]),
+                "--chunk-dir",
+                str(fixture["chunk_b"]),
+                "--review-queue-tsv",
+                str(fixture["queue"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(out),
+                "--source-run-id",
+                "unit-chunk-consolidation-noop",
+                "--emit-formal-product-output",
+            ],
+        )
+        == 0
+    )
+
+    summary = json.loads(
+        (
+            out / "standard_peak_backfill_chunk_consolidation_summary.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert summary["status"] == "pass"
+    assert summary["coverage_status"] == "complete"
+    assert summary["covered_queue_row_count"] == "2"
+    assert summary["matrix_cells_written"] == ""
+    assert summary["formal_product_output_dir"] == ""
+    assert summary["formal_product_manifest_json"] == ""
+    assert summary["published_alignment_manifest_json"] == ""
+    assert not (out / "formal_product_output").exists()
+    product_summary = json.loads(
+        Path(summary["productization_summary_json"]).read_text(encoding="utf-8"),
+    )
+    assert product_summary["selected_activation_row_count"] == "0"
+    assert _read_tsv(fixture["matrix"]) == [
+        {"Mz": "300.1", "RT": "10.1", "S1": "10", "S2": ""},
+        {"Mz": "301.1", "RT": "10.2", "S1": "20", "S2": ""},
+    ]
+
+
 def test_chunk_consolidation_dedupes_full_matrix_shadow_projection_rows(
     tmp_path: Path,
 ) -> None:
