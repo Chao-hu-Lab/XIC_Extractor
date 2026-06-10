@@ -167,11 +167,11 @@ def build_shadow_production_projection_index(
                 ),
             )
 
-    rows = tuple(sorted(rows, key=_row_sort_key))
+    sorted_rows = tuple(sorted(rows, key=_row_sort_key))
     return ShadowProductionProjectionIndex(
-        rows=rows,
+        rows=sorted_rows,
         summary=_summary(
-            rows,
+            sorted_rows,
             gate_projection_summary=gate_projection_summary,
             source_run_id=source_run_id,
             source_review_sha256=source_review_sha256,
