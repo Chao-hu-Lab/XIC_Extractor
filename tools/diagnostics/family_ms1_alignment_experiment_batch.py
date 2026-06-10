@@ -1,0 +1,244 @@
+"""Batch render shift-aware MS1 alignment experiments from overlay summaries."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from collections import Counter
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.diagnostics import family_ms1_alignment_experiment
+from xic_extractor.diagnostics.diagnostic_io import (
+    read_tsv_required,
+    text_value,
+    write_tsv,
+)
+
+SUMMARY_COLUMNS = (
+    "rank",
+    "feature_family_id",
+    "seed_group_id",
+    "overlay_status",
+    "alignment_status",
+    "output_prefix",
+    "trace_data_json",
+    "source_best_shift_summary_tsv",
+    "source_best_shift_png",
+    "failure_reason",
+)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
+    try:
+        rows, summary = run_alignment_experiment_batch(
+            overlay_batch_summary_tsv=args.overlay_batch_summary_tsv,
+            cell_evidence_tsv=args.cell_evidence_tsv,
+            output_dir=args.output_dir,
+            start_rank=args.start_rank,
+            limit=args.limit,
+            reuse_existing=args.reuse_existing,
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostic CLI reports failure.
+        print(f"error: {exc}")
+        return 2
+    output_tsv = args.output_dir / "family_ms1_alignment_experiment_batch_summary.tsv"
+    output_json = args.output_dir / "family_ms1_alignment_experiment_batch_summary.json"
+    write_tsv(output_tsv, rows, SUMMARY_COLUMNS)
+    output_json.write_text(
+        json.dumps(summary, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    print(f"family MS1 alignment experiment batch TSV: {output_tsv}")
+    print(f"family MS1 alignment experiment batch JSON: {output_json}")
+    return 0
+
+
+def run_alignment_experiment_batch(
+    *,
+    overlay_batch_summary_tsv: Path,
+    cell_evidence_tsv: Path,
+    output_dir: Path,
+    start_rank: int = 1,
+    limit: int | None = None,
+    reuse_existing: bool = False,
+) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    if start_rank < 1:
+        raise ValueError("--start-rank must be >= 1")
+    if limit is not None and limit < 1:
+        raise ValueError("--limit must be >= 1 when supplied")
+    overlay_rows = list(
+        read_tsv_required(
+            overlay_batch_summary_tsv,
+            ("rank", "feature_family_id", "output_prefix", "status"),
+        ),
+    )
+    selected_rows = _select_rows(overlay_rows, start_rank=start_rank, limit=limit)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    rows: list[dict[str, str]] = []
+    for row in selected_rows:
+        rows.append(
+            _render_or_reuse_row(
+                row,
+                cell_evidence_tsv=cell_evidence_tsv,
+                output_dir=output_dir,
+                reuse_existing=reuse_existing,
+            ),
+        )
+        write_tsv(
+            output_dir / "family_ms1_alignment_experiment_batch_summary.tsv",
+            rows,
+            SUMMARY_COLUMNS,
+        )
+    status_counts = Counter(row["alignment_status"] for row in rows)
+    summary: dict[str, Any] = {
+        "schema_version": "family_ms1_alignment_experiment_batch_v0",
+        "source_overlay_batch_summary_tsv": str(overlay_batch_summary_tsv),
+        "source_cell_evidence_tsv": str(cell_evidence_tsv),
+        "start_rank": start_rank,
+        "limit": "" if limit is None else limit,
+        "selected_row_count": len(rows),
+        "status_counts": dict(sorted(status_counts.items())),
+        "successful_shift_aware_row_count": sum(
+            1
+            for row in rows
+            if row["alignment_status"] in {"rendered", "reused"}
+        ),
+    }
+    return rows, summary
+
+
+def _render_or_reuse_row(
+    row: Mapping[str, str],
+    *,
+    cell_evidence_tsv: Path,
+    output_dir: Path,
+    reuse_existing: bool,
+) -> dict[str, str]:
+    rank = text_value(row.get("rank"))
+    family = text_value(row.get("feature_family_id"))
+    seed_group = text_value(row.get("seed_group_id"))
+    overlay_status = text_value(row.get("status"))
+    trace_json = text_value(row.get("trace_data_json"))
+    output_prefix = _default_output_prefix(row)
+    best_summary = output_dir / f"{output_prefix}_source_family_best_shift_summary.tsv"
+    best_png = output_dir / f"{output_prefix}_source_family_best_shift_alignment.png"
+    base = {
+        "rank": rank,
+        "feature_family_id": family,
+        "seed_group_id": seed_group,
+        "overlay_status": overlay_status,
+        "output_prefix": output_prefix,
+        "trace_data_json": trace_json,
+        "source_best_shift_summary_tsv": str(best_summary),
+        "source_best_shift_png": str(best_png),
+    }
+    if overlay_status != "success":
+        return {
+            **base,
+            "alignment_status": "skipped",
+            "failure_reason": f"overlay_status_not_success:{overlay_status}",
+        }
+    if not trace_json:
+        return {
+            **base,
+            "alignment_status": "failed",
+            "failure_reason": "missing_trace_data_json",
+        }
+    trace_path = Path(trace_json)
+    if not trace_path.exists():
+        return {
+            **base,
+            "alignment_status": "failed",
+            "failure_reason": f"trace_data_json_not_found:{trace_json}",
+        }
+    if reuse_existing and best_summary.exists() and best_png.exists():
+        return {**base, "alignment_status": "reused", "failure_reason": ""}
+    exit_code = family_ms1_alignment_experiment.main(
+        [
+            "--trace-data-json",
+            str(trace_path),
+            "--output-dir",
+            str(output_dir),
+            "--output-prefix",
+            output_prefix,
+            "--cell-evidence-tsv",
+            str(cell_evidence_tsv),
+        ],
+    )
+    if exit_code != 0:
+        return {
+            **base,
+            "alignment_status": "failed",
+            "failure_reason": f"alignment_experiment_exit_code:{exit_code}",
+        }
+    if not best_summary.exists():
+        return {
+            **base,
+            "alignment_status": "failed",
+            "failure_reason": "missing_source_family_best_shift_summary",
+        }
+    return {**base, "alignment_status": "rendered", "failure_reason": ""}
+
+
+def _select_rows(
+    rows: Sequence[Mapping[str, str]],
+    *,
+    start_rank: int,
+    limit: int | None,
+) -> list[Mapping[str, str]]:
+    selected = [
+        row
+        for row in rows
+        if _positive_int(text_value(row.get("rank"))) >= start_rank
+    ]
+    return selected if limit is None else selected[:limit]
+
+
+def _default_output_prefix(row: Mapping[str, str]) -> str:
+    rank = _positive_int(text_value(row.get("rank")))
+    family = text_value(row.get("feature_family_id")).lower()
+    token = _family_file_token(family) if family else "unknown"
+    return f"{rank:03d}_{token}_shift_aware"
+
+
+def _family_file_token(value: str) -> str:
+    token = re.sub(r"[^A-Za-z0-9]+", "_", value.strip().lower()).strip("_")
+    return token or "unknown"
+
+
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        return 0
+    return parsed if parsed > 0 else 0
+
+
+def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--overlay-batch-summary-tsv", type=Path, required=True)
+    parser.add_argument("--cell-evidence-tsv", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--start-rank", type=int, default=1)
+    parser.add_argument("--limit", type=int)
+    parser.add_argument(
+        "--reuse-existing",
+        action="store_true",
+        help=(
+            "Reuse rows whose source-family best-shift summary and PNG already "
+            "exist in output-dir."
+        ),
+    )
+    return parser.parse_args(argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

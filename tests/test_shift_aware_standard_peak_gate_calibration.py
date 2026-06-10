@@ -58,6 +58,50 @@ def test_gate_uses_shift_aware_support_plus_overlay_family_verdict(
     assert summary["recall"] == 0.5
 
 
+def test_unlabeled_machine_supported_rows_are_not_false_positives(
+    tmp_path: Path,
+) -> None:
+    manual_pack = tmp_path / "manual_pack.tsv"
+    _write_tsv(
+        manual_pack,
+        [
+            {
+                **_row(
+                    "1",
+                    "FAM001",
+                    "ms1_shape_supports_family_backfill",
+                    "",
+                ),
+                "manual_backfill_authority_call": "",
+            },
+            {
+                **_row(
+                    "2",
+                    "FAM002",
+                    "review_required_neighboring_ms1_interference",
+                    "",
+                ),
+                "manual_backfill_authority_call": "",
+            },
+        ],
+    )
+
+    rows, summary = gate.evaluate_standard_peak_gate(manual_pack)
+
+    assert [row["calibration_outcome"] for row in rows] == [
+        "unlabeled_machine_supported",
+        "unlabeled_machine_blocked",
+    ]
+    assert summary["manual_positive_count"] == 0
+    assert summary["manual_negative_count"] == 0
+    assert summary["unlabeled_count"] == 2
+    assert summary["false_positive_count"] == 0
+    assert summary["unlabeled_machine_supported_count"] == 1
+    assert summary["unlabeled_machine_blocked_count"] == 1
+    assert summary["precision"] is None
+    assert summary["recall"] is None
+
+
 def test_cli_writes_gate_calibration_outputs(tmp_path: Path) -> None:
     manual_pack = tmp_path / "manual_pack.tsv"
     _write_tsv(

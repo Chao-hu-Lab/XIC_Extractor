@@ -11,6 +11,8 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from xic_extractor.diagnostics.standard_peak_ms1_authority_bundle import (
+    AUTHORITY_MODE_MANUAL_ORACLE,
+    AUTHORITY_MODES,
     run_standard_peak_ms1_authority_bundle,
 )
 
@@ -23,6 +25,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             overlay_batch_summary_tsv=args.overlay_batch_summary_tsv,
             output_dir=args.output_dir,
             authority_source=args.authority_source,
+            authority_mode=args.authority_mode,
             min_anchor_own_max_shape_similarity=(
                 args.min_anchor_own_max_shape_similarity
             ),
@@ -44,7 +47,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--standard-peak-gate-tsv",
         type=Path,
         required=True,
-        help="shift_aware_standard_peak_gate_calibration.tsv with manual labels.",
+        help=(
+            "shift_aware_standard_peak_gate_calibration.tsv. In machine-gate "
+            "mode, manual label columns may be blank."
+        ),
     )
     parser.add_argument(
         "--overlay-batch-summary-tsv",
@@ -60,8 +66,21 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--authority-source",
-        default="manual_standard_peak_gate_calibration",
-        help="Authority source written into allowlist and authorized rows.",
+        default=None,
+        help=(
+            "Authority source written into allowlist and authorized rows. "
+            "Defaults to a mode-specific source."
+        ),
+    )
+    parser.add_argument(
+        "--authority-mode",
+        choices=AUTHORITY_MODES,
+        default=AUTHORITY_MODE_MANUAL_ORACLE,
+        help=(
+            "manual-oracle preserves the reviewed allowlist behavior; "
+            "machine-gate authorizes any standard_peak_gate_supported row "
+            "after provenance/hash validation."
+        ),
     )
     parser.add_argument(
         "--min-anchor-own-max-shape-similarity",
