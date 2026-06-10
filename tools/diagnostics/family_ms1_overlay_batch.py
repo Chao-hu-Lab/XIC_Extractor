@@ -18,6 +18,9 @@ if __package__ in {None, ""}:
 
 from tools.diagnostics import family_ms1_overlay_plot as overlay_plot
 
+_DEFAULT_LOAD_FAMILY_CELLS = overlay_plot.load_family_cells
+_DEFAULT_EXTRACT_FAMILY_TRACE_ROWS = overlay_plot.extract_family_trace_rows
+
 REQUIRED_QUEUE_COLUMNS = (
     "feature_family_id",
     "family_center_mz",
@@ -59,6 +62,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ppm=args.ppm,
             max_highlight_rescued=args.max_highlight_rescued,
             reuse_existing=args.reuse_existing,
+            write_pdf=not args.no_pdf,
             write_incremental=True,
         )
         _write_outputs(args.output_dir, rows)
@@ -82,6 +86,7 @@ def run_overlay_batch(
     ppm: float = 10.0,
     max_highlight_rescued: int = 8,
     reuse_existing: bool = False,
+    write_pdf: bool = True,
     write_incremental: bool = False,
 ) -> list[dict[str, Any]]:
     if limit < 1:
@@ -103,6 +108,8 @@ def run_overlay_batch(
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, Any]] = []
+    pending_requests: list[OverlayBatchRequest] = []
+    existing_by_rank: dict[int, dict[str, Any]] = {}
     for request in requests:
         try:
             existing = (
@@ -110,13 +117,29 @@ def run_overlay_batch(
                     request,
                     output_dir,
                     source_provenance=source_provenance,
+                    write_pdf=write_pdf,
                 )
                 if reuse_existing
                 else None
             )
             if existing is not None:
-                rows.append(existing)
+                existing_by_rank[request.rank] = existing
             else:
+                pending_requests.append(request)
+        except Exception as exc:  # noqa: BLE001 - diagnostic batch must continue.
+            existing_by_rank[request.rank] = _failure_row(request, exc)
+    fast_trace_rows = _batch_trace_rows_for_requests(
+        pending_requests,
+        alignment_cells=alignment_cells,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        max_highlight_rescued=max_highlight_rescued,
+    )
+    for request in requests:
+        if request.rank in existing_by_rank:
+            rows.append(existing_by_rank[request.rank])
+        else:
+            try:
                 rows.append(
                     _render_family(
                         request,
@@ -126,10 +149,12 @@ def run_overlay_batch(
                         output_dir=output_dir,
                         max_highlight_rescued=max_highlight_rescued,
                         source_provenance=source_provenance,
+                        write_pdf=write_pdf,
+                        trace_rows=fast_trace_rows.get(request.rank),
                     )
                 )
-        except Exception as exc:  # noqa: BLE001 - diagnostic batch must continue.
-            rows.append(_failure_row(request, exc))
+            except Exception as exc:  # noqa: BLE001 - diagnostic batch must continue.
+                rows.append(_failure_row(request, exc))
         if write_incremental:
             _write_outputs(output_dir, rows)
     return rows
@@ -140,12 +165,17 @@ def _existing_success_row(
     output_dir: Path,
     *,
     source_provenance: Mapping[str, object],
+    write_pdf: bool,
 ) -> dict[str, Any] | None:
-    outputs = _request_output_paths(request, output_dir)
-    if any(not path.exists() for path in outputs.values()):
+    outputs = _request_output_paths(request, output_dir, write_pdf=write_pdf)
+    required_outputs = [path for path in outputs.values() if path is not None]
+    if any(not path.exists() for path in required_outputs):
+        return None
+    trace_data_json = outputs["trace_data_json"]
+    if trace_data_json is None:
         return None
     try:
-        payload = json.loads(outputs["trace_data_json"].read_text(encoding="utf-8"))
+        payload = json.loads(trace_data_json.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
     if not _existing_payload_matches_request(
@@ -200,18 +230,21 @@ def _render_family(
     output_dir: Path,
     max_highlight_rescued: int,
     source_provenance: Mapping[str, object],
+    write_pdf: bool,
+    trace_rows: Sequence[overlay_plot.TraceOverlayRow] | None = None,
 ) -> dict[str, Any]:
-    cells = overlay_plot.load_family_cells(alignment_cells, request.family_id)
-    trace_rows = overlay_plot.extract_family_trace_rows(
-        cells=cells,
-        raw_dir=raw_dir,
-        dll_dir=dll_dir,
-        mz=request.mz,
-        rt_min=request.rt_min,
-        rt_max=request.rt_max,
-        ppm=request.ppm,
-        max_highlight_rescued=max_highlight_rescued,
-    )
+    if trace_rows is None:
+        cells = overlay_plot.load_family_cells(alignment_cells, request.family_id)
+        trace_rows = overlay_plot.extract_family_trace_rows(
+            cells=cells,
+            raw_dir=raw_dir,
+            dll_dir=dll_dir,
+            mz=request.mz,
+            rt_min=request.rt_min,
+            rt_max=request.rt_max,
+            ppm=request.ppm,
+            max_highlight_rescued=max_highlight_rescued,
+        )
     outputs = overlay_plot.write_family_ms1_overlay_outputs(
         rows=trace_rows,
         output_dir=output_dir,
@@ -226,19 +259,122 @@ def _render_family(
             request,
             source_provenance=source_provenance,
         ),
+        write_pdf=write_pdf,
     )
     evidence = overlay_plot.build_family_ms1_evidence_summary(trace_rows)
     return _success_row_from_evidence(request, outputs=outputs, evidence=evidence)
 
 
+def _batch_trace_rows_for_requests(
+    requests: Sequence[OverlayBatchRequest],
+    *,
+    alignment_cells: Path,
+    raw_dir: Path,
+    dll_dir: Path,
+    max_highlight_rescued: int,
+) -> dict[int, list[overlay_plot.TraceOverlayRow]]:
+    if not requests:
+        return {}
+    if (
+        overlay_plot.load_family_cells is not _DEFAULT_LOAD_FAMILY_CELLS
+        or overlay_plot.extract_family_trace_rows
+        is not _DEFAULT_EXTRACT_FAMILY_TRACE_ROWS
+    ):
+        return {}
+    cells_by_family = overlay_plot.load_family_cells_for_families(
+        alignment_cells,
+        tuple(request.family_id for request in requests),
+    )
+    return _extract_batch_family_trace_rows(
+        requests,
+        cells_by_family=cells_by_family,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        max_highlight_rescued=max_highlight_rescued,
+    )
+
+
+def _extract_batch_family_trace_rows(
+    requests: Sequence[OverlayBatchRequest],
+    *,
+    cells_by_family: Mapping[str, Sequence[overlay_plot.FamilyCell]],
+    raw_dir: Path,
+    dll_dir: Path,
+    max_highlight_rescued: int,
+    open_raw_func: Any | None = None,
+) -> dict[int, list[overlay_plot.TraceOverlayRow]]:
+    from xic_extractor.raw_reader import open_raw as default_open_raw
+    from xic_extractor.xic_models import XICRequest
+
+    open_raw_func = open_raw_func or default_open_raw
+    sample_items: dict[
+        str,
+        list[tuple[int, overlay_plot.FamilyCell, str, XICRequest]],
+    ] = {}
+    order_by_rank: dict[int, dict[str, int]] = {}
+    for request in requests:
+        cells = tuple(cells_by_family.get(request.family_id, ()))
+        if not cells:
+            raise ValueError(
+                f"No alignment cells found for family `{request.family_id}`"
+            )
+        groups = overlay_plot.assign_highlight_groups(
+            cells,
+            max_highlight_rescued=max_highlight_rescued,
+        )
+        order_by_rank[request.rank] = {
+            cell.sample_stem: index for index, cell in enumerate(cells)
+        }
+        xic_request = XICRequest(
+            mz=request.mz,
+            rt_min=request.rt_min,
+            rt_max=request.rt_max,
+            ppm_tol=request.ppm,
+        )
+        for cell in cells:
+            sample_items.setdefault(cell.sample_stem, []).append(
+                (request.rank, cell, groups[cell.sample_stem], xic_request)
+            )
+
+    rows_by_rank: dict[int, list[overlay_plot.TraceOverlayRow]] = {
+        request.rank: [] for request in requests
+    }
+    for sample_stem in sorted(sample_items):
+        raw_path = raw_dir / f"{sample_stem}.raw"
+        if not raw_path.is_file():
+            raise FileNotFoundError(f"RAW file not found: {raw_path}")
+        items = sample_items[sample_stem]
+        with open_raw_func(raw_path, dll_dir) as raw:
+            traces = raw.extract_xic_many(tuple(item[3] for item in items))
+        for (rank, cell, group, _request), trace in zip(
+            items,
+            traces,
+            strict=True,
+        ):
+            rows_by_rank[rank].append(
+                overlay_plot.trace_row_from_arrays(
+                    cell,
+                    group,
+                    trace.rt,
+                    trace.intensity,
+                )
+            )
+    for rank, rows in rows_by_rank.items():
+        sample_order = order_by_rank[rank]
+        rows.sort(key=lambda row: sample_order.get(row.sample_stem, len(sample_order)))
+    return rows_by_rank
+
+
 def _request_output_paths(
     request: OverlayBatchRequest,
     output_dir: Path,
-) -> dict[str, Path]:
+    *,
+    write_pdf: bool,
+) -> dict[str, Path | None]:
     prefix = request.output_prefix
     return {
         "png_path": output_dir / f"{prefix}.png",
-        "pdf_path": output_dir / f"{prefix}.pdf",
+        "pdf_path": output_dir / f"{prefix}.pdf" if write_pdf else None,
         "trace_summary_tsv": output_dir / f"{prefix}_trace_summary.tsv",
         "trace_data_json": output_dir / f"{prefix}_trace_data.json",
     }
@@ -247,7 +383,7 @@ def _request_output_paths(
 def _success_row_from_evidence(
     request: OverlayBatchRequest,
     *,
-    outputs: Mapping[str, Path] | overlay_plot.FamilyMs1OverlayOutputs,
+    outputs: Mapping[str, Path | None] | overlay_plot.FamilyMs1OverlayOutputs,
     evidence: Mapping[str, Any],
 ) -> dict[str, Any]:
     if isinstance(outputs, Mapping):
@@ -260,6 +396,10 @@ def _success_row_from_evidence(
         pdf_path = outputs.pdf_path
         summary_tsv = outputs.summary_tsv
         trace_data_json = outputs.trace_data_json
+    if png_path is None or summary_tsv is None or trace_data_json is None:
+        raise ValueError(
+            "overlay success row requires PNG, summary TSV, and trace JSON",
+        )
     return {
         **_request_row(request),
         "status": "success",
@@ -335,7 +475,7 @@ def _success_row_from_evidence(
             "",
         ),
         "png_path": str(png_path),
-        "pdf_path": str(pdf_path),
+        "pdf_path": str(pdf_path) if pdf_path is not None else "",
         "trace_summary_tsv": str(summary_tsv),
         "trace_data_json": str(trace_data_json),
         "failure_reason": "",
@@ -737,7 +877,17 @@ def _format_value(value: object) -> str:
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--review-queue-tsv", type=Path, required=True)
-    parser.add_argument("--alignment-cells", type=Path, required=True)
+    parser.add_argument(
+        "--alignment-cells",
+        "--alignment-cell-evidence",
+        dest="alignment_cells",
+        type=Path,
+        required=True,
+        help=(
+            "Cell evidence TSV: compact alignment_backfill_cell_evidence.tsv "
+            "or legacy alignment_cells.tsv."
+        ),
+    )
     parser.add_argument("--raw-dir", type=Path, required=True)
     parser.add_argument("--dll-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -749,9 +899,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--reuse-existing",
         action="store_true",
         help=(
-            "Reuse completed overlay outputs in output-dir when PNG/PDF/trace "
-            "summary/trace JSON already exist for a queued output prefix."
+            "Reuse completed overlay outputs in output-dir when PNG/trace "
+            "summary/trace JSON and any requested PDF already exist for a "
+            "queued output prefix."
         ),
+    )
+    parser.add_argument(
+        "--no-pdf",
+        action="store_true",
+        help="Write PNG, TSV, and JSON overlay artifacts only; skip PDF outputs.",
     )
     return parser.parse_args(argv)
 

@@ -48,7 +48,6 @@ from tools.diagnostics.family_ms1_overlay_rendering import (
 )
 from tools.diagnostics.family_ms1_overlay_rendering_styles import (
     DETECTED_COLOR,
-    DETECTED_MEDIAN_COLOR,
     OTHER_TRACE_COLOR,
     PLOT_GAUSSIAN_SMOOTH_POINTS,
     QC_COLOR,
@@ -66,6 +65,7 @@ from tools.diagnostics.family_ms1_overlay_trace import (
     assign_highlight_groups,
     extract_family_trace_rows,
     load_family_cells,
+    load_family_cells_for_families,
     trace_row_from_arrays,
 )
 from tools.diagnostics.family_ms1_overlay_writers import (
@@ -79,7 +79,6 @@ from tools.diagnostics.family_ms1_overlay_writers import (
 __all__ = [
     "APEX_ALIGN_HALF_WINDOW_MIN",
     "DETECTED_COLOR",
-    "DETECTED_MEDIAN_COLOR",
     "FamilyCell",
     "FamilyMs1OverlayOutputs",
     "GLOBAL_APEX_CONFLICT_DELTA_MIN",
@@ -124,6 +123,7 @@ __all__ = [
     "build_family_ms1_evidence_summary",
     "extract_family_trace_rows",
     "load_family_cells",
+    "load_family_cells_for_families",
     "main",
     "np",
     "render_family_ms1_overlay",
@@ -179,7 +179,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--alignment-cells", type=Path, required=True)
+    parser.add_argument(
+        "--alignment-cells",
+        "--alignment-cell-evidence",
+        dest="alignment_cells",
+        type=Path,
+        required=True,
+        help=(
+            "Cell evidence TSV: compact alignment_backfill_cell_evidence.tsv "
+            "or legacy alignment_cells.tsv."
+        ),
+    )
     parser.add_argument("--family-id", required=True)
     parser.add_argument("--raw-dir", type=Path, required=True)
     parser.add_argument("--dll-dir", type=Path, required=True)
