@@ -11,6 +11,7 @@ from xic_extractor.diagnostics.retained_backfill_evidence_gate import (
 from xic_extractor.diagnostics.standard_peak_backfill_chunk_consolidation import (
     StandardPeakChunkConsolidationOutputs,
 )
+from xic_extractor.diagnostics.timing import TimingRecorder
 
 
 def test_standard_peak_backfill_preset_skips_machine_pipeline_without_queue(
@@ -44,7 +45,6 @@ def test_standard_peak_backfill_preset_skips_machine_pipeline_without_queue(
         "run_retained_backfill_evidence_gate",
         fake_gate,
     )
-
     outputs = standard_peak_backfill_preset.run_standard_peak_backfill_preset(
         alignment_dir=alignment_dir,
         raw_dir=tmp_path / "raws",
@@ -131,7 +131,6 @@ def test_standard_peak_backfill_preset_chunks_and_publishes_alignment_output(
         "run_retained_backfill_evidence_gate",
         fake_gate,
     )
-
     outputs = standard_peak_backfill_preset.run_standard_peak_backfill_preset(
         alignment_dir=alignment_dir,
         raw_dir=raw_dir,
@@ -166,6 +165,99 @@ def test_standard_peak_backfill_preset_chunks_and_publishes_alignment_output(
         "consolidated/publish_manifest.json"
     )
     assert outputs.gallery_html == output_dir / "consolidated/gallery.html"
+
+
+def test_standard_peak_backfill_preset_matrix_only_uses_evidence_only_chunks(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_artifacts(tmp_path)
+    raw_dir = tmp_path / "raws"
+    dll_dir = tmp_path / "dll"
+    output_dir = tmp_path / "preset"
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    machine_calls: list[dict[str, object]] = []
+    consolidation_calls: list[dict[str, object]] = []
+
+    def fake_gate(**_kwargs):
+        gate_dir = output_dir / "retained_backfill_evidence_gate"
+        gate_dir.mkdir(parents=True, exist_ok=True)
+        gate_tsv = gate_dir / "retained_backfill_evidence_gate.tsv"
+        queue = gate_dir / "review_overlay_queue.tsv"
+        gate_tsv.write_text("feature_family_id\n", encoding="utf-8")
+        queue.write_text("feature_family_id\nFAM1\nFAM2\n", encoding="utf-8")
+        missing = gate_dir / "missing_overlay_queue.tsv"
+        missing.write_text("feature_family_id\n", encoding="utf-8")
+        return RetainedBackfillGateOutputs(
+            tsv=gate_tsv,
+            json=gate_dir / "retained_backfill_evidence_gate.json",
+            missing_overlay_queue_tsv=missing,
+            review_overlay_queue_tsv=queue,
+        )
+
+    def fake_machine(**kwargs):
+        machine_calls.append(dict(kwargs))
+        summary_path = Path(kwargs["output_dir"]) / (
+            "standard_peak_backfill_machine_pipeline_summary.json"
+        )
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text('{"status": "pass"}', encoding="utf-8")
+        return summary_path
+
+    def fake_consolidation(**kwargs):
+        consolidation_calls.append(dict(kwargs))
+        output = Path(kwargs["output_dir"])
+        output.mkdir(parents=True, exist_ok=True)
+        summary_json = output / "summary.json"
+        summary_json.write_text(
+            '{"status": "pass", "matrix_cells_written": 2}',
+            encoding="utf-8",
+        )
+        return StandardPeakChunkConsolidationOutputs(
+            summary_tsv=output / "summary.tsv",
+            summary_json=summary_json,
+            status="pass",
+            merged_shadow_projection_cells_tsv=output / "shadow.tsv",
+            productization=SimpleNamespace(reconciliation_gallery_html=None),
+            formal_product_output_dir=output / "formal",
+            formal_product_manifest_json=output / "formal_manifest.json",
+            published_alignment_output_dir=alignment_dir,
+            published_alignment_manifest_json=output / "publish_manifest.json",
+        )
+
+    monkeypatch.setattr(
+        standard_peak_backfill_preset,
+        "run_retained_backfill_evidence_gate",
+        fake_gate,
+    )
+    recorder = TimingRecorder("alignment", run_id="test-standard-peak")
+
+    outputs = standard_peak_backfill_preset.run_standard_peak_backfill_preset(
+        alignment_dir=alignment_dir,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=output_dir,
+        chunk_size=2,
+        publication_mode="matrix-only",
+        write_gallery=True,
+        machine_pipeline_runner=fake_machine,
+        consolidation_runner=fake_consolidation,
+        timing_recorder=recorder,
+    )
+
+    assert machine_calls[0]["publication_mode"] == "matrix-only"
+    assert machine_calls[0]["evidence_only"] is True
+    assert machine_calls[0]["timing_recorder"] is recorder
+    assert consolidation_calls[0]["write_gallery"] is False
+    assert outputs.gallery_html is None
+    stages = [record.stage for record in recorder.records]
+    assert "standard_peak.retained_gate" in stages
+    assert "standard_peak.chunk" in stages
+    assert "standard_peak.consolidation" in stages
+    summary = json.loads(outputs.summary_json.read_text(encoding="utf-8"))
+    assert summary["publication_mode"] == "matrix-only"
+    assert summary["matrix_cells_written"] == "2"
 
 
 def test_standard_peak_backfill_preset_reuses_completed_chunk_summaries(

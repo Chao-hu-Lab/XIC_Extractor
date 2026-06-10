@@ -36,6 +36,13 @@ SCHEMA_VERSION = "shadow_production_projection_v1"
 
 ShadowDecision = Literal["accept", "block", "context"]
 
+_PRODUCT_PROVENANCE_HASH_EXCLUDED_COLUMNS = frozenset(
+    {
+        "shadow_projection_row_sha256",
+        "overlay_png_path",
+    },
+)
+
 SHADOW_PRODUCTION_PROJECTION_COLUMNS = (
     "schema_version",
     "peak_hypothesis_id",
@@ -352,8 +359,24 @@ def _shadow_projection_row_sha256(row: Mapping[str, str]) -> str:
     payload = {
         column: text_value(row.get(column))
         for column in SHADOW_PRODUCTION_PROJECTION_COLUMNS
-        if column != "shadow_projection_row_sha256"
+        if column not in _PRODUCT_PROVENANCE_HASH_EXCLUDED_COLUMNS
     }
+    return _sha256_json_payload(payload)
+
+
+def canonical_shadow_projection_sha256(rows: Iterable[Mapping[str, str]]) -> str:
+    payload = [
+        {
+            column: text_value(row.get(column))
+            for column in SHADOW_PRODUCTION_PROJECTION_COLUMNS
+            if column not in _PRODUCT_PROVENANCE_HASH_EXCLUDED_COLUMNS
+        }
+        for row in rows
+    ]
+    return _sha256_json_payload(payload)
+
+
+def _sha256_json_payload(payload: object) -> str:
     serialized = json.dumps(
         payload,
         ensure_ascii=False,

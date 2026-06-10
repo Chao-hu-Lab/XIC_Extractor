@@ -15,6 +15,7 @@ from xic_extractor.alignment.production_decisions import (
 from xic_extractor.diagnostics.shadow_production_projection import (
     SHADOW_PRODUCTION_PROJECTION_COLUMNS,
     build_shadow_production_projection_index,
+    canonical_shadow_projection_sha256,
     write_shadow_production_projection_outputs,
 )
 
@@ -145,6 +146,45 @@ def test_projection_row_hash_is_present_and_stable_across_identical_builds() -> 
     assert first_hash
     assert len(first_hash) == 64
     assert first_hash == second_hash
+
+
+def test_projection_product_hash_excludes_review_overlay_path() -> None:
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision("FAM_HASH", "S_REVIEW", "review_rescue", False, None),
+        ),
+    )
+
+    def build(overlay_png_path: str) -> dict[str, str]:
+        gate = _gate_row("FAM_HASH", "S_REVIEW", detected="1")
+        gate["overlay_png_path"] = overlay_png_path
+        index = build_shadow_production_projection_index(
+            production_decisions=decisions,
+            cell_rows=(
+                _cell_row(
+                    "FAM_HASH",
+                    "S_REVIEW",
+                    "rescued",
+                    group_hypothesis_id="PH_HASH",
+                    product_evidence=True,
+                ),
+            ),
+            retained_gate_rows=(gate,),
+        )
+        return index.rows[0]
+
+    image_free = build("")
+    rendered = build("plots/fam-hash.png")
+
+    assert image_free["overlay_png_path"] == ""
+    assert rendered["overlay_png_path"] == "plots/fam-hash.png"
+    assert (
+        image_free["shadow_projection_row_sha256"]
+        == rendered["shadow_projection_row_sha256"]
+    )
+    assert canonical_shadow_projection_sha256((image_free,)) == (
+        canonical_shadow_projection_sha256((rendered,))
+    )
 
 
 def test_projection_keeps_dup_without_product_authority_as_review_context() -> None:

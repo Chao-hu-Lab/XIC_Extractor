@@ -52,10 +52,72 @@ def test_apply_to_alignment_returns_runtime_standard_peak_options() -> None:
     assert run_overrides == {
         "standard_peak_backfill": True,
         "standard_peak_backfill_chunk_size": 120,
-        "standard_peak_backfill_write_gallery": True,
+        "standard_peak_backfill_publication_mode": "matrix-only",
+        "standard_peak_backfill_write_gallery": False,
         "standard_peak_backfill_reuse_existing": False,
         "standard_peak_backfill_min_shape_r": pytest.approx(0.95),
     }
+
+
+def test_apply_to_alignment_maps_legacy_gallery_to_deep_audit() -> None:
+    preset = Preset(
+        name="Legacy gallery",
+        description="Legacy gallery",
+        tags=(PresetTag(strategy="neutral_loss", name="DNA_dR", value=116.0474),),
+        combine_mode="single",
+        discovery_overrides={},
+        alignment_overrides={
+            "standard_peak_backfill": True,
+            "standard_peak_backfill_write_gallery": True,
+        },
+        source="test",
+    )
+
+    _, run_overrides = apply_to_alignment(preset)
+
+    assert run_overrides["standard_peak_backfill_publication_mode"] == "deep-audit"
+    assert run_overrides["standard_peak_backfill_write_gallery"] is True
+
+
+def test_apply_to_alignment_publication_mode_overrides_legacy_gallery() -> None:
+    preset = Preset(
+        name="Explicit mode",
+        description="Explicit mode",
+        tags=(PresetTag(strategy="neutral_loss", name="DNA_dR", value=116.0474),),
+        combine_mode="single",
+        discovery_overrides={},
+        alignment_overrides={
+            "standard_peak_backfill": True,
+            "standard_peak_backfill_publication_mode": "matrix-only",
+            "standard_peak_backfill_write_gallery": True,
+        },
+        source="test",
+    )
+
+    _, run_overrides = apply_to_alignment(preset)
+
+    assert run_overrides["standard_peak_backfill_publication_mode"] == "matrix-only"
+    assert run_overrides["standard_peak_backfill_write_gallery"] is False
+
+
+def test_apply_to_alignment_review_gallery_keeps_gallery_surface_enabled() -> None:
+    preset = Preset(
+        name="Review gallery",
+        description="Review gallery",
+        tags=(PresetTag(strategy="neutral_loss", name="DNA_dR", value=116.0474),),
+        combine_mode="single",
+        discovery_overrides={},
+        alignment_overrides={
+            "standard_peak_backfill": True,
+            "standard_peak_backfill_publication_mode": "review-gallery",
+        },
+        source="test",
+    )
+
+    _, run_overrides = apply_to_alignment(preset)
+
+    assert run_overrides["standard_peak_backfill_publication_mode"] == "review-gallery"
+    assert run_overrides["standard_peak_backfill_write_gallery"] is True
 
 
 @pytest.mark.parametrize(
@@ -72,6 +134,11 @@ def test_apply_to_alignment_returns_runtime_standard_peak_options() -> None:
             "standard_peak_backfill_min_shape_r",
             1.5,
             "standard_peak_backfill_min_shape_r",
+        ),
+        (
+            "standard_peak_backfill_publication_mode",
+            "gallery",
+            "standard_peak_backfill_publication_mode",
         ),
     ],
 )

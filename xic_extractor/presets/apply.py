@@ -22,6 +22,13 @@ _POSITIVE_FLOAT_FIELDS = frozenset(
     }
 )
 _RT_FIELDS = frozenset({"rt_min", "rt_max"})
+STANDARD_PEAK_PUBLICATION_MODES = frozenset(
+    {
+        "matrix-only",
+        "review-gallery",
+        "deep-audit",
+    }
+)
 
 
 def apply_to_discovery(
@@ -103,6 +110,11 @@ def apply_to_alignment(preset: Preset) -> tuple[AlignmentConfig, dict[str, objec
         "standard_peak_backfill_write_gallery",
         True,
     )
+    publication_mode = _publication_mode_setting(
+        overrides,
+        legacy_write_gallery=write_gallery,
+    )
+    write_gallery = publication_mode in {"review-gallery", "deep-audit"}
     reuse_existing = _bool_setting(
         overrides,
         "standard_peak_backfill_reuse_existing",
@@ -121,6 +133,7 @@ def apply_to_alignment(preset: Preset) -> tuple[AlignmentConfig, dict[str, objec
     return AlignmentConfig(), {
         "standard_peak_backfill": True,
         "standard_peak_backfill_chunk_size": chunk_size,
+        "standard_peak_backfill_publication_mode": publication_mode,
         "standard_peak_backfill_write_gallery": write_gallery,
         "standard_peak_backfill_reuse_existing": reuse_existing,
         "standard_peak_backfill_min_shape_r": min_shape_r,
@@ -158,6 +171,23 @@ def _bool_setting(
     value = overrides.get(field, default)
     if type(value) is not bool:
         raise PresetError(f"{field} must be true or false")
+    return value
+
+
+def _publication_mode_setting(
+    overrides: Mapping[str, object],
+    *,
+    legacy_write_gallery: bool,
+) -> str:
+    value = overrides.get("standard_peak_backfill_publication_mode")
+    if value is None:
+        return "deep-audit" if legacy_write_gallery else "matrix-only"
+    if not isinstance(value, str) or value not in STANDARD_PEAK_PUBLICATION_MODES:
+        modes = ", ".join(sorted(STANDARD_PEAK_PUBLICATION_MODES))
+        raise PresetError(
+            "standard_peak_backfill_publication_mode must be one of: "
+            f"{modes}"
+        )
     return value
 
 

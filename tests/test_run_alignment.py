@@ -729,9 +729,75 @@ def test_run_alignment_cli_dna_dr_preset_runs_standard_peak_backfill(
     assert captured_preset["raw_dir"] == raw_dir.resolve()
     assert captured_preset["dll_dir"] == dll_dir.resolve()
     assert captured_preset["chunk_size"] == 120
-    assert captured_preset["write_gallery"] is True
+    assert captured_preset["publication_mode"] == "matrix-only"
+    assert captured_preset["write_gallery"] is False
     assert captured_preset["reuse_existing"] is False
     assert captured_preset["min_shape_r"] == pytest.approx(0.95)
+
+
+def test_run_alignment_cli_publication_mode_overrides_preset(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured_preset: dict[str, object] = {}
+
+    def fake_run_alignment(**_kwargs):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        paths = {
+            "review_tsv": output_dir / "alignment_review.tsv",
+            "matrix_tsv": output_dir / "alignment_matrix.tsv",
+            "matrix_identity_tsv": output_dir / "alignment_matrix_identity.tsv",
+            "cells_tsv": output_dir / "alignment_cells.tsv",
+            "backfill_seed_audit_tsv": (
+                output_dir / "alignment_owner_backfill_seed_audit.tsv"
+            ),
+        }
+        for path in paths.values():
+            path.write_text("x\n", encoding="utf-8")
+        return AlignmentRunOutputs(**paths)
+
+    def fake_preset_runner(**kwargs):
+        captured_preset.update(kwargs)
+        return SimpleNamespace(
+            summary_json=output_dir / "summary.json",
+            published_alignment_manifest_json=None,
+            gallery_html=None,
+        )
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setattr(
+        run_alignment,
+        "run_standard_peak_backfill_preset",
+        fake_preset_runner,
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--preset",
+            "dna_dr",
+            "--standard-peak-backfill-publication-mode",
+            "deep-audit",
+        ]
+    )
+
+    assert code == 0
+    assert captured_preset["publication_mode"] == "deep-audit"
+    assert captured_preset["write_gallery"] is True
 
 
 def test_run_alignment_cli_dna_dr_preset_uses_light_cells_for_validation_minimal(
