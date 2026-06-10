@@ -10,6 +10,7 @@ from tools.diagnostics.family_ms1_overlay_rendering import (
     _selected_peak_window_bounds,
     _single_anchor_review_note,
 )
+from tools.diagnostics.family_ms1_overlay_rendering_styles import _plot_unified_legend
 
 
 def test_family_overlay_panel_layout_keeps_only_family_context_graphs() -> None:
@@ -88,6 +89,25 @@ def test_single_detected_anchor_note_marks_review_only_consensus() -> None:
 
     assert _single_anchor_review_note((anchor,)) == "; single-anchor review only"
     assert _single_anchor_review_note((anchor, anchor)) == ""
+
+
+def test_unified_legend_does_not_draw_detected_median() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    try:
+        _plot_unified_legend(ax)
+        legend = ax.get_legend()
+        assert legend is not None
+        labels = [text.get_text() for text in legend.get_texts()]
+        assert "detected NL seed" in labels
+        assert "detected median" not in labels
+        assert "rescued median" in labels
+    finally:
+        plt.close(fig)
 
 
 def _trace_row(

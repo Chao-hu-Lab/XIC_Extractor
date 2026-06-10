@@ -64,6 +64,6 @@ class TraceOverlayRow:
 @dataclass(frozen=True)
 class FamilyMs1OverlayOutputs:
     png_path: Path
-    pdf_path: Path
+    pdf_path: Path | None
     summary_tsv: Path
     trace_data_json: Path

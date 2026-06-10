@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -25,7 +25,6 @@ from tools.diagnostics.family_ms1_overlay_models import (
 )
 from tools.diagnostics.family_ms1_overlay_rendering_styles import (
     DETECTED_COLOR,
-    DETECTED_MEDIAN_COLOR,
     PLOT_GAUSSIAN_SMOOTH_POINTS,
     RESCUED_MEDIAN_COLOR,
     _draw_center_rt,
@@ -40,7 +39,7 @@ def render_family_ms1_overlay(
     *,
     rows: Sequence[TraceOverlayRow],
     png_path: Path,
-    pdf_path: Path,
+    pdf_path: Path | None,
     family_id: str,
     mz: float,
     ppm: float,
@@ -71,7 +70,7 @@ def render_family_ms1_overlay(
         }
     )
     fig, axes = plt.subplot_mosaic(
-        _family_overlay_panel_layout(),
+        cast(Any, _family_overlay_panel_layout()),
         figsize=(14, 6.8),
         constrained_layout=True,
         gridspec_kw={"height_ratios": [1.0, 0.18]},
@@ -106,7 +105,8 @@ def render_family_ms1_overlay(
         ),
     )
     fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
-    fig.savefig(pdf_path, bbox_inches="tight", facecolor="white")
+    if pdf_path is not None:
+        fig.savefig(pdf_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
@@ -114,7 +114,7 @@ def render_hypothesis_ms1_overlay(
     *,
     rows: Sequence[TraceOverlayRow],
     png_path: Path,
-    pdf_path: Path,
+    pdf_path: Path | None,
     family_id: str,
     mz: float,
     ppm: float,
@@ -140,7 +140,7 @@ def render_hypothesis_ms1_overlay(
         }
     )
     fig, axes = plt.subplot_mosaic(
-        _hypothesis_overlay_panel_layout(),
+        cast(Any, _hypothesis_overlay_panel_layout()),
         figsize=(14, 6.8),
         constrained_layout=True,
         gridspec_kw={"height_ratios": [1.0, 0.18]},
@@ -171,7 +171,8 @@ def render_hypothesis_ms1_overlay(
         ),
     )
     fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
-    fig.savefig(pdf_path, bbox_inches="tight", facecolor="white")
+    if pdf_path is not None:
+        fig.savefig(pdf_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
@@ -234,15 +235,6 @@ def _plot_normalized_overlay(
             lw=line_width,
             zorder=zorder,
         )
-    _plot_group_median_trace(
-        ax,
-        rows,
-        group="detected_seed",
-        color=DETECTED_MEDIAN_COLOR,
-        label="detected median",
-        rt_min=rt_min,
-        rt_max=rt_max,
-    )
     _plot_group_median_trace(
         ax,
         rows,
@@ -417,16 +409,6 @@ def _plot_apex_aligned_overlay(
             lw=line_width,
             zorder=zorder,
         )
-    _plot_group_median_trace(
-        ax,
-        rows,
-        group="detected_seed",
-        color=DETECTED_MEDIAN_COLOR,
-        label="detected median",
-        rt_min=-APEX_ALIGN_HALF_WINDOW_MIN,
-        rt_max=APEX_ALIGN_HALF_WINDOW_MIN,
-        align_to_apex=True,
-    )
     _plot_group_median_trace(
         ax,
         rows,
@@ -661,7 +643,7 @@ def _plot_area_distribution(ax: Any, rows: Sequence[TraceOverlayRow]) -> None:
             va="bottom",
             ha="left",
             fontsize=8,
-            color=DETECTED_MEDIAN_COLOR,
+            color=DETECTED_COLOR,
         )
     ax.set_yscale("log")
     ax.set_xticks([0, 1])
