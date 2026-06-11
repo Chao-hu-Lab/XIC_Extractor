@@ -79,6 +79,45 @@ def test_lookup_rejects_conflicting_injection_orders_for_sample() -> None:
         lookup.injection_order("sample-a")
 
 
+def test_lookup_keeps_conflicting_injection_order_lazy_per_sample() -> None:
+    lookup = DriftEvidenceLookup(
+        points=(
+            SampleDriftEvidence(
+                sample_stem="sample-a",
+                injection_order=7,
+                trend_id="trend-001",
+                istd_rt_min=1.9,
+                local_trend_rt_min=2.1,
+                rt_drift_delta_min=-0.2,
+                source="targeted_istd_trend",
+            ),
+            SampleDriftEvidence(
+                sample_stem="sample-a",
+                injection_order=8,
+                trend_id="trend-002",
+                istd_rt_min=2.0,
+                local_trend_rt_min=2.0,
+                rt_drift_delta_min=0.0,
+                source="targeted_istd_trend",
+            ),
+            SampleDriftEvidence(
+                sample_stem="sample-b",
+                injection_order=10,
+                trend_id="trend-001",
+                istd_rt_min=2.2,
+                local_trend_rt_min=2.0,
+                rt_drift_delta_min=0.2,
+                source="targeted_istd_trend",
+            ),
+        )
+    )
+
+    assert lookup.injection_order("sample-b") == 10
+    assert lookup.sample_delta_min("sample-b") == 0.2
+    with pytest.raises(ValueError, match="conflicting injection order"):
+        lookup.injection_order("sample-a")
+
+
 def test_read_targeted_istd_drift_evidence_uses_opaque_trends_and_no_target_context(
     tmp_path: Path,
 ) -> None:

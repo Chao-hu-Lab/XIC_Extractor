@@ -58,7 +58,6 @@ class AlignmentConfig:
             "mz_bucket_neighbor_radius",
             self.mz_bucket_neighbor_radius,
         )
-
         _require_anchor_priorities(self.anchor_priorities)
         _require_int_range(
             "anchor_min_evidence_score",

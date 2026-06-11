@@ -14,8 +14,10 @@ from xic_extractor.alignment.production_decisions import (
 )
 from xic_extractor.diagnostics.shadow_production_projection import (
     SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    _current_matrix_values_by_family_sample,
     build_shadow_production_projection_index,
     canonical_shadow_projection_sha256,
+    run_shadow_production_projection,
     write_shadow_production_projection_outputs,
 )
 
@@ -791,6 +793,45 @@ def test_projection_overlay_requires_exact_seed_group_match() -> None:
     assert row["local_global_ratio"] == ""
 
 
+def test_projection_prefers_conflicting_duplicate_overlay_verdict() -> None:
+    family = "FAM_OVERLAY_DUP"
+    seed_group = f"seed::{family}::mz=269.145::rt=9.5::window=9-10::ppm=10"
+    decisions = _production_decisions(
+        cells=(
+            _cell_decision(family, "S_REVIEW", "review_rescue", False, None),
+        ),
+    )
+    gate = _gate_row(family, "S_REVIEW", detected="1")
+    gate["seed_group_id"] = seed_group
+    gate["overlay_png_path"] = "gate-specific.png"
+
+    index = build_shadow_production_projection_index(
+        production_decisions=decisions,
+        cell_rows=(_cell_row(family, "S_REVIEW", "rescued"),),
+        retained_gate_rows=(gate,),
+        overlay_rows=(
+            {
+                "feature_family_id": family,
+                "seed_group_id": seed_group,
+                "family_verdict": "ms1_shape_supports_family_backfill",
+                "png_path": "support.png",
+                "absolute_own_max_shape_supported_fraction": "0.99",
+            },
+            {
+                "feature_family_id": family,
+                "seed_group_id": seed_group,
+                "family_verdict": "review_required_neighboring_ms1_interference",
+                "png_path": "conflict.png",
+                "absolute_own_max_shape_supported_fraction": "0.25",
+            },
+        ),
+    )
+
+    row = index.rows[0]
+    assert row["overlay_png_path"] == "conflict.png"
+    assert row["local_global_ratio"] == "0.25"
+
+
 def test_projection_writer_serializes_stable_schema_and_summary(tmp_path: Path) -> None:
     decisions = _production_decisions(
         cells=(
@@ -846,6 +887,137 @@ def test_projection_summary_reports_unprojectable_missing_seed_audit_gate() -> N
     assert index.summary["unprojectable_gate_reasons"] == {
         "missing_seed_audit": 1,
     }
+
+
+def test_package_runner_writes_projection_from_alignment_artifacts(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir()
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM_RUNNER",
+                "neutral_loss_tag": "DNA_dR",
+                "detected_count": "1",
+                "family_evidence": "owner_complete_link;owner_count=2",
+            },
+        ],
+        ("feature_family_id", "neutral_loss_tag", "detected_count", "family_evidence"),
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [
+            _cell_row("FAM_RUNNER", "S_DET", "detected", area="100.0"),
+            _cell_row(
+                "FAM_RUNNER",
+                "S_REVIEW",
+                "rescued",
+                area="250.0",
+            ),
+        ],
+        (
+            "feature_family_id",
+            "sample_stem",
+            "status",
+            "area",
+            "apex_rt",
+            "height",
+            "peak_start_rt",
+            "peak_end_rt",
+            "rt_delta_sec",
+            "primary_matrix_area",
+            "primary_matrix_area_source",
+            "gap_fill_state",
+            "gap_fill_reason",
+            "group_claim_state",
+            "consolidation_state",
+            "peak_hypothesis_status",
+            "product_selection_blocker",
+            "rt_mode_status",
+        ),
+    )
+    _write_tsv(
+        alignment_dir / "retained_gate.tsv",
+        [_gate_row("FAM_RUNNER", "S_DET;S_REVIEW", detected="1")],
+        (
+            "feature_family_id",
+            "seed_group_id",
+            "seed_group_basis",
+            "seed_mz",
+            "seed_rt",
+            "suggested_rt_min",
+            "suggested_rt_max",
+            "detected_cell_count",
+            "rescued_cell_count",
+            "seed_source_samples",
+            "support_components",
+            "challenge_blockers",
+            "missing_evidence",
+            "evidence_gate_status",
+            "overlay_family_verdict",
+            "overlay_png_path",
+        ),
+    )
+
+    outputs = run_shadow_production_projection(
+        alignment_review_tsv=alignment_dir / "alignment_review.tsv",
+        alignment_cells_tsv=alignment_dir / "alignment_cells.tsv",
+        retained_gate_tsv=alignment_dir / "retained_gate.tsv",
+        output_dir=tmp_path / "projection",
+        source_run_id="package-runner-unit",
+    )
+
+    rows = _read_tsv(outputs.tsv)
+    assert tuple(rows[0]) == SHADOW_PRODUCTION_PROJECTION_COLUMNS
+    assert {row["sample_stem"] for row in rows} == {"S_DET", "S_REVIEW"}
+    payload = json.loads(outputs.json.read_text(encoding="utf-8"))
+    assert payload["source_run_id"] == "package-runner-unit"
+    assert payload["source_review_sha256"]
+    assert payload["source_cell_sha256"]
+    assert payload["source_gate_sha256"]
+    assert payload["product_behavior_changed"] is False
+    assert payload["matrix_contract_changed"] is False
+
+
+def test_current_matrix_values_limits_materialization_to_requested_keys(
+    tmp_path: Path,
+) -> None:
+    matrix_tsv = tmp_path / "alignment_matrix.tsv"
+    identity_tsv = tmp_path / "alignment_matrix_identity.tsv"
+    _write_tsv(
+        matrix_tsv,
+        [
+            {"Mz": "300.3", "RT": "10.0", "S_KEEP": "111", "S_SKIP": "999"},
+            {"Mz": "400.4", "RT": "11.0", "S_KEEP": "222", "S_SKIP": "888"},
+        ],
+        ("Mz", "RT", "S_KEEP", "S_SKIP"),
+    )
+    _write_tsv(
+        identity_tsv,
+        [
+            {
+                "matrix_row_index": "1",
+                "peak_hypothesis_id": "FAM_KEEP::mode_1",
+                "source_feature_family_ids": "FAM_KEEP",
+            },
+            {
+                "matrix_row_index": "2",
+                "peak_hypothesis_id": "FAM_UNUSED",
+                "source_feature_family_ids": "FAM_UNUSED",
+            },
+        ],
+        ("matrix_row_index", "peak_hypothesis_id", "source_feature_family_ids"),
+    )
+
+    values = _current_matrix_values_by_family_sample(
+        alignment_matrix_tsv=matrix_tsv,
+        alignment_matrix_identity_tsv=identity_tsv,
+        requested_keys={("FAM_KEEP", "S_KEEP")},
+    )
+
+    assert values == {("FAM_KEEP", "S_KEEP"): "111"}
 
 
 def test_cli_writes_projection_from_alignment_artifacts(tmp_path: Path) -> None:

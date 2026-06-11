@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -21,8 +20,10 @@ from xic_extractor.diagnostics.backfill_shadow_policy import (
 )
 from xic_extractor.diagnostics.diagnostic_io import (
     bool_value,
+    file_sha256,
     optional_float,
     read_tsv_required,
+    rows_by_text_field,
     split_semicolon_labels,
     text_value,
     write_tsv,
@@ -444,6 +445,32 @@ class ReconciliationOutputs:
 
 
 @dataclass(frozen=True)
+class _GalleryRenderContext:
+    all_groups: tuple[ReconciliationGroup, ...]
+    html_groups: tuple[ReconciliationGroup, ...]
+    html_shadow_policy_cells: tuple[ShadowPolicyCell, ...]
+    html_shadow_projection_cells: tuple[ShadowProjectionCell, ...]
+    representatives_by_group: Mapping[
+        tuple[str, str],
+        tuple[RepresentativeCell, ...],
+    ]
+    shadow_policy_cells_by_group: Mapping[
+        tuple[str, str],
+        tuple[ShadowPolicyCell, ...],
+    ]
+    shadow_policy_cells_by_family: Mapping[str, tuple[ShadowPolicyCell, ...]]
+    shadow_projection_cells_by_group: Mapping[
+        tuple[str, str],
+        tuple[ShadowProjectionCell, ...],
+    ]
+    shadow_projection_cells_by_family: Mapping[str, tuple[ShadowProjectionCell, ...]]
+    target_benchmark_contexts_by_family: Mapping[
+        str,
+        tuple[TargetBenchmarkContext, ...],
+    ]
+
+
+@dataclass(frozen=True)
 class _SeedRecord:
     seed_group_id: str
     seed_group_basis: str
@@ -759,7 +786,21 @@ def build_reconciliation_index(
     matrix_families = {text_value(row.get("feature_family_id")) for row in matrices}
     seed_records_by_family = _seed_records_by_family(seeds)
     seed_samples_by_family = _seed_samples_by_family(seeds)
-    overlays_by_family = _group_by_family(overlays)
+    family_ids, excluded_family_counts = _candidate_family_ids(
+        reviews=reviews,
+        cells=cells,
+        seeds=seeds,
+        seed_aware=seed_aware,
+        seed_aware_summary=seed_aware_summary,
+        candidates=candidates,
+    )
+    cells_by_seed_group = _cells_by_family_seed_group(
+        cells_by_family=cells_by_family,
+        seed_records_by_family=seed_records_by_family,
+        family_ids=family_ids,
+    )
+    overlay_rows_by_seed_group = _overlay_rows_by_family_seed_group(overlays)
+    legacy_overlay_rows_by_family = _legacy_overlay_rows_by_family(overlays)
     shift_aware_by_family = _group_by_family(shift_aware)
     standard_peak_gate_by_family = _group_by_family(standard_peak_gate)
     seed_aware_by_family = _first_by_family(seed_aware)
@@ -771,14 +812,6 @@ def build_reconciliation_index(
         for row in tier2
         if row.get("feature_family_id")
     }
-    family_ids, excluded_family_counts = _candidate_family_ids(
-        reviews=reviews,
-        cells=cells,
-        seeds=seeds,
-        seed_aware=seed_aware,
-        seed_aware_summary=seed_aware_summary,
-        candidates=candidates,
-    )
 
     groups: list[ReconciliationGroup] = []
     representatives: list[RepresentativeCell] = []
@@ -794,7 +827,10 @@ def build_reconciliation_index(
         for seed_record in sorted_seed_records:
             review = reviews_by_family.get(family, {})
             family_cells = tuple(cells_by_family.get(family, ()))
-            group_cells = _cells_for_seed_record(family_cells, seed_record)
+            group_cells = cells_by_seed_group.get(
+                (family, seed_record.seed_group_id),
+                _cells_for_seed_record(family_cells, seed_record),
+            )
             evidence = _classify_evidence(
                 family=family,
                 seed_record=seed_record,
@@ -802,9 +838,9 @@ def build_reconciliation_index(
                 group_cells=group_cells,
                 has_matrix_context=family in matrix_families,
                 seed_samples=seed_samples_by_family.get(family, frozenset()),
-                overlay_rows=_overlay_rows_for_seed_group(
-                    overlays_by_family.get(family, ()),
-                    seed_group_id=seed_record.seed_group_id,
+                overlay_rows=overlay_rows_by_seed_group.get(
+                    (family, seed_record.seed_group_id),
+                    (),
                 ),
                 shift_aware_same_pattern_rows=shift_aware_by_family.get(
                     family,
@@ -813,8 +849,9 @@ def build_reconciliation_index(
                 shift_aware_standard_peak_gate_rows=(
                     standard_peak_gate_by_family.get(family, ())
                 ),
-                legacy_overlay_rows=_legacy_overlay_rows(
-                    overlays_by_family.get(family, ()),
+                legacy_overlay_rows=legacy_overlay_rows_by_family.get(
+                    family,
+                    (),
                 ),
                 seed_aware_row=seed_aware_by_family.get(family, {}),
                 candidate_gate_row=candidate_by_family.get(family, {}),
@@ -1088,44 +1125,7 @@ def write_reconciliation_gallery_html(
     """Render a table-first human review gallery from a reconciliation index."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    groups = sorted(index.groups, key=_group_sort_key)
-    projection_accept_keys = _shadow_projection_accept_group_keys(
-        index.shadow_projection_cells,
-    )
-    html_groups = _html_render_groups(
-        groups,
-        projection_accept_keys=projection_accept_keys,
-    )
-    html_group_keys = {
-        (group.feature_family_id, group.seed_group_id) for group in html_groups
-    }
-    html_family_ids = {group.feature_family_id for group in html_groups}
-    html_shadow_policy_cells = tuple(
-        cell
-        for cell in index.shadow_policy_cells
-        if (cell.feature_family_id, cell.seed_group_id) in html_group_keys
-    )
-    html_shadow_projection_cells = tuple(
-        cell
-        for cell in index.shadow_projection_cells
-        if (cell.feature_family_id, cell.seed_group_id) in html_group_keys
-    )
-    representatives_by_group = _representatives_by_group(index.representative_cells)
-    shadow_by_group = _shadow_policy_cells_by_group(html_shadow_policy_cells)
-    shadow_by_family = _shadow_policy_cells_by_family(html_shadow_policy_cells)
-    projection_by_group = _shadow_projection_cells_by_group(
-        html_shadow_projection_cells,
-    )
-    projection_by_family = _shadow_projection_cells_by_family(
-        html_shadow_projection_cells,
-    )
-    target_context_by_family = _target_benchmark_contexts_by_family(
-        tuple(
-            context
-            for context in index.target_benchmark_contexts
-            if any(family in html_family_ids for family in context.feature_family_ids)
-        ),
-    )
+    render_context = _gallery_render_context(index)
     lines = [
         "<!doctype html>",
         '<html lang="zh-Hant">',
@@ -1155,27 +1155,41 @@ def write_reconciliation_gallery_html(
         "</div>",
         "</header>",
         *_summary_html(index, output_paths, html_path=path),
-        *_html_scope_notice(groups, html_groups),
+        *_html_scope_notice(render_context.all_groups, render_context.html_groups),
         *_filter_html(
-            total_families=len(_family_groups(html_groups)),
-            default_visible_families=_default_visible_family_count(html_groups),
-            has_shadow_projection=bool(html_shadow_projection_cells),
+            total_families=len(_family_groups(render_context.html_groups)),
+            default_visible_families=_default_visible_family_count(
+                render_context.html_groups,
+            ),
+            has_shadow_projection=bool(
+                render_context.html_shadow_projection_cells,
+            ),
         ),
     ]
-    if not html_groups:
+    if not render_context.html_groups:
         lines.append(
             '<p class="empty-state">沒有 backfill family/seed group 可審閱。</p>',
         )
     else:
         lines.extend(
             _table_html(
-                html_groups,
-                representatives_by_group=representatives_by_group,
-                shadow_policy_cells_by_group=shadow_by_group,
-                shadow_policy_cells_by_family=shadow_by_family,
-                shadow_projection_cells_by_group=projection_by_group,
-                shadow_projection_cells_by_family=projection_by_family,
-                target_benchmark_contexts_by_family=target_context_by_family,
+                render_context.html_groups,
+                representatives_by_group=render_context.representatives_by_group,
+                shadow_policy_cells_by_group=(
+                    render_context.shadow_policy_cells_by_group
+                ),
+                shadow_policy_cells_by_family=(
+                    render_context.shadow_policy_cells_by_family
+                ),
+                shadow_projection_cells_by_group=(
+                    render_context.shadow_projection_cells_by_group
+                ),
+                shadow_projection_cells_by_family=(
+                    render_context.shadow_projection_cells_by_family
+                ),
+                target_benchmark_contexts_by_family=(
+                    render_context.target_benchmark_contexts_by_family
+                ),
                 html_path=path,
                 input_artifacts=index.summary.get("input_artifacts", {}),
             ),
@@ -1183,6 +1197,60 @@ def write_reconciliation_gallery_html(
         lines.extend(_lightbox_html())
     lines.extend(["</main>", _lightbox_script(), "</body>", "</html>"])
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _gallery_render_context(index: ReconciliationIndex) -> _GalleryRenderContext:
+    groups = tuple(sorted(index.groups, key=_group_sort_key))
+    projection_accept_keys = _shadow_projection_accept_group_keys(
+        index.shadow_projection_cells,
+    )
+    html_groups = _html_render_groups(
+        groups,
+        projection_accept_keys=projection_accept_keys,
+    )
+    html_group_keys = {
+        (group.feature_family_id, group.seed_group_id) for group in html_groups
+    }
+    html_family_ids = {group.feature_family_id for group in html_groups}
+    html_shadow_policy_cells = tuple(
+        cell
+        for cell in index.shadow_policy_cells
+        if (cell.feature_family_id, cell.seed_group_id) in html_group_keys
+    )
+    html_shadow_projection_cells = tuple(
+        cell
+        for cell in index.shadow_projection_cells
+        if (cell.feature_family_id, cell.seed_group_id) in html_group_keys
+    )
+    target_contexts = tuple(
+        context
+        for context in index.target_benchmark_contexts
+        if any(family in html_family_ids for family in context.feature_family_ids)
+    )
+    return _GalleryRenderContext(
+        all_groups=groups,
+        html_groups=html_groups,
+        html_shadow_policy_cells=html_shadow_policy_cells,
+        html_shadow_projection_cells=html_shadow_projection_cells,
+        representatives_by_group=_representatives_by_group(
+            index.representative_cells,
+        ),
+        shadow_policy_cells_by_group=_shadow_policy_cells_by_group(
+            html_shadow_policy_cells,
+        ),
+        shadow_policy_cells_by_family=_shadow_policy_cells_by_family(
+            html_shadow_policy_cells,
+        ),
+        shadow_projection_cells_by_group=_shadow_projection_cells_by_group(
+            html_shadow_projection_cells,
+        ),
+        shadow_projection_cells_by_family=_shadow_projection_cells_by_family(
+            html_shadow_projection_cells,
+        ),
+        target_benchmark_contexts_by_family=(
+            _target_benchmark_contexts_by_family(target_contexts)
+        ),
+    )
 
 
 def _html_render_groups(
@@ -1360,11 +1428,14 @@ def _input_artifact_hashes(**paths: object) -> dict[str, object]:
         if value is None:
             continue
         if isinstance(value, Path):
-            hashes[f"{key.removesuffix('_tsv')}_sha256"] = _sha256_file(value)
+            hashes[f"{key.removesuffix('_tsv')}_sha256"] = file_sha256(
+                value,
+                uppercase=False,
+            )
             continue
         if isinstance(value, Sequence) and not isinstance(value, str):
             artifact_hashes = [
-                {"path": str(path), "sha256": _sha256_file(path)}
+                {"path": str(path), "sha256": file_sha256(path, uppercase=False)}
                 for path in value
                 if isinstance(path, Path)
             ]
@@ -1372,14 +1443,6 @@ def _input_artifact_hashes(**paths: object) -> dict[str, object]:
                 key_base = key.removesuffix("_tsvs").removesuffix("_tsv")
                 hashes[f"{key_base}_hashes"] = artifact_hashes
     return hashes
-
-
-def _sha256_file(path: Path) -> str:
-    hasher = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
 
 
 def _source_hashes_from_input_artifacts(
@@ -1417,11 +1480,69 @@ def _first_by_family_and_seed_group(
 def _group_by_family(
     rows: Sequence[Mapping[str, str]],
 ) -> dict[str, tuple[dict[str, str], ...]]:
+    grouped = rows_by_text_field(rows, "feature_family_id")
+    return {
+        family: tuple(dict(row) for row in items)
+        for family, items in grouped.items()
+    }
+
+
+def _cells_by_family_seed_group(
+    *,
+    cells_by_family: Mapping[str, Sequence[Mapping[str, str]]],
+    seed_records_by_family: Mapping[str, Sequence[_SeedRecord]],
+    family_ids: Iterable[str],
+) -> dict[tuple[str, str], tuple[Mapping[str, str], ...]]:
+    result: dict[tuple[str, str], tuple[Mapping[str, str], ...]] = {}
+    for family in family_ids:
+        family_cells = tuple(cells_by_family.get(family, ()))
+        seed_records = seed_records_by_family.get(
+            family,
+            (_fallback_seed_record(family),),
+        )
+        seed_ids_by_sample: dict[str, list[str]] = {}
+        grouped_seed_cells: dict[str, list[Mapping[str, str]]] = {}
+        for seed_record in seed_records:
+            key = (family, seed_record.seed_group_id)
+            if not seed_record.samples:
+                result[key] = family_cells
+                continue
+            grouped_seed_cells.setdefault(seed_record.seed_group_id, [])
+            for sample in seed_record.samples:
+                seed_ids_by_sample.setdefault(sample, []).append(
+                    seed_record.seed_group_id,
+                )
+        for row in family_cells:
+            sample = text_value(row.get("sample_stem"))
+            for seed_group_id in seed_ids_by_sample.get(sample, ()):
+                grouped_seed_cells[seed_group_id].append(row)
+        for seed_group_id, rows in grouped_seed_cells.items():
+            result[(family, seed_group_id)] = tuple(rows)
+    return result
+
+
+def _overlay_rows_by_family_seed_group(
+    rows: Sequence[Mapping[str, str]],
+) -> dict[tuple[str, str], tuple[dict[str, str], ...]]:
+    grouped: dict[tuple[str, str], list[dict[str, str]]] = {}
+    for row in rows:
+        family = text_value(row.get("feature_family_id"))
+        seed_group_id = text_value(row.get("seed_group_id"))
+        if not family or not seed_group_id:
+            continue
+        grouped.setdefault((family, seed_group_id), []).append(dict(row))
+    return {key: tuple(items) for key, items in grouped.items()}
+
+
+def _legacy_overlay_rows_by_family(
+    rows: Sequence[Mapping[str, str]],
+) -> dict[str, tuple[dict[str, str], ...]]:
     grouped: dict[str, list[dict[str, str]]] = {}
     for row in rows:
         family = text_value(row.get("feature_family_id"))
-        if family:
-            grouped.setdefault(family, []).append(dict(row))
+        if not family or text_value(row.get("seed_group_id")):
+            continue
+        grouped.setdefault(family, []).append(dict(row))
     return {family: tuple(items) for family, items in grouped.items()}
 
 

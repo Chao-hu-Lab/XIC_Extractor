@@ -1,6 +1,7 @@
 import csv
 from pathlib import Path
 
+from xic_extractor.alignment import validation_writer
 from xic_extractor.alignment.validation_compare import FeatureMatch, SummaryMetric
 from xic_extractor.alignment.validation_writer import (
     write_legacy_matches_tsv,
@@ -96,6 +97,25 @@ def test_write_legacy_matches_tsv_header_formatting_and_escape(tmp_path: Path):
     assert rows[0]["mz_delta_ppm"] == "0.458412"
     assert rows[0]["present_jaccard"] == ""
     assert rows[0]["log_area_pearson"] == "0.987654"
+
+
+def test_validation_tsv_writer_preserves_private_contract(tmp_path: Path) -> None:
+    path = tmp_path / "nested" / "rows.tsv"
+
+    returned = validation_writer._write_tsv(
+        path,
+        ("id", "value", "flag"),
+        [{"id": "=A", "value": None, "flag": True, "extra": "ignored"}],
+    )
+
+    assert returned == path
+    rows = _read_tsv(path)
+    assert list(rows[0]) == ["id", "value", "flag"]
+    assert rows[0] == {"id": "'=A", "value": "", "flag": "TRUE"}
+
+    empty_path = tmp_path / "empty" / "rows.tsv"
+    validation_writer._write_tsv(empty_path, ("id", "value"), [])
+    assert empty_path.read_text(encoding="utf-8").splitlines() == ["id\tvalue"]
 
 
 def _read_tsv(path: Path) -> list[dict[str, str]]:

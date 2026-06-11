@@ -2,13 +2,18 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
+from pytest import MonkeyPatch
 
 import xic_extractor.alignment.owner_backfill as owner_backfill_module
+import xic_extractor.alignment.owner_backfill_request_plan as request_plan_module
 from tests.test_alignment_owner_clustering import _owner
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.owner_backfill import (
     build_owner_backfill_cells,
     build_owner_backfill_result,
+)
+from xic_extractor.alignment.owner_backfill_request_plan import (
+    build_owner_backfill_request_plan,
 )
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.config import ExtractionConfig
@@ -601,6 +606,83 @@ def test_owner_backfill_uses_batch_source_and_preserves_feature_major_order() ->
     ]
 
 
+def test_owner_backfill_request_plan_is_sample_bucketed_without_raw_access() -> None:
+    feature_a = _feature(feature_family_id="FAM000001", mz=500.0, rt=8.5)
+    feature_b = replace(
+        _feature(feature_family_id="FAM000002", mz=510.0, rt=10.5),
+        backfill_seed_centers=((510.0, 10.5), (511.0, 10.75)),
+    )
+
+    plan = build_owner_backfill_request_plan(
+        (feature_a, feature_b),
+        sample_order=("sample-a", "sample-b", "sample-c"),
+        raw_sample_stems=frozenset({"sample-b"}),
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+    )
+
+    assert plan.requests_for_sample("sample-a") == ()
+    assert plan.requests_for_sample("sample-c") == ()
+    sample_b_requests = plan.requests_for_sample("sample-b")
+    assert [
+        (
+            item[0].feature_family_id,
+            item[1],
+            item[2].mz,
+            item[2].rt_min,
+            item[2].rt_max,
+            item[2].ppm_tol,
+            item[3],
+        )
+        for item in sample_b_requests
+    ] == [
+        ("FAM000001", "sample-b", 500.0, 7.5, 9.5, 20.0, 8.5),
+        ("FAM000002", "sample-b", 510.0, 9.5, 11.5, 20.0, 10.5),
+        ("FAM000002", "sample-b", 511.0, 9.75, 11.75, 20.0, 10.75),
+    ]
+
+
+def test_owner_backfill_request_plan_reuses_seed_centers_per_feature(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    feature = _feature(feature_family_id="FAM000001", mz=500.0, rt=8.5)
+    calls: list[str] = []
+
+    def fake_seed_centers(
+        seen_feature: OwnerAlignedFeature,
+    ) -> tuple[tuple[float, float], ...]:
+        calls.append(seen_feature.feature_family_id)
+        return ((500.0, 8.5), (501.0, 8.75))
+
+    monkeypatch.setattr(
+        request_plan_module,
+        "backfill_seed_centers",
+        fake_seed_centers,
+    )
+
+    plan = request_plan_module.build_owner_backfill_request_plan(
+        (feature,),
+        sample_order=("sample-a", "sample-b", "sample-c"),
+        raw_sample_stems=frozenset({"sample-b", "sample-c"}),
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+    )
+
+    assert calls == ["FAM000001"]
+    assert [
+        (item.sample_stem, item.request.mz, item.preferred_rt)
+        for item in plan.requests_for_sample("sample-b")
+    ] == [
+        ("sample-b", 500.0, 8.5),
+        ("sample-b", 501.0, 8.75),
+    ]
+    assert [
+        (item.sample_stem, item.request.mz, item.preferred_rt)
+        for item in plan.requests_for_sample("sample-c")
+    ] == [
+        ("sample-c", 500.0, 8.5),
+        ("sample-c", 501.0, 8.75),
+    ]
+
+
 def test_owner_backfill_deduplicates_identical_xic_requests() -> None:
     from xic_extractor.xic_models import XICTrace
 
@@ -708,6 +790,78 @@ def test_owner_backfill_validates_prefilter_hits_with_secondary_source() -> None
     assert len(prefilter.requests[0]) == 2
     assert len(validator.requests[0]) == 1
     assert validator.requests[0][0].mz == 500.0
+
+
+def test_owner_backfill_validation_pending_deduplicates_fallback_lookup() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class BatchSource:
+        def __init__(self, traces) -> None:
+            self.traces = tuple(traces)
+            self.requests = []
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.requests.append(requests)
+            return self.traces[: len(requests)]
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    feature = replace(
+        _feature(feature_family_id="FAM000001", mz=500.0, rt=8.5),
+        backfill_seed_centers=((500.0, 8.5), (500.0, 8.8)),
+    )
+    prefilter = BatchSource(
+        (
+            XICTrace.from_arrays(
+                [8.40, 8.49, 8.50, 8.51, 8.60],
+                [0.0, 50.0, 120.0, 50.0, 0.0],
+            ),
+            XICTrace.from_arrays(
+                [8.70, 8.79, 8.80, 8.81, 8.90],
+                [0.0, 60.0, 130.0, 60.0, 0.0],
+            ),
+        )
+    )
+    validator = BatchSource(
+        (
+            XICTrace.from_arrays(
+                [8.40, 8.49, 8.50, 8.51, 8.60],
+                [0.0, 100.0, 240.0, 100.0, 0.0],
+            ),
+            XICTrace.from_arrays(
+                [8.70, 8.79, 8.80, 8.81, 8.90],
+                [0.0, 110.0, 260.0, 110.0, 0.0],
+            ),
+        )
+    )
+
+    result = build_owner_backfill_result(
+        (feature,),
+        sample_order=("sample-a", "sample-b"),
+        raw_sources={"sample-b": prefilter},
+        validation_raw_sources={"sample-b": validator},
+        alignment_config=AlignmentConfig(max_rt_sec=60.0),
+        peak_config=_peak_config(),
+        raw_xic_batch_size=64,
+    )
+
+    assert [row.candidate_phase for row in result.candidate_audit_rows] == [
+        "prefilter_query",
+        "prefilter_query",
+        "validation_query",
+        "validation_query",
+    ]
+    assert len(prefilter.requests[0]) == 2
+    assert len(validator.requests[0]) == 2
+    observed_cells = [
+        (cell.cluster_id, cell.sample_stem, cell.status) for cell in result.cells
+    ]
+    assert observed_cells == [
+        ("FAM000001", "sample-b", "rescued"),
+    ]
+    assert result.cells[0].height == 260.0
 
 
 def test_owner_backfill_batches_by_rt_window_without_changing_emit_order() -> None:

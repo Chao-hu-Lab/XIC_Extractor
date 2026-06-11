@@ -1,9 +1,14 @@
 import math
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 from xic_extractor.alignment.config import AlignmentConfig
-from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.matrix import (
+    AlignedCell,
+    AlignmentMatrix,
+    AlignmentRowLike,
+)
 from xic_extractor.alignment.production_decisions import build_production_decisions
 from xic_extractor.alignment.promotion_policy import (
     ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
@@ -646,7 +651,7 @@ def test_bool_area_is_not_a_valid_production_matrix_area():
 
 def _matrix(
     *,
-    clusters: tuple[object, ...],
+    clusters: tuple[AlignmentRowLike, ...],
     cells: tuple[AlignedCell, ...],
     sample_order: tuple[str, ...],
 ) -> AlignmentMatrix:
@@ -659,20 +664,23 @@ def _feature(
     evidence: str,
     has_anchor: bool = True,
     **extra: object,
-) -> SimpleNamespace:
-    return SimpleNamespace(
-        feature_family_id=feature_family_id,
-        neutral_loss_tag="DNA_dR",
-        family_center_mz=500.123,
-        family_center_rt=8.49,
-        family_product_mz=384.076,
-        family_observed_neutral_loss_da=116.047,
-        has_anchor=has_anchor,
-        event_cluster_ids=("OWN-s1-000001",),
-        event_member_count=1,
-        evidence=evidence,
-        review_only=False,
-        **extra,
+) -> AlignmentRowLike:
+    return cast(
+        AlignmentRowLike,
+        SimpleNamespace(
+            feature_family_id=feature_family_id,
+            neutral_loss_tag="DNA_dR",
+            family_center_mz=500.123,
+            family_center_rt=8.49,
+            family_product_mz=384.076,
+            family_observed_neutral_loss_da=116.047,
+            has_anchor=has_anchor,
+            event_cluster_ids=("OWN-s1-000001",),
+            event_member_count=1,
+            evidence=evidence,
+            review_only=False,
+            **extra,
+        ),
     )
 
 
@@ -702,12 +710,16 @@ def _cell(
     rt_mode_status: str = "",
 ) -> AlignedCell:
     has_area = area is not None
+    positive_area = _positive_area_value(area)
     if (
         selected_integration is None
         and status in {"detected", "rescued"}
-        and _positive_area(area)
+        and positive_area is not None
     ):
-        selected_integration = _integration(raw_area=float(area), asls_area=float(area))
+        selected_integration = _integration(
+            raw_area=positive_area,
+            asls_area=positive_area,
+        )
     return AlignedCell(
         sample_stem=sample_stem,
         cluster_id=cluster_id,
@@ -739,12 +751,15 @@ def _cell(
         product_selection_blocker=product_selection_blocker,
         rt_mode_status=rt_mode_status,
         selected_integration=selected_integration,
-        **_backfill_evidence_fields(
-            status=status,
-            enabled=backfill_evidence,
-            ms1_reason=backfill_ms1_reason,
-            drift_supported=backfill_drift_supported,
-            candidate_ms2_evidence=candidate_ms2_evidence,
+        **cast(
+            Any,
+            _backfill_evidence_fields(
+                status=status,
+                enabled=backfill_evidence,
+                ms1_reason=backfill_ms1_reason,
+                drift_supported=backfill_drift_supported,
+                candidate_ms2_evidence=candidate_ms2_evidence,
+            ),
         ),
     )
 
@@ -854,11 +869,9 @@ def _product_authority_fields() -> dict[str, object]:
     }
 
 
-def _positive_area(value: float | bool | None) -> bool:
-    return (
-        value is not None
-        and isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-        and value > 0
-    )
+def _positive_area_value(value: float | bool | None) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if not math.isfinite(value) or value <= 0:
+        return None
+    return value

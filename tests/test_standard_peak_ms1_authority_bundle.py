@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from pathlib import Path
+
+import pytest
 
 from tools.diagnostics import standard_peak_ms1_authority_bundle as cli
 from xic_extractor.alignment.backfill_evidence_projection import (
@@ -15,6 +18,9 @@ from xic_extractor.alignment.backfill_evidence_projection import (
 from xic_extractor.alignment.backfill_ms1_product_authority import SCHEMA_VERSION
 from xic_extractor.alignment.promotion_policy import (
     STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
+)
+from xic_extractor.diagnostics import (
+    standard_peak_ms1_authority_bundle as bundle_module,
 )
 from xic_extractor.diagnostics.standard_peak_ms1_authority_bundle import (
     AUTHORITY_MODE_MACHINE_GATE,
@@ -314,6 +320,181 @@ def test_machine_gate_authorizes_supported_standard_peak_without_manual_allowlis
     )
 
 
+def test_standard_peak_authority_reuses_trace_json_validation_for_multiple_samples(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trace_json = _write_trace_json(tmp_path, "FAM_CACHE")
+    relative_trace_json = trace_json.relative_to(tmp_path).as_posix()
+    trace_sha256 = hashlib.sha256(trace_json.read_bytes()).hexdigest().upper()
+    source_rows = [
+        _standard_peak_source_row(
+            family_id="FAM_CACHE",
+            sample_stem="S1",
+            relative_trace_json=relative_trace_json,
+        ),
+        _standard_peak_source_row(
+            family_id="FAM_CACHE",
+            sample_stem="S2",
+            relative_trace_json=relative_trace_json,
+        ),
+    ]
+    allowlist_rows = [
+        _standard_peak_allowlist_row(
+            family_id="FAM_CACHE",
+            sample_stem="S1",
+            relative_trace_json=relative_trace_json,
+            trace_sha256=trace_sha256,
+        ),
+        _standard_peak_allowlist_row(
+            family_id="FAM_CACHE",
+            sample_stem="S2",
+            relative_trace_json=relative_trace_json,
+            trace_sha256=trace_sha256,
+        ),
+    ]
+    original_reader = bundle_module._read_trace_data_file
+    read_paths: list[Path] = []
+
+    def counting_reader(path: Path) -> object:
+        read_paths.append(path)
+        return original_reader(path)
+
+    monkeypatch.setattr(bundle_module, "_read_trace_data_file", counting_reader)
+
+    authorized_rows, audit_rows = bundle_module._authorize_standard_peak_rows(
+        source_rows=source_rows,
+        allowlist_rows=allowlist_rows,
+        artifact_base_dir=tmp_path,
+    )
+
+    assert len(authorized_rows) == 2
+    assert {row["decision"] for row in audit_rows} == {"authorized"}
+    assert len(read_paths) == 1
+
+
+def test_standard_peak_bundle_reuses_overlay_artifacts_for_duplicate_gate_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay_dir = tmp_path / "overlay"
+    trace_json = _write_trace_json(overlay_dir, "FAM_STD")
+    trace_summary = overlay_dir / "fam_std_trace_summary.tsv"
+    _write_tsv(
+        trace_summary,
+        (
+            "sample_stem",
+            "status",
+            "cell_area",
+            "cell_height",
+            "cell_apex_rt",
+            "cell_start_rt",
+            "cell_end_rt",
+            "local_window_apex_delta_min",
+            "local_window_to_global_max_ratio",
+            "apex_aligned_shape_similarity",
+            "absolute_own_max_shape_similarity",
+        ),
+        [
+            {
+                "sample_stem": "S1",
+                "status": "rescued",
+                "cell_area": "1234",
+                "cell_height": "200",
+                "cell_apex_rt": "10.0",
+                "cell_start_rt": "9.8",
+                "cell_end_rt": "10.2",
+                "local_window_apex_delta_min": "0.01",
+                "local_window_to_global_max_ratio": "0.95",
+                "apex_aligned_shape_similarity": "0.70",
+                "absolute_own_max_shape_similarity": "0.92",
+            },
+        ],
+    )
+    overlay_summary = tmp_path / "family_ms1_overlay_batch_summary.tsv"
+    _write_tsv(
+        overlay_summary,
+        (
+            "feature_family_id",
+            "family_verdict",
+            "detected_count",
+            "rescued_count",
+            "detected_rescued_count",
+            "absolute_own_max_shape_supported_count",
+            "trace_summary_tsv",
+            "trace_data_json",
+        ),
+        [
+            {
+                "feature_family_id": "FAM_STD",
+                "family_verdict": "ms1_shape_supports_family_backfill",
+                "detected_count": "1",
+                "rescued_count": "1",
+                "detected_rescued_count": "2",
+                "absolute_own_max_shape_supported_count": "2",
+                "trace_summary_tsv": str(trace_summary),
+                "trace_data_json": str(trace_json),
+            }
+        ],
+    )
+    standard_gate = tmp_path / "standard_gate.tsv"
+    gate_row = {
+        "feature_family_id": "FAM_STD",
+        "standard_peak_gate_call": "standard_peak_gate_supported",
+        "standard_peak_gate_reasons": "shift_aware_same_pattern_supported",
+        "standard_peak_gate_blockers": "",
+        "manual_backfill_authority_call": "authorize_standard_peak_backfill",
+        "calibration_outcome": "true_positive",
+        "min_shape_r_after_best_shift": "0.99",
+        "max_abs_shift_sec": "0",
+    }
+    _write_tsv(
+        standard_gate,
+        (
+            "feature_family_id",
+            "standard_peak_gate_call",
+            "standard_peak_gate_reasons",
+            "standard_peak_gate_blockers",
+            "manual_backfill_authority_call",
+            "calibration_outcome",
+            "min_shape_r_after_best_shift",
+            "max_abs_shift_sec",
+        ),
+        [gate_row, dict(gate_row)],
+    )
+
+    original_read_tsv_required = bundle_module.read_tsv_required
+    trace_summary_read_count = 0
+
+    def counting_read_tsv_required(
+        path: Path,
+        columns: tuple[str, ...],
+    ) -> list[dict[str, str]]:
+        nonlocal trace_summary_read_count
+        if path == trace_summary:
+            trace_summary_read_count += 1
+        return original_read_tsv_required(path, columns)
+
+    monkeypatch.setattr(
+        bundle_module,
+        "read_tsv_required",
+        counting_read_tsv_required,
+    )
+
+    outputs = run_standard_peak_ms1_authority_bundle(
+        standard_peak_gate_tsv=standard_gate,
+        overlay_batch_summary_tsv=overlay_summary,
+        output_dir=tmp_path / "out",
+    )
+
+    source_rows = _read_tsv(outputs.ms1_pattern_evidence_tsv)
+    assert trace_summary_read_count == 1
+    assert [row["feature_family_id"] for row in source_rows] == [
+        "FAM_STD",
+        "FAM_STD",
+    ]
+
+
 def test_standard_peak_authority_cli_writes_bundle(tmp_path: Path) -> None:
     overlay_dir = tmp_path / "overlay"
     trace_json = _write_trace_json(overlay_dir, "FAM_STD")
@@ -422,6 +603,44 @@ def test_standard_peak_authority_cli_writes_bundle(tmp_path: Path) -> None:
         / "out"
         / "shared_peak_identity_ms1_pattern_coherence_product_authorized.tsv"
     ).is_file()
+
+
+def _standard_peak_source_row(
+    *,
+    family_id: str,
+    sample_stem: str,
+    relative_trace_json: str,
+) -> dict[str, str]:
+    return {
+        "feature_family_id": family_id,
+        "sample_stem": sample_stem,
+        "ms1_pattern_status": "supportive",
+        "ms1_pattern_evidence_level": "trace_constellation",
+        "shape_metric_source": "shift_aware_standard_peak_gate",
+        "reason": STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
+        "family_ms1_overlay_trace_data_json": relative_trace_json,
+        "anchor_peak_own_max_shape_similarity": "0.92",
+    }
+
+
+def _standard_peak_allowlist_row(
+    *,
+    family_id: str,
+    sample_stem: str,
+    relative_trace_json: str,
+    trace_sha256: str,
+) -> dict[str, str]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "feature_family_id": family_id,
+        "sample_stem": sample_stem,
+        "authority_status": PRODUCT_AUTHORIZED_STATUS,
+        "authority_source": "manual_standard_peak_gate_calibration",
+        "authority_reason": "manual_standard_peak_gate_authorized",
+        "expected_overlay_trace_data_json": relative_trace_json,
+        "expected_overlay_trace_data_sha256": trace_sha256,
+        "min_anchor_own_max_shape_similarity": "0.5",
+    }
 
 
 def _write_trace_json(base_dir: Path, family_id: str) -> Path:

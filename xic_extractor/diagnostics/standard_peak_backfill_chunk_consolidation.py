@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import shutil
 from collections import Counter
@@ -11,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from xic_extractor.diagnostics.diagnostic_io import (
+    file_sha256,
     format_diagnostic_value,
     read_tsv_required,
     text_value,
@@ -313,7 +313,7 @@ def _emit_formal_product_output(
                 "alignment_matrix.tsv",
             )
         shutil.copy2(source, target)
-        copied[name] = _sha256_file(target)
+        copied[name] = file_sha256(target, uppercase=False)
     activation_inputs_summary = _load_activation_inputs_summary(product_summary)
     manifest = {
         "schema_version": "standard_peak_formal_product_output_v1",
@@ -447,7 +447,7 @@ def _publish_formal_product_output_to_alignment_output(
     for name, source in audit_copies.items():
         target = source_dir / name
         shutil.copy2(source, target)
-        copied_audits[name] = _sha256_file(target)
+        copied_audits[name] = file_sha256(target, uppercase=False)
 
     publish_manifest = {
         "schema_version": "standard_peak_default_matrix_publication_v0",
@@ -462,13 +462,21 @@ def _publish_formal_product_output_to_alignment_output(
         ),
         "alignment_matrix_backup_tsv": str(matrix_backup),
         "alignment_matrix_identity_backup_tsv": str(identity_backup),
-        "alignment_matrix_backup_sha256": _sha256_file(matrix_backup),
-        "alignment_matrix_identity_backup_sha256": _sha256_file(identity_backup),
-        "published_alignment_matrix_sha256": _sha256_file(
-            publish_alignment_matrix_tsv,
+        "alignment_matrix_backup_sha256": file_sha256(
+            matrix_backup,
+            uppercase=False,
         ),
-        "published_alignment_matrix_identity_sha256": _sha256_file(
+        "alignment_matrix_identity_backup_sha256": file_sha256(
+            identity_backup,
+            uppercase=False,
+        ),
+        "published_alignment_matrix_sha256": file_sha256(
+            publish_alignment_matrix_tsv,
+            uppercase=False,
+        ),
+        "published_alignment_matrix_identity_sha256": file_sha256(
             publish_alignment_matrix_identity_tsv,
+            uppercase=False,
         ),
         "formal_manifest_schema_version": text_value(
             manifest.get("schema_version"),
@@ -508,7 +516,7 @@ def _verify_manifest_hash(
     expected = text_value(expected_hashes.get(name))
     if not expected:
         raise ValueError(f"formal product manifest missing hash for {name}")
-    actual = _sha256_file(path)
+    actual = file_sha256(path, uppercase=False)
     if actual.lower() != expected.lower():
         raise ValueError(f"formal product hash mismatch for {name}")
 
@@ -812,14 +820,6 @@ def _positive_int(value: object, field: str) -> int:
     if parsed < 1:
         raise ValueError(f"invalid {field}: {value!r}")
     return parsed
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _path_text(path: Path | None) -> str:

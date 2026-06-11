@@ -9,6 +9,7 @@ from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.alignment.ownership_models import IdentityEvent, SampleLocalMS1Owner
 from xic_extractor.alignment.primary_consolidation import (
+    _connected_components,
     consolidate_primary_family_rows,
 )
 from xic_extractor.alignment.production_decisions import build_production_decisions
@@ -402,6 +403,19 @@ def test_consolidation_loser_audit_is_review_tsv_visible(tmp_path: Path):
     )
 
 
+def test_connected_components_preserves_sorted_traversal_and_skips_singletons() -> None:
+    graph = {
+        "B": {"C", "A"},
+        "A": {"B"},
+        "C": {"B"},
+        "E": {"D"},
+        "D": {"E"},
+        "F": set(),
+    }
+
+    assert _connected_components(graph) == (("A", "B", "C"), ("D", "E"))
+
+
 def _feature(
     feature_family_id: str,
     *,
@@ -590,7 +604,7 @@ def _feature_by_id(matrix: AlignmentMatrix, feature_id: str):
     return next(
         cluster
         for cluster in matrix.clusters
-        if cluster.feature_family_id == feature_id
+        if getattr(cluster, "feature_family_id", None) == feature_id
     )
 
 

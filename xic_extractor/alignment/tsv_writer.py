@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -29,6 +28,7 @@ from xic_extractor.alignment.product_matrix import (
 )
 from xic_extractor.alignment.production_decisions import build_production_decisions
 from xic_extractor.peak_detection.baseline import LINEAR_EDGE_RETIRED_MESSAGE
+from xic_extractor.tabular_io import write_tsv
 
 ALIGNMENT_REVIEW_COLUMNS = (
     "feature_family_id",
@@ -840,21 +840,19 @@ def _write_tsv(
     rows: list[dict[str, object]],
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[escape_excel_formula(column) for column in fieldnames],
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {
-                    escape_excel_formula(column): format_value(row.get(column, ""))
-                    for column in fieldnames
-                }
-            )
+    column_map = tuple((column, escape_excel_formula(column)) for column in fieldnames)
+    write_tsv(
+        path,
+        [
+            {
+                escaped_column: format_value(row.get(column, ""))
+                for column, escaped_column in column_map
+            }
+            for row in rows
+        ],
+        tuple(escaped_column for _, escaped_column in column_map),
+        lineterminator="\n",
+    )
     return path
 
 

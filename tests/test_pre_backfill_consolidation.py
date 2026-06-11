@@ -1,11 +1,17 @@
-from tests.test_alignment_owner_clustering import _owner
+from typing import cast
+
+import pytest
+
+import xic_extractor.alignment.pre_backfill_consolidation as pre_mod
 from xic_extractor.alignment.config import AlignmentConfig
-from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix, CellStatus
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
+from xic_extractor.alignment.ownership_models import IdentityEvent, SampleLocalMS1Owner
 from xic_extractor.alignment.pre_backfill_consolidation import (
     consolidate_pre_backfill_identity_families,
     recenter_pre_backfill_identity_families,
 )
+from xic_extractor.peak_detection.hypotheses import IntegrationResult
 
 
 def test_pre_backfill_consolidation_merges_identity_compatible_samples() -> None:
@@ -88,6 +94,36 @@ def test_pre_backfill_consolidation_caps_backfill_seed_centers() -> None:
     )
 
 
+def test_pre_backfill_consolidation_reuses_sample_stem_sets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    features = (
+        _feature("FAM000001", sample_stem="sample-a", rt=8.0),
+        _feature("FAM000002", sample_stem="sample-b", rt=8.1),
+        _feature("FAM000003", sample_stem="sample-c", rt=8.2),
+    )
+    calls: list[str] = []
+    original = pre_mod._sample_stems
+
+    def tracking_sample_stems(feature: OwnerAlignedFeature) -> set[str]:
+        calls.append(feature.feature_family_id)
+        return original(feature)
+
+    monkeypatch.setattr(pre_mod, "_sample_stems", tracking_sample_stems)
+
+    consolidated = consolidate_pre_backfill_identity_families(
+        features,
+        config=AlignmentConfig(),
+    )
+
+    assert calls == ["FAM000001", "FAM000002", "FAM000003"]
+    assert [feature.consolidation_state for feature in consolidated] == [
+        "primary_loser",
+        "primary_winner",
+        "primary_loser",
+    ]
+
+
 def test_recenter_pre_backfill_identity_family_uses_present_cell_rts() -> None:
     feature = _feature("FAM000001", sample_stem="sample-a", rt=9.5)
     feature = OwnerAlignedFeature(
@@ -111,7 +147,7 @@ def test_recenter_pre_backfill_identity_family_uses_present_cell_rts() -> None:
 
     recentered = recenter_pre_backfill_identity_families(matrix)
 
-    recentered_feature = recentered.clusters[0]
+    recentered_feature = cast(OwnerAlignedFeature, recentered.clusters[0])
     assert recentered_feature.family_center_rt == 9.0
     assert [cell.rt_delta_sec for cell in recentered.cells] == [-60.0, 60.0, None]
 
@@ -137,12 +173,66 @@ def _feature(
     )
 
 
+def _owner(
+    sample_stem: str,
+    suffix: str,
+    *,
+    apex_rt: float = 8.5,
+) -> SampleLocalMS1Owner:
+    event = IdentityEvent(
+        candidate_id=f"{sample_stem}#{suffix}",
+        sample_stem=sample_stem,
+        raw_file=f"{sample_stem}.raw",
+        neutral_loss_tag="NL116",
+        precursor_mz=500.0,
+        product_mz=383.9526,
+        observed_neutral_loss_da=116.0474,
+        seed_rt=apex_rt,
+        evidence_score=80,
+        seed_event_count=2,
+    )
+    return SampleLocalMS1Owner(
+        owner_id=f"OWN-{sample_stem}-{suffix}",
+        sample_stem=sample_stem,
+        raw_file=f"{sample_stem}.raw",
+        precursor_mz=500.0,
+        owner_apex_rt=apex_rt,
+        owner_peak_start_rt=apex_rt - 0.05,
+        owner_peak_end_rt=apex_rt + 0.05,
+        owner_area=1000.0,
+        owner_height=100.0,
+        primary_identity_event=event,
+        supporting_events=(),
+        identity_conflict=False,
+        assignment_reason="owner_exact_apex_match",
+        selected_integration=_integration(),
+    )
+
+
+def _integration() -> IntegrationResult:
+    return IntegrationResult(
+        rt_left_min=8.45,
+        rt_apex_min=8.5,
+        rt_right_min=8.55,
+        raw_apex_rt_min=8.5,
+        rt_width_min=0.1,
+        height_raw=100.0,
+        height_smoothed=100.0,
+        area_raw_counts_seconds=1000.0,
+        area_baseline_corrected=900.0,
+        baseline_type="asls",
+        boundary_sources=("test_owner",),
+        area_ms1_morphology=900.0,
+        ms1_morphology_area_source="gaussian15_positive_asls_residual",
+    )
+
+
 def _cell(
     sample_stem: str,
     cluster_id: str,
     *,
     apex_rt: float | None,
-    status: str = "detected",
+    status: CellStatus = "detected",
 ) -> AlignedCell:
     return AlignedCell(
         sample_stem=sample_stem,

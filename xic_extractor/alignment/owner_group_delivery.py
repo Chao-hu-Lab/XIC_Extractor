@@ -219,8 +219,25 @@ def delivery_cell_projection(
     missing_observation_state: str,
     group_claim_state: str = "unclaimed_or_winner",
 ) -> CellGroupProjection:
+    return delivery_cell_projection_from_group(
+        delivery_group_projection(feature),
+        gap_fill_state=gap_fill_state,
+        gap_fill_reason=gap_fill_reason,
+        missing_observation_state=missing_observation_state,
+        group_claim_state=group_claim_state,
+    )
+
+
+def delivery_cell_projection_from_group(
+    group_projection: GroupProjection,
+    *,
+    gap_fill_state: str,
+    gap_fill_reason: str,
+    missing_observation_state: str,
+    group_claim_state: str = "unclaimed_or_winner",
+) -> CellGroupProjection:
     return {
-        **delivery_group_projection(feature),
+        **group_projection,
         "gap_fill_state": gap_fill_state,
         "gap_fill_reason": gap_fill_reason,
         "missing_observation_state": missing_observation_state,

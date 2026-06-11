@@ -137,6 +137,70 @@ def test_builds_deterministic_seed_group_from_seed_audit() -> None:
     assert group.product_behavior_state == "product_rescued_context_only"
 
 
+def test_seed_group_indexes_preserve_cell_order_and_overlay_scope() -> None:
+    family_cells = (
+        _cell_row("FAM_INDEX", "S1", "detected"),
+        _cell_row("FAM_INDEX", "S2", "rescued"),
+        _cell_row("FAM_INDEX", "S3", "rescued"),
+        _cell_row("FAM_INDEX", "S4", "rescued"),
+    )
+    seed_a = gallery._SeedRecord(
+        seed_group_id="seed-a",
+        seed_group_basis="seed_audit",
+        samples=frozenset({"S2", "S4"}),
+    )
+    seed_b = gallery._SeedRecord(
+        seed_group_id="seed-b",
+        seed_group_basis="seed_audit",
+        samples=frozenset({"S1"}),
+    )
+
+    cells_by_group = gallery._cells_by_family_seed_group(
+        cells_by_family={
+            "FAM_INDEX": family_cells,
+            "FAM_FALLBACK": (_cell_row("FAM_FALLBACK", "S9", "rescued"),),
+        },
+        seed_records_by_family={"FAM_INDEX": (seed_a, seed_b)},
+        family_ids=("FAM_INDEX", "FAM_FALLBACK"),
+    )
+    overlay_rows = [
+        {
+            "feature_family_id": "FAM_INDEX",
+            "seed_group_id": "",
+            "overlay_png_path": "family.png",
+        },
+        {
+            "feature_family_id": "FAM_INDEX",
+            "seed_group_id": "seed-b",
+            "overlay_png_path": "seed-b.png",
+        },
+        {
+            "feature_family_id": "FAM_INDEX",
+            "seed_group_id": "seed-a",
+            "overlay_png_path": "seed-a.png",
+        },
+    ]
+
+    assert [
+        row["sample_stem"] for row in cells_by_group[("FAM_INDEX", "seed-a")]
+    ] == ["S2", "S4"]
+    assert [
+        row["sample_stem"] for row in cells_by_group[("FAM_INDEX", "seed-b")]
+    ] == ["S1"]
+    assert [
+        row["sample_stem"]
+        for row in cells_by_group[
+            ("FAM_FALLBACK", "family_center::FAM_FALLBACK::seed=unknown")
+        ]
+    ] == ["S9"]
+    assert gallery._overlay_rows_by_family_seed_group(overlay_rows)[
+        ("FAM_INDEX", "seed-a")
+    ][0]["overlay_png_path"] == "seed-a.png"
+    assert gallery._legacy_overlay_rows_by_family(overlay_rows)["FAM_INDEX"][0][
+        "overlay_png_path"
+    ] == "family.png"
+
+
 def test_non_primary_duplicate_context_is_not_reported_as_primary_backfilled() -> None:
     rescued = _cell_row("FAM_LOSER", "S2", "rescued")
     rescued["primary_matrix_area"] = "1200.0"

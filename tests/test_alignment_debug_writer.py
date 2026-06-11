@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from xic_extractor.alignment import debug_writer
 from xic_extractor.alignment.debug_writer import (
     write_ambiguous_ms1_owners_tsv,
     write_event_to_ms1_owner_tsv,
@@ -104,3 +105,22 @@ def test_owner_edge_evidence_tsv_uses_stable_columns_and_float_format(
             "none\t100\t'=strong"
         ),
     ]
+
+
+def test_debug_tsv_writer_preserves_private_contract(tmp_path: Path) -> None:
+    path = tmp_path / "nested" / "debug.tsv"
+
+    returned = debug_writer._write_tsv(
+        path,
+        ("id", "reason"),
+        [{"id": "=candidate", "reason": "@review", "extra": "ignored"}],
+    )
+
+    assert returned == path
+    assert path.read_text(encoding="utf-8") == (
+        "id\treason\n'=candidate\t'@review\n"
+    )
+
+    empty_path = tmp_path / "empty" / "debug.tsv"
+    debug_writer._write_tsv(empty_path, ("id", "reason"), [])
+    assert empty_path.read_text(encoding="utf-8") == "id\treason\n"

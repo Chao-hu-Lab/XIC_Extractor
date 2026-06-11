@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import json
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -30,6 +29,11 @@ from xic_extractor.diagnostics.standard_peak_shadow_activation_inputs import (
     StandardPeakActivationInputOutputs,
     build_standard_peak_activation_inputs,
     write_standard_peak_activation_input_outputs,
+)
+from xic_extractor.tabular_io import (
+    identity_family_keys,
+    positive_int,
+    read_tsv_with_header,
 )
 
 SCHEMA_VERSION = "standard_peak_backfill_productization_v0"
@@ -394,7 +398,7 @@ def _current_matrix_values_by_family_sample(
     alignment_matrix_tsv: Path,
     alignment_matrix_identity_tsv: Path,
 ) -> dict[tuple[str, str], str]:
-    matrix_header, matrix_rows = _read_tsv_with_header(alignment_matrix_tsv)
+    matrix_header, matrix_rows = read_tsv_with_header(alignment_matrix_tsv)
     identity_rows = read_tsv_required(
         alignment_matrix_identity_tsv,
         ("matrix_row_index", "peak_hypothesis_id"),
@@ -404,38 +408,14 @@ def _current_matrix_values_by_family_sample(
     )
     values: dict[tuple[str, str], str] = {}
     for identity in identity_rows:
-        row_index = _positive_int(identity.get("matrix_row_index"))
+        row_index = positive_int(identity.get("matrix_row_index"))
         if row_index is None or row_index > len(matrix_rows):
             continue
         matrix_row = matrix_rows[row_index - 1]
-        for row_key in _identity_family_keys(identity):
+        for row_key in identity_family_keys(identity):
             for sample in sample_columns:
                 values[(row_key, sample)] = matrix_row.get(sample, "")
     return values
-
-
-def _identity_family_keys(identity: Mapping[str, str]) -> tuple[str, ...]:
-    keys = [text_value(identity.get("peak_hypothesis_id"))]
-    keys.extend(
-        part.strip()
-        for part in text_value(identity.get("source_feature_family_ids")).split(";")
-        if part.strip()
-    )
-    return tuple(dict.fromkeys(key for key in keys if key))
-
-
-def _read_tsv_with_header(path: Path) -> tuple[tuple[str, ...], list[dict[str, str]]]:
-    with path.open(encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle, delimiter="\t")
-        return tuple(reader.fieldnames or ()), list(reader)
-
-
-def _positive_int(value: object) -> int | None:
-    try:
-        parsed = int(str(value or "").strip())
-    except ValueError:
-        return None
-    return parsed if parsed > 0 else None
 
 
 def _single_row(rows: Sequence[dict[str, str]]) -> dict[str, str]:

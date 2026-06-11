@@ -5,6 +5,10 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from xic_extractor.alignment._backfill_util import (
+    allowlist_rows_by_family_sample_key,
+    rows_by_family_sample_key,
+)
 from xic_extractor.alignment.backfill_evidence_projection import (
     PRODUCT_AUTHORITY_SCOPE_FIELD,
     PRODUCT_AUTHORITY_SOURCE_FIELD,
@@ -15,7 +19,7 @@ from xic_extractor.alignment.backfill_evidence_projection import (
 from xic_extractor.alignment.shared_peak_identity_explanation import (
     candidate_ms2_pattern,
 )
-from xic_extractor.diagnostics.diagnostic_io import optional_float, text_value
+from xic_extractor.tabular_io import optional_float, text_value
 
 SCHEMA_VERSION = "backfill_candidate_ms2_pattern_product_authority_v1"
 DEFAULT_MIN_CANDIDATE_MS2_SIMILARITY_SCORE = 0.5
@@ -172,47 +176,22 @@ def required_candidate_ms2_pattern_columns() -> tuple[str, ...]:
 def _rows_by_key(
     rows: Sequence[Mapping[str, str]],
 ) -> dict[tuple[str, str], Mapping[str, str]]:
-    by_key: dict[tuple[str, str], Mapping[str, str]] = {}
-    for row in rows:
-        family_id = text_value(row.get("feature_family_id"))
-        sample_stem = text_value(row.get("sample_stem") or row.get("sample_id"))
-        if family_id and sample_stem:
-            key = (family_id, sample_stem)
-            if key in by_key:
-                raise ValueError(
-                    "duplicate backfill Candidate MS2 product authority source key: "
-                    f"{family_id}, {sample_stem}"
-                )
-            by_key[key] = row
-    return by_key
+    return rows_by_family_sample_key(
+        rows,
+        duplicate_label="backfill Candidate MS2 product authority source",
+    )
 
 
 def _allowlist_by_key(
     rows: Sequence[Mapping[str, str]],
 ) -> dict[tuple[str, str], Mapping[str, str]]:
-    by_key: dict[tuple[str, str], Mapping[str, str]] = {}
-    for row in rows:
-        schema_version = text_value(row.get("schema_version"))
-        if schema_version != SCHEMA_VERSION:
-            raise ValueError(
-                "unsupported backfill Candidate MS2 product authority "
-                f"schema version: {schema_version!r}"
-            )
-        family_id = text_value(row.get("feature_family_id"))
-        sample_stem = text_value(row.get("sample_stem"))
-        if not family_id or not sample_stem:
-            raise ValueError(
-                "backfill Candidate MS2 product authority allowlist rows "
-                "require feature_family_id and sample_stem"
-            )
-        key = (family_id, sample_stem)
-        if key in by_key:
-            raise ValueError(
-                "duplicate backfill Candidate MS2 product authority allowlist key: "
-                f"{family_id}, {sample_stem}"
-            )
-        by_key[key] = row
-    return by_key
+    return allowlist_rows_by_family_sample_key(
+        rows,
+        expected_schema_version=SCHEMA_VERSION,
+        schema_label="backfill Candidate MS2 product authority",
+        missing_label="backfill Candidate MS2 product authority",
+        duplicate_label="backfill Candidate MS2 product authority allowlist",
+    )
 
 
 def _authorization_decision(

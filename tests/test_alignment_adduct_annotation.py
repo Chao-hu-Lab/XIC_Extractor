@@ -53,6 +53,75 @@ def test_match_artificial_adduct_pairs_requires_close_rt_and_delta() -> None:
     ] == [("F001", "F002", "M+Na-H")]
 
 
+def test_match_artificial_adduct_pairs_preserves_order_with_iterable_adducts() -> None:
+    families = [
+        _family("F001", mz=300.000000, rt=5.100, identity_decision="production_family"),
+        _family(
+            "F002",
+            mz=321.981945,
+            rt=5.000,
+            identity_decision="provisional_discovery",
+        ),
+        _family(
+            "F003",
+            mz=337.955882,
+            rt=5.050,
+            identity_decision="provisional_discovery",
+        ),
+    ]
+    adducts = (
+        ArtificialAdduct(adduct_id=adduct_id, mz_delta=mz_delta, adduct_name=name)
+        for adduct_id, mz_delta, name in (
+            ("1", 21.981945, "M+Na-H"),
+            ("2", 37.955882, "M+K-H"),
+        )
+    )
+
+    pairs = match_artificial_adduct_pairs(
+        families,
+        adducts,
+        rt_window_min=0.15,
+        mz_tolerance_ppm=10.0,
+    )
+
+    assert [
+        (pair.parent_family_id, pair.related_family_id, pair.adduct_name)
+        for pair in pairs
+    ] == [
+        ("F001", "F002", "M+Na-H"),
+        ("F001", "F003", "M+K-H"),
+    ]
+
+
+def test_match_artificial_adduct_pairs_preserves_adduct_input_order() -> None:
+    families = [
+        _family("F001", mz=300.000000, rt=5.000, identity_decision="production_family"),
+        _family(
+            "F002",
+            mz=310.000000,
+            rt=5.020,
+            identity_decision="provisional_discovery",
+        ),
+    ]
+    adducts = [
+        ArtificialAdduct(adduct_id="late", mz_delta=10.001, adduct_name="input-first"),
+        ArtificialAdduct(
+            adduct_id="exact",
+            mz_delta=10.000,
+            adduct_name="input-second",
+        ),
+    ]
+
+    pairs = match_artificial_adduct_pairs(
+        families,
+        adducts,
+        rt_window_min=0.05,
+        mz_tolerance_ppm=200.0,
+    )
+
+    assert [pair.adduct_name for pair in pairs] == ["input-first", "input-second"]
+
+
 def _family(
     family_id: str,
     *,

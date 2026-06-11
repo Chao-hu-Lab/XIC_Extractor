@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
 from collections.abc import Sequence
@@ -16,14 +15,16 @@ from xic_extractor.alignment import (
     backfill_candidate_ms2_product_authority as authority,
 )
 from xic_extractor.diagnostics.diagnostic_io import read_tsv_required, write_tsv
+from xic_extractor.tabular_io import read_tsv_with_header
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
-        source_header, source_rows = _read_tsv_with_header(
+        source_header, source_rows = read_tsv_with_header(
             args.candidate_ms2_pattern_evidence_tsv,
             required_columns=authority.required_candidate_ms2_pattern_columns(),
+            encoding="utf-8-sig",
         )
         allowlist_rows = read_tsv_required(
             args.authority_allowlist_tsv,
@@ -94,23 +95,6 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Directory for product-authorized sidecar, audit, and summary outputs.",
     )
     return parser.parse_args(argv)
-
-
-def _read_tsv_with_header(
-    path: Path,
-    *,
-    required_columns: Sequence[str],
-) -> tuple[tuple[str, ...], tuple[dict[str, str], ...]]:
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle, delimiter="\t")
-        header = tuple(reader.fieldnames or ())
-        missing = [column for column in required_columns if column not in header]
-        if missing:
-            raise ValueError(
-                f"{path}: missing required columns: {', '.join(missing)}"
-            )
-        rows = tuple(dict(row) for row in reader)
-    return header, rows
 
 
 if __name__ == "__main__":

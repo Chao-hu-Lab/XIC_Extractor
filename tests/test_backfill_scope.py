@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from xic_extractor.alignment.backfill_scope import (
     PREDICATE_VERSION,
+    SKIPPED_EVIDENCE_LEDGER_COLUMNS,
     backfill_features_for_sample,
     backfill_request_sample_stems,
     read_family_allowlist_tsv,
@@ -146,10 +147,21 @@ def test_allowlist_reader_and_ledger_writer(tmp_path: Path) -> None:
         tmp_path / "skipped_evidence_ledger.tsv",
         result.skipped,
     )
+    raw = path.read_bytes()
+    assert b"\r\n" not in raw
+    assert b"\n" in raw
     with path.open(newline="", encoding="utf-8") as handle:
+        header = handle.readline().rstrip("\n").split("\t")
+        assert header == list(SKIPPED_EVIDENCE_LEDGER_COLUMNS)
+        handle.seek(0)
         rows = list(csv.DictReader(handle, delimiter="\t"))
     assert rows[0]["feature_family_id"] == "FAM001"
+    assert rows[0]["family_center_mz"] == "500.0"
     assert rows[0]["predicate_version"] == PREDICATE_VERSION
+    assert rows[0]["raw_xic_requests_skipped"] == "1"
+    assert rows[0]["would_emit_in_full_audit"] == str(
+        result.skipped[0].would_emit_in_full_audit
+    )
 
 
 def _feature(

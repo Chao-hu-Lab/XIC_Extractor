@@ -128,7 +128,7 @@ def _family_evidence_row(
     if family_mz is None:
         return _blocked_row(base, "blocked", "fail", "missing_family_center_mz")
 
-    seed_cells = tuple(row for row in cell_rows if row.get("status") == "detected")
+    seed_cells, rescued_cells = _split_detected_and_rescued_cells(cell_rows)
     if len(seed_cells) != 1:
         blocker = (
             "missing_detected_seed_cell"
@@ -136,7 +136,6 @@ def _family_evidence_row(
             else "multiple_detected_seed_cells"
         )
         return _blocked_row(base, "blocked", "fail", blocker)
-    rescued_cells = tuple(row for row in cell_rows if row.get("status") == "rescued")
     rescued_cells = tuple(
         sorted(rescued_cells, key=lambda row: _sort_area(row), reverse=True)[
             : max(0, config.max_rescued_cells_per_family)
@@ -665,6 +664,20 @@ def _finite_float(value: object) -> float | None:
 
 def _sort_area(row: Mapping[str, str]) -> float:
     return _finite_float(row.get("area")) or 0.0
+
+
+def _split_detected_and_rescued_cells(
+    cell_rows: Sequence[Mapping[str, str]],
+) -> tuple[tuple[Mapping[str, str], ...], tuple[Mapping[str, str], ...]]:
+    seed_cells: list[Mapping[str, str]] = []
+    rescued_cells: list[Mapping[str, str]] = []
+    for row in cell_rows:
+        status = row.get("status")
+        if status == "detected":
+            seed_cells.append(row)
+        elif status == "rescued":
+            rescued_cells.append(row)
+    return tuple(seed_cells), tuple(rescued_cells)
 
 
 def _string_row(row: Mapping[str, object]) -> dict[str, str]:
