@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-10
-**Total entry-points:** 75
-**Total files (incl. helpers):** 159 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-12
+**Total entry-points:** 86
+**Total files (incl. helpers):** 170 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -937,6 +937,14 @@ not formal boundary+area oracle rows.
 
 ---
 
+### `subthreshold_sensitivity_report.py`
+
+**Purpose**: Aggregate Gaussian15 sub-threshold (missed-peak) candidates across a batch of overlay trace-data JSONs as evidence for whether/how far to relax `ms1_peak_modes.gaussian15_peak_observations` multi-peak thresholds.
+**Topic group**: reuses `subthreshold_candidate_report` (mirrors the detector's local-maximum scan).
+**Status note**: Diagnostic-only; changes NO detection logic. Reports accepted-vs-rejected local maxima, which gate (height/prominence/edge/overlapping) blocked rejects (appears-in-reasons vs SOLE blocker), and a height-recovery upper bound. Use on a real (ideally spike-in) batch, then validate any threshold change with spike-in recovery.
+
+---
+
 ### `ms1_peak_group_nl_scope_gate.py`
 
 **Purpose**: Gate selected `chrom_peak_segment` candidate MS2/NL evidence so
@@ -1021,6 +1029,14 @@ schemas.
 **Topic group**: `multi_tag_adduct_audit.py` (single-file)
 **Originating spec**: `2026-05-15-multi-nl-tag-and-artificial-adduct-contract.md`
 **Recent doc**: `plans/2026-05-15-multi-nl-tag-and-artificial-adduct-plan.md`
+
+---
+
+### `target_pair_rt_candidate_plot_review.py`
+
+**Purpose**: Render target-pair RT candidate review plots from RAW XIC traces for human adjudication of paired analyte/ISTD RT candidate selection.
+**Topic group**: target-pair RT review; reuses `gaussian15_morphology_trace`.
+**Status note**: Diagnostic-only RAW-backed review plots; does not change selection or matrix areas.
 
 ---
 
@@ -1119,6 +1135,14 @@ multiple MS1 peak modes.
 **Topic group**: shares helpers with `family_ms1_overlay_plot`
 **Pairs with**: `family_ms1_backfill_review_report.py` (produces the queue, this consumes it)
 **Status note**: Preserves optional queue `seed_group_id` in `family_ms1_overlay_batch_summary.tsv` so downstream retained-backfill evidence gates can join overlay evidence at seed-group precision. Summary rows carry separate apex-aligned shape metrics and own-max absolute-RT shape / absolute apex cluster metrics; these are evidence notes, not a composite `backfill_score`. Queues without `seed_group_id` remain supported for legacy family context, but seed-specific retained-backfill gates treat them as insufficient and request an exact `seed_group_id` overlay before using visual support/blockers. The CLI writes summary/Markdown incrementally after each row and supports `--reuse-existing`, which rebuilds summary rows from completed trace artifacts and, in rendered mode, completed PNG/PDF bundles without re-reading RAW; this makes large 85RAW queues resumable after timeout. In-process preset callers use the same renderer without incremental summary rewrites, then write final batch outputs once. RAW trace extraction is sample-batched and uses bounded scan-window super-window grouping before cropping traces back to their original request windows; `family_ms1_overlay_batch_summary.json` records selected rows, RAW opens, XIC requests, exact scan windows, super-window groups, chromatogram calls, and trace point counts. `--evidence-only` keeps the same trace TSV/JSON and summary schema while leaving `png_path` / `pdf_path` blank for image-free publication runs.
+
+---
+
+### `family_ms1_alignment_experiment.py`
+
+**Purpose**: Render honest RT-interpretation comparison panels for MS1 overlay traces for one alignment feature family.
+**Topic group**: underlying single-family experiment for `family_ms1_alignment_experiment_batch.py`; reuses `family_ms1_overlay_*` helpers.
+**Status note**: Diagnostic-only RT-interpretation comparison; does not change backfill decisions or matrix areas. The batch wrapper reads existing overlay trace JSONs and runs this per successful overlay row.
 
 ---
 
