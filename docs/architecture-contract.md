@@ -84,6 +84,35 @@ expansion, or other evidence-provider work, use
 reuse target, call-cost model, public contract risk, validation gate, and stop
 rule.
 
+### Shared Decision Semantics Positioning
+
+`xic_extractor/evidence_semantics.py` is the shared, **role-neutral** decision
+layer. It is genuinely load-bearing, not a tiebreaker afterthought, and it serves
+two distinct consumers:
+
+- **Candidate selection** — `decision_class` ranks scored candidates in
+  `peak_detection/candidate_selection.py`.
+- **Targeted product authority** — the selected hypothesis's
+  `decision_semantics` is consumed by `selection_decision_from_hypothesis`
+  (`peak_detection/selection_decision.py`) and by the projection builder
+  (`extraction/result_assembly.py:_targeted_product_projection`) to produce the
+  `TargetedProductProjection`, which is the authority for counts and matrix
+  presence.
+
+Invariant: the shared layer stays role-neutral. Targeted-only, role-aware policy
+(ISTD plausible-dropout, paired-analyte downgrades) lives in the projection
+builder in `result_assembly.py`, **not** in `evidence_semantics.py`. The shared
+layer may say `review` with `plausible_nl_dropout_review`; it must never decide
+"this ISTD is present" or "this row is counted". Do not let targeted role policy
+leak into the shared semantics, and remember `evidence_semantics.py` is also on
+the untargeted alignment path (`common_evidence_from_aligned_cell`), so a change
+there has cross-path blast radius.
+
+The end-to-end `Confidence` / `Reason` / counted-detection resolution order is
+documented in `docs/confidence-reason-precedence-contract.md`; the authority
+migration rationale is in
+`docs/superpowers/specs/2026-06-03-targeted-evidence-chain-alignment-spec.md`.
+
 ## Diagnostics Contract
 
 Treat `tools/diagnostics/` as maintained product-adjacent code.
